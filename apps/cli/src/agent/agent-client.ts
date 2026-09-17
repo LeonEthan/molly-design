@@ -1,0 +1,3046 @@
+import { reloadGrokDesignReminder } from '@/design/grok-reminder';
+import type { claudeDesignSettings } from '@/design/claude-launch';
+import { randomUUID } from 'crypto';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { performance } from 'perf_hooks';
+import { Logger } from '@/utils/logger';
+import * as acp from '@agentclientprotocol/sdk';
+import { z } from 'zod';
+import {
+  LODY_EXTENSION_METHODS,
+  LODY_TOOL_NAMES,
+  type LodyExtensionCapabilities,
+  type LodyElicitationMeta,
+  type RateLimit,
+  type RateLimitsGetRequest,
+  type RateLimitsSnapshot,
+  type SessionUsageUpdate,
+} from 'acp-extension-core';
+import {
+  ACPSessionId,
+  MODEL_THOUGHT_LEVEL_META_KEY,
+  type MachineId,
+  type AcpConfigOptionValue,
+  type AcpSessionNotification,
+  type AgentConfigCliType,
+  type SessionGoalContent,
+  type SessionTurnInputConfig,
+  sanitizeGoalObjective,
+  usesAcpProvidedSessionTitle,
+  parseSessionNotification,
+  SessionContextWindowUsage,
+  SessionId,
+  type WorkspaceId,
+  type ModelInfo,
+  parseAskUserQuestionElicitationRequest,
+  buildAskUserQuestionElicitationResponse,
+  formatMcpResolutionProblem,
+  getServerNow,
+  ACP_INIT_TIMEOUT_MS as DEFAULT_ACP_INIT_TIMEOUT_MS,
+  ACP_NEW_SESSION_TIMEOUT_MS as DEFAULT_ACP_NEW_SESSION_TIMEOUT_MS,
+} from '@molly/shared';
+import { getLocalControlSocketPath } from '@molly/shared/node/local-ipc';
+import { getMollyMcpHttpEndpoint } from '@/mcp/molly-mcp-http-server';
+import { buildMollyMcpHttpHeaders } from '@/mcp/molly-mcp-http-protocol';
+import { TerminalManager } from '@/session/terminal-manager';
+import { reportError } from 'src/utils/telemetry';
+import { formatErrorMessage } from '@/utils/format-error';
+import { MOLLY_AUTH_SITE_URL, MOLLY_AUTH_URL, MOLLY_SERVER_URL } from '@/utils/const';
+import { startTraceSpan } from '@/utils/trace-span';
+import { withSlowOperationWarning } from '@/utils/slow-operation-warning';
+import {
+  type AcpLauncher,
+  type AcpSessionPath,
+  captureAcpProtocolInitCompleted,
+  captureAcpProtocolInitFailed,
+  captureAcpSessionEstablished,
+  captureAcpSessionEstablishFailed,
+  captureAcpStartupCompleted,
+  captureAcpStartupTimeout,
+  classifyAcpProtocolReason,
+} from './acp-analytics';
+import { filterAcpConfigOptions } from './acp-config-option-filter';
+import {
+  readLegacySessionModelState,
+  type LegacySessionModelState,
+} from './acp-capability-normalization';
+import { convertClaudeTaskLifecycleNotification } from './claude-task-lifecycle';
+import { convertKimiTaskLifecycleNotification } from './kimi-task-lifecycle';
+import {
+  buildSteerRequestMeta,
+  findActiveSteerConfigMismatch,
+  parseAcknowledgedSteerCapability,
+  parseSteerAppliedParams,
+  type AcknowledgedSteerCapability,
+} from './acknowledged-steer';
+import type { SessionMcpCatalogSelector } from './session-mcp-resolver';
+import {
+  getBuiltinToolPermissionOutcome,
+  parseLodyExtensionCapabilities,
+  parseLodyExtensionMessage,
+  parseRateLimitsSnapshot,
+} from './lody-acp-extension';
+
+/**
+ * Checks if an error is a transport-related error that may be transient.
+ * These errors typically indicate the underlying process communication layer
+ * is temporarily unavailable (e.g., "ProcessTransport is not ready for writing").
+ */
+function isTransportError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message?.toLowerCase() ?? '';
+  return (
+    msg.includes('not ready for writing') ||
+    msg.includes('transport') ||
+    (msg.includes('process') && msg.includes('not ready'))
+  );
+}
+
+function isNodeErrorCode(error: unknown, code: string): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === code
+  );
+}
+
+function summarizeAcpConfigOptions(options: acp.SessionConfigOption[]): string {
+  if (options.length === 0) {
+    return 'none';
+  }
+
+  return options
+    .slice(0, 12)
+    .map((option) => `${option.id}:${option.category ?? 'uncategorized'}`)
+    .join(',');
+}
+
+/**
+ * Wraps an async operation with retry logic for transient transport errors.
+ * If the operation fails with a transport error, it will retry up to `maxRetries` times
+ * with exponential backoff. On final transport error, logs a warning but does not throw
+ * (graceful degradation). Non-transport errors are always rethrown to preserve failure semantics.
+ */
+async function withTransportRetry<T>(
+  operation: () => Promise<T>,
+  logger: Logger,
+  operationName: string,
+  sessionId: string,
+  maxRetries: number = 2
+): Promise<T | undefined> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      const isTransport = isTransportError(err);
+
+      if (isTransport && attempt < maxRetries) {
+        const delayMs = 100 * (attempt + 1);
+        logger.debug(
+          `[${sessionId}] ${operationName} failed with transport error (attempt ${attempt + 1}/${maxRetries + 1}), retrying in ${delayMs}ms...`
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+        continue;
+      }
+
+      // Non-transport errors should be rethrown to preserve failure semantics
+      if (!isTransport) {
+        throw err;
+      }
+
+      // Final transport failure - log warning but don't throw (graceful degradation)
+      logger.debug(
+        `[${sessionId}] ${operationName} failed after ${attempt + 1} attempt(s) with transport error: ${formatErrorMessage(err)}`
+      );
+      void reportError(
+        `agent-client:${operationName}`,
+        err instanceof Error ? err : new Error(String(err))
+      );
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Error thrown when an ACP operation times out.
+ */
+export class AcpTimeoutError extends Error {
+  constructor(
+    public readonly operationName: string,
+    public readonly timeoutMs: number,
+    public readonly sessionId: string
+  ) {
+    super(
+      `[ACP_TIMEOUT] Operation "${operationName}" timed out after ${Math.round(timeoutMs / 1000)}s`
+    );
+    this.name = 'AcpTimeoutError';
+  }
+}
+
+/**
+ * The agent refused an acknowledged steer, which by the inject-or-refuse
+ * contract proves the prompt never reached the live turn (Codex answers
+ * `No active Codex turn to steer` once that turn has ended). The caller may
+ * therefore re-send that user turn as an ordinary follow-up.
+ */
+export class AgentSteerNotDeliveredError extends Error {
+  constructor(
+    message: string,
+    public override readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = 'AgentSteerNotDeliveredError';
+  }
+}
+
+function isAcpAuthenticationRequired(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = 'code' in error ? (error as { code?: unknown }).code : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+  return code === -32000 && /authentication required/iu.test(message);
+}
+
+/**
+ * JSON-RPC `invalid request` (-32600): the agent answered and declined the call.
+ * Distinct from a plain `Error` (connection closed) or any other code, which
+ * mean we never got a verdict.
+ */
+function isAcpInvalidRequestError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === -32600
+  );
+}
+
+function isAcpMethodNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { readonly code?: unknown }).code === -32601
+  );
+}
+
+export class AcpAuthenticationRequiredError extends Error {
+  readonly code = -32000;
+  readonly data: { readonly authMethods: readonly acp.AuthMethod[] };
+
+  constructor(
+    public readonly authMethods: readonly acp.AuthMethod[],
+    options?: { cause?: unknown }
+  ) {
+    super('Authentication required', options);
+    this.name = 'AcpAuthenticationRequiredError';
+    this.data = { authMethods };
+  }
+}
+
+/**
+ * Wraps a promise with a hard timeout. If the operation does not complete within
+ * the specified timeout, the promise is rejected with an AcpTimeoutError.
+ * Also logs periodic warnings while waiting.
+ *
+ * Use this for critical ACP operations that should not hang indefinitely
+ * (e.g., newSession, initialize).
+ */
+function withTimeout<T>(
+  promise: Promise<T>,
+  logger: Logger,
+  operationName: string,
+  sessionId: string,
+  timeoutMs: number,
+  warningIntervalMs: number = 10000
+): Promise<T> {
+  let completed = false;
+  let elapsedMs = 0;
+  let timeoutHandle: NodeJS.Timeout | undefined;
+
+  // Log warnings periodically
+  const warningInterval = setInterval(() => {
+    elapsedMs += warningIntervalMs;
+    if (!completed) {
+      const remainingMs = timeoutMs - elapsedMs;
+      logger.debug(
+        `[${sessionId}] Operation "${operationName}" is still pending after ${Math.round(elapsedMs / 1000)}s ` +
+          `(timeout in ${Math.round(remainingMs / 1000)}s)`
+      );
+    }
+  }, warningIntervalMs);
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      if (!completed) {
+        reject(new AcpTimeoutError(operationName, timeoutMs, sessionId));
+      }
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    completed = true;
+    clearInterval(warningInterval);
+    clearTimeout(timeoutHandle);
+  });
+}
+
+function withAbort<T>(promise: Promise<T>, abortPromise?: Promise<never>): Promise<T> {
+  if (!abortPromise) {
+    return promise;
+  }
+  return Promise.race([promise, abortPromise]);
+}
+
+type SessionModelUsage = NonNullable<SessionUsageUpdate['modelUsage']>[string];
+
+const toModelUsageFromUsage = (usage: SessionUsageUpdate['usage']): SessionModelUsage => {
+  const rawCostUSD = (usage as { costUSD?: unknown }).costUSD;
+  const costUSD =
+    typeof rawCostUSD === 'number' && Number.isFinite(rawCostUSD) ? rawCostUSD : undefined;
+
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadInputTokens: usage.cacheReadInputTokens,
+    cacheCreationInputTokens: usage.cacheCreationInputTokens,
+    reasoningOutputTokens: usage.reasoningOutputTokens,
+    costUSD,
+  };
+};
+
+const sanitizeModelUsage = (
+  modelUsage: SessionUsageUpdate['modelUsage']
+): SessionUsageUpdate['modelUsage'] => {
+  if (!modelUsage) {
+    return undefined;
+  }
+  const sanitized: NonNullable<SessionUsageUpdate['modelUsage']> = {};
+  for (const [modelId, usage] of Object.entries(modelUsage)) {
+    sanitized[modelId] = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadInputTokens: usage.cacheReadInputTokens,
+      cacheCreationInputTokens: usage.cacheCreationInputTokens,
+      reasoningOutputTokens: usage.reasoningOutputTokens,
+      webSearchRequests: usage.webSearchRequests,
+      costUSD: usage.costUSD,
+    };
+  }
+  return sanitized;
+};
+
+export type AcpStartupStageEvent =
+  | { type: 'initialize_start' }
+  | { type: 'initialize_end'; durationMs: number }
+  | { type: 'new_session_start' }
+  | { type: 'new_session_end'; durationMs: number };
+
+export type AcpStartupTimeoutOptions = {
+  initTimeoutMs?: number;
+  newSessionTimeoutMs?: number;
+  loadSessionTimeoutMs?: number;
+  resumeSessionTimeoutMs?: number;
+};
+
+export type AcpSessionStartTarget = {
+  workdir: string;
+  resumeSessionId?: ACPSessionId;
+};
+
+const LegacyCodexGoalStatusSchema = z.enum([
+  'active',
+  'paused',
+  'blocked',
+  'usageLimited',
+  'budgetLimited',
+  'complete',
+  'cleared',
+]);
+const LegacyCodexGoalSnapshotSchema = z.object({
+  objective: z.string(),
+  status: LegacyCodexGoalStatusSchema,
+  tokenBudget: z.number().nullable().optional(),
+  tokensUsed: z.number().optional(),
+  timeUsedSeconds: z.number().optional(),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+});
+const MollyGoalSnapshotSchema = z.object({
+  objective: z.string(),
+  status: z.enum(['active', 'paused', 'blocked', 'limited', 'complete']),
+  tokenBudget: z.number().nullable().optional(),
+  tokensUsed: z.number().optional(),
+  timeUsedSeconds: z.number().optional(),
+  createdAtEpochSeconds: z.number().nonnegative().optional(),
+  updatedAtEpochSeconds: z.number().nonnegative().optional(),
+});
+const LegacyNeutralGoalSnapshotSchema = z.object({
+  objective: z.string(),
+  status: z.enum(['active', 'paused', 'blocked', 'limited', 'complete']),
+  controlMethod: z.literal('_session/goal'),
+  tokenBudget: z.number().nullable().optional(),
+  tokensUsed: z.number().optional(),
+  timeUsedSeconds: z.number().optional(),
+  createdAt: z.number().optional(),
+  updatedAt: z.number().optional(),
+});
+
+const CodexRetryErrorSchema = z.object({
+  error: z.object({
+    message: z.string(),
+    turnId: z.string().min(1),
+    willRetry: z.literal(true),
+  }),
+});
+
+const MollyNoticeSchema = z.object({
+  notice: z.object({
+    level: z.enum(['info', 'warning', 'error']),
+    message: z.string(),
+    source: z.string().optional(),
+  }),
+});
+
+const LegacyCodexSessionWarningSchema = z.object({
+  warning: z.object({
+    message: z.string(),
+    source: z.enum(['warning', 'configWarning']).optional(),
+  }),
+});
+
+const MollySessionTitleSchema = z.object({
+  titleSource: z.enum(['explicit', 'generated', 'fallback', 'unset']),
+});
+
+export type AgentSessionWarning = {
+  message: string;
+  source?: string;
+};
+
+export type SteerApplicationLease = {
+  release: () => void;
+};
+
+export type SteerOutcome = 'applied' | 'not-applied' | 'unknown';
+
+export type SteerOutcomeResult =
+  | { outcome: 'applied'; application: SteerApplicationLease }
+  | { outcome: 'not-applied'; error: unknown }
+  | { outcome: 'unknown'; error: unknown };
+
+export type SteerPromptRun = {
+  completion: Promise<acp.PromptResponse | undefined>;
+  outcome: Promise<SteerOutcomeResult>;
+};
+
+type SteerApplicationWaiter = {
+  unknown?: boolean;
+  onLateApplied?: () => Promise<void>;
+  sessionId: ACPSessionId;
+  applied: boolean;
+  resolve: (lease: SteerApplicationLease) => void;
+  reject: (error: unknown) => void;
+  released: Promise<void>;
+  release: () => void;
+};
+
+type ActivePromptCompletion = {
+  sessionId: ACPSessionId;
+  promise: Promise<acp.PromptResponse | undefined>;
+};
+
+export type ImageGenerationBeginEvent = {
+  acpSessionId: ACPSessionId;
+  callId: string;
+};
+
+export type ImageGenerationEndEvent = {
+  acpSessionId: ACPSessionId;
+  callId: string;
+  status: string;
+  revisedPrompt?: string;
+  savedPath?: string;
+  image?: {
+    data: string;
+    mimeType: string;
+    uri?: string;
+  };
+};
+
+const IMAGE_GENERATION_REVISED_PROMPT_PREFIX = 'Revised prompt: ';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function getStringField(
+  record: Record<string, unknown>,
+  keys: readonly string[]
+): string | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function parseRawOutputRecord(rawOutput: unknown): Record<string, unknown> | undefined {
+  if (isRecord(rawOutput)) {
+    return rawOutput;
+  }
+  if (typeof rawOutput !== 'string' || rawOutput.length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(rawOutput);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractImageGenerationRawOutputFields(rawOutput: unknown): {
+  revisedPrompt?: string;
+  savedPath?: string;
+  status?: string;
+  imageData?: string;
+} {
+  const record = parseRawOutputRecord(rawOutput);
+  if (!record) return {};
+
+  return {
+    revisedPrompt: getStringField(record, ['revisedPrompt', 'revised_prompt']),
+    savedPath: getStringField(record, ['savedPath', 'saved_path']),
+    status: getStringField(record, ['status']),
+    imageData: getStringField(record, ['result']),
+  };
+}
+
+/**
+ * Extract image-generation metadata from the standard tool-call `content` array: a
+ * tool_call / tool_call_update: a leading "Revised prompt: …" text block and
+ * an image block whose `uri` is the on-disk saved path. `rawOutput` may carry
+ * the same fields for clients that need the saved path without decoding content.
+ */
+function extractImageGenerationContentFields(content: unknown): {
+  revisedPrompt?: string;
+  savedPath?: string;
+  image?: ImageGenerationEndEvent['image'];
+} {
+  if (!Array.isArray(content)) return {};
+  let revisedPrompt: string | undefined;
+  let savedPath: string | undefined;
+  let image: ImageGenerationEndEvent['image'];
+  for (const block of content) {
+    if (!isRecord(block) || block.type !== 'content') continue;
+    const inner = block.content;
+    if (!isRecord(inner)) continue;
+    if (inner.type === 'text' && typeof inner.text === 'string') {
+      if (
+        revisedPrompt === undefined &&
+        inner.text.startsWith(IMAGE_GENERATION_REVISED_PROMPT_PREFIX)
+      ) {
+        revisedPrompt = inner.text.slice(IMAGE_GENERATION_REVISED_PROMPT_PREFIX.length);
+      }
+    } else if (
+      inner.type === 'image' &&
+      typeof inner.data === 'string' &&
+      inner.data.length > 0 &&
+      typeof inner.mimeType === 'string' &&
+      inner.mimeType.length > 0
+    ) {
+      const uri = typeof inner.uri === 'string' && inner.uri.length > 0 ? inner.uri : undefined;
+      savedPath = uri ?? savedPath;
+      image = {
+        data: inner.data,
+        mimeType: inner.mimeType,
+        ...(uri ? { uri } : {}),
+      };
+    }
+  }
+  return { revisedPrompt, savedPath, image };
+}
+
+/**
+ * Turns a loaded workspace MCP catalog into the servers this agent can mount.
+ * Synchronous: everything that needs I/O already happened in the load phase.
+ */
+export interface AgentClientOptions {
+  grokDesignReminderPluginDir?: string;
+  designHookLaunchId?: string;
+  claudeDesignHookSettings?: ReturnType<typeof claudeDesignSettings>;
+  sessionId: SessionId;
+  workspaceId?: WorkspaceId;
+  machineId?: MachineId;
+  logger: Logger;
+  terminalManager: TerminalManager;
+  agentConfig?: {
+    cliType: AgentConfigCliType;
+    agentType: string;
+  };
+  /** Config selected before ACP session establishment. */
+  configOptionValues?: SessionTurnInputConfig['configOptionValues'];
+  /** Whether this Agent session mounts the built-in Molly Task MCP tools. */
+  taskToolsEnabled?: boolean;
+  /** Launcher family (npx/uvx/local) for ACP startup analytics; non-PII. */
+  launcher?: AcpLauncher;
+  /**
+   * Overrides terminal capability advertisement. Builtin Grok defaults to false so its
+   * adapter uses the native local runner; other agents default to true.
+   */
+  terminalEnabled?: boolean;
+  onStartupStage?: (event: AcpStartupStageEvent) => void;
+  onUpdateMessage(message: AcpSessionNotification): void;
+  onRequestPermission(
+    requestId: string,
+    request: acp.RequestPermissionRequest
+  ): Promise<acp.RequestPermissionResponse>;
+  onUsageUpdate?(usage: SessionUsageUpdate): void;
+  onContextWindowUsageUpdate?(usage: SessionContextWindowUsage): void;
+  onRateLimitUpdate?(limits: RateLimit): void;
+  onThreadGoalUpdated?(goal: SessionGoalContent): void;
+  onThreadGoalCleared?(threadId: string): void;
+  onSessionTitleUpdate?(title: string): void;
+  onAgentWarning?(warning: AgentSessionWarning): void;
+  /**
+   * Starts loading the workspace MCP catalog. Invoked BEFORE `initialize`, so
+   * its remote sync overlaps process spawn and the handshake; the resolved
+   * selector is applied once the agent has advertised its MCP capabilities.
+   */
+  loadExternalMcpServers?(): Promise<SessionMcpCatalogSelector>;
+  onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
+  onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
+  onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
+}
+
+export type AcpWriteTextFileEvidence = {
+  readonly path: string;
+  readonly oldText: string | null;
+  readonly newText: string;
+};
+
+export class AgentClient implements acp.Client {
+  private connection: acp.ClientSideConnection | null = null;
+  private lastSessionUpdateAtMs = Date.now();
+  logger: Logger;
+  private readonly terminalManager: TerminalManager;
+  private readonly terminalEnabled: boolean;
+  private acpSessionId: string | null = null;
+  private supportsResume = false;
+  private supportsLoadSession = false;
+  private supportsHttpMcp = false;
+  private supportsClose = false;
+  private supportsFork = false;
+  private supportsForkAtTurn = false;
+  private lodyExtensionCapabilities: LodyExtensionCapabilities = {};
+  private authMethods: acp.AuthMethod[] = [];
+  private authenticationRequired = false;
+  private acknowledgedSteerCapability: AcknowledgedSteerCapability | null = null;
+  private readonly steerApplicationWaiters = new Map<string, SteerApplicationWaiter>();
+  private steerApplicationBarrier: Promise<void> | null = null;
+  private activePromptCompletion: ActivePromptCompletion | null = null;
+  private readonly pendingPrompts = new Set<Promise<unknown>>();
+  private providerPromptCompletion: ActivePromptCompletion | null = null;
+  private grokStopState: 'active' | 'closing' | 'closed' | 'failed' | 'restoring' = 'active';
+  private grokStopCompletion?: Promise<void>;
+  private grokRestoreCompletion?: Promise<void>;
+  private grokRestoreRpcSettlement?: Promise<void>;
+
+  private grokStopRequest?: { ready: Promise<void>; completion: Promise<void> };
+  private grokStopWaitFailed = false;
+
+  get requiresNativeStopClosure(): boolean {
+    return (
+      this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'grok'
+    );
+  }
+
+  /** Native closure evidence outlives a caller's bounded wait. */
+  get nativeStopCompletion(): Promise<void> | undefined {
+    return this.grokStopRequest?.completion;
+  }
+
+  /** Explicit Stop closes the resident Grok session; ordinary ACP cancel stays unchanged. */
+  closeAfterStop(sessionId: ACPSessionId): Promise<void> | undefined {
+    if (
+      this.options.agentConfig?.cliType !== 'builtin' ||
+      this.options.agentConfig.agentType !== 'grok'
+    )
+      return undefined;
+    this.ensureSessionMatch(sessionId);
+    if (this.grokStopCompletion) return this.grokStopCompletion;
+    if (!this.grokStopRequest) {
+      const restoring = this.grokRestoreCompletion;
+      const connection = this.connection;
+      this.grokStopState = 'closing';
+      const ready = (async () => {
+        // A timed-out load can still create residency; close only after it settles.
+        await restoring?.catch(() => {});
+        await this.grokRestoreRpcSettlement;
+      })();
+      const completion = ready.then(async () => {
+        try {
+          this.ensureSessionMatch(sessionId);
+          if (connection !== this.connection || !this.supportsClose || !connection?.closeSession)
+            throw new Error('Grok did not advertise session.close on the original connection');
+          const response = await connection.closeSession({ sessionId });
+          this.ensureSessionMatch(sessionId);
+          if (connection !== this.connection) throw new Error('Grok Stop connection changed');
+          const outcome = response._meta?.['x.ai/closeOutcome'];
+          if (outcome !== 'closed' && outcome !== 'notResident')
+            throw new Error('Grok did not confirm that the resident session closed');
+          this.grokRestoreRpcSettlement = undefined;
+          this.grokStopState = 'closed';
+        } catch (error) {
+          this.grokStopState = 'failed';
+          throw error;
+        }
+      });
+      // The bounded waiter attaches after readiness; retain rejection meanwhile.
+      void completion.catch(() => {});
+      this.grokStopRequest = { ready, completion };
+    }
+    const request = this.grokStopRequest;
+    this.grokStopWaitFailed = false;
+    this.grokStopCompletion = request.ready
+      .then(() =>
+        withTimeout(
+          request.completion,
+          this.logger,
+          'grok.stop.close',
+          this.options.sessionId,
+          10000
+        )
+      )
+      .catch((error) => {
+        this.grokStopWaitFailed = true;
+        throw new Error(
+          'Grok Stop could not confirm closure. Drafts are retained and the canvas stays locked.',
+          { cause: error }
+        );
+      });
+    return this.grokStopCompletion;
+  }
+
+  /** Retry a failed request explicitly; a timed-out, still-live request is shared. */
+  retryCloseAfterStop(sessionId: ACPSessionId): Promise<void> {
+    this.ensureSessionMatch(sessionId);
+    if (this.grokStopState === 'closed') return Promise.resolve();
+    if (this.grokStopWaitFailed) {
+      this.grokStopCompletion = undefined;
+      if (this.grokStopState === 'failed') this.grokStopRequest = undefined;
+    }
+    return this.closeAfterStop(sessionId) ?? Promise.resolve();
+  }
+
+  /** Called only by the next explicit user dispatch, never by Stop or prompt retry. */
+  async resumeAfterStop(sessionId: ACPSessionId): Promise<void> {
+    if (this.grokStopState === 'active') return;
+    this.ensureSessionMatch(sessionId);
+    if (this.grokRestoreCompletion) return this.grokRestoreCompletion;
+    if (this.grokStopState === 'failed' && !this.grokStopCompletion)
+      await this.retryCloseAfterStop(sessionId);
+    if (this.grokStopState !== 'closed') await this.grokStopCompletion;
+    if (this.grokStopState !== 'closed' || !this.connection || !this.sessionWorkdir)
+      throw new Error('Grok stopped session is not ready to restore');
+    const connection = this.connection;
+    const workdir = this.sessionWorkdir;
+    this.grokStopCompletion = undefined;
+    this.grokStopRequest = undefined;
+    this.grokStopState = 'restoring';
+    const restoring = (async () => {
+      const mcpServers = await this.buildMcpServers(
+        workdir,
+        this.options.loadExternalMcpServers?.()
+      );
+      const loadRequest = connection.loadSession({
+        sessionId,
+        cwd: workdir,
+        mcpServers,
+        ...this.getSessionStartMeta(),
+      });
+      this.grokRestoreRpcSettlement = loadRequest.then(
+        () => {},
+        () => {}
+      );
+      const response = await withTimeout(
+        loadRequest,
+        this.logger,
+        'grok.stop.load',
+        this.options.sessionId,
+        120000
+      );
+      await this.loadGrokDesignReminder(connection, sessionId);
+      this.applySessionResponseState({ ...response, sessionId });
+      if (this.grokStopState === 'restoring') this.grokStopState = 'active';
+    })();
+    this.grokRestoreCompletion = restoring;
+    try {
+      await restoring;
+    } catch (error) {
+      if (this.grokStopState === 'restoring') this.grokStopState = 'failed';
+      throw error;
+    } finally {
+      this.grokRestoreCompletion = undefined;
+    }
+  }
+
+  /** Actual ACP prompt response settlement, independent of the local abort race.
+   * The returned promise is a snapshot of this invocation, so later prompts cannot replace it.
+   */
+  getProviderPromptSettlement(sessionId: ACPSessionId): Promise<void> {
+    const active = this.providerPromptCompletion;
+    if (!active || active.sessionId !== sessionId) return Promise.resolve();
+    return active.promise.then(
+      () => {},
+      () => {}
+    );
+  }
+  private sessionWorkdir: string | null = null;
+  private agentMcpCapabilities: acp.McpCapabilities | undefined;
+  /** Session config options returned by the agent; the source of model/mode choices and names. */
+  private configOptions: acp.SessionConfigOption[] = [];
+  private readonly configOptionsListeners = new Set<() => void>();
+  /** Desired config retained across same-client replacement sessions. */
+  private readonly configOptionValues: NonNullable<SessionTurnInputConfig['configOptionValues']>;
+  /** Legacy top-level `models` state proves that `session/set_model` is supported. */
+  private legacySessionModelState: LegacySessionModelState | null = null;
+  public currentModel?: ModelInfo;
+  /**
+   * Tool-call IDs identified by the canonical Molly tool name. We need this so the
+   * follow-up `tool_call_update` notifications — which never repeat the title —
+   * can still be recognized and routed through the upload pipeline.
+   */
+  private imageGenerationToolCallIds = new Set<string>();
+  private activeCodexRetry: { sessionId: string; toolCallId: string } | null = null;
+
+  constructor(private options: AgentClientOptions) {
+    this.logger = options.logger;
+    this.terminalManager = options.terminalManager;
+    this.terminalEnabled =
+      options.terminalEnabled ??
+      !(options.agentConfig?.cliType === 'builtin' && options.agentConfig.agentType === 'grok');
+    this.configOptionValues = { ...(options.configOptionValues ?? {}) };
+  }
+
+  private describePromptDiagnosticContext(): string {
+    const agentConfig = this.options.agentConfig;
+    return `cliType=${agentConfig?.cliType ?? 'unknown'} agentType=${
+      agentConfig?.agentType ?? 'unknown'
+    } currentModel=${this.currentModel?.modelId ?? 'none'} configOptions=${summarizeAcpConfigOptions(
+      this.configOptions
+    )}`;
+  }
+
+  private buildBuiltinMcpServers(workdir: string): acp.McpServer[] {
+    if (!this.options.workspaceId || !this.options.machineId) {
+      return [];
+    }
+
+    // Agents that advertise `mcpCapabilities.http` use the shared MCP HTTP
+    // host (one subprocess per daemon): same tool surface, instead of a full
+    // per-session CLI Node subprocess that only proxies back to the daemon.
+    // Anything else (and a daemon whose host is down or gave up) keeps the
+    // stdio entry below.
+    if (this.supportsHttpMcp) {
+      const endpoint = getMollyMcpHttpEndpoint();
+      if (endpoint) {
+        return [
+          {
+            type: 'http',
+            name: 'molly',
+            url: endpoint.url,
+            headers: buildMollyMcpHttpHeaders(endpoint, {
+              sessionId: this.options.sessionId,
+              designHookLaunchId: this.options.designHookLaunchId,
+              workspaceId: this.options.workspaceId,
+              machineId: this.options.machineId,
+              workdir,
+              taskToolsEnabled: this.options.taskToolsEnabled === true,
+            }),
+          },
+        ];
+      }
+    }
+
+    const cliEntrypoint = process.argv[1];
+    if (!cliEntrypoint) {
+      return [];
+    }
+    const env = [
+      { name: 'MOLLY_MCP_SESSION_ID', value: this.options.sessionId },
+      { name: 'MOLLY_MCP_WORKSPACE_ID', value: this.options.workspaceId },
+      { name: 'MOLLY_MCP_MACHINE_ID', value: this.options.machineId },
+      { name: 'MOLLY_MCP_SOCKET_PATH', value: getLocalControlSocketPath() },
+      { name: 'MOLLY_MCP_WORKDIR', value: workdir },
+      {
+        name: 'MOLLY_MCP_TASK_TOOLS_ENABLED',
+        value: this.options.taskToolsEnabled === true ? '1' : '0',
+      },
+    ];
+
+    if (this.options.designHookLaunchId)
+      env.push({ name: 'MOLLY_DESIGN_LAUNCH_ID', value: this.options.designHookLaunchId });
+
+    // ACP MCP config is an explicit environment allowlist. The MCP subprocess
+    // invokes normal CLI services, so forward their public deployment endpoints
+    // while keeping credentials out of the agent-visible server config.
+    for (const [name, value] of [
+      ['MOLLY_AUTH_URL', MOLLY_AUTH_URL],
+      ['MOLLY_AUTH_SITE_URL', MOLLY_AUTH_SITE_URL],
+      ['MOLLY_SERVER_URL', MOLLY_SERVER_URL],
+    ] as const) {
+      const normalized = value?.trim();
+      if (normalized) {
+        env.push({ name, value: normalized });
+      }
+    }
+
+    if (process.env.ELECTRON_RUN_AS_NODE) {
+      env.push({
+        name: 'ELECTRON_RUN_AS_NODE',
+        value: process.env.ELECTRON_RUN_AS_NODE,
+      });
+    }
+
+    return [
+      {
+        name: 'molly',
+        command: process.execPath,
+        args: [cliEntrypoint, '__internal', 'molly-mcp-server'],
+        env,
+      },
+    ];
+  }
+
+  private async buildMcpServers(
+    workdir: string,
+    externalLoad: Promise<SessionMcpCatalogSelector> | undefined
+  ): Promise<acp.McpServer[]> {
+    const builtin = this.buildBuiltinMcpServers(workdir);
+    if (!externalLoad) {
+      return builtin;
+    }
+
+    try {
+      const external = (await externalLoad)({
+        http: this.agentMcpCapabilities?.http === true,
+      });
+      for (const problem of external.problems) {
+        this.options.onAgentWarning?.({
+          message: formatMcpResolutionProblem(problem),
+          source: 'configWarning',
+        });
+      }
+      return [...builtin, ...(external.servers as acp.McpServer[])];
+    } catch (error) {
+      const message = `Workspace MCP servers could not be loaded (${formatErrorMessage(
+        error
+      )}). The agent started with only the built-in Molly server.`;
+      this.logger.debug(`[${this.options.sessionId}] ${message}`);
+      this.options.onAgentWarning?.({ message, source: 'configWarning' });
+      return builtin;
+    }
+  }
+
+  async requestPermission(
+    params: acp.RequestPermissionRequest
+  ): Promise<acp.RequestPermissionResponse> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const requestId = randomUUID();
+    this.logger.debug(
+      `[${this.options.sessionId}] Requesting permission for tool call ${params.toolCall.toolCallId}`
+    );
+    return this.options.onRequestPermission(requestId, params);
+  }
+
+  /**
+   * acp-extension-claude >= 0.44.0 surfaces AskUserQuestion as an ACP form
+   * elicitation rather than a permission request. Bridge it onto the existing
+   * AskUserQuestion permission flow: parse the form back into question metadata,
+   * synthesize the permission request the UI already renders, then fold the
+   * user's answers back into the elicitation response. Url-mode and non-question
+   * forms (e.g. arbitrary MCP elicitations) are declined — we only advertise
+   * form elicitation to re-enable AskUserQuestion.
+   */
+  async unstable_createElicitation(
+    params: acp.CreateElicitationRequest
+  ): Promise<acp.CreateElicitationResponse> {
+    const elicitation = parseAskUserQuestionElicitationRequest(params);
+    if (!elicitation) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Declining unsupported elicitation (mode=${(params as { mode?: unknown }).mode})`
+      );
+      return { action: 'decline' };
+    }
+
+    const sessionId = (params as { sessionId?: unknown }).sessionId;
+    if (typeof sessionId !== 'string') {
+      return { action: 'decline' };
+    }
+    this.ensureSessionMatch(sessionId as ACPSessionId);
+
+    const toolCallId =
+      typeof (params as { toolCallId?: unknown }).toolCallId === 'string'
+        ? ((params as { toolCallId?: string }).toolCallId as string)
+        : undefined;
+    const requestId = randomUUID();
+    const firstQuestion = elicitation.meta.questions[0];
+    const autoResolveAt =
+      typeof elicitation.autoResolutionMs === 'number' &&
+      Number.isFinite(elicitation.autoResolutionMs)
+        ? getServerNow() + Math.max(0, elicitation.autoResolutionMs)
+        : undefined;
+    const autoResolveAtEpochSeconds =
+      autoResolveAt === undefined ? undefined : Math.floor(autoResolveAt / 1000);
+    const lodyElicitation = {
+      version: 1,
+      questions: elicitation.meta.questions,
+      ...(autoResolveAtEpochSeconds !== undefined ? { autoResolveAtEpochSeconds } : {}),
+    } satisfies LodyElicitationMeta;
+    // Permission requests live in shared history and can be answered by a
+    // renderer older than the Core metadata migration. Keep the canonical
+    // payload authoritative, but dual-write the provider alias for one mixed-
+    // version compatibility window. The response bridge likewise accepts both.
+    const legacyQuestionMeta =
+      this.options.agentConfig?.agentType === 'codex'
+        ? {
+            codex: {
+              requestUserInput: {
+                version: 1,
+                allowCustomAnswer: elicitation.meta.allowCustomAnswer,
+                questions: elicitation.meta.questions,
+                ...(autoResolveAt !== undefined ? { autoResolveAt } : {}),
+              },
+            },
+          }
+        : this.options.agentConfig?.agentType === 'claude'
+          ? {
+              claudeCode: {
+                requestType: 'askUserQuestion',
+                askUserQuestion: {
+                  version: 1,
+                  allowCustomAnswer: elicitation.meta.allowCustomAnswer,
+                  questions: elicitation.meta.questions,
+                },
+              },
+            }
+          : {};
+    const syntheticRequest: acp.RequestPermissionRequest = {
+      sessionId,
+      toolCall: {
+        toolCallId: toolCallId ?? requestId,
+        title: firstQuestion?.question ?? 'Answer question',
+        // Mirrors how acp-extension-claude reports the AskUserQuestion tool call.
+        kind: 'think',
+        status: 'pending',
+        rawInput: { questions: elicitation.meta.questions },
+      },
+      options: [
+        { kind: 'allow_once', name: 'Submit answers', optionId: 'answer' },
+        { kind: 'reject_once', name: 'Cancel', optionId: 'cancel' },
+      ],
+      _meta: {
+        lody: {
+          elicitation: lodyElicitation,
+        },
+        ...legacyQuestionMeta,
+      },
+    };
+
+    this.logger.debug(
+      `[${this.options.sessionId}] Bridging AskUserQuestion elicitation (toolCallId=${toolCallId ?? '<none>'}, questions=${elicitation.meta.questions.length})`
+    );
+    const response = await this.options.onRequestPermission(requestId, syntheticRequest);
+    return buildAskUserQuestionElicitationResponse(elicitation, response);
+  }
+  async sessionUpdate(params: acp.SessionNotification) {
+    const applicationBarrier = this.steerApplicationBarrier;
+    if (applicationBarrier) {
+      await applicationBarrier;
+    }
+    if (
+      this.acpSessionId !== null &&
+      (params.sessionId as unknown as string) !== this.acpSessionId
+    ) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping update for detached ACP session: ${params.sessionId}`
+      );
+      return;
+    }
+    this.lastSessionUpdateAtMs = Date.now();
+    if (this.handleUsageUpdate(params.update)) {
+      // Usage telemetry is handled outside persisted chat history and remains
+      // soft-validated so malformed telemetry cannot break the session stream.
+      return;
+    }
+
+    const notification = parseSessionNotification(params);
+
+    if (notification.update.sessionUpdate === 'config_option_update') {
+      this.applyConfigOptionsState(notification.update.configOptions, true);
+    }
+
+    this.handleGoalSessionInfoUpdate(notification);
+    this.handleCodexWarningSessionInfoUpdate(notification);
+    this.handleAgentSessionTitleUpdate(notification);
+
+    if (this.handleCodexRetrySessionInfoUpdate(notification)) {
+      return;
+    }
+    if (this.isCodexRecoveryNotification(notification)) {
+      this.completeCodexRetryStatus();
+    }
+
+    if (this.handleImageGenerationNotification(notification)) {
+      // handleImageGenerationNotification has already routed the data
+      // to onImageGenerationBegin/End. Suppress the raw notification so
+      // the inline base64 image never lands in the session history doc — the
+      // host's upload pipeline attaches the image as an image_group instead.
+      return;
+    }
+
+    this.options.onUpdateMessage(notification);
+    return;
+  }
+
+  private handleGoalSessionInfoUpdate(notification: AcpSessionNotification): void {
+    if (notification.update.sessionUpdate !== 'session_info_update') {
+      return;
+    }
+
+    const meta = notification.update._meta;
+    if (typeof meta !== 'object' || meta === null) {
+      return;
+    }
+
+    let goalContainer: unknown;
+    let source: 'Molly' | 'legacy ACP' | 'legacy Codex';
+    const lodyMeta = meta.lody;
+    if (typeof lodyMeta === 'object' && lodyMeta !== null && 'goal' in lodyMeta) {
+      goalContainer = lodyMeta;
+      source = 'Molly';
+    } else if ('goal' in meta) {
+      goalContainer = meta;
+      source = 'legacy ACP';
+    } else {
+      const codexMeta = meta.codex;
+      if (
+        !this.isCodexAgent() ||
+        typeof codexMeta !== 'object' ||
+        codexMeta === null ||
+        !('goal' in codexMeta)
+      ) {
+        return;
+      }
+      goalContainer = codexMeta;
+      source = 'legacy Codex';
+    }
+
+    const goalSchema =
+      source === 'Molly'
+        ? MollyGoalSnapshotSchema
+        : source === 'legacy ACP'
+          ? LegacyNeutralGoalSnapshotSchema
+          : LegacyCodexGoalSnapshotSchema;
+    const parsed = z.object({ goal: goalSchema.nullable() }).safeParse(goalContainer);
+    if (!parsed.success) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping invalid ${source} goal session info: ${parsed.error.message}`
+      );
+      return;
+    }
+
+    const threadId = notification.sessionId;
+    if (parsed.data.goal === null) {
+      this.options.onThreadGoalCleared?.(threadId);
+      return;
+    }
+
+    const goal = parsed.data.goal;
+    this.options.onThreadGoalUpdated?.({
+      type: 'goal',
+      threadId,
+      objective: sanitizeGoalObjective(goal.objective),
+      // The neutral extension collapses provider-specific limit reasons into
+      // `limited`. Normalize to the older generic blocked state at the durable
+      // boundary: mixed-version readers can consume it without falsely claiming
+      // that a usage or token budget was the specific limiting resource.
+      status: goal.status === 'limited' ? 'blocked' : goal.status,
+      tokenBudget: goal.tokenBudget ?? null,
+      ...(goal.tokensUsed !== undefined ? { tokensUsed: goal.tokensUsed } : {}),
+      ...(goal.timeUsedSeconds !== undefined ? { timeUsedSeconds: goal.timeUsedSeconds } : {}),
+      ...('createdAtEpochSeconds' in goal && goal.createdAtEpochSeconds !== undefined
+        ? { createdAt: goal.createdAtEpochSeconds * 1_000 }
+        : 'createdAt' in goal && goal.createdAt !== undefined
+          ? { createdAt: goal.createdAt }
+          : {}),
+      ...('updatedAtEpochSeconds' in goal && goal.updatedAtEpochSeconds !== undefined
+        ? { updatedAt: goal.updatedAtEpochSeconds * 1_000 }
+        : 'updatedAt' in goal && goal.updatedAt !== undefined
+          ? { updatedAt: goal.updatedAt }
+          : {}),
+    });
+  }
+
+  /**
+   * Forward structured notices so the host can record warnings without adding
+   * provider diagnostics to persisted agent text.
+   */
+  private handleCodexWarningSessionInfoUpdate(notification: AcpSessionNotification): void {
+    if (notification.update.sessionUpdate !== 'session_info_update') {
+      return;
+    }
+    const lodyMeta = notification.update._meta?.lody;
+    const canonical = MollyNoticeSchema.safeParse(lodyMeta);
+    if (canonical.success) {
+      if (canonical.data.notice.level === 'warning' || canonical.data.notice.level === 'error') {
+        this.options.onAgentWarning?.({
+          message: canonical.data.notice.message,
+          ...(canonical.data.notice.source ? { source: canonical.data.notice.source } : {}),
+        });
+      }
+      return;
+    }
+
+    if (!this.isCodexAgent()) return;
+    const parsed = LegacyCodexSessionWarningSchema.safeParse(notification.update._meta?.codex);
+    if (!parsed.success) {
+      return;
+    }
+    this.options.onAgentWarning?.(parsed.data.warning);
+  }
+
+  private handleCodexRetrySessionInfoUpdate(notification: AcpSessionNotification): boolean {
+    if (!this.isCodexAgent() || notification.update.sessionUpdate !== 'session_info_update') {
+      return false;
+    }
+    const parsed = CodexRetryErrorSchema.safeParse(notification.update._meta?.codex);
+    if (!parsed.success) return false;
+
+    const toolCallId = `codex-retry:${parsed.data.error.turnId}`;
+    if (this.activeCodexRetry?.toolCallId === toolCallId) {
+      return true;
+    }
+    this.completeCodexRetryStatus();
+    this.activeCodexRetry = { sessionId: notification.sessionId, toolCallId };
+    this.options.onUpdateMessage(
+      parseSessionNotification({
+        sessionId: notification.sessionId,
+        update: {
+          sessionUpdate: 'tool_call',
+          toolCallId,
+          title: 'Codex retrying',
+          kind: 'other',
+          status: 'in_progress',
+          _meta: { lody: { activity: { version: 1, kind: 'retry' } } },
+        },
+      })
+    );
+    return true;
+  }
+
+  private isCodexRecoveryNotification(notification: AcpSessionNotification): boolean {
+    if (!this.activeCodexRetry) return false;
+    switch (notification.update.sessionUpdate) {
+      case 'agent_message_chunk':
+      case 'agent_thought_chunk':
+      case 'tool_call':
+      case 'tool_call_update':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private completeCodexRetryStatus(): void {
+    const active = this.activeCodexRetry;
+    if (!active) return;
+    this.activeCodexRetry = null;
+    this.options.onUpdateMessage(
+      parseSessionNotification({
+        sessionId: active.sessionId,
+        update: {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: active.toolCallId,
+          status: 'completed',
+          _meta: { lody: { activity: { version: 1, kind: 'retry' } } },
+        },
+      })
+    );
+  }
+
+  private handleImageGenerationNotification(notification: AcpSessionNotification): boolean {
+    const update = notification.update;
+    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
+      return false;
+    }
+    const callId = update.toolCallId;
+    if (typeof callId !== 'string' || callId.length === 0) return false;
+
+    const isBegin = update.sessionUpdate === 'tool_call';
+    const lodyMeta = isRecord(update._meta?.lody) ? update._meta.lody : undefined;
+    const isCanonicalImageGeneration = lodyMeta?.toolName === LODY_TOOL_NAMES.imageGeneration;
+    const isLegacyCodexImageGeneration = this.isCodexAgent() && update.title === 'Image generation';
+    const isTracked = this.imageGenerationToolCallIds.has(callId);
+    if (isBegin) {
+      if (!isCanonicalImageGeneration && !isLegacyCodexImageGeneration) return false;
+    } else if (!isTracked) {
+      return false;
+    }
+
+    const acpSessionId = (notification.sessionId ?? this.acpSessionId) as ACPSessionId | null;
+    if (!acpSessionId || !this.isCurrentAcpSession(acpSessionId)) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping image generation notification for mismatched ACP session: ${acpSessionId}`
+      );
+      // Still suppress so the inline base64 doesn't leak into history.
+      return true;
+    }
+
+    const rawOutput = (update as { rawOutput?: unknown }).rawOutput;
+    const rawFields = extractImageGenerationRawOutputFields(rawOutput);
+    const status = typeof update.status === 'string' ? update.status : rawFields.status;
+    const isTerminalStatus = status === 'completed' || status === 'failed';
+
+    if (isBegin && !isTracked) {
+      this.imageGenerationToolCallIds.add(callId);
+      this.options.onImageGenerationBegin?.({ acpSessionId, callId });
+    }
+
+    // Any notification that arrives after begin (or a fresh `tool_call` with
+    // a terminal status, which upstream emits when the begin event was lost
+    // on session resume) carries the end-state payload.
+    const carriesEndPayload = !isBegin || isTerminalStatus || Array.isArray(update.content);
+    if (carriesEndPayload && status) {
+      const contentFields = extractImageGenerationContentFields(update.content);
+      const image =
+        contentFields.image ??
+        (rawFields.imageData
+          ? {
+              data: rawFields.imageData,
+              mimeType: 'image/png',
+              ...(rawFields.savedPath ? { uri: rawFields.savedPath } : {}),
+            }
+          : undefined);
+      this.options.onImageGenerationEnd?.({
+        acpSessionId,
+        callId,
+        status,
+        revisedPrompt: contentFields.revisedPrompt ?? rawFields.revisedPrompt,
+        savedPath: contentFields.savedPath ?? rawFields.savedPath,
+        ...(image ? { image } : {}),
+      });
+    }
+
+    if (isTerminalStatus) {
+      this.imageGenerationToolCallIds.delete(callId);
+    }
+
+    return true;
+  }
+
+  private handleUsageUpdate(update: unknown): boolean {
+    if (!isUsageUpdate(update)) {
+      return false;
+    }
+
+    const size = typeof update.size === 'number' ? update.size : null;
+    const used = typeof update.used === 'number' ? update.used : null;
+    if (
+      size !== null &&
+      used !== null &&
+      Number.isFinite(size) &&
+      Number.isFinite(used) &&
+      size >= 0 &&
+      used >= 0
+    ) {
+      this.options.onContextWindowUsageUpdate?.({ size, used });
+    }
+    return true;
+  }
+
+  isCreated(): boolean {
+    return !!this.connection;
+  }
+
+  supportsAcknowledgedSteer(): boolean {
+    return this.acknowledgedSteerCapability !== null;
+  }
+
+  getAuthMethods(): readonly acp.AuthMethod[] {
+    return this.authMethods;
+  }
+
+  isAuthenticationRequired(): boolean {
+    return this.authenticationRequired;
+  }
+
+  getAcknowledgedSteerCapability(): AcknowledgedSteerCapability | null {
+    return this.acknowledgedSteerCapability;
+  }
+
+  findSteerConfigMismatch(input: SessionTurnInputConfig): string | null {
+    return findActiveSteerConfigMismatch(input, this.configOptions, this.currentModel?.modelId);
+  }
+
+  async writeTextFile?(params: acp.WriteTextFileRequest): Promise<acp.WriteTextFileResponse> {
+    // ACP file writes are executed locally by the CLI and may be invoked by the agent.
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const resolvedPath = this.resolvePath(params.path);
+    let oldText: string | null = null;
+    try {
+      oldText = await fs.readFile(resolvedPath, 'utf8');
+    } catch (error) {
+      if (!isNodeErrorCode(error, 'ENOENT')) {
+        throw error;
+      }
+    }
+    await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+    await fs.writeFile(resolvedPath, params.content, 'utf8');
+    if (this.options.onWriteTextFile) {
+      try {
+        await this.options.onWriteTextFile({
+          path: resolvedPath,
+          oldText,
+          newText: params.content,
+        });
+      } catch (error) {
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP write_text_file evidence callback failed: ${formatErrorMessage(error)}`
+        );
+      }
+    }
+    return {};
+  }
+  async readTextFile?(params: acp.ReadTextFileRequest): Promise<acp.ReadTextFileResponse> {
+    // ACP file reads can return large payloads; they are streamed to the UI via notifications,
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const resolvedPath = this.resolvePath(params.path);
+    const content = await fs.readFile(resolvedPath, 'utf8');
+    const sliced = sliceTextByLines(content, params.line ?? null, params.limit ?? null);
+    return { content: sliced };
+  }
+  async createTerminal?(params: acp.CreateTerminalRequest): Promise<acp.CreateTerminalResponse> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const env =
+      params.env?.reduce<Record<string, string>>((acc, variable) => {
+        acc[variable.name] = variable.value;
+        return acc;
+      }, {}) ?? undefined;
+
+    const terminalId = await this.terminalManager.createTerminal(
+      params.sessionId,
+      params.command,
+      params.args ?? [],
+      params.cwd ?? undefined,
+      env,
+      typeof params.outputByteLimit === 'bigint'
+        ? params.outputByteLimit > BigInt(Number.MAX_SAFE_INTEGER)
+          ? Number.MAX_SAFE_INTEGER
+          : Number(params.outputByteLimit)
+        : (params.outputByteLimit ?? undefined)
+    );
+    return { terminalId };
+  }
+  async terminalOutput?(params: acp.TerminalOutputRequest): Promise<acp.TerminalOutputResponse> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const result = await this.terminalManager.terminalOutput(params.sessionId, params.terminalId);
+    return {
+      output: result.output,
+      truncated: result.truncated,
+      exitStatus: result.exitStatus ?? undefined,
+    };
+  }
+  async releaseTerminal?(
+    params: acp.ReleaseTerminalRequest
+  ): Promise<acp.ReleaseTerminalResponse | void> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    await this.terminalManager.releaseTerminal(params.sessionId, params.terminalId);
+    return {};
+  }
+  async waitForTerminalExit?(
+    params: acp.WaitForTerminalExitRequest
+  ): Promise<acp.WaitForTerminalExitResponse> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    const exitStatus = await this.terminalManager.waitForTerminalExit(
+      params.sessionId,
+      params.terminalId
+    );
+    return exitStatus;
+  }
+  async killTerminal?(params: acp.KillTerminalRequest): Promise<acp.KillTerminalResponse | void> {
+    this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    await this.terminalManager.killTerminal(params.sessionId, params.terminalId);
+    return {};
+  }
+
+  async getRateLimits(request: RateLimitsGetRequest = {}): Promise<RateLimitsSnapshot> {
+    if (this.lodyExtensionCapabilities.rateLimits?.query !== true) {
+      throw new Error('[ACP_RATE_LIMITS_UNSUPPORTED] Agent did not advertise rate-limit queries');
+    }
+    const connection = this.connection;
+    if (!connection) {
+      throw new Error('[ACP_RATE_LIMITS_UNAVAILABLE] ACP connection is not initialized');
+    }
+    const response = await connection.request<Record<string, unknown>, RateLimitsGetRequest>(
+      LODY_EXTENSION_METHODS.rateLimitsGet,
+      request
+    );
+    return parseRateLimitsSnapshot(response);
+  }
+
+  async cancelSubagent(taskId: string, reason?: string): Promise<void> {
+    if (this.lodyExtensionCapabilities.subagents?.cancel !== true) {
+      throw new Error('[ACP_SUBAGENT_UNSUPPORTED] Agent did not advertise subagent management');
+    }
+    const sessionId = this.acpSessionId;
+    const connection = this.connection;
+    if (!sessionId || !connection) {
+      throw new Error('[ACP_SUBAGENT_UNAVAILABLE] ACP session is not connected');
+    }
+    await connection.request(LODY_EXTENSION_METHODS.subagentsCancel, { sessionId, taskId, reason });
+  }
+
+  async extMethod(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    try {
+      await this.handleExtensionMessage(method, params);
+    } catch (error) {
+      this.logger.warn(`Error handling extension method ${method}: ${error}`);
+    }
+    return {};
+  }
+
+  async extNotification?(method: string, params: Record<string, unknown>): Promise<void> {
+    try {
+      await this.handleExtensionMessage(method, params);
+    } catch (error) {
+      this.logger.warn(`Error handling extension notification ${method}: ${error}`);
+    }
+  }
+
+  private async handleExtensionMessage(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<void> {
+    const logicalMethod = method.startsWith('_') ? method.slice(1) : method;
+    if (logicalMethod === this.acknowledgedSteerCapability?.appliedNotificationMethod) {
+      await this.handleSteerApplied(logicalMethod, params);
+      return;
+    }
+    const event = parseLodyExtensionMessage({
+      method,
+      params,
+      sessionId: this.acpSessionId ?? this.options.sessionId,
+      provider: this.options.agentConfig?.agentType ?? 'unknown',
+    });
+    if (!event) {
+      this.logger.debug(`[${this.options.sessionId}] Ignoring extension message ${logicalMethod}`);
+      return;
+    }
+    switch (event.type) {
+      case 'usage': {
+        const modelUsage =
+          event.update.modelUsage == null && this.currentModel
+            ? { [this.currentModel.modelId]: toModelUsageFromUsage(event.update.usage) }
+            : sanitizeModelUsage(event.update.modelUsage);
+        this.options.onUsageUpdate?.({ ...event.update, modelUsage });
+        return;
+      }
+      case 'rateLimits':
+        for (const rateLimit of event.snapshot.rateLimits) {
+          this.options.onRateLimitUpdate?.(rateLimit);
+        }
+        return;
+      case 'legacyProposedPlan':
+        this.options.onUpdateMessage(
+          parseSessionNotification({
+            sessionId: event.plan.sessionId,
+            update:
+              event.plan.status === 'cleared'
+                ? { sessionUpdate: 'plan_removed', planId: event.plan.turnId }
+                : {
+                    sessionUpdate: 'plan_update',
+                    plan: {
+                      type: 'markdown',
+                      planId: event.plan.turnId,
+                      content: event.plan.markdown,
+                    },
+                  },
+          })
+        );
+        return;
+      case 'legacyTaskLifecycle':
+        if (event.provider === 'claude') {
+          this.tryHandleClaudeTaskLifecycleExtension(logicalMethod, event.params);
+        } else {
+          this.tryHandleKimiTaskLifecycleExtension(logicalMethod, event.params);
+        }
+        return;
+    }
+  }
+
+  private async handleSteerApplied(method: string, params: Record<string, unknown>): Promise<void> {
+    const parsed = parseSteerAppliedParams(params);
+    if (!parsed) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping invalid steer application from ${method}`
+      );
+      return;
+    }
+    const acpSessionId = parsed.sessionId as ACPSessionId;
+    if (!this.isCurrentAcpSession(acpSessionId)) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping steer application for mismatched ACP session: ${acpSessionId}`
+      );
+      return;
+    }
+    const waiter = this.steerApplicationWaiters.get(parsed.steerId);
+    if (!waiter || waiter.sessionId !== acpSessionId) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping steer application without a matching waiter: ${parsed.steerId}`
+      );
+      return;
+    }
+    if (waiter.unknown) {
+      this.steerApplicationWaiters.delete(parsed.steerId);
+      await waiter.onLateApplied?.();
+      return;
+    }
+    if (!waiter.applied) {
+      waiter.applied = true;
+      this.steerApplicationBarrier = waiter.released;
+      waiter.resolve({ release: waiter.release });
+    }
+    await waiter.released;
+    if (this.steerApplicationBarrier === waiter.released) {
+      this.steerApplicationBarrier = null;
+    }
+    if (this.steerApplicationWaiters.get(parsed.steerId) === waiter) {
+      this.steerApplicationWaiters.delete(parsed.steerId);
+    }
+  }
+
+  private tryHandleClaudeTaskLifecycleExtension(
+    method: string,
+    params: Record<string, unknown>
+  ): void {
+    const result = convertClaudeTaskLifecycleNotification(params);
+    if (!result.ok) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping invalid Claude task lifecycle update from ${method}: ${result.reason}`
+      );
+      return;
+    }
+
+    const acpSessionId = result.notification.sessionId;
+    if (!this.isCurrentAcpSession(acpSessionId)) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping Claude task lifecycle update for mismatched ACP session: ${acpSessionId}`
+      );
+      return;
+    }
+
+    this.options.onUpdateMessage(result.notification);
+  }
+
+  private tryHandleKimiTaskLifecycleExtension(
+    method: string,
+    params: Record<string, unknown>
+  ): void {
+    const result = convertKimiTaskLifecycleNotification(params);
+    if (!result.ok) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping invalid Kimi task lifecycle update from ${method}: ${result.reason}`
+      );
+      return;
+    }
+    if (!this.isCurrentAcpSession(result.notification.sessionId)) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Dropping Kimi task lifecycle update for mismatched ACP session: ${result.notification.sessionId}`
+      );
+      return;
+    }
+    this.options.onUpdateMessage(result.notification);
+  }
+
+  /** Forward native titles only when their source is authoritative. */
+  private handleAgentSessionTitleUpdate(notification: AcpSessionNotification): void {
+    if (notification.update.sessionUpdate !== 'session_info_update') {
+      return;
+    }
+
+    const ownsTitleGeneration = usesAcpProvidedSessionTitle(
+      this.options.agentConfig?.cliType,
+      this.options.agentConfig?.agentType
+    );
+    const lodyTitleMeta = MollySessionTitleSchema.safeParse(notification.update._meta?.lody);
+    const legacyCodexTitleMeta = this.isCodexAgent()
+      ? z
+          .object({ titleSource: z.enum(['explicit', 'fallback', 'unset', 'unknown']) })
+          .safeParse(notification.update._meta?.codex)
+      : null;
+    const isExplicitProviderTitle =
+      (lodyTitleMeta.success && lodyTitleMeta.data.titleSource === 'explicit') ||
+      (legacyCodexTitleMeta?.success === true &&
+        legacyCodexTitleMeta.data.titleSource === 'explicit');
+    if (!ownsTitleGeneration && !isExplicitProviderTitle) {
+      return;
+    }
+
+    const title =
+      typeof notification.update.title === 'string' ? notification.update.title.trim() : '';
+    if (!title) {
+      return;
+    }
+    this.options.onSessionTitleUpdate?.(title);
+  }
+
+  private isCodexAgent(): boolean {
+    return this.options.agentConfig?.agentType === 'codex';
+  }
+
+  private getGrokClientIdentifier(): string | undefined {
+    return this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'grok'
+      ? `lody:${this.options.sessionId}`
+      : undefined;
+  }
+
+  private getSessionStartMeta(forkSessionTurnId?: string) {
+    const clientIdentifier = this.getGrokClientIdentifier();
+    const lody = {
+      ...(forkSessionTurnId !== undefined
+        ? { forkAtTurn: { version: 1 as const, turnId: forkSessionTurnId } }
+        : {}),
+      ...(Object.keys(this.configOptionValues).length > 0
+        ? {
+            sessionConfig: {
+              version: 1 as const,
+              configOptionValues: { ...this.configOptionValues },
+            },
+          }
+        : {}),
+    };
+    const grokPlugin = this.options.grokDesignReminderPluginDir;
+    const claude = this.options.claudeDesignHookSettings;
+    if (clientIdentifier === undefined && Object.keys(lody).length === 0 && !claude && !grokPlugin)
+      return {};
+    return {
+      _meta: {
+        ...(grokPlugin ? { pluginDirs: [grokPlugin] } : {}),
+        ...(claude ? { claudeCode: { options: { settings: claude } } } : {}),
+        ...(clientIdentifier !== undefined ? { clientIdentifier } : {}),
+        ...(Object.keys(lody).length > 0 ? { lody } : {}),
+      },
+    };
+  }
+
+  private async loadGrokDesignReminder(
+    connection: acp.ClientSideConnection,
+    sessionId: string,
+    abort?: Promise<never>
+  ) {
+    const directory = this.options.grokDesignReminderPluginDir;
+    if (!directory) return;
+    await withTimeout(
+      withAbort(
+        reloadGrokDesignReminder(
+          (method, params) => connection.extMethod(`_${method}`, params),
+          sessionId,
+          directory
+        ),
+        abort
+      ),
+      this.logger,
+      'grok.readReminder.reload',
+      this.options.sessionId,
+      5000
+    );
+  }
+
+  private isCurrentAcpSession(acpSessionId: string): boolean {
+    return this.acpSessionId !== null && acpSessionId === this.acpSessionId;
+  }
+
+  private applySessionResponseState(sessionResponse: acp.NewSessionResponse): void {
+    // Drop config options the current version intentionally skips (e.g. the
+    // `agent` option from acp-extension-claude). See backward-compatibility doc
+    // entry BC-2026-06-24-ACP-CONFIG-OPTION-AGENT-FILTERED.
+    this.currentModel = undefined;
+    this.applyConfigOptionsState(
+      sessionResponse.configOptions ?? [],
+      sessionResponse.configOptions !== undefined
+    );
+    this.legacySessionModelState = readLegacySessionModelState(sessionResponse) ?? null;
+    const initialModelOption = this.findConfigOptionByCategory('model');
+    if (
+      initialModelOption?.type === 'select' &&
+      typeof initialModelOption.currentValue === 'string'
+    ) {
+      this.currentModel = this.resolveModelInfo(initialModelOption.currentValue);
+    } else if (this.legacySessionModelState?.currentModelId) {
+      this.currentModel = this.resolveModelInfo(this.legacySessionModelState.currentModelId);
+    }
+  }
+
+  private applyConfigOptionsState(
+    configOptions: readonly acp.SessionConfigOption[],
+    replaceConfigOptionValues: boolean
+  ): void {
+    this.configOptions = filterAcpConfigOptions(configOptions);
+    if (replaceConfigOptionValues) {
+      for (const configId of Object.keys(this.configOptionValues)) {
+        delete this.configOptionValues[configId];
+      }
+      for (const option of this.configOptions) {
+        if (typeof option.currentValue === 'string' || typeof option.currentValue === 'boolean') {
+          this.configOptionValues[option.id] = option.currentValue;
+        }
+      }
+    }
+
+    const modelOption = this.findConfigOptionByCategory('model');
+    if (modelOption?.type === 'select' && typeof modelOption.currentValue === 'string') {
+      this.currentModel = this.resolveModelInfo(modelOption.currentValue);
+    } else if (this.currentModel) {
+      this.currentModel = this.resolveModelInfo(this.currentModel.modelId);
+    } else {
+      this.currentModel = undefined;
+    }
+    for (const listener of this.configOptionsListeners) listener();
+  }
+
+  private retainLegacyConfigOptionValue(configId: string, value: AcpConfigOptionValue): void {
+    this.configOptionValues[configId] = value;
+    this.configOptions = this.configOptions.map((option) => {
+      if (option.id !== configId) return option;
+      if (option.type === 'select' && typeof value === 'string') {
+        return { ...option, currentValue: value };
+      }
+      if (option.type === 'boolean' && typeof value === 'boolean') {
+        return { ...option, currentValue: value };
+      }
+      return option;
+    });
+    for (const listener of this.configOptionsListeners) listener();
+  }
+
+  async startSession(
+    stream: acp.Stream,
+    workdir: string,
+    resumeSessionId?: ACPSessionId,
+    timeoutOptions: AcpStartupTimeoutOptions = {},
+    startupAbort?: Promise<never>,
+    resolveSessionStart?: () => Promise<AcpSessionStartTarget>,
+    forkSessionId?: ACPSessionId,
+    forkSessionTurnId?: string
+  ): Promise<acp.NewSessionResponse> {
+    const connection = new acp.ClientSideConnection(() => this, stream);
+    this.connection = connection;
+    const grokClientIdentifier = this.getGrokClientIdentifier();
+    const sessionStartMeta = this.getSessionStartMeta();
+    this.logger.debug(
+      `[${this.options.sessionId}] Starting ACP client (workdir=${workdir} resumeSessionId=${
+        resumeSessionId ?? 'none'
+      } forkSessionId=${forkSessionId ?? 'none'})`
+    );
+    if (resumeSessionId && forkSessionId) {
+      throw new Error(
+        '[ACP_SESSION_START_INVALID] resumeSessionId and forkSessionId are exclusive'
+      );
+    }
+
+    // Common analytics props for the ACP startup funnel (spec §8c). Non-PII:
+    // only cli_type/agent_type/launcher + opaque ids are emitted.
+    const startupAnalyticsProps = {
+      ...(this.options.agentConfig?.cliType ? { cliType: this.options.agentConfig.cliType } : {}),
+      ...(this.options.agentConfig?.agentType
+        ? { agentType: this.options.agentConfig.agentType }
+        : {}),
+      ...(this.options.launcher ? { launcher: this.options.launcher } : {}),
+      isResume: !!resumeSessionId,
+      sessionId: this.options.sessionId,
+      ...(this.options.workspaceId ? { workspaceId: this.options.workspaceId } : {}),
+    };
+    const startupStart = performance.now();
+
+    // Off the critical path on purpose: loading the workspace MCP catalog is a
+    // remote sync plus a document read, and nothing in it depends on the
+    // `initialize` response — only the selection applied afterwards does. Start
+    // it here so it overlaps the handshake instead of stalling `newSession`.
+    // The rejection handler is attached immediately because an `initialize`
+    // failure below would otherwise leave this promise unobserved.
+    const externalMcpLoad = this.options.loadExternalMcpServers?.();
+    externalMcpLoad?.catch(() => undefined);
+
+    const initStart = performance.now();
+    this.options.onStartupStage?.({ type: 'initialize_start' });
+
+    // connection.initialize() internally spawns the CLI process and waits for it to respond.
+    // Missing dependencies or local runtime issues can hang this operation indefinitely.
+    // Apply a hard timeout so startup fails fast.
+    const ACP_INIT_TIMEOUT_MS = Math.max(
+      0,
+      timeoutOptions.initTimeoutMs ?? DEFAULT_ACP_INIT_TIMEOUT_MS
+    );
+
+    let initResponse: acp.InitializeResponse;
+    try {
+      initResponse = await withTimeout(
+        withAbort(
+          connection.initialize({
+            protocolVersion: acp.PROTOCOL_VERSION,
+            ...(grokClientIdentifier ? { _meta: { clientIdentifier: grokClientIdentifier } } : {}),
+            clientCapabilities: {
+              terminal: this.terminalEnabled,
+              plan: {},
+              auth: {
+                terminal: true,
+              },
+              session: {
+                configOptions: {
+                  boolean: {},
+                },
+              },
+              // Grok must read files natively: delegating PNG reads to the standard
+              // UTF-8 text RPC loses binary data before its image handling.
+              fs: {
+                readTextFile: !(
+                  this.options.agentConfig?.cliType === 'builtin' &&
+                  this.options.agentConfig.agentType === 'grok'
+                ),
+                writeTextFile: true,
+              },
+              // Form elicitation is how acp-extension-claude >= 0.44.0 surfaces
+              // AskUserQuestion; without it the agent disables the tool entirely.
+              // Handled in `unstable_createElicitation` by bridging onto the
+              // existing AskUserQuestion permission UI.
+              elicitation: {
+                form: {},
+              },
+            },
+          }),
+          startupAbort
+        ),
+        this.logger,
+        'connection.initialize',
+        this.options.sessionId,
+        ACP_INIT_TIMEOUT_MS
+      );
+    } catch (error) {
+      const reason = classifyAcpProtocolReason(error);
+      captureAcpProtocolInitFailed({ ...startupAnalyticsProps, reason });
+      if (reason === 'timeout') {
+        captureAcpStartupTimeout({ ...startupAnalyticsProps, timedOutOperation: 'initialize' });
+      }
+      throw error;
+    }
+    const initDurationMs = performance.now() - initStart;
+    this.options.onStartupStage?.({ type: 'initialize_end', durationMs: initDurationMs });
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP initialize finished in ${Math.round(initDurationMs)}ms`
+    );
+    this.logger.debug(`[${this.options.sessionId}] ACP initialize response received`);
+    this.authMethods = [...(initResponse.authMethods ?? [])];
+    this.agentMcpCapabilities = initResponse.agentCapabilities?.mcpCapabilities;
+
+    const loadSessionCapability = initResponse.agentCapabilities?.loadSession;
+    this.supportsLoadSession = !!loadSessionCapability;
+    const hasLoadSessionMethod = typeof connection.loadSession === 'function';
+
+    const resumeCapability = initResponse.agentCapabilities?.sessionCapabilities?.resume;
+    this.supportsResume = !!resumeCapability;
+    this.supportsHttpMcp = initResponse.agentCapabilities?.mcpCapabilities?.http === true;
+    captureAcpProtocolInitCompleted({
+      ...startupAnalyticsProps,
+      initDurationMs,
+      supportsResume: this.supportsResume || this.supportsLoadSession,
+    });
+    const hasResumeMethod = typeof connection.resumeSession === 'function';
+    const closeCapability = initResponse.agentCapabilities?.sessionCapabilities?.close;
+    this.supportsClose = !!closeCapability;
+    const forkCapability = initResponse.agentCapabilities?.sessionCapabilities?.fork;
+    this.supportsFork = !!forkCapability;
+    const extensionMeta = initResponse.agentCapabilities?._meta as
+      | Record<string, unknown>
+      | null
+      | undefined;
+    this.lodyExtensionCapabilities = parseLodyExtensionCapabilities(extensionMeta);
+    this.supportsForkAtTurn = this.lodyExtensionCapabilities.forkAtTurn?.version === 1;
+    this.acknowledgedSteerCapability = parseAcknowledgedSteerCapability(extensionMeta);
+    const hasCloseMethod = typeof connection.closeSession === 'function';
+    const hasForkMethod = typeof connection.unstable_forkSession === 'function';
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP capabilities (loadSession=${
+        this.supportsLoadSession ? 'yes' : 'no'
+      } loadSessionMethod=${hasLoadSessionMethod ? 'yes' : 'no'} resume=${
+        this.supportsResume ? 'yes' : 'no'
+      } resumeMethod=${hasResumeMethod ? 'yes' : 'no'} close=${
+        this.supportsClose ? 'yes' : 'no'
+      } closeMethod=${hasCloseMethod ? 'yes' : 'no'} acknowledgedSteer=${
+        this.acknowledgedSteerCapability ? 'yes' : 'no'
+      } fork=${this.supportsFork ? 'yes' : 'no'} forkMethod=${hasForkMethod ? 'yes' : 'no'})`
+    );
+
+    if (resolveSessionStart) {
+      const target = await withAbort(resolveSessionStart(), startupAbort);
+      workdir = target.workdir;
+      resumeSessionId = target.resumeSessionId;
+    }
+
+    this.logger.debug(`[${this.options.sessionId}] About to establish ACP session`);
+    const newSessionStart = performance.now();
+    this.options.onStartupStage?.({ type: 'new_session_start' });
+    let sessionResponse: acp.NewSessionResponse;
+    const mcpServers = await this.buildMcpServers(workdir, externalMcpLoad);
+
+    const canLoadSession = this.supportsLoadSession && hasLoadSessionMethod;
+    const canResumeSession = this.supportsResume && hasResumeMethod;
+    const canForkSession = this.supportsFork && hasForkMethod;
+
+    const preferResumeOverLoad =
+      this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'kimi';
+    const shouldResume = Boolean(
+      resumeSessionId && canResumeSession && (preferResumeOverLoad || !canLoadSession)
+    );
+    const shouldLoad = Boolean(resumeSessionId && canLoadSession && !shouldResume);
+    const sessionPath: AcpSessionPath = forkSessionId
+      ? 'fork'
+      : shouldLoad
+        ? 'load'
+        : shouldResume
+          ? 'resume'
+          : 'new';
+
+    if (forkSessionId && !canForkSession) {
+      const reasons: string[] = [];
+      if (!this.supportsFork) {
+        reasons.push('agent_did_not_advertise_session_fork');
+      }
+      if (!hasForkMethod) {
+        reasons.push('sdk_missing_forkSession');
+      }
+      const reason = reasons.join(', ');
+      this.logger.error(
+        `[${this.options.sessionId}] ACP fork unsupported (${reason}): ${forkSessionId}`
+      );
+      captureAcpSessionEstablishFailed({
+        ...startupAnalyticsProps,
+        sessionPath: 'fork',
+        reason: 'protocol_error',
+      });
+      throw new Error(`[ACP_FORK_UNSUPPORTED] ${reason}`);
+    }
+    if (forkSessionId && forkSessionTurnId && !this.supportsForkAtTurn) {
+      throw new Error('[ACP_FORK_AT_TURN_UNSUPPORTED] agent_did_not_advertise_lody_forkAtTurn');
+    }
+
+    if (resumeSessionId) {
+      if (!canLoadSession && !canResumeSession) {
+        const reasons: string[] = [];
+        if (!this.supportsLoadSession && !this.supportsResume) {
+          reasons.push('agent_did_not_advertise_resume_or_loadSession');
+        }
+        if (!hasLoadSessionMethod && !hasResumeMethod) {
+          reasons.push('sdk_missing_loadSession_and_resumeSession');
+        }
+        const reason = reasons.join(', ');
+        this.logger.error(
+          `[${this.options.sessionId}] ACP resume unsupported (${reason}): ${resumeSessionId}`
+        );
+        captureAcpSessionEstablishFailed({
+          ...startupAnalyticsProps,
+          sessionPath: 'resume',
+          reason: 'protocol_error',
+        });
+        throw new Error(`[ACP_RESUME_UNSUPPORTED] ${reason}`);
+      }
+    }
+
+    if (forkSessionId) {
+      const forkStart = performance.now();
+      try {
+        const ACP_FORK_SESSION_TIMEOUT_MS = Math.max(
+          0,
+          timeoutOptions.newSessionTimeoutMs ?? 120_000
+        );
+        sessionResponse = await withTimeout(
+          withAbort(
+            connection.unstable_forkSession({
+              sessionId: forkSessionId as unknown as acp.SessionId,
+              cwd: workdir,
+              mcpServers,
+              ...this.getSessionStartMeta(forkSessionTurnId),
+            }),
+            startupAbort
+          ),
+          this.logger,
+          'connection.unstable_forkSession',
+          this.options.sessionId,
+          ACP_FORK_SESSION_TIMEOUT_MS
+        );
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP fork succeeded in ${Math.round(
+            performance.now() - forkStart
+          )}ms (sourceAcpSessionId=${forkSessionId}, acpSessionId=${sessionResponse.sessionId})`
+        );
+      } catch (error) {
+        if (isAcpAuthenticationRequired(error)) {
+          this.authenticationRequired = true;
+          throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
+        }
+        const reason = classifyAcpProtocolReason(error);
+        captureAcpSessionEstablishFailed({
+          ...startupAnalyticsProps,
+          sessionPath: 'fork',
+          reason,
+        });
+        if (reason === 'timeout') {
+          captureAcpStartupTimeout({
+            ...startupAnalyticsProps,
+            timedOutOperation: 'fork_session',
+          });
+        }
+        throw new Error(`[ACP_FORK_FAILED] ${formatErrorMessage(error)}`, { cause: error });
+      }
+    } else if (resumeSessionId && shouldLoad) {
+      // Prefer the stable loadSession API (ACP 0.17+).
+      const loadStart = performance.now();
+      try {
+        this.logger.debug(
+          `[${this.options.sessionId}] Attempting ACP loadSession (acpSessionId=${resumeSessionId})`
+        );
+        const ACP_LOAD_SESSION_TIMEOUT_MS = Math.max(
+          0,
+          timeoutOptions.loadSessionTimeoutMs ?? timeoutOptions.newSessionTimeoutMs ?? 120_000
+        );
+        const loadResponse = await withTimeout(
+          withAbort(
+            connection.loadSession({
+              sessionId: resumeSessionId,
+              cwd: workdir,
+              mcpServers,
+              ...sessionStartMeta,
+            }),
+            startupAbort
+          ),
+          this.logger,
+          'connection.loadSession',
+          this.options.sessionId,
+          ACP_LOAD_SESSION_TIMEOUT_MS
+        );
+        const loadDurationMs = performance.now() - loadStart;
+        sessionResponse = {
+          ...loadResponse,
+          sessionId: resumeSessionId as unknown as acp.SessionId,
+        };
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP loadSession succeeded in ${Math.round(
+            loadDurationMs
+          )}ms (acpSessionId=${resumeSessionId})`
+        );
+      } catch (error) {
+        if (isAcpAuthenticationRequired(error)) {
+          this.authenticationRequired = true;
+          throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
+        }
+        const loadDurationMs = performance.now() - loadStart;
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP loadSession failed in ${Math.round(
+            loadDurationMs
+          )}ms (acpSessionId=${resumeSessionId}): ${formatErrorMessage(error)}`
+        );
+        const reason = classifyAcpProtocolReason(error);
+        captureAcpSessionEstablishFailed({ ...startupAnalyticsProps, sessionPath: 'load', reason });
+        if (reason === 'timeout') {
+          captureAcpStartupTimeout({
+            ...startupAnalyticsProps,
+            timedOutOperation: 'load_session',
+          });
+        }
+        throw new Error(`[ACP_RESUME_FAILED] loadSession: ${formatErrorMessage(error)}`, {
+          cause: error,
+        });
+      }
+    } else if (resumeSessionId && shouldResume) {
+      // Fallback to session/resume when the agent can resume without replaying prior messages.
+      const resumeStart = performance.now();
+      try {
+        this.logger.debug(
+          `[${this.options.sessionId}] Attempting ACP resume (acpSessionId=${resumeSessionId})`
+        );
+        const ACP_RESUME_SESSION_TIMEOUT_MS = Math.max(
+          0,
+          timeoutOptions.resumeSessionTimeoutMs ?? timeoutOptions.newSessionTimeoutMs ?? 120_000
+        );
+        const resumeResponse = await withTimeout(
+          withAbort(
+            connection.resumeSession({
+              sessionId: resumeSessionId,
+              cwd: workdir,
+              mcpServers,
+              ...sessionStartMeta,
+            }),
+            startupAbort
+          ),
+          this.logger,
+          'connection.resumeSession',
+          this.options.sessionId,
+          ACP_RESUME_SESSION_TIMEOUT_MS
+        );
+        const resumeDurationMs = performance.now() - resumeStart;
+        // Resume responses don't include `sessionId`, so we stitch it back in for uniform handling.
+        sessionResponse = {
+          ...resumeResponse,
+          sessionId: resumeSessionId as unknown as acp.SessionId,
+        };
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP resume succeeded in ${Math.round(
+            resumeDurationMs
+          )}ms (acpSessionId=${resumeSessionId})`
+        );
+      } catch (error) {
+        if (isAcpAuthenticationRequired(error)) {
+          this.authenticationRequired = true;
+          throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
+        }
+        const resumeDurationMs = performance.now() - resumeStart;
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP resume failed in ${Math.round(
+            resumeDurationMs
+          )}ms (acpSessionId=${resumeSessionId}): ${formatErrorMessage(error)}`
+        );
+        const reason = classifyAcpProtocolReason(error);
+        captureAcpSessionEstablishFailed({
+          ...startupAnalyticsProps,
+          sessionPath: 'resume',
+          reason,
+        });
+        if (reason === 'timeout') {
+          captureAcpStartupTimeout({
+            ...startupAnalyticsProps,
+            timedOutOperation: 'resume_session',
+          });
+        }
+        throw new Error(`[ACP_RESUME_FAILED] ${formatErrorMessage(error)}`, { cause: error });
+      }
+    } else {
+      this.logger.debug(
+        `[${this.options.sessionId}] Calling connection.newSession (cwd=${workdir})`
+      );
+
+      // newSession() waits for the Claude Code CLI to:
+      // 1. Initialize settings from multiple config files
+      // 2. Start the internal query system which spawns another subprocess
+      // 3. Call query.supportedModels() and query.supportedCommands()
+      // Any of these can hang due to runtime/environment issues. Apply a hard timeout.
+      const ACP_NEW_SESSION_TIMEOUT_MS = Math.max(
+        0,
+        timeoutOptions.newSessionTimeoutMs ?? DEFAULT_ACP_NEW_SESSION_TIMEOUT_MS
+      );
+
+      try {
+        sessionResponse = await withTimeout(
+          withAbort(
+            connection.newSession({ cwd: workdir, mcpServers, ...sessionStartMeta }),
+            startupAbort
+          ),
+          this.logger,
+          'connection.newSession',
+          this.options.sessionId,
+          ACP_NEW_SESSION_TIMEOUT_MS
+        );
+      } catch (error) {
+        if (isAcpAuthenticationRequired(error)) {
+          this.authenticationRequired = true;
+          throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
+        }
+        const reason = classifyAcpProtocolReason(error);
+        captureAcpSessionEstablishFailed({ ...startupAnalyticsProps, sessionPath: 'new', reason });
+        if (reason === 'timeout') {
+          captureAcpStartupTimeout({
+            ...startupAnalyticsProps,
+            timedOutOperation: 'new_session',
+          });
+        }
+        throw error;
+      }
+      this.logger.debug(`[${this.options.sessionId}] connection.newSession returned`);
+    }
+    await this.loadGrokDesignReminder(connection, sessionResponse.sessionId, startupAbort);
+    this.authenticationRequired = false;
+    const newSessionDurationMs = performance.now() - newSessionStart;
+    this.options.onStartupStage?.({ type: 'new_session_end', durationMs: newSessionDurationMs });
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP session start finished in ${Math.round(
+        newSessionDurationMs
+      )}ms (acpSessionId=${sessionResponse.sessionId} resumed=${
+        resumeSessionId && sessionResponse.sessionId === resumeSessionId ? 'yes' : 'no'
+      })`
+    );
+    this.logger.debug('ACP Session started:', sessionResponse);
+    this.applySessionResponseState(sessionResponse);
+
+    const availableModesCount = sessionResponse.modes?.availableModes?.length ?? 0;
+    captureAcpSessionEstablished({
+      ...startupAnalyticsProps,
+      sessionPath,
+      availableModesCount,
+      establishDurationMs: newSessionDurationMs,
+    });
+    captureAcpStartupCompleted({
+      ...startupAnalyticsProps,
+      sessionPath,
+      totalStartupMs: performance.now() - startupStart,
+      initDurationMs,
+      sessionEstablishDurationMs: newSessionDurationMs,
+    });
+
+    for (const [id, waiter] of this.steerApplicationWaiters) {
+      if (waiter.sessionId !== sessionResponse.sessionId) {
+        waiter.release();
+        this.steerApplicationWaiters.delete(id);
+      }
+    }
+    this.acpSessionId = sessionResponse.sessionId;
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP session id set: ${sessionResponse.sessionId}`
+    );
+    this.sessionWorkdir = workdir;
+    this.logger.debug(`ACP Session mode set to agent: ${sessionResponse.sessionId}`);
+    return sessionResponse;
+  }
+
+  /**
+   * Establish the provider session used by edit-and-resend without changing the
+   * currently active ACP session. The caller can therefore fail before cancel
+   * and leave the old turn untouched.
+   */
+  async prepareReplacementSession(
+    forkSessionTurnId?: string,
+    timeoutMs: number = 120_000
+  ): Promise<acp.NewSessionResponse> {
+    const connection = this.connection;
+    const workdir = this.sessionWorkdir;
+    const sourceSessionId = this.acpSessionId;
+    if (!connection || !workdir || !sourceSessionId) {
+      throw new Error('[ACP_SESSION_UNAVAILABLE] Current ACP session is not ready');
+    }
+
+    const mcpServers = await this.buildMcpServers(workdir, this.options.loadExternalMcpServers?.());
+    if (!forkSessionTurnId) {
+      try {
+        const prepared = await withTimeout(
+          connection.newSession({ cwd: workdir, mcpServers, ...this.getSessionStartMeta() }),
+          this.logger,
+          'connection.newSession.editAndResend',
+          this.options.sessionId,
+          timeoutMs
+        );
+        await this.loadGrokDesignReminder(connection, prepared.sessionId);
+        return prepared;
+      } catch (error) {
+        throw new Error(`[ACP_SESSION_PREPARE_FAILED] ${formatErrorMessage(error)}`, {
+          cause: error,
+        });
+      }
+    }
+
+    if (
+      !this.supportsFork ||
+      !this.supportsForkAtTurn ||
+      typeof connection.unstable_forkSession !== 'function'
+    ) {
+      throw new Error('[ACP_FORK_AT_TURN_UNSUPPORTED] Provider cannot fork at this turn');
+    }
+
+    try {
+      return await withTimeout(
+        connection.unstable_forkSession({
+          sessionId: sourceSessionId as unknown as acp.SessionId,
+          cwd: workdir,
+          mcpServers,
+          ...this.getSessionStartMeta(forkSessionTurnId),
+        }),
+        this.logger,
+        'connection.unstable_forkSession.editAndResend',
+        this.options.sessionId,
+        timeoutMs
+      );
+    } catch (error) {
+      throw new Error(`[ACP_FORK_FAILED] ${formatErrorMessage(error)}`, { cause: error });
+    }
+  }
+
+  adoptPreparedSession(sessionResponse: acp.NewSessionResponse): void {
+    this.applySessionResponseState(sessionResponse);
+    for (const [id, waiter] of this.steerApplicationWaiters) {
+      if (waiter.sessionId !== sessionResponse.sessionId) {
+        waiter.release();
+        this.steerApplicationWaiters.delete(id);
+      }
+    }
+    this.acpSessionId = sessionResponse.sessionId;
+    this.authenticationRequired = false;
+    this.logger.debug(
+      `[${this.options.sessionId}] Adopted replacement ACP session: ${sessionResponse.sessionId}`
+    );
+  }
+
+  supportsSessionFork(): boolean {
+    return this.supportsFork;
+  }
+
+  supportsActiveTurnFork(): boolean {
+    return this.supportsFork && this.supportsForkAtTurn;
+  }
+
+  steerPrompt(
+    sessionId: ACPSessionId,
+    prompt: acp.ContentBlock[],
+    options?: { signal?: AbortSignal; onLateApplied?: () => Promise<void> }
+  ): SteerPromptRun {
+    const capability = this.acknowledgedSteerCapability;
+    if (!capability) {
+      throw new Error('Agent does not support acknowledged steer');
+    }
+    const steerId = randomUUID();
+    let resolveApplication!: (lease: SteerApplicationLease) => void;
+    let rejectApplication!: (error: unknown) => void;
+    const applied = new Promise<SteerApplicationLease>((resolve, reject) => {
+      resolveApplication = resolve;
+      rejectApplication = reject;
+    });
+    let resolveRelease!: () => void;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      resolveRelease();
+    };
+    const waiter: SteerApplicationWaiter = {
+      onLateApplied: options?.onLateApplied,
+      sessionId,
+      applied: false,
+      resolve: resolveApplication,
+      reject: rejectApplication,
+      released: new Promise<void>((resolve) => {
+        resolveRelease = resolve;
+      }),
+      release,
+    };
+    this.steerApplicationWaiters.set(steerId, waiter);
+
+    const previousProviderPrompt = this.providerPromptCompletion;
+    let completion: Promise<acp.PromptResponse | undefined>;
+    let submission: Promise<unknown>;
+    if (capability.requestMethod) {
+      const activePrompt = this.activePromptCompletion;
+      if (!activePrompt || activePrompt.sessionId !== sessionId) {
+        this.steerApplicationWaiters.delete(steerId);
+        waiter.release();
+        throw new Error('No active ACP prompt completion is available for steer handoff');
+      }
+      completion = activePrompt.promise;
+      submission = this.requestSteeringExtension(
+        capability.requestMethod,
+        sessionId,
+        prompt,
+        steerId,
+        options?.signal
+      );
+    } else {
+      completion = this.prompt(sessionId, prompt, {
+        signal: options?.signal,
+        _meta: buildSteerRequestMeta(capability, steerId),
+      });
+      submission = completion;
+    }
+    const submittedProviderPrompt = this.providerPromptCompletion;
+    const failUnapplied = (error: unknown) => {
+      if (!waiter.applied && this.steerApplicationWaiters.get(steerId) === waiter) {
+        if (error instanceof AgentSteerNotDeliveredError || !waiter.onLateApplied) {
+          this.steerApplicationWaiters.delete(steerId);
+        } else {
+          waiter.unknown = true;
+        }
+        if (this.providerPromptCompletion === submittedProviderPrompt)
+          this.providerPromptCompletion = previousProviderPrompt;
+        waiter.reject(error);
+        waiter.release();
+      }
+    };
+    if (submission !== completion) {
+      // A refusal ends the steer immediately; the turn it was aimed at may run on.
+      void submission.catch(failUnapplied);
+    }
+    // Otherwise wait for BOTH. The upstream turn's own response can beat the
+    // agent's answer to the steer request onto the wire (the Codex adapter drains
+    // session notifications before it refuses), and that answer is the verdict
+    // that says whether the prompt was taken — losing it to the turn's response
+    // would downgrade a provable refusal to an ambiguous failure and strand the
+    // user's message. Both settle: the turn completes, and the request is either
+    // answered or rejected when the connection closes.
+    void Promise.allSettled([submission, completion]).then(([submitted]) => {
+      failUnapplied(
+        submitted.status === 'rejected'
+          ? submitted.reason
+          : new Error(`Steer ${steerId} completed before application`)
+      );
+    });
+    const outcome: Promise<SteerOutcomeResult> = applied.then(
+      (application) => ({ outcome: 'applied', application }),
+      (error: unknown) => ({
+        outcome: error instanceof AgentSteerNotDeliveredError ? 'not-applied' : 'unknown',
+        error,
+      })
+    );
+    return { completion, outcome };
+  }
+
+  private async requestSteeringExtension(
+    method: string,
+    sessionId: ACPSessionId,
+    prompt: acp.ContentBlock[],
+    steerId: string,
+    signal?: AbortSignal
+  ): Promise<void> {
+    let request: Promise<unknown>;
+    try {
+      this.ensureSessionMatch(sessionId);
+      const connection = this.connection;
+      if (!connection) {
+        throw new Error('ACP connection is not available');
+      }
+      if (signal?.aborted) {
+        throw new Error('Agent steer aborted');
+      }
+      request = connection.request<
+        unknown,
+        {
+          sessionId: string;
+          prompt: acp.ContentBlock[];
+          steerId: string;
+        }
+      >(method, { sessionId, prompt, steerId });
+      this.trackPendingExecution(request);
+    } catch (error) {
+      // Nothing was written to the agent, so the prompt is provably still ours.
+      throw new AgentSteerNotDeliveredError(
+        `Could not submit acknowledged steer ${steerId}: ${formatErrorMessage(error)}`,
+        error
+      );
+    }
+    let abortListener: (() => void) | undefined;
+    const abort = signal
+      ? new Promise<never>((_, reject) => {
+          abortListener = () => reject(new Error('Agent steer aborted'));
+          signal.addEventListener('abort', abortListener, { once: true });
+        })
+      : undefined;
+    try {
+      const response = await withAbort(request, abort).catch((error: unknown) => {
+        // Only the agent's own `invalid request` answer proves it declined the
+        // prompt (Codex answers `No active Codex turn to steer`). A closed
+        // connection, a dead agent process, or an internal error may have left
+        // the prompt inside the live turn, so those stay ambiguous — re-sending
+        // one of those would deliver the user's message twice.
+        throw isAcpInvalidRequestError(error)
+          ? new AgentSteerNotDeliveredError(
+              `Agent refused the acknowledged steer request ${method}: ${formatErrorMessage(error)}`,
+              error
+            )
+          : error;
+      });
+      const parsed = z.object({ outcome: z.enum(['injected', 'failed']) }).safeParse(response);
+      if (!parsed.success) {
+        throw new Error(`Agent returned an invalid acknowledged steer response for ${method}`);
+      }
+      if (parsed.data.outcome === 'failed') {
+        throw new AgentSteerNotDeliveredError(
+          `Agent reported that acknowledged steer ${steerId} was not applied`
+        );
+      }
+    } finally {
+      if (signal && abortListener) {
+        signal.removeEventListener('abort', abortListener);
+      }
+    }
+  }
+
+  /** Raw prompts and steer submissions remain owned after their local waits end. */
+  get pendingPromptCompletion(): Promise<void> | null {
+    return this.pendingPrompts.size > 0
+      ? Promise.allSettled([...this.pendingPrompts]).then(() => undefined)
+      : null;
+  }
+
+  private trackPendingExecution(request: Promise<unknown>): void {
+    this.pendingPrompts.add(request);
+    const release = () => {
+      this.pendingPrompts.delete(request);
+    };
+    void request.then(release, release);
+  }
+
+  async prompt(
+    sessionId: ACPSessionId,
+    prompt: acp.ContentBlock[],
+    options?: { signal?: AbortSignal; _meta?: acp.PromptRequest['_meta'] }
+  ) {
+    const span = startTraceSpan(this.logger, 'agent_client.prompt', {
+      sessionId: this.options.sessionId,
+      acpSessionId: sessionId,
+      promptBlocks: prompt.length,
+    });
+    this.logger.debug(
+      `[${this.options.sessionId}] AgentClient.prompt called (acpSessionId=${sessionId})`
+    );
+    try {
+      this.ensureSessionMatch(sessionId);
+      if (this.grokStopState !== 'active')
+        throw new Error(
+          'Grok resident session is stopped; explicit session restoration is required'
+        );
+      const abortSignal = options?.signal;
+      if (abortSignal?.aborted) {
+        throw new Error('Agent prompt aborted');
+      }
+      this.logger.debug(
+        `[${this.options.sessionId}] Session match verified, calling connection.prompt`
+      );
+      const promptPromise = this.connection?.prompt({
+        sessionId,
+        prompt,
+        ...(options?._meta ? { _meta: options._meta } : {}),
+      });
+      if (!promptPromise) {
+        this.logger.error(
+          `[${this.options.sessionId}] connection.prompt returned undefined - connection may be closed`
+        );
+        span.end({ outcome: 'undefined-promise' });
+        return undefined;
+      }
+
+      this.trackPendingExecution(promptPromise);
+      this.providerPromptCompletion = { sessionId, promise: promptPromise };
+      let abortListener: (() => void) | undefined;
+      let trackedPromptCompletion: ActivePromptCompletion | undefined;
+
+      try {
+        const abortPromise = abortSignal
+          ? new Promise<never>((_, reject) => {
+              abortListener = () => {
+                this.logger.debug(
+                  `[${this.options.sessionId}] AgentClient.prompt aborted; sending ACP cancel (acpSessionId=${sessionId})`
+                );
+                void this.cancel(sessionId).catch((error: unknown) => {
+                  this.logger.debug(
+                    `[${this.options.sessionId}] Failed to cancel aborted prompt: ${formatErrorMessage(error)}`
+                  );
+                });
+                reject(new Error('Agent prompt aborted'));
+              };
+              abortSignal.addEventListener('abort', abortListener, { once: true });
+            })
+          : null;
+        const completion = abortPromise
+          ? Promise.race([promptPromise, abortPromise])
+          : promptPromise;
+        trackedPromptCompletion = { sessionId, promise: completion };
+        this.activePromptCompletion = trackedPromptCompletion;
+        const result = await completion;
+        span.end({ outcome: 'returned' });
+        this.logger.debug(`[${this.options.sessionId}] connection.prompt returned`);
+        return result;
+      } catch (error) {
+        this.logger.error(
+          `[${this.options.sessionId}] connection.prompt failed (${this.describePromptDiagnosticContext()}): ${formatErrorMessage(
+            error,
+            { includeStack: true }
+          )}`
+        );
+        throw error;
+      } finally {
+        if (this.activePromptCompletion === trackedPromptCompletion) {
+          this.activePromptCompletion = null;
+        }
+        if (abortSignal && abortListener) {
+          abortSignal.removeEventListener('abort', abortListener);
+        }
+      }
+    } catch (error) {
+      span.fail(error);
+      throw error;
+    } finally {
+      this.completeCodexRetryStatus();
+    }
+  }
+
+  async cancel(sessionId: ACPSessionId) {
+    this.ensureSessionMatch(sessionId);
+    return await this.connection?.cancel({ sessionId });
+  }
+
+  async closeSession(sessionId: ACPSessionId, timeoutMs: number = 5000): Promise<boolean> {
+    this.ensureSessionMatch(sessionId);
+
+    return await this.closeDetachedSession(sessionId, timeoutMs);
+  }
+
+  async closeDetachedSession(sessionId: ACPSessionId, timeoutMs: number = 5000): Promise<boolean> {
+    if (!this.supportsClose) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Skipping ACP session close: agent did not advertise session.close`
+      );
+      return false;
+    }
+
+    const closeSession = this.connection?.closeSession;
+    if (typeof closeSession !== 'function') {
+      this.logger.debug(
+        `[${this.options.sessionId}] Skipping ACP session close: SDK connection has no closeSession`
+      );
+      return false;
+    }
+
+    this.logger.debug(
+      `[${this.options.sessionId}] Closing ACP session (acpSessionId=${sessionId} timeoutMs=${timeoutMs})`
+    );
+    await withTimeout(
+      closeSession.call(this.connection, { sessionId }),
+      this.logger,
+      'connection.closeSession',
+      this.options.sessionId,
+      timeoutMs,
+      Math.min(timeoutMs, 1000)
+    );
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP session close finished (acpSessionId=${sessionId})`
+    );
+    return true;
+  }
+  /**
+   * Set a session configuration option via the new configOptions API.
+   * Returns the updated configOptions array, or undefined on failure.
+   */
+  async setSessionConfigOption(
+    sessionId: ACPSessionId,
+    configId: string,
+    value: AcpConfigOptionValue
+  ): Promise<acp.SessionConfigOption[] | undefined> {
+    const request =
+      typeof value === 'boolean'
+        ? { sessionId, configId, type: 'boolean' as const, value }
+        : { sessionId, configId, value };
+    this.logger.debug(
+      `[${this.options.sessionId}] setSessionConfigOption called (configId=${configId} value=${value})`
+    );
+    this.ensureSessionMatch(sessionId);
+
+    const result = await withTransportRetry(
+      async () => {
+        const promise = this.connection?.setSessionConfigOption(request);
+        if (promise) {
+          return await withSlowOperationWarning(
+            promise,
+            this.logger,
+            'connection.setSessionConfigOption',
+            this.options.sessionId
+          );
+        }
+        return undefined;
+      },
+      this.logger,
+      'setSessionConfigOption',
+      this.options.sessionId
+    );
+
+    if (result?.configOptions !== undefined) {
+      // The agent returns the full option list, which re-includes any filtered
+      // option (e.g. `agent`); drop it again here. See BC doc entry
+      // BC-2026-06-24-ACP-CONFIG-OPTION-AGENT-FILTERED.
+      this.applyConfigOptionsState(result.configOptions, true);
+    } else if (result) {
+      // Older agents may acknowledge the request without returning the full
+      // snapshot. Keep replacement startup and runtime projection on the same
+      // accepted value for any matching option the agent already advertised.
+      this.retainLegacyConfigOptionValue(configId, value);
+    }
+
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP session config option set: ${configId}=${value}`
+    );
+    return result?.configOptions;
+  }
+
+  /** Returns the config options currently known for this session. */
+  getConfigOptions(): acp.SessionConfigOption[] {
+    return this.configOptions;
+  }
+
+  subscribeConfigOptions(listener: () => void): () => void {
+    this.configOptionsListeners.add(listener);
+    return () => {
+      this.configOptionsListeners.delete(listener);
+    };
+  }
+
+  getAutomaticToolPermissionOutcome(
+    request: acp.RequestPermissionRequest,
+    pending: boolean
+  ): acp.RequestPermissionResponse['outcome'] | undefined {
+    if (request.sessionId !== this.acpSessionId) return undefined;
+    return getBuiltinToolPermissionOutcome({
+      agentConfig: this.options.agentConfig,
+      configOptions: this.configOptions,
+      request,
+      pending,
+    });
+  }
+
+  /**
+   * Find the configOption with the given category, if available.
+   */
+  private findConfigOptionByCategory(category: string): acp.SessionConfigOption | undefined {
+    return this.configOptions.find((opt) => opt.category === category);
+  }
+
+  /**
+   * Resolve a model id to its full `ModelInfo` (with the agent's human-readable
+   * `name`) and attach the active thinking level. Uses the "model" config
+   * option's label, falling back to the raw id when the agent reported no name.
+   */
+  private resolveModelInfo(modelId: string): ModelInfo {
+    const base: ModelInfo = {
+      modelId,
+      name:
+        this.findModelConfigOptionName(modelId) ??
+        this.legacySessionModelState?.availableModels.find((model) => model.modelId === modelId)
+          ?.name ??
+        modelId,
+    };
+    return this.attachThoughtLevel(base);
+  }
+
+  /**
+   * Stash the active thinking/reasoning level label under `ModelInfo._meta` so
+   * the chat UI can render it after the model name. No-op (and does not copy the
+   * object) when the agent exposes no thought-level option.
+   */
+  private attachThoughtLevel(model: ModelInfo): ModelInfo {
+    const label = this.getCurrentThoughtLevelLabel();
+    if (!label) return model;
+    return {
+      ...model,
+      _meta: { ...(model._meta ?? {}), [MODEL_THOUGHT_LEVEL_META_KEY]: label },
+    };
+  }
+
+  /** Human-readable label of the currently selected thought-level / reasoning-effort option. */
+  private getCurrentThoughtLevelLabel(): string | undefined {
+    const opt = this.configOptions.find(
+      (o) => o.category === 'thought_level' || o.id === 'reasoning_effort'
+    );
+    if (!opt || opt.type !== 'select') return undefined;
+    return this.findSelectOptionName(opt.options, opt.currentValue);
+  }
+
+  /** Look up the human-readable label for a model value in the "model" select config option. */
+  private findModelConfigOptionName(value: string): string | undefined {
+    const modelConfigOption = this.findConfigOptionByCategory('model');
+    if (!modelConfigOption || modelConfigOption.type !== 'select') return undefined;
+    return this.findSelectOptionName(modelConfigOption.options, value);
+  }
+
+  /** Find the `name` of the matching option `value` in a select option list (flat or grouped). */
+  private findSelectOptionName(
+    options: acp.SessionConfigSelectOptions,
+    value: acp.SessionConfigValueId
+  ): string | undefined {
+    for (const entry of options) {
+      if ('value' in entry) {
+        if (entry.value === value) return entry.name;
+      } else {
+        const found = entry.options.find((opt) => opt.value === value);
+        if (found) return found.name;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Whether permission/sandbox mode changes should call protocol
+   * session/set_mode directly instead of the generic config option API.
+   */
+  private shouldUseProtocolSetModeRouting(): boolean {
+    return this.options.agentConfig?.agentType === 'codex';
+  }
+
+  async setSessionMode(sessionId: ACPSessionId, modeId: string) {
+    this.logger.debug(`[${this.options.sessionId}] setSessionMode called (modeId=${modeId})`);
+    this.ensureSessionMatch(sessionId);
+
+    // `session/set_mode` is reserved for permission/sandbox mode. For agents
+    // that expose permission mode as a config option, route through
+    // setSessionConfigOption; Codex still exposes the protocol set_mode request directly.
+    const modeConfigOption = !this.shouldUseProtocolSetModeRouting()
+      ? this.findConfigOptionByCategory('mode')
+      : undefined;
+    if (modeConfigOption) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Using setSessionConfigOption for mode (configId=${modeConfigOption.id} value=${modeId})`
+      );
+      try {
+        await this.setSessionConfigOption(sessionId, modeConfigOption.id, modeId);
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP session mode set via configOption: ${modeId}`
+        );
+        return;
+      } catch (err) {
+        this.logger.debug(
+          `[${this.options.sessionId}] setSessionConfigOption failed for mode, falling back to legacy setSessionMode: ${err}`
+        );
+        // Fall through to legacy setSessionMode path below
+      }
+    }
+
+    this.logger.debug(
+      `[${this.options.sessionId}] Calling connection.setSessionMode (modeId=${modeId})`
+    );
+    await withTransportRetry(
+      async () => {
+        const setModePromise = this.connection?.setSessionMode({ sessionId, modeId });
+        if (setModePromise) {
+          await withSlowOperationWarning(
+            setModePromise,
+            this.logger,
+            'connection.setSessionMode',
+            this.options.sessionId
+          );
+        }
+      },
+      this.logger,
+      'setSessionMode',
+      this.options.sessionId
+    );
+    this.logger.debug(`[${this.options.sessionId}] ACP session mode set: ${modeId}`);
+  }
+
+  async unstable_setSessionModel(sessionId: ACPSessionId, modelId: string) {
+    this.logger.debug(
+      `[${this.options.sessionId}] unstable_setSessionModel called (modelId=${modelId})`
+    );
+    this.ensureSessionMatch(sessionId);
+
+    // Prefer the current configOptions API. A session that explicitly reports
+    // the legacy top-level `models` state may instead support `session/set_model`.
+    const modelConfigOption = this.findConfigOptionByCategory('model');
+    if (modelConfigOption) {
+      this.logger.debug(
+        `[${this.options.sessionId}] Using setSessionConfigOption for model (configId=${modelConfigOption.id} value=${modelId})`
+      );
+      try {
+        const updatedConfigOptions = await this.setSessionConfigOption(
+          sessionId,
+          modelConfigOption.id,
+          modelId
+        );
+        if (!updatedConfigOptions) return;
+        this.currentModel = this.resolveModelInfo(modelId);
+        this.logger.debug(
+          `[${this.options.sessionId}] ACP session model set via configOption: ${modelId}`
+        );
+        return;
+      } catch (error) {
+        if (!this.legacySessionModelState || !isAcpMethodNotFoundError(error)) {
+          throw error;
+        }
+        this.logger.debug(
+          `[${this.options.sessionId}] setSessionConfigOption is unavailable; falling back to legacy session/set_model`
+        );
+      }
+    }
+
+    if (!this.legacySessionModelState) {
+      throw new Error(
+        `[ACP_MODEL_SWITCH_UNSUPPORTED] Agent reported neither a model config option nor legacy session models`
+      );
+    }
+
+    const connection = this.connection;
+    if (!connection) {
+      throw new Error('[ACP_MODEL_SWITCH_UNSUPPORTED] ACP connection is not available');
+    }
+    const switched = await withTransportRetry(
+      async () => {
+        const requestPromise = connection.request<unknown, { sessionId: string; modelId: string }>(
+          'session/set_model',
+          { sessionId, modelId }
+        );
+        await withSlowOperationWarning(
+          requestPromise,
+          this.logger,
+          'connection.request(session/set_model)',
+          this.options.sessionId
+        );
+        return true;
+      },
+      this.logger,
+      'setSessionModel',
+      this.options.sessionId
+    );
+    if (!switched) return;
+    this.currentModel = this.resolveModelInfo(modelId);
+    this.logger.debug(
+      `[${this.options.sessionId}] ACP session model set via legacy session/set_model: ${modelId}`
+    );
+  }
+
+  private ensureSessionMatch(sessionId: ACPSessionId) {
+    if (!this.acpSessionId) {
+      throw new Error('ACP session has not been initialized yet.');
+    }
+    if (sessionId !== this.acpSessionId) {
+      throw new Error(`Mismatched ACP session. Expected ${this.acpSessionId} but got ${sessionId}`);
+    }
+  }
+
+  private resolvePath(inputPath: string): string {
+    // Resolve relative paths against the session workdir so tools behave like the terminal.
+    // `path.resolve(base, absolute)` returns the absolute path, so this works for both cases.
+    const base = this.sessionWorkdir ?? process.cwd();
+    return path.resolve(base, inputPath);
+  }
+}
+
+function isUsageUpdate(
+  update: unknown
+): update is { sessionUpdate: 'usage_update'; size?: unknown; used?: unknown } {
+  return (
+    typeof update === 'object' &&
+    update !== null &&
+    'sessionUpdate' in update &&
+    (update as { sessionUpdate?: unknown }).sessionUpdate === 'usage_update'
+  );
+}
+
+const sliceTextByLines = (content: string, line: number | null, limit: number | null): string => {
+  if (line === null && limit === null) return content;
+  // ACP uses 1-based line numbers. We treat `line` as the first line to include.
+  const lines = content.split(/\r?\n/);
+  const start = Math.max((line ?? 1) - 1, 0);
+  const end = limit !== null ? start + Math.max(limit, 0) : undefined;
+  return lines.slice(start, end).join('\n');
+};

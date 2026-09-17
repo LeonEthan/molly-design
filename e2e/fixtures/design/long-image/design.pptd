@@ -1,0 +1,5 @@
+version: v2
+title: Synthetic long-image acceptance
+size: [800, 3200]
+pages:
+  - pages/design.page

@@ -1,0 +1,184 @@
+diff --git a/slides/src/editor/canvas.ts b/slides/src/editor/canvas.ts
+index b9afbd0..b8a5382 100644
+--- a/slides/src/editor/canvas.ts
++++ b/slides/src/editor/canvas.ts
+@@ -784,6 +784,9 @@ export class SlideCanvas {
+
+   /** Drag a column divider: adjust the two adjacent weights, commit on release. */
+   private startColResize(ev: PointerEvent, id: string, i: number) {
++    // Native table geometry is projected-only in the adapted build.  The
++    // semantic table panel owns resize commands; never commit vendor weights.
++    if (this.bridge) { ev.preventDefault(); ev.stopPropagation(); return }
+     ev.preventDefault()
+     ev.stopPropagation()
+     const el = this.store.element(id)
+@@ -1208,6 +1211,7 @@ export class SlideCanvas {
+
+   /** Commit any current edit, then edit cell (r,c) of table `id`. */
+   private editCellAt(id: string, r: number, c: number) {
++    if (this.bridge) return
+     if (this.store.readOnly) return // live viewer — no inline editing
+     this.commitTextEdit()
+     const td = this.surface?.querySelector<HTMLElement>(
+@@ -1248,6 +1252,7 @@ export class SlideCanvas {
+   }
+
+   private commitCellEdit(node: HTMLElement) {
++    if (this.bridge) return
+     const cell = this.editingCell!
+     const id = node.dataset.elId
+     const slideId = this.editingSlideId
+@@ -1532,6 +1537,7 @@ export class SlideCanvas {
+
+   /** Insert an element, select it, and (for text) drop straight into editing. */
+   insert(el: SlideElement, startEditing = false) {
++    if (this.bridge) return
+     // inserting while previewing a non-default hover set joins that set —
+     // "I'm editing the italy panel" means new content belongs to it
+     const slide = this.store.slide
+diff --git a/slides/src/editor/editor.ts b/slides/src/editor/editor.ts
+index 901d1c4..f047034 100644
+--- a/slides/src/editor/editor.ts
++++ b/slides/src/editor/editor.ts
+@@ -89,6 +89,10 @@ export class Editor {
+     private store: Store,
+     private bridge: BentoVisualBridge,
+   ) {
++    // A1a-2 has one semantic committer (BentoVisualBridge/kernel).  The
++    // projected Store remains a rendering cache; all vendor final mutation
++    // paths are sealed before any toolbar/listener is wired.
++    this.store.sealNativeMutations()
+     this.build()
+     this.wireKeyboard()
+     store.on('slides', () => this.rebuildSidebar())
+@@ -859,6 +863,7 @@ export class Editor {
+    * on this deck" means. One commit, so ⌘Z brings the whole deck back.
+    */
+   private startFromScratch() {
++    if (this.bridge) return
+     const n = this.store.doc.slides.length
+     if (!window.confirm(t('Replace all {n} slides with one blank slide? ⌘Z undoes this.', { n: String(n) }))) return
+     const blank = builtinLayouts().find((l) => l.id === 'layout-blank')
+@@ -1808,6 +1813,7 @@ export class Editor {
+   // --- slide ops ------------------------------------------------------------------
+
+   private duplicateSlide(i: number) {
++    if (this.bridge) return
+     // Duplicated slides keep element ids → set transition to morph and you
+     // get PowerPoint-Morph behaviour for free.
+     const clone = JSON.parse(JSON.stringify(this.store.doc.slides[i]))
+@@ -1819,6 +1825,7 @@ export class Editor {
+   }
+
+   private deleteSlide(i: number) {
++    if (this.bridge) return
+     const target = this.store.doc.slides[i]
+     if (!target) return
+     // dependents: states of this slide, and element links pointing at it
+@@ -2043,6 +2050,9 @@ export class Editor {
+     document.addEventListener('drop', (ev: DragEvent) => { void this.openDroppedDeck(ev) })
+
+     document.addEventListener('paste', (ev: ClipboardEvent) => {
++      // Adapted composition owns every insert/paste path.  The project-side
++      // create panel is the only supported durable insertion surface.
++      if (this.bridge) { ev.preventDefault(); return }
+       if (this.presenting) return
+       const a = document.activeElement as HTMLElement | null
+       if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) return // text edit owns it
+@@ -2358,6 +2368,7 @@ export class Editor {
+    * in a way dropping a picture is not.
+    */
+   private async openDroppedDeck(ev: DragEvent): Promise<boolean> {
++    if (this.bridge) { ev.preventDefault(); ev.stopPropagation(); return true }
+     const item = [...(ev.dataTransfer?.items ?? [])].find((i) => i.kind === 'file')
+     const named = ev.dataTransfer?.files?.[0]?.name ?? ''
+     if (!item || !/\.bento\.html$/i.test(named)) return false
+@@ -2426,6 +2437,7 @@ export class Editor {
+   }
+
+   private showRecoveryBanner(snap: Snapshot, recovered: import('../model').BentoDoc) {
++    if (this.bridge) return
+     document.querySelector('.ed-recover')?.remove()
+     const bar = div('ed-recover')
+     const when = new Date(snap.at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })
+@@ -2450,6 +2462,7 @@ export class Editor {
+
+   /** Browse and restore the locally-kept auto-save timeline for this deck. */
+   private async openVersionHistory() {
++    if (this.bridge) return
+     const versions = await listVersions(this.store.doc.docId)
+     document.querySelector('.ed-about-overlay')?.remove()
+     const overlay = div('ed-about-overlay')
+@@ -2736,6 +2749,7 @@ export class Editor {
+       // ⌘V is handled by the document 'paste' listener (wirePaste) so it can
+       // also receive images and cross-deck payloads.
+       if (ev.key === 'Delete' || ev.key === 'Backspace') {
++        if (this.bridge) { ev.preventDefault(); return }
+         if (this.store.selection.length) {
+           ev.preventDefault()
+           const ids = new Set(this.store.selection)
+@@ -2755,6 +2769,7 @@ export class Editor {
+         return
+       }
+       if (ev.key.startsWith('Arrow') && this.store.selection.length) {
++        if (this.bridge) { ev.preventDefault(); return }
+         ev.preventDefault()
+         const step = ev.shiftKey ? 10 : 1
+         const dx = ev.key === 'ArrowLeft' ? -step : ev.key === 'ArrowRight' ? step : 0
+@@ -2794,6 +2809,7 @@ export class Editor {
+   }
+
+   private duplicateSelection() {
++    if (this.bridge) return
+     const els = this.store.selectedElements
+     if (!els.length) return
+     const clones = els.map((el) => cloneElement(el))
+diff --git a/slides/src/store.ts b/slides/src/store.ts
+index e499634..0bf3ade 100644
+--- a/slides/src/store.ts
++++ b/slides/src/store.ts
+@@ -31,6 +31,11 @@ export class Store {
+   currentIndex = 0
+   selection: string[] = []
+   dirty = false
++  /** A1a-2 adapted composition root: vendor has no semantic write capability. */
++  private nativeMutationsSealed = false
++
++  /** Permanently disable projected-store final mutations for this session. */
++  sealNativeMutations() { this.nativeMutationsSealed = true }
+   /** editor-only: which showOnHover set the canvas previews (never saved) */
+   hoverPreview: string | null = null
+
+@@ -76,6 +81,7 @@ export class Store {
+    * ⌘Z restores the previous document wholesale.
+    */
+   replaceDoc(next: BentoDoc) {
++    if (this.nativeMutationsSealed) return
+     this.checkpoint()
+     this.doc = next
+     this.currentIndex = 0
+@@ -110,6 +116,7 @@ export class Store {
+
+   /** checkpoint() + mutate + notify, in one call. */
+   commit(mutate: () => void, event: StoreEvent = 'doc') {
++    if (this.nativeMutationsSealed) return
+     if (this.readOnly) return // live viewer — user edits are inert
+     const view = this.captureView()
+     this.checkpoint()
+@@ -154,7 +161,8 @@ export class Store {
+   /** Mark dirty and notify after an in-place mutation (no checkpoint). */
+   touch(event: StoreEvent = 'doc') {
++    if (this.nativeMutationsSealed) return
+     this.doc.modified = new Date().toISOString()
+     this.setDirty(true)
+     this.emit('doc')
+     if (event !== 'doc') this.emit(event)
+   }
+@@ -161,6 +169,7 @@ export class Store {
+   undo() { this.restore(this.undoStack, this.redoStack) }
+   redo() { this.restore(this.redoStack, this.undoStack) }
+
+   private restore(from: HistoryEntry[], to: HistoryEntry[]) {
++    if (this.nativeMutationsSealed) return
+     const entry = from.pop()
+     if (!entry) return

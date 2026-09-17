@@ -1,0 +1,13 @@
+{
+  "name": "@molly/design-bento",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/inter": "5.2.8",
+    "@molly/shared": "workspace:*"
+  }
+}

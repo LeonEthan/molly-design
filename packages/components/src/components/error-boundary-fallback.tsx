@@ -1,0 +1,256 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AlertTriangle, Check, ChevronRight, Copy, RefreshCw, RotateCcw } from 'lucide-react';
+
+import { Button } from '@/ui/button';
+import { writeTextToClipboard } from '@/lib/clipboard';
+import { openExternalUrl } from '@/lib/native-browser';
+import { MOLLY_ISSUES_URL } from '@/lib/molly-urls';
+import { reloadApp } from '@/lib/clear-local-cache';
+import {
+  buildErrorBoundaryReport,
+  collectErrorBoundaryEnvironment,
+  isRawConvexServerError,
+} from '@/lib/error-boundary-report';
+import { getSessionRenderTraceText } from '@/lib/session-render-trace';
+import { cn } from '@/lib/utils';
+
+export type ErrorBoundaryFallbackVariant = 'page' | 'section' | 'inline';
+
+export type ErrorBoundaryFallbackViewProps = {
+  error: Error;
+  /** Retry the crashed subtree without a page reload. */
+  resetErrorBoundary: () => void;
+  variant: ErrorBoundaryFallbackVariant;
+  componentStack: string | null;
+  boundaryName?: string | undefined;
+  /** Hide the message + details block. Only used by hosts that must stay terse. */
+  showErrorDetails?: boolean;
+};
+
+const COPIED_RESET_MS = 2000;
+
+/**
+ * The crash screen a user actually gets to read.
+ *
+ * Invariants, learned from users who got permanently wedged on the old version:
+ * - The real error text is on screen, not only in DevTools, and copyable in one
+ *   click — the copy payload is the full report from `error-boundary-report.ts`.
+ * - Nothing here reloads or resets on its own. Every recovery step is a button
+ *   the user presses (retry, reload, or report).
+ */
+export function ErrorBoundaryFallback({
+  error,
+  resetErrorBoundary,
+  variant,
+  componentStack,
+  boundaryName,
+  showErrorDetails = true,
+}: ErrorBoundaryFallbackViewProps) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const [copyFailed, setCopyFailed] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  // The environment snapshot is taken once per crash, not per render, so the
+  // timestamp in the report is when the crash surfaced.
+  const report = useMemo(
+    () =>
+      buildErrorBoundaryReport({
+        error,
+        boundaryName,
+        componentStack,
+        environment: collectErrorBoundaryEnvironment(),
+        renderTrace: getSessionRenderTraceText(),
+      }),
+    [error, boundaryName, componentStack]
+  );
+
+  // Backend payloads quote server internals, so the headline stays generic while
+  // the raw text remains one deliberate click (or one copy) away.
+  const headline = isRawConvexServerError(error)
+    ? t('errorBoundary.serverErrorSummary', 'The Molly backend returned a server error.')
+    : report.summary;
+
+  useEffect(() => {
+    if (!copied) return undefined;
+    const timer = setTimeout(() => setCopied(false), COPIED_RESET_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  const handleCopy = useCallback(() => {
+    void writeTextToClipboard(report.text).then((ok) => {
+      setCopied(ok);
+      setCopyFailed(!ok);
+      if (!ok) {
+        // Copying can be blocked (insecure context, no gesture). Open the
+        // details so the text is at least selectable by hand.
+        setDetailsOpen(true);
+      }
+    });
+  }, [report.text]);
+
+  if (variant === 'inline') {
+    return (
+      <div
+        role="alert"
+        className="inline-flex w-fit max-w-full items-center gap-2 rounded-md border border-border/60 bg-background/80 px-3 py-2"
+      >
+        <AlertTriangle className="size-3.5 shrink-0 text-destructive" aria-hidden="true" />
+        <span className="min-w-0 truncate text-xs text-muted-foreground" title={headline}>
+          {showErrorDetails ? headline : t('errorBoundary.inlineTitle', 'This part failed')}
+        </span>
+        <button
+          type="button"
+          className="shrink-0 text-xs font-medium text-foreground underline-offset-4 hover:underline"
+          onClick={resetErrorBoundary}
+        >
+          {t('errorBoundary.tryAgain', 'Try again')}
+        </button>
+        <button
+          type="button"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+          onClick={handleCopy}
+          aria-label={t('errorBoundary.copyDetails', 'Copy error details')}
+        >
+          {copied ? (
+            <Check className="size-3.5 text-emerald-500" aria-hidden="true" />
+          ) : (
+            <Copy className="size-3.5" aria-hidden="true" />
+          )}
+        </button>
+      </div>
+    );
+  }
+
+  const isPage = variant === 'page';
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        'w-full',
+        isPage
+          ? 'flex min-h-[60vh] items-start justify-center overflow-auto p-4 sm:items-center sm:p-6'
+          : 'rounded-lg border border-border/60 bg-background/80 p-4'
+      )}
+    >
+      <div
+        className={cn(
+          'flex w-full min-w-0 flex-col gap-3 text-left',
+          isPage && 'max-w-2xl rounded-xl border border-border/60 bg-background/80 p-5 shadow-sm'
+        )}
+      >
+        <div className="flex items-start gap-2.5">
+          <AlertTriangle
+            className={cn('shrink-0 text-destructive', isPage ? 'mt-0.5 size-5' : 'mt-px size-4')}
+            aria-hidden="true"
+          />
+          <div className="min-w-0">
+            <h2 className={cn('font-semibold text-foreground', isPage ? 'text-base' : 'text-sm')}>
+              {t('errorBoundary.title', 'Molly hit an unexpected error')}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+              {t(
+                'errorBoundary.description',
+                'The rest of the app is still running. Nothing reloads on its own — pick a step below.'
+              )}
+            </p>
+          </div>
+        </div>
+
+        {showErrorDetails ? (
+          <pre className="max-h-32 min-w-0 select-text overflow-auto rounded-md border border-border/60 bg-muted/40 p-3 font-mono text-xs leading-5 text-foreground [overflow-wrap:anywhere] whitespace-pre-wrap">
+            {headline}
+          </pre>
+        ) : null}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" onClick={resetErrorBoundary}>
+            <RotateCcw className="size-3.5" aria-hidden="true" />
+            {t('errorBoundary.tryAgain', 'Try again')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              reloadApp();
+            }}
+          >
+            <RefreshCw className="size-3.5" aria-hidden="true" />
+            {t('errorBoundary.reload', 'Reload Molly')}
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={handleCopy}>
+            {copied ? (
+              <Check className="size-3.5 text-emerald-500" aria-hidden="true" />
+            ) : (
+              <Copy className="size-3.5" aria-hidden="true" />
+            )}
+            {copied
+              ? t('errorBoundary.copied', 'Copied')
+              : t('errorBoundary.copyDetails', 'Copy error details')}
+          </Button>
+        </div>
+
+        {copyFailed ? (
+          <p className="text-xs text-destructive">
+            {t(
+              'errorBoundary.copyFailed',
+              'Copying was blocked. Open the technical details below and select the text manually.'
+            )}
+          </p>
+        ) : null}
+
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3">
+          <p className="text-xs font-medium text-foreground">
+            {t('errorBoundary.nextStepsTitle', 'If it keeps happening')}
+          </p>
+          <ol className="mt-1.5 list-decimal space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
+            <li>{t('errorBoundary.stepRetry', 'Try again — one-off glitches recover here.')}</li>
+            <li>
+              {t('errorBoundary.stepReload', 'Reload Molly. Your synced work is not affected.')}
+            </li>
+            <li>
+              {t(
+                'errorBoundary.stepReport',
+                'Still broken? Copy the error details and report the problem on Molly’s issue tracker.'
+              )}{' '}
+              <button
+                type="button"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+                onClick={() => {
+                  void openExternalUrl(MOLLY_ISSUES_URL);
+                }}
+              >
+                {t('errorBoundary.openDiscord', 'Report an issue')}
+              </button>
+            </li>
+          </ol>
+        </div>
+
+        {showErrorDetails && report.details ? (
+          <div className="min-w-0">
+            <button
+              type="button"
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setDetailsOpen((open) => !open)}
+              aria-expanded={detailsOpen}
+            >
+              <ChevronRight
+                className={cn('size-3.5 transition-transform', detailsOpen && 'rotate-90')}
+                aria-hidden="true"
+              />
+              {t('errorBoundary.technicalDetails', 'Technical details')}
+            </button>
+            {detailsOpen ? (
+              <pre className="mt-2 max-h-[40vh] min-w-0 select-text overflow-auto rounded-md border border-border/60 bg-muted/40 p-3 font-mono text-[11px] leading-5 text-muted-foreground [overflow-wrap:anywhere] whitespace-pre-wrap">
+                {report.details}
+              </pre>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}

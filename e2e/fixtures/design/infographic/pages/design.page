@@ -1,0 +1,15 @@
+{
+  "background": {"type": "solid", "color": "#F7F6F2"},
+  "elements": [
+    {"elementId": "header", "elementType": "shape", "bounds": [0, 0, 1200, 230], "shapeName": "rect", "fill": {"type": "solid", "color": "#102A43"}},
+    {"elementId": "title", "elementType": "text", "bounds": [48, 48, 1104, 150], "content": {"text": "THREE STEPS TO A DESIGN", "fontSize": 48, "bold": true, "color": "#FFFFFF"}},
+    {"elementId": "panel-0", "elementType": "shape", "bounds": [40, 280, 1120, 156], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-0", "elementType": "text", "bounds": [64, 300, 1020, 125], "content": {"text": "01  Gather references", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "panel-1", "elementType": "shape", "bounds": [40, 460, 1120, 156], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-1", "elementType": "text", "bounds": [64, 480, 1020, 125], "content": {"text": "02  Arrange the message", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "panel-2", "elementType": "shape", "bounds": [40, 640, 1120, 156], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-2", "elementType": "text", "bounds": [64, 660, 1020, 125], "content": {"text": "03  Review and refine", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "reference", "elementType": "image", "bounds": [1096, 806, 56, 56], "src": "media/reference.png", "fit": {"mode": "cover"}},
+    {"elementId": "footer", "elementType": "text", "bounds": [48, 830, 1020, 40], "content": {"text": "SYNTHETIC ACCEPTANCE FIXTURE", "fontSize": 16, "bold": true, "color": "#102A43"}}
+  ]
+}

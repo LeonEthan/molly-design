@@ -1,0 +1,104 @@
+# Positive format-admission query (format.mjs)
+
+Status: implemented
+Translation: current
+
+[Chinese](2026-09-17-format-query-script.zh.md)
+
+## Abstract
+
+`artwork-format.md` is a deliberately incomplete format guide (self-described "not a complete whitelist"), so an Agent's positive knowledge of `molly-canvas/1` admission rules can only be learned one rule per failed round through the "write → finalize failure → read diagnostics" feedback loop; one class of failures — "parses but is silently dropped at import/render" — is not even covered by that loop. This note adds a `describeAuthoringFormat()` export to the `design-authoring` package, deriving the format description from the validator's own closed vocabulary and explicit exclusion rules, and exposes it to Agents through a `format.mjs` skill helper script. The skill channel is chosen over an Elyx-style standalone CLI or MCP: format admission is static knowledge and belongs with the task-materialized knowledge carrier; its availability must not depend on a daemon connection, and skill materialization is version-locked with intake by construction. Adversarial analysis has rejected the capability matrix active subset as a data source (the `theme`/`seriesDefaults` counterexamples). Implemented and verified (127 package tests including 15 new ones; repo-wide check/format/docs check pass); the "fewer trial-and-error rounds" benefit remains unmeasured.
+
+## Problem and evidence
+
+- The only Agent-facing material is a compact guide: [`artwork-format.md`](../../../../packages/design-authoring/skills/graphic-design/references/artwork-format.md) calls itself "compact", says kind-specific fields are "not a complete whitelist" (:1, :48), and forbids writing fields merely because TypeScript types or Bento internals mention them (:111-112). Meanwhile [`graphic-canvas-profile.md`](../../../../packages/design-authoring/skills/graphic-design/references/graphic-canvas-profile.md) states existing projected documents may carry editable Bento fields the compact guide does not enumerate (:91-96). "What am I allowed to write" is therefore an ambiguous zone between three information sources: prose, the frozen matrix, and the vendored schema.
+- The negative-feedback loop does not cover silent-drop failures: the guide itself defines "parses but resets/placeholders/flattens" as a failed capability (artwork-format.md:127-130). The validator admits these; the loss happens at import/render, invisible in finalize output.
+- Empirical evidence for push-mode failure: an Agent may read only the beginning of a long format guide. A complete on-paper static document is not complete in context.
+- Factual correction on data reachability (Codex adversarial analysis, verified): the materialized bundle [`molly-authoring.mjs`](../../../../packages/design-authoring/skills/graphic-design/scripts/lib/molly-authoring.mjs) already exports `AUTHORING_PROJECTION_CAPABILITIES` and `FROZEN_CAPABILITY_MATRIX` (:11855, :11859). The real problem is "reachable but undocumented, hard to discover, and raw matrix ≠ authoring grammar", not unreachability.
+- The matrix cannot be the data source (fatal counterexamples, verified): `common.theme` and `chart.seriesDefaults` are both active rows in the matrix yet explicitly rejected by the current validator ([`canvas-format.ts`](../../../../packages/design-authoring/src/canvas-format.ts) :223, :290). Action capability rows like `common.createDelete` and derived rows like `image.pipeline` have no writable YAML syntax. The active label cannot substitute for current admission evidence.
+
+## Research convergence
+
+The starting point was Elyx's (elyx.design) three-piece CLI: `elyx man` / `diagnostics` / `inspect`. After a Codex adversarial pass, the conclusions converged:
+
+- The "complete whitelist lost in migration" narrative was weakened: the original document was not self-contained either (the `shapeName` whitelist lives in a separate `shapes.md`), its local export script performs only shallow checks, and the document is separated from the remote actual behavior; its real safety net was mandatory visual QA, while Molly retained a different kind of enforcement (flush, read-only, CAS conflict refusal to overwrite). "More correction rounds" has no A/B data and is withdrawn.
+- The only surviving conclusion: surface the **admission verdict the validator already holds completely** (fail-closed means the boundary is explicitly written in code) in an Agent-queryable form. The derivation source is the rule itself, so there is no second-truth drift surface.
+- Elyx's value was triggering the "what does the Agent know before writing" review; its CLI mechanism itself need not be ported.
+
+## Channel decision: skill script, not standalone CLI or MCP
+
+All three options derive knowledge from the same source; they differ only in delivery channel. The decisive dimension is whether **availability semantics match the knowledge kind**:
+
+| Dimension | Skill script | Elyx-style global CLI | MCP tool |
+| --- | --- | --- | --- |
+| Availability | Present once materialized, works offline | Depends on global install and PATH | Depends on daemon connection, session enablement, per-turn selection |
+| Version lockstep | Materialized from the same build as intake, locked by construction | Independent install → drift risk | Daemon-served, locked |
+| Mechanism cost | Reuses materialization/bundling; 1 export + 1 script | New artifact, versioning, PATH management | Daemon registration, shared MCP catalog contract, permission surface |
+| Discoverability | Announced via SKILL.md routing at format-learning time | Agent must find it in PATH | Visible in tool list, at the cost of the three rows above |
+
+Format admission is **static knowledge**: it does not vary with session, environment, or time. Hanging it on a dynamic capability channel (MCP) means the Agent loses the most basic format knowledge precisely when the daemon is down — while it can still write `design.yaml`, just without its knowledge source. Knowledge must be available at a more fundamental layer than capabilities. The standalone CLI serves a scenario that does not exist in Molly (usage outside product sessions, operating design files directly in a repo): creation always happens inside a session, and sessions already materialize the skill. The skill script is therefore chosen.
+
+If a future query need depends on **session state** (current canvas size, tools enabled this turn), that is a dynamic capability and MCP is the right channel; this proposal does not anticipate that need. The `describeAuthoringFormat()` export is channel-agnostic; future channels can consume it directly.
+
+## Design
+
+### Package derivation export
+
+Add in `canvas-format.ts`, exported from `index.ts`:
+
+```ts
+describeAuthoringFormat(): ArtworkFormatDescription
+```
+
+All derivation sources are existing validator constants; no hand-maintained data table is added:
+
+- Root field admission list: `['format', 'title', 'size', 'customFonts', 'background', 'elements', 'diagnostics']` (canvas-format.ts:231-235);
+- Kind vocabulary: `BENTO_ELEMENT_KINDS_V4` (canvas-format.ts:208);
+- Per-kind fields: `BENTO_DOC_V4_FIELDS.elements.common` + per-kind tables (canvas-format.ts:280-285), reachable automatically through the existing bundle build;
+- Explicit exclusion list with reasons: `.pptd`/v2/v3, `theme`, `pages`, `notes`/`animations`/`pageType`, `elementId`/`elementType`/`content`, `chart.seriesDefaults`, remote URLs (canvas-format.ts:219-291, :297-302);
+- Legacy status note: top-level `chart.fill` remains in the v4 table with no UI writer (comment at canvas-format.ts:186-192);
+- Value-level constraints are pointers, not re-statements (positive integer size pair, bounds geometry, media path shape, font registration and byte sniffing, kernel replay); rule details remain the validator's verdict, and the derivation does not duplicate numeric semantics.
+
+The five-way classification demanded by adversarial analysis collapses to three under `molly-canvas/1`: admissible fields (writable and round-trip preserved — no "preserved-only" subset exists), explicit exclusions (with validator-original reasons), and value-constraint pointers. No nonexistent category is invented.
+
+### Skill script
+
+`skills/graphic-design/scripts/format.mjs`, importing only `node:*` and the bundled `./lib/molly-authoring.mjs` (per package self-containment rules):
+
+```text
+node scripts/format.mjs                  # Overview: root fields, kind list, exclusion summary
+node scripts/format.mjs kind <kind>      # Admissible fields for the kind + exclusions at that layer
+node scripts/format.mjs excluded         # All explicit exclusions with reasons (incl. PPTD legacy rejections)
+```
+
+Optional helper, never a gate: same status as `finalize.mjs`; it does not submit, review, or block turns, per the agent-naive boundary.
+
+### Discoverability
+
+Add one line to the SKILL.md "Route the task" section: query the admission table via `format.mjs` before writing fields, as needed; point the "not a complete whitelist" note at the top of `artwork-format.md` to this script. This directly closes the "reachable but hard to discover" gap identified by adversarial analysis.
+
+## Explicitly rejected
+
+| Candidate | Rejection reason (post-adversarial-analysis) |
+| --- | --- |
+| Matrix active subset as query source | `theme`/`seriesDefaults` counterexamples: active ≠ writable; action/derived rows have no writable syntax; several rows still carry draft contracts |
+| `inspect` (document structure query) | A single-canvas YAML is a few KB; the Agent can Read it more cheaply |
+| `diagnostics` (YAML↔BentoDoc sync query) | Sync state is the daemon's responsibility; exposing it to Agents violates agent-naive |
+| Standalone `molly-design` CLI | No out-of-session user; new artifact and drift risk; mechanism cost not justified |
+| Format-query MCP tool | Static knowledge must not depend on a dynamic capability channel's availability; mechanism cost |
+| Restoring a long complete format spec | Would freeze vendored upstream fields into a public commitment, unshrinkable later |
+| Making visual review mandatory again | A philosophical decision (advisory), not a downgrade; the original's "mandatory" was also prompt discipline |
+
+## Verification record
+
+1. New `tests/format-description.test.ts` (10 tests): derived output equals the admission table item by item (root fields; common + per-kind fields for all 7 kinds); the behavioral guard injects every `ARTWORK_EXCLUSIONS` entry into a fixture and asserts the validator actually rejects it (v2 version marker, theme, pages, notes/animations/pageType, elementId/elementType/content, chart.seriesDefaults, remote URLs).
+2. Extended `tests/skill-scripts.test.ts` (5 new tests): `format.mjs` overview / `kind chart` (seriesDefaults not admissible) / unknown kind exits 1 / `excluded` lists theme / unknown subcommand exits 2.
+3. All 127 `packages/design-authoring` tests pass (bundle rebuilt); `pnpm check`, `pnpm format`, `pnpm run docs check` pass. The two `apps/cli` `acp-authentication` failures were re-verified as the pre-existing issue of the shell inheriting `ANTHROPIC_*`/`CLAUDE_CODE_*` variables (all 31 pass in an isolated environment; unrelated to this change, see the single-canvas redesign note).
+4. Golden replication not rerun: the change does not touch intake/render semantics.
+
+## Limits
+
+- "Fewer trial-and-error rounds" is a mechanistic inference without A/B measurement.
+- The benefit ceiling is bounded by whether Agents actually call the script; SKILL.md routing is a hint, not a gate.
+- Value-level constraints (geometry, media, fonts) are out of derivation scope; schema ignorance is only partially mitigated.
+- If admission ever becomes session-dependent (feature flags), the static premise of this design breaks and the channel choice must be revisited.

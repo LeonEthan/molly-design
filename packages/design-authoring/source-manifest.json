@@ -1,0 +1,116 @@
+{
+  "repository": "https://github.com/LeonEthan/agentic-listing-design",
+  "commit": "7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12",
+  "bentoCommit": "813c71fff72491e6898f5e55a20da44a562be586",
+  "capabilityMatrix": {
+    "path": "../design-bento/vendor/packages/contracts/capability-matrix/v1.json",
+    "sha256": "a96c9959ba6beeb66aca16fa8f48da3993b394ea526ca979c5949aab8e2dfd48"
+  },
+  "files": {
+    "src/intake.ts": {
+      "upstreamPath": "packages/authoring/src/intake.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "53cb5060e04e1658fb1de9ab3f2b97f8a38dffcd818d99932218f1c5985fd621"
+    },
+    "src/validate.ts": {
+      "upstreamPath": "packages/authoring/src/validate.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "4adb74deaaee23e9b1c94dcc246f6ea8906a1b8ce11a38038cb79a0f91bf34cd"
+    },
+    "src/migrate.ts": {
+      "upstreamPath": "packages/authoring/src/migrate.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "8166fef5152bc99d20a630c8222cca2c81ef1aea9dd311f709985d7176f100d2"
+    },
+    "src/semantic-assets.ts": {
+      "upstreamPath": "packages/authoring/src/semantic-assets.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "b5993506d0fe20947e5c2f2bd3cc98cdd5ee2850482d12dc3c8b37f36fdd8aa3"
+    },
+    "src/product-boundary.ts": {
+      "upstreamPath": "packages/authoring/src/product-boundary.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "a266e349ec0a0be099a797415791d6a607d2ae9c43582d5d33ab2fb80453b1df"
+    },
+    "src/collect-authoring.ts": {
+      "upstreamPath": "packages/authoring/src/collect-authoring.ts",
+      "derivation": "adapted",
+      "upstreamSha256": "05be0c2e37269422e9e0386564f6760efac8c65d8d0cdbf7c48d300c7e6df72b"
+    },
+    "skills/graphic-design/references/general-poster.md": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/references/replication.md": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/references/graphic-canvas-profile.md": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/references/artwork-format.md": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/scripts/reference-pack.mjs": {
+      "upstreamPath": "skills/graphic-design/scripts/reference-pack.py",
+      "derivation": "ported",
+      "upstreamSha256": "3e66820f30ffe793d10813e2ecb32b5034791c50e31691dec80cf87c6e70c9e2"
+    },
+    "skills/graphic-design/examples/minimal/design.yaml": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/examples/minimal/media/swatch.png": {
+      "upstreamPath": "skills/graphic-design/examples/minimal/media/swatch.png",
+      "derivation": "verbatim",
+      "upstreamSha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249",
+      "sha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249"
+    },
+    "skills/imagegen/LICENSE.txt": {
+      "upstreamPath": "skills/imagegen/LICENSE.txt",
+      "derivation": "verbatim",
+      "upstreamSha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9",
+      "sha256": "4dd13869245e356246a5b770723247bbb80a8f07a181d1d3d873a1734297cdb9"
+    },
+    "skills/imagegen/references/prompting.md": {
+      "upstreamPath": "skills/imagegen/references/prompting.md",
+      "derivation": "adapted",
+      "upstreamSha256": "a9fb02d984e8da8442190095a8ac48dc95461d359e3b0f2bf10cff2f22eba2ba"
+    },
+    "skills/imagegen/references/sample-prompts.md": {
+      "upstreamPath": "skills/imagegen/references/sample-prompts.md",
+      "derivation": "verbatim",
+      "upstreamSha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4",
+      "sha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4"
+    }
+  },
+  "derivations": {
+    "verbatim": "byte-identical to the pinned upstream; build.mjs verifies the recorded sha256",
+    "adapted": "Molly Design adaptations and subsequent simplification; upstreamSha256 records provenance",
+    "ported": "re-implemented dependency-free for Node (upstream was Python/Pillow)",
+    "original": "Molly Design-authored YAML canvas materials; not a live upstream pin"
+  },
+  "excluded": [
+    "packages/authoring/src/revisions.ts (immutable revision CAS store)",
+    "packages/authoring/src/workspace.ts (CAS workspace persistence)",
+    "skills/graphic-design/references/pptd.md (upstream PPTD catalogue; not a live pin)",
+    "skills/graphic-design/references/pptd-authoring.md and examples/minimal PPTD files (not live upstream pins)",
+    "rewritten graphic-design/imagegen SKILL.md and helper scripts (Molly Design-local; not live upstream pins)",
+    "skills/graphic-design/scripts/reference-pack.py superseded by the ported .mjs",
+    "skills/graphic-design/VENDOR.lock (runtime per-file freezing replaced by this build-time manifest)",
+    "skills/imagegen/scripts/image_gen.py, references/cli.md, references/codex-network.md, references/image-api.md (old CLI/deployment specifics)",
+    "skills/amazon-aplus (out of scope)",
+    "src/import.ts (retired unused PPTD v2 translation; provenance retained in Git history)",
+    "src/richtext.ts (retired unused PPTD v2 translation; provenance retained in Git history)",
+    "src/latex.ts (retired unused PPTD v2 translation; provenance retained in Git history)"
+  ],
+  "localAdaptations": {
+    "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
+    "skills/graphic-design/references/replication.md": "Original reconstruction guide for the YAML canvas",
+    "skills/graphic-design/references/graphic-canvas-profile.md": "Original Active Profile discipline for YAML/Bento authoring",
+    "skills/graphic-design/references/artwork-format.md": "Original YAML artwork format guide",
+    "skills/graphic-design/examples/minimal/design.yaml": "Original YAML manifest example admitted by intake",
+    "skills/imagegen/references/prompting.md": "T09: model-neutral prompting and generate/edit capability description",
+    "src/projection-capabilities.ts": "Derived YAML representation mapping for every active row of the unchanged frozen v1 matrix",
+    "src/validate.ts": "YAML file/snapshot boundary; unused PPTD v2 validator removed",
+    "src/semantic-assets.ts": "Native structured asset fields only; legacy theme traversal removed",
+    "src/canvas-format.ts": "Single molly-canvas/1 YAML projection using literal Bento editable fields and kernel validation"
+  }
+}

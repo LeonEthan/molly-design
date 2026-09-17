@@ -1,0 +1,5 @@
+version: v2
+title: Synthetic infographic acceptance
+size: [1200, 900]
+pages:
+  - pages/design.page

@@ -1,0 +1,147 @@
+appId: dev.molly-design.app
+productName: Molly
+protocols:
+  - name: Molly Desktop
+    schemes:
+      - molly-design
+directories:
+  buildResources: build
+# Embedded-CLI native deps: swap Electron-ABI bindings per packaging target,
+# then boot the packed CLI as a regression smoke.
+beforePack: ./scripts/eb-before-pack.mjs
+afterPack: ./scripts/eb-after-pack.mjs
+files:
+  # electron-builder prepends `**/*` only while this list holds nothing but
+  # exclusions (`FileMatcher.containsOnlyIgnore`); one positive pattern turns the
+  # list into the whole include set. The skill re-includes below are positive, so
+  # the include-everything default is stated here instead of left implicit.
+  - '**/*'
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!scripts/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!**/node_modules/electron-sparkle-updater/native/vendor/**'
+  - '!**/*.map'
+  - '!**/*.{md,markdown,mkd}'
+  - '!**/{test,tests,__tests__,testing,__mocks__,mocks,spec,examples,example,stories,storybook}/**'
+  # `resources/cli` is staged build output, not the app's source tree, so the two
+  # source-tree exclusions above must not reach into the skill trees it carries.
+  # A design skill ships its instructions as markdown (`SKILL.md`,
+  # `references/*.md`) and a worked example project under `examples/`; the pinned
+  # DeepSeek presets ship skills the same way. Stripping those fails no build or
+  # packaging probe -- the session materializes a skill whose scripts are present
+  # and whose instructions are not, silently downgrading what the agent can do.
+  # Re-including is last-match-wins per file, so the map exclusion is restated for
+  # these trees rather than left to the earlier pattern.
+  - 'resources/cli/design-skills/**'
+  - 'resources/cli/deepseek-agent-presets/**'
+  - '!resources/cli/**/*.map'
+  # better-auth client usage in Electron does not require Prisma runtime.
+  - '!node_modules/@prisma/**'
+  - '!node_modules/prisma/**'
+  - '!node_modules/@better-auth/prisma-adapter/**'
+  # Exclude better-auth server/database adapters and transitive DB stacks in desktop client builds.
+  - '!node_modules/@better-auth/drizzle-adapter/**'
+  - '!node_modules/@better-auth/mongo-adapter/**'
+  - '!node_modules/drizzle-orm/**'
+  # Exclude transitive runtime-unneeded utility/tooling libs.
+  - '!node_modules/effect/**'
+  - '!node_modules/prettier/**'
+  - '!node_modules/@cloudflare/workers-types/**'
+  - '!node_modules/esbuild/**'
+  - '!node_modules/@esbuild/**'
+  - '!node_modules/@electric-sql/pglite/**'
+  - '!node_modules/@electric-sql/pglite-tools/**'
+  - '!node_modules/@electric-sql/pglite-socket/**'
+  - '!node_modules/@mrleebo/prisma-ast/**'
+  - '!node_modules/mongodb/**'
+  - '!node_modules/mysql2/**'
+  - '!node_modules/postgres/**'
+  - '!node_modules/typescript/**'
+  # Keep runtime-required better-auth adapter entrypoints; trim only non-runtime test utilities.
+  - '!node_modules/better-auth/dist/test-utils/**'
+asarUnpack:
+  - resources/**
+  - '**/node_modules/electron-sparkle-updater/native/build/Release/*.node'
+# Keep only the app locales we actually ship to reduce Chromium locale payload.
+# Both naming forms are required: macOS resources use the underscore form
+# (`en_US`) while Windows/Linux Chromium `locales/*.pak` use the hyphen form
+# (`en-US.pak`). Dropping `en-US` leaves the Windows package with NO locale
+# `.pak`, which fatally crashes the renderer (exit -36861) the first time it
+# renders localized UI such as an `<input type=file>` button (Electron #45251).
+# The afterPack hook (`scripts/eb-after-pack.mjs`) asserts a Windows .pak exists.
+electronLanguages:
+  - en_US
+  - en-US
+win:
+  executableName: molly
+  icon: build/icon.ico
+nsis:
+  # GitHub Releases rewrites spaces in uploaded asset names to periods, which would
+  # desynchronize the file names electron-builder records in latest*.yml from the
+  # ones electron-updater can actually download on Windows/Linux. productName is
+  # "Molly", so every artifact name here uses a space-free token instead of
+  # ${productName}. macOS updates use Sparkle appcast.xml, not latest-mac.yml.
+  artifactName: MollyDesign-${version}-${arch}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extraFiles:
+    - from: node_modules/electron-sparkle-updater/native/vendor/Sparkle.framework
+      to: Frameworks/Sparkle.framework
+  extendInfo:
+    NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSUserNotificationAlertStyle: banner
+    SUFeedURL: https://github.com/LeonEthan/molly-design/releases/latest/download/appcast.xml
+    SUPublicEDKey: SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER
+    SUEnableInstallerLauncherService: false
+    SUScheduledCheckInterval: 3600
+    CFBundleLocalizations:
+      - en
+      - zh_CN
+  # Sparkle verifies updates with EdDSA, not Squirrel.Mac's copy of the Developer
+  # ID signature. First-install Gatekeeper still needs a signed + notarized DMG.
+  # Local builds without Apple credentials are still fine: electron-builder skips
+  # signing (and therefore notarization) with a warning rather than failing.
+  notarize: true
+  artifactName: MollyDesign-${version}-${arch}.${ext}
+dmg:
+  artifactName: MollyDesign-${version}-${arch}.${ext}
+  writeUpdateInfo: false
+linux:
+  icon: build/icon.png
+  executableName: mollyDesign
+  syncDesktopName: true
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: Molly contributors
+  category: Utility
+appImage:
+  artifactName: MollyDesign-${version}-${arch}.${ext}
+snap:
+  artifactName: MollyDesign-${version}-${arch}.${ext}
+deb:
+  artifactName: MollyDesign-${version}-${arch}.${ext}
+includePdb: false
+npmRebuild: false
+# The public build has no VITE_ELECTRON_UPDATE_URL to inject: electron.vite.config.ts
+# deliberately strips every VITE_* value so public builds stay deterministic. This
+# provider is baked into the packaged app-update.yml for Windows/Linux electron-updater.
+# macOS Sparkle reads SUFeedURL / SUPublicEDKey from Info.plist instead. Generating
+# latest*.yml for non-mac targets still depends on this block being present.
+publish:
+  provider: github
+  owner: LeonEthan
+  repo: molly-design

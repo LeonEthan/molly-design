@@ -1,0 +1,2858 @@
+{
+  "matrixSchemaVersion": 1,
+  "activeProfileVersion": "v1",
+  "vendorCommit": "813c71fff72491e6898f5e55a20da44a562be586",
+  "frozenAt": "2026-08-28",
+  "rows": [
+    {
+      "capabilityId": "canvas.size",
+      "family": "canvas",
+      "pptdPath": "pptd/v2 Presentation.size（[w,h] px；任意正有限整数）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "canvas.{width,height}",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:392-394（Doc.size {width,height}）；slides/src/editor/panels.ts:215-258（Page Setup 面板预设+Custom W/H 输入）；gd2c-canvas-clamp patch（面板钳制 1..16000）。实测 E1：loadDoc 对 0/负数/小数尺寸全部静默接受（parseDoc 浅校验，model.ts:1067-1086）；面板 Width 99999→16000、0→1（clamp patch 生效）",
+      "importContract": "草案：PPTD size [w,h] → doc.size {width:w, height:h}，1:1 px 直映射；正有限整数约束必须由 importer 保证——原生 loadDoc 路径无任何校验（实测 0/-100/3.7 全过），clamp 只存在于面板编辑路径",
+      "renderContract": "doc.size 决定 slide surface 元素 style.width/height（render.ts:1160-1170 renderSlide）；实测 E1 stage 元素 1200px×675px 与模型一致。负责层：native renderer",
+      "editContract": "草案：原生 Page Setup 面板 W/H 输入（clamp 1..16000，patch 后），直写 Store 绕过 kernel；VisualCommand 词表无 canvas size 命令 → GD-4b 需新增 setCanvasSize 并接管面板入口",
+      "roundTripContract": "实测 E1：size.width/height serialize→loadDoc→serialize 四阶段原值存活（1200/675 全等）；非法值（0/负/小数）同样原样 round-trip——持久化不变量只能由 importer 侧维护",
+      "exportContract": "草案：导出 PNG 像素尺寸 = size × scale；无外部依赖，断网无影响",
+      "failureCode": "PPTD-E002（非正有限整数画布尺寸）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "canvas.background",
+      "family": "canvas",
+      "pptdPath": "pptd/v2 Page.background（Fill；缺省白）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "background（Fill 联合：solid/gradient linear·radial/image）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:327-328（slide.background CSS 串）；render.ts:1160-1170（renderSlide 直赋 style.background）；untrusted.ts:449（paste 路径 background 按 color 规则校验→url() 被拒）；panels.ts:215-258（Background 面板仅 input[type=color]，只产 HEX6）。实测 E1：linear-gradient(90deg,...) CSS 串存活且渲染（computed backgroundImage 命中）；E4：`#0B3D91 url(\"data:image/svg+xml,...\")` 复合串渲染（截图全红画布）；E4 paste probe：url() 背景被剥为 <dropped>、纯色 #123456 存活",
+      "importContract": "草案：SolidFill→'#rrggbb[aa]' 串；GradientFill linear→`linear-gradient(<(angle+90)%360>deg, <stops>)`（PPTD 0=左→右 vs CSS 0=底→顶，差 +90°，E1 实测 SVG 坐标对证实）；ImageFill→`url(\"<resolved>\")` 串（E4 实测可行）或投影垫底 image 元素；radial 无实测路径（radial-gradient() CSS 串语法可行但未实测，GD-4b 验证）。importer 必须走 loadDoc 路径——clipboard 路径剥 url()（实测）",
+      "renderContract": "slide surface 元素 style.background；实测 E1 linear-gradient computed 命中、E4 data-URI 图片背景渲染（截图目验）。负责层：native renderer（CSS 串原样透传浏览器）",
+      "editContract": "草案：原生面板 Background 仅 HEX6 color input，渐变/图片背景无原生编辑 UI → adapter 面板区（a1a2 buildImageProps 先例）；VisualCommand 无背景命令 → GD-4b 新增 setBackground",
+      "roundTripContract": "实测 E1/E4：background CSS 串（含 linear-gradient、data-URI url()）serialize→loadDoc→serialize 原值存活；serialize 为纯 JSON（kernel/src/save.ts:357-365）无损",
+      "exportContract": "草案：背景（纯色/渐变/图片）在最终 PNG 必须可观察（E1/E4 截图已证实渐变与图片两种）",
+      "failureCode": "PPTD-E013（非法 background fill 值/词表外类型）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs",
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/fill-image-bg.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/results/fill-image-bg/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/fill-image-bg/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.elementId",
+      "family": "common",
+      "pptdPath": "pptd/v2 ElementBase.elementId（页内唯一）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].id",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:17（ElementBase.id）；render.ts:964（data-el-id 物化到 DOM）；untrusted.ts:327-331（id 按 cssValue 规则校验）；validate.ts:220-223（duplicate-id error）。实测 E2：id round-trip 存活；dup-id-validate probe 报 duplicate-id error（validate ok:false）",
+      "importContract": "草案：elementId→id 直映射；页内唯一性由 importer 保证——原生 loadDoc 不拒重号（仅 validate advisory 报错）",
+      "renderContract": "实测 E2：每个元素 DOM 节点带 data-el-id=<id>；负责层：native renderer",
+      "editContract": "草案：id 无 UI 编辑；选择/命中测试全走 id（E2 elementFromPoint 实测命中顶层元素 s-over）",
+      "roundTripContract": "实测 E2：id serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：id 不直接可观察；其稳定性是 morph/comment 锚定的前提，导出无额外要求",
+      "failureCode": "PPTD-E014（页内 id 重复/缺失）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.elementType",
+      "family": "common",
+      "pptdPath": "pptd/v2 ElementBase.elementType（7 类型词表 text/shape/line/image/icon/table/chart）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].kind（v4 词表 7 型：text/shape/line/image/icon/table/chart）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:203-214（svg 元素=icon 宿主，markup 承载）；untrusted.ts:363（type oneOf 封闭词表）。实测 E2 unknown-type-render probe：type:'icon'（词表外）被 loadDoc 静默接受、渲染为空 frame（childElementCount 0）、validate 零发现——词表外类型不报错但无任何渲染",
+      "importContract": "草案：PPTD 7 型→原生词表映射：text/shape/line/image/table/chart 同名直映射；icon→svg 元素（markup 承载图标 SVG）。词表外 type 静默空渲染（实测），importer 必须只产出词表内类型并具名拒绝其余",
+      "renderContract": "实测 E2：词表内类型各有渲染分支；词表外类型渲染为空 frame（零子节点）。负责层：native renderer",
+      "editContract": "草案：type 创建即定型，不可编辑",
+      "roundTripContract": "实测 E2：词表外 type 值也 round-trip 存活（浅校验）——但无语义，不能依赖",
+      "exportContract": "草案：类型本身不可观察，渲染效果见各元素 family 行",
+      "failureCode": "PPTD-E003（词表外 elementType）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.bounds",
+      "family": "common",
+      "pptdPath": "pptd/v2 ElementBase.bounds（[x,y,w,h] px，左上角原点）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].bounds",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:24-27（x,y,w,h）；render.ts:179-198（applyElementFrame→left/top/width/height px 绝对定位）；slides/src/editor/canvas.ts:151-155（Moveable drag/resize，a1a2 patch 接管为 kernel 命令）。实测 E2：元素按 x/y/w/h 渲染定位（截图目验）；sanitizer-paste probe added keys 含 x/y/w/h 原值",
+      "importContract": "草案：PPTD bounds [x,y,w,h]（左上角原点 px）→ x,y,w,h 同名直映射，坐标系与单位 1:1，无换算",
+      "renderContract": "实测 E2：绝对定位 left/top/width/height，截图目验位置正确。负责层：native renderer（frame 层）",
+      "editContract": "草案：Moveable drag/resize 原生 UI（a1a2 patch 已接管 → bridge setBounds）；VisualCommand.setBounds 现成（contracts/src/commands.ts）",
+      "roundTripContract": "实测：x/y/w/h 经 serialize→loadDoc→serialize 原值存活（全部 fixture 通用路径）",
+      "exportContract": "草案：元素位置/尺寸在最终 PNG 与设计一致",
+      "failureCode": "PPTD-E006（bounds 畸形/越出画布）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.zOrder",
+      "family": "common",
+      "pptdPath": "pptd/v2 Page.elements[] 数组序（后者居上）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].zIndex（数组序显式化，沿用 v3）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:1168（按数组序绘制，后者居上）；slides/src/editor/panels.ts:1867-1894（z-order step/reorder 面板，直写 store）。实测 E2：DOM 序=模型数组序（domOrder 七元素全等）；elementFromPoint 命中顶层 s-over",
+      "importContract": "草案：Page.elements[] 数组序 → slide.elements[] 同序直映射，无需重排",
+      "renderContract": "实测 E2：DOM 序=数组序、后者居上（hit-test 证实）。负责层：native renderer",
+      "editContract": "草案：原生面板 Bring/Send 层级调整（直写 Store 绕过 kernel）；VisualCommand.setZOrder 现成（a1a2 patch 已接管词表）",
+      "roundTripContract": "实测 E2：元素数组序 serialize→loadDoc→serialize 保持",
+      "exportContract": "草案：重叠区域的遮盖关系在最终 PNG 可观察",
+      "failureCode": "PPTD-E014（元素引用悬空）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.rotation",
+      "family": "common",
+      "pptdPath": "pptd/v2 Text/Shape/Line/Image/Icon.rotation（度，顺时针）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].rotation（v4 ElementBase 新增；度/顺时针与 PPTD 同向零换算）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:28（rotation 度，顺时针——与 PPTD 同向）；render.ts:179-198（transform: rotate(Rdeg)）；untrusted.ts:327-331（rotation clamp ±3600）；canvas.ts:151-155（Moveable rotatable）。实测 E2：15→`rotate(15deg)`、-30→`rotate(-30deg)`（CSS 正=顺时针，与 PPTD 同向，无需换算）；round-trip 原值存活；sanitizer-paste probe：rotation 4000 超 ±3600 丢键",
+      "importContract": "草案：rotation 度直映射（同单位同方向，零换算）；取值域以 PPTD 为准（任意有限度），paste/untrusted 路径的 ±3600 钳制不影响 loadDoc 路径",
+      "renderContract": "实测 E2：CSS transform rotate() 物化到 frame 元素。负责层：native renderer（frame 层）",
+      "editContract": "草案：Moveable 旋转手柄原生存在（未接管→直写 Store）；VisualCommand 无 setRotation → GD-4b 新增并接管",
+      "roundTripContract": "实测 E2：rotation 15/-30 serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：旋转结果在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（非有限数 rotation）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.opacity",
+      "family": "common",
+      "pptdPath": "pptd/v2 Text/Shape/Line/Image/Icon.opacity（[0,1]）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].opacity（v4 提升为 ElementBase 字段，含 text）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:29（opacity）；render.ts:179-198（style.opacity）；untrusted.ts:327-331（opacity 0..1）。实测 E2：0.5→computed opacity '0.5'；round-trip 原值存活；sanitizer-paste probe：opacity 1.5 超界丢键",
+      "importContract": "草案：opacity [0,1] 直映射；界外值由 importer 具名拒绝（原生 loadDoc 不校验，paste 路径丢键）",
+      "renderContract": "实测 E2：style.opacity 物化。负责层：native renderer（frame 层）",
+      "editContract": "草案：属性面板 opacity 编辑原生存在；a1a2 patch 已接管 setStyle{opacity} → VisualCommand 现成",
+      "roundTripContract": "实测 E2：opacity 0.5 serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：半透明效果在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（opacity ∉ [0,1]）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.flip",
+      "family": "common",
+      "pptdPath": "pptd/v2 Text/Shape/Line/Image/Icon.flip（[水平,垂直]）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].flip（v4 ElementBase 新增 [水平,垂直] 布尔对）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段（813c71f slides/src/model.ts 全元素词表无 flip）。实测 E2：flip [true,false] 作为未知键 round-trip 存活（parseDoc 浅校验保留未知键）但 transform 为空串——零渲染效果；validate 按通用规则报 unknown-key warning",
+      "importContract": "草案：无原生宿主 → adapter：frame 层 `transform: rotate(Rdeg) scale(±1,±1)`（scale 在元素本地坐标系先生效、rotate 在后，与 PowerPoint flip 语义一致）；成本小",
+      "renderContract": "实测 E2：原生路径零渲染效果（s-flip 元素 transform:''）；渲染必须由 adapter frame 层负责",
+      "editContract": "草案：无原生 UI；adapter 面板按钮 + VisualCommand 需新增 setFlip（GD-4b）",
+      "roundTripContract": "实测 E2：未知键经 loadDoc/serialize 存活；但 clipboard/CRDT 路径按 untrusted.ts 封闭词表剥除未知键 → adapter 私有字段只能投影期派生，不能当 canonical（见 notes.md 发现 3）",
+      "exportContract": "草案：翻转结果在最终 PNG 可观察（adapter 保证）",
+      "failureCode": "PPTD-E013（非法 flip 形态）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.group",
+      "family": "common",
+      "pptdPath": "—（PPTD v2 无 group 字段；合同 §0.1 group/ungroup 方向项）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].groupId（v4 ElementBase 新增；仅扁平 group，嵌套具名拒绝）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:88-94（group 呈现语义 vs groupId 编辑分组，全元素词表均有 groupId）；slides/src/editor/canvas.ts:528-537（groupId 选择增长：点选组员→选整组）；editor.ts:2657-2663（⌘G/⇧⌘G group/ungroup）；panels.ts:1921-1929（面板 group/ungroup 直写 store）。实测 E3：groupId 'grp-1' round-trip 存活、validate 零告警",
+      "importContract": "草案：PPTD v2 无 group 字段（本行为方向项）→ canonical 需新增 group 字段（GD-4b schema 决策），投影期映射为原生 groupId 串。冻结裁决（C22）：canonical v4 新增 elements[].groupId（仅扁平 group）+ 投影 groupId + GD-4c 接管入口",
+      "renderContract": "groupId 不影响渲染（纯编辑语义，model.ts:88-94 注释明确）；负责层：native（渲染无差异）",
+      "editContract": "草案：原生 ⌘G/⇧⌘G 快捷键 + 面板按钮 + 选择增长全部直写 Store 绕过 kernel（create-delete-bypass probe 同路径证实 bypass）；GD-4c 需接管命令路由。冻结裁决（C22）：GD-4c 接管 ⌘G/面板/选择增长命令路由；嵌套 group 具名拒绝（PPTD-E014）",
+      "roundTripContract": "实测 E3：groupId 串 serialize→loadDoc→serialize 原值存活；groupId 经 untrusted.ts:327-331 cssValue 规则校验（paste 路径可存活）",
+      "exportContract": "草案：—（分组无可观察导出效果）",
+      "failureCode": "PPTD-E014（嵌套 group 具名拒绝；v1 仅扁平）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-group-create.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.createDelete",
+      "family": "common",
+      "pptdPath": "pptd/v2 Page.elements[] 成员增删（元素 create/delete 编辑语义）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[] 数组成员增删（kernel create/delete 命令；无独立持久化字段）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/editor/editor.ts:265-274（toolbar 5 创建按钮）；canvas.ts:1501-1524（insert→store.commit）；editor.ts:2693-2703（Delete 键 store.commit）；model.ts:554-570（defaultText 创建期物化默认值）。实测 E3 create-delete-bypass probe：toolbar Text 插入→Escape 取消→Delete 删除全程原生生效，但 bridge trace apply 零增长（bypass:true）；window.bento.undo() 走 bridge→kernel 空历史 ok:false，不恢复原生删改——原生 Store undo 栈与 kernel 历史已分裂",
+      "importContract": "草案：Page.elements[] 成员 → slide.elements[] 直映射；create/delete 是编辑语义，import 只涉及成员枚举",
+      "renderContract": "—（增删本身无渲染语义；元素渲染见各 family 行）",
+      "editContract": "草案：原生 toolbar 创建、Delete 键删除、duplicate、paste 全部直写 Store 绕过 kernel（实测）；GD-4b 需新增 kernel create/delete 命令，GD-4c 接管全部原生入口（toolbar/快捷键/duplicate/paste）。冻结裁决（C23）：接管范围含 paste 摄入的项目侧接管（toolbar/Delete/duplicate/paste 全入口）",
+      "roundTripContract": "实测 E3：增删后 serialize/loadDoc 正常；undo 语义分裂——bridge undo 不恢复原生删改（traceAfterUndo 仅一条失败的 operation:'undo' 记录）",
+      "exportContract": "草案：—",
+      "failureCode": "PPTD-E014（create/delete 引用不存在 id）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-group-create.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.color",
+      "family": "common",
+      "pptdPath": "pptd/v2 Color 共享类型（HEX6 / HEX8 alpha）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "各宿主 Color 字段字面值（HEX6/HEX8；宿主见 pptdPath）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:868-875（cssColor 透传）；untrusted.ts:141-147（color 字符白名单 /^[#a-zA-Z0-9(),.%\\s/-]+$/ + /url\\s*\\(|expression|@|\\\\/i 拒绝——charset 校验，不做 CSS 合法性校验）；panels.ts:1989-2024（color input 只产 HEX6）+2087-2113（colorAlpha 把 #rrggbbaa 改写为 rgba()，语义等价词形变）。实测 E1：HEX8 #E5393580 渲染为 rgba(229,57,53,0.5) 且原值存活；E2 sanitizer-paste：'bad)color(' 这类 charset 合法串原样存活、含 url( 敌意串丢键",
+      "importContract": "草案：HEX6/HEX8 → 原样字符串直映射（原生接受并正确渲染 alpha，实测）；注意原生不校验 CSS 合法性，非法串由 importer 具名拒绝",
+      "renderContract": "实测 E1：HEX8 → computed rgba() 正确（alpha 0.5）。负责层：native renderer（cssColor 透传浏览器）",
+      "editContract": "草案：原生 color input 只产 HEX6；alpha 编辑经 colorAlpha 把 #rrggbbaa 改写为 rgba()——词形变但语义等价；若要求词形稳定需 adapter 自有 picker",
+      "roundTripContract": "实测 E1：HEX6/HEX8 经 loadDoc/serialize 路径原值存活；paste 路径 charset 外字符丢键（untrusted.ts）",
+      "exportContract": "草案：颜色（含 alpha 合成）在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（非法颜色串）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs",
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.theme",
+      "family": "common",
+      "pptdPath": "pptd/v2 Presentation.theme（colors/textStyles/tableStyles）+ $<key> 引用（宿主：TextContent.style、Cell.textStyle、Table.style）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived:import 期 $ref 解析为宿主字面值（canonical 不落 theme 块，运行期不联动）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/model.ts:392-402（theme{background,color,accent,fontFamily,chartPalette,table}）；548-552（readableInk 消费 theme）；705-707（tableStyleFor 消费 theme.table）；554-570（创建期物化默认值）。实测 E3：theme.chartPalette[0]/theme.table.headerBg round-trip 存活；深底 #0F172A 上新建文本 color=#F5F7FA（readableInk 消费）；新建表格 style.headerBg=#123456（theme.table 创建期物化）。原生 theme 无 $ref 引用机制、无联动——只在创建期物化字面值",
+      "importContract": "草案：PPTD theme{colors,textStyles,tableStyles} + $<key> 引用 → adapter 在 import 期解析 $ref 为字面值落宿主字段；原生 theme 键可作创建期默认值来源写入 doc.theme，但不承担 $ref 语义。冻结裁决（C24）：import 期 $ref 解析为字面值落宿主字段（v1 冻结联动，运行期不联动）",
+      "renderContract": "theme 不直接渲染；实测 E3 经 readableInk/tableStyleFor 在创建期物化到元素字面值。负责层：adapter（$ref 解析）+ native（物化消费）",
+      "editContract": "草案：无原生 theme 编辑联动 UI——改 theme 不回溯已物化元素；$ref 联动（改 theme 更新所有引用）须 adapter 自行实现或冻结为字面值。冻结裁决（C24）：v1 不承诺运行期联动",
+      "roundTripContract": "实测 E3：theme 键 serialize→loadDoc→serialize 原值存活；宿主字段若存 $ref 串会原样存活但原生不解析、无语义",
+      "exportContract": "草案：—（theme 效果经宿主字面值间接可观察）",
+      "failureCode": "PPTD-E014（$ref 无对应 key）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-group-create.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.styleInheritance",
+      "family": "common",
+      "pptdPath": "pptd/v2 §1 Style Priority 优先级链与默认值（含 lineHeight/lineHeightPx 互斥、lineHeightPx 优先）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived:import 期按 PPTD §1 优先级链解析为宿主字面值（lineHeightPx 语义随 C1）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生优先级链机制——813c71f slides/src/model.ts:554-570（defaultText 创建期物化默认值），此后元素字段即字面值。实测 E3：新建文本即带 color #F5F7FA/fontSize 32/lineHeight 1.25 字面值（物化默认值，非运行期继承）。原生 lineHeight 是 multiplier，无固定 px 行高字段（PPTD lineHeightPx 无对应）",
+      "importContract": "草案：adapter 在 import 期按 §1 优先级链解析为字面值落宿主字段（原生字段即字面值，解析后无信息损）；lineHeightPx → 派生 multiplier=px/fontSize（fontSize 后续可变时不严格等价）或记 target-only，交冻结裁决。冻结裁决（C25）：import 期按优先级链解析为字面值（零损失闭合）；lineHeightPx 优先语义随 C1（px 行距 adapter 设像素值，不归一为倍数）",
+      "renderContract": "无独立渲染语义；解析后的字面值经各元素渲染路径呈现。负责层：adapter（解析）",
+      "editContract": "草案：无原生继承编辑概念；adapter/import 层职责",
+      "roundTripContract": "实测 E3：物化字面值（color/fontSize/lineHeight）serialize→loadDoc→serialize 存活",
+      "exportContract": "草案：—",
+      "failureCode": "PPTD-E013（优先级链解析冲突/非法样式值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-group-create.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-group-create/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.border",
+      "family": "common",
+      "pptdPath": "pptd/v2 Border 共享类型（style/width/color；宿主：Shape/Line/Image/Icon.border、Chart 外框 border）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].border（宿主：shape/line/image/icon；table/chart 外框 border）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:160-170（shape stroke/strokeWidth/strokeStyle）；render.ts:372（shapeSvg stroke 属性物化）；panels.ts:1107-1180（shape 面板 stroke 编辑）。原生宿主覆盖：shape/line 有 stroke* 字段；image/svg(icon)/table/chart 无 stroke 字段。实测 E2：stroke #00AA00/strokeWidth 4/strokeStyle dashed round-trip 存活并渲染",
+      "importContract": "草案：Border{style,width,color} → stroke/strokeWidth/strokeStyle 纯结构映射（shape/line 宿主）；image/icon/chart 宿主无原生字段 → adapter frame 层 border/outline",
+      "renderContract": "实测 E2：SVG stroke/stroke-width/stroke-dasharray 渲染（s-border 元素）。负责层：native（shape/line）/ adapter frame（其余宿主）",
+      "editContract": "草案：shape 面板 stroke 编辑原生存在（直写 Store）；VisualCommand 无 setBorder → GD-4b 新增",
+      "roundTripContract": "实测 E2：stroke/strokeWidth/strokeStyle serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：描边在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（非法 Border 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.shadow",
+      "family": "common",
+      "pptdPath": "pptd/v2 Shadow 共享类型（blur/color/offset；宿主：Shape/Line/Image/Icon/Table.shadow、Chart 外框 shadow）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].shadow（v4 提升为 ElementBase 字段，含 text）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:37+110-115（shadow ShadowSpec{x?,y?,blur,color}，可为数组多层）；render.ts:179-198（filter: drop-shadow(...) 多层串联）；panels.ts:473-507+2116-2120（shadow 预设+逐层编辑+colorAlpha）；untrusted.ts:232-241（shadowSpec 校验，≤16 层）。实测 E2：单对象→`drop-shadow(rgba(0,0,0,0.35) 4px 6px 12px)`；双元素数组→两条 drop-shadow 串联；round-trip 原值存活；sanitizer-paste：敌意 shadow.color（含 url(）丢键、元素保留",
+      "importContract": "草案：Shadow{blur,color,offset:[x,y]} → {blur,color,x,y} 纯结构映射（offset 数组展开为 x/y）；多层 → shadow 数组；零语义换算",
+      "renderContract": "实测 E2：CSS filter drop-shadow() 多层串联物化到 frame 元素。负责层：native renderer（frame 层）",
+      "editContract": "草案：原生面板 shadow 预设+逐层编辑（直写 Store 绕过 kernel）；VisualCommand 无 setShadow → GD-4b 新增",
+      "roundTripContract": "实测 E2：shadow 单对象与数组（shadow.blur / shadow[1].blur）serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：阴影在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（非法阴影值/层数超限）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/common-transform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/common-transform/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.multiPage",
+      "family": "common",
+      "pptdPath": "pptd/v2 Presentation.pages（多页/deck 多文件结构）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：813c71f slides/src/model.ts:327-330（Doc.slides[] 数组——多页是原生基本形态）；editor 左侧页导航原生存在。本 spike fixtures 均单页，未深测多页编辑",
+      "importContract": "—（excluded：产品范围排除；PPTD deck 多文件→slides[] 的映射留给后续 wave 定义）",
+      "renderContract": "—（excluded；原生逐页渲染 slide surface）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded；slides[] 经纯 JSON serialize 天然存活）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.pageType",
+      "family": "common",
+      "pptdPath": "pptd/v2 Page.pageType（deck 分类标签；不影响渲染）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：无原生字段——813c71f slides/src/model.ts slide 词表（327-330）仅 background/transition/notes 等，无分类标签字段",
+      "importContract": "—（excluded：产品范围排除）",
+      "renderContract": "—（excluded；pageType 按 PPTD 定义不影响渲染）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.speakerNotes",
+      "family": "common",
+      "pptdPath": "pptd/v2 Page.notes（speaker notes）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：813c71f slides/src/model.ts:329（slide.notes 原生存在）；slides/src/editor/editor.ts:2531（Speaker view 原生展示入口）——原生完整支持，产品范围排除",
+      "importContract": "—（excluded：产品范围排除；原生 notes 字段直映射可行，留后续 wave）",
+      "renderContract": "—（excluded；notes 不进画布渲染，Speaker view 展示）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded；字符串字段经纯 JSON serialize 天然存活）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.animations",
+      "family": "common",
+      "pptdPath": "pptd/v2 Page.animations（§6 动画编排/trigger/easing/motion-path）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：813c71f slides/src 元素 fx 字段 + anim.ts——放映时（present-only）动画播放，编辑态不渲染；无 PPTD §6 级编排（trigger/easing/motion-path）语义对应",
+      "importContract": "—（excluded：产品范围排除）",
+      "renderContract": "—（excluded；present-only，静态导出无动画）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded；静态 PNG 导出与动画正交）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.transitions",
+      "family": "common",
+      "pptdPath": "—（PPTD v2 未定义转场字段；上游 PPTX 转场语义）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：813c71f slides/src/model.ts:328（slide.transition 词表原生存在，present-only 切场）；PPTD v2 未定义该字段",
+      "importContract": "—（excluded：PPTD 无字段，无 import 对象）",
+      "renderContract": "—（excluded；present-only）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.audioVideo",
+      "family": "common",
+      "pptdPath": "pptd/v2 media/ 音视频资源位（PPTD v2 无音视频元素；时间轴语义）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：813c71f slides/src/model.ts:287-300（MediaElement 原生存在——音视频元素有原生对应）；PPTD v2 无音视频元素，仅 media/ 资源位",
+      "importContract": "—（excluded：产品范围排除）",
+      "renderContract": "—（excluded）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded；静态导出与音视频正交）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.pptxInterop",
+      "family": "common",
+      "pptdPath": "—（PPT/PPTX 双向转换与导出；产品范围外）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：无原生能力——全仓（813c71f）grep 无 PPTX import/export 代码路径，仅散文提及",
+      "importContract": "—（excluded：产品范围外）",
+      "renderContract": "—（excluded）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "common.kimiRuntime",
+      "family": "common",
+      "pptdPath": "—（Kimi 专属 renderer/runtime 能力；产品范围外）",
+      "targetState": "excluded",
+      "profileState": "excluded",
+      "activeSince": null,
+      "canonicalPath": null,
+      "implementation": "none",
+      "vendorEvidence": "事实观察：无对应——vendor 是独立 Bento 编辑器代码库，不存在 Kimi runtime 集成点",
+      "importContract": "—（excluded：产品范围外）",
+      "renderContract": "—（excluded）",
+      "editContract": "—（excluded）",
+      "roundTripContract": "—（excluded）",
+      "exportContract": "—（excluded）",
+      "failureCode": "PPTD-E011（产品范围外，输入具名拒绝）",
+      "fixtureRefs": [],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "text.plain",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.text plain-text 简写（单行/多行 block scalar → <p>）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].text（v4 text 内容结构化为 paragraphs[]/runs[] 模型）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:119（html 字段）；render.ts:1008（innerHTML 渲染）；parseDoc 无归一化（model.ts:1067-1085）。实测 inline-runs：round-trip 逐字存活、纯文本渲染正常",
+      "importContract": "草案：纯文本 escapeHtml 后入 html；block scalar 换行符按 importer 约定转 <br/>（单行）或 <p> 切分（多段）；不引入标记解释",
+      "renderContract": "native renderer：.bento-text-inner 文本节点；无标记时无任何结构损失",
+      "editContract": "草案：create/select/move/resize/delete 经 Bento frame + VisualCommand（a1a2 setBounds/setText 已接线）；文本编辑 a1a2 现为 plain-text setText（edit-semantic 证据）",
+      "roundTripContract": "html 字符串 serialize→loadDoc→serialize 逐字相等（inline-runs fieldSurvival 1/1，hash 双等）",
+      "exportContract": "草案：断网 PNG 中文本内容逐字可观察",
+      "failureCode": "PPTD-E013（非法文本形态）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png",
+        "spikes/bento-static-closure/text/results/edit-semantic/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "text.paragraphs",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.text <p> 段落标签",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[]",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（P/DIV 在 ALLOWED_TAGS）。实测 block-list：p 标签存活为 block（counts.p=3），UA 默认 1em 段距（marginTop 24px @ fontSize 24），bento 无 p margin reset（styles.css:472-476）",
+      "importContract": "草案：<p>…</p> 直传 html；UA 1em 段距是 native 渲染事实，不等于 paragraphMargin 语义",
+      "renderContract": "native renderer：<p> block 渲染，段距 = Chromium UA 1em margin",
+      "editContract": "草案：同 text.plain；段落结构在 plain-text setText 下以换行符往返（投影 html 即 <p>/<br> 形态由 projector 决定，GD-4c 定）",
+      "roundTripContract": "html 逐字存活（block-list fieldSurvival 1/1）",
+      "exportContract": "草案：PNG 中段落分块与段距可观察",
+      "failureCode": "PPTD-E013（非法段落结构）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json",
+        "spikes/bento-static-closure/text/results/block-list/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.lineBreak",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.text <br/> 段内换行（上游注明再转换不保证保留）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].text 内段内换行",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（BR 在 ALLOWED_TAGS）。实测 inline-runs counts.br=1、渲染换行可见",
+      "importContract": "草案：<br/> 直传 html",
+      "renderContract": "native renderer：<br> 段内换行",
+      "editContract": "草案：编辑往返中 <br> 与换行符的对应由 projector/setText 约定（GD-4c）；markdownToHtml 粘贴路径以 <br> join 多行（markdown.ts:141）",
+      "roundTripContract": "html 逐字存活（inline-runs）",
+      "exportContract": "草案：PNG 中换行可观察",
+      "failureCode": "PPTD-E013（非法形态）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.runs.color",
+      "family": "text",
+      "pptdPath": "pptd/v2 <span style=\"color:...\">（HEX6/HEX8/$ref）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].color",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486（渲染期剥离全部属性）+ 469（SPAN 仅作为无属性容器存活）。实测 inline-runs：spanAttrs=[]，5 个 styled span 计算样式与元素级一致（无效果）；html 逐字 round-trip 存活。无原生渲染能力",
+      "importContract": "草案：<span style=\"color\"> 原样存 canonical html；HEX8/$ref 由 importer 归一为 CSS 颜色；渲染由 adapter frame hook 承担",
+      "renderContract": "native：属性被 sanitizeHtml 剥离，渲染无色（render.ts:486）；adapter：frame hook 在 native 渲染后按 canonical html 重放 run 样式于 .bento-text-inner",
+      "editContract": "草案：run 级颜色编辑需 adapter 富文本编辑面（原生 inline 编辑器为 plain-text setText，edit-semantic 证据）；create/select/move/resize/delete 走通用 frame",
+      "roundTripContract": "model 层 html 逐字存活；经原生编辑提交会被归一化剥离（canvas.ts:1134 上游 / a1a2 patch plain-text setText）——持久化保真以 canonical 为准，编辑不回写 native html",
+      "exportContract": "草案：PNG 中 run 颜色可观察（adapter 渲染在 .bento-slide 截图面内）",
+      "failureCode": "PPTD-E013（非法颜色值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png",
+        "spikes/bento-static-closure/text/results/edit-semantic/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "text.runs.fontSize",
+      "family": "text",
+      "pptdPath": "pptd/v2 <span style=\"font-size:...px\">",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].fontSize",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486。实测 inline-runs：font-size:36px 的 span 计算 fontSize 仍为元素级 24px（截图 'big' 未放大）。无原生渲染能力",
+      "importContract": "草案：span font-size px 值原样存 canonical html；adapter 渲染",
+      "renderContract": "同 text.runs.color：native 剥离，adapter frame hook 重放",
+      "editContract": "草案：run 级字号编辑需 adapter 富文本编辑面",
+      "roundTripContract": "同 text.runs.color",
+      "exportContract": "草案：PNG 中 run 字号差可观察（adapter）",
+      "failureCode": "PPTD-E013（非法字号）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.runs.fontFamily",
+      "family": "text",
+      "pptdPath": "pptd/v2 <span style=\"font-family:...\">（含逗号 fallback 列表写法）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].fontFamily",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486。实测 inline-runs：Georgia fallback 列表 span 计算 fontFamily 仍为 'Arial, sans-serif'。无原生渲染能力",
+      "importContract": "草案：font-family 列表原样存 canonical html；adapter 渲染；非登记字体的首族由 validate() font-not-embedded 口径在 import 期具名（validate.ts:180-189 为元素级同款逻辑）",
+      "renderContract": "同 text.runs.color",
+      "editContract": "草案：run 级字体编辑需 adapter 富文本编辑面",
+      "roundTripContract": "同 text.runs.color",
+      "exportContract": "草案：PNG 中 run 字体可观察（adapter）；断网字体由 doc.fonts/@font-face 承载（font family 行）",
+      "failureCode": "PPTD-E012（栈内未登记 family；非法值 PPTD-E013）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.runs.backgroundColor",
+      "family": "text",
+      "pptdPath": "pptd/v2 <span style=\"background-color:...\">",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].backgroundColor",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486。实测 inline-runs：background-color span 计算 backgroundColor rgba(0,0,0,0)。无原生渲染能力",
+      "importContract": "草案：原样存 canonical html；adapter 渲染（run 级高亮）",
+      "renderContract": "同 text.runs.color",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "同 text.runs.color",
+      "exportContract": "草案：PNG 中 run 高亮可观察（adapter）",
+      "failureCode": "PPTD-E013（非法颜色值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.bold",
+      "family": "text",
+      "pptdPath": "pptd/v2 <strong> 标签 + TextContent.bold",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.bold（元素级缺省）+ elements[].text.paragraphs[].runs[].bold",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（B/STRONG 允许）；model.ts:123 fontWeight 字段 + render.ts:988；panels.ts:935 Weight 选择器；canvas.ts:1095-1099 ⌘B execCommand。实测 inline-runs counts.strong=1 渲染粗体；element-fields e1 fontWeight 700 计算生效",
+      "importContract": "草案：<strong>/<b> 直传 html；TextContent.bold=true → fontWeight=700（投影映射）；二者同存时 run 级标签优先",
+      "renderContract": "native renderer：<strong>/<b> 与 fontWeight 均原生",
+      "editContract": "草案：⌘B 原生；fontWeight 编辑经 VisualCommand 扩展（a1a2 未接 Weight 行，panels.ts:935 仍 store.commit 旁路，GD-4c 须接）",
+      "roundTripContract": "html 与 fontWeight 逐字/原值存活（inline-runs、element-fields 18/18）",
+      "exportContract": "草案：PNG 中粗体可观察",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs",
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png",
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "text.italic",
+      "family": "text",
+      "pptdPath": "pptd/v2 <em> 标签 + TextContent.italic",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.italic（元素级缺省）+ elements[].text.paragraphs[].runs[].italic",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（EM/I 允许）；model.ts 无 fontStyle 字段（modelkeys.generated.ts:17 词表）；canvas.ts:1095 ⌘I execCommand。实测 inline-runs counts.em=1 渲染斜体",
+      "importContract": "草案：<em>/<i> 直传 html；TextContent.italic=true（元素级）由 projector 以 <i> 包裹全部 run——native 模型无 typed italic 字段，canonical 保留 typed 字段",
+      "renderContract": "native renderer：<em>/<i> 原生；元素级 italic 经投影包裹后同源",
+      "editContract": "草案：⌘I 原生（run 级）；元素级 italic 编辑经 VisualCommand（GD-4c）",
+      "roundTripContract": "html 逐字存活（inline-runs）",
+      "exportContract": "草案：PNG 中斜体可观察",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.underline",
+      "family": "text",
+      "pptdPath": "pptd/v2 <u> 标签",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].underline",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（U 允许）；canvas.ts:1095 ⌘U execCommand。实测 inline-runs counts.u=1 渲染下划线",
+      "importContract": "草案：<u> 直传 html",
+      "renderContract": "native renderer：<u> 原生",
+      "editContract": "草案：⌘U 原生",
+      "roundTripContract": "html 逐字存活（inline-runs）",
+      "exportContract": "草案：PNG 中下划线可观察",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.strikethrough",
+      "family": "text",
+      "pptdPath": "pptd/v2 <s> 标签",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].strikethrough",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（S 允许）；markdown.ts:19,137 ~~strike~~ 自动转换/粘贴转换。实测 inline-runs counts.s=1 渲染删除线",
+      "importContract": "草案：<s> 直传 html",
+      "renderContract": "native renderer：<s> 原生",
+      "editContract": "草案：无快捷键/按钮；markdown ~~ 自动转换为原生 affordance（markdown.ts:14-21）",
+      "roundTripContract": "html 逐字存活（inline-runs）",
+      "exportContract": "草案：PNG 中删除线可观察",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.superscript",
+      "family": "text",
+      "pptdPath": "pptd/v2 <sup> 上标",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].baselineShift=\"sup\"",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:480-485（SUP 不在 ALLOWED_TAGS，unwrap 仅留文本）；无 execCommand 绑定（canvas.ts:1095 仅 b/i/u）。实测 inline-runs counts.sup=0、截图 H2O 平排。无原生能力",
+      "importContract": "草案：<sup> 存 canonical html；adapter 渲染（vertical-align:super + 字号缩放或 baseline-shift）",
+      "renderContract": "native：unwrap 为平排文本；adapter：frame hook 重放上标样式",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "model 层 html 逐字存活（inline-runs fieldSurvival 1/1）；渲染损失由 adapter 闭合",
+      "exportContract": "草案：PNG 中上标可观察（adapter）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.subscript",
+      "family": "text",
+      "pptdPath": "pptd/v2 <sub> 下标",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].baselineShift=\"sub\"",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:480-485（SUB unwrap）。实测 inline-runs counts.sub=0、截图 xi 平排。无原生能力",
+      "importContract": "草案：<sub> 存 canonical html；adapter 渲染（vertical-align:sub）",
+      "renderContract": "同 text.superscript",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "同 text.superscript",
+      "exportContract": "草案：PNG 中下标可观察（adapter）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.hyperlink",
+      "family": "text",
+      "pptdPath": "pptd/v2 <a href>（https/http/mailto；自动蓝色+下划线样式）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].href（https/http/mailto）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:480-485（A unwrap）；model.ts:85-86 el.link 仅页内幻灯片跳转（非 URL）。实测 inline-runs counts.a=0、截图 link 无蓝色下划线。无原生能力",
+      "importContract": "草案：<a href> 存 canonical html；href 词表 https/http/mailto 由 validator 把关；adapter 渲染蓝色+下划线 run 样式并保留 href 元数据；静态画布无点击语义",
+      "renderContract": "native：unwrap 为普通文本；adapter：frame hook 渲染链接样式（颜色+下划线），href 不进入 DOM 属性以避免离线/追踪面（render.ts:121-133 stripRemoteRefs 口径）",
+      "editContract": "草案：链接编辑需 adapter UI；通用 frame 编辑不变",
+      "roundTripContract": "model 层 html 逐字存活；渲染由 adapter 闭合",
+      "exportContract": "草案：PNG 中链接 run 呈蓝色+下划线（adapter）",
+      "failureCode": "PPTD-E013（非法 scheme/值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/inline-runs.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/inline-runs/evidence.json",
+        "spikes/bento-static-closure/text/results/inline-runs/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.lists",
+      "family": "text",
+      "pptdPath": "pptd/v2 <ul>/<ol>/<li> 列表",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].list（ordered/marker/indent 结构保真）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:469（UL/OL/LI 不在 ALLOWED_TAGS）+ 480-485（unwrap；实现缝隙使 ul/ol 的子级 li 逃逸再查、带样式存活——与 render.ts:396 注释声明的意图不符）。实测 block-list：counts ul/ol=0、li=4 以 display:list-item + disc marker 渲染、ol 编号丢失（截图 '第一/第二' 无 1./2.）。上游惯用法是 '• ' glyph 行（markdown.ts:12 注释）。无完整原生能力",
+      "importContract": "草案：<ul>/<ol>/<li> 存 canonical html；adapter 渲染列表结构（含 ol 编号 materialize）；禁止依赖孤儿 li 缝隙（上游随时可能修）；备选降格为 importer 转 '• '/'N. ' glyph 行（视觉近似、结构丢）——裁决项。冻结裁决（C3）：adapter 结构保真渲染 marker/编号/缩进，不降格为 glyph 行",
+      "renderContract": "native：ul/ol unwrap、编号丢失；adapter：frame hook 渲染列表（marker、缩进、编号）",
+      "editContract": "草案：列表编辑需 adapter 富文本编辑面；原生 '- ' 自动转换为 bullet glyph（markdown.ts:64-70）不是列表语义",
+      "roundTripContract": "model 层 html 逐字存活（block-list 1/1）；渲染结构由 adapter 闭合",
+      "exportContract": "草案：PNG 中列表 marker/编号/缩进可观察（adapter）",
+      "failureCode": "PPTD-E013（非法列表结构/值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json",
+        "spikes/bento-static-closure/text/results/block-list/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.listItemStyles",
+      "family": "text",
+      "pptdPath": "pptd/v2 <li style=\"...\">（text-align/line-height/letter-spacing/margin-top/margin-left/list-style-*）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].list item 级样式覆盖（与 text.lists 同落点、共享 renderer）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486（声明意图：剥全部属性）vs 480-485（缝隙：孤儿 li 的 style 实存）。实测 block-list listItems：style 存活且计算生效（listStyleType square、textAlign right、marginLeft 24px、lineHeight 48px=2×24）——但这是未文档化的实现缝隙，且 a1a2 生产投影不产出 ul/li，原生编辑/粘贴路径（canvas.ts:1134/1112）会按 ALLOWED_TAGS 归一化",
+      "importContract": "草案：<li style> 存 canonical html；adapter 应用各属性；不依赖 sanitize 缝隙",
+      "renderContract": "native：缝隙下部分生效（不可依赖）；adapter：frame hook 逐 li 应用样式",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "model 层 html 逐字存活（block-list）",
+      "exportContract": "草案：PNG 中 li 样式可观察（adapter）",
+      "failureCode": "PPTD-E013（非法样式值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json",
+        "spikes/bento-static-closure/text/results/block-list/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.latex",
+      "family": "text",
+      "pptdPath": "pptd/v2 \\(...\\) LaTeX 公式（仅继承 color/font-size）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].runs[].latex（import 期 \\(...\\) 分隔符映射为 latex run）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/render.ts:452-467 resolveMath（$…$/$$…$$ → MathML）+ 436-450 renderMath（Temml，trust off）+ 10（import temml）；\\(...\\) 无识别。实测 latex：mathCount=2（inline + display block）、pptdDelimiterLiteral=true（按字面渲染）、math 计算样式继承元素 color rgb(192,53,64) 与 fontSize 28px",
+      "importContract": "草案：\\(...\\) → $…$ 于 import 做分隔符映射（公式体原样）；canonical 存 PPTD 原文，projector 产出 $…$ 形态入 native html",
+      "renderContract": "native renderer：Temml→MathML 于渲染期解析（模型存源码，render.ts:388-400 注释）；继承 color/font-size 实测成立",
+      "editContract": "草案：编辑时交换回原始源码（canvas.ts:1058 原生行为）；公式编辑为文本编辑的子集",
+      "roundTripContract": "html 源码逐字存活（latex 1/1）；MathML 为渲染期产物不入模型（render.ts:420-421 注释）",
+      "exportContract": "草案：PNG 中公式排版可观察；断网无依赖（Temml 内置于壳）",
+      "failureCode": "PPTD-E013（非法 TeX，import 期 Temml 预检具名）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/latex.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/latex/evidence.json",
+        "spikes/bento-static-closure/text/results/latex/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.color",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.color",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.color",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:124 + render.ts:996（colorGradient 缺席时 inner.style.color=el.color）+ panels.ts:955（a1a2 patch 已接 setStyle）。实测 element-fields e1 computed color rgb(26,115,232)",
+      "importContract": "草案：直传（HEX6/HEX8/rgba 均 CSS 兼容；$ref 由 importer 解析）；与 colorGradient 同存时 gradient 优先（render.ts:989-997）",
+      "renderContract": "native renderer：inner color",
+      "editContract": "草案：颜色面板已接 VisualCommand setStyle（a1a2 patch panels.ts hunk setTextColor：input 预览、change 提交）",
+      "roundTripContract": "原值存活（element-fields 18/18）",
+      "exportContract": "草案：PNG 中文字颜色可观察",
+      "failureCode": "PPTD-E013（非法颜色值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.fontSize",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.fontSize（1px=1pt 约定）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.fontSize（1px=1pt）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:121 + render.ts:986（px）。panels.ts:931-933 面板以 pt 显示（模型 px = pt×4/3，纯 UI 换算）。实测 e1 computed fontSize 24px",
+      "importContract": "草案：数值直传为模型 px；PPTD 1px=1pt 约定在 PPTD 侧解释，import 不做 4/3 换算（4/3 仅是 bento 面板显示惯例）",
+      "renderContract": "native renderer：inner font-size px",
+      "editContract": "草案：Size 行现为 store.commit 旁路（a1a2 未接），GD-4c 接 VisualCommand setStyle fontSize",
+      "roundTripContract": "原值存活（element-fields）",
+      "exportContract": "草案：PNG 中字号可观察",
+      "failureCode": "PPTD-E013（非法字号）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.backgroundColor",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.backgroundColor（文本高亮）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.backgroundColor",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段：813c71f slides/src/modelkeys.generated.ts:17（text 词表无 backgroundColor）。实测 element-fields e5：validate() unknown-key 警告、computed backgroundColor rgba(0,0,0,0)（无效果）、键原值 round-trip 存活",
+      "importContract": "草案：canonical typed 字段；adapter 渲染（inner 或逐 run 背景）；不得以 unknown key 形态进 native 文档（validate 警告、render 忽略、sanitizeElement 丢弃——untrusted.ts:433）",
+      "renderContract": "native：无；adapter：frame hook 设 .bento-text-inner（或 run span）背景",
+      "editContract": "草案：adapter 面板/命令扩展（GD-4c）",
+      "roundTripContract": "canonical 层持有；native unknown key 实测虽存活但不可作为承载（三层风险见 notes.md）",
+      "exportContract": "草案：PNG 中高亮可观察（adapter）",
+      "failureCode": "PPTD-E013（非法颜色值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.lineHeight",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.lineHeight（倍数；与 lineHeightPx 互斥）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.lineHeight（倍数；与 lineHeightPx 互斥）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:129（number）+ render.ts:1005（String(el.lineHeight)，单位less 倍数）+ measure.ts:103（fontSize×lineHeight 估算行数）+ panels.ts:1009-1010（Line height 行，下限 0.5）。实测 e1 computed 43.2px = 24×1.8",
+      "importContract": "草案：倍数直传；范围 0<v≤100（untrusted.ts:337 口径），面板下限 0.5",
+      "renderContract": "native renderer：inner line-height 倍数",
+      "editContract": "草案：Line height 行现为 store.commit 旁路，GD-4c 接 VisualCommand",
+      "roundTripContract": "原值存活（element-fields）",
+      "exportContract": "草案：PNG 中行距可观察",
+      "failureCode": "PPTD-E013（非法行距）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.lineHeightPx",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.lineHeightPx（固定 px；优先于 lineHeight）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.lineHeightPx（固定 px，优先于 lineHeight；adapter 设像素行距，measure 同路径）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段（modelkeys.generated.ts:17 词表外）。边界实测 element-fields e6：lineHeight:'36px' 字符串经 render.ts:1005 透传渲染生效（computed 36px），但 measure.ts:103 乘法得 NaN（lines=null 实测）、untrusted.ts:337 num() 会丢弃字符串、模型类型声明为 number——缝隙不可用。e5 的 lineHeightPx unknown key：validate 警告 + 无渲染效果",
+      "importContract": "草案：canonical 存 px typed 字段；渲染二选一（裁决项）——(a) adapter frame hook 设像素 line-height；(b) 单一字号时 import 归一 px/fontSize 为倍数，混排 run 字号时具名拒绝。冻结裁决（C1）：选 (a)——adapter frame hook 设像素 line-height，measure 同路径；不做 px→倍数归一",
+      "renderContract": "native：无干净能力；adapter：frame hook px line-height",
+      "editContract": "草案：adapter 命令扩展（GD-4c）",
+      "roundTripContract": "canonical 层持有；native 字符串缝隙虽 round-trip 存活但破坏 measure/sanitize 契约",
+      "exportContract": "草案：PNG 中固定行距可观察（adapter）",
+      "failureCode": "PPTD-E013（非法行距）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.letterSpacing",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.letterSpacing",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.letterSpacing",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:131（px）+ render.ts:1006；panels.ts:921-1040 无 panel 行（模型/渲染有、UI 无）。实测 e1 computed letterSpacing 3px",
+      "importContract": "草案：px 数值直传；范围 ±1000（untrusted.ts:337 口径）",
+      "renderContract": "native renderer：inner letter-spacing px",
+      "editContract": "草案：无原生 UI；VisualCommand setStyle 扩展（GD-4c），面板自增",
+      "roundTripContract": "原值存活（element-fields；smoke minimal-text 同证）",
+      "exportContract": "草案：PNG 中字距可观察",
+      "failureCode": "PPTD-E013（非法字距）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.marginTop",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.marginTop（段前距）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.marginTop",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段（modelkeys.generated.ts:17 词表外）。实测 element-fields e5：unknown-key 警告 + computed marginTop 0px（无效果）+ 键原值存活",
+      "importContract": "草案：canonical typed 字段；adapter 渲染（inner margin-top/padding-top）；与 valign 组合的垂直定位语义在 GD-4b schema 定",
+      "renderContract": "native：无；adapter：frame hook 设 inner 上间距",
+      "editContract": "草案：adapter 命令扩展（GD-4c）",
+      "roundTripContract": "canonical 层持有",
+      "exportContract": "草案：PNG 中段前距可观察（adapter）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "text.align",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.align（[水平 left/center/right/justify/distributed, 垂直 top/middle/bottom]）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.align（[水平,垂直]；justify/distributed 由 adapter 显式设置）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:127-128（align left|center|right；valign top|middle|bottom）+ render.ts:1004（textAlign 原样赋值）/975 + VALIGN render.ts:844 + panels.ts:1005-1008。实测 element-fields：e1 center/middle 生效；e3 align:'justify' 声明值 'justify'、计算生效（枚举外 runtime 透传，untrusted.ts:339 oneOf 会丢弃、validate 不报）；e4 'distributed' CSSOM 拒收（declared ''、computed 'start'）——无原生效果",
+      "importContract": "草案：[h,v] → align/valign；left/center/right/top/middle/bottom 直传；justify 渲染可走 runtime 透传但在声明词表外（sanitizeElement 会丢、上游可收紧）——裁决项：承认透传或 adapter hook 显式设 textAlign；distributed → adapter（如 justify + text-justify/字距分布近似，CJK 场景语义差异需在冻结时确认）。冻结裁决（C2）：justify 与 distributed 均由 adapter 显式设置，不承认 runtime 透传缝隙",
+      "renderContract": "native：6 个声明值；justify 透传实测可用但属词表外缝隙；distributed 无。adapter：frame hook 覆盖 textAlign/textJustify",
+      "editContract": "草案：Align/V-align select 现为 store.commit 旁路，GD-4c 接 VisualCommand",
+      "roundTripContract": "声明值原值存活；justify 亦实测存活（loadDoc 无枚举校验）；clipboard/CRDT 摄入路径会被 sanitizeElement 丢弃（untrusted.ts:339）",
+      "exportContract": "草案：PNG 中各对齐可观察（native/adapter 各自边界内）",
+      "failureCode": "PPTD-E013（非法对齐值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.paragraphAlign",
+      "family": "text",
+      "pptdPath": "pptd/v2 <p style=\"text-align:...\"> 段落级对齐覆盖",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].align",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486（p 属性剥离）。实测 block-list：pAttrs=[[],[],[]]，三段 computed textAlign 均回落元素级 left（style='text-align:center' 无效果）。无原生渲染能力",
+      "importContract": "草案：<p style=\"text-align\"> 存 canonical html；adapter 逐段应用；元素级 align 仍为 native 全局值",
+      "renderContract": "native：剥离；adapter：frame hook 逐段 text-align",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "model 层 html 逐字存活（block-list）",
+      "exportContract": "草案：PNG 中段落级对齐可观察（adapter）",
+      "failureCode": "PPTD-E013（非法对齐值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json",
+        "spikes/bento-static-closure/text/results/block-list/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.paragraphLineHeight",
+      "family": "text",
+      "pptdPath": "pptd/v2 <p style=\"line-height:...\"> 段落级行距覆盖（倍数或 px）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].lineHeight（倍数或 px）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486。实测 block-list：'line-height:2.5' 段 computed lineHeight 30px（=元素级 24×1.25，非 2.5 倍）。无原生渲染能力",
+      "importContract": "草案：存 canonical html；adapter 逐段应用（倍数与 px 均由 adapter 处理）",
+      "renderContract": "native：剥离；adapter：frame hook 逐段 line-height",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "model 层 html 逐字存活（block-list）",
+      "exportContract": "草案：PNG 中段落行距可观察（adapter）",
+      "failureCode": "PPTD-E013（非法行距）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "text.paragraphMargin",
+      "family": "text",
+      "pptdPath": "pptd/v2 <p style=\"margin-top/left/right:...px\"> 段落边距",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.paragraphs[].margin",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/render.ts:486。实测 block-list：'margin-top:40px;margin-left:24px' 段 computed marginTop 24px（UA 1em 默认，非 40px）、marginLeft 0px。无原生渲染能力",
+      "importContract": "草案：存 canonical html；adapter 逐段应用；注意与 UA 1em 段距的叠加关系（adapter 渲染时应同时规范化 p margin）",
+      "renderContract": "native：剥离（UA 默认 margin 仍在）；adapter：frame hook 逐段 margin",
+      "editContract": "草案：需 adapter 富文本编辑面",
+      "roundTripContract": "model 层 html 逐字存活（block-list）",
+      "exportContract": "草案：PNG 中段落边距可观察（adapter）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/block-list.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/block-list/evidence.json",
+        "spikes/bento-static-closure/text/results/block-list/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.textDirection",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.textDirection（horizontal/vertical 竖排）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.textDirection（horizontal/vertical）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段（modelkeys.generated.ts:17 词表外）；slides 文本渲染路径无 writing-mode（全仓仅 svg css 允许表 render.ts:603 出现该属性名）。实测 element-fields e5：unknown-key 警告 + computed writingMode horizontal-tb（无效果）。元素内 dir='auto'（render.ts:985）是 bidi 方向、非竖排",
+      "importContract": "草案：canonical typed 字段；adapter 设 writing-mode:vertical-rl（+text-orientation）于 inner；竖排的 measure/overflow 口径需 adapter 接管（measure.ts 假设横排）",
+      "renderContract": "native：无；adapter：frame hook writing-mode + 自有 measure 变体",
+      "editContract": "草案：adapter 命令扩展（GD-4c）",
+      "roundTripContract": "canonical 层持有",
+      "exportContract": "草案：PNG 中竖排可观察（adapter）",
+      "failureCode": "PPTD-E013（词表外值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.wrap",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.wrap（false=不换行，越界溢出）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.wrap",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生字段（modelkeys.generated.ts:17 词表外）。实测 element-fields e5：unknown-key 警告 + computed whiteSpace normal + overflowWrap break-word（styles.css:473 固定）。native 默认必换行；编辑提交有 h 自动增长逻辑（canvas.ts:1135/1142 上游；a1a2 为 setBounds）",
+      "importContract": "草案：wrap=false → adapter 设 white-space:nowrap 于 inner；越界溢出语义（overflow visible + 不裁剪）由 adapter 与 frame 约定；measure 需 nowrap 变体；wrap=true 为 native 默认无需映射",
+      "renderContract": "native：无 nowrap 能力；adapter：frame hook white-space + measure 变体",
+      "editContract": "草案：adapter 命令扩展（GD-4c）；编辑自动长高逻辑在 nowrap 下应转为宽向处理（GD-4c 细化）",
+      "roundTripContract": "canonical 层持有",
+      "exportContract": "草案：PNG 中不换行溢出可观察（adapter）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.gradient",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.gradient（GradientFill 作用于文字本体）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].text.gradient（linear 原生；radial 随 fill.gradientRadial svg 载具）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:126（colorGradient，wins over color）+ render.ts:989-997（backgroundImage + background-clip:text + color transparent）+ cssLinearGradient render.ts:216-221（仅线性）+ panels.ts:937-1003（完整 UI：角度/stops 增删）。实测 element-fields e2：linear-gradient(90deg, #E8442E→#1A73E8) + clip text + 透明色，截图渐变可见",
+      "importContract": "草案：线性 GradientFill → colorGradient {angle, stops:at/color}（角度同 CSS 惯例直传，render.ts:214-215 注释）；radial 无原生对应（裁决项：target-only 或 adapter SVG/text 方案）；gradient 与 color 同存时 gradient 优先、color 作回退。冻结裁决（C5）：不收窄——linear 原生，radial 随 fill.gradientRadial 的 svg 载具闭合",
+      "renderContract": "native renderer：线性渐变字形填充（background-clip:text）",
+      "editContract": "草案：Fill style/stops UI 现为 store.commit 旁路（a1a2 未接），GD-4c 接 VisualCommand",
+      "roundTripContract": "原值存活（element-fields 18/18）",
+      "exportContract": "草案：PNG 中渐变字形可观察",
+      "failureCode": "PPTD-E013（非法 gradient stops）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "text.shadow",
+      "family": "text",
+      "pptdPath": "pptd/v2 TextContent.shadow（文字阴影）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].shadow（text 宿主，随字形 alpha；与 common.shadow 同字段）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:33-37（ElementBase.shadow，CSS drop-shadow 随字形 alpha，数组可叠加）+ render.ts:186-189（filter drop-shadow(...)）+ untrusted.ts:331（sanitize 校验 {x,y,blur,color}）。实测 element-fields e2：computed filter drop-shadow(rgba(0,0,0,0.4) 2px 3px 6px)，截图阴影可见",
+      "importContract": "草案：TextContent.shadow → shadow {x,y,blur,color} 直传；多层阴影 → 数组；注意 drop-shadow(filter) 与 text-shadow 的语义差：随字形 alpha（渐变/描边字亦正确投影），视觉上对实心字形等价",
+      "renderContract": "native renderer：元素 filter drop-shadow（作用于 .bento-el 包装，alpha 源为字形）",
+      "editContract": "草案：阴影预设面板（panels.ts:2116+）现为 store.commit 旁路，GD-4c 接 VisualCommand",
+      "roundTripContract": "原值存活（element-fields）",
+      "exportContract": "草案：PNG 中阴影可观察（filter 在 Chromium 截图内确定渲染）",
+      "failureCode": "PPTD-E013（非法阴影值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/text/fixtures/element-fields.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/text/results/element-fields/evidence.json",
+        "spikes/bento-static-closure/text/results/element-fields/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "font.familyUniform",
+      "family": "font",
+      "pptdPath": "pptd/v2 FontFamily string 形式（宿主：TextContent/Cell/TextStyleConfig/chart TextStyle、span font-family）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fontFamily 字面值（elements[].text.fontFamily / table cell / chart TextStyle；栈含 fallback 列表）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f model 三宿主：slides/src/model.ts:122（TextElement.fontFamily: string）、:256（TableStyle.fontFamily?）、:397（theme.fontFamily）；render：render.ts:987（text inner.style.fontFamily = el.fontFamily || doc.theme.fontFamily）、render.ts:914+950（table 经 cssFont 取 st.fontFamily || theme）；editor：editor/panels.ts:1047-1076（font picker：theme default/embedded/FONT_CHOICES/custom 透传）、:1079-1103（embed font UI）；sanitizer：untrusted.ts:167-168（fontStack：string ≤300 无 <>{};）、:336（text）、:263-268（tableStyle）；validate：validate.ts:180-190（font-not-embedded info）、:321（text 元素检查）。实测：family-uniform fixture 5/5 字段存活 + DOM/computed 可观察。缺口锚点：span 级 font-family 被 render.ts:486 sanitizeHtml 剥离全部属性（probe rendered-dom：spanAttrCount=0）；chart 宿主无原生字体钩子（charts.ts 全文 0 处 font 引用，快照 SVG 文本继承页面字体）；tableCell 无 fontFamily 键（modelkeys.generated.ts:32，仅表级）。",
+      "importContract": "草案：PPTD FontFamily string 形式直写 BentoDoc 文本/表格字体字段，投影为 native fontFamily 栈字符串（元素级 > theme 级回退链保持）。未登记的非 generic family 在 import 时按 font.registration 表核对；span 级 font-family 不在本行闭合（归 text.runs 富文本 adapter）；chart/Cell 级宿主随 chart/table family 裁决。",
+      "renderContract": "native renderer：text → inner.style.fontFamily 栈（render.ts:987），table → <table> font-family（render.ts:950），theme 缺省经 || 回退。DOM/computed 值与输入栈逐字一致（family-uniform probe rendered-dom）。span 级 font-family 渲染不可观察（sanitizeHtml 剥属性，实测 spanAttrCount=0）。",
+      "editContract": "草案：native font picker（theme default + 已登记字体 + 内置栈 + custom 透传，panels.ts:1047）已可编辑元素 fontFamily；生产链路须翻成 VisualCommand（setStyle patch 扩 fontFamily，GD-4b 扩展 commands.ts:49-60 VisualStylePatch）。create/select/move/resize/delete 走通用 frame。",
+      "roundTripContract": "fontFamily 字符串（含 '' theme-default 语义）serialize→loadDoc→serialize 逐字存活（family-uniform 5/5：theme.fontFamily、元素栈、''、html、表级栈均 survived=true）；undo/redo、save/reopen 为同一 JSON 文档语义。",
+      "exportContract": "草案：断网导出 PNG 中非 generic family 必须全部来自 doc.fonts 登记（未登记时验证期即拒绝，见 failureCode）；导出前须 document.fonts.ready（harness waitBento 已等，context.mjs:147）。",
+      "failureCode": "PPTD-E012（引用未登记的非 generic family）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/font/fixtures/family-uniform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/font/results/family-uniform/evidence.json",
+        "spikes/bento-static-closure/font/results/family-uniform/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "font.familyLatinEa",
+      "family": "font",
+      "pptdPath": "pptd/v2 FontFamily {latin, ea} 对象形式（西文/东亚分设）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fontFamily {latin,ea} 对象（v4 FontFamily 联合；投影拼栈 + 两 face 登记时 unicode-range 切片）",
+      "implementation": "hybrid",
+      "vendorEvidence": "无原生能力（实测）：latin-ea-object fixture——loadDoc 接受对象且 round-trip 存活（model 不校验类型，model.ts:1067-1085 parseDoc 仅查 format/slides/docId），但 render.ts:987 赋对象 → CSSOM 忽略 → style.fontFamily='' → 静默回落继承字体（probe render-effect：computed=-apple-system 栈）；validate() 整调用抛 TypeError: n.split is not a function（validate.ts:106-108 firstFamily 对对象调 .split，probe validate-throws）；clipboard 路径 sanitizeElement 的 fontStack 检查要求 string，对象被 DROP（untrusted.ts:167-168+:336 静态锚点）。既有 adapter 先例有损：packages/editor-bento/src/project.ts:76-79 只取 latin（A1a-2 假设 2 显示层丢弃 ea），GD-4 零静默损失下不可用。",
+      "importContract": "草案：{latin, ea} 原样入 BentoDoc canonical（结构化对象，GD-4b schema）；投影规则：两 family 拼接为 CSS 栈 '\"latin\", \"ea\", <generic>'，依赖 CSS 按字形回退完成西文/东亚分设；两 face 均登记时用 @font-face unicode-range 精确切片（latin face 含 CJK 字形时栈序会被吞，须 import 期字形覆盖检查或 unicode-range）。。冻结裁决（C6）：投影拼栈 \"latin\",\"ea\",generic + 两 face 均登记时 unicode-range 切片（不做 import 期字形覆盖检查）",
+      "renderContract": "native renderer 经栈字符串渲染（同 familyUniform 路径）；latin/ea 分设由 Chromium 逐字形回退实现。adapter 责任仅到投影拼栈；unicode-range 精化属 projection 规则。实测反例：对象直进 native 渲染静默失效（latin-ea-object probe render-effect）。",
+      "editContract": "草案：native font picker 只读写单一栈字符串，无 latin/ea 分设 UI；编辑须由 adapter 面板（frame 内）翻译成 canonical {latin, ea} 写命令；create/select/move/resize/delete 走通用 frame。",
+      "roundTripContract": "canonical 侧 {latin, ea} 对象 serialize→load 语义相等（GD-4b codec 责任）；native 投影形态（栈字符串）round-trip 逐字存活（latin-ea-object：对象经 native serialize 也存活，但该形态不可渲染，仅作 model 存活证据）。",
+      "exportContract": "草案：导出 PNG 中西文/东亚字形分别来自登记的两 face；两 face 均须在字体 manifest 中可核（断网）。",
+      "failureCode": "PPTD-E012（latin/ea 未登记；形态非法 PPTD-E013）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/font/fixtures/latin-ea-object.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/font/results/latin-ea-object/evidence.json",
+        "spikes/bento-static-closure/font/results/latin-ea-object/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "font.registration",
+      "family": "font",
+      "pptdPath": "pptd/v2 Presentation.customFonts（family+src 字体登记；上游 src 限 Google Fonts CSS 且仅默认字重）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "fonts[]（v4 文档级新增：family+src asset 登记）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f model：model.ts:435-439（doc.fonts [{family, asset, weight?, style?}]）、:419-420（doc.assets data: URI）；注入机制：fonts.ts:30-46（injectFonts 生成 @font-face，font-display:swap，JSON.stringify 转义）；editor 登记 UI：editor/panels.ts:1079-1103（embedFont：文件→dataURL→assets+fonts+injectFonts）；sanitizer：untrusted.ts:515-526（sanitizeFonts：family fontStack / asset·weight·style cssValue）；validate：validate.ts:153-157（悬空 asset → error missing-asset）。实测：registration-fallback-measure fixture fonts/assets 5/5 round-trip 存活。缺口（实测+静态）：loadDoc→replaceDoc 不调 injectFonts（store.ts:78-88 无字体处理；调用点仅 boot main.ts:133/163、clipboard editor.ts:2038/2048、embedUI panels.ts:1097）——probe fontface-lifecycle：loadDoc 后 #bento-fonts 不存在、元素栈 canvas 宽度=monospace 回落宽度（374.46px），复刻 injectFonts 注入后变 309.52px（glyphHitAfterInject=true）；a1a2 patch 的 replaceViewDoc（patch store.ts hunk）同样不调 injectFonts；projectToBentoNative 不投影 fonts（project.ts:210 只 emit 图片 assets）。",
+      "importContract": "草案：PPTD customFonts[{family, src:Google Fonts CSS URL}] 在 import/authoring 期离线改写——抓取 woff2 字节（authoring  tooling 责任，运行时零网络）→ 内容寻址资产 + canonical 字体登记表 → 投影为 doc.fonts[{family, asset, weight:'400'}] + doc.assets[key]=data: URI。上游仅默认字重，与 native 模型 weight?/style? 兼容（多字重=多条目，a0a 惯例）。",
+      "renderContract": "native：injectFonts 注入 @font-face 后全渲染面（editor/present/thumbnail/measure 同一路径 renderElement）按栈命中登记 face。实测：注入后 canvas measureText 宽度 309.52px ≠ monospace 374.46px ≠ 未注入 UA 默认 279.23px（glyph 级命中证据）。负责层：native renderer + composition-root 注入钩子（见 implementation 提案，notes.md）。",
+      "editContract": "草案：native embedFont UI（panels.ts:1079）经 store.commit 直写 doc——生产链路属 canonical bypass（§2.2-4 须禁用/接管）；编辑面=登记新字体资产（registerAsset seam 已存在，patch boot.ts registerAsset）+ VisualCommand 扩字体登记命令（GD-4b）。create/select/move/resize/delete 不适用（文档级登记表，非元素）。",
+      "roundTripContract": "doc.fonts/doc.assets（含 data: URI 字体字节）serialize→loadDoc→serialize 原样存活（实测 survived=true；serializeFile=kernel/src/save.ts:358 JSON.stringify 全文）；save/reopen 同等（同一 #bento-doc 块）。",
+      "exportContract": "草案：断网导出前全部非 generic family 的 @font-face 已注入且 document.fonts.ready 已解析；字体资产 manifest（family→sha256）随导出证据记录；PNG 中登记 face 字形可观察。",
+      "failureCode": "PPTD-E005（字体资产缺失）/PPTD-E004（src 远程未固化/非允许）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/font/fixtures/registration-fallback-measure.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/font/results/registration-fallback-measure/evidence.json",
+        "spikes/bento-static-closure/font/results/registration-fallback-measure/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "font.fallback",
+      "family": "font",
+      "pptdPath": "pptd/v2 FontFamily 渲染期 fallback 链（无独立字段，渲染语义）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived:fontFamily 栈序渲染期逐字形回退（无独立持久化字段）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f：fontFamily 即 CSS 栈字符串，fallback 为 Chromium 逐字形字体解析（render.ts:987/950 直接赋 style）；editor 缺省栈 model.ts:521-522 FONT_STACK；validate tripwire：validate.ts:93-103（SYSTEM_FAMILIES 白名单）+:180-189（首 family 非白名单且未登记 → info font-not-embedded，不阻断）；注入面 fonts.ts:36 font-display:swap（加载期 FOUT，须 fonts.ready 闸门）。实测（registration-fallback-measure）：未注入时元素栈整链回落至 monospace（canvas 宽度 374.46=mono，stackFallsToMono=true）；注入后 f2 链 '\"No Such Face Anywhere\", \"BSC Pinned Sans\", monospace' 命中登记 face（chain 宽度 309.52=registered，chainFallsToRegistered=true）；f2 首 family 触发 validate info font-not-embedded（probe validate-negatives）。document.fonts.check 语义陷阱实测：无 @font-face 规则时对不存在 family 也返回 true（before.check=true），不能作可用性判别（probe 注释+数据）。",
+      "importContract": "草案：FontFamily 字符串视为有序栈直传；栈内每个非 generic family 须命中登记表，否则按 FONT_NOT_REGISTERED 拒绝（Active Profile 零静默损失优先于 native 的 info 级宽容）；generic 族（sans-serif/serif/monospace 等 SYSTEM_FAMILIES 子集）允许但导出确定性不承诺。",
+      "renderContract": "native renderer + Chromium 字体回退；可观察性=computed fontFamily 栈 + canvas measureText 字宽指纹（本 spike 建立的判别法）+ 截图。负责层：native；确定性边界：栈内未登记 family 的解析结果随宿主系统字体漂移，导出确定性仅对全登记栈承诺。",
+      "editContract": "草案：无独立编辑对象（渲染语义）；可编辑性由 familyUniform 的 fontFamily 编辑承载。create/select/move/resize/delete 不适用。",
+      "roundTripContract": "栈字符串逐字存活（同 familyUniform；f2 三段链实测 survived=true）；fallback 结果本身不持久化（derived: 渲染期 Chromium 解析）。",
+      "exportContract": "草案：导出会话内所有非 generic family 已登记并已加载（fonts.ready）；fallback 发生即视为合同违例（导出前以 canvas 宽度指纹或 document.fonts 遍历核验）。",
+      "failureCode": "PPTD-E012（栈引用未登记 family）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/font/fixtures/registration-fallback-measure.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/font/results/registration-fallback-measure/evidence.json",
+        "spikes/bento-static-closure/font/results/registration-fallback-measure/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "font.measurement",
+      "family": "font",
+      "pptdPath": "pptd/v2 字体确定性测量（换行/度量；1px=1pt 下的可重现布局）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived：渲染/measure 运行期确定性（同运行+跨运行可重现；不持久化）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f：window.bento.measure（main.ts:262-270）→ measure.ts:81-141——经 renderElement 真实排版（与 editor/present/thumbnail 同路径），隐藏 host（visibility:hidden + contain:strict，:61-72），height=ceil(getBoundingClientRect)（:101），lines=round(height/(fontSize*lineHeight)) 估算（:103-104），h 给定时报 fits/overflow；绝对 px 模型（measure.ts:6-8 设计说明）。实测：registration-fallback-measure probe fontface-lifecycle——同运行重复测量逐值相等（deterministic=true）；family-uniform 跨两次独立运行 measure 值与截图 sha256 完全一致（770d56f3…=770d56f3…）。粒度边界（实测）：返回值仅 height/lines，行高由 fontSize*lineHeight 主导，字体字宽差异只在改变换行行数时可见——同本 320px 宽下登记 face/monospace/未注入三态 height/lines 全等（150px/5 行，fontAwareInHeightLines=false），字宽差异由 canvas 指纹（279.23/309.52/374.46px）证明存在。前置条件：measure 读到的是当下已加载字体——注入后测量须先 await document.fonts.load/ready（font-display:swap FOUT 窗口）。",
+      "importContract": "草案：无独立导入字段；1px=1pt 由坐标合同承载（canvas family）；PPTD 字号 pt 值直传为 px（pinned Chromium 内 1:1）。",
+      "renderContract": "native：measure 经真实 renderer 排版；测量结果随 doc 的 theme/登记字体（measure.ts:79 设计注释）。负责层：native renderer + 调用方保证字体加载前置。",
+      "editContract": "草案：只读探查面（agent 排版工具），不产生持久编辑；不进入 VisualCommand 词表。create/select/move/resize/delete 不适用。",
+      "roundTripContract": "测量为 derived（渲染期派生），不持久化；可重现性不变量：同一 normalized 文档 + 同一 pinned Chromium + 同一字体集 ⇒ measure 结果逐值相等（本 spike 同运行+跨运行证据）。",
+      "exportContract": "草案：导出截图与 measure 共用同一已加载字体集与同一 renderer；导出前 fonts.ready；PNG 尺寸严格等于 canvas（harness 截图 400x300 实测）。",
+      "failureCode": "PPTD-E012（登记 face 未就绪时测量前置失败）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/font/fixtures/registration-fallback-measure.fixture.mjs",
+        "spikes/bento-static-closure/font/fixtures/family-uniform.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/font/results/registration-fallback-measure/evidence.json",
+        "spikes/bento-static-closure/font/results/family-uniform/evidence.json",
+        "spikes/bento-static-closure/font/results/family-uniform/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "shape.preset",
+      "family": "shape",
+      "pptdPath": "pptd/v2 Shape.shapeName（177 内置形状库，见 shapes.md）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].shapeName（v1 支持集=OOXML 几何表已建模子集；其余具名拒绝）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:144（ShapeKind 仅 rect/ellipse/triangle/arrow/line/path 6 值）；slides/src/modelkeys.generated.ts:18（shape 元素封闭键表，无 preset/adjustments 键位）；slides/src/render.ts:297-382（shapeSvg 六分支，未知值 render.ts:372 抛 TypeError）；slides/src/render.ts:1168（renderSlide 无逐元素容错）；slides/src/editor/editor.ts:52-62（SHAPE_MENU 9 项，无 177 preset 库）。实测：shape-path-line/results/shape-preset-gap（shape:'roundRect' 直通后 loadDoc 渲染栈崩溃）与 shape-path-line/results/shape-native-kinds（6 原生 kind 全部渲染正确）",
+      "importContract": "草案：shapeName 可静态映射子集 rect/roundRect/ellipse/triangle/arrow → 原生 kind（roundRect → shape:'rect'+radius=adjustments[0]/100000·min(w,h)，先例 packages/editor-bento/src/project.ts:102-108；triangle/arrow 仅默认值可映射）；其余 preset 经 OOXML 几何表在投影期编译为 shape:'path'+d/pathBox；几何表外或未知 shapeName 具名拒绝，绝不直通原生模型（直通=渲染崩溃，见 vendorEvidence）",
+      "renderContract": "原生 6 kind：shapeSvg 输出对应 SVG 节点（rect/ellipse/polygon/line/path），native renderer 负责；其余 preset：项目 projector 编译为 native path 后仍由 native renderer 绘制（hybrid 边界：几何语义在项目侧，像素在原生侧）",
+      "editContract": "草案：create/select/move/resize/rotate/delete 与 fill/stroke/radius(rect) 属性编辑 = native（SHAPE_MENU + Moveable + panels.ts:1177-1199）；preset 形状切换与参数化几何编辑无原生 UI → 项目面板 + VisualCommand；顶点级几何编辑 v1 不承诺",
+      "roundTripContract": "原生 kind 元素 serialize→loadDoc 逐字节存活（results/shape-native-kinds fieldSurvival 7/7、loadedEqualsRoundTrip=true）；preset 语义（shapeName/adjustments）持久化于 BentoDoc canonical，native 投影为 derived，不在 native store 持久",
+      "exportContract": "草案：断网 PNG 中可观察精确几何/圆角/填充/描边；截图 hash 可复现（results/shape-native-kinds/screenshot.png sha256 见 evidence）",
+      "failureCode": "PPTD-E013（几何表外/未知 shapeName）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/shape-native-kinds.fixture.mjs",
+        "spikes/bento-static-closure/shape-path-line/fixtures/shape-preset-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/shape-native-kinds/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/shape-native-kinds/screenshot.png",
+        "spikes/bento-static-closure/shape-path-line/results/shape-preset-gap/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "shape.adjustments",
+      "family": "shape",
+      "pptdPath": "pptd/v2 Shape.adjustments（OOXML 几何参数，按形状定义）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].adjustments（投影期几何编译参数，并入 preset 表）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/model.ts:157-187（ShapeElement 字段表无 adjustments 及任何几何参数键；唯一近邻 radius 仅限 rect，model.ts:165-166）。实测：shape-path-line/results/shape-adjustments-key（外来键 adjustments/shapeName 经 loadDoc/serialize 存活但渲染完全忽略、validate 报 unknown-key warning——存活≠支持）",
+      "importContract": "草案：adjustments 为 OOXML 万分比参数序列，按 shapes.md 每形状定义参与投影期几何编译（产出 d 或 radius）；个数/取值域不符该形状定义时具名拒绝",
+      "renderContract": "无独立渲染面：参数经投影编译进 native path 的 d（或 rect 的 radius），native renderer 负责像素",
+      "editContract": "草案：无原生 UI；adjustments 数值编辑 = 项目面板 + VisualCommand（连带 shape.preset 的参数化重编译）；v1 可按形状子集承诺",
+      "roundTripContract": "canonical 侧持久化于 BentoDoc；native 投影为 derived 状态（编译结果 d），不承担 adjustments 的持久语义",
+      "exportContract": "草案：断网 PNG 中参数化几何效果可观察（如 roundRect 圆角随 adjustments 变化）",
+      "failureCode": "PPTD-E013（个数/取值域不符）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/shape-adjustments-key.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/shape-adjustments-key/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/shape-adjustments-key/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "shape.customPath",
+      "family": "shape",
+      "pptdPath": "pptd/v2 Shape.shapeName=\"custom\" + viewBox + path（M/L/H/V/C/S/Q/A/Z；多子路径镂空 sweep 规则；viewBox 独立拉伸）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].shapeName=\"custom\" + elements[].viewBox/path（import 规范化：近重合整圆 A 弧确定性重写为半圆弧对）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:174-177（d/pathBox 原生键位）；slides/src/render.ts:308-315 + 302-304（pathBox→viewBox、preserveAspectRatio=none 独立拉伸、vector-effect=non-scaling-stroke）；slides/src/untrusted.ts:109,169-170,349-350（sanitizer PATH_DATA 词表覆盖 M/L/H/V/C/S/Q/A/Z 另加 T，64KB 上限）。实测：shape-path-line/results/custom-path（d 逐字节存活、DOM/截图证据）、shape-path-line/results/custom-path-hole（镂空隔离实验：PPTD 官方整圆弧例 h1/h3 镂空不成立，矩形反向绕向 h2 与半圆弧对 h4 成立）",
+      "importContract": "草案：viewBox [w,h] → pathBox [0,0,w,h]；path 指令集逐字透传；border → stroke/strokeWidth（non-scaling-stroke 保屏幕 px）；fill → fill；**弧规范化**：近重合端点的整圆 A 弧（PPTD 镂空成语）必须重写为半圆弧对——PPTD 官方例在 pinned Chromium 的 SVG 规范圆心解析下镂空反向（实测 h1/h3 vs h4），或提请上游修订 PPTD 约定。冻结裁决（C7）：采 import 规范化路线（确定性几何重写），不提请上游修订 PPTD 约定",
+      "renderContract": "native renderer（shapeSvg path 分支）：单 <svg viewBox=pathBox preserveAspectRatio=none> + <path d>；多子路径镂空靠 nonzero 反向绕向（原生默认 fill-rule，机制实测成立）",
+      "editContract": "草案：create/select/move/resize/rotate/delete、fill/stroke 属性 = native；几何点编辑：M/L/C/Z 单子路径 = native（BezierEditor 精确、字节稳定，bezier.ts:28-31）；含 A/Q/S/T 指令或多子路径 = adapter 接管或 v1 声明 target-only（原生编辑会静默重写几何：Q/S/T/A 按 2 数消费错位、多 M 桥接、LineEditor 采样重平滑 lineedit.ts:86,106-108）。冻结裁决（C7）：含 A/多子路径的几何点编辑由 adapter 接管（v1 不声明 target-only）",
+      "roundTripContract": "d/pathBox 及全部随附样式 serialize→loadDoc→serialize 逐字节存活（results/custom-path fieldSurvival 7/7、loadedEqualsRoundTrip=true、reloadAccepted=true）；undo/redo 走 native store checkpoint",
+      "exportContract": "草案：断网 PNG 中路径几何、镂空、描边、拉伸畸变均可观察且 hash 可复现（results/custom-path/screenshot.png、results/custom-path-hole/screenshot.png）",
+      "failureCode": "PPTD-E014（path 语法/指令集/viewBox 非法；镂空弧成语未规范化）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/custom-path.fixture.mjs",
+        "spikes/bento-static-closure/shape-path-line/fixtures/custom-path-hole.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/custom-path/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/custom-path/screenshot.png",
+        "spikes/bento-static-closure/shape-path-line/results/custom-path-hole/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/custom-path-hole/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "line.points",
+      "family": "line",
+      "pptdPath": "pptd/v2 Line.viewBox + Line.points（≥2 点；首尾为过点，中间为 bezier 控制点）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].viewBox + elements[].points",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/render.ts:350-370（原生 line 恒为框内水平直线，y1=y2=h/2，无多点模型）；slides/src/model.ts:157-187（无 points/viewBox 键位）；slides/src/editor/lineedit.ts:33-53（两点直线 ⇄ x/y/w/rotation 原生习语：w=端点距离、rotation=atan2(Δy,Δx)）。实测：shape-path-line/results/line-points-curve（外来 points 键存活但渲染忽略、probe horizontal:true；同点串编译为 path d 后 f1 折线/f2 曲线渲染正确）",
+      "importContract": "草案：points 在 viewBox 坐标系解析（≥2 点、坐标越界校验）；2 点直线可投影为原生 shape:'line'（w=拉伸后距离、rotation=atan2、fill=border.color——注意原生 line 从 fill 取色 render.ts:359、线宽下限 2px render.ts:352）；≥3 点一律投影期编译为 shape:'path' 的 d（viewBox→pathBox 拉伸语义两侧一致，pptd.md:806 ⇄ render.ts:303/310）",
+      "renderContract": "2 点直线：native line renderer；≥3 点：native path renderer 绘制项目编译的 d（hybrid：点列语义在项目侧，像素在原生侧）",
+      "editContract": "草案：create/select/move/resize/rotate/delete = native；2 点直线端点拖拽 = native（LineEditor）；点级编辑（增删/拖动中间控制点）= adapter——PPTD 中间点为 bezier 控制点，原生锚点是过点，语义不兼容，原生拖点会改曲线语义",
+      "roundTripContract": "canonical 存 viewBox+points；native 投影（line 几何或编译 d）为 derived；编译 d 本身 serialize→loadDoc 逐字节存活（results/line-points-curve fieldSurvival 6/6）",
+      "exportContract": "草案：断网 PNG 中折线/曲线几何与线宽可观察；与 source 点串的对应由 renderer conformance 数据驱动验证",
+      "failureCode": "PPTD-E014（<2 点/坐标越 viewBox/串格式非法）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/line-points-curve.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/line-points-curve/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/line-points-curve/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "line.curve",
+      "family": "line",
+      "pptdPath": "pptd/v2 Line.curve（sharp/round/smooth）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].curve（sharp/round/smooth）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/model.ts:157-187（无 curve 键位）；slides/src/render.ts:372-379 + 350-370（path/line 分支均不设置 stroke-linejoin——round 连接无属性级表达）。实测：shape-path-line/results/line-points-curve probe line-render-facts（strokeLinejoin:null）；sharp 编译（M+L）与 smooth 编译（首末过点+中间控制点 C 段）渲染正确（f1/f2 截图）",
+      "importContract": "草案：curve 缺省 = round（pptd.md:798）；sharp → L 折线段；smooth → 三次 bezier C 段（中间点为控制点）；round → 连接处圆角弧烘焙进 d（无原生 stroke-linejoin 可用）；未知值具名拒绝",
+      "renderContract": "无原生 curve 语义；编译产物由 native path renderer 绘制（adapter 编译 + native 像素）",
+      "editContract": "草案：curve 模式切换 = 项目面板 + VisualCommand（触发重编译）；无原生对应交互",
+      "roundTripContract": "canonical 存 curve 枚举；编译 d 为 derived 且自身 round-trip 存活（随 line.points 同 fixture 实测）",
+      "exportContract": "草案：断网 PNG 中 sharp 尖角/round 圆角/smooth 曲线形态可区分可观察",
+      "failureCode": "PPTD-E013（词表外值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/line-points-curve.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/line-points-curve/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/line-points-curve/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "line.arrow",
+      "family": "line",
+      "pptdPath": "pptd/v2 Line.arrow（[start,end]；arrow/stealth/diamond/oval/null）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].arrow（[start,end]；arrow/stealth/diamond/oval/null）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:155（LineEnding 仅 none/arrow/dot/bar）；slides/src/render.ts:257-295,364-367（markerRef：arrow=三角、dot=circle、bar=rect，尺寸恒 5.5×strokeWidth、色恒等线色；未知枚举值落 else 分支静默渲染成 bar；marker 只挂 line 分支）；slides/src/editor/panels.ts:1189-1195（tip 选择器仅 shape==='line'）；slides/src/untrusted.ts:348（clipboard 路径 oneOf DROP 词表外值）。实测：shape-path-line/results/line-arrow（a1/a2/a3 arrow/dot/bar+rotation 正确；a4 stealth/diamond→bar 静默错渲染且 validate 沉默；p1 path 上 lineEnd:'arrow' 完全无效 markerCount=0）",
+      "importContract": "草案：arrow→lineEnd/lineStart:'arrow'、null→'none'（精确映射，限 2 点直线原生 line 投影）；oval↛dot（近似，零静默损失纪律下拒绝）；stealth/diamond/oval 与一切曲线/折线箭头 → adapter 编译箭头几何（端点切线方向的填充多边形，作为同组独立 path 元素或 frame 内自绘）；原生多出词表 dot/bar 为 native-only，不作为 PPTD 输入目标",
+      "renderContract": "直线 arrow/null：native line + SVG marker；其余组合：adapter 编译的箭头几何由 native path renderer 绘制（hybrid 边界：箭头语义/方向计算在项目侧）",
+      "editContract": "草案：直线两端 tip 选择 = native（panels.ts:1189-1195，限 none/arrow/dot/bar 词表）；PPTD 全词表箭头编辑 = 项目面板 + VisualCommand；箭头随线端点/切线联动由 adapter 重编译保证",
+      "roundTripContract": "lineStart/lineEnd serialize→loadDoc 逐字节存活（results/line-arrow fieldSurvival 8/8，含词表外值——存活但错渲染，见 vendorEvidence）；canonical 存 PPTD arrow 二元组",
+      "exportContract": "草案：断网 PNG 中各箭头类型在两端可区分可观察（arrow/stealth/diamond/oval 形态各异）；错渲染（stealth→bar）不得出现在导出物",
+      "failureCode": "PPTD-E013（词表外值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/shape-path-line/fixtures/line-arrow.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/shape-path-line/results/line-arrow/evidence.json",
+        "spikes/bento-static-closure/shape-path-line/results/line-arrow/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "image.src",
+      "family": "image",
+      "pptdPath": "pptd/v2 Image.src（本地相对路径或 https URL；jpg/jpeg/png/gif）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].src（import 期固化为 asset:）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f：model ImageElement.src（data: URI 或 asset:<key>）slides/src/model.ts:195-198；词表 slides/src/modelkeys.generated.ts:19；渲染 slides/src/render.ts:1029-1036（img.src=assetSrc(doc,el.src)，asset: 解析 render.ts:79-81；远端 src 仅在 bento 自身 offline 开关下置空 render.ts:96-99 + kernel/src/net.ts:163,181）；sanitizer mediaRef（data/asset/blob/http(s)/相对路径）slides/src/untrusted.ts:184-188,353，required key slides/src/untrusted.ts:397；validate missing-asset slides/src/validate.ts:313-319；编辑器插入=文件内嵌 slides/src/editor/editor.ts:1870-1893 + canvas.ts:1514-1516；a1a2 patch 替换按钮 packages/editor-bento/patches/a1a2-semantic-editor.patch:315-340。实测：results/image-src-fit（asset:/data: 渲染并解码 naturalWidth=8；相对路径 loopback 404 naturalWidth=0；https 被离线路由 abort naturalWidth=0）。",
+      "importContract": "草案：PPTD src 三种形态在 validate/import 期一律固化为项目资产（下载/读盘→字节 content-hash→asset:<sha256> 登记），native 投影只出现 asset: 形态；相对路径无宿主解析基（自包含文件内 404），https URL 是追踪信标且离线导出不可见（harness 双负例实测），二者不作运行时语义。jpg/jpeg/png/gif 由 <img> 浏览器原生解码，无需转换。失败：资产取不到/格式不在词表 → 具名拒绝。",
+      "renderContract": "native renderer：<img src=解析后 data:URI>，width/height 100%，display:block（render.ts:1030-1036）；asset: 缺失时 img 无 src 且标 data-bento-offline。负责层：native renderer。实测：asset:/data: 形态完整渲染解码（naturalWidth=8，截图可观察四象限图）。",
+      "editContract": "草案：create/select/move/resize/delete 走 native frame + setBounds（已通）；替换图像=a1a2 patch Replace image 按钮→registerAsset+setAsset（已存在，生产需复核插入路径 store.commit 旁路的 canonical guard）；src 字段不直接手编。",
+      "roundTripContract": "loadDoc→serialize→loadDoc 全链存活（parseDoc 不剥键 model.ts:1067-1086；serializeFile=JSON.stringify kernel/src/save.ts:362-365）；asset 表与 src 引用逐字保持（fieldSurvival 9/9，含 assets.qx）。clipboard/CRDT 摄入经 sanitizeElement 重建：src 过 mediaRef，非法 scheme 剥除（untrusted.ts:184-188）。",
+      "exportContract": "草案：断网导出 PNG 中资产像素必须可观察（asset:/data: 形态满足）；https/相对路径形态在 import 期已具名拒绝或固化，运行时不存在。",
+      "failureCode": "PPTD-E005（asset 悬空）/PPTD-E004（https 未固化）/PPTD-E013（格式词表外）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/image-src-fit.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/image-src-fit/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/image-src-fit/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "image.fit",
+      "family": "image",
+      "pptdPath": "pptd/v2 Image.fit（fill/contain/cover）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].fit（fill/contain/cover）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f：model fit:'contain'|'cover'|'fill' slides/src/model.ts:199（默认 contain model.ts:753）；渲染 object-fit slides/src/render.ts:1035；sanitizer 枚举校验 slides/src/untrusted.ts:354（实测 paste 负例 fit:'bogus' 被剥）；vendor 面板 Fit 下拉 slides/src/editor/panels.ts:1651-1652，但活跃 patch 将其卸下（无对应 VisualCommand）packages/editor-bento/patches/a1a2-semantic-editor.patch:306-314。实测：results/image-src-fit（三值 objectFit 逐一对应、round-trip 存活）。",
+      "importContract": "草案：PPTD fit.mode ∈ {fill,contain,cover} 与原生词表 1:1 直映（pptd.md:264-268）。默认值差异必须显式化：PPTD 默认 cover（pptd.md:842）、native 默认 contain（model.ts:753）——import 一律显式写 fit，不依赖默认。本地 v2 子集曾收窄不含 fill（contracts/src/pptd.ts:158-160），v4 需放开。",
+      "renderContract": "native renderer：CSS object-fit=fit 值，逐字对应（render.ts:1035）。负责层：native renderer。实测：contain/cover/fill 三元素 computed objectFit 精确等于 model 值，截图可区分。",
+      "editContract": "草案：fit 编辑在 pinned+patch 生产壳内无 UI（vendor 下拉已被 a1a2 patch 卸下，patch:306-314）；需新增 setImageFit VisualCommand + 面板控件（小成本）；create/select/move/resize/delete 同 image.src。",
+      "roundTripContract": "fit 经 loadDoc→serialize→loadDoc 逐字存活（fieldSurvival slides[0].elements[1].fit 等 9/9）；clipboard 摄入非法枚举值被剥（untrusted.ts:354，动态 paste 负例实测 fit:'bogus'→dropped）。",
+      "exportContract": "草案：导出 PNG 中 fit 效果可观察（同盒不同 mode 像素布局不同，截图实测）。",
+      "failureCode": "PPTD-E013（词表外 fit 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/image-src-fit.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/image-src-fit/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/image-src-fit/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "image.crop",
+      "family": "image",
+      "pptdPath": "pptd/v2 Image.crop（四边比例；正=inset 负=outset 补透明）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].crop（v4 四边比例 [l,t,r,b]，负值 outset；取代 v2 归一化矩形与 D101 丢弃）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生能力。813c71f 词表 slides/src/modelkeys.generated.ts:19 无 crop 键；渲染 slides/src/render.ts:1029-1038 无消费；validate 报 unknown-key slides/src/validate.ts:233-241；clipboard/CRDT 摄入剥除 slides/src/untrusted.ts:432-435。adapter 私有先例：a1a2 patch 的 _crop=[x,y,w,h] 渲染路径 packages/editor-bento/patches/a1a2-semantic-editor.patch:544-559 + 投影 packages/editor-bento/src/project.ts:153-167。实测：results/image-crop-gap（PPTD 形态 crop 键 loadDoc 收下/round-trip 逐字存活/渲染零效果/validate 报 unknown-key；paste 摄入被剥——动态 ClipboardEvent 证据；_crop 渲染可观察 data-a1a2-crop 外框）。",
+      "importContract": "草案：PPTD crop{left,top,right,bottom} 四边比例（pptd.md:256-262）→ 归一化源矩形；正值 inset 直接换算，负值 outset（补透明）需扩展源矩形并虚增原图画布（adapter 几何）；约束 left+right<1 且 top+bottom<1（pptd.md:262），违反具名拒绝。注意 _crop 窗口语义（[x,y,w,h]∈[0,1] 内裁）不覆盖 outset，不能直接复用为 crop 实现。。冻结裁决（C8）：退役 a1a2 `_crop` 渲染 hunk，改 svg 元素承载路线",
+      "renderContract": "原生零渲染（实测：带 crop 键的 image 渲染为未裁剪 <img object-fit>，截图全图可见）。提案负责层：adapter——svg 元素承载（<image href=data:> + viewBox/几何映射，词表内 render.ts:551,586,676-681）或扩展 patch 渲染路径；当前 a1a2 _crop 路径把 crop 窗口直接映射元素框且不叠加 fit（实测 crop-a1a2-fit-ignored 的 img 无 object-fit），不满足 PPTD 复合语义。。冻结裁决（C8）：负责层 adapter——svg 元素承载；不扩展 `_crop` patch",
+      "editContract": "草案：create/select/move/resize/delete 走 native frame；crop 编辑需 adapter UI（a1a2 最小数字面板 + setImageCrop 命令为先例，patch:342-364；拖拽 overlay 为中成本增量）。",
+      "roundTripContract": "loadDoc/serialize 路径未知键逐字存活（实测 crop 对象 survived=true）；但 clipboard/CRDT 摄入被 sanitizeElement 剥除（动态 paste 实测 hasCrop=false）——持久化真相必须放 BentoDoc canonical（native 文档只是投影），不能依赖 native 元素上的私有键跨摄入路径存活。",
+      "exportContract": "草案：导出 PNG 中裁剪结果必须可观察（子图区域 + outset 透明边）；adapter 渲染挂 Bento frame 内，随 stage 截图导出。",
+      "failureCode": "PPTD-E013（退化 left+right≥1 等/非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/image-crop-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "image.cropShape",
+      "family": "image",
+      "pptdPath": "pptd/v2 Image.cropShape（ShapeDef：预设形状或 custom 路径遮罩）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].cropShape（v4 新增 ShapeDef；svg clip-path/mask 承载）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生能力。813c71f 词表 slides/src/modelkeys.generated.ts:19 无 cropShape；model/render/editor/sanitizer 全无对应（model.ts:195-201、render.ts:1029-1038、panels.ts:1649-1655、untrusted.ts:432-435）。间接证据：svg 渲染 sanitizer 词表含 clippath/mask/path（render.ts:553-554、604-605），clip-path/mask 属性与 url(#…) 引用存活（render.ts:698-700）。实测：results/image-crop-gap（cropShape 键同 crop 的未知键命运）；results/icon-svg（clipPath/mask/linearGradient 渲染存活）。",
+      "importContract": "草案：ShapeDef{shapeName,adjustments?,viewBox?,path?}（pptd.md:848-856）预设形状→对应 SVG path/基本形状（roundRect 有 radius 原生特例：render.ts:1035 border-radius）；shapeName=custom 必须有 path；未知 shapeName 具名拒绝。遮罩作用于最终显示区（crop→fit 之后，pptd.md:858）。",
+      "renderContract": "原生零渲染。提案负责层：adapter——两条词表内路径均已实测可行：(a) svg 元素承载，<image> 加 clip-path=url(#shapePath)（render.ts:551 image 标签、604 clip-path 属性均在词表）；(b) CSS clip-path 投影到 frame 内容器。矩形圆角特例已由原生 radius 闭合。",
+      "editContract": "草案：形状遮罩的编辑=选择预设/调整参数（adapter 面板 + VisualCommand）；无原生 UI（image 面板无该项，panels.ts:1649-1655）；create/select/move/resize/delete 走 native frame。",
+      "roundTripContract": "同 image.crop：loadDoc/serialize 存活、clipboard/CRDT 剥除（同一次动态 paste 实测 hasCropShape=false）；canonical 必须在 BentoDoc 层承载。",
+      "exportContract": "草案：导出 PNG 中遮罩轮廓可观察（非矩形透明区）；svg/clip-path 路线随 stage 截图导出。",
+      "failureCode": "PPTD-E013（shapeName 词表外）/PPTD-E014（custom 缺 path）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/image-crop-gap.fixture.mjs",
+        "spikes/bento-static-closure/image-icon/fixtures/icon-svg.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/screenshot.png",
+        "spikes/bento-static-closure/image-icon/results/icon-svg/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/icon-svg/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "image.pipeline",
+      "family": "image",
+      "pptdPath": "pptd/v2 Image 渲染次序约定：crop → fit → cropShape（固定顺序）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived:crop→fit→cropShape 固定渲染次序（次序约定，不持久化）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生对应物：原生 image 只有 fit（render.ts:1035），crop/cropShape 不存在，次序约定在原生侧为空集。a1a2 _crop 私有路径显式不复合 fit（patch 注释\"crop 窗口即映射，fit 不叠加\"packages/editor-bento/patches/a1a2-semantic-editor.patch:544-546）。实测：results/image-crop-gap 的 crop-a1a2-fit-ignored 元素（_crop+fit:'contain' 同设）渲染 img 无 objectFit，与 crop-a1a2-private（fit:'cover'）像素一致——复合次序在现有私有路径上不成立。上游语义：pptd.md:858（crop→fit→cropShape 固定次序，三者独立可设）。",
+      "importContract": "草案：行本身是次序约定而非字段；import 只需把 crop/fit/cropShape 三字段各自无损带入 canonical，次序由渲染合同固定。任何实现若只能表达子集（如 crop 激活即吞掉 fit）即不满足本行。",
+      "renderContract": "提案负责层：adapter——渲染输出为固定嵌套：frame（Bento 通用变换）> cropShape 裁剪容器 > fit 适配（object-fit 或 svg preserveAspectRatio）> crop 源矩形映射；次序不可由字段值改变。svg 元素承载时：外层 <svg> 的 viewBox/clipPath + 内层 <image preserveAspectRatio>（xMidYMid slice/meet/none ≈ cover/contain/fill）可一次表达三级复合，全部词表内（render.ts:551,586）。",
+      "editContract": "草案：无独立编辑面；编辑散落在 crop/fit/cropShape 各自命令。声明点：三字段任意组合编辑后重渲染必须仍按固定次序复合。",
+      "roundTripContract": "次序约定不产生持久化字段（derived: 渲染几何由三字段推导）；round-trip 归三字段各自合同。实测：三字段同设时 loadDoc/serialize 全存活（fieldSurvival 7/7）。",
+      "exportContract": "草案：导出 PNG 必须反映固定次序复合结果（fixture 可构造三者同设且次序敏感的案例：outset crop + contain + 非矩形遮罩）。",
+      "failureCode": "随 image.crop/image.fit/image.cropShape 各行失败码（无独立码）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/image-crop-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/image-crop-gap/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "icon.name",
+      "family": "icon",
+      "pptdPath": "pptd/v2 Icon.iconName（style:name；Font Awesome 7.x free：fas/far/fab）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].iconName（adapter FA 货架解析 + svg 元素承载）",
+      "implementation": "hybrid",
+      "vendorEvidence": "无原生 icon 元素与 FA 货架：813c71f slides/src/icons.ts:1-55 是编辑器工具栏图标集（lucide 风格 36 枚），全仓无 fontawesome/fa- 资产。原生载体=svg 元素：model markup/asset/css 三字段 slides/src/model.ts:203-214；渲染 slides/src/render.ts:1120-1150（sanitizeSvg 每次渲染执行）；词表 slides/src/render.ts:545-619（svg/g/defs/path/rect/circle/use/clippath/mask/gradient/filter 等）；css 字段 scoped 注入 render.ts:1141-1147；href 策略 render.ts:656-681。项目现状：projectIcon 占位 glyph+注释 packages/editor-bento/src/project.ts:135-151。实测：results/icon-svg（FA 风格单 path glyph 渲染+round-trip；asset 形态；clipPath/mask/gradient 存活；css 改色通道 computed fill 生效；注释留在 model markup 但剥出渲染 DOM render.ts:791；script/onclick/远程 url() 负例被剥）。",
+      "importContract": "草案：iconName='style:name'（pptd.md:901-916，fas/far/fab ∈ FA 7.x free）由项目离线资产货架解析为 svg markup（或 asset: 引用），style 前缀∈{fas,far,fab}、name 在货架内，否则具名拒绝；Icon.fill 实色→markup path fill 或 css 字段（两通道实测均通）；运行时零网络（FA 字节随项目分发）。非等比 bounds 的适配策略需声明（svg 默认 preserveAspectRatio=meet 会 letterbox；可在 markup 根改写，词表内 render.ts:586）。",
+      "renderContract": "native renderer：svg 元素经 sanitizeSvg 渲染（render.ts:1135），svg 强制 100%×100% 显示；markup/asset/css 为原生词表内字段（validate 零 unknown-key，实测）。负责层：native renderer（渲染）+ adapter（iconName→markup 解析与货架）。",
+      "editContract": "草案：create/select/move/resize/delete 走 native frame（svg 元素无专属面板，panels.ts 无 svg case）；图标选择/改色=adapter UI + VisualCommand（改写 canonical iconName/fill 后重投影 markup）；markup 不作手编字段暴露。",
+      "roundTripContract": "markup/asset/css 经 loadDoc→serialize→loadDoc 逐字存活（fieldSurvival 6/6，含带 <!-- --> 注释与 <script> 负例的 markup——doc 块 < 转义纪律下无损）；sanitizeSvg 只在渲染路径执行，不回写 model（render.ts:763-768 注释明言 additive），故 canonical markup 逐字稳定。",
+      "exportContract": "草案：导出 PNG 中 glyph 形状与 fill 色可观察；svg 内禁止远程 url()/href 取数（sanitizer 词表实测：仅 # 片段与 data:image/ 存活），断网导出不依赖远端。",
+      "failureCode": "PPTD-E013（name/style 词表外）/PPTD-E005（货架字节缺失）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/image-icon/fixtures/icon-svg.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/image-icon/results/icon-svg/evidence.json",
+        "spikes/bento-static-closure/image-icon/results/icon-svg/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.grid",
+      "family": "table",
+      "pptdPath": "pptd/v2 Table.columnWidths/rowHeights（[0,1] 比例、各项和为 1）+ rows 二维结构",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.columnWidths/rowHeights + rows[][]（v4 新增 table 元素类型）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:269-277（TableElement.columns[{w}]/rows/header/style；columns 注释即 fractional weights）；词表 modelkeys.generated.ts:22/31 无行高字段；渲染归一化 render.ts:910-912（权重→colgroup 百分比）；编辑 canvas.ts:752-819（列宽拖拽）+ panels.ts:1508-1518（行列步进）。实测 table/results/baseline：权重 2:1:1→50%/25%/25%（probes[dom-structure].colWidths），行高无原生对应——h=200 三行均分 66/66/66（probes[row-heights]）。",
+      "importContract": "草案：columnWidths[i]（[0,1] 和为 1）→ columns[i].w 直写（渲染期归一化，语义等价）；rows 二维结构逐格映射；rowHeights 比例 → adapter 渲染期按 元素 h×比例 换算；权重和为 0/非有限数具名拒绝。",
+      "renderContract": "列宽：native renderer，colgroup 百分比 + table-layout:fixed（实测 50/25/25 精确）。行高：无原生词表，native 渲染为均分/内容高度；比例行高由 adapter 在 frame 内输出（tr height 或格网定位）。负责层：列 native、行 adapter。",
+      "editContract": "草案：create/select/move/resize/delete 走 Bento frame 通用交互（插入按钮 editor.ts:271-272）；列宽拖拽（canvas.ts:776-819）与行列步进（panels.ts:1508-1518）原生可达、需桥接 VisualCommand；行高编辑无原生 UI，adapter 提供。",
+      "roundTripContract": "columns/rows/header 结构 loadDoc→serialize→loadDoc 原样存活（baseline fieldSurvival 12/12，loaded=roundTrip=reloaded hash 相等）。注意：serialize 会 stamp collab 会话块（main.ts:201），native serialize 不是 canonical 出口。",
+      "exportContract": "草案：PNG 中列宽比例与行高分布精确可观察（baseline screenshot：50/25/25 列宽 + 均分行高）。",
+      "failureCode": "PPTD-E009（行列权重/结构违规，沿用）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/baseline/evidence.json",
+        "spikes/bento-static-closure/table/results/baseline/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.cellText",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.text（富文本，规则同 TextContent.text）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].text（结构化富文本，同 text 元素 paragraphs/runs 模型）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:231-239（TableCell.html = sanitized inline subset）；渲染 render.ts:938 经 sanitizeHtml（render.ts:469-497：允许 B/I/U/BR/SPAN/DIV/P/STRONG/EM/S/CODE，剥全部属性，未知标签 unwrap 留文本）；编辑 canvas.ts:1166-1243（contentEditable 单元格编辑）。实测 table/results/cell-html-rich：html 原始字符串全链存活（6/6），渲染后 <span style=…> 属性被剥（probes[rendered-inner-html].spanCell='<span>styled span</span>'）、<font> unwrap、i/u/s/code 可见。",
+      "importContract": "草案：Cell.text 富文本 → cell.html；run 级属性（color/fontSize/…）不得塞进 span style（渲染期被 sanitizeHtml 剥掉=静默损失），必须投影为 cell 内联字段或 adapter 渲染结构；无法表达的 run 属性具名拒绝。",
+      "renderContract": "cell.html 渲染为 td>.bento-cell-inner 的 sanitizeHtml 输出：标签级格式（b/i/u/s/code/br/div/p/无属性 span）可见；属性化 run 样式渲染期丢失（实测 span 计算色为继承色 rgb(26,29,36)）。负责层：标签子集 native renderer；run 级属性 adapter。",
+      "editContract": "草案：单元格文本原生 dblclick→contentEditable 编辑（canvas.ts:1166-1243），commit 写 rows[r].cells[c].html，需桥接 VisualCommand；run 级样式编辑无原生 UI，adapter 提供。create/select/move/resize/delete 走 frame。",
+      "roundTripContract": "cell.html 作为不透明字符串 loadDoc→serialize→loadDoc 原样存活（cell-html-rich fieldSurvival 6/6）；标签清洗只发生在渲染期，model 不解析 html。",
+      "exportContract": "草案：PNG 中标签级格式（粗/斜/下划线/删除线/换行）可观察；active 的 run 级样式必须可见（cell-html-rich screenshot 反证 span style 丢失）。",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/cell-html-rich.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/cell-html-rich/evidence.json",
+        "spikes/bento-static-closure/table/results/cell-html-rich/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.cellTextStyleRef",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.textStyle（$ref theme.textStyles；仅文本字段）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "derived:import 期 $ref 解析为 cell 文本字面值",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生能力：table/tableCell 词表无 textStyle/$ref 机制（813c71f modelkeys.generated.ts:22/30-32）；theme 仅 theme.table 创建期默认（model.ts:400-401、705-707，仅 defaultTable 使用）。",
+      "importContract": "草案：Cell.textStyle $ref theme.textStyles → import 期查表展开为 Cell 内联文本字段（仅文本字段）；未知 ref 具名拒绝；canonical 存 ref 由共享样式解析器渲染期求值，或存展开结果——按一个含义一个地方二选一，不双写。",
+      "renderContract": "无原生渲染路径；渲染由展开后的内联字段走 native（color/bold）或 adapter（fontSize/lineHeight 等）承担。",
+      "editContract": "草案：编辑展开后的内联字段（见 table.cellTextProps）；样式表定义本身的编辑属 theme 能力，不在本行。",
+      "roundTripContract": "无原生持久化落点；若把 ref 字符串塞进 native 文档，loadDoc 路径虽透传但零渲染效果（fill-border-gap 同类实测），不得以此冒充支持；canonical 持久化在 BentoDoc。",
+      "exportContract": "草案：PNG 中展开后的文本样式可观察。",
+      "failureCode": "PPTD-E014（$ref 未登记/循环）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "table.cellTextProps",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell 内联文本字段（color/fontSize/fontFamily/bold/italic/backgroundColor/lineHeight/lineHeightPx/letterSpacing/marginTop）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].{color,fontSize,fontFamily,bold,italic,backgroundColor,lineHeight,lineHeightPx,letterSpacing,marginTop}",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:232-239：cell 级仅 color/bg/bold；应用点 render.ts:926-929。fontSize/fontFamily 仅表级（style.fontSize/fontFamily，render.ts:914/950）；lineHeight 硬编码 1.3（render.ts:950）；letterSpacing/marginTop 无词表（modelkeys.generated.ts:32）。实测 cell-html-rich probes[no-render-effect]：cell.fontSize=22/letterSpacing=3 透传存活但计算样式 14px/normal 零效果；baseline 实测 cell.color/bg/bold 渲染生效。",
+      "importContract": "草案：color→cell.color、bold→cell.bold、backgroundColor→cell.bg 直映；italic→html <i> 标签；fontSize/fontFamily/lineHeight/lineHeightPx/letterSpacing/marginTop → adapter cell inner inline style（canonical 持久化，不写 native 未知 key）。",
+      "renderContract": "color/bold/bg per-cell native（td style）；italic/underline/strike 经 html 标签 native；其余字段无原生渲染，adapter 在 .bento-cell-inner 上补 inline style。负责层：前四者 native、其余 adapter。",
+      "editContract": "草案：bold 可经内容编辑达成，color/bg 无原生 cell 级面板（panels.ts:1494-1578 只有表级）；全部字段的统一编辑 UI 由 adapter 提供 + VisualCommand。",
+      "roundTripContract": "原生词表字段（color/bg/bold/html）全链存活（baseline 12/12）；超词表 key 在 loadDoc 路径透传存活但 clipboard/CRDT 摄入被 untrusted.ts:271-277 DROP 且渲染零效果——透传≠支持。",
+      "exportContract": "草案：各字段 PNG 可观察（adapter 字段以计算样式断言佐证）。",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/cell-html-rich.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/baseline/evidence.json",
+        "spikes/bento-static-closure/table/results/cell-html-rich/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "table.cellFill",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.fill（solid/gradient/image）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].fill",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:237（cell bg?: string）；render.ts:927 经 cssColor（render.ts:868-875：字符 allowlist、禁 url(/expression/@/\\、48 字符上限静默回落；untrusted.ts:141-147 同规则 64 上限）。实测 fill-border-gap probes[fill-render-outcome]：solid #FFCDD2 生效；短 linear-gradient（39 字符）偶然穿洞生效（bgImage 可见）；url(asset:…) 与 62 字符 gradient 均静默回落 transparent。",
+      "importContract": "草案：Cell.fill solid→cell.bg 直映；gradient/image→adapter 渲染（Fill 联合类型语义由 fill family 裁决，cell 宿主复用其投影）；禁止依赖 cssColor 偶然穿洞；image fill 引用未登记资产具名拒绝。",
+      "renderContract": "solid per-cell native（background:<bg>）；gradient 非设计词表——短串偶然生效、>48 字符静默丢失，渲染结果对字符串长度敏感且无报告；image 无原生路径（url( 被显式拒绝）。负责层：solid native；gradient/image adapter。",
+      "editContract": "草案：cell fill 无原生面板入口（panels.ts 仅表级色板）；adapter 提供单元格 fill 编辑 + VisualCommand。",
+      "roundTripContract": "bg 字符串全链原样存活（fill-border-gap 8/8，含会被渲染回落的值）——round-trip 存活≠渲染存活，回落静默（validate 不查 cell 级），adapter/importer 必须自校验。",
+      "exportContract": "草案：PNG 中 solid/gradient/image fill 可观察；断网 export 使用已登记资产。",
+      "failureCode": "PPTD-E013（非法 fill）/PPTD-E005（资产缺失）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json",
+        "spikes/bento-static-closure/table/results/fill-border-gap/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.cellBorder",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.border（BorderSpec：单边/两边/四边数组形式与 null 清除）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].border（BorderSpec 单边/两边/四边/null 清除）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f slides/src/model.ts:251-252（style.borderColor/borderWidth 表级）；render.ts:915-916 构造统一边框、931 渲染到每个 td 四边相同；编辑 panels.ts:1550-1551（表级 Grid lines 色板）。无 cell 级/单边词表（modelkeys.generated.ts:32 tableCell 仅 5 键）。实测 fill-border-gap：cell.border={width:4,color:#D32F2F} 透传存活（8/8）但渲染保持表级 2px #334155（probes[fill-render-outcome].cellBorderRendered）。",
+      "importContract": "草案：BorderSpec 单值/两边/四边数组 → adapter per-side border style；null 清除单边 → adapter 省略该边；相邻格在 border-collapse:collapse 下的冲突规则由 adapter 定义（后写胜/外框胜需裁决）；全表统一边框可退化为同一 adapter 路径。",
+      "renderContract": "表级统一四边实线 native（borderWidth 0=全清）；cell 级、单边/数组形式、null 单边清除、线型（dash/dot）均无原生渲染，adapter 在 td 上写 per-side border-*-style/width/color。负责层：adapter（含表级退化情形，避免两路并存）。",
+      "editContract": "草案：表级 Grid lines 原生面板（panels.ts:1550-1551）可桥接；cell 级边框编辑 UI 无原生，adapter 提供 + VisualCommand。",
+      "roundTripContract": "表级 borderColor/borderWidth 全链存活（baseline 12/12）；cell 级 border key loadDoc 透传存活但 clipboard/CRDT 摄入 DROP（untrusted.ts:271-277）、渲染零效果。",
+      "exportContract": "草案：PNG 中各边有无/颜色/宽度精确可观察。",
+      "failureCode": "PPTD-E013（非法 BorderSpec 形态）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json",
+        "spikes/bento-static-closure/table/results/baseline/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "table.cellAlign",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.align（[水平,垂直]）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].align",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:234（align?: left|center|right）；render.ts:926（ALIGN map，非法值回落 left）+ 932（vertical-align:middle 硬编码）；摄入 untrusted.ts:274 oneOf 三值。实测 baseline probes[dom-structure]：alignCenter='center' 生效、verticalAlign='middle' 不可配。",
+      "importContract": "草案：align[0] left/center/right→cell.align 直映；justify 无原生，具名拒绝或 adapter text-align:justify；align[1] top/middle/bottom→adapter vertical-align（middle 与原生默认一致可省略）。",
+      "renderContract": "水平三值 native（td text-align）；垂直恒 middle 不可配——top/bottom 由 adapter 写 td vertical-align。负责层：水平 native、垂直 adapter。",
+      "editContract": "草案：cell align 无原生面板/快捷键；adapter 提供两分量编辑 + VisualCommand。",
+      "roundTripContract": "cell.align 全链存活（baseline 12/12）；非法值渲染静默回落 left，importer 应按词表校验拒绝。",
+      "exportContract": "草案：PNG 中水平/垂直对齐可观察。",
+      "failureCode": "PPTD-E013（非法对齐值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/baseline/evidence.json",
+        "spikes/bento-static-closure/table/results/baseline/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.merge",
+      "family": "table",
+      "pptdPath": "pptd/v2 Cell.rowSpan/colSpan（合并区被覆盖单元格从 rows 数组省略）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.rows[][].rowSpan/colSpan（adapter 格网模型 + 真合并渲染）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生能力：tableCell 词表仅 [align,bg,bold,color,html]（813c71f modelkeys.generated.ts:32）；render.ts:919-943 不写 rowspan/colspan 且 cells 为位置语义；摄入 untrusted.ts:271-277 DROP 未知 cell key；编辑 panels.ts:1508-1518 行列增删不处理合并。实测 merge-gap：rowSpan/colSpan loadDoc 全链透传存活（4/4）但渲染 spanAttrs=0、tdsPerRow=[2,1,3] 网格错位、B2 落第 1 列视觉位置（probes[render-grid-breakage]，见 screenshot）；validate() 无 cell 级报告（probes[validate-blindspot] mentionsSpan=0，盲区 validate.ts:234-242）。",
+      "importContract": "草案：Cell.rowSpan/colSpan → adapter 格网模型；被覆盖格省略规则由 importer 展开校验；越界/重叠/悬空合并具名拒绝；合并表禁止投给 native renderer（静默错位渲染）。。冻结裁决（C9）：adapter 格网模型 + 真 rowspan/colspan 渲染 + merge/split 命令，闭合",
+      "renderContract": "无原生渲染；adapter 输出真 rowspan/colspan td（或格网绝对定位），在 Bento frame 内挂载。负责层：adapter。",
+      "editContract": "草案：合并/拆分无原生 UI——adapter 提供格选区 + merge/split VisualCommand；create/select/move/resize/delete 复用 Bento frame。成本：本 family 最大单件（中）。",
+      "roundTripContract": "loadDoc 路径透传存活（4/4）不构成支持证据；clipboard/CRDT 摄入会 DROP rowSpan/colSpan（静默丢语义）——adapter 元素的粘贴摄入需项目侧接管；canonical 持久化在 BentoDoc，native 文档只是投影。",
+      "exportContract": "草案：PNG 中合并区几何精确可观察（merge-gap screenshot 反证 native 渲染错位）。",
+      "failureCode": "PPTD-E014（越界/重叠/悬空合并）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/merge-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/merge-gap/evidence.json",
+        "spikes/bento-static-closure/table/results/merge-gap/screenshot.png"
+      ]
+    },
+    {
+      "capabilityId": "table.styleRef",
+      "family": "table",
+      "pptdPath": "pptd/v2 Table.style（$ref theme.tableStyles 或内联 TableStyleConfig）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.style（import 期 $ref 已解析为内联字面值）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:246-261（TableStyle 内联 11 键）+ 400-401（theme.table 创建期默认）+ 705-707（tableStyleFor 仅 defaultTable 使用）；无 $ref/具名样式表机制；摄入 untrusted.ts:263-268 限 11 键。实测 baseline：内联 style 全字段存活且渲染生效（headerBg/zebra/borderWidth/radius，12/12）；fill-border-gap：扩展键（firstRowStyle/bodyStyles/…）透传存活、渲染零效果（probes[style-slot-zero-effect] 全 400/transparent）。",
+      "importContract": "草案：Table.style $ref theme.tableStyles → import 期解析为内联 TableStyleConfig；未知 ref 具名拒绝；config 的 11 键子集直映 native style，扩展键交 adapter 样式解析器（见 table.styleSlots）。",
+      "renderContract": "内联 style 11 键 native 渲染（headerBg/headerColor/zebra/borderColor/borderWidth/cellPadX/cellPadY/fontSize/fontFamily/color/radius）；$ref 与扩展键无渲染路径。负责层：子集 native、扩展 adapter。",
+      "editContract": "草案：原生面板可编辑 style 子集（panels.ts:1494-1578：Preset/header 两色/文本色/网格线色/fontSize/radius/pad），可桥接 VisualCommand；$ref 绑定/换绑无原生 UI，adapter 提供。",
+      "roundTripContract": "内联 style 全链存活；扩展键透传存活但摄入 DROP、渲染零效果（同上口径）。",
+      "exportContract": "草案：PNG 中 style 各键效果可观察（baseline screenshot：header 深色底白字、zebra、圆角、边框）。",
+      "failureCode": "PPTD-E014（$ref 未登记）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/baseline/evidence.json",
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "table.styleSlots",
+      "family": "table",
+      "pptdPath": "pptd/v2 TableStyleConfig.cellStyle/firstRowStyle/lastRowStyle/firstColumnStyle/lastColumnStyle（按单元格独立应用）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.style.{cellStyle,firstRowStyle,lastRowStyle,firstColumnStyle,lastColumnStyle}",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f：firstRow 部分对应 header+headerBg/headerColor+恒 bold 700（render.ts:921/927-929）；cellStyle 的 color/fontSize/fontFamily/pad 可映表级 style 默认（render.ts:914-918/928）；lastRow/firstColumn/lastColumn 无词表（modelkeys.generated.ts:30 仅 11 键）。实测 fill-border-gap probes[style-slot-zero-effect]：slot 键全部零渲染效果（bg transparent、weight 400、color 继承）。",
+      "importContract": "草案：canonical 保留 TableStyleConfig，adapter 渲染期按 slot 优先级逐格求值（不烘焙进 cell，避免双写）；firstRow 仅 bg/color/bold 时可退化 native header 投影，但同一表命中多 slot 时必须走统一 adapter 路径。",
+      "renderContract": "firstRow 子集可 native（header=true 时 headerBg/headerColor/700）；其余 slot 与任意组合由 adapter 逐格求值输出。负责层：adapter 为主，native 仅作退化兼容。",
+      "editContract": "草案：header toggle 原生（panels.ts:1520-1522）可桥接；slot 内容编辑无原生 UI，adapter 提供 + VisualCommand。",
+      "roundTripContract": "header/style 字段全链存活（baseline）；slot 键透传非证据（摄入 DROP、渲染零效果）。",
+      "exportContract": "草案：PNG 中各 slot 应用结果逐格可观察。",
+      "failureCode": "PPTD-E013（非法 slot 字段/值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json",
+        "spikes/bento-static-closure/table/results/baseline/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "table.bodyStylesCycle",
+      "family": "table",
+      "pptdPath": "pptd/v2 TableStyleConfig.bodyStyles（按数据行序循环应用）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.style.bodyStyles",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f render.ts:922-923：zebra 单色、固定 bodyIndex%2===1（奇数数据行）；词表 model.ts:249-250（style.zebra?）。无任意长度 bodyStyles 循环机制。实测 baseline probes[dom-structure].zebraBg=rgba(30,42,58,0.1) 仅第 2 数据行（bodyIndex 1）。",
+      "importContract": "草案：bodyStyles 长度 2 且仅 backgroundColor 且首项 transparent 时可退化为原生 zebra；其余（长度≠2、多字段、非背景字段）走 adapter 按 数据行序%length 求值；与 styleSlots 同一样式解析器。",
+      "renderContract": "2 周期单色条带 native（zebra）；任意 bodyStyles 列表循环 adapter。负责层：adapter 为主，zebra 为退化兼容。",
+      "editContract": "草案：zebra 经原生 Preset 间接可达（panels.ts:1532-1542）；bodyStyles 列表编辑 adapter。",
+      "roundTripContract": "style.zebra 全链存活（baseline 12/12）；bodyStyles 键透传非证据。",
+      "exportContract": "草案：PNG 中循环样式逐行可观察。",
+      "failureCode": "PPTD-E013（非法 bodyStyles 形态）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/baseline.fixture.mjs",
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/baseline/evidence.json",
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "table.rowOverColumn",
+      "family": "table",
+      "pptdPath": "pptd/v2 TableStyleConfig.rowOverColumn（行/列类别冲突规则，默认 true 行胜）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].table.style.rowOverColumn",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生能力：原生无行/列类别样式概念（813c71f modelkeys.generated.ts:30 仅 11 键；render.ts:919-943 无类别冲突逻辑）；实测 fill-border-gap：rowOverColumn=true 透传存活、零效果（probes[style-slot-zero-effect]）。",
+      "importContract": "草案：rowOverColumn 默认 true（行胜）；作为 adapter 样式解析器的一个布尔分支随 styleSlots 生效；canonical 持久化该布尔。",
+      "renderContract": "无原生渲染；冲突格样式由 adapter 解析器按规则求值。负责层：adapter。",
+      "editContract": "草案：随 styleSlots 的 adapter 编辑界面；无独立原生交互。",
+      "roundTripContract": "无原生落点；canonical 在 BentoDoc 持久化，native 投影不承载。",
+      "exportContract": "草案：PNG 中行/列 slot 冲突格的应用结果可观察。",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/table/fixtures/fill-border-gap.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/table/results/fill-border-gap/evidence.json"
+      ]
+    },
+    {
+      "capabilityId": "chart.data",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.data（cols/rows + 完整性约束：DuplicateColumn/EmptyColumn/RowLength/UnknownColumn/NonNumericValue）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.data（cols/rows 表模型 + 五类完整性校验；v4 新增 chart 元素类型）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:222-229（ChartElement 仅 option/preset/source，无 tabular data 模型）；kernel/src/charts.ts:200,561,584（renderer 读 xAxis.data/series[].data 内联数组）；slides/src/editor/panels.ts:1375-1444（原生类目×series 数据网格）；实测 E1 loadDocAccepted=true、21 条深路径存活",
+      "importContract": "草案：Chart.data.cols/rows → option.xAxis.data（首列/encode.x 列，String 化）+ series[].data（数值列直写）；DuplicateColumn/EmptyColumn/RowLength/UnknownColumn/NonNumericValue 由 PPTD validator 在 import 前具名拒绝，不进 Bento 层",
+      "renderContract": "内联数据由 native renderer（charts-lite chartSnapshotSvg，render.ts:1107-1112）渲染为 SVG：bar=rect、line=path、scatter=circle、pie=arc path；E1 结构探针逐项命中。PPTD cols/rows 表模型与五类完整性约束无原生对应，由项目 validator/importer 承担",
+      "editContract": "草案：create/select/move/resize/delete 走 Bento frame 原生（§2.1 substrate）；数据/列编辑经 VisualCommand 改 canonical 后 reproject；原生数据网格（panels.ts:1375-1444）仅作交互参考，native mutate 不直接挂（唯一写路径纪律）",
+      "roundTripContract": "option 内联数据与样式键 serialize/load 逐字节存活（E1 fieldSurvival 21/21、E4 22/22，三阶段 canonical hash 全等）；undo/redo 与 save/reopen 的语义保证属 BentoDoc v4 canonical 层（native Store 非持久化真相，合同 §2.3）。",
+      "exportContract": "草案：断网导出 PNG 中柱/线/点/弧几何与数据值一一对应；快照路径确定性（charts.ts:703-716，缓存键 w×h+JSON(option)）",
+      "failureCode": "PPTD-E014（数据完整性五类违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.encode",
+      "family": "chart",
+      "pptdPath": "pptd/v2 series[i].encode 通道绑定（§5.1；同列可被多 series 引用）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[].encode",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:126,561,584（无 encode 概念：series.data 为已解析数组，digest 逐键直读）；原生无通道绑定机制",
+      "importContract": "草案：series[i].encode {x,y,size,open…} 按列名查 data.cols 解析为 series.data/xAxis.data；同列多 series 引用合法（解析后各自持有拷贝）；未知列名/缺通道 import 具名拒绝",
+      "renderContract": "encode 本身无渲染语义；解析结果（数组）由 native renderer 承接，渲染面同 chart.data",
+      "editContract": "草案：encode 重绑经 VisualCommand 改 canonical 重投影；原生 UI 无对应面，不投影为 native 编辑能力",
+      "roundTripContract": "encode 绑定存 BentoDoc v4 canonical（项目侧）；option 投影数组 round-trip 原生存活（E4 _pptd.encode 深路径存活证明任意嵌套可持久化）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：导出 PNG 与 encode 解析结果一致（可观察面同 chart.data）",
+      "failureCode": "PPTD-E014（未知列/缺通道）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.seriesDefaults",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.seriesDefaults（按 type 分组默认值；一层深合并规则）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.seriesDefaults（import 期一层深合并物化）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:125-221（digest 逐键直读，无 defaults 合并层）；原生无按类型默认值机制",
+      "importContract": "草案：seriesDefaults[type] 与 series[i] 按 PPTD 一层深合并规则在 import/投影期物化（series 优先）；未知 type 键具名拒绝",
+      "renderContract": "无独立渲染语义；合并结果落到各 series 后由 native renderer 承接",
+      "editContract": "草案：defaults 编辑经 VisualCommand → reproject（批量影响同类型 series 的投影）",
+      "roundTripContract": "分组默认值存 canonical；option 存合并后结果，round-trip 存活（E4 _pptd.seriesDefaults 深路径存活）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 可观察合并后样式（同各 series 类型行）",
+      "failureCode": "PPTD-E013（未知 type）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.typeMixing",
+      "family": "chart",
+      "pptdPath": "pptd/v2 §5.4 类型混排约束（bar/line/area/scatter/bubble 自由混；candlestick 受限；其余独占）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[].type（§5.4 混排词表约束；adapter renderer 全集混排）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:406-632（renderCartesian 仅过滤 bar/line/scatter）,:127,353（isPie 短路，其它 series 静默丢弃）,:499（scatter 绘制要求无类目）；实测 E3：bar/line/area 混排全渲染；mix-bar-scatter scatter 零渲染（0 circle）；mix-pie-bar bar 零渲染；candlestick/radar/heatmap/treemap/sunburst/sankey 零数据图形",
+      "importContract": "草案：按 PPTD §5.4 校验混排矩阵：bar/line/area/scatter 自由混（注意原生限制——scatter 只在无类目图渲染，scatter 与类目系混排须具名拒绝或投影为纯 scatter 组）；candlestick 受限混排、其余独占；非法组合 import 具名拒绝。冻结裁决（C21）：不做 import 收窄——adapter chart renderer 支持 §5.4 全集混排（含 scatter 混类目图）",
+      "renderContract": "native 可混集实测收窄为 bar/line/area（area=line+areaStyle）；scatter 仅在纯 value-x 图渲染，混入类目图被静默丢弃；pie 独占且短路丢弃其它 series；其余类型无渲染。负责层：可混子集 native renderer；§5.4 约束强制在 adapter（import 具名拒绝非法混排），不靠 Bento 兜底（其兜底方式是静默丢数据）。冻结裁决（C21）：负责层 adapter chart renderer（全集混排自渲染）",
+      "editContract": "草案：series 类型变更经 VisualCommand（原生 Type 下拉整体重置 option，panels.ts:1242-1247，不可复用）",
+      "roundTripContract": "混排 option 逐字节 round-trip 存活（E3 各 case loadDoc 后可 serialize；E4 stack/多 series 存活）；混排约束语义在 canonical/validator 层持久化",
+      "exportContract": "草案：PNG 中各 series 类型几何齐全、无静默缺失（对照 E3 签名法可回归）",
+      "failureCode": "PPTD-E014（§5.4 混排矩阵违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.axisBasic",
+      "family": "chart",
+      "pptdPath": "pptd/v2 AxisConfig.show/type/category 推断/min/max/reverse/title（xAxis/yAxis）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.{xAxis,yAxis}",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:200（xAxis.data 类目）,:144-147,267-278（yAxis min/max/name、niceTicks/linspace）,:479-484（y 轴名渲染）,:536-549（类目标签疏化）；show/reverse 无 reader（grep 零命中）；axis.type 不读（E3 heatmap case：yAxis.type:\"category\" 被当 value 轴，类目标签丢失）；xAxis.name 不渲染",
+      "importContract": "草案：AxisConfig.type 由投影推断（category↔data 存在，value↔数值轴），显式 time/log 具名拒绝；min/max 直写；reverse 投影期倒序类目+数据（小）；title → yAxis.name（x 轴 title 与 show=false v1 具名拒绝或 adapter overlay，冻结裁决）",
+      "renderContract": "原生：类目标签、y 轴 nice 刻度、min/max 覆盖、y 轴名（左上/右上，E1 实测 Revenue/Ratio 命中）；轴恒显（无 show）、无 reverse、x 轴名不渲染。负责层 native renderer；show/reverse/x 轴 title 若承诺需 adapter overlay",
+      "editContract": "草案：min/max/name 经 VisualCommand（原生面板 min/max 输入 panels.ts:1346-1367 可作交互参考）；show/reverse 无原生编辑面",
+      "roundTripContract": "轴配置键 round-trip 存活（E1：xAxis.data/axisLabel/axisLine、yAxis min/max/name/formatter/splitLine 共 8 条全活）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 轴刻度/范围/轴名与 canonical 一致（E1 截图可观察双轴名与刻度）",
+      "failureCode": "PPTD-E013（非法轴配置值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.axisLabel",
+      "family": "chart",
+      "pptdPath": "pptd/v2 AxisConfig.label（TextStyle + numberFormat 子集）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.{xAxis,yAxis}[].label",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:142,203-207（x axisLabel color/fontSize/fontWeight）,:149-153（y 同）,:148,276（y axisLabel.formatter \"{value}\" 模板）,:242-243（fmt 内建千分位）,:197（option.textStyle.fontFamily）；x 轴 formatter 不读；numberFormat 词表无。E1 实测：x 标签 fill/fontSize/fontWeight 命中、\"{value}M\"→\"20M\" 命中",
+      "importContract": "草案：TextStyle 子集 → axisLabel.{color,fontSize,fontWeight}、fontFamily → option.textStyle.fontFamily；numberFormat 固定前后缀可映射 y formatter \"{value}<suffix>\"，百分比/货币/千分位语义 v1 具名拒绝或 adapter",
+      "renderContract": "原生：轴标签颜色/字号/字重/字体族 + y 轴 {value} 模板 + 内建千分位；x 轴 formatter 与 numberFormat 词表（百分比/货币/小数位）无。负责层 native renderer（子集）+ adapter（numberFormat：刻度由 niceTicks 内部生成无法注入文本，需自绘刻度或 v1 收窄词表）",
+      "editContract": "草案：经 VisualCommand；原生无轴标签结构化编辑面（仅 Advanced JSON 逃逸舱 panels.ts:1252-1270）",
+      "roundTripContract": "axisLabel/textStyle 各键 round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 轴标签样式与格式化文本可观察（E1 截图）",
+      "failureCode": "PPTD-E013（非法 label 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.axisLineGrid",
+      "family": "chart",
+      "pptdPath": "pptd/v2 AxisConfig.axisLine（含 arrow）/gridLine（LineStyleConfig：style/color/width）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.{xAxis,yAxis}[].{axisLine,gridLine}",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:208-211（x axisLine.lineStyle.color/width）,:490-497（轴线画在零基线）,:212-215,444-453（y[0] splitLine.lineStyle.color/width，恒显实线）；arrow/dash（stroke-dasharray）/show/x splitLine/y[1] splitLine 无 reader。E1 实测：axisLine #00AA00 width3、splitLine #CCCCFF width2 命中",
+      "importContract": "草案：axisLine.color/width、gridLine.color/width 直写；axisLine.arrow、style=dashed/dotted v1 具名拒绝或 adapter overlay 自绘轴线层",
+      "renderContract": "原生：x 轴线颜色/宽度（零位绘制）、y[0] 网格线颜色/宽度；箭头/线型/显隐/副轴网格无。负责层 native renderer（子集）+ adapter overlay（若承诺样式键）",
+      "editContract": "草案：VisualCommand；原生无面板",
+      "roundTripContract": "axisLine/splitLine 键 round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 轴线/网格线样式可观察（E1 截图）",
+      "failureCode": "PPTD-E013（非法 axisLine/gridLine 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.axisSecondary",
+      "family": "chart",
+      "pptdPath": "pptd/v2 xAxis/yAxis 数组形式 + series xAxisIndex/yAxisIndex（副轴）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.{xAxis,yAxis} 数组形式 + series[].{xAxisIndex,yAxisIndex}（v1 仅副 y 轴）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:143-164（yAxis 数组 slice(0,2)）,:417（axisOf：yAxisIndex clamp）,:434（副轴刻度与主轴 k 对齐）,:465-477（右轴标签）,:482-484（右轴名）；slides/src/editor/panels.ts:1292-1302（Second axis 原生开关）；xAxis 数组不支持（:141 单对象读取）。E1 实测：右轴 7 条标签 + Ratio 轴名命中",
+      "importContract": "草案：yAxis 数组长度≤2 直写 + series.yAxisIndex 映射；副 x 轴或 >2 轴 import 具名拒绝",
+      "renderContract": "原生：副 y 轴（右侧）刻度/轴名/series yAxisIndex 归属；副 x 轴无、副轴无独立网格线。负责层 native renderer（副 y）；副 x 若承诺需 adapter",
+      "editContract": "草案：series 轴归属经 VisualCommand；原生 Second axis toggle 与 Left/Right 下拉（panels.ts:1318-1321）可作交互参考",
+      "roundTripContract": "yAxis 数组与 series.yAxisIndex round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 双轴刻度与各自 series 对应（E1 截图）",
+      "failureCode": "PPTD-E013（副 x/>2 轴具名拒绝）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.spokeAxis",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.spokeAxis（radar 专用 SpokeAxisConfig）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.spokeAxis（随 chart.radar renderer 自绘）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 radar/spoke reader（E3 radar case：0 rect/path/circle 数据图形，仅轴线；option.radar 被 validate 标记 chart-key-ignored）",
+      "importContract": "草案：SpokeAxisConfig min/max/标签 → adapter radar 渲染参数（canonical 直存，不经 option）",
+      "renderContract": "无原生渲染；adapter radar 渲染器自绘 spoke 网格/刻度（svg 元素投影 seam，见 notes.md §3 开头）。负责层 adapter",
+      "editContract": "草案：VisualCommand 编辑 → reproject 重新生成 svg markup（native frame 承担选择/变换）",
+      "roundTripContract": "SpokeAxisConfig 存 canonical；若随 option 透传亦逐字节存活（E4 _pptd.spokeAxis）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 中 spoke 网格/刻度可观察（adapter 渲染确定性由 GD-4d 双跑签发）",
+      "failureCode": "PPTD-E013（非法 SpokeAxisConfig 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.barLayout",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.barWidth/barGap/categoryGap（柱槽布局参数）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.{barWidth,barGap,categoryGap}",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:554-555（groupW=band*0.62、barW=groupW/m 硬编码）；E1 probe barwidth-ignored：barWidth 8/88/缺省渲染宽度逐字节相同（71.408）；注意 validate.ts:73 将 barWidth 误列为已实现键（validate 不报、renderer 不读，详见 notes.md §4 风险 1）",
+      "importContract": "草案：v1 target-only 时非缺省值 import 具名拒绝；若升 active 则 adapter 渲染 bar 几何（柱宽/间距映射自绘 rect）。冻结裁决（C10）：升 active——adapter 自渲染 bar 几何（柱宽/间距映射），不做 import 收窄",
+      "renderContract": "原生柱槽布局不可配（槽宽固定 62%、组内均分）；barWidth/barGap/categoryGap 无任何渲染效果。若承诺须 adapter 自渲染 bar 几何（负责层 adapter）；否则 v1 target-only。冻结裁决（C10）：负责层 adapter（bar 几何自渲染）",
+      "editContract": "草案：无原生编辑面；adapter 渲染时经 VisualCommand 改 canonical → reproject",
+      "roundTripContract": "三键作为自由 JSON round-trip 存活（E1 barWidth、E4 barGap/categoryGap）——仅存储语义，无渲染语义。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：（若 active）PNG 柱宽/间距与参数一致；（若 target-only）导入即拒绝，无导出路径。冻结裁决（C10）：active——PNG 柱宽/间距与参数一致（adapter）",
+      "failureCode": "PPTD-E013（非法布局值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.title",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.title（string | TitleConfig）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.title（投影为 frame 上方原生 text 元素）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 option.title reader（grep 零命中）；E4 probe render-side-facts：titleRendered=false",
+      "importContract": "草案：Chart.title string → text 元素（默认标题样式）；TitleConfig → text 元素 fontSize/color/align 映射",
+      "renderContract": "无原生渲染。adapter 闭合：PPTD Chart.title 投影为 chart frame 上方独立原生 text 元素（text family 原生渲染/样式面全可用），不写 option.title（避免 validate 噪声）。负责层 adapter（投影）+ native（text 渲染）",
+      "editContract": "草案：title 文本/样式经 VisualCommand（复用 text family 编辑面）",
+      "roundTripContract": "title 存 canonical；text 元素 round-trip 由 text family 证据背书；option.title 键亦可逐字节存活（E4）但建议投影不写 option",
+      "exportContract": "草案：PNG 中标题文本可观察（text 渲染确定性由 text family 证据背书）",
+      "failureCode": "PPTD-E013（非法样式值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.legend",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.legend（boolean | LegendConfig；show 按类型默认值表）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.legend",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:129-140（legend textStyle.color/fontSize/fontWeight、itemWidth/itemHeight/itemGap、top/bottom）,:356（显示条件：legend 键存在且 series 有名或为 pie）,:360-397（渲染，pie 取片名 :363-364）；show/left-right/data 不读；slides/src/editor/panels.ts:1289-1290（Legend 原生开关）。E1/E2 实测图例样式/片名命中",
+      "importContract": "草案：legend:true → option.legend={bottom:0} 或按 PPTD 类型默认值表；LegendConfig top/bottom 直写，left/right v1 具名拒绝或 adapter；textStyle 子集直写",
+      "renderContract": "原生：上/下定位（数值偏移）、文本样式、色块尺寸/间距；left/right 定位与 data 过滤无。负责层 native renderer（子集）+ adapter（定位扩展，若承诺）",
+      "editContract": "草案：显隐/位置经 VisualCommand；原生 toggle 可作交互参考",
+      "roundTripContract": "legend 键 round-trip 存活（E1）；PPTD boolean ↔ option.legend 键有无双向无损。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 图例文本/色块/位置可观察（E1/E2 截图）",
+      "failureCode": "PPTD-E013（非法 legend 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/pie-donut.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/pie-donut/evidence.json",
+        "spikes/bento-static-closure/chart/results/pie-donut/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.dataLabels",
+      "family": "chart",
+      "pptdPath": "pptd/v2 Chart.dataLabels + series.dataLabels 覆盖（浅合并；content 按类型词表；numberFormat）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.dataLabels + series[].dataLabels",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:648,669-672（pie label.formatter 的 {b}/{c}/{d} 模板）,:219（labelColor=label.color）,E2 probe label-off（label:false 整组抑制含引出线）；bar/line/scatter 无 label reader（E1 SVG 无任何数据值文本，validate.ts:65-67 注释自述 label 仅 pie 实现）",
+      "importContract": "草案：dataLabels content 按类型词表：pie name/value/percent → {b}/{c}/{d} 模板映射；numberFormat 仅静态可求值场景可预格式化；series.dataLabels 浅合并在投影期物化；cartesian content v1 具名拒绝或 adapter",
+      "renderContract": "原生仅 pie 数据标签（模板/开关/颜色/引出线，E2 全命中）；cartesian 数据标签无。负责层 pie=native；cartesian=adapter overlay（需对齐 plot 坐标，成本中）或 v1 限 pie",
+      "editContract": "草案：VisualCommand；原生无结构化编辑面（JSON 逃逸舱）",
+      "roundTripContract": "label 键 round-trip 存活（E2 fieldSurvival 10/10）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 标签文本/位置可观察（E2 截图：\"Alpha: 42%\" 等）",
+      "failureCode": "PPTD-E013（非法 dataLabels 值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/pie-donut.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/pie-donut/evidence.json",
+        "spikes/bento-static-closure/chart/results/pie-donut/screenshot.png",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.bar",
+      "family": "chart",
+      "pptdPath": "pptd/v2 BarSeries（stack value/percent、symbol 象形柱 ShapeDef、fill/border）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=bar：stack/symbol/fill/border）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:552-576（分组柱、itemStyle.color、borderRadius 数值/数组首项、零基线负值）；stack 无 reader——E3 stack-bars 实测两组柱 x=78.26/126 并排非堆叠，validate 标记 option.series[i].stack；symbol 象形柱与 bar border（borderColor/Width）无 reader。E1 实测 fill/rx=6/负值基线命中",
+      "importContract": "草案：fill → itemStyle.color；borderRadius 直写；border → v1 具名拒绝或 adapter；stack value/percent、symbol 象形柱 → adapter 渲染或 v1 具名拒绝",
+      "renderContract": "原生：分组柱 + 单色 fill + 圆角 + 负值零基线；stack/percent/象形柱 ShapeDef/border 无。负责层：简单分组柱 native；stack 系（投影无法闭合 baseline 几何）与象形柱 adapter 自渲染",
+      "editContract": "草案：数据/颜色经 VisualCommand（原生 series 行编辑器 panels.ts:1304-1344 可作交互参考）；stack/symbol 配置无原生面",
+      "roundTripContract": "bar 各键含 stack round-trip 存活（E1/E4）——存储语义完整，渲染语义见上。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 柱几何/颜色/圆角可观察（E1 截图）",
+      "failureCode": "PPTD-E013（收窄词表外值具名拒绝）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.line",
+      "family": "chart",
+      "pptdPath": "pptd/v2 LineSeries + LinearSeriesBase（smooth/lineStyle/width/marker/nullHandling/lineColor）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=line：smooth/lineStyle/marker/nullHandling/lineColor）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:588-594（smooth 三次贝塞尔）,:582-583（lineStyle.color/width）,:613-621（symbol:\"none\"/symbolSize；marker 恒为圆点、fill=描边色）,:584（data 经 num(v,0)：null→0）；lineStyle.type（dash）/marker 形状/nullHandling 语义无。E1 实测：smooth 贝塞尔、width=4、symbol:none 抑制 marker 命中",
+      "importContract": "草案：smooth/width/lineColor 直写 lineStyle；marker=false → symbol:\"none\"，marker 尺寸 → symbolSize；nullHandling 投影期变换；dash v1 具名拒绝或 adapter",
+      "renderContract": "原生：平滑/宽度/颜色/圆点 marker/抑制 marker；dash、marker 形状与独立 fill、null gap/connect 无。负责层 native renderer（子集）+ adapter（nullHandling 投影期闭合：gap=拆多段 series、connect=剔除 null、zero=原生默认；dash 需自渲染或 v1 放弃）",
+      "editContract": "草案：VisualCommand；原生 series 行可改名称/类型/颜色（panels.ts:1304-1344）",
+      "roundTripContract": "line 各键 round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 折线几何/marker 可观察（E1 截图）",
+      "failureCode": "PPTD-E013（收窄词表外值具名拒绝）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.area",
+      "family": "chart",
+      "pptdPath": "pptd/v2 AreaSeries（stack 含 stream 流图、areaColor 派生）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=area：stack/areaColor 派生物化）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:598-604（areaStyle:{}→描边色 0.25 透明填充；E1 实测 areaPath opacity=0.25）,:322-338（seriesFill：areaStyle.color 字符串或 linear gradient 对象→SVG linearGradient）；stack/stream 无 reader（stack 死证见 chart.bar 行 E3）",
+      "importContract": "草案：areaColor 派生（PPTD 侧 L+透明度语义）在投影期物化为显式 areaStyle.color（含渐变）直写；stack value/percent/stream → adapter 或 v1 具名拒绝",
+      "renderContract": "原生：单层面积图（默认 0.25 透明或显式 areaStyle.color/linear gradient）；stack（含 stream 流图）无。负责层：单层 native；stack/stream adapter 自渲染",
+      "editContract": "草案：VisualCommand；原生无 area 结构化开关（JSON 逃逸舱）",
+      "roundTripContract": "areaStyle 键 round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 面积填充可观察（E1 截图绿色面积层）",
+      "failureCode": "PPTD-E013（收窄词表外值具名拒绝）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.scatter",
+      "family": "chart",
+      "pptdPath": "pptd/v2 ScatterSeries（marker 不可为 false、dataFilter、marker.fill 优先链）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=scatter：marker/dataFilter；混排约束随 chart.typeMixing）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:499-531（纯 value-x 支路：[x,y]、symbolSize 标量、itemStyle.color 按 series、niceTicks 数值刻度）,:499（类目存在时 scatter 不绘制——E3 mix-bar-scatter 实证 0 circle）。E1 c2 实测：7 点、r=8（symbolSize 16/2）、数值 x 刻度命中",
+      "importContract": "草案：data → [[x,y]…]；marker.fill 优先链在投影期落到 series itemStyle.color；dataFilter 投影期应用后写数组；PPTD \"marker 不可为 false\" 与原生恒画兼容",
+      "renderContract": "原生：纯散点图（统一点径、按 series 着色、opacity 0.85）；per-point fill/size 无；与类目图混排时静默不渲染。负责层 native renderer（纯散点）+ adapter（dataFilter 投影期过滤）",
+      "editContract": "草案：VisualCommand；原生无 scatter 结构化面板（panels.ts:1249 仅 pie/cartesian 分支）",
+      "roundTripContract": "scatter 各键 round-trip 存活（E1）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 散点位置/颜色可观察（E1 截图）",
+      "failureCode": "PPTD-E013（非法值；混排违规 PPTD-E014）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/cartesian-mix/screenshot.png",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.bubble",
+      "family": "chart",
+      "pptdPath": "pptd/v2 BubbleSeries（size 通道、sizeScale linear/sqrt/log、sizeRange、dataFilter）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=bubble：size 通道/sizeScale/sizeRange）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:521（symbolSize 仅经 num() 读标量，数组→默认 10）；E3 bubble case 实测：data 第三维忽略、symbolSize:[8,40] 时 4 点半径全为 5（默认值）——无 per-point 大小通道",
+      "importContract": "草案：encode.size + sizeScale linear/sqrt/log + sizeRange → adapter 逐点半径映射；dataFilter 投影期应用",
+      "renderContract": "无原生气泡渲染；adapter 自渲染（散点几何 + per-point 半径，svg 元素投影 seam）。负责层 adapter",
+      "editContract": "草案：VisualCommand → reproject（重新生成 svg markup）",
+      "roundTripContract": "size 通道数据存 canonical；option 层数值数组 round-trip 存活（E3 loadDoc 后可 serialize）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 气泡面积映射可观察（adapter 渲染确定性由 GD-4d 双跑签发）",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.candlestick",
+      "family": "chart",
+      "pptdPath": "pptd/v2 CandlestickSeries（encode.open 决定 OHLC/HLC；upBars/downBars/wickStyle；日期列类目处理）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=candlestick：OHLC encode/upBars/downBars/wickStyle）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 candlestick reader；E3 candlestick case 实测：0 rect/path/circle 数据图形（仅轴线+刻度），且 validate 零报告（series 键全在基础词表内——notes.md §4 风险 1 方向二）",
+      "importContract": "草案：encode.open 有无决定 OHLC/HLC（PPTD validator 强制）；upBars/downBars/wickStyle → adapter 渲染参数；日期列 → 类目字符串",
+      "renderContract": "无原生渲染；adapter 自绘 OHLC 实体/影线、up/down 双色（svg 元素投影）；日期列类目化在投影期完成。负责层 adapter",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "OHLC 数据与样式存 canonical；option 层任意嵌套 round-trip 存活（E4 _pptd.candlestick）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG K 线实体/影线/涨跌色可观察",
+      "failureCode": "PPTD-E014（OHLC 数据结构/encode 违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.pie",
+      "family": "chart",
+      "pptdPath": "pptd/v2 PieSeries（单 series 独占；innerRadius donut、startAngle 顺时针、fill 数组按片循环）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=pie：innerRadius/startAngle/fill 数组；startAngle=90° native，≠90° adapter renderer）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f kernel/src/charts.ts:634-681（renderPie：单 series、radius 数组 donut、-π/2 起顺时针、option.color 按片循环、itemStyle.borderColor/Width、{b}/{c}/{d} 标签+引出线）,:127,353（isPie 独占短路，E3 mix-pie-bar 实证 bar 静默丢弃）；startAngle 固定——E2 probe startangle-ignored：0 vs 180 渲染逐字节相同。E2 实测：4 弧/按片色/描边/标签/donut 内弧/片名图例全命中",
+      "importContract": "草案：innerRadius → radius:[\"i%\",\"o%\"]；fill 数组 → option.color（按片循环原生语义一致）；border → itemStyle.borderColor/Width；startAngle=90° 直写（缺省一致），≠90° v1 具名拒绝或 adapter；单 series 独占由 PPTD validator 强制（不依赖 Bento 的静默短路）。冻结裁决（C20）：不收窄——startAngle=90° native 承载，≠90° 走 adapter chart renderer",
+      "renderContract": "原生：单 pie 独占、donut innerRadius、按片调色板、分隔描边、外侧标签+引出线、片名图例；startAngle 不可配（固定 12 点）、多 pie/嵌套无。负责层：startAngle 恒 90°（12 点）时 native；可配 startAngle 需 adapter 自渲染。冻结裁决（C20）：hybrid——缺省 90° native，其余 adapter chart renderer",
+      "editContract": "草案：片名/值/颜色/增删经 VisualCommand（原生 pie 面板 panels.ts:1446-1492 可作交互参考）",
+      "roundTripContract": "pie 各键 round-trip 存活（E2 fieldSurvival 10/10）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 片角/颜色/标签/图例可观察（E2 截图）",
+      "failureCode": "PPTD-E014（多 series 结构违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/pie-donut.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/pie-donut/evidence.json",
+        "spikes/bento-static-closure/chart/results/pie-donut/screenshot.png",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.radar",
+      "family": "chart",
+      "pptdPath": "pptd/v2 RadarSeries（多 series 共享 spoke；encode.category 必须同列）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=radar：多 series 共享 spoke）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 radar reader；E3 radar case 实测：0 数据图形，option.radar 被 validate 标记 chart-key-ignored",
+      "importContract": "草案：encode.category 必须同列（PPTD validator）；spokeAxis 配置 → adapter 渲染参数",
+      "renderContract": "无原生渲染；adapter 自绘 spoke 网格+多 series 多边形（svg 元素投影，共享 spoke 轴）。负责层 adapter",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "radar 语义存 canonical；option 层 radar 键 round-trip 存活（E4）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 雷达多边形/spoke 网格可观察",
+      "failureCode": "PPTD-E014（encode.category 不同列）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.waterfall",
+      "family": "chart",
+      "pptdPath": "pptd/v2 WaterfallSeries（isTotal bool 列；totalBars/increaseBars/decreaseBars 三色映射；TotalMismatch 校验）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=waterfall：isTotal 列/三色映射）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 stack reader（E3 stack-bars 死证：两组柱 x=78.26/126 并排）；E3 waterfall case 实测：helper 透明柱方案退化为 8 柱并排 + y 轴负刻度——原生无法表达浮动柱",
+      "importContract": "草案：isTotal bool 列 + TotalMismatch 校验由 PPTD validator；totalBars/increaseBars/decreaseBars 三色 → adapter 渲染参数",
+      "renderContract": "无原生渲染且 stack 技巧不成立；adapter 自绘浮动柱 + isTotal 三色映射（svg 元素投影）。负责层 adapter",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "瀑布语义（isTotal 列/三色）存 canonical；option 层嵌套 round-trip 存活（E4 _pptd.waterfall）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 浮动柱/三色可观察",
+      "failureCode": "PPTD-E014（TotalMismatch）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.heatmap",
+      "family": "chart",
+      "pptdPath": "pptd/v2 HeatmapSeries（colorScheme 端点插值、colorScale linear/diverging、colorbar 替代 legend）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=heatmap：colorScheme/colorScale/colorbar）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 heatmap reader；E3 heatmap case 实测：0 数据图形，option.visualMap 被 validate 标记；附带发现 yAxis.type:\"category\" 被当 value 轴（类目 r1/r2 标签丢失）",
+      "importContract": "草案：colorScheme 端点插值/colorScale linear/diverging → adapter 色带查找表；行列类目直映射网格坐标；colorbar 替代 legend 由 adapter 绘制",
+      "renderContract": "无原生渲染；adapter 自绘网格 rect + colorScheme 端点插值色带 + colorbar（svg 元素投影）。负责层 adapter",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "矩阵数据存 canonical；option 层 visualMap 等键 round-trip 存活（E4）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 网格色块/colorbar 可观察",
+      "failureCode": "PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.treemap",
+      "family": "chart",
+      "pptdPath": "pptd/v2 TreemapSeries（parent 层级多根、levels、fill 逐层 HSL.L-10% 派生）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=treemap：parent 层级/levels；fill 逐层派生物化）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 treemap reader；E3 treemap case 实测：0 数据图形且 validate 零报告（series 键全在基础词表——静默忽略双盲区，notes.md §4 风险 1）",
+      "importContract": "草案：parent 层级多根/levels 由 PPTD validator + 投影处理；fill 逐层 HSL.L-10% 派生在投影期物化为显式颜色",
+      "renderContract": "无原生渲染；adapter 需 squarified 布局 + 层级矩形 + 标签（svg 元素投影）。负责层 adapter（成本大）",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "层级数据存 canonical；option 层嵌套 round-trip 存活（E4 _pptd.treemap）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 层级矩形/派生色可观察",
+      "failureCode": "PPTD-E014（parent 层级结构违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.sunburst",
+      "family": "chart",
+      "pptdPath": "pptd/v2 SunburstSeries（parent 层级、levels、fill 按顶层节点循环）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=sunburst：parent 层级/levels）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 sunburst reader；E3 sunburst case 实测：0 数据图形且 validate 零报告（同 treemap 双盲区）",
+      "importContract": "草案：parent 层级/levels 校验；fill 按顶层节点循环在投影期物化",
+      "renderContract": "无原生渲染；adapter 需多层弧布局（svg 元素投影）。负责层 adapter（成本大）",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "层级数据存 canonical；option 层嵌套 round-trip 存活（E4 _pptd.sunburst）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 多层弧/顶层循环色可观察",
+      "failureCode": "PPTD-E014（parent 层级结构违规）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.sankey",
+      "family": "chart",
+      "pptdPath": "pptd/v2 SankeySeries（source/target/flow DAG 约束、nodeAlign、fill 拓扑序循环/按名映射）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.series[]（type=sankey：source/target/flow DAG/nodeAlign）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/charts.ts 无 sankey reader；E3 sankey case 实测：0 数据图形，series[0].links 被 validate 标记 chart-key-ignored",
+      "importContract": "草案：source/target/flow DAG 约束（引用存在/无环）由 PPTD validator；nodeAlign、fill 拓扑序循环/按名映射 → adapter 渲染参数",
+      "renderContract": "无原生渲染；adapter 需 DAG 布局 + 流带贝塞尔（svg 元素投影）。负责层 adapter（成本大）",
+      "editContract": "草案：VisualCommand → reproject",
+      "roundTripContract": "DAG 数据存 canonical；option 层嵌套 round-trip 存活（E4 _pptd.sankey）。option 为自由纯 JSON：loadDoc 路径不过 sanitizer（parseDoc 仅 JSON.parse+format 检查，model.ts:1067-1085），serialize→loadDoc→serialize 三阶段 canonical hash 全等（E4 roundTrip loadedEqualsRoundTrip/roundTripEqualsReloaded=true）；clipboard/CRDT 摄入的 chartOption 检查无键白名单、仅纯 JSON 边界（深度≤12/节点≤20000，untrusted.ts:288-308,:98-99），失败粒度为整个 option。",
+      "exportContract": "草案：PNG 节点/流带可观察",
+      "failureCode": "PPTD-E014（DAG 引用缺失/环）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/type-vocab.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/option-storage.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/results/option-storage/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "chart.palette",
+      "family": "chart",
+      "pptdPath": "pptd/v2 §1 3.1 Series 主体色优先级链第 3 级（Theme.colors 循环）+ §5.2 Color Mechanism；PPTD 无独立 palette 字段，三级来源为原生语义",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "elements[].chart.palette（v4 新增：import 期物化的颜色循环字面值数组）",
+      "implementation": "adapter",
+      "vendorEvidence": "813c71f kernel/src/model.ts:398-399,609-621,668-677（theme.chartPalette 显式声明 + deriveChartPalette(accent) 派生 6 色）+ kernel/src/charts.ts:80,198（option.color 数组优先、引擎兜底 PALETTE 8 色）。实测：cartesian-mix/pie-donut 的 option.color 显式数组按序循环命中；accent 派生路径仅静态锚点（chart/notes.md §2 palette、§6 候选行缺口）",
+      "importContract": "三级来源 theme.chartPalette → deriveChartPalette(accent) → option.color，import 期物化为字面值颜色数组落 elements[].chart.palette（$ref 随 C24 已解析）；运行期不联动",
+      "renderContract": "adapter：物化 palette 按 series 序循环设色；native option.color 通道与 adapter chart renderer 消费同一字面值数组",
+      "editContract": "草案：palette 逐色编辑经 VisualCommand（GD-4b 新增 setChartPalette）；series 取色随 palette 循环重投影",
+      "roundTripContract": "物化字面值数组 serialize/load 逐字存活（option.color 实测 cartesian-mix/pie-donut 存活）",
+      "exportContract": "草案：断网 PNG 中 series 颜色按物化 palette 可观察",
+      "failureCode": "PPTD-E013（palette 内非法颜色值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/chart/fixtures/cartesian-mix.fixture.mjs",
+        "spikes/bento-static-closure/chart/fixtures/pie-donut.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/chart/results/cartesian-mix/evidence.json",
+        "spikes/bento-static-closure/chart/results/pie-donut/evidence.json",
+        "spikes/bento-static-closure/chart/results/type-vocab/evidence.json",
+        "spikes/bento-static-closure/chart/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "fill.solid",
+      "family": "fill",
+      "pptdPath": "pptd/v2 SolidFill（宿主：Page.background、Shape/Icon/Table/Cell.fill、Chart.fill 外框）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fill 字段 SolidFill（background/elements[].fill/table cell/chart 外框）",
+      "implementation": "native",
+      "vendorEvidence": "813c71f slides/src/model.ts:160-170（shape fill）+327-328（slide.background）；render.ts:372（shapeSvg fill 属性）+868-875（cssColor）；untrusted.ts:141-147（paint 字符白名单）+159-160（允许本地 url(#…) paint 引用）+394-401（REQUIRED_ELEMENT_KEYS：shape 需 shape+fill）。实测 E1：fill #1E88E5 等四阶段存活并渲染、HEX8 alpha 正确；E4：fill url(#nowhere) 本地引用 sanitizer 放行但不可解析（无 defs，截图只剩白描边）；E2 sanitizer-paste：敌意 fill 致 shape 必要键缺失→整元素丢弃（addedCount=2 而非 3）",
+      "importContract": "草案：SolidFill → fill '#rrggbb[aa]' 直映射（本 family 实测宿主：shape.fill、slide.background；table/cell/chart 宿主字段以对应 family spike 为准）；icon 宿主是 svg markup 内填充，非 fill 字段",
+      "renderContract": "实测 E1：SVG fill 属性/slide style.background 渲染，截图目验。负责层：native renderer",
+      "editContract": "草案：原生面板 Fill 色（HEX6 color input + colorAlpha）；VisualCommand 无 setFill → GD-4b 新增",
+      "roundTripContract": "实测 E1：fill 串 serialize→loadDoc→serialize 原值存活（含 HEX8）",
+      "exportContract": "草案：填充色在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（非法 paint 串）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs",
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/fill-image-bg.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/results/fill-image-bg/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "fill.gradientLinear",
+      "family": "fill",
+      "pptdPath": "pptd/v2 GradientFill linear（angle [0,360) 顺时针，0=左→右；stops≥2；宿主含 TextContent.gradient）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fill GradientFill linear（import 期 (pptd+90)%360 角度换算）",
+      "implementation": "hybrid",
+      "vendorEvidence": "813c71f slides/src/model.ts:126+147-152（fillGradient/colorGradient GradientFill 仅 linear，CSS 角度惯例）；render.ts:207-243（gradientLineCoords CSS 惯例 + linearGradient 物化）+989-997（text colorGradient background-clip:text）；panels.ts:1107-1180（渐变编辑 UI）；untrusted.ts:232-241（gradient 校验）。实测 E1：fillGradient angle 90 → SVG linearGradient (0,0.5)→(1,0.5) 左→右；angle 0 → (0.5,1)→(0.5,0) 底→顶——**PPTD 与 CSS 角度惯例差 90° 实证**；slide.background 亦可持 linear-gradient() CSS 串；E2 sanitizer-paste：gradient stop 含 '\"' 破字符 → stops 整组丢 → fillGradient 丢键",
+      "importContract": "草案：GradientFill linear → fillGradient{angle:(pptd+90)%360, stops}——**必须 +90° 转换**（PPTD 0=左→右顺时针 vs CSS 0=底→顶，E1 坐标对实证）；packages/editor-bento/src/project.ts:52-57 假设 3 声称两惯例一致是错的（见 notes.md 发现 1）。原生宿主：shape.fillGradient、text.colorGradient、background（CSS 串）；table/cell/chart/icon 无渐变宿主 → adapter",
+      "renderContract": "实测 E1：shape→SVG linearGradient 物化（stops offset/color 原值）；text→background-clip:text；background→CSS 串 computed 命中。负责层：native（已列宿主）/ adapter（其余宿主）",
+      "editContract": "草案：原生面板渐变编辑（angle/stops）存在（直写 Store 绕过 kernel）；VisualCommand 无 → GD-4b 新增",
+      "roundTripContract": "实测 E1：fillGradient angle/stops serialize→loadDoc→serialize 原值存活",
+      "exportContract": "草案：渐变在最终 PNG 可观察（E1 截图已证实）",
+      "failureCode": "PPTD-E013（stops<2/非法 stop）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "fill.gradientRadial",
+      "family": "fill",
+      "pptdPath": "pptd/v2 GradientFill radial（stops≥2）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fill GradientFill radial（v4 BentoFill 扩展；svg 载具渲染）",
+      "implementation": "hybrid",
+      "vendorEvidence": "无原生 radial 字段——813c71f slides/src/model.ts:147-152（GradientFill 仅 linear）；render.ts:553（SVG_TAGS 白名单含 radialgradient——svg 元素 markup 内可达）。实测 E1：svg 元素 markup 内 radialGradient 正常渲染（rect fill url(#rg1)，stops 原值存活，round-trip 保持）",
+      "importContract": "草案：无原生字段宿主 → hybrid：投影期生成 svg 元素（markup=rect+radialGradient）作载具（中成本）；background 宿主候选 radial-gradient() CSS 串（语法可行但未实测，GD-4b 验证）",
+      "renderContract": "实测 E1：svg markup 内 radialGradient 经 native svg 元素渲染。负责层：adapter（投影生成载具）+ native（svg 元素渲染）",
+      "editContract": "草案：无原生 radial 编辑 UI；adapter 面板区（角度/stops 编辑写 canonical 后 reproject）",
+      "roundTripContract": "实测 E1：svg markup（含 radialGradient defs）serialize→loadDoc→serialize 存活",
+      "exportContract": "草案：radial 渐变在最终 PNG 可观察",
+      "failureCode": "PPTD-E013（stops<2/非法 stop）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    },
+    {
+      "capabilityId": "fill.image",
+      "family": "fill",
+      "pptdPath": "pptd/v2 ImageFill（src/fit/crop/opacity；crop→fit 次序；宿主：Page.background、Shape/Table/Cell/Chart fill）",
+      "targetState": "target",
+      "profileState": "active",
+      "activeSince": "v1",
+      "canonicalPath": "宿主 fill ImageFill（v4 BentoFill 扩展；全宿主 background+shape/table/cell/chart；background 可 CSS 串、shape 等 frame 内 adapter DOM，路线 GD-4b 投影设计定）",
+      "implementation": "adapter",
+      "vendorEvidence": "无原生 ImageFill 字段。实测 E1：假想 fillImage 键 validate 报 unknown-key warning 但 loadDoc round-trip 存活（浅校验）；E4：slide.background `#0B3D91 url(\"data:image/svg+xml,...\")` CSS 串渲染（computed backgroundImage 带 data URI，截图全红画布）；E4 paste probe：url() 背景经 clipboard 路径被剥为 <dropped>（untrusted.ts:449）、纯色存活；E4：shape fill url(#nowhere) 证实 paint 引用不解析外部 src。image 元素原生 src/fit + a1a2 patch _crop 可复用",
+      "importContract": "草案：ImageFill → adapter：Page.background 宿主写 `url(\"<resolved>\")` CSS 串（实测可行）或投影垫底 image 元素复用 fit/_crop（小成本）；shape/table/cell/chart 宿主需 frame 内 adapter DOM（中成本）；crop→fit 次序由 adapter 保证。importer 必须走 loadDoc 路径——clipboard 路径剥 url()（实测）。冻结裁决（C26）：全宿主承诺（background + shape/table/cell/chart）；background 可用 CSS 串，shape 等用 frame 内 adapter DOM——路线在 GD-4b 投影设计定",
+      "renderContract": "实测 E4：background url(data:) 经 native renderer 渲染（截图目验）；shape 等宿主无原生渲染路径（fill url(#nowhere) 不解析）。负责层：adapter（native 仅 background 串透传）",
+      "editContract": "草案：无原生 fill-image 编辑 UI；adapter 面板区（a1a2 buildImageProps 先例）+ setAsset/setImageCrop VisualCommand 部分可复用（GD-4b 扩展）",
+      "roundTripContract": "实测 E4：background url() 串经 loadDoc/serialize 原值存活；假想 fillImage 键存活但无语义——adapter 私有字段只能投影期派生（见 notes.md 发现 3）",
+      "exportContract": "草案：断网导出时图片填充以 data-URI 内联可观察；外部 src 需资产解析与缺失具名错误（GD-4d）",
+      "failureCode": "PPTD-E005（资产缺失）/PPTD-E013（非法值）",
+      "fixtureRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/canvas-fill.fixture.mjs",
+        "spikes/bento-static-closure/fill-common-canvas/fixtures/fill-image-bg.fixture.mjs"
+      ],
+      "evidenceRefs": [
+        "spikes/bento-static-closure/fill-common-canvas/results/fill-image-bg/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/results/fill-image-bg/screenshot.png",
+        "spikes/bento-static-closure/fill-common-canvas/results/canvas-fill/evidence.json",
+        "spikes/bento-static-closure/fill-common-canvas/notes.md"
+      ]
+    }
+  ]
+}

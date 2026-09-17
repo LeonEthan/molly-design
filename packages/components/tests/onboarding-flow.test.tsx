@@ -1,0 +1,432 @@
+// @vitest-environment jsdom
+
+import React, { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { Provider, createStore, type Store } from 'jotai';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type {
+  AgentConfigId,
+  AgentConfigMeta,
+  LocalProjectId,
+  MachineId,
+  ProviderSetupTask,
+  WorkspaceId,
+} from '@molly/shared';
+
+const mocks = vi.hoisted(() => ({
+  getCliState: vi.fn(),
+  onCliState: vi.fn(),
+  selectLocalProjectDirectory: vi.fn(),
+  useVisibleLocalProjects: vi.fn(),
+}));
+
+vi.mock('../src/hooks/use-recoverable-convex-query', () => ({
+  usePublicConvexQuery: () => undefined,
+  useRecoverableConvexQuery: () => [],
+}));
+
+vi.mock('../src/hooks/use-authenticated-convex', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/hooks/use-authenticated-convex')>();
+  return {
+    ...actual,
+    useAuthenticatedConvex: () => ({ isAuthenticated: true, isLoading: false }),
+  };
+});
+
+vi.mock('../src/hooks/use-visible-local-projects', () => ({
+  useVisibleLocalProjects: mocks.useVisibleLocalProjects,
+}));
+
+import { runtimeAtom } from '../src/atoms/runtime';
+import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom } from '../src/atoms/workspace-context';
+import {
+  OnboardingOverlay,
+  resolveDesktopOnboardingPhase,
+} from '../src/components/onboarding/onboarding-overlay';
+import { getDesktopOnboardingSteps } from '../src/components/onboarding/onboarding-steps';
+import { ProjectsScreenView } from '../src/components/onboarding/screens/projects-screen';
+import { ProvidersScreenView } from '../src/components/onboarding/screens/providers-screen';
+import { SummaryScreen } from '../src/components/onboarding/screens/summary-screen';
+import { initI18n } from '../src/i18n';
+import { TestCloudPlatformProvider } from './test-platform';
+
+const workspaceId = 'workspace-1' as WorkspaceId;
+const machineId = 'machine-1' as MachineId;
+
+function installElectronWindowIpc() {
+  mocks.getCliState.mockReturnValue(new Promise(() => undefined));
+  mocks.onCliState.mockReturnValue(() => undefined);
+
+  Object.defineProperty(window, '__MOLLY_ELECTRON__', { configurable: true, value: true });
+  Object.defineProperty(window, 'ipc', {
+    configurable: true,
+    value: {
+      invoke: async (channel: string, ...args: unknown[]) => {
+        if (channel === 'cli.getState') return mocks.getCliState();
+        if (channel === 'localProjects.selectDirectory') {
+          return mocks.selectLocalProjectDirectory(...args);
+        }
+        throw new Error(`unexpected invoke ${channel}`);
+      },
+      on: (channel: string, listener: (payload: unknown) => void) => {
+        if (channel === 'cli.state') return mocks.onCliState(listener);
+        return () => {};
+      },
+      send: () => {},
+    },
+  });
+}
+
+function uninstallElectronWindowIpc() {
+  delete window.__MOLLY_ELECTRON__;
+  delete window.ipc;
+}
+
+function findButton(container: HTMLElement, label: string): HTMLButtonElement {
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
+    item.textContent?.includes(label)
+  );
+  if (!button) throw new Error(`Expected button containing "${label}"`);
+  return button;
+}
+
+describe('desktop onboarding flow', () => {
+  let root: Root | undefined;
+  let container: HTMLDivElement;
+  let store: Store;
+
+  beforeEach(async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    await initI18n('en');
+    localStorage.clear();
+    mocks.useVisibleLocalProjects.mockReturnValue({ projects: new Map() });
+    installElectronWindowIpc();
+
+    store = createStore();
+    store.set(currentWorkspaceIdAtom, workspaceId);
+    store.set(currentWorkspaceSlugAtom, 'workspace-1');
+    store.set(runtimeAtom, {
+      workspaceId,
+      workspaceSlug: 'workspace-1',
+      getMachineAcpBinaryProgress: () => null,
+      subscribeMachineAcpBinaryProgress: () => () => undefined,
+    } as never);
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root?.unmount());
+    container.remove();
+    document.body.innerHTML = '';
+    uninstallElectronWindowIpc();
+    vi.clearAllMocks();
+  });
+
+  it('renders the welcome step without waiting for the Electron CLI bootstrap', async () => {
+    await act(async () => {
+      root?.render(
+        <TestCloudPlatformProvider>
+          <Provider store={store}>
+            <OnboardingOverlay onCompleted={vi.fn()} />
+          </Provider>
+        </TestCloudPlatformProvider>
+      );
+    });
+
+    expect(container.textContent).toContain('Make an impression.');
+    expect(container.querySelector('img')).not.toBeNull();
+    expect(container.textContent).not.toContain('Preparing your workspace');
+    expect(mocks.getCliState).not.toHaveBeenCalled();
+  });
+
+  it('derives steps and repairs stale phases from platform capabilities', () => {
+    expect(getDesktopOnboardingSteps({ cloudAccount: false, multiWorkspace: false })).toEqual([
+      'ceremony',
+      'providers',
+      'projects',
+      'firstTask',
+    ]);
+    expect(getDesktopOnboardingSteps({ cloudAccount: true, multiWorkspace: true })).toEqual([
+      'ceremony',
+      'login',
+      'workspace',
+      'providers',
+      'projects',
+      'firstTask',
+    ]);
+    expect(
+      resolveDesktopOnboardingPhase('login', {
+        cloudAccount: false,
+        multiWorkspace: false,
+        hasAgent: false,
+        hasProject: false,
+      })
+    ).toBe('providers');
+    expect(
+      resolveDesktopOnboardingPhase('firstTask', {
+        cloudAccount: false,
+        multiWorkspace: false,
+        hasAgent: true,
+        hasProject: false,
+      })
+    ).toBe('projects');
+  });
+
+  it('returns the exact selected local project', async () => {
+    const onComplete = vi.fn();
+    const selectedMachine = 'machine-2' as MachineId;
+    const selectedProject = 'project-2' as LocalProjectId;
+    await act(async () => {
+      root?.render(
+        <ProjectsScreenView
+          local={[
+            {
+              key: `${machineId}:project-1`,
+              machineId,
+              localProjectId: 'project-1' as LocalProjectId,
+              name: 'first',
+              detail: '/first',
+            },
+            {
+              key: `${selectedMachine}:${selectedProject}`,
+              machineId: selectedMachine,
+              localProjectId: selectedProject,
+              name: 'selected',
+              detail: '/selected',
+            },
+          ]}
+          github={[]}
+          importing={false}
+          connectingGitHub={false}
+          canImportLocal
+          canConnectGitHub={false}
+          loadingRepos={false}
+          selectedProjectKey={`local:${selectedMachine}:${selectedProject}`}
+          onAddLocal={vi.fn()}
+          onConnectGitHub={vi.fn()}
+          onBack={vi.fn()}
+          onSkip={vi.fn()}
+          onComplete={onComplete}
+        />
+      );
+    });
+
+    await act(async () => {
+      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onComplete).toHaveBeenCalledWith({
+      kind: 'local',
+      machineId: selectedMachine,
+      localProjectId: selectedProject,
+      name: 'selected',
+    });
+  });
+
+  it('keeps a pending setup distinct from a completed AgentConfig', async () => {
+    const onNext = vi.fn();
+    const setup: ProviderSetupTask = {
+      v: 1,
+      id: 'setup-1' as ProviderSetupTask['id'],
+      machineId,
+      config: {
+        id: 'setup-1' as ProviderSetupTask['id'],
+        machineId,
+        name: 'Codex',
+        description: undefined,
+        cliType: 'builtin',
+        agentType: 'codex',
+        env: {},
+        prompt: '',
+      },
+      status: 'preparing-runtime',
+      attempt: 1,
+      createdAt: 10,
+      updatedAt: 20,
+    };
+
+    await act(async () => {
+      root?.render(
+        <ProvidersScreenView
+          configs={[]}
+          setups={[setup]}
+          testStatuses={{}}
+          selectedProviderId={setup.id}
+          noLocalMachine={false}
+          localMachineId={machineId}
+          onEdit={vi.fn()}
+          onTest={vi.fn()}
+          onDelete={vi.fn()}
+          onAdd={vi.fn()}
+          onBack={vi.fn()}
+          onSkip={vi.fn()}
+          onNext={onNext}
+        />
+      );
+    });
+
+    expect(findButton(container, 'Working').disabled).toBe(true);
+
+    await act(async () => {
+      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onNext).toHaveBeenCalledWith({
+      kind: 'providerSetup',
+      providerSetupId: setup.id,
+      agentName: setup.config.name,
+    });
+  });
+
+  it('continues with an AgentConfig only after it is published', async () => {
+    const onNext = vi.fn();
+    const config: AgentConfigMeta = {
+      id: 'config-ready' as AgentConfigId,
+      machineId,
+      name: 'Codex',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'codex',
+      env: {},
+    };
+
+    await act(async () => {
+      root?.render(
+        <ProvidersScreenView
+          configs={[config]}
+          testStatuses={{}}
+          selectedProviderId={config.id}
+          noLocalMachine={false}
+          localMachineId={machineId}
+          onEdit={vi.fn()}
+          onTest={vi.fn()}
+          onDelete={vi.fn()}
+          onAdd={vi.fn()}
+          onBack={vi.fn()}
+          onSkip={vi.fn()}
+          onNext={onNext}
+        />
+      );
+    });
+
+    await act(async () => {
+      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onNext).toHaveBeenCalledWith({
+      kind: 'agentConfig',
+      agentConfigId: config.id,
+      agentName: config.name,
+    });
+  });
+
+  it('keeps provider activity compact in the badge and progress button', async () => {
+    const config: AgentConfigMeta = {
+      id: 'config-progress' as AgentConfigId,
+      machineId,
+      name: 'Codex',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'codex',
+      env: {},
+    };
+
+    await act(async () => {
+      root?.render(
+        <ProvidersScreenView
+          configs={[config]}
+          testStatuses={{}}
+          testActivities={{ [config.id]: { phase: 'downloading-runtime', percent: 64 } }}
+          noLocalMachine={false}
+          onEdit={vi.fn()}
+          onTest={vi.fn()}
+          onDelete={vi.fn()}
+          onAdd={vi.fn()}
+          onBack={vi.fn()}
+          onSkip={vi.fn()}
+          onNext={vi.fn()}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain('Downloading');
+    expect(findButton(container, '64%').disabled).toBe(true);
+    expect(container.textContent).not.toContain('Downloading the agent runtime');
+  });
+
+  it('keeps the latest provider failure reason on the failed badge', async () => {
+    const config: AgentConfigMeta = {
+      id: 'config-failed' as AgentConfigId,
+      machineId,
+      name: 'Codex',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'codex',
+      env: {},
+    };
+
+    await act(async () => {
+      root?.render(
+        <ProvidersScreenView
+          configs={[config]}
+          testStatuses={{ [config.id]: 'failed' }}
+          failureReasons={{ [config.id]: 'The API key was rejected.' }}
+          noLocalMachine={false}
+          onEdit={vi.fn()}
+          onTest={vi.fn()}
+          onDelete={vi.fn()}
+          onAdd={vi.fn()}
+          onBack={vi.fn()}
+          onSkip={vi.fn()}
+          onNext={vi.fn()}
+        />
+      );
+    });
+
+    expect(
+      container.querySelector('[aria-label="Failed: The API key was rejected."]')
+    ).not.toBeNull();
+  });
+
+  it('keeps failed Agent setup retryable from Summary with investigation detail', async () => {
+    const retry = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error('machine is offline'))
+      .mockResolvedValueOnce(undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await act(async () => {
+      root?.render(
+        <SummaryScreen
+          agentState="failed"
+          agentName="Codex"
+          agentFailureCode="runtime-install-failed"
+          onBack={vi.fn()}
+          onComplete={vi.fn()}
+          onRetryAgent={retry}
+        />
+      );
+    });
+
+    expect(container.textContent).toContain(
+      'Molly could not download the Agent runtime. Check your connection and try again.'
+    );
+    expect(container.textContent).not.toContain('runtime-install-failed');
+    await act(async () => {
+      findButton(container, 'Retry').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('machine is offline');
+    expect(consoleError).toHaveBeenCalledWith(
+      '[onboarding] Failed to retry Agent setup from Summary:',
+      expect.any(Error)
+    );
+    expect(findButton(container, 'Retry').disabled).toBe(false);
+
+    await act(async () => {
+      findButton(container, 'Retry').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(retry).toHaveBeenCalledTimes(2);
+  });
+});

@@ -1,0 +1,641 @@
+diff --git a/slides/src/a1a2/boot.ts b/slides/src/a1a2/boot.ts
+new file mode 100644
+index 0000000..fb1dc59
+--- /dev/null
++++ b/slides/src/a1a2/boot.ts
+@@ -0,0 +1,87 @@
++// A1a-2 composition root（docs/a1a-2-acceptance.md §3/§5）。
++// 页面以 ?ws=<id> 启动时接管 boot：从同源 test server 取 semantic BentoDocV4 +
++// 资产 dataURI 表，建 kernel + bridge（packages 源码拷入本目录 packages/），
++// projectToBentoNative 单向投影为 native 视图文档。semantic kernel 是 canonical
++// 唯一权威；永不 native→semantic 回写——成功命令后从 semantic snapshot 重新投影。
++
++import {
++  BentoVisualBridge,
++  createRecordingVisualDocumentKernel,
++  type RecordingVisualDocumentKernel,
++} from './packages/editor-bento/src/bridge.ts'
++import { projectToBentoNative } from './packages/editor-bento/src/project.ts'
++import { injectTextParagraphNormalizationCss } from './packages/editor-bento/src/renderers/text.ts'
++import type { BentoDocV4 } from './packages/contracts/src/index.ts'
++
++export interface A1a2Session {
++  /** 投影后的 native 文档，交给 bootWith 建 Store。 */
++  readonly nativeDoc: unknown
++  readonly bridge: BentoVisualBridge
++  readonly kernel: RecordingVisualDocumentKernel
++  /** editorMode 建 Store 后回接，供 bridge 成功命令后的视图刷新。 */
++  attachStore(store: { replaceViewDoc(next: unknown): void }): void
++  /** 登记新资产字节（setAsset 前置）；key 为调用方算好的内容 sha256 hex。 */
++  registerAsset(key: string, dataUri: string): void
++  /** 保存 = semantic canonical JSON + 全量资产表 POST /ws/<id>/save。 */
++  save(): Promise<{ ok: boolean; error?: string }>
++}
++
++interface WorkspacePayload {
++  doc: BentoDocV4
++  assets: Record<string, string>
++}
++
++export async function bootA1a2Workspace(wsId: string): Promise<A1a2Session> {
++  // text.paragraphMargin 行：UA 1em 段距规范化（投影段落为 <p>，vendor
++  // sanitizeHtml 剥 inline style）。规则定义在项目侧 renderers/text.ts，此处
++  // 只做 host 装配调用（composition-root bound；patch 零语义）。
++  injectTextParagraphNormalizationCss()
++  const response = await fetch(`/ws/${encodeURIComponent(wsId)}`)
++  if (!response.ok) throw new Error(`workspace fetch failed: HTTP ${response.status}`)
++  const payload = (await response.json()) as WorkspacePayload
++
++  // 资产表：初始 workspace 资产 + 编辑期 registerAsset 新增；投影的唯一解析源。
++  const assetRegistry = new Map<string, string>(Object.entries(payload.assets))
++  const resolveAsset = (ref: string): string => {
++    const key = ref.startsWith('asset:') ? ref.slice('asset:'.length) : ref
++    const dataUri = assetRegistry.get(key)
++    if (dataUri === undefined) throw new Error(`unresolvable asset reference: ${ref}`)
++    return dataUri
++  }
++
++  const kernel = createRecordingVisualDocumentKernel(payload.doc)
++  let view: { replaceViewDoc(next: unknown): void } | null = null
++  const bridge = new BentoVisualBridge(kernel, (snapshot) => {
++    view?.replaceViewDoc(
++      projectToBentoNative(JSON.parse(snapshot) as BentoDocV4, { resolveAsset }),
++    )
++  })
++
++  return {
++    nativeDoc: projectToBentoNative(payload.doc, { resolveAsset }),
++    bridge,
++    kernel,
++    attachStore(store) {
++      view = store
++    },
++    registerAsset(key, dataUri) {
++      assetRegistry.set(key, dataUri)
++    },
++    async save() {
++      const reply = await fetch(`/ws/${encodeURIComponent(wsId)}/save`, {
++        method: 'POST',
++        headers: { 'content-type': 'application/json' },
++        body: JSON.stringify({
++          doc: kernel.snapshot(),
++          assets: Object.fromEntries(assetRegistry),
++        }),
++      })
++      const result = (await reply.json()) as { ok: boolean; error?: string }
++      if (reply.ok && result.ok) {
++        // 已保存指示：最小形态，标题前缀。
++        document.title = `✓ ${document.title.replace(/^✓ /, '')}`
++      }
++      return result
++    },
++  }
++}
+diff --git a/slides/src/editor/canvas.ts b/slides/src/editor/canvas.ts
+index a5a1c4b..0a760cd 100644
+--- a/slides/src/editor/canvas.ts
++++ b/slides/src/editor/canvas.ts
+@@ -20,6 +20,9 @@
+ type DrawKind = 'line' | 'path' | 'connector' | 'free' | 'poly'
+ import { CommentsUI } from './comments'
+ import type { Peer } from '../sync/session'
++import type { BentoVisualBridge } from '../a1a2/packages/editor-bento/src/bridge.ts'
++import type { VisualCommandV4 } from '../a1a2/packages/contracts/src/index.ts'
++import { frameGestureCommands } from '../a1a2/packages/editor-bento/src/ui/gestures.ts'
+ 
+ export class SlideCanvas {
+   private stage: HTMLElement
+@@ -42,6 +44,7 @@
+   /** startTextEdit swapped the rendered form for raw source (a field or a
+    *  formula), so commit must re-render even if the text is unchanged. */
+   private editingShowedRaw = false
++  private textEditCancelled = false
+   /** when editing a table cell, which cell (else null → text element edit) */
+   private editingCell: { r: number; c: number } | null = null
+   /** a repaint arrived (e.g. a remote collab op) while an inline edit was in
+@@ -61,6 +64,7 @@
+   constructor(
+     private wrap: HTMLElement,
+     private store: Store,
++    private bridge: BentoVisualBridge,
+   ) {
+     this.scroller = document.createElement('div')
+     this.scroller.className = 'ed-scroll'
+@@ -976,17 +980,15 @@
+         rotation: rotation ? Math.round(parseFloat(rotation[1]) * 10) / 10 : 0,
+       }
+     })
+-    this.store.commit(() => {
+-      for (const f of frames) {
+-        const el = this.store.element(f.id)
+-        if (!el) continue
+-        el.x = Math.round(f.x * 10) / 10
+-        el.y = Math.round(f.y * 10) / 10
+-        el.w = Math.round(f.w * 10) / 10
+-        el.h = Math.round(f.h * 10) / 10
+-        el.rotation = f.rotation
+-      }
+-    })
++    // C2-B #13：终态帧手势只经 VisualCommand——bounds 变更 → setBounds、
++    // rotation 变更 → setRotation（Moveable rotate 手柄接管，common.rotation
++    // 行）；未变/同值帧零命令（transient 不落 canonical）。手势前状态读
++    // store.element（拖拽期不改模型，commitFrames 时仍是手势前值）。
++    const commands = frameGestureCommands(frames, (id) => {
++      const el = this.store.element(id)
++      return el ? { bounds: [el.x, el.y, el.w, el.h] as [number, number, number, number], rotation: el.rotation } : undefined
++    })
++    if (commands.length > 0) this.bridge.dispatch(commands)
+   }
+ 
+   // --- selecto ----------------------------------------------------------------
+@@ -1047,6 +1053,7 @@
+     if (this.store.readOnly) return // live viewer — no inline editing
+     if (this.editing === node) return
+     this.commitTextEdit()
++    this.textEditCancelled = false
+     const inner = node.querySelector<HTMLElement>('.bento-text-inner')
+     if (!inner) return
+     // fields ({{page}} etc.) and math ($…$) render RESOLVED; while editing,
+@@ -1080,6 +1087,7 @@
+       ev.stopPropagation() // keep global shortcuts (Delete, arrows…) away
+       if (ev.key === 'Escape') {
+         ev.preventDefault()
++        this.textEditCancelled = true
+         this.commitTextEdit()
+         return
+       }
+@@ -1122,6 +1130,8 @@
+     if (!node) return
+     if (this.editingCell) { this.commitCellEdit(node); return }
+     const slideId = this.editingSlideId
++    const cancelled = this.textEditCancelled
++    this.textEditCancelled = false
+     this.editing = null
+     this.editingSlideId = null
+     this.onTextEditChange?.(undefined)
+@@ -1130,17 +1140,33 @@
+     node.classList.remove('bento-editing')
+     if (!inner || !id) return
+     inner.contentEditable = 'false'
+-    // drop the zero-width caret spacers autoformat leaves behind
+-    const html = sanitizeHtml(inner.innerHTML.replace(/\u200B/g, '').replace(/\\([*_~`-])/g, '$1'))
++    if (cancelled) {
++      // Escape 不提交：可见文字由 re-render 恢复到 canonical 状态。
++      this.editingShowedRaw = false
++      this.render()
++      this.flushPendingRender()
++      return
++    }
++    // A1a-2：semantic setText 用纯文本（v1 子集排除富文本）。native el.html 是
++    // escapeHtml(semantic text)，比较前用浏览器自身反转义，不引入第二份 escape 表。
++    const text = (inner.textContent ?? '').replace(/\u200B/g, '')
+     const grownH = Math.max(parseFloat(node.style.height) || 0, inner.scrollHeight)
+     const el = this.store.doc.slides
+       .find((slide) => slide.id === slideId)
+       ?.elements.find((element) => element.id === id)
+-    if (el && el.type === 'text' && (el.html !== html || grownH > el.h)) {
+-      this.store.commit(() => {
+-        el.html = html
+-        if (grownH > el.h) el.h = Math.ceil(grownH)
+-      })
++    const probe = document.createElement('div')
++    probe.innerHTML = el?.type === 'text' ? el.html : ''
++    const oldText = probe.textContent ?? ''
++    if (el && el.type === 'text' && (oldText !== text || grownH > el.h)) {
++      const commands: VisualCommandV4[] = [{ type: 'setText', targetId: id, text }]
++      if (grownH > el.h) {
++        commands.push({
++          type: 'setBounds',
++          targetId: id,
++          bounds: [el.x, el.y, el.w, Math.ceil(grownH)],
++        })
++      }
++      this.bridge.dispatch(commands)
+     } else if (this.editingShowedRaw) {
+       // Nothing changed, so there is no commit to re-render off the back of —
+       // but startTextEdit replaced the rendered formula (or {{page}} field)
+diff --git a/slides/src/editor/editor.ts b/slides/src/editor/editor.ts
+index 5494310..f90e0e8 100644
+--- a/slides/src/editor/editor.ts
++++ b/slides/src/editor/editor.ts
+@@ -34,6 +34,8 @@ import { injectFonts } from '../fonts'
+ import { appConfig } from '../../../kernel/src/app.ts'
+ import { disconnectOnline, joinFromDoc, mintCollab, mintInvite, onlineTransport, rotateKeys, sharingOn, startSharing, stopSharing } from '../sync/online'
+ import { lsGet, lsJson, lsSet } from '../../../kernel/src/storage.ts'
++import type { BentoVisualBridge } from '../a1a2/packages/editor-bento/src/bridge.ts'
++import { sealExitMessage } from '../a1a2/packages/editor-bento/src/bypass-seal.ts'
+ 
+ const i18nT = t
+
+@@ -85,6 +87,7 @@ export class Editor {
+   constructor(
+     private root: HTMLElement,
+     private store: Store,
++    private bridge: BentoVisualBridge,
+   ) {
+     this.build()
+     this.wireKeyboard()
+@@ -97,7 +100,10 @@ export class Editor {
+     window.addEventListener('beforeunload', (ev) => {
+       if (store.dirty) ev.preventDefault()
+     })
+-    this.wireAutosave()
++    // A1a-2 bypass seal (ticket #14): the adapted editor never opens IndexedDB
++    // — autosave/recovery/versions would put projected-store bytes on disk
++    // outside the committed canonical. Legacy builds (no bridge) keep autosave.
++    if (!this.bridge) this.wireAutosave()
+     this.wirePaste()
+     store.on('doc', () => this.syncLinkedCharts())
+     store.on('doc', () => this.syncConnectors())
+@@ -297,8 +303,8 @@ export class Editor {
+         this.toast(t('Up to date — v{v}', { v: APP_VERSION }))
+       }
+     }, 1500)
+-    const undoB = btn(ICONS.undo, '', () => this.store.undo(), t('Undo (⌘Z)'))
+-    const redoB = btn(ICONS.redo, '', () => this.store.redo(), t('Redo (⇧⌘Z)'))
++    const undoB = btn(ICONS.undo, '', () => this.bridge.undo(), t('Undo (⌘Z)'))
++    const redoB = btn(ICONS.redo, '', () => this.bridge.redo(), t('Redo (⇧⌘Z)'))
+     const saveB = btn(ICONS.save, t('Save'), () => this.save(false), canWriteInPlace()
+       ? t('Save — rewrite this file in place (⌘S)')
+       : t('Save — download an updated copy (⌘S). This browser can’t rewrite the open file.'))
+@@ -456,10 +462,11 @@ export class Editor {
+     })
+ 
+     this.restorePanelWidths()
+-    this.canvas = new SlideCanvas(canvasWrap, this.store)
++    this.canvas = new SlideCanvas(canvasWrap, this.store, this.bridge)
+     this.canvas.onCommentModeChange = (on) => commentB.classList.toggle('ed-btn-armed', on)
+     this.canvas.onSlideNav = (dir) => this.store.goToLinear(dir)
+-    this.panel = new PropsPanel(this.props, this.store)
++    if (this.bridge) this.props.hidden = true
++    else this.panel = new PropsPanel(this.props, this.store)
+ 
+     if (this.store.doc.collab?.role === 'reader') this.enterReaderMode()
+   }
+@@ -862,8 +868,23 @@ export class Editor {
+     }, 'slides')
+   }
+
++  /**
++   * A1a-2 bypass seal (ticket #14): in the adapted build these vendor exports
++   * would serialize the projected store to disk (serializeAuto +
++   * writeUpdatedFileAs) outside the committed canonical — refuse with a clean
++   * toast, never bytes, never an unhandled rejection. Shared by every
++   * copy/export action; the sanctioned export rebuilds from committed BentoDoc.
++   */
++  private a1a2SealedExport(label: string): boolean {
++    if (!this.bridge) return false
++    console.warn(`[a1a2-seal] ${sealExitMessage('native-export', label)}`)
++    this.toast(t('{label} is disabled in this build — the sanctioned export rebuilds from the committed document', { label }))
++    return true
++  }
++
+   /** A sealed hand-out: present-only player file, no editor, no live session. */
+   private async savePresentationPackage() {
++    if (this.a1a2SealedExport(t('Presentation package'))) return
+     const clone = JSON.parse(JSON.stringify(this.store.doc)) as import('../model').BentoDoc
+     clone.readonly = true
+     stripCollabSecrets(clone) // a sealed package must not join (or leak) the live room
+@@ -879,6 +900,7 @@ export class Editor {
+    *  key + writer PUBKEY (so the relay knows the room's writer) but drops the
+    *  writer PRIVATE key — the relay then rejects any op it tries to send. */
+   private async saveReaderCopy() {
++    if (this.a1a2SealedExport(t('Read-only copy'))) return
+     await this.goLive() // a viewer copy follows the live session — make sure there is one
+     const c = this.store.doc.collab
+     if (!c?.room || !c.key) {
+@@ -902,6 +924,7 @@ export class Editor {
+    *  chain — so the owner can later revoke this invite (cutting off every copy
+    *  descended from it) or a single member key, without re-keying the room. */
+   private async saveEditorCopy() {
++    if (this.a1a2SealedExport(t('Editor copy'))) return
+     await this.goLive()
+     const c = this.store.doc.collab
+     if (!(c?.room && c.key && c.v === 2 && c.ownerPriv)) {
+@@ -1054,6 +1077,7 @@ export class Editor {
+   }
+-
++
+   private async saveAsNewDeck() {
++    if (this.a1a2SealedExport(t('New deck'))) return
+     const clone = JSON.parse(JSON.stringify(this.store.doc)) as import('../model').BentoDoc
+     clone.docId = newDocId()
+     clone.collab = await mintCollab()
+@@ -1063,6 +1087,7 @@ export class Editor {
+   }
+-
++
+   private async saveAsTemplate() {
++    if (this.a1a2SealedExport(t('Template copy'))) return
+     const clone = JSON.parse(JSON.stringify(this.store.doc)) as import('../model').BentoDoc
+     clone.template = true
+     stripCollabSecrets(clone) // instances mint their own credentials
+@@ -2580,6 +2605,24 @@ export class Editor {
+-
++
+   async save(forcePicker: boolean) {
+     this.canvas.commitTextEdit()
++    if (this.bridge) {
++      // A1a-2 bypass seal (ticket #14): ⌘S / Save route through the sanctioned
++      // path — a1a2.save() POSTs the kernel-committed canonical as the new
++      // workspace revision. Serialize-to-disk variants (Save a copy…) stay
++      // sealed below — never bytes from the projected store.
++      if (forcePicker) {
++        this.a1a2SealedExport(t('Save a copy…'))
++        return
++      }
++      const saved = await (window as any).bento?.save?.()
++      if (saved?.ok) {
++        this.store.setDirty(false)
++        this.flashSaved()
++      } else {
++        this.toast(typeof saved?.error === 'string' ? saved.error : t('Save failed — see console'))
++      }
++      return
++    }
+     // shared docs persist their CRDT state so the saved copy can rejoin
+     // as a true fork later (offline edits merge both ways)
+     this.session?.stampInto(this.store.doc)
+@@ -2657,18 +2700,19 @@ export class Editor {
+       if (mod && ev.key.toLowerCase() === 'g') {
+         ev.preventDefault()
++        if (this.bridge) return
+         const els = this.store.selectedElements
+         if (ev.shiftKey) this.panel.ungroup(els)
+         else this.panel.group(els)
+         return
+       }
+       if (mod && ev.key.toLowerCase() === 'z') {
+         ev.preventDefault()
+-        ev.shiftKey ? this.store.redo() : this.store.undo()
++        ev.shiftKey ? this.bridge.redo() : this.bridge.undo()
+         return
+       }
+       if (mod && ev.key.toLowerCase() === 'y') {
+         ev.preventDefault()
+-        this.store.redo()
++        this.bridge.redo()
+         return
+       }
+       if (mod && ev.key.toLowerCase() === 'd') {
+diff --git a/slides/src/main.ts b/slides/src/main.ts
+index d8c0113..77a468f 100644
+--- a/slides/src/main.ts
++++ b/slides/src/main.ts
+@@ -26,6 +26,9 @@ import { Editor } from './editor/editor'
+ import { startPresentation } from './present'
+ import { SyncSession } from './sync/session'
+ import { onlineTransport, startSharing, stopSharing } from './sync/online'
++import { bootA1a2Workspace, type A1a2Session } from './a1a2/boot.ts'
++import { bootFrameHost } from './a1a2/packages/editor-bento/src/boot/frame-host.ts'
++import { sealExit } from './a1a2/packages/editor-bento/src/bypass-seal.ts'
+ 
+ // Tell the kernel who this app is — must precede any kernel module use
+ // (window title suffix, save-picker label, update manifest + its `app` check).
+@@ -71,7 +74,16 @@ applyDirection()
+-
++
+ const embedded = readEmbeddedDoc()
+ const envelope = embedded ? parseEnvelope(embedded) : null
+-if (envelope) {
++// A1a-2: ?ws=<id> 由 a1a2 composition root 接管 boot（semantic kernel 为 canonical
++// 权威，native 仅为投影）。无 ws 参数的打开不是 A1a-2 路径，见 editorMode 守卫。
++const a1a2Ws = new URLSearchParams(location.search).get('ws')
++if (a1a2Ws) {
++  // A1a-2 generic frame hook: register project-side adapter renderers
++  // (packages/editor-bento/src/renderers/*, copied into a1a2/packages) BEFORE any
++  // render path. Idempotent; ?ws= and other boot paths share the same registry.
++  bootFrameHost()
++  void bootA1a2Workspace(a1a2Ws).then((session) => bootWith(session.nativeDoc as BentoDoc, session))
++} else if (envelope) {
+   void passwordGate()
+ } else {
+   bootWith((embedded && parseDoc(embedded)) || starterDoc())
+@@ -119,9 +131,9 @@ async function passwordGate() {
+   input.focus()
+ }
+ 
+-function bootWith(doc: BentoDoc) {
++function bootWith(doc: BentoDoc, a1a2?: A1a2Session) {
+   if (doc.readonly) playerMode(doc)
+-  else editorMode(doc)
++  else editorMode(doc, a1a2)
+ }
+ 
+ /**
+@@ -154,6 +166,13 @@ function playerMode(doc: BentoDoc) {
+   start()
+ }
+ 
+-function editorMode(doc: BentoDoc) {
++function editorMode(doc: BentoDoc, a1a2?: A1a2Session) {
++
++// A1a-2 构建只服务 ?ws= 会话：无 session 时 semantic canonical 不存在，拒绝进入编辑器。
++if (!a1a2) {
++  document.getElementById('bento-splash')?.remove()
++  document.body.innerHTML = '<p style="padding:2rem;font:14px sans-serif">A1a-2 build: open with ?ws=&lt;workspace-id&gt;</p>'
++  return
++}
+ 
+ document.title = `${doc.title} — ${appConfig().appName}`
+@@ -163,12 +182,18 @@ document.title = `${doc.title} — ${appConfig().appName}`
+ if (doc.fonts?.length) injectFonts(doc)
+ 
+ const store = new Store(doc)
+-const editor = new Editor(document.getElementById('app')!, store)
++a1a2.attachStore(store)
++const editor = new Editor(document.getElementById('app')!, store, a1a2.bridge)
+ 
+ // Live collaboration (bento-sync): same-machine tabs sync automatically over
+ // BroadcastChannel; the online relay transport joins via the Share UI.
+-const session = new SyncSession(store)
+-editor.connectSync(session)
++// A1a-2 bypass seal (ticket #14): the adapted build never constructs a
++// SyncSession — no BroadcastChannel, no collab stamp, no relay transport. The
++// sealed `sync` surface below answers every collab probe with a named
++// SealedExitError instead.
++const adapted = a1a2 !== undefined
++const session = adapted ? null : new SyncSession(store)
++if (session) editor.connectSync(session)
+-
++
+ // Opening a link ending in #present starts the show immediately (player mode).
+ if (location.hash === '#present') {
+@@ -198,32 +223,52 @@ if (location.hash === '#present') {
+     return store.doc
+   },
+   serialize: () => {
+-    session.stampInto(store.doc)
++    // A1a-2 bypass seal: native serialize would emit projected-store bytes
++    // outside the committed canonical — always sealed in the adapted build.
++    if (adapted) return sealExit('serialize-file')
++    session!.stampInto(store.doc)
+     return serializeFile(store.doc)
+   },
+-  undo: () => store.undo(),
+-  redo: () => store.redo(),
++  undo: () => a1a2.bridge.undo(),
++  redo: () => a1a2.bridge.redo(),
+   get selection() {
+     return store.selection.slice()
+   },
++  /** A1a-2 bridge 公开面：命令 trace / 只读投影 inspect / 单调 revision */
++  visual: {
++    get revision() { return a1a2.bridge.revision },
++    trace: () => a1a2.bridge.trace(),
++    inspect: () => a1a2.bridge.inspect(),
++    snapshot: () => a1a2.bridge.snapshot(),
++  },
++  /** A1a-2 保存：semantic canonical JSON + 资产表回写 workspace */
++  save: () => a1a2.save(),
++  /** A1a-2 资产登记（setAsset 前置，key = 内容 sha256 hex） */
++  registerAsset: (key: string, dataUri: string) => a1a2.registerAsset(key, dataUri),
+   /** animation engine, exposed for scripting/diagnostics */
+   anim,
+   /** i18n: t/locale/setLocale/choices — setLocale('x-pseudo') audits the sweep */
+   i18n: i18nApi,
+   /** live-collaboration session: actor id, connected peers, force a diff-flush */
+-  sync: {
+-    get actor() {
+-      return session.actor
+-    },
+-    peers: () => session.peers(),
+-    flush: () => session.flush(),
+-    transports: () => session.transportKinds,
++  sync: adapted ? {
++    get actor() { return sealExit('collab-session') },
++    peers: () => sealExit('collab-session'),
++    flush: () => sealExit('collab-session'),
++    transports: () => sealExit('collab-session'),
++    share: () => sealExit('collab-session'),
++    unshare: () => sealExit('collab-session'),
++    online: () => sealExit('collab-session'),
++  } : {
++    get actor() { return session!.actor },
++    peers: () => session!.peers(),
++    flush: () => session!.flush(),
++    transports: () => session!.transportKinds,
+     /** start an online session (mints doc.collab, connects the relay) */
+     share: () => {
+-      void startSharing(session, store)
++      void startSharing(session!, store)
+       return store.doc.collab
+     },
+-    unshare: () => stopSharing(session, store),
++    unshare: () => stopSharing(session!, store),
+     online: () => onlineTransport()?.status ?? 'off',
+   },
+   /**
+@@ -232,6 +276,9 @@ if (location.hash === '#present') {
+    * changes nothing on invalid input. Undoable in the editor.
+    */
+   loadDoc(json: string): boolean {
++    // A1a-2 bypass seal: replacing the projected doc outside the kernel is a
++    // canonical bypass (kernel canonical would silently diverge) — seal it.
++    if (adapted) return sealExit('native-load-doc')
+     const next = parseDoc(json)
+     if (!next) return false
+     store.replaceDoc(next)
+@@ -276,13 +323,17 @@ if (location.hash === '#present') {
+    */
+   updates: {
+     version: APP_VERSION,
+-    check: (url?: string) => checkForUpdates(url),
++    // A1a-2 bypass seal: manifest fetch + self-update serialize are
++    // network/persistence exits — sealed in the adapted build.
++    check: (url?: string) => adapted ? sealExit('update-network') : checkForUpdates(url),
+     build: (release: any) => {
+-      session.stampInto(store.doc)
++      if (adapted) return sealExit('update-network')
++      session!.stampInto(store.doc)
+       return buildUpdatedFile(release, store.doc)
+     },
+     apply: (release: any) => {
+-      session.stampInto(store.doc)
++      if (adapted) return sealExit('update-network')
++      session!.stampInto(store.doc)
+       return applyUpdate(release, store.doc)
+     },
+   },
+diff --git a/slides/src/render.ts b/slides/src/render.ts
+index 4f88172..7b29ef0 100644
+--- a/slides/src/render.ts
++++ b/slides/src/render.ts
+@@ -8,5 +8,11 @@
+ import { morphKey, paginates } from './model'
+ import { chartSnapshotSvg } from './charts'
+ import temml from 'temml'
++// A1a-2 generic frame hook (project copy; Node-safe contract + registry): the
++// projector marks matrix adapter/hybrid elements with a projection-private
++// `frameRenderer`, renderElement consults the host registry BEFORE the native
++// switch and the registered per-kind renderer produces element content inside
++// the native .bento-el frame.
++import { frameHost, type FrameHostElement } from './a1a2/packages/editor-bento/src/boot/frame-host.ts'
+ 
+ const SVG_NS = 'http://www.w3.org/2000/svg'
+@@ -968,6 +974,26 @@
+   if (el.showOnHover) node.dataset.showOnHover = el.showOnHover
+   applyElementFrame(node, el)
+ 
++  // A1a-2 generic frame hook, consulted BEFORE the native switch: a marked
++  // element is adapter-rendered inside the frame and must NEVER fall through to
++  // native handling (fail closed). Rotation/opacity/shadow/bounds/selection/
++  // transform handles/z-order all stay on the native .bento-el frame.
++  const frameRenderer = (el as SlideElement & { frameRenderer?: string }).frameRenderer
++  if (frameRenderer) {
++    const renderer = frameHost.resolve(frameRenderer)
++    if (!renderer) {
++      throw new Error(`frame renderer "${frameRenderer}" is not registered (bootFrameHost missed a renderer)`)
++    }
++    node.dataset.frameRenderer = frameRenderer
++    const content = renderer(el as unknown as FrameHostElement, { doc, opts, resolveMath })
++    if (!(content instanceof Node)) {
++      throw new Error(`frame renderer "${frameRenderer}" did not produce a DOM node`)
++    }
++    node.appendChild(content)
++    stripRemoteRefs(node)
++    return node
++  }
++
+   switch (el.type) {
+     case 'text': {
+       node.style.display = 'flex'
+diff --git a/slides/src/store.ts b/slides/src/store.ts
+index 70721b8..e499634 100644
+--- a/slides/src/store.ts
++++ b/slides/src/store.ts
+@@ -87,6 +87,18 @@
+     this.emit('doc')
+   }
+ 
++  /** A1a-2 adapter only: refresh the rendered view without creating Store history. */
++  replaceViewDoc(next: BentoDoc) {
++    const before = this.captureView()
++    this.doc = next
++    const { currentChanged, selectionChanged } = this.reconcileView(before)
++    this.setDirty(true)
++    this.emit('slides')
++    if (currentChanged) this.emit('current')
++    if (selectionChanged) this.emit('selection')
++    this.emit('doc')
++  }
++
+   // --- history ------------------------------------------------------------
+ 
+   /** Snapshot current doc state onto the undo stack. Call BEFORE a mutation. */
+diff --git a/slides/src/fonts.ts b/slides/src/fonts.ts
+index 5d3a2d1..c7c0f5a 100644
+--- a/slides/src/fonts.ts
++++ b/slides/src/fonts.ts
+@@ -30,8 +30,10 @@ export function injectFonts(doc: BentoDoc) {
+   const css = (doc.fonts ?? [])
+     .map((f) => {
+       const src = doc.assets?.[f.asset]
+       if (!src) return ''
++      const unicodeRange = (f as typeof f & { unicodeRange?: string }).unicodeRange
+       return `@font-face{font-family:${JSON.stringify(f.family)};src:url(${JSON.stringify(src)});` +
+-        `font-weight:${f.weight ?? 'normal'};font-style:${f.style ?? 'normal'};font-display:swap}`
++        `font-weight:${f.weight ?? 'normal'};font-style:${f.style ?? 'normal'};` +
++        `${unicodeRange ? `unicode-range:${unicodeRange};` : ''}font-display:swap}`
+     })
+     .join('\n')

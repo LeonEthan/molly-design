@@ -1,0 +1,14 @@
+# Upstream-adapted sources stay close to the pinned upstream for reviewable
+# diffs; see source-manifest.json. Authored files in this package are formatted.
+src/collect-authoring.ts
+src/intake.ts
+src/migrate.ts
+src/product-boundary.ts
+src/semantic-assets.ts
+src/validate.ts
+# Build outputs are regenerated, never hand-edited.
+src/generated/
+skills/graphic-design/scripts/lib/
+# Preserve upstream imagegen reference layouts; provenance is in source-manifest.json.
+skills/imagegen/references/
+node_modules/

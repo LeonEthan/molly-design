@@ -1,0 +1,1600 @@
+import { createHash } from 'node:crypto';
+import { chmodSync, mkdirSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import Database from 'better-sqlite3';
+import { z } from 'zod';
+
+import {
+  MOLLY_OPERATION_COMMAND_MAX_BYTES,
+  MOLLY_OPERATION_COMPLETION_MAX_BYTES,
+  MollyErrorSchema,
+  MollyOperationIdSchema,
+  type FrozenOperationContinuationConfig,
+  type MollyError,
+  type MollyOperationCompletion,
+  type MollyOperationItemResult,
+  type MollyOperationKind,
+  type MollyOperationSnapshot,
+  type MachineId,
+  type SessionId,
+  type StoredMollyDelivery,
+  type StoredMollyOperation,
+  type WorkspaceId,
+} from '@molly/shared';
+import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+
+const DAY_MS = 24 * 60 * 60 * 1_000;
+const TERMINAL_RETENTION_MS = 7 * DAY_MS;
+export const MATERIALIZATION_CLAIM_MS = 60_000;
+export const DELIVERY_MAX_ATTEMPTS = 2;
+
+type DeliveryExecutionClaim =
+  | { status: 'claimed'; delivery: StoredMollyDelivery }
+  | { status: 'in_flight'; delivery: StoredMollyDelivery }
+  | { status: 'exhausted'; delivery: StoredMollyDelivery }
+  | { status: 'consumed'; delivery: StoredMollyDelivery };
+
+type DeliveryFinalizationClaim =
+  | { status: 'claimed'; delivery: StoredMollyDelivery }
+  | { status: 'in_flight'; delivery: StoredMollyDelivery }
+  | { status: 'not_ready'; delivery: StoredMollyDelivery }
+  | { status: 'consumed'; delivery: StoredMollyDelivery };
+
+const OperationKindSchema = z.enum([
+  'session_create',
+  'session_create_many',
+  'session_chat',
+  'session_chat_many',
+]);
+
+const OperationTargetSchema = z.object({ sessionId: z.string(), userTurnId: z.string() }).strict();
+const OperationOutputPreviewSchema = z
+  .object({
+    text: z.string(),
+    truncated: z.literal(true).optional(),
+    omittedBytes: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+const OperationItemSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('active'),
+      label: z.string().optional(),
+      target: OperationTargetSchema,
+      inputDurable: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('succeeded'),
+      label: z.string().optional(),
+      target: OperationTargetSchema,
+      assistantTurnId: z.string(),
+      output: OperationOutputPreviewSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('failed'),
+      label: z.string().optional(),
+      target: OperationTargetSchema.optional(),
+      error: MollyErrorSchema,
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('cancelled'),
+      label: z.string().optional(),
+      target: OperationTargetSchema.optional(),
+    })
+    .strict(),
+]);
+
+const OperationResultSchema = z.object({ items: z.array(OperationItemSchema) }).strict();
+const CompletionTruncationSchema = z
+  .object({ truncated: z.literal(true), omittedBytes: z.number().int().nonnegative() })
+  .strict();
+const OperationCompletionSchema = z.discriminatedUnion('type', [
+  z
+    .object({
+      type: z.literal('result'),
+      value: OperationResultSchema,
+      truncation: CompletionTruncationSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('error'),
+      error: MollyErrorSchema,
+      truncation: CompletionTruncationSchema.optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('cancelled'),
+      partial: OperationResultSchema.optional(),
+      truncation: CompletionTruncationSchema.optional(),
+    })
+    .strict(),
+]);
+
+const FrozenConfigSchema = z
+  .object({
+    agentConfigId: z.string().optional(),
+    inputConfig: z.record(z.string(), z.unknown()),
+    sourceTurnId: z.string().trim().min(1).optional(),
+    targetDispatchConfigs: z
+      .array(
+        z
+          .object({
+            modeId: z.string().optional(),
+            modelId: z.string().optional(),
+            configOptionValues: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
+            taskToolsEnabled: z.boolean().optional(),
+            inheritSessionDefaults: z.literal(false).optional(),
+          })
+          .strict()
+          .nullable()
+      )
+      .optional(),
+  })
+  .strict();
+
+const OperationRowSchema = z
+  .object({
+    workspace_id: z.string(),
+    owner_machine_id: z.string(),
+    requester_session_id: z.string(),
+    requester_user_id: z.string(),
+    operation_id: MollyOperationIdSchema,
+    kind: OperationKindSchema,
+    fingerprint: z.string(),
+    canonical_command_json: z.string(),
+    frozen_config_json: z.string(),
+    initiator_chain_depth: z.number().int().nonnegative(),
+    created_at: z.string(),
+    deadline_at: z.string(),
+    state: z.enum(['active', 'finished']),
+    items_json: z.string(),
+    completion_json: z.string().nullable(),
+    finished_at: z.string().nullable(),
+  })
+  .strict();
+
+const DeliveryRowSchema = z
+  .object({
+    sequence: z.number().int().positive(),
+    workspace_id: z.string(),
+    requester_session_id: z.string(),
+    operation_id: MollyOperationIdSchema,
+    delivery_id: z.string(),
+    system_turn_id: z.string(),
+    state: z.enum(['pending', 'consumed']),
+    initiator_chain_depth: z.number().int().nonnegative(),
+    completion_json: z.string(),
+    consumed_at: z.string().nullable(),
+  })
+  .strict();
+
+const DeliveryReadRowSchema = DeliveryRowSchema.extend({
+  execution_phase: z.enum(['ready', 'claimed', 'prepared', 'started', 'uncertain']),
+  attempt_count: z.number().int().nonnegative(),
+  active_claim_id: z.string().nullable(),
+  active_claim_worker_boot_id: z.string().nullable(),
+}).strict();
+
+const DELIVERY_READ_COLUMNS = `
+  deliveries.sequence,
+  deliveries.workspace_id,
+  deliveries.requester_session_id,
+  deliveries.operation_id,
+  deliveries.delivery_id,
+  deliveries.system_turn_id,
+  deliveries.state,
+  deliveries.initiator_chain_depth,
+  deliveries.completion_json,
+  deliveries.consumed_at,
+  delivery_execution_state.execution_phase,
+  delivery_execution_state.attempt_count,
+  delivery_execution_state.active_claim_id,
+  delivery_execution_state.active_claim_worker_boot_id`;
+
+export class MollyOperationStoreError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly retryable: boolean
+  ) {
+    super(message);
+    this.name = 'LodyOperationStoreError';
+  }
+
+  toMollyError(): MollyError {
+    return { code: this.code, message: this.message, retryable: this.retryable };
+  }
+}
+
+/** SQLITE_BUSY-family write-lock contention; inherently retryable. */
+export const isOperationStoreBusyError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const code = (error as { code?: unknown }).code;
+  return code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT';
+};
+
+const BUSY_RETRY_DELAYS_MS = [100, 300, 900];
+
+/**
+ * Run a synchronous store interaction, retrying SQLITE_BUSY contention with a
+ * short backoff. Store operations are idempotent by design, and a busy
+ * transaction commits nothing, so a wholesale retry is safe. Exhausted retries
+ * surface as a retryable STORE_BUSY error instead of a raw driver error.
+ * Only use this from subprocess boundaries (MCP tools); daemon paths must not
+ * add blocking waits on top of the driver's busy_timeout.
+ */
+export const runWithOperationStoreBusyRetry = async <T>(
+  run: () => T,
+  options: { delaysMs?: number[]; sleep?: (ms: number) => Promise<void> } = {}
+): Promise<T> => {
+  const delays = options.delaysMs ?? BUSY_RETRY_DELAYS_MS;
+  const sleep =
+    options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return run();
+    } catch (error) {
+      if (!isOperationStoreBusyError(error)) throw error;
+      const delayMs = delays[attempt];
+      if (delayMs === undefined) {
+        throw new MollyOperationStoreError(
+          'STORE_BUSY',
+          'The local Operation store is busy; retry the command.',
+          true
+        );
+      }
+      await sleep(delayMs);
+    }
+  }
+};
+
+const parseJson = <T>(text: string, schema: z.ZodType<T>, label: string): T => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`Invalid ${label} JSON`, { cause: error });
+  }
+  return schema.parse(parsed);
+};
+
+const normalizeCanonicalValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(normalizeCanonicalValue);
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .filter((key) => record[key] !== undefined)
+        .map((key) => [key, normalizeCanonicalValue(record[key])])
+    );
+  }
+  return value;
+};
+
+const truncateUtf8 = (value: string, maxBytes: number) => {
+  const originalBytes = Buffer.byteLength(value, 'utf8');
+  if (originalBytes <= maxBytes) return { value, omittedBytes: 0 };
+  const marker = maxBytes >= 5 ? '\n…\n' : '';
+  const chars = Array.from(value);
+  const render = (keptCharacters: number) => {
+    const headCount = Math.ceil(keptCharacters / 2);
+    const tailCount = keptCharacters - headCount;
+    return `${chars.slice(0, headCount).join('')}${marker}${chars
+      .slice(chars.length - tailCount)
+      .join('')}`;
+  };
+  let low = 0;
+  let high = chars.length;
+  let keptCharacters = 0;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    if (Buffer.byteLength(render(middle), 'utf8') <= maxBytes) {
+      keptCharacters = middle;
+      low = middle + 1;
+    } else {
+      high = middle - 1;
+    }
+  }
+  const headCount = Math.ceil(keptCharacters / 2);
+  const tailCount = keptCharacters - headCount;
+  const kept = `${chars.slice(0, headCount).join('')}${chars.slice(chars.length - tailCount).join('')}`;
+  return {
+    value: render(keptCharacters),
+    omittedBytes: originalBytes - Buffer.byteLength(kept, 'utf8'),
+  };
+};
+
+const boundCompletionFreeText = (
+  completion: MollyOperationCompletion,
+  maxBytesPerText: number
+): MollyOperationCompletion => {
+  let omittedBytes = 0;
+  const boundError = (error: MollyError): MollyError => {
+    const bounded = truncateUtf8(error.message, maxBytesPerText);
+    omittedBytes += bounded.omittedBytes;
+    return { ...error, message: bounded.value };
+  };
+  const boundResult = (result: { items: MollyOperationItemResult[] }) => ({
+    items: result.items.map((item): MollyOperationItemResult => {
+      const boundedLabel = item.label ? truncateUtf8(item.label, maxBytesPerText) : undefined;
+      if (boundedLabel) omittedBytes += boundedLabel.omittedBytes;
+      const label = boundedLabel?.value;
+      if (item.status === 'failed') {
+        return {
+          ...item,
+          ...(label !== undefined ? { label } : {}),
+          error: boundError(item.error),
+        };
+      }
+      if (item.status === 'succeeded' && item.output) {
+        const boundedOutput = truncateUtf8(item.output.text, maxBytesPerText);
+        omittedBytes += boundedOutput.omittedBytes;
+        const outputOmittedBytes = (item.output.omittedBytes ?? 0) + boundedOutput.omittedBytes;
+        return {
+          ...item,
+          ...(label !== undefined ? { label } : {}),
+          output: {
+            text: boundedOutput.value,
+            ...(outputOmittedBytes > 0
+              ? { truncated: true as const, omittedBytes: outputOmittedBytes }
+              : {}),
+          },
+        };
+      }
+      return { ...item, ...(label !== undefined ? { label } : {}) };
+    }),
+  });
+  let bounded: MollyOperationCompletion;
+  if (completion.type === 'result') {
+    bounded = { type: 'result', value: boundResult(completion.value) };
+  } else if (completion.type === 'error') {
+    bounded = { type: 'error', error: boundError(completion.error) };
+  } else {
+    bounded = {
+      type: 'cancelled',
+      ...(completion.partial ? { partial: boundResult(completion.partial) } : {}),
+    };
+  }
+  return omittedBytes > 0 ? { ...bounded, truncation: { truncated: true, omittedBytes } } : bounded;
+};
+
+export const canonicalizeMollyCommand = (value: unknown): string => {
+  const serialized = JSON.stringify(normalizeCanonicalValue(value));
+  if (serialized === undefined) {
+    throw new MollyOperationStoreError('REQUEST_TOO_LARGE', 'Command is not serializable.', false);
+  }
+  const bytes = Buffer.byteLength(serialized, 'utf8');
+  if (bytes > MOLLY_OPERATION_COMMAND_MAX_BYTES) {
+    throw new MollyOperationStoreError(
+      'REQUEST_TOO_LARGE',
+      `Canonical Command exceeds ${MOLLY_OPERATION_COMMAND_MAX_BYTES} bytes.`,
+      false
+    );
+  }
+  return serialized;
+};
+
+export const fingerprintMollyCommand = (kind: MollyOperationKind, canonical: string): string =>
+  createHash('sha256').update(kind).update('\0').update(canonical).digest('hex');
+
+// machineId is deliberately required: an env-derived default here once made the
+// daemon-hosted HTTP MCP transport (whose process has no MOLLY_MCP_MACHINE_ID)
+// silently fall back to a 'local'-keyed store that no coordinator reconciles,
+// so accepted Operations were never finalized or delivered. Callers must pass
+// the machine id they authenticated (session context, coordinator options).
+export const getMollyOperationStorePath = (machineId: string, homeDir = os.homedir()): string => {
+  const machineKey = createHash('sha256').update(machineId).digest('hex').slice(0, 24);
+  return path.join(
+    getMollyDataDir(undefined, homeDir),
+    'orchestration',
+    machineKey,
+    'operations.sqlite3'
+  );
+};
+
+export type AcceptOperationInput = Omit<
+  StoredMollyOperation,
+  'fingerprint' | 'state' | 'completion' | 'finishedAt'
+>;
+
+export type AcceptOperationOptions = {
+  materializationClaimToken?: string;
+};
+
+export const getOperationDeliveryId = (
+  requesterSessionId: SessionId,
+  operationId: string
+): string => `operation:${requesterSessionId}:${operationId}:completion`;
+
+export const getOperationCompletionTurnId = (
+  requesterSessionId: SessionId,
+  operationId: string
+): string => `operation-completion:${requesterSessionId}:${operationId}`;
+
+export class MollyOperationStore {
+  private readonly db: Database.Database;
+
+  /**
+   * `maintenance: false` skips the open-time repair/cleanup write transactions.
+   * Non-owner processes (MCP subprocesses) open with it so that opening the
+   * shared machine-level store is not itself a write-lock contender; the
+   * daemon-side coordinator keeps the default and owns maintenance.
+   */
+  constructor(
+    dbPath: string,
+    private readonly now: () => number = Date.now,
+    options: { maintenance?: boolean } = {}
+  ) {
+    const storeDirectory = path.dirname(dbPath);
+    mkdirSync(storeDirectory, { recursive: true, mode: 0o700 });
+    chmodSync(storeDirectory, 0o700);
+    this.db = new Database(dbPath);
+    // Operations contain canonical prompts and bounded assistant output. Keep
+    // both the database and SQLite sidecars private to the local account.
+    chmodSync(dbPath, 0o600);
+    this.db.pragma('busy_timeout = 5000');
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('foreign_keys = ON');
+    this.migrate();
+    if (options.maintenance !== false) {
+      this.repairTerminalDeliveries();
+      this.cleanupExpired(false);
+    }
+  }
+
+  close(): void {
+    this.db.close();
+  }
+
+  accept(
+    input: AcceptOperationInput,
+    options: AcceptOperationOptions = {}
+  ): { created: boolean; operation: StoredMollyOperation; claimedItemIndexes: number[] } {
+    MollyOperationIdSchema.parse(input.operationId);
+    const canonical = canonicalizeMollyCommand(input.canonicalCommand);
+    const fingerprint = fingerprintMollyCommand(input.kind, canonical);
+    const frozenConfig = FrozenConfigSchema.parse(input.frozenContinuationConfig);
+    const items = z.array(OperationItemSchema).parse(input.items);
+    const transaction = this.db.transaction(
+      (): { created: boolean; operation: StoredMollyOperation; claimedItemIndexes: number[] } => {
+        const existing = this.getStored(input.requesterSessionId, input.operationId);
+        if (existing)
+          return {
+            created: false,
+            operation: this.assertMatching(
+              existing,
+              input.kind,
+              fingerprint,
+              input.requesterUserId,
+              frozenConfig.sourceTurnId
+            ),
+            claimedItemIndexes: [],
+          };
+        const inserted = this.db
+          .prepare(
+            `INSERT OR IGNORE INTO operations (
+            workspace_id, owner_machine_id, requester_session_id, requester_user_id,
+            operation_id, kind, fingerprint, canonical_command_json, frozen_config_json,
+            initiator_chain_depth, created_at, deadline_at, state, items_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)`
+          )
+          .run(
+            input.workspaceId,
+            input.ownerMachineId,
+            input.requesterSessionId,
+            input.requesterUserId,
+            input.operationId,
+            input.kind,
+            fingerprint,
+            canonical,
+            JSON.stringify(frozenConfig),
+            input.initiatorChainDepth,
+            input.createdAt,
+            input.deadlineAt,
+            JSON.stringify(items)
+          );
+        const operation = this.getStored(input.requesterSessionId, input.operationId);
+        if (!operation) throw new Error('Accepted Operation was not readable after insert.');
+        const claimedItemIndexes: number[] = [];
+        if (inserted.changes === 1 && options.materializationClaimToken) {
+          for (const [index, item] of operation.items.entries()) {
+            if (item.status !== 'active' || item.inputDurable) continue;
+            this.db
+              .prepare(
+                `INSERT INTO operation_item_materializations (
+                   requester_session_id, operation_id, item_index, claim_token, claimed_at_ms
+                 ) VALUES (?, ?, ?, ?, ?)`
+              )
+              .run(
+                input.requesterSessionId,
+                input.operationId,
+                index,
+                options.materializationClaimToken,
+                this.now()
+              );
+            claimedItemIndexes.push(index);
+          }
+        }
+        return {
+          created: inserted.changes === 1,
+          operation: this.assertMatching(
+            operation,
+            input.kind,
+            fingerprint,
+            input.requesterUserId,
+            frozenConfig.sourceTurnId
+          ),
+          claimedItemIndexes,
+        };
+      }
+    );
+    // All writing transactions run BEGIN IMMEDIATE: a deferred transaction that
+    // reads first and upgrades to a write can fail with SQLITE_BUSY_SNAPSHOT,
+    // which busy_timeout cannot wait out. Taking the write lock up front turns
+    // that into an ordinary BUSY wait.
+    const accepted = transaction.immediate();
+    this.cleanupExpired(false);
+    return accepted;
+  }
+
+  get(requesterSessionId: SessionId, operationId: string): StoredMollyOperation {
+    this.cleanupExpired(false);
+    const operation = this.getStored(requesterSessionId, operationId);
+    if (!operation) {
+      throw new MollyOperationStoreError(
+        'OPERATION_NOT_FOUND',
+        `Operation not found: ${operationId}`,
+        false
+      );
+    }
+    return operation;
+  }
+
+  findMatchingRetry(
+    requesterSessionId: SessionId,
+    operationId: string,
+    kind: MollyOperationKind,
+    canonicalCommand: unknown,
+    requesterUserId: string,
+    sourceTurnId?: string
+  ): StoredMollyOperation | undefined {
+    const existing = this.getStored(requesterSessionId, operationId);
+    if (!existing) return undefined;
+    const fingerprint = fingerprintMollyCommand(kind, canonicalizeMollyCommand(canonicalCommand));
+    return this.assertMatching(existing, kind, fingerprint, requesterUserId, sourceTurnId);
+  }
+
+  listActive(workspaceId: WorkspaceId, ownerMachineId: MachineId): StoredMollyOperation[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM operations
+         WHERE workspace_id = ? AND owner_machine_id = ? AND state = 'active'
+         ORDER BY created_at ASC, requester_session_id ASC, operation_id ASC`
+      )
+      .all(workspaceId, ownerMachineId);
+    return rows.map((row) => this.decodeOperation(row));
+  }
+
+  // Absence of a settlement is the durable obligation, including for Operations
+  // created before this table existed. Delivery consumption does not discharge it.
+  listPendingProgress(workspaceId: WorkspaceId, ownerMachineId: MachineId): StoredMollyOperation[] {
+    return this.db
+      .prepare(
+        `SELECT operations.* FROM operations
+      WHERE workspace_id = ? AND owner_machine_id = ? AND state = 'finished'
+        AND kind IN ('session_create', 'session_create_many')
+        AND NOT EXISTS (SELECT 1 FROM operation_progress_settlements p
+          WHERE p.requester_session_id = operations.requester_session_id
+            AND p.operation_id = operations.operation_id)
+      ORDER BY created_at, requester_session_id, operation_id`
+      )
+      .all(workspaceId, ownerMachineId)
+      .map((row) => this.decodeOperation(row));
+  }
+
+  settleProgress(requesterSessionId: SessionId, operationId: string): void {
+    this.db
+      .transaction(() => {
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO operation_progress_settlements
+        (requester_session_id, operation_id)
+        SELECT requester_session_id, operation_id FROM operations
+        WHERE requester_session_id = ? AND operation_id = ? AND state = 'finished'
+          AND kind IN ('session_create', 'session_create_many')`
+          )
+          .run(requesterSessionId, operationId);
+      })
+      .immediate();
+  }
+
+  updateItems(
+    requesterSessionId: SessionId,
+    operationId: string,
+    items: MollyOperationItemResult[]
+  ): StoredMollyOperation {
+    z.array(OperationItemSchema).parse(items);
+    const result = this.db
+      .prepare(
+        `UPDATE operations SET items_json = ?
+         WHERE requester_session_id = ? AND operation_id = ? AND state = 'active'`
+      )
+      .run(JSON.stringify(items), requesterSessionId, operationId);
+    if (result.changes === 0) {
+      return this.get(requesterSessionId, operationId);
+    }
+    return this.get(requesterSessionId, operationId);
+  }
+
+  claimItemMaterialization(
+    requesterSessionId: SessionId,
+    operationId: string,
+    itemIndex: number,
+    claimToken: string,
+    claimDurationMs = MATERIALIZATION_CLAIM_MS
+  ): { claimed: boolean; retryAtMs?: number } {
+    return this.db
+      .transaction(() => {
+        const operation = this.get(requesterSessionId, operationId);
+        const item = operation.items[itemIndex];
+        if (!item || item.status !== 'active' || item.inputDurable) return { claimed: false };
+        const row = this.db
+          .prepare(
+            `SELECT claim_token, claimed_at_ms FROM operation_item_materializations
+           WHERE requester_session_id = ? AND operation_id = ? AND item_index = ?`
+          )
+          .get(requesterSessionId, operationId, itemIndex) as
+          | { claim_token: string; claimed_at_ms: number }
+          | undefined;
+        const nowMs = this.now();
+        if (row && row.claim_token !== claimToken && row.claimed_at_ms + claimDurationMs > nowMs) {
+          return { claimed: false, retryAtMs: row.claimed_at_ms + claimDurationMs };
+        }
+        this.db
+          .prepare(
+            `INSERT INTO operation_item_materializations (
+             requester_session_id, operation_id, item_index, claim_token, claimed_at_ms
+           ) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(requester_session_id, operation_id, item_index)
+           DO UPDATE SET claim_token = excluded.claim_token, claimed_at_ms = excluded.claimed_at_ms`
+          )
+          .run(requesterSessionId, operationId, itemIndex, claimToken, nowMs);
+        return { claimed: true };
+      })
+      .immediate();
+  }
+
+  markItemInputDurable(
+    requesterSessionId: SessionId,
+    operationId: string,
+    itemIndex: number,
+    claimToken?: string
+  ): StoredMollyOperation {
+    return this.db
+      .transaction(() => {
+        const operation = this.get(requesterSessionId, operationId);
+        const item = operation.items[itemIndex];
+        if (!item || item.status !== 'active' || item.inputDurable) return operation;
+        if (claimToken) {
+          const claim = this.db
+            .prepare(
+              `SELECT claim_token FROM operation_item_materializations
+             WHERE requester_session_id = ? AND operation_id = ? AND item_index = ?`
+            )
+            .get(requesterSessionId, operationId, itemIndex) as { claim_token: string } | undefined;
+          if (claim?.claim_token !== claimToken) return operation;
+        }
+        const items = operation.items.map((candidate, index) =>
+          index === itemIndex && candidate.status === 'active'
+            ? { ...candidate, inputDurable: true }
+            : candidate
+        );
+        this.db
+          .prepare(
+            `UPDATE operations SET items_json = ?
+           WHERE requester_session_id = ? AND operation_id = ? AND state = 'active'`
+          )
+          .run(JSON.stringify(items), requesterSessionId, operationId);
+        this.db
+          .prepare(
+            `DELETE FROM operation_item_materializations
+           WHERE requester_session_id = ? AND operation_id = ? AND item_index = ?`
+          )
+          .run(requesterSessionId, operationId, itemIndex);
+        return this.get(requesterSessionId, operationId);
+      })
+      .immediate();
+  }
+
+  finish(
+    requesterSessionId: SessionId,
+    operationId: string,
+    completion: MollyOperationCompletion,
+    finishedAt = new Date(this.now()).toISOString()
+  ): StoredMollyOperation {
+    const bounded = this.assertCompletionBound(completion);
+    const transaction = this.db.transaction(() => {
+      const current = this.getStored(requesterSessionId, operationId);
+      if (!current) {
+        throw new MollyOperationStoreError(
+          'OPERATION_NOT_FOUND',
+          `Operation not found: ${operationId}`,
+          false
+        );
+      }
+      const durableCompletion = current.state === 'finished' ? current.completion : bounded;
+      if (!durableCompletion) throw new Error('Finished Operation is missing its completion.');
+      if (current.state === 'active') {
+        this.db
+          .prepare(
+            `UPDATE operations
+             SET state = 'finished', completion_json = ?, finished_at = ?
+             WHERE requester_session_id = ? AND operation_id = ? AND state = 'active'`
+          )
+          .run(JSON.stringify(bounded), finishedAt, requesterSessionId, operationId);
+      }
+      this.db
+        .prepare(
+          `INSERT OR IGNORE INTO deliveries (
+             workspace_id, requester_session_id, operation_id, delivery_id,
+             system_turn_id, state, initiator_chain_depth, completion_json
+           ) VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`
+        )
+        .run(
+          current.workspaceId,
+          current.requesterSessionId,
+          current.operationId,
+          getOperationDeliveryId(current.requesterSessionId, current.operationId),
+          getOperationCompletionTurnId(current.requesterSessionId, current.operationId),
+          current.initiatorChainDepth,
+          JSON.stringify(durableCompletion)
+        );
+      const updated = this.getStored(requesterSessionId, operationId);
+      if (!updated) {
+        throw new Error('Finished Operation disappeared during transaction.');
+      }
+      return updated;
+    });
+    return transaction.immediate();
+  }
+
+  cancel(
+    requesterSessionId: SessionId,
+    operationId: string
+  ): { operation: StoredMollyOperation; didCancel: boolean } {
+    const transaction = this.db.transaction(() => {
+      const current = this.get(requesterSessionId, operationId);
+      if (current.state === 'finished') {
+        return { operation: current, didCancel: false };
+      }
+      const partial = { items: current.items };
+      return {
+        operation: this.finish(requesterSessionId, operationId, {
+          type: 'cancelled',
+          ...(partial.items.length > 0 ? { partial } : {}),
+        }),
+        didCancel: true,
+      };
+    });
+    return transaction.immediate();
+  }
+
+  listPendingDeliveries(
+    workspaceId: WorkspaceId,
+    requesterSessionId?: SessionId
+  ): StoredMollyDelivery[] {
+    const rows = requesterSessionId
+      ? this.db
+          .prepare(
+            `SELECT ${DELIVERY_READ_COLUMNS}
+             FROM deliveries
+             JOIN delivery_execution_state USING (requester_session_id, operation_id)
+             WHERE deliveries.workspace_id = ?
+               AND deliveries.requester_session_id = ?
+               AND deliveries.state = 'pending'
+             ORDER BY deliveries.sequence ASC`
+          )
+          .all(workspaceId, requesterSessionId)
+      : this.db
+          .prepare(
+            `SELECT ${DELIVERY_READ_COLUMNS}
+             FROM deliveries
+             JOIN delivery_execution_state USING (requester_session_id, operation_id)
+             WHERE deliveries.workspace_id = ? AND deliveries.state = 'pending'
+             ORDER BY deliveries.sequence ASC`
+          )
+          .all(workspaceId);
+    return rows.map((row) => this.decodeDelivery(row));
+  }
+
+  getDelivery(requesterSessionId: SessionId, operationId: string): StoredMollyDelivery {
+    const row = this.db
+      .prepare(
+        `SELECT ${DELIVERY_READ_COLUMNS}
+         FROM deliveries
+         JOIN delivery_execution_state USING (requester_session_id, operation_id)
+         WHERE deliveries.requester_session_id = ? AND deliveries.operation_id = ?`
+      )
+      .get(requesterSessionId, operationId);
+    if (row === undefined) {
+      throw new MollyOperationStoreError(
+        'DELIVERY_NOT_FOUND',
+        `Delivery not found for Operation: ${operationId}`,
+        false
+      );
+    }
+    return this.decodeDelivery(row);
+  }
+
+  /** Run once after the Worker lifecycle barrier, never during ordinary reconciliation. */
+  recoverOrphanedDeliveryClaims(workspaceId: WorkspaceId, workerBootId: string): number {
+    const result = this.db
+      .prepare(
+        `UPDATE delivery_execution_state
+         SET execution_phase = CASE
+               WHEN execution_phase = 'started' THEN 'uncertain'
+               WHEN execution_phase IN ('claimed', 'prepared') THEN 'ready'
+               ELSE execution_phase
+             END,
+             active_claim_id = NULL,
+             active_claim_worker_boot_id = NULL
+         WHERE (active_claim_id IS NOT NULL OR active_claim_worker_boot_id IS NOT NULL)
+           AND (
+             active_claim_id IS NULL
+             OR active_claim_worker_boot_id IS NULL
+             OR active_claim_worker_boot_id <> ?
+           )
+           AND EXISTS (
+             SELECT 1 FROM deliveries
+             WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+               AND deliveries.operation_id = delivery_execution_state.operation_id
+               AND deliveries.workspace_id = ? AND deliveries.state = 'pending'
+           )`
+      )
+      .run(workerBootId, workspaceId);
+    return result.changes;
+  }
+
+  /** Run only after this coordinator has stopped scheduling new Delivery work. */
+  abandonDeliveryClaimsOwnedBy(workspaceId: WorkspaceId, workerBootId: string): number {
+    const result = this.db
+      .prepare(
+        `UPDATE delivery_execution_state
+         SET execution_phase = CASE
+               WHEN execution_phase = 'started' THEN 'uncertain'
+               WHEN execution_phase IN ('claimed', 'prepared') THEN 'ready'
+               ELSE execution_phase
+             END,
+             active_claim_id = NULL,
+             active_claim_worker_boot_id = NULL
+         WHERE active_claim_worker_boot_id = ?
+           AND EXISTS (
+             SELECT 1 FROM deliveries
+             WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+               AND deliveries.operation_id = delivery_execution_state.operation_id
+               AND deliveries.workspace_id = ? AND deliveries.state = 'pending'
+           )`
+      )
+      .run(workerBootId, workspaceId);
+    return result.changes;
+  }
+
+  claimDeliveryExecution(
+    requesterSessionId: SessionId,
+    operationId: string,
+    claim: { claimId: string; workerBootId: string }
+  ): DeliveryExecutionClaim {
+    const transaction = this.db.transaction((): DeliveryExecutionClaim => {
+      const current = this.getDelivery(requesterSessionId, operationId);
+      if (current.state === 'consumed') return { status: 'consumed', delivery: current };
+      if (
+        current.activeClaimId === claim.claimId &&
+        current.activeClaimWorkerBootId === claim.workerBootId
+      ) {
+        return { status: 'claimed', delivery: current };
+      }
+      if (current.activeClaimId !== undefined || current.activeClaimWorkerBootId !== undefined) {
+        return { status: 'in_flight', delivery: current };
+      }
+      if (current.executionPhase !== 'ready') {
+        return { status: 'in_flight', delivery: current };
+      }
+      if (current.attemptCount >= DELIVERY_MAX_ATTEMPTS) {
+        return { status: 'exhausted', delivery: current };
+      }
+      const result = this.db
+        .prepare(
+          `UPDATE delivery_execution_state
+           SET execution_phase = 'claimed', active_claim_id = ?, active_claim_worker_boot_id = ?
+           WHERE requester_session_id = ? AND operation_id = ?
+             AND attempt_count < ?
+             AND execution_phase = 'ready'
+             AND active_claim_id IS NULL AND active_claim_worker_boot_id IS NULL
+             AND EXISTS (
+               SELECT 1 FROM deliveries
+               WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+                 AND deliveries.operation_id = delivery_execution_state.operation_id
+                 AND deliveries.state = 'pending'
+             )`
+        )
+        .run(
+          claim.claimId,
+          claim.workerBootId,
+          requesterSessionId,
+          operationId,
+          DELIVERY_MAX_ATTEMPTS
+        );
+      if (result.changes !== 1) {
+        const latest = this.getDelivery(requesterSessionId, operationId);
+        if (latest.state === 'consumed') return { status: 'consumed', delivery: latest };
+        if (latest.activeClaimId !== undefined || latest.activeClaimWorkerBootId !== undefined) {
+          return { status: 'in_flight', delivery: latest };
+        }
+        return { status: 'exhausted', delivery: latest };
+      }
+      return {
+        status: 'claimed',
+        delivery: this.getDelivery(requesterSessionId, operationId),
+      };
+    });
+    return transaction.immediate();
+  }
+
+  prepareClaimedDeliveryExecution(
+    requesterSessionId: SessionId,
+    operationId: string,
+    workerBootId: string,
+    claimId: string
+  ): { prepared: boolean; delivery: StoredMollyDelivery } {
+    const transaction = this.db.transaction(() => {
+      const current = this.getDelivery(requesterSessionId, operationId);
+      if (
+        current.activeClaimWorkerBootId === workerBootId &&
+        current.activeClaimId === claimId &&
+        (current.executionPhase === 'prepared' || current.executionPhase === 'started')
+      ) {
+        return { prepared: true, delivery: current };
+      }
+      const result = this.db
+        .prepare(
+          `UPDATE delivery_execution_state
+           SET execution_phase = 'prepared', attempt_count = attempt_count + 1
+           WHERE requester_session_id = ? AND operation_id = ?
+             AND attempt_count < ?
+             AND execution_phase = 'claimed'
+             AND active_claim_worker_boot_id = ? AND active_claim_id = ?
+             AND EXISTS (
+               SELECT 1 FROM deliveries
+               WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+                 AND deliveries.operation_id = delivery_execution_state.operation_id
+                 AND deliveries.state = 'pending'
+             )`
+        )
+        .run(requesterSessionId, operationId, DELIVERY_MAX_ATTEMPTS, workerBootId, claimId);
+      return {
+        prepared: result.changes === 1,
+        delivery: this.getDelivery(requesterSessionId, operationId),
+      };
+    });
+    return transaction.immediate();
+  }
+
+  markClaimedDeliveryExecutionStarted(
+    requesterSessionId: SessionId,
+    operationId: string,
+    workerBootId: string,
+    claimId: string
+  ): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE delivery_execution_state
+         SET execution_phase = 'started'
+         WHERE requester_session_id = ? AND operation_id = ?
+           AND execution_phase = 'prepared'
+           AND active_claim_worker_boot_id = ? AND active_claim_id = ?
+           AND EXISTS (
+             SELECT 1 FROM deliveries
+             WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+               AND deliveries.operation_id = delivery_execution_state.operation_id
+               AND deliveries.state = 'pending'
+           )`
+      )
+      .run(requesterSessionId, operationId, workerBootId, claimId);
+    if (result.changes === 1) return true;
+    const current = this.getDelivery(requesterSessionId, operationId);
+    return (
+      current.executionPhase === 'started' &&
+      current.activeClaimWorkerBootId === workerBootId &&
+      current.activeClaimId === claimId
+    );
+  }
+
+  markClaimedDeliveryExecutionUncertain(
+    requesterSessionId: SessionId,
+    operationId: string,
+    workerBootId: string,
+    claimId: string
+  ): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE delivery_execution_state
+         SET execution_phase = 'uncertain',
+             active_claim_id = NULL,
+             active_claim_worker_boot_id = NULL
+         WHERE requester_session_id = ? AND operation_id = ?
+           AND execution_phase = 'started'
+           AND active_claim_worker_boot_id = ? AND active_claim_id = ?
+           AND EXISTS (
+             SELECT 1 FROM deliveries
+             WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+               AND deliveries.operation_id = delivery_execution_state.operation_id
+               AND deliveries.state = 'pending'
+           )`
+      )
+      .run(requesterSessionId, operationId, workerBootId, claimId);
+    return result.changes === 1;
+  }
+
+  claimDeliveryFinalization(
+    requesterSessionId: SessionId,
+    operationId: string,
+    claim: {
+      claimId: string;
+      workerBootId: string;
+      requireAttemptsExhausted?: boolean;
+      requiredExecutionPhase?: 'ready' | 'uncertain';
+    }
+  ): DeliveryFinalizationClaim {
+    const transaction = this.db.transaction((): DeliveryFinalizationClaim => {
+      const current = this.getDelivery(requesterSessionId, operationId);
+      if (current.state === 'consumed') return { status: 'consumed', delivery: current };
+      if (
+        current.activeClaimId === claim.claimId &&
+        current.activeClaimWorkerBootId === claim.workerBootId
+      ) {
+        return { status: 'claimed', delivery: current };
+      }
+      if (current.activeClaimId !== undefined || current.activeClaimWorkerBootId !== undefined) {
+        return { status: 'in_flight', delivery: current };
+      }
+      const minimumAttemptCount = claim.requireAttemptsExhausted ? DELIVERY_MAX_ATTEMPTS : 0;
+      const requiredExecutionPhase = claim.requiredExecutionPhase ?? 'ready';
+      if (current.attemptCount < minimumAttemptCount) {
+        return { status: 'not_ready', delivery: current };
+      }
+      if (current.executionPhase !== requiredExecutionPhase) {
+        return { status: 'not_ready', delivery: current };
+      }
+      const result = this.db
+        .prepare(
+          `UPDATE delivery_execution_state
+           SET active_claim_id = ?, active_claim_worker_boot_id = ?
+           WHERE requester_session_id = ? AND operation_id = ?
+             AND attempt_count >= ?
+             AND execution_phase = ?
+             AND active_claim_id IS NULL AND active_claim_worker_boot_id IS NULL
+             AND EXISTS (
+               SELECT 1 FROM deliveries
+               WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+                 AND deliveries.operation_id = delivery_execution_state.operation_id
+                 AND deliveries.state = 'pending'
+             )`
+        )
+        .run(
+          claim.claimId,
+          claim.workerBootId,
+          requesterSessionId,
+          operationId,
+          minimumAttemptCount,
+          requiredExecutionPhase
+        );
+      if (result.changes !== 1) {
+        const latest = this.getDelivery(requesterSessionId, operationId);
+        if (latest.state === 'consumed') return { status: 'consumed', delivery: latest };
+        if (latest.activeClaimId !== undefined || latest.activeClaimWorkerBootId !== undefined) {
+          return { status: 'in_flight', delivery: latest };
+        }
+        return { status: 'not_ready', delivery: latest };
+      }
+      return {
+        status: 'claimed',
+        delivery: this.getDelivery(requesterSessionId, operationId),
+      };
+    });
+    return transaction.immediate();
+  }
+
+  releaseDeliveryClaim(
+    requesterSessionId: SessionId,
+    operationId: string,
+    workerBootId: string,
+    claimId: string
+  ): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE delivery_execution_state
+         SET execution_phase = CASE
+               WHEN execution_phase IN ('claimed', 'prepared') THEN 'ready'
+               ELSE execution_phase
+             END,
+             active_claim_id = NULL,
+             active_claim_worker_boot_id = NULL
+         WHERE requester_session_id = ? AND operation_id = ?
+           AND active_claim_worker_boot_id = ? AND active_claim_id = ?
+           AND execution_phase <> 'started'
+           AND EXISTS (
+             SELECT 1 FROM deliveries
+             WHERE deliveries.requester_session_id = delivery_execution_state.requester_session_id
+               AND deliveries.operation_id = delivery_execution_state.operation_id
+               AND deliveries.state = 'pending'
+           )`
+      )
+      .run(requesterSessionId, operationId, workerBootId, claimId);
+    return result.changes === 1;
+  }
+
+  consumeClaimedDelivery(
+    requesterSessionId: SessionId,
+    operationId: string,
+    workerBootId: string,
+    claimId: string,
+    consumedAt = new Date(this.now()).toISOString()
+  ): { consumed: boolean; delivery: StoredMollyDelivery } {
+    const transaction = this.db.transaction(() => {
+      const current = this.getDelivery(requesterSessionId, operationId);
+      if (
+        current.state === 'consumed' ||
+        current.activeClaimWorkerBootId !== workerBootId ||
+        current.activeClaimId !== claimId
+      ) {
+        return { consumed: false, delivery: current };
+      }
+      const result = this.db
+        .prepare(
+          `UPDATE deliveries
+           SET state = 'consumed', consumed_at = ?
+           WHERE requester_session_id = ? AND operation_id = ? AND state = 'pending'
+             AND EXISTS (
+               SELECT 1 FROM delivery_execution_state
+               WHERE delivery_execution_state.requester_session_id = deliveries.requester_session_id
+                 AND delivery_execution_state.operation_id = deliveries.operation_id
+                 AND delivery_execution_state.active_claim_worker_boot_id = ?
+                 AND delivery_execution_state.active_claim_id = ?
+             )`
+        )
+        .run(consumedAt, requesterSessionId, operationId, workerBootId, claimId);
+      if (result.changes === 1) {
+        const released = this.db
+          .prepare(
+            `UPDATE delivery_execution_state
+             SET active_claim_id = NULL, active_claim_worker_boot_id = NULL
+             WHERE requester_session_id = ? AND operation_id = ?
+               AND active_claim_worker_boot_id = ? AND active_claim_id = ?`
+          )
+          .run(requesterSessionId, operationId, workerBootId, claimId);
+        if (released.changes !== 1) {
+          throw new Error('Consumed Delivery lost its active claim during transaction.');
+        }
+      }
+      const latest = this.getDelivery(requesterSessionId, operationId);
+      return {
+        consumed: result.changes === 1,
+        delivery: latest,
+      };
+    });
+    return transaction.immediate();
+  }
+
+  deleteRequesterSession(requesterSessionId: SessionId): void {
+    this.db
+      .prepare('DELETE FROM operations WHERE requester_session_id = ?')
+      .run(requesterSessionId);
+  }
+
+  snapshot(operation: StoredMollyOperation): MollyOperationSnapshot {
+    if (operation.state === 'finished') {
+      if (!operation.completion || !operation.finishedAt) {
+        throw new Error('Finished Operation is missing completion fields.');
+      }
+      return {
+        id: operation.operationId,
+        kind: operation.kind,
+        state: 'finished',
+        createdAt: operation.createdAt,
+        deadlineAt: operation.deadlineAt,
+        finishedAt: operation.finishedAt,
+        completion: operation.completion,
+      };
+    }
+    const totalItems = operation.items.length;
+    const terminalItems = operation.items.filter((item) => item.status !== 'active').length;
+    return {
+      id: operation.operationId,
+      kind: operation.kind,
+      state: 'active',
+      createdAt: operation.createdAt,
+      deadlineAt: operation.deadlineAt,
+      ...(totalItems > 1 ? { progress: { totalItems, terminalItems } } : {}),
+      items: operation.items,
+    };
+  }
+
+  private getStored(
+    requesterSessionId: SessionId,
+    operationId: string
+  ): StoredMollyOperation | undefined {
+    const row = this.db
+      .prepare('SELECT * FROM operations WHERE requester_session_id = ? AND operation_id = ?')
+      .get(requesterSessionId, operationId);
+    return row === undefined ? undefined : this.decodeOperation(row);
+  }
+
+  private assertMatching(
+    operation: StoredMollyOperation,
+    kind: MollyOperationKind,
+    fingerprint: string,
+    requesterUserId: string,
+    sourceTurnId?: string
+  ): StoredMollyOperation {
+    if (
+      operation.kind !== kind ||
+      operation.fingerprint !== fingerprint ||
+      operation.requesterUserId !== requesterUserId ||
+      operation.frozenContinuationConfig.sourceTurnId !== sourceTurnId
+    ) {
+      throw new MollyOperationStoreError(
+        'OPERATION_ID_REUSED',
+        `Operation id ${operation.operationId} is already bound to different input.`,
+        false
+      );
+    }
+    return operation;
+  }
+
+  private decodeOperation(row: unknown): StoredMollyOperation {
+    const parsed = OperationRowSchema.parse(row);
+    const command = parseJson(parsed.canonical_command_json, z.unknown(), 'canonical Command');
+    const frozen = parseJson(
+      parsed.frozen_config_json,
+      FrozenConfigSchema,
+      'frozen continuation configuration'
+    ) as FrozenOperationContinuationConfig;
+    const items = parseJson(
+      parsed.items_json,
+      z.array(OperationItemSchema),
+      'Operation items'
+    ) as MollyOperationItemResult[];
+    const completion = parsed.completion_json
+      ? (parseJson(
+          parsed.completion_json,
+          OperationCompletionSchema,
+          'Operation completion'
+        ) as MollyOperationCompletion)
+      : undefined;
+    return {
+      workspaceId: parsed.workspace_id as WorkspaceId,
+      ownerMachineId: parsed.owner_machine_id as MachineId,
+      requesterSessionId: parsed.requester_session_id as SessionId,
+      requesterUserId: parsed.requester_user_id,
+      operationId: parsed.operation_id,
+      kind: parsed.kind,
+      fingerprint: parsed.fingerprint,
+      canonicalCommand: command,
+      frozenContinuationConfig: frozen,
+      initiatorChainDepth: parsed.initiator_chain_depth,
+      createdAt: parsed.created_at,
+      deadlineAt: parsed.deadline_at,
+      state: parsed.state,
+      items,
+      ...(completion ? { completion } : {}),
+      ...(parsed.finished_at ? { finishedAt: parsed.finished_at } : {}),
+    };
+  }
+
+  private decodeDelivery(row: unknown): StoredMollyDelivery {
+    const parsed = DeliveryReadRowSchema.parse(row);
+    return {
+      sequence: parsed.sequence,
+      workspaceId: parsed.workspace_id as WorkspaceId,
+      requesterSessionId: parsed.requester_session_id as SessionId,
+      operationId: parsed.operation_id,
+      deliveryId: parsed.delivery_id,
+      systemTurnId: parsed.system_turn_id,
+      state: parsed.state,
+      executionPhase: parsed.execution_phase,
+      attemptCount: parsed.attempt_count,
+      ...(parsed.active_claim_id ? { activeClaimId: parsed.active_claim_id } : {}),
+      ...(parsed.active_claim_worker_boot_id
+        ? { activeClaimWorkerBootId: parsed.active_claim_worker_boot_id }
+        : {}),
+      initiatorChainDepth: parsed.initiator_chain_depth,
+      completion: parseJson(
+        parsed.completion_json,
+        OperationCompletionSchema,
+        'Delivery completion'
+      ) as MollyOperationCompletion,
+      ...(parsed.consumed_at ? { consumedAt: parsed.consumed_at } : {}),
+    };
+  }
+
+  private assertCompletionBound(completion: MollyOperationCompletion): MollyOperationCompletion {
+    const parsed = OperationCompletionSchema.parse(completion) as MollyOperationCompletion;
+    if (Buffer.byteLength(JSON.stringify(parsed), 'utf8') <= MOLLY_OPERATION_COMPLETION_MAX_BYTES) {
+      return parsed;
+    }
+    let low = 0;
+    let high = MOLLY_OPERATION_COMPLETION_MAX_BYTES;
+    let best = boundCompletionFreeText(parsed, 0);
+    while (low <= high) {
+      const middle = Math.floor((low + high) / 2);
+      const candidate = boundCompletionFreeText(parsed, middle);
+      if (
+        Buffer.byteLength(JSON.stringify(candidate), 'utf8') <= MOLLY_OPERATION_COMPLETION_MAX_BYTES
+      ) {
+        best = candidate;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+    if (Buffer.byteLength(JSON.stringify(best), 'utf8') > MOLLY_OPERATION_COMPLETION_MAX_BYTES) {
+      throw new Error('Operation completion structural envelope exceeds the 64 KiB bound.');
+    }
+    return best;
+  }
+
+  private cleanupExpired(force: boolean): void {
+    const nowMs = this.now();
+    const prior = this.db
+      .prepare(`SELECT value FROM orchestration_meta WHERE key = 'last_cleanup_at_ms'`)
+      .get() as { value?: string } | undefined;
+    const priorMs = Number(prior?.value ?? 0);
+    if (!force && Number.isFinite(priorMs) && nowMs - priorMs < DAY_MS) {
+      return;
+    }
+    const cutoff = new Date(nowMs - TERMINAL_RETENTION_MS).toISOString();
+    this.db
+      .transaction(() => {
+        this.db
+          .prepare(
+            `DELETE FROM operations
+           WHERE state = 'finished'
+             AND (kind NOT IN ('session_create', 'session_create_many') OR EXISTS (
+               SELECT 1 FROM operation_progress_settlements p
+               WHERE p.requester_session_id = operations.requester_session_id
+                 AND p.operation_id = operations.operation_id
+             ))
+             AND EXISTS (
+               SELECT 1 FROM deliveries
+               WHERE deliveries.requester_session_id = operations.requester_session_id
+                 AND deliveries.operation_id = operations.operation_id
+                 AND deliveries.state = 'consumed'
+                 AND deliveries.consumed_at < ?
+             )`
+          )
+          .run(cutoff);
+        this.db
+          .prepare(
+            `INSERT INTO orchestration_meta (key, value) VALUES ('last_cleanup_at_ms', ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+          )
+          .run(String(nowMs));
+      })
+      .immediate();
+  }
+
+  private migrate(): void {
+    if (!this.isMigrationRequired()) return;
+
+    this.db
+      .transaction(() => {
+        const hadDeliveryExecutionState =
+          this.db
+            .prepare(
+              "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'delivery_execution_state'"
+            )
+            .get() !== undefined;
+        const hadDeliveryExecutionPhase =
+          hadDeliveryExecutionState &&
+          (
+            this.db.prepare(`PRAGMA table_info(delivery_execution_state)`).all() as Array<{
+              name: string;
+            }>
+          ).some((column) => column.name === 'execution_phase');
+        this.db.exec(`
+      CREATE TABLE IF NOT EXISTS operations (
+        workspace_id TEXT NOT NULL,
+        owner_machine_id TEXT NOT NULL,
+        requester_session_id TEXT NOT NULL,
+        requester_user_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        fingerprint TEXT NOT NULL,
+        canonical_command_json TEXT NOT NULL,
+        frozen_config_json TEXT NOT NULL,
+        initiator_chain_depth INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        deadline_at TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('active', 'finished')),
+        items_json TEXT NOT NULL,
+        completion_json TEXT,
+        finished_at TEXT,
+        PRIMARY KEY (requester_session_id, operation_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS operations_active_owner
+      ON operations (workspace_id, owner_machine_id, state, deadline_at);
+
+      CREATE TABLE IF NOT EXISTS deliveries (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        workspace_id TEXT NOT NULL,
+        requester_session_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        delivery_id TEXT NOT NULL UNIQUE,
+        system_turn_id TEXT NOT NULL UNIQUE,
+        state TEXT NOT NULL CHECK (state IN ('pending', 'consumed')),
+        initiator_chain_depth INTEGER NOT NULL,
+        completion_json TEXT NOT NULL,
+        consumed_at TEXT,
+        FOREIGN KEY (requester_session_id, operation_id)
+          REFERENCES operations (requester_session_id, operation_id)
+          ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS deliveries_pending_session
+      ON deliveries (workspace_id, requester_session_id, state, sequence);
+
+      CREATE TABLE IF NOT EXISTS delivery_execution_state (
+        requester_session_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        execution_phase TEXT NOT NULL DEFAULT 'ready'
+          CHECK (execution_phase IN ('ready', 'claimed', 'prepared', 'started', 'uncertain')),
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        active_claim_id TEXT,
+        active_claim_worker_boot_id TEXT,
+        PRIMARY KEY (requester_session_id, operation_id),
+        FOREIGN KEY (requester_session_id, operation_id)
+          REFERENCES operations (requester_session_id, operation_id)
+          ON DELETE CASCADE
+      );
+
+      CREATE TRIGGER IF NOT EXISTS deliveries_insert_execution_state
+      AFTER INSERT ON deliveries
+      BEGIN
+        INSERT OR IGNORE INTO delivery_execution_state (
+          requester_session_id, operation_id, execution_phase, attempt_count
+        ) VALUES (NEW.requester_session_id, NEW.operation_id, 'ready', 0);
+      END;
+
+      CREATE TABLE IF NOT EXISTS operation_item_materializations (
+        requester_session_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        item_index INTEGER NOT NULL,
+        claim_token TEXT NOT NULL,
+        claimed_at_ms INTEGER NOT NULL,
+        PRIMARY KEY (requester_session_id, operation_id, item_index),
+        FOREIGN KEY (requester_session_id, operation_id)
+          REFERENCES operations (requester_session_id, operation_id)
+          ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS operation_progress_settlements (
+        requester_session_id TEXT NOT NULL,
+        operation_id TEXT NOT NULL,
+        PRIMARY KEY (requester_session_id, operation_id),
+        FOREIGN KEY (requester_session_id, operation_id)
+          REFERENCES operations (requester_session_id, operation_id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS orchestration_meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `);
+        if (hadDeliveryExecutionState && !hadDeliveryExecutionPhase) {
+          this.db.exec(
+            `ALTER TABLE delivery_execution_state
+             ADD COLUMN execution_phase TEXT NOT NULL DEFAULT 'ready'`
+          );
+          this.db.exec(
+            `UPDATE delivery_execution_state
+             SET execution_phase = CASE
+               WHEN attempt_count > 0
+                 OR active_claim_id IS NOT NULL
+                 OR active_claim_worker_boot_id IS NOT NULL
+               THEN 'uncertain'
+               ELSE 'ready'
+             END`
+          );
+        }
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO delivery_execution_state (
+               requester_session_id, operation_id, execution_phase, attempt_count
+             )
+             SELECT requester_session_id, operation_id,
+               CASE WHEN state = 'pending' THEN ? ELSE 'ready' END,
+               0
+             FROM deliveries`
+          )
+          .run(hadDeliveryExecutionState ? 'ready' : 'uncertain');
+      })
+      .immediate();
+  }
+
+  private isMigrationRequired(): boolean {
+    const requiredObjects = new Set([
+      'table:operations',
+      'index:operations_active_owner',
+      'table:deliveries',
+      'index:deliveries_pending_session',
+      'table:delivery_execution_state',
+      'trigger:deliveries_insert_execution_state',
+      'table:operation_item_materializations',
+      'table:operation_progress_settlements',
+      'table:orchestration_meta',
+    ]);
+    const existingObjects = this.db
+      .prepare(
+        `SELECT type, name FROM sqlite_master
+         WHERE type IN ('table', 'index', 'trigger')`
+      )
+      .all() as Array<{ type: string; name: string }>;
+    for (const { type, name } of existingObjects) {
+      requiredObjects.delete(`${type}:${name}`);
+    }
+    if (requiredObjects.size > 0) return true;
+
+    const executionStateColumns = this.db
+      .prepare(`PRAGMA table_info(delivery_execution_state)`)
+      .all() as Array<{ name: string }>;
+    return !executionStateColumns.some((column) => column.name === 'execution_phase');
+  }
+
+  private repairTerminalDeliveries(): void {
+    this.db
+      .transaction(() => {
+        this.db
+          .prepare(
+            `UPDATE deliveries
+           SET delivery_id = 'operation:' || requester_session_id || ':' || operation_id || ':completion',
+               system_turn_id = 'operation-completion:' || requester_session_id || ':' || operation_id`
+          )
+          .run();
+        this.db
+          .prepare(
+            `INSERT OR IGNORE INTO deliveries (
+             workspace_id, requester_session_id, operation_id, delivery_id,
+             system_turn_id, state, initiator_chain_depth, completion_json
+           )
+           SELECT workspace_id, requester_session_id, operation_id,
+             'operation:' || requester_session_id || ':' || operation_id || ':completion',
+             'operation-completion:' || requester_session_id || ':' || operation_id,
+             'pending', initiator_chain_depth, completion_json
+           FROM operations
+           WHERE state = 'finished' AND completion_json IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM deliveries
+               WHERE deliveries.requester_session_id = operations.requester_session_id
+                 AND deliveries.operation_id = operations.operation_id
+             )`
+          )
+          .run();
+      })
+      .immediate();
+  }
+}

@@ -1,0 +1,6 @@
+# Molly brand — v3
+
+Mode: built-in image_gen, text-only generation. No reference images supplied.
+Candidate pending human visual acceptance; no legal clearance is asserted.
+
+Create an original portrait 4:5 graphic-design brand identity presentation for a fictional contemporary sound festival called "FIELDWORK". Flat graphic artwork, not a desk photograph. Distinctive geometric identity: vivid emerald, soft mint, midnight navy and clean white. A large abstract topographic fingerprint of fine concentric irregular lines, an oversized modular monospaced wordmark FIELDWORK split over two lines at upper left, precise grid and generous whitespace. Lower third shows three clearly separated brand applications: a narrow festival wristband, a square lineup graphic, a tall admission pass, using the same topographic-line identity and exact small text "LISTEN OUTSIDE". Elegant experimental music-culture identity system with rigorous hierarchy. No human dancer, red/orange colors, ECHO text, circles behind people, collage orbit lines, photo cutouts or grunge. Graphic elements and typography are the main subject; no watermark, no existing logos. Render the entire rectangular canvas on a SOLID OPAQUE pale mint paper background. No transparency anywhere, no alpha cutouts. Strong navy text contrast on pale mint. All small type must be crisp, no broken glitch texture.

@@ -1,0 +1,39 @@
+diff --git a/slides/src/editor/canvas.ts b/slides/src/editor/canvas.ts
+index a5a1c4b..146181d 100644
+--- a/slides/src/editor/canvas.ts
++++ b/slides/src/editor/canvas.ts
+@@ -52,6 +52,8 @@ export class SlideCanvas {
+   private spaceHeld = false
+   /** a pan drag is in flight — keeps the grabbing cursor through a space release */
+   private panning = false
++  /** primary button is down — gates the deferred selectEnd dragStart (below) */
++  private pointerDown = false
+   private pathEditor!: PathEditor
+   private lineEditor!: LineEditor
+   private bezierEditor!: BezierEditor
+@@ -142,8 +144,11 @@ export class SlideCanvas {
+     // Losing the window with space down would otherwise leave it stuck armed
+     window.addEventListener('blur', () => {
+       this.spaceHeld = false
++      this.pointerDown = false
+       if (!this.panning) this.scroller.style.cursor = ''
+     })
++    window.addEventListener('mousedown', (ev) => { if (ev.button === 0) this.pointerDown = true }, true)
++    window.addEventListener('mouseup', (ev) => { if (ev.button === 0) this.pointerDown = false }, true)
+
+     // Control box lives INSIDE the scaled host with rootContainer at body:
+     // Moveable then works in slide-local coordinates (e.left/e.top are model
+@@ -1035,7 +1040,12 @@ export class SlideCanvas {
+       if (e.isDragStartEnd) {
+         e.inputEvent.preventDefault()
+         this.moveable.waitToChangeTarget().then(() => {
+-          this.moveable.dragStart(e.inputEvent)
++          // The promise resolves on the NEXT target change — which may be a
++          // later, unrelated selection, long after this gesture ended. Firing
++          // dragStart with that stale inputEvent corrupts Moveable's drag
++          // state (later gestures throw on null dragInfo). Only hand the
++          // gesture over if the mouse is still down: a real drag in progress.
++          if (this.pointerDown) this.moveable.dragStart(e.inputEvent)
+         })
+       }
+     })

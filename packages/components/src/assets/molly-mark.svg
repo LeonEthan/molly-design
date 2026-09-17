@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="paper" x1="48" y1="48" x2="976" y2="976" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8F3E8"/>
+      <stop offset="1" stop-color="#EEE7D6"/>
+    </linearGradient>
+  </defs>
+  <rect x="48" y="48" width="928" height="928" rx="218" fill="url(#paper)"/>
+  <path d="M130 240H894M130 388H894M130 568H894M130 736H894" stroke="#26281F" stroke-width="4" opacity="0.07"/>
+  <!-- handwritten M with lead-in, single gesture -->
+  <g transform="translate(-100 -700) scale(3)">
+    <path d="M 118 490
+             C 132 468 144 424 152 368
+             C 155 348 158 330 162 318
+             C 178 362 198 414 214 446
+             C 220 458 226 460 232 452
+             C 248 422 266 368 280 322
+             C 286 372 290 440 288 490"
+          stroke="#26281F" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+</svg>

@@ -1,0 +1,15 @@
+{
+  "background": {"type": "solid", "color": "#F7F6F2"},
+  "elements": [
+    {"elementId": "header", "elementType": "shape", "bounds": [0, 0, 800, 230], "shapeName": "rect", "fill": {"type": "solid", "color": "#102A43"}},
+    {"elementId": "title", "elementType": "text", "bounds": [48, 48, 704, 150], "content": {"text": "MAKE SOMETHING", "fontSize": 48, "bold": true, "color": "#FFFFFF"}},
+    {"elementId": "panel-0", "elementType": "shape", "bounds": [40, 280, 720, 222], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-0", "elementType": "text", "bounds": [64, 300, 620, 191], "content": {"text": "Saturday 14:00", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "panel-1", "elementType": "shape", "bounds": [40, 526, 720, 222], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-1", "elementType": "text", "bounds": [64, 546, 620, 191], "content": {"text": "A synthetic community workshop", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "panel-2", "elementType": "shape", "bounds": [40, 772, 720, 222], "shapeName": "rect", "fill": {"type": "solid", "color": "#E3EFF2"}},
+    {"elementId": "section-2", "elementType": "text", "bounds": [64, 792, 620, 191], "content": {"text": "Bring one idea. Leave with a draft.", "fontSize": 28, "bold": true, "color": "#102A43"}},
+    {"elementId": "reference", "elementType": "image", "bounds": [696, 1006, 56, 56], "src": "media/reference.png", "fit": {"mode": "cover"}},
+    {"elementId": "footer", "elementType": "text", "bounds": [48, 1030, 620, 40], "content": {"text": "SYNTHETIC ACCEPTANCE FIXTURE", "fontSize": 16, "bold": true, "color": "#102A43"}}
+  ]
+}

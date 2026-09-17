@@ -1,0 +1,29 @@
+format: molly-canvas/1
+title: Studio hours
+size: [640, 800]
+background:
+  type: solid
+  color: '#EEF2F0'
+elements:
+  - id: masthead
+    kind: shape
+    bounds: [0, 0, 640, 168]
+    shapeName: rect
+    fill:
+      type: solid
+      color: '#163A2C'
+  - id: headline
+    kind: text
+    bounds: [36, 44, 568, 92]
+    text:
+      paragraphs:
+        - runs:
+            - text: 'Studio hours'
+              fontSize: 48
+              bold: true
+              color: '#EEF2F0'
+  - id: swatch
+    kind: image
+    bounds: [36, 204, 260, 260]
+    src: media/swatch.png
+    fit: cover

@@ -1,0 +1,78 @@
+diff --git a/slides/src/render.ts b/slides/src/render.ts
+index 7b29ef0..9475a82 100644
+--- a/slides/src/render.ts
++++ b/slides/src/render.ts
+@@ -13,7 +13,10 @@ import temml from 'temml'
+ // `frameRenderer`, renderElement consults the host registry BEFORE the native
+ // switch and the registered per-kind renderer produces element content inside
+ // the native .bento-el frame.
+-import { frameHost, type FrameHostElement } from './a1a2/packages/editor-bento/src/boot/frame-host.ts'
++// A1a-2 generic frame hook + post-native decorator registry (project copy; Node-safe):
++//   frameHost = per-kind alternate content renderers (frameRenderer)
++//   frameDecoratorHost = post-native overlay decorators (frameDecorators)
++import { frameHost, frameDecoratorHost, type FrameHostElement } from './a1a2/packages/editor-bento/src/boot/frame-host.ts'
+ 
+ const SVG_NS = 'http://www.w3.org/2000/svg'
+ 
+@@ -436,1 +436,11 @@ function renderMath(src: string, display: boolean): string | null {
++/** Invalid canonical latex is a contract error. The host must not silently
++ * return the source marker, because callers would render raw TeX as text. */
++class PptdE013MathError extends Error {
++  readonly code = 'PPTD-E013'
++
++  constructor(src: string) {
++    super(`PPTD-E013: invalid LaTeX source (${src})`)
++    this.name = 'PPTD-E013'
++  }
++}
+ function renderMath(src: string, display: boolean): string | null {
+@@ -445,3 +455,3 @@ function renderMath(src: string, display: boolean): string | null {
+   } catch {
+-    out = null // not valid TeX — leave the author's text exactly as typed
++    throw new PptdE013MathError(src)
+   }
+@@ -964,6 +967,25 @@ export function renderTableHtml(el: TableElement, doc: BentoDoc): string {
+  * element's `morphId` when set, else its `id` — so morph pairing can be
+  * re-targeted without disturbing the stable identity used everywhere else.
+  */
++/**
++ * A1a-2 post-native decorator dispatch: an element whose projection carries
++ * `frameDecorators` names gets each registered project-side decorator applied
++ * to its already-mounted frame node (adapter rows overlay styles/transforms on
++ * native-rendered content). Fail closed: an unregistered decorator name is a
++ * project-side bug and hard-throws, never silently skipped.
++ */
++function applyFrameDecorators(node: HTMLElement, el: SlideElement, doc: BentoDoc, opts: RenderOpts) {
++  const names = (el as SlideElement & { frameDecorators?: string[] }).frameDecorators
++  if (!names) return
++  for (const name of names) {
++    const decorator = frameDecoratorHost.resolve(name)
++    if (!decorator) {
++      throw new Error(`frame decorator "${name}" is not registered (bootFrameHost missed a decorator)`)
++    }
++    decorator(el as unknown as FrameHostElement, node, { doc, opts })
++  }
++}
++
+ export function renderElement(el: SlideElement, doc: BentoDoc, opts: RenderOpts = {}): HTMLElement {
+   const node = document.createElement('div')
+   node.className = `bento-el bento-el-${el.type}`
+@@ -990,6 +1012,7 @@ export function renderElement(el: SlideElement, doc: BentoDoc, opts: RenderOpts
+       throw new Error(`frame renderer "${frameRenderer}" did not produce a DOM node`)
+     }
+     node.appendChild(content)
++    applyFrameDecorators(node, el, doc, opts)
+     stripRemoteRefs(node)
+     return node
+   }
+@@ -1176,6 +1199,10 @@ export function renderElement(el: SlideElement, doc: BentoDoc, opts: RenderOpts
+       break
+     }
+   }
++  // A1a-2 post-native decorators: adapter overlay on native-rendered content
++  // (runs/paragraph styles, cropShape clip, flip frame scale) — always after
++  // the native switch so sanitize/resolveMath saw the content first.
++  applyFrameDecorators(node, el, doc, opts)
+   // Every element type funnels through here, so this is the one place that
+   // sees author markup after it has been built into DOM.
+   stripRemoteRefs(node)

@@ -1,0 +1,24 @@
+Molly — Source and attribution
+================================
+
+Molly is an independent project based on the Lody codebase:
+https://github.com/LodyAI/Lody
+
+Lody's interface, Agent execution architecture and related source materials are
+retained under the Apache License, Version 2.0. The original Lody attribution and
+license notices remain in this repository; see LICENSE.
+
+Additional source components retain their own provenance and licenses:
+
+* Bento is pinned from https://github.com/nyblnet/bento and is distributed under
+  the MIT License. See packages/design-bento/README.md and the bundled license
+  files.
+* Authoring and editor adapters record their source commits and derivation in
+  packages/design-authoring/source-manifest.json and
+  packages/design-bento/source-manifest.json.
+* ACP extension submodules retain their upstream repositories and licenses in
+  their respective checkouts under packages/acp-extension-*.
+
+For the complete generated list of dependency notices, see
+THIRD_PARTY_NOTICES.md. This file is a provenance summary and does not replace
+any component's individual license or notice.

@@ -1,0 +1,33 @@
+name: Design resources
+on:
+  push:
+    branches: [codex/p0-resource-verification]
+  pull_request:
+    paths:
+      - packages/design-bento/**
+      - apps/electron/**
+      - .github/workflows/design-resources.yml
+      - .gitmodules
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      # Source hashes and patches require byte-identical LF checkouts on Windows.
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+      - run: node packages/design-bento/scripts/build.mjs
+      - run: node packages/design-bento/scripts/verify-resources.mjs

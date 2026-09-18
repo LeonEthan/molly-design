@@ -154,6 +154,18 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 
 **验证（CDP，重建重启后）**：落地页 active 态 New chat 钮 = tint 底 + rgb(30,30,30) 深字；会话页选中行同语言。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
 
+## 重设计：画布尺寸选择器对齐单色 chrome（2026-09-18，用户点名"漏网之鱼"）
+
+`chat/canvas-size-selector.tsx` 是 chrome 刷新唯一没走过的 composer 控件：原生 `<input type="radio">` 在 Electron 里渲染默认 accent 蓝色（违背冻结单色）、Auto 文案硬编码英文未走 i18n、字号/间距是随手值。按冻结规格重设计：
+
+- 模式切换换共享 `SegmentedControl`（sm 档，muted 槽 + 选中 popover 底浮起），原生 radio 绝迹，蓝色绝迹；`Auto` 文案补 `design.autoSize` key（沿用 `design.*` 只作 fallback 的既有惯例）。
+- 弹层 `w-[248px] p-3` 纵向 flex gap-3；Width/Height 用菜单组微标签惯例（10px/600/uppercase/0.6px tracking/muted 前景）；输入框共享 32px `Input` 并隐藏 number spinner（`appearance:textfield`，32px 下 stepper 是视觉噪音，1–4096  clamp 由消费侧保证）；× 分隔符按输入框光学居中。
+- 触发钮保持 ghost sm h-6，`▾` 字符换 `ChevronDown` 图标（字符在不同字体下高度不稳，图标恒定）。
+- 焦点管理：仅当用户**刚从 Auto 切到 Custom** 时 width 输入框 autoFocus；重新打开已处 Custom 的弹层不抢焦点（`focusWidth` state 随 `onOpenChange(false)` 复位）——聚焦是"切换模式"这个动作的延续，不是弹层打开的属性。
+- 触发值加 `tabular-nums`，数字宽度不随字号抖动。
+
+**验证（CDP 计算值 + 截图，重建重启后，亮暗双主题）**：弹层 248px；分段控件 222×30、选中段 bg-popover+shadow；`input[type=radio]` 计数 0；切 Custom 后焦点落 width 输入框（值 800 可读）；输入框 98×32、`appearance: textfield`（spinner 隐藏）；微标签 10px/600/uppercase/0.6px、亮 rgb(111,111,111)/暗 rgb(184,184,184)；Auto 态 0 输入框。两主题零蓝色像素。`pnpm check` 同前仅环境性失败；`pnpm format`、`pnpm run docs check` 通过。
+
 ## 验证
 
 - `packages/components/src/lib/vscode-theme/bundled/molly-themes.test.ts`：两个主题各 71 个 chrome 变量精确断言 + 画布/面板层级 + 选中/环=前景反转 + 语法变量存在性 + 默认选择=molly。7/7 绿。

@@ -136,7 +136,7 @@ export function PreviewSelect<T extends string>({
           ref={triggerRef}
           type="button"
           className={cn(
-            'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input-border bg-input-field px-3 py-2 text-sm text-input-foreground shadow-xs ring-offset-background focus:outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
+            'flex h-8 w-full items-center justify-between whitespace-nowrap rounded-md border border-input-border bg-input-field px-3 text-[13px] text-input-foreground ring-offset-background focus:outline-hidden focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60',
             triggerClassName
           )}
         >
@@ -163,7 +163,7 @@ export function PreviewSelect<T extends string>({
               key={option.value}
               data-preview-item
               className={cn(
-                'relative flex w-full cursor-default select-none items-center rounded-xs py-1.5 pl-2 pr-8 text-sm outline-hidden',
+                'relative flex min-h-[30px] w-full cursor-default select-none items-center rounded-[5px] py-1 pl-2 pr-8 text-[13px] outline-hidden',
                 index === highlightedIndex
                   ? 'bg-hover text-hover-foreground'
                   : 'hover:bg-hover hover:text-hover-foreground'

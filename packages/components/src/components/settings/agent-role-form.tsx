@@ -115,7 +115,7 @@ export function AgentRoleForm({
               id={`${fieldId}-name`}
               autoComplete="off"
               aria-label={t('settings.agentRoles.form.name')}
-              className="h-9 min-w-0 flex-1 text-sm"
+              className="h-8 min-w-0 flex-1"
               maxLength={AGENT_ROLE_NAME_MAX_LENGTH}
               placeholder={t('settings.agentRoles.form.name')}
               aria-invalid={hasError('name_required') || undefined}
@@ -159,7 +159,7 @@ export function AgentRoleForm({
                 }
               >
                 <SelectTrigger
-                  className="h-9 text-xs"
+                  className="h-8 text-xs"
                   aria-label={t('settings.agentRoles.form.machine')}
                   aria-invalid={hasError('machine_required') || undefined}
                 >
@@ -197,7 +197,7 @@ export function AgentRoleForm({
                 }
               >
                 <SelectTrigger
-                  className="h-9 text-xs"
+                  className="h-8 text-xs"
                   aria-label={t('settings.agentRoles.form.agentConfig')}
                   aria-invalid={hasError('agent_config_required') || undefined}
                 >
@@ -358,7 +358,7 @@ function AgentRoleEmojiField({
           ref={triggerRef}
           type="button"
           aria-label={t('settings.agentRoles.form.emoji')}
-          className="flex h-9 w-11 items-center justify-center rounded-md border border-input-border bg-input-field text-lg leading-none transition-colors hover:bg-hover/60 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex h-8 w-11 items-center justify-center rounded-md border border-input-border bg-input-field text-lg leading-none transition-colors hover:bg-hover/60 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
         >
           <span aria-hidden="true">{value || DEFAULT_AGENT_ROLE_EMOJI}</span>
         </button>
@@ -454,7 +454,7 @@ function ValueSelect({
 }) {
   return (
     <Select value={value ?? ''} onValueChange={onChange}>
-      <SelectTrigger className="h-9 text-xs" aria-label={label}>
+      <SelectTrigger className="h-8 text-xs" aria-label={label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

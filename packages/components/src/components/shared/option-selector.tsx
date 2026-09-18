@@ -74,7 +74,7 @@ export interface OptionSelectorProps<TValue extends string | number = string> {
 
 const sizeClassMap: Record<SelectorSize, string> = {
   sm: 'h-8 text-xs',
-  md: 'h-9 text-sm',
+  md: 'h-8 text-[13px]',
   lg: 'h-10 text-sm',
 };
 

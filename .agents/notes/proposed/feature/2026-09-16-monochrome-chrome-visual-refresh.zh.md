@@ -81,6 +81,18 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 - **选中状态重播种**：主进程新增 `lastSelectionSummaries`（按 hostId 索引；`POST /ws/<id>/selection` 在 count>0 时写入、为 0 时删除；`attachDesign` 新建记录与 `destroyDesignInstance` 时清除），新 IPC `design.selectionSummary` 暴露；渲染进程在订阅 `design.selection` 后重挂载时调用重播种。修复"缩放后消失了"：胶囊是渲染进程状态，重挂载即丢，而原生视图里的选区仍在，两者失配。元素引用仍只来自验证过的选区上报，重播种只是显示层补数。
 - **遮罩几何判定**：`hasCanvasBlockingOverlay` 从"存在任何 overlay"改为要求与画布 host 真实矩形相交且跳过零矩形 overlay。修复左侧栏会话悬浮卡（Radix HoverCard portal 到 body）在画布加载期间把画布判成被遮挡而留白。
 
+## 设置界面对齐走查与残留清扫（2026-09-18，回应"设置是否也对齐"）
+
+设置弹窗（`DesktopSettingsModal`，Personal/Workspace/Other 三组）本身走共享基件，跟随刷新自动对齐：开关（34px 反转 thumb）、按钮（32px/无阴影/radius 5）、菜单（13px/30px 行）、对话框圆角（token 驱动）、Queue/Steer 分段控件（去胶囊化）实测均符合冻结规格（亮暗双主题 CDP 实测）。但走查发现一批设置域**本地克隆/覆盖**的控件样式停留在刷新前值，属第一轮遗漏：
+
+- `settings/preview-select.tsx`：Appearance 的 Theme/Language/界面字体下拉触发器是本地克隆串（h-9 36px + shadow-xs + 14px），已改为与共享 SelectTrigger 一致（h-8 32px、去阴影、13px），弹层条目改 13px/radius 5/min-h 30。
+- `settings/mcp-connection-form.tsx` TransportToggle：仍是旧式胶囊分段（rounded-full + border + bg-muted/60），已按 Queue/Steer 规格去胶囊化（容器 h-[30px] rounded-md bg-muted p-[2px] 无边框，内钮 26px radius 3，选中 popover 底 + shadow-sm）。
+- 共享 `shared/option-selector.tsx` 尺寸表 `md` 档（默认档，agent/模型/字体选择器共用）：h-9 text-sm → h-8 text-[13px]，与 Select/Input 统一；`sm`/`lg` 档不动。
+- 一批 `h-9` 输入/触发器高度覆盖统一回 h-8：agent-role-form、agent-config-dialog（名称/命令/env 输入、SelectTrigger、内嵌行）、image-connection-setting、mcp-connection-form、acp-authentication-panel（原生 select 克隆同步 border-input-border/bg-input-field/13px）。
+- `settings/compact-layout.tsx` 行内图标按钮去 shadow-xs（chrome 去阴影）。
+
+真机验证（CDP 计算值）：Appearance Theme 触发器 32px/13px/无阴影/radius 5；字体选择器 32px/13px；MCP Transport 分段容器 30px/radius 5/无边框/暗 muted 底，选中钮 popover 底 + 阴影；MCP 表单输入 32px。设置其余表面（badge、tooltip、开关、Terminate 红=信号红、Running 绿点=信号绿）与冻结规格一致。
+
 ## 缺陷修复：画布选中悬浮栏字体下拉（2026-09-18）
 
 用户报告选中悬浮栏字体下拉"似乎有 bug"（触发器显示回退文案 "Font ⌄"，点击只弹出一个无选项的空白小片）。根因是数据层而非交互层：

@@ -238,7 +238,7 @@ export function ImageConnectionForm({
               disabled={saving}
               autoComplete="off"
               spellCheck={false}
-              className="h-9 font-mono text-xs"
+              className="h-8 font-mono text-xs"
               placeholder="https://api.openai.com/v1"
               value={draft.baseUrl}
               onChange={(event) =>
@@ -264,7 +264,7 @@ export function ImageConnectionForm({
                 disabled={saving}
                 autoComplete="off"
                 spellCheck={false}
-                className="h-9 font-mono text-xs"
+                className="h-8 font-mono text-xs"
                 placeholder={
                   hasStoredKey ? t('settings.imageConnection.apiKeyPlaceholderStored') : 'sk-...'
                 }
@@ -312,7 +312,7 @@ export function ImageConnectionForm({
               disabled={saving}
               autoComplete="off"
               spellCheck={false}
-              className="h-9 font-mono text-xs"
+              className="h-8 font-mono text-xs"
               required
               value={draft.model}
               onChange={(event) =>

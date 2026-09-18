@@ -1876,7 +1876,7 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('common.search', 'Search')}
-            className={cn('pl-7 pr-7', isNarrowLayout ? 'h-9 text-sm' : 'h-8 text-xs')}
+            className={cn('pl-7 pr-7', isNarrowLayout ? 'h-8 text-sm' : 'h-8 text-xs')}
             aria-label={t('common.search', 'Search')}
           />
           {query && (
@@ -2028,7 +2028,7 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
               value={formData.name}
               onChange={(event) => setFormData({ ...formData, name: event.target.value })}
               placeholder={t('agents.configNamePlaceholder', 'Enter configuration name')}
-              className="h-9"
+              className="h-8"
               autoComplete="off"
             />
           </Field>
@@ -2089,7 +2089,7 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
                   )}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 font-mono"
+                  className="h-8 font-mono"
                 />
               </Field>
               <div className="flex items-center gap-2">
@@ -2163,7 +2163,7 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
                   }
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 font-mono"
+                  className="h-8 font-mono"
                 />
               </Field>
               <div className="mt-3 flex items-center gap-2">
@@ -2809,7 +2809,7 @@ function DeepSeekApiKeyField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={t('settings.agent.dialog.deepseek.apiKeyPlaceholder', 'sk-XXXXXXXXXXXX')}
-        className="h-9 font-mono"
+        className="h-8 font-mono"
       />
     </Field>
   );
@@ -2872,7 +2872,7 @@ function DeepSeekHarnessPanel({
                 'settings.agent.dialog.deepseek.endpointPlaceholder',
                 'https://example.com'
               )}
-              className="h-9 font-mono"
+              className="h-8 font-mono"
             />
           </Field>
           <p className="text-xs text-muted-foreground">
@@ -3011,7 +3011,7 @@ function PresetPanel({
             credentialMode?.tokenPlaceholderKey ?? preset.tokenPlaceholderKey,
             credentialMode?.tokenPlaceholderDefault ?? preset.tokenPlaceholderDefault
           )}
-          className="h-9 font-mono"
+          className="h-8 font-mono"
         />
       </Field>
 
@@ -3029,7 +3029,7 @@ function PresetPanel({
         >
           <div className="space-y-2">
             <Select value={selectedBaseUrlOptionId} onValueChange={onBaseUrlOptionChange}>
-              <SelectTrigger className="h-9 text-xs">
+              <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -3053,7 +3053,7 @@ function PresetPanel({
                     'settings.agent.dialog.preset.baseUrlPlaceholderFallback',
                   credentialMode.baseUrlPlaceholderDefault ?? 'https://example.com/anthropic'
                 )}
-                className="h-9 font-mono"
+                className="h-8 font-mono"
               />
             ) : null}
           </div>
@@ -3144,7 +3144,7 @@ function Section({
 }) {
   return (
     <Collapsible defaultOpen={defaultOpen}>
-      <div className="flex h-9 items-center gap-1 rounded-md border border-border/60 bg-card/40 pr-1 hover:bg-card/70">
+      <div className="flex h-8 items-center gap-1 rounded-md border border-border/60 bg-card/40 pr-1 hover:bg-card/70">
         <CollapsibleTrigger asChild>
           <button
             type="button"

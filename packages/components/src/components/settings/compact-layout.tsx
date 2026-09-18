@@ -65,7 +65,7 @@ export function CompactSection({
                   size: child.props.size ?? 'icon',
                   variant: child.props.variant ?? 'default',
                   className: cn(
-                    'h-7 w-7 rounded-md shadow-xs focus-visible:ring-1 focus-visible:ring-ring/60',
+                    'h-7 w-7 rounded-md focus-visible:ring-1 focus-visible:ring-ring/60',
                     child.props.className
                   ),
                 });

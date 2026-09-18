@@ -885,7 +885,7 @@ export function AcpAuthenticationInteractionView({
           </Label>
           {field.type === 'select' ? (
             <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="h-8 w-full rounded-md border border-input-border bg-input-field px-3 text-[13px]"
               value={values[field.id] ?? ''}
               disabled={submitting}
               onChange={(event) => onValuesChange({ ...values, [field.id]: event.target.value })}

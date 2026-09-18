@@ -176,7 +176,7 @@ export function McpConnectionForm({
                 id={`${fieldId}-name`}
                 required
                 autoComplete="off"
-                className="h-9"
+                className="h-8"
                 placeholder={t('settings.mcp.form.namePlaceholder')}
                 value={draft.name}
                 onChange={(event) =>
@@ -220,7 +220,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-command`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 font-mono text-xs"
+                  className="h-8 font-mono text-xs"
                   placeholder="/absolute/path/to/mcp-server"
                   value={draft.command}
                   onChange={(event) =>
@@ -263,7 +263,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-url`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 font-mono text-xs"
+                  className="h-8 font-mono text-xs"
                   placeholder="https://mcp.example.com/mcp"
                   value={draft.url}
                   onChange={(event) =>
@@ -280,7 +280,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-token`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-9 font-mono text-xs"
+                  className="h-8 font-mono text-xs"
                   placeholder="${MCP_TOKEN}"
                   value={draft.bearerToken}
                   onChange={(event) =>
@@ -354,7 +354,7 @@ function TransportToggle({
     <div
       role="radiogroup"
       aria-label={t('settings.mcp.form.transport')}
-      className="inline-grid h-9 grid-cols-2 rounded-full border border-border/70 bg-muted/60 p-0.5"
+      className="inline-grid h-[30px] grid-cols-2 rounded-md bg-muted p-[2px]"
     >
       {MCP_TRANSPORTS.map((transport) => {
         const selected = value === transport;
@@ -366,10 +366,10 @@ function TransportToggle({
             aria-checked={selected}
             onClick={() => onChange(transport)}
             className={cn(
-              'flex min-w-20 items-center justify-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors',
+              'flex min-w-20 items-center justify-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
               selected
-                ? 'bg-background text-foreground shadow-sm'
+                ? 'bg-popover text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

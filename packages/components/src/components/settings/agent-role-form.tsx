@@ -115,7 +115,7 @@ export function AgentRoleForm({
               id={`${fieldId}-name`}
               autoComplete="off"
               aria-label={t('settings.agentRoles.form.name')}
-              className="h-8 min-w-0 flex-1"
+              className="min-w-0 flex-1"
               maxLength={AGENT_ROLE_NAME_MAX_LENGTH}
               placeholder={t('settings.agentRoles.form.name')}
               aria-invalid={hasError('name_required') || undefined}
@@ -159,7 +159,7 @@ export function AgentRoleForm({
                 }
               >
                 <SelectTrigger
-                  className="h-8 text-xs"
+                  className="text-xs"
                   aria-label={t('settings.agentRoles.form.machine')}
                   aria-invalid={hasError('machine_required') || undefined}
                 >
@@ -197,7 +197,7 @@ export function AgentRoleForm({
                 }
               >
                 <SelectTrigger
-                  className="h-8 text-xs"
+                  className="text-xs"
                   aria-label={t('settings.agentRoles.form.agentConfig')}
                   aria-invalid={hasError('agent_config_required') || undefined}
                 >
@@ -454,7 +454,7 @@ function ValueSelect({
 }) {
   return (
     <Select value={value ?? ''} onValueChange={onChange}>
-      <SelectTrigger className="h-8 text-xs" aria-label={label}>
+      <SelectTrigger className="text-xs" aria-label={label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

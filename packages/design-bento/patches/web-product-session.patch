@@ -82,12 +82,12 @@ index 579f34b..5a4412c 100644
 +            ? (() => {
 +                const firstRun = element.text.paragraphs?.flatMap((paragraph) => paragraph.runs ?? [])[0]
 +                return {
-+                  color: element.text.color ?? firstRun?.color,
-+                  // Omitted fontFamily resolves to the pinned product default at
-+                  // projection time; surface that effective family so the toolbar
-+                  // never renders an empty/indeterminate font control.
-+                  fontFamily: (typeof element.text.fontFamily === 'string' ? element.text.fontFamily : (element.text.fontFamily?.latin ?? (typeof firstRun?.fontFamily === 'string' ? firstRun.fontFamily : firstRun?.fontFamily?.latin))) ?? STATIC_V1_TEXT_DEFAULTS.fontFamily,
-+                  fontSize: element.text.fontSize ?? firstRun?.fontSize,
++                  color: element.text.color || firstRun?.color || STATIC_V1_TEXT_DEFAULTS.color,
++                  // Omitted (or empty) text style resolves to the pinned product
++                  // default at projection time; surface the effective values so
++                  // the toolbar never renders an empty/indeterminate control.
++                  fontFamily: (typeof element.text.fontFamily === 'string' ? element.text.fontFamily : (element.text.fontFamily?.latin || (typeof firstRun?.fontFamily === 'string' ? firstRun.fontFamily : firstRun?.fontFamily?.latin))) || STATIC_V1_TEXT_DEFAULTS.fontFamily,
++                  fontSize: element.text.fontSize ?? firstRun?.fontSize ?? STATIC_V1_TEXT_DEFAULTS.fontSize,
 +                  bold: element.text.bold ?? firstRun?.bold,
 +                  italic: element.text.italic ?? firstRun?.italic,
 +                  alignH: horizontalAlign(element.text.align?.[0]),

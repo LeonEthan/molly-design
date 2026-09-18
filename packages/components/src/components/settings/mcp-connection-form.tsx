@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { McpConnectionSpec, McpTransport, WorkspaceMcpServerMeta } from '@molly/shared';
+import { SegmentedControl } from '@/components/shared/segmented-control';
 import {
   MCP_TRANSPORT_SHORT_LABELS,
   MCP_TRANSPORTS,
@@ -176,7 +177,6 @@ export function McpConnectionForm({
                 id={`${fieldId}-name`}
                 required
                 autoComplete="off"
-                className="h-8"
                 placeholder={t('settings.mcp.form.namePlaceholder')}
                 value={draft.name}
                 onChange={(event) =>
@@ -220,7 +220,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-command`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-8 font-mono text-xs"
+                  className="font-mono text-xs"
                   placeholder="/absolute/path/to/mcp-server"
                   value={draft.command}
                   onChange={(event) =>
@@ -263,7 +263,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-url`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-8 font-mono text-xs"
+                  className="font-mono text-xs"
                   placeholder="https://mcp.example.com/mcp"
                   value={draft.url}
                   onChange={(event) =>
@@ -280,7 +280,7 @@ export function McpConnectionForm({
                   id={`${fieldId}-token`}
                   autoComplete="off"
                   spellCheck={false}
-                  className="h-8 font-mono text-xs"
+                  className="font-mono text-xs"
                   placeholder="${MCP_TOKEN}"
                   value={draft.bearerToken}
                   onChange={(event) =>
@@ -351,34 +351,16 @@ function TransportToggle({
 }) {
   const { t } = useTranslation();
   return (
-    <div
-      role="radiogroup"
-      aria-label={t('settings.mcp.form.transport')}
-      className="inline-grid h-[30px] grid-cols-2 rounded-md bg-muted p-[2px]"
-    >
-      {MCP_TRANSPORTS.map((transport) => {
-        const selected = value === transport;
-        return (
-          <button
-            key={transport}
-            type="button"
-            role="radio"
-            aria-checked={selected}
-            onClick={() => onChange(transport)}
-            className={cn(
-              'flex min-w-20 items-center justify-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
-              selected
-                ? 'bg-popover text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <McpTransportIcon transport={transport} />
-            {MCP_TRANSPORT_SHORT_LABELS[transport]}
-          </button>
-        );
-      })}
-    </div>
+    <SegmentedControl
+      ariaLabel={t('settings.mcp.form.transport')}
+      value={value}
+      onChange={onChange}
+      options={MCP_TRANSPORTS.map((transport) => ({
+        value: transport,
+        label: MCP_TRANSPORT_SHORT_LABELS[transport],
+        icon: <McpTransportIcon transport={transport} />,
+      }))}
+    />
   );
 }
 
@@ -461,7 +443,7 @@ function StringListEditor({
             placeholder={placeholder}
             autoComplete="off"
             spellCheck={false}
-            className="h-8 font-mono text-xs"
+            className="font-mono text-xs"
             onChange={(event) =>
               onChange(
                 values.map((item, itemIndex) => (itemIndex === index ? event.target.value : item))
@@ -508,7 +490,7 @@ function KeyValueEditor({
             value={row.key}
             autoComplete="off"
             spellCheck={false}
-            className="h-8 font-mono text-xs"
+            className="font-mono text-xs"
             onChange={(event) =>
               onChange(
                 rows.map((item, itemIndex) =>
@@ -523,7 +505,7 @@ function KeyValueEditor({
             value={row.value}
             autoComplete="off"
             spellCheck={false}
-            className="h-8 font-mono text-xs"
+            className="font-mono text-xs"
             onChange={(event) =>
               onChange(
                 rows.map((item, itemIndex) =>

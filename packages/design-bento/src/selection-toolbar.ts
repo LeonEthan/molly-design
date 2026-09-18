@@ -352,24 +352,20 @@ export function createSelectionToolbar(options: {
     commit: (value: string) => void
   ) {
     const name = label(key, fallback);
-    const trigger = button(
-      bar,
-      `${items.find((item) => item[0] === value)?.[1] ?? name} ⌄`,
-      name,
-      () => {
-        // A choice popup with zero entries is a dead end; keep it closed.
-        if (items.length === 0) return;
-        openPopup(trigger, name, (node) => {
-          const list = document.createElement('div');
-          list.className = 'choices';
-          for (const [item, title] of items) {
-            const b = button(list, title, title, () => commit(item));
-            b.setAttribute('aria-pressed', String(item === value));
-          }
-          node.append(list);
-        });
-      }
-    );
+    const trigger = button(bar, `${items.find((item) => item[0] === value)?.[1] ?? name} ⌄`, name, () => {
+      openPopup(trigger, name, (node) => {
+        const list = document.createElement('div');
+        list.className = 'choices';
+        for (const [item, title] of items) {
+          const b = button(list, title, title, () => commit(item));
+          b.setAttribute('aria-pressed', String(item === value));
+        }
+        node.append(list);
+      });
+    });
+    // Zero choices is a producer-side error (the summary always injects the
+    // pinned default family); render the trigger disabled rather than opening
+    // an empty popup.
     if (items.length === 0) trigger.disabled = true;
     trigger.setAttribute('aria-haspopup', 'dialog');
     trigger.setAttribute('aria-expanded', 'false');

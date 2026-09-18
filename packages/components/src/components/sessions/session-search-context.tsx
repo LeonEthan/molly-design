@@ -21,11 +21,16 @@ type SessionSearchContextValue = {
 
 const SessionSearchContext = createContext<SessionSearchContextValue | null>(null);
 
+// Mark ink is amber-family rather than text-foreground: marks also render
+// inside the inverted user bubble (fg ≈ bubble bg in both themes) and on dark
+// surfaces, where page-foreground ink loses contrast. An opaque-ish amber with
+// dark amber ink reads on every surface (assistant card, light bubble, dark
+// bubble, dark page).
 export const SEARCH_HIGHLIGHT_MARK_CLASS_NAME =
-  'rounded-xs bg-amber-200/75 px-0.5 text-foreground shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)] dark:bg-amber-400/25';
+  'rounded-xs bg-amber-200/75 px-0.5 text-amber-950 shadow-[inset_0_-1px_0_rgba(0,0,0,0.12)] dark:bg-amber-400/85';
 
 export const SEARCH_HIGHLIGHT_ACTIVE_MARK_CLASS_NAME =
-  'bg-amber-300 text-foreground ring-1 ring-amber-400/80 dark:bg-amber-300/55 dark:ring-amber-200/60';
+  'bg-amber-300 text-amber-950 ring-1 ring-amber-500/70 dark:ring-amber-300/80';
 
 export const SEARCH_HIGHLIGHT_CONTAINER_MATCHED_CLASS_NAME = '';
 

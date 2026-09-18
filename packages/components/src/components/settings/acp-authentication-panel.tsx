@@ -30,6 +30,7 @@ import { isElectronRenderer } from '@/lib/electron';
 import { openExternalUrl } from '@/lib/native-browser';
 import { isNativeAppShell } from '@/lib/native-platform';
 import { cn } from '@/lib/utils';
+import { selectTriggerClassName } from '@/ui/select';
 
 type AuthenticationPhase = 'idle' | 'running' | 'authenticated' | 'cancelled' | 'error';
 export type AcpAuthorizationDetails = Pick<
@@ -885,7 +886,7 @@ export function AcpAuthenticationInteractionView({
           </Label>
           {field.type === 'select' ? (
             <select
-              className="h-8 w-full rounded-md border border-input-border bg-input-field px-3 text-[13px]"
+              className={cn(selectTriggerClassName)}
               value={values[field.id] ?? ''}
               disabled={submitting}
               onChange={(event) => onValuesChange({ ...values, [field.id]: event.target.value })}

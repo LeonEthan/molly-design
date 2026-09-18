@@ -87,6 +87,16 @@ pre,
   .text-balance {
     text-wrap: balance;
   }
+  /* Neutral mention chip inside the inverted user bubble (spec §5): the
+     frozen soft tint is a color-mix() of the bubble ink, which a channel
+     token rebind cannot express (consumers wrap tokens in hsl(var()/alpha)).
+     Paint the hook class directly, scoped to the bubble so composer chips
+     keep the global muted ink. Lives in the utilities layer so it beats the
+     text-muted-foreground utility's own color declaration (layer order wins
+     over specificity across layers). */
+  [data-molly-user-bubble] .mn-mention-chip--neutral {
+    color: color-mix(in srgb, hsl(var(--primary-foreground)) 68%, transparent);
+  }
   .field-sizing-content {
     field-sizing: content;
     /* Set reasonable constraints to prevent UI breakage */
@@ -2117,4 +2127,16 @@ pre,
   .animate-usage-heatmap-cell {
     animation: none;
   }
+}
+
+/* Host-flattening guard for the frozen radius ladder: some host builds (the
+   electron renderer's CSS minifier) flatten Tailwind's default theme into an
+   UNLAYERED :root,:host block. Unlayered declarations beat every @layer, so
+   the base-layer rebind above loses for exactly the tokens Tailwind also
+   emits — observed live: --radius-xl resolving to the 12px default instead of
+   the frozen 13px on every rounded-xl surface (SelectContent, frozen menus).
+   Rebind it unlayered, later in source order than the theme block, so the
+   frozen ladder holds in every host. Keep this in sync with the base block. */
+:root {
+  --radius-xl: 0.8125rem;
 }

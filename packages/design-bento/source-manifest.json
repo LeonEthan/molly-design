@@ -84,7 +84,7 @@
     "vendor/packages/editor-bento/src/ui/dom/mount.ts": "28ba65b5f4b335f737192483ea611291b06e934a36f05830cacb087da5e13d60",
     "patches/canvas-moveable-deferred-dragstart.patch": "917d6bd5867c6f71a475dc4d4dee5dda33412ada820a259e82e926b0c29e7bda",
     "patches/a1a2-semantic-editor.patch": "dffbaee6a9532ad871cef194492043b47423b84605509b8d0caaf3bc6ba96534",
-    "patches/web-product-session.patch": "13325324a28b1f7fde8e9d0dca0119fac8579f412054045c937b810233f2583f",
+    "patches/web-product-session.patch": "0aa74adba7ab99fcd82abf4287b9bddf81afbdd5c5fc4e48148ed87847ace695",
     "patches/a1a2-native-mutation-seal.patch": "5c6091d214350174c11ba5ee3f951029bcfa45524db13d8e553a4f5b95dcf9b5",
     "patches/gd4c-frame-decorators.patch": "8aca515c15e81ccd9ab2058443da598a80bfd8ade095748897c9df5741ac8d87",
     "vendor/packages/contracts/capability-matrix/v1.json": "a96c9959ba6beeb66aca16fa8f48da3993b394ea526ca979c5949aab8e2dfd48",

@@ -67,7 +67,10 @@ export const MENTION_ICON_CLASS_NAME = 'size-[1.05em] shrink-0';
  */
 export const MENTION_CHIP_CLASS_NAME =
   'text-[color-mix(in_srgb,hsl(var(--primary))_82%,hsl(var(--foreground)))]';
-export const MENTION_NEUTRAL_CHIP_CLASS_NAME = 'text-muted-foreground';
+// The trailing hook class is inert by itself; the inverted user bubble paints
+// it with a color-mix tint (index.css), which a channel-token rebind cannot
+// express. Outside the bubble the global muted ink still applies.
+export const MENTION_NEUTRAL_CHIP_CLASS_NAME = 'text-muted-foreground mn-mention-chip--neutral';
 
 /**
  * The kinds a mention range can carry, including the kindless fallback a range

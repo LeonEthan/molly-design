@@ -36,6 +36,12 @@ mobile surfaces. Background for the rules below:
 - System theme state, persistence, and browser preference tracking are owned by
   `next-themes`. Keep Lody's wrapper focused on preview state, fixed VS Code theme
   application, and the Electron native-theme bridge.
+- The frozen monochrome radius ladder in `src/tailwind/index.css` rebinds tokens in
+  `@layer base`, with an unlayered `:root` tail rebind for any token Tailwind's default
+  theme also emits (`--radius-xl` today): some host builds flatten the default theme
+  into an unlayered `:root,:host` block, and unlayered declarations beat every layer.
+  When changing the ladder, keep both rebinds in sync and verify the computed value in
+  the shipping host, not only in source order.
 
 ## Rules shared by callers
 

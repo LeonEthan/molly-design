@@ -103,6 +103,24 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 - 连带发现的跨构建不一致（不修则"选了 Inter 反而保存失败"）：供应商契约的文本默认值 `MiSans`→`Inter` 改写原本只发生在 design-bento 画布构建；CLI 侧保存校验（`apps/cli/src/design/store.ts` 的 `staticV1UnregisteredFontFamilies`）与素材 skill 打包仍看 MiSans 默认值，显式写入 `fontFamily:"Inter"` 会触发 `PPTD-E012: unregistered font family "Inter"` 导致自动保存失败。已在 `apps/cli/vite.config.ts`（molly-vendor-text-default transform）与 `packages/design-authoring/scripts/build.mjs`（skill helper 打包后改写，同样带 pinned-source 断言）补上同一改写；design-bento README 记录"三处改写必须同改"的不变量。CLI dist 已重建并 sync 进 resources/cli。
 - 回归测试：`packages/components/tests/design-toolbar-font-repro.test.ts`（jsdom：触发器显示 Inter、点击开弹层、选中后 POST `text-style` 命令）。
 
+## 代码评审缺陷修复与组件对齐（2026-09-18，第二轮）
+
+对 chrome 刷新与字体下拉修复做代码评审后，修复确认缺陷（A 组）与组件对齐（B 组剩余两项）：
+
+- **tooltip 无效背景类**：`ui/tooltip.tsx` 的 `bg-(--tip-bg)` 缩写发出裸 `var()` 代入，在计算值时被丢弃（token 是 HSL 通道三元组）。改为 `bg-[hsl(var(--tip-bg))] text-[hsl(var(--tip-fg))]`。
+- **`--muted-foreground` 非法重绑定**：`ai-gui/view.tsx` 曾把完整 `color-mix()` 颜色重绑进通道三元组变量，消费者包 `hsl(var()/alpha)` 后整条声明失效。用户气泡改为显式类 + 唯一合法的重绑定（`--primary: var(--primary-foreground)`）；中性 mention 芯片的 68% 墨色 tint 由 `@layer utilities` 里挂在气泡属性选择器下的直接 color 规则绘制（层级序胜过跨层 specificity；不做 `--foreground` 重绑定——那会把彩色芯片的 82/18 混色变平）。
+- **反转气泡内搜索高亮不可读**：`session-search-context.tsx` 的 mark 从透明底翻转反色改为显式琥珀（amber-200/75 底 + amber-950 字，dark 下 amber-400/85；active 档 amber-300 + ring），两种气泡极性都可读。
+- **气泡"Show more"对比度**：显式 `text-primary-foreground/60 hover:text-primary-foreground`。
+- **开发构建缺 MiSans→Inter 改写**：`apps/cli/scripts/dev-build.mjs` 增加 esbuild onLoad 插件（与 vite 生产插件同规则、同 pinned-source 断言），dev/prod 构建的保存校验行为一致；AGENTS.md 不变量点名四处改写站点。
+- **补丁回退链补全**：`patches/web-product-session.patch` 的 `fontFamily` 回退之外，`color`/`fontSize` 同样补 `|| firstRun` / `?? firstRun` 与 `STATIC_V1_TEXT_DEFAULTS` 兜底（含空字符串守卫）；sha256 已更新。`selection-toolbar.ts` 空候选只禁用触发器、不再尝试开空弹层。回归测试并入 `design-selection-toolbar.test.ts`（触发器显示生效字体并下发 text-style 命令；无字体候选时禁用且不开弹层），删除一次性 repro 文件。
+- **Select 对齐冻结菜单配方（B 组）**：`SelectItem` 13px/leading-5/min-h-30/rounded-md/pl-2 pr-8，`SelectContent` rounded-xl；`selectTriggerClassName` 导出并由 preview-select 与 acp-authentication-panel（原生 select）复用，消灭三份克隆。
+- **SegmentedControl 共享组件（B 组）**：`components/shared/segmented-control.tsx`（md/sm 两档，30px 高、rounded-md 槽、选中 popover 底 + 阴影）替换 mcp-connection-form 的 TransportToggle 与 queued-message-behavior-control 的本地实现；设计画布 Artwork/Preview 切换几何/语义不同，刻意不并入。
+- **冗余清理**：`Input`/`SelectTrigger` 等重复 `h-8` 与 `focus-visible:outline-hidden` 覆盖删除（compositor 的 `focus-visible:shadow-none` 是承重的，保留）。
+
+真机 CDP 走查发现一处规格未达：宿主 CSS 压缩把 Tailwind 默认主题压成**未分层** `:root,:host` 块，未分层声明胜过一切 `@layer`，冻结的 base 层 `--radius-xl: 0.8125rem` 被 12px 默认值压过（`--radius-sm/md/lg` 因默认主题不发同名变量而不受影响）。修复：index.css 末尾加未分层 `:root` 尾部重绑定守卫；AGENTS.md 记录"改梯子需两处同步、在宿主验证计算值"的不变量。修复后实测：`--radius-xl` .8125rem，SelectContent 13px、菜单/气泡等全部 rounded-xl 表面回到冻结值。
+
+真机验证（CDP 计算值，重建重启后）：tooltip 探针 rgb(44,44,44) 深底白字（修复前透明）；语言 SelectContent radius 13px、项 13px/min-h 30px/leading-5；Preferences 分段控件 30px/radius 5/子项 12px；RADIUS_XL .8125rem。全量 `pnpm check` 仅剩 clone 环境性失败（本 clone 仅 4 个提交，live-fingerprints 断言最近 30 条提交含 PPTD|Folio，不可由代码修复）；`pnpm format`、`pnpm run docs check` 通过。
+
 ## 验证
 
 - `packages/components/src/lib/vscode-theme/bundled/molly-themes.test.ts`：两个主题各 71 个 chrome 变量精确断言 + 画布/面板层级 + 选中/环=前景反转 + 语法变量存在性 + 默认选择=molly。7/7 绿。

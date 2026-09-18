@@ -8,7 +8,9 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<'input'>>(
       <input
         type={type}
         className={cn(
-          'flex h-8 w-full rounded-md border border-input-border bg-input-field px-3 py-1 text-[13px] text-input-foreground transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-input-placeholder focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 outline-hidden',
+          // The trailing outline-hidden (all states) already covers focus-visible,
+          // so a separate focus-visible:outline-hidden would be dead weight.
+          'flex h-8 w-full rounded-md border border-input-border bg-input-field px-3 py-1 text-[13px] text-input-foreground transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-input-placeholder focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 outline-hidden',
           className
         )}
         ref={ref}

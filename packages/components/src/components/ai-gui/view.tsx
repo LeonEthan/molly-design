@@ -5284,7 +5284,10 @@ const UserPlainTextBlock = ({
 
   return (
     <div className="flex max-w-full justify-end sm:pl-2">
-      <div className="min-w-0 max-w-full rounded-[13px] bg-primary px-[13px] py-2">
+      <div
+        data-molly-user-bubble=""
+        className="min-w-0 max-w-full rounded-[13px] bg-primary px-[13px] py-2"
+      >
         <div
           className={cn(
             // overflow-wrap:anywhere (not break-words) is load-bearing: only `anywhere`
@@ -5296,15 +5299,15 @@ const UserPlainTextBlock = ({
             isLong && !isFullTextVisible ? 'overflow-hidden' : ''
           )}
           style={{
-            // The bubble is the fg inversion (spec §5 user bubble). Mention
-            // chips re-derive their colour from --primary / --muted-foreground,
-            // so rebind those to the inverted ink: the chip mix (82% --primary
-            // + 18% --foreground) then lands as a soft tint of the bubble's own
-            // text in both themes instead of the theme's dark ink. The bubble's
-            // own bg/text read the ORIGINAL scope one level up.
+            // The bubble is the fg inversion (spec §5 user bubble). Colored
+            // chips re-derive their colour from --primary, so rebind it to the
+            // inverted ink — channels to channels, the only rebind the
+            // hsl(var()/alpha) token contract accepts (a complete color-mix()
+            // here is invalid and silently dropped). The neutral chip tint,
+            // search marks and the expand button are painted with explicit
+            // bubble-ink / amber classes instead of page-ink tokens. The
+            // bubble's own bg/text read the ORIGINAL scope one level up.
             '--primary': 'var(--primary-foreground)',
-            '--muted-foreground':
-              'color-mix(in srgb, hsl(var(--primary-foreground)) 68%, transparent)',
             ...conversationTextFontSizeStyle(fontSize),
             ...(isLong && !isFullTextVisible
               ? { maxHeight: userTextCollapsedHeight(fontSize) }
@@ -5331,7 +5334,10 @@ const UserPlainTextBlock = ({
               type="button"
               variant="ghost"
               size="sm"
-              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+              // Bubble ink at rest, full ink on hover: text-muted-foreground /
+              // hover:text-foreground here would resolve to the PAGE ink
+              // (hover paints foreground on the primary bubble = invisible).
+              className="h-7 px-2 text-xs text-primary-foreground/60 hover:text-primary-foreground"
               onClick={() => setIsExpanded((prev) => !prev)}
             >
               {isExpanded ? 'Show less' : 'Show more'}

@@ -31,6 +31,10 @@
   licensed default family name. Update `projection-capabilities.ts` and
   roundtrip fixtures with any supported field change; never add a second
   canonical blob to the format.
+- INVARIANT: the MiSans→Inter text-default rewrite in `scripts/build.mjs` (with its pinned-source
+  assert) is one of three lockstep adaptations of the same vendored contracts — the others are the
+  apps/cli Vite production plugin and the apps/cli esbuild dev bundle. A fourth bundle must apply
+  the identical rewrite; rationale: `packages/design-bento/README.md`.
 
 - Read-only previews collect the entry and semantic assets only.
   Bound reads and compare exact document/asset bytes across observations; stability

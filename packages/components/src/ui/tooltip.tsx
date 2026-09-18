@@ -19,7 +19,10 @@ const TooltipContent = React.forwardRef<
       sideOffset={sideOffset}
       className={cn(
         'z-[var(--z-tooltip)] overflow-hidden rounded-md',
-        'bg-(--tip-bg) text-(--tip-fg)',
+        // --tip-bg/--tip-fg are HSL channel triplets (index.css), so they must
+        // be wrapped in hsl() — the bg-(--tip-bg) shorthand would emit a bare
+        // var() substitution, which is invalid at computed-value time.
+        'bg-[hsl(var(--tip-bg))] text-[hsl(var(--tip-fg))]',
         'px-[9px] py-1.5 text-[11px] font-medium',
         'shadow-md',
         'animate-in fade-in-0 zoom-in-95',

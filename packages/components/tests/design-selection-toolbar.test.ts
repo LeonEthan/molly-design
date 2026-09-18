@@ -221,8 +221,39 @@ it('validates the crop draft before submitting a single edit', () => {
   click('Apply');
   expect(requests[0]).toMatchObject({ command: { verb: 'image-crop', crop: [0.7, 0, 0.1, 0] } });
 });
-it('uses generic actions for mixed and oversized selections and hides on readonly/empty', () => {
-  toolbar.update({ count: 9, kinds: ['text'] }, ['one'], 1);
+it('opens the font popup with its effective family and sends the text-style command', () => {
+  select('text', { fontFamily: 'Inter', fontSize: 20 });
+  const trigger = getByRole(document.body, 'button', { name: 'Font', exact: true });
+  expect(trigger.textContent).toContain('Inter');
+  click('Font');
+  expect(getByRole(document.body, 'dialog')).toBeTruthy();
+  click('Inter');
+  expect(requests).toEqual([
+    { type: 'command', selectionEpoch: 1, command: { verb: 'text-style', fontFamily: 'Inter' } },
+  ]);
+});
+it('disables the font trigger without font choices and opens no popup', () => {
+  // Zero choices is a producer-side error state (the summary normally injects
+  // the pinned default family): the trigger must be disabled rather than open
+  // an empty popup — the original user-reported bug.
+  toolbar.update(
+    {
+      count: 1,
+      kinds: ['text'],
+      fonts: [],
+      elements: [{ id: 'one', kind: 'text', fontSize: 20 }],
+    },
+    ['one'],
+    1
+  );
+  vi.advanceTimersByTime(20);
+  const trigger = getByRole(document.body, 'button', { name: 'Font', exact: true });
+  expect(trigger.hasAttribute('disabled')).toBe(true);
+  fireEvent.click(trigger);
+  expect(queryByRole(document.body, 'dialog')).toBeNull();
+});
+
+it('uses generic actions for mixed and oversized selections and hides on readonly/empty', () => {  toolbar.update({ count: 9, kinds: ['text'] }, ['one'], 1);
   vi.advanceTimersByTime(20);
   expect(queryByRole(document.body, 'button', { name: 'Bold' })).toBeNull();
   click('Regenerate selection');

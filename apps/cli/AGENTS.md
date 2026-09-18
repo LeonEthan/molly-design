@@ -14,6 +14,12 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
   `claude-acp.js` / `codex-acp.js` / `*-worker.js` — because worker owners resolve their child by
   FILENAME next to `import.meta.url`. Keep npm packages external by ABSOLUTE path, keep
   `splitting: true`, and keep the no-hoisting assertion.
+- INVARIANT: every bundle of the vendored design contracts (`design-bento/vendor/packages/contracts`)
+  must apply the identical MiSans→Inter text-default rewrite with the pinned-source assert — the Vite
+  production build (`vite.config.ts` `molly-vendor-text-default`) AND the esbuild dev bundle
+  (`scripts/dev-build.mjs` `molly-vendor-text-default` onLoad). Divergence makes an explicit
+  `fontFamily: "Inter"` pass save validation in one build and fail with PPTD-E012 in the other.
+  Rationale and the third (design-authoring helper) site: `packages/design-bento/README.md`.
 - Import the CLI's own `version` from `@/pkg`, never a relative `../package.json`; the package
   `name` stays `lody` internally. This package is private, has no public bin, and is shipped only inside Molly.
 - Keep `prepare:acp-adapters` before `dev-build.mjs` and Vite: skipping it can silently launch old

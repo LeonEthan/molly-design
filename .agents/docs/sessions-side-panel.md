@@ -108,3 +108,11 @@ association. `DesignCanvas` places a sandboxed native view in that tab; the nati
 view survives hiding and route changes, while explicit tab close saves and destroys
 it. Route blocking awaits the same save/discard decision as native close and quit.
 The canvas's drawing and assets live in its CLI-owned workspace file, not Loro.
+Because the native view always renders above HTML, `design-canvas.tsx` hides it
+whenever a `[role=dialog|listbox|menu]` overlay intersects the canvas host rect.
+Menus anchored at the chat panel's right edge must therefore not let their
+submenus reach into the canvas host: Radix submenus always open right (`side` is
+not configurable), so give the submenu a `collisionBoundary` of the chat panel
+element (`[data-panel-id="chat"]`) and let collision detection flip it left; the
+hide gate stays as the correct fallback only for overlays that genuinely cover
+the canvas.

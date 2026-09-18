@@ -121,6 +121,16 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 
 真机验证（CDP 计算值，重建重启后）：tooltip 探针 rgb(44,44,44) 深底白字（修复前透明）；语言 SelectContent radius 13px、项 13px/min-h 30px/leading-5；Preferences 分段控件 30px/radius 5/子项 12px；RADIUS_XL .8125rem。全量 `pnpm check` 仅剩 clone 环境性失败（本 clone 仅 4 个提交，live-fingerprints 断言最近 30 条提交含 PPTD|Folio，不可由代码修复）；`pnpm format`、`pnpm run docs check` 通过。
 
+## 缺陷修复：会话菜单 Copy 子菜单触发画布隐藏（2026-09-18，用户报告）
+
+**现象**：悬停会话头部"More actions"菜单的 Copy 项时，右侧设计画布整片变白；移开后恢复。用户两次截图中一次画布空白、一次正常，疑似偶发。
+
+**诊断（非崩溃、非渲染 bug）**：这是 `design-canvas.tsx` 的 `hasCanvasBlockingOverlay` 闸门的**故意行为**——设计画布是原生 WebContentsView，永远渲染在 HTML 之上；任何 `[role=dialog|listbox|menu]` 与画布宿主矩形相交时，闸门主动 `service.hide()` 藏起原生画布，避免菜单被画布盖住。实测 Copy 子菜单固定在父菜单右侧打开（Radix 子菜单的 `side` 不可配置），落在 x=1123、宽 200 → 右缘 1323，而画布宿主从 x=1167 起，持续相交约 156px，于是整片画布被藏。用户第二张截图（子菜单开着、画布正常）是子菜单尚未完成碰撞翻转/指针恰在边缘的瞬时态，非两种稳定状态。整片隐藏虽"正确"但体验差：为一条 156px 的相交缝把整块画布变白。
+
+**修复**：`session-chat-interface.tsx` 的 `SessionHeaderMenu` 在菜单打开时取 `[data-panel-id="chat"]` 面板元素，作为 Copy 子菜单 `DropdownMenuSubContent` 的 `collisionBoundary`。Radix 的碰撞检测在子菜单右缘触到面板边界前先把它翻到父菜单左侧，不再伸进画布宿主；面板极窄容不下时回退到视口行为（此时画布隐藏闸门仍是正确兜底，因为菜单真的盖到了画布上）。子菜单 `side` 想直接给 `left` 会 TS2322（Radix 类型省略 `side`/`align`），故走 collisionBoundary 一路。
+
+**验证（CDP 实测）**：修复前子菜单 x=1123/宽 200，与画布宿主（x=1167）持续相交；修复后同一会话同一操作，子菜单翻到 x=705/宽 200（右缘 905），父菜单 x=911/宽 206（右缘 1117），两个菜单与画布宿主均不相交（intersects:false），菜单开着时画布区域与关闭时逐像素一致（该验证会话画布本就无内容，白色为画布底色，非被隐藏）。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
+
 ## 验证
 
 - `packages/components/src/lib/vscode-theme/bundled/molly-themes.test.ts`：两个主题各 71 个 chrome 变量精确断言 + 画布/面板层级 + 选中/环=前景反转 + 语法变量存在性 + 默认选择=molly。7/7 绿。

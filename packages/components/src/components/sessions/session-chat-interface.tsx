@@ -983,11 +983,22 @@ export function SessionHeaderMenu({
     [t]
   );
 
+  const [chatPanelBoundary, setChatPanelBoundary] = useState<HTMLElement | null>(null);
   return (
     <>
       <DropdownMenu
         onOpenChange={(open) => {
           if (open) onForkMenuOpen?.();
+          if (open) {
+            // The Copy submenu trigger sits at the chat panel's right edge, and
+            // Radix submenus always open right (their side is not configurable).
+            // Without a boundary the submenu reaches into the design-canvas host,
+            // whose overlay gate then blanks the whole native canvas for the
+            // overlap sliver. Bound collisions to the chat panel so the submenu
+            // flips left instead; Radix falls back to the viewport when the
+            // panel can't host it.
+            setChatPanelBoundary(document.querySelector('[data-panel-id="chat"]'));
+          }
         }}
       >
         <DropdownMenuTrigger asChild>
@@ -1187,7 +1198,10 @@ export function SessionHeaderMenu({
               <Copy className="h-3.5 w-3.5 shrink-0" />
               {t('sessions.copy', 'Copy')}
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="min-w-[200px]">
+            <DropdownMenuSubContent
+              className="min-w-[200px]"
+              collisionBoundary={chatPanelBoundary ?? undefined}
+            >
               {showBaseBranchContext ? (
                 <>
                   <DropdownMenuItem

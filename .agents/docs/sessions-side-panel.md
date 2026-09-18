@@ -118,7 +118,10 @@ hide gate stays as the correct fallback only for overlays that genuinely cover
 the canvas.
 Selected/hovered rows in the sidebar lists render as a 10% tint
 (`bg-sidebar-foreground/10`), so their text keeps the plain sidebar foreground.
-Inverted text (`text-sidebar-selection-foreground`, `text-primary-foreground`,
+Inverted text (`text-primary-foreground`, `text-sidebar-selection-foreground`,
 `text-selection-foreground`) is only readable on the solid dark selection
-surfaces (`bg-sidebar-selection`, `bg-primary`, `bg-selection`) — never pair it
-with a tinted background.
+surfaces (`bg-primary`, `bg-selection`) — never pair it with a tinted
+background. Sidebar chrome never uses the solid `--sidebar-selection` surface
+anymore: every active state (New chat nav, footer icons, menu buttons,
+group headers, project rows, list rows) speaks the same tint language as the
+selected session row, with `text-sidebar-foreground` on top.

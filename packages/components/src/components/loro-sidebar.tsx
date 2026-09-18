@@ -553,7 +553,7 @@ function NavButton({
           'group flex w-full select-none items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm outline-hidden transition',
           'focus-visible:ring-1 focus-visible:ring-sidebar-ring/30',
           active
-            ? 'bg-sidebar-selection text-sidebar-selection-foreground'
+            ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
             : 'text-sidebar-foreground dark:text-sidebar-foreground/75 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
           // Keep the label clear of the trailing control instead of letting it
           // truncate under it.
@@ -590,7 +590,7 @@ export function getLoroSidebarFooterIconButtonClassName(isMobile: boolean, activ
     isMobile ? 'h-12 w-12 rounded-xl [&_svg]:h-5 [&_svg]:w-5' : 'h-7 w-7 rounded-md',
     'transition-colors focus-visible:ring-1 focus-visible:ring-sidebar-ring/40',
     active
-      ? 'bg-sidebar-selection text-sidebar-selection-foreground'
+      ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
       : 'text-sidebar-foreground dark:text-sidebar-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
   );
 }
@@ -1137,7 +1137,7 @@ export const LoroSidebar = memo(function LoroSidebar({
                               className={cn(
                                 'flex items-center gap-2 rounded-lg px-2 py-2 text-[12px]',
                                 item.isSelected
-                                  ? 'bg-sidebar-selection text-sidebar-selection-foreground'
+                                  ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
                                   : 'text-sidebar-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
                               )}
                             >

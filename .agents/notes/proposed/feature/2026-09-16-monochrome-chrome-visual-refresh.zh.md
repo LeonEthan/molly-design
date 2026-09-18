@@ -144,6 +144,16 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 
 **验证（CDP 计算值，重建重启后）**：亮主题选中行标题 rgb(30,30,30) 近黑 / 行底 10% tint；暗主题标题 rgb(255,255,255) 白 / 行底白 10% tint——两主题均可读。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
 
+## 方向修正：侧栏取消实心底选中，统一浅灰 tint 语言（2026-09-18，用户裁定）
+
+用户看过选中行修复后明确"这里也要改"——侧栏的 New chat 导航钮等 active 态仍是实心底 `--sidebar-selection`（近黑）+ 白字，与选中行的浅灰 tint 语言并存，观感厚重且两套选中语义并存。裁定：**侧栏 chrome 不再使用实心底选中**，所有 active/selected 态统一为选中行同款语言（`bg-sidebar-foreground/10` tint + `text-sidebar-foreground`，有边框槽的顺带把 `border-sidebar-ring/30` 换成 `border-sidebar-foreground/10`）。
+
+改动 8 处 6 文件：`loro-sidebar.tsx`（NavButton=New chat/Tasks、底部工具图标、updated 分区项）、`ui/sidebar.tsx`（MenuButton/MenuSubButton active、MenuAction/MenuBadge 的 peer-active 白字覆盖删除——回退到基类深字）、`session-list.tsx` 与 `task-list.tsx`（分组头 active）、`loro-app-sidebar.tsx`（项目行 active）、`task-list.tsx` 任务行标题（同一 tint 底配白字残留，本轮一并修掉）。`--sidebar-selection`/`--sidebar-selection-foreground` token 保留在契约里（主题 JSON 与契约测试不动），只是 chrome 不再消费。
+
+实心底的反转字保留范围收窄为：`bg-primary` prominent 钮（对话框主按钮等）与 `bg-selection`（日历/toggle/tree）——`bg-primary` 实心底的反转按冻结规格仍成立（New chat 钮本身已改 tint，其余按钮用户未点名，保留待裁）。
+
+**验证（CDP，重建重启后）**：落地页 active 态 New chat 钮 = tint 底 + rgb(30,30,30) 深字；会话页选中行同语言。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
+
 ## 验证
 
 - `packages/components/src/lib/vscode-theme/bundled/molly-themes.test.ts`：两个主题各 71 个 chrome 变量精确断言 + 画布/面板层级 + 选中/环=前景反转 + 语法变量存在性 + 默认选择=molly。7/7 绿。

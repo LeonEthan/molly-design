@@ -1047,12 +1047,12 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                       !isMobile &&
                       'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-hover data-[menu-open]:text-sidebar-hover-foreground',
                     showSelectedState &&
-                      'border-sidebar-ring/30 bg-sidebar-selection hover:bg-sidebar-selection',
+                      'border-sidebar-foreground/10 bg-sidebar-foreground/10 hover:bg-sidebar-foreground/10',
                     'flex min-w-0 flex-1 select-none items-center gap-2 text-xs font-semibold transition-colors',
                     projectCanNavigate ? 'cursor-pointer' : 'cursor-default',
                     removalState && 'text-muted-foreground',
                     showSelectedState
-                      ? 'text-sidebar-selection-foreground'
+                      ? 'text-sidebar-foreground'
                       : cn(
                           // Project folder names are content rather than section chrome,
                           // but still recede behind the conversation in dark mode.

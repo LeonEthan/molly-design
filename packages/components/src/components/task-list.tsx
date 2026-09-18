@@ -492,7 +492,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
             'min-w-0 flex-1 transition-colors',
             headerTypographyClass,
             showActiveGroupState
-              ? 'cursor-pointer border-sidebar-ring/30 bg-sidebar-selection text-sidebar-selection-foreground hover:bg-sidebar-selection'
+              ? 'cursor-pointer border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
               : canNavigate
                 ? cn(
                     'cursor-pointer bg-transparent',
@@ -765,7 +765,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
                       className={cn(
                         'min-w-0 flex-1 flex items-center gap-1 truncate text-sm',
                         showSelectedState
-                          ? 'text-sidebar-selection-foreground'
+                          ? 'text-sidebar-foreground'
                           : 'text-sidebar-foreground dark:text-sidebar-foreground/75',
                         useAnchor && isEditingTitle && 'relative z-20'
                       )}

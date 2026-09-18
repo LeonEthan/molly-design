@@ -644,7 +644,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
             'min-w-0 flex-1 transition-colors',
             headerTypographyClass,
             showActiveGroupState
-              ? 'cursor-pointer border-sidebar-ring/30 bg-sidebar-selection text-sidebar-selection-foreground hover:bg-sidebar-selection'
+              ? 'cursor-pointer border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
               : canNavigate
                 ? cn(
                     'cursor-pointer bg-transparent',

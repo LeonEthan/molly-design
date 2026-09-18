@@ -270,3 +270,54 @@ test('reading a missing drawing never creates its session directory', async () =
   });
   await expect(lstat(path.join(root, 'chats'))).rejects.toMatchObject({ code: 'ENOENT' });
 });
+
+test('rejects unrenderable smooth curves before replacing the current artwork', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'molly-line-validation-'));
+  roots.push(root);
+  const association = {
+    sessionId: randomUUID(),
+    name: 'Synthetic',
+    userId: 'local:test',
+    machineId: 'test-machine',
+    createdAt: '2026-09-18T00:00:00.000Z',
+  };
+  const created = await designOperation(root, { operation: 'create', association });
+  const content = {
+    doc: {
+      ...created.doc,
+      elements: [
+        {
+          id: 'synthetic-stroke',
+          kind: 'line',
+          bounds: [10, 10, 100, 100],
+          viewBox: [100, 100],
+          points: '0,0 50,25 100,100',
+          curve: 'smooth',
+          zIndex: 0,
+        },
+      ],
+    },
+    assets: {},
+  };
+  const file = path.join(root, 'chats', association.sessionId, 'design.json');
+  const before = await readFile(file);
+  await expect(
+    designOperation(root, {
+      operation: 'save',
+      sessionId: association.sessionId,
+      baseRevisionId: created.revisionId,
+      content,
+    })
+  ).rejects.toThrow(/synthetic-stroke.*smooth/);
+  expect(await readFile(file)).toEqual(before);
+  expect(
+    await designOperation(root, { operation: 'read', sessionId: association.sessionId })
+  ).toEqual(created);
+  // A historical invalid file must report the actual constraint without changing bytes.
+  const historical = JSON.stringify({ ...JSON.parse(before.toString()), ...content });
+  await writeFile(file, historical);
+  await expect(
+    designOperation(root, { operation: 'read', sessionId: association.sessionId })
+  ).rejects.toThrow(/synthetic-stroke.*smooth/);
+  expect(await readFile(file, 'utf8')).toBe(historical);
+});

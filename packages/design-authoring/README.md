@@ -155,3 +155,9 @@ Source files are preserved. An existing target is never overwritten; an I/O fail
 may leave incomplete output for inspection. This helper never submits, saves current
 artwork, changes history, or changes an Agent's frozen baseline. Current projections
 are instead regenerated from canonical BentoDoc by the existing publication path.
+
+Smooth-line admission also checks the pinned renderer's cubic-segment point count,
+which kernel replay alone does not enforce. YAML intake/projection and the CLI
+store share `assertRenderableLines`; malformed lines fail before persistence or
+editor startup, with the element ID and point count. Two-point lines remain
+straight. Existing invalid files are reported without rewriting their geometry.

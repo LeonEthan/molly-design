@@ -125,6 +125,23 @@ export function artworkToDocument(project: CanvasSource): BentoDocV4 {
   };
 }
 
+/** Renderer constraint missing from the pinned kernel's line schema. Call after replay. */
+export function assertRenderableLines(
+  elements: ReadonlyArray<{ id: string; kind: string; curve?: unknown; points?: unknown }>
+): void {
+  for (const element of elements) {
+    if (element.kind !== 'line' || element.curve !== 'smooth' || typeof element.points !== 'string')
+      continue;
+    // Matches editor-bento/renderers/line.ts routeLine: two points are a
+    // straight line; longer smooth paths require complete cubic segments.
+    const count = element.points.trim().split(/\s+/).length;
+    if (count !== 2 && (count - 1) % 3 !== 0)
+      throw Error(
+        `element ${element.id}: smooth line requires 2 points or 1 + 3k Bézier points (received ${count})`
+      );
+  }
+}
+
 /** Same acceptance domains as manual save; replay is validation, never output repair. */
 export function assertProjectionDocument(doc: BentoDocV4): void {
   // Saved BentoDoc is JSON data. Reject values YAML would silently coerce or
@@ -208,6 +225,7 @@ export function assertProjectionDocument(doc: BentoDocV4): void {
     ],
   });
   if (!result.ok) throw Error(result.error.message);
+  assertRenderableLines(doc.elements);
   const missing = staticV1UnregisteredFontFamilies(doc.elements, [
     ...(doc.fonts ?? []).map((f) => f.family),
     AUTHORING_DEFAULT_FONT_FAMILY,
@@ -293,6 +311,7 @@ export const ARTWORK_EXCLUSIONS: readonly ArtworkFormatExclusion[] = [
 ];
 
 const ARTWORK_NOTES: readonly string[] = [
+  'smooth lines use 1 + 3k Bézier control points; two points render as a straight line.',
   'Legacy geon-canvas/1 bytes remain readable with identical validation; every write uses molly-canvas/1.',
   'size must be a positive integer pair; see artwork-format.md for the admitted pixel range.',
   'bounds are [x, y, w, h] with x, y >= 0, w, h > 0 and the element inside the canvas; see artwork-format.md.',

@@ -30,6 +30,7 @@ export {
 
 export {
   exportAuthoring,
+  assertRenderableLines,
   AUTHORING_DEFAULT_FONT_FAMILY,
   ARTWORK_ENTRY,
   ARTWORK_FORMAT,

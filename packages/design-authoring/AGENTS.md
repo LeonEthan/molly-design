@@ -48,3 +48,7 @@
   guarded collection and a fresh output directory. Preserve source bytes, current
   artwork, history and turn receipts. Digest-only reads retain the former page path
   to fingerprint inherited drafts; they never confer format admission or submission.
+
+- After kernel replay, YAML admission and canonical store validation share
+  `assertRenderableLines` for the pinned renderer's smooth-line point contract.
+  Reject incomplete cubic segments; never add points or change curve modes.

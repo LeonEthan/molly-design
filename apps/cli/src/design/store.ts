@@ -47,6 +47,7 @@ import { constants } from 'node:fs';
 import { mkdir, open, rename, unlink, lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
+import { assertRenderableLines } from '@molly/design-authoring';
 import { withDesignLock, type DesignLockTiming } from './lock';
 import { ensureCurrentProjection } from './current-projection';
 
@@ -297,6 +298,7 @@ function validateAssets(content: z.output<typeof designInput>) {
     commands,
   });
   if (!checked.ok) throw Error(checked.error.message);
+  assertRenderableLines(content.doc.elements);
   const missingFonts = staticV1UnregisteredFontFamilies(
     content.doc.elements,
     (content.doc.fonts ?? []).map((font) => font.family)

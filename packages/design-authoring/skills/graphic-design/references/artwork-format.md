@@ -53,6 +53,11 @@ one kind; it lists exactly what the intake validator admits.
 - `shape`: `shapeName` (`rect`, `roundRect`, `ellipse`, `oval`, `triangle`,
   `arrow`, or `custom` with `viewBox` and `path`), plus `fill` / `border`.
 - `line`: `viewBox`, `points`, optional `curve` / `arrow`, plus `border`.
+  Points are whitespace-separated `x,y` pairs. For `curve: smooth`, use one
+  start point followed by groups of three: control point 1, control point 2,
+  segment endpoint. Thus a curved line needs 4, 7, 10, … points; two points
+  render as a straight line. These are Bézier controls, not sampled freehand
+  points. `sharp` and `round` accept ordinary polyline points.
 - `image`: `src` under `media/`, `fit` (`cover`, `contain`, or `fill`), optional
   `crop` and `cropShape`.
 - `icon`: `iconName` as `style:name` against the pinned offline shelf.

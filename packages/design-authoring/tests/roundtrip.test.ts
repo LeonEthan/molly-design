@@ -335,7 +335,7 @@ const elements: BentoElementV4[] = [
     ...base('line'),
     kind: 'line',
     viewBox: [100, 100],
-    points: '0,0  5e1,25 100,100',
+    points: '0,0  25,10 5e1,25 100,100',
     curve: 'smooth',
     arrow: [null, 'stealth'],
     border,

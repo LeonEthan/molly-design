@@ -34,7 +34,6 @@ import {
   Minimize2,
   MoreHorizontal,
   Pencil,
-  RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { sessionLiveStatusAtomFamily } from '@/atoms/presence';
@@ -194,9 +193,6 @@ export function DesignCanvas({
       cancelled = true;
     };
   }, [active, refreshVersions]);
-  const [previewStatus, setPreviewStatus] = useState<'waiting' | 'ready' | 'refreshing'>('waiting');
-  const [previewSource, setPreviewSource] = useState('');
-  const [previewIdentity, setPreviewIdentity] = useState<string>();
   const [previewError, setPreviewError] = useState('');
   const [automaticError, setAutomaticError] = useState('');
   const previewGeneration = useRef(0);
@@ -209,8 +205,6 @@ export function DesignCanvas({
   const machine = useAtomValue(localProbeResultAtom);
   const refreshPreview = useCallback(async () => {
     const generation = ++previewGeneration.current;
-    setPreviewStatus('refreshing');
-    setPreviewError('');
     try {
       const service = getIpcServices()?.design;
       if (!service || !workspaceId || !machine?.machineId)
@@ -223,10 +217,7 @@ export function DesignCanvas({
         params: {},
       });
       if (generation !== previewGeneration.current || result.status === 'superseded') return;
-      setPreviewSource(result.source);
-      setPreviewIdentity(result.sourceIdentity);
-      setPreviewStatus(result.status);
-      if (result.status === 'waiting') setPreviewError(result.error ?? '');
+      setPreviewError(result.status === 'waiting' ? (result.error ?? '') : '');
       setAutomaticError(result.automaticError ?? '');
       if (host.current && !hasCanvasBlockingOverlay(host.current)) {
         const { x, y, width, height } = host.current.getBoundingClientRect();
@@ -234,7 +225,6 @@ export function DesignCanvas({
       }
     } catch (cause) {
       if (generation !== previewGeneration.current) return;
-      setPreviewStatus('waiting');
       setPreviewError(String(cause));
     }
   }, [workspaceId, machine?.machineId, sessionId, hostId]);
@@ -304,9 +294,6 @@ export function DesignCanvas({
     };
     const stop = onIpcEvent('design.preview', (result) => {
       if (result.hostId !== hostId) return;
-      setPreviewSource(result.source);
-      setPreviewIdentity(result.sourceIdentity);
-      setPreviewStatus(result.status);
       setPreviewError(result.error ?? '');
       setAutomaticError(result.automaticError ?? '');
     });
@@ -576,20 +563,6 @@ export function DesignCanvas({
         );
       switchPreview(false);
     });
-  const importPreview = () =>
-    run(async () => {
-      const service = getIpcServices()?.design;
-      if (!service || !previewIdentity) throw Error('Preview is not available');
-      const saved = await service.importPreview(sessionId, hostId, previewIdentity);
-      if (saved.reloadError)
-        throw Error(
-          t(
-            'design.importSavedReloadFailed',
-            'Imported and saved, but the canvas could not reload: '
-          ) + saved.reloadError
-        );
-      switchPreview(false);
-    });
   const exportArtwork = (format: 'png' | 'jpeg') =>
     run(async () => getIpcServices()?.design.export(sessionId, format, name));
   // Live selection size pushed from the canvas drives the native toolbar and
@@ -696,27 +669,6 @@ export function DesignCanvas({
             {t('design.sourcePreview', 'Preview')}
           </button>
         </div>
-        {preview && (
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={previewStatus === 'refreshing'}
-            onClick={() => void refreshPreview()}
-          >
-            <RefreshCw className="size-3.5" />
-            {t('design.refreshPreview', 'Refresh preview')}
-          </Button>
-        )}
-        {preview && (
-          <Button
-            size="sm"
-            disabled={busy || !previewIdentity || previewStatus === 'refreshing'}
-            onClick={importPreview}
-          >
-            <Download className="size-3.5" />
-            {t('design.importPreview', 'Import as current artwork')}
-          </Button>
-        )}
         <TooltipProvider>
           <div className="ml-auto flex items-center gap-1">
             <DropdownMenu
@@ -864,36 +816,19 @@ export function DesignCanvas({
             : t('design.historyLoading', 'Loading version…')}
         </p>
       )}
-      {preview && (
-        <div role="status" className="border-b p-2 text-xs text-muted-foreground">
-          <p>
-            {t(
-              'design.previewReadonly',
-              'Read-only authoring files · not submitted. Valid drafts may still be unfinished.'
-            )}
-          </p>
-          {previewSource && <p className="break-all">{previewSource}</p>}
-          <p>
-            {previewStatus === 'ready'
-              ? t('design.previewReady', 'Showing the observed document and assets.')
-              : previewStatus === 'refreshing'
-                ? t('design.previewRefreshing', 'Reading files…')
-                : t(
-                    'design.previewWaiting',
-                    'Waiting for valid files. The last valid preview, if any, is retained.'
-                  )}
-          </p>
-          {automaticError && (
-            <p>
-              {t(
-                'design.previewAutomaticUnavailable',
-                'Automatic updates unavailable. Use Refresh preview.'
-              )}{' '}
-              {automaticError}
-            </p>
-          )}
-          {previewError && <p>{previewError}</p>}
-        </div>
+      {preview && previewError && (
+        <p role="alert" className="border-b p-2 text-xs text-destructive">
+          {previewError}
+        </p>
+      )}
+      {preview && automaticError && (
+        <p role="alert" className="border-b p-2 text-xs text-destructive">
+          {t(
+            'design.previewAutomaticUnavailable',
+            'Automatic preview updates unavailable.'
+          )}{' '}
+          {automaticError}
+        </p>
       )}
       {error && (
         <p role="alert" className="p-2 text-destructive">

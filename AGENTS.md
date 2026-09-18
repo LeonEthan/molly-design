@@ -49,8 +49,8 @@ file previews neither commit nor trigger sync loops. Files or previews do not en
 Agent turns. Human judgment establishes visual quality; Agent review is advisory.
 
 Agents resolve file conflicts through tool errors and re-reading; preserve drafts
-and retire candidate workflows. Never auto-restart completed turns. External import
-validates and saves the viewed snapshot directly. Image MCP supports generate/edit
+and retire candidate workflows. Never auto-restart completed turns.
+Image MCP supports generate/edit
 with a user-required model and no product default.
 
 Design history uses a Molly-managed local Git repository only, isolated from user

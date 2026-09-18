@@ -3,18 +3,9 @@ import { strict as assert } from 'node:assert'
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import {
-  attachDesign,
-  designCanvasAccess,
-  designRequest,
-  hideDesign,
-  importDesignSnapshot,
-  destroyDesign,
-  setDesignCanvasStateQuery
-} from './design-service'
+import { attachDesign, designCanvasAccess, designRequest, hideDesign } from './design-service'
 import {
   refreshSourcePreview,
-  importSourcePreview,
   attachSourcePreview,
   hideSourcePreview,
   closeSourcePreview
@@ -209,144 +200,6 @@ export async function verifySourcePreview(
         canonicalInstancePreserved: true,
         canonicalUndoRedoPreserved: true,
         authorCompletionNotInferred: true
-      },
-      null,
-      2
-    )
-  )
-}
-
-/** Import uses the same production preview and canonical worker, with explicit race signals. */
-export async function verifySourceImport(owner: BrowserWindow, directory: string) {
-  setDesignCanvasStateQuery(async () => {})
-  const artworkId = randomUUID(),
-    host = randomUUID()
-  const saved = await designRequest({
-    operation: 'create',
-    association: {
-      sessionId: artworkId,
-      name: 'Synthetic import',
-      userId: 'verification',
-      machineId: 'verification',
-      createdAt: new Date().toISOString()
-    },
-    width: 320,
-    height: 200
-  })
-  const root = join(directory, 'import-authoring')
-  await mkdir(join(root, 'media'), { recursive: true })
-  const source = join(root, 'design.yaml')
-  const page =
-    'format: molly-canvas/1\nsize: [320, 200]\nbackground: {type: solid, color: "#FFFFFF"}\nelements:\n  - id: photo\n    kind: image\n    bounds: [0, 0, 100, 100]\n    src: media/pic.png\n    fit: cover\n'
-  await writeFile(source, page)
-  const firstAsset = nativeImage
-    .createFromBitmap(Buffer.from([100, 0, 0, 255]), { width: 1, height: 1 })
-    .toPNG()
-  await writeFile(join(root, 'media/pic.png'), firstAsset)
-  const shown = await refreshSourcePreview(owner, artworkId, host, async () => source)
-  if (shown.status !== 'ready' || !shown.sourceIdentity) throw Error('Import preview not ready')
-  attachSourcePreview(host, { x: 0, y: 0, width: 1000, height: 700 })
-  await designCanvasAccess.update([
-    { artworkId, turnId: 'synthetic-import-processing', preparing: false }
-  ])
-  await assert.rejects(importSourcePreview(owner, artworkId, host, shown.sourceIdentity), /active/)
-  await designCanvasAccess.update([])
-  let started!: () => void, finish!: () => void
-  const entered = new Promise<void>((resolve) => {
-    started = resolve
-  })
-  const released = new Promise<void>((resolve) => {
-    finish = resolve
-  })
-  const buffered = {
-    artworkId,
-    async setReadonly() {},
-    async flush() {
-      started()
-      await released
-    }
-  }
-  await designCanvasAccess.register(buffered)
-  const importing = importSourcePreview(owner, artworkId, host, shown.sourceIdentity)
-  await entered
-  await writeFile(
-    join(root, 'media/pic.png'),
-    nativeImage.createFromBitmap(Buffer.from([200, 0, 0, 255]), { width: 1, height: 1 }).toPNG()
-  )
-  const latest = await refreshSourcePreview(owner, artworkId, host, async () => source)
-  if (latest.status !== 'ready') throw Error('Updated import preview not ready')
-  assert.notEqual(latest.sourceIdentity, shown.sourceIdentity)
-  finish()
-  const result = await importing
-  assert.equal(result.reloadError, undefined)
-  designCanvasAccess.unregister(buffered)
-  const imported = await designRequest({ operation: 'read', sessionId: artworkId })
-  assert.ok(
-    Object.values(imported.assets).includes(
-      'data:image/png;base64,' + firstAsset.toString('base64')
-    )
-  )
-  assert.notEqual(imported.revisionId, saved.revisionId)
-  await assert.rejects(importSourcePreview(owner, artworkId, host, shown.sourceIdentity), /changed/)
-  const retry = {
-    content: { doc: imported.doc, assets: imported.assets },
-    baseRevisionId: saved.revisionId
-  }
-  assert.equal((await importDesignSnapshot(artworkId, retry)).revisionId, imported.revisionId)
-  const conflict = {
-    content: { doc: saved.doc, assets: saved.assets },
-    baseRevisionId: saved.revisionId
-  }
-  await assert.rejects(importDesignSnapshot(artworkId, conflict), /DESIGN_CONFLICT/)
-  await assert.rejects(
-    importDesignSnapshot(artworkId, { content: { doc: imported.doc, assets: {} } }),
-    /asset/i
-  )
-  const failure = {
-    artworkId,
-    async setReadonly() {},
-    async flush() {
-      throw Error('Synthetic flush failure; draft retained')
-    }
-  }
-  await designCanvasAccess.register(failure)
-  await assert.rejects(importDesignSnapshot(artworkId, retry), /draft retained/)
-  designCanvasAccess.unregister(failure)
-  assert.deepEqual(await designRequest({ operation: 'read', sessionId: artworkId }), imported)
-  assert.equal(await readFile(source, 'utf8'), page)
-  closeSourcePreview(host)
-  await assert.rejects(
-    importSourcePreview(owner, artworkId, host, latest.sourceIdentity!),
-    /closed/
-  )
-  await attachDesign(owner, artworkId, { x: 0, y: 0, width: 1000, height: 700 }, artworkId, false)
-  const editor = owner.contentView.children.find(
-    (child) => child instanceof WebContentsView && child.webContents.getURL().includes(artworkId)
-  ) as WebContentsView
-  assert.ok(editor)
-  assert.deepEqual(
-    (await editor.webContents.executeJavaScript('window.molly.snapshot()')).doc,
-    imported.doc
-  )
-  assert.equal((await editor.webContents.executeJavaScript('window.molly.state()')).readonly, false)
-  destroyDesign(artworkId)
-  setDesignCanvasStateQuery(async () => {
-    await designCanvasAccess.update([])
-  })
-  await writeFile(
-    join(directory, 'source-import-result.json'),
-    JSON.stringify(
-      {
-        status: 'passed',
-        exactClickedAssetsAcrossRefresh: true,
-        executionProcessingRefused: true,
-        closedOrReplacedIdentityRefused: true,
-        lostReplyIdempotence: true,
-        staleVersionRefused: true,
-        assetFailurePreservesCanonical: true,
-        flushFailurePreservesCanonical: true,
-        workspacePreserved: true,
-        savedCanonicalEditable: true
       },
       null,
       2

@@ -3,7 +3,7 @@ import { lstatSync } from 'node:fs'
 import { startWorkspaceFileWatcher, type WorkspaceFileWatcher } from '@loro-dev/ignore'
 import { SourceObservation } from './design-source-observation'
 import { dirname, relative, resolve } from 'node:path'
-import { designRequest, surface, importDesignSnapshot } from './design-service'
+import { designRequest, surface } from './design-service'
 import type { ObservedPreviewResult } from '../../../../cli/src/design/render-preview'
 import { PreviewRequests } from './design-source-preview-core'
 
@@ -56,37 +56,10 @@ const views = new Map<
     artworkId: string
     source: string
     sourceIdentity: string
-    kind: 'source' | 'history'
-    snapshot: {
-      content: Pick<import('../../../../cli/src/design/store').DesignPayload, 'doc' | 'assets'>
-      baseRevisionId?: string
-    }
     view: WebContentsView
     dispose(): void
   }
 >()
-
-/** A click names the rendered identity, never the watcher's newest observation. */
-export async function importSourcePreview(
-  owner: BrowserWindow,
-  artworkId: string,
-  hostId: string,
-  sourceIdentity: string
-) {
-  const shown = views.get(hostId)
-  if (
-    !shown ||
-    shown.kind !== 'source' ||
-    shown.owner !== owner ||
-    shown.artworkId !== artworkId ||
-    shown.sourceIdentity !== sourceIdentity ||
-    !requests.visible(hostId) ||
-    !shown.view.getVisible() ||
-    shown.view.webContents.isDestroyed()
-  )
-    throw Error('Preview changed or closed; view the document again before importing')
-  return importDesignSnapshot(artworkId, shown.snapshot)
-}
 
 export function hideSourcePreview(hostId: string, cancel = true) {
   if (cancel) {
@@ -390,9 +363,7 @@ async function renderSourcePreview(
       owner,
       artworkId,
       source,
-      kind,
       sourceIdentity: built.sourceIdentity,
-      snapshot: { content: { doc: built.doc, assets: built.assets } },
       view,
       dispose: resource.dispose
     })

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   history: [] as { designOutcome?: unknown }[],
   synced: false,
+  previewVisible: false,
   sync: vi.fn<() => Promise<void>>(),
 }));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
@@ -47,10 +48,16 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       versions: async () => [],
       syncFromStore: () => state.sync(),
       hide: async () => {},
-      hidePreview: async () => {},
-      closePreview: async () => {},
+      hidePreview: async () => {
+        state.previewVisible = false;
+      },
+      closePreview: async () => {
+        state.previewVisible = false;
+      },
       attach: async () => {},
-      attachPreview: async () => {},
+      attachPreview: async () => {
+        state.previewVisible = true;
+      },
       refreshPreview: async () => ({ status: 'ready', source: 'design.yaml' }),
       selectionSummary: async () => null,
     },
@@ -85,7 +92,7 @@ const click = async (name: string) =>
     expect(button).toBeDefined();
     button!.click();
   });
-const isPreview = () => container.textContent!.includes('Read-only authoring files');
+const isPreview = () => state.previewVisible;
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
@@ -96,6 +103,7 @@ beforeEach(() => {
   );
   state.history = [];
   state.synced = false;
+  state.previewVisible = false;
   state.sync.mockReset().mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);

@@ -16,7 +16,6 @@ import {
 } from '@molly/shared/local-machine-rpc'
 import {
   refreshSourcePreview,
-  importSourcePreview,
   hideSourcePreview,
   attachSourcePreview,
   closeSourcePreview,
@@ -171,14 +170,6 @@ export class DesignIpc extends IpcService {
       if (!resolved.ok) throw Error(resolved.error)
       return resolved.path
     })
-  }
-  @IpcMethod() async importPreview(sessionId: string, hostId: string, sourceIdentity: string) {
-    return importSourcePreview(
-      owner(),
-      id.parse(sessionId),
-      id.parse(hostId),
-      candidateId.parse(sourceIdentity)
-    )
   }
   @IpcMethod() async attachPreview(
     hostId: string,

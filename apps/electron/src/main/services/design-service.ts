@@ -539,38 +539,6 @@ export async function applyDesignCommand(
   return DesignCanvasCommandResultSchema.parse(result)
 }
 
-/** The preview owns these exact bytes and its retry baseline; never read authoring files here. */
-export async function importDesignSnapshot(
-  id: string,
-  snapshot: { content: Pick<DesignPayload, 'doc' | 'assets'>; baseRevisionId?: string }
-): Promise<{ revisionId: string; reloadError?: string }> {
-  await queryCanvasState?.()
-  let committed: DesignPayload | undefined
-  try {
-    return await designCanvasAccess.replaceAfterFlush(id, async (assertIdle) => {
-      const current = await designRequest({ operation: 'read', sessionId: id })
-      snapshot.baseRevisionId ??= current.revisionId
-      // Recheck after asynchronous flush/read and again at the worker queue boundary.
-      assertIdle()
-      const saved = await designRequest(
-        {
-          operation: 'save',
-          sessionId: id,
-          baseRevisionId: snapshot.baseRevisionId,
-          content: snapshot.content
-        },
-        assertIdle
-      )
-      committed = saved
-      await syncDesignCanvasFromStore(id)
-      return { revisionId: saved.revisionId }
-    })
-  } catch (error) {
-    if (committed) return { revisionId: committed.revisionId, reloadError: String(error) }
-    throw error
-  }
-}
-
 export async function saveDesignForDispatch(id: string) {
   await queryCanvasState?.()
   await designCanvasAccess.prepareForSend(id)

@@ -6,18 +6,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   hostId: '',
+  refreshCalls: 0,
   events: new Map<string, (payload: unknown) => void>(),
   history: [] as Array<{ role: 'assistant'; id: string; finished: boolean; endedAt: number }>,
   liveStatus: null as null | { type: 'running' },
   visible: false,
   previewVisible: false,
+  attachPreviewCalls: 0,
   refresh: async (): Promise<unknown> => ({ status: 'ready', source: '/synthetic/design.yaml' }),
   attach: async () => {},
-  importPreview: async (
-    _session: string,
-    _host: string,
-    _identity: string
-  ): Promise<{ revisionId: string; reloadError?: string }> => ({ revisionId: 'saved' }),
 }));
 vi.mock('jotai', async (original) => ({
   ...(await original<typeof import('jotai')>()),
@@ -63,16 +60,16 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         await state.attach();
         state.visible = true;
       },
-      importPreview: (session: string, host: string, identity: string) =>
-        state.importPreview(session, host, identity),
       hide: async () => {
         state.visible = false;
       },
       refreshPreview: (_session: string, host: string) => {
         state.hostId = host;
+        state.refreshCalls += 1;
         return state.refresh();
       },
       attachPreview: async () => {
+        state.attachPreviewCalls += 1;
         state.previewVisible = true;
       },
       hidePreview: async () => {
@@ -82,6 +79,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         state.previewVisible = false;
       },
       selectionSummary: async () => null,
+      versions: async () => [],
     },
   }),
 }));
@@ -94,6 +92,8 @@ beforeEach(async () => {
   state.liveStatus = null;
   state.visible = false;
   state.previewVisible = false;
+  state.refreshCalls = 0;
+  state.attachPreviewCalls = 0;
   state.attach = async () => {};
   vi.stubGlobal(
     'ResizeObserver',
@@ -151,13 +151,9 @@ test('reselecting source during refresh keeps the pending response consumable', 
   await mount();
   await click('Preview');
   await click('Preview');
+  const attachedBefore = state.attachPreviewCalls;
   await act(async () => complete({ status: 'ready', source: '/synthetic/design.yaml' }));
-  expect(container.textContent).toContain('Showing the observed document and assets.');
-  expect(
-    [...container.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Refresh preview'
-    )!.disabled
-  ).toBe(false);
+  expect(state.attachPreviewCalls).toBeGreaterThan(attachedBefore);
 });
 test('shows valid intermediate authoring snapshots while an Agent turn is active', async () => {
   state.refresh = async () => ({
@@ -173,7 +169,6 @@ test('shows valid intermediate authoring snapshots while an Agent turn is active
   expect(state.hostId).not.toBe('');
   expect(state.previewVisible).toBe(true);
   expect(state.visible).toBe(false);
-  expect(container.textContent).toContain('/synthetic/intermediate-1/design.yaml');
   await act(async () =>
     state.events.get('design.preview')?.({
       hostId: state.hostId,
@@ -182,8 +177,8 @@ test('shows valid intermediate authoring snapshots while an Agent turn is active
       status: 'ready',
     })
   );
-  expect(container.textContent).toContain('/synthetic/intermediate-2/design.yaml');
   expect(state.previewVisible).toBe(true);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
   await click('Artwork');
   expect(state.visible).toBe(true);
   expect(state.previewVisible).toBe(false);
@@ -206,57 +201,68 @@ test('old attachment cleanup cannot hide the current artwork after a rapid switc
 });
 
 test('push status, reconnect and finalized history reconcile only an open preview', async () => {
-  let path = '/synthetic/first/design.yaml';
-  state.refresh = async () => ({ status: 'ready', source: path });
+  state.refresh = async () => ({ status: 'ready', source: '/synthetic/first/design.yaml' });
   await mount();
   await click('Preview');
   await act(async () =>
     state.events.get('design.preview')?.({
       hostId: state.hostId,
-      source: path,
+      source: '/synthetic/first/design.yaml',
       status: 'waiting',
       error: 'Missing referenced file',
       automaticError: 'Native watch failed',
     })
   );
   expect(container.textContent).toContain('Missing referenced file');
-  expect(container.textContent).toContain('Automatic updates unavailable');
-  path = '/synthetic/reconnected/design.yaml';
+  expect(container.textContent).toContain('Automatic preview updates unavailable.');
+  const beforeReconnect = state.refreshCalls;
   await act(async () => state.events.get('loro.status')?.(true));
-  expect(container.textContent).toContain(path);
+  expect(state.refreshCalls).toBeGreaterThan(beforeReconnect);
+  expect(container.textContent).not.toContain('Missing referenced file');
   expect(container.textContent).not.toContain('Native watch failed');
-  path = '/synthetic/finalized/design.yaml';
   state.history = [{ role: 'assistant', id: 'turn', finished: true, endedAt: 1 }];
+  const beforeFinalized = state.refreshCalls;
   await mount();
-  expect(container.textContent).toContain(path);
+  expect(state.refreshCalls).toBeGreaterThan(beforeFinalized);
   await click('Artwork');
   expect(state.events.has('design.preview')).toBe(false);
   expect(state.events.has('loro.status')).toBe(false);
 });
 
-test('import names the displayed snapshot, retains preview on failure and opens canonical only after save', async () => {
+test('preview errors hide with the preview and clear after successful reconciliation', async () => {
+  state.refresh = async () => ({ status: 'ready', source: '/synthetic/design.yaml' });
+  await mount();
+  await click('Preview');
+  await act(async () =>
+    state.events.get('design.preview')?.({
+      hostId: state.hostId,
+      source: '/synthetic/design.yaml',
+      status: 'waiting',
+      error: 'Missing referenced file',
+      automaticError: 'Native watch failed',
+    })
+  );
+  expect(container.textContent).toContain('Missing referenced file');
+  expect(container.textContent).toContain('Native watch failed');
+  await click('Artwork');
+  expect(container.textContent).not.toContain('Missing referenced file');
+  expect(container.textContent).not.toContain('Native watch failed');
+  await click('Preview');
+  expect(container.textContent).not.toContain('Missing referenced file');
+  expect(container.textContent).not.toContain('Native watch failed');
+});
+
+test('preview exposes no manual refresh, import action or information banner', async () => {
   state.refresh = async () => ({
     status: 'ready',
     source: '/synthetic/design.yaml',
     sourceIdentity: 'shown',
   });
-  let requested: unknown;
-  state.importPreview = async (...args) => {
-    requested = args;
-    throw Error('DESIGN_CONFLICT');
-  };
   await mount();
   await click('Preview');
-  await click('Import as current artwork');
-  expect(requested).toEqual(['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', state.hostId, 'shown']);
-  expect(container.textContent).toContain('DESIGN_CONFLICT');
-  expect(state.previewVisible).toBe(true);
-  state.importPreview = async () => ({ revisionId: 'saved', reloadError: 'dirty editor' });
-  await click('Import as current artwork');
-  expect(container.textContent).toContain('Imported and saved, but the canvas could not reload');
-  expect(state.previewVisible).toBe(true);
-  state.importPreview = async () => ({ revisionId: 'saved' });
-  await click('Import as current artwork');
-  expect(state.previewVisible).toBe(false);
-  expect(state.visible).toBe(true);
+  const labels = [...container.querySelectorAll('button')].map((button) => button.textContent);
+  expect(labels).not.toContain('Refresh preview');
+  expect(labels).not.toContain('Import as current artwork');
+  expect(container.textContent).not.toContain('Read-only authoring files');
+  expect(container.textContent).not.toContain('/synthetic/design.yaml');
 });

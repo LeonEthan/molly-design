@@ -1,4 +1,4 @@
-import { verifySourcePreview, verifySourceImport } from './design-source-preview-verification'
+import { verifySourcePreview } from './design-source-preview-verification'
 import { app, BrowserWindow, WebContentsView, nativeImage, dialog } from 'electron'
 import { strict as assert } from 'node:assert'
 import { randomUUID } from 'node:crypto'
@@ -172,7 +172,6 @@ export async function verifyDesign(directory: string) {
     await writeFile(join(directory, 'design.' + format), bytes)
   }
   await verifySourcePreview(owner, id, reopenedView, directory)
-  await verifySourceImport(owner, directory)
   original = await designRequest({ operation: 'read', sessionId: id })
   // Invalid writes must reject and leave the confirmed drawing intact.
   await assert.rejects(

@@ -98,10 +98,11 @@ retired from Molly. Generic file/diff viewers and send-to-chat references remain
 ### Authoring preview in the canvas
 
 `design-canvas.tsx` switches the existing canvas region between the retained current
-artwork and a readonly, unsubmitted source preview. Refresh uses frozen document and
-asset bytes; waiting/error states retain the last valid preview. Current-artwork
-copy/export actions are disabled while viewing source files. The preview never
-unlocks or destroys the editor and does not declare Agent completion.
+artwork and a readonly, unsubmitted source preview. Automatic refresh uses frozen
+document and asset bytes; failures are reported and retain the last valid preview.
+The preview offers no manual refresh and no import-into-current-artwork action.
+Current-artwork copy/export actions are disabled while viewing source files. The
+preview never unlocks or destroys the editor and does not declare Agent completion.
 
 When an Agent turn starts while Current artwork is selected, the canvas enters that
 same readonly source preview and subscribes to valid intermediate PPTD snapshots.
@@ -124,14 +125,6 @@ revision through draft restoration, and restores input focus. Subsequent edits,
 deletions or artwork changes invalidate the mention explicitly at send; remove it
 and reselect. Unsubmitted previews cannot supply these references.
 
-An explicit **Import as current artwork** action saves the displayed document and
-fixed assets through the existing canonical save path. It flushes unsaved editor
-changes, refuses execution/processing and version conflicts, and retains the source
-on failure. Only successful save and canvas reload switch back to current artwork;
-a reload error explicitly reports that the import was already saved. A changed or
-closed preview identity must be viewed again; an already accepted import retains its
-clicked bytes even if automatic refresh advances while it is flushing.
-
 ### Current artwork after a commit
 
 The canvas retains its current artwork while the authoring-source preview is shown.
@@ -149,6 +142,6 @@ Historical views share the isolated readonly renderer, while the current editor 
 hidden with its undo state. Edit from here explicitly restores the selected version;
 the service preserves unversioned current content in the same Git history first.
 Version mutations use the existing execution/processing gate, and history cannot supply
-current-artwork selections or enter the external-file import path. Git errors remain
+current-artwork selections. Git errors remain
 visible without replacing the current editor. See the
 [implementation and acceptance limits](../../../../../.agents/notes/implemented/feature/2026-09-12-design-version-history.zh.md).

@@ -142,4 +142,13 @@ await build({
   logLevel: 'warning',
 });
 
+// The vendored text default names the upstream face; the design canvas
+// (design-bento build) rewrites it to the bundled Inter face. Skill-side
+// authoring and validation must bless the same registration-optional default,
+// so apply the identical adaptation to the assembled helper bundle.
+const helper = readFileSync(helperOut, 'utf8');
+if (helper.split('fontFamily: "MiSans",').length !== 2)
+  fail('Pinned text font default changed; review the Inter adaptation');
+writeFileSync(helperOut, helper.replace('fontFamily: "MiSans",', 'fontFamily: "Inter",'));
+
 console.log('design-authoring build: ok');

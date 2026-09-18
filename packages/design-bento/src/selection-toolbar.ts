@@ -356,7 +356,9 @@ export function createSelectionToolbar(options: {
       bar,
       `${items.find((item) => item[0] === value)?.[1] ?? name} ⌄`,
       name,
-      () =>
+      () => {
+        // A choice popup with zero entries is a dead end; keep it closed.
+        if (items.length === 0) return;
         openPopup(trigger, name, (node) => {
           const list = document.createElement('div');
           list.className = 'choices';
@@ -365,8 +367,10 @@ export function createSelectionToolbar(options: {
             b.setAttribute('aria-pressed', String(item === value));
           }
           node.append(list);
-        })
+        });
+      }
     );
+    if (items.length === 0) trigger.disabled = true;
     trigger.setAttribute('aria-haspopup', 'dialog');
     trigger.setAttribute('aria-expanded', 'false');
   }

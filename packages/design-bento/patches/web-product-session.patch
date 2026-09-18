@@ -10,12 +10,13 @@ index 579f34b..5a4412c 100644
  // A1a-2 composition root（docs/a1a-2-acceptance.md §3/§5）。
  // 页面以 ?ws=<id> 启动时接管 boot：从同源 test server 取 semantic BentoDocV4 +
  // 资产 dataURI 表，建 kernel + bridge（packages 源码拷入本目录 packages/），
-@@ -11,7 +15,7 @@ import {
+@@ -11,7 +15,8 @@ import {
  } from './packages/editor-bento/src/bridge.ts'
  import { projectToBentoNative } from './packages/editor-bento/src/project.ts'
  import { injectTextParagraphNormalizationCss } from './packages/editor-bento/src/renderers/text.ts'
 -import type { BentoDocV4 } from './packages/contracts/src/index.ts'
 +import type { BentoDocV4, VisualCommandV4 } from './packages/contracts/src/index.ts'
++import { STATIC_V1_TEXT_DEFAULTS } from './packages/contracts/src/index.ts'
  
  export interface A1a2Session {
    /** 投影后的 native 文档，交给 bootWith 建 Store。 */
@@ -36,7 +37,7 @@ index 579f34b..5a4412c 100644
  }
  
  export async function bootA1a2Workspace(wsId: string): Promise<A1a2Session> {
-@@ -50,24 +55,222 @@ export async function bootA1a2Workspace(wsId: string): Promise<A1a2Session> {
+@@ -50,24 +55,227 @@ export async function bootA1a2Workspace(wsId: string): Promise<A1a2Session> {
    }
  
    const kernel = createRecordingVisualDocumentKernel(payload.doc)
@@ -82,7 +83,10 @@ index 579f34b..5a4412c 100644
 +                const firstRun = element.text.paragraphs?.flatMap((paragraph) => paragraph.runs ?? [])[0]
 +                return {
 +                  color: element.text.color ?? firstRun?.color,
-+                  fontFamily: typeof element.text.fontFamily === 'string' ? element.text.fontFamily : (element.text.fontFamily?.latin ?? (typeof firstRun?.fontFamily === 'string' ? firstRun.fontFamily : firstRun?.fontFamily?.latin)),
++                  // Omitted fontFamily resolves to the pinned product default at
++                  // projection time; surface that effective family so the toolbar
++                  // never renders an empty/indeterminate font control.
++                  fontFamily: (typeof element.text.fontFamily === 'string' ? element.text.fontFamily : (element.text.fontFamily?.latin ?? (typeof firstRun?.fontFamily === 'string' ? firstRun.fontFamily : firstRun?.fontFamily?.latin))) ?? STATIC_V1_TEXT_DEFAULTS.fontFamily,
 +                  fontSize: element.text.fontSize ?? firstRun?.fontSize,
 +                  bold: element.text.bold ?? firstRun?.bold,
 +                  italic: element.text.italic ?? firstRun?.italic,
@@ -104,7 +108,9 @@ index 579f34b..5a4412c 100644
 +          return {
 +            count: elements.length,
 +            kinds: [...new Set(elements.map((element) => element.kind))],
-+            fonts: [...new Set((doc().fonts ?? []).map((font) => font.family))],
++            // Usable families = pinned product default + registered custom fonts;
++            // both are registration-optional in the kernel contract.
++            fonts: [...new Set([STATIC_V1_TEXT_DEFAULTS.fontFamily, ...(doc().fonts ?? []).map((font) => font.family)])],
 +            ...(elements.length <= 8 ? { elements: elements.map(selectionEntry) } : {}),
 +          }
 +        }

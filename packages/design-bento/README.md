@@ -29,6 +29,13 @@ isolated canvas embeds Fontsource Inter 5.2.8 WOFF2 faces (regular/bold, normal/
 with its original script ranges) and emits `INTER-LICENSE` (OFL). It cannot inherit
 fonts from the React shell. The font CSS identity is recorded in `build.json`;
 canonical omitted fields and pinned vendor files remain unchanged.
+The same single adaptation (`fontFamily: "MiSans"` → `"Inter"`, with the pinned-source
+assert) must be applied by every other bundle of the vendored contracts, or
+CLI/skill-side font validation will disagree with the canvas about the
+registration-optional default: `apps/cli/vite.config.ts` (molly-vendor-text-default
+transform) and `packages/design-authoring/scripts/build.mjs` (skill helper bundle).
+When adding another consumer, mirror one of these three rewrites instead of editing
+the pinned vendor file.
 The fixture image is synthetic RGBA data. All fonts, icons and images are offline.
 
 The builder emits `apps/electron/resources/design/editor.html`, sample JSON,

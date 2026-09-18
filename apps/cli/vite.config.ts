@@ -36,8 +36,24 @@ const explicitlyExternal = new Set([
   'tinypool',
 ]);
 
+// The pinned vendor text default names the upstream face. The design canvas
+// bundle (design-bento build) rewrites it to the bundled Inter face so
+// projection and validation agree on one registration-optional default; apply
+// the identical adaptation to every CLI bundle of the same vendored contracts
+// (design store save checks, render preview, image generation, design-authoring
+// validation) so an explicit fontFamily: "Inter" never fails save validation.
+const vendorTextDefault = {
+  name: 'molly-vendor-text-default',
+  transform(code: string, id: string) {
+    if (!id.endsWith('design-bento/vendor/packages/contracts/src/static-v1.ts')) return null;
+    if (code.split('fontFamily: "MiSans",').length !== 2)
+      throw Error('Pinned text font default changed; review the Inter adaptation');
+    return { code: code.replace('fontFamily: "MiSans",', 'fontFamily: "Inter",'), map: null };
+  },
+};
+
 export default defineConfig({
-  plugins: [wasm(), topLevelAwait()],
+  plugins: [vendorTextDefault, wasm(), topLevelAwait()],
   define: inlineEnv,
   resolve: {
     alias: {

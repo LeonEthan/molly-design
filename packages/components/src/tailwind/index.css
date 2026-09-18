@@ -883,6 +883,10 @@ pre,
     --input-field: 0 0% 100%;
     --switch-track: 0 0% 85.1%;
     --ring: 0 0% 11.8%;
+    /* Tooltip surface: frozen monochrome dark bubble (spec §5), independent of
+       the active editor theme; tips always read as dark ink with white text. */
+    --tip-bg: 0 0% 17.3%;
+    --tip-fg: 0 0% 100%;
     --chart-1: 220 82% 65%;
     --chart-2: 210 70% 45%;
     --chart-3: 262 60% 55%;
@@ -989,10 +993,13 @@ pre,
     --font-terminal:
       'SF Mono', 'JetBrains Mono', 'Fira Code', 'Inconsolata', 'Source Code Pro', ui-monospace,
       'SFMono-Regular', 'Monaco', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+    /* Frozen radius ladder (visual-refresh spec §2): 4px badges, 5px default
+       controls, 9px floating bars/cards/dialogs, 13px menus/popovers/composer. */
     --radius: 0.25rem;
     --radius-sm: 0.25rem;
-    --radius-md: 0.375rem;
-    --radius-lg: 0.5rem;
+    --radius-md: 0.3125rem;
+    --radius-lg: 0.5625rem;
+    --radius-xl: 0.8125rem;
 
     /* Pro control sizing (VS Code/Linear style) */
     --control-h: 36px;
@@ -1064,6 +1071,10 @@ pre,
     --input-field: var(--input);
     --switch-track: 0 0% 30.2%;
     --ring: 0 0% 100%;
+    /* Tooltip surface: frozen monochrome dark bubble (spec §5), independent of
+       the active editor theme; tips always read as dark ink with white text. */
+    --tip-bg: 0 0% 11.8%;
+    --tip-fg: 0 0% 100%;
     --chart-1: 210 90% 62%;
     --chart-2: 197 85% 58%;
     --chart-3: 261 84% 70%;
@@ -1223,7 +1234,7 @@ pre,
 
   :where(a, button, input, textarea, select, [tabindex]):focus-visible {
     outline: none;
-    box-shadow: inset 0 0 0 1px hsl(var(--primary) / 0.5);
+    box-shadow: inset 0 0 0 2px hsl(var(--ring));
   }
 
   /* Radix menu items already paint their own focus highlight (focus:bg-hover /

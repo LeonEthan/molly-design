@@ -32,10 +32,7 @@ export function QueuedMessageBehaviorControl({
         'settings.general.sessions.queuedMessageBehavior.label',
         'Queued message behavior'
       )}
-      className={cn(
-        'inline-grid h-8 grid-cols-2 rounded-full border border-border/70 bg-muted/60 p-0.5',
-        className
-      )}
+      className={cn('inline-grid h-[30px] grid-cols-2 rounded-md bg-muted p-[2px]', className)}
     >
       {options.map((option) => {
         const selected = value === option.value;
@@ -47,10 +44,10 @@ export function QueuedMessageBehaviorControl({
             aria-checked={selected}
             onClick={() => onChange(option.value)}
             className={cn(
-              'min-w-16 rounded-full px-3 text-xs font-medium transition-colors',
+              'min-w-16 rounded-[3px] px-3 text-xs font-medium transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
               selected
-                ? 'bg-background text-foreground shadow-sm'
+                ? 'bg-popover text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

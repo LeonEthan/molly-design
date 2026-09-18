@@ -5284,7 +5284,7 @@ const UserPlainTextBlock = ({
 
   return (
     <div className="flex max-w-full justify-end sm:pl-2">
-      <div className="min-w-0 max-w-full rounded-[1.15rem] border border-foreground/[0.08] bg-foreground/[0.05] px-3.5 py-2 sm:rounded-2xl sm:px-4 sm:py-2.5">
+      <div className="min-w-0 max-w-full rounded-[13px] bg-primary px-[13px] py-2">
         <div
           className={cn(
             // overflow-wrap:anywhere (not break-words) is load-bearing: only `anywhere`
@@ -5292,15 +5292,24 @@ const UserPlainTextBlock = ({
             // unbreakable token (e.g. a pasted log URL). `break-words`/`overflow-wrap:break-word`
             // wraps visually but does NOT shrink min-content, so it must not be set here —
             // it would win by source order and let the bubble overflow its column on every engine.
-            'min-w-0 max-w-full whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]',
+            'min-w-0 max-w-full whitespace-pre-wrap text-primary-foreground [overflow-wrap:anywhere]',
             isLong && !isFullTextVisible ? 'overflow-hidden' : ''
           )}
           style={{
+            // The bubble is the fg inversion (spec §5 user bubble). Mention
+            // chips re-derive their colour from --primary / --muted-foreground,
+            // so rebind those to the inverted ink: the chip mix (82% --primary
+            // + 18% --foreground) then lands as a soft tint of the bubble's own
+            // text in both themes instead of the theme's dark ink. The bubble's
+            // own bg/text read the ORIGINAL scope one level up.
+            '--primary': 'var(--primary-foreground)',
+            '--muted-foreground':
+              'color-mix(in srgb, hsl(var(--primary-foreground)) 68%, transparent)',
             ...conversationTextFontSizeStyle(fontSize),
             ...(isLong && !isFullTextVisible
               ? { maxHeight: userTextCollapsedHeight(fontSize) }
               : {}),
-          }}
+          } as React.CSSProperties}
           data-search-block-id={searchBlockId}
         >
           {/* Search wins over chips: both want to split the same string, and a

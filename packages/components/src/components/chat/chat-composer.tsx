@@ -207,7 +207,7 @@ export function getChatComposerTextareaClassName({
           // Mobile session composer floors at a single line; desktop keeps two.
           isMobile ? 'min-h-[24px]' : 'min-h-[48px]'
         ),
-    'focus-visible:outline-hidden focus-visible:ring-0 focus-visible:ring-offset-0',
+    'focus-visible:outline-hidden focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
     'text-input-foreground placeholder:text-input-placeholder'
   );
 }
@@ -588,7 +588,7 @@ export function ChatComposer({
       ? 'h-10 rounded-lg px-5 text-sm'
       : isLanding
         ? 'h-6 rounded-[4px] px-2 text-[11px] leading-tight'
-        : 'h-7 rounded-md px-2.5 text-xs'
+        : 'h-6 rounded-md px-2 text-xs'
   );
 
   const actionWidthClassName = isLanding ? 'w-auto shrink-0' : 'w-auto';
@@ -601,9 +601,9 @@ export function ChatComposer({
   );
 
   const sessionContainerClassName = cn(
-    'flex flex-col gap-1 rounded-xl border px-2 py-1.5 transition-colors duration-150',
-    'border border-foreground/[0.10] bg-background focus-within:border-ring/40',
-    'dark:border-input-border/70 dark:bg-input/90',
+    'flex flex-col gap-1 rounded-xl border border-input-border px-2 py-1.5 transition-colors duration-150',
+    'bg-background focus-within:border-primary focus-within:ring-1 focus-within:ring-primary',
+    'dark:bg-input/90',
     mentionSurfaceClassName
   );
 

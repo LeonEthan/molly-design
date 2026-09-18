@@ -34,7 +34,7 @@ export const menuItemIconClassName =
 // library's 24px default. A caller that genuinely needs another size says so
 // with `!`.
 const menuItemBaseClassName =
-  'relative flex w-full min-h-8 cursor-default select-none items-center overflow-hidden gap-3 rounded-lg px-3 py-1.5 text-sm leading-5 outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:size-3.5';
+  'relative flex w-full min-h-[30px] cursor-default select-none items-center overflow-hidden gap-3 rounded-md px-3 py-1 text-[13px] leading-5 outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:size-3.5';
 
 // An item that owns an open surface (a submenu trigger, or a trigger wired to a
 // nested menu) stays lit while that surface is open, so the pointer moving onto

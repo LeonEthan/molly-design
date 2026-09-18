@@ -2267,7 +2267,9 @@ export const SessionChatInputArea = memo(
       </div>
     ) : null;
     /* Keep desktop actions compact while preserving the mobile touch target. */
-    const primaryActionSizeClassName = isMobile ? 'h-8 w-8' : 'h-7 w-7';
+    const primaryActionSizeClassName = isMobile ? 'h-8 w-8' : 'h-[30px] w-[30px]';
+    const primaryActionSurfaceClassName =
+      'rounded-full shadow-xs transition-all hover:-translate-y-[1px] bg-foreground text-background hover:bg-foreground/90 hover:text-background';
     const primaryActionNode = showStopButton ? (
       <Button
         onClick={() => {
@@ -2276,11 +2278,7 @@ export const SessionChatInputArea = memo(
         variant="ghost"
         size="icon"
         aria-label={t('sessions.stop')}
-        className={cn(
-          primaryActionSizeClassName,
-          'rounded-full shadow-xs transition-all',
-          'bg-foreground text-background hover:bg-foreground/90 hover:text-background active:translate-y-[1px]'
-        )}
+        className={cn(primaryActionSizeClassName, primaryActionSurfaceClassName)}
       >
         <span
           className={cn('rounded-[3px] bg-current', isMobile ? 'h-3 w-3' : 'h-2.5 w-2.5')}
@@ -2299,11 +2297,7 @@ export const SessionChatInputArea = memo(
             ? externalHistorySyncLabel
             : t('sessions.send')
         }
-        className={cn(
-          primaryActionSizeClassName,
-          'rounded-full shadow-xs transition-all',
-          'bg-foreground text-background hover:bg-foreground/90 hover:text-background active:translate-y-[1px]'
-        )}
+        className={cn(primaryActionSizeClassName, primaryActionSurfaceClassName)}
       >
         {submissionPending || hasBlockingImages || isExternalHistoryRefreshing ? (
           <Loader2 className={isMobile ? 'h-5 w-5 animate-spin' : 'h-4 w-4 animate-spin'} />

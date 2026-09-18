@@ -693,8 +693,12 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
       className={cn(
         'min-w-0 flex-1 truncate',
         titleFontClassName,
+        // The selected row keeps the 10% tint (bg-sidebar-foreground/10), which
+        // is far too light for the inverted selection foreground — that token
+        // is only readable on the solid bg-sidebar-selection. Match the
+        // container's plain sidebar foreground instead.
         showSelectedState
-          ? 'text-sidebar-selection-foreground'
+          ? 'text-sidebar-foreground'
           : 'text-sidebar-foreground dark:text-sidebar-foreground/75 group-hover/row:text-sidebar-hover-foreground'
       )}
     >

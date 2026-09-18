@@ -116,3 +116,9 @@ not configurable), so give the submenu a `collisionBoundary` of the chat panel
 element (`[data-panel-id="chat"]`) and let collision detection flip it left; the
 hide gate stays as the correct fallback only for overlays that genuinely cover
 the canvas.
+Selected/hovered rows in the sidebar lists render as a 10% tint
+(`bg-sidebar-foreground/10`), so their text keeps the plain sidebar foreground.
+Inverted text (`text-sidebar-selection-foreground`, `text-primary-foreground`,
+`text-selection-foreground`) is only readable on the solid dark selection
+surfaces (`bg-sidebar-selection`, `bg-primary`, `bg-selection`) — never pair it
+with a tinted background.

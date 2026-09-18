@@ -931,8 +931,10 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   <div
                     className={cn(
                       'min-w-0 flex-1 flex items-center gap-1 truncate text-sm',
+                      // See SidebarUpdatedSessionList: the selected row is a 10%
+                      // tint, too light for the inverted selection foreground.
                       showSelectedState
-                        ? 'text-sidebar-selection-foreground'
+                        ? 'text-sidebar-foreground'
                         : 'text-sidebar-foreground dark:text-sidebar-foreground/75'
                     )}
                     // Double-click to rename is scoped to the title only, so it can't

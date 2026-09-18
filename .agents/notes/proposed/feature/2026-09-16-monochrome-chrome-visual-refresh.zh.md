@@ -131,6 +131,19 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 
 **验证（CDP 实测）**：修复前子菜单 x=1123/宽 200，与画布宿主（x=1167）持续相交；修复后同一会话同一操作，子菜单翻到 x=705/宽 200（右缘 905），父菜单 x=911/宽 206（右缘 1117），两个菜单与画布宿主均不相交（intersects:false），菜单开着时画布区域与关闭时逐像素一致（该验证会话画布本就无内容，白色为画布底色，非被隐藏）。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
 
+## 缺陷修复：选中行反转白字（2026-09-18，用户报告）
+
+**现象**：侧栏选中行（如"Chats"列表的当前会话）背景是 10% 浅灰 tint，标题却是白色反转字，对比度极低看不清；用户明确"背景色可以，字体颜色没必要反转，因为背景色不是很浓"。
+
+**根因**：`--sidebar-selection-foreground`（亮色主题 = 白）是为**实心底** `--sidebar-selection`（近黑）设计的配对；而四个侧栏列表的选中行背景实际是 `bg-sidebar-foreground/10`（10% tint），标题却沿用了反转 token。暗色主题同样中招：该主题下 selection-foreground 是 17.3% 近黑，落在白 10% tint 上一样看不清。泛化审计全部反转字配对后确认仅此一类错误：
+
+- 错误（白字/黑字浅底，已修）：`session-list.tsx`、`sidebar-updated-session-list.tsx`、`sidebar-updated-task-list.tsx` 的选中行标题，`loro-app-sidebar.tsx` 的会话行——统一改回 `text-sidebar-foreground`（与容器一致）。
+- 正确（反转字只配实心底，保留）：New chat 按钮等 `bg-primary` 实心近黑 + 白字（冻结规格的前景反转 prominent 钮）；`bg-sidebar-selection` 实心底的分组头/项目行/sidebar 菜单 active 态；日历/toggle/tree-view 的 `bg-selection` 实心底。菜单高亮项 `bg-hover`（92.2% 浅灰）配 `--hover-foreground=--foreground`（近黑字），本来就是正确范式。所有 `bg-primary/*` tint 底也都配深字，无违规。
+
+**不变量**（已记入会话壳文档）：反转文字只允许出现在深色实心底（`bg-primary`、`bg-sidebar-selection`、`bg-selection`）上；任何 `*-foreground/10` 级别的浅 tint 选中底必须用常规前景色。
+
+**验证（CDP 计算值，重建重启后）**：亮主题选中行标题 rgb(30,30,30) 近黑 / 行底 10% tint；暗主题标题 rgb(255,255,255) 白 / 行底白 10% tint——两主题均可读。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
+
 ## 验证
 
 - `packages/components/src/lib/vscode-theme/bundled/molly-themes.test.ts`：两个主题各 71 个 chrome 变量精确断言 + 画布/面板层级 + 选中/环=前景反转 + 语法变量存在性 + 默认选择=molly。7/7 绿。

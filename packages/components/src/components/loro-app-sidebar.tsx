@@ -630,9 +630,10 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           'hover:bg-sidebar-hover data-[menu-open]:bg-sidebar-hover',
         showSelectedState &&
           'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
-        showSelectedState
-          ? 'text-sidebar-selection-foreground'
-          : 'text-sidebar-foreground dark:text-sidebar-foreground/75'
+        // The selected tint is too light for the inverted selection
+        // foreground (see SidebarUpdatedSessionList) — keep the plain sidebar
+        // foreground on selected rows.
+        !showSelectedState && 'text-sidebar-foreground dark:text-sidebar-foreground/75'
       )}
       onClick={() => {
         onNavigate(session.id);

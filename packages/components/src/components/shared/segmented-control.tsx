@@ -9,7 +9,6 @@ export type SegmentedControlOption<TValue extends string> = {
 };
 
 export type SegmentedControlSize = 'md' | 'sm';
-
 /**
  * De-pilled segmented control (spec §5): a muted track with a raised popover
  * segment for the selected value — explicitly not a pill. One home for the
@@ -24,6 +23,8 @@ export function SegmentedControl<TValue extends string>({
   ariaLabel,
   size = 'md',
   className,
+  disabled = false,
+  pill = false,
 }: {
   value: TValue;
   onChange: (value: TValue) => void;
@@ -31,13 +32,20 @@ export function SegmentedControl<TValue extends string>({
   ariaLabel: string;
   size?: SegmentedControlSize;
   className?: string;
+  disabled?: boolean;
+  /** Capsule geometry for inline config rows: fully rounded track and
+   * segments. The default squared control is the frozen §5 chrome recipe;
+   * pill is an opt-in per-instance shape, never the default. */
+  pill?: boolean;
 }) {
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'inline-grid h-[30px] auto-cols-fr grid-flow-col rounded-md bg-muted p-[2px]',
+        'inline-grid h-[30px] auto-cols-fr grid-flow-col bg-muted p-[2px]',
+        pill ? 'rounded-full' : 'rounded-md',
+        disabled && 'pointer-events-none opacity-40',
         className
       )}
     >
@@ -49,9 +57,11 @@ export function SegmentedControl<TValue extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
+            disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'flex items-center justify-center gap-1.5 rounded-[3px] px-3 text-xs font-medium transition-colors',
+              'flex items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
+              pill ? 'rounded-full' : 'rounded-[3px]',
               size === 'md' ? 'min-w-20' : 'min-w-16',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
               selected

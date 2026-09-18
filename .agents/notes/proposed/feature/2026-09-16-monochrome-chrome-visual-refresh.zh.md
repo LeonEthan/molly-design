@@ -154,17 +154,22 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 
 **验证（CDP，重建重启后）**：落地页 active 态 New chat 钮 = tint 底 + rgb(30,30,30) 深字；会话页选中行同语言。`pnpm check` 同前仅环境性失败；`pnpm format` 通过。
 
-## 重设计：画布尺寸选择器对齐单色 chrome（2026-09-18，用户点名"漏网之鱼"）
+## 重设计：画布尺寸选择器内联胶囊形态，取消弹层与文字标签（2026-09-18，用户点名"漏网之鱼"并两次裁定形态）
 
-`chat/canvas-size-selector.tsx` 是 chrome 刷新唯一没走过的 composer 控件：原生 `<input type="radio">` 在 Electron 里渲染默认 accent 蓝色（违背冻结单色）、Auto 文案硬编码英文未走 i18n、字号/间距是随手值。按冻结规格重设计：
+`chat/canvas-size-selector.tsx` 是 chrome 刷新唯一没走过的 composer 控件：原生 `<input type="radio">` 在 Electron 里渲染默认 accent 蓝色（违背冻结单色）、Auto 文案硬编码英文未走 i18n、字号/间距是随手值。迭代三轮定型，用户两轮裁定：
 
-- 模式切换换共享 `SegmentedControl`（sm 档，muted 槽 + 选中 popover 底浮起），原生 radio 绝迹，蓝色绝迹；`Auto` 文案补 `design.autoSize` key（沿用 `design.*` 只作 fallback 的既有惯例）。
-- 弹层 `w-[248px] p-3` 纵向 flex gap-3；Width/Height 用菜单组微标签惯例（10px/600/uppercase/0.6px tracking/muted 前景）；输入框共享 32px `Input` 并隐藏 number spinner（`appearance:textfield`，32px 下 stepper 是视觉噪音，1–4096  clamp 由消费侧保证）；× 分隔符按输入框光学居中。
-- 触发钮保持 ghost sm h-6，`▾` 字符换 `ChevronDown` 图标（字符在不同字体下高度不稳，图标恒定）。
-- 焦点管理：仅当用户**刚从 Auto 切到 Custom** 时 width 输入框 autoFocus；重新打开已处 Custom 的弹层不抢焦点（`focusWidth` state 随 `onOpenChange(false)` 复位）——聚焦是"切换模式"这个动作的延续，不是弹层打开的属性。
-- 触发值加 `tabular-nums`，数字宽度不随字号抖动。
+1. 第一版按弹层方案（分段控件 + 微标签 + 32px 输入框）。
+2. 用户裁定"把胶囊按钮直接放在那个位置更好"——模式选择应常可见，弹层是多余层级 → 完全内联。
+3. 用户再裁定"Canvas size 文字不需要了，Auto/Custom 要左右胶囊二选一的按钮形态" → 去掉文字标签（无障碍信息保留在 radiogroup 的 aria-label），分段控件启用**胶囊几何**。
 
-**验证（CDP 计算值 + 截图，重建重启后，亮暗双主题）**：弹层 248px；分段控件 222×30、选中段 bg-popover+shadow；`input[type=radio]` 计数 0；切 Custom 后焦点落 width 输入框（值 800 可读）；输入框 98×32、`appearance: textfield`（spinner 隐藏）；微标签 10px/600/uppercase/0.6px、亮 rgb(111,111,111)/暗 rgb(184,184,184)；Auto 态 0 输入框。两主题零蓝色像素。`pnpm check` 同前仅环境性失败；`pnpm format`、`pnpm run docs check` 通过。
+终稿与关键决策：
+
+- Auto/Custom 用共享 `SegmentedControl`（原生 radio 绝迹、蓝色绝迹），`Auto` 补 `design.autoSize` i18n key。共享组件为此新增两个可选 prop：`disabled`（轨道 `pointer-events-none opacity-40`，既有调用方不受影响）与 `pill`（轨道与子段 `rounded-full`；**胶囊是 per-instance opt-in，冻结 §5 的方形 chrome 配方仍是默认**——用户只为此处点名胶囊，不开全局先例）。
+- 关键几何决策：landing 配置行的 pill 系统是 `h-6`（24px，`getSelectorTagClassName`），内联控件必须说这一行的语言而不是把行撑高——分段控件 `h-6` 覆盖、尺寸输入框 `h-6 w-14`（覆盖共享 Input 的 32px 默认）。Auto↔Custom 切换行高恒 24px 不跳动。32px/30px 是对话框与 composer 的几何，不是配置行的。
+- Custom 态下 W/H 两个 24px 数字框内联出现：10px muted 的 W/H 前缀（Numbers 检查器惯例，省去可见标签的横向开销）、spinner 隐藏（`appearance:textfield`）、× 分隔、1–4096 提示进 `title` tooltip。窄窗下行容器 `flex-wrap`，控件整组换行不被压扁。
+- 焦点：仅"刚从 Auto 切到 Custom"时 width 框 autoFocus（初始挂载在 Custom 态不抢焦点）；width 框 Enter 链到 height 框。
+
+**验证（CDP 计算值 + 截图，重建重启后，亮暗双主题）**：分段轨道 24px、行高 24px（两态一致）；可见"Canvas size"文字 0 处；胶囊 radius = rounded-full（轨道与子段同）；Auto 态 0 输入框；切 Custom 焦点落 width（值 800）；输入框 56×24、`appearance: textfield`；Enter 从 width 链到 height；暗主题轨道 rgb(56,56,56)/选中段 rgb(44,44,44) 正常浮起。`pnpm check` 同前仅环境性失败；`pnpm format`、`pnpm run docs check` 通过。
 
 ## 验证
 

@@ -2446,7 +2446,7 @@ function WorkspaceChatLanding({
         </Button>
       )}
     >
-      <div className="flex w-full min-w-0 items-center gap-2">
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-2">
         <DesktopMachineMenu
           value={desktopSelectedMachineId}
           visibleLocalMachineId={visibleLocalMachineId}

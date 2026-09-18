@@ -35,7 +35,7 @@ export function CanvasSizeSelector({
   const heightInputRef = useRef<HTMLInputElement>(null);
   const sizeHint = t('design.sizeHint', '1–4096 px per side');
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2" title={t('design.sizeMode', 'Canvas size mode')}>
       <SegmentedControl
         ariaLabel={t('design.size', 'Canvas size')}
         size="sm"
@@ -44,7 +44,7 @@ export function CanvasSizeSelector({
         disabled={disabled}
         value={mode}
         options={[
-          { value: 'auto', label: t('design.autoSize', 'Auto') },
+          { value: 'auto', label: t('design.autoSize', 'Auto size') },
           { value: 'custom', label: t('design.customSize', 'Custom') },
         ]}
         onChange={(value) => {

@@ -161,15 +161,18 @@ UI 截图审核中发现三个画布生命周期缺陷，与视觉层无关但�
 1. 第一版按弹层方案（分段控件 + 微标签 + 32px 输入框）。
 2. 用户裁定"把胶囊按钮直接放在那个位置更好"——模式选择应常可见，弹层是多余层级 → 完全内联。
 3. 用户再裁定"Canvas size 文字不需要了，Auto/Custom 要左右胶囊二选一的按钮形态" → 去掉文字标签（无障碍信息保留在 radiogroup 的 aria-label），分段控件启用**胶囊几何**。
+4. 用户实测后指出去标签造成困惑（"这里是干什么的"），要求先调研再定。调研结论：Apple HIG 允许文本分段控件不带引导文字的前提正是"分段文本本身自描述"（名词短语）；Apple 自家无语境处从不缩写（AirPods "Noise Cancellation / Transparency"），Figma 同类模式选择永远带名词（"Hug contents / Fixed width"）。困惑只发生在 Auto 态（Custom 态有 W/H 字段托底）。据此用户选定方案 A：分段改名 + 滑动拇指 + tooltip。
 
 终稿与关键决策：
 
-- Auto/Custom 用共享 `SegmentedControl`（原生 radio 绝迹、蓝色绝迹），`Auto` 补 `design.autoSize` i18n key。共享组件为此新增两个可选 prop：`disabled`（轨道 `pointer-events-none opacity-40`，既有调用方不受影响）与 `pill`（轨道与子段 `rounded-full`；**胶囊是 per-instance opt-in，冻结 §5 的方形 chrome 配方仍是默认**——用户只为此处点名胶囊，不开全局先例）。
+- Auto/Custom 分段：**"Auto size | Custom"**（`design.autoSize` fallback 改为 "Auto size"）——名词由 Auto 段自带，HIG"无需引导文字"的前提成立；等宽分段下两段长度接近（"Auto size"≈48px vs "Custom"≈36px），视觉平衡。控制整体挂 `title="Canvas size mode"`（`design.sizeMode` key）回答悬停好奇。
+- **滑动选中拇指**（iOS 图式：一个面、两个位置）：胶囊形态下渲染唯一绝对定位的白色拇指（`data-segmented-thumb`，bg-popover + shadow-sm），`width: calc((100% - 4px) / n)`、`transform: translateX(index * 100%)`，200ms ease-out（冻结动效预算内）。分列等宽（`auto-cols-fr`）保证位移零测量精确落位；按钮只需 `relative z-[1]` 让文字浮在拇指上。方形冻结配方不走拇指（菜单系本色是即时）。初始挂载不播动画（transition 只在计算值变化时触发）。
+- Auto/Custom 用共享 `SegmentedControl`（原生 radio 绝迹、蓝色绝迹）。共享组件为此新增三个可选 prop：`disabled`（轨道 `pointer-events-none opacity-40`）、`pill`（胶囊几何，per-instance opt-in，方形仍是默认）、以及 pill 模式的拇指渲染。
 - 关键几何决策：landing 配置行的 pill 系统是 `h-6`（24px，`getSelectorTagClassName`），内联控件必须说这一行的语言而不是把行撑高——分段控件 `h-6` 覆盖、尺寸输入框 `h-6 w-14`（覆盖共享 Input 的 32px 默认）。Auto↔Custom 切换行高恒 24px 不跳动。32px/30px 是对话框与 composer 的几何，不是配置行的。
 - Custom 态下 W/H 两个 24px 数字框内联出现：10px muted 的 W/H 前缀（Numbers 检查器惯例，省去可见标签的横向开销）、spinner 隐藏（`appearance:textfield`）、× 分隔、1–4096 提示进 `title` tooltip。窄窗下行容器 `flex-wrap`，控件整组换行不被压扁。
 - 焦点：仅"刚从 Auto 切到 Custom"时 width 框 autoFocus（初始挂载在 Custom 态不抢焦点）；width 框 Enter 链到 height 框。
 
-**验证（CDP 计算值 + 截图，重建重启后，亮暗双主题）**：分段轨道 24px、行高 24px（两态一致）；可见"Canvas size"文字 0 处；胶囊 radius = rounded-full（轨道与子段同）；Auto 态 0 输入框；切 Custom 焦点落 width（值 800）；输入框 56×24、`appearance: textfield`；Enter 从 width 链到 height；暗主题轨道 rgb(56,56,56)/选中段 rgb(44,44,44) 正常浮起。`pnpm check` 同前仅环境性失败；`pnpm format`、`pnpm run docs check` 通过。
+**验证（CDP 计算值 + 截图，重建重启后，亮暗双主题）**：分段轨道 24px、行高 24px（两态一致）；可见"Canvas size"文字 0 处；胶囊 radius = rounded-full（轨道与子段同）；Auto 态 0 输入框；切 Custom 焦点落 width（值 800）；输入框 56×24、`appearance: textfield`；Enter 从 width 链到 height；暗主题轨道 rgb(56,56,56)/选中段 rgb(44,44,44) 正常浮起。方案 A 后复验：分段文本 ["Auto size","Custom"]（轨道 158×24）；拇指存在、白色 rounded-full、transition 0.2s；Auto→Custom 位移 77.1875px == 拇指宽度（一列，零误差）；wrapper title "Canvas size mode"；暗主题拇指 rgb(44,44,44)。`pnpm check` 同前仅环境性失败；`pnpm format`、`pnpm run docs check` 通过。
 
 ## 验证
 

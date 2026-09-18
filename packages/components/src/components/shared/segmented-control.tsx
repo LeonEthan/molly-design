@@ -38,17 +38,32 @@ export function SegmentedControl<TValue extends string>({
    * pill is an opt-in per-instance shape, never the default. */
   pill?: boolean;
 }) {
+  const selectedIndex = options.findIndex((option) => option.value === value);
   return (
     <div
       role="radiogroup"
       aria-label={ariaLabel}
       className={cn(
-        'inline-grid h-[30px] auto-cols-fr grid-flow-col bg-muted p-[2px]',
+        'relative inline-grid h-[30px] auto-cols-fr grid-flow-col bg-muted p-[2px]',
         pill ? 'rounded-full' : 'rounded-md',
         disabled && 'pointer-events-none opacity-40',
         className
       )}
     >
+      {pill && selectedIndex >= 0 ? (
+        // Sliding selection thumb (iOS metaphor): one surface, two positions.
+        // Columns are equal (auto-cols-fr), so the thumb width is exactly one
+        // column and translateX(index * 100%) lands without measurement.
+        <span
+          aria-hidden
+          data-segmented-thumb
+          className="absolute inset-y-[2px] left-[2px] z-0 rounded-full bg-popover shadow-sm transition-transform duration-200 ease-out"
+          style={{
+            width: `calc((100% - 4px) / ${options.length})`,
+            transform: `translateX(${selectedIndex * 100}%)`,
+          }}
+        />
+      ) : null}
       {options.map((option) => {
         const selected = value === option.value;
         return (
@@ -60,12 +75,15 @@ export function SegmentedControl<TValue extends string>({
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'flex items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
+              'relative z-[1] flex items-center justify-center gap-1.5 px-3 text-xs font-medium transition-colors',
               pill ? 'rounded-full' : 'rounded-[3px]',
               size === 'md' ? 'min-w-20' : 'min-w-16',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
               selected
-                ? 'bg-popover text-foreground shadow-sm'
+                ? pill
+                  ? // The thumb carries the selected surface.
+                    'text-foreground'
+                  : 'bg-popover text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >

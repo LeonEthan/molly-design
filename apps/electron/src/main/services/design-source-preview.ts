@@ -1,9 +1,18 @@
+import { bindLiveSource, type LiveSource } from './design-live-source'
+import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
 import { WebContentsView, type BrowserWindow } from 'electron'
 import { lstatSync } from 'node:fs'
 import { startWorkspaceFileWatcher, type WorkspaceFileWatcher } from '@loro-dev/ignore'
 import { SourceObservation } from './design-source-observation'
 import { dirname, relative, resolve } from 'node:path'
-import { designRequest, surface } from './design-service'
+import {
+  designRequest,
+  surface,
+  designCanvasAccess,
+  hideDesign,
+  currentDesignBounds,
+  isDesignVisible
+} from './design-service'
 import type { ObservedPreviewResult } from '../../../../cli/src/design/render-preview'
 import { PreviewRequests } from './design-source-preview-core'
 
@@ -23,10 +32,13 @@ const sources = new Map<
     watcher: WorkspaceFileWatcher
     error?: string
     paths: Set<string>
+    close(): void
   }
 >()
 const subscriptions = new Map<string, string>()
+const resolvedSources = new Map<string, string>()
 const boundsByHost = new Map<string, Electron.Rectangle>()
+const staging = new Map<string, Set<WebContentsView>>()
 function release(hostId: string) {
   const source = subscriptions.get(hostId)
   subscriptions.delete(hostId)
@@ -34,8 +46,7 @@ function release(hostId: string) {
   const shared = sources.get(source)
   shared?.observation.consumers.delete(hostId)
   if (shared && shared.observation.consumers.size === 0) {
-    shared.observation.close()
-    shared.watcher.close()
+    shared.close()
     sources.delete(source)
   }
 }
@@ -68,22 +79,37 @@ export function hideSourcePreview(hostId: string, cancel = true) {
     release(hostId)
   }
   boundsByHost.delete(hostId)
-  views.get(hostId)?.view.setVisible(false)
+  for (const view of staging.get(hostId) ?? []) {
+    view.setVisible(false)
+    if (cancel && !view.webContents.isDestroyed())
+      view.webContents.close({ waitForBeforeUnload: false })
+  }
+  const view = views.get(hostId)?.view
+  if (view) {
+    void rememberDesignViewport(hostId, view)
+    view.setVisible(false)
+  }
 }
 export function closeSourcePreview(hostId: string) {
+  const previous = views.get(hostId)
+  const captured = previous && rememberDesignViewport(hostId, previous.view)
+  previous?.view.setVisible(false)
   hideSourcePreview(hostId)
   consumers.delete(hostId)
   statuses.delete(hostId)
-  const previous = views.get(hostId)
+  resolvedSources.delete(hostId)
   if (!previous) return
   views.delete(hostId)
-  if (!previous.owner.isDestroyed()) previous.owner.contentView.removeChildView(previous.view)
-  if (!previous.view.webContents.isDestroyed())
-    previous.view.webContents.close({ waitForBeforeUnload: false })
-  previous.dispose()
+  // Remove visibility immediately; allow the camera read to finish before disposal.
+  void Promise.resolve(captured).finally(() => {
+    if (!previous.owner.isDestroyed()) previous.owner.contentView.removeChildView(previous.view)
+    if (!previous.view.webContents.isDestroyed())
+      previous.view.webContents.close({ waitForBeforeUnload: false })
+    previous.dispose()
+  })
 }
 
-export function attachSourcePreview(hostId: string, bounds: Electron.Rectangle) {
+export async function attachSourcePreview(hostId: string, bounds: Electron.Rectangle) {
   boundsByHost.set(hostId, bounds)
   const current = views.get(hostId)
   if (!current || !requests.visible(hostId)) return
@@ -93,7 +119,12 @@ export function attachSourcePreview(hostId: string, bounds: Electron.Rectangle) 
     width: Math.max(1, Math.round(bounds.width)),
     height: Math.max(1, Math.round(bounds.height))
   })
-  current.view.setVisible(true)
+  try {
+    await restoreDesignViewport(hostId, current.view)
+  } catch (error) {
+    if (views.get(hostId) === current) throw error
+  }
+  if (views.get(hostId) === current && boundsByHost.has(hostId)) current.view.setVisible(true)
 }
 
 /** Resolve trusted paths before subscribing; reopening always reconciles exact bytes. */
@@ -115,53 +146,27 @@ function registerConsumer(owner: BrowserWindow, artworkId: string, hostId: strin
   consumers.set(hostId, owner)
 }
 
-/** Immutable history uses the existing isolated renderer, without a file watcher. */
-export async function showDesignVersion(
-  owner: BrowserWindow,
-  artworkId: string,
-  hostId: string,
-  commitId: string
-) {
-  closeSourcePreview(hostId)
-  registerConsumer(owner, artworkId, hostId)
-  const token = resolutions.begin(hostId, artworkId)
-  const saved = await designRequest<import('../../../../cli/src/design/store').DesignPayload>({
-    operation: 'history-read',
-    sessionId: artworkId,
-    commitId
-  })
-  if (!resolutions.current(token)) return { status: 'superseded' as const }
-  return renderSourcePreview(
-    owner,
-    artworkId,
-    hostId,
-    `git:${commitId}`,
-    {
-      status: 'ok',
-      doc: saved.doc,
-      assets: saved.assets,
-      width: saved.doc.canvas.width,
-      height: saved.doc.canvas.height,
-      sourceIdentity: saved.revisionId
-    },
-    () => resolutions.current(token),
-    'history'
-  )
-}
-
 export async function refreshSourcePreview(
   owner: BrowserWindow,
   artworkId: string,
   hostId: string,
-  resolveSource: () => Promise<string>
+  resolveSource: () => Promise<string | LiveSource>
 ) {
   registerConsumer(owner, artworkId, hostId)
-  const token = resolutions.begin(hostId, artworkId)
+  let token = resolutions.begin(hostId, artworkId)
   try {
-    const source = await resolveSource()
+    const resolved = await resolveSource()
+    const source = typeof resolved === 'string' ? resolved : resolved.path
+    const live = typeof resolved === 'string' ? undefined : resolved.live
+    const sourceKey = `${source}\0${live?.turnId ?? ''}`
     if (!resolutions.current(token)) return { status: 'superseded' as const }
-    if (subscriptions.get(hostId) !== source) release(hostId)
-    let shared = sources.get(source)
+    if (resolvedSources.has(hostId) && resolvedSources.get(hostId) !== sourceKey) {
+      closeSourcePreview(hostId)
+      registerConsumer(owner, artworkId, hostId)
+      token = resolutions.begin(hostId, artworkId)
+    }
+    resolvedSources.set(hostId, sourceKey)
+    let shared = sources.get(sourceKey)
     if (!shared) {
       const workdir = dirname(source)
       let watchRoot = dirname(workdir)
@@ -190,13 +195,34 @@ export async function refreshSourcePreview(
           id: path,
           path: relative(watchRoot, resolve(workdir, path)).split('\\').join('/')
         }))
+      let boundInput = live
+      let bindingTimer: ReturnType<typeof setTimeout> | undefined
       const observation = new SourceObservation(
-        (previousSourceIdentity) =>
-          designRequest<ObservedPreviewResult>({
+        async (previousSourceIdentity) => {
+          if (boundInput) {
+            const input = await bindLiveSource({ path: source, live: boundInput }, resolveSource)
+            if (!input) {
+              // Input provenance can become available without another authoring write.
+              // Reconcile only this startup handoff; normal snapshots remain file-driven.
+              bindingTimer ??= setTimeout(() => {
+                bindingTimer = undefined
+                void observation.refresh()
+              }, 250)
+              return { status: 'refused', error: '', dependencies: [sourceEntry] }
+            }
+            clearTimeout(bindingTimer)
+            bindingTimer = undefined
+            boundInput = input
+          }
+          return designRequest<ObservedPreviewResult>({
             operation: 'source-preview',
             workdir,
+            ...(boundInput?.sourceTurnId
+              ? { live: { sessionId: boundInput.sessionId, sourceTurnId: boundInput.sourceTurnId } }
+              : {}),
             previousSourceIdentity
-          }),
+          })
+        },
         (dependencies, valid) => {
           const before = [...paths].sort().join('\0')
           paths.clear()
@@ -223,7 +249,7 @@ export async function refreshSourcePreview(
         onEvent: (event) => {
           if (event.type !== 'error') return
           watchError = event.message
-          const entry = sources.get(source)
+          const entry = sources.get(sourceKey)
           if (entry) {
             entry.error = watchError
             for (const key of entry.observation.consumers.keys()) {
@@ -233,19 +259,35 @@ export async function refreshSourcePreview(
           }
         }
       })
-      shared = { observation, watcher, paths, error: watchError }
-      sources.set(source, shared)
+      shared = {
+        observation,
+        watcher,
+        paths,
+        error: watchError,
+        close() {
+          clearTimeout(bindingTimer)
+          observation.close()
+          watcher.close()
+        }
+      }
+      sources.set(sourceKey, shared)
     }
-    subscriptions.set(hostId, source)
+    subscriptions.set(hostId, sourceKey)
     const entry = shared
     entry.observation.consumers.set(hostId, async (built, current) => {
-      if (!current() || subscriptions.get(hostId) !== source) return
-      const result = await renderSourcePreview(owner, artworkId, hostId, source, built, current)
-      if (!current() || subscriptions.get(hostId) !== source || result.status === 'superseded')
-        return
+      const owns = () =>
+        current() &&
+        subscriptions.get(hostId) === sourceKey &&
+        (!live || designCanvasAccess.state(artworkId).turnId === live.turnId)
+      if (!owns()) return
+      const result = await renderSourcePreview(owner, artworkId, hostId, source, built, owns)
+      if (!owns() || result.status === 'superseded') return
       notify(hostId, { ...result, automaticError: entry.error })
       const bounds = boundsByHost.get(hostId)
-      if (bounds) attachSourcePreview(hostId, bounds)
+      if (bounds) {
+        if (views.has(hostId)) hideDesign(artworkId, hostId)
+        await attachSourcePreview(hostId, bounds)
+      }
     })
     await entry.observation.refresh()
     return statuses.get(hostId) ?? { status: 'superseded' as const }
@@ -269,8 +311,7 @@ async function renderSourcePreview(
   hostId: string,
   source: string,
   built: ObservedPreviewResult,
-  sourceCurrent: () => boolean,
-  kind: 'source' | 'history' = 'source'
+  sourceCurrent: () => boolean
 ) {
   const token = requests.begin(hostId, artworkId)
   const current = () => requests.current(token) && sourceCurrent()
@@ -308,9 +349,19 @@ async function renderSourcePreview(
       }
     })
     const [width, height] = owner.getContentSize()
-    view.setBounds({ x: 0, y: 0, width, height })
-    owner.contentView.addChildView(view)
-    view.setVisible(false)
+    const intended = boundsByHost.get(hostId) ??
+      currentDesignBounds(hostId) ?? { x: 0, y: 0, width, height }
+    view.setBounds({
+      x: Math.round(intended.x),
+      y: Math.round(intended.y),
+      width: Math.max(1, Math.round(intended.width)),
+      height: Math.max(1, Math.round(intended.height))
+    })
+    const preparing = staging.get(hostId) ?? new Set<WebContentsView>()
+    preparing.add(view)
+    staging.set(hostId, preparing)
+    view.setVisible(boundsByHost.has(hostId) || isDesignVisible(hostId))
+    owner.contentView.addChildView(view, 0)
     view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     view.webContents.on('will-navigate', (event) => event.preventDefault())
     view.webContents.on('will-redirect', (event) => event.preventDefault())
@@ -325,7 +376,7 @@ async function renderSourcePreview(
           if (started || !window.molly || !window.bento?.doc || !document.querySelector('.bento-slide')) return;
           started = true; observer.disconnect();
           try {
-            window.molly.setReadonly(true, ${JSON.stringify(kind === 'history' ? '历史版本 · 只读 / Version history · Read-only' : '未提交预览 · 只读 / Unsubmitted preview · Read-only')});
+            window.molly.setReadonly(true, ${JSON.stringify('Agent 正在构建 · 只读 / Agent is building · Read-only')});
             document.querySelector('.bento-slide').getBoundingClientRect();
             await Promise.all([...document.fonts].filter(font => font.status === 'loading').map(font => font.load()));
             if ([...document.fonts].some(font => font.status === 'error')) throw Error('Preview font failed to load');
@@ -347,33 +398,47 @@ async function renderSourcePreview(
         resource.dispose()
         return { status: 'superseded' as const }
       }
+      const previous = views.get(hostId)
+      if (previous && boundsByHost.has(hostId)) {
+        await rememberDesignViewport(hostId, previous.view)
+        await restoreDesignViewport(hostId, view)
+      }
+      if (!current() || owner.isDestroyed()) {
+        if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
+        if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
+        resource.dispose()
+        return { status: 'superseded' as const }
+      }
+      if (previous && views.get(hostId) === previous) {
+        owner.contentView.removeChildView(previous.view)
+        previous.view.webContents.close({ waitForBeforeUnload: false })
+        previous.dispose()
+      }
+      if (!boundsByHost.has(hostId)) view.setVisible(false)
+      views.set(hostId, {
+        owner,
+        artworkId,
+        source,
+        sourceIdentity: built.sourceIdentity,
+        view,
+        dispose: resource.dispose
+      })
+      return { status: 'ready' as const, source, sourceIdentity: built.sourceIdentity }
     } catch (error) {
       if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
       if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
       resource.dispose()
       throw error
+    } finally {
+      preparing.delete(view)
+      if (staging.get(hostId) === preparing && preparing.size === 0) staging.delete(hostId)
     }
-    const previous = views.get(hostId)
-    if (previous) {
-      owner.contentView.removeChildView(previous.view)
-      previous.view.webContents.close({ waitForBeforeUnload: false })
-      previous.dispose()
-    }
-    views.set(hostId, {
-      owner,
-      artworkId,
-      source,
-      sourceIdentity: built.sourceIdentity,
-      view,
-      dispose: resource.dispose
-    })
-    return { status: 'ready' as const, source, sourceIdentity: built.sourceIdentity }
   } catch (error) {
     if (!current()) return { status: 'superseded' as const }
     return {
       status: 'waiting' as const,
       source: views.get(hostId)?.source ?? source,
-      error: String(error),
+      error: built.status === 'refused' && !built.error ? undefined : String(error),
       retained: views.has(hostId),
       sourceIdentity: views.get(hostId)?.sourceIdentity
     }

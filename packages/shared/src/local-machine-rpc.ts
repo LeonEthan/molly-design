@@ -277,7 +277,15 @@ export const DesignCanvasHostResultSchema = z
 /** Read-only historical draft location; byte transport stays with ordinary file preview. */
 export const DesignSourcePathResultSchema = z.discriminatedUnion('ok', [
   z
-    .object({ type: z.literal('design/source-path'), ok: z.literal(true), path: z.string().min(1) })
+    .object({
+      type: z.literal('design/source-path'),
+      ok: z.literal(true),
+      path: z.string().min(1),
+      live: z
+        .object({ turnId: z.string().min(1).max(200), sourceTurnId: z.string().min(1).max(200) })
+        .strict()
+        .optional(),
+    })
     .strict(),
   z
     .object({

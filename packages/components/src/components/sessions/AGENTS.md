@@ -27,9 +27,8 @@ Files: [README.md](README.md). Scopes:
   conversations. `sidePanelTabs` owns strip order and each close's fallback neighbour.
 - Human forks share the workspace; no Git probe/new-worktree menu. Keep recovery
   for previously accepted worktree forks.
-- Keep Current artwork wired in the visible toolbar.
-- Agent start on Current artwork opens its readonly source preview; respect later
-  explicit source choices.
+- Keep one canvas, with Save version and direct history switching. Active Agent
+  drafts replace its display only when valid; execution/processing owns readonly.
 - A Side Chat is a durable child Session (`childSessionPlacement: 'side-panel'`):
   no top tab/sidebar row; rolls up into its parent. Mount lazily; only tab `X` deletes it.
 - `SessionMeta.openedBySessionId` is presentation-only provenance: never

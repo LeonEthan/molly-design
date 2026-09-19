@@ -9,7 +9,12 @@ const state = vi.hoisted(() => ({
   refreshCalls: 0,
   events: new Map<string, (payload: unknown) => void>(),
   history: [] as Array<{ role: 'assistant'; id: string; finished: boolean; endedAt: number }>,
-  liveStatus: null as null | { type: 'running' },
+  canvasState: {
+    readonly: false,
+    turnId: undefined as string | undefined,
+    preparing: false,
+    changed: true,
+  },
   visible: false,
   previewVisible: false,
   attachPreviewCalls: 0,
@@ -24,7 +29,7 @@ vi.mock('jotai', async (original) => ({
       : key === 'workspace'
         ? 'workspace'
         : key === 'live'
-          ? state.liveStatus
+          ? state.canvasState
           : null,
 }));
 vi.mock('../src/atoms', () => ({ userAtom: 'user', currentWorkspaceIdAtom: 'workspace' }));
@@ -80,6 +85,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       },
       selectionSummary: async () => null,
       versions: async () => [],
+      state: async () => ({ ...state.canvasState }),
     },
   }),
 }));
@@ -89,7 +95,7 @@ let container: HTMLDivElement;
 beforeEach(async () => {
   state.events.clear();
   state.history = [];
-  state.liveStatus = null;
+  state.canvasState = { readonly: false, turnId: undefined, preparing: false, changed: true };
   state.visible = false;
   state.previewVisible = false;
   state.refreshCalls = 0;
@@ -136,133 +142,79 @@ const mount = () =>
       />
     )
   );
-const click = (label: string) =>
-  act(async () =>
-    [...container.querySelectorAll('button')]
-      .find((button) => button.textContent === label)!
-      .click()
-  );
-test('reselecting source during refresh keeps the pending response consumable', async () => {
-  let complete!: (result: unknown) => void;
+const artworkId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const execution = (turnId?: string, preparing = false) =>
+  act(async () => {
+    state.canvasState = { readonly: !!turnId, turnId, preparing, changed: true };
+    state.events.get('design.state')?.({ artworkId });
+  });
+const publish = (result: unknown) => act(async () => state.events.get('design.preview')?.(result));
+
+test('one canvas keeps canonical until a valid live snapshot and locks actions through processing', async () => {
+  state.refresh = async () => ({ status: 'waiting', source: '', error: '' });
+  await mount();
+  expect(state.visible).toBe(true);
+  await execution('turn-1', true);
+  expect(state.visible).toBe(true);
+  const save = [...container.querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Save version')
+  )!;
+  expect(save.disabled).toBe(true);
+  await execution('turn-1');
+  expect(state.visible).toBe(true);
+  expect(state.previewVisible).toBe(false);
+  await publish({ hostId: artworkId, status: 'ready', sourceIdentity: 'step-1' });
+  expect(state.visible).toBe(false);
+  expect(state.previewVisible).toBe(true);
+  await publish({ hostId: artworkId, status: 'waiting', retained: true, error: 'Incomplete YAML' });
+  expect(state.previewVisible).toBe(true);
+  expect(container.textContent).toContain('Incomplete YAML');
+  expect(container.querySelector('details')?.open).toBe(false);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  // An assistant message ending is not the authoritative release signal.
+  state.history = [{ role: 'assistant', id: 'turn', finished: true, endedAt: 1 }];
+  state.refresh = async () => ({ status: 'waiting', retained: true });
+  await mount();
+  expect(save.disabled).toBe(true);
+  await execution();
+  expect(state.visible).toBe(true);
+  expect(state.previewVisible).toBe(false);
+  expect(save.disabled).toBe(false);
+  expect(container.textContent).not.toContain('Incomplete YAML');
+});
+
+test('late output from a previous turn cannot replace the new canonical fallback', async () => {
+  let finish!: (result: unknown) => void;
   state.refresh = () =>
     new Promise((resolve) => {
-      complete = resolve;
+      finish = resolve;
     });
   await mount();
-  await click('Preview');
-  await click('Preview');
-  const attachedBefore = state.attachPreviewCalls;
-  await act(async () => complete({ status: 'ready', source: '/synthetic/design.yaml' }));
-  expect(state.attachPreviewCalls).toBeGreaterThan(attachedBefore);
-});
-test('shows valid intermediate authoring snapshots while an Agent turn is active', async () => {
-  state.refresh = async () => ({
-    status: 'ready',
-    source: '/synthetic/intermediate-1/design.yaml',
-    sourceIdentity: 'intermediate-1',
-  });
-  await mount();
+  await execution('old');
+  await execution();
+  await act(async () => finish({ status: 'ready', sourceIdentity: 'stale' }));
+  expect(state.previewVisible).toBe(false);
   expect(state.visible).toBe(true);
-  expect(state.previewVisible).toBe(false);
-  state.liveStatus = { type: 'running' };
-  await mount();
-  expect(state.hostId).not.toBe('');
-  expect(state.previewVisible).toBe(true);
-  expect(state.visible).toBe(false);
-  await act(async () =>
-    state.events.get('design.preview')?.({
-      hostId: state.hostId,
-      source: '/synthetic/intermediate-2/design.yaml',
-      sourceIdentity: 'intermediate-2',
-      status: 'ready',
-    })
-  );
-  expect(state.previewVisible).toBe(true);
-  expect(container.querySelector('[role="alert"]')).toBeNull();
-  await click('Artwork');
-  expect(state.visible).toBe(true);
-  expect(state.previewVisible).toBe(false);
-  await mount();
-  expect(state.previewVisible).toBe(false);
-});
-test('old attachment cleanup cannot hide the current artwork after a rapid switch', async () => {
-  let finishAttach!: () => void;
-  const delayed = new Promise<void>((resolve) => {
-    finishAttach = resolve;
-  });
-  state.attach = () => delayed;
-  state.refresh = async () => ({ status: 'ready', source: '/synthetic/design.yaml' });
-  await mount();
-  await click('Preview');
-  await click('Artwork');
-  await act(async () => finishAttach());
-  expect(state.visible).toBe(true);
-  expect(state.previewVisible).toBe(false);
 });
 
-test('push status, reconnect and finalized history reconcile only an open preview', async () => {
-  state.refresh = async () => ({ status: 'ready', source: '/synthetic/first/design.yaml' });
+test('continuous valid states replace the same canvas and recovery clears errors', async () => {
+  state.refresh = async () => ({ status: 'ready', sourceIdentity: 'step-1' });
   await mount();
-  await click('Preview');
-  await act(async () =>
-    state.events.get('design.preview')?.({
-      hostId: state.hostId,
-      source: '/synthetic/first/design.yaml',
-      status: 'waiting',
-      error: 'Missing referenced file',
-      automaticError: 'Native watch failed',
-    })
-  );
-  expect(container.textContent).toContain('Missing referenced file');
-  expect(container.textContent).toContain('Automatic preview updates unavailable.');
-  const beforeReconnect = state.refreshCalls;
-  await act(async () => state.events.get('loro.status')?.(true));
-  expect(state.refreshCalls).toBeGreaterThan(beforeReconnect);
-  expect(container.textContent).not.toContain('Missing referenced file');
-  expect(container.textContent).not.toContain('Native watch failed');
-  state.history = [{ role: 'assistant', id: 'turn', finished: true, endedAt: 1 }];
-  const beforeFinalized = state.refreshCalls;
-  await mount();
-  expect(state.refreshCalls).toBeGreaterThan(beforeFinalized);
-  await click('Artwork');
-  expect(state.events.has('design.preview')).toBe(false);
-  expect(state.events.has('loro.status')).toBe(false);
-});
-
-test('preview errors hide with the preview and clear after successful reconciliation', async () => {
-  state.refresh = async () => ({ status: 'ready', source: '/synthetic/design.yaml' });
-  await mount();
-  await click('Preview');
-  await act(async () =>
-    state.events.get('design.preview')?.({
-      hostId: state.hostId,
-      source: '/synthetic/design.yaml',
-      status: 'waiting',
-      error: 'Missing referenced file',
-      automaticError: 'Native watch failed',
-    })
-  );
-  expect(container.textContent).toContain('Missing referenced file');
+  await execution('active');
+  await publish({
+    hostId: artworkId,
+    status: 'waiting',
+    retained: true,
+    error: 'Missing referenced file',
+    automaticError: 'Native watch failed',
+  });
+  expect(state.previewVisible).toBe(true);
   expect(container.textContent).toContain('Native watch failed');
-  await click('Artwork');
-  expect(container.textContent).not.toContain('Missing referenced file');
+  await publish({ hostId: artworkId, status: 'ready', sourceIdentity: 'step-2' });
+  expect(state.previewVisible).toBe(true);
   expect(container.textContent).not.toContain('Native watch failed');
-  await click('Preview');
-  expect(container.textContent).not.toContain('Missing referenced file');
-  expect(container.textContent).not.toContain('Native watch failed');
-});
-
-test('preview exposes no manual refresh, import action or information banner', async () => {
-  state.refresh = async () => ({
-    status: 'ready',
-    source: '/synthetic/design.yaml',
-    sourceIdentity: 'shown',
-  });
-  await mount();
-  await click('Preview');
-  const labels = [...container.querySelectorAll('button')].map((button) => button.textContent);
+  const labels = [...container.querySelectorAll('button')].map((b) => b.textContent);
+  expect(labels).not.toContain('Preview');
+  expect(labels).not.toContain('Artwork');
   expect(labels).not.toContain('Refresh preview');
-  expect(labels).not.toContain('Import as current artwork');
-  expect(container.textContent).not.toContain('Read-only authoring files');
-  expect(container.textContent).not.toContain('/synthetic/design.yaml');
 });

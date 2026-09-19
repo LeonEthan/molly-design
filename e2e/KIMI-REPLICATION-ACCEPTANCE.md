@@ -2,12 +2,21 @@
 
 Status: runner implemented; K3 High baseline and single-file technical/editability
 checks passed; current single-file golden visually accepted by the user on 2026-09-15.
+Unified-canvas/version-editing extension: implemented; deterministic and native
+desktop checks passed. Final-build replication and prescribed version continuation
+passed technical checks in `unified-canvas-20260918-03` plus its retained-profile
+resume; earlier timeout and driver failures remain recorded. Human visual and
+interaction acceptance remain pending; historical passes do not approve this change.
 
 This is a required real-model acceptance case for the
 [single-canvas authoring redesign](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md).
 The user selected the reference, prompt, Agent and high visual-fidelity pass
 criterion on 2026-09-15. It supplements editable roundtrip and lifecycle tests.
 It is a separate live-model acceptance lane; the result record, not this definition, establishes execution.
+
+The 2026-09-18 [unified canvas and version-editing plan](../.agents/notes/proposed/architecture/2026-09-18-version-based-canvas-editing.zh.md)
+also requires this frozen case, extended by the final section below. The initial
+reference, prompt, real Agent/model and human visual authority remain unchanged.
 
 ## Frozen input
 
@@ -159,7 +168,7 @@ Overall pass requires completed technical/editability checks and explicit human
 confirmation of high visual consistency. The generic `run-acceptance.mjs` subjects
 do not run this case.
 
-## Run the golden case
+## Run the existing authoring golden case
 
 Build the intended revision once, then invoke from the repository root:
 
@@ -191,6 +200,13 @@ full-resolution pairs and fixed corresponding regions. `report.json` separates
 technical, editing and pending human visual judgments. Owned processes stop before
 an isolated `review-profile` is retained. Failures stay in their original round;
 no automatic paid or model rerun occurs.
+
+Use `--phase unified-canvas` for the extension below. The `baseline|single-file`
+phases retain their original scope. `--runtime-cache <installed-runtime/node>` may
+reuse an existing pinned Kimi installation when the release asset is unavailable;
+the runner verifies its artifact metadata and records the entry hash before copying
+only program files into the fresh isolated profile. No provider configuration,
+conversation, design or solution is copied.
 
 ## 2026-09-15 execution
 
@@ -345,3 +361,115 @@ canonical/YAML readback, edited exports and original-golden restoration. It made
 model call. Its technical success is inherited from the parent; its overall status
 is `editing-passed-visual-pending`. The original failed round remains immutable,
 and human visual acceptance of this output is still pending.
+
+## Unified canvas and version editing: required new acceptance
+
+This is the planned final gate for the 2026-09-18 change, not an execution record.
+Use one fresh isolated round on the final built macOS arm64 OSS desktop, with the
+frozen reference, exact initial prompt and K3 / Thinking High settings above.
+Record actual source/build/runtime identities. Existing rounds are comparison
+evidence only; an additional paid pre-change baseline is not required by this plan.
+
+### Initial replication and visible construction
+
+Observe from dispatch through settlement without selecting Artwork or Preview;
+those source controls must be absent. Before the first valid new draft, retain
+the initial canvas. Capture at least two different nonempty valid construction
+images, with at least one visible before Agent settlement; the final image may
+be the second. Bind observations to artwork, editing context, turn, exact source
+and displayed identities, canonical revision and actual native-canvas captures.
+Prove that intermediate rendering did not save canonical or create Git versions.
+
+Do not manufacture progress by writing the Agent's files, withholding tool
+results, inserting pauses or repair prompts, or replaying a prepared design. If
+the real Agent only produces one visible state, record live acceptance as
+unproven; technical/visual results remain independent and overall cannot pass.
+A deterministic multi-write fixture proves renderer behavior but cannot replace
+the missing real-run evidence. No automatic extra model round is triggered.
+
+Record valid-complete-files/assets-to-visible latency and coalesced observations.
+The proposed warm-update target is convergence within two seconds after writes
+stop at this case's document/asset scale on the recorded machine. Record cold
+loading separately; continuous updates must not starve visible progress. This
+is a target to verify, not an existing measured capability or a sleep-based test.
+
+After natural completion, require the final validation/commit receipt and canvas
+readiness before editing is enabled. Export PNG/JPEG, reopen and verify content,
+assets and exports as in the original case. Save the unedited replication as V1
+through the separate Save version button. Preserve its immutable exports and
+hashes for human visual review.
+
+### Version switching and human/Agent continuation
+
+1. Use native controls to change a visible heading, move text and adjust an image
+   crop. Verify autosave/reopen, then save V2. Preserve the original V1 evidence.
+2. Select V1 from history: its content becomes the editable working artwork in
+   one action, without an Edit from here or preview step; V2 remains selectable.
+3. Manually set the selected editable heading to `GOLDEN-HUMAN`, await autosave,
+   then use the ordinary element reference and the exact follow-up prompt:
+   `仅在我引用的标题现有文字末尾追加「 · Agent」，保留其他内容。`
+   This is one real continuation round in the same case, not a change or repair
+   hint to the frozen initial replication. Its result is judged separately.
+4. Verify that the Agent uses the latest working content including the human
+   edit, produces `GOLDEN-HUMAN · Agent`, and preserves all other document content
+   and assets. Saving/switching versions is blocked during execution and artifact
+   processing; the same canvas continues displaying live work.
+5. Save V3 and verify its design base is V1, while V2 and original assets remain
+   intact. Assert actual commit identities; V1/V2/V3 are logical scenario labels,
+   not assumptions about numbering if protective nodes exist.
+6. Make another manual edit without saving a version, then select V2. Verify the
+   pre-switch protection node, exact V2 content, and recovery by selecting the
+   protective node. Restart and verify active base, working content, ancestry and
+   the full version list. Finally select V1 and export to prove it was unchanged.
+
+### Evidence and pass authority
+
+Extend the runner/Page Objects/report to include separate technical, live,
+version, human/Agent continuation, visual and cleanup verdicts. Save native
+construction captures or a recording, source/display/revision associations,
+version/protection/restart results, timings, and unchanged original V1 exports.
+Deliver the original full-length and fixed-region comparisons, editable artwork
+and process evidence. The human must accept both original replication fidelity
+and the visible construction/version-switching experience. An Agent cannot sign
+either verdict. All dimensions must pass before the change is complete.
+
+Missing configuration or runtime capabilities are reported as blocked. Preserve
+failed/unproven attempts and all call counts. This case plans an initial real
+replication and one explicit real continuation; it does not add an automatic
+retry loop. The task-wide limit of five image generate/edit calls still applies,
+with no default model or automatic paid retry. Captured transcripts and private
+artifacts remain outside tracked files.
+
+Deterministic tests separately cover invalid/partial YAML, missing/replaced
+assets, stale results, retained old drafts, reconnect/mid-turn opening,
+cancellation/failure/no artifact, multi-window contention, projection/load
+failure, Git-publication-before-base-binding interruption and idempotent retry.
+Use explicit signals and injected clocks, without real sleeps, live network or
+scheduler luck. These tests supplement the live golden; neither lane can claim
+the other's evidence.
+
+### Final-build execution on 2026-09-18
+
+`unified-canvas-20260918-03` completed initial replication naturally, passed
+commit/export/reopen/native editing, and captured three distinct live frames
+(cold 753 ms; warm 1844 and 1540 ms, with unchanged camera). It then failed before
+follow-up dispatch because the driver used the landing-page composer ID in an
+existing session. That failed report remains immutable.
+
+`resume-kimi-versions.mjs --source <retained-round> --round <fresh-id>` verifies
+the identical build and exactly one committed original dispatch before continuing
+from an owned copy. The corrected driver appends the fixed prompt while preserving
+the native element reference. It never repeats the original replication.
+`unified-canvas-20260918-03-versions-resume-01` passed the prescribed continuation,
+V1-based save, V2 retention, unversioned-change protection, restart/history checks
+and byte-identical V1 exports. Its two committed receipts correspond to the two
+authorized model turns. The copied profile could not resume Kimi's obsolete
+absolute working directory; the application's existing history-replay fallback
+continued after the 120-second ACP timeout. This is retained evidence, not proof
+of uninterrupted native session resumption. Both owned profiles were cleaned up
+and exported for review.
+
+The resulting verdict is `technical-passed-visual-pending`. The original export
+shows overlapping text around “Stronger Magnets”, and some photo-embedded text
+remains rasterized. Human visual and interaction approval is still required;
+there is no automatic model repair or reclassification of earlier failed rounds.

@@ -54,6 +54,8 @@ import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { sanitizeDesignTurnOutcome, type DesignTurnOutcome } from '@molly/shared';
 import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { collectAuthoring } from '@molly/design-authoring';
+import { snapshotIdentity } from './render-preview';
 import { artifactAtSendRecord, readDesignArtifact, type DesignArtifactAtSend } from './artifact';
 import { designOperation } from './store';
 
@@ -104,6 +106,8 @@ export interface DesignTurnManifest {
    * stale-artifact comparison.
    */
   artifactAtSend?: DesignArtifactAtSend;
+  /** Display-only identity of YAML and referenced assets; never a commit/read proof. */
+  previewSourceAtSend?: string;
   /** Recorded dispatch fact; consumers must compare with trusted Session workspace paths. */
   artifactWorkdir?: string;
   artworkId?: string;
@@ -325,6 +329,16 @@ export async function materializeDesignTurnInput(
   const artifactAtSend = artifactAtSendRecord(
     await readDesignArtifact(opts.artifactWorkdir ?? workdir)
   );
+  let previewSourceAtSend: string | undefined;
+  if (artifactAtSend.status === 'present') {
+    try {
+      previewSourceAtSend = snapshotIdentity(
+        collectAuthoring(opts.artifactWorkdir ?? workdir, { referencedOnly: true })
+      );
+    } catch {
+      // An invalid inherited draft does not block dispatch or acquire display authority.
+    }
+  }
 
   const referencesDir = path.join(turnDir, 'references');
   await mkdir(referencesDir, { recursive: true });
@@ -349,6 +363,7 @@ export async function materializeDesignTurnInput(
     skillDrift: [...(opts.skillDrift ?? [])].sort(),
     references,
     artifactAtSend,
+    ...(previewSourceAtSend ? { previewSourceAtSend } : {}),
     ...(opts.artifactWorkdir === undefined
       ? {}
       : { artifactWorkdir: path.resolve(opts.artifactWorkdir), artworkId: opts.artworkId }),

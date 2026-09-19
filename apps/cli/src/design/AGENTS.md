@@ -65,7 +65,12 @@ Design history uses the artwork's independent local Git repository. Preserve exa
 embedded content and protect unversioned current work before restore; then use the
 ordinary canonical save/CAS and projection path. Never alter user Git state or add
 parallel snapshot storage. Recheck canonical revision after acquiring the history
-lock so queued operations cannot version a pre-restore snapshot. See [history](README.md#design-history).
+lock so queued operations cannot version a pre-restore snapshot. Selected base and
+operation identity live in the canonical envelope, outside BentoDoc/YAML; Git commits
+record logical design origin while the managed ref remains linear. Source display
+may read frozen input provenance but never gains save authority. Freeze its referenced
+source identity separately from the full artifact digest; unused new media cannot
+make an inherited draft live. See [history](README.md#design-history).
 
 Grok reminders use only the app-owned session plugin and native hook reload. Preserve
 user plugin trust; PreToolUse context arrives after the tool and establishes no read

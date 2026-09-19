@@ -13,11 +13,16 @@ canonical instances and reject late results after consumer/source changes.
 Source previews share exact dependency watches and serialized conversion only
 while consumers exist; release both with the last consumer. Re-observe new
 dependencies after installing watches. Watch `design.yaml` and needed `media/`; leftover `.pptd` is not a watch or import source. Reject
-old source/view generations; previews never commit or update Agent baselines.
+old source/turn/view generations; previews never commit or update Agent baselines.
+Valid frozen frames may publish while newer bytes are queued; render serially.
+The single canvas retains its camera across source replacements and store reloads.
+Preparation may precede input identity: establish the entry watch and bind that
+identity on observation. Reconcile this startup handoff even without another file
+event; stop the reconciliation when bound or released. Cancellation retires loading native surfaces as well as
+the visible preview; late loads cannot reveal a closed canvas. Canonical editors
+may finish loading while hidden, but initial display and viewport restoration
+must recheck the current host's visibility intent.
 
-Explicit import retains the clicked document/assets snapshot, flushes under the
-artwork mutation gate, rechecks execution before save, and uses canonical CAS.
-Preserve retry baselines and distinguish committed saves from reload failures.
 `design-canvas-access` gates actual human writes and flushes all artwork instances
 before dispatch. Execution state comes from the versioned daemon canvas-host
 snapshot; unknown is readonly. Keep ownership independent of view lifetime, and
@@ -37,10 +42,12 @@ per-turn thumbnails or thumbnail IPC. Previews/PNG/JPEG use canvas dimensions.
 Historical files resolve by artwork/digest in the worker; local resources serve
 original bytes and embedded assets.
 
-Git history views reuse the isolated readonly renderer and have no file watcher or
-import action. Save-version and restore flush through the artwork mutation gate;
-restore preserves unversioned content in Git before canonical CAS. Report successful
-disk writes separately from failed canvas reloads.
+Selecting Git history restores directly into the editable current draft. Save-version
+and switch flush through the artwork mutation gate; protect unversioned content in
+Git before canonical CAS. Persist selected base and operation identity outside
+BentoDoc, and report successful disk writes separately from failed canvas reloads.
+Execution and artifact processing block both actions. Source display binds to the
+authoritative active turn and excludes unchanged inherited draft bytes.
 
 Element references originate only from visible canonical selections while idle.
 Capture IDs before flush and pair them with its saved revision; never rebase stored

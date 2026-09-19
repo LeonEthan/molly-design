@@ -39,7 +39,25 @@ export interface DesignVersion {
   number: number;
   createdAt: string;
   kind: 'saved' | 'before-restore';
+  baseVersionId?: string;
+  contentDigest?: string;
+  sourceRevisionId?: string;
+  actionId?: string;
 }
+const metadata = z
+  .object({
+    baseVersionId: commitId.optional(),
+    contentDigest: revision,
+    sourceRevisionId: revision,
+    actionId: revision,
+  })
+  .strict();
+const contentDigest = (content: Parameters<typeof canonicalContentBytes>[0]) =>
+  createHash('sha256').update(canonicalContentBytes(content)).digest('hex');
+const actionIdentity = (operation: string, baseline: string, target = '') =>
+  createHash('sha256')
+    .update(JSON.stringify([operation, baseline, target]))
+    .digest('hex');
 const historyRef = 'refs/heads/main';
 const zeroId = '0'.repeat(40);
 
@@ -101,7 +119,7 @@ async function list(repository: string): Promise<DesignVersion[]> {
     'log',
     '--reverse',
     '--first-parent',
-    '--format=%H%x09%ct%x09%s',
+    '--format=%H%x09%ct%x09%s%x09%b',
     historyRef,
   ]);
   return output
@@ -109,7 +127,7 @@ async function list(repository: string): Promise<DesignVersion[]> {
     .split('\n')
     .filter(Boolean)
     .map((line, index) => {
-      const [hash, seconds, subject] = line.split('\t');
+      const [hash, seconds, subject, body] = line.split('\t');
       if (subject !== 'saved' && subject !== 'before-restore')
         throw Error('Invalid design history entry');
       const timestamp = z.coerce.number().int().nonnegative().parse(seconds);
@@ -118,6 +136,7 @@ async function list(repository: string): Promise<DesignVersion[]> {
         number: index + 1,
         createdAt: new Date(timestamp * 1000).toISOString(),
         kind: subject,
+        ...(body ? metadata.parse(JSON.parse(body)) : {}),
       };
     });
 }
@@ -136,7 +155,7 @@ async function read(repository: string, version: string) {
 
 async function append(
   repository: string,
-  content: z.output<typeof designInput>,
+  content: import('./store').DesignPayload,
   kind: DesignVersion['kind'],
   assertHeld: () => Promise<void>
 ): Promise<DesignVersion> {
@@ -145,21 +164,22 @@ async function append(
   const blob = commitId.parse(
     (await git(repository, ['hash-object', '-w', '--stdin'], bytes)).trim()
   );
-  if (parent) {
-    const previous = (await git(repository, ['rev-parse', `${parent}:design.json`])).trim();
-    if (previous === blob) {
-      const versions = await list(repository);
-      const latest = versions.at(-1);
-      if (!latest) throw Error('Design version disappeared');
-      return latest;
-    }
-  }
   const tree = commitId.parse(
     (await git(repository, ['mktree'], `100644 blob ${blob}\tdesign.json\n`)).trim()
   );
+  const details = {
+    ...(content.editing ? { baseVersionId: content.editing.baseVersionId } : {}),
+    contentDigest: contentDigest(content),
+    sourceRevisionId: content.revisionId,
+    actionId: actionIdentity(kind, content.revisionId),
+  };
   const commit = commitId.parse(
     (
-      await git(repository, ['commit-tree', tree, ...(parent ? ['-p', parent] : [])], `${kind}\n`)
+      await git(
+        repository,
+        ['commit-tree', tree, ...(parent ? ['-p', parent] : [])],
+        `${kind}\n\n${JSON.stringify(details)}\n`
+      )
     ).trim()
   );
   await assertHeld();
@@ -191,23 +211,12 @@ export async function designHistoryOperation(
     const historic = await read(repository, request.commitId);
     // Use current artwork identity; never restore another Session's metadata or conversation.
     return {
-      ...current,
       ...historic.content,
+      association: current.association,
       revisionId: createHash('sha256')
         .update(canonicalContentBytes(historic.content))
         .digest('hex'),
     };
-  }
-  if (current.revisionId !== request.baseRevisionId) {
-    if (request.operation === 'history-restore' && available) {
-      const historic = await read(repository, request.commitId);
-      const sameContent = Buffer.from(canonicalContentBytes(current)).equals(
-        canonicalContentBytes(historic.content)
-      );
-      // A lost save reply may be retried; matching bytes permit no further mutation.
-      if (sameContent) return current;
-    }
-    throw Error('DESIGN_CONFLICT');
   }
   if (!available)
     await mkdir(repository).catch(async (error: unknown) => {
@@ -221,27 +230,81 @@ export async function designHistoryOperation(
       operation: 'read',
       sessionId: request.sessionId,
     });
-    if (lockedCurrent.revisionId !== current.revisionId) throw Error('DESIGN_CONFLICT');
-    if (!(await exists(path.join(repository, 'objects'))))
-      await git(repository, ['init', '--bare', '--template=', '--object-format=sha1', repository]);
-    if (request.operation === 'history-create')
-      return append(repository, current, 'saved', assertHeld);
+    const versions = (await exists(path.join(repository, 'objects'))) ? await list(repository) : [];
+    if (request.operation === 'history-create') {
+      const prior = versions.find(
+        (version) => version.kind === 'saved' && version.sourceRevisionId === request.baseRevisionId
+      );
+      if (
+        prior &&
+        lockedCurrent.editing &&
+        lockedCurrent.editing.actionId === prior.actionId &&
+        lockedCurrent.editing.baseVersionId === prior.commitId &&
+        contentDigest(lockedCurrent) === prior.contentDigest
+      )
+        return prior;
+      if (lockedCurrent.revisionId !== request.baseRevisionId) throw Error('DESIGN_CONFLICT');
+      if (!(await exists(path.join(repository, 'objects'))))
+        await git(repository, [
+          'init',
+          '--bare',
+          '--template=',
+          '--object-format=sha1',
+          repository,
+        ]);
+      if (lockedCurrent.editing) {
+        const base = await read(repository, lockedCurrent.editing.baseVersionId);
+        if (contentDigest(base.content) === contentDigest(lockedCurrent)) return base.version;
+      }
+      const version = prior ?? (await append(repository, lockedCurrent, 'saved', assertHeld));
+      await assertHeld();
+      await designOperation(
+        dataRoot,
+        {
+          operation: 'save',
+          sessionId: request.sessionId,
+          baseRevisionId: lockedCurrent.revisionId,
+          content: { doc: lockedCurrent.doc, assets: lockedCurrent.assets },
+        },
+        {
+          editing: {
+            baseVersionId: version.commitId,
+            actionId: actionIdentity('saved', lockedCurrent.revisionId),
+          },
+        }
+      );
+      return version;
+    }
+    const actionId = actionIdentity('restore', request.baseRevisionId, request.commitId);
     const historic = await read(repository, request.commitId);
+    const sameContent = contentDigest(lockedCurrent) === contentDigest(historic.content);
+    if (
+      lockedCurrent.editing?.baseVersionId === request.commitId &&
+      sameContent &&
+      (lockedCurrent.revisionId === request.baseRevisionId ||
+        lockedCurrent.editing.actionId === actionId)
+    )
+      return lockedCurrent;
+    if (lockedCurrent.revisionId !== request.baseRevisionId) throw Error('DESIGN_CONFLICT');
     // No changes to current storage until the protective history entry is durable and reachable.
     const currentBlob = (
-      await git(repository, ['hash-object', '--stdin'], canonicalContentBytes(current))
+      await git(repository, ['hash-object', '--stdin'], canonicalContentBytes(lockedCurrent))
     ).trim();
     const reachable = (await head(repository))
       ? await git(repository, ['rev-list', '--objects', historyRef])
       : '';
     if (!reachable.split('\n').some((line) => line.split(' ')[0] === currentBlob))
-      await append(repository, current, 'before-restore', assertHeld);
+      await append(repository, lockedCurrent, 'before-restore', assertHeld);
     await assertHeld();
-    return designOperation(dataRoot, {
-      operation: 'save',
-      sessionId: request.sessionId,
-      baseRevisionId: request.baseRevisionId,
-      content: historic.content,
-    });
+    return designOperation(
+      dataRoot,
+      {
+        operation: 'save',
+        sessionId: request.sessionId,
+        baseRevisionId: request.baseRevisionId,
+        content: historic.content,
+      },
+      { editing: { baseVersionId: request.commitId, actionId } }
+    );
   });
 }

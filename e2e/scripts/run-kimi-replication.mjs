@@ -6,16 +6,20 @@ const { ElectronHarness } = await import('../src/support/electron-harness.ts');
 const { KimiReplicationPage } = await import('../src/support/pages/kimi-replication-page.ts');
 const { collectKimiResult, REFERENCE_SHA256, sha } =
   await import('./kimi-replication-evidence.mjs');
+const { verifyKimiVersions } = await import('./kimi-version-evidence.mjs');
+const { observeLiveCanvas } = await import('./kimi-live-canvas-evidence.mjs');
 import { parseArgs } from 'node:util';
-import { mkdir, readFile, writeFile, copyFile, readdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, copyFile, readdir, cp } from 'node:fs/promises';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 import { execFileSync } from 'node:child_process';
 import { expect } from '@playwright/test';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const { values } = parseArgs({
   options: {
     reference: { type: 'string' },
+    'runtime-cache': { type: 'string' },
     round: { type: 'string' },
     phase: { type: 'string' },
     'timeout-ms': { type: 'string', default: '2700000' },
@@ -24,10 +28,10 @@ const { values } = parseArgs({
 if (
   !values.reference ||
   !/^[a-z0-9][a-z0-9-]{0,79}$/.test(values.round ?? '') ||
-  !['baseline', 'single-file'].includes(values.phase)
+  !['baseline', 'single-file', 'unified-canvas'].includes(values.phase)
 )
   throw Error(
-    'usage: node e2e/scripts/run-kimi-replication.mjs --reference <reference.jpg> --round <fresh-id> --phase baseline|single-file [--timeout-ms 2700000]'
+    'usage: node e2e/scripts/run-kimi-replication.mjs --reference <reference.jpg> --round <fresh-id> --phase baseline|single-file|unified-canvas [--timeout-ms 2700000]'
   );
 const timeout = Number(values['timeout-ms']);
 if (!Number.isSafeInteger(timeout) || timeout <= 0)
@@ -86,22 +90,54 @@ const h = new ElectronHarness({
   stableId: 'kimi-replication',
 });
 const ui = new KimiReplicationPage(h);
+let stopObserving;
 try {
   console.log(`Golden ${values.phase}: ${directory}`);
   await persist();
   await h.launch();
+  if (values['runtime-cache']) {
+    const source = resolve(values['runtime-cache']);
+    const metadata = JSON.parse(await readFile(join(source, 'metadata.json'), 'utf8'));
+    if (
+      (metadata.runtimeName ?? metadata.name) !== 'kimi-code' ||
+      (metadata.runtimeVersion ?? metadata.version) !== report.runtime.version ||
+      metadata.archiveSha256 !== report.runtime.artifact.sha256 ||
+      metadata.archiveSize !== report.runtime.artifact.size
+    )
+      throw Error('Runtime cache does not match the pinned Kimi artifact');
+    const dataRoot = await h.app.evaluate(() => process.env.MOLLY_DATA_DIR);
+    const destination = join(
+      dataRoot,
+      'agent-binaries',
+      'kimi-code',
+      report.runtime.version,
+      'node'
+    );
+    await cp(source, destination, { recursive: true, errorOnExist: true, force: false });
+    report.runtimeCache = {
+      source,
+      metadata,
+      entrySha256: sha(await readFile(join(destination, report.runtime.artifact.cmd))),
+    };
+    await persist();
+  }
   await ui.configure();
   report.configurationUi = await ui.page.locator('body').innerText();
   await ui.page.screenshot({ path: join(directory, 'configured.png') });
   report.artworkId = await ui.send(join(directory, 'reference.jpg'));
-  report.dataRoot = await h.app.evaluate(() => (process.env.MOLLY_DATA_DIR ?? process.env.LODY_DATA_DIR));
+  report.dataRoot = await h.app.evaluate(
+    () => process.env.MOLLY_DATA_DIR ?? process.env.LODY_DATA_DIR
+  );
   await persist();
+  if (values.phase === 'unified-canvas')
+    stopObserving = observeLiveCanvas(h, directory, report.artworkId, report, report.dataRoot);
   console.log(`Real Kimi task dispatched: ${report.artworkId}`);
   await expect(ui.page.getByRole('button', { name: 'Stop', exact: true })).toBeVisible({
     timeout: 120_000,
   });
   // Explicit terminal UI and durable receipt, not file appearance, define completion.
   await expect(ui.page.getByRole('button', { name: 'Stop', exact: true })).toBeHidden({ timeout });
+  report.agentEndedAt = new Date().toISOString();
   await expect
     .poll(
       async () => {
@@ -116,6 +152,10 @@ try {
       { timeout: 60_000 }
     )
     .toBe(true);
+  if (stopObserving) {
+    await stopObserving();
+    stopObserving = undefined;
+  }
   console.log('Kimi turn settled; checking commit, exports and native editing.');
   await collectKimiResult(h, {
     directory,
@@ -123,6 +163,28 @@ try {
     dataRoot: report.dataRoot,
     report,
   });
+  if (values.phase === 'unified-canvas') {
+    await verifyKimiVersions(h, {
+      directory,
+      artworkId: report.artworkId,
+      dataRoot: report.dataRoot,
+      report,
+      timeout,
+    });
+    const canonical = JSON.parse(await readFile(join(directory, 'canonical.json'), 'utf8'));
+    let finalDigest = sha(JSON.stringify(canonical.doc));
+    for (const frame of report.liveCanvas.frames) {
+      const document = JSON.parse(await readFile(join(directory, `${frame.file}.json`), 'utf8'));
+      if (isDeepStrictEqual(document, canonical.doc)) finalDigest = frame.digest;
+    }
+    const live = report.liveCanvas.frames.filter((f) => f.observedAt < report.agentEndedAt);
+    const distinct = new Set([...live.map((f) => f.digest), finalDigest]);
+    report.liveCanvas.distinctIncludingFinal = distinct.size;
+    report.liveCanvas.status = live.length && distinct.size >= 2 ? 'passed' : 'unproven';
+    if (report.liveCanvas.status !== 'passed') report.overall = 'unproven-live-progress';
+    else if (report.liveCanvas.latency.status !== 'passed')
+      report.overall = `${report.liveCanvas.latency.status}-live-latency`;
+  }
 } catch (error) {
   report.overall = 'failed';
   report.error = String(error);
@@ -132,6 +194,7 @@ try {
   process.exitCode = 1;
   console.error(String(error));
 } finally {
+  if (stopObserving) await stopObserving();
   report.finishedAt = new Date().toISOString();
   if (h.page && !h.page.isClosed())
     await h.page.screenshot({ path: join(directory, 'last-desktop.png') }).catch(() => {});

@@ -97,17 +97,13 @@ retired from Molly. Generic file/diff viewers and send-to-chat references remain
 
 ### Authoring preview in the canvas
 
-`design-canvas.tsx` switches the existing canvas region between the retained current
-artwork and a readonly, unsubmitted source preview. Automatic refresh uses frozen
-document and asset bytes; failures are reported and retain the last valid preview.
-The preview offers no manual refresh and no import-into-current-artwork action.
-Current-artwork copy/export actions are disabled while viewing source files. The
-preview never unlocks or destroys the editor and does not declare Agent completion.
-
-When an Agent turn starts while Current artwork is selected, the canvas enters that
-same readonly source preview and subscribes to valid intermediate PPTD snapshots.
-An explicit view choice made afterward remains in place while that live status
-stays active; idle external-file previews still use the Unsubmitted preview control.
+`design-canvas.tsx` owns one canvas region. Idle shows the editable current draft;
+an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
+Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
+files retain the last valid frame. There is no source switch, manual refresh or import.
+Turn-bound display never saves, flushes, changes version base or ends execution.
+The main-process canvas-host state keeps edit/reference/export/version actions locked
+through artifact processing; conversation presence or file appearance cannot release it.
 
 Current-artwork selection controls and their popups render inside Bento's native
 view near the selection. The shell passes labels/theme and receives validated
@@ -127,21 +123,19 @@ and reselect. Unsubmitted previews cannot supply these references.
 
 ### Current artwork after a commit
 
-The canvas retains its current artwork while the authoring-source preview is shown.
-After a new successful Agent receipt, the existing guarded store sync must succeed
-before the canvas returns to the current artwork. Historical receipts on initial
-hydration and later explicit source choices do not trigger that navigation. Reload
-failures remain visible and preserve unsaved edits. See the
-[decision and verification](../../../../../.agents/notes/implemented/bug-fix/2026-09-11-current-canvas-after-commit.md).
+The existing guarded store sync reconciles committed receipts, including hydration.
+The authoritative canvas-host release waits for artifact handling and canonical sync;
+only then does the single canvas return to editing. Failed/cancelled/no-artifact turns
+return to the confirmed current draft. Reload failures preserve unsaved edits. Camera
+scale and canvas-coordinate center survive surface replacement within native bounds.
 
 ### Design versions
 
-The version selector uses immutable local Git history. Save version flushes the current
-artwork and records its exact assets; ordinary autosave does not create a version.
-Historical views share the isolated readonly renderer, while the current editor remains
-hidden with its undo state. Edit from here explicitly restores the selected version;
-the service preserves unversioned current content in the same Git history first.
-Version mutations use the existing execution/processing gate, and history cannot supply
-current-artwork selections. Git errors remain
-visible without replacing the current editor. See the
-[implementation and acceptance limits](../../../../../.agents/notes/implemented/feature/2026-09-12-design-version-history.zh.md).
+The separate Save version button flushes current edits and saves exact assets in
+immutable local Git history. Ordinary autosave does not create a version. Clicking
+history directly switches the editable current draft, protecting unversioned work in
+the same Git repository first. The selected base survives restart; subsequent saves
+record that logical source without deleting later versions. An unchanged draft does
+not create a duplicate. Version operations use the execution/processing gate.
+The label distinguishes Vn from “Based on Vn · New changes”; selections are recaptured
+after switching. See the [current design and validation plan](../../../../../.agents/notes/proposed/architecture/2026-09-18-version-based-canvas-editing.zh.md).

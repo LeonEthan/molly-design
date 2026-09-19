@@ -308,10 +308,13 @@ describe('materializeDesignTurnInput', () => {
       digest: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
     const digest = (withProject.artifactAtSend as { digest: string }).digest;
+    expect(withProject.previewSourceAtSend).toMatch(/^[a-f0-9]{64}$/);
 
     // The same project on the next dispatch is the same identity — which is what
     // lets P2.3 report "this turn produced nothing" instead of re-importing it.
-    expect((await send('turn-c')).artifactAtSend).toEqual({ status: 'present', digest });
+    const unchanged = await send('turn-c');
+    expect(unchanged.artifactAtSend).toEqual({ status: 'present', digest });
+    expect(unchanged.previewSourceAtSend).toBe(withProject.previewSourceAtSend);
 
     // One rewritten page is a different project.
     await writeProject(workdir, 'elements:\n  - id: title\n    kind: text\n');

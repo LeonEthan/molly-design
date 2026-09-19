@@ -6350,7 +6350,16 @@ export class MessageHandler {
             )
               throw error;
           }
-          return { type: 'design/source-path', ok: true, path: sourcePath };
+          const turnId = this.designCanvasHost
+            .exchange([])
+            .find((state) => state.artworkId === design.artworkId)?.turnId;
+          const sourceTurnId = this.executionService.getActiveUserTurnId(sessionId);
+          return {
+            type: 'design/source-path',
+            ok: true,
+            path: sourcePath,
+            ...(turnId && sourceTurnId ? { live: { turnId, sourceTurnId } } : {}),
+          };
         } catch (error) {
           return { type: 'design/source-path', ok: false, error: formatErrorMessage(error) };
         }

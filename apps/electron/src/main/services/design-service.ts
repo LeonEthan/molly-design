@@ -1,3 +1,4 @@
+import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
 import {
   DesignElementReferenceSchema,
   validateDesignElementReferences
@@ -50,6 +51,32 @@ type RecordEntry = {
   revisionId: string
 }
 export const designCanvasAccess = new DesignCanvasAccess()
+export function notifyDesignState(artworkId?: string) {
+  for (const window of BrowserWindow.getAllWindows())
+    if (!window.isDestroyed()) window.webContents.send('design.state', { artworkId })
+}
+export async function readDesignCanvasState(id: string) {
+  await queryCanvasState?.().catch(() => {})
+  const current = await designRequest({ operation: 'read', sessionId: id })
+  let changed = true
+  if (current.editing) {
+    const base = await designRequest({
+      operation: 'history-read',
+      sessionId: id,
+      commitId: current.editing.baseVersionId
+    })
+    changed = !isDeepStrictEqual(
+      { doc: current.doc, assets: current.assets },
+      { doc: base.doc, assets: base.assets }
+    )
+  }
+  return {
+    ...designCanvasAccess.state(id),
+    revisionId: current.revisionId,
+    baseVersionId: current.editing?.baseVersionId,
+    changed
+  }
+}
 let queryCanvasState: (() => Promise<void>) | undefined
 export function setDesignCanvasStateQuery(query: () => Promise<void>) {
   queryCanvasState = query
@@ -59,6 +86,8 @@ export async function prepareDesignUpdate(): Promise<() => Promise<void>> {
   return designCanvasAccess.prepareApplicationUpdate(queryCanvasState)
 }
 const records = new Map<string, RecordEntry>()
+export const currentDesignBounds = (hostId: string) => records.get(hostId)?.view.getBounds()
+export const isDesignVisible = (hostId: string) => records.get(hostId)?.view.getVisible() ?? false
 // Last non-empty selection summary per host, mirrored from the canvas's own
 // reports. A hidden-but-alive canvas keeps its document (and selection) across
 // renderer remounts while no new report fires, so the shell reseeds its
@@ -83,7 +112,12 @@ export function designRequest<T = DesignPayload>(
   request:
     | DesignRequest
     | DesignHistoryRequest
-    | { operation: 'source-preview'; workdir: string; previousSourceIdentity?: string }
+    | {
+        operation: 'source-preview'
+        workdir: string
+        previousSourceIdentity?: string
+        live?: { sessionId: string; sourceTurnId: string }
+      }
     | { operation: 'pending' }
     | { operation: 'acknowledge'; sessionId: string }
     | ({ operation: 'candidate-file' } & DesignCandidateRequest),
@@ -140,6 +174,7 @@ export async function surface(
         payload = saved
         const record = hostId ? records.get(hostId) : undefined
         if (record) record.revisionId = saved.revisionId
+        notifyDesignState(id)
         return Response.json({ ok: true, revisionId: saved.revisionId }, { headers })
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -319,8 +354,15 @@ export async function attachDesign(
           revisionId: payload.revisionId
         }
         records.set(hostId, entry)
-        owner.contentView.addChildView(view)
-        view.setVisible(false)
+        owner.contentView.addChildView(view, 0)
+        view.setBounds({
+          x: Math.round(bounds.x),
+          y: Math.round(bounds.y),
+          width: Math.max(1, Math.round(bounds.width)),
+          height: Math.max(1, Math.round(bounds.height))
+        })
+        // Loading may outlive a panel close before the record existed.
+        view.setVisible(hosts.get(hostId) === id)
         view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
         view.webContents.on('will-navigate', (event) => event.preventDefault())
         view.webContents.on('will-redirect', (event) => event.preventDefault())
@@ -359,8 +401,16 @@ export async function attachDesign(
     width: Math.max(1, Math.min(width - x, Math.round(bounds.width))),
     height: Math.max(1, Math.min(height - y, Math.round(bounds.height)))
   })
-  await record.view.webContents.executeJavaScript('document.body.inert = false')
-  record.view.setVisible(true)
+  try {
+    await record.view.webContents.executeJavaScript('document.body.inert = false')
+    // Restoring layout can reveal a hidden view; do not revive a cancelled attach.
+    if (records.get(hostId) !== record || hosts.get(hostId) !== id) return
+    await restoreDesignViewport(hostId, record.view)
+  } catch (error) {
+    if (records.get(hostId) === record && hosts.get(hostId) === id) throw error
+    return
+  }
+  if (records.get(hostId) === record) record.view.setVisible(hosts.get(hostId) === id)
 }
 export function hideDesign(id: string, hostId?: string) {
   // Cancel visibility intent even while the first native instance is still loading.
@@ -369,6 +419,7 @@ export function hideDesign(id: string, hostId?: string) {
   for (const [key, record] of records) {
     if (record.artworkId !== id || (hostId && key !== hostId)) continue
     hosts.delete(key)
+    void rememberDesignViewport(key, record.view)
     record.view.setVisible(false)
   }
 }
@@ -400,16 +451,37 @@ export async function saveDesign(id: string) {
   if (designCanvasAccess.isReadonly(id)) throw Error('Canvas is read-only; edits are retained')
   await designCanvasAccess.prepareForSend(id)
 }
-/** Version actions reuse the same mutation gate as explicit import. */
+/** Version actions share the canonical replacement gate and flush every instance. */
 export async function createDesignVersion(id: string): Promise<DesignVersion> {
   await queryCanvasState?.()
   return designCanvasAccess.replaceAfterFlush(id, async (assertIdle) => {
     const current = await designRequest({ operation: 'read', sessionId: id })
     assertIdle()
-    return designRequest<DesignVersion>(
+    const version = await designRequest<DesignVersion>(
       { operation: 'history-create', sessionId: id, baseRevisionId: current.revisionId },
       assertIdle
     )
+    const saved = await designRequest({ operation: 'read', sessionId: id })
+    // Metadata-only revision change preserves the native document and undo stack.
+    for (const record of recordsFor(id)) {
+      if (record.revisionId === saved.revisionId) continue
+      const snapshot = await record.view.webContents.executeJavaScript('window.molly.snapshot()')
+      if (
+        !isDeepStrictEqual(
+          { doc: snapshot.doc, assets: snapshot.assets },
+          { doc: saved.doc, assets: saved.assets }
+        )
+      ) {
+        await syncDesignCanvasFromStore(id)
+        break
+      }
+      await record.view.webContents.executeJavaScript(
+        `window.molly.rebase(${JSON.stringify(record.revisionId)},${JSON.stringify(saved.revisionId)})`
+      )
+      record.revisionId = saved.revisionId
+    }
+    notifyDesignState(id)
+    return version
   })
 }
 
@@ -434,6 +506,7 @@ export async function restoreDesignVersion(
       )
       saved = result
       await syncDesignCanvasFromStore(id)
+      notifyDesignState(id)
       return { revisionId: result.revisionId }
     })
   } catch (error) {
@@ -604,6 +677,7 @@ async function reloadDesignCanvas(id: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
+    await rememberDesignViewport(key, record.view)
     destroyDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }

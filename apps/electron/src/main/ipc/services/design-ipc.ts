@@ -18,8 +18,7 @@ import {
   refreshSourcePreview,
   hideSourcePreview,
   attachSourcePreview,
-  closeSourcePreview,
-  showDesignVersion
+  closeSourcePreview
 } from '../../services/design-source-preview'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import {
@@ -27,6 +26,8 @@ import {
   presentDesignToolbar,
   applyDesignCommand,
   createDesignVersion,
+  readDesignCanvasState,
+  designCanvasAccess,
   restoreDesignVersion,
   attachDesign,
   hideDesign,
@@ -168,7 +169,13 @@ export class DesignIpc extends IpcService {
       if (!response.ok) throw Error(response.error)
       const resolved = DesignSourcePathResultSchema.parse(response.result)
       if (!resolved.ok) throw Error(resolved.error)
-      return resolved.path
+      const turnId = designCanvasAccess.state(artworkId).turnId
+      if (!turnId || (resolved.live && turnId !== resolved.live.turnId))
+        throw Error('Design execution changed while resolving its source')
+      return {
+        path: resolved.path,
+        live: { sessionId: artworkId, turnId, sourceTurnId: resolved.live?.sourceTurnId }
+      }
     })
   }
   @IpcMethod() async attachPreview(
@@ -176,7 +183,7 @@ export class DesignIpc extends IpcService {
     bounds: { x: number; y: number; width: number; height: number }
   ) {
     owner()
-    attachSourcePreview(id.parse(hostId), DesignBoundsSchema.parse(bounds))
+    await attachSourcePreview(id.parse(hostId), DesignBoundsSchema.parse(bounds))
   }
   @IpcMethod() async hidePreview(hostId: string, cancel = true) {
     owner()
@@ -217,6 +224,10 @@ export class DesignIpc extends IpcService {
       sessionId: id.parse(sessionId)
     })
   }
+  @IpcMethod() async state(sessionId: string) {
+    owner()
+    return readDesignCanvasState(id.parse(sessionId))
+  }
   @IpcMethod() async saveVersion(sessionId: string) {
     owner()
     return createDesignVersion(id.parse(sessionId))
@@ -226,12 +237,6 @@ export class DesignIpc extends IpcService {
     if (typeof commitId !== 'string' || !/^[a-f0-9]{40}$/.test(commitId))
       throw Error('Invalid design version')
     return restoreDesignVersion(id.parse(sessionId), commitId)
-  }
-  @IpcMethod() async viewVersion(sessionId: string, hostId: string, commitId: string) {
-    const window = owner()
-    if (typeof commitId !== 'string' || !/^[a-f0-9]{40}$/.test(commitId))
-      throw Error('Invalid design version')
-    return showDesignVersion(window, id.parse(sessionId), id.parse(hostId), commitId)
   }
   @IpcMethod() async export(sessionId: string, format: 'png' | 'jpeg', title: string) {
     owner()

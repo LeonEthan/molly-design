@@ -494,3 +494,53 @@ void test('failed save releases the update gate and keeps edits retryable', asyn
   assert.equal(access.isReadonly('poster'), false)
   await access.write('poster', undefined, async () => {})
 })
+
+void test('valid frozen frames publish while newer writes are queued, then converge to latest', async () => {
+  const outputs = []
+  const queued = deferred(),
+    firstPublished = deferred()
+  let next
+  const observingLatest = deferred()
+  const observation = new SourceObservation(
+    () =>
+      new Promise((resolve) => {
+        next = resolve
+        if (outputs.length) observingLatest.resolve()
+      }),
+    () => false
+  )
+  observation.consumers.set('canvas', async (result, current) => {
+    if (result.sourceIdentity === 'first') {
+      firstPublished.resolve()
+      await queued.promise
+    }
+    if (current()) outputs.push(result.sourceIdentity)
+  })
+  const run = observation.refresh()
+  next({ status: 'ok', sourceIdentity: 'first', doc: {}, assets: {}, width: 1, height: 1 })
+  await firstPublished.promise
+  observation.invalidate()
+  queued.resolve()
+  // The next observation itself is the deterministic signal that publication finished.
+  await observingLatest.promise
+  assert.deepEqual(outputs, ['first'])
+  next({ status: 'ok', sourceIdentity: 'latest', doc: {}, assets: {}, width: 1, height: 1 })
+  await run
+  assert.deepEqual(outputs, ['first', 'latest'])
+  observation.close()
+})
+
+const { bindLiveSource } = await import('./design-live-source.ts')
+void test('live watch can start before causal input exists and bind on first file change', async () => {
+  const pending = { path: '/synthetic/design.yaml', live: { sessionId: 'art', turnId: 'owner' } }
+  assert.equal(await bindLiveSource(pending, async () => pending), undefined)
+  const ready = { ...pending, live: { ...pending.live, sourceTurnId: 'user-turn' } }
+  assert.deepEqual(await bindLiveSource(pending, async () => ready), ready.live)
+  await assert.rejects(
+    bindLiveSource(pending, async () => ({
+      ...ready,
+      live: { ...ready.live, turnId: 'different-owner' }
+    })),
+    /source changed/
+  )
+})

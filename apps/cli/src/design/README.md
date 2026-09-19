@@ -50,9 +50,8 @@ The design worker returns a checksum/identity-verified original path, and ordina
 file preview supplies its bytes. No candidate approval, deletion, export-copy or
 history catalogue is needed. New candidate production is retired; final conflicts preserve the existing draft and receipt diagnostics.
 
-Live authoring preview and idle explicit import watch `design.yaml`,
-needed `media/` in the draft directory. Leftover
-Legacy `.pptd` is not a preview or import source. Invalid or unstable
+Live authoring display watches `design.yaml` and needed `media/` in the draft
+directory. Legacy `.pptd` is not a preview source. Invalid or unstable
 files keep the last valid preview and do not clear the current artwork.
 
 Agent previews continue through `render-preview.ts` and the shared desktop render
@@ -140,40 +139,21 @@ being silently replaced. See the [implementation and native proof](../../../../.
 
 ## Read-only source snapshots
 
-The desktop's source preview resolves the current trusted Session source through
-`design/source-path` without a turn ID, including a not-yet-created entry; supplied turn IDs retain the historical
-frozen-manifest checks. The design worker calls `buildPreviewPayload(workdir, {})`
-for two bounded, reference-only collections followed by the existing intake.
-Names and exact content, including same-path image changes, identify the snapshot.
-This observes a stable input, not a completed author transaction; valid intermediate
-drafts may render. No preview operation writes canonical, baselines or turn state.
+The desktop resolves trusted Session source paths through `design/source-path`,
+including not-yet-created entries. Active canvas and source turn identities bind the
+single canvas display to current execution. `buildLivePreviewPayload` excludes draft
+bytes unchanged from frozen turn input, then uses the existing bounded, reference-only
+collector and intake. It observes valid intermediate states without claiming a complete
+transaction. Preview requests never write canonical, baselines or turn state.
 
-Actual open preview consumers share an Electron-owned native watch and serialized
-observation. The existing watcher runs in explicit tracked-only mode, with no
-workspace discovery. Validated dependencies include missing files; new targets are
-watched and re-observed before publication. Matching exact bytes skip conversion.
-Closing the last consumer releases watching and cached payloads; reopening, reconnect,
-manual refresh and observed turn finalization reconcile independently. Invalid drafts
-retain the last valid surface; watcher errors retain manual refresh. Formal turn
-collection and exports remain independent.
+Visible consumers share native dependency watches and serial observation. New dependencies
+are watched and re-observed before publication; invalid drafts retain the last good
+surface. A valid frozen frame can finish while newer changes are coalesced for the next
+render. Source/turn/consumer changes still reject late results. Closing the last consumer
+releases watches and cached payloads. Reopening, reconnect and focus reconcile current
+source. Formal collection and exports remain independent.
 
-Element-reference prompt markers are validated during `turn-input.ts` materialization
-and frozen-input recovery against the actual artwork revision and stable IDs.
-A stale marker blocks dispatch without changing its identity or selecting a replacement.
-The original prompt and ordinary attachments remain the frozen input.
-
-Explicit desktop import is separate from observation: Electron retains the displayed
-payload and submits it to the unchanged `designOperation` save after canvas flush.
-The store repeats structural/assets validation and atomic version checks, including
-same-content lost-reply idempotence. Import saves also refresh the application current projection; they never overwrite
-Agent draft authoring files.
-
-Missing canonical reads reject without creating a session directory. The Electron
-owner drains accepted design-worker operations and awaits child exit on application
-quit, after the existing cancellable editor flush. See the
-[shutdown fix](../../../../.agents/notes/implemented/bug-fix/2026-09-12-design-worker-shutdown.md).
-
-### Pi image and rendering tools
+## Pi image and rendering tools
 
 Pi generation/edit MCP calls allow 210 seconds to cover the existing 180-second image
 service deadline and delivery. Pi render keeps its default; cancellation remains active
@@ -217,7 +197,11 @@ and embedded assets, while current association metadata stays outside history.
 Ordinary saves do not create history entries. Git uses Molly's local executable;
 missing Git reports an error without falling back to another store.
 
-Readonly history verifies reachable version identity and content before rendering.
+History reads verify reachable identity and content. Selected base and action identity
+persist in the current envelope, outside BentoDoc/YAML. Git commit metadata records
+logical design origin; physical history remains a linear managed ref. Save binds the
+new base with canonical CAS; unchanged content at the selected base is a no-op.
+Selecting history directly edits from that version without mutating the saved version.
 Restore protects unversioned current content in the same Git repository, then uses
 the normal store save/CAS and current YAML projection publication. A failed protective write
 cannot replace the current artwork; a canonical save followed by projection or

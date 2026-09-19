@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline';
 import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import { z } from 'zod';
 import { buildPreviewPayload } from './design/render-preview';
+import { buildLivePreviewPayload } from './design/live-preview';
 import { designHistoryOperation } from './design/history';
 import {
   acknowledgeDesign,
@@ -30,6 +31,10 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
         .object({
           operation: z.literal('source-preview'),
           workdir: z.string().min(1),
+          live: z
+            .object({ sessionId: z.string().uuid(), sourceTurnId: z.string().min(1).max(200) })
+            .strict()
+            .optional(),
           previousSourceIdentity: z
             .string()
             .regex(/^[a-f0-9]{64}$/)
@@ -37,9 +42,16 @@ for await (const line of createInterface({ input: process.stdin, crlfDelay: Infi
         })
         .strict()
         .parse(request);
-      value = await buildPreviewPayload(input.workdir, {
-        previousSourceIdentity: input.previousSourceIdentity,
-      });
+      value = input.live
+        ? await buildLivePreviewPayload(
+            dataRoot,
+            input.workdir,
+            input.live,
+            input.previousSourceIdentity
+          )
+        : await buildPreviewPayload(input.workdir, {
+            previousSourceIdentity: input.previousSourceIdentity,
+          });
     } else if (request?.operation === 'pending') {
       z.object({ operation: z.literal('pending') })
         .strict()

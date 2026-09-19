@@ -16,11 +16,13 @@ import type {
 } from './electron-ipc';
 
 export type IpcPushMap = {
+  'design.state': { artworkId?: string };
   'design.preview': {
     hostId: string;
     status: 'ready' | 'waiting';
     source: string;
     sourceIdentity?: string;
+    retained?: boolean;
     error?: string;
     automaticError?: string;
   };
@@ -64,6 +66,7 @@ export type IpcSendMap = {
 };
 
 export const IPC_PUSH_CHANNELS = {
+  designState: 'design.state',
   designPreview: 'design.preview',
   designSelection: 'design.selection',
   designSelectionAction: 'design.selectionAction',

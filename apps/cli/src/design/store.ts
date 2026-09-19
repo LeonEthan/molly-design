@@ -106,7 +106,16 @@ export const designAssociation = z
     createdAt: z.string().datetime(),
   })
   .strict();
-const savedSchema = designInput.extend({ association: designAssociation });
+const editingContext = z
+  .object({
+    baseVersionId: z.string().regex(/^[a-f0-9]{40}$/),
+    actionId: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+const savedSchema = designInput.extend({
+  association: designAssociation,
+  editing: editingContext.optional(),
+});
 export const designRequest = z.discriminatedUnion('operation', [
   z
     .object({
@@ -343,6 +352,8 @@ export interface DesignOperationOptions {
   lock?: DesignLockTiming;
   /** Dispatch only verifies; save/reopen recover the current representation. */
   projection?: 'verify';
+  /** History owns this context; ordinary saves cannot choose or rebase it. */
+  editing?: z.output<typeof editingContext>;
 }
 
 /**
@@ -425,6 +436,9 @@ export async function designOperation(
     const saved = savedSchema.parse({
       ...content,
       assets: validateAssets(content),
+      ...(request.operation === 'save' && (options?.editing ?? previous?.editing)
+        ? { editing: options?.editing ?? previous?.editing }
+        : {}),
       association:
         request.operation === 'create'
           ? request.association

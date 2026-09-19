@@ -95,6 +95,8 @@ failure leave ownership intact. Keep this independent of preview rendering.
 
 ## Historical design files
 
+`design/source-path` may report active canvas/source turn identities for display
+isolation; these facts confer no commit authority.
 `design/source-path` uses trusted Session workspace metadata, including archived
 Sessions. An omitted turn resolves today's expected entry even before creation.
 Supplied turns require the frozen original root and an existing regular entry;

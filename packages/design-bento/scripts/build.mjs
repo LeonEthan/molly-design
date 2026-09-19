@@ -99,6 +99,73 @@ try {
     if (!interactions.includes(selector)) throw Error('Pinned canvas UI exclusion changed');
     interactions = interactions.replaceAll(selector, selector + ', [data-molly-toolbar]');
   }
+  const viewportAnchor = '  setZoom(zoom: number) {';
+  if (!interactions.includes(viewportAnchor)) throw Error('Pinned canvas zoom API changed');
+  // Two rounded half-paddings exceed an odd-sized viewport by one pixel.
+  // That changes fitScale after each restore and compounds across live frames.
+  for (const dimension of ['Width', 'Height']) {
+    const padding = `Math.round(this.scroller.client${dimension} / 2)`;
+    if (!interactions.includes(padding)) throw Error('Pinned canvas pan padding changed');
+    interactions = interactions.replaceAll(
+      padding,
+      `Math.floor(this.scroller.client${dimension} / 2)`
+    );
+  }
+  interactions = interactions.replace(
+    viewportAnchor,
+    `
+  viewport(value?: { scale: number; x: number; y: number }) {
+    this.relayout()
+    if (value) {
+      // Changing pan padding can also add/remove a classic scrollbar. Settle
+      // the resulting fit scale before restoring the document-space center.
+      for (let pass = 0; pass < 3; pass++) {
+        this.setZoom(value.scale / this.fitScale)
+        this.relayout()
+        if (Math.abs(this.scale - value.scale) < 1e-9) break
+      }
+      const stage = this.stage.getBoundingClientRect()
+      const box = this.scroller.getBoundingClientRect()
+      this.scroller.scrollLeft += stage.left + value.x * this.scale - box.left - this.scroller.clientWidth / 2
+      this.scroller.scrollTop += stage.top + value.y * this.scale - box.top - this.scroller.clientHeight / 2
+    }
+    const stage = this.stage.getBoundingClientRect()
+    const box = this.scroller.getBoundingClientRect()
+    return { scale: this.scale,
+      x: (box.left + this.scroller.clientWidth / 2 - stage.left) / this.scale,
+      y: (box.top + this.scroller.clientHeight / 2 - stage.top) / this.scale }
+  }
+
+` + viewportAnchor
+  );
+  const editorFile = join(tree, 'slides/src/editor/editor.ts');
+  const editor = readFileSync(editorFile, 'utf8');
+  const editorAnchor = 'export class Editor {';
+  if (!editor.includes(editorAnchor)) throw Error('Pinned editor API changed');
+  writeFileSync(
+    editorFile,
+    editor.replace(
+      editorAnchor,
+      editorAnchor +
+        `
+  viewport(value?: { scale: number; x: number; y: number }) { return this.canvas.viewport(value) }
+`
+    )
+  );
+  const mainFile = join(tree, 'slides/src/main.ts');
+  const main = readFileSync(mainFile, 'utf8');
+  const mainAnchor = '  format: doc.format,';
+  if (!main.includes(mainAnchor)) throw Error('Pinned scripting API changed');
+  writeFileSync(
+    mainFile,
+    main.replace(
+      mainAnchor,
+      mainAnchor +
+        `
+  viewport: (value?: { scale: number; x: number; y: number }) => editor.viewport(value),
+`
+    )
+  );
   writeFileSync(interactionFile, interactions);
   const slides = join(tree, 'slides');
   // Use the checked-in npm lockfile; installation may fill an empty CI cache.

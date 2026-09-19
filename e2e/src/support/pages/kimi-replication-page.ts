@@ -102,7 +102,10 @@ export class KimiReplicationPage {
           const visible = await app.evaluate(({ BrowserWindow }) =>
             BrowserWindow.getAllWindows().flatMap((w) =>
               w.contentView.children.flatMap((v) =>
-                'webContents' in v && v.getVisible()
+                'webContents' in v &&
+                v.getVisible() &&
+                v.getBounds().x + v.getBounds().width > 0 &&
+                v.getBounds().y + v.getBounds().height > 0
                   ? [(v.webContents as Electron.WebContents).getURL()]
                   : []
               )

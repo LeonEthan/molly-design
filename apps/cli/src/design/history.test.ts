@@ -132,7 +132,7 @@ test('Git retains exact embedded image and font bytes after current assets chang
   const blank = await designOperation(root, {
     operation: 'save',
     sessionId,
-    baseRevisionId: artwork.revisionId,
+    baseRevisionId: (await designOperation(root, { operation: 'read', sessionId })).revisionId,
     content: { doc: initial.doc, assets: {} },
   });
   const historical = await designHistoryOperation(root, {
@@ -232,6 +232,42 @@ test('history cannot be redirected into an unrelated repository', async () => {
   ).rejects.toThrow('redirected');
 });
 
+test('selected bases persist, branching keeps later versions and unchanged saves are idempotent', async () => {
+  const { root, sessionId, initial, save } = await fixture();
+  const read = () => designOperation(root, { operation: 'read', sessionId });
+  const checkpoint = async () => {
+    const current = await read();
+    const request = { operation: 'history-create', sessionId, baseRevisionId: current.revisionId };
+    const version = await designHistoryOperation(root, request);
+    if (Array.isArray(version) || !('commitId' in version)) throw Error('Expected version');
+    expect(await designHistoryOperation(root, request)).toEqual(version);
+    expect((await read()).editing?.baseVersionId).toBe(version.commitId);
+    return version;
+  };
+  const first = await checkpoint();
+  await save('#ff0000');
+  const second = await checkpoint();
+  const beforeSwitch = await read();
+  const select = {
+    operation: 'history-restore',
+    sessionId,
+    commitId: first.commitId,
+    baseRevisionId: beforeSwitch.revisionId,
+  };
+  await designHistoryOperation(root, select);
+  expect((await read()).doc).toEqual(initial.doc);
+  expect((await read()).editing?.baseVersionId).toBe(first.commitId);
+  expect(await checkpoint()).toEqual(first);
+  await save('#0000ff');
+  const third = await checkpoint();
+  expect(third.baseVersionId).toBe(first.commitId);
+  expect(second.baseVersionId).toBe(first.commitId);
+  const versions = await designHistoryOperation(root, { operation: 'history-list', sessionId });
+  expect(versions).toEqual([first, second, third]);
+  await expect(designHistoryOperation(root, select)).rejects.toThrow('DESIGN_CONFLICT');
+  expect((await read()).editing?.baseVersionId).toBe(third.commitId);
+});
+
 test('a queued version save rejects a snapshot superseded by another instance restoring history', async () => {
   const { root, sessionId, initial, save } = await fixture();
   const version = await designHistoryOperation(root, {
@@ -303,4 +339,20 @@ test('a queued version save rejects a snapshot superseded by another instance re
     commitId: protectedVersion.commitId,
   });
   expect(retained).toMatchObject({ doc: red.doc });
+});
+
+test('retry after Git publication without base binding reuses the saved version', async () => {
+  const { root, sessionId, initial, save } = await fixture();
+  const file = path.join(root, 'chats', sessionId, 'design.json');
+  const initialBytes = await readFile(file);
+  const request = { operation: 'history-create', sessionId, baseRevisionId: initial.revisionId };
+  const first = await designHistoryOperation(root, request);
+  // Recreate the durable boundary: Git published, canonical binding not yet written.
+  await writeFile(file, initialBytes);
+  expect(await designHistoryOperation(root, request)).toEqual(first);
+  expect(await designHistoryOperation(root, { operation: 'history-list', sessionId })).toEqual([
+    first,
+  ]);
+  await save('#ff0000');
+  await expect(designHistoryOperation(root, request)).rejects.toThrow('DESIGN_CONFLICT');
 });

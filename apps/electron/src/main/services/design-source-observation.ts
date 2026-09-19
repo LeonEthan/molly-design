@@ -41,13 +41,17 @@ export class SourceObservation {
     while (this.dirty && !this.closed) {
       this.dirty = false
       const generation = this.generation
-      const current = () => !this.closed && generation === this.generation
+      // A frozen valid snapshot may finish while newer bytes are queued.
+      // Publication stays serial, so it cannot overwrite a newer rendered frame.
+      let publishValid = false
+      const current = () => !this.closed && (publishValid || generation === this.generation)
       let result: ObservedPreviewResult
       try {
         result = await this.observe(this.last?.sourceIdentity)
       } catch (error) {
         result = { status: 'refused', error: String(error) }
       }
+      publishValid = result.status === 'ok' || result.status === 'unchanged'
       if (!current()) continue
       if (result.status === 'unchanged' && this.last) result = this.last
       if (

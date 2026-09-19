@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   history: [] as { designOutcome?: unknown }[],
   synced: false,
   previewVisible: false,
+  processing: false,
   sync: vi.fn<() => Promise<void>>(),
 }));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
@@ -46,6 +47,12 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({
     design: {
       versions: async () => [],
+      state: async () => ({
+        readonly: state.processing,
+        turnId: state.processing ? 'active' : undefined,
+        changed: true,
+      }),
+      presentToolbar: async () => {},
       syncFromStore: () => state.sync(),
       hide: async () => {},
       hidePreview: async () => {
@@ -84,15 +91,6 @@ const render = () =>
   act(async () => {
     root.render(<DesignCanvas sessionId="artwork" active workspaceSlug="local" name="Artwork" />);
   });
-const click = async (name: string) =>
-  act(async () => {
-    const button = [...container.querySelectorAll('button')].find(
-      (node) => node.textContent === name
-    );
-    expect(button).toBeDefined();
-    button!.click();
-  });
-const isPreview = () => state.previewVisible;
 beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
@@ -104,6 +102,7 @@ beforeEach(() => {
   state.history = [];
   state.synced = false;
   state.previewVisible = false;
+  state.processing = false;
   state.sync.mockReset().mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
@@ -115,92 +114,48 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('seeds hydrated historical receipts without changing the chosen source', async () => {
-  await render();
-  await click('Preview');
+it('reconciles hydrated committed receipts only after history synchronization', async () => {
   state.history = [receipt('old')];
+  state.sync.mockRejectedValue(Error('Synchronization reached'));
+  await render();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
   state.synced = true;
   await render();
-  expect(isPreview()).toBe(true);
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'Synchronization reached'
+  );
 });
-it('shows canonical only after a new successful receipt finishes guarded synchronization', async () => {
+it('a committed receipt cannot release the authoritative processing lock', async () => {
+  state.processing = true;
   state.synced = true;
   await render();
-  await click('Preview');
-  let resolve!: () => void;
+  let finish!: () => void;
   state.sync.mockImplementation(
     () =>
-      new Promise<void>((done) => {
-        resolve = done;
+      new Promise((done) => {
+        finish = done;
       })
   );
   state.history = [receipt('new')];
   await render();
-  expect(isPreview()).toBe(true);
-  await act(async () => resolve());
-  expect(isPreview()).toBe(false);
+  const save = [...container.querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Save version')
+  )!;
+  expect(save.disabled).toBe(true);
+  await act(async () => finish());
+  expect(save.disabled).toBe(true);
 });
-it('preserves preview and shows a failed canonical reload instead of masking unsaved edits', async () => {
+it('reports a guarded reload failure without discarding unsaved edits', async () => {
   state.synced = true;
-  await render();
-  await click('Preview');
   state.sync.mockRejectedValue(Error('Canvas has unsaved edits'));
   state.history = [receipt('new')];
   await render();
-  expect(isPreview()).toBe(true);
   expect(container.querySelector('[role="alert"]')?.textContent).toContain('unsaved edits');
 });
-it('does not override a newer explicit source choice with delayed completion', async () => {
+it('failure receipts do not request canonical replacement', async () => {
   state.synced = true;
+  state.history = [receipt('failed', 'a'.repeat(64), 'invalid')];
+  state.sync.mockRejectedValue(Error('Must not replace'));
   await render();
-  await click('Preview');
-  let resolve!: () => void;
-  state.sync.mockImplementation(
-    () =>
-      new Promise<void>((done) => {
-        resolve = done;
-      })
-  );
-  state.history = [receipt('new')];
-  await render();
-  await click('Artwork');
-  await click('Preview');
-  await act(async () => resolve());
-  expect(isPreview()).toBe(true);
-});
-it('ignores failure receipts and recognizes a new successful turn at the same revision', async () => {
-  state.synced = true;
-  state.history = [receipt('old')];
-  await render();
-  await click('Preview');
-  state.history.push(receipt('failed', 'a'.repeat(64), 'invalid'));
-  await render();
-  expect(isPreview()).toBe(true);
-  state.history.push(receipt('new'));
-  await render();
-  expect(isPreview()).toBe(false);
-});
-
-it('retains a pending new receipt across synchronization interruption', async () => {
-  state.synced = true;
-  await render();
-  await click('Preview');
-  let resolve!: () => void;
-  state.sync.mockImplementation(
-    () =>
-      new Promise<void>((done) => {
-        resolve = done;
-      })
-  );
-  state.history = [receipt('new')];
-  await render();
-  const oldResolve = resolve;
-  state.synced = false;
-  await render();
-  await act(async () => oldResolve());
-  expect(isPreview()).toBe(true);
-  state.synced = true;
-  await render();
-  await act(async () => resolve());
-  expect(isPreview()).toBe(false);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });

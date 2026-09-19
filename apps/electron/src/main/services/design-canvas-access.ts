@@ -23,6 +23,15 @@ export class DesignCanvasAccess {
   isActive(id: string): boolean {
     return this.active.has(id)
   }
+  state(id: string) {
+    const active = this.active.get(id)
+    return {
+      readonly: this.isReadonly(id),
+      known: this.known,
+      turnId: active?.turnId,
+      preparing: active?.preparing ?? false
+    }
+  }
 
   async register(instance: CanvasInstance): Promise<void> {
     this.instances.add(instance)

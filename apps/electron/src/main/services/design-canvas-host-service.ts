@@ -7,6 +7,7 @@ import { readLocalPlatformSnapshot } from '../platform'
 import type { CliService } from './cli-service'
 import {
   designCanvasAccess,
+  notifyDesignState,
   setDesignCanvasStateQuery,
   syncDesignCanvasFromStore
 } from './design-service'
@@ -16,6 +17,7 @@ export function startDesignCanvasHost(cli: CliService): () => void {
   let reports: DesignCanvasReport[] = []
   let pending: Promise<void> | undefined
   let stopped = false
+  let lastState = ''
   const exchange = (): Promise<void> => {
     if (pending) return pending
     pending = (async () => {
@@ -34,12 +36,25 @@ export function startDesignCanvasHost(cli: CliService): () => void {
         const response = DesignCanvasHostResultSchema.parse(result.result)
         if (!machineSupportsDesignCanvasSerialEditing(response.machine))
           throw Error('Daemon does not support serial canvas editing')
+        let released = false
         reports = [
           ...reports.slice(100),
-          ...(await designCanvasAccess.update(response.active, syncDesignCanvasFromStore))
+          ...(await designCanvasAccess.update(response.active, async (id) => {
+            await syncDesignCanvasFromStore(id)
+            released = true
+          }))
         ]
+        const state = JSON.stringify(response.active)
+        // A prior reload failure can retain local ownership after the daemon is idle.
+        // Its eventual release still needs invalidation even when the wire state is unchanged.
+        if (released || state !== lastState) {
+          lastState = state
+          notifyDesignState()
+        }
       } catch (error) {
         await designCanvasAccess.disconnected()
+        if (lastState !== '') notifyDesignState()
+        lastState = ''
         throw error
       }
     })().finally(() => {

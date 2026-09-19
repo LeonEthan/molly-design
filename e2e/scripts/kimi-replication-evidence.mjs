@@ -234,6 +234,8 @@ export async function verifyKimiEditing(
     edited = await snapshot();
     await saved(edited);
     await exportAndRecord('edited-crop', 'png');
+    if (report.phase === 'unified-canvas')
+      report.editedVersion = await ui.ipc('design.saveVersion', artworkId);
     report.editing = {
       status: 'passed',
       headingId: heading.id,

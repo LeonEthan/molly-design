@@ -1,4 +1,5 @@
 import { verifySourcePreview } from './design-source-preview-verification'
+import { verifyDesignVersions } from './design-version-verification'
 import { app, BrowserWindow, WebContentsView, nativeImage, dialog } from 'electron'
 import { strict as assert } from 'node:assert'
 import { randomUUID } from 'node:crypto'
@@ -55,10 +56,22 @@ export async function verifyDesign(directory: string) {
   }
   const id = association.sessionId
   const created = await designRequest({ operation: 'create', association, ...dimensions })
+  // attach yields at the worker read before it creates a native view. Cancel
+  // synchronously so this exercises the late-load path without timing guesses.
+  const opening = attachDesign(owner, id, { x: 0, y: 0, width: 1200, height: 800 })
+  hideDesign(id)
+  await opening
+  const cancelledView = owner.contentView.children.find(
+    (child) => child instanceof WebContentsView
+  ) as WebContentsView
+  assert.ok(cancelledView, 'Cancelled loading retains the canonical editor')
+  assert.equal(cancelledView.getVisible(), false, 'A late load must not reveal a closed canvas')
   await attachDesign(owner, id, { x: 0, y: 0, width: 1200, height: 800 })
   let view = owner.contentView.children.find(
     (child) => child instanceof WebContentsView
   ) as WebContentsView
+  assert.equal(view, cancelledView, 'Reopening reuses the retained editor')
+  assert.equal(view.getVisible(), true)
   await view.webContents.executeJavaScript(`new Promise((resolve, reject) => {
     const timer = setTimeout(() => { observer.disconnect(); reject(Error('Editor not ready')); }, 30000);
     const observer = new MutationObserver(check); observer.observe(document, { childList:true, subtree:true });
@@ -282,6 +295,7 @@ export async function verifyDesign(directory: string) {
   await designRequest({ operation: 'acknowledge', sessionId: id })
   await designRequest({ operation: 'acknowledge', sessionId: copy.association.sessionId })
   destroyDesign(id)
+  await verifyDesignVersions(directory)
   await prepareDesignQuit()
   owner.destroy()
   await writeFile(
@@ -302,6 +316,8 @@ export async function verifyDesign(directory: string) {
         invalidDocumentPreserved: true,
         missingFontAssetPreserved: true,
         create: true,
+        cancelledInitialLoadStaysHidden: true,
+        reopenCancelledLoadReusesEditor: true,
         edit: true,
         undoRedoAcrossHide: true,
         reopenWithoutUndo: true,

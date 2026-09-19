@@ -21,7 +21,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
@@ -33,10 +32,8 @@ import {
   Maximize2,
   Minimize2,
   MoreHorizontal,
-  Pencil,
+  Save,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { sessionLiveStatusAtomFamily } from '@/atoms/presence';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 
 type Association = {
@@ -156,30 +153,30 @@ export function DesignCanvas({
   const [focused, setFocused] = useState(false);
   const [selection, setSelection] = useState<DesignSelectionSummary | null>(null);
   const selectionCount = selection?.count ?? 0;
-  const [preview, setPreview] = useState(false);
-  const [historyVersion, setHistoryVersion] = useState<string>();
-  const [historyReady, setHistoryReady] = useState(false);
+  const [canvasState, setCanvasState] =
+    useState<Awaited<ReturnType<IpcServices['design']['state']>>>();
+  const [previewReady, setPreviewReady] = useState(false);
   const [versions, setVersions] = useState<Awaited<ReturnType<IpcServices['design']['versions']>>>(
     []
   );
   const versionsGeneration = useRef(0);
-  const liveStatus = useAtomValue(sessionLiveStatusAtomFamily(sessionId as SessionId));
-  const previousLiveState = useRef({ sessionId, running: false });
-  const readonlyView = preview || historyVersion !== undefined;
-  useEffect(() => {
-    const running = liveStatus != null;
-    const previous = previousLiveState.current;
-    const started = running && (previous.sessionId !== sessionId || !previous.running);
-    previousLiveState.current = { sessionId, running };
-    if (started && !preview && historyVersion === undefined) setPreview(true);
-  }, [sessionId, liveStatus, preview, historyVersion]);
+  const preview = !!canvasState?.turnId;
+  const readonlyView = canvasState?.readonly ?? true;
+  const currentVersion = versions.find((v) => v.commitId === canvasState?.baseVersionId);
+  const visiblePreview = preview && previewReady;
   const refreshVersions = useCallback(
     async (isCurrent: () => boolean = () => true) => {
       const generation = ++versionsGeneration.current;
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
-      const result = await service.versions(sessionId);
-      if (isCurrent() && generation === versionsGeneration.current) setVersions(result);
+      const [result, state] = await Promise.all([
+        service.versions(sessionId),
+        service.state(sessionId),
+      ]);
+      if (isCurrent() && generation === versionsGeneration.current) {
+        setVersions(result);
+        setCanvasState(state);
+      }
     },
     [sessionId]
   );
@@ -196,10 +193,6 @@ export function DesignCanvas({
   const [previewError, setPreviewError] = useState('');
   const [automaticError, setAutomaticError] = useState('');
   const previewGeneration = useRef(0);
-  const viewChoiceGeneration = useRef(0);
-  const observedReceipt = useRef<
-    { value: string | undefined; pending: boolean; choice: number } | undefined
-  >(undefined);
   const attachmentGeneration = useRef(0);
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
   const machine = useAtomValue(localProbeResultAtom);
@@ -217,9 +210,14 @@ export function DesignCanvas({
         params: {},
       });
       if (generation !== previewGeneration.current || result.status === 'superseded') return;
+      setPreviewReady(result.status === 'ready' || !!result.retained);
       setPreviewError(result.status === 'waiting' ? (result.error ?? '') : '');
       setAutomaticError(result.automaticError ?? '');
-      if (host.current && !hasCanvasBlockingOverlay(host.current)) {
+      if (
+        (result.status === 'ready' || result.retained) &&
+        host.current &&
+        !hasCanvasBlockingOverlay(host.current)
+      ) {
         const { x, y, width, height } = host.current.getBoundingClientRect();
         await service.attachPreview(hostId, { x, y, width, height });
       }
@@ -228,55 +226,33 @@ export function DesignCanvas({
       setPreviewError(String(cause));
     }
   }, [workspaceId, machine?.machineId, sessionId, hostId]);
-  const switchPreview = (value: boolean) => {
-    if (value === preview && historyVersion === undefined) return;
-    setHistoryVersion(undefined);
-    ++viewChoiceGeneration.current;
-    ++previewGeneration.current;
-    setPreview(value);
-    if (!value) void getIpcServices()?.design.hidePreview(hostId);
-  };
   useEffect(() => {
-    if (preview && active) void refreshPreview();
-    else {
-      ++previewGeneration.current;
-      void getIpcServices()?.design.hidePreview(hostId);
-    }
-  }, [preview, active, sessionId, hostId, refreshPreview]);
-  useEffect(
-    () => () => {
-      ++previewGeneration.current;
-      void getIpcServices()?.design.closePreview(hostId);
-    },
-    [hostId, sessionId]
-  );
-  useEffect(() => {
-    if (!historyVersion || !active) return undefined;
-    let cancelled = false;
-    const generation = ++previewGeneration.current;
-    setHistoryReady(false);
-    const service = getIpcServices()?.design;
-    if (!service) return undefined;
-    void service
-      .viewVersion(sessionId, hostId, historyVersion)
-      .then(async (result) => {
-        if (cancelled || generation !== previewGeneration.current || result.status === 'superseded')
-          return;
-        if (result.status !== 'ready') throw Error(result.error ?? 'Version could not render');
-        setHistoryReady(true);
-        if (host.current && !hasCanvasBlockingOverlay(host.current)) {
-          const { x, y, width, height } = host.current.getBoundingClientRect();
-          await service.attachPreview(hostId, { x, y, width, height });
-        }
-      })
-      .catch((cause) => {
-        if (!cancelled && generation === previewGeneration.current) setError(String(cause));
-      });
+    const generationRef = previewGeneration;
+    setPreviewReady(false);
+    setPreviewError('');
+    if (preview && active && !canvasState?.preparing) void refreshPreview();
+    else void getIpcServices()?.design.closePreview(hostId);
     return () => {
-      cancelled = true;
-      void service.hidePreview(hostId);
+      ++generationRef.current;
+      void getIpcServices()?.design.closePreview(hostId);
     };
-  }, [historyVersion, active, sessionId, hostId]);
+  }, [preview, active, canvasState?.turnId, canvasState?.preparing, hostId, refreshPreview]);
+  useEffect(() => {
+    if (!active) return undefined;
+    const refresh = () => {
+      void refreshVersions().catch((cause) => setError(String(cause)));
+    };
+    const stop = onIpcEvent('design.state', (event) => {
+      if (!event.artworkId || event.artworkId === sessionId) refresh();
+    });
+    const reconnect = onIpcEvent('loro.status', () => refresh());
+    window.addEventListener('focus', refresh);
+    return () => {
+      stop();
+      reconnect();
+      window.removeEventListener('focus', refresh);
+    };
+  }, [active, sessionId, refreshVersions]);
   const { history: conversationView, synced } = useSessionDoc(sessionId as SessionId, {
     enabled: sessionId.length > 0,
   });
@@ -294,6 +270,7 @@ export function DesignCanvas({
     };
     const stop = onIpcEvent('design.preview', (result) => {
       if (result.hostId !== hostId) return;
+      setPreviewReady(result.status === 'ready' || !!result.retained);
       setPreviewError(result.error ?? '');
       setAutomaticError(result.automaticError ?? '');
     });
@@ -342,7 +319,7 @@ export function DesignCanvas({
           }
           const { x, y, width, height } = host.current.getBoundingClientRect();
           if (width > 0 && height > 0) {
-            if (readonlyView) {
+            if (visiblePreview) {
               await service.hide(sessionId, hostId);
               await service.attachPreview(hostId, { x, y, width, height });
             } else {
@@ -419,41 +396,19 @@ export function DesignCanvas({
         })
         .catch((cause) => console.error(cause));
     };
-  }, [sessionId, active, hostId, readonlyView, t, onReferenceSelection]);
+  }, [sessionId, active, hostId, visiblePreview, t, onReferenceSelection]);
   useEffect(() => {
-    // Seed from hydrated history: opening an old session is not a new commit.
-    if (!synced) return undefined;
-    if (observedReceipt.current?.value !== committedReceipt || !observedReceipt.current) {
-      observedReceipt.current = {
-        value: committedReceipt,
-        pending: observedReceipt.current !== undefined,
-        choice: viewChoiceGeneration.current,
-      };
-    }
-    const receipt = observedReceipt.current;
-    if (committedReceipt === undefined) return undefined;
+    if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
-    const choice = receipt.choice;
     void syncOpenDesignCanvas(sessionId)
-      .then(() => {
-        if (cancelled) return;
-        const shouldShowCanonical = receipt.pending;
-        receipt.pending = false;
-        if (!shouldShowCanonical || historyVersion || choice !== viewChoiceGeneration.current)
-          return;
-        // Only the guarded canonical reload succeeding changes the visible source.
-        // Preview snapshots never enter this path's save or completion decisions.
-        ++previewGeneration.current;
-        setPreview(false);
-        void getIpcServices()?.design.hidePreview(hostId);
-      })
+      .then(() => (cancelled ? undefined : refreshVersions()))
       .catch((cause) => {
         if (!cancelled) setError(String(cause));
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionId, committedReceipt, synced, hostId, historyVersion]);
+  }, [sessionId, committedReceipt, synced, refreshVersions]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -531,17 +486,20 @@ export function DesignCanvas({
       }),
     [hostId, sessionId, active, readonlyView]
   );
-  const chooseVersion = (value: string) => {
-    setError('');
-    if (value === 'current') {
-      switchPreview(false);
-      return;
-    }
-    ++viewChoiceGeneration.current;
-    ++previewGeneration.current;
-    setPreview(false);
-    setHistoryVersion(value);
-  };
+  const chooseVersion = (commitId: string) =>
+    run(async () => {
+      const service = getIpcServices()?.design;
+      if (!service) throw Error('Local workspace is not ready');
+      const saved = await service.restoreVersion(sessionId, commitId);
+      setSelection(null);
+      onSyncSelection?.(null, '');
+      await refreshVersions();
+      if (saved.reloadError)
+        throw Error(
+          t('design.restoreReloadFailed', 'Restored and saved, but the canvas could not reload: ') +
+            saved.reloadError
+        );
+    });
   const saveVersion = () =>
     run(async () => {
       const service = getIpcServices()?.design;
@@ -549,19 +507,6 @@ export function DesignCanvas({
       const version = await service.saveVersion(sessionId);
       await refreshVersions();
       toast.success(t('design.versionSaved', 'Saved as V{{number}}', { number: version.number }));
-    });
-  const restoreFromVersion = () =>
-    run(async () => {
-      const service = getIpcServices()?.design;
-      if (!service || !historyVersion) throw Error('Local workspace is not ready');
-      const saved = await service.restoreVersion(sessionId, historyVersion);
-      await refreshVersions();
-      if (saved.reloadError)
-        throw Error(
-          t('design.restoreReloadFailed', 'Restored and saved, but the canvas could not reload: ') +
-            saved.reloadError
-        );
-      switchPreview(false);
     });
   const exportArtwork = (format: 'png' | 'jpeg') =>
     run(async () => getIpcServices()?.design.export(sessionId, format, name));
@@ -602,7 +547,7 @@ export function DesignCanvas({
     const sync = syncSelectionCallback.current;
     if (!sync) return undefined;
     if (readonlyView || selectionCount === 0) {
-      // Entering a history/preview/readonly view or an empty selection retires
+      // Entering a preview/readonly view or an empty selection retires
       // the mirrored chip explicitly; returning to the live canvas re-captures.
       sync(null, '');
       return undefined;
@@ -643,34 +588,26 @@ export function DesignCanvas({
         }
       </style>
       <div className="flex flex-wrap items-center gap-2 border-b bg-card p-2">
-        <div className="inline-flex items-center rounded-md bg-muted p-0.5" role="group">
-          <button
-            type="button"
-            onClick={() => switchPreview(false)}
-            className={cn(
-              'rounded-[3px] px-3 py-1 text-sm transition-colors',
-              !readonlyView
-                ? 'bg-popover font-medium shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t('design.currentCanvas', 'Artwork')}
-          </button>
-          <button
-            type="button"
-            onClick={() => switchPreview(true)}
-            className={cn(
-              'rounded-[3px] px-3 py-1 text-sm transition-colors',
-              preview
-                ? 'bg-popover font-medium shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {t('design.sourcePreview', 'Preview')}
-          </button>
-        </div>
+        <span className="text-sm text-muted-foreground" role="status">
+          {currentVersion
+            ? canvasState?.changed
+              ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
+                  number: currentVersion.number,
+                })
+              : `V${currentVersion.number}`
+            : t('design.currentCanvas', 'Current draft')}
+        </span>
         <TooltipProvider>
           <div className="ml-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy || readonlyView || !canvasState?.changed}
+              onClick={saveVersion}
+            >
+              <Save className="size-4" />
+              {t('design.saveVersion', 'Save version')}
+            </Button>
             <DropdownMenu
               onOpenChange={(open) => {
                 if (open) void refreshVersions().catch((cause) => setError(String(cause)));
@@ -693,38 +630,24 @@ export function DesignCanvas({
                 <TooltipContent>{t('design.versions', 'Version history')}</TooltipContent>
               </Tooltip>
               <DropdownMenuContent align="end" className="w-72">
-                {historyVersion ? (
-                  <DropdownMenuItem
-                    disabled={busy || !historyReady || liveStatus != null}
-                    onClick={restoreFromVersion}
-                  >
-                    <Pencil className="size-4" />
-                    {t('design.editFromVersion', 'Edit from here')}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    disabled={busy || preview || liveStatus != null}
-                    onClick={saveVersion}
-                  >
-                    <Check className="size-4" />
-                    {t('design.saveVersion', 'Save version')}
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => chooseVersion('current')}>
-                  {t('design.currentCanvas', 'Artwork')}
-                  {!historyVersion && <Check className="ml-auto size-4" />}
-                </DropdownMenuItem>
                 {[...versions].reverse().map((version) => (
                   <DropdownMenuItem
                     key={version.commitId}
+                    disabled={busy || readonlyView}
                     onClick={() => chooseVersion(version.commitId)}
                   >
                     V{version.number} · {new Date(version.createdAt).toLocaleString()}
                     {version.kind === 'before-restore'
                       ? ` · ${t('design.beforeRestore', 'Before restore')}`
                       : ''}
-                    {historyVersion === version.commitId && <Check className="ml-auto size-4" />}
+                    {version.baseVersionId &&
+                      versions.find((v) => v.commitId === version.baseVersionId) &&
+                      ` · ${t('design.versionOrigin', 'Based on V{{number}}', {
+                        number: versions.find((v) => v.commitId === version.baseVersionId)?.number,
+                      })}`}
+                    {canvasState?.baseVersionId === version.commitId && (
+                      <Check className="ml-auto size-4" />
+                    )}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -806,27 +729,17 @@ export function DesignCanvas({
           </div>
         </TooltipProvider>
       </div>
-      {historyVersion && (
-        <p role="status" className="border-b p-2 text-xs text-muted-foreground">
-          {historyReady
-            ? t(
-                'design.historyReadonly',
-                'Read-only version. Edit from here to restore it as the current artwork.'
-              )
-            : t('design.historyLoading', 'Loading version…')}
-        </p>
-      )}
       {preview && previewError && (
-        <p role="alert" className="border-b p-2 text-xs text-destructive">
-          {previewError}
-        </p>
+        <details className="border-b p-2 text-xs text-muted-foreground">
+          <summary>
+            {t('design.previewWaiting', 'Waiting for a valid draft. Keeping the current canvas.')}
+          </summary>
+          <p className="mt-1 whitespace-pre-wrap">{previewError}</p>
+        </details>
       )}
       {preview && automaticError && (
         <p role="alert" className="border-b p-2 text-xs text-destructive">
-          {t(
-            'design.previewAutomaticUnavailable',
-            'Automatic preview updates unavailable.'
-          )}{' '}
+          {t('design.previewAutomaticUnavailable', 'Automatic preview updates unavailable.')}{' '}
           {automaticError}
         </p>
       )}

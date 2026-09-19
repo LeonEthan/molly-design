@@ -4007,6 +4007,7 @@
   "design.size": "画布尺寸",
   "design.sizeHint": "每边 1–4096 像素",
   "design.invalidSize": "画布宽高必须是 1–4096 的整数。",
+  "design.requestedSize": "画布尺寸：{{width}} × {{height}} px。请严格按此宽度和高度设计。",
   "design.customSize": "自定义",
   "design.saveFailedBeforeSend": "画布保存失败，你的修改仍保留。请重试发送。",
   "settings.tabs.imageConnection": "图像连接",

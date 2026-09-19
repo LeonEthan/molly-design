@@ -17,6 +17,7 @@ host-bound toolbar endpoint and selection epoch. Keep readonly, hidden-view and
 stale-selection checks on the receiving path. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.
 
-The generic viewport API reports screen scale and canvas-coordinate center. It
-contains no Agent or version lifecycle; Electron preserves camera state when
-replacing isolated renderers. Adapt only the assembled checkout.
+The generic viewport API reports screen scale and canvas-coordinate center; fit
+reuses native zoomReset. Neither knows Agent or version lifecycle. Electron fits
+new renderers and resized containers, retaining zoom for unchanged hide/show.
+Adapt only the assembled checkout.

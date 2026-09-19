@@ -1,5 +1,5 @@
 import { prepareDesignFrame } from './design-frame'
-import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
+import { fitDesignViewport } from './design-viewport'
 import {
   DesignElementReferenceSchema,
   validateDesignElementReferences
@@ -87,10 +87,6 @@ export async function prepareDesignUpdate(): Promise<() => Promise<void>> {
   return designCanvasAccess.prepareApplicationUpdate(queryCanvasState)
 }
 const records = new Map<string, RecordEntry>()
-export const rememberCurrentDesignViewport = (hostId: string) => {
-  const record = records.get(hostId)
-  return record && rememberDesignViewport(hostId, record.view)
-}
 export const currentDesignBounds = (hostId: string) => records.get(hostId)?.view.getBounds()
 export const isDesignVisible = (hostId: string) => records.get(hostId)?.view.getVisible() ?? false
 // Last non-empty selection summary per host, mirrored from the canvas's own
@@ -409,9 +405,9 @@ export async function attachDesign(
   })
   try {
     await record.view.webContents.executeJavaScript('document.body.inert = false')
-    // Restoring layout can reveal a hidden view; do not revive a cancelled attach.
+    // Preparing layout can reveal a hidden view; do not revive a cancelled attach.
     if (records.get(hostId) !== record || hosts.get(hostId) !== id) return
-    await restoreDesignViewport(hostId, record.view)
+    await fitDesignViewport(record.view)
     if (needsFrame) await prepareDesignFrame(record.view, owner)
   } catch (error) {
     if (records.get(hostId) === record && hosts.get(hostId) === id) {
@@ -429,7 +425,6 @@ export function hideDesign(id: string, hostId?: string) {
   for (const [key, record] of records) {
     if (record.artworkId !== id || (hostId && key !== hostId)) continue
     hosts.delete(key)
-    void rememberDesignViewport(key, record.view)
     record.view.setVisible(false)
   }
 }
@@ -687,7 +682,6 @@ async function reloadDesignCanvas(id: string) {
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
-    await rememberDesignViewport(key, record.view)
     destroyDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }

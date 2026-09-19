@@ -1,6 +1,6 @@
 import { prepareDesignFrame } from './design-frame'
 import { bindLiveSource, type LiveSource } from './design-live-source'
-import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
+import { fitDesignViewport } from './design-viewport'
 import { WebContentsView, type BrowserWindow } from 'electron'
 import { lstatSync } from 'node:fs'
 import { startWorkspaceFileWatcher, type WorkspaceFileWatcher } from '@loro-dev/ignore'
@@ -12,7 +12,6 @@ import {
   designCanvasAccess,
   hideDesign,
   attachDesign,
-  rememberCurrentDesignViewport,
   currentDesignBounds,
   isDesignVisible
 } from './design-service'
@@ -90,13 +89,11 @@ export function hideSourcePreview(hostId: string, cancel = true) {
   }
   const view = views.get(hostId)?.view
   if (view) {
-    void rememberDesignViewport(hostId, view)
     view.setVisible(false)
   }
 }
 export function closeSourcePreview(hostId: string) {
   const previous = views.get(hostId)
-  const captured = previous && rememberDesignViewport(hostId, previous.view)
   previous?.view.setVisible(false)
   hideSourcePreview(hostId)
   consumers.delete(hostId)
@@ -104,13 +101,10 @@ export function closeSourcePreview(hostId: string) {
   resolvedSources.delete(hostId)
   if (!previous) return
   views.delete(hostId)
-  // Remove visibility immediately; allow the camera read to finish before disposal.
-  void Promise.resolve(captured).finally(() => {
-    if (!previous.owner.isDestroyed()) previous.owner.contentView.removeChildView(previous.view)
-    if (!previous.view.webContents.isDestroyed())
-      previous.view.webContents.close({ waitForBeforeUnload: false })
-    previous.dispose()
-  })
+  if (!previous.owner.isDestroyed()) previous.owner.contentView.removeChildView(previous.view)
+  if (!previous.view.webContents.isDestroyed())
+    previous.view.webContents.close({ waitForBeforeUnload: false })
+  previous.dispose()
 }
 
 /** Keep the last draft covering the editor until its pixels are ready. */
@@ -121,8 +115,6 @@ export async function attachDesignFromPreview(
   hostId = artworkId
 ) {
   const previous = views.get(hostId)
-  if (previous && !designCanvasAccess.state(artworkId).turnId)
-    void rememberDesignViewport(hostId, previous.view)
   await attachDesign(owner, artworkId, bounds, hostId)
   if (
     views.get(hostId) === previous &&
@@ -146,9 +138,8 @@ export async function attachSourcePreview(hostId: string, bounds: Electron.Recta
   })
   const needsFrame = !current.view.getVisible()
   try {
-    await rememberCurrentDesignViewport(hostId)
     if (views.get(hostId) !== current || !boundsByHost.has(hostId) || !current.isCurrent()) return
-    await restoreDesignViewport(hostId, current.view)
+    await fitDesignViewport(current.view)
     if (needsFrame) await prepareDesignFrame(current.view, current.owner)
   } catch (error) {
     if (views.get(hostId) === current) throw error
@@ -434,10 +425,8 @@ async function renderSourcePreview(
       }
       const previous = views.get(hostId)
       if (boundsByHost.has(hostId) || isDesignVisible(hostId)) {
-        if (previous?.view.getVisible()) await rememberDesignViewport(hostId, previous.view)
-        else await rememberCurrentDesignViewport(hostId)
         if (!current() || view.webContents.isDestroyed()) throw Error('Preview superseded')
-        await restoreDesignViewport(hostId, view)
+        await fitDesignViewport(view)
         await prepareDesignFrame(view, owner)
       }
       if (!current() || owner.isDestroyed()) {

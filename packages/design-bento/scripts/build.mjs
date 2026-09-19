@@ -148,6 +148,7 @@ try {
       editorAnchor,
       editorAnchor +
         `
+  fit() { this.canvas.zoomReset(); return this.canvas.viewport() }
   viewport(value?: { scale: number; x: number; y: number }) { return this.canvas.viewport(value) }
 `
     )
@@ -162,6 +163,7 @@ try {
       mainAnchor,
       mainAnchor +
         `
+  fit: () => editor.fit(),
   viewport: (value?: { scale: number; x: number; y: number }) => editor.viewport(value),
 `
     )

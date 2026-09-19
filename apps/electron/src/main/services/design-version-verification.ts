@@ -1,5 +1,6 @@
 import { BrowserWindow, WebContentsView } from 'electron'
 import { strict as assert } from 'node:assert'
+import { assertDesignFits } from './design-viewport-verification'
 import { randomUUID } from 'node:crypto'
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -26,8 +27,10 @@ export async function verifyDesignVersions(directory: string) {
       `document.querySelector('[data-c2a-kind="${kind}"]').click()`
     )
   const restore = async (version: DesignVersion) => {
+    await canvas().webContents.executeJavaScript('window.bento.viewport({scale: 4, x: 40, y: 40})')
     const result = await restoreDesignVersion(id, version.commitId)
     assert.equal(result.reloadError, undefined)
+    await assertDesignFits(canvas())
     assert.equal((await readDesignCanvasState(id)).baseVersionId, version.commitId)
     assert.equal(
       (await canvas().webContents.executeJavaScript('window.molly.state()')).readonly,

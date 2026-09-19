@@ -33,6 +33,10 @@ Index and rationale: [README.md](README.md).
 
 ## Invariants
 
+- Custom canvas dimensions enter both artwork creation and the durable first-turn
+  text from one submission snapshot. Auto adds no fixed-size instruction; retries
+  rebuild from the untouched draft. Keep automatic titles based on user-authored text.
+
 - The chat-route URL declares selection, never one-shot event nonces. Once it names
   a selection, mirror composer steering through desktop `onSelectionUrlSync` using
   replace (incomplete selection → empty search). Plain `/chat` stays plain; restored

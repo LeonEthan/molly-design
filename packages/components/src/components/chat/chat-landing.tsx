@@ -1,4 +1,5 @@
 import { CanvasSizeSelector } from './canvas-size-selector';
+import { buildCanvasSubmission } from './canvas-submission';
 import { usePendingDesignRecovery } from '@/components/sessions/design-canvas';
 import { chatLandingCanvasDraftAtomFamily } from '@/atoms/chat-landing-draft';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
@@ -1750,28 +1751,38 @@ function WorkspaceChatLanding({
       mentions: persistedMentionRanges ?? [],
       pastedTextDrafts,
     });
-    const inputBlocks = normalizeSessionInputBlocks(
+    const draftInputBlocks = normalizeSessionInputBlocks(
       buildInputBlocks(expandedPrompt.text, buildFileInputBlocks(), expandedPrompt.spans),
       ''
     );
-    const promptText = extractPromptPreviewFromInputBlocks(inputBlocks);
-    if (inputBlocks.length === 0) {
+    const draftPromptText = extractPromptPreviewFromInputBlocks(draftInputBlocks);
+    if (draftInputBlocks.length === 0) {
       captureSessionInputBlocked('empty_input');
       setComposerError(t('chat.validation.missingPrompt'));
       return;
     }
-    if (
-      isElectron &&
-      canvasDraft.mode === 'custom' &&
-      ![canvasDraft.width, canvasDraft.height].every(
-        (value) => Number.isInteger(value) && value >= 1 && value <= 4096
-      )
-    ) {
+    let canvasSubmission: ReturnType<typeof buildCanvasSubmission>;
+    try {
+      canvasSubmission = buildCanvasSubmission(
+        draftInputBlocks,
+        isElectron ? canvasDraft : undefined,
+        ({ width, height }) =>
+          t('design.requestedSize', {
+            defaultValue:
+              'Canvas size: {{width}} × {{height}} px. Design at exactly this width and height.',
+            width,
+            height,
+          })
+      );
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
       setComposerError(
         t('design.invalidSize', 'Canvas dimensions must be whole numbers from 1 to 4096.')
       );
       return;
     }
+    const { inputBlocks, dimensions } = canvasSubmission;
+    const promptText = extractPromptPreviewFromInputBlocks(inputBlocks);
     if (!selectedAgent || !selectedConfig) {
       captureSessionInputBlocked('missing_agent_config');
       setComposerError(t('chat.validation.missingAgent'));
@@ -1859,7 +1870,7 @@ function WorkspaceChatLanding({
         repoFullNameForMentions = selectedRepo;
       }
 
-      const draftTitle = promptText
+      const draftTitle = draftPromptText
         .split('\n')
         .map((line) => line.trim())
         .find((line) => line.length > 0)
@@ -1918,9 +1929,7 @@ function WorkspaceChatLanding({
         setCanvasDraft({ ...canvasDraft, association });
         await designService.create({
           association,
-          ...(canvasDraft.mode === 'custom'
-            ? { width: canvasDraft.width, height: canvasDraft.height }
-            : {}),
+          ...dimensions,
         });
         /* P2.2: the first turn's baseline must be the saved canvas. Create is
            the initial save; also flush any already-open editor (a no-op when

@@ -2,6 +2,7 @@ import { WebContentsView, nativeImage, type BrowserWindow } from 'electron'
 import { strict as assert } from 'node:assert'
 import { mkdir, writeFile, readFile, rename } from 'node:fs/promises'
 import { join } from 'node:path'
+import { assertDesignFits } from './design-viewport-verification'
 import { attachDesign, designCanvasAccess, designRequest, hideDesign } from './design-service'
 import {
   refreshSourcePreview,
@@ -81,6 +82,7 @@ export async function verifySourcePreview(
       (child) => child instanceof WebContentsView && child !== canonical
     ) as WebContentsView
   const preview = getPreview()
+  await assertDesignFits(preview)
   await writeFile(
     join(directory, 'source-preview.png'),
     (await preview.webContents.capturePage()).toPNG()
@@ -120,7 +122,7 @@ export async function verifySourcePreview(
   assert.notEqual(replacement.sourceIdentity, first.sourceIdentity)
   hideDesign(artworkId, host)
   await attachSourcePreview(host, bounds)
-  const camera = await getPreview().webContents.executeJavaScript(
+  await getPreview().webContents.executeJavaScript(
     'window.bento.viewport({ scale: 4, x: 160, y: 100 })'
   )
   // Subscribe to the real native publication signal before external file IO.
@@ -183,12 +185,7 @@ export async function verifySourcePreview(
     owner.webContents.send = send
   }
   await attachSourcePreview(host, bounds)
-  const afterCamera = await getPreview().webContents.executeJavaScript('window.bento.viewport()')
-  for (const key of ['scale', 'x', 'y'] as const)
-    assert.ok(
-      Math.abs(camera[key] - afterCamera[key]) < (key === 'scale' ? 1e-6 : 1),
-      `Viewport ${key} changed during replacement: ${camera[key]} -> ${afterCamera[key]}`
-    )
+  await assertDesignFits(getPreview())
   const image = await getPreview().webContents.executeJavaScript(
     "(async () => { const image = document.querySelector('.bento-slide img'); if (image && (!image.complete || !image.naturalWidth)) throw Error('Preview image not loaded'); return window.molly.snapshot(); })()"
   )
@@ -203,20 +200,52 @@ export async function verifySourcePreview(
   await writeFile(source, page.replace('[320, 200]', '[285, 2000]'))
   await refreshSourcePreview(owner, artworkId, host, async () => source)
   await attachSourcePreview(host, tallBounds)
-  const tallCamera = await getPreview().webContents.executeJavaScript(
+  await getPreview().webContents.executeJavaScript(
     'window.bento.viewport({ scale: 1.5, x: 142.5, y: 300 })'
   )
   for (const color of [91, 92]) {
     await writeImage(color)
     await refreshSourcePreview(owner, artworkId, host, async () => source)
     await attachSourcePreview(host, tallBounds)
-    const observed = await getPreview().webContents.executeJavaScript('window.bento.viewport()')
-    assert.ok(
-      Math.abs(observed.scale - tallCamera.scale) < 1e-6,
-      `Odd viewport scale drifted: ${tallCamera.scale} -> ${observed.scale}`
-    )
-    assert.ok(Math.abs(observed.x - tallCamera.x) < 1 && Math.abs(observed.y - tallCamera.y) < 1)
+    await assertDesignFits(getPreview())
   }
+  const fitEvidence: { width: number; height: number; geometry: unknown }[] = []
+  for (const [width, height] of [
+    [1200, 628],
+    [628, 1200],
+    [128, 128],
+    [285, 2000],
+    [4096, 1]
+  ]) {
+    await getPreview().webContents.executeJavaScript(
+      'window.bento.viewport({scale: 4, x: 50, y: 50})'
+    )
+    await writeFile(source, `format: molly-canvas/1\nsize: [${width}, ${height}]\nelements: []\n`)
+    await refreshSourcePreview(owner, artworkId, host, async () => source)
+    await attachSourcePreview(host, bounds)
+    const current = getPreview()
+    const snapshot = await current.webContents.executeJavaScript('window.molly.snapshot()')
+    const state = await current.webContents.executeJavaScript('window.molly.state()')
+    fitEvidence.push({ width, height, geometry: await assertDesignFits(current) })
+    // A same-size reattach must not reset the user's zoom, unlike a resize.
+    const manual = await current.webContents.executeJavaScript(
+      'window.bento.viewport({scale: 4, x: 50, y: 50})'
+    )
+    hideSourcePreview(host, false)
+    await attachSourcePreview(host, bounds)
+    assert.deepEqual(await current.webContents.executeJavaScript('window.bento.viewport()'), manual)
+    await attachSourcePreview(host, { ...bounds, width: 901, height: 701 })
+    await assertDesignFits(current)
+    assert.deepEqual(
+      await current.webContents.executeJavaScript('window.molly.snapshot()'),
+      snapshot
+    )
+    assert.equal(
+      (await current.webContents.executeJavaScript('window.molly.state()')).dirty,
+      state.dirty
+    )
+  }
+  await writeFile(join(directory, 'canvas-fit.json'), JSON.stringify(fitEvidence, null, 2))
   let resolveLate!: (value: string) => void
   const late = refreshSourcePreview(
     owner,
@@ -391,8 +420,8 @@ export async function verifySourcePreview(
         closedStagingViewRetired: true,
         preparedNativeFrames: handoffFrames,
         previewToEditorRetainsOutgoingUntilPrepared: editorPrepared,
-        viewportPreserved: { before: camera, after: afterCamera },
-        oddHeightLongCanvasViewportPreserved: tallCamera,
+        viewportFitted: fitEvidence,
+        oddHeightLongCanvasFitted: true,
         nativeAutomaticMissingDependency: true,
         nativeAutomaticRename: true,
         nativeAutomaticSamePathAsset: true,

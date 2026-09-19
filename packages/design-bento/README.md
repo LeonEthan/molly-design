@@ -116,7 +116,7 @@ existing visible-turn owner waits for all artwork instances and keeps them reado
 through provider completion and artifact processing; hiding a view changes no ownership.
 If a panel is hidden during its first load, Electron retains the completed editor
 without revealing it; reopening reuses that instance. Initial display and viewport
-restoration both honor the host's current visibility intent.
+fitting both honor the host's current visibility intent.
 Unexpected dirty content blocks reload rather than being discarded. The original
 store CAS remains independent. See the [implementation note](../../.agents/notes/implemented/architecture/2026-09-11-canvas-serial-execution.zh.md), including the headless limitation.
 
@@ -158,5 +158,7 @@ There is no asset library, gallery or additional cleanup pass.
 
 The assembled `window.bento.viewport()` API returns screen scale and the visible
 center in canvas coordinates; passing that value restores the camera within native
-zoom/scroll bounds. Electron transfers it across isolated surface replacements.
+zoom/scroll bounds. `window.bento.fit()` reuses native fit and centering. Electron
+fits new document instances and resized containers before publishing prepared pixels;
+unchanged retained instances keep manual zoom across hide/show.
 It does not persist document state or know about Agent execution or Git history.

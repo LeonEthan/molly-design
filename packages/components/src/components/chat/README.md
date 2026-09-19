@@ -14,6 +14,8 @@ reasoning behind those rules.
 - `canvas-size-selector.tsx` — the Auto/custom dimensions popover at the right end
   of the project selector row, aligned with the composer. Enter uses existing submission and naming;
   artwork persistence precedes acceptance using the reserved draft session identity.
+- `canvas-submission.ts` — validates custom dimensions and pairs initial artwork size
+  with the localized size request in durable first-turn input; Auto stays unconstrained.
 - `chat-landing-view.tsx` — the render-only landing layout around `ChatComposer`.
 - `chat-landing-derived.ts` — derived landing selection state.
 - `chat-landing-selectors.tsx`, `unified-project-selector.tsx` — wrappers over the

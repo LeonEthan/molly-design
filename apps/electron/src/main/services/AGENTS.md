@@ -16,6 +16,9 @@ dependencies after installing watches. Watch `design.yaml` and needed `media/`; 
 old source/turn/view generations; previews never commit or update Agent baselines.
 Valid frozen frames may publish while newer bytes are queued; render serially.
 The single canvas retains its camera across source replacements and store reloads.
+For visible windows, keep outgoing pixels until the replacement has decoded resources,
+restored its camera and completed a compositor capture. Promote before disposal; turn completion does
+not close the visible preview before the canonical editor is ready.
 Preparation may precede input identity: establish the entry watch and bind that
 identity on observation. Reconcile this startup handoff even without another file
 event; stop the reconciliation when bound or released. Cancellation retires loading native surfaces as well as

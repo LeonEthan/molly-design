@@ -18,6 +18,7 @@ import {
   refreshSourcePreview,
   hideSourcePreview,
   attachSourcePreview,
+  attachDesignFromPreview,
   closeSourcePreview
 } from '../../services/design-source-preview'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -29,7 +30,6 @@ import {
   readDesignCanvasState,
   designCanvasAccess,
   restoreDesignVersion,
-  attachDesign,
   hideDesign,
   destroyDesign,
   currentDesignSelection,
@@ -142,7 +142,7 @@ export class DesignIpc extends IpcService {
     hostId: string
   ) {
     const window = owner()
-    return attachDesign(
+    return attachDesignFromPreview(
       window,
       id.parse(sessionId),
       DesignBoundsSchema.parse(bounds),

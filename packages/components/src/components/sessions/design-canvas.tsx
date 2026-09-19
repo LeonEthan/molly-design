@@ -231,12 +231,17 @@ export function DesignCanvas({
     setPreviewReady(false);
     setPreviewError('');
     if (preview && active && !canvasState?.preparing) void refreshPreview();
-    else void getIpcServices()?.design.closePreview(hostId);
+    else if (!active) void getIpcServices()?.design.closePreview(hostId);
     return () => {
       ++generationRef.current;
-      void getIpcServices()?.design.closePreview(hostId);
     };
   }, [preview, active, canvasState?.turnId, canvasState?.preparing, hostId, refreshPreview]);
+  useEffect(
+    () => () => {
+      void getIpcServices()?.design.closePreview(hostId);
+    },
+    [hostId]
+  );
   useEffect(() => {
     if (!active) return undefined;
     const refresh = () => {
@@ -320,7 +325,6 @@ export function DesignCanvas({
           const { x, y, width, height } = host.current.getBoundingClientRect();
           if (width > 0 && height > 0) {
             if (visiblePreview) {
-              await service.hide(sessionId, hostId);
               await service.attachPreview(hostId, { x, y, width, height });
             } else {
               await service.attach(sessionId, { x, y, width, height }, hostId);
@@ -396,7 +400,7 @@ export function DesignCanvas({
         })
         .catch((cause) => console.error(cause));
     };
-  }, [sessionId, active, hostId, visiblePreview, t, onReferenceSelection]);
+  }, [sessionId, active, hostId, preview, visiblePreview, t, onReferenceSelection]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;

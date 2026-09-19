@@ -7,7 +7,8 @@ import {
   refreshSourcePreview,
   attachSourcePreview,
   hideSourcePreview,
-  closeSourcePreview
+  closeSourcePreview,
+  attachDesignFromPreview
 } from './design-source-preview'
 
 /** Synthetic native evidence: production collector, worker, Bento and access gate. */
@@ -17,6 +18,7 @@ export async function verifySourcePreview(
   canonical: WebContentsView,
   directory: string
 ) {
+  owner.showInactive()
   const root = join(directory, 'authoring')
   await mkdir(join(root, 'media'), { recursive: true })
   const source = join(root, 'design.yaml')
@@ -41,10 +43,39 @@ export async function verifySourcePreview(
       nativeImage.createFromBitmap(Buffer.from([color, 0, 0, 255]), { width: 1, height: 1 }).toPNG()
     )
   await writeImage(255)
+  const addPreparedView = owner.contentView.addChildView.bind(owner.contentView)
+  const prepared = new Set<WebContentsView>()
+  const handoffFrames: { bytes: number; outgoingVisible: boolean }[] = []
+  owner.contentView.addChildView = (view, index) => {
+    if (view instanceof WebContentsView && view !== canonical) {
+      if (!owner.contentView.children.includes(view)) {
+        const capture = view.webContents.capturePage.bind(view.webContents)
+        view.webContents.capturePage = async (...args) => {
+          const outgoing = owner.contentView.children
+            .filter(
+              (child): child is WebContentsView =>
+                child instanceof WebContentsView && child !== view && child.getVisible()
+            )
+            .at(-1)
+          const frame = await capture(...args)
+          assert.equal(frame.isEmpty(), false)
+          if (outgoing)
+            assert.equal(outgoing.getVisible(), true, 'Keep outgoing pixels through preparation')
+          prepared.add(view)
+          handoffFrames.push({ bytes: frame.toBitmap().length, outgoingVisible: !!outgoing })
+          return frame
+        }
+      } else if (index === undefined) {
+        assert.ok(prepared.has(view), 'A promoted preview must have prepared compositor pixels')
+      }
+    }
+    addPreparedView(view, index)
+  }
   const first = await refreshSourcePreview(owner, artworkId, host, async () => source)
   assert.equal(first.status, 'ready', JSON.stringify(first))
-  hideDesign(artworkId)
+  assert.equal(canonical.getVisible(), true, 'Keep canonical until the first preview attaches')
   await attachSourcePreview(host, bounds)
+  assert.equal(canonical.getVisible(), false)
   const getPreview = () =>
     owner.contentView.children.find(
       (child) => child instanceof WebContentsView && child !== canonical
@@ -202,9 +233,30 @@ export async function verifySourcePreview(
   assert.equal(getPreview().getVisible(), false)
   assert.deepEqual(await designRequest({ operation: 'read', sessionId: artworkId }), saved)
   assert.equal(canonical.webContents.isDestroyed(), false)
-  closeSourcePreview(host)
+  // Complete a turn with a visible preview: canonical preparation must not clear it.
+  await refreshSourcePreview(owner, artworkId, host, async () => source)
+  await attachSourcePreview(host, bounds)
+  const outgoing = getPreview()
+  const captureCanonical = canonical.webContents.capturePage.bind(canonical.webContents)
+  let editorPrepared = false
+  canonical.webContents.capturePage = async (...args) => {
+    assert.equal(outgoing.getVisible(), true, 'Last draft covers the preparing editor')
+    const frame = await captureCanonical(...args)
+    assert.equal(outgoing.getVisible(), true)
+    editorPrepared = true
+    return frame
+  }
   await designCanvasAccess.update([])
-  await attachDesign(owner, artworkId, bounds)
+  try {
+    await attachDesignFromPreview(owner, artworkId, bounds)
+    assert.equal(editorPrepared, true)
+    assert.equal(canonical.getVisible(), true)
+    assert.equal(outgoing.getVisible(), false)
+  } finally {
+    canonical.webContents.capturePage = captureCanonical
+    owner.contentView.addChildView = addPreparedView
+  }
+  assert.ok(handoffFrames.some((frame) => frame.outgoingVisible))
   const undoRedo = await canonical.webContents.executeJavaScript(`(() => {
     window.bento.undo(); const undone = window.bento.visual.snapshot();
     window.bento.redo(); const redone = window.bento.visual.snapshot();
@@ -337,6 +389,8 @@ export async function verifySourcePreview(
         initialWaiting: true,
         firstWriteBindsLateInput: true,
         closedStagingViewRetired: true,
+        preparedNativeFrames: handoffFrames,
+        previewToEditorRetainsOutgoingUntilPrepared: editorPrepared,
         viewportPreserved: { before: camera, after: afterCamera },
         oddHeightLongCanvasViewportPreserved: tallCamera,
         nativeAutomaticMissingDependency: true,

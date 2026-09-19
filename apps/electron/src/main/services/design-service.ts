@@ -1,3 +1,4 @@
+import { prepareDesignFrame } from './design-frame'
 import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
 import {
   DesignElementReferenceSchema,
@@ -86,6 +87,10 @@ export async function prepareDesignUpdate(): Promise<() => Promise<void>> {
   return designCanvasAccess.prepareApplicationUpdate(queryCanvasState)
 }
 const records = new Map<string, RecordEntry>()
+export const rememberCurrentDesignViewport = (hostId: string) => {
+  const record = records.get(hostId)
+  return record && rememberDesignViewport(hostId, record.view)
+}
 export const currentDesignBounds = (hostId: string) => records.get(hostId)?.view.getBounds()
 export const isDesignVisible = (hostId: string) => records.get(hostId)?.view.getVisible() ?? false
 // Last non-empty selection summary per host, mirrored from the canvas's own
@@ -310,6 +315,7 @@ export async function attachDesign(
 ) {
   hosts.set(hostId, id)
   let record = records.get(hostId)
+  const needsFrame = !record?.view.getVisible()
   if (!record) {
     // A fresh document starts with no selection; drop any summary a previous
     // view for this host reported.
@@ -406,8 +412,12 @@ export async function attachDesign(
     // Restoring layout can reveal a hidden view; do not revive a cancelled attach.
     if (records.get(hostId) !== record || hosts.get(hostId) !== id) return
     await restoreDesignViewport(hostId, record.view)
+    if (needsFrame) await prepareDesignFrame(record.view, owner)
   } catch (error) {
-    if (records.get(hostId) === record && hosts.get(hostId) === id) throw error
+    if (records.get(hostId) === record && hosts.get(hostId) === id) {
+      if (needsFrame) record.view.setVisible(false)
+      throw error
+    }
     return
   }
   if (records.get(hostId) === record) record.view.setVisible(hosts.get(hostId) === id)

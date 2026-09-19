@@ -1,3 +1,4 @@
+import { prepareDesignFrame } from './design-frame'
 import { bindLiveSource, type LiveSource } from './design-live-source'
 import { rememberDesignViewport, restoreDesignViewport } from './design-viewport'
 import { WebContentsView, type BrowserWindow } from 'electron'
@@ -10,6 +11,8 @@ import {
   surface,
   designCanvasAccess,
   hideDesign,
+  attachDesign,
+  rememberCurrentDesignViewport,
   currentDesignBounds,
   isDesignVisible
 } from './design-service'
@@ -67,6 +70,7 @@ const views = new Map<
     artworkId: string
     source: string
     sourceIdentity: string
+    isCurrent(): boolean
     view: WebContentsView
     dispose(): void
   }
@@ -109,22 +113,51 @@ export function closeSourcePreview(hostId: string) {
   })
 }
 
+/** Keep the last draft covering the editor until its pixels are ready. */
+export async function attachDesignFromPreview(
+  owner: BrowserWindow,
+  artworkId: string,
+  bounds: Electron.Rectangle,
+  hostId = artworkId
+) {
+  const previous = views.get(hostId)
+  if (previous && !designCanvasAccess.state(artworkId).turnId)
+    void rememberDesignViewport(hostId, previous.view)
+  await attachDesign(owner, artworkId, bounds, hostId)
+  if (
+    views.get(hostId) === previous &&
+    isDesignVisible(hostId) &&
+    !designCanvasAccess.state(artworkId).turnId
+  ) {
+    previous?.view.setVisible(false)
+    closeSourcePreview(hostId)
+  }
+}
+
 export async function attachSourcePreview(hostId: string, bounds: Electron.Rectangle) {
   boundsByHost.set(hostId, bounds)
   const current = views.get(hostId)
-  if (!current || !requests.visible(hostId)) return
+  if (!current || !requests.visible(hostId) || !current.isCurrent()) return
   current.view.setBounds({
     x: Math.round(bounds.x),
     y: Math.round(bounds.y),
     width: Math.max(1, Math.round(bounds.width)),
     height: Math.max(1, Math.round(bounds.height))
   })
+  const needsFrame = !current.view.getVisible()
   try {
+    await rememberCurrentDesignViewport(hostId)
+    if (views.get(hostId) !== current || !boundsByHost.has(hostId) || !current.isCurrent()) return
     await restoreDesignViewport(hostId, current.view)
+    if (needsFrame) await prepareDesignFrame(current.view, current.owner)
   } catch (error) {
     if (views.get(hostId) === current) throw error
   }
-  if (views.get(hostId) === current && boundsByHost.has(hostId)) current.view.setVisible(true)
+  if (views.get(hostId) === current && boundsByHost.has(hostId) && current.isCurrent()) {
+    current.view.setVisible(true)
+    current.owner.contentView.addChildView(current.view)
+    hideDesign(current.artworkId, hostId)
+  }
 }
 
 /** Resolve trusted paths before subscribing; reopening always reconciles exact bytes. */
@@ -285,7 +318,6 @@ export async function refreshSourcePreview(
       notify(hostId, { ...result, automaticError: entry.error })
       const bounds = boundsByHost.get(hostId)
       if (bounds) {
-        if (views.has(hostId)) hideDesign(artworkId, hostId)
         await attachSourcePreview(hostId, bounds)
       }
     })
@@ -321,8 +353,10 @@ async function renderSourcePreview(
     if (
       views.get(hostId)?.source === source &&
       views.get(hostId)?.sourceIdentity === built.sourceIdentity
-    )
+    ) {
+      views.get(hostId)!.isCurrent = sourceCurrent
       return { status: 'ready' as const, source, sourceIdentity: built.sourceIdentity }
+    }
     const saved = await designRequest({ operation: 'read', sessionId: artworkId })
     const resource = await surface(
       {
@@ -399,9 +433,12 @@ async function renderSourcePreview(
         return { status: 'superseded' as const }
       }
       const previous = views.get(hostId)
-      if (previous && boundsByHost.has(hostId)) {
-        await rememberDesignViewport(hostId, previous.view)
+      if (boundsByHost.has(hostId) || isDesignVisible(hostId)) {
+        if (previous?.view.getVisible()) await rememberDesignViewport(hostId, previous.view)
+        else await rememberCurrentDesignViewport(hostId)
+        if (!current() || view.webContents.isDestroyed()) throw Error('Preview superseded')
         await restoreDesignViewport(hostId, view)
+        await prepareDesignFrame(view, owner)
       }
       if (!current() || owner.isDestroyed()) {
         if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
@@ -409,6 +446,9 @@ async function renderSourcePreview(
         resource.dispose()
         return { status: 'superseded' as const }
       }
+      // Promote prepared pixels before retiring the outgoing view, in one main-process turn.
+      if (boundsByHost.has(hostId)) owner.contentView.addChildView(view)
+      else view.setVisible(false)
       if (previous && views.get(hostId) === previous) {
         owner.contentView.removeChildView(previous.view)
         previous.view.webContents.close({ waitForBeforeUnload: false })
@@ -420,6 +460,7 @@ async function renderSourcePreview(
         artworkId,
         source,
         sourceIdentity: built.sourceIdentity,
+        isCurrent: sourceCurrent,
         view,
         dispose: resource.dispose
       })

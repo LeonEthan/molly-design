@@ -101,6 +101,9 @@ retired from Molly. Generic file/diff viewers and send-to-chat references remain
 an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.
+Native replacements prepare decoded pixels under the outgoing view and promote
+before disposal. Turn completion retains the final preview until the canonical
+editor is ready; component phase cleanup does not dispose that handoff surface.
 Turn-bound display never saves, flushes, changes version base or ends execution.
 The main-process canvas-host state keeps edit/reference/export/version actions locked
 through artifact processing; conversation presence or file appearance cannot release it.

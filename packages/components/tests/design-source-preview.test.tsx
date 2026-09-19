@@ -64,6 +64,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       attach: async () => {
         await state.attach();
         state.visible = true;
+        if (!state.canvasState.turnId) state.previewVisible = false;
       },
       hide: async () => {
         state.visible = false;
@@ -76,6 +77,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       attachPreview: async () => {
         state.attachPreviewCalls += 1;
         state.previewVisible = true;
+        state.visible = false;
       },
       hidePreview: async () => {
         state.previewVisible = false;
@@ -217,4 +219,22 @@ test('continuous valid states replace the same canvas and recovery clears errors
   expect(labels).not.toContain('Preview');
   expect(labels).not.toContain('Artwork');
   expect(labels).not.toContain('Refresh preview');
+});
+
+test('turn completion keeps the final preview until the editor handoff finishes', async () => {
+  state.refresh = async () => ({ status: 'ready', sourceIdentity: 'final-frame' });
+  await mount();
+  await execution('active');
+  expect(state.previewVisible).toBe(true);
+  let finish!: () => void;
+  state.attach = () =>
+    new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+  await execution();
+  expect(state.previewVisible).toBe(true);
+  expect(state.visible).toBe(false);
+  await act(async () => finish());
+  expect(state.visible).toBe(true);
+  expect(state.previewVisible).toBe(false);
 });

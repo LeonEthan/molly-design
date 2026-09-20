@@ -104,6 +104,8 @@ and `molly.applyCommands`.
 Bento does not observe Agent status: the bridge rejects semantic mutations while
 readonly, and the product overlay commits buffered input before freezing, then
 flushes accepted saves. An unfinished composition or save failure retains the draft.
+Readonly input capture also blocks double-click entry into text/table editing;
+blocking later typing alone leaves a misleading editable preview.
 Direct property edits and dock element creation arrive as zod-validated commands
 through `molly.applyCommands`, each applied as one kernel batch (one undo step);
 every element semantic lives in `@molly/shared/design-selection-commands`, keeping

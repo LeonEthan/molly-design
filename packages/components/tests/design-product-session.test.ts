@@ -11,6 +11,40 @@ afterEach(() => {
   delete (window as unknown as { molly?: unknown }).molly;
 });
 
+it('prevents double-click editing while readonly and restores it when unlocked', () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+  });
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const text = document.createElement('div');
+  text.textContent = 'Saved title';
+  text.addEventListener('dblclick', () => { text.contentEditable = 'true'; });
+  document.body.append(text);
+  const doubleClick = () => text.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+  doubleClick();
+  expect(text.contentEditable).not.toBe('true');
+  api.setReadonly(false);
+  doubleClick();
+  expect(text.contentEditable).toBe('true');
+  text.contentEditable = 'false';
+  api.setReadonly(true);
+  doubleClick();
+  expect(text.contentEditable).toBe('false');
+});
+
 it('publishes the complete generic canvas API at the real ready boundary', async () => {
   let resolveFonts!: () => void;
   const fontsReady = new Promise<void>((resolve) => {

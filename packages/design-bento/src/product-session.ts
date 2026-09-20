@@ -317,7 +317,8 @@ export function createProductSession(options: {
     event.preventDefault();
     event.stopImmediatePropagation();
   };
-  for (const type of ['beforeinput', 'paste', 'cut', 'drop'])
+  // Bento enters text/table editing on double-click, before any input event.
+  for (const type of ['dblclick', 'beforeinput', 'paste', 'cut', 'drop'])
     document.addEventListener(type, blockInput, true);
   document.addEventListener(
     'keydown',

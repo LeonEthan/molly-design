@@ -29,6 +29,22 @@ Being configurable does not prove that a provider supports every design operatio
 The [design specification](specs/graphic-design-platform.zh.md) describes the draft
 target, not a list of shipped features.
 
+## Install the macOS package
+
+The local build produces `MollyDesign-<version>-arm64.dmg` (macOS, Apple Silicon).
+Open the DMG and copy **Molly.app** to a folder you own; it does not replace or
+modify other applications. The package is ad-hoc signed and not notarized: on first
+launch, right-click the app and choose **Open**, then confirm. Do not disable
+Gatekeeper or remove quarantine attributes to run it.
+
+On first launch macOS asks whether Molly may use its "Molly Safe Storage" keychain
+entry, which protects saved connection credentials. **Always Allow** keeps saved
+connections readable across restarts, **Allow** grants once, and **Deny** leaves the
+app usable but unable to read saved connections until you re-enter them in Settings.
+Ad-hoc local builds do not share a stable signing identity, so macOS asks again for
+each new build. Answer this prompt before driving the app through automation
+interfaces: they stay unresponsive while it is pending.
+
 ## Configure connections
 
 1. Open Settings → Agents → Molly model connections. Add the provider/product,
@@ -102,24 +118,52 @@ restart and rollback acceptance is still pending. If native history is invalid,
 retain the original files and report the error rather than deleting journals to
 force a retry.
 
+## Troubleshooting
+
+- **First launch appears stalled and automation interfaces do not respond.** The
+  keychain prompt above is still pending, possibly behind the window; answer it.
+- **Saved connections are missing or unreadable.** The prompt was denied or the
+  build changed. Re-enter the connection in Settings; the encrypted store is not
+  portable across machines or OS accounts.
+- **An image call ends with an unknown outcome after a timeout.** Molly keeps the
+  receipt, neither retries a possibly-paid request nor reports it as successful.
+  Retry only with an explicit new request, which may charge again.
+- **The canvas is read-only or a save conflict is reported.** Let the running turn
+  finish or stop it and save open canvases first; Molly does not overwrite the
+  current artwork with a stale draft. Keep the preserved draft and resolve the
+  conflict with a new message.
+- **Receipts and logs.** Run and paid-operation receipts live under
+  `~/.molly/harness/pi`; desktop and service data locations are listed in the
+  backup section below.
+
 ## Release status and support limits
 
-The embedded Pi migration is **not fully accepted**. Current evidence and remaining
-work are recorded in the
-[implementation note](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md).
+The embedded Pi migration has **scoped accepted evidence**, not full acceptance.
+Evidence and remaining work are recorded in the
+[implementation note](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md)
+and the [final package delivery note](.agents/notes/implemented/testing/2026-09-20-final-package-delivery.zh.md).
 
 | Connection                                            | Current evidence and limits                                                                                                                                                                   |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kimi Code `k3-256k/high`                              | Scoped real text, design, image-reading and recovery checks; not complete journey acceptance.                                                                                                 |
-| Configured Images-compatible `gpt-image-2.5-sunburst` | Scoped real generation/editing outputs; the full mask, multiple-image, JPEG, long-image and human visual matrix remains open. This is a tested user selection, not a default.                 |
+| Kimi Code `k3-256k/high`                              | Real text turns, design creation/revision, cancellation and legacy-session continuation verified on local installed builds; the final package re-verified rendering, edit/save/export and continuation routing without new paid calls. Not complete vendor or journey coverage. |
+| Configured Images-compatible `gpt-image-2.5-sunburst` | Real generation and edit outputs verified on a local installed build within one artwork; the final package re-verified rendering of those assets. The full mask, multiple-image, JPEG, long-image and human visual matrix remains open. This is a tested user selection, not a default. |
 | Other named model presets                             | Pinned SDK catalog and code/offline checks do not prove real-account, regional or product compatibility.                                                                                      |
 | Advanced OpenAI-compatible language models            | Explicit model form, encrypted persistence and standard Chat Completions SDK path have synthetic coverage. Native UI and real-service acceptance remain open; separate from Image Connection. |
 
-macOS arm64 has development-build and scoped native evidence, but the new embedded
-installer and no-global-Node journey still need acceptance. Windows/Linux resource
-builds are not native execution evidence. The reviewed `pi-ask-question` subset has
+The macOS arm64 delivery package was verified from a DMG-installed copy: first launch,
+session reopening, artwork rendering (including previously generated images), manual
+edit and autosave, PNG export, legacy-continuation canvas routing and restart
+persistence. Configured-model turns and image generation were verified on the earlier
+installed builds recorded in the linked notes. Windows/Linux resource builds are not
+native
+execution evidence. The reviewed `pi-ask-question` subset has
 SDK tests; native question interaction and restoration remain open. None of these
 checks establishes a universal canvas-size or performance limit.
+
+Deferred beyond this delivery: Google and other SDK upgrades, the plugin
+slash-command system, complex image composition (masks, multiple reference images,
+format matrices), dedicated cross-platform acceptance, long-term performance testing,
+and bundled-Pi upgrade/uninstall drills.
 
 The earlier [design acceptance](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)
 and [five-Agent matrix](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)

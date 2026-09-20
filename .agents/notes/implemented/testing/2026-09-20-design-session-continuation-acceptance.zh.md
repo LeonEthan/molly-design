@@ -122,9 +122,12 @@ Molly 内置引擎后，以其创建的会话进入 builtin/molly 运行时并�
 - 对话框 → Molly → 预览：`Omitted: 0 turns, 2 non-text items, 0 attachments`，历史
   节选如实 → 确认后打开目标会话 `360172a7-2e50-5b1c-9983-a25c2ceff065`（确定性
   v5），顶部溯源横幅 + 「Back to session」。
-- 显式选择 Kimi K3-256K · High；发送有界标题编辑指令。回合中 5 次权限请求逐一审查
-  后批准（均为源作品目录只读、目标会话目录内 mkdir/edit、`molly_render_preview`、
-  读渲染预览 PNG），无批量批准。
+- 显式选择 Kimi K3-256K · High；发送有界标题编辑指令。回合中权限请求共 5 张卡
+  （源作品目录只读 ls/cat/read、目标会话目录内 mkdir/edit、`molly_render_preview`、
+  读渲染预览 PNG）。批准前均先在输出中观察到各卡的命令文本，但批准动作由轮询脚本
+  点击「Allow once」执行，其中一张 `mkdir` 卡的完整参数未展开查看，最后一次
+  「读预览 PNG」批准点击与回合结算发生竞争（点击超时，权限卡随后消失，回合正常
+  完成）。本轮权限审查因此不是完全干净的人工逐一审查。
 - 回合结算：「Saved to the current artwork.」（约 5 分钟），助手摘要确认标题改动。
 - 作品侧验证：artwork 根 `design.json` 的 main-title 文本 = 「动手工作坊·第二期」，
   背景与右下角色块不变；history.git 的 V1 提交（`6104c0a`）保持原标题原文可读。
@@ -154,26 +157,31 @@ Molly 内置引擎后，以其创建的会话进入 builtin/molly 运行时并�
 ### 如实披露（最终验收）
 
 - **hybrid 安装包**：本轮全新 `build:mac` 产物在本机出现 devtools 异常——
-  `--remote-debugging-port` 端口接受 TCP 连接但 HTTP/WS 永不响应；用干净 HEAD
-  （stash 掉本任务全部改动）重新构建同样复现，证明与本任务改动无关。该异常不影响
-  应用本身（daemon、渲染器、machine-rpc 均正常），但使 CDP 驱动的 UI 验收无法在
-  全新包上执行。最终验收因此在 hybrid 包上完成：#47 打包壳 + 本任务修复树构建的
-  renderer/harness 产物（与被测改动逐字节一致），主进程与 CLI 主包保持 #47 版本
-  （本任务对二者无行为变更）。devtools 异常建议另开 issue 跟进。
-- **夹具二播种竞赛**：夹具二的播种在 daemon 运行时执行，UI 的 pending-design
-  recovery 把会话 meta 覆写为 `builtin/''`（history 完好）。停止应用后用仓库持久化
-  API 修复 meta 并复验通过。教训：夹具播种必须在应用停止时进行。
-- 诊断轮（夹具一）证据仅作冒烟信号；最终验收全部来自夹具二的干净运行。
+  `--remote-debugging-port` 端口接受 TCP 连接但 HTTP/WS 永不响应。用干净 HEAD
+  （stash 掉本任务全部改动）重新构建同样复现——这仅证明故障不依赖本任务的 diff，
+  根因未定位，不能断言为环境原因。观察到该构建的 daemon、渲染器与 machine-rpc
+  正常，但 devtools 通道不可用，使 CDP 驱动的 UI 验收无法在全新包上执行。最终
+  验收因此在 hybrid 包上完成：#47 打包壳 + 本任务修复树当时构建的 renderer 与
+  harness 产物。注意 hybrid 验收后代码又发生两处后续修改（`session-paths` 零依赖
+  重构、`artworkId` 由必填改为可选缺省回退）——这两处只有自动化测试覆盖
+  （electron 裸 node 测试、vitest 套件），没有运行时旅程证据。结论应表述为：
+  **hybrid 环境旅程通过；最终完整安装包未验证**。devtools 异常建议另开 issue 跟进。
+- **夹具二 meta 覆写（推测）**：播种后发现夹具二会话 meta 被覆写为
+  `cliType=builtin / agentType=''`（并多出 `name`/`sessionId` 键，形状与渲染器
+  pending-design recovery 的默认填充一致）；history 4 回合完好。推测为播种时
+  daemon 仍在运行、recovery 读到空 meta 所致，未做完整因果验证。停止应用后用
+  仓库持久化 API 修复 meta 并复验通过。教训：夹具播种应在应用停止时进行。
+- 诊断轮（夹具一）证据仅作冒烟信号；最终验收旅程证据全部来自夹具二的干净运行。
 
 ## 检查结果
 
 - 套件：components 414 文件 3186 用例全绿（含新增回归 5 个与既有预览 4 个）、
   harness-pi 243 全绿（含新增回归）、apps/cli 3061 通过 3 跳过、shared 1314 全绿、
-  platform 17 全绿、electron 主进程测试全绿（修复本任务引入的裸 node 解析回归后）。
-- `pnpm run check`：typecheck、lint、lint:i18n、code-collab/platform/public 边界守卫
-  全部通过；test:ci 中唯一失败为 `packages/design-authoring` 的
-  `live-fingerprints` git 历史指纹测试——该断言要求最近 30 条提交中存在 PPTD/Folio
-  谱系提交，而本仓库迁移后仅 22 条提交、整条历史中无此谱系，干净 HEAD 上同样失败，
-  属与本任务无关的既有失败，仅报告未处理。
+  platform 17 全绿、electron 主进程测试 173 全绿（修复本任务引入的裸 node 解析回归后）。
+- `pnpm run check` **并非整体全绿**：typecheck、lint、lint:i18n、
+  code-collab/platform/public 边界守卫全部通过，但 test:ci 中
+  `packages/design-authoring` 的 `live-fingerprints` git 历史指纹测试失败——该断言
+  要求最近 30 条提交中存在 PPTD/Folio 谱系提交，而本仓库迁移后仅 22 条提交、整条
+  历史中无此谱系，干净 HEAD 上同样失败，属与本任务无关的既有失败，仅报告未处理。
 - 全桌面迁移（非合成数据）仍未验证，见
   `apps/cli/src/session/README.md` 的既有声明。

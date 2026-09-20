@@ -1,6 +1,10 @@
 import { z } from 'zod';
 export { McpImageBindingSchema, type McpImageBinding } from '#mcp-image-binding';
 export * from '#harness-image-import';
+// The workspace-relative attachment root is a harness boundary contract too:
+// the daemon materializes resource_link files there and the adapter validates
+// containment against the same value (issue #49: a stale copy broke prompts).
+export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;

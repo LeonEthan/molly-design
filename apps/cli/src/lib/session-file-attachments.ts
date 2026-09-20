@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
+import { SESSION_ATTACHMENTS_DIR_RELATIVE } from '@molly/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -10,9 +11,11 @@ const execFileAsync = promisify(execFile);
  * Directory (relative to the session workspace root) where human→agent file
  * attachments are materialized. Excluded from version control and from
  * code-collab file watching. Kept under `.molly/` so a single ignore entry
- * covers all Molly-managed runtime state.
+ * covers all Molly-managed runtime state. The value is owned by
+ * `@molly/shared` session-file contract and shared with the embedded harness adapter,
+ * which validates `resource_link` containment against the same root.
  */
-export const ATTACHMENTS_DIR_RELATIVE = path.join('.molly', 'attachments');
+export const ATTACHMENTS_DIR_RELATIVE = SESSION_ATTACHMENTS_DIR_RELATIVE;
 
 /** The path segment we ensure is present in `.git/info/exclude`. */
 export const ATTACHMENTS_EXCLUDE_ENTRY = '.molly/';

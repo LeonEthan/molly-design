@@ -124,6 +124,7 @@ export function useDesignCreation(workspaceSlug: string) {
 }
 export function DesignCanvas({
   sessionId,
+  artworkId: artworkIdProp,
   active,
   workspaceSlug,
   name,
@@ -131,6 +132,14 @@ export function DesignCanvas({
   onSyncSelection,
 }: {
   sessionId: string;
+  /**
+   * The artwork this canvas opens. Defaults to sessionId — the common
+   * session-created case. Differs for continuation sessions, which edit the
+   * source session's artwork (meta.design.artworkId). All design channel
+   * calls key documents by artwork id, so they must use this value, while
+   * conversation reads (useSessionDoc, ownerSessionId) stay session-keyed.
+   */
+  artworkId?: string;
   active: boolean;
   workspaceSlug: string;
   name: string;
@@ -138,9 +147,10 @@ export function DesignCanvas({
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
 }) {
+  const artworkId = artworkIdProp ?? sessionId;
   const { t } = useTranslation();
   const host = useRef<HTMLDivElement>(null);
-  // Native-view host key, stable per artwork (NOT per mount). The main process
+  // Native-view host key, stable per session consumer (NOT per mount). The main process
   // keeps hidden canvas views alive keyed by this id, so a remount must reuse
   // the live view — a fresh random id spawns a second WebContentsView, reloads
   // the document (selection ring, zoom and toolbar all reset) and leaks the old
@@ -170,15 +180,15 @@ export function DesignCanvas({
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
       const [result, state] = await Promise.all([
-        service.versions(sessionId),
-        service.state(sessionId),
+        service.versions(artworkId),
+        service.state(artworkId),
       ]);
       if (isCurrent() && generation === versionsGeneration.current) {
         setVersions(result);
         setCanvasState(state);
       }
     },
-    [sessionId]
+    [artworkId]
   );
   useEffect(() => {
     let cancelled = false;
@@ -202,7 +212,7 @@ export function DesignCanvas({
       const service = getIpcServices()?.design;
       if (!service || !workspaceId || !machine?.machineId)
         throw Error('Local workspace is not ready');
-      const result = await service.refreshPreview(sessionId, hostId, {
+      const result = await service.refreshPreview(artworkId, hostId, {
         machineId: machine.machineId,
         workspaceId,
         ownerSessionId: sessionId as SessionId,
@@ -225,7 +235,7 @@ export function DesignCanvas({
       if (generation !== previewGeneration.current) return;
       setPreviewError(String(cause));
     }
-  }, [workspaceId, machine?.machineId, sessionId, hostId]);
+  }, [workspaceId, machine?.machineId, sessionId, artworkId, hostId]);
   useEffect(() => {
     const generationRef = previewGeneration;
     setPreviewReady(false);
@@ -248,7 +258,7 @@ export function DesignCanvas({
       void refreshVersions().catch((cause) => setError(String(cause)));
     };
     const stop = onIpcEvent('design.state', (event) => {
-      if (!event.artworkId || event.artworkId === sessionId) refresh();
+      if (!event.artworkId || event.artworkId === artworkId) refresh();
     });
     const reconnect = onIpcEvent('loro.status', () => refresh());
     window.addEventListener('focus', refresh);
@@ -257,7 +267,7 @@ export function DesignCanvas({
       reconnect();
       window.removeEventListener('focus', refresh);
     };
-  }, [active, sessionId, refreshVersions]);
+  }, [active, artworkId, refreshVersions]);
   const { history: conversationView, synced } = useSessionDoc(sessionId as SessionId, {
     enabled: sessionId.length > 0,
   });
@@ -292,13 +302,13 @@ export function DesignCanvas({
   useEffect(() => {
     if (preview && active && finalized) void refreshPreview();
   }, [finalized, preview, active, refreshPreview]);
-  const committedReceipt = latestCommittedDesignReceipt(designHistory, sessionId);
+  const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
   useBlocker({
     enableBeforeUnload: false,
     shouldBlockFn: async ({ current, next }) => {
       if (current.pathname === next.pathname) return false;
       try {
-        return !(await getIpcServices()?.design.leave(sessionId, hostId));
+        return !(await getIpcServices()?.design.leave(artworkId, hostId));
       } catch (e) {
         setError(String(e));
         return true;
@@ -318,7 +328,7 @@ export function DesignCanvas({
         .then(async () => {
           if (attachmentGeneration.current !== generation) return;
           if (disposed || !active || !host.current || hasCanvasBlockingOverlay(host.current)) {
-            await service.hide(sessionId, hostId);
+            await service.hide(artworkId, hostId);
             await service.hidePreview(hostId, false);
             return;
           }
@@ -327,8 +337,8 @@ export function DesignCanvas({
             if (visiblePreview) {
               await service.attachPreview(hostId, { x, y, width, height });
             } else {
-              await service.attach(sessionId, { x, y, width, height }, hostId);
-              await service.presentToolbar(sessionId, hostId, {
+              await service.attach(artworkId, { x, y, width, height }, hostId);
+              await service.presentToolbar(artworkId, hostId, {
                 dark: document.documentElement.classList.contains('dark'),
                 actionsEnabled: !!onReferenceSelection,
                 labels: Object.fromEntries(
@@ -396,15 +406,15 @@ export function DesignCanvas({
       appearance.disconnect();
       void work
         .then(async () => {
-          if (ownsAttachment()) await service.hide(sessionId, hostId);
+          if (ownsAttachment()) await service.hide(artworkId, hostId);
         })
         .catch((cause) => console.error(cause));
     };
-  }, [sessionId, active, hostId, preview, visiblePreview, t, onReferenceSelection]);
+  }, [sessionId, artworkId, active, hostId, preview, visiblePreview, t, onReferenceSelection]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
-    void syncOpenDesignCanvas(sessionId)
+    void syncOpenDesignCanvas(artworkId)
       .then(() => (cancelled ? undefined : refreshVersions()))
       .catch((cause) => {
         if (!cancelled) setError(String(cause));
@@ -412,7 +422,7 @@ export function DesignCanvas({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, committedReceipt, synced, refreshVersions]);
+  }, [artworkId, committedReceipt, synced, refreshVersions]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -425,7 +435,7 @@ export function DesignCanvas({
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
       const generation = attachmentGeneration.current;
-      const reference = captured ?? (await service.selection(sessionId, hostId, kind));
+      const reference = captured ?? (await service.selection(artworkId, hostId, kind));
       if (generation !== attachmentGeneration.current)
         throw Error(
           t('design.selectionChanged', 'Artwork view changed; select the current elements again')
@@ -482,19 +492,19 @@ export function DesignCanvas({
       onIpcEvent('design.selectionAction', (event) => {
         if (
           event.hostId === hostId &&
-          event.reference.artworkId === sessionId &&
+          event.reference.artworkId === artworkId &&
           active &&
           !readonlyView
         )
           actionCallback.current(event.action, event.reference);
       }),
-    [hostId, sessionId, active, readonlyView]
+    [hostId, artworkId, active, readonlyView]
   );
   const chooseVersion = (commitId: string) =>
     run(async () => {
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
-      const saved = await service.restoreVersion(sessionId, commitId);
+      const saved = await service.restoreVersion(artworkId, commitId);
       setSelection(null);
       onSyncSelection?.(null, '');
       await refreshVersions();
@@ -508,12 +518,12 @@ export function DesignCanvas({
     run(async () => {
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
-      const version = await service.saveVersion(sessionId);
+      const version = await service.saveVersion(artworkId);
       await refreshVersions();
       toast.success(t('design.versionSaved', 'Saved as V{{number}}', { number: version.number }));
     });
   const exportArtwork = (format: 'png' | 'jpeg') =>
-    run(async () => getIpcServices()?.design.export(sessionId, format, name));
+    run(async () => getIpcServices()?.design.export(artworkId, format, name));
   // Live selection size pushed from the canvas drives the native toolbar and
   // the mirrored composer chip. Syncing stays passive: it captures through the
   // same validated path as an explicit click, but never surfaces errors, never
@@ -538,7 +548,7 @@ export function DesignCanvas({
     if (!service) return undefined;
     let cancelled = false;
     void service
-      .selectionSummary(sessionId, hostId)
+      .selectionSummary(artworkId, hostId)
       .then((summary) => {
         if (!cancelled && summary && summary.count > 0) setSelection(summary);
       })
@@ -546,7 +556,7 @@ export function DesignCanvas({
     return () => {
       cancelled = true;
     };
-  }, [sessionId, active, readonlyView, hostId]);
+  }, [sessionId, artworkId, active, readonlyView, hostId]);
   useEffect(() => {
     const sync = syncSelectionCallback.current;
     if (!sync) return undefined;
@@ -562,7 +572,7 @@ export function DesignCanvas({
         if (!service) return;
         const generation = attachmentGeneration.current;
         try {
-          const reference = await service.selection(sessionId, hostId, undefined, true);
+          const reference = await service.selection(artworkId, hostId, undefined, true);
           if (generation !== attachmentGeneration.current) return;
           syncSelectionCallback.current?.(
             reference,
@@ -580,7 +590,7 @@ export function DesignCanvas({
     // Key on the selection event itself, not the count: switching between
     // same-count selections or editing properties must re-capture so the
     // mirrored chip never keeps stale element ids or a stale revision.
-  }, [selection, readonlyView, selectionCount, sessionId, hostId, t]);
+  }, [selection, readonlyView, selectionCount, sessionId, artworkId, hostId, t]);
   return (
     <div
       data-design-canvas-focus={active && focused}
@@ -699,7 +709,7 @@ export function DesignCanvas({
                   disabled={busy || readonlyView}
                   onClick={() =>
                     run(() =>
-                      create(name + t('design.copySuffix', ' — copy'), 800, 600, sessionId, hostId)
+                      create(name + t('design.copySuffix', ' — copy'), 800, 600, artworkId, hostId)
                     )
                   }
                 >

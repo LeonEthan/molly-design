@@ -29,9 +29,9 @@ limits produce omission counts; no files or source history are changed.
 immutable target-Session receipt. The Molly startup path can bind its text to the
 new engine's existing system context without native transcript replay. First-turn
 attachment handoff now rechecks the receipt and source, then reuses ordinary local
-file/vision/reference materialization. The explicit continuation UI and target
-publication are not yet wired; ordinary Agent switching is not a substitute for
-that migration flow.
+file/vision/reference materialization. The renderer dialog and target publication
+are wired through `session/design-continuation-prepare` (see the session README);
+ordinary Agent switching is not a substitute for that migration flow.
 
 The existing chat `design-input/<turnId>/` remains the immutable manifest,
 reference-byte and receipt location. New manifests record `artifactWorkdir` and

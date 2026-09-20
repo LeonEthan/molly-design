@@ -29,6 +29,7 @@ import {
   type HarnessImageImportResult,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
+  SESSION_ATTACHMENTS_DIR_RELATIVE,
 } from '@molly/shared/embedded-harness';
 import { createMollySession, type CreateMollySessionInput } from './session-factory';
 import { NativeRunOutcome } from './run-outcome';
@@ -659,7 +660,11 @@ export class MollyAcpAdapter implements acp.Agent {
         const uri = new URL(part.uri);
         if (uri.protocol !== 'file:' || uri.host || uri.search || uri.hash)
           throw new Error('harness_attachment_uri_unsupported');
-        const attachmentRoot = await realpath(join(this.input.cwd, '.lody', 'attachments'));
+        // Containment root is the shared contract value (.molly/attachments),
+        // materialized by the daemon before dispatch.
+        const attachmentRoot = await realpath(
+          join(this.input.cwd, SESSION_ATTACHMENTS_DIR_RELATIVE)
+        );
         const attachment = await realpath(fileURLToPath(uri));
         const local = relative(attachmentRoot, attachment);
         if (!local || local === '..' || local.startsWith(`..${sep}`) || isAbsolute(local))

@@ -118,7 +118,11 @@ Source-level tests and stories do not establish native desktop migration accepta
 
 ### Authoring preview in the canvas
 
-`design-canvas.tsx` owns one canvas region. Idle shows the editable current draft;
+`design-canvas.tsx` owns one canvas region. All design channel calls key documents by
+the session meta's `design.artworkId`, never by session id: a continuation session
+edits its source session's artwork, so the two identities differ there. Conversation
+reads (`useSessionDoc`, `ownerSessionId`) stay session-keyed; the native view key
+(host id) stays per session consumer. Idle shows the editable current draft;
 an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.

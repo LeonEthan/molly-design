@@ -4111,6 +4111,7 @@ const SessionDetail = ({
             name={activeSession.title || t('design.untitled', 'Untitled design')}
             key={activeSession.id}
             sessionId={activeSession.id}
+            artworkId={activeSession.design?.artworkId ?? activeSession.id}
             workspaceSlug={workspaceSlug ?? ''}
             active={
               activeSidebarTab === 'design' &&

@@ -31,6 +31,18 @@ const workspaceBasePath = (workspaceId: string): string => {
 };
 
 /**
+ * Directory (relative to a session workspace root) where human→agent file
+ * attachments are materialized before dispatch. This is the single source of
+ * truth shared by the producing daemon (`apps/cli` session-file-attachments)
+ * and the consuming embedded harness (`@molly/harness-pi` acp-adapter), which
+ * validates `resource_link` containment against the same root — the two must
+ * never drift (see issue #49: a stale pre-rename `.lody` copy broke every
+ * attachment-bearing prompt in embedded Pi). Defined in `session-paths.ts`
+ * (dependency-free) and re-exported here for the public surface.
+ */
+export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
+
+/**
  * True if a file of `sizeBytes` should use the single-shot upload endpoint
  * (i.e. it fits in a single part). Larger files MUST use multipart upload.
  */

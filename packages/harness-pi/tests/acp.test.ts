@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAssistantMessageEventStream,
@@ -214,6 +214,63 @@ describe('owned ACP boundary', () => {
       expect(JSON.stringify(f.messages)).toContain(text);
     } finally {
       await f.adapter.dispose();
+    }
+  });
+
+  it('accepts resource_link attachments under the shared attachments root and rejects escapes', async () => {
+    // Regression for issue #49: the adapter validated containment against the
+    // pre-rename `.lody/attachments` while the daemon materializes into the
+    // shared contract root `.molly/attachments`, failing every
+    // attachment-bearing prompt with ENOENT.
+    const f = await fixture();
+    try {
+      const dir = join(f.input.cwd, '.molly', 'attachments');
+      await mkdir(dir, { recursive: true });
+      const file = join(dir, 'abc12345-palette.png');
+      await writeFile(file, 'synthetic-bytes');
+      const result = await f.adapter.prompt({
+        ...f.request,
+        prompt: [
+          { type: 'text', text: 'continue the design' },
+          {
+            type: 'resource_link',
+            uri: pathToFileURL(file).href,
+            name: 'palette.png',
+            mimeType: 'image/png',
+            size: 15,
+          },
+        ],
+      });
+      expect(result.stopReason).toBe('end_turn');
+      const dispatched = JSON.stringify(f.messages);
+      expect(dispatched).toContain('User attachment:');
+      expect(dispatched).toContain('palette.png');
+    } finally {
+      await f.adapter.dispose();
+    }
+
+    const escape = await fixture();
+    try {
+      await mkdir(join(escape.input.cwd, '.molly', 'attachments'), { recursive: true });
+      const outside = join(escape.input.privateRoot, 'outside.png');
+      await writeFile(outside, 'x');
+      await expect(
+        escape.adapter.prompt({
+          ...escape.request,
+          prompt: [
+            {
+              type: 'resource_link',
+              uri: pathToFileURL(outside).href,
+              name: 'outside.png',
+              mimeType: 'image/png',
+              size: 1,
+            },
+          ],
+        })
+      ).rejects.toThrow('harness_attachment_outside_scope');
+      expect(escape.messages).toEqual([]);
+    } finally {
+      await escape.adapter.dispose();
     }
   });
   it('does not turn a failed completion hook into success or reuse its failed context', async () => {

@@ -11,6 +11,10 @@ const state = vi.hoisted(() => ({
   previewVisible: false,
   processing: false,
   sync: vi.fn<() => Promise<void>>(),
+  /** Records [method, firstArg] for artwork-scoped design service calls. */
+  calls: [] as [string, string][],
+  /** The session id handed to useSessionDoc (conversation ownership). */
+  docSessionId: '' as string,
 }));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
 vi.mock('../src/atoms/local-probe', () => ({ localProbeResultAtom: 'machine' }));
@@ -26,32 +30,38 @@ vi.mock('react-i18next', () => ({
 }));
 vi.mock('../src/lib/session-draft-tabs', () => ({ writeStoredLastActiveTabState: () => {} }));
 vi.mock('../src/hooks/use-session-doc', () => ({
-  useSessionDoc: () => ({
-    doc: {},
-    synced: state.synced,
-    history: createConversationViewFromHistory({
-      sessionId: 'artwork' as SessionId,
-      getHistory: () =>
-        state.history.map((entry, index) => ({
-          id: `turn-${index}`,
-          role: 'user',
-          timestamp: '2026-09-17T00:00:00Z',
-          ...entry,
-        })) as SessionHistory[],
-      subscribe: () => () => {},
-    }),
-  }),
+  useSessionDoc: (sessionId: string) => {
+    state.docSessionId = sessionId;
+    return {
+      doc: {},
+      synced: state.synced,
+      history: createConversationViewFromHistory({
+        sessionId: 'artwork' as SessionId,
+        getHistory: () =>
+          state.history.map((entry, index) => ({
+            id: `turn-${index}`,
+            role: 'user',
+            timestamp: '2026-09-17T00:00:00Z',
+            ...entry,
+          })) as SessionHistory[],
+        subscribe: () => () => {},
+      }),
+    };
+  },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   onIpcEvent: () => () => {},
   getIpcServices: () => ({
     design: {
-      versions: async () => [],
-      state: async () => ({
-        readonly: state.processing,
-        turnId: state.processing ? 'active' : undefined,
-        changed: true,
-      }),
+      versions: async (id: string) => (state.calls.push(['versions', id]), []),
+      state: async (id: string) => (
+        state.calls.push(['state', id]),
+        {
+          readonly: state.processing,
+          turnId: state.processing ? 'active' : undefined,
+          changed: true,
+        }
+      ),
       presentToolbar: async () => {},
       syncFromStore: () => state.sync(),
       hide: async () => {},
@@ -61,7 +71,9 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       closePreview: async () => {
         state.previewVisible = false;
       },
-      attach: async () => {},
+      attach: async (id: string) => {
+        state.calls.push(['attach', id]);
+      },
       attachPreview: async () => {
         state.previewVisible = true;
       },
@@ -77,19 +89,27 @@ import { DesignCanvas } from '../src/components/sessions/design-canvas';
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
-const receipt = (turnId: string, revisionId = 'a'.repeat(64), status = 'committed') => ({
+const receipt = (turnId: string, revisionId = 'a'.repeat(64), status = 'committed', artworkId = 'artwork') => ({
   designOutcome: {
     version: 1,
-    artworkId: 'artwork',
+    artworkId,
     turnId,
     revisionId,
     status,
     timestamp: '2026-09-11T00:00:00.000Z',
   },
 });
-const render = () =>
+const render = (props?: { sessionId?: string; artworkId?: string }) =>
   act(async () => {
-    root.render(<DesignCanvas sessionId="artwork" active workspaceSlug="local" name="Artwork" />);
+    root.render(
+      <DesignCanvas
+        sessionId={props?.sessionId ?? 'artwork'}
+        artworkId={props?.artworkId ?? 'artwork'}
+        active
+        workspaceSlug="local"
+        name="Artwork"
+      />
+    );
   });
 beforeEach(() => {
   vi.stubGlobal(
@@ -103,6 +123,8 @@ beforeEach(() => {
   state.synced = false;
   state.previewVisible = false;
   state.processing = false;
+  state.calls = [];
+  state.docSessionId = '';
   state.sync.mockReset().mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
@@ -158,4 +180,24 @@ it('failure receipts do not request canonical replacement', async () => {
   state.sync.mockRejectedValue(Error('Must not replace'));
   await render();
   expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
+// Issue #49 regression: a continuation session edits the SOURCE artwork, so
+// sessionId !== artworkId. Artwork-scoped design channel calls (versions,
+// state, attach, sync-from-store) must route by artwork id, while the
+// conversation document stays owned by the session id.
+it('routes artwork operations by artwork id while the conversation stays session-owned', async () => {
+  state.synced = true;
+  state.history = [receipt('turn-1', 'b'.repeat(64), 'committed', 'artwork-y')];
+  await render({ sessionId: 'session-continuation', artworkId: 'artwork-y' });
+  expect(state.docSessionId).toBe('session-continuation');
+  expect(state.calls.filter(([method]) => method === 'versions').map(([, id]) => id)).toContain(
+    'artwork-y'
+  );
+  expect(state.calls.filter(([method]) => method === 'state').map(([, id]) => id)).toContain(
+    'artwork-y'
+  );
+  expect(state.calls.map(([, id]) => id)).not.toContain('session-continuation');
+  // The committed receipt for artwork-y must trigger a store sync of artwork-y.
+  expect(state.sync).toHaveBeenCalled();
 });

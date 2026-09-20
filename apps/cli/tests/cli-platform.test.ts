@@ -68,6 +68,7 @@ describe('getCliPlatformKind / applyLocalPlatformEnv', () => {
 
   it('defaults to local and rejects MOLLY_PLATFORM=cloud', () => {
     delete process.env.MOLLY_PLATFORM;
+    delete process.env.LODY_PLATFORM;
     expect(getCliPlatformKind()).toBe('local');
     process.env.MOLLY_PLATFORM = 'cloud';
     expect(() => getCliPlatformKind()).toThrow('Molly supports only the local platform');

@@ -39,6 +39,67 @@ const anchor: MinimalVisualAnnotationAnchor = {
 };
 
 describe('createDirectWorkspaceWriter', () => {
+  it('assigns MCP revisions at the renderer write boundary instead of trusting stale editor values', async () => {
+    const flock = new Flock('workspace-mcp-revision-test');
+    const writer = createDirectWorkspaceWriter({
+      repo: { openFlockDoc: async () => ({ flock }) } as never,
+      acquireSessionStore: async () => {
+        throw new Error('unused');
+      },
+      releaseSessionStoreRef: () => {},
+      acquirePreviewVisualCommentStore: async () => {
+        throw new Error('unused');
+      },
+      releasePreviewVisualCommentStoreRef: () => {},
+    });
+    const key = ['mcpServer', 'synthetic-server'];
+    const entry = {
+      id: key[1],
+      name: 'Synthetic',
+      transport: 'stdio',
+      connection: { transport: 'stdio', command: 'node', args: ['fixture.mjs'] },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    flock.set(key, entry);
+    flock.commit();
+    await writer.flockRowPut('workspace-1:wf:workspace', key, entry);
+    expect(flock.get(key)).toMatchObject({ revision: 1 });
+    await Promise.all([
+      writer.flockRowPut('workspace-1:wf:workspace', key, {
+        ...entry,
+        name: 'First',
+        revision: 999,
+      }),
+      writer.flockRowPut('workspace-1:wf:workspace', key, {
+        ...entry,
+        name: 'Second',
+        revision: 1,
+      }),
+    ]);
+    expect(flock.get(key)).toMatchObject({ name: 'Second', revision: 3 });
+    await expect(
+      writer.flockRowPut('workspace-1:wf:workspace', key, { ...entry, id: 'wrong' })
+    ).rejects.toThrow('invalid_workspace_mcp_entry');
+    expect(flock.get(key)).toMatchObject({ name: 'Second', revision: 3 });
+    const protectedConnection = {
+      ...entry.connection,
+      protectedCredentials: { credentialRef: '00000000-0000-4000-8000-000000000001', revision: 2 },
+    };
+    await writer.flockRowPut('workspace-1:wf:workspace', key, {
+      ...entry,
+      connection: protectedConnection,
+    });
+    expect(flock.get(key)).toMatchObject({ revision: 4, connection: protectedConnection });
+    await expect(
+      writer.flockRowPut('workspace-1:wf:workspace', key, {
+        ...entry,
+        connection: { ...protectedConnection, env: { TOKEN: 'synthetic-secret' } },
+      })
+    ).rejects.toThrow('invalid_workspace_mcp_entry');
+    expect(flock.get(key)).toMatchObject({ revision: 4, connection: protectedConnection });
+    expect(JSON.stringify(flock.get(key))).not.toContain('synthetic-secret');
+  });
   it.each([
     ['before acquisition', 'created'],
     ['before acquisition', 'dismissed'],

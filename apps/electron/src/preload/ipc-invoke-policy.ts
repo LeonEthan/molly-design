@@ -3,6 +3,7 @@ export const IPC_INVOKE_SERVICE_GROUPS = [
   'app',
   'cli',
   'image',
+  'modelConnections',
   'localPlatform',
   'localProjects',
   'loro',

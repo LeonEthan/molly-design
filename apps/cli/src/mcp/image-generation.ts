@@ -8,7 +8,7 @@
  *    body, or a `url` we fetch once. Neither path retries: a paid call that
  *    failed is a failure the user decides what to do about.
  * 3. **Land** those bytes in the session workdir as a content-addressed asset
- *    the agent can reference from its PPTD project.
+ *    the agent can reference from its YAML artwork.
  *
  * Discipline that matters more than the code:
  *
@@ -22,7 +22,7 @@
  *   asset is refused with an actionable message instead of being written to a
  *   directory the intake will later reject.
  * - The write is content-addressed, so the same bytes always land at the same
- *   path and a retry of the same prompt is idempotent. A path that already holds
+ *   path. This does not make repeating a paid request idempotent. A path that already holds
  *   *different* bytes is refused rather than overwritten: the workdir is user
  *   space, and a generated asset never had a right to replace something there.
  */
@@ -40,8 +40,9 @@ import {
 import { redactCredential } from '@/design/image-connection';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, realpath, rename, unlink } from 'node:fs/promises';
+import { link, lstat, mkdir, open, realpath, unlink } from 'node:fs/promises';
 import path from 'node:path';
+import sharp from 'sharp';
 import {
   sniffStaticV1ImageMime,
   type StaticV1ImageMimeType,
@@ -52,10 +53,13 @@ export const IMAGE_GENERATION_TIMEOUT_MS = 180_000;
 export const IMAGE_GENERATION_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 /** Matches the design store's per-asset cap (`turn-outcome.ts` `MAX_ASSET_BYTES`). */
 export const IMAGE_GENERATION_MAX_IMAGE_BYTES = 16 * 1024 * 1024;
+/** Import limits, not canvas sizes or provider request defaults. Never silently resize. */
+export const IMAGE_GENERATION_MAX_EDGE = 16_384;
+export const IMAGE_GENERATION_MAX_PIXELS = 64_000_000;
 const UPSTREAM_ERROR_CHARS = 300;
 const MAX_SIZE_SPEC_CHARS = 32;
 
-/** The default asset directory a PPTD project references as `media/...`. */
+/** The asset directory a YAML artwork references as `media/...`. */
 export const DESIGN_MEDIA_DIRNAME = 'media';
 
 export class ImageGenerationError extends Error {
@@ -78,7 +82,7 @@ export interface GenerateImageOptions {
 }
 
 export interface GeneratedImageAsset {
-  /** Workdir-relative path, exactly what a PPTD page must reference. */
+  /** Workdir-relative path, exactly what a YAML artwork must reference. */
   path: string;
   absolutePath: string;
   sha256: string;
@@ -97,10 +101,16 @@ export interface GeneratedImageAsset {
 export async function generateImageAsset(
   options: GenerateImageOptions
 ): Promise<GeneratedImageAsset> {
+  const bytes = await generateImageBytes(options);
+  return await writeGeneratedImageAsset(options.workdir, bytes, options.signal);
+}
+
+/** A managed host can journal provenance before publishing these bytes. */
+export async function generateImageBytes(options: GenerateImageOptions): Promise<Uint8Array> {
   options.signal?.throwIfAborted();
   const bytes = await requestImageBytes(options);
   options.signal?.throwIfAborted();
-  return await writeGeneratedImageAsset(options.workdir, bytes, options.signal);
+  return bytes;
 }
 
 async function requestImageBytes(
@@ -251,11 +261,16 @@ export const IMAGE_EDIT_MAX_INPUTS = 16;
 export const IMAGE_EDIT_MAX_TOTAL_BYTES = 64 * 1024 * 1024;
 
 export async function editImageAsset(options: EditImageOptions): Promise<GeneratedImageAsset> {
+  const bytes = await editImageBytes(options);
+  return await writeGeneratedImageAsset(options.workdir, bytes, options.signal);
+}
+
+export async function editImageBytes(options: EditImageOptions): Promise<Uint8Array> {
   options.signal?.throwIfAborted();
   const request = await buildImageEditRequest(options);
   const bytes = await requestImageBytes(options, request);
   options.signal?.throwIfAborted();
-  return await writeGeneratedImageAsset(options.workdir, bytes, options.signal);
+  return bytes;
 }
 
 export async function buildImageEditRequest(options: EditImageOptions): Promise<ImageHttpRequest> {
@@ -274,6 +289,7 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
   );
   options.signal?.throwIfAborted();
   const files: NonNullable<ImageHttpRequest['multipart']>['files'] = [];
+  const dimensions: Array<{ width: number; height: number }> = [];
   let total = 0;
   const appendFile = async (input: string, field: string, index: number) => {
     options.signal?.throwIfAborted();
@@ -289,7 +305,10 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
     ) {
       throw new ImageGenerationError('image input must be a file inside the session workspace');
     }
-    const handle = await open(candidate, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const handle = await open(
+      candidate,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+    );
     try {
       const stat = await handle.stat();
       options.signal?.throwIfAborted();
@@ -310,7 +329,13 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
         if (read.bytesRead === 0) break;
         length += read.bytesRead;
       }
-      if (length !== stat.size)
+      const after = await handle.stat();
+      if (
+        length !== stat.size ||
+        after.size !== stat.size ||
+        after.mtimeMs !== stat.mtimeMs ||
+        after.ctimeMs !== stat.ctimeMs
+      )
         throw new ImageGenerationError('image input changed while reading; reread before retrying');
       const content = bytes.subarray(0, length);
       const mimeType =
@@ -325,6 +350,7 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
             : 'source/reference image must be PNG, JPEG, GIF or WebP'
         );
       }
+      dimensions.push(await decodeImageDimensions(content, mimeType, options.signal));
       files.push({
         field,
         filename: `${field === 'mask' ? 'mask' : `image-${index}`}.${mimeType === 'image/webp' ? 'webp' : EXTENSION_BY_MIME[mimeType]}`,
@@ -338,11 +364,8 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
   for (const [index, input] of options.images.entries()) await appendFile(input, 'image[]', index);
   if (options.mask !== undefined) {
     await appendFile(options.mask, 'mask', 0);
-    const source = files[0];
-    const mask = files.at(-1);
-    const sourceType = source ? sniffStaticV1ImageMime(source.bytes) : null;
-    const sourceSize = source && sourceType ? readImageDimensions(source.bytes, sourceType) : null;
-    const maskSize = mask ? readImageDimensions(mask.bytes, 'image/png') : null;
+    const sourceSize = dimensions[0];
+    const maskSize = dimensions.at(-1);
     if (
       sourceSize &&
       maskSize &&
@@ -391,7 +414,13 @@ function parseGenerationBody(bytes: Uint8Array, credential: string): GenerationP
 }
 
 function decodeBase64Payload(base64: string): Uint8Array {
+  if (base64.length > Math.ceil(IMAGE_GENERATION_MAX_IMAGE_BYTES / 3) * 4) {
+    throw new ImageGenerationError('image generation failed: base64 image exceeds the byte limit');
+  }
   const bytes = Buffer.from(base64, 'base64');
+  if (bytes.toString('base64') !== base64) {
+    throw new ImageGenerationError('image generation failed: the image is not canonical base64');
+  }
   if (bytes.byteLength === 0) {
     throw new ImageGenerationError('image generation failed: the returned image was empty');
   }
@@ -438,9 +467,9 @@ const EXTENSION_BY_MIME: Record<StaticV1ImageMimeType, string> = {
  * A path that already holds the same bytes is reused (the content address is the
  * identity), a symlink or non-regular file is refused, and anything else at that
  * path is a collision we do not resolve by writing — the caller gets an error
- * naming the path. The temporary file is created `wx` in the target directory so
- * the rename is intra-filesystem, then the directory is synced so a crash cannot
- * leave the name pointing at nothing.
+ * naming the path. A checked real media parent excludes directory symlinks. An
+ * exclusive hard link publishes the fsynced temporary inode without replacing a
+ * concurrent writer. This is not a sandbox against malicious same-user processes.
  */
 export async function writeGeneratedImageAsset(
   workdir: string,
@@ -448,13 +477,13 @@ export async function writeGeneratedImageAsset(
   signal?: AbortSignal
 ): Promise<GeneratedImageAsset> {
   signal?.throwIfAborted();
-  const mimeType = sniffStaticV1ImageMime(bytes);
-  if (mimeType === null) {
-    throw new ImageGenerationError(
-      'image generation failed: the returned bytes are not a PNG, JPEG, or GIF image, so the design intake could not import them'
-    );
+  if (bytes.byteLength === 0 || bytes.byteLength > IMAGE_GENERATION_MAX_IMAGE_BYTES) {
+    throw new ImageGenerationError('image generation failed: image exceeds the allowed byte range');
   }
-  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  // Freeze caller-owned bytes before any filesystem await.
+  bytes = Buffer.from(bytes);
+  const { mimeType, width, height, sha256 } = await inspectGeneratedImage(bytes, signal);
+  const dimensions = { width, height };
   const relative = `${DESIGN_MEDIA_DIRNAME}/${sha256}.${EXTENSION_BY_MIME[mimeType]}`;
   const root = path.resolve(workdir);
   const absolutePath = path.resolve(root, relative);
@@ -462,45 +491,140 @@ export async function writeGeneratedImageAsset(
     throw new ImageGenerationError('image generation failed: the asset path escapes the workdir');
   }
 
-  const existing = await statOrNull(absolutePath);
-  signal?.throwIfAborted();
-  if (existing !== null) {
-    if (existing.isSymbolicLink() || !existing.isFile()) {
-      throw new ImageGenerationError(`refusing to write over a non-regular file: ${relative}`);
-    }
-    const current = await readFile(absolutePath);
-    signal?.throwIfAborted();
-    if (!current.equals(Buffer.from(bytes))) {
+  await mkdir(root, { recursive: true });
+  const resolvedRoot = await realpath(root);
+  const media = path.join(resolvedRoot, DESIGN_MEDIA_DIRNAME);
+  await mkdir(media).catch((error: unknown) => {
+    if (!isFileError(error, 'EEXIST')) throw error;
+  });
+  const parent = await lstat(media);
+  if (parent.isSymbolicLink() || !parent.isDirectory() || (await realpath(media)) !== media) {
+    throw new ImageGenerationError(
+      'image generation failed: media directory must be a real workspace directory'
+    );
+  }
+  const checkParent = async () => {
+    const current = await lstat(media);
+    if (
+      !current.isDirectory() ||
+      current.isSymbolicLink() ||
+      current.dev !== parent.dev ||
+      current.ino !== parent.ino ||
+      (await realpath(media)) !== media
+    ) {
       throw new ImageGenerationError(
-        `refusing to overwrite an unrelated file at the content-addressed path ${relative}`
+        'image generation failed: media directory changed during import'
       );
     }
-  } else {
-    signal?.throwIfAborted();
-    await mkdir(path.dirname(absolutePath), { recursive: true });
-    signal?.throwIfAborted();
-    await writeFileAtomically(absolutePath, bytes, signal);
+  };
+  const target = path.join(media, `${sha256}.${EXTENSION_BY_MIME[mimeType]}`);
+  signal?.throwIfAborted();
+  await checkParent();
+  if (!(await matchesExistingAsset(target, bytes, signal))) {
+    await writeFileAtomically(target, bytes, checkParent, signal);
   }
+  await checkParent();
+  signal?.throwIfAborted();
 
-  const dimensions = readImageDimensions(bytes, mimeType);
   return {
     path: relative,
     absolutePath,
     sha256,
     mimeType,
-    width: dimensions?.width ?? 0,
-    height: dimensions?.height ?? 0,
+    width: dimensions.width,
+    height: dimensions.height,
     bytes: bytes.byteLength,
   };
+}
+
+/** Decode all frames before publication; retain the exact encoded bytes, never repair/resize. */
+export async function inspectGeneratedImage(bytes: Uint8Array, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  if (bytes.byteLength === 0 || bytes.byteLength > IMAGE_GENERATION_MAX_IMAGE_BYTES)
+    throw new ImageGenerationError('image generation failed: image exceeds the allowed byte range');
+  const mimeType = sniffStaticV1ImageMime(bytes);
+  if (mimeType === null) {
+    throw new ImageGenerationError(
+      'image generation failed: the returned bytes are not a PNG, JPEG, or GIF image, so the design intake could not import them'
+    );
+  }
+  // Freeze mutable callers across native asynchronous decode and digest computation.
+  bytes = Buffer.from(bytes);
+  const dimensions = await decodeImageDimensions(bytes, mimeType, signal);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  return {
+    path: `${DESIGN_MEDIA_DIRNAME}/${sha256}.${EXTENSION_BY_MIME[mimeType]}`,
+    sha256,
+    mimeType,
+    width: dimensions.width,
+    height: dimensions.height,
+    bytes: bytes.byteLength,
+  };
+}
+
+async function decodeImageDimensions(
+  bytes: Uint8Array,
+  mimeType: StaticV1ImageMimeType | 'image/webp',
+  signal?: AbortSignal
+): Promise<{ width: number; height: number }> {
+  signal?.throwIfAborted();
+  const decoder = sharp(bytes, {
+    failOn: 'warning',
+    limitInputPixels: IMAGE_GENERATION_MAX_PIXELS,
+    limitInputChannels: 4,
+    pages: -1,
+  }).timeout({ seconds: 15 });
+  try {
+    const metadata = await decoder.metadata();
+    signal?.throwIfAborted();
+    // Some GIF decoders crop the logical screen to its frame rectangles. The
+    // original bytes still advertise that screen to browser consumers: budget
+    // both representations, not only the decoder's smaller working surface.
+    const container = mimeType === 'image/webp' ? null : readImageDimensions(bytes, mimeType);
+    if (mimeType !== 'image/webp' && container === null)
+      throw new ImageGenerationError('image dimensions are missing or invalid');
+    const width = Math.max(metadata.width, container?.width ?? 0);
+    const height = Math.max(metadata.pageHeight ?? metadata.height, container?.height ?? 0);
+    const pages = metadata.pages ?? 1;
+    if (
+      metadata.format !== mimeType.slice('image/'.length) ||
+      !Number.isSafeInteger(width) ||
+      !Number.isSafeInteger(height) ||
+      !Number.isSafeInteger(pages) ||
+      width < 1 ||
+      height < 1 ||
+      pages < 1 ||
+      width > IMAGE_GENERATION_MAX_EDGE ||
+      height > IMAGE_GENERATION_MAX_EDGE ||
+      width * height * pages > IMAGE_GENERATION_MAX_PIXELS
+    )
+      throw new ImageGenerationError(
+        'image dimensions exceed the import limits (16384 per edge, 64 million pixels across frames)'
+      );
+    // Metadata is not decode evidence. Force every pixel through the bounded raw
+    // pipeline; discard output without changing the original image or its digest.
+    await decoder.toColourspace('srgb').ensureAlpha().raw().toBuffer();
+    signal?.throwIfAborted();
+    return { width, height };
+  } catch (error) {
+    signal?.throwIfAborted();
+    if (error instanceof ImageGenerationError) throw error;
+    // Decoder diagnostics can carry embedded metadata; expose a fixed local error.
+    throw new ImageGenerationError('image is invalid, truncated, or exceeds decoding limits');
+  } finally {
+    decoder.destroy();
+  }
 }
 
 async function writeFileAtomically(
   target: string,
   bytes: Uint8Array,
+  checkParent: () => Promise<void>,
   signal?: AbortSignal
 ): Promise<void> {
   const temporary = `${target}.${randomUUID()}.tmp`;
   try {
+    await checkParent();
     signal?.throwIfAborted();
     const file = await open(temporary, 'wx', 0o600);
     try {
@@ -511,18 +635,72 @@ async function writeFileAtomically(
     } finally {
       await file.close();
     }
+    await checkParent();
     signal?.throwIfAborted();
-    await rename(temporary, target);
-  } finally {
-    await unlink(temporary).catch(() => undefined);
-  }
-  const directory = await open(path.dirname(target), constants.O_RDONLY).catch(() => null);
-  if (directory !== null) {
     try {
-      await directory.sync().catch(() => undefined);
+      await link(temporary, target);
+    } catch (error) {
+      if (!isFileError(error, 'EEXIST')) throw error;
+      if (!(await matchesExistingAsset(target, bytes, signal))) throw error;
+    }
+  } finally {
+    // Do not unlink a path reinterpreted through a replaced directory.
+    await checkParent()
+      .then(() => unlink(temporary))
+      .catch(() => undefined);
+  }
+  if (process.platform !== 'win32') {
+    const directory = await open(
+      path.dirname(target),
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW
+    );
+    try {
+      await directory.sync();
     } finally {
       await directory.close();
     }
+  }
+}
+
+function isFileError(error: unknown, code: string): boolean {
+  return error instanceof Error && 'code' in error && error.code === code;
+}
+
+async function matchesExistingAsset(
+  target: string,
+  bytes: Uint8Array,
+  signal?: AbortSignal
+): Promise<boolean> {
+  const existing = await statOrNull(target);
+  if (existing === null) return false;
+  if (existing.isSymbolicLink() || !existing.isFile()) {
+    throw new ImageGenerationError('refusing to write over a non-regular file');
+  }
+  const file = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const current = await file.stat();
+    if (!current.isFile() || current.size !== bytes.byteLength) {
+      throw new ImageGenerationError(
+        'refusing to overwrite an unrelated file at the content-addressed path'
+      );
+    }
+    const snapshot = Buffer.alloc(bytes.byteLength + 1);
+    let length = 0;
+    while (length < snapshot.length) {
+      signal?.throwIfAborted();
+      const result = await file.read(snapshot, length, snapshot.length - length, length);
+      if (result.bytesRead === 0) break;
+      length += result.bytesRead;
+    }
+    signal?.throwIfAborted();
+    if (length !== bytes.byteLength || !snapshot.subarray(0, length).equals(Buffer.from(bytes))) {
+      throw new ImageGenerationError(
+        'refusing to overwrite an unrelated file at the content-addressed path'
+      );
+    }
+    return true;
+  } finally {
+    await file.close();
   }
 }
 
@@ -544,20 +722,29 @@ function isWithin(root: string, candidate: string): boolean {
  * Dimensions from the file header, for the types the design pipeline admits.
  *
  * Returns `null` when the header is malformed or the format is not parsed here:
- * the caller reports dimensions as unavailable rather than guessing, and the
- * upstream's own `size` echo is never trusted over the bytes.
+ * import caller refuses unavailable dimensions rather than guessing. This is
+ * bounded header inspection, not a full pixel decoder or a rendering guarantee.
  */
 export function readImageDimensions(
   bytes: Uint8Array,
   mimeType: StaticV1ImageMimeType
 ): { width: number; height: number } | null {
   try {
+    if (sniffStaticV1ImageMime(bytes) !== mimeType) return null;
     if (mimeType === 'image/png') {
       // IHDR is the first chunk: 8-byte signature, 4-byte length, 4-byte type.
-      if (bytes.length < 24) return null;
+      if (
+        bytes.length < 33 ||
+        readU32(bytes, 8) !== 13 ||
+        bytes[12] !== 73 ||
+        bytes[13] !== 72 ||
+        bytes[14] !== 68 ||
+        bytes[15] !== 82
+      )
+        return null;
       return { width: readU32(bytes, 16), height: readU32(bytes, 20) };
     }
-    if (mimeType === 'image/gif' && bytes.length >= 10) {
+    if (mimeType === 'image/gif' && bytes.length >= 13) {
       // The GIF logical screen descriptor is the one little-endian header here.
       return { width: readU16LE(bytes, 6), height: readU16LE(bytes, 8) };
     }
@@ -565,7 +752,14 @@ export function readImageDimensions(
       let offset = 2;
       while (offset + 9 <= bytes.length) {
         if (bytes[offset] !== 0xff) return null;
+        // JPEG permits padding FF bytes before a marker.
+        if (bytes[offset + 1] === 0xff) {
+          offset += 1;
+          continue;
+        }
         const marker = bytes[offset + 1]!;
+        const length = readU16(bytes, offset + 2);
+        if (length < 2 || offset + 2 + length > bytes.length) return null;
         // SOF0..SOF15 minus the DHT/JPG/DAC markers that share the range.
         if (
           marker >= 0xc0 &&
@@ -574,10 +768,16 @@ export function readImageDimensions(
           marker !== 0xc8 &&
           marker !== 0xcc
         ) {
+          const components = bytes[offset + 9];
+          if (
+            components === undefined ||
+            components < 1 ||
+            components > 4 ||
+            length !== 8 + 3 * components
+          )
+            return null;
           return { width: readU16(bytes, offset + 7), height: readU16(bytes, offset + 5) };
         }
-        const length = readU16(bytes, offset + 2);
-        if (length < 2) return null;
         offset += 2 + length;
       }
     }

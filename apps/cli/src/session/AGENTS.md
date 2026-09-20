@@ -59,8 +59,8 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
   teardown never writes `finished=false`.
 - Keep JSON-RPC/transport matching in `acp-error-classification.ts`: disposed/stale `-32603` is
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
-- Continue-session recovery may restore the ACP session and retry the same prompt once, only
-  while that turn has no ACP output.
+- Legacy: retry once before ACP output. Embedded Molly: exact native restore/settlement;
+  never replay prompts or history.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

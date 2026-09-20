@@ -21,6 +21,43 @@ function createLogger(): Logger {
 }
 
 describe('applyAcpSessionRunConfig', () => {
+  it('requires an exact embedded selection and refuses legacy configuration without fallback', async () => {
+    const session = { sessionId: 'synthetic' as SessionId, acpSessionId: null, agentClient: null };
+    const modelSelection = {
+      connectionId: 'connection',
+      modelId: 'explicit-model',
+      thinking: 'off' as const,
+    };
+    await expect(
+      applyAcpSessionRunConfig({
+        session,
+        config: { agentType: 'molly', modelSelection },
+        logger: createLogger(),
+      })
+    ).rejects.toThrow('harness_worker_unavailable');
+    const selections: unknown[] = [];
+    const bound = {
+      ...session,
+      assertEmbeddedModelSelection: (value: unknown) => {
+        selections.push(value);
+      },
+    };
+    await expect(
+      applyAcpSessionRunConfig({
+        session: bound,
+        config: { agentType: 'molly', modelSelection },
+        logger: createLogger(),
+      })
+    ).resolves.toEqual({ rejectedSelections: [], warningSelections: [], runtimeConfigPatch: null });
+    expect(selections).toEqual([modelSelection]);
+    await expect(
+      applyAcpSessionRunConfig({
+        session: bound,
+        config: { agentType: 'molly', modelSelection, modeId: 'yolo' },
+        logger: createLogger(),
+      })
+    ).rejects.toThrow('harness_legacy_config_unsupported');
+  });
   it('applies mode, model, and remaining options to an established ACP session', async () => {
     const setSessionMode = vi.fn(async () => undefined);
     const setSessionModel = vi.fn(async () => undefined);

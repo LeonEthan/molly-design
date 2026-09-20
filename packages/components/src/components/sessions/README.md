@@ -41,6 +41,7 @@ What each file in this directory is responsible for. Binding rules live in
 | `notification-permission-prompt.tsx`                            | Notification permission ask                                                                                                                         |
 | `session-fork-destination-menu.tsx`                             | Legacy fork target presentation; current human forks share the workspace                                                                            |
 | `rename-session-dialog.tsx`                                     | Session rename dialog                                                                                                                               |
+| `design-continuation-dialog.tsx`                                | Explicit legacy-design context preview and renderer publication; no model execution                                                                 |
 
 ## Info bar, status, and session actions
 
@@ -94,6 +95,26 @@ What each file in this directory is responsible for. Binding rules live in
 
 PR/CI actions, live GitHub review comments and automatic review settings/engines are
 retired from Molly. Generic file/diff viewers and send-to-chat references remain.
+
+### Continue an old design with Molly
+
+The owned legacy design's header menu negotiates preparation support on its machine.
+The dialog requires an explicit same-machine Molly selection, shows historical text
+as plain text with omissions and current attachment availability, then re-prepares
+on confirmation. A changed preview requires another confirmation. Cancellation,
+unmount and workspace/identity changes invalidate pending UI work.
+
+The existing renderer writer waits for the daemon's immutable receipt to sync and
+checks its identity, source, target catalog and deletion state before publishing
+the independent target's bindings. It omits mutable title/activity/archive fields
+so delayed confirmations preserve later edits. Publication waits for local Repo flush,
+then rechecks the receipt and live target before acknowledging success. A failed flush
+retains accepted metadata; explicit retry flushes again and reuses the same target.
+Accepted writes may finish after the dialog closes. This is neither an execution lock
+nor a cross-process metadata transaction; normal guarded dispatch remains required.
+The new conversation opens without a turn or model call. Connection/model choice
+and the next request use the normal composer. Old history and files remain in place.
+Source-level tests and stories do not establish native desktop migration acceptance.
 
 ### Authoring preview in the canvas
 

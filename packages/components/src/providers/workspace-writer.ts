@@ -4,6 +4,8 @@ import type {
   SessionHistory,
   PermissionOutcome,
   TaskProposalMeta,
+  DesignContinuationRecord,
+  SessionMeta,
 } from '@molly/shared';
 
 // # WorkspaceWriter — the renderer's authored-write seam
@@ -18,6 +20,12 @@ import type {
 export interface WorkspaceWriter {
   /** `repo.upsertDocMeta(roomId, patch)` — session/machine doc-meta write. */
   upsertDocMeta(roomId: string, patch: Record<string, unknown>): Promise<void>;
+
+  /** Publish the renderer-confirmed, already durable migration receipt. Never dispatch. */
+  publishDesignContinuation(
+    record: DesignContinuationRecord,
+    identity: { workspaceId: string; userId: string; signal?: AbortSignal }
+  ): Promise<SessionMeta>;
 
   /**
    * Author a new session's meta and first user turn as one accept unit. The

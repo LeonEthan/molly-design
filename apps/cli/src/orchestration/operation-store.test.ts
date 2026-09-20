@@ -259,41 +259,92 @@ describe('LodyOperationStore', () => {
     }
   });
 
-  it('round-trips a frozen create dispatch config including the task tools gate', async () => {
-    const store = await makeStore();
-    try {
-      const accepted = store.accept({
-        ...baseInput(),
-        kind: 'session_create',
-        frozenContinuationConfig: {
-          agentConfigId: 'agent-1',
-          inputConfig: { cliType: 'builtin' as const, agentType: 'codex', chainDepth: 0 },
-          targetDispatchConfigs: [
-            {
-              modeId: 'default',
-              modelId: 'gpt-5',
-              configOptionValues: { fast: true },
-              taskToolsEnabled: false,
-              inheritSessionDefaults: false as const,
-            },
-          ],
-        },
-      });
+  it.each(['session_create', 'session_chat'] as const)(
+    'round-trips a frozen %s dispatch config including its exact target and task tools gate',
+    async (kind) => {
+      const store = await makeStore();
+      try {
+        const accepted = store.accept({
+          ...baseInput(),
+          kind,
+          frozenContinuationConfig: {
+            agentConfigId: 'agent-1',
+            inputConfig: { cliType: 'builtin' as const, agentType: 'codex', chainDepth: 0 },
+            targetDispatchConfigs: [
+              {
+                agentConfigId: 'exact-target',
+                modeId: 'default',
+                modelId: 'gpt-5',
+                configOptionValues: { fast: true },
+                taskToolsEnabled: false,
+                mcpServerIds: [],
+                inheritSessionDefaults: false as const,
+              },
+            ],
+          },
+        });
 
-      expect(accepted.created).toBe(true);
-      expect(accepted.operation.frozenContinuationConfig.targetDispatchConfigs).toEqual([
-        {
-          modeId: 'default',
-          modelId: 'gpt-5',
-          configOptionValues: { fast: true },
-          taskToolsEnabled: false,
-          inheritSessionDefaults: false,
-        },
-      ]);
-    } finally {
-      store.close();
+        expect(accepted.created).toBe(true);
+        expect(accepted.operation.frozenContinuationConfig.targetDispatchConfigs).toEqual([
+          {
+            agentConfigId: 'exact-target',
+            modeId: 'default',
+            modelId: 'gpt-5',
+            configOptionValues: { fast: true },
+            taskToolsEnabled: false,
+            mcpServerIds: [],
+            inheritSessionDefaults: false,
+          },
+        ]);
+      } finally {
+        store.close();
+      }
     }
-  });
+  );
+
+  it.each([{ mcpServerIds: [] }, { mcpServerIds: ['synthetic-mcp'] }])(
+    'retains frozen MCP selection after reopening SQLite %#',
+    async ({ mcpServerIds }) => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'molly-mcp-selection-'));
+      roots.add(root);
+      const dbPath = path.join(root, 'operations.sqlite3');
+      const original = new MollyOperationStore(dbPath);
+      const input = baseInput();
+      const expected = [...mcpServerIds];
+      const modelSelection = {
+        connectionId: 'synthetic',
+        modelId: 'k3-256k',
+        thinking: 'high' as const,
+      };
+      const expectedModel = { ...modelSelection };
+      try {
+        original.accept({
+          ...input,
+          frozenContinuationConfig: {
+            ...input.frozenContinuationConfig,
+            targetDispatchConfigs: [
+              { mcpServerIds, modelSelection, inheritSessionDefaults: false },
+            ],
+          },
+        });
+      } finally {
+        original.close();
+      }
+      mcpServerIds.push('later-selection');
+      modelSelection.connectionId = 'later-connection';
+      const reopened = new MollyOperationStore(dbPath);
+      try {
+        expect(
+          reopened.get(input.requesterSessionId, input.operationId).frozenContinuationConfig
+            .targetDispatchConfigs
+        ).toEqual([
+          { mcpServerIds: expected, modelSelection: expectedModel, inheritSessionDefaults: false },
+        ]);
+      } finally {
+        reopened.close();
+      }
+    }
+  );
 
   it('rejects operation id reuse with different semantic input', async () => {
     const store = await makeStore();

@@ -90,3 +90,12 @@ Parent instructions apply.
 - Image generate/edit use the user-selected model with no product default. Edits upload
   bounded workspace files through the existing image transport; results are assets only,
   never artwork commits. Preserve upstream failures without automatic paid retries.
+  Return the private image receipt with dispatch/outcome facts and successful asset
+  digests; transport loss or post-response import failure is not proof of non-dispatch.
+  Decode admitted image bytes before upload/publication, with edge, total-frame pixel
+  and time limits; preserve original encoding, never repair or resize. Publication uses
+  a real media directory and exclusive writes, preserving colliding files. Import refusal
+  after dispatch remains unknown, never retryable. Stage the pinned decoder per target.
+  Managed inline-result metadata defers publication to the owning host's image import
+  service; it grants no permission or destination authority. Legacy asset calls keep
+  their existing publication path until those launchers are retired.

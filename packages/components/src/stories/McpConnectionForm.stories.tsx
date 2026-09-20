@@ -56,10 +56,41 @@ export const HttpEmpty: Story = {
   args: { initialEntry: { ...httpEntry, name: '', connection: undefined } },
 };
 export const HttpWithEnvironmentToken: Story = { args: { initialEntry: httpEntry } };
+export const ProtectedCredentialsStored: Story = {
+  args: {
+    initialEntry: {
+      ...httpEntry,
+      connection: {
+        transport: 'http',
+        url: 'https://mcp.example.com/mcp',
+        protectedCredentials: {
+          credentialRef: '00000000-0000-4000-8000-000000000001',
+          revision: 2,
+        },
+      },
+    },
+  },
+};
 export const SaveFailedLocally: Story = {
   args: {
     initialEntry: stdioEntry,
     error:
-      'Saved on this device, but the workspace has not synced yet (offline). Keep this editor open and retry when the connection recovers.',
+      'MCP settings were not saved. Check local encrypted storage and re-enter credentials before retrying.',
+  },
+};
+export const ImageToolMapping: Story = {
+  args: {
+    initialEntry: {
+      ...httpEntry,
+      imageBinding: {
+        version: 1,
+        model: 'synthetic-image',
+        generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
+        edit: {
+          tool: 'edit',
+          fields: { prompt: 'text', model: 'model_id', images: 'refs', mask: 'mask_ref' },
+        },
+      },
+    },
   },
 };

@@ -24,6 +24,7 @@ const bundledNodeBuiltins = new Set([
 
 const explicitlyExternal = new Set([
   'better-sqlite3',
+  'sharp',
   '@lydell/node-pty',
   '@sqlite.org/sqlite-wasm',
   'broadcast-channel',
@@ -87,18 +88,8 @@ export default defineConfig({
       // better-sqlite3 external, just like the main CLI entry.
       input: {
         design: path.resolve(__dirname, 'src/design-entry.ts'),
-        'codex-design-reminder': path.resolve(__dirname, 'src/codex-design-reminder.ts'),
-        'grok-design-reminder': path.resolve(__dirname, 'src/grok-design-reminder.ts'),
-        'claude-design-hook': path.resolve(__dirname, 'src/claude-design-hook.ts'),
-        'pi-design-launcher': path.resolve(__dirname, 'src/pi-design-launcher.ts'),
-        'pi-design-extension': path.resolve(__dirname, 'src/design/pi-extension.ts'),
-        'pi-mcp-extension': path.resolve(__dirname, 'src/design/pi-mcp-extension.ts'),
         'design-sample': path.resolve(__dirname, 'src/design-sample-entry.ts'),
         index: path.resolve(__dirname, 'src/index.ts'),
-        'codex-acp': path.resolve(__dirname, 'src/codex-acp-entry.ts'),
-        'claude-acp': path.resolve(__dirname, 'src/claude-acp-entry.ts'),
-        'deepseek-acp': path.resolve(__dirname, 'src/deepseek-acp-entry.ts'),
-        'grok-acp': path.resolve(__dirname, 'src/grok-acp-entry.ts'),
         'diff-worker': path.resolve(__dirname, 'src/lib/code-collab/diff-worker.ts'),
         'file-index-scan-worker': path.resolve(
           __dirname,

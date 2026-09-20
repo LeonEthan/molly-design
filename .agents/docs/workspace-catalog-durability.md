@@ -26,3 +26,25 @@ An accepted Operation captures the resolved Role configuration rather than rerea
 a mutable catalog on retry. Otherwise editing or deleting a Role could change what
 an already accepted request executes. Session provenance describes creation; it is
 not another configuration authority.
+
+## Explicit Role conversion to Molly
+
+Settings can convert an owned legacy Role to the same machine's built-in Molly.
+The Role retains its id; its current row gains a versioned `embeddedMigration`
+source snapshot in the same write as the new target. This is a non-executable,
+normalized backup of Role fields, not a copy of AgentConfig, environment or
+credentials. Historical secret-shaped options are filtered; existing CRDT history
+and older backups are not erased by this conversion.
+
+The editor clears CLI model, reasoning and permission settings and requires an
+explicit Molly connection/model. The writer rechecks the target's machine/engine
+and compares the current source with the editor's backup before its synchronous
+single-row commit. Repeating the same result is a no-op; an edited or deleted source
+is a conflict. Later edits retain the original backup, which is viewable read-only.
+Local durability and best-effort upload keep the catalog contract above.
+
+No Session is opened, native identity adopted or model called. Existing Sessions
+and accepted Operations retain their original provenance and frozen config. This
+conversion does not retire other legacy execution paths. Earlier binaries can read
+the ordinary v1 Role fields, but their editors may discard the additional backup;
+editing converted rows with such binaries is not a supported rollback procedure.

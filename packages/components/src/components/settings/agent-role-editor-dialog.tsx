@@ -2,7 +2,18 @@ import { useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
 import { usePostHog } from '@posthog/react';
 import { useTranslation } from 'react-i18next';
-import { getServerNow, type AgentRole, type AgentRoleId, type MachineId } from '@molly/shared';
+import {
+  canManageAgentRole,
+  getServerNow,
+  isAcpCapabilityCacheEntryCurrent,
+  type AgentRole,
+  type AgentRoleId,
+  type MachineId,
+} from '@molly/shared';
+import {
+  decodeMollyModelOption,
+  getEmbeddedHarnessTargetError,
+} from '@molly/shared/embedded-harness';
 
 import { userAtom } from '@/atoms';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
@@ -16,6 +27,8 @@ import {
   buildAgentRoleFormValue,
   buildAgentRoleFromForm,
   buildAgentRoleRunConfig,
+  buildAgentRoleMigrationFormValue,
+  buildMigratedAgentRole,
   findAgentRoleRunConfigIssues,
   validateAgentRoleForm,
   type AgentRoleFormValue,
@@ -35,7 +48,8 @@ import { AgentRoleForm } from './agent-role-form';
  */
 export type AgentRoleEditorState =
   | { mode: 'add'; roleId: AgentRoleId; value: AgentRoleFormValue }
-  | { mode: 'edit'; role: AgentRole; value: AgentRoleFormValue };
+  | { mode: 'edit'; role: AgentRole; value: AgentRoleFormValue }
+  | { mode: 'migrate'; role: AgentRole; value: AgentRoleFormValue; migratedAt: number };
 
 export const openAgentRoleEditorForCreate = (value: AgentRoleFormValue): AgentRoleEditorState => ({
   mode: 'add',
@@ -47,6 +61,13 @@ export const openAgentRoleEditorForEdit = (role: AgentRole): AgentRoleEditorStat
   mode: 'edit',
   role,
   value: buildAgentRoleFormValue(role),
+});
+
+export const openAgentRoleEditorForMigration = (role: AgentRole): AgentRoleEditorState => ({
+  mode: 'migrate',
+  role,
+  value: buildAgentRoleMigrationFormValue(role),
+  migratedAt: getServerNow(),
 });
 
 /**
@@ -92,6 +113,17 @@ export function AgentRoleEditorDialog({
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+  const migrating = editor?.mode === 'migrate';
+  const legacyEdit =
+    editor?.mode === 'edit' &&
+    !editor.role.embeddedMigration &&
+    !agentConfigs.some(
+      (config) =>
+        config.id === editor.role.agentConfigId &&
+        config.machineId === editor.role.machineId &&
+        getEmbeddedHarnessTargetError(config) === undefined
+    );
+  const embeddedOnly = !legacyEdit;
 
   const machineOptions = useMemo(
     () =>
@@ -107,8 +139,14 @@ export function AgentRoleEditorDialog({
 
   const selectedMachineId: MachineId | null = editor?.value.machineId ?? null;
   const machineAgentConfigs = useMemo(
-    () => agentConfigs.filter((config) => config.machineId === selectedMachineId),
-    [agentConfigs, selectedMachineId]
+    () =>
+      agentConfigs.filter(
+        (config) =>
+          config.machineId === selectedMachineId &&
+          (!embeddedOnly || getEmbeddedHarnessTargetError(config) === undefined) &&
+          (!legacyEdit || config.id === editor?.value.agentConfigId)
+      ),
+    [agentConfigs, selectedMachineId, embeddedOnly, legacyEdit, editor?.value.agentConfigId]
   );
   const selectedAgentConfig = useMemo(
     () => machineAgentConfigs.find((config) => config.id === editor?.value.agentConfigId),
@@ -139,7 +177,11 @@ export function AgentRoleEditorDialog({
   // returns the value itself when it changes nothing.
   const editorValue = editor
     ? selectedAgentConfig
-      ? applyAgentRoleRunConfigDefaults(editor.value, selectorOptions)
+      ? applyAgentRoleRunConfigDefaults(
+          editor.value,
+          selectorOptions,
+          selectedAgentConfig.cliType === 'builtin' && selectedAgentConfig.agentType === 'molly'
+        )
       : editor.value
     : null;
 
@@ -148,15 +190,19 @@ export function AgentRoleEditorDialog({
       editorValue
         ? validateAgentRoleForm(editorValue, {
             accessibleRoles,
-            editingRoleId: editor
-              ? editor.mode === 'edit'
-                ? editor.role.id
-                : editor.roleId
-              : null,
+            editingRoleId: editor ? (editor.mode !== 'add' ? editor.role.id : editor.roleId) : null,
           })
         : [],
     [accessibleRoles, editor, editorValue]
   );
+  const requiresModel =
+    embeddedOnly ||
+    (selectedAgentConfig?.cliType === 'builtin' && selectedAgentConfig.agentType === 'molly');
+  const modelSelection = decodeMollyModelOption(
+    editorValue?.modelId,
+    editorValue?.configOptionValues.reasoning_effort ?? 'off'
+  );
+  const modelMissing = requiresModel && !modelSelection;
   const runConfigIssues = useMemo(
     () =>
       editorValue && selectedAgentConfig
@@ -164,6 +210,23 @@ export function AgentRoleEditorDialog({
         : [],
     [editorValue, selectedAgentConfig, selectorOptions]
   );
+  const capabilityCurrent = isAcpCapabilityCacheEntryCurrent(
+    selectedMachineId && selectedAgentConfig
+      ? machines.get(selectedMachineId)?.acpCapabilities?.[selectedAgentConfig.id]
+      : undefined
+  );
+  const cannotSave =
+    legacyEdit ||
+    !selectedAgentConfig ||
+    getEmbeddedHarnessTargetError(selectedAgentConfig) !== undefined ||
+    (requiresModel &&
+      (!capabilityCurrent ||
+        selectorOptions.capabilityAuthority !== 'authoritative' ||
+        runConfigIssues.length > 0 ||
+        !modelSelection ||
+        selectorOptions.modelReasoningEfforts?.[editorValue?.modelId ?? '']?.includes(
+          modelSelection.thinking
+        ) !== true));
 
   const close = () => {
     setError(undefined);
@@ -171,17 +234,28 @@ export function AgentRoleEditorDialog({
   };
 
   const save = async () => {
-    if (!editor || !editorValue || formErrors.length > 0 || !currentUserId) return;
-    const role = buildAgentRoleFromForm(editorValue, {
-      existing: editor.mode === 'edit' ? editor.role : undefined,
-      ownerUserId: currentUserId,
-      now: getServerNow(),
-      createId: () => (editor.mode === 'add' ? editor.roleId : editor.role.id),
-    });
-
+    if (
+      !editor ||
+      !editorValue ||
+      formErrors.length > 0 ||
+      !currentUserId ||
+      modelMissing ||
+      cannotSave ||
+      (editor.mode !== 'add' && !canManageAgentRole(editor.role, currentUserId))
+    )
+      return;
     setSubmitting(true);
     setError(undefined);
     try {
+      const role =
+        editor.mode === 'migrate'
+          ? buildMigratedAgentRole(editor.role, editorValue, editor.migratedAt)
+          : buildAgentRoleFromForm(editorValue, {
+              existing: editor.mode === 'edit' ? editor.role : undefined,
+              ownerUserId: currentUserId,
+              now: getServerNow(),
+              createId: () => (editor.mode === 'add' ? editor.roleId : editor.role.id),
+            });
       // Resolves on durability: the row exists, so the editor is done. The
       // upload runs on its own and is deliberately not reported — a deferred
       // upload is not a failed save and there is nothing to act on.
@@ -197,7 +271,13 @@ export function AgentRoleEditorDialog({
       onSaved?.(role, { created: editor.mode === 'add' });
       close();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(
+        embeddedOnly
+          ? t('settings.agentRoles.migration.saveFailed')
+          : cause instanceof Error
+            ? cause.message
+            : String(cause)
+      );
     } finally {
       setSubmitting(false);
     }
@@ -223,12 +303,16 @@ export function AgentRoleEditorDialog({
       >
         <header className="shrink-0 border-b border-border/60 px-5 py-3 pr-12">
           <DialogTitle className="text-sm font-semibold">
-            {editor?.mode === 'edit'
-              ? t('settings.agentRoles.editTitle')
-              : t('settings.agentRoles.addTitle')}
+            {migrating
+              ? t('settings.agentRoles.migration.title')
+              : editor?.mode === 'edit'
+                ? t('settings.agentRoles.editTitle')
+                : t('settings.agentRoles.addTitle')}
           </DialogTitle>
           <DialogDescription className="mt-0.5 text-xs leading-snug text-muted-foreground">
-            {t('settings.agentRoles.dialogDescription')}
+            {migrating
+              ? t('settings.agentRoles.migration.description')
+              : t('settings.agentRoles.dialogDescription')}
           </DialogDescription>
         </header>
         {editor && editorValue ? (
@@ -236,17 +320,44 @@ export function AgentRoleEditorDialog({
             className="min-h-0 flex-1"
             value={editorValue}
             onChange={(value) => onChange({ ...editor, value })}
-            machines={machineOptions}
+            machines={
+              migrating
+                ? machineOptions.filter((machine) => machine.machineId === editor.role.machineId)
+                : machineOptions
+            }
             agentConfigs={machineAgentConfigs.map((config) => ({
               agentConfigId: config.id,
               label: config.name,
             }))}
             selectorOptions={selectedAgentConfig ? selectorOptions : null}
             issues={runConfigIssues}
-            errors={formErrors}
+            errors={modelMissing ? [...formErrors, 'model_required'] : formErrors}
+            submitDisabled={
+              cannotSave ||
+              (editor.mode !== 'add' && !canManageAgentRole(editor.role, currentUserId))
+            }
             submitting={submitting}
-            error={error}
-            isEditing={editor.mode === 'edit'}
+            readOnly={legacyEdit}
+            error={
+              legacyEdit
+                ? t(
+                    selectedAgentConfig
+                      ? 'settings.agentRoles.unavailable.agentConfigRetired'
+                      : 'settings.agentRoles.unavailable.agentConfigMissing'
+                  )
+                : (error ??
+                  (selectedAgentConfig && cannotSave
+                    ? t(
+                        !capabilityCurrent ||
+                          selectorOptions.capabilityAuthority !== 'authoritative'
+                          ? 'settings.agentRoles.unavailable.capabilitiesUnavailable'
+                          : 'settings.agentRoles.unavailable.runConfigUnsupported'
+                      )
+                    : undefined))
+            }
+            isEditing={editor.mode !== 'add'}
+            isMigrating={migrating}
+            migrationBackup={editor.mode !== 'add' ? editor.role.embeddedMigration : undefined}
             onSubmit={() => void save()}
             onCancel={close}
           />

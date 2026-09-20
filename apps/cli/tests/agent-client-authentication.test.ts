@@ -18,6 +18,7 @@ vi.mock('@agentclientprotocol/sdk', async (importOriginal) => {
   return {
     ...actual,
     ClientSideConnection: class MockClientSideConnection {
+      readonly closed = new Promise<void>(() => {});
       initialize = connectionMocks.initialize;
       newSession = connectionMocks.newSession;
       loadSession = connectionMocks.loadSession;

@@ -1,9 +1,14 @@
-import type { ProjectRef, TaskId, WorkspaceId } from '@molly/shared';
+import type { ProjectRef, SessionId, TaskAgentRef, TaskId, WorkspaceId } from '@molly/shared';
+import { validateMollyRunConfigProjection } from '@molly/shared/embedded-harness';
 import type { AuthContext } from '@/lib/command-runtime';
 import type { LoroDocumentManager } from '@/lib/loro/doc';
 import type { WorkspaceSummary } from '@/lib/workspace';
 import type { Logger } from '@/utils/logger';
-import { applyAgentTaskUpdate, readTask } from '@/lib/task-doc';
+import { readTask } from '@/lib/task-doc';
+import { settleTaskAutomationStatus, taskAutomationStateHash } from './task-automation-recovery';
+
+/** Dispatch is durable. This remaining work must never create another Session. */
+export type TaskAutomationDispatch = { settle: () => Promise<void> };
 
 export type TaskAutomationStartDeps = {
   auth: AuthContext;
@@ -21,6 +26,10 @@ export type TaskAutomationStartDeps = {
     manager: LoroDocumentManager;
     prompt: string;
     options: Record<string, unknown>;
+    dispatchConfig: Pick<TaskAgentRef, 'modelId' | 'modeId' | 'configOptionValues'> & {
+      taskToolsEnabled: true;
+      inheritSessionDefaults: false;
+    };
   }) => Promise<{ sessionId: string }>;
 };
 
@@ -63,22 +72,38 @@ export const buildProjectOptions = (project: ProjectRef | undefined): Record<str
 };
 
 /**
- * Starts one delegated task: reads it, dispatches a session carrying the brief,
- * and moves the task to in progress.
+ * Starts one delegated task and returns status-only settlement after dispatch.
  *
  * Status advances only after the dispatch is durable, and a later turn failure
  * does not roll it back — "started and then failed" is a true description of
- * in-progress work.
+ * in-progress work. Settlement failure must never recreate the Session.
  */
 export const startDelegatedTask = async (
   deps: TaskAutomationStartDeps,
   taskId: TaskId,
   agentConfigId: string
-): Promise<void> => {
+): Promise<TaskAutomationDispatch> => {
   const snapshot = await readTask(deps.manager, taskId);
   if (!snapshot) {
     throw new Error(`Task not found: ${taskId}`);
   }
+  const entrusted = snapshot.meta.agent;
+  if (
+    entrusted?.agentConfigId !== agentConfigId ||
+    snapshot.meta.ownerId !== deps.auth.userId ||
+    !['backlog', 'todo'].includes(snapshot.meta.status)
+  )
+    throw new Error('task_automation_consent_changed');
+  const dispatchConfig = {
+    ...(entrusted.modelId !== undefined ? { modelId: entrusted.modelId } : {}),
+    ...(entrusted.modeId !== undefined ? { modeId: entrusted.modeId } : {}),
+    ...(entrusted.configOptionValues !== undefined
+      ? { configOptionValues: { ...entrusted.configOptionValues } }
+      : {}),
+    taskToolsEnabled: true as const,
+    inheritSessionDefaults: false as const,
+  };
+  validateMollyRunConfigProjection(dispatchConfig);
   const projects = (snapshot.meta.projects ?? []) as ProjectRef[];
   const project = projects[0];
   if (!project) {
@@ -90,24 +115,29 @@ export const startDelegatedTask = async (
     workspace: deps.workspace,
     manager: deps.manager,
     prompt: buildAutomationBrief(snapshot.meta.title, snapshot.body),
+    dispatchConfig,
     options: {
       agentConfig: agentConfigId,
       taskId,
       taskLinkOrigin: 'run',
+      taskAutomationStateHash: taskAutomationStateHash(snapshot),
       title: snapshot.meta.title.slice(0, 50),
       ...buildProjectOptions(project),
     },
   });
 
-  deps.logger.debug(
-    `[task-automation] started sessionId=${result.sessionId} for taskId=${taskId}`
-  );
+  deps.logger.debug(`[task-automation] started sessionId=${result.sessionId} for taskId=${taskId}`);
 
-  await applyAgentTaskUpdate(
-    deps.manager,
-    deps.workspace.id as WorkspaceId,
-    taskId,
-    { status: 'in_progress' },
-    { agentConfigId }
-  );
+  return {
+    settle: () =>
+      settleTaskAutomationStatus(
+        {
+          manager: deps.manager,
+          workspaceId: deps.workspace.id as WorkspaceId,
+          machineId: deps.auth.machineId,
+          userId: deps.auth.userId,
+        },
+        result.sessionId as SessionId
+      ),
+  };
 };

@@ -1,5 +1,12 @@
 import type { AgentConfigId, AgentRoleId, MachineId } from './ids';
 import { isSensitiveAcpConfigOptionId } from './session-preparation';
+import type { AgentConfigMeta, MachineViewMeta } from './schema';
+import { getAcpCapabilityCacheEntryAuthority, isAcpCapabilityCacheEntryCurrent } from './ai';
+import {
+  encodeMollyModelOption,
+  getEmbeddedHarnessTargetError,
+  validateMollyRunConfigProjection,
+} from './embedded-harness';
 
 /**
  * Agent Role — a named, mentionable preset for *creating* a Session.
@@ -55,6 +62,12 @@ export type AgentRole = {
   revision: number;
   createdAt: number;
   updatedAt: number;
+  /** Immutable, non-executable backup written atomically with an explicit conversion. */
+  embeddedMigration?: {
+    v: 1;
+    migratedAt: number;
+    source: Omit<AgentRole, 'embeddedMigration'>;
+  };
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -245,6 +258,20 @@ export const isAgentRole = (value: unknown): value is AgentRole => {
   if (value.emoji !== undefined && typeof value.emoji !== 'string') return false;
   if (value.promptPrefix !== undefined && typeof value.promptPrefix !== 'string') return false;
   if (value.runConfig !== undefined && !isRecord(value.runConfig)) return false;
+  if (value.embeddedMigration !== undefined) {
+    const migration = value.embeddedMigration;
+    if (
+      !isRecord(migration) ||
+      migration.v !== 1 ||
+      !isFiniteNumber(migration.migratedAt) ||
+      !isRecord(migration.source) ||
+      migration.source.embeddedMigration !== undefined ||
+      !isAgentRole(migration.source) ||
+      migration.source.id !== value.id ||
+      migration.source.ownerUserId !== value.ownerUserId
+    )
+      return false;
+  }
   // A name that normalizes to nothing (only punctuation the token strips) has no
   // mention token, so it could never be used for what a Role is for.
   return getAgentRoleMentionSlug({ name: value.name.trim() }).length > 0;
@@ -274,6 +301,15 @@ export const normalizeAgentRole = (value: unknown): AgentRole | undefined => {
     revision: Math.max(1, Math.trunc(value.revision)),
     createdAt: value.createdAt,
     updatedAt: value.updatedAt,
+    ...(value.embeddedMigration
+      ? {
+          embeddedMigration: {
+            v: 1 as const,
+            migratedAt: value.embeddedMigration.migratedAt,
+            source: normalizeAgentRole(value.embeddedMigration.source)!,
+          },
+        }
+      : {}),
   };
 };
 
@@ -290,6 +326,7 @@ export const isAgentRoleContentEqual = (left: AgentRole, right: AgentRole): bool
   left.machineId === right.machineId &&
   left.agentConfigId === right.agentConfigId &&
   (left.promptPrefix ?? '') === (right.promptPrefix ?? '') &&
+  JSON.stringify(left.embeddedMigration) === JSON.stringify(right.embeddedMigration) &&
   runConfigsEqual(left.runConfig, right.runConfig);
 
 // ---------------------------------------------------------------------------
@@ -319,6 +356,9 @@ export type AgentRoleUnavailableReason =
   | 'machine_unknown'
   | 'machine_offline'
   | 'agent_config_missing'
+  | 'agent_config_retired'
+  | 'capabilities_unavailable'
+  | 'run_config_unsupported'
   | 'agent_config_machine_mismatch';
 
 export type AgentRoleAvailability =
@@ -331,8 +371,12 @@ export type AgentRoleAvailabilityContext = {
   /** Machines the current user may reach at all. */
   authorizedMachineIds: ReadonlySet<MachineId>;
   onlineMachineIds: ReadonlySet<MachineId>;
-  /** Agent config id -> the machine it belongs to. */
-  agentConfigMachineIds: ReadonlyMap<AgentConfigId, MachineId>;
+  /** Exact published targets, including execution identity and launch overrides. */
+  agentConfigs: ReadonlyMap<
+    AgentConfigId,
+    Pick<AgentConfigMeta, 'machineId' | 'cliType' | 'agentType' | 'customAcp' | 'runtimeOverrides'>
+  >;
+  capabilitiesByMachineId: ReadonlyMap<MachineId, MachineViewMeta['acpCapabilities']>;
   /**
    * Machines whose agent configs have actually been read. A machine outside
    * this set yields `unknown`, never `agent_config_missing`: reporting a Role
@@ -352,15 +396,37 @@ export const resolveAgentRoleAvailability = (
   if (!context.loadedAgentConfigMachineIds.has(role.machineId)) {
     return { kind: 'unknown' };
   }
-  const configMachineId = context.agentConfigMachineIds.get(role.agentConfigId);
-  if (configMachineId === undefined) {
+  const config = context.agentConfigs.get(role.agentConfigId);
+  if (config === undefined) {
     return { kind: 'unavailable', reason: 'agent_config_missing' };
   }
-  if (configMachineId !== role.machineId) {
+  if (config.machineId !== role.machineId) {
     return { kind: 'unavailable', reason: 'agent_config_machine_mismatch' };
+  }
+  if (getEmbeddedHarnessTargetError(config) !== undefined) {
+    return { kind: 'unavailable', reason: 'agent_config_retired' };
   }
   if (!context.onlineMachineIds.has(role.machineId)) {
     return { kind: 'unavailable', reason: 'machine_offline' };
+  }
+  const capability = context.capabilitiesByMachineId.get(role.machineId)?.[role.agentConfigId];
+  if (
+    !isAcpCapabilityCacheEntryCurrent(capability) ||
+    capability.cliType !== 'builtin' ||
+    capability.agentType !== 'molly' ||
+    getAcpCapabilityCacheEntryAuthority(capability, undefined) !== 'authoritative'
+  )
+    return { kind: 'unavailable', reason: 'capabilities_unavailable' };
+  try {
+    const selection = validateMollyRunConfigProjection(role.runConfig);
+    const modelId = encodeMollyModelOption(selection.connectionId, selection.modelId);
+    if (
+      !capability.models.some((model) => model.modelId === modelId) ||
+      capability.modelReasoningEfforts?.[modelId]?.includes(selection.thinking) !== true
+    )
+      return { kind: 'unavailable', reason: 'run_config_unsupported' };
+  } catch {
+    return { kind: 'unavailable', reason: 'run_config_unsupported' };
   }
   return { kind: 'available' };
 };

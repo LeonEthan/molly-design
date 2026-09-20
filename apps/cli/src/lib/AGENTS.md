@@ -26,9 +26,9 @@ end-to-end map. The WS/DO control-plane path is DEPRECATED; do not add to it.
   NDJSON, legacy clients keep the buffered JSON envelope. `MachineRuntime` may collect
   responses for completion, but must also forward each to the streaming observer as it
   is sent.
-- `Lody.start()` starts builtin Agent registration after local runtime initialization
-  and machine Flock join; registration is idempotent and must not depend on a
-  remote bridge or hosted workspace access.
+- `Molly.start()` initializes the runtime and joins machine Flock. Embedded Agent
+  registration belongs to the protected desktop catalog publisher, not startup
+  discovery or a deferred legacy-registration queue.
 - **Dual-author (no write intents)**: the renderer direct-authors user/UI durable
   writes against its own repo over its own Streams connection; the CLI authors only
   agent-produced data. The v4-v6 write-intent envelope (`WorkspaceWriteIntentAuthor`,
@@ -104,9 +104,13 @@ never pushed to renderers as local room health.
   index rows, repairs a missing projection, and never revives an index tombstone.
   `status`/`ownerId`/`projects` writes here can make a task automation-eligible and
   start a session. Contract: specs/tasks.md.
-- `task-automation/`: an agent counts as busy while its task is **in progress**, not
-  merely while being dispatched, or one agent gets two concurrent sessions in one
-  working copy.
+- `task-automation/`: Molly-only dispatch rechecks consent and freezes explicit
+  model/thinking with Task tools; baseline includes retired records to prevent replay.
+  Hold Agent slots through dispatch, settlement and in-progress work. Repair writes
+  only, preserving later decisions and flushing identical index rows. Boot/meta-sync
+  filters Session receipts before opening Tasks, never history. State hashes guard
+  repair; failures or prepared-only evidence hold new dispatch. Clear receipts after Task/index durability or
+  a superseding decision, never recreate a Session.
 - Historical design file reads reuse workspace metadata for unloaded/archived
   Sessions, never deleted Sessions or Agent startup. Keep Code Collab archive
   restrictions for other consumers.

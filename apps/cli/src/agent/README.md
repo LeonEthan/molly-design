@@ -1,5 +1,38 @@
 # apps/cli/src/agent
 
+The in-progress embedded Molly branch uses `embedded-harness-runtime.ts` for a fixed
+packaged sibling entry, `embedded-harness-control.ts` for public ACP/run validation and
+private fd-3 credential handoff, and `harness-credential-broker.ts` for main-host leases.
+It does not discover a global Pi executable. The engine boundary and current enablement
+gates are documented in [harness-pi](../../../../packages/harness-pi/README.md).
+Process resolution and Session startup now reject every legacy target. The generic
+ACP spawn helper is a refusal boundary, including when supplied an explicit command;
+Molly launches only through its Session-owned private channel and run lease.
+Old launch metadata builders, runtime download/update code and session-created
+legacy catalog writes are removed. Stored catalogs and history remain readable;
+the protected embedded publisher owns Molly's connection-aware catalog. Builds omit
+retired ACP adapters, presets, Pi shims and design hooks, and reject stale artifacts
+before staging/packaging.
+The generic local ACP runner is now a pre-environment refusal boundary, not a
+disabled spawn behind launch preparation. Its Codex config/credential copying and
+npx recovery/cache cleanup implementation are removed. Session-owned embedded
+startup makes one attempt through the existing gate and retains failed-process
+cleanup and stderr diagnostics; no retry or cache mutation follows startup failure.
+
+`embedded-harness-catalog.ts` registers the available Molly identity from authoritative
+local machine Flock (no cloud confirmation) and publishes a checksummed, offline SDK model projection into the existing
+ACP capability cache. Connection-qualified model IDs prevent same-model cross-account
+ambiguity; the initial placeholder is not a default model. Public catalog publication
+never reads credentials, tests inference or changes the user's existing Agent selection.
+
+Embedded Molly title generation uses the first local user sentence without spawning
+a title worker or requesting model inference.
+
+`session-mcp-resolver.ts` binds embedded workers to selected catalog snapshots and live
+invalidation guards. Shared catalog writers assign revisions in both CLI and renderer.
+AgentClient rechecks after permission delivery; Session retires only the captured worker.
+Protected external MCP credentials remain an open gate.
+
 ACP client side of the CLI: spawning coding agents, talking the Agent Client Protocol to
 them, resolving their runtimes, and authenticating them. Binding rules for this directory
 live in [AGENTS.md](AGENTS.md); this file is the responsibility index and the background a
@@ -10,9 +43,9 @@ context/acp-agent-edit-evidence.md. Adapter source repositories and builtin prov
 [apps/cli/AGENTS.md](../../AGENTS.md). Where updates go after they arrive:
 context/message-flow.md "Upstream".
 
-Design launches carry a fresh producer ID through native hooks and optional MCP
-resubmission; [design ownership](../design/README.md) describes the per-client
-read evidence and terminal validation.
+Design launches carry a fresh producer ID for optional MCP resubmission; the
+embedded worker owns reminders and native settlement. [Design ownership](../design/README.md)
+describes the per-client/turn fence and independent terminal validation, not read proofs.
 
 ## Files
 
@@ -21,22 +54,14 @@ read evidence and terminal validation.
   ACP extensions are consumed through `acp-extension-core`, so capability discovery lives
   at `agentCapabilities._meta.lody`, session metadata at `_meta.lody`, and custom methods
   use the Core `_lody/...` names.
-- `acp-runner.ts` — process spawn/restart around the client. Spawn + initialize +
-  `newSession`/`loadSession` share `acp-session-start-gate.ts`.
+- `acp-runner.ts` — ACP client construction, generic-launch refusal and retained
+  shutdown support for historical consumers. Actual workers belong to Session.
 - `acp-session-start-gate.ts` — process-wide start semaphore used by
-  `Session.createAgent`, `startLocalAcpAgent`, and history-catalog ACP spawn.
-- `setting.ts` — launch resolution for every agent kind.
-- `deepseek-harness-runtime.ts` — Harness-home (`DSH_HOME`, then `~/.dsh`), atomic-config,
-  and npx launch wrapper around the `packages/acp-extension-dsh` submodule.
-- `managed-agent-runtime.ts` — pinned Codex/Claude Code/Grok native and Kimi Node-package
-  `.tar.zst` artifacts, checksums, resumable downloads, the active installation profile's
-  `agent-binaries` layout, and best-effort `bin` symlinks for complete native CLIs.
-- `acp-authentication.ts` / `acp-authentication-output.ts` — the authentication lifecycle
-  and the incremental conversion of bounded provider output into allowlisted authorization
-  URLs, device codes, expiry, and Claude's optional browser-returned code input.
-- `acp-binary-manager.ts` — registry binary-distribution agents (tar/zip install).
-- `npx-cache.ts` — npx cache isolation plus poisoning detection/purge for resilient
-  registry launches.
+  `Session.createAgent`; old catalog code also holds a slot before its refused spawn.
+- `setting.ts` — Molly-only asynchronous launch resolution and shared environment helpers.
+- `acp-authentication.ts` — fixed refusal responses for retired CLI login/status/input
+  RPCs; Molly directs users to protected model connections. No subprocesses or CLI
+  credential reads remain. `acp-authentication-output.ts` retains historical output parsing.
 - `acp-capabilities.ts` / `acp-startup-monitor.ts` / `acp-analytics.ts` — capability cache,
   startup health, analytics.
 - `login-shell-env.ts` — login-shell env capture for spawned agents.
@@ -110,95 +135,31 @@ closed connection, a dead agent process, or an internal error may have left the 
 inside the live turn, and the caller re-sends an undelivered steer — so widening the
 "not delivered" classification sends the user's message twice.
 
-### DeepSeek Harness is not a managed runtime
+### Retired runtime services
 
-`deepseek-harness-runtime.ts` publishes Lody's versioned ACP composition beside (without
-replacing) user Harness config and launches the pinned explicit package closure through
-`dsh-acp-demo`. The all-in-one `@deepseek-ai/dsh` product CLI is deliberately not used
-because this ACP host excludes product UI and telemetry packages. CLI production and dev
-builds copy the extension's pinned official presets beside `deepseek-acp.js`; the generated
-roster also discovers `$DSH_HOME/.agent-presets`. Harness JSONL roots are single-encoding
-stores: an empty or zstd root uses upstream's `zstd`, a raw-only legacy root keeps `none`,
-and a mixed root fails with both paths named.
-
-### Managed runtimes
-
-Codex version/archive pins come from `codex-runtime-manifest.json`, which the outer
-`mirror:agent-runtimes` operator command atomically refreshes from the exact official GitHub
-Release when the adapter's `@openai/codex` dependency changes. Claude SDK/runtime archive
-pins come from `claude-runtime-manifest.json`; the mirror derives sources and integrity from
-the adapter lockfile, regenerates all eight zstd archives after a version change, verifies
-the canonical production objects, and then atomically updates the manifest.
-
-Grok launches the pinned `acp-extension-grok` compatibility adapter with an official,
-unmodified R2-managed runtime in `GROK_PATH`; the submodule owns the private-wire contract
-and minimum official version. Kimi is different: `packages/acp-extension-kimi` owns the
-Lody-maintained runtime source and implements the shared `acp-extension-core` contract.
-Its pinned `0.39.1-lody.f255222661c9` artifact has a working public UserPromptSubmit
-reminder event, but Molly has no verified session-scoped hook loading path that
-preserves Kimi's home configuration and state. See the
-[reminder loading audit](../../../../.agents/notes/proposed/architecture/2026-09-12-kimi-read-reminder-loading.md).
-The earlier generation-proof limitation no longer blocks the revised reminder
-scope; ordinary native tool instructions alone do not complete hook integration. A
-[prepared native plugin](../../../../.agents/notes/proposed/architecture/2026-09-12-kimi-reminder-plugin.md)
-can emit the shared reminder only for Molly-marked design launches; real-user
-registration remains unapproved and has not been performed.
-
-Grok design sessions load a process-owned plugin through native session metadata and reload its hooks with the existing plugin-management API. Its public PreToolUse reminder reaches the next model request after tool execution; it does not enforce a preceding read for already-generated writes. See the [1.0.13 reminder verification](../../../../.agents/notes/implemented/architecture/2026-09-12-grok-read-reminder.md).
-
-Completed caches written before metadata schema v1 remain reusable through a separate strict
-legacy schema; their old `name`/`version`/`platform` fields are normalized in memory and only
-the trusted runtime definition's command and host requirement are inferred. Repacked Node
-packages intentionally publish no convenience link because non-ACP subcommands may be
-omitted. A fully validated install that has already crossed the final complete-marker commit
-may remain a safe cache hit even though that caller observes cancellation, and network
-failures retain the URL plus nested transport cause for diagnostics.
-
-### Authentication
-
-Which authentication path runs is decided by the provider, not the caller: a managed builtin
-runs its pinned login command, and everything else (registry and custom ACP) opens a
-temporary standard ACP connection in the same bounded lifecycle. Kimi runs `acp --login`;
-Grok runs the official `login --device-auth`; Claude Code runs the official
-`auth login --claudeai` subscription flow; Codex always runs the official
-`login --device-auth` ChatGPT flow so Web can complete authentication against a remote
-machine.
-
-Remote Web transport stores only an ephemeral-ECDH/AES-GCM envelope in the 24-hour request
-stream; the target machine keeps the recipient private key in memory and decrypts
-immediately before stdin. Local UI and CLI state is in memory. Raw output progress remains
-only as a temporary old-renderer compatibility field.
-
-Grok and Codex authentication requirements come from ACP session creation because
-`codex login status` cannot account for custom model providers with
-`requires_openai_auth = false`. Because protocol authentication spans launch preparation,
-JSON-RPC requests, and process cleanup, the running slot also carries an `AbortController`
-that termination raises before any child exists.
-
-The real-process authentication test keeps method selection, versioned secret metadata, form
-submission, URL parsing, protocol stdout integrity, and process cleanup on one spawned ACP
-connection.
+External managed-runtime and registry installers, ZIP extraction, background updates,
+DeepSeek config/launch preparation, and CLI login/status execution are removed.
+Historical archive manifests remain source records, not install authority.
+No CLI SDK or DSH profile dependency is needed to read stored catalogs or history.
+Authentication RPCs return fixed refusals; Molly credentials use protected model
+connections. User runtime caches, DSH configs and native histories remain untouched.
 
 ### Capability cache
 
-Default managed builtin Codex/Claude/Kimi/Grok capabilities come from
-`getStaticBuiltinAcpCapabilities()` in `@molly/shared` so onboarding, settings, and chat can
-render mode/model/config options without spawning adapters or downloading managed runtimes.
-DeepSeek's static entry mirrors the bundled adapter's model, reasoning-effort, and permission
-selectors. Registry/custom agents and builtin runtime overrides still need the actual ACP
-agent.
+Stored legacy capability entries remain readable for historical display but confer
+no execution authority. Session creation does not refresh those entries or replace
+Molly's connection-aware catalog with one worker's model selection.
 
-`machine/acp-capabilities-refresh` resolves the pinned target, then the most recently
-installed reusable runtime, and blocks on `ensureCurrentRuntime()` only when no runtime is
-installed. `ManagedRuntimeUpdateCoordinator` serially downloads stale targets in the
-background and never hot-swaps a running ACP process. Real session creation also normalizes
-its `NewSessionResponse` through `acp-capability-normalization.ts`; the session execution
-service schedules a non-blocking cache update before the first prompt. Adapters may publish
-per-model reasoning-effort ladders on that session response as
-`_meta.lody.modelReasoningEfforts`. Normalization merges the map into the cached
-`modelReasoningEfforts`, together with the legacy `model[effort]` id derivation for builtin
-Codex only — other agents use the same brackets for unrelated variants (Claude's `opus[1m]`
-is a context window). Vendor model `_meta` never enters the CLI.
+`machine/acp-capabilities-refresh` rejects legacy engines and all launch overrides
+before reading capabilities. Molly reads the existing published catalog, validating
+engine identity and cache version; absent/mismatched catalogs fail without a probe
+or write. Concurrent requests share reads per config, with independent cancellation;
+deduplication stores no environment/credential values. The background update coordinator
+is removed; startup neither prepares nor prunes runtime caches. Explicit install/status
+RPCs return `legacy_harness_installation_disabled`. Molly refresh reads its published
+embedded catalog. AgentClient still normalizes session capabilities for the live protocol; this does
+not publish a model catalog. The retained normalizer also understands historical
+per-model reasoning ladders and Codex model[effort] identities.
 
 ### Session titles
 
@@ -218,7 +179,6 @@ new ACP session's current model; list order does not imply a cheaper model or th
 same endpoint. Permission and reasoning defaults remain independent. Existing saved
 overrides are retained because their provenance cannot be inferred; users can still
 explicitly select another title model in the existing settings field.
-
 
 Grok's explicit Stop uses public `session/close` and requires the native `closed` or
 `notResident` result; the generic `closeSession` boolean is not a shutdown proof. Stopped or

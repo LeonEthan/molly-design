@@ -64,7 +64,7 @@ const agentConfig = (): AgentConfigMeta =>
     machineId: MACHINE,
     name: 'Agent 1',
     cliType: 'builtin',
-    agentType: 'codex',
+    agentType: 'molly',
     env: {},
   }) as AgentConfigMeta;
 
@@ -96,7 +96,9 @@ describe('readTaskIndexRowsForWorkspace', () => {
 });
 
 describe('createTaskAutomationWorkspace', () => {
-  const createHarness = (options: { seedRows?: TaskIndexRow[] } = {}) => {
+  const createHarness = (
+    options: { seedRows?: TaskIndexRow[]; recoveryUnavailable?: () => boolean } = {}
+  ) => {
     const indexFlock = new Flock('index-peer');
     for (const row of options.seedRows ?? []) {
       putTaskRow(indexFlock, row);
@@ -145,8 +147,9 @@ describe('createTaskAutomationWorkspace', () => {
     const documentManager = {
       repo: {
         // Workspace meta: no agent-config documents, no task documents.
-        getMeta: () => new Flock('meta-peer'),
+        getMeta: () => (options.recoveryUnavailable?.() ? undefined : new Flock('meta-peer')),
         getDocMeta: async () => undefined,
+        flush: async () => {},
         openFlockDoc: async (flockDocId: string) => {
           const flock = flocks.get(flockDocId);
           if (!flock) {
@@ -189,6 +192,7 @@ describe('createTaskAutomationWorkspace', () => {
       started,
       startCalled,
       warned,
+      joined: joinedRoom.promise,
       logger,
       /**
        * Resolves once the baseline pass ran and the room was joined. An attach
@@ -219,6 +223,42 @@ describe('createTaskAutomationWorkspace', () => {
     await harness.handle.dispose();
   });
 
+  it('holds new dispatch while recovery is unavailable and owns a bounded retry', async () => {
+    vi.useFakeTimers();
+    let unavailable = true;
+    const harness = createHarness({ recoveryUnavailable: () => unavailable });
+    try {
+      await harness.joined;
+      harness.firstSynced.resolve();
+      putTaskRow(harness.indexFlock, taskRow());
+      await harness.handle.evaluate();
+      expect(harness.started).toEqual([]);
+      expect(await harness.warned.promise).toContain('task_automation_recovery_index_unavailable');
+      unavailable = false;
+      await vi.advanceTimersByTimeAsync(30_000);
+      await harness.startCalled.promise;
+      expect(harness.started).toEqual(['t1:agent-1']);
+    } finally {
+      await harness.handle.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels pending recovery retries when the workspace is disposed', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness({ recoveryUnavailable: () => true });
+    try {
+      await harness.joined;
+      await harness.handle.dispose();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(harness.started).toEqual([]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('never starts a task that was already waiting at boot', async () => {
     const harness = createHarness({ seedRows: [taskRow()] });
     await harness.attached();
@@ -242,6 +282,7 @@ describe('createTaskAutomationWorkspace', () => {
       repo: {
         getMeta: () => new Flock('meta-peer'),
         getDocMeta: async () => undefined,
+        flush: async () => {},
         openFlockDoc: async () => {
           throw new Error('flock doc unavailable');
         },

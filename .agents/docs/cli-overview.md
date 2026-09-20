@@ -9,14 +9,44 @@ Session/Task MCP tool contracts are owned by
 directory. Cross-entry model validation, Session provenance, and feedback privacy
 remain in the CLI parent rules.
 
+## Embedded Session acceptance
+
+CLI create and MCP pre-accept validation share the same target and effective run-config
+resolver in `src/commands/session.ts`. It reads the exact same-machine Molly config and
+current runtime catalog before a Session is written. Explicit and inherited controls
+are merged before model-specific validation; unsupported inherited fields are rejected,
+not silently discarded. MCP option discovery excludes retired targets. Chat validates
+both the stored Session engine identity and the current exact configuration before
+writing history. It resolves and validates the target's last selected model/thinking
+before Operation acceptance, freezing the exact configuration ID and the invoking
+Turn's Task gate alongside the effective controls in `targetDispatchConfigs`. MCP
+creates (including Role creates) freeze the invoking Turn's MCP ids, not mutable
+requester history or Role fields. Chat freezes the target's latest explicit MCP
+selection with its model defaults; an explicit `[]` overrides inheritance. Both
+single and batch recovery reuse that snapshot and revalidate current eligibility;
+changed history cannot replace it. Older accepted chats without a frozen snapshot
+fail materialization rather than guessing a new selection (the existing Operation
+deadline still owns their final timeout). The snapshot adds an optional exact target
+ID, structured model selection and selected MCP ids to the existing stored dispatch object; downgrade to older strict readers is not
+verified. These checks do not establish upstream credential availability.
+Structured-only model inputs survive history inheritance and CLI history authoring.
+Before merging, each structured selection is checked against its own ACP aliases and
+projected into the existing selector fields. Explicit model/thinking changes then use
+ordinary field inheritance; acceptance validates the result against the current catalog
+and freezes its structured selection. SQLite reopens preserve that snapshot without
+backfilling older rows or rereading mutable history.
+Retired records remain readable. The independent worker execution guard still owns
+last-mile refusal. Builds omit retired executable adapters and presets; historical
+runtime download/update code and unreachable legacy catalog writers are removed.
+
 ## Development build
 
 `pnpm dev` bundles with esbuild (`scripts/dev-build.mjs`, ~3s) into `dist-dev/`, then runs
 `node --enable-source-maps dist-dev/index.js`. `pnpm dev:build` builds only. There is no
 on-demand TypeScript-loader fallback, so development startup must run built JavaScript.
 
-The dev output layout must match production's — `index.js` plus flat sibling `claude-acp.js` /
-`codex-acp.js` / `*-worker.js` — because `agent/setting.ts`, the Tinypool pools
+The dev output layout must match production's — `index.js`, sealed `harness/` and flat
+sibling `*-worker.js` — because the Tinypool pools
 (`file-index-scan-pool.ts`, `diff-line-count-pool.ts`), the direct `turn-diff-store-worker.ts`
 client, and `workspace-watch-coordinator.ts` all locate their child by FILENAME next to
 `import.meta.url`. Running directly from `src/` would leave only `.ts` siblings, so pools would
@@ -47,39 +77,29 @@ Existing scheduling caches, review records, working files and session history ar
 not deleted. Generic task automation, workspace watchers and Agent tools remain.
 See [T24's consumer audit](../notes/implemented/simplification/2026-09-11-developer-workflow-retirement.md).
 
-## Builtin agents and adapter provenance
+## Remaining legacy adapter provenance
 
-Builtin Claude, Codex, and Grok use bundled adapters plus managed native runtimes; builtin Kimi
-launches its managed Node package directly. `src/agent/setting.ts` resolves those four through
-`src/agent/managed-agent-runtime.ts`.
+The public submodule sources remain for history and separate maintenance, but CLI
+production/dev builds no longer emit Claude, Codex, Grok or DeepSeek ACP executable
+entries or copy DeepSeek presets. CLI direct dependencies on the first three adapter
+packages are removed. `assertNoLegacyHarnessArtifacts` rejects stale entries and maps
+in dev output, the published bundle, both staging scripts and the packed desktop.
+The regular dev commands clean their generated output; the checker never deletes
+artifacts or touches user runtime installations.
 
-Builtin DeepSeek Harness is deliberately not a managed runtime: `src/agent/deepseek-harness-runtime.ts`
-consumes the pinned profile from the `packages/acp-extension-dsh` submodule, launches it through
-Lody's isolated npx cache, and loads the bundled `deepseek-acp.js` adapter. The extension owns the
-ACP model, reasoning-effort, and permission selectors while Harness continues to own model
-execution, sandbox enforcement, and one-shot approvals.
+External managed-runtime and registry installers, background updates, DeepSeek
+config/launch preparation and old launch-metadata builders are removed. The only
+version-builder consumer was an obsolete session-created legacy catalog writer,
+not a history reader. Removing it leaves stored catalogs unchanged and keeps
+Molly publication with the protected connection-aware publisher. CLI no longer
+depends on DSH profile, Claude SDK, tar or zstd-stream for retired execution.
 
-Built-in provider auto-registration runs from `src/lib/lody.ts`. Provider configs live in the
-current machine Flock doc, so registration starts only after the Fleet's workspace subscription
-confirms remote identity/access and the remote bridge attaches.
+Startup no longer auto-registers external providers or prepares their runtimes. The protected
+desktop catalog publisher registers bundled Molly in the existing machine Flock catalog;
+historical configurations and runtime caches are preserved.
 
-The adapter packages in `apps/cli/package.json` are public submodule dependencies, and adapter
-bugs or behaviors should be fixed in their package sources first:
-
-- `claude` → `packages/acp-extension-claude`, https://github.com/LodyAI/acp-extension-claude
-- `codex` → `packages/acp-extension-codex`, https://github.com/LodyAI/acp-extension-codex
-- shared contracts → `packages/acp-extension-core`, https://github.com/LodyAI/acp-extension-core
-- `deepseek` → `packages/acp-extension-dsh`, https://github.com/LodyAI/acp-extension-dsh
-
-When debugging Codex-side ACP behavior (tool_call update shapes, collaboration events, goal
-metadata, image generation, history recovery), check the workspace adapter source first. Managed
-runtime artifact pins and checksums live in `src/agent/managed-agent-runtime.ts`; artifact
-production and publication are external distribution responsibilities. Observed per-agent
-edit-evidence behavior and the ACP protocol reference are documented in context/acp-protocol.md
-and context/acp-agent-edit-evidence.md.
-
-Clean checkouts have no adapter `dist/` outputs, and existing checkouts may have stale outputs
-after a submodule update, which is why `prepare:acp-adapters` runs before both
-`scripts/dev-build.mjs` in the CLI `dev` script and Vite in the CLI `build` chain. The
-`src/claude-acp-entry.ts` and `src/codex-acp-entry.ts` entries import the adapters' package roots,
-whose runtime exports point at adapter `dist/`.
+`prepare:acp-adapters` retains its script name for existing callers but prepares only
+shared Core. It no longer builds Claude/Codex/Grok/DSH
+adapter distributions. The Pi closure is built and sealed separately by
+`build-embedded-harness.mjs`. Final desktop staging/native installation remains a
+separate verification step; a successful CLI build is not installed-app evidence.

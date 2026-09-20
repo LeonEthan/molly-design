@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ const logger = {
   },
   async close() {},
 } satisfies Logger;
-describe('Kimi actual Session launch environment', () => {
+describe('retired external Kimi launch environment', () => {
   it.each([
     { design: true, agent: 'kimi', text: '', explicit: undefined, expected: '210000' },
     {
@@ -38,8 +38,8 @@ describe('Kimi actual Session launch environment', () => {
     { design: false, agent: 'kimi', text: '', explicit: undefined, expected: undefined },
     { design: false, agent: 'codex', text: '', explicit: undefined, expected: undefined },
   ])(
-    'constructs only the eligible default: $agent / $design / $expected',
-    async ({ design, agent, text, explicit, expected }) => {
+    'refuses the old launch without editing configuration: $agent / $design / $expected',
+    async ({ design, agent, text, explicit }) => {
       const root = await mkdtemp(path.join(tmpdir(), 'kimi-session-'));
       vi.stubEnv('KIMI_MCP_TOOL_TIMEOUT_MS', undefined);
       try {
@@ -70,8 +70,9 @@ describe('Kimi actual Session launch environment', () => {
             command: 'synthetic',
             args: [],
           } as CreateAgentConfig)
-        ).rejects.toThrow('synthetic spawn boundary');
-        expect(received?.KIMI_MCP_TOOL_TIMEOUT_MS).toBe(expected);
+        ).rejects.toThrow('legacy_harness_execution_disabled');
+        expect(received).toBeUndefined();
+        expect(await readFile(path.join(home, 'config.toml'), 'utf8')).toBe(text);
       } finally {
         vi.unstubAllEnvs();
         await rm(root, { recursive: true, force: true });

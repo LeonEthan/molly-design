@@ -41,7 +41,7 @@ const sessionMeta = (sessionId: SessionId, design: boolean): Partial<SessionMeta
 
 let client = {};
 let launchId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-let runtime: 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' = 'pi';
+let runtime: 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' | 'molly' = 'pi';
 const live = {
   get agentClient() {
     return client;
@@ -220,7 +220,7 @@ it('an in-flight old launch cannot replace the fresh service after workspace res
   });
 });
 
-it.each(['claude', 'codex', 'kimi', 'grok'] as const)(
+it.each(['claude', 'codex', 'kimi', 'grok', 'molly'] as const)(
   '%s accepts exact submission through existing launch ownership without Pi hooks',
   async (agent) => {
     runtime = agent;

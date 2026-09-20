@@ -53,7 +53,8 @@ export type OrchestrationModelAction =
   | 'recover_orphans'
   | 'archive'
   | 'restore'
-  | 'delete_configuration';
+  | 'delete_configuration'
+  | 'retire_configuration';
 
 export const initialOrchestrationModelState = (): OrchestrationModelState => ({
   operation: 'absent',
@@ -267,6 +268,7 @@ export const stepOrchestrationModel = (
       next.archived = false;
       break;
     case 'delete_configuration':
+    case 'retire_configuration':
       next.configurationAvailable = false;
       break;
   }
@@ -343,6 +345,7 @@ export const enumerateOrchestrationModel = (maxDepth: number): OrchestrationMode
     'archive',
     'restore',
     'delete_configuration',
+    'retire_configuration',
   ];
   const initial = initialOrchestrationModelState();
   const seen = new Map([[JSON.stringify(initial), initial]]);

@@ -1,6 +1,11 @@
 import { LocalFileResolutionSchema } from './local-file-preview';
 import { PublicImageConnectionSchema } from './image-connection';
 import { z } from 'zod';
+import { HarnessHostExchangeSchema, HarnessHostResultSchema } from './embedded-harness';
+import {
+  DesignContinuationPreparationSpecSchema,
+  DesignContinuationPreparationResultSchema,
+} from './design-continuation';
 import {
   CodeCollabV2ErrorSchema,
   CodeCollabV2FileIndexRequestSchema,
@@ -104,6 +109,8 @@ export const ImageConnectionRpcResultSchema = z.discriminatedUnion('type', [
        * stored row, a switched-off row, or a row with no key yet.
        */
       ready: z.boolean(),
+      /** Catalog discovery is public; a credential is acquired only for an active paid call. */
+      available: z.boolean().optional(),
       /**
        * The credential, and the only place it appears on the wire.
        *
@@ -348,7 +355,7 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/image-connection'),
-    params: z.object({}).strict(),
+    params: z.object({ acquireCredential: z.boolean().optional() }).strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/image-connection-test'),
@@ -375,6 +382,10 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
         reports: z.array(DesignRenderHostReportSchema).max(8),
       })
       .strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('harness/host'),
+    params: HarnessHostExchangeSchema,
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('session/get-active-invocation-context'),
@@ -478,6 +489,10 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
     params: SessionForkSpecSchema,
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('session/design-continuation-prepare'),
+    params: DesignContinuationPreparationSpecSchema,
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('session/edit-and-resend'),
     params: SessionEditAndResendSpecSchema,
   }).strict(),
@@ -550,6 +565,7 @@ export type LocalMachineRpcRequest = z.infer<typeof LocalMachineRpcRequestSchema
 export type LocalMachineRpcRequestValidated = LocalMachineRpcRequest;
 
 export const LocalMachineRpcResultSchema = z.union([
+  HarnessHostResultSchema,
   DesignSourcePathResultSchema,
   ImageConnectionRpcResultSchema,
   DesignRenderRpcResultSchema,
@@ -572,6 +588,7 @@ export const LocalMachineRpcResultSchema = z.union([
   SessionDispatchTurnResponseSchema,
   SessionEditAndResendResponseSchema,
   SessionForkResponseSchema,
+  DesignContinuationPreparationResultSchema,
   SessionPrepareResponseSchema,
   SessionPrepareCancelResponseSchema,
   SessionPreviewEndpointAcquireResponseSchema,

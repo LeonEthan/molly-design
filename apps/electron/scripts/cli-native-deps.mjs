@@ -38,7 +38,11 @@ const CLI_RUNTIME_PACKAGE_CHAIN = [
   { name: '@lydell/node-pty', from: 'cli' },
   // tinypool drives the diff line-count worker pool; it stays external because it
   // resolves its own entry/worker.js relative to its package dir. Pure JS, no deps.
-  { name: 'tinypool', from: 'cli' }
+  { name: 'tinypool', from: 'cli' },
+  { name: 'sharp', from: 'cli' },
+  { name: 'semver', from: 'sharp' },
+  { name: '@img/colour', from: 'sharp' },
+  { name: 'detect-libc', from: 'sharp' }
 ]
 
 // Top-level package dirs that are never needed at runtime (C++ sources, the
@@ -145,7 +149,14 @@ function copyPackageDir(fromDir, toDir, { isTopLevel }) {
       continue
     }
     if (!entry.isFile()) continue
-    if (/\.(md|markdown|map)$/i.test(entry.name)) continue
+    if (/\.map$/i.test(entry.name)) continue
+    // Package licenses and attribution often live in README/LICENCE.md (libvips
+    // also includes notices for its codec dependencies); retain those on staging.
+    if (
+      /\.(md|markdown)$/i.test(entry.name) &&
+      !/^(readme|licen[cs]e|notice|copying|copyright)/i.test(entry.name)
+    )
+      continue
     fs.copyFileSync(fromPath, toPath)
   }
 }
@@ -236,8 +247,8 @@ function resolveInstalledNodePtyBinaryDir(packageName) {
  * install across its `os`/`cpu` fields without `--force`; the download itself is
  * platform-agnostic. Installed into a throwaway prefix so the workspace tree is untouched.
  */
-function fetchNodePtyBinaryPackage(packageName, version) {
-  const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-node-pty-'))
+function fetchNativePackage(packageName, version) {
+  const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-native-package-'))
   const result = spawnSync(
     process.platform === 'win32' ? 'npm.cmd' : 'npm',
     [
@@ -249,6 +260,7 @@ function fetchNodePtyBinaryPackage(packageName, version) {
       '--no-audit',
       '--no-fund',
       '--ignore-scripts',
+      '--omit=optional',
       '--force'
     ],
     { stdio: 'inherit' }
@@ -258,7 +270,7 @@ function fetchNodePtyBinaryPackage(packageName, version) {
   if (result.status !== 0 || !fs.existsSync(path.join(packageDir, 'package.json'))) {
     fs.rmSync(downloadDir, { recursive: true, force: true })
     throw new Error(
-      `Failed to download ${packageName}@${version} for the embedded CLI pty binding. ` +
+      `Failed to download ${packageName}@${version} for the embedded CLI native binding. ` +
         `It is fetched from the npm registry because the build host is ` +
         `${process.platform}-${process.arch}; set a registry mirror on restricted networks.`
     )
@@ -290,7 +302,7 @@ export function installEmbeddedNodePtyBinding({ platform, arch }) {
   removeStagedNodePtyBinaryPackages()
 
   const installedDir = resolveInstalledNodePtyBinaryDir(packageName)
-  const downloaded = installedDir ? undefined : fetchNodePtyBinaryPackage(packageName, version)
+  const downloaded = installedDir ? undefined : fetchNativePackage(packageName, version)
   const targetDir = stagedNodePtyBinaryDir({ platform, arch })
   try {
     // Copied as a non-top-level dir so the `prebuilds/` exclusion does not apply: in this
@@ -323,6 +335,62 @@ export function installEmbeddedNodePtyBinding({ platform, arch }) {
       `${installedDir ? '' : ', downloaded'})`
   )
   return bindingPath
+}
+
+/** Sharp has a target-specific Node-API addon and (except Windows) a libvips package. */
+export function sharpTargetPackages({ platform, arch }) {
+  if (!['darwin', 'linux', 'win32'].includes(platform) || !['x64', 'arm64'].includes(arch))
+    throw new Error(`Unsupported embedded image decoder target: ${platform}-${arch}`)
+  return [
+    `@img/sharp-${platform}-${arch}`,
+    ...(platform === 'win32' ? [] : [`@img/sharp-libvips-${platform}-${arch}`])
+  ]
+}
+
+export function installEmbeddedSharpBinding(target) {
+  const names = sharpTargetPackages(target)
+  const sharpDir = resolvePackageDir('sharp', cliAppRoot)
+  const metadata = JSON.parse(fs.readFileSync(path.join(sharpDir, 'package.json'), 'utf8'))
+  const scope = path.join(stagedNodeModulesDir, '@img')
+  if (!fs.existsSync(path.join(stagedNodeModulesDir, 'sharp', 'package.json')))
+    throw new Error('Stage CLI runtime packages before its image decoder binding')
+  fs.mkdirSync(scope, { recursive: true })
+  for (const entry of fs.readdirSync(scope, { withFileTypes: true })) {
+    if (entry.isDirectory() && entry.name.startsWith('sharp-'))
+      fs.rmSync(path.join(scope, entry.name), { recursive: true, force: true })
+  }
+  for (const name of names) {
+    const version = metadata.optionalDependencies?.[name]
+    if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) throw new Error(`Unpinned decoder package ${name}`)
+    const installed = path.resolve(sharpDir, '..', name)
+    const present = fs.existsSync(path.join(installed, 'package.json'))
+    const downloaded = present ? undefined : fetchNativePackage(name, version)
+    try {
+      const source = present ? installed : downloaded.packageDir
+      const actual = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'))
+      if (actual.name !== name || actual.version !== version)
+        throw new Error(`Unexpected decoder package ${name}`)
+      copyPackageDir(source, path.join(stagedNodeModulesDir, name), { isTopLevel: false })
+    } finally {
+      downloaded?.cleanup()
+    }
+  }
+  assertEmbeddedSharpPackages(stagedNodeModulesDir, target)
+}
+
+export function assertEmbeddedSharpPackages(nodeModulesDir, target) {
+  const metadata = JSON.parse(
+    fs.readFileSync(path.join(nodeModulesDir, 'sharp/package.json'), 'utf8')
+  )
+  for (const name of sharpTargetPackages(target)) {
+    const directory = path.join(nodeModulesDir, name)
+    const actual = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
+    if (actual.name !== name || actual.version !== metadata.optionalDependencies[name])
+      throw new Error(`Mismatched packaged image decoder ${name}`)
+    const resources = fs.readdirSync(path.join(directory, 'lib'))
+    if (!resources.some((file) => /\.(node|dll|dylib|so(?:\.\d+)*)$/.test(file)))
+      throw new Error(`Packaged image decoder binary missing: ${name}`)
+  }
 }
 
 const SPAWN_HELPER_ASAR_REWRITES = [

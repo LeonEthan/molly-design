@@ -1,8 +1,9 @@
 import http from 'node:http';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { mkdtemp, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { crc32, deflateSync } from 'node:zlib';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it, vi } from 'vitest';
@@ -21,12 +22,144 @@ import {
   type McpDesignGate,
 } from './design-tools';
 import { buildMollyMcpServer, runWithMcpSessionContext } from './molly-mcp-server';
+import {
+  HARNESS_INLINE_IMAGE_RESULT_META,
+  HarnessImageImportRequestSchema,
+} from '@molly/shared/embedded-harness';
+import { importHarnessImages } from '@/design/harness-image-import';
+import { recoverHarnessImages } from '@/design/harness-image-recovery';
+import { resolveDesignWorkspace } from '@/design/workspace';
+import { createHash, randomUUID } from 'node:crypto';
 
 const TOOL_NAME = 'molly_generate_image';
+
+it.each(['molly_generate_image', 'molly_edit_image'] as const)(
+  'defers %s publication to the owning import service and recovers it by operation identity',
+  async (name) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'molly-managed-image-'));
+    const sessionId = randomUUID();
+    const artworkId = randomUUID();
+    const workspace = resolveDesignWorkspace({
+      workspaceRoot: root,
+      sessionId,
+      artworkId,
+      legacyWorkdir: path.join(root, 'input'),
+    });
+    await mkdir(workspace.artifactWorkdir, { recursive: true });
+    const png = pngFixture(2, 3);
+    const source = path.join(root, 'source.png');
+    await writeFile(source, png);
+    const args = {
+      prompt: 'synthetic image',
+      ...(name === 'molly_edit_image' ? { images: [source] } : {}),
+    };
+    try {
+      await withServer(
+        {
+          workdir: root,
+          designGate: {
+            ...readyGate,
+            artworkWorkdir: workspace.artifactWorkdir,
+            workspaceRoot: root,
+          },
+          imageTransport: async (request) => {
+            if (name === 'molly_edit_image')
+              expect(request.multipart?.files.map((file) => Buffer.from(file.bytes))).toEqual([
+                png,
+              ]);
+            return jsonResponse(200, { data: [{ b64_json: png.toString('base64') }] });
+          },
+        },
+        async (client) => {
+          const result = (await client.callTool({
+            name,
+            arguments: args,
+            _meta: { [HARNESS_INLINE_IMAGE_RESULT_META]: 1 },
+          })) as CallToolResult;
+          expect(result.isError).not.toBe(true);
+          expect(result._meta?.mollyImageOperation).toEqual({
+            version: 1,
+            state: 'succeeded',
+            dispatched: true,
+            assetDigests: [],
+          });
+          expect(await readdir(workspace.artifactWorkdir)).toEqual([]);
+          const image = result.content.find((content) => content.type === 'image');
+          if (!image || image.type !== 'image') throw new Error('expected inline image');
+          const request = HarnessImageImportRequestSchema.parse({
+            version: 1,
+            runId: 'a'.repeat(64),
+            runtimeEpoch: randomUUID(),
+            productSessionId: sessionId,
+            turnId: 'source-turn',
+            toolCallId: 'paid-call',
+            requestDigest: createHash('sha256').update(JSON.stringify(args)).digest('hex'),
+            connectionId: 'image-connection',
+            connectionRevision: 7,
+            serverName: 'molly',
+            toolName: name,
+            images: [{ mimeType: image.mimeType, data: image.data }],
+          });
+          const operationDirectory = path.join(root, 'operations');
+          const imported = await importHarnessImages({
+            request,
+            workspace,
+            artworkId,
+            operationDirectory,
+            signal: new AbortController().signal,
+          });
+          const recovery = {
+            sessionId,
+            artworkId,
+            operationDirectory,
+            signal: new AbortController().signal,
+            resolveWorkspace: async (turnId: string) => {
+              expect(turnId).toBe('source-turn');
+              return workspace;
+            },
+          };
+          const listed = await recoverHarnessImages({ ...recovery, query: {} });
+          if (listed.kind !== 'listed') throw new Error('expected recovery list');
+          expect(listed.operations).toEqual([
+            expect.objectContaining({
+              connectionId: 'image-connection',
+              connectionRevision: 7,
+              toolName: name,
+              expectedAssets: 1,
+            }),
+          ]);
+          const verified = await recoverHarnessImages({
+            ...recovery,
+            query: { operationId: listed.operations[0].operationId },
+          });
+          expect(verified).toMatchObject({
+            kind: 'verified',
+            unavailable: [],
+            assets: [
+              expect.objectContaining({ sha256: imported.assets[0].sha256, width: 2, height: 3 }),
+            ],
+          });
+          await expect(readFile(imported.assets[0].absolutePath)).resolves.toEqual(png);
+          expect(await readdir(workspace.artifactWorkdir)).toEqual(['media']);
+        }
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+);
 const SECRET_KEY = 'sk-live-super-secret-value';
 
-/** A real, decodable PNG of the requested size. */
+/** Synthetic PNG header for transport/metadata tests, not pixel-decoding evidence. */
 function pngFixture(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const checksum = Buffer.alloc(4);
+    checksum.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, checksum]);
+  };
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
@@ -34,10 +167,9 @@ function pngFixture(width: number, height: number): Buffer {
   header[9] = 6;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    Buffer.from([0, 0, 0, 13]),
-    Buffer.from('IHDR', 'ascii'),
-    header,
-    Buffer.alloc(4),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(Buffer.alloc((width * 4 + 1) * height))),
+    chunk('IEND', Buffer.alloc(0)),
   ]);
 }
 
@@ -183,6 +315,36 @@ describe('molly_generate_image gate', () => {
 
   it('is published exactly when the connection is complete and enabled', async () => {
     expect(await listToolNames(readyGate)).toContain(TOOL_NAME);
+  });
+
+  it('advertises a public catalog without acquiring a key, but refuses execution without a live grant', async () => {
+    const gate = designGateFromRpcResult({
+      type: 'design/image-connection',
+      available: true,
+      ready: false,
+      connection: {
+        enabled: true,
+        baseUrl: 'https://images.example.com/v1',
+        model: 'gpt-image-2',
+        hasApiKey: true,
+        updatedAt: 0,
+      },
+      credential: null,
+      artworkWorkdir: '/tmp/workspace',
+      workspaceRoot: '/tmp/workspace',
+    });
+    expect(gate.imageConnection).toBeNull();
+    expect(gate.imageAvailable).toBe(true);
+    expect(await listToolNames(gate)).toContain(TOOL_NAME);
+    const { calls, transport } = recordedTransport(() => jsonResponse(500, {}));
+    const result = await callGenerate({
+      designGate: gate,
+      resolveGate: async () => EMPTY_DESIGN_GATE,
+      imageTransport: transport,
+    });
+    expect(result.isError).toBe(true);
+    expect(calls).toEqual([]);
+    expect(JSON.stringify(gate)).not.toContain(SECRET_KEY);
   });
 
   it('is not callable while it is absent from the list', async () => {
@@ -351,6 +513,12 @@ describe('molly_generate_image call', () => {
     expect(payload.path).toMatch(/^media\/[a-f0-9]{64}\.png$/);
     expect(payload.width).toBe(64);
     expect(payload.height).toBe(48);
+    expect(result._meta?.mollyImageOperation).toEqual({
+      version: 1,
+      state: 'succeeded',
+      dispatched: true,
+      assetDigests: [payload.sha256],
+    });
     expect(textOf(result)).not.toContain(SECRET_KEY);
 
     // The request went to the configured endpoint under the configured model,
@@ -380,7 +548,90 @@ describe('molly_generate_image call', () => {
 
     expect(result.isError).toBe(true);
     expect(textOf(result)).toContain('prompt violates content policy');
+    expect(result._meta?.mollyImageOperation).toEqual({
+      version: 1,
+      state: 'failed',
+      dispatched: true,
+      assetDigests: [],
+    });
     expect(textOf(result)).not.toContain(SECRET_KEY);
+  });
+
+  it('reports lost upstream delivery as unknown rather than a safely retryable failure', async () => {
+    const result = await callGenerate({
+      designGate: readyGate,
+      imageTransport: async () => {
+        throw new Error('synthetic connection lost');
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(result._meta?.mollyImageOperation).toEqual({
+      version: 1,
+      state: 'outcome_unknown',
+      dispatched: true,
+      assetDigests: [],
+    });
+    expect(JSON.stringify(result)).not.toContain(SECRET_KEY);
+  });
+
+  it('keeps paid dispatch unknown when a valid-looking image header has no decodable pixels', async () => {
+    const workdir = await mkdtemp(path.join(os.tmpdir(), 'molly-invalid-image-'));
+    const requests: string[] = [];
+    try {
+      const result = await callGenerate({
+        designGate: readyGate,
+        workdir,
+        imageTransport: async (request) => {
+          requests.push(`${request.method} ${request.url}`);
+          return jsonResponse(200, {
+            data: [{ b64_json: pngFixture(2, 2).subarray(0, 33).toString('base64') }],
+          });
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(result._meta?.mollyImageOperation).toEqual({
+        version: 1,
+        state: 'outcome_unknown',
+        dispatched: true,
+        assetDigests: [],
+      });
+      expect(requests).toEqual(['POST https://images.example.com/v1/images/generations']);
+      expect(await readdir(workdir)).toEqual([]);
+      expect(JSON.stringify(result)).not.toContain(SECRET_KEY);
+    } finally {
+      await rm(workdir, { recursive: true });
+    }
+  });
+
+  it('preserves dispatched-unknown when safe asset publication refuses a symlinked directory', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'molly-image-import-refused-'));
+    const workdir = path.join(root, 'work');
+    const outside = path.join(root, 'outside');
+    await mkdir(workdir);
+    await mkdir(outside);
+    await symlink(outside, path.join(workdir, 'media'));
+    const requests: string[] = [];
+    try {
+      const result = await callGenerate({
+        designGate: readyGate,
+        workdir,
+        imageTransport: async (request) => {
+          requests.push(`${request.method} ${request.url}`);
+          return jsonResponse(200, { data: [{ b64_json: pngFixture(1, 1).toString('base64') }] });
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(result._meta?.mollyImageOperation).toEqual({
+        version: 1,
+        state: 'outcome_unknown',
+        dispatched: true,
+        assetDigests: [],
+      });
+      expect(requests).toEqual(['POST https://images.example.com/v1/images/generations']);
+      await expect(readdir(outside)).resolves.toEqual([]);
+    } finally {
+      await rm(root, { recursive: true });
+    }
   });
 
   it('re-checks the gate before spending, and refuses a connection revoked mid-session', async () => {

@@ -7,9 +7,9 @@ import { Button } from '@/ui/button';
 import { OnboardingBackButton, OnboardingNextButton, OnboardingShell } from '../onboarding-shell';
 import { useOnboardingAnalytics } from '../onboarding-analytics';
 
-export type OnboardingSummaryAgentState = 'ready' | 'preparing' | 'failed' | 'missing';
+export type OnboardingSummaryAgentState = 'ready' | 'preparing' | 'failed' | 'missing' | 'retired';
 
-type SummaryStatus = 'ready' | 'preparing' | 'failed' | 'missing';
+type SummaryStatus = OnboardingSummaryAgentState;
 
 export function SummaryScreen({
   agentState,
@@ -33,30 +33,37 @@ export function SummaryScreen({
   const [retryingAgent, setRetryingAgent] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const title =
-    agentState === 'ready'
-      ? t('onboarding.summary.title', 'Molly is ready')
-      : agentState === 'preparing'
-        ? t('onboarding.summary.preparingTitle', 'Ready to enter Molly')
-        : agentState === 'failed'
-          ? t('onboarding.summary.failedTitle', 'Agent setup needs attention')
-          : t('onboarding.summary.exploreTitle', 'Explore Molly');
+    agentState === 'retired'
+      ? t('onboarding.models.retiredTitle')
+      : agentState === 'ready'
+        ? t('onboarding.summary.title', 'Molly is ready')
+        : agentState === 'preparing'
+          ? t('onboarding.summary.preparingTitle', 'Ready to enter Molly')
+          : agentState === 'failed'
+            ? t('onboarding.summary.failedTitle', 'Agent setup needs attention')
+            : t('onboarding.summary.exploreTitle', 'Explore Molly');
   const description =
-    agentState === 'ready'
-      ? t('onboarding.summary.description', 'You can add Agents and projects later from Settings.')
-      : agentState === 'preparing'
+    agentState === 'retired'
+      ? t('onboarding.models.retiredDescription')
+      : agentState === 'ready'
         ? t(
-            'onboarding.summary.preparingDescription',
-            'Your Agent setup is still in progress. You can enter Molly now and check its status in Settings.'
+            'onboarding.summary.description',
+            'You can add Agents and projects later from Settings.'
           )
-        : agentState === 'failed'
+        : agentState === 'preparing'
           ? t(
-              'onboarding.summary.failedDescription',
-              'Your Agent could not finish setup. Retry here or enter Molly and finish later.'
+              'onboarding.summary.preparingDescription',
+              'Your Agent setup is still in progress. You can enter Molly now and check its status in Settings.'
             )
-          : t(
-              'onboarding.summary.exploreDescription',
-              'Explore Molly now. Connect your Agent in Settings when you are ready to start a design session.'
-            );
+          : agentState === 'failed'
+            ? t(
+                'onboarding.summary.failedDescription',
+                'Your Agent could not finish setup. Retry here or enter Molly and finish later.'
+              )
+            : t(
+                'onboarding.summary.exploreDescription',
+                'Explore Molly now. Connect your Agent in Settings when you are ready to start a design session.'
+              );
 
   const resolvedAgentName =
     agentName ??
@@ -197,13 +204,15 @@ function SummaryRow({
 }) {
   const { t } = useTranslation();
   const statusLabel =
-    status === 'ready'
-      ? t('onboarding.summary.statusReady', 'Ready')
-      : status === 'preparing'
-        ? t('onboarding.summary.statusPreparing', 'Setting up')
-        : status === 'failed'
-          ? t('onboarding.summary.statusFailed', 'Setup failed')
-          : t('onboarding.summary.statusLater', 'Set up later');
+    status === 'retired'
+      ? t('settings.models.legacyReadOnly')
+      : status === 'ready'
+        ? t('onboarding.summary.statusReady', 'Ready')
+        : status === 'preparing'
+          ? t('onboarding.summary.statusPreparing', 'Setting up')
+          : status === 'failed'
+            ? t('onboarding.summary.statusFailed', 'Setup failed')
+            : t('onboarding.summary.statusLater', 'Set up later');
 
   return (
     <TableRow className="hover:bg-transparent">

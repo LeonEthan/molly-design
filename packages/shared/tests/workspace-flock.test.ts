@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { AGENT_ROLE_VERSION, type AgentRole } from '../src/agent-role';
+import { AGENT_ROLE_VERSION, normalizeAgentRole, type AgentRole } from '../src/agent-role';
+import { encodeMollyModelOption } from '../src/embedded-harness';
 import type { AgentConfigId, AgentRoleId, MachineId, McpServerId, WorkspaceId } from '../src/ids';
 import {
   applyWorkspaceFlockRowEvents,
@@ -71,6 +72,144 @@ class FakeWorkspaceFlock implements WorkspaceFlockWritableFlock {
 }
 
 describe('workspace Flock helpers', () => {
+  const migrated = (source: AgentRole): AgentRole => ({
+    ...source,
+    agentConfigId: 'molly-config' as AgentConfigId,
+    runConfig: {
+      modelId: encodeMollyModelOption('connection-1', 'synthetic-model'),
+      configOptionValues: { reasoning_effort: 'high' },
+    },
+    revision: source.revision + 1,
+    updatedAt: 20,
+    embeddedMigration: { v: 1, migratedAt: 20, source },
+  });
+
+  it('persists a versioned backup and target together, and retries without another migration', () => {
+    const flock = new FakeWorkspaceFlock();
+    const source = agentRole('legacy', {
+      runConfig: { modelId: 'old-model', modeId: 'danger-full-access' },
+    });
+    writeWorkspaceAgentRoleToFlock(flock, source);
+    const target = migrated(source);
+    expect(writeWorkspaceAgentRoleToFlock(flock, target)).toBe(true);
+    // Simulate reopening only the durable rows, not a process-local migration cache.
+    const reopened = new FakeWorkspaceFlock();
+    for (const { key, value } of flock.scan()) reopened.set(key, structuredClone(value));
+    expect(writeWorkspaceAgentRoleToFlock(reopened, target)).toBe(false);
+    expect(listWorkspaceAgentRoles(readWorkspaceFlockRowsFromFlock(reopened))).toEqual([target]);
+    expect(target.embeddedMigration?.source).toEqual(source);
+    expect(target.runConfig.modeId).toBeUndefined();
+  });
+
+  it.each(['edited', 'deleted', 'same-revision-edit'] as const)(
+    'refuses migration over a %s source without recreating or overwriting it',
+    (change) => {
+      const flock = new FakeWorkspaceFlock();
+      const source = agentRole('legacy');
+      writeWorkspaceAgentRoleToFlock(flock, source);
+      if (change === 'deleted') deleteWorkspaceAgentRoleFromFlock(flock, source.id);
+      else
+        writeWorkspaceAgentRoleToFlock(flock, {
+          ...source,
+          name: 'Changed',
+          revision: change === 'edited' ? 2 : 1,
+        });
+      const before = readWorkspaceFlockRowsFromFlock(flock);
+      expect(() => writeWorkspaceAgentRoleToFlock(flock, migrated(source))).toThrow(
+        'agent_role_migration_source_changed'
+      );
+      expect(readWorkspaceFlockRowsFromFlock(flock)).toEqual(before);
+    }
+  );
+
+  it('retains the original backup across ordinary edits and refuses stale migration retries', () => {
+    const flock = new FakeWorkspaceFlock();
+    const source = agentRole('legacy');
+    writeWorkspaceAgentRoleToFlock(flock, source);
+    const target = migrated(source);
+    writeWorkspaceAgentRoleToFlock(flock, target);
+    const edited = { ...target, name: 'Molly role', revision: 3, updatedAt: 30 };
+    writeWorkspaceAgentRoleToFlock(flock, edited);
+    expect(writeWorkspaceAgentRoleToFlock(flock, { ...edited, revision: 1, updatedAt: 1 })).toBe(
+      false
+    );
+    expect(() => writeWorkspaceAgentRoleToFlock(flock, target)).toThrow(
+      'agent_role_migration_source_changed'
+    );
+    expect(() =>
+      writeWorkspaceAgentRoleToFlock(flock, { ...edited, embeddedMigration: undefined })
+    ).toThrow('agent_role_migration_backup_immutable');
+    expect(() =>
+      writeWorkspaceAgentRoleToFlock(flock, {
+        ...edited,
+        embeddedMigration: { v: 1, migratedAt: 20, source: { ...source, name: 'Forged' } },
+      })
+    ).toThrow('agent_role_migration_backup_immutable');
+    expect(listWorkspaceAgentRoles(readWorkspaceFlockRowsFromFlock(flock))).toEqual([edited]);
+  });
+
+  it('normalizes backup secrets and rejects nested, foreign and unsupported migration records', () => {
+    const source = agentRole('legacy', {
+      runConfig: {
+        configOptionValues: { api_key: 'synthetic-do-not-copy', thought_level: 'high' },
+      },
+    });
+    const target = migrated(source);
+    expect(JSON.stringify(normalizeAgentRole(target))).not.toContain('synthetic-do-not-copy');
+    expect(
+      normalizeAgentRole({ ...target, embeddedMigration: { ...target.embeddedMigration, v: 2 } })
+    ).toBeUndefined();
+    expect(
+      normalizeAgentRole({
+        ...target,
+        embeddedMigration: { ...target.embeddedMigration, source: target },
+      })
+    ).toBeUndefined();
+    expect(
+      normalizeAgentRole({
+        ...target,
+        embeddedMigration: {
+          ...target.embeddedMigration,
+          source: { ...source, id: 'another-role' },
+        },
+      })
+    ).toBeUndefined();
+    expect(
+      normalizeAgentRole({
+        ...target,
+        embeddedMigration: {
+          ...target.embeddedMigration,
+          source: { ...source, ownerUserId: 'another-owner' },
+        },
+      })
+    ).toBeUndefined();
+  });
+
+  it.each([
+    {},
+    { modelId: 'old-model' },
+    { modelId: encodeMollyModelOption('connection-1', 'synthetic-model'), modeId: 'full-access' },
+  ])('rejects an implicit or legacy executable configuration: %j', (runConfig) => {
+    const flock = new FakeWorkspaceFlock();
+    const source = agentRole('legacy');
+    writeWorkspaceAgentRoleToFlock(flock, source);
+    expect(() =>
+      writeWorkspaceAgentRoleToFlock(flock, { ...migrated(source), runConfig })
+    ).toThrow();
+    expect(listWorkspaceAgentRoles(readWorkspaceFlockRowsFromFlock(flock))).toEqual([source]);
+  });
+  it('owns monotonic MCP generations even with identical clocks or caller revisions', () => {
+    const flock = new FakeWorkspaceFlock();
+    const server = entry('versioned');
+    flock.set(workspaceFlockKeys.mcpServer(server.id), server);
+    expect(writeWorkspaceMcpServerToFlock(flock, server)).toBe(true);
+    expect(listWorkspaceMcpServers(readWorkspaceFlockRowsFromFlock(flock))[0]?.revision).toBe(1);
+    expect(writeWorkspaceMcpServerToFlock(flock, { ...server, revision: 999 })).toBe(false);
+    expect(
+      writeWorkspaceMcpServerToFlock(flock, { ...server, revision: 999, name: 'Changed' })
+    ).toBe(true);
+    expect(listWorkspaceMcpServers(readWorkspaceFlockRowsFromFlock(flock))[0]?.revision).toBe(2);
+  });
   it('builds the workspace-scoped document id', () => {
     expect(getWorkspaceFlockDocId('workspace-1' as WorkspaceId)).toBe('workspace-1:wf:workspace');
   });
@@ -133,7 +272,7 @@ describe('workspace Flock helpers', () => {
     expect(writeWorkspaceAgentRoleToFlock(flock, role)).toBe(true);
 
     const rows = readWorkspaceFlockRowsFromFlock(flock);
-    expect(listWorkspaceMcpServers(rows)).toEqual([server]);
+    expect(listWorkspaceMcpServers(rows)).toEqual([{ ...server, revision: 1 }]);
     expect(listWorkspaceAgentRoles(rows)).toEqual([role]);
   });
 

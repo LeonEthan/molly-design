@@ -17,6 +17,7 @@ import {
 } from '@/hooks/use-workspace-mcp-catalog';
 import { cn } from '@/lib/utils';
 import { capturePostHogEvent } from '@/lib/posthog-analytics';
+import { getIpcServices } from '@/lib/electron-ipc-client';
 import { MCP_TRANSPORT_LABELS, McpTransportIcon } from '@/components/shared/mcp-transport';
 import {
   AlertDialog,
@@ -35,6 +36,7 @@ import { Switch } from '@/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { settingContainerClass } from '.';
 import { McpConnectionForm, type McpConnectionFormValue } from './mcp-connection-form';
+import { protectMcpEntry } from './mcp-credential-save';
 
 type EditorState = { mode: 'add' } | { mode: 'edit'; entry: WorkspaceMcpServerMeta };
 
@@ -57,6 +59,7 @@ export function McpSetting() {
   };
 
   const save = async (value: McpConnectionFormValue) => {
+    if (submitting || !editor) return;
     const duplicate = servers.find(
       (server) =>
         server.name.localeCompare(value.name, undefined, { sensitivity: 'accent' }) === 0 &&
@@ -77,15 +80,24 @@ export function McpSetting() {
       transport: value.transport,
       ...(value.description ? { description: value.description } : {}),
       ...(value.connection ? { connection: value.connection } : {}),
+      ...(value.imageBinding ? { imageBinding: value.imageBinding } : {}),
       enabledByDefault: value.enabledByDefault,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
       ...(existing?.createdBy || user?.id ? { createdBy: existing?.createdBy ?? user?.id } : {}),
     };
     try {
+      const protectedEntry = await protectMcpEntry(
+        entry,
+        existing,
+        getIpcServices()?.modelConnections ?? null
+      );
+      // If Flock durability fails, retain the already-saved reference for an explicit retry.
+      // Rolling back the vault could overwrite a concurrent rotation.
+      setEditor({ mode: 'edit', entry: protectedEntry });
       // Resolves on durability: the row exists, so the editor is done. The
       // upload runs on its own and is deliberately not reported.
-      await upsert(entry);
+      await upsert(protectedEntry);
       if (editor?.mode === 'add') {
         capturePostHogEvent(postHog, 'workspace/mcp_created', {
           source: 'settings',
@@ -95,8 +107,8 @@ export function McpSetting() {
         });
       }
       setEditor(null);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch {
+      setError(t('settings.mcp.protectedSaveFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -115,8 +127,17 @@ export function McpSetting() {
     setRemoving(true);
     try {
       await remove(pendingRemoval.id);
-    } catch (cause) {
-      console.error('Failed to remove MCP server', cause);
+      const credentials = pendingRemoval.connection?.protectedCredentials;
+      if (credentials) {
+        const ipc = getIpcServices();
+        if (!ipc) throw new Error('mcp_credential_storage_unavailable');
+        await ipc.modelConnections.deleteMcp({
+          serverId: pendingRemoval.id,
+          expectedRevision: credentials.revision,
+        });
+      }
+    } catch {
+      setError(t('settings.mcp.protectedRemoveFailed'));
     } finally {
       setRemoving(false);
       setPendingRemoval(null);
@@ -128,6 +149,14 @@ export function McpSetting() {
   return (
     <div className={settingContainerClass}>
       <p className="text-xs leading-snug text-muted-foreground">{t('settings.mcp.description')}</p>
+      <p className="text-xs leading-snug text-muted-foreground">
+        {t('settings.mcp.protectedRuntimeNotice')}
+      </p>
+      {error && !editor ? (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : null}
 
       <section className="flex flex-col">
         <div className="flex items-center justify-between gap-2 pb-1 pt-0.5">
@@ -190,7 +219,7 @@ export function McpSetting() {
       <Dialog
         open={editor !== null}
         onOpenChange={(open) => {
-          if (open) return;
+          if (open || submitting) return;
           setError(undefined);
           setEditor(null);
         }}
@@ -216,7 +245,11 @@ export function McpSetting() {
           </header>
           {editor ? (
             <McpConnectionForm
-              key={editor.mode === 'edit' ? editor.entry.id : 'new'}
+              key={
+                editor.mode === 'edit'
+                  ? `${editor.entry.id}:${editor.entry.connection?.protectedCredentials?.revision ?? 'none'}`
+                  : 'new'
+              }
               className="min-h-0 flex-1"
               initialEntry={editor.mode === 'edit' ? editor.entry : undefined}
               submitting={submitting}

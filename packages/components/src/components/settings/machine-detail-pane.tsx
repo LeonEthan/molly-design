@@ -11,7 +11,6 @@ import {
 } from '@molly/shared';
 import {
   Activity,
-  Bot,
   ChevronUp,
   Download,
   Laptop,
@@ -19,7 +18,6 @@ import {
   LogOut,
   MoreHorizontal,
   Pencil,
-  Plus,
   RotateCcw,
   UserRound,
 } from 'lucide-react';
@@ -48,8 +46,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { useMachineActionState } from '@/hooks/use-machine-action-state';
-import { ProviderRow } from './provider-row';
-import { ProviderSetupRow } from './provider-setup-row';
+import { AgentEngineCatalog } from './agent-engine-catalog';
 import { DeviceResourceMonitor } from './device-resource-monitor';
 import type { MachineMonitorViewState } from '@/hooks/use-machine-monitor';
 import {
@@ -59,91 +56,13 @@ import {
 } from './workspace-machine-accordion';
 
 export type MachineProvidersSectionProps = {
-  machine: MachineViewMeta;
   configs: AgentConfigMeta[];
   setups?: ProviderSetupTask[];
-  onAddConfig: () => void;
-  onEditConfig: (config: AgentConfigMeta) => void;
-  onDeleteConfig?: (config: AgentConfigMeta) => Promise<void>;
-  onRefreshConfig?: (config: AgentConfigMeta) => Promise<void>;
-  onRetrySetup?: (setup: ProviderSetupTask) => Promise<void>;
-  onDeleteSetup?: (setup: ProviderSetupTask) => Promise<void>;
-  /** Desktop pills content is flush with the title — no extra horizontal inset. */
-  flush?: boolean;
 };
 
-/** "Agent Provider" list + add button — shared by the mobile detail pane and the
- *  desktop Agents tab. */
-export function MachineProvidersSection({
-  machine,
-  configs,
-  setups = [],
-  onAddConfig,
-  onEditConfig,
-  onDeleteConfig,
-  onRefreshConfig,
-  onRetrySetup,
-  onDeleteSetup,
-  flush = false,
-}: MachineProvidersSectionProps) {
-  const { t } = useTranslation();
-  const addButton = (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-          onClick={onAddConfig}
-          aria-label={t('settings.agent.provider.addProvider', 'Add provider')}
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{t('settings.agent.provider.addProvider', 'Add provider')}</TooltipContent>
-    </Tooltip>
-  );
-
-  return (
-    <section className="flex flex-col">
-      <div
-        className={cn(
-          'flex items-center justify-between gap-2 pb-1 pt-0.5',
-          flush ? 'px-0' : 'px-4'
-        )}
-      >
-        <h3 className="text-xs font-semibold text-muted-foreground">
-          {t('settings.agent.provider.title', 'Agent Provider')}
-        </h3>
-        {addButton}
-      </div>
-      {configs.length === 0 && setups.length === 0 ? (
-        <EmptyProviders onAdd={onAddConfig} flush={flush} />
-      ) : (
-        <div className={cn('space-y-2', flush ? '' : 'mx-4')}>
-          {setups.map((setup) => (
-            <ProviderSetupRow
-              key={setup.id}
-              setup={setup}
-              machine={machine}
-              onRetry={onRetrySetup ?? (async () => undefined)}
-              onDelete={onDeleteSetup ?? (async () => undefined)}
-            />
-          ))}
-          {configs.map((config) => (
-            <ProviderRow
-              key={config.id}
-              config={config}
-              machine={machine}
-              onEdit={onEditConfig}
-              onDelete={onDeleteConfig}
-              onRefresh={onRefreshConfig}
-            />
-          ))}
-        </div>
-      )}
-    </section>
-  );
+/** Historical provider controls are retired in both Agents and machine detail. */
+export function MachineProvidersSection({ configs, setups = [] }: MachineProvidersSectionProps) {
+  return <AgentEngineCatalog configs={configs} setups={setups} />;
 }
 
 export type MachineDetailPaneProps = {
@@ -158,12 +77,6 @@ export type MachineDetailPaneProps = {
   canDelete: boolean;
   onRename: (machineId: MachineId, newName: string) => Promise<void>;
   onDelete: (machine: MachineViewMeta) => Promise<void>;
-  onAddConfig: () => void;
-  onEditConfig: (config: AgentConfigMeta) => void;
-  onDeleteConfig?: (config: AgentConfigMeta) => Promise<void>;
-  onRefreshConfig?: (config: AgentConfigMeta) => Promise<void>;
-  onRetrySetup?: (setup: ProviderSetupTask) => Promise<void>;
-  onDeleteSetup?: (setup: ProviderSetupTask) => Promise<void>;
   onPing?: (machineId: MachineId) => Promise<number>;
   daemonUpdate?: { currentVersion: string; latestVersion: string };
   onRestartDaemon?: (machineId: MachineId) => Promise<void>;
@@ -197,12 +110,6 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
     canDelete,
     onRename,
     onDelete,
-    onAddConfig,
-    onEditConfig,
-    onDeleteConfig,
-    onRefreshConfig,
-    onRetrySetup,
-    onDeleteSetup,
     onPing,
     daemonUpdate,
     onRestartDaemon,
@@ -403,9 +310,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                 )}
               </div>
               {onPing && !renaming && !isMobile && (
-                <div
-                  className="ml-auto flex shrink-0 items-center gap-1.5"
-                >
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -709,17 +614,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
             />
           </>
         ) : (
-          <MachineProvidersSection
-            machine={machine}
-            configs={configs}
-            setups={setups}
-            onAddConfig={onAddConfig}
-            onEditConfig={onEditConfig}
-            onDeleteConfig={onDeleteConfig}
-            onRefreshConfig={onRefreshConfig}
-            onRetrySetup={onRetrySetup}
-            onDeleteSetup={onDeleteSetup}
-          />
+          <MachineProvidersSection configs={configs} setups={setups} />
         )}
       </div>
 
@@ -755,28 +650,6 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-    </div>
-  );
-}
-
-function EmptyProviders({ onAdd, flush = false }: { onAdd: () => void; flush?: boolean }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center rounded-lg border border-dashed border-border/60 bg-card/30 px-6 py-8 text-center text-sm',
-        flush ? '' : 'mx-4'
-      )}
-    >
-      <Bot className="h-6 w-6 text-muted-foreground/70" />
-      <p className="mt-2 text-muted-foreground">
-        {t('settings.agent.provider.empty', 'No providers on this machine yet.')}
-      </p>
-      <Button size="sm" className="mt-3" onClick={onAdd}>
-        <Plus className="mr-1.5 h-3.5 w-3.5" />
-        {t('settings.agent.provider.addProvider', 'Add provider')}
-      </Button>
     </div>
   );
 }

@@ -1,0 +1,58 @@
+# Embedded Pi SDK boundary
+
+Read [README](README.md) before changing session construction or packaged resources.
+
+- Import the pinned public SDK. This package owns model context, resource loading
+  and native outcome mapping; the CLI owns dispatch, permissions and design commits.
+- Construct every SDK dependency explicitly. Load only host-approved resources;
+  private settings, credentials, model cache and sessions never use Pi defaults.
+- Validate extension tool identities and collisions before SDK construction. Reserve
+  native and host tool names plus Molly/MCP namespaces; preserve approved hook order.
+- Native commands require explicit host-state mappings; reject unmapped registrations.
+  Keep implicit SDK command/template dispatch disabled for model prompts. Command
+  completion must not be presented as native inference completion.
+- Curated source changes require reviewed provenance/hash updates and packaged license
+  resources. Negotiate question UI explicitly; bind requests to run/epoch and await
+  host dismissal before returning answers. UI failures end inference; timeout/cancel/
+  late replies confer no answer or approval. Unsupported terminal UI fails.
+- Bind SDK hook failures even without question UI. Latch failure per native context,
+  fence subsequent model transport and reject context reuse. Only the owning context
+  may fail an active run; retain static error codes, never extension diagnostics.
+- Credentials remain in memory. Tool children receive a separate sanitized
+  environment; only the selected connection may receive its model credential.
+- Advanced model metadata belongs to the connection revision. Register only declared
+  Chat Completions models; reject unsupported tools/thinking without fallback. SDK
+  zero-price placeholders are not invoices; absent streaming usage stays unmeasured.
+- Protected MCP discovery starts only with a run/epoch-bound private grant. Bind
+  workspace, server, destination and revision before injecting headers or child env;
+  freeze the resulting toolset before inference. Close and drop protected clients
+  at settlement; another turn needs a new grant over the same native history.
+- A native execution boundary, complete assistant result and settled tools must
+  agree before success. Cancellation, missing evidence and transport resolution
+  cannot manufacture completion or authorize replay.
+- Persist the SDK-owned empty session header before acknowledging a new ACP ID;
+  reopen through public APIs. Existing missing/corrupt native history stays untouched.
+- Journal every provider HTTP attempt before transport, compaction included.
+  Restore cumulative Core accounting by request identity; unknown cost stays unknown.
+- Unknown MCP delivery and dispatched image failures end the run. A new tool-call
+  ID cannot bypass its durable retry fence; only explicit user continuation may
+  start another operation. Asset receipts confer recovery identity, not commit authority.
+- Resolve MCP resource links only through the producing connection, with separate
+  approval and dispatch receipts. Verify returned URI identity; never dereference
+  them through host fetch or filesystem APIs. Image-result reads remain inside the
+  live parent's dispatch fence; the scoped callback fixes run/server/tool identity,
+  drains child reads before parent settlement and expires afterwards. Resource content
+  becomes an asset only through owning-host import.
+- Image mappings use the selected catalog revision and explicit image model. Approve
+  the mapped native arguments; validate before dispatch. External private receipts
+  confer no asset authority. Unsupported paid results stay inside the retry fence.
+- Keep managed built-in and external image imports within that dispatch fence;
+  only the owning host's verified response supplies asset digests. Built-in MCP
+  returns bytes privately for host publication, bound to the frozen image connection.
+  Import never commits artwork.
+- Offer local image recovery only with the host's design capability; bind its exact
+  approved query and active run. Readback never dispatches MCP or settles paid state.
+- Tests use synthetic messages and injected transports. Keep filesystem pollution
+  fixtures inside owned temporary directories and preserve failed native history.
+
+`CLAUDE.md` is a symlink to this file.

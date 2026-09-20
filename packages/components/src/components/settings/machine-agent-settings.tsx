@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ModelConnectionSetting } from './model-connection-setting';
+import { AgentEngineCatalog } from './agent-engine-catalog';
+import { BundledCapabilitiesSetting } from './bundled-capabilities-setting';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from '@tanstack/react-router';
 import {
   type AcpSessionMonitorSnapshot,
-  type AgentConfigId,
   type AgentConfigMeta,
   type MachineId,
   type MachineViewMeta,
@@ -13,32 +15,18 @@ import {
   type WorkspaceId,
 } from '@molly/shared';
 import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
 import { activeWorkspaceRuntimeAtom, authTokenAtom, type WorkspaceRuntime } from '@/atoms/runtime';
 import { developerModeEnabledAtom } from '@/atoms/settings';
 import { settingsDialogOpenAtom } from '@/atoms/settings';
 import { sessionMetaCacheAtom } from '@/atoms/doc-meta';
 import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom } from '@/atoms/workspace-context';
 import { localMachineIdAtom } from '@/atoms/local-probe';
-import {
-  cmdCreateAgentConfigAtom,
-  cmdCreateProviderSetupAtom,
-  cmdRetryProviderSetupAtom,
-  cmdUpdateAgentConfigAtom,
-  deleteAgentConfigAtom,
-  deleteProviderSetupAtom,
-  getAllAgentConfigAtom,
-  getAllProviderSetupsAtom,
-} from '@/atoms/agents';
+import { getAllAgentConfigAtom, getAllProviderSetupsAtom } from '@/atoms/agents';
 import { machineSettingsFilterAtom } from '@/atoms/settings-machine-tab';
 import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
 import { useVisibleLocalProjectsFromMachineIndex } from '@/hooks/use-visible-local-projects';
 import { useMachineActions } from '@/hooks/use-machine-actions';
-import { useAgentConfigMigration } from '@/hooks/use-agent-config-migration';
 import { useMachineFlockAgentConfigsForMachineIds } from '@/hooks/use-machine-flock-agent-configs';
-import { resyncMachineFlockRows } from '@/hooks/use-machine-flock-rows';
-import { useMachineAcpBinaryActions } from '@/hooks/use-machine-acp-binary-actions';
-import { useProviderSetupRuntimeProgress } from '@/hooks/use-provider-setup-runtime-progress';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { canDeleteOfflineMachine, canManageAllMachines } from '@/lib/machine-deletion';
 import {
@@ -61,21 +49,15 @@ import {
   type MachineTabItem,
   type MachineTabOwner,
 } from './machine-tab-list';
-import { MachineDetailPane, MachineProvidersSection } from './machine-detail-pane';
+import { MachineDetailPane } from './machine-detail-pane';
 import {
   buildWorkspaceMachineSelectionPool,
   resolveDesktopMachineSelection,
 } from './machine-selection';
-import { MachinePills } from './machine-pills';
 import {
   MachineConnectedResources,
   type MachineConnectedProject,
 } from './my-machine-connected-resources';
-import {
-  AgentConfigDialog,
-  type AgentConfigDialogMode,
-  type AgentConfigSubmitPayload,
-} from './agent-config-dialog';
 import {
   WorkspaceMachineCollapsedRow,
   WorkspaceMachineExpandedSection,
@@ -156,11 +138,33 @@ async function pingMachineWithRuntime(args: {
   return Math.max(0, Math.round(performance.now() - startedAt));
 }
 
-export function MachineAgentSettings({
+export function MachineAgentSettings(props: MachineAgentSettingsProps) {
+  if ((props.mode ?? 'agents') === 'machines') return <MachineSettingsView {...props} />;
+  return <EmbeddedAgentSettings />;
+}
+
+function EmbeddedAgentSettings() {
+  const machineId = useAtomValue(localMachineIdAtom);
+  const machineIds = useMemo(() => (machineId ? [machineId] : []), [machineId]);
+  useMachineFlockAgentConfigsForMachineIds(machineIds, { syncRemote: false });
+  const configs = useAtomValue(getAllAgentConfigAtom);
+  const setups = useAtomValue(getAllProviderSetupsAtom);
+  return (
+    <div className="space-y-4">
+      <ModelConnectionSetting />
+      <BundledCapabilitiesSetting />
+      <AgentEngineCatalog
+        configs={configs.filter((config) => config.machineId === machineId)}
+        setups={setups.filter((setup) => setup.machineId === machineId)}
+      />
+    </div>
+  );
+}
+
+function MachineSettingsView({
   selectedMachineId,
   onSelectedMachineChange,
-  mode = 'agents',
-}: MachineAgentSettingsProps) {
+}: Omit<MachineAgentSettingsProps, 'mode'>) {
   const { t } = useTranslation();
   const { openSettings } = useOpenSettings();
   const navigate = useNavigate();
@@ -185,7 +189,7 @@ export function MachineAgentSettings({
   const { projects: visibleLocalProjects, isLoading: visibleLocalProjectsLoading } =
     useVisibleLocalProjectsFromMachineIndex(
       { machines, accessByMachineId, isLoading },
-      { enabled: mode === 'machines' }
+      { enabled: true }
     );
   const visibleMachineIdsForAgentConfigs = useMemo(() => [...machines.keys()], [machines]);
   useMachineFlockAgentConfigsForMachineIds(visibleMachineIdsForAgentConfigs);
@@ -194,13 +198,6 @@ export function MachineAgentSettings({
 
   const allConfigs = useAtomValue(getAllAgentConfigAtom);
   const allSetups = useAtomValue(getAllProviderSetupsAtom);
-  useProviderSetupRuntimeProgress(runtime, workspaceId, allSetups);
-  const createConfig = useSetAtom(cmdCreateAgentConfigAtom);
-  const createSetup = useSetAtom(cmdCreateProviderSetupAtom);
-  const retrySetup = useSetAtom(cmdRetryProviderSetupAtom);
-  const updateConfig = useSetAtom(cmdUpdateAgentConfigAtom);
-  const deleteConfig = useSetAtom(deleteAgentConfigAtom);
-  const deleteSetup = useSetAtom(deleteProviderSetupAtom);
 
   const [filter, setFilter] = [
     useAtomValue(machineSettingsFilterAtom),
@@ -211,7 +208,7 @@ export function MachineAgentSettings({
     selectedMachineId
   );
   const selectionFramesRef = useRef<{ first: number; second: number | null } | null>(null);
-  const usesDesktopMachineAccordion = !isMobile && mode === 'machines' && remoteMachinesAvailable;
+  const usesDesktopMachineAccordion = !isMobile && remoteMachinesAvailable;
   const visibleSelectedMachineId = usesDesktopMachineAccordion
     ? desktopExpandedMachineId
     : selectedMachineId;
@@ -264,8 +261,6 @@ export function MachineAgentSettings({
     },
     [onSelectedMachineChange]
   );
-
-  const migration = useAgentConfigMigration();
 
   const canManageOthers = useMemo(
     () => canManageAllMachines(currentUserId, members),
@@ -344,23 +339,18 @@ export function MachineAgentSettings({
       filter: { onlineOnly: false, mineOnly: false },
     }).items;
   }, [machines, accessByMachineId, onlineMachineIds, isOwnMachine]);
-  const machinePills = allItems.map((item) => ({
-    id: item.machine.id,
-    label: item.machine.name || item.machine.id,
-    online: item.isOnline,
-  }));
   const localMachineItems = useMemo(
     () => (localMachineId ? allItems.filter((item) => item.machine.id === localMachineId) : []),
     [allItems, localMachineId]
   );
-  const filteredModeItems = useMemo(() => {
-    if (mode === 'machines') return tabItems.filter((item) => item.sharedWithTeam);
-    return tabItems;
-  }, [mode, tabItems]);
-  const modeTotalBeforeFilter = useMemo(() => {
-    if (mode === 'machines') return allItems.filter((item) => item.sharedWithTeam).length;
-    return allItems.length;
-  }, [allItems, mode]);
+  const filteredSharedItems = useMemo(
+    () => tabItems.filter((item) => item.sharedWithTeam),
+    [tabItems]
+  );
+  const totalSharedBeforeFilter = useMemo(
+    () => allItems.filter((item) => item.sharedWithTeam).length,
+    [allItems]
+  );
   const ownPrivateItems = useMemo(
     () => allItems.filter((item) => item.isOwn && !item.sharedWithTeam),
     [allItems]
@@ -405,23 +395,17 @@ export function MachineAgentSettings({
 
   // Remote-capable Machines stays inside the filtered visible pool. A local-only
   // platform has no machine selection surface, so it binds directly to the
-  // local machine and cannot be blanked by a stale list filter. Agents still
-  // renders every machine; remote-capable mobile keeps its list→detail flow.
+  // local machine and cannot be blanked by a stale list filter.
   const workspaceMachineSelectionPool = useMemo(
     () =>
       buildWorkspaceMachineSelectionPool({
-        filteredItems: filteredModeItems,
+        filteredItems: filteredSharedItems,
         allItems,
         selectedMachineId: visibleSelectedMachineId,
       }),
-    [allItems, filteredModeItems, visibleSelectedMachineId]
+    [allItems, filteredSharedItems, visibleSelectedMachineId]
   );
-  const selectionPool =
-    mode === 'agents'
-      ? allItems
-      : remoteMachinesAvailable
-        ? workspaceMachineSelectionPool
-        : localMachineItems;
+  const selectionPool = remoteMachinesAvailable ? workspaceMachineSelectionPool : localMachineItems;
   const { resolved: resolvedDesktopMachine, nextSelectedMachineId } = useMemo(
     () =>
       resolveDesktopMachineSelection({
@@ -435,7 +419,7 @@ export function MachineAgentSettings({
   useEffect(() => {
     if (isMobile) return;
     if (machines.size === 0) return;
-    if (mode === 'machines' && remoteMachinesAvailable && visibleSelectedMachineId === null) return;
+    if (remoteMachinesAvailable && visibleSelectedMachineId === null) return;
     if (nextSelectedMachineId !== visibleSelectedMachineId) {
       if (usesDesktopMachineAccordion) {
         selectDesktopMachine(nextSelectedMachineId);
@@ -446,7 +430,6 @@ export function MachineAgentSettings({
   }, [
     isMobile,
     machines,
-    mode,
     nextSelectedMachineId,
     onSelectedMachineChange,
     remoteMachinesAvailable,
@@ -455,41 +438,15 @@ export function MachineAgentSettings({
     visibleSelectedMachineId,
   ]);
 
-  useEffect(() => {
-    if (!isMobile || mode !== 'agents') return;
-    const selectableItems = remoteMachinesAvailable ? allItems : localMachineItems;
-    if (selectableItems.length === 0) return;
-    if (
-      selectedMachineId &&
-      selectableItems.some((item) => item.machine.id === selectedMachineId)
-    ) {
-      return;
-    }
-    onSelectedMachineChange(selectableItems[0]!.machine.id);
-  }, [
-    allItems,
-    isMobile,
-    localMachineItems,
-    mode,
-    onSelectedMachineChange,
-    remoteMachinesAvailable,
-    selectedMachineId,
-  ]);
-
   const resolvedSelectedMachine: MachineViewMeta | undefined = isMobile
-    ? mode === 'agents'
-      ? remoteMachinesAvailable
-        ? ((selectedMachineId ? machines.get(selectedMachineId) : undefined) ??
-          allItems[0]?.machine)
-        : localMachineItems[0]?.machine
-      : !remoteMachinesAvailable
-        ? localMachineId
-          ? machines.get(localMachineId)
-          : undefined
-        : selectedMachineId
-          ? machines.get(selectedMachineId)
-          : undefined
-    : mode === 'machines' && remoteMachinesAvailable && visibleSelectedMachineId === null
+    ? !remoteMachinesAvailable
+      ? localMachineId
+        ? machines.get(localMachineId)
+        : undefined
+      : selectedMachineId
+        ? machines.get(selectedMachineId)
+        : undefined
+    : remoteMachinesAvailable && visibleSelectedMachineId === null
       ? undefined
       : resolvedDesktopMachine;
   const configsForMachine = useMemo(() => {
@@ -510,12 +467,6 @@ export function MachineAgentSettings({
     localMachineId,
     canManageAllMachines: canManageOthers,
   });
-  const [dialogMode, setDialogMode] = useState<AgentConfigDialogMode | null>(null);
-  // The provider dialog targets whichever machine's accordion row opened it,
-  // decoupled from any single "selected machine" now that desktop lists them all.
-  const [dialogMachineId, setDialogMachineId] = useState<MachineId | null>(null);
-  const dialogMachine = dialogMachineId ? machines.get(dialogMachineId) : undefined;
-  const dialogOpen = dialogMode !== null;
   const [latestCliVersion, setLatestCliVersion] = useState<string | null>(null);
 
   const isLocal = !!resolvedSelectedMachine && resolvedSelectedMachine.id === localMachineId;
@@ -572,7 +523,7 @@ export function MachineAgentSettings({
       : undefined;
   const machineMonitor = useMachineMonitor({
     machineId: resolvedSelectedMachine?.id ?? null,
-    enabled: mode !== 'agents',
+    enabled: true,
     online: selectedIsOnline,
   });
   const monitorSessionMetas = useMemo(() => Object.values(sessionMetaCache), [sessionMetaCache]);
@@ -639,45 +590,6 @@ export function MachineAgentSettings({
       cancelled = true;
     };
   }, [remoteMachinesAvailable]);
-
-  const refreshCapabilities = useCallback(
-    async (args: { machineId: MachineId; configId: AgentConfigId }) => {
-      if (!runtime || !workspaceId) {
-        throw new Error(t('chat.validation.missingContext', 'Missing workspace context'));
-      }
-      const response = await runtime.requestMachineAcpCapabilitiesRefresh({
-        type: 'machine/acp-capabilities-refresh',
-        machineId: args.machineId,
-        workspaceId,
-        configId: args.configId,
-      });
-      if (!response) {
-        throw new Error(
-          t('agents.acpCapabilities.refreshTimeout', 'Refresh timed out, please try again')
-        );
-      }
-      if (!response.success) {
-        if (response.authRequired) {
-          return response;
-        }
-        const errorMessage =
-          typeof response.error === 'string' && response.error.length > 0
-            ? response.error
-            : t('agents.acpCapabilities.refreshError', 'Refresh failed');
-        throw new Error(errorMessage);
-      }
-      // The CLI wrote the fresh capabilities to the machine flock doc, which the
-      // web only syncs once per session; force a re-sync so chat landing and the
-      // settings dialog reflect the new modes/models without a reload.
-      await resyncMachineFlockRows(runtime, args.machineId, {
-        refreshedCapability: response.capability
-          ? { configId: response.configId, value: response.capability }
-          : undefined,
-      });
-      return response;
-    },
-    [runtime, t, workspaceId]
-  );
 
   const pingMachine = useCallback(
     (machineId: MachineId): Promise<number> => {
@@ -790,144 +702,7 @@ export function MachineAgentSettings({
     [requestMachineLifecycle]
   );
 
-  const handleRefreshConfig = useCallback(
-    async (config: AgentConfigMeta) => {
-      await refreshCapabilities({
-        machineId: config.machineId,
-        configId: config.id,
-      });
-    },
-    [refreshCapabilities]
-  );
-
-  const { checkBinaryStatus, installBinary } = useMachineAcpBinaryActions(runtime, workspaceId);
-
-  const openCreateDialog = useCallback((machine: MachineViewMeta) => {
-    setDialogMachineId(machine.id);
-    setDialogMode({ kind: 'create' });
-  }, []);
-
-  const openEditDialog = useCallback((machine: MachineViewMeta, config: AgentConfigMeta) => {
-    setDialogMachineId(machine.id);
-    setDialogMode({ kind: 'edit', config });
-  }, []);
-
-  const handleDialogSubmit = useCallback(
-    async (payload: AgentConfigSubmitPayload) => {
-      if (!dialogMachineId || !dialogMode) return;
-      try {
-        if (dialogMode.kind === 'create') {
-          const config: AgentConfigMeta = {
-            id: payload.id,
-            name: payload.name,
-            description: payload.description,
-            cliType: payload.cliType,
-            agentType: payload.agentType,
-            customAcp: payload.customAcp,
-            runtimeOverrides: payload.runtimeOverrides,
-            env: payload.env,
-            prompt: payload.prompt,
-            titleGeneration: payload.titleGeneration,
-            brandId: payload.brandId,
-            machineId: dialogMachineId,
-          };
-          if (payload.backgroundSetup) {
-            await createSetup(config);
-          } else {
-            await createConfig(config);
-          }
-        } else {
-          await updateConfig({
-            id: dialogMode.config.id as AgentConfigId,
-            machineId: dialogMode.config.machineId,
-            name: payload.name,
-            description: payload.description,
-            cliType: payload.cliType,
-            agentType: payload.agentType,
-            customAcp: payload.customAcp,
-            runtimeOverrides: payload.runtimeOverrides,
-            env: payload.env,
-            prompt: payload.prompt,
-            titleGeneration: payload.titleGeneration,
-            brandId: payload.brandId,
-          });
-        }
-      } catch (error) {
-        console.error('Failed to save agent config:', error);
-        toast.error(
-          dialogMode.kind === 'create'
-            ? t('agents.createConfigError', 'Failed to create configuration')
-            : t('agents.updateConfigError', 'Failed to update configuration')
-        );
-        throw error;
-      }
-    },
-    [dialogMachineId, dialogMode, createConfig, createSetup, updateConfig, t]
-  );
-
-  const handleRetrySetup = useCallback(
-    async (setup: ProviderSetupTask) => {
-      try {
-        await retrySetup(setup.id);
-      } catch (error) {
-        toast.error(t('settings.agent.setup.retryFailed', 'Could not retry provider setup'));
-        throw error;
-      }
-    },
-    [retrySetup, t]
-  );
-
-  const handleDeleteSetup = useCallback(
-    async (setup: ProviderSetupTask) => {
-      try {
-        await deleteSetup(setup.id);
-      } catch (error) {
-        toast.error(t('settings.agent.setup.deleteFailed', 'Could not cancel provider setup'));
-        throw error;
-      }
-    },
-    [deleteSetup, t]
-  );
-
-  const handleDeleteConfig = useCallback(
-    async (config: AgentConfigMeta) => {
-      try {
-        await deleteConfig(config.id);
-      } catch (error) {
-        console.error('Failed to delete agent config:', error);
-        toast.error(t('agents.deleteConfigError', 'Failed to delete configuration'));
-        throw error;
-      }
-    },
-    [deleteConfig, t]
-  );
-
-  const showBanner = mode === 'agents' && migration.status === 'running';
   const hasMachines = machines.size > 0;
-
-  const banner = showBanner ? (
-    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      {t('settings.agent.migration.banner', 'Upgrading agent configs to be per-machine…')}
-    </div>
-  ) : null;
-
-  const dialog =
-    dialogMode && dialogMachine ? (
-      <AgentConfigDialog
-        open={dialogOpen}
-        onOpenChange={(open) => {
-          if (!open) setDialogMode(null);
-        }}
-        nestedInDialog={!isMobile}
-        mode={dialogMode}
-        machine={dialogMachine}
-        onSubmit={handleDialogSubmit}
-        onRefreshCapabilities={refreshCapabilities}
-        onCheckBinaryStatus={checkBinaryStatus}
-        onInstallBinary={installBinary}
-      />
-    ) : null;
 
   if (isLoading && !hasMachines) {
     return (
@@ -946,29 +721,17 @@ export function MachineAgentSettings({
     );
   }
 
-  // Desktop Agents keeps the compact pill selector. Desktop Machines uses one
-  // full-width accordion list so the summary and detail share the same reading
-  // order and only the expanded machine mounts monitoring UI.
-  const title =
-    mode === 'machines'
-      ? t('settings.tabs.machines', 'Machines')
-      : t('settings.tabs.agents', 'Agents');
-  const subtitle =
-    mode === 'machines'
-      ? t(
-          'settings.categories.machines.description',
-          'View workspace machines and manage the machines you own.'
-        )
-      : t(
-          'settings.categories.agents.description',
-          'AI agent configurations available in this workspace.'
-        );
+  const title = t('settings.tabs.machines', 'Machines');
+  const subtitle = t(
+    'settings.categories.machines.description',
+    'View workspace machines and manage the machines you own.'
+  );
 
   const header = (
     <div className="min-w-0">
       <div className="flex items-center gap-1.5">
         <h2 className="text-base font-semibold text-foreground">{title}</h2>
-        {mode === 'machines' && remoteMachinesAvailable ? (
+        {remoteMachinesAvailable ? (
           <MachineListFilterButton filter={effectiveFilter} onFilterChange={setFilter} />
         ) : null}
       </div>
@@ -1010,12 +773,6 @@ export function MachineAgentSettings({
           canDelete={isOwn && selectedCanDelete}
           onRename={actions.renameMachine}
           onDelete={actions.deleteMachine}
-          onAddConfig={() => openCreateDialog(item.machine)}
-          onEditConfig={(config) => openEditDialog(item.machine, config)}
-          onDeleteConfig={handleDeleteConfig}
-          onRefreshConfig={handleRefreshConfig}
-          onRetrySetup={handleRetrySetup}
-          onDeleteSetup={handleDeleteSetup}
           onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
           daemonUpdate={isOwn ? selectedDaemonUpdate : undefined}
           onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
@@ -1049,149 +806,100 @@ export function MachineAgentSettings({
     );
   };
 
-  if (mode !== 'agents') {
-    if (!remoteMachinesAvailable) {
-      return (
-        <div className="flex w-full min-w-0 flex-col gap-4">
-          {banner}
-          {header}
-          {resolvedSelectedMachine ? (
-            <MachineDetailPane
-              key={resolvedSelectedMachine.id}
-              mode="devices"
-              machine={resolvedSelectedMachine}
-              configs={configsForMachine}
-              setups={setupsForMachine}
-              isOwn={isOwn}
-              isLocal={isLocal}
-              ownerName={ownerName}
-              canDelete={isOwn && selectedCanDelete}
-              onRename={actions.renameMachine}
-              onDelete={actions.deleteMachine}
-              onAddConfig={() => openCreateDialog(resolvedSelectedMachine)}
-              onEditConfig={(config) => openEditDialog(resolvedSelectedMachine, config)}
-              onDeleteConfig={handleDeleteConfig}
-              onRefreshConfig={handleRefreshConfig}
-              onRetrySetup={handleRetrySetup}
-              onDeleteSetup={handleDeleteSetup}
-              onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
-              daemonUpdate={isOwn ? selectedDaemonUpdate : undefined}
-              onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
-              onUpgradeDaemon={isOwn && selectedDaemonUpdate ? upgradeMachine : undefined}
-              monitorSnapshot={machineMonitor.snapshot}
-              monitorState={machineMonitor.state}
-              monitorSessionMetas={monitorSessionMetas}
-              onOpenMonitorSession={openMonitorSession}
-              onTerminateMonitorSession={(monitoredSession) =>
-                terminateMonitorSession(resolvedSelectedMachine, monitoredSession)
-              }
-              footer={
-                <MachineConnectedResources
-                  machineId={resolvedSelectedMachine.id}
-                  configs={configsForMachine}
-                  preloadedProjects={
-                    connectedProjectsByMachineId.get(resolvedSelectedMachine.id) ?? []
-                  }
-                  projectsLoading={visibleLocalProjectsLoading}
-                  onManageAgents={() => openAgentsForMachine(resolvedSelectedMachine.id)}
-                />
-              }
-            />
-          ) : null}
-          {dialog}
-        </div>
-      );
-    }
-
+  if (!remoteMachinesAvailable) {
     return (
       <div className="flex w-full min-w-0 flex-col gap-4">
-        {banner}
         {header}
-
-        <div className="space-y-3">
-          {sharedAccordionItems.length > 0 ? (
-            sharedAccordionItems.map(renderDesktopMachineSection)
-          ) : (
-            <div className="rounded-xl border border-border/50 bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
-              {modeTotalBeforeFilter === 0
-                ? t('workspace.machines.empty', 'No machines connected')
-                : t(
-                    'settings.agent.machineTabs.filter.noMatch',
-                    'No machines match these filters.'
-                  )}
-              {modeTotalBeforeFilter > 0 ? (
-                <div className="mt-2">
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-auto px-0 text-xs"
-                    onClick={() => setFilter({ onlineOnly: false, mineOnly: false })}
-                  >
-                    {t('settings.agent.machineTabs.filter.reset', 'Clear filter')}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-
-        {ownPrivateItems.length > 0 ? (
-          <section className="space-y-3 pt-3">
-            <div className="px-1">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  {t('settings.machines.yourPrivateMachines', 'Your private machines')}
-                </h3>
-                <span className="text-xs tabular-nums text-muted-foreground">
-                  {ownPrivateItems.length}
-                </span>
-              </div>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                {t(
-                  'settings.machines.privateMachinesHint',
-                  'These machines are not available to other workspace members. Select one here to manage sharing.'
-                )}
-              </p>
-            </div>
-            <div className="space-y-3">{ownPrivateItems.map(renderDesktopMachineSection)}</div>
-          </section>
+        {resolvedSelectedMachine ? (
+          <MachineDetailPane
+            key={resolvedSelectedMachine.id}
+            mode="devices"
+            machine={resolvedSelectedMachine}
+            configs={configsForMachine}
+            setups={setupsForMachine}
+            isOwn={isOwn}
+            isLocal={isLocal}
+            ownerName={ownerName}
+            canDelete={isOwn && selectedCanDelete}
+            onRename={actions.renameMachine}
+            onDelete={actions.deleteMachine}
+            onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
+            daemonUpdate={isOwn ? selectedDaemonUpdate : undefined}
+            onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
+            onUpgradeDaemon={isOwn && selectedDaemonUpdate ? upgradeMachine : undefined}
+            monitorSnapshot={machineMonitor.snapshot}
+            monitorState={machineMonitor.state}
+            monitorSessionMetas={monitorSessionMetas}
+            onOpenMonitorSession={openMonitorSession}
+            onTerminateMonitorSession={(monitoredSession) =>
+              terminateMonitorSession(resolvedSelectedMachine, monitoredSession)
+            }
+            footer={
+              <MachineConnectedResources
+                machineId={resolvedSelectedMachine.id}
+                configs={configsForMachine}
+                preloadedProjects={
+                  connectedProjectsByMachineId.get(resolvedSelectedMachine.id) ?? []
+                }
+                projectsLoading={visibleLocalProjectsLoading}
+                onManageAgents={() => openAgentsForMachine(resolvedSelectedMachine.id)}
+              />
+            }
+          />
         ) : null}
-        {dialog}
       </div>
     );
   }
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
-      {banner}
       {header}
 
-      <MachinePills
-        pills={machinePills}
-        selectedId={resolvedSelectedMachine?.id ?? null}
-        onSelect={(id) => onSelectedMachineChange(id as MachineId)}
-      />
+      <div className="space-y-3">
+        {sharedAccordionItems.length > 0 ? (
+          sharedAccordionItems.map(renderDesktopMachineSection)
+        ) : (
+          <div className="rounded-xl border border-border/50 bg-muted/10 px-4 py-8 text-center text-sm text-muted-foreground">
+            {totalSharedBeforeFilter === 0
+              ? t('workspace.machines.empty', 'No machines connected')
+              : t('settings.agent.machineTabs.filter.noMatch', 'No machines match these filters.')}
+            {totalSharedBeforeFilter > 0 ? (
+              <div className="mt-2">
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-0 text-xs"
+                  onClick={() => setFilter({ onlineOnly: false, mineOnly: false })}
+                >
+                  {t('settings.agent.machineTabs.filter.reset', 'Clear filter')}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
 
-      {resolvedSelectedMachine ? (
-        <MachineProvidersSection
-          key={resolvedSelectedMachine.id}
-          flush
-          machine={resolvedSelectedMachine}
-          configs={configsForMachine}
-          setups={setupsForMachine}
-          onAddConfig={() => openCreateDialog(resolvedSelectedMachine)}
-          onEditConfig={(config) => openEditDialog(resolvedSelectedMachine, config)}
-          onDeleteConfig={handleDeleteConfig}
-          onRefreshConfig={handleRefreshConfig}
-          onRetrySetup={handleRetrySetup}
-          onDeleteSetup={handleDeleteSetup}
-        />
-      ) : (
-        <div className="px-1 py-8 text-center text-sm text-muted-foreground">
-          {t('settings.agent.machineTabs.selectPromptAgent', 'Select a machine.')}
-        </div>
-      )}
-      {dialog}
+      {ownPrivateItems.length > 0 ? (
+        <section className="space-y-3 pt-3">
+          <div className="px-1">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                {t('settings.machines.yourPrivateMachines', 'Your private machines')}
+              </h3>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {ownPrivateItems.length}
+              </span>
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {t(
+                'settings.machines.privateMachinesHint',
+                'These machines are not available to other workspace members. Select one here to manage sharing.'
+              )}
+            </p>
+          </div>
+          <div className="space-y-3">{ownPrivateItems.map(renderDesktopMachineSection)}</div>
+        </section>
+      ) : null}
     </div>
   );
 }

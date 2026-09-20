@@ -7,6 +7,7 @@ import { DesignIpc } from './services/design-ipc'
 import { AppIpc, installNativeThemeWatch } from './services/app-ipc'
 import { CliIpc } from './services/cli-ipc'
 import { ImageIpc } from './services/image-ipc'
+import { ModelConnectionsIpc } from './services/model-connections-ipc'
 import { LocalPlatformIpc } from './services/local-platform-ipc'
 import { LocalProjectsIpc } from './services/local-projects-ipc'
 import { LoroIpc } from './services/loro-ipc'
@@ -25,6 +26,7 @@ export const IPC_SERVICE_CONSTRUCTORS = [
   AppIpc,
   CliIpc,
   ImageIpc,
+  ModelConnectionsIpc,
   LocalPlatformIpc,
   LocalProjectsIpc,
   LoroIpc,

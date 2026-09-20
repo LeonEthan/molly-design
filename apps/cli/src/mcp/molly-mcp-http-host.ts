@@ -323,7 +323,7 @@ async function handleRequest(
     designGate,
     designResubmit,
     renderHost,
-    resolveGate: async () => await resolveDesignGate(context, logger),
+    resolveGate: async () => await resolveDesignGate(context, logger, true),
     resolveRenderHost: async () => await resolveRenderHost(context, logger),
   });
   const transport = new StreamableHTTPServerTransport({

@@ -6,9 +6,7 @@ import { version } from '@/pkg';
 import { Logger, createHybridLogger, getLogger } from '../utils/logger';
 import { registerProcessCleanup, reportError, unregisterProcessCleanup } from '../utils/telemetry';
 import { MollyFleet } from '@/lib/molly-fleet';
-import { CliType, MachineId } from '@molly/shared';
-import { checkClaude, checkCodex } from '@/utils';
-import { CliAvailability, resolveCliTypesSelection } from './start-options';
+import { MachineId } from '@molly/shared';
 import { CliRuntimeStateReporter } from '@/lib/cli-runtime-state';
 import { formatErrorMessage } from '@/utils/format-error';
 import { createStartShutdownController } from './start-shutdown';
@@ -47,11 +45,8 @@ import {
   ACTIVE_PING_MIN_INTERVAL_MS,
 } from './analytics-events';
 import { createLocalCloudPort } from '@molly/platform';
-import { configureManagedAgentRuntimeManager } from '@/agent/managed-agent-runtime';
-import { configureManagedRuntimeUpdateCoordinator } from '@/agent/managed-runtime-update-coordinator';
 
 interface StartOptions {
-  cliTypes: CliType[];
   debug?: boolean;
   machineName?: string;
   heartbeatLog?: boolean;
@@ -59,30 +54,12 @@ interface StartOptions {
 
 const EXIT_CODE_ALREADY_RUNNING = 3;
 
-function logCliDetectionResults(logger: Logger, availability: CliAvailability): void {
-  logger.debug('Local agent auth detection results:');
-  logger.debug(`kimi: ${availability.kimi || 'not found'}`);
-  logger.debug(`grok: ${availability.grok || 'not found'}`);
-  logger.debug(`claude: ${availability.claude || 'not found'}`);
-  logger.debug(`codex: ${availability.codex || 'not found'}`);
-}
-
 /**
  * 统一的 start 命令
  */
 export const startCommand = new Command('start')
   .description('Start agent service in native mode')
   .option('--machine-name <name>', 'Machine name to register (defaults to hostname)')
-  .option(
-    '--cli-types <types...>',
-    'Specify CLI types to register: `kimi`, `grok`, `claude`, or `codex`',
-    (value, previous: string[]) => {
-      if (!previous) {
-        return [value as CliType];
-      }
-      return previous.concat(value as CliType);
-    }
-  )
   .option('--debug', 'enable debug output')
   .option('--heartbeat-log', 'output current timestamp every 5 seconds')
   .action(async (options: StartOptions) => {
@@ -168,45 +145,6 @@ export const startCommand = new Command('start')
     });
     runtimeStateReporter.setStartupStage('bootstrap');
 
-    const cliDetectionStartedAt = Date.now();
-    const cliAvailability = {
-      kimi: 'managed-runtime',
-      grok: 'managed-runtime',
-      claude: checkClaude(),
-      codex: checkCodex(),
-    };
-    logger.debug(
-      `[startup] CLI credential detection durationMs=${Date.now() - cliDetectionStartedAt}`
-    );
-    logCliDetectionResults(logger, cliAvailability);
-    captureAgentServiceEvent('agent_service_cli_detection', {
-      kimi_available: true,
-      grok_available: true,
-      claude_available: Boolean(cliAvailability.claude),
-      codex_available: Boolean(cliAvailability.codex),
-    });
-
-    const cliSelection = resolveCliTypesSelection({
-      requestedCliTypes: options.cliTypes,
-      availability: cliAvailability,
-    });
-
-    if (cliSelection.invalid.length > 0) {
-      logger.error(
-        `Unknown CLI types: ${cliSelection.invalid.join(', ')}. Supported values: kimi, grok, claude, codex.`
-      );
-      process.exit(1);
-    }
-
-    if (cliSelection.missing.length > 0) {
-      logger.warn(
-        `Builtin agent configs remain available, but local auth files are missing for: ${cliSelection.missing.join(
-          ', '
-        )}.`
-      );
-    }
-    options.cliTypes = cliSelection.cliTypes;
-
     runtimeStateReporter.setStartupStage('auth');
     const localIdentity = await loadOrCreateLocalIdentity(logger);
     const token = '';
@@ -229,7 +167,6 @@ export const startCommand = new Command('start')
         userId,
         machineName,
         machineId,
-        cliSelection.configuredCliTypes,
         logger,
         runtimeStateReporter,
         authMethod,
@@ -266,7 +203,6 @@ async function startAgentService(
   userId: string,
   machineName: string,
   machineId: string,
-  builtinAgentConfigCliTypes: CliType[],
   logger: Logger,
   runtimeStateReporter: CliRuntimeStateReporter,
   authMethod: 'local_platform',
@@ -305,21 +241,10 @@ async function startAgentService(
       process.env.MOLLY_RUNTIME_BASE_URL ?? process.env.LODY_RUNTIME_BASE_URL,
   });
 
-  const managedRuntimeManager = configureManagedAgentRuntimeManager({
-    runtimeBaseUrl: cloudPort.runtimeArtifacts.baseUrl,
-  });
-
   let fleet: MollyFleet;
-  const managedRuntimeUpdates = configureManagedRuntimeUpdateCoordinator({
-    manager: managedRuntimeManager,
-    logger,
-  });
   try {
-    await managedRuntimeManager.prepareCache();
-    await managedRuntimeUpdates.start();
     fleet = new MollyFleet({
       logger,
-      builtinAgentConfigCliTypes,
       cliToken: token,
       userId,
       machineId: machineId as MachineId,
@@ -330,7 +255,6 @@ async function startAgentService(
       onProcessLifecycleAction: (action) => triggerProcessLifecycleAction?.(action),
     });
   } catch (error) {
-    await managedRuntimeUpdates.shutdown();
     await cloudPort.dispose();
     throw error;
   }
@@ -342,7 +266,6 @@ async function startAgentService(
   };
   registerProcessCleanup(async () => {
     eventLoopLagMonitor.stop();
-    await managedRuntimeUpdates.shutdown();
     await fleet.shutdown();
     await closeForegroundHostLease();
   });
@@ -360,7 +283,6 @@ async function startAgentService(
       unregisterProcessCleanup();
       stopActivePing();
       eventLoopLagMonitor.stop();
-      await managedRuntimeUpdates.shutdown();
       await fleet.shutdown();
       await closeForegroundHostLease();
     },
@@ -407,7 +329,6 @@ async function startAgentService(
       // Best-effort: the workspace subscription may still be populating right
       // after fleet.start(); connected rooms approximate workspace count.
       workspace_count: startupSnapshot.connectedRoomCount,
-      builtin_agent_config_cli_types: builtinAgentConfigCliTypes,
       startup_duration_ms: Date.now() - startupStartMs,
     });
     captureCliActiveUser({ auth_method: authMethod });
@@ -443,7 +364,6 @@ async function startAgentService(
     unregisterProcessCleanup();
     stopActivePing();
     eventLoopLagMonitor.stop();
-    await managedRuntimeUpdates.shutdown();
     await fleet.shutdown().catch((err: unknown) => {
       logger.error('Cleanup failed:', err);
     });

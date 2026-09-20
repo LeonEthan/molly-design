@@ -1,10 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import {
-  IMAGE_CONNECTION_VERSION,
-  getServerNow,
-  type ImageConnectionSettings,
-} from '@molly/shared';
+import type { ProtectedImageConnection } from '@molly/shared/embedded-harness';
 import {
   ImageConnectionForm,
   type ImageConnectionFormDraft,
@@ -17,19 +13,20 @@ import {
    carries a key and the API-key input must still render empty. */
 
 const storedConnection = (
-  overrides: Partial<ImageConnectionSettings> = {}
-): ImageConnectionSettings => ({
-  v: IMAGE_CONNECTION_VERSION,
+  overrides: Partial<ProtectedImageConnection> = {}
+): ProtectedImageConnection => ({
+  id: '00000000-0000-4000-8000-000000000001',
+  revision: 1,
   enabled: true,
   baseUrl: 'https://api.openai.com/v1',
-  apiKey: 'sk-storybook-placeholder-not-a-real-key',
+  hasApiKey: true,
   model: 'gpt-image-2',
-  updatedAt: getServerNow(),
+  legacyHistoryMayContainKey: false,
   ...overrides,
 });
 
 type StoryProps = {
-  stored?: ImageConnectionSettings;
+  stored?: ProtectedImageConnection;
   saving?: boolean;
   saveError?: string;
   testState?: ImageConnectionTestState;
@@ -84,7 +81,7 @@ export const StoredKey: Story = {
 
 /** Enabled but missing its key: saved, and honestly reported as not ready. */
 export const MissingKey: Story = {
-  args: { stored: storedConnection({ apiKey: '' }) },
+  args: { stored: storedConnection({ hasApiKey: false }) },
 };
 
 /** Switched off: the row survives, the design tool does not. */

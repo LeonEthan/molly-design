@@ -32,6 +32,11 @@ Root and CLI instructions apply. `CLAUDE.md` links to this file.
 - Conflicts preserve drafts and durable diagnostics for explicit continuation.
   Never produce candidates, restart the Agent or require a finalize tool. Retain
   historical candidate readback and the independent manual save-copy escape.
+- Image import requires the owning active Molly run, selected MCP identity,
+  frozen image/catalog revision and single-use native approval. Resolve the draft from Session/frozen context;
+  import intents are recovery identity, not publication or canvas-commit evidence.
+- Local image recovery is read-only: verify owned receipts and original-turn files;
+  preserve unavailable results and paid state. Never regenerate or commit on recovery.
 - Flush human edits before execution and keep every instance read-only through
   artifact processing. Preparation must verify the saved current projection after
   flush, including recovery/re-dispatch; frozen input itself remains immutable.
@@ -39,26 +44,23 @@ Root and CLI instructions apply. `CLAUDE.md` links to this file.
   against actual canonical; reject stale targets without choosing replacements.
 - Design Agent selection affects only the next explicit turn. Freeze provider ID,
   bind native session identity to its actual provider and retire callbacks under
-  the existing turn guard. Never resume across providers.
+  the existing turn guard. Never reuse native identity across ACP Agent providers.
+  Within Molly, an explicit idle-time model/connection switch replaces the worker
+  and retains the same product-owned Pi history; never replay product messages.
 
 See [runtime and files](README.md), the
 [replacement decision](../../../../.agents/notes/implemented/simplification/2026-09-12-editor-owned-pptd-save.md),
 and the [YAML turn/projection entry](../../../../.agents/notes/implemented/architecture/2026-09-14-yaml-turn-projection.md).
 
-Codex public UserPromptSubmit supplies context only. Preserve native user hook
-declarations and trust; trust only Molly’s exact bundled command in the per-session
-overlay. Never treat reminder delivery as read or commit evidence.
-
-Pi image/render tools use the existing Molly MCP catalog and session context through
-the public extension API. Never implement providers there or expose unlisted tools;
-retain native tool policy, cancellation signals and session-scoped client cleanup.
+Embedded Pi uses its host-approved reminder and frozen Molly MCP catalog; preserve
+native settlement, approval, cancellation and owned-client cleanup in `harness-pi`.
+Keep external Agent shims, hooks and native config overlays retired; preserve user
+CLI installations, hook trust, configuration and history. Never implement image providers in the adapter.
 Image MCP client deadlines must cover the existing image-service deadline plus delivery;
-Pi render keeps its default. Give SDK cancellation delivery its 30-second allowance before
-isolated Pi call-client cleanup; a stalled delivery then yields to transport close. Server
+give SDK cancellation delivery its 30-second allowance before
+owned call-client cleanup; a stalled delivery then yields to transport close. Server
 cancellation must reach image upload/download and guard the final asset write while remaining
-distinct from that deadline. Kimi design
-launches default the public global MCP timeout
-only when environment and readable TOML omit it; never log config parse errors.
+distinct from that deadline. Native CLI timeout settings are not embedded model settings.
 Do not retry paid requests automatically.
 
 Design history uses the artwork's independent local Git repository. Preserve exact
@@ -71,7 +73,3 @@ record logical design origin while the managed ref remains linear. Source displa
 may read frozen input provenance but never gains save authority. Freeze its referenced
 source identity separately from the full artifact digest; unused new media cannot
 make an inherited draft live. See [history](README.md#design-history).
-
-Grok reminders use only the app-owned session plugin and native hook reload. Preserve
-user plugin trust; PreToolUse context arrives after the tool and establishes no read
-or commit evidence. Missing/disabled Molly hooks must not be reported as loaded.

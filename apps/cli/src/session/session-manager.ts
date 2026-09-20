@@ -14,8 +14,6 @@ import {
   SessionStatusFactory,
   MachineId,
   CliType,
-  getManagedBuiltinRuntimeByAgentType,
-  getManagedBuiltinRuntimeByRuntimeName,
   isManagedBuiltinAgentType,
   RepoId,
   SessionContextWindowUsage,
@@ -33,6 +31,7 @@ import {
   buildSessionLaunchConfig,
   getMachineFlockDocId,
   getSessionRoomId,
+  getDesignContinuationSystemContext,
   normalizeSessionPreparationRunConfigForDedup,
   isLoroRepoDocDeleted,
   type SessionLaunchConfig,
@@ -55,14 +54,8 @@ import {
 import { RequestPermissionRequest, RequestPermissionResponse } from '@agentclientprotocol/sdk';
 import { TerminalManager } from './terminal-manager';
 import { resolveACPProcessLaunchAsync } from '@/agent/setting';
-import {
-  classifyManagedRuntimeFailureReason,
-  formatManagedRuntimeFailureMessage,
-  getManagedAgentRuntimeManager,
-  ManagedRuntimeError,
-  type ManagedRuntimeName,
-  type ManagedRuntimeProgressEvent,
-} from '@/agent/managed-agent-runtime';
+import type { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
+import { decodeMollyModelOption, type ModelConnection } from '@molly/shared/embedded-harness';
 import { buildGitHubCloneUrl, deriveRepoIdFromGitHubRepo, redactUrlAuth } from '@/utils/github';
 import type { CloudPort } from '@molly/platform';
 import type { RateLimit, SessionUsageUpdate } from 'acp-extension-core';
@@ -94,7 +87,6 @@ import {
   type SessionResourceAccounting,
 } from './session-sandbox';
 import { formatErrorMessage } from '@/utils/format-error';
-import { captureCli } from '@/lib/analytics/posthog';
 import { getEffectiveMemoryLimitBytes } from '@/utils/memory';
 import { withSlowOperationWarning } from '@/utils/slow-operation-warning';
 import { resolveGitHubRepoWorktreeConfig } from './worktree/worktree-config-resolver';
@@ -102,6 +94,11 @@ import type { AcpCapabilitiesResult } from '@/agent/acp-capability-normalization
 import { resolveWorkspaceLocalProjectRootPathWithRetry } from '@/lib/local-project-meta';
 import { readTimeoutEnv } from '@/lib/loro/timeout-utils';
 import { loadSessionMcpCatalog } from '@/agent/session-mcp-resolver';
+import { importHarnessImages } from '@/design/harness-image-import';
+import { recoverHarnessImages } from '@/design/harness-image-recovery';
+import { resolveDesignContext } from '@/design/workspace';
+import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import path from 'node:path';
 import { SessionUserResolver } from './session-user-resolver';
 import {
   SessionPreparationService,
@@ -120,34 +117,6 @@ import {
   type PreparedWorktree,
   type SpeculativeWorktreeTarget,
 } from './worktree/speculative-worktree';
-
-function formatManagedRuntimeProgressDetail(event: ManagedRuntimeProgressEvent): string {
-  const runtimeLabel =
-    getManagedBuiltinRuntimeByRuntimeName(event.runtimeName)?.displayName ?? event.runtimeName;
-  switch (event.phase) {
-    case 'downloading':
-      return event.percent !== undefined
-        ? `Downloading ${runtimeLabel} runtime ${event.percent}%`
-        : `Downloading ${runtimeLabel} runtime`;
-    case 'verifying':
-      return `Verifying ${runtimeLabel} runtime`;
-    case 'extracting':
-      return `Extracting ${runtimeLabel} runtime`;
-    case 'publishing':
-      return `Installing ${runtimeLabel} runtime`;
-    case 'complete':
-      return `${runtimeLabel} runtime ready`;
-  }
-  return `Preparing ${runtimeLabel} runtime`;
-}
-
-function resolveManagedRuntimeNameForBuiltin(agentType: string): ManagedRuntimeName | undefined {
-  return getManagedBuiltinRuntimeByAgentType(agentType)?.runtimeName;
-}
-
-function truncateAnalyticsString(value: string, maxLength = 1_000): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
-}
 
 // Some call paths provide only githubRepoUrl; derive owner/repo so we still
 // bootstrap the broker + git env injection (avoids prompt-disabled failures).
@@ -241,9 +210,11 @@ function buildSessionPreparationCompatibility(
   launchSource: Partial<SessionLaunchConfig> | null | undefined,
   mcpServerIds: readonly McpServerId[] | undefined,
   configOptionValues: SessionConfig['configOptionValues'],
-  taskToolsEnabled: boolean
+  taskToolsEnabled: boolean,
+  modelSelection: SessionConfig['modelSelection']
 ) {
   return {
+    ...(modelSelection ? { modelSelection } : {}),
     launch: buildSessionLaunchConfig({
       customAcp: launchSource?.customAcp,
       runtimeOverrides: launchSource?.runtimeOverrides,
@@ -278,9 +249,17 @@ export type PreparedSessionLaunchConfigSnapshot = {
 };
 
 export interface ISession {
+  promptEmbeddedHarness?(
+    turnId: string,
+    prompt: import('@agentclientprotocol/sdk').ContentBlock[],
+    signal: AbortSignal
+  ): Promise<import('@agentclientprotocol/sdk').PromptResponse>;
+  assertEmbeddedModelSelection?(selection: unknown): void;
+  needsEmbeddedRuntimeReplacement?(selection: unknown, mcpServerIds?: readonly string[]): boolean;
+  isEmbeddedHarness?(): boolean;
   getAgentConfigId?(): AgentConfigId | undefined;
   getDesignHookLaunchId?(): string | undefined;
-  getDesignHookRuntime?(): 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' | undefined;
+  getDesignHookRuntime?(): 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' | 'molly' | undefined;
   agentClient: AgentClient | null;
   acpSessionId: ACPSessionId | null;
   sessionId: SessionId;
@@ -337,6 +316,19 @@ export type SessionMonitorRuntimeInfo = {
 };
 
 export interface CreateAgentConfig {
+  recoverHarnessImages?: (
+    request: import('@molly/shared/embedded-harness').HarnessImageRecoveryRequest,
+    signal: AbortSignal
+  ) => Promise<import('@molly/shared/embedded-harness').HarnessImageRecoveryResult>;
+  importHarnessImages?: (
+    request: import('@molly/shared/embedded-harness').HarnessImageImportRequest,
+    signal: AbortSignal
+  ) => Promise<import('@molly/shared/embedded-harness').HarnessImageImportResult>;
+  embeddedHarness?: {
+    connection: ModelConnection;
+    credentials: HarnessCredentialBroker;
+    readDesignContinuationContext?: () => Promise<string | undefined>;
+  };
   /** Set only after reading trusted durable design Session metadata. */
   designHooks?: boolean;
   cliType: AgentConfigCliType;
@@ -366,7 +358,8 @@ export interface CreateAgentConfig {
   onUpdateMessage: (message: AcpSessionNotification) => void;
   onRequestPermission: (
     requestId: string,
-    request: RequestPermissionRequest
+    request: RequestPermissionRequest,
+    signal?: AbortSignal
   ) => Promise<RequestPermissionResponse>;
   onUsageUpdate: (usage: SessionUsageUpdate) => void;
   onContextWindowUsageUpdate: (usage: SessionContextWindowUsage) => void;
@@ -429,6 +422,12 @@ interface SessionManagerEvents {
 }
 
 export class SessionManager extends EventEmitter<SessionManagerEvents> {
+  private harnessCredentials?: HarnessCredentialBroker;
+  setHarnessCredentials(credentials: HarnessCredentialBroker): void {
+    if (this.harnessCredentials && this.harnessCredentials !== credentials)
+      throw new Error('harness_host_already_bound');
+    this.harnessCredentials = credentials;
+  }
   protected logger: Logger;
   protected machineId: MachineId;
   protected workspaceId: WorkspaceId;
@@ -456,7 +455,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     sessionId: SessionId,
     requestId: string,
     request: RequestPermissionRequest,
-    agentClient: AgentClient
+    agentClient: AgentClient,
+    signal?: AbortSignal
   ) => Promise<RequestPermissionResponse>;
 
   constructor(
@@ -587,7 +587,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           current.config,
           resource.config.mcpServerIds,
           resource.config.configOptionValues,
-          resource.config.taskToolsEnabled
+          resource.config.taskToolsEnabled,
+          resource.config.modelSelection
         )
       )
     ) {
@@ -636,6 +637,33 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     agentStart?: AgentStartConfig
   ): Promise<ISession> {
     const sessionId = config.sessionId!;
+    // A continuation is an independent chat workspace. Validate before claim,
+    // worktree setup or Agent startup; the bootstrap rechecks before inference.
+    const continuation = (await this.readDesignContinuation(sessionId))?.record;
+    if (continuation) {
+      if (
+        config.requesterUserId !== continuation.source.userId ||
+        config.workspaceId !== continuation.workspaceId ||
+        config.machineId !== continuation.source.machineId ||
+        config.agentConfigId !== continuation.target.agentConfigId ||
+        config.agentCliType !== 'builtin' ||
+        config.agentType !== 'molly' ||
+        config.parentSessionId !== undefined ||
+        config.project !== undefined ||
+        config.repoId !== undefined ||
+        config.githubRepo !== undefined ||
+        config.githubRepoUrl !== undefined ||
+        config.branch !== undefined ||
+        config.restoreBranchName !== undefined ||
+        config.worktreeStartPoint !== undefined ||
+        config.worktreeSetup !== undefined ||
+        config.worktreeCleanup !== undefined ||
+        agentStart?.forkSessionId !== undefined ||
+        (config.workdir !== undefined &&
+          path.resolve(config.workdir) !== getDefaultSessionWorkdir(sessionId))
+      )
+        throw new Error('design_continuation_launch_mismatch');
+    }
     const preparationIdentity = config.agentConfigId
       ? {
           requestedByUserId: config.requesterUserId,
@@ -654,7 +682,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       config,
       config.mcpServerIds,
       config.configOptionValues,
-      config.taskToolsEnabled
+      config.taskToolsEnabled,
+      config.modelSelection
     );
     const claim = this.preparationService.claim({
       sessionId,
@@ -682,7 +711,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
               current.config,
               config.mcpServerIds,
               config.configOptionValues,
-              config.taskToolsEnabled
+              config.taskToolsEnabled,
+              config.modelSelection
             )
           )
         );
@@ -899,6 +929,13 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       agentConfigId: spec.agentConfigId as AgentConfigId,
       agentCliType: spec.cliType,
       agentType: spec.agentType,
+      modelSelection:
+        spec.cliType === 'builtin' && spec.agentType === 'molly'
+          ? decodeMollyModelOption(
+              spec.runConfig?.modelId ?? spec.runConfig?.configOptionValues?.model,
+              spec.runConfig?.configOptionValues?.reasoning_effort ?? 'off'
+            )
+          : undefined,
       configOptionValues: spec.runConfig?.configOptionValues,
       mcpServerIds: spec.runConfig?.mcpServerIds ?? [],
       taskToolsEnabled: spec.runConfig?.taskToolsEnabled === true,
@@ -920,7 +957,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       config,
       config.mcpServerIds,
       config.configOptionValues,
-      config.taskToolsEnabled
+      config.taskToolsEnabled,
+      config.modelSelection
     );
     const ghTokenInjected = await this.prepareGitHubRepoSessionConfig(config);
     signal.throwIfAborted();
@@ -1203,6 +1241,18 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     }
   }
 
+  private async readDesignContinuation(sessionId: SessionId) {
+    const row = await this.workspaceDocument.repo.getDocMeta(getSessionRoomId(sessionId));
+    const meta = row?.meta as SessionMeta | undefined;
+    if (meta?.designContinuation === undefined) return undefined;
+    if (isLoroRepoDocDeleted(row)) throw new Error('design_continuation_target_deleted');
+    const doc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
+    const record = doc.getDesignContinuation();
+    if (record?.workspaceId !== this.workspaceId)
+      throw new Error('design_continuation_binding_mismatch');
+    return { record, context: getDesignContinuationSystemContext(meta, record) };
+  }
+
   private buildCreateAgentConfig(
     session: Session,
     config: SessionConfig,
@@ -1221,11 +1271,80 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   ): CreateAgentConfig {
     const sessionId = config.sessionId!;
     const deliverEvent = options?.dispatchEvent ?? ((event: () => void) => event());
+    let embeddedHarness: CreateAgentConfig['embeddedHarness'];
+    if (config.agentCliType === 'builtin' && config.agentType === 'molly') {
+      const connection = this.harnessCredentials
+        ?.catalog()
+        .find((entry) => entry.id === config.modelSelection?.connectionId && entry.enabled);
+      if (!connection || !this.harnessCredentials) throw new Error('harness_connection_required');
+      embeddedHarness = {
+        connection,
+        credentials: this.harnessCredentials,
+        readDesignContinuationContext: async () => {
+          return (await this.readDesignContinuation(sessionId))?.context;
+        },
+      };
+    }
     const dispatchEvent = (event: () => void) =>
       deliverEvent(() => {
         if (!this.replacedDesignRuntimes.has(session)) event();
       });
+    const resolveImageWorkspace = async (turnId: string, signal: AbortSignal) => {
+      signal.throwIfAborted();
+      if (this.replacedDesignRuntimes.has(session) || this.sessions.get(sessionId) !== session)
+        throw new Error('harness_image_session_retired');
+      const record = await this.workspaceDocument.repo.getDocMeta(getSessionRoomId(sessionId));
+      if (!record?.meta || isLoroRepoDocDeleted(record))
+        throw new Error('harness_image_design_unavailable');
+      const meta = record.meta as SessionMeta;
+      if (!meta.design) throw new Error('harness_image_design_unavailable');
+      const workspace = await resolveDesignContext({
+        workspaceRoot: session.getWorkdir(),
+        sessionId,
+        artworkId: meta.design.artworkId,
+        legacyWorkdir: getDefaultSessionWorkdir(sessionId),
+        turnId,
+        requireTurnManifest: true,
+      });
+      signal.throwIfAborted();
+      if (this.replacedDesignRuntimes.has(session) || this.sessions.get(sessionId) !== session)
+        throw new Error('harness_image_session_retired');
+      return { workspace, artworkId: meta.design.artworkId };
+    };
     return {
+      embeddedHarness,
+      recoverHarnessImages:
+        embeddedHarness && options?.designHooks
+          ? async (request, signal) => {
+              const current = await resolveImageWorkspace(request.turnId, signal);
+              return recoverHarnessImages({
+                sessionId,
+                artworkId: current.artworkId,
+                query: request.query,
+                signal,
+                operationDirectory: path.join(getMollyDataDir(), 'harness', 'pi', 'operations'),
+                resolveWorkspace: async (sourceTurnId) => {
+                  const source = await resolveImageWorkspace(sourceTurnId, signal);
+                  if (source.artworkId !== current.artworkId)
+                    throw new Error('harness_image_recovery_not_owned');
+                  return source.workspace;
+                },
+              });
+            }
+          : undefined,
+      importHarnessImages:
+        embeddedHarness && options?.designHooks
+          ? async (request, signal) => {
+              const { workspace, artworkId } = await resolveImageWorkspace(request.turnId, signal);
+              return importHarnessImages({
+                request,
+                workspace,
+                artworkId,
+                signal,
+                operationDirectory: path.join(getMollyDataDir(), 'harness', 'pi', 'operations'),
+              });
+            }
+          : undefined,
       cliType: config.agentCliType,
       agentType: config.agentType,
       designHooks: options?.designHooks,
@@ -1242,7 +1361,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       onUpdateMessage: (update) => {
         dispatchEvent(() => this.emit('onACPUpdateMessage', sessionId, update));
       },
-      onRequestPermission: (requestId, request) => {
+      onRequestPermission: (requestId, request, signal) => {
         if (
           this.replacedDesignRuntimes.has(session) ||
           (options?.allowInteractiveRequest && !options.allowInteractiveRequest())
@@ -1253,7 +1372,13 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           this.logger.debug(`[${sessionId}] Permission handler not configured`);
           return Promise.resolve({ outcome: { outcome: 'cancelled' } });
         }
-        return this.requestPermissionHandler(sessionId, requestId, request, session.agentClient!);
+        return this.requestPermissionHandler(
+          sessionId,
+          requestId,
+          request,
+          session.agentClient!,
+          signal
+        );
       },
       onUsageUpdate: (usage: SessionUsageUpdate) => {
         dispatchEvent(() => {
@@ -1296,6 +1421,14 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
           workspaceId: this.workspaceId,
           sessionId,
           selectedIds: config.mcpServerIds,
+          guarded: config.agentCliType === 'builtin' && config.agentType === 'molly',
+          protectedMcp:
+            config.agentCliType === 'builtin' && config.agentType === 'molly'
+              ? {
+                  workspaceId: this.workspaceId,
+                  connections: this.harnessCredentials?.mcpCatalog() ?? [],
+                }
+              : undefined,
           logger: this.logger,
         }),
       onImageGenerationBegin: (event) =>
@@ -1342,54 +1475,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     session.updateGitIdentity(config.userName, config.userEmail, config.requesterUserId);
     let acpSessionId: string | undefined;
 
-    const launchResolutionStartedAt = performance.now();
-    let managedRuntimeReadyLogged = false;
     const launch = await resolveACPProcessLaunchAsync({
       cliType: config.agentCliType,
       agentType: config.agentType,
       customAcp: config.customAcp,
       runtimeOverrides: config.runtimeOverrides,
       env: config.env,
-      onManagedRuntimeProgress: (event) => {
-        config.onPresencePhase?.('managed-runtime', formatManagedRuntimeProgressDetail(event));
-        if (event.phase === 'complete' && !managedRuntimeReadyLogged) {
-          managedRuntimeReadyLogged = true;
-          this.logger.debug(
-            `[${sessionId}] Managed runtime ready in ${Math.round(performance.now() - launchResolutionStartedAt)}ms (runtime=${event.runtimeName})`
-          );
-        }
-      },
-    }).catch((error: unknown) => {
-      if (error instanceof ManagedRuntimeError) {
-        const runtimeName = resolveManagedRuntimeNameForBuiltin(config.agentType);
-        const runtimeDiagnostics = runtimeName
-          ? getManagedAgentRuntimeManager().getDiagnostics(runtimeName)
-          : undefined;
-        captureCli(
-          'managed_runtime/install_failed',
-          {
-            workspace_id: config.workspaceId,
-            session_id: sessionId,
-            machine_id: config.machineId,
-            agent_type: config.agentType,
-            ...(runtimeName ? { runtime_name: runtimeName } : {}),
-            ...(runtimeDiagnostics
-              ? {
-                  runtime_version: runtimeDiagnostics.version,
-                  platform_arch: runtimeDiagnostics.platformArch,
-                  runtime_base_host: runtimeDiagnostics.runtimeBaseHost,
-                  proxy_env_present: runtimeDiagnostics.proxyEnvPresent,
-                  proxy_configured_for_runtime_url: runtimeDiagnostics.proxyConfiguredForRuntimeUrl,
-                }
-              : {}),
-            source: 'session_start',
-            reason: classifyManagedRuntimeFailureReason(error),
-            error_message: truncateAnalyticsString(formatManagedRuntimeFailureMessage(error)),
-          },
-          { tier: 'A' }
-        );
-      }
-      throw error;
     });
     const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
     const publishAcpStep = (step: 'spawn' | 'initialize' | 'new-session') => {
@@ -1992,7 +2083,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       sessionId: SessionId,
       requestId: string,
       request: RequestPermissionRequest,
-      agentClient: AgentClient
+      agentClient: AgentClient,
+      signal?: AbortSignal
     ) => Promise<RequestPermissionResponse>
   ) {
     this.requestPermissionHandler = handler;

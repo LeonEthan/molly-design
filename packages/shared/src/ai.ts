@@ -1642,6 +1642,8 @@ export type ACPSessionConfig = {
   runtimeOverrides?: BuiltinRuntimeOverrides;
   modeId?: SessionMode['id'];
   modelId?: string;
+  /** Explicit BYOK choice; independent of legacy AgentConfig/model selectors. */
+  modelSelection?: import('./embedded-harness').ModelSelection;
   /** Config option values (configId → value) for setSessionConfigOption. */
   configOptionValues?: Record<string, AcpConfigOptionValue>;
   /** Workspace MCP catalog ids selected for this session. */

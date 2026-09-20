@@ -21,6 +21,12 @@ safety. Removal requires a reviewed replacement write boundary (PR #460).
   product-cloud RPC client.
 - Release one-shot document handles and subscriptions that the workspace
   runtime does not already own.
+- Design migration publishes through the renderer writer only after explicit
+  preview confirmation and receipt synchronization. Recheck owner/source/catalog
+  bindings; publish immutable identity only, preserving live metadata and tombstones.
+  Publication never appends or dispatches a turn; cancellation fences pending writes.
+  Acknowledge publication only after local Repo flush, including explicit retries.
+  Failed or cancelled acknowledgement preserves accepted writes for recovery.
 
 ## Workspace switching
 
@@ -36,6 +42,10 @@ safety. Removal requires a reviewed replacement write boundary (PR #460).
   proxy-authoring/write-intent mirror.
 - Every room uses the local transport. Session owner assertions remain checked
   for historical readback, but do not select a transport or authorize remote RPC.
+- Role writes validate the exact published Molly target and model projection at
+  the writer boundary, including new rows. Legacy rebinding requires the explicit
+  migration backup. Recheck the source after catalog awaits before committing;
+  concurrent edits/deletes survive. Generic insert-if-absent cannot author Roles.
 - The local renderer identity comes atomically from the Electron local-platform snapshot
   and uses the CLI catalog's persistent `local:*` id. Do not substitute a constant or
   temporary user.

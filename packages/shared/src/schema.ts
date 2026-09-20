@@ -872,8 +872,20 @@ export type PendingScheduledTask = {
 };
 
 export type SessionMeta = {
+  /** Status-only repair: persist preparation before publishing dispatch; never replay authority. */
+  taskAutomationStatusRepair?: {
+    version: 1;
+    dispatchState: 'prepared' | 'dispatched';
+    taskId: TaskId;
+    agentConfigId: string;
+    ownerId: string;
+    taskStateHash: string;
+    userTurnId: string;
+  };
   /** Local editable artwork association; the workspace owns canonical bytes. */
   design?: { artworkId: string; path: 'design.json' };
+  /** Explicit cross-engine continuation provenance; never a native resume identity. */
+  designContinuation?: { version: 1; sourceSessionId: SessionId };
   id: SessionId;
   machineId: MachineId;
   createdAt: string;
@@ -1215,6 +1227,11 @@ export const sessionDocSchema = schema({
   mq: schema.LoroMovableList(messageQueueItemSchema, (item) => item.$cid, { required: false }),
   /** Temporary durable state for an asynchronous Session fork. Removed on success. */
   forkOperation: sessionForkOperationDocSchema,
+  /** Immutable explicit-migration receipt. Parse at the service boundary before use. */
+  designContinuation: schema.LoroMap(
+    { record: schema.Any({ required: false }) },
+    { required: false }
+  ),
   preview: sessionPreviewDocSchema,
   externalHistoryCursor: sessionExternalHistoryCursorDocSchema,
   acpRuntimeConfig: sessionAcpRuntimeConfigDocSchema,

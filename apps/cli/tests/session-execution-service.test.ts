@@ -23,7 +23,6 @@ import {
   type SessionExecutionServiceDeps,
 } from '../src/session/session-execution-service';
 import {
-  ACP_CAPABILITY_CACHE_VERSION,
   getMachineRoomId,
   SessionStatusFactory,
   type ACPSessionId,
@@ -250,6 +249,130 @@ const createBaseDeps = (
 };
 
 describe('SessionExecutionService', () => {
+  it.each(['native', 'catalog'] as const)(
+    'retires an embedded epoch and restores native context for a changed %s selection',
+    async (source) => {
+      const sessionId = 'session-embedded-switch' as SessionId;
+      const configId = 'embedded-config' as AgentConfigId;
+      const nativeId = '00000000-0000-4000-8000-000000000001' as ACPSessionId;
+      const selection = {
+        connectionId: 'second-connection',
+        modelId: 'k3-256k',
+        thinking: 'high' as const,
+      };
+      const events: unknown[] = [];
+      const meta = {
+        repoFullName: 'owner/repo',
+        isArchived: false,
+        agentConfigId: configId,
+        cliType: 'builtin',
+        agentType: 'molly',
+        acpSessionId: nativeId,
+        acpSessionAgentConfigId: configId,
+      };
+      const sessionDoc = withHistoryPort({
+        getMetaState: async () => meta,
+        setStatus: async () => {},
+        setBaseBranch: async () => {},
+        getHistory: () => PRIOR_CONVERSATION_HISTORY,
+        updateHistory: async () => {},
+      });
+      const restored = {
+        sessionId,
+        acpSessionId: nativeId,
+        terminalManager: {},
+        agentClient: {
+          isCreated: () => true,
+          cancel: async () => {},
+          prompt: async () => {
+            throw new Error('legacy_prompt_forbidden');
+          },
+        },
+        isEmbeddedHarness: () => true,
+        promptEmbeddedHarness: async () => {
+          events.push('new-epoch-prompt');
+          return { stopReason: 'end_turn' };
+        },
+        getWorkdir: () => '/tmp',
+        getHostWorkdir: () => '/tmp',
+        getParentSessionId: () => undefined,
+        exec: async () => '',
+        terminate: async () => {},
+        updateGitIdentity: () => {},
+        createAgent: async () => nativeId,
+        applyExecutionPlaneLimits: async () => {},
+      };
+      let active: unknown = {
+        ...restored,
+        needsEmbeddedRuntimeReplacement: (value: unknown) => {
+          expect(value).toEqual(selection);
+          return true;
+        },
+      };
+      const promptInputs: unknown[] = [];
+      const deps = createBaseDeps({
+        sessionManager: {
+          getSession: () => active,
+          getPendingSession: () => null,
+          terminateSession: async () => {
+            events.push('old-epoch-exited');
+            active = null;
+          },
+          createSession: async (
+            config: { modelSelection?: unknown },
+            start: { resumeSessionId?: string }
+          ) => {
+            events.push({ restore: start.resumeSessionId, selection: config.modelSelection });
+            return restored;
+          },
+          setSessionError: async () => {},
+          refreshGhTokenForSession: async () => {},
+        } as unknown as SessionManager,
+        workspaceDocument: {
+          repo: { upsertDocMeta: async () => {}, getDocMeta: async () => undefined },
+          getOrCreateSessionDoc: async () => sessionDoc,
+          getAgentConfigById: async () =>
+            createLaunchConfig({ id: configId, cliType: 'builtin', agentType: 'molly' }),
+          updateAcpCapabilities: async () => {
+            throw new Error('must_not_replace_public_model_catalog');
+          },
+        } as unknown as LoroDocumentManager,
+        buildAcpPromptBlocks: async (input) => {
+          promptInputs.push(input.replayPromptText);
+          return [{ type: 'text', text: 'Synthetic current request' }];
+        },
+      });
+      await new SessionExecutionService(deps).continueSession({
+        type: 'session/chat',
+        sessionId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        project: { kind: 'github', repoFullName: 'owner/repo', branch: 'main' },
+        acpSessionConfig: {
+          prompt: 'Synthetic current request',
+          cliType: 'builtin',
+          agentType: 'molly',
+          agentConfigId: configId,
+          ...(source === 'native'
+            ? { modelSelection: selection }
+            : {
+                modelId: 'molly-model:second-connection/k3-256k',
+                configOptionValues: { reasoning_effort: 'high' },
+              }),
+        },
+        userTurnId: 'switch-turn',
+        userId: 'user-1',
+        userName: 'User',
+        userEmail: 'user@example.com',
+      });
+      expect(events).toEqual([
+        'old-epoch-exited',
+        { restore: nativeId, selection },
+        'new-epoch-prompt',
+      ]);
+      expect(promptInputs).toEqual([undefined]);
+    }
+  );
   it('cancels only the named native child and rejects a stale parent turn', async () => {
     const runningChildren = new Set(['child-1', 'child-2']);
     const sessionManager = {
@@ -3127,7 +3250,7 @@ describe('SessionExecutionService', () => {
     expect(refreshCodeCollabSharedState).toHaveBeenCalledWith('session-1');
   });
 
-  it('starts a local project session creation', async () => {
+  it('starts a local project session without rewriting the model catalog', async () => {
     const localProjectId = 'local-project-1' as LocalProjectId;
     const machineId = 'machine-1' as MachineId;
     const sessionDoc = withHistoryPort({
@@ -3199,7 +3322,10 @@ describe('SessionExecutionService', () => {
         },
       };
     });
-    const updateAcpCapabilities = vi.fn(async () => {});
+    const catalogWrites: unknown[][] = [];
+    const updateAcpCapabilities = async (...args: unknown[]) => {
+      catalogWrites.push(args);
+    };
     const deps = createBaseDeps({
       machineId,
       sessionManager,
@@ -3235,33 +3361,7 @@ describe('SessionExecutionService', () => {
         project: { kind: 'local', localProjectId },
       })
     );
-    await vi.waitFor(() =>
-      expect(updateAcpCapabilities).toHaveBeenCalledWith(
-        machineId,
-        capabilityConfigId,
-        'builtin',
-        'codex',
-        [{ id: 'agent', name: 'Agent' }],
-        [{ modelId: 'gpt-5', name: 'GPT-5' }],
-        [
-          {
-            id: 'reasoning',
-            name: 'Reasoning',
-            category: 'thought_level',
-            type: 'select',
-            currentValue: 'high',
-            options: [{ value: 'high', name: 'High' }],
-          },
-        ],
-        [{ name: 'review', description: 'Review changes' }],
-        false,
-        expect.any(String),
-        // Per-model reasoning efforts: absent for this agent, which publishes no
-        // legacy `model[effort]` combination list.
-        undefined,
-        true
-      )
-    );
+    expect(catalogWrites).toEqual([]);
   });
 
   it('rejects session creation before spawning an agent when memory pressure persists', async () => {
@@ -7741,53 +7841,28 @@ describe('SessionExecutionService', () => {
     });
   });
 
-  it('preserves authentication success and auth methods when the follow-up probe still needs auth', async () => {
-    const authenticate = vi
-      .spyOn(AcpAuthenticationManager.prototype, 'authenticate')
-      .mockResolvedValue({ success: true, disposition: 'authenticated' });
-    const fetchAcpCapabilities = vi.fn(async () => {
-      throw new AcpAuthenticationRequiredError([{ type: 'terminal', args: ['--login'] }]);
-    });
+  it('refuses legacy authentication without a follow-up capability probe', async () => {
     const service = new SessionExecutionService(
       createBaseDeps({
-        fetchAcpCapabilities,
-        workspaceDocument: {
-          getAgentConfigForMachineLaunch: vi.fn(async () =>
-            createLaunchConfig({
-              cliType: 'builtin',
-              agentType: 'kimi',
-              env: {},
-              runtimeOverrides: { kimiPath: '/test/kimi' },
-            })
-          ),
-          updateAcpCapabilities: vi.fn(async () => {}),
-        } as unknown as LoroDocumentManager,
+        fetchAcpCapabilities: async () => {
+          throw new Error('retired probe must not run');
+        },
       })
     );
-
-    try {
-      const result = await service.authenticateMachineAcp({
+    await expect(
+      service.authenticateMachineAcp({
         type: 'machine/acp-authenticate',
-        machineId: 'machine-1' as MachineId,
-        workspaceId: 'workspace-1' as WorkspaceId,
-        requestId: 'auth-1',
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1',
+        requestId: 'auth-retired',
         action: 'start',
         configId: capabilityConfigId,
-      });
-
-      expect(result).toEqual(
-        expect.objectContaining({
-          success: true,
-          disposition: 'authenticated',
-          capabilitiesRefreshed: false,
-          authRequired: true,
-          authMethods: [{ type: 'terminal', args: ['--login'] }],
-          error: 'Authentication required',
-        })
-      );
-    } finally {
-      authenticate.mockRestore();
-    }
+      })
+    ).resolves.toMatchObject({
+      success: false,
+      disposition: 'error',
+      error: 'legacy_harness_authentication_disabled',
+    });
   });
 
   it('launches authentication only from the daemon-authoritative persisted config', async () => {
@@ -7875,45 +7950,32 @@ describe('SessionExecutionService', () => {
     }
   });
 
-  it('bounds the post-authentication capability proof inside the renderer deadline', async () => {
-    vi.useFakeTimers();
-    const authenticate = vi
-      .spyOn(AcpAuthenticationManager.prototype, 'authenticate')
-      .mockResolvedValue({ success: true, disposition: 'authenticated' });
-    const fetchAcpCapabilities = vi.fn(
-      (...args: unknown[]) =>
-        new Promise<never>((_resolve, reject) => {
-          const signal = (args[5] as { signal?: AbortSignal } | undefined)?.signal;
-          signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-        })
+  it('directs Molly authentication to model connections without a probe', async () => {
+    const service = new SessionExecutionService(
+      createBaseDeps({
+        workspaceDocument: {
+          getAgentConfigForMachineLaunch: async () =>
+            createLaunchConfig({ cliType: 'builtin', agentType: 'molly' }),
+        } as unknown as LoroDocumentManager,
+        fetchAcpCapabilities: async () => {
+          throw new Error('must not probe');
+        },
+      })
     );
-    const service = new SessionExecutionService(createBaseDeps({ fetchAcpCapabilities }));
-
-    try {
-      const resultPromise = service.authenticateMachineAcp({
+    await expect(
+      service.authenticateMachineAcp({
         type: 'machine/acp-authenticate',
-        machineId: 'machine-1' as MachineId,
-        workspaceId: 'workspace-1' as WorkspaceId,
-        requestId: 'auth-refresh-timeout',
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1',
+        requestId: 'molly-auth',
         action: 'start',
         configId: capabilityConfigId,
-      });
-
-      await vi.advanceTimersByTimeAsync(60_000);
-
-      await expect(resultPromise).resolves.toEqual(
-        expect.objectContaining({
-          success: true,
-          disposition: 'authenticated',
-          capabilitiesRefreshed: false,
-          error: 'Authentication succeeded, but capability verification timed out',
-        })
-      );
-      expect(fetchAcpCapabilities).toHaveBeenCalledOnce();
-    } finally {
-      authenticate.mockRestore();
-      vi.useRealTimers();
-    }
+      })
+    ).resolves.toMatchObject({
+      success: false,
+      disposition: 'error',
+      error: 'harness_model_connection_required',
+    });
   });
 
   it('forwards a browser authorization code to the active login process', async () => {
@@ -7971,455 +8033,6 @@ describe('SessionExecutionService', () => {
     } finally {
       submitAuthenticationInput.mockRestore();
     }
-  });
-
-  it('refreshes machine ACP capabilities and persists them to machine meta', async () => {
-    const capability = {
-      cliType: 'registry' as const,
-      agentType: 'deepseek',
-      cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
-      provenance: 'runtime' as const,
-      sourceVersion: 'registry:deepseek:unknown',
-      modes: [],
-      models: [{ modelId: 'kimi-k3', name: 'Kimi K3' }],
-      configOptions: [
-        {
-          id: 'model',
-          name: 'Model',
-          category: 'model',
-          type: 'select' as const,
-          currentValue: 'kimi-k3',
-          options: [{ value: 'kimi-k3', name: 'Kimi K3' }],
-        },
-        {
-          id: 'reasoning_effort',
-          name: 'Thinking',
-          category: 'thought_level',
-          type: 'select' as const,
-          currentValue: 'max',
-          options: ['low', 'high', 'max'].map((value) => ({ value, name: value })),
-        },
-      ],
-      modelReasoningEfforts: { 'kimi-k3': ['low', 'high', 'max'] },
-      sessionFork: false,
-      acknowledgedSteer: true,
-      sessionForkWorktree: false,
-      fetchedAt: 1,
-    };
-    const updateAcpCapabilities = vi.fn(async () => capability);
-    const fetchAcpCapabilities = vi.fn(async () => ({
-      modes: [],
-      models: capability.models,
-      configOptions: capability.configOptions,
-      availableCommands: [{ name: 'review', description: 'Review changes' }],
-      sessionFork: false,
-      acknowledgedSteer: true,
-      modelReasoningEfforts: capability.modelReasoningEfforts,
-    }));
-
-    const deps = createBaseDeps({
-      workspaceDocument: {
-        repo: {
-          upsertDocMeta: vi.fn(async () => {}),
-          getDocMeta: vi.fn(async () => undefined),
-        },
-        getOrCreateSessionDoc: vi.fn(),
-        updateAcpCapabilities,
-        getAgentConfigForMachineLaunch: vi.fn(async () =>
-          createLaunchConfig({
-            agentType: 'deepseek',
-            env: { ACP_PROVIDER_TOKEN: 'secret-token' },
-          })
-        ),
-      } as unknown as LoroDocumentManager,
-      fetchAcpCapabilities,
-    });
-
-    const service = new SessionExecutionService(deps);
-    const result = await service.refreshMachineAcpCapabilities({
-      type: 'machine/acp-capabilities-refresh',
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    });
-
-    expect(fetchAcpCapabilities).toHaveBeenCalledWith(
-      'registry',
-      'deepseek',
-      { ACP_PROVIDER_TOKEN: 'secret-token' },
-      undefined,
-      undefined,
-      expect.objectContaining({
-        onManagedRuntimeProgress: expect.any(Function),
-      })
-    );
-    expect(updateAcpCapabilities).toHaveBeenCalledWith(
-      'machine-1',
-      capabilityConfigId,
-      'registry',
-      'deepseek',
-      [],
-      capability.models,
-      capability.configOptions,
-      [{ name: 'review', description: 'Review changes' }],
-      false,
-      'registry:deepseek:unknown',
-      capability.modelReasoningEfforts,
-      true,
-      { signal: expect.any(AbortSignal) }
-    );
-    expect(result).toEqual(
-      expect.objectContaining({
-        type: 'machine/acp-capabilities-refresh_response',
-        machineId: 'machine-1',
-        configId: capabilityConfigId,
-        cliType: 'registry',
-        agentType: 'deepseek',
-        success: true,
-        capability,
-      })
-    );
-  });
-
-  it('deduplicates concurrent ACP capability refreshes for the same config and launch inputs', async () => {
-    let release: () => void = () => {};
-    const fetched = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const fetchAcpCapabilities = vi.fn(async () => {
-      await fetched;
-      return { modes: [], models: [] };
-    });
-    const updateAcpCapabilities = vi.fn(async () => {});
-
-    const deps = createBaseDeps({
-      workspaceDocument: {
-        repo: {
-          upsertDocMeta: vi.fn(async () => {}),
-          getDocMeta: vi.fn(async () => undefined),
-        },
-        getOrCreateSessionDoc: vi.fn(),
-        getOrOpenSessionCode: vi.fn(async () => null),
-        updateAcpCapabilities,
-      } as unknown as LoroDocumentManager,
-      fetchAcpCapabilities,
-    });
-
-    const service = new SessionExecutionService(deps);
-    const request = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-
-    const first = service.refreshMachineAcpCapabilities(request);
-    const second = service.refreshMachineAcpCapabilities(request);
-    const third = service.refreshMachineAcpCapabilities(request);
-    release();
-    const [a, b, c] = await Promise.all([first, second, third]);
-
-    expect(fetchAcpCapabilities).toHaveBeenCalledTimes(1);
-    expect(updateAcpCapabilities).toHaveBeenCalledTimes(1);
-    expect(a).toEqual(expect.objectContaining({ success: true }));
-    expect(b).toEqual(expect.objectContaining({ success: true }));
-    expect(c).toEqual(expect.objectContaining({ success: true }));
-    expect(a).toBe(b);
-    expect(a).toBe(c);
-  });
-
-  it('keeps shared capability work alive until its last consumer cancels', async () => {
-    let releaseFetch!: () => void;
-    const fetched = new Promise<void>((resolve) => {
-      releaseFetch = resolve;
-    });
-    let markFetchStarted!: () => void;
-    const fetchStarted = new Promise<void>((resolve) => {
-      markFetchStarted = resolve;
-    });
-    let sharedSignal!: AbortSignal;
-    const fetchAcpCapabilities = vi.fn(async (...args: unknown[]) => {
-      const options = args[5] as { signal: AbortSignal };
-      sharedSignal = options.signal;
-      markFetchStarted();
-      await fetched;
-      return { modes: [], models: [] };
-    });
-    const updateAcpCapabilities = vi.fn(async () => {});
-    const service = new SessionExecutionService(
-      createBaseDeps({
-        fetchAcpCapabilities,
-        workspaceDocument: {
-          repo: {
-            upsertDocMeta: vi.fn(async () => {}),
-            getDocMeta: vi.fn(async () => undefined),
-          },
-          getOrCreateSessionDoc: vi.fn(),
-          getOrOpenSessionCode: vi.fn(async () => null),
-          updateAcpCapabilities,
-        } as unknown as LoroDocumentManager,
-      })
-    );
-    const request = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-    const firstController = new AbortController();
-    const secondController = new AbortController();
-
-    const first = service.refreshMachineAcpCapabilities(request, {
-      signal: firstController.signal,
-    });
-    const second = service.refreshMachineAcpCapabilities(request, {
-      signal: secondController.signal,
-    });
-    await fetchStarted;
-
-    firstController.abort();
-    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
-    expect(sharedSignal.aborted).toBe(false);
-
-    releaseFetch();
-    await expect(second).resolves.toEqual(expect.objectContaining({ success: true }));
-    expect(updateAcpCapabilities).toHaveBeenCalledTimes(1);
-  });
-
-  it('aborts capability probing when its last consumer cancels', async () => {
-    let markFetchStarted!: () => void;
-    const fetchStarted = new Promise<void>((resolve) => {
-      markFetchStarted = resolve;
-    });
-    let markProbeAborted!: () => void;
-    const probeAborted = new Promise<void>((resolve) => {
-      markProbeAborted = resolve;
-    });
-    const fetchAcpCapabilities = vi.fn(async (...args: unknown[]) => {
-      const options = args[5] as { signal: AbortSignal };
-      markFetchStarted();
-      await new Promise<void>((_resolve, reject) => {
-        const handleAbort = () => {
-          markProbeAborted();
-          reject(new DOMException('probe cancelled', 'AbortError'));
-        };
-        options.signal.addEventListener('abort', handleAbort, { once: true });
-        if (options.signal.aborted) handleAbort();
-      });
-      throw new Error('unreachable');
-    });
-    const updateAcpCapabilities = vi.fn(async () => {});
-    const service = new SessionExecutionService(
-      createBaseDeps({
-        fetchAcpCapabilities,
-        workspaceDocument: {
-          repo: {
-            upsertDocMeta: vi.fn(async () => {}),
-            getDocMeta: vi.fn(async () => undefined),
-          },
-          getOrCreateSessionDoc: vi.fn(),
-          getOrOpenSessionCode: vi.fn(async () => null),
-          updateAcpCapabilities,
-        } as unknown as LoroDocumentManager,
-      })
-    );
-    const controller = new AbortController();
-    const refresh = service.refreshMachineAcpCapabilities(
-      {
-        type: 'machine/acp-capabilities-refresh',
-        machineId: 'machine-1',
-        workspaceId: 'workspace-1' as WorkspaceId,
-        configId: capabilityConfigId,
-      },
-      { signal: controller.signal }
-    );
-    await fetchStarted;
-
-    controller.abort();
-    await expect(refresh).rejects.toMatchObject({ name: 'AbortError' });
-    await probeAborted;
-    expect(updateAcpCapabilities).not.toHaveBeenCalled();
-  });
-
-  it('starts a new capability probe while an aborted generation is still cleaning up', async () => {
-    let markFirstStarted!: () => void;
-    const firstStarted = new Promise<void>((resolve) => {
-      markFirstStarted = resolve;
-    });
-    let markFirstAborted!: () => void;
-    const firstAborted = new Promise<void>((resolve) => {
-      markFirstAborted = resolve;
-    });
-    let releaseFirstCleanup!: () => void;
-    const firstCleanup = new Promise<void>((resolve) => {
-      releaseFirstCleanup = resolve;
-    });
-    let markFirstFinished!: () => void;
-    const firstFinished = new Promise<void>((resolve) => {
-      markFirstFinished = resolve;
-    });
-    let callCount = 0;
-    const fetchAcpCapabilities = vi.fn(async (...args: unknown[]) => {
-      const options = args[5] as { signal: AbortSignal };
-      callCount += 1;
-      if (callCount === 2) {
-        return { modes: [], models: [] };
-      }
-      markFirstStarted();
-      await new Promise<void>((resolve) => {
-        const handleAbort = () => {
-          markFirstAborted();
-          resolve();
-        };
-        options.signal.addEventListener('abort', handleAbort, { once: true });
-        if (options.signal.aborted) handleAbort();
-      });
-      await firstCleanup;
-      markFirstFinished();
-      throw new DOMException('old probe cancelled', 'AbortError');
-    });
-    const service = new SessionExecutionService(createBaseDeps({ fetchAcpCapabilities }));
-    const request = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-    const controller = new AbortController();
-
-    const first = service.refreshMachineAcpCapabilities(request, {
-      signal: controller.signal,
-    });
-    await firstStarted;
-    controller.abort();
-    await expect(first).rejects.toMatchObject({ name: 'AbortError' });
-    await firstAborted;
-
-    await expect(service.refreshMachineAcpCapabilities(request)).resolves.toEqual(
-      expect.objectContaining({ success: true })
-    );
-    expect(fetchAcpCapabilities).toHaveBeenCalledTimes(2);
-
-    releaseFirstCleanup();
-    await firstFinished;
-  });
-
-  it('does not deduplicate ACP refreshes for configs sharing the same provider', async () => {
-    let release: () => void = () => {};
-    const fetched = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const fetchAcpCapabilities = vi.fn(async () => {
-      await fetched;
-      return { modes: [], models: [] };
-    });
-    const service = new SessionExecutionService(createBaseDeps({ fetchAcpCapabilities }));
-    const request = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-
-    const first = service.refreshMachineAcpCapabilities(request);
-    const second = service.refreshMachineAcpCapabilities({
-      ...request,
-      configId: 'config-2' as AgentConfigId,
-    });
-    await vi.waitFor(() => expect(fetchAcpCapabilities).toHaveBeenCalledTimes(2));
-    release();
-    await Promise.all([first, second]);
-  });
-
-  it('does not deduplicate ACP refreshes across authoritative config revisions', async () => {
-    let releaseFirst: () => void = () => {};
-    let releaseSecond: () => void = () => {};
-    const firstFetched = new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-    const secondFetched = new Promise<void>((resolve) => {
-      releaseSecond = resolve;
-    });
-    let callCount = 0;
-    const fetchAcpCapabilities = vi.fn(async () => {
-      const which = ++callCount;
-      await (which === 1 ? firstFetched : secondFetched);
-      return { modes: [], models: [] };
-    });
-
-    const getAgentConfigForMachineLaunch = vi
-      .fn()
-      .mockResolvedValueOnce(createLaunchConfig({ env: { TOKEN: 'A' } }))
-      .mockResolvedValueOnce(createLaunchConfig({ env: { TOKEN: 'B' } }));
-    const deps = createBaseDeps({
-      fetchAcpCapabilities,
-      workspaceDocument: {
-        getAgentConfigForMachineLaunch,
-        updateAcpCapabilities: vi.fn(async () => {}),
-      } as unknown as LoroDocumentManager,
-    });
-    const service = new SessionExecutionService(deps);
-    const baseRequest = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-
-    const first = service.refreshMachineAcpCapabilities(baseRequest);
-    const second = service.refreshMachineAcpCapabilities(baseRequest);
-
-    releaseFirst();
-    releaseSecond();
-    await Promise.all([first, second]);
-
-    expect(fetchAcpCapabilities).toHaveBeenCalledTimes(2);
-    expect(fetchAcpCapabilities).toHaveBeenCalledWith(
-      'registry',
-      'codex',
-      { TOKEN: 'A' },
-      undefined,
-      undefined,
-      expect.objectContaining({
-        onManagedRuntimeProgress: expect.any(Function),
-      })
-    );
-    expect(fetchAcpCapabilities).toHaveBeenCalledWith(
-      'registry',
-      'codex',
-      { TOKEN: 'B' },
-      undefined,
-      undefined,
-      expect.objectContaining({
-        onManagedRuntimeProgress: expect.any(Function),
-      })
-    );
-  });
-
-  it('clears the ACP refresh dedupe slot after a fetch failure so subsequent calls retry', async () => {
-    let fail = true;
-    const fetchAcpCapabilities = vi.fn(async () => {
-      if (fail) {
-        throw new Error('probe failed');
-      }
-      return { modes: [], models: [] };
-    });
-    const deps = createBaseDeps({ fetchAcpCapabilities });
-    const service = new SessionExecutionService(deps);
-    const request = {
-      type: 'machine/acp-capabilities-refresh' as const,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      configId: capabilityConfigId,
-    };
-
-    const failed = await service.refreshMachineAcpCapabilities(request);
-    expect(failed).toEqual(expect.objectContaining({ success: false, error: 'probe failed' }));
-
-    fail = false;
-    const second = await service.refreshMachineAcpCapabilities(request);
-    expect(second).toEqual(expect.objectContaining({ success: true }));
-    expect(fetchAcpCapabilities).toHaveBeenCalledTimes(2);
   });
 });
 

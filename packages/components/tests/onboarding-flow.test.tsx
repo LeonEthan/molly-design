@@ -9,9 +9,11 @@ import type {
   AgentConfigMeta,
   LocalProjectId,
   MachineId,
-  ProviderSetupTask,
   WorkspaceId,
 } from '@molly/shared';
+import { getAgentConfigRoomId } from '@molly/shared';
+import { createLocalPlatformProvider, createStaticStore } from '@molly/platform';
+import { PlatformContext } from '@molly/platform/react';
 
 const mocks = vi.hoisted(() => ({
   getCliState: vi.fn(),
@@ -36,8 +38,17 @@ vi.mock('../src/hooks/use-authenticated-convex', async (importOriginal) => {
 vi.mock('../src/hooks/use-visible-local-projects', () => ({
   useVisibleLocalProjects: mocks.useVisibleLocalProjects,
 }));
+vi.mock('../src/hooks/use-machine-flock-agent-configs', () => ({
+  useMachineFlockAgentConfigsForMachineIds: () => undefined,
+}));
+vi.mock('../src/components/settings/model-connection-setting', () => ({
+  ModelConnectionSetting: () => <div data-testid="model-connections" />,
+}));
 
 import { runtimeAtom } from '../src/atoms/runtime';
+import { desktopOnboardingDraftAtom, desktopOnboardingPhaseAtom } from '../src/atoms/onboarding';
+import { localCliStartingAtom, localProbeResultAtom } from '../src/atoms/local-probe';
+import { agentConfigMetaCacheAtom } from '../src/atoms/doc-meta';
 import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom } from '../src/atoms/workspace-context';
 import {
   OnboardingOverlay,
@@ -174,6 +185,63 @@ describe('desktop onboarding flow', () => {
     ).toBe('projects');
   });
 
+  it('mounts the real connection step without probing, installing or reviving old setup', async () => {
+    const legacyRequests: string[] = [];
+    const legacy: AgentConfigMeta = {
+      id: 'retired' as AgentConfigId,
+      machineId,
+      name: 'Previous Claude',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'claude',
+      env: {},
+    };
+    store.set(localProbeResultAtom, { ok: true, machineId });
+    store.set(localCliStartingAtom, false);
+    store.set(agentConfigMetaCacheAtom, { [getAgentConfigRoomId(legacy.id)]: legacy });
+    store.set(desktopOnboardingDraftAtom, {
+      provider: { kind: 'agentConfig', agentConfigId: legacy.id, agentName: legacy.name },
+      project: null,
+    });
+    store.set(desktopOnboardingPhaseAtom, 'firstTask');
+    store.set(runtimeAtom, {
+      workspaceId,
+      workspaceSlug: 'workspace-1',
+      requestMachineAcpBinaryStatus: () => {
+        legacyRequests.push('status');
+      },
+      requestMachineAcpBinaryInstall: () => {
+        legacyRequests.push('install');
+      },
+      requestMachineAcpCapabilitiesRefresh: () => {
+        legacyRequests.push('refresh');
+      },
+    } as never);
+    const platform = createLocalPlatformProvider({
+      session: createStaticStore({ status: 'unauthenticated' }),
+      workspaces: createStaticStore({ status: 'ready', workspaces: [], activeWorkspaceId: null }),
+    });
+    await act(async () =>
+      root?.render(
+        <Provider store={store}>
+          <PlatformContext.Provider value={platform}>
+            <OnboardingOverlay onCompleted={async () => true} />
+          </PlatformContext.Provider>
+        </Provider>
+      )
+    );
+    expect(container.querySelector('[data-testid=model-connections]')).not.toBeNull();
+    expect(container.textContent).toContain('Connect a model');
+    expect(findButton(container, 'Next').disabled).toBe(true);
+    expect(container.textContent).not.toContain('Previous Claude');
+    expect(legacyRequests).toEqual([]);
+    expect(store.get(desktopOnboardingDraftAtom).provider).toEqual({
+      kind: 'agentConfig',
+      agentConfigId: legacy.id,
+      agentName: legacy.name,
+    });
+  });
+
   it('returns the exact selected local project', async () => {
     const onComplete = vi.fn();
     const selectedMachine = 'machine-2' as MachineId;
@@ -224,167 +292,91 @@ describe('desktop onboarding flow', () => {
     });
   });
 
-  it('keeps a pending setup distinct from a completed AgentConfig', async () => {
-    const onNext = vi.fn();
-    const setup: ProviderSetupTask = {
-      v: 1,
-      id: 'setup-1' as ProviderSetupTask['id'],
+  it('requires explicit selection of a published local Molly', async () => {
+    const selected: AgentConfigMeta = {
+      id: 'synthetic-molly' as AgentConfigId,
       machineId,
-      config: {
-        id: 'setup-1' as ProviderSetupTask['id'],
-        machineId,
-        name: 'Codex',
-        description: undefined,
-        cliType: 'builtin',
-        agentType: 'codex',
-        env: {},
-        prompt: '',
-      },
-      status: 'preparing-runtime',
-      attempt: 1,
-      createdAt: 10,
-      updatedAt: 20,
+      name: 'Molly',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'molly',
+      env: {},
     };
-
-    await act(async () => {
+    const selections: unknown[] = [];
+    await act(async () =>
       root?.render(
         <ProvidersScreenView
-          configs={[]}
-          setups={[setup]}
-          testStatuses={{}}
-          selectedProviderId={setup.id}
-          noLocalMachine={false}
+          configs={[
+            selected,
+            {
+              ...selected,
+              id: 'legacy' as AgentConfigId,
+              name: 'Retired Claude',
+              agentType: 'claude',
+            },
+            {
+              ...selected,
+              id: 'remote' as AgentConfigId,
+              name: 'Remote Molly',
+              machineId: 'remote' as MachineId,
+            },
+          ]}
           localMachineId={machineId}
-          onEdit={vi.fn()}
-          onTest={vi.fn()}
-          onDelete={vi.fn()}
-          onAdd={vi.fn()}
-          onBack={vi.fn()}
-          onSkip={vi.fn()}
-          onNext={onNext}
+          onBack={() => undefined}
+          onSkip={() => undefined}
+          onNext={(selection) => selections.push(selection)}
         />
-      );
-    });
-
-    expect(findButton(container, 'Working').disabled).toBe(true);
-
-    await act(async () => {
-      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onNext).toHaveBeenCalledWith({
-      kind: 'providerSetup',
-      providerSetupId: setup.id,
-      agentName: setup.config.name,
-    });
+      )
+    );
+    expect(findButton(container, 'Next').disabled).toBe(true);
+    expect(container.textContent).not.toContain('Retired Claude');
+    expect(container.textContent).not.toContain('Remote Molly');
+    await act(async () =>
+      findButton(container, 'Molly').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    );
+    await act(async () =>
+      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    );
+    expect(selections).toEqual([
+      { kind: 'agentConfig', agentConfigId: selected.id, agentName: selected.name },
+    ]);
   });
 
-  it('continues with an AgentConfig only after it is published', async () => {
-    const onNext = vi.fn();
+  it('does not replace a removed selection with another Molly or offer legacy installers', async () => {
     const config: AgentConfigMeta = {
-      id: 'config-ready' as AgentConfigId,
+      id: 'one' as AgentConfigId,
       machineId,
-      name: 'Codex',
+      name: 'Molly One',
       description: undefined,
       cliType: 'builtin',
-      agentType: 'codex',
+      agentType: 'molly',
       env: {},
     };
-
-    await act(async () => {
+    const selections: unknown[] = [];
+    const render = (configs: AgentConfigMeta[], currentMachineId = machineId) =>
       root?.render(
         <ProvidersScreenView
-          configs={[config]}
-          testStatuses={{}}
-          selectedProviderId={config.id}
-          noLocalMachine={false}
-          localMachineId={machineId}
-          onEdit={vi.fn()}
-          onTest={vi.fn()}
-          onDelete={vi.fn()}
-          onAdd={vi.fn()}
-          onBack={vi.fn()}
-          onSkip={vi.fn()}
-          onNext={onNext}
+          configs={configs}
+          localMachineId={currentMachineId}
+          onBack={() => undefined}
+          onSkip={() => undefined}
+          onNext={(selection) => selections.push(selection)}
         />
       );
-    });
-
-    await act(async () => {
-      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onNext).toHaveBeenCalledWith({
-      kind: 'agentConfig',
-      agentConfigId: config.id,
-      agentName: config.name,
-    });
-  });
-
-  it('keeps provider activity compact in the badge and progress button', async () => {
-    const config: AgentConfigMeta = {
-      id: 'config-progress' as AgentConfigId,
-      machineId,
-      name: 'Codex',
-      description: undefined,
-      cliType: 'builtin',
-      agentType: 'codex',
-      env: {},
-    };
-
-    await act(async () => {
-      root?.render(
-        <ProvidersScreenView
-          configs={[config]}
-          testStatuses={{}}
-          testActivities={{ [config.id]: { phase: 'downloading-runtime', percent: 64 } }}
-          noLocalMachine={false}
-          onEdit={vi.fn()}
-          onTest={vi.fn()}
-          onDelete={vi.fn()}
-          onAdd={vi.fn()}
-          onBack={vi.fn()}
-          onSkip={vi.fn()}
-          onNext={vi.fn()}
-        />
-      );
-    });
-
-    expect(container.textContent).toContain('Downloading');
-    expect(findButton(container, '64%').disabled).toBe(true);
-    expect(container.textContent).not.toContain('Downloading the agent runtime');
-  });
-
-  it('keeps the latest provider failure reason on the failed badge', async () => {
-    const config: AgentConfigMeta = {
-      id: 'config-failed' as AgentConfigId,
-      machineId,
-      name: 'Codex',
-      description: undefined,
-      cliType: 'builtin',
-      agentType: 'codex',
-      env: {},
-    };
-
-    await act(async () => {
-      root?.render(
-        <ProvidersScreenView
-          configs={[config]}
-          testStatuses={{ [config.id]: 'failed' }}
-          failureReasons={{ [config.id]: 'The API key was rejected.' }}
-          noLocalMachine={false}
-          onEdit={vi.fn()}
-          onTest={vi.fn()}
-          onDelete={vi.fn()}
-          onAdd={vi.fn()}
-          onBack={vi.fn()}
-          onSkip={vi.fn()}
-          onNext={vi.fn()}
-        />
-      );
-    });
-
-    expect(
-      container.querySelector('[aria-label="Failed: The API key was rejected."]')
-    ).not.toBeNull();
+    await act(async () => render([config]));
+    await act(async () =>
+      findButton(container, 'Molly One').dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    );
+    await act(async () => render([{ ...config, id: 'two' as AgentConfigId, name: 'Molly Two' }]));
+    expect(findButton(container, 'Next').disabled).toBe(true);
+    expect(selections).toEqual([]);
+    const otherMachine = 'other-machine' as MachineId;
+    await act(async () => render([{ ...config, machineId: otherMachine }], otherMachine));
+    expect(findButton(container, 'Next').disabled).toBe(true);
+    expect(findButton(container, 'Molly One').getAttribute('aria-pressed')).toBe('false');
+    expect(container.textContent).not.toContain('Download');
+    expect(container.textContent).not.toContain('Sign in');
+    expect(container.textContent).not.toContain('Add provider');
   });
 
   it('keeps failed Agent setup retryable from Summary with investigation detail', async () => {

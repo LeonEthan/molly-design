@@ -21,9 +21,9 @@ Root and `apps/cli/AGENTS.md` apply; `specs/session-orchestration.md` owns behav
   completion at 64 KiB; preserve both per-output and aggregate omission metadata.
 - Operation files contain prompts and assistant output; keep them private to the
   local account (0700/0600 on Unix).
-- Create Operations freeze each target's effective dispatch config at
-  acceptance; recovery must not re-read mutable requester history defaults.
-  Full content stays in the target Session history.
+- Create/chat Operations freeze each target's effective dispatch config at acceptance;
+  recovery uses that snapshot, never mutable history. Missing chat snapshots refuse
+  execution. Full content stays in the target Session history.
 - Accepted Operations freeze `requesterUserId` and exact `sourceTurnId`; `requesterSessionId` names
   the source Session. Recovery uses that user for attribution/authorization and the current owner
   Machine credential to execute. Completion preserves userId. Matching includes both ids, kind,
@@ -81,6 +81,8 @@ Root and `apps/cli/AGENTS.md` apply; `specs/session-orchestration.md` owns behav
 - Missing Session metadata, a recoverable tombstone, or an unsynchronized
   Machine Flock document is uncertainty, not permanent deletion/configuration
   absence. Keep the item/Delivery pending until positive evidence or deadline.
+- Retired/mismatched Delivery targets or invalid frozen Molly selections settle without
+  execution. Dispatch preserves the frozen target ID and MCP/Task selection.
 - Deadlines finish the root with item `TARGET_TIMEOUT` results but never cancel
   target Turns. Operation cancel is the only best-effort remote-cancel path.
 - A pending Delivery still undeliverable 8h after its Operation's deadline is

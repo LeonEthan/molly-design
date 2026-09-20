@@ -2,9 +2,8 @@
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 
-These contracts bind producers and consumers, including UI and CLI callers outside
-this package. Read them when changing daemon protocol negotiation, MCP/Role catalogs,
-per-turn MCP selection, or Role-based session creation and dispatch.
+Read before changing daemon negotiation, MCP/Role catalogs or UI, per-turn MCP
+selection, or Role creation/dispatch. These contracts bind all producers and consumers.
 
 ## Machine protocol negotiation
 
@@ -16,39 +15,54 @@ per-turn MCP selection, or Role-based session creation and dispatch.
 
 ## Workspace MCP and Agent Roles
 
+- MCP catalog writes own monotonic revisions; caller revisions and clocks confer no
+  execution identity. Historical rows remain readable until explicitly saved.
+
 - Workspace MCP has exactly two durable layers: catalog entries in the workspace Flock
   document and selected ids in each user turn input config. Do not add machine bindings.
   Preserve `mcpServerIds: []` as an explicit empty selection; dispatch must carry the
   driving turn's selection into ACP startup rather than rereading session history.
-- MCP/Role catalog writes resolve on local Flock durability, followed by explicit
-  upload. Settings neither await nor report upload; upload failure must not fail or
-  roll back a durable write. CLI reports its sync result. See
+- MCP/Role writes resolve on local Flock durability, then upload. Settings neither
+  await nor report upload; its failure cannot fail or roll back the write. CLI
+  reports sync results. See
   [catalog explanation](../../.agents/docs/workspace-catalog-durability.md).
-- Roles use one workspace Flock `agentRole` family; sharing updates `visibility`.
-  Store no secrets, API keys, MCP selections, or memory; apply
-  `isSensitiveAgentRoleConfigOptionKey` on read and write. Roles pin permission via
-  `runConfig.modeId` or `_permission`; hide the separate composer permission button
-  when pinned, but keep warning-tone modes visibly marked on every such surface.
-  Role-level auto-approval policy is out of scope. Settings/mentions use
-  `canReadAgentRole`/`canManageAgentRole`; MCP resolves explicit Role ids from the
-  catalog without requiring mention-scoped authorization.
+- Roles share one Flock `agentRole` family; sharing changes `visibility`. Exclude
+  secrets, API keys, MCP selections and memory; apply
+  `isSensitiveAgentRoleConfigOptionKey` on read/write. Permission pins
+  (`runConfig.modeId`/`_permission`) hide the composer permission button but retain
+  visible warning modes. Role-level auto-approval policy stays out of scope.
+  Settings/mentions use `canReadAgentRole`/`canManageAgentRole`; MCP resolves explicit
+  catalog ids without mention-scoped authorization.
+- Explicit Role migration commits an immutable, normalized source backup and the
+  new config in one row. Recheck source before writing; reject stale retries and
+  backup removal. Backup run options are history only, never execution defaults.
 - Roles bind exact `machineId + agentConfigId`, never fall back, and remain listed
-  with precise reasons but unmentionable when machine/config/model/mode is unavailable.
+  with reasons but unmentionable for retired engines, overrides, stale catalogs or run config.
   Before Operation acceptance, MCP resolves the current `agentRoleId` row and freezes
   canonical Prompt, target, Role revision, and dispatch config into the Operation;
   edits/deletion cannot change recovery or retry. `SessionMeta.agentRoleId` and
   `agentRoleRevision` are display-only creation provenance.
 
-## Machine RPC: image connection
+## Embedded harness credentials
 
-- `design/image-connection` answers the capability question for ONE session: it carries
-  `ownerSessionId`, and `ready` (with a non-null `credential`) requires that session to have
-  design meta AND the machine's row to be complete and enabled. Absent, deleted, or unreadable
-  session meta is unavailable, and the lookup must stay read-only — never create or write a
-  session document to answer it. `design/image-connection-test` is machine-scoped and carries no
-  session identity: a settings surface must work before any session exists. Optional
-  `artworkWorkdir` and `workspaceRoot` come only from the live Session and validated
-  frozen context; image calls require both, never fall back to an MCP-provided path.
+`harness/host` v1 is main-process-only; renderer generic Machine RPC rejects it.
+It carries ciphertext-store metadata and in-memory credential reports over the
+owner-only local control socket, never Loro. Only a dispatcher-owned active
+run/epoch lease can consume a matching report. RPC results contain pending work,
+not secrets. Never log exchange bodies or return validation inputs in errors.
+`embedded-harness` schemas separate connection references from model selection;
+no empty-model fallback, snapshot secrets or dispatched-work replay. Session
+dispatch owns runtime availability; schema presence does not enable execution.
+
+## Image connection RPC
+
+- `design/image-connection` carries `ownerSessionId`. Secret-free `available` requires
+  design meta and complete protected metadata. `acquireCredential` additionally requires
+  an active dispatcher-owned run; only then may `ready` carry a credential. Renderer
+  generic RPC rejects this method. Missing/deleted/unreadable meta is unavailable;
+  lookups never create/write Session documents. Settings discovery uses main-only
+  vault IPC; the legacy daemon probe refuses. `artworkWorkdir` and `workspaceRoot`
+  come from the live Session and frozen context, never MCP caller paths.
 - Image models are user-required: preserve explicit stored models, never fill empty ones.
   Generate/edit share readiness; image-reading, attachments and rendering remain independent.
 

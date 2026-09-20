@@ -14,6 +14,11 @@ import {
   type SessionId,
 } from '@molly/shared';
 import { userAtom } from '@/atoms';
+import { decodeMollyModelOption } from '@molly/shared/embedded-harness';
+import { useAcpSelectorOptions } from '@/hooks/use-acp-selector-options';
+import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
+import type { AcpSelectorOptions } from '@/components/shared/acp-selector-options';
+import { filterAcpSessionConfigOptionValues } from '@/lib/acp-session-config-selection';
 import { chatLandingSessionStateAtomFamily } from '@/atoms/local-storage-cache';
 import {
   buildChatLandingDraftKey,
@@ -41,6 +46,7 @@ import { Textarea } from '@/ui/textarea';
 import { getFirstTaskPrimaryAction } from '../first-task-primary-action';
 import { OnboardingBackButton, OnboardingNextButton, OnboardingShell } from '../onboarding-shell';
 import { useOnboardingAnalytics } from '../onboarding-analytics';
+import { isOnboardingMollyConfig } from '../onboarding-agent';
 
 export function getFirstTaskAgentConfigs(
   configs: readonly AgentConfigMeta[],
@@ -48,7 +54,7 @@ export function getFirstTaskAgentConfigs(
 ): AgentConfigMeta[] {
   if (project.kind !== 'local') return [];
   return configs
-    .filter((candidate) => candidate.machineId === project.machineId)
+    .filter((candidate) => isOnboardingMollyConfig(candidate, project.machineId))
     .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id));
 }
 
@@ -57,6 +63,25 @@ export function getSelectedFirstTaskAgentConfig(
   agentConfigId: AgentConfigId
 ): AgentConfigMeta | null {
   return availableConfigs.find((candidate) => candidate.id === agentConfigId) ?? null;
+}
+
+export function isFirstTaskModelAvailable(
+  options: AcpSelectorOptions,
+  modelId: string,
+  thinking: string
+): boolean {
+  return (
+    options.capabilityAuthority === 'authoritative' &&
+    !!decodeMollyModelOption(modelId, thinking) &&
+    options.modelOptions.some((option) => option.value === modelId && option.disabled !== true) &&
+    options.modelReasoningEfforts?.[modelId]?.includes(thinking) === true &&
+    options.configOptionSelectors.some(
+      (selector) =>
+        selector.configId === 'reasoning_effort' &&
+        selector.type === 'select' &&
+        selector.options.some((option) => option.value === thinking && option.disabled !== true)
+    )
+  );
 }
 
 export function FirstTaskScreen({
@@ -90,6 +115,37 @@ export function FirstTaskScreen({
     () => getSelectedFirstTaskAgentConfig(availableConfigs, agentConfigId),
     [agentConfigId, availableConfigs]
   );
+  const { machines } = useVisibleMachineMetas({ syncMachineFlock: false });
+  const [runSelections, setRunSelections] = useState<
+    Record<string, { modelId: string; thinking: string }>
+  >({});
+  const selectionKey = config ? `${config.machineId}/${config.id}` : '';
+  const savedSelection = config ? agentDefaultsCache.get(config.id) : undefined;
+  const { modelId, thinking } = runSelections[selectionKey] ?? {
+    modelId: savedSelection?.modelId ?? '',
+    thinking:
+      typeof savedSelection?.configOptionValues?.reasoning_effort === 'string'
+        ? savedSelection.configOptionValues.reasoning_effort
+        : '',
+  };
+  const selectorOptions = useAcpSelectorOptions(
+    config
+      ? {
+          configId: config.id,
+          cliType: config.cliType,
+          agentType: config.agentType,
+          selectedModelId: modelId,
+          machine: machines.get(config.machineId) ?? null,
+        }
+      : undefined
+  );
+  const modelOptions = selectorOptions.modelOptions.filter((option) =>
+    decodeMollyModelOption(option.value)
+  );
+  const thinkingSelector = selectorOptions.configOptionSelectors.find(
+    (selector) => selector.configId === 'reasoning_effort' && selector.type === 'select'
+  );
+  const modelAvailable = isFirstTaskModelAvailable(selectorOptions, modelId, thinking);
   const seedPrompts = useMemo(
     () => [
       t(
@@ -108,6 +164,7 @@ export function FirstTaskScreen({
   const canStartFirstTask =
     project.kind === 'local' &&
     config !== null &&
+    modelAvailable &&
     config.machineId === project.machineId &&
     runtime !== null &&
     user !== null;
@@ -125,6 +182,12 @@ export function FirstTaskScreen({
     }
     const machineId = project.machineId;
     const trimmedPrompt = prompt.trim();
+    // Freeze the visible choice before navigation; never reread mutable defaults later.
+    const configOptionValues = filterAcpSessionConfigOptionValues(
+      { reasoning_effort: thinking },
+      selectorOptions.configOptionSelectors
+    );
+    agentDefaultsCache.set(config.id, { modelId, modeId: null, configOptionValues });
     setStartRequested(true);
     setStartError(null);
 
@@ -167,7 +230,10 @@ export function FirstTaskScreen({
         if (
           !store
             .get(getAllAgentConfigAtom)
-            .some((candidate) => candidate.id === config.id && candidate.machineId === machineId)
+            .some(
+              (candidate) =>
+                candidate.id === config.id && isOnboardingMollyConfig(candidate, machineId)
+            )
         ) {
           throw new Error(t('onboarding.firstTask.agentUnavailable'));
         }
@@ -183,7 +249,6 @@ export function FirstTaskScreen({
           kind: 'local',
           localProjectId: project.localProjectId as LocalProjectId,
         };
-        const defaults = agentDefaultsCache.get(config.id);
         const entry = buildInitialHistoryEntry({
           userId: user.id,
           timestamp: new Date(getServerNow()).toISOString(),
@@ -191,9 +256,8 @@ export function FirstTaskScreen({
           agentType: config.agentType,
           prompt: buildAgentPrompt(trimmedPrompt, config.prompt ?? ''),
           inputBlocks: undefined,
-          modelId: defaults?.modelId ?? undefined,
-          modeId: defaults?.modeId ?? undefined,
-          configOptionValues: defaults?.configOptionValues,
+          modelId,
+          configOptionValues,
         });
         if (!entry) throw new Error('Could not build the first turn');
         const result = await startSession(
@@ -297,6 +361,9 @@ export function FirstTaskScreen({
     localMachineId,
     canCreateSession,
     config,
+    modelId,
+    thinking,
+    selectorOptions.configOptionSelectors,
     onContinue,
     project,
     prompt,
@@ -391,7 +458,7 @@ export function FirstTaskScreen({
               if (!next) return;
               onAgentConfigChange(next);
             }}
-            disabled={availableConfigs.length === 0}
+            disabled={startRequested || availableConfigs.length === 0}
           >
             <SelectTrigger
               id="onboarding-first-task-agent"
@@ -439,6 +506,65 @@ export function FirstTaskScreen({
             </p>
           ) : null}
         </div>
+        {config ? (
+          <div className="grid gap-3">
+            <label className="grid gap-1.5 text-xs font-medium">
+              {t('onboarding.firstTask.model')}
+              <Select
+                value={modelId}
+                disabled={startRequested || selectorOptions.capabilityAuthority !== 'authoritative'}
+                onValueChange={(value) =>
+                  setRunSelections((current) => ({
+                    ...current,
+                    [selectionKey]: { modelId: value, thinking },
+                  }))
+                }
+              >
+                <SelectTrigger aria-label={t('onboarding.firstTask.model')}>
+                  <SelectValue placeholder={t('onboarding.firstTask.selectModel')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {modelOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            <label className="grid gap-1.5 text-xs font-medium">
+              {t('onboarding.firstTask.thinking')}
+              <Select
+                value={thinking}
+                disabled={
+                  startRequested || !modelOptions.some((option) => option.value === modelId)
+                }
+                onValueChange={(value) =>
+                  setRunSelections((current) => ({
+                    ...current,
+                    [selectionKey]: { modelId, thinking: value },
+                  }))
+                }
+              >
+                <SelectTrigger aria-label={t('onboarding.firstTask.thinking')}>
+                  <SelectValue placeholder={t('onboarding.firstTask.selectThinking')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {thinkingSelector?.options.map((option) => (
+                    <SelectItem key={option.value} value={option.value} disabled={option.disabled}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </label>
+            {!modelAvailable ? (
+              <p role="status" className="text-xs text-muted-foreground">
+                {t('onboarding.firstTask.modelRequired')}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {startError ? (
           <p role="alert" className="text-sm text-destructive">
             {t('onboarding.firstTask.startFailed')} {startError}

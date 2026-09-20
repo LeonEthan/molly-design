@@ -571,6 +571,24 @@ describe('session MCP input schemas', () => {
     ).toBe(true);
   });
 
+  it.each([{ mcpServerIds: [] }, { mcpServerIds: ['synthetic-causal-mcp'] }])(
+    'freezes ordinary create MCP selection from the invoking turn %#',
+    ({ mcpServerIds }) => {
+      const expected = [...mcpServerIds];
+      const resolved = resolveMcpSessionCreate(
+        { operationId: 'synthetic-create', prompt: 'Synthetic task' },
+        {
+          chainDepth: 0,
+          frozenInputConfig: { cliType: 'builtin', agentType: 'molly', mcpServerIds },
+        },
+        { machineId: 'synthetic-machine' },
+        undefined
+      );
+      mcpServerIds.push('later-mcp');
+      expect(resolved.dispatchConfig.mcpServerIds).toEqual(expected);
+    }
+  );
+
   it('resolves an Agent Role directly from the workspace catalog', () => {
     const role = agentRole({
       runConfig: {
@@ -580,7 +598,11 @@ describe('session MCP input schemas', () => {
       },
       promptPrefix: 'Act as a careful reviewer.',
     });
-    const frozenInputConfig = {} as SessionTurnInputConfig;
+    const frozenInputConfig: SessionTurnInputConfig = {
+      cliType: 'builtin',
+      agentType: 'molly',
+      mcpServerIds: ['synthetic-mcp'],
+    };
     const resolved = resolveMcpSessionCreate(
       {
         operationId: 'role-review-1',
@@ -619,6 +641,7 @@ describe('session MCP input schemas', () => {
       modelId: 'opus',
       configOptionValues: { reasoning_effort: 'medium' },
       taskToolsEnabled: false,
+      mcpServerIds: ['synthetic-mcp'],
       inheritSessionDefaults: false,
     });
     expect(buildResolvedMcpCreateCanonicalCommand(resolved)).toMatchObject({
@@ -628,6 +651,52 @@ describe('session MCP input schemas', () => {
       machineId: 'remote-machine',
       agentConfigId: 'claude-opus',
     });
+  });
+
+  it('freezes only the migrated Role config, never its legacy backup or native options', () => {
+    const legacy = agentRole({
+      promptPrefix: 'Legacy-only prompt',
+      runConfig: {
+        modelId: 'legacy-model',
+        modeId: 'skip-permissions',
+        configOptionValues: { legacy_option: 'historical-only' },
+      },
+    });
+    const migrated = agentRole({
+      agentConfigId: 'molly-config' as AgentRole['agentConfigId'],
+      revision: 8,
+      promptPrefix: 'Current explicit prompt',
+      runConfig: {
+        modelId: 'molly-model:synthetic-connection/synthetic-model',
+        configOptionValues: { reasoning_effort: 'high' },
+      },
+      embeddedMigration: { v: 1, migratedAt: 10, source: legacy },
+    });
+    const resolved = resolveMcpSessionCreate(
+      {
+        operationId: 'synthetic-migrated-role',
+        prompt: 'Synthetic task',
+        agentRoleId: migrated.id,
+      },
+      { chainDepth: 0, frozenInputConfig: {} as SessionTurnInputConfig },
+      { machineId: migrated.machineId },
+      migrated
+    );
+    expect(resolved.dispatchConfig).toEqual({
+      ...migrated.runConfig,
+      taskToolsEnabled: false,
+      mcpServerIds: [],
+      inheritSessionDefaults: false,
+    });
+    expect(buildResolvedMcpCreateCanonicalCommand(resolved)).toMatchObject({
+      agentConfigId: 'molly-config',
+      agentRoleRevision: 8,
+      prompt: 'Current explicit prompt\n\nSynthetic task',
+    });
+    expect(JSON.stringify(buildResolvedMcpCreateCanonicalCommand(resolved))).not.toContain(
+      'legacy'
+    );
+    expect(legacy.runConfig.modeId).toBe('skip-permissions');
   });
 
   it('loads Role rows from the workspace catalog without a Turn authorization record', async () => {

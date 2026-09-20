@@ -14,6 +14,10 @@ import {
 import type { AgentClient } from '@/agent/agent-client';
 import { getAcpRuntimeConfigPatchFromOptions } from '@/lib/acp/runtime-config';
 import type { Logger } from '@/utils/logger';
+import {
+  validateMollyRunConfigProjection,
+  type ModelSelection,
+} from '@molly/shared/embedded-harness';
 
 const MAX_ACP_CONFIG_VALUE_LOG_LENGTH = 160;
 
@@ -48,6 +52,7 @@ export type AcpSessionConfigTarget = {
   sessionId: SessionId;
   acpSessionId: ACPSessionId | null;
   agentClient: AgentClient | null;
+  assertEmbeddedModelSelection?: (selection: unknown) => void;
 };
 
 export type AcpSessionRunConfig = {
@@ -55,6 +60,7 @@ export type AcpSessionRunConfig = {
   agentType?: string;
   modeId?: string;
   modelId?: string;
+  modelSelection?: ModelSelection;
   configOptionValues?: Record<string, AcpConfigOptionValue>;
 };
 
@@ -95,6 +101,12 @@ export async function applyAcpSessionRunConfig(args: {
   signal?: AbortSignal;
 }): Promise<AcpSessionRunConfigApplyResult> {
   const { session, config, logger, signal } = args;
+  if (config.agentType === 'molly') {
+    signal?.throwIfAborted();
+    if (!session.assertEmbeddedModelSelection) throw new Error('harness_worker_unavailable');
+    session.assertEmbeddedModelSelection(validateMollyRunConfigProjection(config));
+    return { rejectedSelections: [], warningSelections: [], runtimeConfigPatch: null };
+  }
   const assertNotAborted = (): void => {
     if (!signal?.aborted) return;
     throw signal.reason instanceof Error

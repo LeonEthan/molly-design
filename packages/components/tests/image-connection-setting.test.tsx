@@ -3,18 +3,26 @@
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { IMAGE_CONNECTION_VERSION, type ImageConnectionSettings } from '@molly/shared';
+import type { ProtectedImageConnection } from '@molly/shared/embedded-harness';
 
 import en from '../../../locales/en.json';
 import {
   ImageConnectionForm,
-  buildImageConnectionSettings,
+  ImageConnectionSetting,
+  buildImageConnectionSave,
   createImageConnectionFormDraft,
   imageConnectionDraftIssues,
-  resolveImageConnectionApiKey,
   type ImageConnectionFormDraft,
 } from '../src/components/settings/image-connection-setting';
 import { initI18n } from '../src/i18n';
+
+const { imageIpc } = vi.hoisted(() => ({
+  imageIpc: { getImageSnapshot: vi.fn(), saveImage: vi.fn(), testImage: vi.fn() },
+}));
+vi.mock('../src/lib/electron-ipc-client', () => ({
+  // Production returns a fresh proxy each time; do not mask unstable effect dependencies.
+  getIpcServices: () => ({ modelConnections: imageIpc }),
+}));
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -26,17 +34,17 @@ import { initI18n } from '../src/i18n';
 const copy = (key: keyof typeof en): string => en[key];
 
 const STORED_KEY = 'sk-test-stored-placeholder-not-real';
-const NOW_MS = 1_700_000_000_000;
 
 const storedConnection = (
-  overrides: Partial<ImageConnectionSettings> = {}
-): ImageConnectionSettings => ({
-  v: IMAGE_CONNECTION_VERSION,
+  overrides: Partial<ProtectedImageConnection> = {}
+): ProtectedImageConnection => ({
+  id: '00000000-0000-4000-8000-000000000001',
+  revision: 3,
   enabled: true,
   baseUrl: 'https://api.openai.com/v1',
-  apiKey: STORED_KEY,
+  hasApiKey: true,
   model: 'saved-custom-model',
-  updatedAt: NOW_MS,
+  legacyHistoryMayContainKey: false,
   ...overrides,
 });
 
@@ -50,100 +58,43 @@ const draftOf = (overrides: Partial<ImageConnectionFormDraft> = {}): ImageConnec
 });
 
 describe('image connection form values', () => {
-  it('requires a user-selected model for a new connection', () => {
-    const draft = createImageConnectionFormDraft(undefined);
-    expect(draft).toEqual({
+  it('requires an explicit model and never seeds a credential', () => {
+    expect(createImageConnectionFormDraft(undefined)).toEqual({
       enabled: true,
       baseUrl: '',
       apiKey: '',
       clearApiKey: false,
       model: '',
     });
-    expect(imageConnectionDraftIssues(draft).model).toBe(true);
-    expect(
-      buildImageConnectionSettings(
-        { ...draft, baseUrl: 'https://images.example/v1', apiKey: 'synthetic' },
-        undefined,
-        NOW_MS
-      )
-    ).toBeUndefined();
+    expect(createImageConnectionFormDraft(storedConnection()).apiKey).toBe('');
+    expect(buildImageConnectionSave(draftOf({ model: '' }))).toBeUndefined();
   });
-
   it.each([
     'https://user:secret@images.example/v1',
     'https://images.example/v1?key=secret',
     'https://images.example/v1#fragment',
     'ftp://images.example/v1',
-  ])('rejects an unusable endpoint in the form before save: %s', (baseUrl) => {
-    expect(imageConnectionDraftIssues(draftOf({ baseUrl })).baseUrl).toBe(true);
-    expect(buildImageConnectionSettings(draftOf({ baseUrl }), undefined, NOW_MS)).toBeUndefined();
+  ])('rejects unsafe endpoint %s', (baseUrl) => {
+    expect(buildImageConnectionSave(draftOf({ baseUrl }))).toBeUndefined();
   });
-
-  it('rejects model names longer than the stored connection permits', () => {
+  it('sends the CAS revision and leaves retention to the main vault', () => {
+    const saved = buildImageConnectionSave(draftOf(), storedConnection());
+    expect(saved?.expectedRevision).toBe(3);
+    expect(saved?.apiKey).toBeUndefined();
+    expect(
+      buildImageConnectionSave(draftOf({ apiKey: '  synthetic-new  ' }), storedConnection())?.apiKey
+    ).toBe('synthetic-new');
+    expect(
+      buildImageConnectionSave(draftOf({ clearApiKey: true }), storedConnection())?.clearApiKey
+    ).toBe(true);
+    expect(
+      buildImageConnectionSave(draftOf({ clearApiKey: true, apiKey: 'synthetic' }))
+    ).toBeUndefined();
+  });
+  it('rejects missing or oversized model values', () => {
+    expect(imageConnectionDraftIssues(draftOf({ model: ' ' })).model).toBe(true);
     expect(imageConnectionDraftIssues(draftOf({ model: 'a'.repeat(201) })).model).toBe(true);
-  });
-
-  it('never seeds the draft with the stored key', () => {
-    const draft = createImageConnectionFormDraft(storedConnection());
-    expect(draft.apiKey).toBe('');
-    expect(draft.baseUrl).toBe('https://api.openai.com/v1');
-    expect(draft.model).toBe('saved-custom-model');
-  });
-
-  it('keeps the stored key unless the draft replaces or clears it', () => {
-    const stored = storedConnection();
-    expect(resolveImageConnectionApiKey(draftOf(), stored)).toBe(STORED_KEY);
-    expect(resolveImageConnectionApiKey(draftOf({ apiKey: '  sk-new  ' }), stored)).toBe('sk-new');
-    expect(resolveImageConnectionApiKey(draftOf({ apiKey: '' }), stored)).toBe(STORED_KEY);
-    expect(resolveImageConnectionApiKey(draftOf({ clearApiKey: true }), stored)).toBe('');
-    // An explicit clear wins even if the field still holds text.
-    expect(
-      resolveImageConnectionApiKey(draftOf({ apiKey: 'sk-new', clearApiKey: true }), stored)
-    ).toBe('');
-    expect(resolveImageConnectionApiKey(draftOf(), undefined)).toBe('');
-  });
-
-  it('builds a storable row, and refuses one the reader would reject', () => {
-    const built = buildImageConnectionSettings(
-      draftOf({ apiKey: 'sk-new', enabled: false }),
-      storedConnection(),
-      NOW_MS
-    );
-    expect(built).toEqual({
-      v: IMAGE_CONNECTION_VERSION,
-      enabled: false,
-      baseUrl: 'https://api.openai.com/v1',
-      apiKey: 'sk-new',
-      model: 'saved-custom-model',
-      updatedAt: NOW_MS,
-    });
-
-    // `http://user:pass@host` would store a second secret in a shown field.
-    expect(
-      buildImageConnectionSettings(
-        draftOf({ baseUrl: 'https://user:pass@api.openai.com/v1' }),
-        undefined,
-        NOW_MS
-      )
-    ).toBeUndefined();
-    expect(
-      buildImageConnectionSettings(draftOf({ baseUrl: 'ftp://api.openai.com' }), undefined, NOW_MS)
-    ).toBeUndefined();
-    expect(
-      buildImageConnectionSettings(draftOf({ model: '   ' }), undefined, NOW_MS)
-    ).toBeUndefined();
-  });
-
-  it('flags exactly the fields that stop a save', () => {
-    expect(imageConnectionDraftIssues(draftOf())).toEqual({ baseUrl: false, model: false });
-    expect(imageConnectionDraftIssues(draftOf({ baseUrl: '' }))).toEqual({
-      baseUrl: true,
-      model: false,
-    });
-    expect(imageConnectionDraftIssues(draftOf({ model: ' ' }))).toEqual({
-      baseUrl: false,
-      model: true,
-    });
+    expect(buildImageConnectionSave(draftOf({ model: 'a'.repeat(201) }))).toBeUndefined();
   });
 });
 
@@ -231,6 +182,39 @@ describe('ImageConnectionForm', () => {
     });
   };
 
+  it('keeps an unsaved draft on rerender and saves only a public CAS update', async () => {
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({
+      connection: storedConnection({ legacyHistoryMayContainKey: true }),
+    }));
+    const writes: unknown[] = [];
+    imageIpc.saveImage.mockImplementation(async (input: unknown) => {
+      writes.push(input);
+      return storedConnection({ revision: 4, model: 'explicit-new-model' });
+    });
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
+    });
+    const view = container as HTMLElement;
+    expect(view.textContent).toContain(copy('settings.imageConnection.legacyHistoryWarning'));
+    const model = view.querySelector<HTMLInputElement>('input[id$="-model"]')!;
+    await typeInto(model, 'explicit-new-model');
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
+    });
+    expect(model.value).toBe('explicit-new-model');
+    await click(button(view, copy('common.save')));
+    expect(writes).toEqual([
+      {
+        expectedRevision: 3,
+        enabled: true,
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'explicit-new-model',
+        clearApiKey: false,
+      },
+    ]);
+    expect(apiKeyInput(view).value).toBe('');
+  });
+
   it('renders a stored key as stored without ever showing it', async () => {
     const view = await renderForm({ stored: storedConnection() });
     const input = apiKeyInput(view);
@@ -277,11 +261,16 @@ describe('ImageConnectionForm', () => {
     expect(view.textContent).toContain(copy('settings.imageConnection.invalidBaseUrl'));
 
     await typeInto(urlInput as HTMLInputElement, 'https://images.example.com/v1');
+    expect(button(view, copy('common.save')).disabled).toBe(true);
+    await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
     expect(button(view, copy('common.save')).disabled).toBe(false);
 
     await click(button(view, copy('common.save')));
     expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({ baseUrl: 'https://images.example.com/v1', apiKey: '' })
+      expect.objectContaining({
+        baseUrl: 'https://images.example.com/v1',
+        apiKey: 'synthetic-renewed-key',
+      })
     );
   });
 
@@ -368,7 +357,7 @@ describe('ImageConnectionForm', () => {
     expect(view.textContent).toContain(copy('settings.imageConnection.statusReady'));
 
     const failed = await renderForm({
-      stored: storedConnection({ apiKey: '' }),
+      stored: storedConnection({ hasApiKey: false }),
       testState: { phase: 'error', message: 'HTTP 401: invalid API key provided' },
     });
     expect(failed.querySelector('[role="alert"]')?.textContent).toBe(

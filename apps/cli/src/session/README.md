@@ -13,6 +13,72 @@ Design continuation uses the same guarded dispatch and restore path. Its frozen
 provider selection, persisted ACP/provider association, retiring callback fence,
 and native terminal evidence are described in [design ownership](../design/README.md).
 
+The embedded Molly branch restores only its exact private native session. It does not
+use stale-ACP prompt retries, transcript reconstruction or an isolated title request.
+Prompt success additionally requires a matching run/epoch and native settlement receipt.
+Worker startup is a single attempt inside the existing start gate; failed-process
+cleanup and stderr diagnostics remain. The external npx recovery policy and cache
+mutation are retired, independently of native prompt replay prevention.
+`acp-session-config-applier.ts` rejects unsupported legacy options or a changed embedded
+model selection instead of silently continuing with an old configuration. The protected
+host exchange registers Molly when its catalog is available; registration does not
+migrate existing sessions or retire legacy execution. Migration status lives in the
+[harness implementation note](../../../../.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md).
+
+`design-continuation-service.ts` prepares explicit legacy-design migration without
+starting an Agent. A workspace/source/version-derived target ID makes explicit retries
+find the same immutable receipt in the target Session Doc, including after reopening.
+It saves a bounded reference and source topology/provenance, not a second artwork or
+native transcript. Preparation checks owner, machine, target catalog, source changes,
+target tombstones and one-level parent topology; it awaits local persistence but
+publishes no runnable Session metadata. Failed persistence can be explicitly retried;
+corrupt/future receipts are preserved and refused. It does not scan rooms on startup.
+The existing Molly bootstrap can consume a receipt's historical text only when the
+target's workspace, source, artwork, owner, provider and opener bindings agree. It
+labels the reference as data, reuses it on exact native restore, and grants no tool
+approval. Ordinary Molly startup does not open history for this feature. The
+[renderer dialog](../../../../packages/components/src/components/sessions/README.md#continue-an-old-design-with-molly)
+previews and confirms the receipt, then publishes through its existing writer.
+This service is not a legacy-execution gate; full desktop migration remains unverified.
+
+The target is an independent Session in its own default chat workdir, with the same
+`artworkId` and exact `openedBySessionId`/root provenance. Old project, branch and
+parent fields remain reference-only in the immutable receipt. They do not grant
+workspace or lifecycle ownership: normal child startup can recreate a missing old
+worktree and rewrite its metadata. `SessionManager` validates marked targets and
+their launch config before preparation adoption or workspace setup, then rechecks
+the receipt for bootstrap. It rejects inherited project/worktree/native-fork inputs
+instead of restoring or unarchiving the source. The ordinary design resolver reads
+the existing artwork projection and stores new draft/turn inputs under the new chat.
+
+The production `session/design-continuation-prepare` local RPC exposes this preparation
+and inspection behind `designContinuationPreparation` v1 negotiation. It accepts only
+the daemon's local owner and exact workspace/machine envelope, rejects Agent-scoped
+requests, and derives busy state from the existing live execution/presence/dispatch
+sources. It returns the persisted bounded receipt and per-candidate statuses, never
+publishes target metadata or dispatches. Unexpected storage/parser errors become a
+fixed diagnostic without private payloads. This capability advertises preparation only.
+
+Its explicit `inspectAttachments` preflight checks receipt candidates against the exact
+settled human turn and existing local blob namespace (including fork storage IDs).
+`design-continuation-attachments.ts` checks regular-file size and a bounded streamed hash,
+rejects symlink escapes, and rechecks history after filesystem work. Missing, changed,
+unsafe or unreadable files have per-file results; no cloud or source-path fallback runs.
+The source owner/artwork and idle state are rechecked before returning. This read-only
+observation grants no enduring file capability, copies no bytes and does not validate
+image decoding; actual dispatch still needs its normal byte and image checks.
+
+The first new human turn now resolves receipt attachments again under its frozen
+invocation. It checks the first target turn and metadata bindings, reads only the
+selected source bodies, and strips old source paths. The ordinary prompt builder
+materializes eligible local files; raster bytes also enter ACP vision and the existing
+design-reference snapshot. Current attachments take precedence within normal file/image
+limits, and matching historical identities are not added twice. Missing, changed and
+turn-limited references are explicit prompt data; later turns do not read the source or
+repeat the handoff. An ownership change or failed local copy blocks this prompt without
+a relay fallback or history write. These consumers are wired, but target publication
+and user-facing migration acceptance still require implementation and desktop verification.
+
 Explicit Stop saves an exact-turn dispatch pause. Queued inputs stay intact until Continue;
 unknown steer delivery stays non-dispatchable even then. Stop escalation retains the original
 native request and can be retried after failure. Canvas release follows native settlement and

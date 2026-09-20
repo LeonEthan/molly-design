@@ -20,6 +20,25 @@ import {
   type AgentRoleAvailabilityContext,
 } from '../src/agent-role';
 import type { AgentConfigId, AgentRoleId, MachineId } from '../src/ids';
+import { ACP_CAPABILITY_CACHE_VERSION } from '../src/ai';
+import { encodeMollyModelOption } from '../src/embedded-harness';
+
+const modelId = encodeMollyModelOption('synthetic-connection', 'k3-256k');
+const target = (machineId = 'machine-1' as MachineId) => ({
+  machineId,
+  cliType: 'builtin' as const,
+  agentType: 'molly',
+});
+const capability = {
+  cliType: 'builtin' as const,
+  agentType: 'molly',
+  cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
+  provenance: 'runtime' as const,
+  fetchedAt: 1,
+  modes: [],
+  models: [{ modelId, name: 'Synthetic Kimi' }],
+  modelReasoningEfforts: { [modelId]: ['off', 'high'] },
+};
 
 const role = (overrides: Partial<AgentRole> = {}): AgentRole => ({
   v: AGENT_ROLE_VERSION,
@@ -29,7 +48,7 @@ const role = (overrides: Partial<AgentRole> = {}): AgentRole => ({
   name: 'Reviewer',
   machineId: 'machine-1' as MachineId,
   agentConfigId: 'config-1' as AgentConfigId,
-  runConfig: { modelId: 'gpt-5.6' },
+  runConfig: { modelId },
   revision: 1,
   createdAt: 10,
   updatedAt: 10,
@@ -41,7 +60,8 @@ const context = (
 ): AgentRoleAvailabilityContext => ({
   authorizedMachineIds: new Set(['machine-1' as MachineId]),
   onlineMachineIds: new Set(['machine-1' as MachineId]),
-  agentConfigMachineIds: new Map([['config-1' as AgentConfigId, 'machine-1' as MachineId]]),
+  agentConfigs: new Map([['config-1' as AgentConfigId, target()]]),
+  capabilitiesByMachineId: new Map([['machine-1' as MachineId, { 'config-1': capability }]]),
   loadedAgentConfigMachineIds: new Set(['machine-1' as MachineId]),
   ...overrides,
 });
@@ -171,6 +191,99 @@ describe('agent role visibility', () => {
 });
 
 describe('agent role availability', () => {
+  it.each(['claude', 'codex', 'kimi', 'grok', 'gemini', 'opencode'])(
+    'keeps a retired %s Role readable but not mentionable',
+    (agentType) => {
+      const current = role();
+      const snapshot = structuredClone(current);
+      const ctx = context({
+        agentConfigs: new Map([[current.agentConfigId, { ...target(), agentType }]]),
+      });
+      expect(resolveAgentRoleAvailability(current, ctx)).toEqual({
+        kind: 'unavailable',
+        reason: 'agent_config_retired',
+      });
+      expect(
+        selectMentionableAgentRoles([current], {
+          currentUserId: current.ownerUserId,
+          scope: { kind: 'machine', machineId: current.machineId },
+          getAvailability: (candidate) => resolveAgentRoleAvailability(candidate, ctx),
+        })
+      ).toEqual([]);
+      expect(current).toEqual(snapshot);
+    }
+  );
+
+  it.each([
+    { cliType: 'registry' as const },
+    { cliType: 'custom' as const },
+    { runtimeOverrides: {} },
+    { customAcp: { command: 'external', args: [] } },
+  ])('rejects non-embedded launch identity %j', (override) => {
+    expect(
+      resolveAgentRoleAvailability(
+        role(),
+        context({
+          agentConfigs: new Map([['config-1' as AgentConfigId, { ...target(), ...override }]]),
+        })
+      )
+    ).toEqual({ kind: 'unavailable', reason: 'agent_config_retired' });
+  });
+
+  it.each([
+    undefined,
+    { ...capability, provenance: 'static' as const },
+    { ...capability, cacheVersion: 0 },
+    { ...capability, agentType: 'codex' },
+  ])('does not call an absent, provisional or mismatched catalog available', (entry) => {
+    expect(
+      resolveAgentRoleAvailability(
+        role(),
+        context({
+          capabilitiesByMachineId: new Map([
+            ['machine-1' as MachineId, entry ? { 'config-1': entry } : undefined],
+          ]),
+        })
+      )
+    ).toEqual({ kind: 'unavailable', reason: 'capabilities_unavailable' });
+  });
+
+  it.each([
+    {},
+    { modelId: 'legacy-model' },
+    { modelId: encodeMollyModelOption('deleted', 'k3-256k') },
+    { modelId, modeId: 'skip-permissions' },
+    { modelId, configOptionValues: { reasoning_effort: 'xhigh' } },
+    { modelId, configOptionValues: { unsupported: true } },
+  ])('does not substitute an incompatible run config %j', (runConfig) => {
+    expect(resolveAgentRoleAvailability(role({ runConfig }), context())).toEqual({
+      kind: 'unavailable',
+      reason: 'run_config_unsupported',
+    });
+  });
+
+  it('accepts the exact published connection/model and supported thinking', () => {
+    expect(
+      resolveAgentRoleAvailability(
+        role({ runConfig: { modelId, configOptionValues: { reasoning_effort: 'high' } } }),
+        context()
+      )
+    ).toEqual({ kind: 'available' });
+    expect(
+      resolveAgentRoleAvailability(
+        role(),
+        context({
+          capabilitiesByMachineId: new Map([
+            [
+              'machine-1' as MachineId,
+              { 'config-1': { ...capability, modelReasoningEfforts: undefined } },
+            ],
+          ]),
+        })
+      )
+    ).toEqual({ kind: 'unavailable', reason: 'run_config_unsupported' });
+  });
+
   it('reports the precise reason instead of falling back', () => {
     expect(resolveAgentRoleAvailability(role(), context())).toEqual({ kind: 'available' });
     expect(
@@ -180,14 +293,15 @@ describe('agent role availability', () => {
       kind: 'unavailable',
       reason: 'machine_offline',
     });
-    expect(
-      resolveAgentRoleAvailability(role(), context({ agentConfigMachineIds: new Map() }))
-    ).toEqual({ kind: 'unavailable', reason: 'agent_config_missing' });
+    expect(resolveAgentRoleAvailability(role(), context({ agentConfigs: new Map() }))).toEqual({
+      kind: 'unavailable',
+      reason: 'agent_config_missing',
+    });
     expect(
       resolveAgentRoleAvailability(
         role(),
         context({
-          agentConfigMachineIds: new Map([['config-1' as AgentConfigId, 'machine-2' as MachineId]]),
+          agentConfigs: new Map([['config-1' as AgentConfigId, target('machine-2' as MachineId)]]),
         })
       )
     ).toEqual({ kind: 'unavailable', reason: 'agent_config_machine_mismatch' });
@@ -211,9 +325,13 @@ describe('agent role mention scope', () => {
   const bothMachines = context({
     authorizedMachineIds: new Set(['machine-1', 'machine-2'] as MachineId[]),
     onlineMachineIds: new Set(['machine-1', 'machine-2'] as MachineId[]),
-    agentConfigMachineIds: new Map([
-      ['config-1' as AgentConfigId, 'machine-1' as MachineId],
-      ['config-2' as AgentConfigId, 'machine-2' as MachineId],
+    agentConfigs: new Map([
+      ['config-1' as AgentConfigId, target()],
+      ['config-2' as AgentConfigId, target('machine-2' as MachineId)],
+    ]),
+    capabilitiesByMachineId: new Map([
+      ['machine-1' as MachineId, { 'config-1': capability }],
+      ['machine-2' as MachineId, { 'config-2': capability }],
     ]),
     loadedAgentConfigMachineIds: new Set(['machine-1', 'machine-2'] as MachineId[]),
   });

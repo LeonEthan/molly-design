@@ -56,7 +56,7 @@ type OnboardingOperation =
 
 export interface DesktopOnboardingTraceProperties {
   action?: 'authenticated' | 'back' | 'complete' | 'continue' | 'skip';
-  agent_state?: 'failed' | 'missing' | 'preparing' | 'ready';
+  agent_state?: 'failed' | 'missing' | 'preparing' | 'ready' | 'retired';
   attempt?: number | null;
   available?: boolean;
   cloud_account?: boolean;

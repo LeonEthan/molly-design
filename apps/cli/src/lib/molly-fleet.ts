@@ -2,7 +2,6 @@ import { Effect } from 'effect';
 import {
   type CliRuntimeConnectivity,
   type CliRuntimeWorkspace,
-  CliType,
   MachineId,
   WorkspaceId,
   getSessionRoomId,
@@ -98,7 +97,6 @@ type WorkspaceRuntimeState = {
 
 export class MollyFleet {
   private readonly logger: Logger;
-  private readonly builtinAgentConfigCliTypes: CliType[];
   private readonly supportRegistryAgentTypes: string[];
   private readonly cliToken: string;
   private readonly userId: string;
@@ -127,7 +125,6 @@ export class MollyFleet {
 
   constructor(options: {
     logger: Logger;
-    builtinAgentConfigCliTypes: CliType[];
     supportRegistryAgentTypes?: string[];
     cliToken: string;
     userId: string;
@@ -140,7 +137,6 @@ export class MollyFleet {
     onProcessLifecycleAction?: (action: MachineProcessLifecycleAction) => void;
   }) {
     this.logger = options.logger;
-    this.builtinAgentConfigCliTypes = options.builtinAgentConfigCliTypes;
     this.supportRegistryAgentTypes = options.supportRegistryAgentTypes ?? [];
     this.cliToken = options.cliToken;
     this.userId = options.userId;
@@ -390,7 +386,6 @@ export class MollyFleet {
       try {
         lody = await Molly.create({
           logger: workspaceLogger,
-          builtinAgentConfigCliTypes: this.builtinAgentConfigCliTypes,
           supportRegistryAgentTypes: this.supportRegistryAgentTypes,
           workspaceId: workspace.id as WorkspaceId,
           workspaceSlug: workspace.slug ?? undefined,
@@ -434,9 +429,8 @@ export class MollyFleet {
           userId: this.userId,
           logger: workspaceLogger,
           startTask: async (taskId, agentConfigId) => {
-            const { createSessionResult, resolveTurnDispatchConfig } =
-              await import('@/commands/session');
-            await startDelegatedTask(
+            const { createSessionResult } = await import('@/commands/session');
+            return await startDelegatedTask(
               {
                 auth: {
                   token: this.cliToken,
@@ -456,7 +450,7 @@ export class MollyFleet {
                     args.manager,
                     args.prompt,
                     args.options as Parameters<typeof createSessionResult>[4],
-                    resolveTurnDispatchConfig({})
+                    args.dispatchConfig
                   ),
               },
               taskId,

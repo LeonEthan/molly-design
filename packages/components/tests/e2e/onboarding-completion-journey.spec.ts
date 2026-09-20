@@ -7,7 +7,7 @@ test('provider skip remains an honest path into Molly', async ({ page }) => {
   );
   expect(response?.ok()).toBeTruthy();
 
-  await expect(page.getByRole('heading', { name: 'Connect a coding agent' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: 'Connect a model' })).toBeVisible({
     timeout: 30_000,
   });
   await page.getByRole('button', { name: 'Skip for now' }).click();
@@ -19,30 +19,18 @@ test('provider skip remains an honest path into Molly', async ({ page }) => {
   await expect(page.getByTestId('onboarding-complete')).toBeVisible();
 });
 
-test('pending provider selects a project then finishes on the preparing summary', async ({
-  page,
-}) => {
+test('a retained old setup is retired and cannot be retried', async ({ page }) => {
   test.setTimeout(60_000);
   const response = await page.goto(
-    '/iframe.html?id=onboarding-completionjourney--provider-pending-setup&viewMode=story'
+    '/iframe.html?id=onboarding-completionjourney--retired-setup&viewMode=story'
   );
   expect(response?.ok()).toBeTruthy();
 
-  await expect(page.getByRole('heading', { name: 'Connect a coding agent' })).toBeVisible({
+  await expect(page.getByRole('heading', { name: 'Choose the built-in Molly' })).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole('button', { name: 'Next' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Pick a project to start with' })).toBeVisible();
-  await page.getByRole('button', { name: 'Next' }).click();
-
-  await expect(page.getByRole('heading', { name: 'Ready to enter Molly' })).toBeVisible();
-  await expect(page.getByText('Your Agent setup is still in progress.')).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Codex' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'Molly' })).toBeVisible();
-  await expect(page.getByText('Setting up')).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Run your first task' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Enter Molly' }).click();
-
-  await expect(page.getByTestId('onboarding-complete')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'Previous Codex setup' })).toBeVisible();
+  await expect(page.getByText('Retired · read-only')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Enter Molly' })).toBeEnabled();
 });

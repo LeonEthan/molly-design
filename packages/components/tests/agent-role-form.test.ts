@@ -10,6 +10,8 @@ import type { AcpSelectorOptions } from '../src/components/shared/acp-selector-o
 import {
   applyAgentRoleRunConfigDefaults,
   buildAgentRoleFormValue,
+  buildAgentRoleMigrationFormValue,
+  buildMigratedAgentRole,
   buildAgentRoleRunConfigSummary,
   buildAgentRoleFromForm,
   EMPTY_AGENT_ROLE_FORM_VALUE,
@@ -18,6 +20,7 @@ import {
   validateAgentRoleForm,
   type AgentRoleFormValue,
 } from '../src/lib/agent-role-form';
+import { encodeMollyModelOption } from '@molly/shared/embedded-harness';
 
 const role = (overrides: Partial<AgentRole> = {}): AgentRole => ({
   v: AGENT_ROLE_VERSION,
@@ -68,6 +71,54 @@ const selectorOptions = (overrides: Partial<AcpSelectorOptions> = {}): AcpSelect
 });
 
 describe('agent role form validation', () => {
+  it('explicit migration resets CLI controls, preserves source and never selects a first model', () => {
+    const source = role({
+      runConfig: {
+        modelId: 'legacy-model',
+        modeId: 'skip-permissions',
+        configOptionValues: { thought_level: 'high' },
+      },
+      promptPrefix: 'Synthetic instruction',
+    });
+    const value = buildAgentRoleMigrationFormValue(source);
+    expect(value).toMatchObject({
+      name: source.name,
+      machineId: source.machineId,
+      agentConfigId: null,
+      modelId: null,
+      modeId: null,
+      configOptionValues: {},
+      promptPrefix: source.promptPrefix,
+    });
+    expect(applyAgentRoleRunConfigDefaults(value, selectorOptions(), true).modelId).toBeNull();
+    const target = buildMigratedAgentRole(
+      source,
+      {
+        ...value,
+        agentConfigId: 'molly' as AgentConfigId,
+        modelId: encodeMollyModelOption('connection-1', 'synthetic-model'),
+        configOptionValues: { reasoning_effort: 'high' },
+      },
+      20
+    );
+    expect(target).toMatchObject({
+      id: source.id,
+      revision: 2,
+      embeddedMigration: { v: 1, migratedAt: 20, source },
+    });
+    expect(target.runConfig).toEqual({
+      modelId: encodeMollyModelOption('connection-1', 'synthetic-model'),
+      configOptionValues: { reasoning_effort: 'high' },
+    });
+    const edited = buildAgentRoleFromForm(
+      { ...buildAgentRoleFormValue(target), name: 'Changed' },
+      { existing: target, ownerUserId: source.ownerUserId, now: 30, createId }
+    );
+    expect(edited.embeddedMigration).toEqual(target.embeddedMigration);
+    expect(edited.revision).toBe(3);
+    expect(source.runConfig.modelId).toBe('legacy-model');
+    expect(() => buildMigratedAgentRole(source, value, 20)).toThrow();
+  });
   it('requires a name and an exact machine + agent config pair', () => {
     expect(validateAgentRoleForm(EMPTY_AGENT_ROLE_FORM_VALUE, { accessibleRoles: [] })).toEqual([
       'name_required',

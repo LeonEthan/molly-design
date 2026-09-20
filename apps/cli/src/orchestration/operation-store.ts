@@ -24,6 +24,7 @@ import {
   type WorkspaceId,
 } from '@molly/shared';
 import { getMollyDataDir } from '@molly/shared/node/installation-profile';
+import { ModelSelectionSchema } from '@molly/shared/embedded-harness';
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const TERMINAL_RETENTION_MS = 7 * DAY_MS;
@@ -130,10 +131,13 @@ const FrozenConfigSchema = z
       .array(
         z
           .object({
+            agentConfigId: z.string().optional(),
             modeId: z.string().optional(),
             modelId: z.string().optional(),
+            modelSelection: ModelSelectionSchema.optional(),
             configOptionValues: z.record(z.string(), z.union([z.string(), z.boolean()])).optional(),
             taskToolsEnabled: z.boolean().optional(),
+            mcpServerIds: z.array(z.string()).optional(),
             inheritSessionDefaults: z.literal(false).optional(),
           })
           .strict()

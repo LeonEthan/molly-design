@@ -84,7 +84,43 @@ would have to load in the background to know whether to render at all.
 
 ## First design session and image settings
 
+Agents settings now mounts the encrypted `ModelConnectionSetting` independently of
+machine management. `AgentEngineCatalog` explains model selection and lists only
+names of this machine's legacy configs and pending setups as retired/read-only.
+It neither deletes those records nor mounts their authentication, installation or
+retry controls. Device monitoring remains in the separate Machines branch; its
+historical provider section uses the same read-only inventory. Onboarding also
+uses the model-connection form and explicit local Molly selection, with no legacy
+CLI prefetch, installation or sign-in. Persisted setup tasks stay retired rather
+than being promoted to runnable configs; an old first-task selection returns to
+model setup. These entry changes are not completion of the
+[embedded-harness migration](../../specs/molly-embedded-pi-harness.zh.md).
+
+Agents settings also mounts `BundledCapabilitiesSetting`. Its read-only IPC uses the
+same bundled CLI entry resolver as execution, then verifies fixed extension manifest
+and license resources. The public result includes engine/build and extension versions;
+neither renderer nor host imports the Pi SDK or acquires credentials for this read.
+The UI distinguishes loading, unknown and included-with-activation-conditions. Inclusion
+does not prove a live session negotiated question UI or that native acceptance passed.
+The current question extension excludes terminal UI and grill-me; command mapping
+remains open. Storybook covers narrow loading, unavailable and included states.
+
+Role discovery passes exact config metadata and machine capability catalogs to the
+shared availability rule. Retired targets and launch overrides remain readable but
+unmentionable; current authoritative model/effort support is required for availability.
+New Role authoring offers Molly only, while old Roles open for viewing and explicit
+migration rather than ordinary saves. UI checks do not replace backend acceptance.
+The renderer writer separately validates new and migrated Role targets and model
+projections. It requires a backup when rebinding a legacy source, rejects concurrent
+source changes across catalog reads, and excludes Roles from generic insert-if-absent.
+This protects local catalog authoring; runtime capability and credential checks still
+belong to execution acceptance and dispatch.
+
 Local onboarding keeps its capability-selected steps and optional exploration exit.
+Its first task exposes the published connection/model and model-specific thinking
+choices, validates saved selections against the authoritative catalog, and freezes
+the selection before navigation. Missing or stale choices permit exploration only;
+they never select another model automatically.
 The first-task screen uses the same canvas create/save and durable Session acceptance
 as the landing composer. Before leaving onboarding it puts the prompt and reserved
 canvas ID in the landing draft, sharing the existing submitting state across the

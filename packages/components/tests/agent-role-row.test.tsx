@@ -93,6 +93,46 @@ describe('AgentRoleRow', () => {
     expect(view.textContent).not.toContain('@Code-Reviewer');
   });
 
+  it('keeps retired history visible with a view action and explicit migration', async () => {
+    const view = await render({
+      availability: { kind: 'unavailable', reason: 'agent_config_retired' },
+      onMigrate: () => {},
+    });
+    expect(view.textContent).toContain('Agent engine is retired');
+    expect(view.querySelector('button[aria-label="View"]')).not.toBeNull();
+    expect(view.querySelector('button[aria-label="Edit"]')).toBeNull();
+    expect(view.textContent).toContain('Migrate to Molly');
+    expect(view.textContent).toContain('gpt-5.6-sol');
+  });
+
+  it('offers explicit migration only for an owned legacy binding and shows saved provenance', async () => {
+    let chosen = false;
+    const onMigrate = () => {
+      chosen = true;
+    };
+    const view = await render({ onMigrate });
+    const action = [...view.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Migrate to Molly'
+    );
+    expect(action).toBeDefined();
+    expect(chosen).toBe(false);
+    await act(async () => {
+      action?.click();
+    });
+    expect(chosen).toBe(true);
+    await render({ onMigrate, canManage: false });
+    expect(view.textContent).not.toContain('Migrate to Molly');
+    await render({
+      onMigrate,
+      agentConfig: { ...agentConfig, agentType: 'molly' },
+      role: { ...role, embeddedMigration: { v: 1, migratedAt: 3, source: role } },
+    });
+    expect(view.textContent).not.toContain('Migrate to Molly');
+    expect(view.textContent).toContain(
+      'Previous configuration saved: Code Reviewer · revision 2 · config-1'
+    );
+  });
+
   it('shows the default glyph when no emoji was picked', async () => {
     const view = await render({ role: { ...role, emoji: undefined } });
     expect(view.textContent).toContain(DEFAULT_AGENT_ROLE_EMOJI);

@@ -51,8 +51,9 @@ Files: [README.md](README.md). Scopes:
   documents are never executable and static frames die with their tab.
 - Preview comment writes go through `runtime.writer.mutatePreviewVisualComments`, never the store's `setState`.
 
-- Show paused dispatch with Retry Stop/Continue gated by `sessionStopControl: 1`. Unknown
-  steer has no resend; only execution/artifact completion releases canvas.
+- Keep Stop reachable during permissions/questions. Gate paused Retry Stop/Continue
+  on `sessionStopControl: 1`; unknown steer has no resend. Only execution/artifact
+  completion releases canvas.
 
 ## [Conversation surface](../../../../../.agents/docs/sessions-surface.md)
 

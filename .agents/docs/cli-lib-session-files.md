@@ -16,6 +16,15 @@ renderer-lifetime resource URL. An RPC turn may arrive before its history entry;
 the resolver waits for the existing `TurnHistoryGate` and rechecks history. A
 staged blob without a durable history block never receives a resource capability.
 
+For explicit design continuation, the immutable migration receipt selects historical
+attachments for the first new human turn. The continuation service checks the current
+invocation/target bindings, re-reads only the referenced source turns and verifies local
+bytes. The ordinary materializer then copies and hashes again, supplying the same ACP
+file/image blocks and design reference bytes as current attachments. Current input wins
+within normal count limits. Unavailable/omitted identities are reported as historical
+data; subsequent turns do not repeat the transfer. No source path or relay fallback is
+used. This consumer does not itself publish the new Session or dispatch a turn.
+
 For a historical `transport: 'r2'` row, the same RPC may read a byte copy left
 by an older Molly relay backfill under `_backfilled/`. Because the history row
 contains the relay id while that directory contains the former local id, lookup

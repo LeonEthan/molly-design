@@ -4,7 +4,6 @@ import { selectAtom } from 'jotai/utils';
 import {
   listAccessibleAgentRoles,
   resolveAgentRoleAvailability,
-  type AgentConfigId,
   type AgentRole,
   type AgentRoleAvailability,
   type AgentRoleAvailabilityContext,
@@ -99,14 +98,13 @@ export function useAgentRoleAvailability(
   );
 
   const context = useMemo<AgentRoleAvailabilityContext>(() => {
-    const agentConfigMachineIds = new Map<AgentConfigId, MachineId>();
-    for (const config of agentConfigs) {
-      if (config.machineId) agentConfigMachineIds.set(config.id, config.machineId);
-    }
     return {
       authorizedMachineIds: new Set(machines.keys()),
       onlineMachineIds,
-      agentConfigMachineIds,
+      agentConfigs: new Map(agentConfigs.map((config) => [config.id, config])),
+      capabilitiesByMachineId: new Map(
+        [...machines].map(([id, machine]) => [id, machine.acpCapabilities])
+      ),
       loadedAgentConfigMachineIds: new Set(loadedMachineIds),
     };
   }, [agentConfigs, loadedMachineIds, machines, onlineMachineIds]);

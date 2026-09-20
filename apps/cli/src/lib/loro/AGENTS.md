@@ -13,6 +13,9 @@ preserve unchanged unknown legacy data. Reads use the directory or targeted read
 only explicit export/replay reads all bodies. Control-plane `validateUpdates: false`
 does not disable history write validation.
 
+Design-continuation preparation persists an immutable target receipt, preserves
+source data, and publishes no runnable Session metadata.
+
 ## Opening a doc pulls its stream
 
 `getOrCreateSessionDoc()` immediately joins and pulls the full stream; the cached

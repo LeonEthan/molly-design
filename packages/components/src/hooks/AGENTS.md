@@ -61,6 +61,8 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
   `listAccessibleAgentRoles` / `resolveAgentRoleAvailability` rules, never a local
   predicate. Availability stays `unknown` — not `unavailable` — until that machine's
   agent-config rows are read, so subscribe exactly the machines the given Roles point at.
+  Pass exact target metadata and machine capability catalogs to that shared rule;
+  an ID-to-machine match alone does not make a Role executable.
   A Settings row states only reasons about its own binding; `machine_offline` belongs to
   the group's machine pill.
 

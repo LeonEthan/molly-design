@@ -52,7 +52,9 @@ one kind; it lists exactly what the intake validator admits.
 - `text`: structured `text.paragraphs[].runs[]`. Do not write HTML `content`.
 - `shape`: `shapeName` (`rect`, `roundRect`, `ellipse`, `oval`, `triangle`,
   `arrow`, or `custom` with `viewBox` and `path`), plus `fill` / `border`.
-- `line`: `viewBox`, `points`, optional `curve` / `arrow`, plus `border`.
+- `line`: `viewBox: [width, height]` is a pair of positive numbers defining
+  local coordinates (for example `[120, 120]`), not an SVG four-number string.
+  Use `points`, optional `curve` / `arrow`, plus `border`.
   Points are whitespace-separated `x,y` pairs. For `curve: smooth`, use one
   start point followed by groups of three: control point 1, control point 2,
   segment endpoint. Thus a curved line needs 4, 7, 10, … points; two points

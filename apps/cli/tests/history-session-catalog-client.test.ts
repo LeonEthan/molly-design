@@ -3,7 +3,6 @@ import * as acp from '@agentclientprotocol/sdk';
 import type { SessionInfo } from '@agentclientprotocol/sdk';
 import type { ACPSessionId } from '@molly/shared';
 
-import { resolveACPProcessLaunch, resolveACPProcessLaunchAsync } from '../src/agent/setting';
 import {
   dedupeHistorySessionsById,
   listPaginatedHistorySessions,
@@ -197,69 +196,18 @@ describe('requestHistorySessionReplay', () => {
 });
 
 describe('resolveHistoryACPProcessLaunch', () => {
-  it('uses the same builtin Codex bundled-adapter launch as normal sessions', async () => {
-    const provider = {
+  it.each([
+    {
       cliType: 'builtin',
       agentType: 'codex',
-      runtimeOverrides: { codexPath: '/opt/lody/codex' },
-    } as const;
-    const sessionLaunch = await resolveACPProcessLaunchAsync(provider);
-    const historyLaunch = await resolveHistoryACPProcessLaunch({
-      provider,
-      env: { PATH: '/usr/bin' },
-    });
-
-    expect(historyLaunch.command).toBe(sessionLaunch.command);
-    expect(historyLaunch.args).toEqual(sessionLaunch.args);
-    expect(historyLaunch.command).toBe(process.execPath);
-    expect(historyLaunch.args[0]).toContain('codex-acp.js');
-    expect(historyLaunch.env.CODEX_PATH).toBe('/opt/lody/codex');
-    expect(historyLaunch.env.PATH).toBe('/usr/bin');
-  });
-
-  it('uses the same registry Interactive Claude npx launch as normal sessions', async () => {
-    const provider = { cliType: 'registry', agentType: 'claude-p' } as const;
-    const sessionLaunch = resolveACPProcessLaunch(provider);
-    const historyLaunch = await resolveHistoryACPProcessLaunch({
-      provider,
-      env: { PATH: '/usr/bin' },
-    });
-
-    expect(historyLaunch.command).toBe(sessionLaunch.command);
-    expect(historyLaunch.args).toEqual(sessionLaunch.args);
-    expect(historyLaunch.command).toBe('npx');
-    expect(historyLaunch.args).toContain('--registry=https://registry.npmjs.org/');
-    expect(historyLaunch.args.some((arg) => /^acp-extension-claude-pty.*@0\.1\.5$/.test(arg))).toBe(
-      true
-    );
-    expect(historyLaunch.env.PATH).toBe('/usr/bin');
-  });
-
-  it('uses the same registry ACP npx launch as normal sessions', async () => {
-    const provider = { cliType: 'registry', agentType: 'auggie' } as const;
-    const sessionLaunch = resolveACPProcessLaunch(provider);
-    const historyLaunch = await resolveHistoryACPProcessLaunch({
-      provider,
-      env: { PATH: '/usr/bin' },
-    });
-
-    expect(historyLaunch.command).toBe(sessionLaunch.command);
-    expect(historyLaunch.args).toEqual(sessionLaunch.args);
-    expect(historyLaunch.env.PATH).toBe('/usr/bin');
-    expect(historyLaunch.env.AUGMENT_DISABLE_AUTO_UPDATE).toBe('1');
-  });
-
-  it('uses the same registry ACP local launch as normal sessions', async () => {
-    const provider = { cliType: 'registry', agentType: 'amp-acp' } as const;
-    const sessionLaunch = resolveACPProcessLaunch(provider);
-    const historyLaunch = await resolveHistoryACPProcessLaunch({
-      provider,
-      env: { PATH: '/usr/bin' },
-    });
-
-    expect(historyLaunch.command).toBe(sessionLaunch.command);
-    expect(historyLaunch.args).toEqual(sessionLaunch.args);
-    expect(historyLaunch.command).toBe('npx');
-    expect(historyLaunch.args).toEqual(['--prefer-offline', '-y', 'amp-acp']);
+      runtimeOverrides: { codexPath: '/synthetic/legacy' },
+    },
+    { cliType: 'registry', agentType: 'claude-p' },
+    { cliType: 'registry', agentType: 'auggie' },
+    { cliType: 'registry', agentType: 'amp-acp' },
+  ] as const)('does not start $cliType/$agentType to read history', async (provider) => {
+    await expect(
+      resolveHistoryACPProcessLaunch({ provider, env: { PATH: '/usr/bin' } })
+    ).rejects.toThrow('legacy_harness_execution_disabled');
   });
 });

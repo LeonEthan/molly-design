@@ -120,6 +120,7 @@ export function useSessionDoc(
       session: { id: sessionId },
       mq: [],
       forkOperation: undefined,
+      designContinuation: undefined,
       preview: undefined,
       externalHistoryCursor: undefined,
       acpRuntimeConfig: undefined,

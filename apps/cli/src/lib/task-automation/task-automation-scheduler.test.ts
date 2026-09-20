@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentConfigMeta, MachineId, TaskIndexRow, WorkspaceId } from '@molly/shared';
-import { TaskAutomationScheduler } from './task-automation-scheduler';
+import {
+  TaskAutomationScheduler,
+  type TaskAutomationSchedulerDeps,
+} from './task-automation-scheduler';
 
 const MACHINE = 'machine-1' as MachineId;
 const OPERATOR = 'user-1';
@@ -13,7 +16,7 @@ const logger = {
 } as unknown as Parameters<typeof makeScheduler>[0]['logger'];
 
 const agentConfig = (id: string, machineId: MachineId = MACHINE): AgentConfigMeta =>
-  ({ id, machineId, name: id, cliType: 'codex', agentType: 'codex' }) as AgentConfigMeta;
+  ({ id, machineId, name: id, cliType: 'builtin', agentType: 'molly', env: {} }) as AgentConfigMeta;
 
 const row = (overrides: Partial<TaskIndexRow> = {}): TaskIndexRow => ({
   taskId: 't1',
@@ -33,7 +36,7 @@ function makeScheduler(options: {
   rows: TaskIndexRow[][];
   agents?: AgentConfigMeta[];
   online?: boolean;
-  startTask?: (taskId: string, agentConfigId: string) => Promise<void>;
+  startTask?: TaskAutomationSchedulerDeps['startTask'];
   logger?: unknown;
 }) {
   const reads = [...options.rows];
@@ -57,7 +60,114 @@ function makeScheduler(options: {
   return { scheduler, started, queued };
 }
 
+afterEach(() => vi.useRealTimers());
+
 describe('TaskAutomationScheduler', () => {
+  it('holds the agent slot on settlement failure and never recreates its Session', async () => {
+    vi.useFakeTimers();
+    const sessions: string[] = [];
+    let statusWritable = false;
+    const { scheduler, queued } = makeScheduler({
+      rows: [
+        [],
+        [row({ taskId: 'a' })],
+        [row({ taskId: 'a' }), row({ taskId: 'b' })],
+        [row({ taskId: 'a', status: 'in_progress' }), row({ taskId: 'b' })],
+      ],
+      startTask: async (id) => {
+        sessions.push(id);
+        return {
+          settle: async () => {
+            if (!statusWritable) throw new Error('status disk unavailable');
+          },
+        };
+      },
+    });
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    expect(sessions).toEqual(['a']);
+    expect(queued).toContainEqual({ taskId: 'b', position: 1 });
+    statusWritable = true;
+    await scheduler.evaluate();
+    expect(sessions).toEqual(['a']);
+    scheduler.stop();
+  });
+
+  it('owns a settlement-only retry when no index event follows failure', async () => {
+    vi.useFakeTimers();
+    const sessions: string[] = [];
+    let writable = false;
+    let persisted = false;
+    const { scheduler } = makeScheduler({
+      rows: [[], [row()], [row({ status: 'in_progress' })]],
+      startTask: async (id) => {
+        sessions.push(id);
+        return {
+          settle: async () => {
+            if (!writable) throw new Error('disk unavailable');
+            persisted = true;
+          },
+        };
+      },
+    });
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    writable = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(persisted).toBe(true);
+    expect(sessions).toEqual(['t1']);
+    expect(vi.getTimerCount()).toBe(0);
+    scheduler.stop();
+  });
+
+  it('cancels settlement wakeups when stopped', async () => {
+    vi.useFakeTimers();
+    let stopped = false;
+    const { scheduler } = makeScheduler({
+      rows: [[], [row()]],
+      startTask: async () => ({
+        settle: async () => {
+          expect(stopped).toBe(false);
+          throw new Error('disk unavailable');
+        },
+      }),
+    });
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    scheduler.stop();
+    stopped = true;
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(10_000);
+  });
+
+  it.each([
+    { agentType: 'codex' },
+    { agentType: 'claude' },
+    { agentType: 'kimi' },
+    { runtimeOverrides: {} },
+    { extraArgs: ['--legacy'] },
+  ])('does not dispatch retired or overridden targets %#', async (override) => {
+    const { scheduler, started, queued } = makeScheduler({
+      rows: [[], [row()], [row()]],
+      agents: [{ ...agentConfig('agent-1'), ...override }],
+    });
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    await scheduler.evaluate();
+    expect(started).toEqual([]);
+    expect(queued).toEqual([]);
+  });
+
+  it('does not replay boot-time tasks when their engine becomes executable', async () => {
+    const agents = [{ ...agentConfig('agent-1'), agentType: 'codex' }];
+    const { scheduler, started } = makeScheduler({ rows: [[row()], [row()]], agents });
+    await scheduler.evaluate();
+    agents[0] = agentConfig('agent-1');
+    await scheduler.evaluate();
+    expect(started).toEqual([]);
+  });
+
   it('records a baseline on the first pass and starts nothing', async () => {
     const { scheduler, started } = makeScheduler({ rows: [[row()]] });
     await scheduler.evaluate();

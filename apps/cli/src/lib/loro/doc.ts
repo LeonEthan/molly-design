@@ -13,6 +13,8 @@ import {
   SessionControlPlaneMirror,
   SessionControlPlaneState,
   SessionStatusFactory,
+  DesignContinuationRecordSchema,
+  type DesignContinuationRecord,
   SessionId,
   WorkspaceId,
   getSessionRoomId,
@@ -325,6 +327,7 @@ export type LoroRepoPersistReason =
   | 'session-fork-prepare'
   | 'session-fork-commit'
   | 'session-fork-rollback'
+  | 'design-continuation-prepare'
   | 'session-edit-and-resend-commit'
   | 'session-edit-and-resend-rollback';
 
@@ -2130,6 +2133,7 @@ export class SessionDocument implements LoroDocument<Omit<SessionDocMeta, 'histo
       session: state.session,
       mq: state.mq as SessionDocMeta['mq'],
       forkOperation: state.forkOperation as SessionDocMeta['forkOperation'],
+      designContinuation: state.designContinuation,
       preview: state.preview as SessionDocMeta['preview'],
       externalHistoryCursor: state.externalHistoryCursor as SessionDocMeta['externalHistoryCursor'],
       acpRuntimeConfig: state.acpRuntimeConfig as SessionDocMeta['acpRuntimeConfig'],
@@ -2189,6 +2193,28 @@ export class SessionDocument implements LoroDocument<Omit<SessionDocMeta, 'histo
     }
     const parsed = SessionForkOperationSchema.safeParse(this.mirror.getState().forkOperation);
     return parsed.success ? parsed.data : undefined;
+  }
+
+  getDesignContinuation(): DesignContinuationRecord | undefined {
+    if (!this.mirror) throw new Error('SessionDocument not initialized');
+    const value = this.mirror.getState().designContinuation?.record;
+    if (value === undefined) return undefined;
+    const parsed = DesignContinuationRecordSchema.safeParse(value);
+    if (!parsed.success) throw new Error('invalid_design_continuation_record');
+    return parsed.data;
+  }
+
+  setDesignContinuation(record: DesignContinuationRecord): void {
+    if (!this.mirror) throw new Error('SessionDocument not initialized');
+    const parsed = DesignContinuationRecordSchema.safeParse(record);
+    if (!parsed.success) throw new Error('invalid_design_continuation_record');
+    const existing = this.getDesignContinuation();
+    if (existing) {
+      if (JSON.stringify(existing) !== JSON.stringify(parsed.data))
+        throw new Error('design_continuation_record_immutable');
+      return;
+    }
+    this.mirror.setState({ designContinuation: { record: parsed.data } });
   }
 
   setForkOperation(operation: SessionForkOperation | undefined): void {

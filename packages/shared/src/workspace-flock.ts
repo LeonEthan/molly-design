@@ -1,9 +1,7 @@
-import { normalizeAgentRole, type AgentRole } from './agent-role';
+import { isAgentRoleContentEqual, normalizeAgentRole, type AgentRole } from './agent-role';
+import { validateMollyRunConfigProjection } from './embedded-harness';
 import type { AgentRoleId, McpServerId, WorkspaceId } from './ids';
-import {
-  isWorkspaceMcpServerMeta,
-  type WorkspaceMcpServerMeta,
-} from './workspace-mcp';
+import { isWorkspaceMcpServerMeta, type WorkspaceMcpServerMeta } from './workspace-mcp';
 
 export const WORKSPACE_FLOCK_DOC_STREAM_SEGMENT = 'wf';
 const WORKSPACE_FLOCK_DOC_NAME = 'workspace';
@@ -175,7 +173,23 @@ const workspaceFlockRowsEqual = (
 export const writeWorkspaceMcpServerToFlock = (
   flock: WorkspaceFlockWritableFlock,
   entry: WorkspaceMcpServerMeta
-): boolean => writeWorkspaceFlockRow(flock, workspaceFlockKeys.mcpServer(entry.id), entry);
+): boolean => {
+  const key = workspaceFlockKeys.mcpServer(entry.id);
+  const previous = readSingleRow(flock, key)[serializeWorkspaceFlockKey(key)]?.value as
+    | WorkspaceMcpServerMeta
+    | undefined;
+  // The catalog, not a caller-supplied revision or wall clock, owns generations.
+  const comparable = { ...entry, revision: previous?.revision };
+  if (
+    previous &&
+    previous.revision !== undefined &&
+    workspaceFlockRowsEqual({ key, value: previous }, { key, value: comparable })
+  )
+    return false;
+  const revision = (previous?.revision ?? 0) + 1;
+  if (!Number.isSafeInteger(revision)) throw new Error('mcp_catalog_revision_exhausted');
+  return writeWorkspaceFlockRow(flock, key, { ...entry, revision });
+};
 
 export const deleteWorkspaceMcpServerFromFlock = (
   flock: WorkspaceFlockWritableFlock,
@@ -185,7 +199,43 @@ export const deleteWorkspaceMcpServerFromFlock = (
 export const writeWorkspaceAgentRoleToFlock = (
   flock: WorkspaceFlockWritableFlock,
   role: AgentRole
-): boolean => writeWorkspaceFlockRow(flock, workspaceFlockKeys.agentRole(role.id), role);
+): boolean => {
+  const normalized = normalizeAgentRole(role);
+  if (!normalized) throw new Error('invalid_workspace_agent_role');
+  const key = workspaceFlockKeys.agentRole(normalized.id);
+  const previous = readSingleRow(flock, key)[serializeWorkspaceFlockKey(key)]?.value as
+    | AgentRole
+    | undefined;
+  if (previous?.embeddedMigration) {
+    if (JSON.stringify(previous.embeddedMigration) !== JSON.stringify(normalized.embeddedMigration))
+      throw new Error('agent_role_migration_backup_immutable');
+  } else if (normalized.embeddedMigration) {
+    const backup = normalized.embeddedMigration.source;
+    if (
+      !previous ||
+      !isAgentRoleContentEqual(previous, backup) ||
+      previous.ownerUserId !== backup.ownerUserId ||
+      previous.revision !== backup.revision ||
+      previous.createdAt !== backup.createdAt ||
+      previous.updatedAt !== backup.updatedAt ||
+      normalized.machineId !== previous.machineId ||
+      normalized.agentConfigId === previous.agentConfigId ||
+      normalized.revision !== previous.revision + 1
+    )
+      throw new Error('agent_role_migration_source_changed');
+  }
+  if (normalized.embeddedMigration) {
+    // A backup is history, never a way to restore a CLI mode or an implicit model.
+    validateMollyRunConfigProjection(normalized.runConfig);
+    if (previous?.embeddedMigration && isAgentRoleContentEqual(previous, normalized)) return false;
+    if (
+      previous?.embeddedMigration &&
+      (normalized.revision !== previous.revision + 1 || normalized.createdAt !== previous.createdAt)
+    )
+      throw new Error('agent_role_migration_source_changed');
+  }
+  return writeWorkspaceFlockRow(flock, key, normalized);
+};
 
 export const deleteWorkspaceAgentRoleFromFlock = (
   flock: WorkspaceFlockWritableFlock,

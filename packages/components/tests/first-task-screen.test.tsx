@@ -5,13 +5,22 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ACP_CAPABILITY_CACHE_VERSION,
   getAgentConfigRoomId,
   type AgentConfigId,
   type AgentConfigMeta,
   type LocalProjectId,
   type MachineId,
+  type MachineViewMeta,
   type WorkspaceId,
 } from '@molly/shared';
+import { encodeMollyModelOption } from '@molly/shared/embedded-harness';
+import { buildAcpSelectorOptions } from '../src/components/shared/acp-selector-options';
+
+const machineCatalog = vi.hoisted(() => ({ machines: new Map() }));
+vi.mock('../src/hooks/use-visible-machine-metas', () => ({
+  useVisibleMachineMetas: () => machineCatalog,
+}));
 
 const sessionActions = vi.hoisted(() => ({
   requestSessionDispatch: vi.fn(),
@@ -41,6 +50,7 @@ import {
   FirstTaskScreen,
   getFirstTaskAgentConfigs,
   getSelectedFirstTaskAgentConfig,
+  isFirstTaskModelAvailable,
 } from '../src/components/onboarding/screens/first-task-screen';
 import { userAtom } from '../src/atoms';
 import { agentConfigMetaCacheAtom } from '../src/atoms/doc-meta';
@@ -57,6 +67,43 @@ import { initI18n } from '../src/i18n';
 
 const machineId = 'machine-1' as MachineId;
 const otherMachineId = 'machine-2' as MachineId;
+const modelId = encodeMollyModelOption('00000000-0000-4000-8000-000000000001', 'k3-256k');
+function modelCapabilities() {
+  return {
+    cliType: 'builtin' as const,
+    agentType: 'molly',
+    cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
+    provenance: 'runtime' as const,
+    fetchedAt: 1,
+    modes: [],
+    models: [{ modelId, name: 'Synthetic Kimi · k3-256k' }],
+    modelReasoningEfforts: { [modelId]: ['off', 'high'] },
+    configOptions: [
+      {
+        id: 'model',
+        name: 'Model',
+        category: 'model',
+        type: 'select' as const,
+        currentValue: 'molly-model:unselected',
+        options: [{ value: modelId, name: 'Synthetic Kimi · k3-256k' }],
+      },
+      {
+        id: 'reasoning_effort',
+        name: 'Thinking',
+        category: 'thought_level',
+        type: 'select' as const,
+        currentValue: 'off',
+        options: [
+          { value: 'off', name: 'Off' },
+          { value: 'high', name: 'High' },
+        ],
+      },
+    ],
+  };
+}
+const machine = {
+  acpCapabilities: { selected: modelCapabilities(), 'chosen-agent': modelCapabilities() },
+} satisfies Pick<MachineViewMeta, 'acpCapabilities'>;
 const project = {
   kind: 'local' as const,
   machineId,
@@ -71,7 +118,7 @@ function config(id: string, name: string, targetMachineId = machineId): AgentCon
     name,
     description: undefined,
     cliType: 'builtin',
-    agentType: 'claude',
+    agentType: 'molly',
     env: {},
   };
 }
@@ -87,6 +134,14 @@ describe('first task Agent Provider state', () => {
     sessionActions.saveDesign.mockResolvedValue(undefined);
     sessionActions.acknowledgeDesign.mockResolvedValue(undefined);
     localStorage.clear();
+    machineCatalog.machines = new Map([[machineId, machine]]);
+    for (const id of ['selected', 'chosen-agent']) {
+      agentDefaultsCache.set(id as AgentConfigId, {
+        modelId,
+        modeId: null,
+        configOptionValues: { reasoning_effort: 'high' },
+      });
+    }
     await initI18n('en');
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -125,6 +180,91 @@ describe('first task Agent Provider state', () => {
       getSelectedFirstTaskAgentConfig([remaining], 'missing-selection' as AgentConfigId)
     ).toBeNull();
   });
+
+  it('excludes retired and custom-launch targets from first-task execution', () => {
+    const molly = config('molly', 'Molly');
+    const retired = { ...molly, id: 'legacy' as AgentConfigId, agentType: 'claude' };
+    const override = { ...molly, id: 'override' as AgentConfigId, runtimeOverrides: {} };
+    expect(getFirstTaskAgentConfigs([retired, override, molly], project)).toEqual([molly]);
+  });
+
+  it('requires an authoritative exact model and a supported explicit thinking level', () => {
+    const options = buildAcpSelectorOptions({
+      configId: 'selected' as AgentConfigId,
+      cliType: 'builtin',
+      agentType: 'molly',
+      selectedModelId: modelId,
+      machine,
+    });
+    expect(isFirstTaskModelAvailable(options, modelId, 'high')).toBe(true);
+    expect(isFirstTaskModelAvailable(options, modelId, 'off')).toBe(true);
+    expect(isFirstTaskModelAvailable(options, modelId, '')).toBe(false);
+    expect(isFirstTaskModelAvailable(options, modelId, 'xhigh')).toBe(false);
+    expect(isFirstTaskModelAvailable(options, 'molly-model:unselected', 'off')).toBe(false);
+    expect(
+      isFirstTaskModelAvailable(options, encodeMollyModelOption('deleted', 'k3-256k'), 'high')
+    ).toBe(false);
+    expect(
+      isFirstTaskModelAvailable({ ...options, capabilityAuthority: 'provisional' }, modelId, 'high')
+    ).toBe(false);
+    expect(
+      isFirstTaskModelAvailable({ ...options, modelReasoningEfforts: undefined }, modelId, 'high')
+    ).toBe(false);
+    expect(
+      isFirstTaskModelAvailable({ ...options, configOptionSelectors: [] }, modelId, 'high')
+    ).toBe(false);
+  });
+
+  it.each(['missing', 'stale', 'unsupported', 'catalog-missing'])(
+    'enters without accepting a task for a %s model selection',
+    async (kind) => {
+      const selected = config('selected', 'Molly');
+      const store = createStore();
+      store.set(userAtom, { id: 'synthetic-user', name: 'User', email: 'synthetic@example.com' });
+      store.set(runtimeAtom, { workspaceId: 'local', workspaceSlug: 'local' } as never);
+      store.set(agentConfigMetaCacheAtom, { [getAgentConfigRoomId(selected.id)]: selected });
+      agentDefaultsCache.set(selected.id, {
+        modelId: kind === 'missing' ? null : kind === 'stale' ? 'old-model' : modelId,
+        modeId: null,
+        configOptionValues: { reasoning_effort: kind === 'unsupported' ? 'xhigh' : 'high' },
+      });
+      if (kind === 'catalog-missing') machineCatalog.machines = new Map();
+      const events: string[] = [];
+      sessionActions.startSession.mockImplementation(async () => {
+        events.push('accept');
+      });
+      sessionActions.requestSessionDispatch.mockImplementation(async () => {
+        events.push('dispatch');
+      });
+      await act(async () => {
+        root?.render(
+          <Provider store={store}>
+            <FirstTaskScreen
+              agentConfigId={selected.id}
+              project={project}
+              onBack={() => {}}
+              onAgentConfigChange={() => {}}
+              onSkip={() => {}}
+              onContinue={async () => {
+                events.push('enter');
+                return true;
+              }}
+            />
+          </Provider>
+        );
+      });
+      expect(container.textContent).toContain(
+        'Missing or outdated choices are not replaced automatically'
+      );
+      expect(container.textContent).not.toContain('Start design session');
+      const enter = Array.from(container.querySelectorAll('button')).find(
+        (button) => button.textContent === 'Enter Molly'
+      );
+      expect(enter).toBeDefined();
+      await act(async () => enter?.click());
+      expect(events).toEqual(['enter']);
+    }
+  );
 
   it('skips without creating a Session, first turn, or dispatch request', async () => {
     const onSkip = vi.fn();
@@ -226,7 +366,7 @@ describe('first task Agent Provider state', () => {
     expect(sessionActions.requestSessionDispatch).toHaveBeenCalledOnce();
     expect(onContinue).toHaveBeenCalledOnce();
   });
-  it.each(['save', 'accept', 'success', 'changed', 'rehydrated'])(
+  it.each(['save', 'accept', 'success', 'changed', 'rehydrated', 'cache-changed'])(
     'keeps the design handoff recoverable across unmount: %s',
     async (outcome) => {
       sessionActions.electron = true;
@@ -236,7 +376,6 @@ describe('first task Agent Provider state', () => {
       store.set(runtimeAtom, { workspaceId: 'local', workspaceSlug: 'local' } as never);
       store.set(localProbeResultAtom, { machineId } as never);
       store.set(agentConfigMetaCacheAtom, { [getAgentConfigRoomId(selected.id)]: selected });
-      agentDefaultsCache.set(selected.id, { modelId: 'user-chosen-model', modeId: null });
       const events: string[] = [];
       let releaseSave!: () => void;
       sessionActions.saveDesign.mockImplementation(
@@ -253,7 +392,8 @@ describe('first task Agent Provider state', () => {
       sessionActions.startSession.mockImplementation(async (args, historyEntry) => {
         events.push('accept');
         expect(args.agentConfigId).toBe(selected.id);
-        expect(historyEntry.inputConfig.modelId).toBe('user-chosen-model');
+        expect(historyEntry.inputConfig.modelId).toBe(modelId);
+        expect(historyEntry.inputConfig.configOptionValues).toEqual({ reasoning_effort: 'high' });
         expect(args.design).toEqual({ artworkId: args.sessionId, path: 'design.json' });
         if (outcome === 'accept') throw new Error('synthetic accept error');
         return {
@@ -292,6 +432,9 @@ describe('first task Agent Provider state', () => {
       expect(events).toEqual(['navigate', 'create', 'save']);
       act(() => root?.unmount());
       root = undefined;
+      if (outcome === 'cache-changed') {
+        agentDefaultsCache.set(selected.id, { modelId: 'changed-after-submit', modeId: null });
+      }
       if (outcome === 'rehydrated')
         store.set(
           chatLandingSessionStateAtomFamily(buildChatLandingDraftKey('user-design', 'local')),
@@ -318,7 +461,7 @@ describe('first task Agent Provider state', () => {
             chatLandingSessionStateAtomFamily(buildChatLandingDraftKey('user-design', 'local'))
           ).prompt
         ).toBe('A newer user draft');
-      } else if (outcome === 'success' || outcome === 'rehydrated') {
+      } else if (outcome === 'success' || outcome === 'rehydrated' || outcome === 'cache-changed') {
         expect(events).toEqual(['navigate', 'create', 'save', 'accept', 'dispatch']);
         expect(
           store.get(

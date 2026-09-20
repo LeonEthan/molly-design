@@ -77,6 +77,8 @@ export type McpDesignGate = {
    * the same answer, so no caller can register the tool on half the condition.
    */
   imageConnection: ImageConnectionSettings | null;
+  /** Public discovery snapshot; never sufficient to execute a paid request. */
+  imageAvailable?: boolean;
   /** Resolved by the daemon from the live Session; never a caller-selected root. */
   artworkWorkdir?: string;
   workspaceRoot?: string;
@@ -111,6 +113,21 @@ export function designGateFromRpcResult(result: unknown): McpDesignGate {
     return EMPTY_DESIGN_GATE;
   }
   const { connection, ready, credential } = parsed.data;
+  if (
+    parsed.data.available &&
+    connection?.enabled &&
+    connection.hasApiKey &&
+    parsed.data.artworkWorkdir &&
+    parsed.data.workspaceRoot &&
+    (!ready || !credential)
+  ) {
+    return {
+      imageConnection: null,
+      imageAvailable: true,
+      artworkWorkdir: parsed.data.artworkWorkdir,
+      workspaceRoot: parsed.data.workspaceRoot,
+    };
+  }
   if (
     !ready ||
     connection === null ||
@@ -147,13 +164,14 @@ export function designGateFromRpcResult(result: unknown): McpDesignGate {
  */
 export async function resolveDesignGate(
   ctx: DesignGateContext,
-  logger?: { debug(message: string): void }
+  logger?: { debug(message: string): void },
+  acquireCredential = false
 ): Promise<McpDesignGate> {
   if (!ctx.localControlSocketPath) {
     logger?.debug('design gate: no local control socket; image tool stays unregistered');
     return EMPTY_DESIGN_GATE;
   }
-  const answer = await callDesignRpc(ctx, logger, 'design/image-connection', {});
+  const answer = await callDesignRpc(ctx, logger, 'design/image-connection', { acquireCredential });
   if (!answer.ok) {
     logger?.debug(`design gate: lookup failed: ${answer.error}`);
     return EMPTY_DESIGN_GATE;
@@ -260,7 +278,7 @@ async function callDesignRpc(
   ctx: DesignGateContext,
   logger: { debug(message: string): void } | undefined,
   method: 'design/image-connection' | 'design/render-host-status' | 'design/render-preview',
-  params: Record<string, never>,
+  params: { acquireCredential?: boolean },
   timeoutMs: number = DESIGN_GATE_TIMEOUT_MS
 ): Promise<DesignRpcAnswer> {
   const socketPath = ctx.localControlSocketPath;
@@ -270,11 +288,10 @@ async function callDesignRpc(
       makeLocalControlClientAuto({ socketPath })
         .machineRpc(
           {
-            method,
             machineId: ctx.machineId,
             workspaceId: ctx.workspaceId,
             ownerSessionId: ctx.sessionId,
-            params,
+            ...(method === 'design/image-connection' ? { method, params } : { method, params: {} }),
           },
           { timeoutMs }
         )

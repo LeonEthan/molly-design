@@ -1,11 +1,8 @@
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { __test__, shutdownLocalAcpAgent, spawnAcpProcess } from './acp-runner';
+import { startLocalAcpAgent, shutdownLocalAcpAgent, spawnAcpProcess } from './acp-runner';
 import type { Logger } from '@/utils/logger';
 
 const createSilentLogger = (): Logger => ({
@@ -42,96 +39,59 @@ function createFakeChildProcess(options?: {
 }
 
 describe('spawnAcpProcess', () => {
-  it('spawns ACP agents in a detached process group on POSIX', () => {
+  it('rejects an explicit legacy command before spawning a process', () => {
     const child = createFakeChildProcess();
     const spawnImpl = vi.fn(() => child);
 
-    const result = spawnAcpProcess({
-      cliType: 'builtin',
-      agentType: 'codex',
-      workdir: '/tmp',
-      env: process.env,
-      command: 'test-command',
-      args: ['--test'],
-      spawnImpl: spawnImpl as never,
-    });
-
-    expect(result).toBe(child);
-    expect(spawnImpl).toHaveBeenCalledWith('test-command', ['--test'], {
-      cwd: '/tmp',
-      env: process.env,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
-      windowsHide: true,
-    });
+    expect(() =>
+      spawnAcpProcess({
+        cliType: 'builtin',
+        agentType: 'codex',
+        workdir: '/tmp',
+        env: process.env,
+        command: 'test-command',
+        args: ['--test'],
+        spawnImpl: spawnImpl as never,
+      })
+    ).toThrow('legacy_harness_execution_disabled');
   });
 });
 
-describe('Codex title-agent environment', () => {
-  it('isolates the title agent in the workdir Codex home', () => {
-    const baseEnv = { MOLLY_TITLE_AGENT: '1', MOLLY_E2E: '1' };
-
-    const prepared = __test__.prepareCodexHomeEnv(
-      { cliType: 'builtin', agentType: 'codex', workdir: '/tmp/title-agent' },
-      baseEnv
-    );
-
-    expect(prepared.isTitleAgentCodexRun).toBe(true);
-    expect(prepared.shouldUseWorkdirCodexHome).toBe(true);
-    expect(prepared.env.CODEX_HOME).toBe(path.join('/tmp/title-agent', '.codex'));
-  });
-
-  it('merges title isolation into existing Codex session config', () => {
-    const env = __test__.withTitleAgentCodexConfig({
-      CODEX_CONFIG: JSON.stringify({
-        model_provider: 'gateway',
-        model_providers: { gateway: { base_url: 'https://gateway.example/v1' } },
-        skills: { include_instructions: true },
-      }),
-    });
-
-    expect(JSON.parse(env.CODEX_CONFIG ?? '')).toEqual({
-      model_provider: 'gateway',
-      model_providers: { gateway: { base_url: 'https://gateway.example/v1' } },
-      project_doc_max_bytes: 0,
-      include_environment_context: false,
-      skills: {
-        include_instructions: false,
-        bundled: { enabled: false },
+describe('startLocalAcpAgent retirement', () => {
+  it('refuses Molly before inspecting a launch environment or spawning a child', async () => {
+    const options = {
+      cliType: 'builtin' as const,
+      agentType: 'molly',
+      workdir: '/synthetic-never-opened',
+      logger: createSilentLogger(),
+      terminalManager: {} as never,
+      onUpdateMessage: () => {},
+      onRequestPermission: async () => ({ outcome: { outcome: 'cancelled' as const } }),
+      get env(): NodeJS.ProcessEnv {
+        throw new Error('must not inspect environment');
       },
-    });
+      spawnImpl: (() => {
+        throw new Error('must not spawn');
+      }) as never,
+    };
+    await expect(startLocalAcpAgent(options)).rejects.toThrow('harness_session_launch_required');
   });
 
-  it('copies custom provider config into the isolated Codex home', () => {
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lody-title-config-test-'));
-    const sourcePath = path.join(tempDir, 'source.toml');
-    const destinationPath = path.join(tempDir, 'isolated', 'config.toml');
-    const config = `model_provider = "gateway"
-
-[model_providers.gateway]
-base_url = "https://gateway.example/v1"
-`;
-    fs.writeFileSync(sourcePath, config);
-    fs.mkdirSync(path.dirname(destinationPath));
-
-    try {
-      __test__.copyTitleAgentCodexConfig(sourcePath, destinationPath);
-
-      expect(fs.readFileSync(destinationPath, 'utf8')).toBe(config);
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  it('still isolates non-title Codex E2E runs in the workdir', () => {
-    const prepared = __test__.prepareCodexHomeEnv(
-      { cliType: 'builtin', agentType: 'codex', workdir: '/tmp/codex-e2e' },
-      { MOLLY_E2E: '1' }
-    );
-
-    expect(prepared.isTitleAgentCodexRun).toBe(false);
-    expect(prepared.shouldUseWorkdirCodexHome).toBe(true);
-    expect(prepared.env.CODEX_HOME).toBe(path.join('/tmp/codex-e2e', '.codex'));
+  it('preserves explicit cancellation without preparing a runtime', async () => {
+    const controller = new AbortController();
+    controller.abort(new Error('synthetic cancellation'));
+    await expect(
+      startLocalAcpAgent({
+        cliType: 'builtin',
+        agentType: 'molly',
+        signal: controller.signal,
+        workdir: '/synthetic-never-opened',
+        logger: createSilentLogger(),
+        terminalManager: {} as never,
+        onUpdateMessage: () => {},
+        onRequestPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
+      })
+    ).rejects.toThrow('synthetic cancellation');
   });
 });
 

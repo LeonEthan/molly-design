@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { CliType, SUPPORTED_CLI_TYPES } from '@molly/shared';
-import { resolveCliTypesSelection } from './start-options';
 import { createStartShutdownController } from './start-shutdown';
 import type { Logger } from '@/utils/logger';
 
@@ -38,145 +36,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('start command cli type selection', () => {
-  it('defaults to all supported CLI types when none are requested', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: undefined,
-      availability: {
-        kimi: 'managed-runtime',
-        grok: 'managed-runtime',
-        claude: '1.0.0',
-        codex: '1.0.0',
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: SUPPORTED_CLI_TYPES,
-      cliTypes: SUPPORTED_CLI_TYPES,
-      missing: [],
-      invalid: [],
-      isDefaultSelection: true,
-    });
-  });
-
-  it('defaults to installed CLI types only when a subset is available', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: undefined,
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: '1.0.0',
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: ['claude'],
-      cliTypes: ['claude'],
-      missing: [],
-      invalid: [],
-      isDefaultSelection: true,
-    });
-  });
-
-  it('uses requested CLI types and reports missing ones in native mode', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: ['codex'],
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: false,
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: ['codex'],
-      cliTypes: [],
-      missing: ['codex'],
-      invalid: [],
-      isDefaultSelection: false,
-    });
-  });
-
-  it('keeps available requested CLI types and skips missing ones', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: ['codex', 'claude'],
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: '1.0.0',
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: ['codex', 'claude'],
-      cliTypes: ['claude'],
-      missing: ['codex'],
-      invalid: [],
-      isDefaultSelection: false,
-    });
-  });
-
-  it('returns empty cliTypes when all explicitly requested types are missing', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: ['codex'],
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: false,
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: ['codex'],
-      cliTypes: [],
-      missing: ['codex'],
-      invalid: [],
-      isDefaultSelection: false,
-    });
-  });
-
-  it('marks unknown requested cli types as invalid', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: ['claude', 'codxe' as CliType],
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: '1.0.0',
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: ['claude'],
-      cliTypes: ['claude'],
-      missing: [],
-      invalid: ['codxe'],
-      isDefaultSelection: false,
-    });
-  });
-
-  it('creates no builtin defaults when no local CLI is installed', () => {
-    const result = resolveCliTypesSelection({
-      requestedCliTypes: undefined,
-      availability: {
-        kimi: false,
-        grok: false,
-        claude: false,
-        codex: false,
-      },
-    });
-
-    expect(result).toEqual({
-      configuredCliTypes: [],
-      cliTypes: [],
-      missing: [],
-      invalid: [],
-      isDefaultSelection: true,
-    });
+describe('start command embedded-only options', () => {
+  it('rejects the retired CLI selector before starting the service', async () => {
+    const { startCommand } = await import('./start');
+    const stderr: string[] = [];
+    startCommand.exitOverride().configureOutput({ writeErr: (text) => stderr.push(text) });
+    await expect(
+      startCommand.parseAsync(['--cli-types', 'codex'], { from: 'user' })
+    ).rejects.toMatchObject({ code: 'commander.unknownOption' });
+    expect(stderr.join('')).toContain('--cli-types');
+    expect(startCommand.helpInformation()).not.toContain('--cli-types');
   });
 });
 

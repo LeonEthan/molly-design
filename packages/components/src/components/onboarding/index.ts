@@ -5,11 +5,7 @@ export { OnboardingBackdrop } from './onboarding-backdrop';
 export { LanguageScreen, LanguageScreenView } from './screens/language-screen';
 export { ThemeScreen, ThemeScreenView } from './screens/theme-screen';
 export { WorkspaceScreen } from './screens/workspace-screen';
-export {
-  ProvidersScreen,
-  ProvidersScreenView,
-  type ProviderTestStatus,
-} from './screens/providers-screen';
+export { ProvidersScreen, ProvidersScreenView } from './screens/providers-screen';
 export type { DesktopOnboardingProviderSelection } from '@/atoms/onboarding';
 export type { ProviderTestActivity } from './provider-test-state';
 export {

@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { McpConnectionSpec, McpTransport, WorkspaceMcpServerMeta } from '@molly/shared';
+import { McpImageBindingSchema, type McpImageBinding } from '@molly/shared';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import {
   MCP_TRANSPORT_SHORT_LABELS,
@@ -30,6 +31,8 @@ type McpConnectionFormDraft = {
   url: string;
   bearerToken: string;
   headers: KeyValueDraft[];
+  protectedCredentials?: McpConnectionSpec['protectedCredentials'];
+  imageBindingJson: string;
 };
 
 export type McpConnectionFormValue = {
@@ -38,6 +41,7 @@ export type McpConnectionFormValue = {
   transport: McpTransport;
   enabledByDefault: boolean;
   connection?: McpConnectionSpec;
+  imageBinding?: McpImageBinding;
 };
 
 const emptyConnectionFields = (transport: McpTransport) => ({
@@ -50,9 +54,7 @@ const emptyConnectionFields = (transport: McpTransport) => ({
   headers: [] as KeyValueDraft[],
 });
 
-const createMcpConnectionFormDraft = (
-  entry?: WorkspaceMcpServerMeta
-): McpConnectionFormDraft => {
+const createMcpConnectionFormDraft = (entry?: WorkspaceMcpServerMeta): McpConnectionFormDraft => {
   const transport = entry?.transport ?? 'stdio';
   const connection = entry?.connection;
   return {
@@ -61,6 +63,8 @@ const createMcpConnectionFormDraft = (
     transport,
     enabledByDefault: entry?.enabledByDefault ?? false,
     ...emptyConnectionFields(transport),
+    protectedCredentials: connection?.protectedCredentials,
+    imageBindingJson: entry?.imageBinding ? JSON.stringify(entry.imageBinding, null, 2) : '',
     ...(connection?.transport === 'stdio'
       ? {
           command: connection.command,
@@ -98,6 +102,7 @@ const buildStdioConnection = (draft: McpConnectionFormDraft): McpConnectionSpec 
   );
   return {
     transport: 'stdio',
+    ...(draft.protectedCredentials ? { protectedCredentials: draft.protectedCredentials } : {}),
     command,
     ...(args.length > 0 ? { args } : {}),
     ...(env ? { env } : {}),
@@ -112,6 +117,7 @@ const buildHttpConnection = (draft: McpConnectionFormDraft): McpConnectionSpec |
   const bearerToken = draft.bearerToken || undefined;
   return {
     transport: 'http',
+    ...(draft.protectedCredentials ? { protectedCredentials: draft.protectedCredentials } : {}),
     url,
     ...(bearerToken ? { bearerToken } : {}),
     ...(headers ? { headers } : {}),
@@ -152,6 +158,22 @@ export function McpConnectionForm({
   const { t } = useTranslation();
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createMcpConnectionFormDraft(initialEntry));
+  const [needsCredentialReentry, setNeedsCredentialReentry] = useState(false);
+  let imageBinding: McpImageBinding | undefined;
+  let imageBindingInvalid = false;
+  if (draft.imageBindingJson.trim()) {
+    try {
+      if (draft.imageBindingJson.length > 8192) throw new Error();
+      imageBinding = McpImageBindingSchema.parse(JSON.parse(draft.imageBindingJson));
+    } catch {
+      imageBindingInvalid = true;
+    }
+  }
+  const hasCredentialInput = Boolean(
+    draft.bearerToken ||
+    draft.headers.some((row) => row.key.trim()) ||
+    draft.env.some((row) => row.key.trim())
+  );
   const setTransport = (transport: McpTransport) => {
     setDraft((current) => ({
       name: current.name,
@@ -159,11 +181,20 @@ export function McpConnectionForm({
       enabledByDefault: current.enabledByDefault,
       transport,
       ...emptyConnectionFields(transport),
+      protectedCredentials: current.protectedCredentials,
+      imageBindingJson: current.imageBindingJson,
     }));
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    void onSubmit(buildMcpConnectionFormValue(draft));
+    if (submitting || imageBindingInvalid || (needsCredentialReentry && !hasCredentialInput))
+      return;
+    void onSubmit({
+      ...buildMcpConnectionFormValue(draft),
+      ...(imageBinding ? { imageBinding } : {}),
+    });
+    setNeedsCredentialReentry(hasCredentialInput);
+    setDraft((current) => ({ ...current, bearerToken: '', headers: [], env: [] }));
   };
   const isStdio = draft.transport === 'stdio';
 
@@ -207,8 +238,25 @@ export function McpConnectionForm({
 
         <Section
           title={t('settings.mcp.form.sectionConnection')}
-          hint={t('settings.mcp.form.envHint')}
+          hint={t('settings.mcp.protectedStorageHint')}
         >
+          {draft.protectedCredentials ? (
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">{t('settings.mcp.protectedStored')}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={submitting}
+                onClick={() => {
+                  setNeedsCredentialReentry(false);
+                  setDraft((current) => ({ ...current, protectedCredentials: undefined }));
+                }}
+              >
+                {t('settings.mcp.removeStoredCredentials')}
+              </Button>
+            </div>
+          ) : null}
           {isStdio ? (
             <>
               <Field
@@ -241,16 +289,22 @@ export function McpConnectionForm({
                 rows={draft.env}
                 onChange={(env) => setDraft((current) => ({ ...current, env }))}
               />
-              <StringListEditor
-                label={t('settings.mcp.form.envPassthrough')}
-                addLabel={t('settings.mcp.form.addPassthrough')}
-                hint={t('settings.mcp.form.envPassthroughHint')}
-                values={draft.envPassthrough}
-                placeholder="API_TOKEN"
-                onChange={(envPassthrough) =>
-                  setDraft((current) => ({ ...current, envPassthrough }))
-                }
-              />
+              {draft.envPassthrough.length ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.mcp.legacyPassthrough')}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={submitting}
+                    onClick={() => setDraft((current) => ({ ...current, envPassthrough: [] }))}
+                  >
+                    {t('common.remove')}
+                  </Button>
+                </div>
+              ) : null}
             </>
           ) : (
             <>
@@ -281,7 +335,7 @@ export function McpConnectionForm({
                   autoComplete="off"
                   spellCheck={false}
                   className="font-mono text-xs"
-                  placeholder="${MCP_TOKEN}"
+                  type="password"
                   value={draft.bearerToken}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, bearerToken: event.target.value }))
@@ -297,6 +351,33 @@ export function McpConnectionForm({
               />
             </>
           )}
+        </Section>
+
+        <Section
+          title={t('settings.mcp.imageBinding.title')}
+          hint={t('settings.mcp.imageBinding.hint')}
+        >
+          <Field htmlFor={`${fieldId}-image-binding`} label={t('settings.mcp.imageBinding.fields')}>
+            <Textarea
+              id={`${fieldId}-image-binding`}
+              rows={6}
+              maxLength={8192}
+              spellCheck={false}
+              className="font-mono text-xs"
+              value={draft.imageBindingJson}
+              placeholder={
+                '{"version":1,"model":"your-image-model","generate":{"tool":"generate","fields":{"prompt":"prompt","model":"model"}}}'
+              }
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, imageBindingJson: event.target.value }))
+              }
+            />
+          </Field>
+          {imageBindingInvalid ? (
+            <p role="alert" className="text-xs text-destructive">
+              {t('settings.mcp.imageBinding.invalid')}
+            </p>
+          ) : null}
         </Section>
 
         <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5">
@@ -325,13 +406,27 @@ export function McpConnectionForm({
             {error}
           </p>
         ) : null}
+        {needsCredentialReentry && !hasCredentialInput ? (
+          <p role="status" className="text-xs text-muted-foreground">
+            {t('settings.mcp.credentialReentry')}
+          </p>
+        ) : null}
       </div>
 
       <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-5 py-3">
         <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
           {t('common.cancel')}
         </Button>
-        <Button type="submit" size="sm" disabled={submitting || draft.name.trim().length === 0}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={
+            submitting ||
+            imageBindingInvalid ||
+            draft.name.trim().length === 0 ||
+            (needsCredentialReentry && !hasCredentialInput)
+          }
+        >
           {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
           {submitting ? t('settings.mcp.form.saving') : t('common.save')}
         </Button>
@@ -503,6 +598,7 @@ function KeyValueEditor({
             aria-label={t('settings.mcp.form.value')}
             placeholder={t('settings.mcp.form.value')}
             value={row.value}
+            type="password"
             autoComplete="off"
             spellCheck={false}
             className="font-mono text-xs"

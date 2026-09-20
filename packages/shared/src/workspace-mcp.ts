@@ -1,4 +1,7 @@
 import type { McpServerId } from './ids';
+import { mcpCredentialMatchesServer, type McpCredentialBinding } from './embedded-harness';
+import { McpImageBindingSchema, type McpImageBinding } from './mcp-image-binding';
+export { McpImageBindingSchema, type McpImageBinding } from './mcp-image-binding';
 
 /**
  * Molly supports stdio and Streamable HTTP MCP servers. SSE is intentionally
@@ -9,8 +12,12 @@ export type McpTransport = 'stdio' | 'http';
 export const isMcpTransport = (value: unknown): value is McpTransport =>
   value === 'stdio' || value === 'http';
 
+/** Opaque main-vault identity, never the corresponding header/environment values. */
+export type McpProtectedCredentials = { credentialRef: string; revision: number };
+
 export type McpStdioConnection = {
   transport: 'stdio';
+  protectedCredentials?: McpProtectedCredentials;
   command: string;
   args?: string[];
   /** Workspace-readable plaintext. Prefer ${VAR} or envPassthrough for secrets. */
@@ -21,6 +28,7 @@ export type McpStdioConnection = {
 
 export type McpHttpConnection = {
   transport: 'http';
+  protectedCredentials?: McpProtectedCredentials;
   url: string;
   bearerToken?: string;
   headers?: Record<string, string>;
@@ -30,11 +38,15 @@ export type McpConnectionSpec = McpStdioConnection | McpHttpConnection;
 
 export type WorkspaceMcpServerMeta = {
   id: McpServerId;
+  /** Catalog-owned generation. Historical rows acquire it on their next explicit save. */
+  revision?: number;
   /** Unique workspace display name and the name sent to the ACP agent. */
   name: string;
   transport: McpTransport;
   description?: string;
   connection?: McpConnectionSpec;
+  /** Explicit image-tool mapping; does not attest asset import or service support. */
+  imageBinding?: McpImageBinding;
   enabledByDefault?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -42,6 +54,11 @@ export type WorkspaceMcpServerMeta = {
 };
 
 export type ResolvedStdioMcpServer = {
+  _meta?: {
+    mollyConnection: { id: string; revision: number };
+    mollyMcpCredential?: McpCredentialBinding;
+    mollyImageBinding?: McpImageBinding;
+  };
   name: string;
   command: string;
   args: string[];
@@ -49,6 +66,11 @@ export type ResolvedStdioMcpServer = {
 };
 
 export type ResolvedHttpMcpServer = {
+  _meta?: {
+    mollyConnection: { id: string; revision: number };
+    mollyMcpCredential?: McpCredentialBinding;
+    mollyImageBinding?: McpImageBinding;
+  };
   type: 'http';
   name: string;
   url: string;
@@ -86,6 +108,7 @@ export type ResolveSessionMcpServersInput = {
   selectedIds: readonly string[];
   agentCapabilities: { http?: boolean } | undefined;
   env: Readonly<Record<string, string | undefined>>;
+  protectedMcp?: { workspaceId: string; connections: readonly McpCredentialBinding[] };
 };
 
 export type ResolveSessionMcpServersResult = {
@@ -116,6 +139,25 @@ export const isMcpConnectionSpec = (value: unknown): value is McpConnectionSpec 
   if (!isRecord(value) || !isMcpTransport(value.transport)) {
     return false;
   }
+  const protectedCredentials = value.protectedCredentials;
+  if (
+    protectedCredentials !== undefined &&
+    (!isRecord(protectedCredentials) ||
+      typeof protectedCredentials.credentialRef !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        protectedCredentials.credentialRef
+      ) ||
+      !Number.isSafeInteger(protectedCredentials.revision) ||
+      (protectedCredentials.revision as number) < 1 ||
+      Object.keys(protectedCredentials).some(
+        (key) => key !== 'credentialRef' && key !== 'revision'
+      ) ||
+      value.bearerToken !== undefined ||
+      value.headers !== undefined ||
+      value.env !== undefined ||
+      value.envPassthrough !== undefined)
+  )
+    return false;
 
   if (value.transport === 'stdio') {
     return (
@@ -147,7 +189,11 @@ export const isWorkspaceMcpServerMeta = (value: unknown): value is WorkspaceMcpS
     !Number.isFinite(value.createdAt) ||
     typeof value.updatedAt !== 'number' ||
     !Number.isFinite(value.updatedAt) ||
+    (value.revision !== undefined &&
+      (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1)) ||
     (value.description !== undefined && typeof value.description !== 'string') ||
+    (value.imageBinding !== undefined &&
+      !McpImageBindingSchema.safeParse(value.imageBinding).success) ||
     (value.enabledByDefault !== undefined && typeof value.enabledByDefault !== 'boolean') ||
     (value.createdBy !== undefined && typeof value.createdBy !== 'string')
   ) {
@@ -241,6 +287,34 @@ export const resolveSessionMcpServers = (
       continue;
     }
 
+    const reference = connection.protectedCredentials;
+    const protectedBinding =
+      reference &&
+      input.protectedMcp?.connections.find(
+        (binding) =>
+          binding.workspaceId === input.protectedMcp?.workspaceId &&
+          binding.serverId === entry.id &&
+          binding.credentialRef === reference.credentialRef &&
+          binding.revision === reference.revision &&
+          mcpCredentialMatchesServer(
+            binding,
+            connection.transport === 'http'
+              ? { type: 'http', url: connection.url }
+              : { command: connection.command, args: connection.args ?? [] }
+          )
+      );
+    // Legacy ACP has no protected channel. Never downgrade a protected connection.
+    if (reference && (!protectedBinding || !entry.revision)) {
+      problems.push({
+        kind: 'invalid_connection',
+        mcpServerId,
+        name: entry.name,
+        reason:
+          'Protected MCP credentials are unavailable for this execution host or connection revision',
+      });
+      continue;
+    }
+
     if (entry.transport === 'http' && input.agentCapabilities?.http !== true) {
       problems.push({
         kind: 'unsupported_transport',
@@ -308,7 +382,20 @@ export const resolveSessionMcpServers = (
       if (problems.length !== problemStart) {
         continue;
       }
-      servers.push({ name: entry.name, command, args, env: resolvedEnv });
+      servers.push({
+        name: entry.name,
+        command,
+        args,
+        env: resolvedEnv,
+        ...(protectedBinding && entry.revision
+          ? {
+              _meta: {
+                mollyConnection: { id: entry.id, revision: entry.revision },
+                mollyMcpCredential: protectedBinding,
+              },
+            }
+          : {}),
+      });
       continue;
     }
 
@@ -346,7 +433,20 @@ export const resolveSessionMcpServers = (
     if (problems.length !== problemStart) {
       continue;
     }
-    servers.push({ type: 'http', name: entry.name, url, headers });
+    servers.push({
+      type: 'http',
+      name: entry.name,
+      url,
+      headers,
+      ...(protectedBinding && entry.revision
+        ? {
+            _meta: {
+              mollyConnection: { id: entry.id, revision: entry.revision },
+              mollyMcpCredential: protectedBinding,
+            },
+          }
+        : {}),
+    });
   }
 
   return { servers, problems };

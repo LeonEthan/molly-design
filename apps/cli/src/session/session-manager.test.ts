@@ -34,6 +34,8 @@ import {
   type SessionPreparationResource,
 } from './session-preparation-service';
 import { createLocalCloudPort } from '@molly/platform';
+import * as agentSettings from '../agent/setting';
+import { HarnessCredentialBroker } from '../agent/harness-credential-broker';
 
 vi.mock('./worktree/worktree-setup-runner', () => ({
   runWorktreeSetup: vi.fn(async () => undefined),
@@ -1279,9 +1281,30 @@ describe('SessionManager failed agent creation', () => {
   });
 
   it('publishes no lifecycle events for an instance whose agent never started', async () => {
+    vi.spyOn(agentSettings, 'resolveACPProcessLaunchAsync').mockResolvedValue({
+      command: 'synthetic-never-spawned',
+      args: [],
+    });
     const sourceDir = createLocalRepo(tempHome);
     const sessionId = 'agent-start-failed' as SessionId;
     const docs = new Map<SessionId, FakeSessionDoc>();
+    const credentials = new HarnessCredentialBroker();
+    credentials.exchange({
+      version: 1,
+      connections: [
+        {
+          schemaVersion: 1,
+          id: 'synthetic-connection',
+          revision: 1,
+          providerPresetId: 'openai',
+          displayName: 'Synthetic',
+          baseUrl: 'https://example.invalid/v1',
+          credentialRef: 'synthetic-unused',
+          enabled: true,
+        },
+      ],
+      reports: [],
+    });
     const manager = new SessionManager(
       createLogger(),
       'token',
@@ -1293,15 +1316,20 @@ describe('SessionManager failed agent creation', () => {
         cloudPort: createTestCloudPort(),
       }
     );
+    manager.setHarnessCredentials(credentials);
     const terminated: unknown[] = [];
     const exit: unknown[] = [];
     manager.on('terminated', (event) => terminated.push(event));
     manager.on('exit', (event) => exit.push(event));
     const config = createSessionConfig({
       sessionId,
-      agentCliType: 'custom',
-      agentType: 'custom-agent',
-      customAcp: { command: 'agent', args: [] },
+      agentCliType: 'builtin',
+      agentType: 'molly',
+      modelSelection: {
+        connectionId: 'synthetic-connection',
+        modelId: 'synthetic-model',
+        thinking: 'off',
+      },
       workdir: sourceDir,
     });
     const createAgent = vi
@@ -1334,5 +1362,6 @@ describe('SessionManager failed agent creation', () => {
     await manager.terminateSession(sessionId, true);
     expect(terminated).toEqual([expect.objectContaining({ sessionId })]);
     expect(manager.getSession(sessionId)).toBeNull();
+    credentials.dispose();
   });
 });

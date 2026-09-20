@@ -219,7 +219,7 @@ describe('Session buildShellEnv', () => {
     }
   });
 
-  it('awaits the login-shell PATH before spawning the ACP agent', async () => {
+  it('refuses legacy execution before a login-shell environment can reach spawn', async () => {
     loginShellOverlay.value = { PATH: '/usr/bin' };
     resolvedLoginShellOverlay.value = {
       PATH: ['/opt/homebrew/bin', '/usr/bin'].join(delimiter),
@@ -248,27 +248,44 @@ describe('Session buildShellEnv', () => {
       args: ['acp'],
     } as CreateAgentConfig;
 
-    await expect(session.createAgent(callbacks)).rejects.toBe(stopAfterCapture);
-    expect((spawnedEnv?.PATH ?? '').split(delimiter)).toEqual(
-      expect.arrayContaining(['/opt/homebrew/bin', '/usr/bin'])
+    await expect(session.createAgent(callbacks)).rejects.toThrow(
+      'legacy_harness_execution_disabled'
     );
-    expect((spawnedEnv?.PATH ?? '').split(delimiter).indexOf('/opt/homebrew/bin')).toBeLessThan(
-      (spawnedEnv?.PATH ?? '').split(delimiter).indexOf('/usr/bin')
-    );
+    expect(spawnedEnv).toBeUndefined();
   });
 });
 
-it('preserves an ordinary Pi custom executable without requiring design extension resources', async () => {
+it('refuses a historical external Pi executable without spawning it', async () => {
   let observed: NodeJS.ProcessEnv | undefined;
   const stop = new Error('observed ordinary Pi launch');
   const sandbox: SessionSandbox = {
-    enabled: false, description: 'test', applyLimits: async () => {},
+    enabled: false,
+    description: 'test',
+    applyLimits: async () => {},
     readResourceAccounting: async () => ({ kind: 'unavailable', reason: 'test' }),
-    spawn: async (_command, _args, options) => { observed = options.env; throw stop; },
-    terminate: async () => {}, cleanup: async () => {},
+    spawn: async (_command, _args, options) => {
+      observed = options.env;
+      throw stop;
+    },
+    terminate: async () => {},
+    cleanup: async () => {},
   };
-  const session = new Session(createConfig({ agentCliType: 'registry', agentType: 'pi-acp', env: { PI_ACP_PI_COMMAND: '/synthetic/old-custom-pi' } }), createSilentLogger(), process.cwd(), sandbox);
-  await expect(session.createAgent({ cliType: 'registry', agentType: 'pi-acp', command: 'synthetic-pi-acp' } as CreateAgentConfig)).rejects.toBe(stop);
-  expect(observed?.PI_ACP_PI_COMMAND).toBe('/synthetic/old-custom-pi');
-  expect(observed?.MOLLY_DESIGN_EXTENSION).toBeUndefined();
+  const session = new Session(
+    createConfig({
+      agentCliType: 'registry',
+      agentType: 'pi-acp',
+      env: { PI_ACP_PI_COMMAND: '/synthetic/old-custom-pi' },
+    }),
+    createSilentLogger(),
+    process.cwd(),
+    sandbox
+  );
+  await expect(
+    session.createAgent({
+      cliType: 'registry',
+      agentType: 'pi-acp',
+      command: 'synthetic-pi-acp',
+    } as CreateAgentConfig)
+  ).rejects.toThrow('legacy_harness_execution_disabled');
+  expect(observed).toBeUndefined();
 });

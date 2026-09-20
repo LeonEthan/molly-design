@@ -145,7 +145,7 @@ function resolveLocalSessionControlTimeoutMs(type: LocalSessionControlRequest['t
   return LOCAL_SESSION_CONTROL_TIMEOUT_MS
 }
 
-function resolveBundledCliEntry(): string | null {
+export function resolveBundledCliEntry(): string | null {
   const packagedEntry = join(
     process.resourcesPath,
     'app.asar.unpacked',

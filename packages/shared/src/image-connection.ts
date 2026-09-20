@@ -8,25 +8,23 @@
  *
  * ## Where it lives
  *
- * Machine-scoped, not workspace-scoped: the credential belongs to one machine's
- * operator, exactly like the per-machine Agent config `env` it sits beside. The
- * row is stored on the per-machine Flock doc
- * (`machineFlockKeys.imageConnection()`), written by the Electron-side writer
- * seam and read by the daemon and the built-in MCP server, which are both on the
- * machine the key belongs to.
+ * New settings live in Electron main's encrypted connection vault. The UI uses
+ * ProtectedImageConnection metadata and write-only credential input. This older
+ * shape remains the in-memory image transport input and the legacy Machine Flock
+ * migration reader; it is not a destination for new settings writes.
  *
  * ## Trust
  *
  * This is a *user-typed* configuration, so it is normalized fail-closed on
- * every read (`normalizeImageConnectionSettings`): the value arrives from a Loro
- * CRDT row that any client may have written, including a newer one. A shape this
- * build cannot use reads as absent, and absent means the tool is not registered
- * at all — never a half-configured call to a guessed endpoint.
+ * every read (`normalizeImageConnectionSettings`), including legacy CRDT rows.
+ * Public discovery can advertise capability without a secret; actual dispatch
+ * needs an active run-bound grant from the main vault. Invalid input never
+ * falls back to a guessed endpoint or model.
  *
  * `apiKey` is a secret: it must never reach an agent-visible MCP server config,
  * a log line, a tool response, or a shared workspace row. `toPublicImageConnection`
- * is the only shape a UI or an RPC reply may carry, and it reports only whether a
- * key is present.
+ * reports only whether a key is present. The machine-local MCP credential RPC
+ * is the explicit secret-bearing exception, unavailable through renderer IPC.
  */
 
 import { z } from 'zod';
@@ -38,7 +36,7 @@ export const IMAGE_CONNECTION_MAX_API_KEY_LENGTH = 8192;
 export const IMAGE_CONNECTION_MAX_MODEL_LENGTH = 200;
 
 /**
- * The durable row. `v` is the schema generation, so a future shape can be
+ * Legacy durable row / private transport input. `v` is the schema generation, so a future shape can be
  * recognized and refused instead of misread as this one.
  */
 export type ImageConnectionSettings = {
@@ -67,9 +65,9 @@ export type ImageConnectionDraft = {
 };
 
 /**
- * The non-secret projection. The only shape allowed out of an RPC or into a UI:
+ * The non-secret projection for capability discovery:
  * a settings surface still has to render "a key is stored" without ever holding
- * the key, and an RPC reply has no reason to carry it.
+ * the key. Credential acquisition is a separate run-bound operation.
  */
 export const PublicImageConnectionSchema = z
   .object({

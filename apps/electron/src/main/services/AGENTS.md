@@ -2,7 +2,30 @@
 
 `CLAUDE.md` links here; edit `AGENTS.md` only.
 
-## Design canvas
+## Model credentials
+
+Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, validates
+resource/license digests, and returns public fields only. It neither imports the SDK
+nor opens the credential store; missing or incompatible resources mean unavailable.
+
+`model-connection-store` is main-only. Renderer IPC exposes save/delete/public
+metadata, never acquisition. Persist encrypted bytes only; unavailable OS storage
+and Linux plaintext backends fail closed. Endpoint changes require renewed
+credential input. Broker acquisition must bind an active run and worker epoch to
+the exact connection revision; the store itself is not a permission authority.
+Compatible model definitions share that encrypted row and revision; they are public
+capability declarations, never credential/header/script or per-model destination fields.
+Image credentials use the same vault. Acknowledge legacy removal only after encrypted
+backup durability; compare the exact current row before removal. History/backup
+residue remains disclosed, never claimed erased. Image discovery is secret-free;
+acquisition requires an active run, except the explicit main-only settings probe.
+MCP values share this vault. Bind them to workspace, server, destination and revision;
+changed HTTP URLs or stdio command/args require renewed input. Settings IPC derives
+the local workspace and exposes only write/delete/public metadata. Acquisition stays
+internal and is not enabled by saving. Header framing and isolated-process environment
+fields cannot be supplied as credentials. Reject writes exceeding the vault read limit.
+
+## Design canvas contracts
 
 Views accept validated CLI design-worker documents without Node, preload,
 permissions or external network.

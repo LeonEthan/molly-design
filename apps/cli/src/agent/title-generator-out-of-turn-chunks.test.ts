@@ -56,6 +56,23 @@ const createSilentLogger = (): Logger =>
     close: async () => {},
   }) as unknown as Logger;
 
+it('uses only the first local user sentence for embedded Molly titles without launching ACP', async () => {
+  const launches: string[] = [];
+  mocks.startLocalAcpAgent.mockImplementation(async () => {
+    launches.push('unexpected-title-worker');
+    throw new Error('synthetic launch refusal');
+  });
+  expect(
+    await generateTitleIsolated({
+      cliType: 'builtin',
+      agentType: 'molly',
+      taskPrompt: '合成测试标题。第二句不应成为标题。',
+      logger: createSilentLogger(),
+    })
+  ).toBe('合成测试标题');
+  expect(launches).toEqual([]);
+});
+
 /** An untyped agent_message_chunk: what an adapter without Molly phase metadata sends. */
 const agentChunk = (text: string): AcpSessionNotification =>
   ({

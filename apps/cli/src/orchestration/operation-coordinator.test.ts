@@ -35,12 +35,13 @@ type DeliveryDispatchOptions = {
 };
 
 const makeHarness = async (options?: {
+  inputConfig?: Record<string, unknown>;
   deadlineAt?: string;
   requesterArchived?: boolean;
   pendingUser?: boolean;
   busy?: boolean;
   activeTurnId?: string;
-  agentConfigId?: string;
+  agentConfigId?: string | null;
   configurationSyncSucceeds?: boolean;
   configurationSync?: () => Promise<boolean>;
   beforeTurnClaim?: () => Promise<void>;
@@ -73,6 +74,19 @@ const makeHarness = async (options?: {
   const workspaceId = 'workspace-1' as WorkspaceId;
   const machineId = 'machine-1' as MachineId;
   const requesterSessionId = 'requester-1' as SessionId;
+  const agentConfigId = options?.agentConfigId ?? 'synthetic-molly';
+  const machineAgentConfig =
+    options?.machineAgentConfig ??
+    (options?.agentConfigId === undefined
+      ? {
+          id: agentConfigId,
+          machineId,
+          name: 'Molly',
+          cliType: 'builtin' as const,
+          agentType: 'molly',
+          env: {},
+        }
+      : undefined);
   const targetSessionId = 'target-1' as SessionId;
   const targetInputDurable = options?.targetInputDurable ?? true;
   const histories = new Map<SessionId, SessionHistoryInput[]>([
@@ -111,7 +125,8 @@ const makeHarness = async (options?: {
         machineId,
         userId: 'user-1',
         cliType: 'builtin',
-        agentType: 'codex',
+        agentType: 'molly',
+        agentConfigId,
         isArchived: options?.requesterArchived ?? false,
       } as SessionMeta,
     ],
@@ -170,11 +185,11 @@ const makeHarness = async (options?: {
         histories.set(sessionId, next);
       },
     });
-  const flockRows = options?.machineAgentConfig
+  const flockRows = machineAgentConfig
     ? [
         {
-          key: machineFlockKeys.agentConfig(options.machineAgentConfig.id),
-          value: options.machineAgentConfig,
+          key: machineFlockKeys.agentConfig(machineAgentConfig.id),
+          value: machineAgentConfig,
         },
       ]
     : [];
@@ -339,8 +354,17 @@ const makeHarness = async (options?: {
     kind: options?.operationKind ?? 'session_chat',
     canonicalCommand: { sessionId: targetSessionId, prompt: 'work' },
     frozenContinuationConfig: {
-      ...(options?.agentConfigId ? { agentConfigId: options.agentConfigId } : {}),
-      inputConfig: { cliType: 'builtin', agentType: 'codex', chainDepth: 0 },
+      ...(options?.agentConfigId !== null ? { agentConfigId } : {}),
+      inputConfig: options?.inputConfig ?? {
+        cliType: 'builtin',
+        agentType: 'molly',
+        modelSelection: {
+          connectionId: 'synthetic-connection',
+          modelId: 'synthetic-model',
+          thinking: 'high',
+        },
+        chainDepth: 0,
+      },
     },
     initiatorChainDepth: 0,
     createdAt: '2026-07-19T00:00:00.000Z',
@@ -786,8 +810,17 @@ describe('LodyOperationCoordinator', () => {
     }
   });
 
-  it('carries the requester resolved commit identity into the Delivery turn', async () => {
-    const harness = await makeHarness();
+  it('carries the requester identity and frozen Molly selection into the Delivery turn', async () => {
+    const modelSelection = { connectionId: 'connection', modelId: 'k3-256k', thinking: 'high' };
+    const harness = await makeHarness({
+      inputConfig: {
+        cliType: 'builtin',
+        agentType: 'molly',
+        modelSelection,
+        mcpServerIds: ['synthetic-server'],
+        taskToolsEnabled: true,
+      },
+    });
     const targetHistory = harness.histories.get(harness.targetSessionId)!;
     targetHistory[0] = { ...targetHistory[0]!, status: 'handled' };
     targetHistory.push({
@@ -810,6 +843,36 @@ describe('LodyOperationCoordinator', () => {
       userId: 'user-1',
       userName: 'Ada Lovelace',
       userEmail: 'ada@example.com',
+      acpSessionConfig: {
+        agentConfigId: 'synthetic-molly',
+        agentType: 'molly',
+        modelSelection,
+        mcpServerIds: ['synthetic-server'],
+        taskToolsEnabled: true,
+      },
+    });
+  });
+
+  it('preserves an explicitly empty frozen MCP selection and disabled Task tools', async () => {
+    const harness = await makeHarness({
+      deadlineAt: '2026-07-19T23:59:59.000Z',
+      inputConfig: {
+        cliType: 'builtin',
+        agentType: 'molly',
+        mcpServerIds: [],
+        taskToolsEnabled: false,
+        modelSelection: { connectionId: 'synthetic', modelId: 'synthetic', thinking: 'off' },
+      },
+    });
+    harness.coordinator.start();
+    await harness.coordinator.idle();
+    harness.coordinator.stop();
+    expect(harness.continueSession.mock.calls[0]?.[0]).toMatchObject({
+      acpSessionConfig: {
+        agentConfigId: 'synthetic-molly',
+        mcpServerIds: [],
+        taskToolsEnabled: false,
+      },
     });
   });
 
@@ -1212,9 +1275,9 @@ describe('LodyOperationCoordinator', () => {
       machineAgentConfig: {
         id: agentConfigId,
         machineId: 'machine-1' as MachineId,
-        name: 'Codex',
+        name: 'Molly',
         cliType: 'builtin',
-        agentType: 'codex',
+        agentType: 'molly',
         env: {},
       },
     });
@@ -1231,7 +1294,7 @@ describe('LodyOperationCoordinator', () => {
     expect(harness.getRepoMeta).not.toHaveBeenCalled();
   });
 
-  it('continues with a legacy repo-meta-backed frozen configuration using one doc lookup', async () => {
+  it('continues with a Molly configuration in legacy repo-meta storage using one doc lookup', async () => {
     const agentConfigId = 'legacy-agent-config' as AgentConfigId;
     const harness = await makeHarness({
       deadlineAt: '2026-07-19T23:59:59.000Z',
@@ -1239,9 +1302,9 @@ describe('LodyOperationCoordinator', () => {
       legacyAgentConfig: {
         id: agentConfigId,
         machineId: 'machine-1' as MachineId,
-        name: 'Legacy Codex',
+        name: 'Molly in legacy storage',
         cliType: 'builtin',
-        agentType: 'codex',
+        agentType: 'molly',
         env: {},
       },
     });
@@ -1285,6 +1348,88 @@ describe('LodyOperationCoordinator', () => {
       }),
     ]);
   });
+
+  it.each([
+    'frozen-legacy-engine',
+    'missing-frozen-id',
+    'legacy-session',
+    'rebound-session',
+    'retired-config',
+    'overridden-config',
+    'foreign-config',
+    'missing-model',
+    'legacy-mode',
+    'frozen-override',
+    'conflicting-model',
+  ])(
+    'settles %s as non-started without waking an engine, including after restart',
+    async (kind) => {
+      const frozenId = 'frozen-molly';
+      const inputConfig: Record<string, unknown> = {
+        cliType: 'builtin',
+        agentType: 'molly',
+        modelSelection: { connectionId: 'synthetic', modelId: 'synthetic', thinking: 'high' },
+      };
+      const currentConfig: AgentConfigMeta = {
+        id: frozenId,
+        machineId: 'machine-1' as MachineId,
+        name: 'Molly',
+        cliType: 'builtin',
+        agentType: 'molly',
+        env: {},
+      };
+      if (kind === 'frozen-legacy-engine') inputConfig.agentType = 'codex';
+      if (kind === 'retired-config') currentConfig.agentType = 'codex';
+      if (kind === 'overridden-config') currentConfig.runtimeOverrides = {};
+      if (kind === 'foreign-config') currentConfig.machineId = 'other-machine' as MachineId;
+      if (kind === 'missing-model') delete inputConfig.modelSelection;
+      if (kind === 'legacy-mode') inputConfig.modeId = 'skip-permissions';
+      if (kind === 'frozen-override') inputConfig.runtimeOverrides = {};
+      if (kind === 'conflicting-model') inputConfig.modelId = 'molly-model:other/other';
+      const harness = await makeHarness({
+        deadlineAt: '2026-07-19T23:59:59.000Z',
+        agentConfigId: kind === 'missing-frozen-id' ? null : frozenId,
+        machineAgentConfig: currentConfig,
+        inputConfig,
+      });
+      const requester = harness.metas.get(harness.requesterSessionId);
+      if (!requester) throw new Error('missing synthetic requester');
+      if (kind === 'legacy-session') requester.agentType = 'codex';
+      if (kind === 'rebound-session') requester.agentConfigId = 'other-molly';
+      harness.coordinator.start();
+      await harness.coordinator.idle();
+      harness.coordinator.stop();
+      const beforeRestart = structuredClone(harness.histories.get(harness.requesterSessionId));
+      const replacement = new MollyOperationCoordinator(harness.coordinatorOptions);
+      replacement.start();
+      await replacement.idle();
+      replacement.stop();
+      expect(harness.histories.get(harness.requesterSessionId)).toEqual(beforeRestart);
+      expect(beforeRestart).toEqual([
+        expect.objectContaining({
+          role: 'system',
+          items: [
+            expect.objectContaining({
+              type: 'operation_completion',
+              continuation: {
+                status: 'not_started',
+                reason: expect.objectContaining({ code: 'CONFIGURATION_UNAVAILABLE' }),
+              },
+            }),
+          ],
+        }),
+      ]);
+      const store = new MollyOperationStore(harness.storePath, () => TEST_NOW_MS);
+      try {
+        expect(store.getDelivery(harness.requesterSessionId, 'review-round-1')).toMatchObject({
+          state: 'consumed',
+          attemptCount: 0,
+        });
+      } finally {
+        store.close();
+      }
+    }
+  );
 
   it('does not let progress write failures block operation finalization or delivery', async () => {
     const options: {

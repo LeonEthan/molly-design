@@ -67,7 +67,6 @@ const createFleetHarness = (catalog: LocalWorkspaceCatalogService, port?: CloudP
   const runtimeStateReporter = createRuntimeStateReporter();
   const fleet = new MollyFleet({
     logger: createSilentLogger(),
-    builtinAgentConfigCliTypes: [],
     cliToken: 'token',
     userId: 'user-1',
     machineId: 'machine-1' as MachineId,

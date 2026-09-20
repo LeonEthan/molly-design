@@ -34,13 +34,11 @@ describe('MachineDetailPane local machine removal', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
 
-  const renderPane = async (
-    options?: {
-      readOnly?: boolean;
-      canDelete?: boolean;
-      onDelete?: (machine: MachineViewMeta) => Promise<void>;
-    }
-  ) => {
+  const renderPane = async (options?: {
+    readOnly?: boolean;
+    canDelete?: boolean;
+    onDelete?: (machine: MachineViewMeta) => Promise<void>;
+  }) => {
     await act(async () => {
       root?.render(
         <TooltipProvider>
@@ -54,8 +52,6 @@ describe('MachineDetailPane local machine removal', () => {
             canDelete={options?.canDelete ?? false}
             onRename={vi.fn(async () => {})}
             onDelete={options?.onDelete ?? vi.fn(async () => {})}
-            onAddConfig={vi.fn()}
-            onEditConfig={vi.fn()}
           />
         </TooltipProvider>
       );

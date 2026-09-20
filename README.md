@@ -22,12 +22,41 @@ artwork authoring and the Bento editor.
   optional connection; supply your own endpoint, credentials and explicit model
   identifier in Settings. Molly does not recommend a product-default model.
 
-This is a development build, not a claim of release readiness. Agent-specific
-image input, public read-first reminders, live authoring preview, and additional
-workflow improvements remain separately scoped future work. An Agent being
-configurable does not prove every design operation works with that Agent.
+This development build is migrating to one bundled Pi engine with explicit model
+connections. Image reading, public read-first reminders and authoring previews have
+scoped implementation evidence; the complete migrated workflow is not yet accepted.
+Being configurable does not prove that a provider supports every design operation.
 The [design specification](specs/graphic-design-platform.zh.md) describes the draft
 target, not a list of shipped features.
+
+## Configure connections
+
+1. Open Settings → Agents → Molly model connections. Add the provider/product,
+   connection name, endpoint and API key. Enter keys only in the local settings
+   field, never in a conversation or artwork file. Saving encrypts the connection;
+   it neither tests inference nor changes an existing session's selection.
+2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
+   not Moonshot Open Platform. In the conversation composer choose Molly and an
+   explicit connection, model and supported thinking level. Missing or invalid
+   selections fail rather than silently switching providers or models.
+3. Optionally configure Settings → Image Connection separately. Supply an
+   OpenAI Images-compatible API root (without `/images/generations` or
+   `/images/edits`), key and exact model, enable it and save. **Test connection**
+   checks `/models` only; success does not verify generation, editing or masks.
+4. For external tools, configure Settings → MCP and select the servers for the
+   turn. Saving does not test or automatically select them. A stdio server runs
+   local code: configure only commands and servers you trust.
+
+The bundled-capabilities section reports packaged versions and compatibility
+conditions, not live session activation. The selected question extension requires
+the desktop question interface; necessary Slash-command mapping remains unfinished.
+There is no user plugin installation required for the bundled engine.
+
+For **OpenAI-compatible (advanced)**, add explicit model definitions in the connection
+form: IDs, token limits and the capabilities your service actually supports. This
+path uses standard Chat Completions streaming, not Responses or vendor-specific
+thinking formats. Turns containing tools require declared tool-call support. Saving
+does not verify these declarations or select a model; unknown prices remain unknown.
 
 ## Try a design
 
@@ -59,48 +88,44 @@ not automatically restart the finished turn. Existing draft files and historical
 content remain available through the file interface. A save failure must be
 resolved before treating your latest edits as saved or quitting.
 
+After cancellation, timeout or a crash, a dispatched request can have an unknown
+remote outcome. Stop does not prove that the provider stopped computing or charging.
+Keep the receipts and recovered assets; Molly does not automatically repeat a paid
+request. An explicit new request may incur another charge. Recovering already
+completed artifact processing must not restart model execution.
+
+For a legacy design session, use its explicit Molly continuation flow and review
+the migration preview. It creates a new context for the same artwork, retaining
+the original history instead of replaying it as native Pi history. Legacy Roles
+also require explicit migration. These paths have implementation tests; native
+restart and rollback acceptance is still pending. If native history is invalid,
+retain the original files and report the error rather than deleting journals to
+force a retry.
+
 ## Release status and support limits
 
-The agreed local design acceptance scope is complete; public release is separate. The installed macOS package has completed scripted
-poster, infographic and long-image journeys with a native Claude runtime and a
-synthetic provider. The user has accepted six visual/editing checks on a later
-real-asset poster and 12-image review copy, and subsequently passed all three human
-Agent journeys. The reported missing intermediate canvas preview has been corrected
-and observed in an installed package. Supplemental real image MCP outputs, selected
-replacement, commit, export and reopen have scoped evidence, with failed harness
-rounds retained separately. Nine
-controlled canvas-operation samples were recorded on an Apple M4 Mac with 16 GiB
-RAM; these do not establish a maximum canvas size, universal performance budget,
-application cold-start time or physical input latency. The supported first-release platform is macOS arm64, the only platform with
-installed native acceptance. Windows and Linux resource packaging is
-build-and-integrity evidence only, not native execution evidence; their
-real-machine acceptance is a separate future decision. See the
-[acceptance evidence](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)
-and [review procedure](e2e/DESIGN-ACCEPTANCE.md).
+The embedded Pi migration is **not fully accepted**. Current evidence and remaining
+work are recorded in the
+[implementation note](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md).
 
-The current approach combines automatic YAML artwork saves with public read-first reminders,
-without patching Agent runtimes or requiring generation-by-generation read proofs.
-Pi, Claude, Codex and Grok reminders have scoped native evidence. Kimi's public
-plugin also passed in a normal installed package with explicit registration in an
-isolated Kimi home. Enabling that reminder in a user's own home requires their
-opt-in plugin setup; Molly does not install it silently or claim it works before
-registration. Pi now exposes
-Molly image and rendering tools through its public extension, with installed
-generation/editing and native image-reading evidence. The
-[installed Agent matrix](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)
-records each combination and its limits; Settings availability alone does not
-establish a complete design workflow.
+| Connection                                            | Current evidence and limits                                                                                                                                                                   |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kimi Code `k3-256k/high`                              | Scoped real text, design, image-reading and recovery checks; not complete journey acceptance.                                                                                                 |
+| Configured Images-compatible `gpt-image-2.5-sunburst` | Scoped real generation/editing outputs; the full mask, multiple-image, JPEG, long-image and human visual matrix remains open. This is a tested user selection, not a default.                 |
+| Other named model presets                             | Pinned SDK catalog and code/offline checks do not prove real-account, regional or product compatibility.                                                                                      |
+| Advanced OpenAI-compatible language models            | Explicit model form, encrypted persistence and standard Chat Completions SDK path have synthetic coverage. Native UI and real-service acceptance remain open; separate from Image Connection. |
 
-Recorded real image generation/editing has produced seven test outputs, with original
-failed receipts retained separately from successful calls and free file recovery.
-The real-image TODO is complete at its recorded scope; the review artworks, original
-edit target and three scene journeys have explicit human acceptance. Grok's full-close Stop and explicit session restoration passed
-an installed raw-evidence audit, with the harness's later auxiliary-request
-failure retained. Pi's image-request cancellation
-passes an installed regression against a synthetic provider; this does not establish
-cancellation behavior at a paid provider. Image generation
-requires your own supported connection and explicit model; there is no product
-default or automatic paid retry.
+macOS arm64 has development-build and scoped native evidence, but the new embedded
+installer and no-global-Node journey still need acceptance. Windows/Linux resource
+builds are not native execution evidence. The reviewed `pi-ask-question` subset has
+SDK tests; native question interaction and restoration remain open. None of these
+checks establishes a universal canvas-size or performance limit.
+
+The earlier [design acceptance](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)
+and [five-Agent matrix](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)
+are historical evidence for the pre-migration runtime. They do not validate the
+current embedded engine. See the [review procedure](e2e/DESIGN-ACCEPTANCE.md) for
+design review context, not a claim that the migration has passed.
 
 No public release, Developer ID signing, notarization or automatic update channel
 is established by the local ad-hoc package checks.
@@ -116,14 +141,14 @@ corepack pnpm install
 corepack pnpm start:local
 ```
 
-Choose and configure your Agent in Settings. Agent runtime setup may require a
-public download and the provider's own authentication. The OSS desktop uses local
+Configure the bundled engine's model connection in Settings as above; installing
+an external Agent CLI is not the new execution path. The Node requirement here is
+for source development. The OSS desktop uses local
 product storage; it does not sign in to Lody's hosted workspace or provide its web,
 mobile, team-sharing or cloud features.
 
-Molly already has a separate application identity (`dev.molly-design.app`, `molly-design://`) and
-uses `~/.molly` for its local service data. Electron uses the Molly user-data
-location for the current operating system. Owned workspace packages use `@molly/*`; environment options use `MOLLY_*`
+Molly has a separate application identity (`dev.molly-design.app`, `molly-design://`).
+Owned workspace packages use `@molly/*`; environment options use `MOLLY_*`
 with `LODY_*` read aliases (new names take precedence). External ACP protocol
 names remain unchanged. No automatic
 migration or deletion of Lody data is performed.
@@ -133,6 +158,36 @@ See the [embedded runtime README](apps/cli/README.md) for internal architecture 
 checks. This repository README is Molly's public help entry; `site-docs` retains
 upstream Lody website material and is not the Molly feature reference.
 
+## Back up, uninstall and recover data
+
+Finish active work, resolve save errors and quit Molly before copying data. Back up
+the complete desktop profile, local service data and any external project/artwork
+directories together, not just a conversation JSONL file. With no path overrides,
+the macOS locations are:
+
+| Location                                     | Contents                                                                                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `~/Library/Application Support/Molly Design` | Desktop profile, including the encrypted `secrets/model-connections.enc` store.                                         |
+| `~/.molly`                                   | Local service data; managed Pi configuration, cache, native sessions and run/operation receipts are under `harness/pi`. |
+| Your chosen project directories              | Project files and artwork assets stored outside those application directories.                                          |
+
+`MOLLY_DATA_DIR`, `MOLLY_ELECTRON_USER_DATA_DIR` or `--user-data-dir` can change
+these locations. A copied encrypted credential store is not guaranteed to work on
+another machine or OS account; re-enter credentials through Settings if needed.
+Protect backups as sensitive data: migration to encrypted new writes does not
+erase historical plaintext from older backups or replicated history.
+
+Removing the application is not a data reset. On macOS, quit and move only the app
+to Trash if you want to retain data. Permanent data removal requires separately
+identifying and backing up the intended profile and projects. Leave Lody data,
+external CLI homes and user repositories alone. Removing local credentials does
+not revoke provider-side keys.
+
+There is no verified one-click downgrade. Do not open a newly migrated profile
+with an older writable binary: strict readers may reject newer records. Restore
+only a separately preserved backup whose compatibility has been checked; do not
+copy encrypted keys back into legacy plaintext settings.
+
 ## Repository
 
 - `apps/cli` — Agent execution and local design persistence
@@ -140,6 +195,7 @@ upstream Lody website material and is not the Molly feature reference.
 - `packages/components` — Reused workspace interface
 - `packages/design-bento` — Pinned Bento editor and rendering resources
 - `packages/design-authoring` — YAML artwork conversion and Agent skills
+- `packages/harness-pi` — Pinned embedded engine and reviewed bundled resources
 - `packages/platform` — Platform capabilities and ports
 - `packages/shared` — Shared schemas and protocols
 - `packages/cloud-api` — Optional-cloud DTOs; no hosted backend is included
@@ -159,6 +215,10 @@ Authoring and editor adapters come from
 [Bento provenance and license details](packages/design-bento/README.md) and
 [authoring provenance](packages/design-authoring/README.md) identify their sources.
 The app's Open Source Licenses entry retains dependency notices.
+Embedded-engine packaging is described in [its README](packages/harness-pi/README.md);
+the selected community extension records its version, source and adaptations in
+the [manifest](packages/harness-pi/vendor/pi-ask-question/manifest.json) and retains
+its [MIT license](packages/harness-pi/vendor/pi-ask-question/LICENSE).
 
 For new Molly problems or proposals, use
 [Molly Issues](https://github.com/LeonEthan/molly-design/issues).

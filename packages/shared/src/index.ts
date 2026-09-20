@@ -75,6 +75,7 @@ export * from './machine-monitor';
 export * from './machine-protocol-capabilities';
 export * from './repo-doc-meta';
 export * from './session-input';
+export * from './design-continuation';
 export * from './session-preparation';
 export * from './session-bootstrap';
 export * from './session-delete-queue';

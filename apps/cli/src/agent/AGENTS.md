@@ -35,76 +35,50 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   the driving Turn's `taskToolsEnabled` bit (HTTP header or stdio allowlisted env) across
   replacement and restored sessions; missing/false keeps the server mounted but drops every
   `lody_task_*` tool.
-- Workspace MCP resolution stays TWO phases: call `loadExternalMcpServers` BEFORE `initialize`,
-  never between `initialize` and `newSession`.
-- Acknowledged steer is inject-or-refuse. `AgentSteerNotDeliveredError` marks ONLY a provable
-  refusal — local pre-write failure or the agent's own JSON-RPC `invalid request`; never widen
-  it. The applied-waiter must await the steer request's answer before giving up on the turn's
-  response.
+- Load workspace MCP before `initialize`; apply capabilities at `newSession`.
+  Molly watches the frozen catalog, retires changed workers, and rechecks after approval.
+- Managed questions belong to the pending native prompt's run/epoch. Reuse durable
+  permission history; acknowledge dismissal only after cancellation settles. Prompt
+  termination and connection closure abort their questions; late answers grant nothing.
+- Acknowledged steer is inject-or-refuse. `AgentSteerNotDeliveredError` requires local pre-write
+  failure or agent JSON-RPC `invalid request`. Await the steer answer before abandoning the
+  turn response; never classify uncertain delivery as refusal.
 
 ## Launch and runtimes
 
-- `acp-runner.ts`: spawn + initialize + `newSession`/`loadSession` go through
-  `acp-session-start-gate.ts` (default 2, `MOLLY_MAX_CONCURRENT_ACP_SESSION_STARTS`). Never bypass
-  that gate.
-- `setting.ts`: every builtin requires `resolveACPProcessLaunchAsync()`.
-- `deepseek-harness-runtime.ts` is NOT a managed runtime: keep it out of runtime download,
-  prefetch, override, and interactive-auth flows, and launch the pinned closure, not the
-  all-in-one `@deepseek-ai/dsh` CLI. Credentials stay in the agent config environment;
-  never write them into the generated config. The adapter applies model/reasoning selection
-  through the Agent-scoped request waterfall, permissions through Harness presets,
-  and `agent_preset` through `AgentPresets.mount/recompose` — never as UI-only state. Presets
-  may change only before the first prompt. Per-Agent ACP stdio/HTTP MCP servers belong in the
-  extension adapter, not the immutable host composition. JSONL encoding detection is READ-ONLY:
-  fail a mixed root naming both paths; never migrate, rename, or delete session artifacts.
-- `managed-agent-runtime.ts`: Codex pins come only from `codex-runtime-manifest.json`, Claude
-  pins only from `claude-runtime-manifest.json`; reject a dependency/manifest version mismatch
-  and never duplicate those pins or checksums beside the manager. Do not loosen the metadata
-  schema or accept unknown legacy fields. The Grok submodule is never the source for production
-  runtime binaries, and the desktop must not depend on the Kimi submodule workspace. Custom
-  methods stay capability-gated. Inject the artifact base URL from
-  `CloudPort.runtimeArtifacts`; never read deployment environment or derive the channel here.
-  `MOLLY_RUNTIME_BASE_URL` is an explicit mirror override only.
-- Install cancellation, here and in `acp-binary-manager.ts`: concurrent installs share one
-  download but keep independent consumer leases; cancelling one caller must not stop others, and
-  only the last aborts fetch, checksum, and extraction. An immediate retry waits for an aborted
-  generation's scratch cleanup and never reuses it meanwhile. Tar and ZIP extraction must attach
-  to the shared abort signal; ZIP cancellation destroys the yauzl endpoint, awaits the
-  relay/output pipeline, and fences cleanup on the reader's real close/error event — never await
-  the yauzl endpoint, whose `destroy()` does not settle.
-- `npx-cache.ts`: ACP `npx` spawns force `npm_config_cache`/`NPM_CONFIG_CACHE` to the active
-  profile's `npm-cache`. Automatic `_npx`/`_cacache` cleanup is allowed ONLY for that Lody-owned
-  cache.
+- Session-owned spawn + initialize + `newSession`/`loadSession` go through
+  `acp-session-start-gate.ts` (default 2, `MOLLY_MAX_CONCURRENT_ACP_SESSION_STARTS`).
+  Each startup gets one attempt and owned failure cleanup; no npx cache repair/retry.
+  Generic `acp-runner.ts` launch helpers refuse before environment or runtime access.
+- `setting.ts` resolves only bundled Molly asynchronously. `Session.createAgent`
+  independently rejects legacy targets before environment/hook setup. Generic
+  ACP spawn cannot bypass the Session-owned private channel and run lease.
+  Historical launch metadata is not execution authority; no runtime fallback flag.
+- Embedded design reminders belong to the worker resource loader. ACP startup,
+  restore and replacement must not inject retired CLI hooks or reload native plugins.
+  Preserve the launch ID used by the existing exact-resubmission MCP contract.
+- External runtime download, update, authentication and launch-metadata writers are
+  retired. Preserve stored catalogs and user runtime/config/session files; history
+  readers do not require rebuilding external runtime versions or loading their SDKs.
+  Bundled Molly's protected publisher alone owns its connection-aware catalog.
+- Preserve historical npm/runtime caches when retiring launch paths; the embedded
+  worker neither inspects nor purges external npx installations.
 
-## `acp-authentication.ts`
+## Authentication retirement
 
-- The single per-agent slot covers launch preparation as well as the child process;
-  timeout/cancel terminate it and release it for Retry, and a cancel or timeout during cleanup
-  still wins. Stop the process before returning success.
-- Authorization data must never enter logs, chat, Flock, or config; raw provider output and
-  secret defaults must never reach retained progress.
-- Claude capability refresh runs its native status command first so missing credentials surface
-  as structured auth-required state before adapter startup; explicit environment-authenticated
-  paths bypass it.
-- Registry/custom initialization advertises no terminal capability; only agent-driven methods
-  are runnable (`env_var` rejected as deprecated, `terminal` unsupported until Machine RPC has a
-  real interactive-terminal bridge). Method lists and elicitations stay on the original
-  long-running request with one pending interaction at a time; replies carry an interaction id
-  and use the encrypted authentication-input path on remote Machines. Bound URL schemes, sizes,
-  ids, labels, options, and defaults before they enter progress, under a shared serialized-byte
-  budget for the form.
-- Machine RPC may name only a persisted Provider `configId`; the daemon freezes
-  machine/CLI/agent/launch/env/runtime fields before spawning, capability refresh included, and
-  later replies can never replace that launch target.
+- `acp-authentication.ts` returns fixed refusals for historical login/input RPCs.
+  Molly credentials use protected model connections; probing never reads external
+  CLI stores, spawns login/status commands or captures a login-shell environment.
+- Historical authentication/output DTOs remain decodable. They do not authorize
+  execution, and late authorization-code/form replies cannot start work.
 
 ## Capabilities and titles
 
-- `getStaticBuiltinAcpCapabilities()` applies only to `cliType: 'builtin'` without runtime
-  overrides. `machine/acp-capabilities-refresh` is always a real runtime probe, cached per
-  `agentConfigId` and the launched runtime version; an aborted probe must NOT update
-  the cache, and requests/responses carry that id to keep configs of one provider isolated.
-  `ManagedRuntimeUpdateCoordinator` never hot-swaps a running ACP process, and Machine Flock
-  writes ignore `fetchedAt` when comparing entries.
+- Capability refresh rejects legacy targets and launch overrides before catalog access.
+  Molly reads the existing embedded catalog with exact engine/cache identity; it
+  neither probes a runtime nor chooses a default model. Concurrent readers own
+  independent cancellation; failed/cancelled reads never write catalog state.
+  Machine Flock writes ignore `fetchedAt` when comparing entries.
 - Builtin Claude owns session titles through ACP `session_info_update`; store them only after
   `sanitizeLodyInternalInstructions`, and never start `title-generator.ts`'s isolated session
   for Claude. For Codex accept only `explicit` `_meta.lody.titleSource` names, ignore its

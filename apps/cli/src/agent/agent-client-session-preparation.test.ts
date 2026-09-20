@@ -18,6 +18,7 @@ const connectionMocks = vi.hoisted(() => ({
 vi.mock('@agentclientprotocol/sdk', () => ({
   PROTOCOL_VERSION: 1,
   ClientSideConnection: class {
+    readonly closed = new Promise<void>(() => {});
     readonly extMethod = connectionMocks.extMethod;
     readonly prompt = connectionMocks.prompt;
     readonly initialize = connectionMocks.initialize;
@@ -610,56 +611,43 @@ describe('AgentClient session preparation gate', () => {
   });
 });
 
-describe('Grok design reminder session startup', () => {
-  it('loads only the session plugin and waits for native reload before exposing the session', async () => {
-    const entered = deferred<void>();
-    const release = deferred<void>();
+describe('retired design hook startup options', () => {
+  it('does not forward old hook options during initial or replacement session setup', async () => {
+    const requests: unknown[] = [];
+    const methods: string[] = [];
     connectionMocks.initialize.mockResolvedValue({ agentCapabilities: {} });
-    connectionMocks.newSession.mockResolvedValue({ sessionId: 'grok-native' });
-    connectionMocks.extMethod.mockImplementation(async (method: string) => {
-      if (method === '_x.ai/hooks/action') {
-        entered.resolve();
-        await release.promise;
-        return {};
-      }
-      return {
-        result: {
-          hooks: [
-            { sourceDir: '/molly/grok-plugin/hooks', event: 'pre_tool_use', disabled: false },
-          ],
-        },
-      };
+    connectionMocks.newSession.mockImplementation(async (request) => {
+      requests.push(request);
+      return { sessionId: 'synthetic-native' };
     });
-    const client = new AgentClient({
+    connectionMocks.extMethod.mockImplementation(async (method: string) => {
+      methods.push(method);
+      throw new Error('Retired hook reload must not run');
+    });
+    // Structural extra fields model an older in-memory caller without adding
+    // these retired options back to the product interface.
+    const options = {
       logger: createLogger(),
-      sessionId: 'molly-grok' as SessionId,
+      sessionId: 'molly-design' as SessionId,
       terminalManager: {} as never,
       onUpdateMessage: vi.fn(),
       onRequestPermission: vi.fn(),
-      agentConfig: { cliType: 'builtin', agentType: 'grok' },
       grokDesignReminderPluginDir: '/molly/grok-plugin',
-    });
-    let exposed = false;
-    const started = client.startSession({} as never, '/workdir').then((result) => {
-      exposed = true;
-      return result;
-    });
-    await entered.promise;
-    expect(exposed).toBe(false);
-    expect(connectionMocks.newSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        _meta: expect.objectContaining({
-          pluginDirs: ['/molly/grok-plugin'],
-          clientIdentifier: 'lody:molly-grok',
-        }),
-      })
-    );
-    release.resolve();
-    expect((await started).sessionId).toBe('grok-native');
-    expect(connectionMocks.extMethod.mock.calls).toEqual([
-      ['_x.ai/hooks/action', { sessionId: 'grok-native', action: { type: 'reload' } }],
-      ['_x.ai/hooks/list', { sessionId: 'grok-native' }],
-    ]);
+      claudeDesignHookSettings: { hooks: { UserPromptSubmit: [{ command: 'retired' }] } },
+      configOptionValues: { model: 'synthetic-explicit-model' },
+    };
+    const client = new AgentClient(options);
+    expect((await client.startSession({} as never, '/workdir')).sessionId).toBe('synthetic-native');
+    expect((await client.prepareReplacementSession()).sessionId).toBe('synthetic-native');
+    const expected = {
+      cwd: '/workdir',
+      mcpServers: [],
+      _meta: {
+        lody: { sessionConfig: { version: 1, configOptionValues: options.configOptionValues } },
+      },
+    };
+    expect(requests).toEqual([expected, expected]);
+    expect(methods).toEqual([]);
   });
 });
 

@@ -8,12 +8,14 @@ import {
   normalizeAgentRoleEmoji,
   normalizeAgentRoleMentionSlug,
   normalizeAgentRoleRunConfig,
+  normalizeAgentRole,
   type AgentConfigId,
   type AgentRole,
   type AgentRoleId,
   type AgentRoleRunConfig,
   type MachineId,
 } from '@molly/shared';
+import { validateMollyRunConfigProjection } from '@molly/shared/embedded-harness';
 import {
   isConfigOptionValueValid,
   type AcpSelectorOptions,
@@ -94,11 +96,47 @@ export const buildAgentRoleFormValue = (role: AgentRole): AgentRoleFormValue => 
   shareWithWorkspace: role.visibility === 'workspace',
 });
 
+/** CLI model ids, permission modes and reasoning names have no implicit Pi mapping. */
+export const buildAgentRoleMigrationFormValue = (role: AgentRole): AgentRoleFormValue => ({
+  ...buildAgentRoleFormValue(role),
+  agentConfigId: null,
+  modelId: null,
+  modeId: null,
+  configOptionValues: {},
+});
+
+export const buildMigratedAgentRole = (
+  source: AgentRole,
+  value: AgentRoleFormValue,
+  migratedAt: number
+): AgentRole => {
+  const backup = normalizeAgentRole(source);
+  if (
+    !backup ||
+    backup.embeddedMigration ||
+    value.machineId !== backup.machineId ||
+    !value.agentConfigId ||
+    value.agentConfigId === backup.agentConfigId
+  )
+    throw new Error('agent_role_migration_source_changed');
+  validateMollyRunConfigProjection(buildAgentRoleRunConfig(value));
+  return {
+    ...buildAgentRoleFromForm(value, {
+      existing: backup,
+      ownerUserId: backup.ownerUserId,
+      now: migratedAt,
+      createId: () => backup.id,
+    }),
+    embeddedMigration: { v: 1, migratedAt, source: backup },
+  };
+};
+
 export type AgentRoleFormError =
   | 'name_required'
   | 'name_taken'
   | 'machine_required'
-  | 'agent_config_required';
+  | 'agent_config_required'
+  | 'model_required';
 
 /**
  * The name is the only authored label, so it carries both jobs: it is what the
@@ -177,6 +215,7 @@ export const buildAgentRoleFromForm = (
     revision: existing?.revision ?? 1,
     createdAt: existing?.createdAt ?? now,
     updatedAt: existing?.updatedAt ?? now,
+    ...(existing?.embeddedMigration ? { embeddedMigration: existing.embeddedMigration } : {}),
   };
 
   if (!existing) return next;
@@ -199,13 +238,14 @@ export const buildAgentRoleFromForm = (
  */
 export const applyAgentRoleRunConfigDefaults = (
   value: AgentRoleFormValue,
-  selectorOptions: AcpSelectorOptions | null
+  selectorOptions: AcpSelectorOptions | null,
+  requireExplicitModel = false
 ): AgentRoleFormValue => {
   if (!selectorOptions || selectorOptions.capabilityAuthority === 'unavailable') return value;
 
   const modelId =
     value.modelId ??
-    (selectorOptions.modelOptions.length > 0
+    (!requireExplicitModel && selectorOptions.modelOptions.length > 0
       ? (selectorOptions.defaultModelId ?? selectorOptions.modelOptions[0]?.value ?? null)
       : null);
   const modeId =

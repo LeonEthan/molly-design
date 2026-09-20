@@ -317,6 +317,10 @@ export type WorkspaceRuntime = {
     args: import('@molly/shared').SessionForkSpec,
     options?: { timeoutMs?: number }
   ) => Promise<import('@molly/shared').SessionForkResponse | null>;
+  requestDesignContinuationPreparation: (
+    machineId: MachineId,
+    spec: import('@molly/shared').DesignContinuationPreparationSpec
+  ) => Promise<import('@molly/shared').DesignContinuationPreparationResult>;
   requestSessionEditAndResend: (
     machineId: MachineId,
     args: import('@molly/shared').SessionEditAndResendSpec,

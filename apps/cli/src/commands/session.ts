@@ -22,6 +22,7 @@ import {
   isBillingQuotaExempt,
   getAcpCapabilityCacheKey,
   getBuiltinDefaultModeId,
+  isAcpCapabilityCacheEntryCurrent,
   getMachineFlockAcpCapabilities,
   getMachineFlockDocId,
   readMachineFlockRowsFromFlock,
@@ -54,6 +55,11 @@ import {
   type WorkspaceId,
   shouldQueueMachineDeleteSession,
 } from '@molly/shared';
+import {
+  encodeMollyModelOption,
+  getEmbeddedHarnessTargetError,
+  validateMollyRunConfigProjection,
+} from '@molly/shared/embedded-harness';
 import {
   dispatchLocalControl,
   ensureWorkspaceMetaSynced,
@@ -163,6 +169,8 @@ export type CreateOptions = CommonOptions &
     taskId?: string;
     /** Provenance for the task link; automation starts are runs, spawns inherit. */
     taskLinkOrigin?: 'run' | 'agent-spawn';
+    /** Internal delegated automation snapshot; never a prompt or execution override. */
+    taskAutomationStateHash?: string;
     /** Durable batch Operations intentionally bypass cooperative session quotas. */
     bypassSessionQuota?: boolean;
     /**
@@ -1017,40 +1025,51 @@ async function appendUserPromptHistory(args: {
   };
 }
 
-function buildCliHistoryInputConfig(args: {
+export function buildCliHistoryInputConfig(args: {
   prompt: string;
+  agentConfigId?: AgentConfigMeta['id'];
   cliType: SessionMeta['cliType'];
   agentType: SessionMeta['agentType'];
   modeId?: string;
   modelId?: string;
+  modelSelection?: SessionTurnInputConfig['modelSelection'];
   configOptionValues?: Record<string, string | boolean>;
   taskToolsEnabled?: boolean;
+  mcpServerIds?: SessionTurnInputConfig['mcpServerIds'];
   resume?: ACPSessionConfig['resume'];
   chainDepth?: number;
 }): NonNullable<SessionHistoryInput['inputConfig']> {
   return {
     prompt: args.prompt,
+    agentConfigId: args.agentConfigId,
     cliType: args.cliType,
     agentType: args.agentType,
     modeId: args.modeId,
     modelId: args.modelId,
+    ...(args.modelSelection ? { modelSelection: { ...args.modelSelection } } : {}),
     configOptionValues:
       args.configOptionValues && Object.keys(args.configOptionValues).length > 0
         ? args.configOptionValues
         : undefined,
     taskToolsEnabled: args.taskToolsEnabled === true,
+    ...(args.mcpServerIds !== undefined ? { mcpServerIds: [...args.mcpServerIds] } : {}),
     resume: args.resume,
     chainDepth: args.chainDepth,
   };
 }
 
 export type ResolvedTurnDispatchConfig = {
+  /** Exact target captured for a durable chat; never resolve it by name or kind. */
+  agentConfigId?: string;
+  /** Selected workspace MCP ids; an explicit empty list disables inheritance. */
+  mcpServerIds?: SessionTurnInputConfig['mcpServerIds'];
   modeId?: string;
   modelId?: string;
+  modelSelection?: SessionTurnInputConfig['modelSelection'];
   configOptionValues?: Record<string, string | boolean>;
   /** Frozen capability gate for the built-in Molly Task MCP tools. */
   taskToolsEnabled?: boolean;
-  /** Prevent create replay from re-reading mutable defaults from the requester history. */
+  /** Prevent replay from re-reading mutable Session defaults. */
   inheritSessionDefaults?: false;
   /**
    * Upgrade compatibility for Operations accepted before per-target configs
@@ -1063,8 +1082,8 @@ export type ResolvedTurnDispatchConfig = {
    * only becomes concrete ACP ids once the target agent's capabilities are
    * known. Resolved by `applyAgentRunConfigSelection` before validation.
    *
-   * Session creation only: `sendSessionChatResult` does not resolve it, because
-   * a follow-up turn keeps the settings the session was created with.
+   * Follow-up turns inherit the target Session's last explicit selection unless
+   * the caller supplies a replacement or a frozen accepted configuration.
    */
   runConfig?: AgentRunConfigSelection;
 };
@@ -1097,6 +1116,7 @@ export function applyAgentRunConfigSelection(
   };
   return {
     config: {
+      ...rest,
       ...(rest.taskToolsEnabled !== undefined ? { taskToolsEnabled: rest.taskToolsEnabled } : {}),
       ...((resolved.modeId ?? rest.modeId) ? { modeId: resolved.modeId ?? rest.modeId } : {}),
       ...((resolved.modelId ?? rest.modelId) ? { modelId: resolved.modelId ?? rest.modelId } : {}),
@@ -1172,7 +1192,25 @@ function mergeTurnDispatchConfig(
   explicitConfig: ResolvedTurnDispatchConfig,
   fallbackConfig: ResolvedTurnDispatchConfig | undefined
 ): ResolvedTurnDispatchConfig {
+  // Project each complete structured selection before field-level inheritance.
+  // Validate its own aliases first so merging cannot hide contradictory inputs.
+  const projectSelection = (config: ResolvedTurnDispatchConfig): ResolvedTurnDispatchConfig => {
+    if (!config.modelSelection) return config;
+    const selected = validateMollyRunConfigProjection(config);
+    return {
+      ...config,
+      modelId: encodeMollyModelOption(selected.connectionId, selected.modelId),
+      configOptionValues: {
+        ...config.configOptionValues,
+        reasoning_effort: selected.thinking,
+      },
+    };
+  };
+  explicitConfig = projectSelection(explicitConfig);
+  fallbackConfig = fallbackConfig ? projectSelection(fallbackConfig) : undefined;
+  const mcpServerIds = explicitConfig.mcpServerIds ?? fallbackConfig?.mcpServerIds;
   return {
+    ...(mcpServerIds !== undefined ? { mcpServerIds: [...mcpServerIds] } : {}),
     modeId: explicitConfig.modeId ?? fallbackConfig?.modeId,
     modelId: explicitConfig.modelId ?? fallbackConfig?.modelId,
     configOptionValues: explicitConfig.configOptionValues ?? fallbackConfig?.configOptionValues,
@@ -1299,6 +1337,7 @@ export function filterCompatibleInheritedTurnConfig(
     ...(config.modelId && supportedModels.has(config.modelId) ? { modelId: config.modelId } : {}),
     ...(configOptionValues ? { configOptionValues } : {}),
     ...(config.taskToolsEnabled !== undefined ? { taskToolsEnabled: config.taskToolsEnabled } : {}),
+    ...(config.mcpServerIds !== undefined ? { mcpServerIds: [...config.mcpServerIds] } : {}),
   };
 }
 
@@ -1339,11 +1378,15 @@ export function resolveTurnDispatchConfigFromInputConfig(
   return {
     ...(inputConfig.modeId ? { modeId: inputConfig.modeId } : {}),
     ...(inputConfig.modelId ? { modelId: inputConfig.modelId } : {}),
+    ...(inputConfig.modelSelection ? { modelSelection: { ...inputConfig.modelSelection } } : {}),
     ...(inputConfig.configOptionValues
       ? { configOptionValues: inputConfig.configOptionValues }
       : {}),
     ...(inputConfig.taskToolsEnabled !== undefined
       ? { taskToolsEnabled: inputConfig.taskToolsEnabled }
+      : {}),
+    ...(inputConfig.mcpServerIds !== undefined
+      ? { mcpServerIds: [...inputConfig.mcpServerIds] }
       : {}),
   };
 }
@@ -1531,21 +1574,53 @@ async function assertMachineAccess(args: {
 }
 
 /**
- * Write the durable dispatch pointer that tells the daemon a turn is pending.
- * Once this resolves the pointer is committed to the local repo and the daemon
+ * Publish the dispatch pointer that tells the daemon a turn is pending.
+ * Metadata events precede disk persistence. Once published, the daemon
  * may already be executing the turn, so this is the point of no rollback: a
  * later failure must NOT delete the session/turn. Cloud confirmation is a
  * separate, best-effort step — see {@link confirmDispatchSyncedBestEffort}.
  */
-async function writeDispatchPointer(args: {
-  manager: LoroDocumentManager;
+export async function writeDispatchPointer(args: {
+  manager: { repo: Pick<LoroDocumentManager['repo'], 'upsertDocMeta' | 'flush'> };
   sessionId: SessionId;
   userTurnId: string;
-}): Promise<void> {
+  taskAutomationStatusRepair?: SessionMeta['taskAutomationStatusRepair'];
+}): Promise<boolean> {
+  if (
+    args.taskAutomationStatusRepair &&
+    args.taskAutomationStatusRepair.userTurnId !== args.userTurnId
+  )
+    throw new Error('task_automation_repair_turn_mismatch');
+  if (args.taskAutomationStatusRepair) {
+    if (args.taskAutomationStatusRepair.dispatchState !== 'dispatched')
+      throw new Error('task_automation_repair_state_invalid');
+    // upsert publishes in-memory events before its debounced disk flush. Leave
+    // a durable prepared record before any observer can execute the pointer.
+    await args.manager.repo.upsertDocMeta(getSessionRoomId(args.sessionId), {
+      taskAutomationStatusRepair: { ...args.taskAutomationStatusRepair, dispatchState: 'prepared' },
+    });
+    await args.manager.repo.flush();
+  }
   await args.manager.repo.upsertDocMeta(getSessionRoomId(args.sessionId), {
     latestUserMsgId: args.userTurnId,
     lastMissingHistoryUserMsgId: undefined,
+    ...(args.taskAutomationStatusRepair
+      ? { taskAutomationStatusRepair: args.taskAutomationStatusRepair }
+      : {}),
   } satisfies Partial<SessionMeta>);
+  // Publication is already irreversible: a failed flush cannot become a
+  // pre-dispatch exception that causes deletion or a second Session/model run.
+  if (args.taskAutomationStatusRepair) {
+    try {
+      await args.manager.repo.flush();
+    } catch {
+      getLogger('session').warn(
+        'Task dispatch was published but disk persistence is unconfirmed; retain its Session and never redispatch.'
+      );
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -1786,7 +1861,9 @@ async function listAgentConfigsForMachine(
   machineId: MachineId
 ): Promise<AgentConfigMeta[]> {
   await syncMachineFlockDocsForRead(manager, workspaceId, [machineId], 'session.agent-configs');
-  const configs = await listMergedAgentConfigs(manager.repo, workspaceId, [machineId]);
+  const configs = (await listMergedAgentConfigs(manager.repo, workspaceId, [machineId])).filter(
+    (config) => config.machineId === machineId
+  );
   configs.sort((left, right) => {
     const nameCompare = left.name.localeCompare(right.name);
     if (nameCompare !== 0) {
@@ -1802,22 +1879,15 @@ export function selectDefaultAgentConfigForCreate(
   machineId: MachineId,
   currentSession?: SessionMeta
 ): AgentConfigMeta | undefined {
+  const eligible = configs.filter(
+    (config) =>
+      config.machineId === machineId && getEmbeddedHarnessTargetError(config) === undefined
+  );
   if (currentSession?.machineId === machineId && currentSession.agentConfigId !== undefined) {
-    const currentConfig = configs.find((config) => config.id === currentSession.agentConfigId);
-    if (currentConfig) {
-      return currentConfig;
-    }
+    return eligible.find((config) => config.id === currentSession.agentConfigId);
   }
-  if (currentSession) {
-    const sameKind = configs.filter(
-      (config) =>
-        config.cliType === currentSession.cliType && config.agentType === currentSession.agentType
-    );
-    if (sameKind.length === 1) {
-      return sameKind[0];
-    }
-  }
-  return configs.length === 1 ? configs[0] : undefined;
+  if (currentSession) return undefined;
+  return eligible.length === 1 ? eligible[0] : undefined;
 }
 
 async function resolveAgentConfigForCreate(args: {
@@ -2209,6 +2279,10 @@ async function resolveCreateContext(args: {
     selector: agentSelector,
     currentSession,
   });
+  const targetError = getEmbeddedHarnessTargetError(agentConfig);
+  if (targetError !== undefined) throw new Error(targetError);
+  if (args.options.agentRoleId && agentConfig.id !== args.options.agentConfig)
+    throw new Error('agent_role_target_unavailable');
 
   let project: ProjectRef | undefined;
   if (normalizedRepo && normalizedLocalProject) {
@@ -2298,7 +2372,7 @@ export async function validateSessionCreateOptions(args: {
     args.options.delegatedRequester
   );
   const resolved = await resolveCreateContext({ ...args, requester });
-  return await resolveEffectiveSessionCreateDispatchConfig({
+  return await resolveEffectiveSessionDispatchConfig({
     manager: args.manager,
     workspaceId: args.workspace.id as WorkspaceId,
     agentConfig: resolved.agentConfig,
@@ -2307,13 +2381,15 @@ export async function validateSessionCreateOptions(args: {
   });
 }
 
-async function resolveEffectiveSessionCreateDispatchConfig(args: {
+async function resolveEffectiveSessionDispatchConfig(args: {
   manager: LoroDocumentManager;
   workspaceId: WorkspaceId;
   agentConfig: AgentConfigMeta;
   openedBySessionId?: SessionId;
   dispatchConfig: ResolvedTurnDispatchConfig;
 }): Promise<ResolvedTurnDispatchConfig> {
+  const targetError = getEmbeddedHarnessTargetError(args.agentConfig);
+  if (targetError !== undefined) throw new Error(targetError);
   const { frozenInheritedInputConfig, ...dispatchConfig } = args.dispatchConfig;
   const inheritedDispatchConfig =
     frozenInheritedInputConfig !== undefined
@@ -2325,49 +2401,34 @@ async function resolveEffectiveSessionCreateDispatchConfig(args: {
             args.agentConfig
           )
         : undefined;
-  // Builtin Role/MCP creates often have no modeId. Read capabilities before
-  // accepting so withBuiltinDefaultTurnMode cannot freeze an unoffered mode.
-  const mayApplyBuiltinDefault =
-    Boolean(getBuiltinDefaultModeId(args.agentConfig.cliType, args.agentConfig.agentType)) &&
-    dispatchConfig.modeId === undefined &&
-    typeof dispatchConfig.configOptionValues?.mode !== 'string' &&
-    inheritedDispatchConfig?.modeId === undefined &&
-    typeof inheritedDispatchConfig?.configOptionValues?.mode !== 'string';
-  const needsCapability =
-    mayApplyBuiltinDefault ||
-    dispatchConfig.modeId !== undefined ||
-    dispatchConfig.modelId !== undefined ||
-    dispatchConfig.configOptionValues !== undefined ||
-    hasAgentRunConfigSelection(dispatchConfig.runConfig) ||
-    inheritedDispatchConfig?.modeId !== undefined ||
-    inheritedDispatchConfig?.modelId !== undefined ||
-    inheritedDispatchConfig?.configOptionValues !== undefined;
-  const capability = needsCapability
-    ? await readAgentAcpCapability({
-        manager: args.manager,
-        workspaceId: args.workspaceId,
-        machineId: args.agentConfig.machineId,
-        agentConfigId: args.agentConfig.id,
-      })
-    : undefined;
+  const capability = await readAgentAcpCapability({
+    manager: args.manager,
+    workspaceId: args.workspaceId,
+    machineId: args.agentConfig.machineId,
+    agentConfigId: args.agentConfig.id,
+  });
+  if (
+    !isAcpCapabilityCacheEntryCurrent(capability) ||
+    capability.provenance !== 'runtime' ||
+    capability.cliType !== 'builtin' ||
+    capability.agentType !== 'molly'
+  )
+    throw new Error('harness_model_catalog_unavailable');
   const requested = applyAgentRunConfigSelection(dispatchConfig, capability);
-  validateTurnModeAndModel(requested.config, capability);
-  validateTurnConfigOptionValues(
-    requested.config.configOptionValues,
-    capability,
-    requested.validatedConfigIds
-  );
-  return {
-    ...withBuiltinDefaultTurnMode(
-      mergeTurnDispatchConfig(
-        requested.config,
-        filterCompatibleInheritedTurnConfig(inheritedDispatchConfig, capability)
-      ),
-      args.agentConfig,
-      capability
-    ),
+  // Preserve inherited controls for validation. Dropping unsupported fields
+  // would silently select a different model/thinking configuration.
+  const effective: ResolvedTurnDispatchConfig = {
+    ...mergeTurnDispatchConfig(requested.config, inheritedDispatchConfig),
     inheritSessionDefaults: false,
   };
+  const selected = validateMollyRunConfigProjection(effective);
+  const modelId = encodeMollyModelOption(selected.connectionId, selected.modelId);
+  if (
+    !capability.models.some((model) => model.modelId === modelId) ||
+    capability.modelReasoningEfforts?.[modelId]?.includes(selected.thinking) !== true
+  )
+    throw new Error('harness_model_selection_unavailable');
+  return { ...effective, modelSelection: selected };
 }
 
 export function shouldQueueMachineDelete(
@@ -2441,6 +2502,13 @@ export async function createSessionResult(
   openedByRootSessionId?: SessionId;
   completionPromise?: Promise<Awaited<ReturnType<typeof waitForTurnCompletion>>>;
 }> {
+  if (
+    options.taskAutomationStateHash !== undefined &&
+    (!options.taskId ||
+      options.taskLinkOrigin !== 'run' ||
+      !/^[a-f0-9]{64}$/u.test(options.taskAutomationStateHash))
+  )
+    throw new Error('task_automation_state_hash_invalid');
   const envOverrides = parseEnvAssignments(options.env);
   if (Object.keys(envOverrides).length > 0) {
     throw new Error(
@@ -2479,7 +2547,7 @@ export async function createSessionResult(
     openedByRootSessionId,
     taskId,
   } = resolved;
-  const effectiveDispatchConfig = await resolveEffectiveSessionCreateDispatchConfig({
+  const effectiveDispatchConfig = await resolveEffectiveSessionDispatchConfig({
     manager,
     workspaceId: workspace.id as WorkspaceId,
     agentConfig,
@@ -2534,12 +2602,15 @@ export async function createSessionResult(
       userId: requesterUserId,
       inputConfig: buildCliHistoryInputConfig({
         prompt: sessionCreatePrompt,
+        agentConfigId: agentConfig.id,
         cliType: agentConfig.cliType,
         agentType: agentConfig.agentType,
         modeId: modeId ?? undefined,
         modelId: modelId ?? undefined,
+        modelSelection: effectiveDispatchConfig.modelSelection,
         configOptionValues: effectiveDispatchConfig.configOptionValues,
         taskToolsEnabled: taskId ? true : effectiveDispatchConfig.taskToolsEnabled,
+        mcpServerIds: effectiveDispatchConfig.mcpServerIds,
         chainDepth: options.chainDepth,
       }),
       preallocatedId: options.userTurnId,
@@ -2561,7 +2632,24 @@ export async function createSessionResult(
     await manager.repo.upsertDocMeta(sessionRoomId, {
       status: SessionStatusFactory.idle(),
     } satisfies Partial<SessionMeta>);
-    await writeDispatchPointer({ manager, sessionId, userTurnId });
+    await writeDispatchPointer({
+      manager,
+      sessionId,
+      userTurnId,
+      ...(taskId && options.taskAutomationStateHash
+        ? {
+            taskAutomationStatusRepair: {
+              version: 1 as const,
+              dispatchState: 'dispatched' as const,
+              taskId,
+              agentConfigId: agentConfig.id,
+              ownerId: requesterUserId,
+              taskStateHash: options.taskAutomationStateHash,
+              userTurnId,
+            },
+          }
+        : {}),
+    });
     dispatched = true;
     await confirmDispatchSyncedBestEffort({
       manager,
@@ -2627,19 +2715,46 @@ export async function validateSessionChatTarget(args: {
   sessionId: SessionId;
   requesterUserIdOverride?: string;
   delegatedRequester?: DelegatedSessionRequester;
-}): Promise<SessionMeta> {
+  dispatchConfig?: ResolvedTurnDispatchConfig;
+  skipMachineAvailabilityCheck?: boolean;
+}): Promise<{ session: SessionMeta; dispatchConfig: ResolvedTurnDispatchConfig }> {
   const requester = resolveSessionRequester(
     args.auth,
     args.requesterUserIdOverride,
     args.delegatedRequester
   );
-  return await validateSessionChatTargetForRequester({
+  const { session, agentConfig } = await validateSessionChatTargetForRequester({
     auth: args.auth,
     workspace: args.workspace,
     manager: args.manager,
     sessionId: args.sessionId,
     requester,
   });
+  const requested = args.dispatchConfig ?? {};
+  if (requested.agentConfigId !== undefined && requested.agentConfigId !== agentConfig.id)
+    throw new Error('harness_target_unavailable');
+  if (requested.inheritSessionDefaults !== false && !requested.frozenInheritedInputConfig) {
+    await syncDocForRead(
+      args.manager,
+      getSessionRoomId(args.sessionId),
+      `session.chat:${args.sessionId}:defaults`
+    );
+  }
+  const dispatchConfig = await resolveEffectiveSessionDispatchConfig({
+    manager: args.manager,
+    workspaceId: args.workspace.id as WorkspaceId,
+    agentConfig,
+    openedBySessionId: args.sessionId,
+    dispatchConfig: requested,
+  });
+  if (!args.skipMachineAvailabilityCheck) {
+    await ensureTargetMachineOnline({
+      auth: args.auth,
+      workspaceId: args.workspace.id as WorkspaceId,
+      machineId: session.machineId,
+    });
+  }
+  return { session, dispatchConfig: { ...dispatchConfig, agentConfigId: agentConfig.id } };
 }
 
 async function validateSessionChatTargetForRequester(args: {
@@ -2648,9 +2763,11 @@ async function validateSessionChatTargetForRequester(args: {
   manager: LoroDocumentManager;
   sessionId: SessionId;
   requester: ResolvedSessionRequester;
-}): Promise<SessionMeta> {
+}): Promise<{ session: SessionMeta; agentConfig: AgentConfigMeta }> {
   await syncWorkspaceMetaForRead(args.manager, `session.chat:${args.sessionId}:prewrite:meta`);
   const session = await resolveSessionMetaOrThrow(args.manager, args.sessionId);
+  const targetError = getEmbeddedHarnessTargetError(session);
+  if (targetError !== undefined) throw new Error(targetError);
   if (session.isArchived) {
     throw new Error(`Session ${args.sessionId} is archived. Restore it before chatting.`);
   }
@@ -2661,12 +2778,16 @@ async function validateSessionChatTargetForRequester(args: {
     requester: args.requester,
     localProjectId: session.project?.kind === 'local' ? session.project.localProjectId : undefined,
   });
-  await ensureTargetMachineOnline({
-    auth: args.auth,
-    workspaceId: args.workspace.id as WorkspaceId,
-    machineId: session.machineId,
-  });
-  return session;
+  const configs = await listAgentConfigsForMachine(
+    args.manager,
+    args.workspace.id as WorkspaceId,
+    session.machineId
+  );
+  const config = configs.find((candidate) => candidate.id === session.agentConfigId);
+  if (!config) throw new Error('harness_target_unavailable');
+  const configError = getEmbeddedHarnessTargetError(config);
+  if (configError !== undefined) throw new Error(configError);
+  return { session, agentConfig: config };
 }
 
 export async function sendSessionChatResult(
@@ -2697,34 +2818,15 @@ export async function sendSessionChatResult(
 }> {
   const requester = resolveSessionRequester(auth, requesterUserIdOverride, delegatedRequester);
   const requesterUserId = requester.userId;
-  const session = await validateSessionChatTargetForRequester({
+  const { session, dispatchConfig: effectiveDispatchConfig } = await validateSessionChatTarget({
     auth,
     workspace,
     manager,
     sessionId,
-    requester,
+    requesterUserIdOverride,
+    delegatedRequester,
+    dispatchConfig,
   });
-  const mayApplyBuiltinDefault =
-    Boolean(getBuiltinDefaultModeId(session.cliType, session.agentType)) &&
-    !dispatchConfig.modeId &&
-    typeof dispatchConfig.configOptionValues?.mode !== 'string';
-  const capability =
-    dispatchConfig.modeId ||
-    dispatchConfig.modelId ||
-    dispatchConfig.configOptionValues ||
-    mayApplyBuiltinDefault
-      ? await readAgentAcpCapability({
-          manager,
-          workspaceId: workspace.id as WorkspaceId,
-          machineId: session.machineId,
-          agentConfigId: session.agentConfigId,
-        })
-      : undefined;
-  if (dispatchConfig.modeId || dispatchConfig.modelId || dispatchConfig.configOptionValues) {
-    validateTurnModeAndModel(dispatchConfig, capability);
-    validateTurnConfigOptionValues(dispatchConfig.configOptionValues, capability);
-  }
-  const effectiveDispatchConfig = withBuiltinDefaultTurnMode(dispatchConfig, session, capability);
 
   await syncDocForRead(
     manager,
@@ -2746,12 +2848,15 @@ export async function sendSessionChatResult(
     userId: requesterUserId,
     inputConfig: buildCliHistoryInputConfig({
       prompt,
+      agentConfigId: session.agentConfigId,
       cliType: session.cliType,
       agentType: session.agentType,
       modeId: effectiveDispatchConfig.modeId,
       modelId: effectiveDispatchConfig.modelId,
+      modelSelection: effectiveDispatchConfig.modelSelection,
       configOptionValues: effectiveDispatchConfig.configOptionValues,
       taskToolsEnabled: effectiveDispatchConfig.taskToolsEnabled,
+      mcpServerIds: effectiveDispatchConfig.mcpServerIds,
       resume: session.acpSessionId ?? undefined,
       chainDepth: orchestration?.chainDepth,
     }),

@@ -6,7 +6,6 @@ import {
 import type { Logger } from '@/utils/logger';
 import { shutdownLocalAcpAgent, startLocalAcpAgent } from '@/agent/acp-runner';
 import { scrubInheritedClaudeAuthEnv, shouldScrubClaudeAuthEnv } from '@/agent/claude-env-conflict';
-import type { ManagedRuntimeProgressCallback } from '@/agent/managed-agent-runtime';
 import { AcpAuthenticationRequiredError } from '@/agent/agent-client';
 import { probeBuiltinAuthentication } from '@/agent/acp-authentication';
 import {
@@ -18,7 +17,6 @@ export { normalizeConfigOptions } from '@/agent/acp-capability-normalization';
 export type { AcpCapabilitiesResult } from '@/agent/acp-capability-normalization';
 
 export type FetchAcpCapabilitiesOptions = {
-  onManagedRuntimeProgress?: ManagedRuntimeProgressCallback;
   signal?: AbortSignal;
 };
 
@@ -51,7 +49,6 @@ export async function fetchAcpCapabilities(
     agentType,
     runtimeOverrides,
     env: probeEnv,
-    onManagedRuntimeProgress: options.onManagedRuntimeProgress,
     signal: options.signal,
     logger,
   });
@@ -78,7 +75,6 @@ export async function fetchAcpCapabilities(
       runtimeOverrides,
       workdir,
       env: probeEnv,
-      onManagedRuntimeProgress: options.onManagedRuntimeProgress,
       signal: options.signal,
       logger,
       terminalManager: noopTerminalManager,

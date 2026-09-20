@@ -1,10 +1,11 @@
 import { createCancellationDrain } from './cancellation-drain';
+import { decodeMollyModelOption } from '@molly/shared/embedded-harness';
 import type { SteerOutcomeResult } from '@/agent/agent-client';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
 import {
   type ACPSessionId,
-  type AgentConfigId,
+  ACP_CAPABILITY_CACHE_VERSION,
   type AgentConfigCliType,
   type AgentConfigMeta,
   type ChatFailedCode,
@@ -26,8 +27,6 @@ import {
   type MachinePingRequestValidated,
   type MachinePingResponse,
   type MachineLifecycleCapability,
-  REGISTRY_ACP_AGENTS,
-  type RegistryAcpAgent,
   type MachineStatusRequestValidated,
   type MachineStatusResponse,
   type MachineResourceInfo,
@@ -55,10 +54,6 @@ import {
   type AcpConfigOptionValue,
   type BuiltinRuntimeOverrides,
   type CustomAcpLaunchSpec,
-  hasBuiltinRuntimeOverrideValues,
-  getManagedBuiltinRuntimeByAgentType,
-  getManagedBuiltinRuntimeByRuntimeName,
-  serializeCustomAcpLaunchSpec,
 } from '@molly/shared';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
 import type { ModelInfo } from '@molly/shared';
@@ -78,17 +73,9 @@ import {
   getLocalProjectGitStateAtRootPath,
   resolveLocalProjectBranchAtRootPath,
 } from '@molly/shared/node/local-project';
-import { getAcpCapabilitySourceVersion, resolveACPProcessLaunch } from '@/agent/setting';
+import { resolveACPProcessLaunch } from '@/agent/setting';
 import { type AcpLauncher, resolveAcpLauncher } from '@/agent/acp-analytics';
-import { AcpBinaryUnsupportedPlatformError, getAcpBinaryManager } from '@/agent/acp-binary-manager';
-import {
-  classifyManagedRuntimeFailureReason,
-  formatManagedRuntimeFailureMessage,
-  getManagedAgentRuntimeManager,
-  ManagedRuntimeUnsupportedPlatformError,
-  type ManagedRuntimeProgressEvent,
-  type ManagedRuntimeName,
-} from '@/agent/managed-agent-runtime';
+import { assertEmbeddedHarnessTarget } from '@/agent/embedded-harness-runtime';
 import type { FetchAcpCapabilitiesOptions } from '@/agent/acp-capabilities';
 import { AcpAuthenticationRequiredError } from '@/agent/agent-client';
 import {
@@ -151,11 +138,6 @@ type FinalizeTurnContext = {
 };
 
 const TURN_FINALIZATION_STAGE_WARN_MS = 5_000;
-// Renderer, local IPC, and Machine RPC wait at most 300s for the complete
-// authentication workflow. Keep the post-login capability proof inside that
-// envelope and leave a small delivery margin for the final response.
-const ACP_AUTHENTICATION_WORKFLOW_DEADLINE_MS = 295_000;
-const ACP_POST_AUTH_REFRESH_MAX_MS = 60_000;
 
 /**
  * How long a fallback restore waits for the history CRDT to carry the prior
@@ -512,10 +494,6 @@ const isSessionTurnStartFenceFailed = (error: unknown): error is SessionTurnStar
   );
 };
 
-function truncateAnalyticsString(value: string, maxLength = 1_000): string {
-  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
-}
-
 export type SessionExecutionServiceDeps = {
   logger: Logger;
   sessionManager: SessionManager;
@@ -719,11 +697,6 @@ type InFlightAcpRefreshEntry = {
   settled: boolean;
 };
 
-type InFlightAcpBinaryInstallEntry = {
-  consumers: Map<object, AcpBinaryProgressSink | undefined>;
-  promise: Promise<MachineAcpBinaryInstallResponse>;
-};
-
 function createAcpRefreshAbortError(): DOMException {
   return new DOMException('ACP capability refresh was cancelled', 'AbortError');
 }
@@ -758,28 +731,6 @@ const summarizeAcpAuthMethod = (method: unknown): MachineAcpAuthMethodSummary =>
   };
 };
 
-const managedRuntimeAgentType = (runtimeName: ManagedRuntimeName): string =>
-  getManagedBuiltinRuntimeByRuntimeName(runtimeName)?.agentType ?? runtimeName;
-
-const managedRuntimeProgressStatus = (
-  phase: ManagedRuntimeProgressEvent['phase']
-): MachineAcpBinaryProgressMessage['status'] => (phase === 'complete' ? 'installed' : phase);
-
-const toManagedRuntimeProgressMessage = (
-  machineId: MachineId,
-  event: ManagedRuntimeProgressEvent
-): MachineAcpBinaryProgressMessage => ({
-  type: 'machine/acp-binary-progress',
-  machineId,
-  agentType: managedRuntimeAgentType(event.runtimeName),
-  status: managedRuntimeProgressStatus(event.phase),
-  downloadedBytes: event.downloadedBytes,
-  totalBytes: event.totalBytes,
-  percent: event.percent,
-  platformArch: event.platformArch,
-  version: event.version,
-});
-
 type TurnAnalyticsState = {
   turnId: string;
   startedAtMs: number;
@@ -788,6 +739,19 @@ type TurnAnalyticsState = {
 };
 
 export class SessionExecutionService {
+  /** UI, MCP and durable delivery share the same explicit catalog projection. */
+  private resolveEmbeddedRunSelection(config: SessionChatRequestValidated['acpSessionConfig']) {
+    if (config.cliType !== 'builtin' || config.agentType !== 'molly' || config.modelSelection)
+      return config;
+    return {
+      ...config,
+      modelSelection: decodeMollyModelOption(
+        config.modelId ?? config.configOptionValues?.model,
+        config.configOptionValues?.reasoning_effort ?? 'off'
+      ),
+    };
+  }
+
   private readonly stopRequestedBySession = new Map<SessionId, string>();
 
   isDispatchPausedInMemory(sessionId: SessionId): boolean {
@@ -818,15 +782,9 @@ export class SessionExecutionService {
     SessionId,
     { status: string; stage?: string; atMs: number }
   >();
-  // Dedupes concurrent ACP capability refreshes for the same config and launch
-  // inputs. Refreshes spawn
-  // a fresh CLI subprocess and wait a few seconds; running it twice in parallel
-  // doubles process cost and races the final `updateAcpCapabilities` write.
+  // Coalesce reads of the existing embedded catalog, with independent cancellation.
   private readonly inFlightAcpRefresh = new Map<string, InFlightAcpRefreshEntry>();
 
-  // Coalesce concurrent install requests for the same agent so the user clicking
-  // "download" twice (or a refresh racing an install) triggers a single download.
-  private readonly inFlightAcpBinaryInstall = new Map<string, InFlightAcpBinaryInstallEntry>();
   private readonly acpAuthenticationManager: AcpAuthenticationManager;
 
   constructor(private readonly deps: SessionExecutionServiceDeps) {
@@ -3527,9 +3485,14 @@ export class SessionExecutionService {
                             promptBlocks: promptBlocks.length,
                           },
                           async () => {
-                            const providerPrompt = agentClient.prompt(acpSessionId, promptBlocks, {
-                              signal,
-                            });
+                            const providerPrompt = activeSession.isEmbeddedHarness?.()
+                              ? activeSession.promptEmbeddedHarness!(
+                                  self.getActiveInvocationContext(sessionId)?.sourceTurnId ??
+                                    runtime.turnId,
+                                  promptBlocks,
+                                  signal
+                                )
+                              : agentClient.prompt(acpSessionId, promptBlocks, { signal });
                             if (runtime.canvasPrepared)
                               runtime.providerPromptSettlement =
                                 agentClient.getProviderPromptSettlement?.(acpSessionId);
@@ -4258,7 +4221,8 @@ export class SessionExecutionService {
     dispatchOptions?: SessionDispatchOptions,
     prepareOptions?: { sessionDoc?: SessionDocument }
   ): Promise<VisibleSessionTurnPlan> {
-    const { sessionId, acpSessionConfig, userId, userName, userEmail, userTurnId } = message;
+    const { sessionId, userId, userName, userEmail, userTurnId } = message;
+    const acpSessionConfig = this.resolveEmbeddedRunSelection(message.acpSessionConfig);
     const executionUserTurnId =
       dispatchOptions?.dispatchSource === 'delivery' ? undefined : userTurnId;
     const sessionDoc =
@@ -4428,6 +4392,7 @@ export class SessionExecutionService {
           agentCliType: acpSessionConfig.cliType,
           agentType: acpSessionConfig.agentType,
           configOptionValues: acpSessionConfig.configOptionValues,
+          modelSelection: acpSessionConfig.modelSelection,
           mcpServerIds: acpSessionConfig.mcpServerIds ?? [],
           taskToolsEnabled: acpSessionConfig.taskToolsEnabled === true,
           customAcp: resumeCustomAcp,
@@ -4485,7 +4450,7 @@ export class SessionExecutionService {
             // This freshly created ACP session has no knowledge of that turn,
             // so reconstruct its context before sending the current request.
             const history = readSessionHistory(sessionDoc.sessionData.history);
-            if (history.length > 0) {
+            if (history.length > 0 && acpSessionConfig.agentType !== 'molly') {
               replayPromptResult = buildReplayPromptFromHistory({
                 history,
                 excludeTurnId: message.userTurnId,
@@ -4523,7 +4488,12 @@ export class SessionExecutionService {
                 error instanceof AcpAuthenticationRequiredError ||
                 isAuthenticationRequiredACPError(error);
 
-              if (isAcpResumeError && resumeSessionId && !needsAuthentication) {
+              if (
+                isAcpResumeError &&
+                resumeSessionId &&
+                !needsAuthentication &&
+                acpSessionConfig.agentType !== 'molly'
+              ) {
                 self.deps.logger.debug(
                   `[${sessionId}] ACP resume failed, attempting fallback with chat history replay`
                 );
@@ -4785,6 +4755,7 @@ export class SessionExecutionService {
                 const hasPromptOutput =
                   self.deps.hasPromptOutputForTurn?.(sessionId, runtime.turnId) ?? false;
                 if (
+                  acpSessionConfig.agentType === 'molly' ||
                   runtime.turnId !== turnId ||
                   !shouldRecoverStaleACPConnectionPrompt({
                     error,
@@ -5076,6 +5047,23 @@ export class SessionExecutionService {
           }
           if (
             readySession &&
+            acpSessionConfig.cliType === 'builtin' &&
+            acpSessionConfig.agentType === 'molly' &&
+            readySession.needsEmbeddedRuntimeReplacement?.(
+              acpSessionConfig.modelSelection,
+              acpSessionConfig.mcpServerIds ?? []
+            )
+          ) {
+            // Under the ordinary turn owner, retire the old epoch before restoring
+            // the same native context with the newly frozen connection/model.
+            yield* self.tryPromise(() =>
+              self.deps.sessionManager.terminateSession(sessionId, true, true)
+            );
+            readySession = null;
+            session = null;
+          }
+          if (
+            readySession &&
             (!readySession.agentClient?.isCreated() || !readySession.acpSessionId)
           ) {
             const pending = self.deps.sessionManager.getPendingSession(sessionId);
@@ -5190,7 +5178,8 @@ export class SessionExecutionService {
     dispatchOptions?: SessionDispatchOptions,
     prepareOptions?: { sessionDoc?: SessionDocument }
   ): Promise<VisibleSessionTurnPlan> {
-    const { sessionId, acpSessionConfig, workspaceId, env } = message;
+    const { sessionId, workspaceId, env } = message;
+    const acpSessionConfig = this.resolveEmbeddedRunSelection(message.acpSessionConfig);
     const userTurnId =
       typeof message.userTurnId === 'string' && message.userTurnId.trim()
         ? message.userTurnId.trim()
@@ -5267,6 +5256,7 @@ export class SessionExecutionService {
       agentCliType: acpSessionConfig.cliType,
       agentType: acpSessionConfig.agentType,
       configOptionValues: acpSessionConfig.configOptionValues,
+      modelSelection: acpSessionConfig.modelSelection,
       mcpServerIds: acpSessionConfig.mcpServerIds ?? [],
       taskToolsEnabled: acpSessionConfig.taskToolsEnabled === true,
       agentConfigId: existingMeta?.agentConfigId,
@@ -5327,15 +5317,16 @@ export class SessionExecutionService {
     );
     const startSessionStartedAtMs = getServerNow();
 
-    void this.deps.maybeGenerateAndStoreSessionTitle(
-      sessionId,
-      sessionConfig.agentCliType,
-      sessionConfig.agentType,
-      agentConfig.prompt,
-      env,
-      acpSessionConfig.customAcp,
-      acpSessionConfig.runtimeOverrides
-    );
+    if (sessionConfig.agentType !== 'molly')
+      void this.deps.maybeGenerateAndStoreSessionTitle(
+        sessionId,
+        sessionConfig.agentCliType,
+        sessionConfig.agentType,
+        agentConfig.prompt,
+        env,
+        acpSessionConfig.customAcp,
+        acpSessionConfig.runtimeOverrides
+      );
 
     const self = this;
     const turnErrorContext: VisibleSessionTurnUnhandledErrorContext = {
@@ -5488,7 +5479,6 @@ export class SessionExecutionService {
             { terminateOnCancel: true }
           );
           bindSession(session);
-          self.scheduleCreatedSessionCapabilityUpdate(session, sessionConfig);
           yield* abortIfCancelled({ terminateSession: true });
           // First-turn attachments are materialized under the session workspace.
           // Start this as soon as createSession has registered the workspace, but
@@ -6105,61 +6095,10 @@ export class SessionExecutionService {
     };
   }
 
-  private scheduleCreatedSessionCapabilityUpdate(session: ISession, config: SessionConfig): void {
-    const capabilities = session.getAcpCapabilities?.();
-    const agentConfigId = config.agentConfigId;
-    if (!capabilities || !agentConfigId) {
-      return;
-    }
-
-    void (async () => {
-      const sourceVersion =
-        session.getAcpCapabilitySourceVersion?.() ??
-        getAcpCapabilitySourceVersion({
-          cliType: config.agentCliType,
-          agentType: config.agentType,
-          customAcp: config.customAcp,
-          runtimeOverrides: config.runtimeOverrides,
-          env: config.env,
-        });
-      const existing = await this.deps.workspaceDocument.getAcpCapabilities(
-        this.deps.machineId,
-        agentConfigId
-      );
-      const availableCommands =
-        capabilities.availableCommands !== undefined
-          ? capabilities.availableCommands
-          : existing?.sourceVersion === sourceVersion
-            ? existing.availableCommands
-            : undefined;
-      await this.deps.workspaceDocument.updateAcpCapabilities(
-        this.deps.machineId,
-        agentConfigId,
-        config.agentCliType,
-        config.agentType,
-        capabilities.modes,
-        capabilities.models,
-        capabilities.configOptions,
-        availableCommands,
-        capabilities.sessionFork,
-        sourceVersion,
-        capabilities.modelReasoningEfforts,
-        capabilities.acknowledgedSteer
-      );
-    })().catch((error: unknown) => {
-      this.deps.logger.debug(
-        `[${session.sessionId}] Failed to update ACP capabilities from created session: ${formatErrorMessage(
-          error
-        )}`
-      );
-    });
-  }
-
   async authenticateMachineAcp(
     message: MachineAcpAuthenticateRequestValidated,
     options: AcpAuthenticationOptions = {}
   ): Promise<MachineAcpAuthenticateResponse> {
-    const workflowStartedAt = Date.now();
     const targetRequestId =
       message.action === 'start' ? message.requestId : message.authenticationRequestId;
     const activeAgentType = this.acpAuthenticationManager.getAgentType(targetRequestId);
@@ -6248,61 +6187,6 @@ export class SessionExecutionService {
       env: config.env,
       onProgress,
     });
-    if (result.success && result.disposition === 'authenticated') {
-      const refreshController = new AbortController();
-      const refreshTimeoutMs = Math.max(
-        1,
-        Math.min(
-          ACP_POST_AUTH_REFRESH_MAX_MS,
-          ACP_AUTHENTICATION_WORKFLOW_DEADLINE_MS - (Date.now() - workflowStartedAt)
-        )
-      );
-      const refreshTimeout = setTimeout(() => refreshController.abort(), refreshTimeoutMs);
-      refreshTimeout.unref?.();
-      let refresh: MachineAcpCapabilitiesRefreshResponse;
-      try {
-        refresh = await this.refreshMachineAcpCapabilitiesForConfig(
-          {
-            type: 'machine/acp-capabilities-refresh',
-            machineId: message.machineId,
-            workspaceId: message.workspaceId,
-            configId: message.configId,
-            cliType: config.cliType,
-            agentType: config.agentType,
-            customAcp: config.customAcp,
-            runtimeOverrides: config.runtimeOverrides,
-            env: config.env,
-          },
-          { signal: refreshController.signal }
-        );
-      } catch (error) {
-        refresh = {
-          type: 'machine/acp-capabilities-refresh_response',
-          machineId: message.machineId,
-          configId: message.configId,
-          cliType: config.cliType,
-          agentType: config.agentType,
-          success: false,
-          error: refreshController.signal.aborted
-            ? 'Authentication succeeded, but capability verification timed out'
-            : formatErrorMessage(error),
-        };
-      } finally {
-        clearTimeout(refreshTimeout);
-      }
-      if (!refresh.success) {
-        return {
-          ...resolvedBase,
-          ...result,
-          capabilitiesRefreshed: false,
-          authRequired: refresh.authRequired,
-          authMethods: refresh.authMethods,
-          error: refresh.error ?? 'Authentication succeeded, but capability refresh failed',
-        };
-      }
-      return { ...resolvedBase, ...result, capabilitiesRefreshed: true };
-    }
-
     return { ...resolvedBase, ...result };
   }
 
@@ -6355,16 +6239,21 @@ export class SessionExecutionService {
     message: ResolvedMachineAcpCapabilitiesRefreshRequest,
     options: AcpBinaryProgressOptions = {}
   ): Promise<MachineAcpCapabilitiesRefreshResponse> {
-    // Config identity is part of the key because the response and cache row are
-    // both config-scoped even when two configs share identical launch inputs.
-    const dedupeKey = computeAcpRefreshDedupeKey(
-      message.configId,
-      message.cliType,
-      message.agentType,
-      message.env,
-      message.customAcp,
-      message.runtimeOverrides
-    );
+    // Reject legacy/override inputs before sharing any catalog read.
+    try {
+      assertEmbeddedHarnessTarget(message);
+    } catch (error) {
+      return {
+        type: 'machine/acp-capabilities-refresh_response',
+        machineId: this.deps.machineId,
+        configId: message.configId,
+        cliType: message.cliType,
+        agentType: message.agentType,
+        success: false,
+        error: formatErrorMessage(error),
+      };
+    }
+    const dedupeKey = message.configId;
 
     this.deps.logger.debug(
       `[acp-capabilities] Refresh requested (cliType=${message.cliType} agentType=${message.agentType})`
@@ -6444,76 +6333,45 @@ export class SessionExecutionService {
   ): Promise<MachineAcpCapabilitiesRefreshResponse> {
     try {
       options.signal?.throwIfAborted();
-      await this.emitBuiltinRuntimeStatusForRefresh(message, options.onAcpBinaryProgress);
-      options.signal?.throwIfAborted();
-      const {
-        modes,
-        models,
-        configOptions,
-        availableCommands,
-        sessionFork,
-        acknowledgedSteer,
-        modelReasoningEfforts,
-        capabilitySourceVersion,
-      } = await this.deps.fetchAcpCapabilities(
-        message.cliType,
-        message.agentType,
-        message.env,
-        message.customAcp,
-        message.runtimeOverrides,
-        {
-          signal: options.signal,
-          onManagedRuntimeProgress: (event) => {
-            if (options.signal?.aborted) return;
-            options.onAcpBinaryProgress?.(
-              toManagedRuntimeProgressMessage(this.deps.machineId, event)
-            );
-          },
-        }
-      );
-
-      options.signal?.throwIfAborted();
-      const capability = await this.deps.workspaceDocument.updateAcpCapabilities(
-        this.deps.machineId,
-        message.configId,
-        message.cliType,
-        message.agentType,
-        modes,
-        models,
-        configOptions,
-        availableCommands,
-        sessionFork,
-        capabilitySourceVersion ??
-          getAcpCapabilitySourceVersion({
-            cliType: message.cliType,
-            agentType: message.agentType,
-            customAcp: message.customAcp,
-            runtimeOverrides: message.runtimeOverrides,
-            env: message.env,
-          }),
-        modelReasoningEfforts,
-        acknowledgedSteer,
-        { signal: options.signal }
-      );
-
-      return {
-        type: 'machine/acp-capabilities-refresh_response',
-        machineId: this.deps.machineId,
-        configId: message.configId,
-        cliType: message.cliType,
-        agentType: message.agentType,
-        success: true,
-        modes,
-        models,
-        configOptions: configOptions?.map((opt) => ({
-          id: opt.id,
-          name: opt.name,
-          category: opt.category,
-          optionCount: opt.options.length,
-        })),
-        capability,
-        availableCommands,
-      };
+      if (message.cliType === 'builtin' && message.agentType === 'molly') {
+        const capability = await this.deps.workspaceDocument.getAcpCapabilities(
+          this.deps.machineId,
+          message.configId
+        );
+        options.signal?.throwIfAborted();
+        if (
+          !capability?.sourceVersion?.startsWith('molly-pi:') ||
+          capability.cliType !== 'builtin' ||
+          capability.agentType !== 'molly' ||
+          capability.cacheVersion !== ACP_CAPABILITY_CACHE_VERSION
+        )
+          throw new Error('harness_catalog_unavailable');
+        return {
+          type: 'machine/acp-capabilities-refresh_response',
+          machineId: this.deps.machineId,
+          configId: message.configId,
+          cliType: message.cliType,
+          agentType: message.agentType,
+          success: true,
+          modes: capability.modes.map((mode) => ({
+            ...mode,
+            description: mode.description ?? undefined,
+          })),
+          models: capability.models.map((model) => ({
+            ...model,
+            description: model.description ?? undefined,
+          })),
+          capability,
+          configOptions: capability.configOptions?.map((opt) => ({
+            id: opt.id,
+            name: opt.name,
+            category: opt.category,
+            optionCount: opt.options.length,
+          })),
+          availableCommands: capability.availableCommands,
+        };
+      }
+      throw new Error('legacy_harness_execution_disabled');
     } catch (error) {
       const errorMessage = formatErrorMessage(error);
       this.deps.logger.debug(
@@ -6537,72 +6395,6 @@ export class SessionExecutionService {
     }
   }
 
-  private async emitBuiltinRuntimeStatusForRefresh(
-    message: ResolvedMachineAcpCapabilitiesRefreshRequest,
-    onProgress: AcpBinaryProgressSink | undefined
-  ): Promise<void> {
-    if (!onProgress || message.cliType !== 'builtin') {
-      return;
-    }
-    if (hasBuiltinRuntimeOverrideValues(message.runtimeOverrides)) {
-      return;
-    }
-
-    const runtimeName = this.resolveManagedRuntimeName(message.agentType);
-    if (!runtimeName) {
-      return;
-    }
-    const status = await getManagedAgentRuntimeManager().getRuntimeStatus(runtimeName);
-    onProgress({
-      type: 'machine/acp-binary-progress',
-      machineId: this.deps.machineId,
-      agentType: message.agentType,
-      status:
-        status.kind === 'installed'
-          ? 'installed'
-          : status.kind === 'unsupported-platform'
-            ? 'unsupported-platform'
-            : status.kind === 'incompatible-host'
-              ? 'incompatible-host'
-              : 'not-installed',
-      command: status.kind === 'installed' ? status.command : undefined,
-      platformArch: 'platformArch' in status ? status.platformArch : undefined,
-      version: 'version' in status ? status.version : undefined,
-      current: status.kind === 'incompatible-host' ? status.current : undefined,
-      required: status.kind === 'incompatible-host' ? status.required : undefined,
-    });
-  }
-
-  private resolveManagedRuntimeName(agentType: string): ManagedRuntimeName | null {
-    return getManagedBuiltinRuntimeByAgentType(agentType)?.runtimeName ?? null;
-  }
-
-  // Both binary handlers below accept a request for a specific machine + agent;
-  // share the machine-mismatch and unknown-agent guards so the two response
-  // shapes stay in sync. Returns the resolved agent or the error string to embed.
-  private resolveAcpBinaryRequest(message: {
-    machineId: string;
-    agentType: string;
-  }):
-    | { kind: 'managed-runtime'; runtimeName: ManagedRuntimeName }
-    | { kind: 'registry'; agent: RegistryAcpAgent }
-    | { error: string } {
-    if (message.machineId !== this.deps.machineId) {
-      return {
-        error: `Machine mismatch: expected ${this.deps.machineId}, got ${message.machineId}`,
-      };
-    }
-    const managedRuntime = getManagedBuiltinRuntimeByAgentType(message.agentType);
-    if (managedRuntime) {
-      return { kind: 'managed-runtime', runtimeName: managedRuntime.runtimeName };
-    }
-    const agent = findRegistryAcpAgent(message.agentType);
-    if (!agent) {
-      return { error: `Unknown registry ACP agent: ${message.agentType}` };
-    }
-    return { kind: 'registry', agent };
-  }
-
   async getMachineAcpBinaryStatus(
     message: MachineAcpBinaryStatusRequestValidated
   ): Promise<MachineAcpBinaryStatusResponse> {
@@ -6611,267 +6403,33 @@ export class SessionExecutionService {
       machineId: this.deps.machineId,
       agentType: message.agentType,
     };
-    const resolved = this.resolveAcpBinaryRequest(message);
-    if ('error' in resolved) {
-      return { ...base, success: false, status: 'not-installed', error: resolved.error };
-    }
-    try {
-      if (resolved.kind === 'managed-runtime') {
-        const status = await getManagedAgentRuntimeManager().getRuntimeStatus(resolved.runtimeName);
-        return {
-          ...base,
-          success: true,
-          status: status.kind,
-          command: status.kind === 'installed' ? status.command : undefined,
-          installPath: status.kind === 'installed' ? status.command : undefined,
-          platformArch: 'platformArch' in status ? status.platformArch : undefined,
-          version: 'version' in status ? status.version : undefined,
-          current: status.kind === 'incompatible-host' ? status.current : undefined,
-          required: status.kind === 'incompatible-host' ? status.required : undefined,
-        };
-      }
-      const status = await getAcpBinaryManager().getBinaryStatus(resolved.agent);
-      return {
-        ...base,
-        success: true,
-        status: status.kind,
-        command: status.kind === 'installed' ? status.command : undefined,
-        platformArch: 'platformArch' in status ? status.platformArch : undefined,
-      };
-    } catch (error) {
-      return { ...base, success: false, status: 'not-installed', error: formatErrorMessage(error) };
-    }
-  }
-
-  private async runAcpBinaryInstall(
-    key: string,
-    progressSink: AcpBinaryProgressSink | undefined,
-    install: (emitProgress: AcpBinaryProgressSink) => Promise<MachineAcpBinaryInstallResponse>
-  ): Promise<MachineAcpBinaryInstallResponse> {
-    let entry = this.inFlightAcpBinaryInstall.get(key);
-    if (!entry) {
-      const consumers = new Map<object, AcpBinaryProgressSink | undefined>();
-      let nextEntry!: InFlightAcpBinaryInstallEntry;
-      const promise = install((progress) => {
-        for (const sink of consumers.values()) {
-          sink?.(progress);
-        }
-      }).finally(() => {
-        if (this.inFlightAcpBinaryInstall.get(key) === nextEntry) {
-          this.inFlightAcpBinaryInstall.delete(key);
-        }
-      });
-      nextEntry = { consumers, promise };
-      this.inFlightAcpBinaryInstall.set(key, nextEntry);
-      entry = nextEntry;
-    }
-
-    const consumer = {};
-    entry.consumers.set(consumer, progressSink);
-    try {
-      return await entry.promise;
-    } finally {
-      entry.consumers.delete(consumer);
-    }
+    return {
+      ...base,
+      success: false,
+      status: 'not-applicable',
+      error:
+        message.machineId !== this.deps.machineId
+          ? 'machine_mismatch'
+          : 'legacy_harness_installation_disabled',
+    };
   }
 
   async installMachineAcpBinary(
     message: MachineAcpBinaryInstallRequestValidated,
-    options: AcpBinaryProgressOptions = {}
+    _options: AcpBinaryProgressOptions = {}
   ): Promise<MachineAcpBinaryInstallResponse> {
     const base = {
       type: 'machine/acp-binary-install_response' as const,
       machineId: this.deps.machineId,
       agentType: message.agentType,
     };
-    const resolved = this.resolveAcpBinaryRequest(message);
-    if ('error' in resolved) {
-      return { ...base, success: false, error: resolved.error };
-    }
-    if (resolved.kind === 'managed-runtime') {
-      return await this.runAcpBinaryInstall(
-        `managed:${resolved.runtimeName}`,
-        options.onAcpBinaryProgress,
-        async (emitProgress) => {
-          try {
-            this.deps.logger.debug(`[managed-runtime] Installing ${resolved.runtimeName}`);
-            const runtimeStatus = await getManagedAgentRuntimeManager().getRuntimeStatus(
-              resolved.runtimeName
-            );
-            emitProgress({
-              type: 'machine/acp-binary-progress',
-              machineId: this.deps.machineId,
-              agentType: message.agentType,
-              status:
-                runtimeStatus.kind === 'installed'
-                  ? 'installed'
-                  : runtimeStatus.kind === 'unsupported-platform'
-                    ? 'unsupported-platform'
-                    : runtimeStatus.kind === 'incompatible-host'
-                      ? 'incompatible-host'
-                      : 'not-installed',
-              command: runtimeStatus.kind === 'installed' ? runtimeStatus.command : undefined,
-              platformArch:
-                'platformArch' in runtimeStatus ? runtimeStatus.platformArch : undefined,
-              version: 'version' in runtimeStatus ? runtimeStatus.version : undefined,
-              current:
-                runtimeStatus.kind === 'incompatible-host' ? runtimeStatus.current : undefined,
-              required:
-                runtimeStatus.kind === 'incompatible-host' ? runtimeStatus.required : undefined,
-            });
-            if (runtimeStatus.kind === 'incompatible-host') {
-              const displayName =
-                getManagedBuiltinRuntimeByRuntimeName(resolved.runtimeName)?.displayName ??
-                resolved.runtimeName;
-              return {
-                ...base,
-                success: false,
-                error: `${displayName} requires Node >=${runtimeStatus.required}; current Node is ${runtimeStatus.current}`,
-              };
-            }
-            const installation = await getManagedAgentRuntimeManager().ensureCurrentRuntime(
-              resolved.runtimeName,
-              {
-                onProgress: (event) => {
-                  emitProgress(toManagedRuntimeProgressMessage(this.deps.machineId, event));
-                },
-              }
-            );
-            await getManagedAgentRuntimeManager().pruneSupersededVersions(resolved.runtimeName);
-            return {
-              ...base,
-              success: true,
-              command: installation.command,
-              installPath: installation.command,
-              version: installation.version,
-            };
-          } catch (error) {
-            // Managed-runtime install failures should emit sanitized PostHog
-            // diagnostics with the concrete fetch/HTTP/verify reason.
-            const errorMessage =
-              error instanceof ManagedRuntimeUnsupportedPlatformError
-                ? error.message
-                : formatManagedRuntimeFailureMessage(error);
-            const runtimeDiagnostics = getManagedAgentRuntimeManager().getDiagnostics(
-              resolved.runtimeName
-            );
-            captureCli(
-              'managed_runtime/install_failed',
-              {
-                workspace_id: this.deps.workspaceId,
-                machine_id: this.deps.machineId,
-                agent_type: message.agentType,
-                runtime_name: resolved.runtimeName,
-                runtime_version: runtimeDiagnostics.version,
-                platform_arch: runtimeDiagnostics.platformArch,
-                runtime_base_host: runtimeDiagnostics.runtimeBaseHost,
-                proxy_env_present: runtimeDiagnostics.proxyEnvPresent,
-                proxy_configured_for_runtime_url: runtimeDiagnostics.proxyConfiguredForRuntimeUrl,
-                source: 'explicit_install',
-                reason: classifyManagedRuntimeFailureReason(error),
-                error_message: truncateAnalyticsString(errorMessage),
-              },
-              { tier: 'A' }
-            );
-            this.deps.logger.debug(
-              `[managed-runtime] Install failed for ${resolved.runtimeName}: ${errorMessage}`
-            );
-            emitProgress({
-              type: 'machine/acp-binary-progress',
-              machineId: this.deps.machineId,
-              agentType: message.agentType,
-              status: 'error',
-              error: errorMessage,
-            });
-            return { ...base, success: false, error: errorMessage };
-          }
-        }
-      );
-    }
-    const agent = resolved.agent;
-    return await this.runAcpBinaryInstall(
-      `${agent.id}@${agent.version}`,
-      options.onAcpBinaryProgress,
-      async (emitProgress) => {
-        try {
-          this.deps.logger.debug(`[acp-binary] Installing ${agent.id}@${agent.version}`);
-          const status = await getAcpBinaryManager().getBinaryStatus(agent);
-          emitProgress({
-            type: 'machine/acp-binary-progress',
-            machineId: this.deps.machineId,
-            agentType: message.agentType,
-            status:
-              status.kind === 'installed'
-                ? 'installed'
-                : status.kind === 'unsupported-platform'
-                  ? 'unsupported-platform'
-                  : status.kind === 'not-applicable'
-                    ? 'installed'
-                    : 'not-installed',
-            command: status.kind === 'installed' ? status.command : undefined,
-            platformArch: 'platformArch' in status ? status.platformArch : undefined,
-          });
-          if (status.kind === 'not-installed') {
-            emitProgress({
-              type: 'machine/acp-binary-progress',
-              machineId: this.deps.machineId,
-              agentType: message.agentType,
-              status: 'downloading',
-              platformArch: status.platformArch,
-            });
-          }
-          const launch = await getAcpBinaryManager().ensureBinary(agent);
-          emitProgress({
-            type: 'machine/acp-binary-progress',
-            machineId: this.deps.machineId,
-            agentType: message.agentType,
-            status: 'installed',
-            command: launch.command,
-          });
-          return { ...base, success: true, command: launch.command };
-        } catch (error) {
-          const errorMessage =
-            error instanceof AcpBinaryUnsupportedPlatformError
-              ? error.message
-              : formatErrorMessage(error);
-          this.deps.logger.debug(`[acp-binary] Install failed for ${agent.id}: ${errorMessage}`);
-          emitProgress({
-            type: 'machine/acp-binary-progress',
-            machineId: this.deps.machineId,
-            agentType: message.agentType,
-            status: 'error',
-            error: errorMessage,
-          });
-          return { ...base, success: false, error: errorMessage };
-        }
-      }
-    );
+    return {
+      ...base,
+      success: false,
+      error:
+        message.machineId !== this.deps.machineId
+          ? 'machine_mismatch'
+          : 'legacy_harness_installation_disabled',
+    };
   }
 }
-
-const findRegistryAcpAgent = (agentType: string): RegistryAcpAgent | undefined =>
-  REGISTRY_ACP_AGENTS.find((agent) => agent.id === agentType);
-
-// NUL separates field segments and \x01 separates env pairs so equivalent
-// env maps produce identical keys and ambiguous separators in values can't
-// collide. Env vars on POSIX cannot contain either control character.
-const computeAcpRefreshDedupeKey = (
-  configId: AgentConfigId,
-  cliType: AgentConfigCliType,
-  agentType: string,
-  env: Record<string, string> | undefined,
-  customAcp?: CustomAcpLaunchSpec,
-  runtimeOverrides?: BuiltinRuntimeOverrides
-): string => {
-  const sortedKeys = env ? Object.keys(env).sort() : [];
-  const envSerialized = sortedKeys.map((k) => `${k}=${env![k]}`).join('\x01');
-  const customSerialized = customAcp ? serializeCustomAcpLaunchSpec(customAcp) : '';
-  const runtimeOverrideSerialized = runtimeOverrides
-    ? Object.entries(runtimeOverrides)
-        .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, value]) => `${key}=${value}`)
-        .join('\x01')
-    : '';
-  return `${configId}\x00${cliType}\x00${agentType}\x00${envSerialized}\x00${customSerialized}\x00${runtimeOverrideSerialized}`;
-};

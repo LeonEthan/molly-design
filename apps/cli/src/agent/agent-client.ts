@@ -1,12 +1,29 @@
-import { reloadGrokDesignReminder } from '@/design/grok-reminder';
-import type { claudeDesignSettings } from '@/design/claude-launch';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { performance } from 'perf_hooks';
 import { Logger } from '@/utils/logger';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
+import {
+  MOLLY_BUILTIN_MCP_CONNECTION,
+  MOLLY_PREPARE_MCP_METHOD,
+  type HarnessMcpPreparation,
+  HARNESS_IMAGE_IMPORT_METHOD,
+  HARNESS_IMAGE_RECOVERY_METHOD,
+  HARNESS_IMAGE_RECOVERY_PERMISSION,
+  HarnessImageRecoveryRequestSchema,
+  HarnessImageRecoveryResultSchema,
+  type HarnessImageRecoveryRequest,
+  type HarnessImageRecoveryResult,
+  HarnessImageImportRequestSchema,
+  HarnessImageImportResultSchema,
+  type HarnessImageImportRequest,
+  type HarnessImageImportResult,
+  HARNESS_QUESTION_DISMISS_METHOD,
+  HarnessQuestionIdentitySchema,
+  HarnessQuestionDismissRequestSchema,
+} from '@molly/shared/embedded-harness';
 import {
   LODY_EXTENSION_METHODS,
   LODY_TOOL_NAMES,
@@ -571,9 +588,7 @@ function extractImageGenerationContentFields(content: unknown): {
  * Synchronous: everything that needs I/O already happened in the load phase.
  */
 export interface AgentClientOptions {
-  grokDesignReminderPluginDir?: string;
   designHookLaunchId?: string;
-  claudeDesignHookSettings?: ReturnType<typeof claudeDesignSettings>;
   sessionId: SessionId;
   workspaceId?: WorkspaceId;
   machineId?: MachineId;
@@ -598,7 +613,8 @@ export interface AgentClientOptions {
   onUpdateMessage(message: AcpSessionNotification): void;
   onRequestPermission(
     requestId: string,
-    request: acp.RequestPermissionRequest
+    request: acp.RequestPermissionRequest,
+    signal?: AbortSignal
   ): Promise<acp.RequestPermissionResponse>;
   onUsageUpdate?(usage: SessionUsageUpdate): void;
   onContextWindowUsageUpdate?(usage: SessionContextWindowUsage): void;
@@ -613,6 +629,12 @@ export interface AgentClientOptions {
    * selector is applied once the agent has advertised its MCP capabilities.
    */
   loadExternalMcpServers?(): Promise<SessionMcpCatalogSelector>;
+  onMcpCatalogInvalidated?(): void;
+  onMcpServersResolved?(servers: readonly acp.McpServer[]): void;
+  onHarnessImageImport?(request: HarnessImageImportRequest): Promise<HarnessImageImportResult>;
+  onHarnessImageRecovery?(
+    request: HarnessImageRecoveryRequest
+  ): Promise<HarnessImageRecoveryResult>;
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
   onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
@@ -625,7 +647,27 @@ export type AcpWriteTextFileEvidence = {
 };
 
 export class AgentClient implements acp.Client {
+  private readonly imageImportApprovals = new Map<string, { title: string; digest: string }>();
+  private mcpCatalogGuard?: NonNullable<SessionMcpCatalogSelector['guard']>;
+  private releaseMcpCatalog?: () => void;
   private connection: acp.ClientSideConnection | null = null;
+  private connectionClosed = false;
+  private questionRun?: { runId: string; runtimeEpoch: string; owner: Promise<unknown> };
+  private readonly questions = new Map<
+    string,
+    {
+      identity: z.infer<typeof HarnessQuestionIdentitySchema>;
+      controller: AbortController;
+      owner: Promise<unknown>;
+      done: Promise<acp.CreateElicitationResponse>;
+    }
+  >();
+
+  private abortQuestions(owner?: Promise<unknown>): void {
+    for (const question of this.questions.values()) {
+      if (!owner || question.owner === owner) question.controller.abort();
+    }
+  }
   private lastSessionUpdateAtMs = Date.now();
   logger: Logger;
   private readonly terminalManager: TerminalManager;
@@ -776,7 +818,6 @@ export class AgentClient implements acp.Client {
         this.options.sessionId,
         120000
       );
-      await this.loadGrokDesignReminder(connection, sessionId);
       this.applySessionResponseState({ ...response, sessionId });
       if (this.grokStopState === 'restoring') this.grokStopState = 'active';
     })();
@@ -923,13 +964,26 @@ export class AgentClient implements acp.Client {
     workdir: string,
     externalLoad: Promise<SessionMcpCatalogSelector> | undefined
   ): Promise<acp.McpServer[]> {
-    const builtin = this.buildBuiltinMcpServers(workdir);
+    const builtin = this.buildBuiltinMcpServers(workdir).map((server) =>
+      this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'molly'
+        ? { ...server, _meta: { ...server._meta, mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION } }
+        : server
+    );
     if (!externalLoad) {
       return builtin;
     }
 
+    const owner = this.connection;
     try {
-      const external = (await externalLoad)({
+      const selector = await externalLoad;
+      if (owner && (this.connection !== owner || this.connectionClosed)) return builtin;
+      this.releaseMcpCatalog?.();
+      this.mcpCatalogGuard = selector.guard;
+      this.releaseMcpCatalog = selector.guard?.subscribe(() =>
+        this.options.onMcpCatalogInvalidated?.()
+      );
+      const external = selector({
         http: this.agentMcpCapabilities?.http === true,
       });
       for (const problem of external.problems) {
@@ -938,7 +992,9 @@ export class AgentClient implements acp.Client {
           source: 'configWarning',
         });
       }
-      return [...builtin, ...(external.servers as acp.McpServer[])];
+      const servers = [...builtin, ...(external.servers as acp.McpServer[])];
+      this.options.onMcpServersResolved?.(servers);
+      return servers;
     } catch (error) {
       const message = `Workspace MCP servers could not be loaded (${formatErrorMessage(
         error
@@ -953,11 +1009,35 @@ export class AgentClient implements acp.Client {
     params: acp.RequestPermissionRequest
   ): Promise<acp.RequestPermissionResponse> {
     this.ensureSessionMatch(params.sessionId as ACPSessionId);
+    this.imageImportApprovals.delete(params.toolCall.toolCallId);
     const requestId = randomUUID();
     this.logger.debug(
       `[${this.options.sessionId}] Requesting permission for tool call ${params.toolCall.toolCallId}`
     );
-    return this.options.onRequestPermission(requestId, params);
+    if (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
+      return { outcome: { outcome: 'cancelled' } };
+    const response = await this.options.onRequestPermission(requestId, params);
+    if (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
+      return { outcome: { outcome: 'cancelled' } };
+    if (
+      this.options.agentConfig?.agentType === 'molly' &&
+      (this.options.onHarnessImageImport || this.options.onHarnessImageRecovery) &&
+      response.outcome.outcome === 'selected' &&
+      params.options.find(
+        (option) =>
+          response.outcome.outcome === 'selected' && option.optionId === response.outcome.optionId
+      )?.kind === 'allow_once' &&
+      this.imageImportApprovals.size < 1024 &&
+      typeof params.toolCall.title === 'string'
+    ) {
+      this.imageImportApprovals.set(params.toolCall.toolCallId, {
+        title: params.toolCall.title,
+        digest: createHash('sha256')
+          .update(JSON.stringify(params.toolCall.rawInput) ?? 'null')
+          .digest('hex'),
+      });
+    }
+    return response;
   }
 
   /**
@@ -985,6 +1065,33 @@ export class AgentClient implements acp.Client {
       return { action: 'decline' };
     }
     this.ensureSessionMatch(sessionId as ACPSessionId);
+    const managedIdentity = params._meta?.mollyQuestion;
+    const identity =
+      managedIdentity === undefined
+        ? undefined
+        : HarnessQuestionIdentitySchema.parse(managedIdentity);
+    if (
+      !identity &&
+      this.options.agentConfig?.cliType === 'builtin' &&
+      this.options.agentConfig.agentType === 'molly'
+    )
+      return { action: 'decline' };
+    if (
+      identity &&
+      (this.options.agentConfig?.cliType !== 'builtin' ||
+        this.options.agentConfig.agentType !== 'molly' ||
+        this.connectionClosed ||
+        !this.questionRun ||
+        !this.pendingPrompts.has(this.questionRun.owner) ||
+        identity.runId !== this.questionRun.runId ||
+        identity.runtimeEpoch !== this.questionRun.runtimeEpoch ||
+        this.questions.has(identity.questionId) ||
+        z.object({ toolCallId: z.string() }).passthrough().safeParse(params).data?.toolCallId !==
+          identity.questionId ||
+        elicitation.meta.questions.length !== 1 ||
+        elicitation.meta.questions[0]?.id !== identity.questionId)
+    )
+      throw new Error('harness_question_outside_run');
 
     const toolCallId =
       typeof (params as { toolCallId?: unknown }).toolCallId === 'string'
@@ -1057,8 +1164,29 @@ export class AgentClient implements acp.Client {
     this.logger.debug(
       `[${this.options.sessionId}] Bridging AskUserQuestion elicitation (toolCallId=${toolCallId ?? '<none>'}, questions=${elicitation.meta.questions.length})`
     );
-    const response = await this.options.onRequestPermission(requestId, syntheticRequest);
-    return buildAskUserQuestionElicitationResponse(elicitation, response);
+    if (!identity) {
+      const response = await this.options.onRequestPermission(requestId, syntheticRequest);
+      return buildAskUserQuestionElicitationResponse(elicitation, response);
+    }
+    const controller = new AbortController();
+    const owner = this.questionRun?.owner;
+    if (!owner) throw new Error('harness_question_outside_run');
+    const done = this.options
+      .onRequestPermission(requestId, syntheticRequest, controller.signal)
+      .then(
+        (response): acp.CreateElicitationResponse =>
+          controller.signal.aborted
+            ? { action: 'cancel' }
+            : buildAskUserQuestionElicitationResponse(elicitation, response)
+      );
+    const active = { identity, controller, owner, done };
+    this.questions.set(identity.questionId, active);
+    try {
+      return await done;
+    } finally {
+      if (this.questions.get(identity.questionId) === active)
+        this.questions.delete(identity.questionId);
+    }
   }
   async sessionUpdate(params: acp.SessionNotification) {
     const applicationBarrier = this.steerApplicationBarrier;
@@ -1512,6 +1640,72 @@ export class AgentClient implements acp.Client {
     method: string,
     params: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    if (method === HARNESS_QUESTION_DISMISS_METHOD) {
+      const { sessionId, request } = HarnessQuestionDismissRequestSchema.parse(params);
+      this.ensureSessionMatch(sessionId as ACPSessionId);
+      if (
+        this.options.agentConfig?.cliType !== 'builtin' ||
+        this.options.agentConfig.agentType !== 'molly'
+      )
+        throw new Error('harness_question_dismiss_refused');
+      const question = this.questions.get(request.questionId);
+      if (question) {
+        if (JSON.stringify(question.identity) !== JSON.stringify(request))
+          throw new Error('harness_question_dismiss_refused');
+        question.controller.abort();
+        await question.done;
+      }
+      return { version: 1, dismissed: true };
+    }
+    if (method === HARNESS_IMAGE_RECOVERY_METHOD) {
+      try {
+        this.ensureSessionMatch(z.string().parse(params.sessionId) as ACPSessionId);
+        const request = HarnessImageRecoveryRequestSchema.parse(params.request);
+        const approval = this.imageImportApprovals.get(request.toolCallId);
+        if (
+          this.options.agentConfig?.cliType !== 'builtin' ||
+          this.options.agentConfig.agentType !== 'molly' ||
+          !this.options.onHarnessImageRecovery ||
+          this.connectionClosed ||
+          (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
+          approval?.title !== HARNESS_IMAGE_RECOVERY_PERMISSION ||
+          approval.digest !== request.requestDigest ||
+          request.requestDigest !==
+            createHash('sha256').update(JSON.stringify(request.query)).digest('hex')
+        )
+          throw new Error('harness_image_recovery_not_authorized');
+        this.imageImportApprovals.delete(request.toolCallId);
+        return HarnessImageRecoveryResultSchema.parse(
+          await this.options.onHarnessImageRecovery(request)
+        );
+      } catch {
+        throw new Error('harness_image_recovery_refused');
+      }
+    }
+    if (method === HARNESS_IMAGE_IMPORT_METHOD) {
+      try {
+        this.ensureSessionMatch(z.string().parse(params.sessionId) as ACPSessionId);
+        const request = HarnessImageImportRequestSchema.parse(params.request);
+        const approval = this.imageImportApprovals.get(request.toolCallId);
+        if (
+          this.options.agentConfig?.cliType !== 'builtin' ||
+          this.options.agentConfig.agentType !== 'molly' ||
+          !this.options.onHarnessImageImport ||
+          this.connectionClosed ||
+          (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
+          approval?.title !== `${request.serverName}/${request.toolName}` ||
+          approval.digest !== request.requestDigest
+        )
+          throw new Error('harness_image_import_not_authorized');
+        this.imageImportApprovals.delete(request.toolCallId);
+        return HarnessImageImportResultSchema.parse(
+          await this.options.onHarnessImageImport(request)
+        );
+      } catch {
+        // Never log image payloads or foreign validation inputs.
+        throw new Error('harness_image_import_refused');
+      }
+    }
     try {
       await this.handleExtensionMessage(method, params);
     } catch (error) {
@@ -1731,41 +1925,13 @@ export class AgentClient implements acp.Client {
           }
         : {}),
     };
-    const grokPlugin = this.options.grokDesignReminderPluginDir;
-    const claude = this.options.claudeDesignHookSettings;
-    if (clientIdentifier === undefined && Object.keys(lody).length === 0 && !claude && !grokPlugin)
-      return {};
+    if (clientIdentifier === undefined && Object.keys(lody).length === 0) return {};
     return {
       _meta: {
-        ...(grokPlugin ? { pluginDirs: [grokPlugin] } : {}),
-        ...(claude ? { claudeCode: { options: { settings: claude } } } : {}),
         ...(clientIdentifier !== undefined ? { clientIdentifier } : {}),
         ...(Object.keys(lody).length > 0 ? { lody } : {}),
       },
     };
-  }
-
-  private async loadGrokDesignReminder(
-    connection: acp.ClientSideConnection,
-    sessionId: string,
-    abort?: Promise<never>
-  ) {
-    const directory = this.options.grokDesignReminderPluginDir;
-    if (!directory) return;
-    await withTimeout(
-      withAbort(
-        reloadGrokDesignReminder(
-          (method, params) => connection.extMethod(`_${method}`, params),
-          sessionId,
-          directory
-        ),
-        abort
-      ),
-      this.logger,
-      'grok.readReminder.reload',
-      this.options.sessionId,
-      5000
-    );
   }
 
   private isCurrentAcpSession(acpSessionId: string): boolean {
@@ -1847,6 +2013,15 @@ export class AgentClient implements acp.Client {
   ): Promise<acp.NewSessionResponse> {
     const connection = new acp.ClientSideConnection(() => this, stream);
     this.connection = connection;
+    this.connectionClosed = false;
+    void connection.closed.then(() => {
+      if (this.connection !== connection) return;
+      this.connectionClosed = true;
+      this.abortQuestions();
+      this.questionRun = undefined;
+      this.releaseMcpCatalog?.();
+      this.releaseMcpCatalog = undefined;
+    });
     const grokClientIdentifier = this.getGrokClientIdentifier();
     const sessionStartMeta = this.getSessionStartMeta();
     this.logger.debug(
@@ -1928,6 +2103,10 @@ export class AgentClient implements acp.Client {
               elicitation: {
                 form: {},
               },
+              ...(this.options.agentConfig?.cliType === 'builtin' &&
+              this.options.agentConfig.agentType === 'molly'
+                ? { _meta: { mollyQuestionUI: { version: 1 } } }
+                : {}),
             },
           }),
           startupAbort
@@ -2278,7 +2457,6 @@ export class AgentClient implements acp.Client {
       }
       this.logger.debug(`[${this.options.sessionId}] connection.newSession returned`);
     }
-    await this.loadGrokDesignReminder(connection, sessionResponse.sessionId, startupAbort);
     this.authenticationRequired = false;
     const newSessionDurationMs = performance.now() - newSessionStart;
     this.options.onStartupStage?.({ type: 'new_session_end', durationMs: newSessionDurationMs });
@@ -2348,7 +2526,6 @@ export class AgentClient implements acp.Client {
           this.options.sessionId,
           timeoutMs
         );
-        await this.loadGrokDesignReminder(connection, prepared.sessionId);
         return prepared;
       } catch (error) {
         throw new Error(`[ACP_SESSION_PREPARE_FAILED] ${formatErrorMessage(error)}`, {
@@ -2509,6 +2686,43 @@ export class AgentClient implements acp.Client {
     return { completion, outcome };
   }
 
+  async prepareEmbeddedMcp(
+    sessionId: ACPSessionId,
+    preparation: HarnessMcpPreparation,
+    signal: AbortSignal
+  ): Promise<unknown> {
+    this.ensureSessionMatch(sessionId);
+    if (
+      this.options.agentConfig?.cliType !== 'builtin' ||
+      this.options.agentConfig.agentType !== 'molly' ||
+      !this.connection ||
+      this.connectionClosed ||
+      (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
+    )
+      throw new Error('harness_mcp_preparation_unavailable');
+    signal.throwIfAborted();
+    const bounded = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
+    let abortListener: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      abortListener = () => reject(new Error('harness_mcp_preparation_cancelled'));
+      bounded.addEventListener('abort', abortListener, { once: true });
+    });
+    try {
+      const request = this.connection.extMethod(MOLLY_PREPARE_MCP_METHOD, {
+        sessionId,
+        preparation,
+      });
+      this.trackPendingExecution(request);
+      const result = await withAbort(request, aborted);
+      bounded.throwIfAborted();
+      if (this.connectionClosed || (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()))
+        throw new Error('harness_mcp_preparation_unavailable');
+      return result;
+    } finally {
+      if (abortListener) bounded.removeEventListener('abort', abortListener);
+    }
+  }
+
   private async requestSteeringExtension(
     method: string,
     sessionId: ACPSessionId,
@@ -2599,6 +2813,7 @@ export class AgentClient implements acp.Client {
     prompt: acp.ContentBlock[],
     options?: { signal?: AbortSignal; _meta?: acp.PromptRequest['_meta'] }
   ) {
+    this.imageImportApprovals.clear();
     const span = startTraceSpan(this.logger, 'agent_client.prompt', {
       sessionId: this.options.sessionId,
       acpSessionId: sessionId,
@@ -2635,6 +2850,26 @@ export class AgentClient implements acp.Client {
 
       this.trackPendingExecution(promptPromise);
       this.providerPromptCompletion = { sessionId, promise: promptPromise };
+      if (
+        this.options.agentConfig?.cliType === 'builtin' &&
+        this.options.agentConfig.agentType === 'molly'
+      ) {
+        const run = z
+          .object({ runId: z.string(), runtimeEpoch: z.string().uuid() })
+          .passthrough()
+          .safeParse(options?._meta?.mollyRunSnapshot);
+        if (run.success)
+          this.questionRun = {
+            runId: run.data.runId,
+            runtimeEpoch: run.data.runtimeEpoch,
+            owner: promptPromise,
+          };
+        const retire = () => {
+          this.abortQuestions(promptPromise);
+          if (this.questionRun?.owner === promptPromise) this.questionRun = undefined;
+        };
+        void promptPromise.then(retire, retire);
+      }
       let abortListener: (() => void) | undefined;
       let trackedPromptCompletion: ActivePromptCompletion | undefined;
 
@@ -2690,6 +2925,7 @@ export class AgentClient implements acp.Client {
 
   async cancel(sessionId: ACPSessionId) {
     this.ensureSessionMatch(sessionId);
+    this.abortQuestions();
     return await this.connection?.cancel({ sessionId });
   }
 

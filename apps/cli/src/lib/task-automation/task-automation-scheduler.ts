@@ -11,6 +11,8 @@ import {
   type WorkspaceId,
 } from '@molly/shared';
 import type { Logger } from '@/utils/logger';
+import { getEmbeddedHarnessTargetError } from '@molly/shared/embedded-harness';
+import type { TaskAutomationDispatch } from './task-automation-start';
 import {
   collectTaskAutomationBaseline,
   planTaskAutomation,
@@ -29,8 +31,8 @@ export type TaskAutomationSchedulerDeps = {
   listOwnedAgentConfigs: () => Promise<AgentConfigMeta[]>;
   /** Whether this machine can execute right now. */
   isMachineOnline: () => boolean;
-  /** Starts the task; resolves once the dispatch is durable. */
-  startTask: (taskId: TaskId, agentConfigId: string) => Promise<void>;
+  /** Throws only before dispatch. A result owns settlement-only work; void means already settled. */
+  startTask: (taskId: TaskId, agentConfigId: string) => Promise<TaskAutomationDispatch | void>;
   /** Called when a task is eligible but has to wait its turn or for the agent. */
   onQueued?: (taskId: TaskId, position: number) => void;
 };
@@ -60,6 +62,8 @@ export class TaskAutomationScheduler {
   private baseline: Set<string> | null = null;
   private readonly started = new Set<string>();
   private readonly inFlightByAgentConfigId = new Map<string, string>();
+  private readonly pendingSettlements = new Map<string, TaskAutomationDispatch>();
+  private settlementTimer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private rerunRequested = false;
   private stopped = false;
@@ -70,6 +74,8 @@ export class TaskAutomationScheduler {
 
   stop(): void {
     this.stopped = true;
+    if (this.settlementTimer !== undefined) clearTimeout(this.settlementTimer);
+    this.settlementTimer = undefined;
   }
 
   /**
@@ -96,9 +102,12 @@ export class TaskAutomationScheduler {
   }
 
   private async runPass(): Promise<void> {
+    await this.settleDispatchedTasks();
+    if (this.stopped) return;
     const rows = await this.deps.readTaskIndex();
     const candidates = rows.map(toCandidate);
     const ownedAgents = await this.deps.listOwnedAgentConfigs();
+    if (this.stopped) return;
     const ownedAgentConfigIds = new Set(
       ownedAgents
         .filter((config) => config.machineId === this.deps.machineId)
@@ -145,7 +154,17 @@ export class TaskAutomationScheduler {
 
     const plan = planTaskAutomation({
       candidates,
-      ownedAgentConfigIds,
+      // Baseline ownership above includes retired records: making a config
+      // executable later must not replay tasks that were present at boot.
+      ownedAgentConfigIds: new Set(
+        ownedAgents
+          .filter(
+            (config) =>
+              ownedAgentConfigIds.has(config.id) &&
+              getEmbeddedHarnessTargetError(config) === undefined
+          )
+          .map((config) => config.id)
+      ),
       onlineAgentConfigIds,
       operatorUserId: this.deps.operatorUserId,
       inFlightByAgentConfigId: this.inFlightByAgentConfigId,
@@ -158,6 +177,7 @@ export class TaskAutomationScheduler {
     }
 
     for (const start of plan.start) {
+      if (this.stopped) break;
       if (this.inFlightByAgentConfigId.has(start.agentConfigId)) {
         // Another start in this same pass already claimed the agent's slot.
         continue;
@@ -168,19 +188,55 @@ export class TaskAutomationScheduler {
         this.deps.logger.debug(
           `[task-automation] starting taskId=${start.taskId} agentConfigId=${start.agentConfigId}`
         );
-        await this.deps.startTask(start.taskId as TaskId, start.agentConfigId);
+        const dispatched = await this.deps.startTask(start.taskId as TaskId, start.agentConfigId);
+        if (dispatched) {
+          this.pendingSettlements.set(start.agentConfigId, dispatched);
+        } else {
+          this.inFlightByAgentConfigId.delete(start.agentConfigId);
+        }
       } catch (error) {
-        // Let it be retried: drop the started marker so a later pass can pick it
-        // up, but keep the agent's slot released so the queue is not wedged.
+        // This boundary is pre-dispatch only. Post-dispatch status failures are
+        // held separately and may never cause another Session creation.
         this.started.delete(start.taskId);
+        this.inFlightByAgentConfigId.delete(start.agentConfigId);
         this.deps.logger.warn(
           `[task-automation] failed to start taskId=${start.taskId}: ${
             error instanceof Error ? error.message : String(error)
           }`
         );
-      } finally {
-        this.inFlightByAgentConfigId.delete(start.agentConfigId);
       }
+    }
+    await this.settleDispatchedTasks();
+  }
+
+  private async settleDispatchedTasks(): Promise<void> {
+    for (const [agentConfigId, dispatched] of this.pendingSettlements) {
+      if (this.stopped) break;
+      try {
+        await dispatched.settle();
+        this.pendingSettlements.delete(agentConfigId);
+        this.inFlightByAgentConfigId.delete(agentConfigId);
+      } catch (error) {
+        this.deps.logger.warn(
+          `[task-automation] dispatched task status pending agentConfigId=${agentConfigId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    }
+    if (!this.stopped && this.pendingSettlements.size > 0 && this.settlementTimer === undefined) {
+      this.settlementTimer = setTimeout(() => {
+        this.settlementTimer = undefined;
+        void this.evaluate().catch((error: unknown) =>
+          this.deps.logger.warn(
+            `[task-automation] status repair failed: ${error instanceof Error ? error.message : String(error)}`
+          )
+        );
+      }, 5_000);
+      this.settlementTimer.unref?.();
+    } else if (this.pendingSettlements.size === 0 && this.settlementTimer !== undefined) {
+      clearTimeout(this.settlementTimer);
+      this.settlementTimer = undefined;
     }
   }
 }

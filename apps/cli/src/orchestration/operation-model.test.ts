@@ -66,6 +66,25 @@ describe('Operation delivery executable model', () => {
     });
   });
 
+  it('preserves a retired-engine completion without an execution attempt across restart', () => {
+    const retired = trace(
+      'accept',
+      'materialize_success',
+      'finish',
+      'retire_configuration',
+      'restart',
+      'recover_orphans',
+      'schedule',
+      'complete_finalization'
+    );
+    expect(retired).toMatchObject({
+      delivery: 'consumed',
+      activeTurn: 'none',
+      completionTurnWrites: 1,
+      deliveryAttempts: 0,
+    });
+  });
+
   it('retains terminal ownership through repeated history and consume failures', () => {
     const failed = trace(
       'accept',

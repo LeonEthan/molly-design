@@ -25,6 +25,7 @@ export interface SessionConfig {
   agentType: string;
   /** Config selected by the driving turn and carried into ACP session startup. */
   configOptionValues?: SessionTurnInputConfig['configOptionValues'];
+  modelSelection?: SessionTurnInputConfig['modelSelection'];
   /** Selection carried by the dispatching turn; ACP startup must not re-read history for it. */
   mcpServerIds: McpServerId[];
   /** Whether this driving Turn mounts the built-in Molly Task MCP tools. */

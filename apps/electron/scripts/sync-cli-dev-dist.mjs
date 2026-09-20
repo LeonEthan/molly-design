@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertNoLegacyHarnessArtifacts } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 import {
   installEmbeddedNodePtyBinding,
@@ -50,6 +51,7 @@ if (!fs.existsSync(sourceDir)) {
   )
 }
 
+assertNoLegacyHarnessArtifacts(sourceDir)
 fs.rmSync(destDir, { recursive: true, force: true })
 copyDir(sourceDir, destDir)
 writeCliPackageMetadata()

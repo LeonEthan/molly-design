@@ -1,8 +1,15 @@
-import { withKimiImageToolTimeout } from '@/design/kimi-image-timeout';
-import { prepareGrokDesignReminder } from '@/design/grok-reminder';
-import { withCodexDesignReminder } from '@/design/codex-reminder';
-import { prepareClaudeDesignLaunch } from '@/design/claude-launch';
 import { randomUUID } from 'node:crypto';
+import { Writable } from 'node:stream';
+import { createWorkerEnvironment } from '@molly/harness-pi/environment';
+import type { WorkerConfig } from '@molly/harness-pi/worker-config';
+import { ModelSelectionSchema } from '@molly/shared/embedded-harness';
+import {
+  assertEmbeddedHarnessTarget,
+  resolveEmbeddedHarnessLaunch,
+} from '@/agent/embedded-harness-runtime';
+import { EmbeddedHarnessControl } from '@/agent/embedded-harness-control';
+import { readEmbeddedHarnessSessionBinding } from '@/agent/lody-acp-extension';
+import { DESIGN_READ_BEFORE_EDIT_REMINDER } from '@/design/read-before-edit-reminder';
 import EventEmitter from 'eventemitter3';
 import { ACPSessionId, getServerNow, MachineId, SessionId } from '@molly/shared';
 import type { CreateAgentConfig, ISession, SessionMonitorRuntimeInfo } from './session-manager';
@@ -18,9 +25,8 @@ import path from 'path';
 import { Logger } from '@/utils/logger';
 import { ndJsonStream } from '@agentclientprotocol/sdk';
 import * as fs from 'fs';
-import type { AcpStartupTimeoutOptions, AgentClient } from '@/agent/agent-client';
+import type { AgentClient } from '@/agent/agent-client';
 import { createAcpClient } from '@/agent/acp-runner';
-import { preparePiDesignLaunch } from '@/design/pi-launch';
 import { withAcpSessionStartSlot } from '@/agent/acp-session-start-gate';
 import {
   AcpStartupProcessError,
@@ -28,9 +34,7 @@ import {
   appendStderrTail,
   createAcpStartupMonitor,
 } from '@/agent/acp-startup-monitor';
-import { runNpxStartupWithRecovery } from '@/agent/acp-npx-startup-policy';
 import { ensureMollyDataDir, getMollyDataDir } from '@molly/shared/node/installation-profile';
-import { withMollyNpmCacheForNpx } from '@/agent/npx-cache';
 import {
   type AcpLauncher,
   captureAcpSpawnFailed,
@@ -125,7 +129,51 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
   private readonly sandbox: SessionSandbox;
   private gitIdentity: { id: string; name: string; email: string };
   public agentClient: AgentClient | null = null;
-  private designHookRuntime: 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' | undefined;
+  private embeddedControl?: EmbeddedHarnessControl;
+  isEmbeddedHarness(): boolean {
+    return this.config.agentCliType === 'builtin' && this.config.agentType === 'molly';
+  }
+  assertEmbeddedModelSelection(selection: unknown): void {
+    if (!this.embeddedControl) throw new Error('harness_worker_unavailable');
+    this.embeddedControl.assertSelection(selection);
+  }
+  needsEmbeddedRuntimeReplacement(
+    selection: unknown,
+    mcpServerIds: readonly string[] = []
+  ): boolean {
+    if (!this.isEmbeddedHarness()) throw new Error('harness_runtime_identity_mismatch');
+    if (!this.embeddedControl) return false; // Pending startup retains its existing owner.
+    return (
+      this.embeddedControl.needsReplacement(selection) ||
+      JSON.stringify([...this.config.mcpServerIds].sort()) !==
+        JSON.stringify([...mcpServerIds].sort())
+    );
+  }
+  async promptEmbeddedHarness(
+    turnId: string,
+    prompt: import('@agentclientprotocol/sdk').ContentBlock[],
+    signal: AbortSignal
+  ) {
+    const client = this.agentClient;
+    const sessionId = this.acpSessionId;
+    if (!this.embeddedControl || !client || !sessionId)
+      throw new Error('harness_worker_unavailable');
+    return this.embeddedControl.prompt({
+      turnId,
+      signal,
+      prepareMcp: (preparation, preparationSignal) =>
+        client.prepareEmbeddedMcp(sessionId, preparation, preparationSignal),
+      prompt: async (snapshot) => {
+        const response = await client.prompt(sessionId, prompt, {
+          signal,
+          _meta: { mollyRunSnapshot: snapshot },
+        });
+        if (!response) throw new Error('harness_native_outcome_missing');
+        return response;
+      },
+    });
+  }
+  private designHookRuntime: 'pi' | 'claude' | 'codex' | 'kimi' | 'grok' | 'molly' | undefined;
   private designHookLaunchId: string | undefined;
   getAgentConfigId() {
     return this.config.agentConfigId;
@@ -501,53 +549,54 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
   }
 
   async createAgent(callbacks: CreateAgentConfig): Promise<string> {
+    assertEmbeddedHarnessTarget({
+      cliType: this.config.agentCliType,
+      agentType: this.config.agentType,
+    });
     this.acpCapabilitySourceVersion = callbacks.capabilitySourceVersion ?? null;
     const loginShellEnv = await getLoginShellEnv();
     callbacks.abortSignal?.throwIfAborted();
-    let env = withMollyNpmCacheForNpx(
-      callbacks.command,
-      this.buildShellEnv(callbacks.env, loginShellEnv)
-    );
-    if (callbacks.cliType === 'builtin' && callbacks.agentType === 'kimi' && callbacks.designHooks)
-      env = await withKimiImageToolTimeout(env, this.getWorkdir());
-    if (callbacks.cliType === 'builtin' && callbacks.agentType === 'codex' && callbacks.designHooks)
-      env = withCodexDesignReminder(env);
-    const grokReminder =
-      callbacks.cliType === 'builtin' && callbacks.agentType === 'grok' && callbacks.designHooks
-        ? await prepareGrokDesignReminder()
-        : undefined;
-    const piLaunch =
-      callbacks.agentType === 'pi-acp' && callbacks.designHooks === true
-        ? await preparePiDesignLaunch(env, {
-            machineId: this.config.machineId,
-            workspaceId: this.config.workspaceId,
-            sessionId: this.sessionId,
-            workdir: this.getWorkdir(),
-            taskToolsEnabled: this.config.taskToolsEnabled === true,
-          })
-        : undefined;
-    if (piLaunch) env = piLaunch.env;
-    const claudeLaunch =
-      callbacks.cliType === 'builtin' && callbacks.agentType === 'claude' && callbacks.designHooks
-        ? prepareClaudeDesignLaunch(env, {
-            machineId: this.config.machineId,
-            workspaceId: this.config.workspaceId,
-          })
-        : undefined;
-    if (claudeLaunch) env = claudeLaunch.env;
+    let env = this.buildShellEnv(callbacks.env, loginShellEnv);
+    let embeddedConfig: WorkerConfig | undefined;
+    if (this.isEmbeddedHarness()) {
+      if (!callbacks.embeddedHarness || callbacks.forkSessionId)
+        throw new Error('harness_native_fork_unsupported');
+      const launch = await resolveEmbeddedHarnessLaunch();
+      if (
+        callbacks.command !== launch.command ||
+        JSON.stringify(callbacks.args) !== JSON.stringify(launch.args)
+      )
+        throw new Error('harness_launch_mismatch');
+      const privateRoot = path.join(getMollyDataDir(), 'harness', 'pi');
+      const designContinuationContext =
+        await callbacks.embeddedHarness.readDesignContinuationContext?.();
+      embeddedConfig = {
+        schemaVersion: 1,
+        runtimeEpoch: randomUUID(),
+        productSessionId: this.sessionId,
+        workspaceId: this.config.workspaceId,
+        privateRoot,
+        cwd: this.getWorkdir(),
+        shellPath: '/bin/sh',
+        harness: launch.harness,
+        connection: callbacks.embeddedHarness.connection,
+        nativeSessionId: callbacks.resumeSessionId,
+        readBeforeEditReminder: callbacks.designHooks
+          ? DESIGN_READ_BEFORE_EDIT_REMINDER
+          : undefined,
+        designImageImport: callbacks.importHarnessImages !== undefined,
+        designImageRecovery: callbacks.recoverHarnessImages !== undefined,
+        selection: ModelSelectionSchema.parse(this.config.modelSelection),
+        permissionProfileId: 'ask-every-tool-v1',
+        systemPrompt:
+          'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. Ask for approval before tool execution. Never retry an operation whose result is unknown.' +
+          (designContinuationContext ? `\n\n${designContinuationContext}` : ''),
+      };
+      env = createWorkerEnvironment({ ...process.env, ...loginShellEnv }, privateRoot);
+    }
     // Trusted design launch identity also serves exact submission; it does not
     // assert that this runtime implements native tool or terminal hooks.
-    this.designHookRuntime = claudeLaunch
-      ? 'claude'
-      : piLaunch
-        ? 'pi'
-        : callbacks.designHooks &&
-            callbacks.cliType === 'builtin' &&
-            (callbacks.agentType === 'codex' ||
-              callbacks.agentType === 'kimi' ||
-              callbacks.agentType === 'grok')
-          ? callbacks.agentType
-          : undefined;
+    this.designHookRuntime = embeddedConfig && callbacks.designHooks ? 'molly' : undefined;
     const launcher: AcpLauncher = resolveAcpLauncher(callbacks.command);
     const spawnAnalyticsProps = {
       cliType: callbacks.cliType,
@@ -557,7 +606,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       sessionId: this.sessionId,
       ...(this.config.workspaceId ? { workspaceId: this.config.workspaceId } : {}),
     };
-    let lastStderrTail = '';
     let lastAgentProcessHandle: SessionProcessHandle | null = null;
 
     const cleanupFailedAttempt = async (): Promise<void> => {
@@ -571,7 +619,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         this.logger.debug(
           `[${
             this.sessionId
-          }] Failed to terminate ACP startup attempt before retry: ${formatErrorMessage(error)}`
+          }] Failed to terminate failed ACP startup attempt: ${formatErrorMessage(error)}`
         );
       } finally {
         if (this.agentProcess === handle) {
@@ -581,13 +629,10 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       }
     };
 
-    const attemptCreateAgent = async (
-      startupTimeouts?: AcpStartupTimeoutOptions
-    ): Promise<string> => {
-      lastStderrTail = '';
+    const attemptCreateAgent = async (): Promise<string> => {
       lastAgentProcessHandle = null;
       this.designHookLaunchId = this.designHookRuntime ? randomUUID() : undefined;
-      env = { ...env, MOLLY_DESIGN_LAUNCH_ID: this.designHookLaunchId };
+      if (!embeddedConfig) env = { ...env, MOLLY_DESIGN_LAUNCH_ID: this.designHookLaunchId };
       this.logger.debug(
         `[${this.sessionId}] Starting ACP agent process (cwd=${this.getWorkdir()} cmd=${
           callbacks.command
@@ -600,7 +645,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         agentProcessHandle = await this.sandbox.spawn(callbacks.command, callbacks.args ?? [], {
           cwd: this.getWorkdir(),
           env,
-          stdio: ['pipe', 'pipe', 'pipe'],
+          stdio: embeddedConfig ? ['pipe', 'pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe'],
         });
       } catch (error) {
         captureAcpSpawnFailed({ ...spawnAnalyticsProps, reason: classifyCliSpawnReason(error) });
@@ -610,6 +655,18 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
 
       this.agentProcess = agentProcessHandle;
       lastAgentProcessHandle = agentProcessHandle;
+
+      if (embeddedConfig && callbacks.embeddedHarness) {
+        const pipe = agentProcess.stdio[3];
+        if (!(pipe instanceof Writable)) throw new Error('harness_control_pipe_missing');
+        this.embeddedControl = new EmbeddedHarnessControl(
+          embeddedConfig,
+          pipe,
+          callbacks.embeddedHarness.credentials,
+          () => this.killAndWait(agentProcessHandle, true)
+        );
+        await this.embeddedControl.bootstrap();
+      }
 
       agentProcessHandle.onError((err) => {
         this.logger.error(`[${this.sessionId}] Agent process error: ${err.message}`);
@@ -646,7 +703,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       agentProcess.stderr?.on('data', (chunk: string) => {
         if (chunk) {
           stderrTail = appendStderrTail(stderrTail, chunk);
-          lastStderrTail = stderrTail;
           const preview = truncateLogText(chunk, {
             maxChars: 1200,
             headChars: 900,
@@ -679,10 +735,11 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       let client: AgentClient;
       let acpSessionId: ACPSessionId;
       let acpCapabilities: AcpCapabilitiesResult;
+      const embeddedControl = embeddedConfig ? this.embeddedControl : undefined;
+      const importHarnessImages = callbacks.importHarnessImages;
+      const recoverHarnessImages = callbacks.recoverHarnessImages;
       try {
         const started = await createAcpClient({
-          grokDesignReminderPluginDir: grokReminder?.directory,
-          claudeDesignHookSettings: claudeLaunch?.settings,
           designHookLaunchId: this.designHookLaunchId,
           stream,
           workdir: this.getWorkdir(),
@@ -711,17 +768,36 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           onSessionTitleUpdate: callbacks.onSessionTitleUpdate,
           onAgentWarning: callbacks.onAgentWarning,
           loadExternalMcpServers: callbacks.loadExternalMcpServers,
+          onMcpServersResolved: embeddedControl
+            ? (servers) => embeddedControl.configureMcp(servers)
+            : undefined,
+          onHarnessImageImport:
+            embeddedControl && importHarnessImages
+              ? (request) => embeddedControl.importImages(request, importHarnessImages)
+              : undefined,
+          onHarnessImageRecovery:
+            embeddedControl && recoverHarnessImages
+              ? (request) => embeddedControl.recoverImages(request, recoverHarnessImages)
+              : undefined,
+          onMcpCatalogInvalidated: embeddedControl
+            ? () => {
+                void embeddedControl.invalidate().catch(() => {
+                  this.logger.warn('harness_mcp_revoked_exit_unconfirmed');
+                });
+              }
+            : undefined,
           onImageGenerationBegin: callbacks.onImageGenerationBegin,
           onImageGenerationEnd: callbacks.onImageGenerationEnd,
           onWriteTextFile: callbacks.onWriteTextFile,
           sessionId: this.sessionId,
-          startupTimeouts,
           startupAbort: externalAbort
             ? Promise.race([startupMonitor.abortPromise, externalAbort.promise])
             : startupMonitor.abortPromise,
           resolveSessionStart: callbacks.resolveSessionStart,
         });
         client = started.client;
+        if (embeddedConfig)
+          this.embeddedControl!.bind(readEmbeddedHarnessSessionBinding(started.sessionResponse));
         acpSessionId = started.acpSessionId;
         acpCapabilities = normalizeAcpSessionCapabilities(started.sessionResponse, {
           sessionFork: started.client.supportsSessionFork(),
@@ -747,10 +823,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       this.logger.debug(
         `[${this.sessionId}] createAcpClient returned (acpSessionId=${acpSessionId})`
       );
-      agentProcess.once('exit', () => {
-        void piLaunch?.cleanup();
-        void grokReminder?.cleanup();
-      });
       this.acpSessionId = acpSessionId;
       this.agentClient = client;
       this.acpCapabilities = acpCapabilities;
@@ -765,22 +837,10 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           logger: this.logger,
           abortSignal: callbacks.abortSignal,
         },
-        async () =>
-          await runNpxStartupWithRecovery({
-            command: callbacks.command,
-            args: callbacks.args ?? [],
-            env,
-            logger: this.logger,
-            logPrefix: `[${this.sessionId}]`,
-            attempt: ({ startupTimeouts }) => attemptCreateAgent(startupTimeouts),
-            cleanupFailedAttempt,
-            getStderrTail: () => lastStderrTail,
-          })
+        attemptCreateAgent
       );
     } catch (error) {
       await cleanupFailedAttempt();
-      await piLaunch?.cleanup();
-      await grokReminder?.cleanup();
       throw error;
     }
   }

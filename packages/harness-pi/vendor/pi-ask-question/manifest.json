@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "name": "pi-ask-question",
+  "version": "0.4.0",
+  "source": "https://github.com/fitchmultz/pi-ask-question",
+  "commit": "c3caa7cb9ba17875c6a75c0a9cff84366b31cbb9",
+  "upstreamPath": "extensions/ask-question.ts",
+  "upstreamSha256": "6eff85f426282d17b8cceabb32ab48952eecffb8913bc06355a6d311bbe58cd1",
+  "license": "MIT",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "5c4612e7f41328ae9bf9f2c26e0c20899c3b12b6c8c6677d8dbc3dba3d944de6",
+  "entry": "ask-question.ts",
+  "adaptedSha256": "fb182b6ae61984907c0169f3a7199abb1e3ea44b6f4385aba21ec9d0f58af17f",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "typebox": "1.3.7"
+  },
+  "selectedTools": ["ask_question"],
+  "selectedCommands": [],
+  "adaptations": [
+    "Select dialog-backed question logic; omit keyboard UI, terminal renderers and optional grill-me command/state/hooks.",
+    "Narrow factory API to registerTool; construct registrations with the public SDK types and runtime, without discovery or deep imports.",
+    "Replace AFK/best-judgement guidance with an explicit statement that no answer or approval was given.",
+    "Bound questions to 8, options to 32, labels to 1024, prompts to 8192 and IDs to 200 characters.",
+    "Check cancellation again after dialog replies; retain the upstream five-minute timer and its finally cleanup.",
+    "Use checked array assertions, a non-shadowing local binding and repository formatting; retain normalized answers in native tool-result history only."
+  ],
+  "activation": "Production ACP requires form elicitation and host-owned mollyQuestionUI version 1 with run/epoch-bound dismissal."
+}

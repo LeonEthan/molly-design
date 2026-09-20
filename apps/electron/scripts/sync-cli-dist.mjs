@@ -1,10 +1,12 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertNoLegacyHarnessArtifacts } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 import {
   installEmbeddedNodePtyBinding,
   installEmbeddedSqliteBinding,
+  installEmbeddedSharpBinding,
   stageCliRuntimePackages
 } from './cli-native-deps.mjs'
 
@@ -50,6 +52,7 @@ if (!fs.existsSync(sourceDir)) {
   )
 }
 
+assertNoLegacyHarnessArtifacts(sourceDir)
 fs.rmSync(destDir, { recursive: true, force: true })
 copyDir(sourceDir, destDir)
 writeCliPackageMetadata()
@@ -62,5 +65,6 @@ writeCliPackageMetadata()
 stageCliRuntimePackages()
 installEmbeddedSqliteBinding({ platform: process.platform, arch: process.arch })
 installEmbeddedNodePtyBinding({ platform: process.platform, arch: process.arch })
+installEmbeddedSharpBinding({ platform: process.platform, arch: process.arch })
 
 console.log(`Synced CLI dist to ${destDir}`)

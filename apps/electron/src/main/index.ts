@@ -7,6 +7,7 @@ import {
 } from './services/design-service'
 import { startDesignCanvasHost } from './services/design-canvas-host-service'
 import { startDesignRenderHost } from './services/design-render-host-service'
+import { startHarnessCredentialHost } from './services/harness-credential-host'
 import { verifyDesignSample } from './services/design-sample-verification'
 import { registerDesignSampleScheme } from './services/design-sample-service'
 import {
@@ -284,6 +285,8 @@ if (hasSingleInstanceLock) {
     app.once('will-quit', () => stopDesignCanvasHost())
     const stopDesignRenderHost = startDesignRenderHost(cliService)
     app.once('will-quit', () => stopDesignRenderHost())
+    const stopHarnessCredentialHost = startHarnessCredentialHost(cliService)
+    app.once('will-quit', () => stopHarnessCredentialHost())
 
     setupApplicationMenu({
       appUpdaterService,

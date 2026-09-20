@@ -1,18 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useAtom, useAtomValue } from 'jotai';
 import { usePlatformCapability } from '@molly/platform/react';
-import type { AgentConfigMeta, ManagedBuiltinAgentType, ProviderSetupTask } from '@molly/shared';
+import type { AgentConfigMeta, MachineId } from '@molly/shared';
 import {
   desktopOnboardingDraftAtom,
   desktopOnboardingPhaseAtom,
   type DesktopOnboardingProviderSelection,
   type DesktopOnboardingResumePhase,
 } from '@/atoms/onboarding';
-import {
-  cmdRetryProviderSetupAtom,
-  getAllAgentConfigAtom,
-  getAllProviderSetupsAtom,
-} from '@/atoms/agents';
+import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import { useMachineFlockAgentConfigsForMachineIds } from '@/hooks/use-machine-flock-agent-configs';
 import { getDesktopOnboardingSteps, OnboardingStepsProvider } from './onboarding-steps';
@@ -24,7 +20,7 @@ import { ProvidersScreen } from './screens/providers-screen';
 import { ProjectsScreen } from './screens/projects-screen';
 import { FirstTaskScreen } from './screens/first-task-screen';
 import { SummaryScreen } from './screens/summary-screen';
-import { useOnboardingBuiltinRuntimePrefetch } from './use-onboarding-builtin-runtime-prefetch';
+import { isOnboardingMollyConfig } from './onboarding-agent';
 import {
   useOnboardingAnalytics,
   type DesktopOnboardingTraceProperties,
@@ -41,28 +37,16 @@ export type DesktopOnboardingCompletion = {
 
 export function resolveDesktopOnboardingSummaryAgent(
   provider: DesktopOnboardingProviderSelection | null,
-  providerSetups: readonly ProviderSetupTask[],
-  agentConfigs: readonly AgentConfigMeta[]
-): {
-  state: 'ready' | 'preparing' | 'failed' | 'missing';
-  name: string | undefined;
-} {
-  if (provider?.kind === 'agentConfig') {
-    const publishedConfig = agentConfigs.find((config) => config.id === provider.agentConfigId);
-    return publishedConfig
-      ? { state: 'ready', name: publishedConfig.name }
-      : { state: 'missing', name: provider.agentName };
-  }
-  if (provider?.kind !== 'providerSetup') return { state: 'missing', name: undefined };
-
-  const publishedConfig = agentConfigs.find((config) => config.id === provider.providerSetupId);
-  if (publishedConfig) return { state: 'ready', name: publishedConfig.name };
-  const setup = providerSetups.find((candidate) => candidate.id === provider.providerSetupId);
-  if (!setup) return { state: 'missing', name: provider.agentName };
-  return {
-    state: setup.status === 'failed' ? 'failed' : 'preparing',
-    name: provider.agentName,
-  };
+  agentConfigs: readonly AgentConfigMeta[],
+  machineId: MachineId | null
+): { state: 'ready' | 'retired' | 'missing'; name: string | undefined } {
+  if (!provider) return { state: 'missing', name: undefined };
+  if (provider.kind === 'providerSetup') return { state: 'retired', name: provider.agentName };
+  const config = agentConfigs.find((candidate) => candidate.id === provider.agentConfigId);
+  if (!config || machineId === null) return { state: 'missing', name: provider.agentName };
+  return isOnboardingMollyConfig(config, machineId)
+    ? { state: 'ready', name: config.name }
+    : { state: 'retired', name: config.name };
 }
 
 export function resolveDesktopOnboardingPhase(
@@ -72,7 +56,8 @@ export function resolveDesktopOnboardingPhase(
   if (!phase) return 'ceremony';
   if (phase === 'login' && !input.cloudAccount) return 'providers';
   if (phase === 'workspace' && !input.multiWorkspace) return 'providers';
-  if (phase === 'firstTask' && (!input.hasAgent || !input.hasProject)) return 'projects';
+  if (phase === 'firstTask' && !input.hasAgent) return 'providers';
+  if (phase === 'firstTask' && !input.hasProject) return 'projects';
   return phase;
 }
 
@@ -86,23 +71,31 @@ export function OnboardingOverlay({
   const multiWorkspace = usePlatformCapability('multiWorkspace');
   const [persistedPhase, setPersistedPhase] = useAtom(desktopOnboardingPhaseAtom);
   const [draft, setDraft] = useAtom(desktopOnboardingDraftAtom);
-  const [preferredBuiltinRuntime, setPreferredBuiltinRuntime] =
-    useState<ManagedBuiltinAgentType | null>(null);
   const onboardingAudio = useOnboardingAudio();
   const analytics = useOnboardingAnalytics();
   const { stop: stopOnboardingAudio } = onboardingAudio;
   const audioHandoffStoppedRef = useRef(false);
-  const providerSetupTraceRef = useRef<string | null>(null);
-  useOnboardingBuiltinRuntimePrefetch(preferredBuiltinRuntime);
 
   const steps = useMemo(
     () => getDesktopOnboardingSteps({ cloudAccount, multiWorkspace }),
     [cloudAccount, multiWorkspace]
   );
+  const agentConfigs = useAtomValue(getAllAgentConfigAtom);
+  const localMachineId = useAtomValue(localMachineIdAtom);
+  const machineIds = useMemo(
+    () => (localMachineId === null ? [] : [localMachineId]),
+    [localMachineId]
+  );
+  useMachineFlockAgentConfigsForMachineIds(machineIds, { syncRemote: false });
+  const summaryAgent = resolveDesktopOnboardingSummaryAgent(
+    draft.provider,
+    agentConfigs,
+    localMachineId
+  );
   const phase = resolveDesktopOnboardingPhase(persistedPhase, {
     cloudAccount,
     multiWorkspace,
-    hasAgent: draft.provider?.kind === 'agentConfig',
+    hasAgent: summaryAgent.state === 'ready',
     hasProject: draft.project !== null,
   });
   const visibleSteps = useMemo(
@@ -152,31 +145,6 @@ export function OnboardingOverlay({
     [advanceTo, cloudAccount, multiWorkspace]
   );
 
-  // The summary must tell the truth about a pending setup: a failed task is
-  // not "still progressing", and a deleted one is no longer pending at all.
-  // A successful setup is REPLACED by a published AgentConfig under the same
-  // id, so the config check must come first or success reads as "missing".
-  const providerSetups = useAtomValue(getAllProviderSetupsAtom);
-  const agentConfigs = useAtomValue(getAllAgentConfigAtom);
-  const retryProviderSetup = useSetAtom(cmdRetryProviderSetupAtom);
-  const selectedSetupId =
-    draft.provider?.kind === 'providerSetup' ? draft.provider.providerSetupId : null;
-  const localMachineId = useAtomValue(localMachineIdAtom);
-  const selectedSetupMachineIds = useMemo(
-    () => (selectedSetupId !== null && localMachineId !== null ? [localMachineId] : []),
-    [localMachineId, selectedSetupId]
-  );
-  useMachineFlockAgentConfigsForMachineIds(selectedSetupMachineIds);
-  const summaryAgent = resolveDesktopOnboardingSummaryAgent(
-    draft.provider,
-    providerSetups,
-    agentConfigs
-  );
-  const failedProviderSetup =
-    selectedSetupId === null
-      ? undefined
-      : providerSetups.find((setup) => setup.id === selectedSetupId && setup.status === 'failed');
-
   useEffect(() => {
     if (!flowStartedCapturedRef.current) {
       flowStartedCapturedRef.current = true;
@@ -213,54 +181,6 @@ export function OnboardingOverlay({
     summaryAgent.state,
     visibleSteps,
   ]);
-
-  useEffect(() => {
-    if (selectedSetupId === null) {
-      providerSetupTraceRef.current = null;
-      return;
-    }
-    const traceKey = `${selectedSetupId}:${summaryAgent.state}:${failedProviderSetup?.attempt ?? 0}`;
-    if (providerSetupTraceRef.current === traceKey) return;
-    providerSetupTraceRef.current = traceKey;
-    if (summaryAgent.state === 'preparing') {
-      analytics.capture('onboarding/operation_started', {
-        step: phase,
-        operation: 'agent_setup',
-        attempt: failedProviderSetup?.attempt ?? null,
-      });
-      return;
-    }
-    if (summaryAgent.state === 'ready') {
-      analytics.capture('onboarding/operation_succeeded', {
-        step: phase,
-        operation: 'agent_setup',
-      });
-      return;
-    }
-    if (failedProviderSetup) {
-      console.error('[onboarding] Agent setup failed:', {
-        id: failedProviderSetup.id,
-        machineId: failedProviderSetup.machineId,
-        agentName: failedProviderSetup.config.name,
-        failureCode: failedProviderSetup.failureCode,
-        attempt: failedProviderSetup.attempt,
-      });
-      analytics.capture('onboarding/operation_failed', {
-        step: phase,
-        operation: 'agent_setup',
-        failure_code: failedProviderSetup.failureCode ?? 'agent_setup_failed',
-        attempt: failedProviderSetup.attempt,
-        retryable: true,
-      });
-      return;
-    }
-    analytics.capture('onboarding/operation_failed', {
-      step: phase,
-      operation: 'agent_setup',
-      failure_code: 'agent_setup_missing',
-      retryable: false,
-    });
-  }, [analytics, failedProviderSetup, phase, selectedSetupId, summaryAgent.state]);
 
   const completeOnboarding = useCallback(
     async (entryPoint: NonNullable<DesktopOnboardingCompletion['entryPoint']>) => {
@@ -314,7 +234,6 @@ export function OnboardingOverlay({
           setDraft({ provider, project: null });
           advanceTo('projects', 'continue', { provider_selection_kind: provider.kind });
         }}
-        onManagedRuntimeSelected={setPreferredBuiltinRuntime}
       />
     ),
     projects: (
@@ -367,11 +286,7 @@ export function OnboardingOverlay({
         key="summary"
         agentState={summaryAgent.state}
         agentName={summaryAgent.name}
-        agentFailureCode={failedProviderSetup?.failureCode}
         projectName={draft.project?.name}
-        onRetryAgent={
-          failedProviderSetup ? () => retryProviderSetup(failedProviderSetup.id) : undefined
-        }
         onBack={() => advanceTo(draft.project ? 'projects' : 'providers', 'back')}
         onComplete={() => {
           void completeOnboarding('summary');

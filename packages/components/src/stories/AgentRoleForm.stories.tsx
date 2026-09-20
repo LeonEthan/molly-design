@@ -109,6 +109,35 @@ export const NewRole: Story = {
 
 export const Configured: Story = {};
 
+export const MigrationNeedsExplicitModel: Story = {
+  args: {
+    isMigrating: true,
+    value: {
+      ...configured,
+      agentConfigId: 'molly' as AgentConfigId,
+      modelId: null,
+      modeId: null,
+      configOptionValues: {},
+    },
+    machines: machines.slice(0, 1),
+    agentConfigs: [{ agentConfigId: 'molly' as AgentConfigId, label: 'Molly' }],
+    selectorOptions: {
+      ...selectorOptions,
+      defaultModelId: null,
+      defaultModeId: null,
+      modeOptions: [],
+      configOptionSelectors: [],
+      modelOptions: [
+        {
+          value: 'molly-model:synthetic-connection/synthetic-model',
+          label: 'Synthetic connection · model',
+        },
+      ],
+    },
+    errors: ['model_required'],
+  },
+};
+
 /**
  * No emoji picked: the trigger shows the default glyph, so a Role never looks
  * half-authored. Clicking it opens the picker.

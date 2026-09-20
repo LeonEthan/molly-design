@@ -224,7 +224,12 @@ export function assertProjectionDocument(doc: BentoDocV4): void {
       ...doc.elements.map((element) => ({ type: 'createElement' as const, element })),
     ],
   });
-  if (!result.ok) throw Error(result.error.message);
+  if (!result.ok) {
+    const { targetId, message } = result.error;
+    throw Error(
+      targetId === undefined ? message : `Element ${JSON.stringify(targetId)}: ${message}`
+    );
+  }
   assertRenderableLines(doc.elements);
   const missing = staticV1UnregisteredFontFamilies(doc.elements, [
     ...(doc.fonts ?? []).map((f) => f.family),

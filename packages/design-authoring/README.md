@@ -123,6 +123,8 @@ Leftover `.pptd`, HTML rich text, theme `$ref`, `seriesDefaults`,
 `elementId` / `elementType`, extra pages, animation, notes, and remote
 font/image URLs fail closed. Kernel replay validates structure; replay results
 are discarded, so normalization never repairs output.
+Kernel rejections retain the reported element ID in diagnostics so invalid
+geometry can be located without guessing which element failed.
 `AUTHORING_PROJECTION_CAPABILITIES` maps all active frozen v1 capability rows to this
 projection without enabling editor features.
 

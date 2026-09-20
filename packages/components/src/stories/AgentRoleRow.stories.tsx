@@ -56,6 +56,19 @@ type Story = StoryObj<typeof meta>;
 
 export const Private: Story = {};
 
+export const LegacyMigrationAvailable: Story = { args: { onMigrate: () => undefined } };
+
+export const MigratedToMolly: Story = {
+  args: {
+    agentConfig: { ...agentConfig, agentType: 'molly', name: 'Molly' },
+    role: {
+      ...base,
+      runConfig: { modelId: 'molly-model:synthetic-connection/synthetic-model' },
+      embeddedMigration: { v: 1, migratedAt: 3, source: base },
+    },
+  },
+};
+
 /** No emoji picked: the row shows the shared default glyph. */
 export const DefaultEmoji: Story = {
   args: { role: { ...base, emoji: undefined } },
@@ -83,6 +96,18 @@ export const AgentConfigMissing: Story = {
     availability: { kind: 'unavailable', reason: 'agent_config_missing' },
     agentConfig: undefined,
   },
+};
+
+export const RetiredEngine: Story = {
+  args: { availability: { kind: 'unavailable', reason: 'agent_config_retired' } },
+};
+
+export const ModelUnavailable: Story = {
+  args: { availability: { kind: 'unavailable', reason: 'run_config_unsupported' } },
+};
+
+export const CatalogUnavailable: Story = {
+  args: { availability: { kind: 'unavailable', reason: 'capabilities_unavailable' } },
 };
 
 /** That machine's configs have not been read yet, so nothing is claimed. */

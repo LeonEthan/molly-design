@@ -91,6 +91,7 @@ const createHandler = (
   imageConnection?: ImageConnectionSettings
 ): MessageHandler => {
   const sessionManager = {
+    setHarnessCredentials: () => undefined,
     getSession: vi.fn((id: string) => ({
       getHostWorkdir: () => path.join(process.env.MOLLY_DATA_DIR ?? '', 'chats', id),
       getWorkdir: () => undefined,
@@ -227,6 +228,25 @@ describe('MessageHandler design skill prompt wiring', () => {
   it('delivers the imagegen skill exactly when the machine has image capability', async () => {
     const ready = createHandler(DESIGN_META(sessionId), storedImageConnection());
     try {
+      await ready.handleLocalMachineRpc({
+        method: 'harness/host',
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1',
+        params: {
+          version: 1,
+          connections: [],
+          reports: [],
+          imageConnection: {
+            id: '00000000-0000-4000-8000-000000000001',
+            revision: 1,
+            enabled: true,
+            baseUrl: 'https://images.invalid/v1',
+            model: 'synthetic-image',
+            hasApiKey: true,
+            legacyHistoryMayContainKey: false,
+          },
+        },
+      });
       const workdir = path.join(dataDir, 'chats', sessionId);
       await buildText(ready, 'make a poster');
       expect(imagegenMaterialized(workdir)).toBe(true);

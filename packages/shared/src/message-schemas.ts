@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ModelSelectionSchema } from './embedded-harness';
 import { SubagentTaskPayloadSchema } from './acp/claude-subagent-task';
 import {
   SESSION_FILE_MAX_COUNT,
@@ -366,6 +367,7 @@ export const ACPSessionConfigSchema = z
     runtimeOverrides: BuiltinRuntimeOverridesSchema.optional(),
     modeId: z.string().optional(),
     modelId: z.string().optional(),
+    modelSelection: ModelSelectionSchema.optional(),
     configOptionValues: AcpConfigOptionValuesSchema.optional(),
     mcpServerIds: z.array(z.string()).optional(),
     taskToolsEnabled: z.boolean().optional(),
@@ -419,6 +421,8 @@ export const normalizeSessionTurnInputConfig = (
 
   const record = value as Record<string, unknown>;
   const normalized: SessionTurnInputConfig = {};
+  const modelSelection = maybeParseField(ModelSelectionSchema, record.modelSelection);
+  if (modelSelection) normalized.modelSelection = modelSelection;
   const agentConfigId = trimOptionalString(record.agentConfigId);
   if (agentConfigId) normalized.agentConfigId = agentConfigId as AgentConfigId;
 

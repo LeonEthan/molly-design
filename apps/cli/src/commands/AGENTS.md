@@ -21,6 +21,8 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
 - `start.ts` and `molly daemon start` compose only the local installation identity and
   Agent service. The daemon foreground command rejects `--auth`; the runner's ready
   handshake remains the startup success signal.
+- `start` has no CLI selector, external credential detection or managed-runtime
+  update/cache-preparation lifecycle. Bundled Molly needs the protected desktop host.
 - The runner's fd 3 launch handshake reports success only after its supervised Worker reaches
   `startupStage=ready`. An initial Worker exit returns bounded output and terminates the runner
   instead of claiming success; retryable startup exits keep the handshake pending, and a timeout
@@ -58,6 +60,15 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
 
 ## Session create and dispatch (`session.ts`)
 
+- Create requires same-machine Molly and a current runtime catalog; validate merged
+  controls without dropping unsupported fields. Requester defaults and Role IDs bind
+  exact targets. Chat validates target history defaults and freezes its exact config,
+  model/thinking, MCP selection and invoking Task gate before acceptance; replay uses
+  that snapshot. MCP creates freeze the invoking Turn's selected ids, including `[]`;
+  Roles do not own MCP choices. Semantic model conversion preserves non-model controls.
+  Structured model selections validate their ACP aliases before inheritance; freeze
+  the resulting selection in Operation configs and history, including explicit retries.
+  See [acceptance](../../../../.agents/docs/cli-overview.md#embedded-session-acceptance).
 - `--local-project … --worktree` sets `ProjectRef.useWorktree`; daemon startup consumes it in
   `../session/session-execution-service.ts` and worktree creation happens in
   `../session/session-manager.ts`.
@@ -67,13 +78,17 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
   workspace's spelling; an unauthorized, absent, or unreadable one leaves the Session local rather
   than failing create.
 - Dispatch point-of-no-rollback (`createSessionResult` / `sendSessionChatResult`):
-  `writeDispatchPointer` commits `latestUserMsgId` locally, after which the daemon may already be
+  `writeDispatchPointer` publishes `latestUserMsgId` locally, after which the daemon may already be
   executing the turn. `confirmDispatchSyncedBestEffort` is AWAITED so the push completes before
   the one-shot `withWorkspaceManager` transport is torn down, but it must NEVER throw — the
   durable pointer plus the SQLite Operation own delivery. The create/chat `catch` may only unwind
   when the pointer was NOT yet written (`if (!dispatched)`); rolling back after dispatch deletes an
   already-running session out from under the daemon. Do not reintroduce a hard-fail Streams ack on
   the dispatch write.
+- Delegated Task creation flushes a prepared receipt before publishing its first
+  pointer and dispatched receipt, then flushes again. A post-publication flush
+  failure retains the Session; prepared-only recovery means outcome unknown, not
+  permission to retry. Receipts authorize status repair only; chat preserves them.
 - MCP create takes run config semantically (`modelId`/`reasoningEffort`/`fastMode`/`planMode`),
   never raw ACP option ids. `@molly/shared` `acp-run-config.ts` owns the mapping onto each agent's
   advertised option ids, `applyAgentRunConfigSelection` applies it once the target agent's cached

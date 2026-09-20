@@ -21,6 +21,10 @@ import type { LoroRepo } from 'loro-repo';
 
 import type { Logger } from '@/utils/logger';
 import { ProviderSetupManager, type ProviderSetupManagerOptions } from './provider-setup-manager';
+import {
+  SessionExecutionService,
+  type SessionExecutionServiceDeps,
+} from '@/session/session-execution-service';
 
 class FakeMachineFlock implements MachineFlockWritableFlock {
   readonly rows = new Map<string, { key: MachineFlockKey; value: unknown }>();
@@ -158,6 +162,29 @@ function createDeferred<T>() {
 }
 
 describe('ProviderSetupManager', () => {
+  it('settles a legacy setup as unavailable through the real retired-runtime boundary', async () => {
+    const execution = new SessionExecutionService({ machineId } as SessionExecutionServiceDeps);
+    const harness = createHarness({
+      getMachineAcpBinaryStatus: execution.getMachineAcpBinaryStatus.bind(execution),
+      installMachineAcpBinary: async () => {
+        throw new Error('retired setup must not install');
+      },
+      refreshMachineAcpCapabilities: async () => {
+        throw new Error('retired setup must not probe');
+      },
+    });
+    const source = createSetup();
+    seedSetup(harness.flock, source);
+    await harness.manager.kick();
+    expect(readState(harness.flock).config).toBeUndefined();
+    expect(readState(harness.flock).setup).toMatchObject({
+      config: JSON.parse(JSON.stringify(source.config)),
+      status: 'failed',
+      failureCode: 'runtime-unavailable',
+    });
+    harness.manager.stop();
+  });
+
   it('publishes the config and removes the setup in one commit after a live probe', async () => {
     const harness = createHarness();
     seedSetup(harness.flock);

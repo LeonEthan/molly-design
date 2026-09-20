@@ -318,6 +318,12 @@ export const generateTitleIsolated = async (
   options: GenerateTitleOptions
 ): Promise<string | null> => {
   if (options.signal?.aborted) return null;
+  if (options.cliType === 'builtin' && options.agentType === 'molly') {
+    const firstSentence = sanitizeMollyInternalInstructions(options.taskPrompt)
+      .trim()
+      .split(/[。！？\r\n]|[.!?](?:\s|$)/u)[0];
+    return sanitizeTitle(firstSentence);
+  }
   const fallbackTitle = sanitizeGeneratedTitle(options.taskPrompt);
   const workdir = fs.mkdtempSync(path.join(os.tmpdir(), 'molly-title-agent-'));
 

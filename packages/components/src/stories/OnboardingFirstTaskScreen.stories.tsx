@@ -4,15 +4,18 @@ import { Provider, createStore } from 'jotai';
 import { createLocalPlatformProvider, createStaticStore } from '@molly/platform';
 import { PlatformContext } from '@molly/platform/react';
 import {
+  ACP_CAPABILITY_CACHE_VERSION,
   getAgentConfigRoomId,
+  getMachineRoomId,
   type AgentConfigId,
   type AgentConfigMeta,
   type LocalProjectId,
   type MachineId,
   type WorkspaceId,
 } from '@molly/shared';
+import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import { userAtom } from '@/atoms';
-import { agentConfigMetaCacheAtom } from '@/atoms/doc-meta';
+import { agentConfigMetaCacheAtom, machineMetaCacheAtom } from '@/atoms/doc-meta';
 import { runtimeAtom } from '@/atoms/runtime';
 import { currentWorkspaceSlugAtom } from '@/atoms/workspace-context';
 import { FirstTaskScreen } from '@/components/onboarding';
@@ -27,18 +30,18 @@ const project = {
 };
 const configs: AgentConfigMeta[] = [
   {
-    id: 'provider-claude' as AgentConfigId,
+    id: 'provider-molly' as AgentConfigId,
     machineId,
-    name: 'Claude Code',
+    name: 'Molly',
     description: undefined,
     cliType: 'builtin',
-    agentType: 'claude',
+    agentType: 'molly',
     env: {},
   },
   {
     id: 'provider-kimi' as AgentConfigId,
     machineId,
-    name: 'Kimi',
+    name: 'Retired Kimi CLI',
     description: undefined,
     cliType: 'builtin',
     agentType: 'kimi',
@@ -65,7 +68,7 @@ const storyPlatform = createLocalPlatformProvider({
   }),
 });
 
-function MultipleProvidersStory() {
+function ModelSelectionStory({ catalogAvailable = true }: { catalogAvailable?: boolean }) {
   const [selectedAgentConfigId, setSelectedAgentConfigId] = useState(configs[0]!.id);
   const [completed, setCompleted] = useState(false);
   const store = useMemo(() => {
@@ -84,8 +87,51 @@ function MultipleProvidersStory() {
       agentConfigMetaCacheAtom,
       Object.fromEntries(configs.map((config) => [getAgentConfigRoomId(config.id), config]))
     );
+    const modelId = encodeMollyModelOption('00000000-0000-4000-8000-000000000001', 'k3-256k');
+    next.set(machineMetaCacheAtom, {
+      [getMachineRoomId(machineId)]: {
+        id: machineId,
+        name: 'Synthetic local machine',
+        ownerUserId: 'user-onboarding-first-task',
+        acpCapabilities: catalogAvailable
+          ? {
+              [configs[0]!.id]: {
+                cliType: 'builtin',
+                agentType: 'molly',
+                provenance: 'runtime',
+                cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
+                fetchedAt: 1,
+                modes: [],
+                models: [{ modelId, name: 'Synthetic Kimi · k3-256k' }],
+                modelReasoningEfforts: { [modelId]: ['off', 'high'] },
+                configOptions: [
+                  {
+                    id: 'model',
+                    category: 'model',
+                    name: 'Model',
+                    type: 'select',
+                    currentValue: MOLLY_UNSELECTED_MODEL,
+                    options: [{ value: modelId, name: 'Synthetic Kimi · k3-256k' }],
+                  },
+                  {
+                    id: 'reasoning_effort',
+                    category: 'thought_level',
+                    name: 'Thinking',
+                    type: 'select',
+                    currentValue: 'off',
+                    options: [
+                      { value: 'off', name: 'Off' },
+                      { value: 'high', name: 'High' },
+                    ],
+                  },
+                ],
+              },
+            }
+          : undefined,
+      },
+    } as never);
     return next;
-  }, []);
+  }, [catalogAvailable]);
 
   if (completed) {
     return <div data-testid="first-task-skipped" />;
@@ -112,13 +158,17 @@ function MultipleProvidersStory() {
 
 const meta = {
   title: 'Onboarding/FirstTaskScreen',
-  component: MultipleProvidersStory,
+  component: ModelSelectionStory,
   parameters: { layout: 'fullscreen' },
-} satisfies Meta<typeof MultipleProvidersStory>;
+} satisfies Meta<typeof ModelSelectionStory>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const MultipleProviders: Story = {
-  render: () => <MultipleProvidersStory />,
+export const ExplicitModelSelection: Story = {
+  render: () => <ModelSelectionStory />,
+};
+
+export const CatalogUnavailable: Story = {
+  render: () => <ModelSelectionStory catalogAvailable={false} />,
 };

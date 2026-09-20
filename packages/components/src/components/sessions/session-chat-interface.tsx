@@ -114,7 +114,9 @@ import {
   resolveActiveAssistantTurnId,
   resolveBaseBranchPreference,
   resolveProjectGitHubRepo,
+  machineSupportsDesignContinuationPreparation,
 } from '@molly/shared';
+import { DesignContinuationDialog } from './design-continuation-dialog';
 import { useIsMobile } from '../../hooks/use-mobile';
 import { useStableCallback } from '@/hooks/use-stable-callback';
 import {
@@ -866,6 +868,7 @@ export function SessionHeaderMenu({
   onShareAsImage,
   onOpenSearch,
   onFork,
+  onContinueWithMolly,
   isForking = false,
   forkWorktreeAvailability = 'hidden',
   onForkMenuOpen,
@@ -889,6 +892,7 @@ export function SessionHeaderMenu({
   onShareAsImage?: () => void;
   onOpenSearch?: () => void | Promise<void>;
   onFork?: (destination?: SessionForkDestination) => void | Promise<void>;
+  onContinueWithMolly?: () => void;
   isForking?: boolean;
   forkWorktreeAvailability?: SessionForkWorktreeAvailability;
   onForkMenuOpen?: () => void;
@@ -1182,6 +1186,11 @@ export function SessionHeaderMenu({
             </DropdownMenuItem>
           ) : null}
 
+          {onContinueWithMolly ? (
+            <DropdownMenuItem onClick={onContinueWithMolly}>
+              {t('design.continuation.title', 'Continue this design with Molly')}
+            </DropdownMenuItem>
+          ) : null}
           {onRename && !isArchived && (
             <DropdownMenuItem
               onClick={() => {
@@ -2111,6 +2120,15 @@ export const SessionChatInterface = memo(
     const lastSearchAnalyticsKeyRef = useRef<string | null>(null);
 
     const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
+    const [designContinuationSourceId, setDesignContinuationSourceId] = useState<string | null>(
+      null
+    );
+    const canContinueWithMolly =
+      !!session.design &&
+      !(session.cliType === 'builtin' && session.agentType === 'molly') &&
+      currentUser?.id === session.userId &&
+      !!runtime &&
+      machineSupportsDesignContinuationPreparation(sessionMachine);
     const queuedMessageBehavior = useAtomValue(queuedMessageBehaviorAtom);
     const {
       markSessionRead,
@@ -4014,10 +4032,17 @@ export const SessionChatInterface = memo(
         <ConversationColumn className="py-2 sm:py-3">
           <SessionRelationCard
             relation="opened-by"
-            label={t(
-              'sessions.openedBy.createdAutomaticallyBy',
-              'This session was automatically created by'
-            )}
+            label={
+              session.designContinuation
+                ? t(
+                    'design.continuation.createdFrom',
+                    'This conversation continues the design from'
+                  )
+                : t(
+                    'sessions.openedBy.createdAutomaticallyBy',
+                    'This session was automatically created by'
+                  )
+            }
             sessionTitle={openedBy.title}
             actionLabel={t('sessions.openedBy.backToOpener', 'Back to session')}
             actionIcon={CornerLeftUp}
@@ -4025,7 +4050,7 @@ export const SessionChatInterface = memo(
           />
         </ConversationColumn>
       );
-    }, [openedByRelations, t]);
+    }, [openedByRelations, session.designContinuation, t]);
 
     const headerBrowserSession =
       browserActionSession === undefined ? session : browserActionSession;
@@ -4692,6 +4717,9 @@ export const SessionChatInterface = memo(
         onShareAsImage={onShareAsImage}
         onOpenSearch={hideMessageArea ? onOpenSearchExternal : openSearch}
         onFork={canForkFromMenu ? handleForkFromMenu : undefined}
+        onContinueWithMolly={
+          canContinueWithMolly ? () => setDesignContinuationSourceId(session.id) : undefined
+        }
         isForking={forkingAssistantMessageId !== null && forkingAssistantMessageId !== undefined}
         forkWorktreeAvailability={forkWorktreeAvailability}
         onForkMenuOpen={onForkWorktreeMenuOpen}
@@ -4857,9 +4885,11 @@ export const SessionChatInterface = memo(
 
                   {/* Floating permission request - shown when session is waiting for permission */}
                   <FloatingPermissionRequest
+                    key={session.id}
                     sessionId={session.id}
                     sessionStatus={liveSessionStatus ?? undefined}
                     sessionHistory={permissionSessionHistory}
+                    onStop={canStopAgent && !isArchivedSession ? handleStop : undefined}
                   />
 
                   {/* Notification permission prompt - shown when session becomes idle (turn completed) */}
@@ -5040,6 +5070,28 @@ export const SessionChatInterface = memo(
               </SessionSearchProvider>
             </>
           )}
+          {canContinueWithMolly && designContinuationSourceId === session.id ? (
+            <DesignContinuationDialog
+              key={session.id}
+              source={session}
+              configs={agentConfigs.filter(
+                (config) =>
+                  config.machineId === session.machineId &&
+                  config.cliType === 'builtin' &&
+                  config.agentType === 'molly'
+              )}
+              onClose={() => setDesignContinuationSourceId(null)}
+              onPublished={(published) => {
+                setDesignContinuationSourceId(null);
+                if (onNavigateSession) onNavigateSession({ sessionId: published.id });
+                else if (workspaceSlug)
+                  void router.navigate({
+                    to: '/$workspaceName/sessions/$sessionId',
+                    params: { workspaceName: workspaceSlug, sessionId: published.id },
+                  });
+              }}
+            />
+          ) : null}
           <RenameSessionDialog
             target={renameDialogTarget}
             onClose={() => setRenameDialogTarget(null)}

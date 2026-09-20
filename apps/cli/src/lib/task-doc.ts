@@ -291,11 +291,12 @@ async function republishIndexRow(
     [...handle.flock.scan({ prefix: [...key] })].find((entry) => entry.key.length === key.length)
       ?.value
   );
-  if (previous && JSON.stringify(previous) === JSON.stringify(row)) {
-    return;
+  if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
+    handle.flock.set([...key], row as never);
+    handle.flock.commit();
   }
-  handle.flock.set([...key], row as never);
-  handle.flock.commit();
+  // An identical in-memory row may be left by an earlier failed flush.
+  // Idempotent publication still has to establish local durability.
   await manager.repo.flush();
   await handle.syncOnce().catch(() => undefined);
 }
@@ -462,7 +463,8 @@ export const applyAgentTaskUpdate = async (
   workspaceId: WorkspaceId,
   taskId: TaskId,
   input: TaskUpdateInput,
-  actor: TaskAgentActor
+  actor: TaskAgentActor,
+  shouldApply?: (current: TaskDocMeta, snapshot: TaskSnapshot) => boolean
 ): Promise<TaskSnapshot | null> => {
   const result = await withTaskMirror(manager, taskId, async ({ mirror, syncOnce }) => {
     const before = mirror.getState() as unknown as { meta?: TaskDocMeta; links?: TaskLink[] };
@@ -480,9 +482,15 @@ export const applyAgentTaskUpdate = async (
     mirror.setState((draft: unknown) => {
       const state = draft as {
         meta: TaskDocMeta;
+        body?: string;
         links: TaskLink[];
         timeline: TaskTimelineEntry[];
       };
+      if (
+        shouldApply !== undefined &&
+        !shouldApply(state.meta, { ...state, body: state.body ?? '' })
+      )
+        return;
       const now = getServerNow();
       const activities: TaskTimelineEntry[] = [];
       const recordActivity = (

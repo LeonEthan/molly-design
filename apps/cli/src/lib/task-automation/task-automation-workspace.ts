@@ -13,6 +13,8 @@ import {
   readTaskIndexRowsForWorkspace,
   TaskAutomationScheduler,
 } from './task-automation-scheduler';
+import type { TaskAutomationDispatch } from './task-automation-start';
+import { recoverTaskAutomationStatuses } from './task-automation-recovery';
 
 export type TaskAutomationWorkspaceHandle = {
   /** Re-evaluate the queue; safe to call on every task-index change. */
@@ -27,7 +29,7 @@ export type TaskAutomationWorkspaceOptions = {
   userId: string;
   logger: Logger;
   /** Starts a task on this machine; supplied by the fleet so the command layer stays owner of dispatch. */
-  startTask: (taskId: TaskId, agentConfigId: string) => Promise<void>;
+  startTask: (taskId: TaskId, agentConfigId: string) => Promise<TaskAutomationDispatch | void>;
 };
 
 /**
@@ -47,6 +49,12 @@ export function createTaskAutomationWorkspace(
   const readTaskIndex = (): Promise<TaskIndexRow[]> =>
     readTaskIndexRowsForWorkspace(documentManager.repo, workspaceId);
 
+  let recoveryPending = true;
+  let recoveryRequested = false;
+  let recoveryPromise: Promise<void> | undefined;
+  let recoveryTimer: ReturnType<typeof setTimeout> | undefined;
+  const recoveryController = new AbortController();
+
   const scheduler = new TaskAutomationScheduler({
     workspaceId,
     machineId,
@@ -57,7 +65,7 @@ export function createTaskAutomationWorkspace(
       listMergedAgentConfigs(documentManager.repo, workspaceId, [machineId]).catch(() => []),
     // Being connected is what makes this machine able to run anything; an
     // offline pass must hold the queue rather than fail the starts.
-    isMachineOnline: () => documentManager.isTransportConnected(),
+    isMachineOnline: () => !recoveryPending && documentManager.isTransportConnected(),
     startTask,
     onQueued: (taskId, position) => {
       logger.debug(`[task-automation] queued taskId=${taskId} position=${position}`);
@@ -67,6 +75,52 @@ export function createTaskAutomationWorkspace(
   let unsubscribe: (() => void) | null = null;
   let disposed = false;
   let joined: { unsubscribe: () => void } | null = null;
+  const recover = (): Promise<void> => {
+    if (disposed) return Promise.resolve();
+    recoveryRequested = true;
+    recoveryPending = true;
+    if (recoveryPromise) return recoveryPromise;
+    recoveryPromise = (async () => {
+      try {
+        do {
+          recoveryRequested = false;
+          await recoverTaskAutomationStatuses({
+            manager: documentManager,
+            workspaceId,
+            machineId,
+            userId,
+            signal: recoveryController.signal,
+          });
+          if (disposed) return;
+        } while (recoveryRequested);
+        recoveryPending = false;
+        if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
+        recoveryTimer = undefined;
+        if (!disposed) await scheduler.evaluate();
+      } catch (error) {
+        if (!disposed) {
+          logger.warn(
+            `[task-automation] status recovery pending: ${error instanceof Error ? error.message : String(error)}`
+          );
+          if (recoveryTimer === undefined) {
+            recoveryTimer = setTimeout(() => {
+              recoveryTimer = undefined;
+              void recover();
+            }, 30_000);
+            recoveryTimer.unref?.();
+          }
+        }
+      } finally {
+        recoveryPromise = undefined;
+        if (recoveryRequested && !disposed) void recover();
+      }
+    })();
+    return recoveryPromise;
+  };
+  // Metadata scans use the existing rate-limited catch-up edge, not every Task event.
+  const detachMetaRecovery = documentManager.onMetaRoomSynced(() => {
+    void recover();
+  });
   // An offline pass holds the queue instead of failing, so something has to
   // re-evaluate once this machine is back. The index subscription alone is not
   // enough: if nothing changed remotely while we were down, no row event arrives
@@ -91,6 +145,7 @@ export function createTaskAutomationWorkspace(
       // Seed the baseline before joining the room so the first remote catch-up
       // is not mistaken for a burst of new assignments.
       await scheduler.evaluate();
+      await recover();
       unsubscribe = handle.flock.subscribe(() => {
         if (disposed) {
           return;
@@ -128,6 +183,10 @@ export function createTaskAutomationWorkspace(
     dispose: async () => {
       disposed = true;
       scheduler.stop();
+      recoveryController.abort();
+      if (recoveryTimer !== undefined) clearTimeout(recoveryTimer);
+      detachMetaRecovery();
+      await recoveryPromise;
       detachReconnect();
       unsubscribe?.();
       joined?.unsubscribe();

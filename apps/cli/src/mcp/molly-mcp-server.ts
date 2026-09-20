@@ -136,7 +136,18 @@ import {
   runWithOperationStoreBusyRetry,
 } from '@/orchestration/operation-store';
 import { publishTaskProposal } from '@/mcp/task-proposal';
-import { generateImageAsset, editImageAsset, IMAGE_EDIT_MAX_INPUTS } from '@/mcp/image-generation';
+import {
+  generateImageAsset,
+  editImageAsset,
+  generateImageBytes,
+  editImageBytes,
+  IMAGE_EDIT_MAX_INPUTS,
+} from '@/mcp/image-generation';
+import {
+  HARNESS_INLINE_IMAGE_RESULT_META,
+  getEmbeddedHarnessTargetError,
+} from '@molly/shared/embedded-harness';
+import { sniffStaticV1ImageMime } from '../../../../packages/design-bento/vendor/packages/contracts/src/static-v1';
 import {
   EMPTY_DESIGN_GATE,
   requestDesignRenderPreview,
@@ -1346,6 +1357,7 @@ const resolveMcpSessionCreate = (
       dispatchConfig: {
         ...buildMcpTurnDispatchConfig(input),
         taskToolsEnabled: invoking?.frozenInputConfig.taskToolsEnabled === true,
+        mcpServerIds: [...(invoking?.frozenInputConfig.mcpServerIds ?? [])],
       },
     };
   }
@@ -1401,6 +1413,7 @@ const resolveMcpSessionCreate = (
     dispatchConfig: {
       ...role.runConfig,
       taskToolsEnabled: invoking?.frozenInputConfig.taskToolsEnabled === true,
+      mcpServerIds: [...(invoking?.frozenInputConfig.mcpServerIds ?? [])],
       inheritSessionDefaults: false,
     },
     role,
@@ -2615,6 +2628,11 @@ const buildSessionCreateOptions = async (
       currentSession
     )?.id;
     const agentConfigs = allAgentConfigs
+      .filter(
+        (config) =>
+          config.machineId === selectedMachine.id &&
+          getEmbeddedHarnessTargetError(config) === undefined
+      )
       .filter((config) => {
         if (agentConfigQuery) {
           return [config.id, config.name, config.description]
@@ -2897,14 +2915,19 @@ const startSessionChatOperation = async (args: SessionChatToolInput): Promise<un
       }
       assertDifferentMcpSession(currentSession, targetSession);
       await assertMachineOnlineForSingleCommand(manager, targetSession.machineId, ctx);
+      let effectiveDispatchConfig: ResolvedTurnDispatchConfig;
       try {
-        await validateSessionChatTarget({
+        const validated = await validateSessionChatTarget({
           auth,
           workspace,
           manager,
           sessionId: targetSession.id,
           delegatedRequester: toDelegatedSessionRequester(invoking.identity),
+          dispatchConfig: {
+            taskToolsEnabled: invoking.frozenInputConfig.taskToolsEnabled === true,
+          },
         });
+        effectiveDispatchConfig = validated.dispatchConfig;
       } catch (error) {
         if (error instanceof WorkspaceSyncUnavailableError) {
           throw error;
@@ -2930,6 +2953,7 @@ const startSessionChatOperation = async (args: SessionChatToolInput): Promise<un
                 : {}),
               inputConfig: invoking.frozenInputConfig,
               sourceTurnId: invoking.identity.sourceTurnId,
+              targetDispatchConfigs: [effectiveDispatchConfig],
             },
             initiatorChainDepth: invoking.chainDepth,
             ...timing,
@@ -2952,10 +2976,7 @@ const startSessionChatOperation = async (args: SessionChatToolInput): Promise<un
           manager,
           pendingItem.target.sessionId,
           args.prompt,
-          {
-            ...resolveTurnDispatchConfig({}),
-            taskToolsEnabled: invoking.frozenInputConfig.taskToolsEnabled === true,
-          },
+          effectiveDispatchConfig,
           undefined,
           undefined,
           {
@@ -3436,10 +3457,13 @@ const startSessionChatManyOperation = async (args: SessionChatManyToolInput): Pr
       return await withOperationStore((store) => store.snapshot(retry));
     }
     const isMachineOnline = makeMachineOnlineLookupForMcp(manager, ctx);
+    const targetDispatchConfigs: Array<ResolvedTurnDispatchConfig | null> = expanded.map(
+      () => null
+    );
     const initialItems = await mapWithConcurrency(
       expanded,
       5,
-      async (item): Promise<MollyOperationItemResult> => {
+      async (item, index): Promise<MollyOperationItemResult> => {
         if (!item.sessionId || !item.prompt) {
           return batchFailure(
             'INVALID_ITEM',
@@ -3474,13 +3498,17 @@ const startSessionChatManyOperation = async (args: SessionChatManyToolInput): Pr
           );
         }
         try {
-          await validateSessionChatTarget({
+          const validated = await validateSessionChatTarget({
             auth,
             workspace,
             manager,
             sessionId: target.id,
             delegatedRequester: toDelegatedSessionRequester(invoking.identity),
+            dispatchConfig: {
+              taskToolsEnabled: invoking.frozenInputConfig.taskToolsEnabled === true,
+            },
           });
+          targetDispatchConfigs[index] = validated.dispatchConfig;
         } catch (error) {
           if (error instanceof WorkspaceSyncUnavailableError) {
             throw error;
@@ -3506,6 +3534,7 @@ const startSessionChatManyOperation = async (args: SessionChatManyToolInput): Pr
             ...(requester.agentConfigId ? { agentConfigId: requester.agentConfigId } : {}),
             inputConfig: invoking.frozenInputConfig,
             sourceTurnId: invoking.identity.sourceTurnId,
+            targetDispatchConfigs,
           },
           initiatorChainDepth: invoking.chainDepth,
           ...timing,
@@ -3539,16 +3568,15 @@ const startSessionChatManyOperation = async (args: SessionChatManyToolInput): Pr
           );
         }
         try {
+          const frozenDispatchConfig = targetDispatchConfigs[index];
+          if (!frozenDispatchConfig) throw new Error('harness_frozen_chat_config_unavailable');
           await sendSessionChatResult(
             auth,
             workspace,
             manager,
             storedItem.target.sessionId,
             expandedItem.prompt,
-            {
-              ...resolveTurnDispatchConfig({}),
-              taskToolsEnabled: invoking.frozenInputConfig.taskToolsEnabled === true,
-            },
+            frozenDispatchConfig,
             undefined,
             undefined,
             {
@@ -4063,8 +4091,18 @@ export function buildMollyMcpServer(
   // merely advertised and then refused.
   const runImageTool = async (
     args: GenerateImageToolInput | EditImageToolInput,
-    { signal }: { signal: AbortSignal }
+    { signal, _meta }: { signal: AbortSignal; _meta?: Record<string, unknown> }
   ) => {
+    let dispatched = false;
+    let rejected = false;
+    const receipt = <T extends object>(
+      result: T,
+      state: 'succeeded' | 'failed' | 'outcome_unknown',
+      assetDigests: string[] = []
+    ) => ({
+      ...result,
+      _meta: { mollyImageOperation: { version: 1, state, dispatched, assetDigests } },
+    });
     try {
       signal.throwIfAborted();
       // Re-resolve before every paid call: the tool is registered from a
@@ -4076,22 +4114,56 @@ export function buildMollyMcpServer(
       const connection = gate.imageConnection;
       signal.throwIfAborted();
       if (connection === null) {
-        return textResult(
-          'Image generation is unavailable: this is not a design session, or the image connection is not configured, is disabled, or is missing its URL, API key or explicit model. Tell the user to enable it in Molly settings; do not retry.',
-          true
+        return receipt(
+          textResult(
+            'Image generation is unavailable: this is not a design session, or the image connection is not configured, is disabled, or is missing its URL, API key or explicit model. Tell the user to enable it in Molly settings; do not retry.',
+            true
+          ),
+          'failed'
         );
       }
       if (!gate.artworkWorkdir || !gate.workspaceRoot) {
-        return textResult('Design workspace is unavailable; no image request was sent.', true);
+        return receipt(
+          textResult('Design workspace is unavailable; no image request was sent.', true),
+          'failed'
+        );
       }
       const common = {
         settings: connection,
         prompt: args.prompt,
         ...(args.size === undefined ? {} : { size: args.size }),
         workdir: gate.artworkWorkdir,
-        transport: config.imageTransport ?? fetchImageHttpTransport,
+        transport: (async (request) => {
+          if (request.method === 'POST') dispatched = true;
+          const response = await (config.imageTransport ?? fetchImageHttpTransport)(request);
+          if (request.method === 'POST' && (response.status < 200 || response.status >= 300))
+            rejected = true;
+          return response;
+        }) satisfies ImageHttpTransport,
         signal,
       };
+      if (_meta?.[HARNESS_INLINE_IMAGE_RESULT_META] === 1) {
+        // The managed worker sends the result to its owning import callback. No
+        // filesystem write occurs here: that host records provenance first.
+        const bytes = await ('images' in args
+          ? editImageBytes({
+              ...common,
+              sourceWorkdir: gate.workspaceRoot,
+              images: args.images,
+              ...(args.mask === undefined ? {} : { mask: args.mask }),
+            })
+          : generateImageBytes(common));
+        const mimeType = sniffStaticV1ImageMime(bytes);
+        if (!mimeType) throw new Error('Image result must be PNG, JPEG or GIF.');
+        return receipt(
+          {
+            content: [
+              { type: 'image' as const, mimeType, data: Buffer.from(bytes).toString('base64') },
+            ],
+          },
+          'succeeded'
+        );
+      }
       const asset = await ('images' in args
         ? editImageAsset({
             ...common,
@@ -4100,22 +4172,29 @@ export function buildMollyMcpServer(
             ...(args.mask === undefined ? {} : { mask: args.mask }),
           })
         : generateImageAsset(common));
-      return jsonTextResult({
-        ok: true,
-        path: asset.path,
-        absolutePath: asset.absolutePath,
-        sha256: asset.sha256,
-        mimeType: asset.mimeType,
-        width: asset.width,
-        height: asset.height,
-        bytes: asset.bytes,
-        note: `Reference "${asset.path}" from the project (relative to the project root), or copy it into the project's media/ directory if you keep one.`,
-      });
+      return receipt(
+        jsonTextResult({
+          ok: true,
+          path: asset.path,
+          absolutePath: asset.absolutePath,
+          sha256: asset.sha256,
+          mimeType: asset.mimeType,
+          width: asset.width,
+          height: asset.height,
+          bytes: asset.bytes,
+          note: `Reference "${asset.path}" from the project (relative to the project root), or copy it into the project's media/ directory if you keep one.`,
+        }),
+        'succeeded',
+        [asset.sha256]
+      );
     } catch (error) {
       // The upstream's own message, or our refusal; never the request header.
-      return textResult(
-        error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
-        true
+      return receipt(
+        textResult(
+          error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
+          true
+        ),
+        dispatched && !rejected ? 'outcome_unknown' : 'failed'
       );
     }
   };
@@ -4554,7 +4633,7 @@ export function buildMollyMcpServer(
             manager,
             sessionId,
             args.prompt,
-            resolveTurnDispatchConfig({}),
+            { taskToolsEnabled: invoking.frozenInputConfig.taskToolsEnabled === true },
             buildStructuredOutputOptions(args),
             undefined,
             undefined,
@@ -5137,7 +5216,10 @@ export function buildMollyMcpServer(
   // design session, or a machine with no complete, enabled image connection,
   // means the tool is not published at all. The daemon answers both halves in
   // one gate (see `resolveDesignGate`), so this stays a single check.
-  if (!isImageConnectionReady(config.designGate?.imageConnection ?? null)) {
+  if (
+    !config.designGate?.imageAvailable &&
+    !isImageConnectionReady(config.designGate?.imageConnection ?? null)
+  ) {
     generateImageTool.disable();
     editImageTool.disable();
   }
@@ -5178,7 +5260,7 @@ export async function runMollyMcpServer(): Promise<void> {
     designGate,
     designResubmit,
     renderHost,
-    resolveGate: async () => await resolveDesignGate(context),
+    resolveGate: async () => await resolveDesignGate(context, undefined, true),
     resolveRenderHost: async () => await resolveRenderHost(context),
   }).connect(new StdioServerTransport());
 }

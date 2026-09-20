@@ -16,6 +16,16 @@ import {
   type SessionUsageUpdate,
 } from 'acp-extension-core';
 import { z } from 'zod';
+import { HarnessSessionBindingSchema } from '@molly/shared/embedded-harness';
+
+/** Private embedded adapter announcement; keep vendor metadata readers at this boundary. */
+export function readEmbeddedHarnessSessionBinding(response: {
+  _meta?: Record<string, unknown> | null;
+}) {
+  const result = HarnessSessionBindingSchema.safeParse(response._meta?.mollyRuntime);
+  if (!result.success) throw new Error('harness_session_binding_invalid');
+  return result.data;
+}
 
 /** Grok's official TUI owns this behavior in addition to the runtime YOLO flag. */
 export function getBuiltinToolPermissionOutcome(args: {

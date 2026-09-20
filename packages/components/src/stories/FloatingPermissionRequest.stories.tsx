@@ -81,6 +81,13 @@ export const Default: Story = {
   },
 };
 
+export const CancellablePermission: Story = {
+  args: {
+    ...Default.args,
+    onStop: async () => undefined,
+  },
+};
+
 export const WithToolTitle: Story = {
   args: {
     sessionId: SESSION_ID,
@@ -183,6 +190,10 @@ export const AskUserQuestion: Story = {
       true
     ),
   },
+};
+
+export const CancellableQuestion: Story = {
+  args: { ...AskUserQuestion.args, onStop: async () => undefined },
 };
 
 export const AskUserQuestionAutoContinue: Story = {

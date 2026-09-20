@@ -2,8 +2,6 @@ import { LoroDocumentManager } from '@/lib/loro/doc';
 import { MachineRuntime } from '@/lib/machine-runtime';
 import { Logger } from '@/utils/logger';
 import {
-  CliType,
-  getManagedBuiltinRuntimeByAgentType,
   type LocalProjectId,
   MachineId,
   type SessionId,
@@ -17,7 +15,6 @@ import {
 import { getLoginShellEnv } from '@/agent/login-shell-env';
 import { SessionManager } from '@/session/session-manager';
 import pkg from '@/pkg';
-import { formatErrorMessage } from '@/utils/format-error';
 import type { LocalWorkspaceCatalogService } from '@/lib/local-workspace-catalog';
 import type { MachineProcessLifecycleAction } from './machine-lifecycle';
 import { traceAsync } from '@/utils/trace-span';
@@ -25,12 +22,8 @@ import type { MemoryPressureSnapshotSource } from '@/monitor/memory-pressure-sam
 import type { WorkspaceWatchCoordinatorApi } from '@/lib/code-collab/workspace-watch-coordinator';
 import type { CloudPort } from '@molly/platform';
 
-const BUILTIN_AGENT_CONFIG_INITIAL_RETRY_DELAY_MS = 10_000;
-const BUILTIN_AGENT_CONFIG_MAX_RETRY_DELAY_MS = 5 * 60_000;
-
 interface MollyOptions {
   logger: Logger;
-  builtinAgentConfigCliTypes?: CliType[];
   supportRegistryAgentTypes?: string[];
   workspaceId: WorkspaceId;
   workspaceSlug?: string;
@@ -60,12 +53,6 @@ export class Molly {
   private machineName: string;
   private runtime: MachineRuntime;
   private supportRegistryAgentTypes: string[];
-  private cleanedUp = false;
-  private builtinAgentConfigRetryTimer: ReturnType<typeof setTimeout> | undefined;
-  private pendingBuiltinAgentConfigRetryCliTypes = new Set<CliType>();
-  private builtinAgentConfigRetryAttempt = 0;
-  private builtinAgentRegistrationStarted = false;
-
   static async create(options: MollyOptions): Promise<Molly> {
     const manager = await traceAsync(
       options.logger,
@@ -143,168 +130,9 @@ export class Molly {
       async () => await this.runtime.initialize()
     );
     this.documentManager.ensureMachineFlockDocJoined(this.machineId, { reason: 'lody-start' });
-    this.startBuiltinAgentRegistration();
   }
 
-  async registerAgent(cliTypes: CliType[]): Promise<void> {
-    if (this.cleanedUp) {
-      return;
-    }
-    await this.runtime.initialize();
-    if (this.cleanedUp) {
-      return;
-    }
-    if (this.documentManager.hasCompletedInitialMetaSync()) {
-      await this.ensureBuiltinAgentConfigsOrRetry(cliTypes);
-    } else {
-      this.logger.debug(
-        `[agent-config] Initial meta sync is not complete for workspace ${this.workspaceId}; deferring builtin agent registration`
-      );
-      let detachMetaSyncedListener: (() => void) | null = null;
-      // Both the meta-synced listener and the initial-sync promise below can
-      // fire for the same sync; run the registration exactly once.
-      let registered = false;
-      const registerAfterMetaSync = async () => {
-        detachMetaSyncedListener?.();
-        detachMetaSyncedListener = null;
-        if (registered || this.cleanedUp) {
-          return;
-        }
-        registered = true;
-        await this.ensureBuiltinAgentConfigsOrRetry(cliTypes);
-      };
-      detachMetaSyncedListener = this.documentManager.onMetaRoomSynced(() => {
-        void registerAfterMetaSync().catch((error: unknown) => {
-          this.logger.debug(
-            `[agent-config] Deferred builtin agent registration failed: ${formatErrorMessage(error)}`
-          );
-        });
-      });
-      void this.documentManager
-        .waitForInitialMetaSync()
-        .then(async (completed) => {
-          if (!completed || this.cleanedUp) {
-            return;
-          }
-          await registerAfterMetaSync();
-        })
-        .catch((error: unknown) => {
-          this.logger.debug(
-            `[agent-config] Deferred builtin agent registration failed: ${formatErrorMessage(error)}`
-          );
-        });
-    }
-  }
-
-  private async ensureBuiltinAgentConfigsOrRetry(cliTypes: CliType[]): Promise<void> {
-    if (this.cleanedUp) {
-      return;
-    }
-    const completed = await this.ensureBuiltinAgentConfigs(cliTypes);
-    if (!completed) {
-      this.scheduleBuiltinAgentConfigRetry(cliTypes);
-      return;
-    }
-    this.builtinAgentConfigRetryAttempt = 0;
-  }
-
-  private async ensureBuiltinAgentConfigs(cliTypes: CliType[]): Promise<boolean> {
-    if (cliTypes.length === 0) {
-      return true;
-    }
-    const syncedMachineFlock = await this.documentManager.syncMachineFlockDoc(this.machineId, {
-      reason: 'builtin-agent-registration',
-    });
-    if (!syncedMachineFlock) {
-      this.logger.debug(
-        `[agent-config] Machine Flock sync is not complete for workspace ${this.workspaceId} machine ${this.machineId}; skipping builtin agent registration for this attempt`
-      );
-      return false;
-    }
-
-    // "Not in the list" cannot tell "never created" from "just removed by the user".
-    // Removal intent lives in this set; skipping it adds a removed provider back on
-    // every startup.
-    const optedOut = await this.documentManager.getBuiltinAgentOptOuts(this.machineId);
-
-    for (const cliType of cliTypes) {
-      const builtinRuntime = getManagedBuiltinRuntimeByAgentType(cliType);
-      if (!builtinRuntime) {
-        continue;
-      }
-      if (optedOut.has(cliType)) {
-        this.logger.debug(
-          `[agent-config] Skipping builtin agent registration for ${cliType} on machine ${this.machineId}; the user removed it on this machine`
-        );
-        continue;
-      }
-      const has = await this.documentManager.hasAgentConfig('builtin', cliType, this.machineId);
-      if (!has) {
-        await this.documentManager.createAgentConfig(
-          'builtin',
-          cliType,
-          this.machineId,
-          builtinRuntime.displayName
-        );
-      }
-    }
-    return true;
-  }
-
-  private scheduleBuiltinAgentConfigRetry(cliTypes: CliType[]): void {
-    if (cliTypes.length === 0 || this.cleanedUp) {
-      return;
-    }
-
-    for (const cliType of cliTypes) {
-      this.pendingBuiltinAgentConfigRetryCliTypes.add(cliType);
-    }
-
-    if (this.builtinAgentConfigRetryTimer) {
-      return;
-    }
-
-    const delayMs = this.nextBuiltinAgentConfigRetryDelayMs();
-    this.logger.debug(
-      `[agent-config] Scheduling builtin agent registration retry in ${delayMs}ms for workspace ${this.workspaceId} machine ${this.machineId}`
-    );
-    this.builtinAgentConfigRetryTimer = setTimeout(() => {
-      this.builtinAgentConfigRetryTimer = undefined;
-      if (this.cleanedUp) {
-        this.pendingBuiltinAgentConfigRetryCliTypes.clear();
-        return;
-      }
-
-      const retryCliTypes = [...this.pendingBuiltinAgentConfigRetryCliTypes];
-      this.pendingBuiltinAgentConfigRetryCliTypes.clear();
-      void this.ensureBuiltinAgentConfigsOrRetry(retryCliTypes).catch((error: unknown) => {
-        this.logger.debug(
-          `[agent-config] Retried builtin agent registration failed: ${formatErrorMessage(error)}`
-        );
-      });
-    }, delayMs);
-    this.builtinAgentConfigRetryTimer.unref?.();
-  }
-
-  private nextBuiltinAgentConfigRetryDelayMs(): number {
-    const multiplier = 2 ** Math.min(this.builtinAgentConfigRetryAttempt, 5);
-    this.builtinAgentConfigRetryAttempt += 1;
-    return Math.min(
-      BUILTIN_AGENT_CONFIG_INITIAL_RETRY_DELAY_MS * multiplier,
-      BUILTIN_AGENT_CONFIG_MAX_RETRY_DELAY_MS
-    );
-  }
-
-  cleanup = async () => {
-    this.cleanedUp = true;
-    if (this.builtinAgentConfigRetryTimer) {
-      clearTimeout(this.builtinAgentConfigRetryTimer);
-      this.builtinAgentConfigRetryTimer = undefined;
-    }
-    this.pendingBuiltinAgentConfigRetryCliTypes.clear();
-    this.builtinAgentConfigRetryAttempt = 0;
-    return await this.runtime.cleanup();
-  };
+  cleanup = async () => await this.runtime.cleanup();
 
   async dispatchLocalControl(
     message: LocalSessionControlRequest,
@@ -335,25 +163,6 @@ export class Molly {
 
   getActiveSessionCount(): number {
     return this.runtime.getActiveSessionCount();
-  }
-
-  private startBuiltinAgentRegistration(): void {
-    if (this.builtinAgentRegistrationStarted || this.cleanedUp) {
-      return;
-    }
-    this.builtinAgentRegistrationStarted = true;
-    void traceAsync(
-      this.logger,
-      'startup.agent_registration',
-      { workspaceId: this.workspaceId },
-      async () => await this.registerAgent(this.options.builtinAgentConfigCliTypes ?? [])
-    ).catch((error: unknown) => {
-      this.logger.debug(
-        `[agent-config] Background builtin agent registration failed for workspace ${this.workspaceId}: ${formatErrorMessage(
-          error
-        )}`
-      );
-    });
   }
 
   async resolveSessionWorkdir(sessionId: SessionId): Promise<string | null> {

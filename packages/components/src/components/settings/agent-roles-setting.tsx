@@ -10,6 +10,7 @@ import {
   type AgentRoleAvailability,
   type MachineId,
 } from '@molly/shared';
+import { getEmbeddedHarnessTargetError } from '@molly/shared/embedded-harness';
 import { userAtom } from '@/atoms';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { onlineMachineIdsAtom } from '@/atoms/presence';
@@ -41,6 +42,7 @@ import {
   AgentRoleEditorDialog,
   openAgentRoleEditorForCreate,
   openAgentRoleEditorForEdit,
+  openAgentRoleEditorForMigration,
   type AgentRoleEditorState,
 } from './agent-role-editor-dialog';
 
@@ -170,6 +172,7 @@ export function AgentRolesSetting() {
                       canManage={canManageAgentRole(role, currentUserId)}
                       onEdit={() => openEdit(role)}
                       onRemove={() => setPendingRemoval(role)}
+                      onMigrate={() => setEditor(openAgentRoleEditorForMigration(role))}
                     />
                   ))}
                 </div>
@@ -225,7 +228,7 @@ export function AgentRolesSetting() {
  *
  * States the whole binding — machine, provider, model, reasoning — because that
  * is what a Role IS, and says exactly why it cannot run when it cannot. A row
- * whose target is gone stays listed and editable; it never quietly re-points at
+ * whose target is retired stays readable; it never quietly re-points at
  * something that happens to be available.
  */
 export function AgentRoleRow({
@@ -235,17 +238,24 @@ export function AgentRoleRow({
   canManage,
   onEdit,
   onRemove,
+  onMigrate,
 }: {
   role: AgentRole;
   availability: AgentRoleAvailability;
   /** The bound config, when it still exists; its icon stands for the agent. */
-  agentConfig?: Pick<AgentConfigMeta, 'cliType' | 'agentType' | 'brandId' | 'env' | 'name'>;
+  agentConfig?: Pick<
+    AgentConfigMeta,
+    'cliType' | 'agentType' | 'brandId' | 'env' | 'name' | 'customAcp' | 'runtimeOverrides'
+  >;
   canManage: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  onMigrate?: () => void;
 }) {
   const { t } = useTranslation();
   const runConfig = buildAgentRoleRunConfigSummary(role.runConfig);
+  const retired =
+    availability.kind === 'unavailable' && availability.reason === 'agent_config_retired';
 
   return (
     <div className="overflow-hidden rounded-lg bg-foreground/[0.04]">
@@ -253,7 +263,7 @@ export function AgentRoleRow({
         <button
           type="button"
           onClick={onEdit}
-          aria-label={canManage ? t('common.edit') : t('common.view')}
+          aria-label={canManage && !retired ? t('common.edit') : t('common.view')}
           className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-left focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
         >
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] text-sm leading-none">
@@ -294,9 +304,28 @@ export function AgentRoleRow({
               </span>
             </span>
             <AgentRoleAvailabilityText availability={availability} />
+            {role.embeddedMigration ? (
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                {t('settings.agentRoles.migration.provenance', {
+                  name: role.embeddedMigration.source.name,
+                  revision: role.embeddedMigration.source.revision,
+                  config: role.embeddedMigration.source.agentConfigId,
+                })}
+              </span>
+            ) : null}
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-1 py-2 pl-2 pr-2">
+          {canManage &&
+          onMigrate &&
+          !role.embeddedMigration &&
+          ((agentConfig && getEmbeddedHarnessTargetError(agentConfig) !== undefined) ||
+            (availability.kind === 'unavailable' &&
+              availability.reason === 'agent_config_missing')) ? (
+            <Button type="button" size="sm" variant="outline" onClick={onMigrate}>
+              {t('settings.agentRoles.migration.action')}
+            </Button>
+          ) : null}
           {canManage ? (
             <Button
               type="button"

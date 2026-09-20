@@ -2,13 +2,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import {
+  assertNoLegacyHarnessArtifacts,
+  verifyEmbeddedHarness
+} from '../../cli/scripts/verify-embedded-harness.mjs'
 
 import {
   stagedNodePtyBindingPath,
   stagedNodePtySpawnHelperPath,
   stagedNodeModulesDir,
+  assertEmbeddedSharpPackages,
   stagedSqliteBindingPath
 } from './cli-native-deps.mjs'
+import { probeImageDecoder } from './image-decoder-probe.mjs'
 import {
   hasCodeSigningCredentials,
   shouldAdHocSignSparkleApp,
@@ -18,25 +24,6 @@ import {
 
 const ARCH_NAMES = { 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64', 4: 'universal' }
 const SMOKE_TIMEOUT_MS = 120_000
-const DEEPSEEK_PACKAGED_ASSETS = [
-  'deepseek-acp.js',
-  ...['standard', 'code', 'minimal', 'cordis'].map((preset) =>
-    path.join('deepseek-agent-presets', preset, 'agent.cordis.yml')
-  )
-]
-
-function assertPackagedDeepSeekAssets(packedCliDir) {
-  const missing = DEEPSEEK_PACKAGED_ASSETS.filter(
-    (relativePath) => !fs.existsSync(path.join(packedCliDir, relativePath))
-  )
-  if (missing.length > 0) {
-    throw new Error(
-      `[embedded-cli] missing DeepSeek Harness assets after pack: ${missing.join(', ')}`
-    )
-  }
-  console.log('[embedded-cli] DeepSeek Harness adapter and presets are packaged')
-}
-
 /**
  * Two jobs, in order, before code signing:
  *
@@ -123,7 +110,14 @@ export default async function afterPack(context) {
   if (!fs.existsSync(cliEntry)) {
     throw new Error(`[embedded-cli] missing expected path: ${cliEntry}`)
   }
-  assertPackagedDeepSeekAssets(packedCliDir)
+  assertNoLegacyHarnessArtifacts(packedCliDir)
+  // Builder skips arbitrary nested node_modules; copy the owned, sealed SDK closure
+  // explicitly and verify bytes before signing (also on cross-host builds).
+  const stagedHarness = path.join(path.dirname(stagedNodeModulesDir), 'harness')
+  const packedHarness = path.join(packedCliDir, 'harness')
+  verifyEmbeddedHarness(stagedHarness)
+  fs.cpSync(stagedHarness, packedHarness, { recursive: true, force: true })
+  verifyEmbeddedHarness(packedHarness)
   // beforePack staged both native bindings for this exact target, so mirror their
   // staged-relative locations rather than guessing the per-platform file names here.
   const nativeTarget = { platform: platform === 'mas' ? 'darwin' : platform, arch: archName }
@@ -136,6 +130,7 @@ export default async function afterPack(context) {
     recursive: true,
     force: true
   })
+  assertEmbeddedSharpPackages(packedNodeModulesDir, nativeTarget)
   if (!fs.existsSync(packedBindingPath)) {
     throw new Error(`[embedded-cli] sqlite binding missing after copy: ${packedBindingPath}`)
   }
@@ -200,6 +195,36 @@ export default async function afterPack(context) {
   if (!fs.existsSync(cliRuntimePath)) {
     throw new Error(`[embedded-cli-smoke] missing expected runtime path: ${cliRuntimePath}`)
   }
+
+  const probeEnvironment = Object.fromEntries(
+    ['PATH', 'HOME', 'LANG', 'SystemRoot', 'WINDIR'].flatMap((key) =>
+      process.env[key] === undefined ? [] : [[key, process.env[key]]]
+    )
+  )
+  probeImageDecoder(packedCliDir, cliRuntimePath)
+  const harnessProbe = spawnSync(
+    cliRuntimePath,
+    [path.join(packedCliDir, 'molly-pi-agent.js'), '--probe'],
+    {
+      env: { ...probeEnvironment, ELECTRON_RUN_AS_NODE: '1' },
+      encoding: 'utf8',
+      timeout: 30_000,
+      windowsHide: true
+    }
+  )
+  if (harnessProbe.error || harnessProbe.status !== 0)
+    throw new Error('[embedded-pi] packaged runtime probe failed')
+  const harnessRuntime = JSON.parse(harnessProbe.stdout.trim())
+  if (
+    harnessRuntime.engineVersion !== '0.85.1' ||
+    harnessRuntime.protocolVersion !== 1 ||
+    harnessRuntime.modelCount < 1
+  ) {
+    throw new Error('[embedded-pi] packaged runtime probe returned incompatible capabilities')
+  }
+  console.log(
+    `[embedded-pi] packaged Node ${harnessRuntime.nodeVersion} loaded the sealed SDK closure`
+  )
 
   const result = spawnSync(cliRuntimePath, [cliEntry, '--help'], {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },

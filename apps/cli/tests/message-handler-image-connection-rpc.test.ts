@@ -1,17 +1,15 @@
 /**
- * The daemon's image-connection Machine RPC (P2.4): the gate behind
- * `molly_generate_image`, and the settings page's own test action.
+ * The daemon's image-connection Machine RPC: public discovery and run-bound
+ * credential acquisition behind `molly_generate_image`.
  *
  * `molly_generate_image` is exposed to design sessions only, and the daemon is
  * where that rule lives: the read method folds the asking session's identity and
- * the machine's connection row into one `ready` bit and one credential, so no
- * caller can register the tool on half the condition. The read never opens,
+ * the host's public metadata into availability. Only a live lease can acquire
+ * the credential; discovery alone never grants execution. The read never opens,
  * creates, or writes a session document — asking must not materialize state.
  *
- * The settings test action (`design/image-connection-test`) stays deliberately
- * machine-scoped: a settings surface belongs to no session and has to work
- * before one exists, so it takes no session identity and is unaffected by the
- * design-session rule.
+ * The retired daemon test action is rejected. Settings probes run in main using
+ * the encrypted vault, independently of the design-session rule.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -21,7 +19,6 @@ import {
   getSessionRoomId,
   machineFlockKeys,
   type ImageConnectionSettings,
-  type ImageHttpTransport,
   type MachineFlockKey,
   type SessionId,
   type SessionMeta,
@@ -32,6 +29,7 @@ import { MessageHandler } from '../src/lib/message-handler';
 import type { LoroDocumentManager } from '../src/lib/loro/doc';
 import type { SessionManager } from '../src/session/session-manager';
 import type { Logger } from '../src/utils/logger';
+import type { HarnessCredentialBroker } from '../src/agent/harness-credential-broker';
 import { createTestCloudPort } from './test-cloud-port';
 
 const DESIGN_SESSION_ID = '11111111-2222-4333-8444-555555555555' as SessionId;
@@ -101,6 +99,7 @@ type Harness = {
   handler: MessageHandler;
   upsertDocMeta: ReturnType<typeof vi.fn>;
   getOrCreateSessionDoc: ReturnType<typeof vi.fn>;
+  announceImage: () => Promise<HarnessCredentialBroker>;
 };
 
 /**
@@ -111,9 +110,12 @@ type Harness = {
 const createHandler = (options: {
   imageConnection?: ImageConnectionSettings;
   sessions?: SessionMetaStore;
-  imageConnectionTransport?: ImageHttpTransport;
 }): Harness => {
+  let broker: HarnessCredentialBroker | undefined;
   const sessionManager = {
+    setHarnessCredentials: (value: HarnessCredentialBroker) => {
+      broker = value;
+    },
     getSession: vi.fn((id: string) =>
       options.sessions?.[id]
         ? {
@@ -165,11 +167,36 @@ const createHandler = (options: {
     machineName: 'machine',
     cliVersion: '0.0.0',
     cloudPort: createTestCloudPort(),
-    ...(options.imageConnectionTransport
-      ? { imageConnectionTransport: options.imageConnectionTransport }
-      : {}),
   });
-  return { handler, upsertDocMeta, getOrCreateSessionDoc };
+  const announceImage = async () => {
+    const connection = options.imageConnection;
+    await handler.handleLocalMachineRpc(
+      LocalMachineRpcRequestSchema.parse({
+        method: 'harness/host',
+        machineId: 'machine-1',
+        workspaceId,
+        params: {
+          version: 1,
+          connections: [],
+          reports: [],
+          imageConnection: connection
+            ? {
+                id: '00000000-0000-4000-8000-000000000001',
+                revision: 1,
+                enabled: connection.enabled,
+                baseUrl: connection.baseUrl,
+                model: connection.model,
+                hasApiKey: Boolean(connection.apiKey),
+                legacyHistoryMayContainKey: true,
+              }
+            : null,
+        },
+      })
+    );
+    if (!broker) throw Error('host not bound');
+    return broker;
+  };
+  return { handler, upsertDocMeta, getOrCreateSessionDoc, announceImage };
 };
 
 const readConnection = async (
@@ -181,7 +208,7 @@ const readConnection = async (
     machineId: 'machine-1',
     workspaceId,
     ...(ownerSessionId ? { ownerSessionId } : {}),
-    params: {},
+    params: { acquireCredential: true },
   });
   const response = await handler.handleLocalMachineRpc(request);
   if (!response.ok) throw new Error(`rpc failed: ${response.error}`);
@@ -192,15 +219,24 @@ const readConnection = async (
 };
 
 describe('MessageHandler design/image-connection gate', () => {
-  it('answers ready for a design session on a machine with a complete, enabled connection', async () => {
-    const { handler, getOrCreateSessionDoc, upsertDocMeta } = createHandler({
+  it('answers ready using the broker-authorized image lease, not the legacy row', async () => {
+    const { handler, getOrCreateSessionDoc, upsertDocMeta, announceImage } = createHandler({
       imageConnection: storedImageConnection(),
       sessions: { [DESIGN_SESSION_ID]: { meta: sessionMeta(DESIGN_SESSION_ID, true) } },
     });
     try {
+      const broker = await announceImage();
+      const connection = broker.imageCatalog();
+      if (!connection) throw Error('missing public image metadata');
+      const requested: string[] = [];
+      vi.spyOn(broker, 'acquireImageForSession').mockImplementation(async (sessionId) => {
+        requested.push(sessionId);
+        return { connection, apiKey: 'synthetic-protected-key' };
+      });
       const result = await readConnection(handler, DESIGN_SESSION_ID);
       expect(result.ready).toBe(true);
-      expect(result.credential).toEqual({ apiKey: SECRET_KEY });
+      expect(result.credential).toEqual({ apiKey: 'synthetic-protected-key' });
+      expect(requested).toEqual([DESIGN_SESSION_ID]);
       expect(result.connection).toMatchObject({ hasApiKey: true, model: 'gpt-image-2' });
       // The lookup asks the raw doc-meta store: no session document is opened,
       // created, or written just to answer a capability question.
@@ -289,20 +325,16 @@ describe('MessageHandler design/image-connection gate', () => {
     }
   });
 
-  it('reads the settings probe as the machine, with a session identity present or not', async () => {
+  it('refuses the retired plaintext settings probe without sending any request', async () => {
     const calls: string[] = [];
-    const transport: ImageHttpTransport = async (request) => {
-      calls.push(request.url);
-      return {
-        status: 200,
-        bytes: new TextEncoder().encode(JSON.stringify({ data: [{ id: 'gpt-image-2' }] })),
-      };
-    };
+    const fetchGuard = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      calls.push(String(input));
+      throw new Error('unexpected_network_request');
+    });
     for (const ownerSessionId of [DESIGN_SESSION_ID, undefined]) {
       const { handler } = createHandler({
         imageConnection: storedImageConnection(),
         sessions: { [DESIGN_SESSION_ID]: { meta: sessionMeta(DESIGN_SESSION_ID, false) } },
-        imageConnectionTransport: transport,
       });
       try {
         const request = LocalMachineRpcRequestSchema.parse({
@@ -317,18 +349,15 @@ describe('MessageHandler design/image-connection gate', () => {
         if (!response.ok) continue;
         expect(response.result).toEqual({
           type: 'design/image-connection-test',
-          ok: true,
-          modelCount: 1,
+          ok: false,
+          error: 'image_connection_probe_requires_desktop',
         });
       } finally {
         await handler.cleanup();
       }
     }
-    // The settings surface belongs to no session: it probes the machine's own
-    // row regardless of who is asking, and no session document is touched.
-    expect(calls).toEqual([
-      'https://images.example.com/v1/models',
-      'https://images.example.com/v1/models',
-    ]);
+    fetchGuard.mockRestore();
+    // This retired daemon endpoint never touches a provider, even for settings.
+    expect(calls).toEqual([]);
   });
 });

@@ -16,10 +16,32 @@ YAML 画稿创作与 Bento 编辑器。
 - 未配置图像服务也可以编辑画布。图像生成是可选连接；在设置中填写你自己的端点、
   凭据和明确的 model 标识。Molly 不推荐产品默认型号。
 
-这是开发版本，不代表已经满足发布标准。各 Agent 的图片输入、公开先读提醒、创作文件实时
-预览及其它流程改进仍分别作为后续工作处理。能够配置某个 Agent，不代表其全部设计操作
-都已验证。
+当前开发版本正在迁移到单一内置 Pi 引擎和显式模型连接。图片读取、公开先读提醒和创作
+预览已有局部实现证据，但迁移后的完整流程尚未验收。能够配置某个供应商，不代表其全部
+设计操作都已验证。
 [设计规范](specs/graphic-design-platform.zh.md) 描述草案目标，不是已交付功能清单。
+
+## 配置连接
+
+1. 打开设置 → Agents → Molly model connections，添加供应商/产品、连接名称、端点和
+   API key。密钥只填写在本地设置字段中，不放进聊天或画稿文件。保存会加密连接，但不
+   测试推理，也不修改已有会话的模型选择。
+2. Kimi 会员凭据选择 **Kimi Code (membership API key)**，不是 Moonshot 开放平台。
+   在会话输入框选择 Molly，并明确选择连接、模型和受支持的思考等级。缺失或无效选择
+   会报错，不静默切换供应商或模型。
+3. 按需单独配置设置 → Image Connection。填写兼容 OpenAI Images 的 API 根地址
+   （不含 `/images/generations` 或 `/images/edits`）、密钥和准确模型名称，启用并保存。
+   **Test connection** 只检查 `/models`；成功不证明生成、编辑或蒙版可用。
+4. 外部工具在设置 → MCP 中配置，再为当前回合选择服务器。保存不会测试或自动选中。
+   stdio 服务器会运行本地代码，只配置你信任的命令和服务器。
+
+内置能力区域显示随包版本和兼容条件，不代表当前会话已经启用。精选问答扩展需要桌面
+问答接口；必要的 Slash 命令映射尚未完成。使用内置引擎不需要用户自行安装插件。
+
+选择 **OpenAI-compatible（高级）** 时，在连接表单中添加明确模型定义，包括 ID、token
+限制和服务实际支持的能力。此路径使用标准 Chat Completions 流式协议，不是 Responses 或
+厂商专属思考格式。含工具的回合需要声明支持工具调用。保存不验证声明、不选择模型；
+未知价格保持未知。
 
 ## 试做一张设计
 
@@ -37,7 +59,7 @@ PNG 或 JPEG。生成图片是可选步骤，文字和形状设计不需要图�
 
 ## 本地运行
 
-使用 Node.js 22.14 或更高版本，通过 Corepack 使用仓库锁定的 pnpm：
+使用 Node.js `>=22.14.0 <23 || >=23.6.0`（Node-API 10），通过 Corepack 使用仓库锁定的 pnpm：
 
 ```sh
 git clone --recurse-submodules https://github.com/LeonEthan/molly-design.git
@@ -46,17 +68,40 @@ corepack pnpm install
 corepack pnpm start:local
 ```
 
-在设置中选择并配置 Agent。Agent 运行时安装可能需要公共下载及供应商自己的认证。
+按上文在设置中配置内置引擎的模型连接；安装外部 Agent CLI 不再是新的执行路径。
+这里的 Node 要求针对源码开发。
 OSS 桌面使用本地产品存储，不登录 Lody 托管工作空间，也不提供其网页、手机、团队
 共享或云端功能。
 
-Molly 已有独立应用身份（`dev.molly-design.app`、`molly-design://`），本地服务数据位于 `~/.molly`。
-Electron 使用当前操作系统的 Molly 用户数据位置。现有 `LODY_*` 环境选项及
-`@lody/*` 包名、协议名仍是兼容接口，不会自动迁移或清除 Lody 数据。
+Molly 已有独立应用身份（`dev.molly-design.app`、`molly-design://`）。自有工作区包使用
+`@molly/*`，环境选项使用 `MOLLY_*` 并兼容读取 `LODY_*` 别名（新名称优先）。
+外部 ACP 协议名称保持不变，不会自动迁移或清除 Lody 数据。
 
 内部后台架构见 [运行组件 README](apps/cli/README.md)，继承的贡献条款和开发检查见
 [CONTRIBUTING.md](CONTRIBUTING.md)。本 README 是 Molly 的公开帮助入口；`site-docs`
 保留上游 Lody 网站材料，不是 Molly 的功能参考。
+
+## 备份、卸载与数据恢复
+
+结束执行、解决保存错误并退出 Molly 后再复制数据。一起备份完整桌面配置、本地服务
+数据和外部项目/画稿目录，不要只复制会话 JSONL 文件。未覆盖路径时，macOS 默认位置为：
+
+| 位置                                         | 内容                                                                            |
+| -------------------------------------------- | ------------------------------------------------------------------------------- |
+| `~/Library/Application Support/Molly Design` | 桌面配置，包含加密的 `secrets/model-connections.enc` 存储。                     |
+| `~/.molly`                                   | 本地服务数据；受管 Pi 配置、缓存、原生会话和运行/操作回执位于 `harness/pi` 下。 |
+| 用户选择的项目目录                           | 存在应用目录之外的项目文件和画稿资产。                                          |
+
+`MOLLY_DATA_DIR`、`MOLLY_ELECTRON_USER_DATA_DIR` 或 `--user-data-dir` 可以改变这些位置。
+复制加密凭据不保证能在另一台机器或操作系统账户中解密；必要时通过设置重新填写。
+备份应视为敏感数据：新写入改为加密不会抹除旧备份或复制历史中的明文。
+
+删除应用不等于重置数据。在 macOS 上若要保留数据，退出后只把应用移入废纸篓。
+永久移除数据需要另行确认目标配置和项目并备份；保留 Lody 数据、外部 CLI 目录和用户
+仓库。移除本地凭据不会撤销供应商端的密钥。
+
+目前没有已验证的一键降级。不要用可写的旧版本打开已迁移的新配置：严格读取器可能拒绝
+新记录。仅恢复另行保留且已核对兼容性的备份，不把加密密钥复制回旧明文设置。
 
 ## Repository
 
@@ -65,6 +110,7 @@ Electron 使用当前操作系统的 Molly 用户数据位置。现有 `LODY_*` 
 - `packages/components` — 复用的工作台界面
 - `packages/design-bento` — 固定版本的 Bento 编辑与渲染资源
 - `packages/design-authoring` — YAML 画稿转换和 Agent skills
+- `packages/harness-pi` — 固定版本的内置引擎和已审核随包资源
 - `packages/platform` — 平台能力与端口
 - `packages/shared` — 共享 schema 和协议
 - `packages/cloud-api` — 可选云 DTO，不包含托管后端
@@ -79,6 +125,9 @@ Molly 是基于 [Lody](https://github.com/LodyAI/Lody) 的独立衍生项目，�
 [Bento 来源与许可证说明](packages/design-bento/README.md)及
 [创作格式来源说明](packages/design-authoring/README.md)记录各自来源。
 应用内“开源许可证”入口保留依赖声明。
+内置引擎打包见[模块 README](packages/harness-pi/README.md)；精选社区扩展在
+[manifest](packages/harness-pi/vendor/pi-ask-question/manifest.json) 中记录版本、来源和适配，
+并保留其 [MIT 许可证](packages/harness-pi/vendor/pi-ask-question/LICENSE)。
 
 新的 Molly 问题和建议请提交到 [Molly Issues](https://github.com/LeonEthan/molly-design/issues)。
 
@@ -88,12 +137,34 @@ Molly 是基于 [Lody](https://github.com/LodyAI/Lody) 的独立衍生项目，�
 
 发生文件或最终保存冲突时，保留当前已保存画布与 Agent 草稿。通过新消息明确继续解决冲突，不自动重启结束的回合。既有草稿和历史内容仍可通过文件入口读取。保存失败时，先解决错误，再把最新编辑视为已保存或退出。
 
+取消、超时或崩溃后，已派发请求的远端结果可能未知。停止不证明供应商已经停止计算或计费。
+保留回执和已恢复的资产；Molly 不自动重复付费请求，明确发起新请求可能再次计费。
+恢复已完成执行的资产处理不得重新启动模型。
+
+旧设计会话通过明确的 Molly 续作入口迁移，并先审阅迁移预览。它为同一作品建立新上下文，
+保留原历史，不将旧记录重放成 Pi 原生历史。旧 Role 也需要明确迁移。这些路径已有实现
+测试，原生重启及回滚验收仍待完成。原生历史无效时保留原文件并报告错误，不通过删除
+日志强制重试。
+
 ## 发布状态与支持限制
 
-约定的本地设计验收范围已完成；公开发布是独立事项。macOS 安装包已用原生 Claude 与合成 provider 完成海报、信息图、长图的脚本化旅程。用户已在后续真实素材评审副本上通过海报与 12 图作品的六项视觉/编辑检查，并随后总体通过全部三个人工 Agent 旅程。此前报告的画布中间过程预览缺失已修复并在安装包内观察到。补充的真实图像 MCP 输出、选中替换、提交、导出与重开已有各自范围证据，失败的测试轮次单独保留。Apple M4、16 GiB 内存机器已记录 9 组受控画布操作样本；这不确立最大画布尺寸、通用性能预算、应用冷启动时间或物理输入延迟。首发支持平台为 macOS arm64——唯一完成安装态原生验收的平台；Windows/Linux 资源打包仅为构建与完整性证据，不代表原生执行通过，其实机验收另行决定。详见[实际证据](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)和[验收说明](e2e/DESIGN-ACCEPTANCE.md)。
+内置 Pi 迁移**尚未完整验收**。当前证据及剩余工作记录在
+[实施笔记](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md)。
 
-当前采用自动保存 YAML 画稿与公开先读提醒，不修改 Agent runtime，也不要求逐次模型生成的读取证明。Pi、Claude、Codex、Grok 的提醒已有各自原生证据；Kimi 公开插件也在正常安装包内以隔离 Kimi home 显式登记通过。在用户自己的目录启用该提醒需要其自愿登记插件；Molly 不静默安装，也不在登记前声称可用。Pi 已通过公开 extension 接通 Molly 图像与渲染工具，并有安装包内生成、编辑和原生读图证据。[安装态 Agent 矩阵](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)分别记录各组合及限制；出现在设置中不代表完整设计流程已获支持。
+| 连接                                                | 当前证据与限制                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Kimi Code `k3-256k/high`                            | 有限范围的真实文字、设计、读图和恢复检查，不代表完整旅程验收。                                                                 |
+| 已配置的 Images-compatible `gpt-image-2.5-sunburst` | 有限范围的真实生成/编辑输出；完整蒙版、多图、JPEG、长图及人工视觉矩阵仍开放。这是测试时的用户选择，不是默认模型。              |
+| 其他具名模型预设                                    | 固定 SDK 目录及代码/离线检查，不证明真实账户、区域或产品兼容。                                                                 |
+| 高级 OpenAI-compatible 语言模型                     | 显式模型表单、加密持久化和标准 Chat Completions SDK 路径已有合成测试；原生界面和真实服务验收仍开放，与 Image Connection 独立。 |
 
-真实图像生成与编辑已记录七份测试输出，原失败回执与成功调用及免费文件恢复分别保留。真实图像 TODO 已在记录范围内完成；评审作品、原编辑目标和三场景旅程均有明确人工通过结论。Grok 完整关闭式停止与显式会话恢复已通过安装态原始证据审查，测试脚本后续的辅助请求失败单独保留。Pi 图像请求取消已通过安装包内合成 provider 回归，但不代表付费供应商侧的取消行为已验证。图像生成需要自备受支持连接及明确模型，没有产品默认模型或自动付费重试。
+macOS arm64 已有开发构建及局部原生证据，但新内置安装包和无全局 Node 旅程仍需验收。
+Windows/Linux 资源构建不是原生执行证据。已审核的 `pi-ask-question` 子集有 SDK 测试，
+原生问答交互及恢复仍开放。这些检查不确立通用画布尺寸或性能上限。
+
+此前的[设计验收](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)与
+[五 Agent 矩阵](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)
+是迁移前运行时的历史证据，不能验证当前内置引擎。
+[验收说明](e2e/DESIGN-ACCEPTANCE.md)提供设计评审背景，不代表迁移已通过。
 
 本地临时签名包验证不代表公开发布、Developer ID 签名、公证或自动更新通道已就绪。

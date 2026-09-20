@@ -20,3 +20,18 @@ current history so a preflight snapshot cannot overwrite an intervening update.
 
 The real-Mirror regression is in
 [operation-progress-feedback.test.ts](../../tests/operation-progress-feedback.test.ts).
+
+## Embedded continuation eligibility
+
+Delivery recovery checks both the frozen execution identity and the requester Session,
+then point-reads the exact configuration. Only a same-machine Molly target without launch
+overrides and a valid frozen model projection can continue. A retired engine, changed
+target, missing frozen identity or unsupported model controls use the existing claimed
+non-started finalization path: preserve the result in history, consume its Delivery, and
+spend no execution attempt. Transient catalog visibility still remains pending until sync
+establishes absence; old storage layout alone does not make an eligible Molly config invalid.
+
+Continuation carries the frozen target ID, model selection, MCP IDs (including an explicit
+empty list) and Task-tool gate into the execution service. It does not reread defaults or
+choose a replacement model. The execution service and protected host independently check
+current runtime/credential availability; this offline gate does not prove provider access.

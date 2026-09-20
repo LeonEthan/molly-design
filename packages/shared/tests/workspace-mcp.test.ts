@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { McpCredentialBinding } from '../src/embedded-harness';
 
 import type { McpServerId } from '../src/ids';
 import {
@@ -27,6 +28,91 @@ const stdioServer = (
 });
 
 describe('workspace MCP resolution', () => {
+  it('resolves protected entries only from an exact workspace/server/target/revision public catalog', () => {
+    const binding: McpCredentialBinding = {
+      workspaceId: 'workspace',
+      serverId: 'protected',
+      credentialRef: '00000000-0000-4000-8000-000000000001',
+      revision: 2,
+      destination: { transport: 'http', url: 'https://mcp.invalid/mcp' },
+      fieldNames: ['Authorization'],
+    };
+    const entry = stdioServer('protected', {
+      revision: 3,
+      transport: 'http',
+      connection: {
+        transport: 'http',
+        url: 'https://mcp.invalid/mcp',
+        protectedCredentials: { credentialRef: binding.credentialRef, revision: binding.revision },
+      },
+    });
+    const resolve = (connections: McpCredentialBinding[]) =>
+      resolveSessionMcpServers({
+        catalog: { [entry.id]: entry },
+        selectedIds: [entry.id],
+        agentCapabilities: { http: true },
+        env: {},
+        protectedMcp: { workspaceId: 'workspace', connections },
+      });
+    expect(resolve([binding])).toEqual({
+      problems: [],
+      servers: [
+        {
+          type: 'http',
+          name: entry.name,
+          url: 'https://mcp.invalid/mcp',
+          headers: [],
+          _meta: { mollyConnection: { id: entry.id, revision: 3 }, mollyMcpCredential: binding },
+        },
+      ],
+    });
+    for (const changed of [
+      { workspaceId: 'other' },
+      { serverId: 'other' },
+      { revision: 1 },
+      { destination: { transport: 'http' as const, url: 'https://other.invalid' } },
+    ]) {
+      expect(resolve([{ ...binding, ...changed }]).servers).toEqual([]);
+      expect(resolve([{ ...binding, ...changed }]).problems).toMatchObject([
+        { kind: 'invalid_connection' },
+      ]);
+    }
+  });
+  it('reads secret-free protected references but never downgrades them to no-auth execution', () => {
+    const connection = {
+      transport: 'http' as const,
+      url: 'https://mcp.invalid/mcp',
+      protectedCredentials: {
+        credentialRef: '00000000-0000-4000-8000-000000000001',
+        revision: 1,
+      },
+    };
+    expect(isMcpConnectionSpec(connection)).toBe(true);
+    expect(isMcpConnectionSpec({ ...connection, headers: { Authorization: 'secret' } })).toBe(
+      false
+    );
+    expect(
+      isMcpConnectionSpec({
+        ...connection,
+        protectedCredentials: { ...connection.protectedCredentials, revision: 0 },
+      })
+    ).toBe(false);
+    expect(
+      isMcpConnectionSpec({
+        ...connection,
+        protectedCredentials: { ...connection.protectedCredentials, value: 'secret' },
+      })
+    ).toBe(false);
+    const entry = stdioServer('protected', { transport: 'http', connection });
+    const result = resolveSessionMcpServers({
+      catalog: { [entry.id]: entry },
+      selectedIds: [entry.id],
+      agentCapabilities: { http: true },
+      env: {},
+    });
+    expect(result.servers).toEqual([]);
+    expect(result.problems).toMatchObject([{ kind: 'invalid_connection', mcpServerId: entry.id }]);
+  });
   it('interpolates set variables and preserves missing placeholders', () => {
     expect(
       interpolateEnvVars('https://${HOST}/${PATH}', { HOST: 'example.test', PATH: 'mcp' })

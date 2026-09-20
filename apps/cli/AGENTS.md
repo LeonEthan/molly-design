@@ -11,7 +11,7 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
   fails before Agent service composition. Keep local telemetry disabled even when
   PostHog variables exist in the shell.
 - INVARIANT: the dev output layout must match production's — `index.js` plus flat sibling
-  `claude-acp.js` / `codex-acp.js` / `*-worker.js` — because worker owners resolve their child by
+  `*-worker.js` and sealed `harness/` — because worker owners resolve their child by
   FILENAME next to `import.meta.url`. Keep npm packages external by ABSOLUTE path, keep
   `splitting: true`, and keep the no-hoisting assertion.
 - INVARIANT: every bundle of the vendored design contracts (`design-bento/vendor/packages/contracts`)
@@ -22,8 +22,9 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
   Rationale and the third (design-authoring helper) site: `packages/design-bento/README.md`.
 - Import the CLI's own `version` from `@/pkg`, never a relative `../package.json`; the package
   `name` stays `lody` internally. This package is private, has no public bin, and is shipped only inside Molly.
-- Keep `prepare:acp-adapters` before `dev-build.mjs` and Vite: skipping it can silently launch old
-  adapter capabilities from a stale `dist/`.
+- Keep shared Core preparation before bundling. External
+  ACP entrypoints/presets and external Pi shims are retired; dev, production, staging and afterPack reject stale
+  artifacts through `assertNoLegacyHarnessArtifacts`. Preserve user CLI installs/caches.
 - Keep `prepare:design-authoring` before `dev-build.mjs` and Vite, and `copy:design-skills` after
   the bundle: design sessions materialize skills from `design-skills/` beside the CLI entry
   (`src/design/skills.ts`), so a stale or missing staging silently downgrades agent capability.
@@ -70,22 +71,23 @@ execution/consent rules. These rules also bind CLI callers outside that director
 
 ## Agents, GitHub, and PR status
 
-- ACP authentication rules: [src/agent/AGENTS.md](src/agent/AGENTS.md). A capability refresh after
-  login proves credentials became usable and must finish inside the renderer's 300-second deadline.
+- Agent startup and retired CLI authentication: [src/agent/AGENTS.md](src/agent/AGENTS.md).
+  Legacy process targets fail closed; historical configuration grants no execution permission.
 - Agent `gh` auth for GitHub repo sessions is set up in `src/session/session-manager.ts`; the
   host-side credential-broker INVARIANT is in [worktree](src/session/worktree/AGENTS.md).
-- Built-in provider auto-registration (`src/lib/lody.ts`) must wait for initial meta sync and a
-  confirmed `syncMachineFlockDoc()` before `hasAgentConfig`/`createAgentConfig`, or a stale local
-  doc creates duplicate configs; unconfirmed sync keeps a deferred backoff retry.
-- `DEEPSEEK_BASE_URL` is a capability-bearing launch input: digest its exact value into the
-  DeepSeek capability source version and thread the Agent config environment through every
-  probe/session source-version derivation, so two endpoint catalogs never share a cache identity.
-  Never put the API key or a derivative of it in that cache key.
+- Startup initializes the local workspace runtime without CLI credential detection,
+  legacy registration or runtime updates. The protected desktop catalog publisher
+  alone registers bundled Molly; preserve historical configs and runtime caches.
 - Molly does not start PR reconciliation or automatic code-review/merge engines. Preserve
   generic task dispatch, file watchers, and existing session/history records when changing fleet wiring.
 
 ## Design workspace files
 
+- Migration targets share artwork, not parent/project workdirs. Validate before setup; keep sources in receipts.
+- Migration attachments bind the immutable receipt, current invocation and first
+  durable user turn. Reuse local file/image materialization and limits, report
+  omissions, and never replay old turns or repeat the handoff on later turns.
+  See [session ownership](src/session/README.md).
 - Use `src/design/workspace.ts` to resolve design paths from the live Session cwd
   and existing artwork/session identity. Manifest paths are dispatch facts, never
   filesystem authority. Preserve legacy turn inputs; reject changed workspace

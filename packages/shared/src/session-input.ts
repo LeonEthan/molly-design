@@ -11,6 +11,7 @@ import type {
   VisualAnnotationReferencePayload,
 } from './ai';
 import { isSessionFileSourcePath } from './ai';
+import { decodeMollyModelOption } from './embedded-harness';
 import type { SessionHistoryInput } from './schema';
 import type { AgentRoleId, McpServerId } from './ids';
 import { reanchorMessageTextSpansForTrim, sanitizeMessageTextSpans } from './message-text-spans';
@@ -664,6 +665,7 @@ export const buildSessionTurnInputConfig = (args: {
   agentType: string;
   modeId?: string | null;
   modelId?: string | null;
+  modelSelection?: ACPSessionConfig['modelSelection'];
   configOptionValues?: Record<string, AcpConfigOptionValue> | null;
   mcpServerIds?: readonly McpServerId[] | null;
   taskToolsEnabled?: boolean;
@@ -683,6 +685,14 @@ export const buildSessionTurnInputConfig = (args: {
     agentType: args.agentType,
     modeId: args.modeId ?? undefined,
     modelId: args.modelId ?? undefined,
+    modelSelection:
+      args.modelSelection ??
+      (args.cliType === 'builtin' && args.agentType === 'molly'
+        ? decodeMollyModelOption(
+            args.modelId ?? args.configOptionValues?.model,
+            args.configOptionValues?.reasoning_effort ?? 'off'
+          )
+        : undefined),
     configOptionValues:
       args.configOptionValues && Object.keys(args.configOptionValues).length > 0
         ? args.configOptionValues

@@ -16,6 +16,7 @@ export const MACHINE_PROTOCOL_CAPABILITIES = {
   localFileResources: 'localFileResources',
   localSessionAttachments: 'localSessionAttachments',
   designCanvasSerialEditing: 'designCanvasSerialEditing',
+  designContinuationPreparation: 'designContinuationPreparation',
   designToolHooks: 'designToolHooks',
   acpProtocolAuthentication: 'acpProtocolAuthentication',
 } as const;
@@ -27,6 +28,7 @@ export const PROVIDER_SETUP_PROTOCOL_VERSION = 1;
 export const LOCAL_FILE_RESOURCES_PROTOCOL_VERSION = 1;
 export const LOCAL_SESSION_ATTACHMENTS_PROTOCOL_VERSION = 1;
 export const DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION = 1;
+export const DESIGN_CONTINUATION_PREPARATION_PROTOCOL_VERSION = 1;
 export const DESIGN_TOOL_HOOKS_PROTOCOL_VERSION = 2;
 export const ACP_PROTOCOL_AUTHENTICATION_VERSION = 2;
 
@@ -78,6 +80,8 @@ export const CURRENT_MACHINE_PROTOCOL_CAPABILITIES: MachineProtocolCapabilities 
   [MACHINE_PROTOCOL_CAPABILITIES.localFileResources]: LOCAL_FILE_RESOURCES_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.designCanvasSerialEditing]:
     DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION,
+  [MACHINE_PROTOCOL_CAPABILITIES.designContinuationPreparation]:
+    DESIGN_CONTINUATION_PREPARATION_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.localSessionAttachments]:
     LOCAL_SESSION_ATTACHMENTS_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.acpProtocolAuthentication]: ACP_PROTOCOL_AUTHENTICATION_VERSION,
@@ -160,5 +164,16 @@ export function machineSupportsDesignCanvasSerialEditing(
     machine,
     MACHINE_PROTOCOL_CAPABILITIES.designCanvasSerialEditing,
     DESIGN_CANVAS_SERIAL_EDITING_PROTOCOL_VERSION
+  );
+}
+
+/** Explicit legacy-design receipt and attachment preflight, not target publication. */
+export function machineSupportsDesignContinuationPreparation(
+  machine: MachineProtocolCapabilityCarrier | null | undefined
+): boolean {
+  return machineSupportsProtocolCapability(
+    machine,
+    MACHINE_PROTOCOL_CAPABILITIES.designContinuationPreparation,
+    DESIGN_CONTINUATION_PREPARATION_PROTOCOL_VERSION
   );
 }

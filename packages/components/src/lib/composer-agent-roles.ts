@@ -208,6 +208,9 @@ export const AGENT_ROLE_UNAVAILABLE_REASON_KEYS = {
   machine_unknown: 'settings.agentRoles.unavailable.machineUnknown',
   machine_offline: 'settings.agentRoles.unavailable.machineOffline',
   agent_config_missing: 'settings.agentRoles.unavailable.agentConfigMissing',
+  agent_config_retired: 'settings.agentRoles.unavailable.agentConfigRetired',
+  capabilities_unavailable: 'settings.agentRoles.unavailable.capabilitiesUnavailable',
+  run_config_unsupported: 'settings.agentRoles.unavailable.runConfigUnsupported',
   agent_config_machine_mismatch: 'settings.agentRoles.unavailable.agentConfigMismatch',
 } as const satisfies Record<AgentRoleUnavailableReason, string>;
 

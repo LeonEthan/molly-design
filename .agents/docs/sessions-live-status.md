@@ -9,6 +9,10 @@ this page is the full text of the rules summarised there.
 
 - `floating-permission-request.tsx`: floating permissions + ask-user-question;
   hidden-composer mobile keyboard lift/scroll lives there.
+  While replacing the composer, it retains the conversation's existing Stop action
+  when the owner reports a cancellable, non-archived turn. Stop is separate from
+  approval/denial or answering a question: pending controls remain until ordinary
+  dispatch/presence settlement, and the canvas lifecycle still owns read-only release.
   `notification-permission-prompt.tsx` and the inner content of `session-pin.tsx`
   use the same `ConversationColumn` as the stream and composer; keep full-bleed
   bands outside that column, but never let their interactive content span the pane.

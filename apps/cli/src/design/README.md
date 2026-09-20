@@ -18,6 +18,21 @@ checks readiness after flushing editors and never uses an older projection as cu
 Preparation never seeds or overwrites a draft. Legacy workspace projections remain
 untouched; current trusted resolution points to the canonical-adjacent directory.
 
+The shared `buildDesignContinuationReference` prepares bounded historical reference
+data for explicit cross-engine migration. It selects settled user/assistant text
+with source turn IDs, never native identities, tool records, permissions, thoughts,
+run options or executable mention spans. Local human file references are only
+attachment candidates: source-namespace authorization and byte/hash validation
+still belong to the existing attachment store. Unsupported references and context
+limits produce omission counts; no files or source history are changed.
+`session/design-continuation-service.ts` now durably prepares this reference in an
+immutable target-Session receipt. The Molly startup path can bind its text to the
+new engine's existing system context without native transcript replay. First-turn
+attachment handoff now rechecks the receipt and source, then reuses ordinary local
+file/vision/reference materialization. The explicit continuation UI and target
+publication are not yet wired; ordinary Agent switching is not a substitute for
+that migration flow.
+
 The existing chat `design-input/<turnId>/` remains the immutable manifest,
 reference-byte and receipt location. New manifests record `artifactWorkdir` and
 artwork identity as dispatch facts. Every consumer compares them to paths derived
@@ -37,6 +52,53 @@ relative paths there and may read explicitly named attachments from the trusted
 Session cwd. Render replies include the absolute preview path because their
 output directory can differ from Agent cwd. Hooks reuse `resolveDesignContext`; file watching should use the same resolver
 instead of constructing paths.
+
+Image publication resolves the trusted workspace root and refuses symlinked media
+directories and nonregular targets. It stages a bounded byte snapshot and publishes
+with an exclusive hard link; a concurrent different file is preserved, while identical
+bytes are reused. Byte limits (16 MiB), positive decoded dimensions (at most 16,384 per
+edge and 64 million pixels across decoded frames), and canonical base64 are checked before publication.
+These are import safety limits, not canvas/provider defaults; no resizing or repair
+occurs. The pinned Sharp decoder must complete its strict raw-pixel pipeline (15-second
+processing timeout); metadata alone is insufficient. PNG/JPEG/GIF results, and PNG/JPEG/GIF/WebP
+edit inputs including masks use the same decoder. GIF/WebP frames are decoded together;
+mask dimensions match the first source even for WebP. Cancellation before publication
+removes its temporary file when the directory identity is unchanged. A failure after
+the paid request remains dispatched/unknown; asset-write idempotency is not permission
+to repeat generation. Decoder acceptance does not establish visual quality; late-result recovery remains open.
+
+`harness-image-import.ts` imports managed built-in and external MCP image results into the same draft.
+The private worker callback is restricted to an active Molly design run, selected
+revision-guarded MCP and a matching single-use native approval. SessionManager owns
+the live artwork/cwd lookup and frozen-turn resolution; requests have no destination
+field. The entire batch is preflighted before any publication, preserving image order.
+A byte-free `<operationId>.images.json` intent beside the existing operation journal
+records origin identity and expected hashes/dimensions. This minimal crash bridge is
+needed because filesystem publication and worker settlement are not atomic; it is
+neither an asset store nor proof that publication succeeded. Existing conflicting
+intents/files are preserved. Cancellation or import failure leaves the paid dispatch
+unknown and cannot authorize regeneration or a canvas commit.
+Managed built-in generation/editing requests inline bytes through private MCP metadata,
+deferring file publication until this service records its intent. It binds the frozen
+image connection revision separately from the built-in MCP contract revision. Legacy
+callers retain the earlier direct-publication path until their launchers are retired.
+External resource links are resolved by the producing MCP connection, under separate
+approval and child dispatch receipts within the original image operation. Only the
+resolved, validated bytes enter this importer; resource URIs never authorize host reads.
+
+`harness-image-recovery.ts` provides read-only local recovery through the design-only
+native `molly_recover_images` tool. Empty arguments list this Session/artwork's import
+intents; an opaque cursor continues the bounded page. Listing reads at most 100 small
+receipts and returns at most 20 entries, without resolving asset paths or claiming
+availability. An explicit operation ID resolves the original frozen turn directory
+and verifies regular no-follow files, exact bytes/digest/MIME/decoded dimensions, and
+media-directory identity. The result distinguishes verified assets from missing,
+changed or unsafe files. Recovery performs no filesystem writes, provider calls or
+paid-state settlement. Invalid/foreign receipts remain untouched and unlisted.
+Each request requires an exact single-use native approval and active run/epoch.
+It does not require the old MCP connection or credential, and cannot retrieve bytes
+never received locally. Earlier built-in assets without intents, remote/late retrieval and a dedicated
+human recovery UI remain open; a verified file is still not visual or canvas approval.
 
 Historical design readback uses the same context with the persisted Session's
 project/worktree metadata when no runtime Session is loaded. Read-only source and
@@ -61,12 +123,11 @@ Turn collection writes verdicts/receipts only, with no thumbnail generation,
 reference amendment, or dedicated readback. Legacy optional outcome fields and
 existing image files remain stored; the current read view ignores retired fields.
 
-Pi design sessions use the registry ACP adapter `pi-acp@0.0.33` and explicitly
-loaded native Pi extension. The verified runtime is Pi `0.85.1`; other versions
-return an actionable design-hook error. The launcher resolves the existing
-`PI_ACP_PI_COMMAND` (or PATH), preserves user configuration, and uses a temporary
-executable shim because this adapter does not forward extension arguments. It
-never installs Pi globally or selects a product default Agent/model.
+Molly design sessions use the sealed embedded Pi SDK. The external `pi-acp`
+launcher, temporary command shim and separate design/MCP extensions are retired
+from source and both bundle layouts; staging rejects stale copies. User Pi
+installations, configuration and history are untouched. The embedded worker uses
+only its explicit host-owned resources, never `PI_ACP_PI_COMMAND` or PATH discovery.
 
 `current-projection.ts` exports the self-contained canonical payload under the
 store's existing mutation lock. Fsynced staging replaces the fixed directory;
@@ -76,7 +137,7 @@ reports that the canvas revision was saved but current files are not ready; an e
 save retry or reopen repairs it. Verification checks file hashes, not just a marker.
 No projection publication touches draft files or frozen turn manifests.
 
-Pi and Claude use public read-before-edit reminders and their native tools. There
+Embedded Pi uses a public `before_agent_start` reminder and its native tools. There
 are no Molly generation ledgers, successful-read coverage proofs or Write/Edit
 interceptors. Shell and custom tools retain their actual native behavior. The
 optional `molly_resubmit_draft` accepts explicit `expectedRevisionId` and
@@ -92,50 +153,40 @@ may choose its checked revision; otherwise the immutable turn baseline applies.
 Conflicts retain drafts and durable diagnostics. No candidate, automatic restart,
 paid retry, semantic merge or mandatory finalize tool is introduced.
 
-Claude Code's existing native `UserPromptSubmit` configuration appends the common
-reminder while preserving user/project settings. Pi uses public `before_agent_start`.
-`sync-service.ts` now owns only exact explicit submission facts and native Pi
-settlement, transported through protocol version 2. Old proof events are rejected.
+The host supplies the common reminder to the embedded resource loader; synthetic
+SDK tests verify delivery to the model context on success, failure and cancellation.
+The embedded adapter derives settlement from native events and its owned run receipt,
+not the retired extension's `design/tool-hook` terminal messages. Optional exact
+resubmission uses the existing Molly MCP tool and launch-bound host checks.
+`sync-service.ts` retains exact submission facts and historical Pi settlement
+handling; old proof events are rejected. Claude/Codex/Grok reminder sources and
+native config overlays, Grok plugin reload and Kimi CLI timeout adaptation are
+retired. Existing user CLI configuration and hook registrations are left untouched.
 Historical implementation evidence remains in the
 [Pi note](../../../../.agents/notes/implemented/architecture/2026-09-11-pi-design-hooks.md)
 and [Claude note](../../../../.agents/notes/implemented/architecture/2026-09-11-claude-design-hooks.md);
 the [replacement decision](../../../../.agents/notes/implemented/simplification/2026-09-12-editor-owned-pptd-save.md)
 describes current responsibilities.
 
-Each actual design Agent spawn registers a fresh launch ID. Pi, Claude, Codex,
-Kimi and Grok use that same trusted identity for explicit exact resubmission; this
-does not claim native hook support on every runtime. Speculative processes created
+Each actual design Agent spawn registers a fresh launch ID for explicit exact
+resubmission. Speculative processes created
 before durable design identity are recreated through the ordinary startup gate. The daemon binds requests to
 the current client, source turn and canvas owner; delayed native or MCP producers
 cannot update a replacement service. This is a lifecycle fence, not a sandbox.
-Pi ACP can report success after native provider failure, so the native settled
-status remains independently required. Error, cancellation or missing settlement
+The old Pi ACP adapter could report success after native provider failure; the
+embedded adapter requires native settlement independently. Error, cancellation or missing settlement
 preserves canonical, draft and diagnostics. Files, previews and an ACP success
 response do not establish native success. Settlement uses a native execution ID,
 not an assistant-generation read ledger.
 
-Idle desktop design sessions expose supported Pi/Claude choices in Molly’s existing
-run configuration menu. Selection only records the next provider. The explicit
-Turn freezes that provider ID; a changed/unavailable selection fails visibly.
-The owned dispatch retires a mismatched live runtime, ignoring its retiring
-callbacks, then uses existing restore/history replay. Persisted ACP identity is
-paired with its actual provider in SessionMeta, so a cold reopen never resumes
-another provider’s native session. The canvas association and retained files stay
-in place, and ordinary conversations retain their existing Agent selection rules.
-
-Codex design sessions load the bundled read-before-edit reminder through native
-`UserPromptSubmit` hooks in the existing ACP `CODEX_CONFIG` session overlay.
-The managed CLI `0.153.4` and ACP `1.10.0` deliver it before the model request,
-including a fresh reminder after session resume. Existing hooks and trust remain;
-only Molly's fixed command receives its own session-scoped native trust hash.
-
-The rule requires current-file reads, complete reads before full replacement,
-rereads after conflicts, and the latest current-design files when continuing. New
-files are exempt from reading nonexistent targets. This is a reminder, not a read
-ledger, synchronization trigger, tool denial, or commit authorization. Existing
-native tool checks remain unchanged. Explicit native hook disabling is respected;
-unsupported dotted `CODEX_CONFIG` hook overrides fail with a diagnostic instead of
-being silently replaced. See the [implementation and native proof](../../../../.agents/notes/implemented/architecture/2026-09-12-codex-read-reminder.md).
+An explicit Molly turn freezes its connection/model selection. A changed selection
+retires the old worker and restores the product-owned native Pi history; product
+transcript replay is not a fallback. Historical external configurations remain
+readable but cannot execute; continuing an old design requires the explicit
+[migration flow](../session/README.md). The canvas and retained files stay in place.
+Earlier external Codex reminder behavior is recorded in the historical
+[implementation and native proof](../../../../.agents/notes/implemented/architecture/2026-09-12-codex-read-reminder.md),
+not enabled by the current package.
 
 ## Read-only source snapshots
 
@@ -155,38 +206,27 @@ source. Formal collection and exports remain independent.
 
 ## Pi image and rendering tools
 
-Pi generation/edit MCP calls allow 210 seconds to cover the existing 180-second image
-service deadline and delivery. Pi render keeps its default; cancellation remains active
-and paid calls are never retried automatically. Pi gives the SDK cancellation notification the
+Embedded MCP tool calls allow 210 seconds to cover the existing 180-second image
+service deadline and delivery; cancellation remains active and paid calls are never
+retried automatically. Pi gives the SDK cancellation notification the
 same 30-second MCP delivery allowance before closing the isolated call client; a stalled send
 therefore cannot block Stop indefinitely. The MCP server propagates that native request signal
 through edit uploads and returned-image downloads, combines it with the HTTP deadline, and checks
-it before publishing the content-addressed asset. Builtin Kimi
-design launches use the
-public `KIMI_MCP_TOOL_TIMEOUT_MS` default only when neither the inherited/provider
-environment nor the native `config.toml` sets it. `KIMI_CODE_HOME` and the child
-HOME locate that file; unreadable or malformed configuration is left to Kimi.
-This Kimi setting is a global MCP default for the design session, including other
-tools without a per-server override; native per-server timeout settings still win.
-The managed executable exposes no separate config-file CLI option in this launch. See the
+it before publishing the content-addressed asset. Molly no longer reads Kimi CLI
+configuration or sets its global MCP timeout. The independently configured embedded
+Kimi provider uses the same protected model and MCP paths as other embedded providers.
+Historical CLI timeout behavior is recorded in the
 [deadline correction](../../../../.agents/notes/implemented/bug-fix/2026-09-12-image-mcp-client-deadline.md)
 and [server cancellation correction](../../../../.agents/notes/implemented/bug-fix/2026-09-12-image-mcp-request-cancellation.md).
 
-The separate `pi-mcp-extension` uses Pi's public tool API and the existing Molly
-MCP HTTP host. It exposes only listed `molly_generate_image`, `molly_edit_image`
-and `molly_render_preview` tools, with the server's descriptions and schemas.
-Before each generation it refreshes availability without re-enabling an explicitly
-inactive tool. Execution uses the ordinary native extension tool policy and MCP
-session context; the adapter does not answer permissions for the user or implement
-image requests itself. MCP failures remain tool failures and cancellation signals
-reach the SDK. Session shutdown closes the client.
-
-The launch prefers the existing daemon HTTP endpoint. If startup has no endpoint,
-it uses the existing bundled stdio MCP entry with the same owned Session context.
-HTTP calls have independent SDK connections so aborting one closes its request
-without interrupting another; the stdio client uses ordinary MCP cancellation. Image configuration/model and render-host availability remain the daemon's
-gates. Installed Pi validation is pending; see the
-[implementation record](../../../../.agents/notes/implemented/architecture/2026-09-12-pi-geon-mcp-extension.md).
+Embedded MCP tools use the frozen, selected catalog and host approval through
+[`harness-pi`](../../../../packages/harness-pi/README.md). This replaces the retired
+`pi-mcp-extension`, including image/render tools, cancellation delivery and client
+cleanup. The shared cancellation transport remains in the harness package, with
+native SDK in-memory delivery and bounded-timeout tests. Image configuration/model
+and render-host availability remain daemon gates. The older
+[implementation record](../../../../.agents/notes/implemented/architecture/2026-09-12-pi-geon-mcp-extension.md)
+is historical, not the current launch contract.
 
 ## Design history
 

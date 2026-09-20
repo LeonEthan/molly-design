@@ -104,7 +104,7 @@ FOLIO_PROBE_GROK=/absolute/path/to/managed/grok \
   apps/cli/node_modules/.bin/tsx apps/cli/scripts/probe-grok-design-reminder.mjs
 ```
 
-The [probe](../../../../apps/cli/scripts/probe-grok-design-reminder.mjs) runs the
+The [historical probe](https://github.com/LeonEthan/molly-design/blob/7c85b3b06cc227a4e9e0c0e61d769352754aaa00/apps/cli/scripts/probe-grok-design-reminder.mjs) runs the
 actual bundled ACP adapter, managed binary and bundled hook command with synthetic
 Chat Completions responses. It uses an isolated synthetic GROK_HOME and workspace,
 an environment allowlist, disabled telemetry, and no inherited provider secrets.

@@ -1,4 +1,9 @@
 import { readSessionHistory } from '@molly/shared/session-data';
+import {
+  ModelSelectionSchema,
+  getEmbeddedHarnessTargetError,
+  validateMollyRunConfigProjection,
+} from '@molly/shared/embedded-harness';
 import { randomUUID } from 'node:crypto';
 import { watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
@@ -1131,7 +1136,7 @@ export class MollyOperationCoordinator {
       return;
     }
 
-    const configuration = await this.resolveFrozenConfiguration(operation, delivery, reason);
+    const configuration = await this.resolveFrozenConfiguration(operation, delivery, meta, reason);
     if (configuration === 'unknown') {
       this.armConfigurationRetry(delivery.requesterSessionId);
       return;
@@ -1195,13 +1200,16 @@ export class MollyOperationCoordinator {
         workspaceId: this.options.workspaceId,
         acpSessionConfig: {
           prompt: completionText(operation),
+          agentConfigId: operation.frozenContinuationConfig.agentConfigId as AgentConfigId,
           cliType: frozen.cliType ?? meta.cliType,
           agentType: frozen.agentType ?? meta.agentType,
-          ...(frozen.customAcp ? { customAcp: frozen.customAcp } : {}),
-          ...(frozen.runtimeOverrides ? { runtimeOverrides: frozen.runtimeOverrides } : {}),
-          ...(frozen.modeId ? { modeId: frozen.modeId } : {}),
           ...(frozen.modelId ? { modelId: frozen.modelId } : {}),
+          ...(frozen.modelSelection
+            ? { modelSelection: ModelSelectionSchema.parse(frozen.modelSelection) }
+            : {}),
           ...(frozen.configOptionValues ? { configOptionValues: frozen.configOptionValues } : {}),
+          ...(frozen.mcpServerIds !== undefined ? { mcpServerIds: [...frozen.mcpServerIds] } : {}),
+          taskToolsEnabled: frozen.taskToolsEnabled === true,
           ...(meta.acpSessionId ? { resume: meta.acpSessionId } : {}),
           chainDepth: operation.initiatorChainDepth + 1,
         },
@@ -1446,6 +1454,7 @@ export class MollyOperationCoordinator {
   private async resolveFrozenConfiguration(
     operation: StoredMollyOperation,
     delivery: StoredMollyDelivery,
+    meta: SessionMeta,
     wakeReason: string
   ): Promise<'available' | 'unavailable' | 'unknown'> {
     const startedAt = performance.now();
@@ -1466,7 +1475,32 @@ export class MollyOperationCoordinator {
       );
       return result;
     };
-    if (!agentConfigId) return finish('available', null, null);
+    const frozen = operation.frozenContinuationConfig.inputConfig;
+    if (
+      !agentConfigId ||
+      meta.agentConfigId !== agentConfigId ||
+      getEmbeddedHarnessTargetError(meta) !== undefined ||
+      getEmbeddedHarnessTargetError({
+        ...frozen,
+        cliType: frozen.cliType ?? '',
+        agentType: frozen.agentType ?? '',
+      }) !== undefined
+    )
+      return finish('unavailable', null, null);
+    try {
+      validateMollyRunConfigProjection({
+        ...frozen,
+        ...(frozen.modelSelection !== undefined
+          ? { modelSelection: ModelSelectionSchema.parse(frozen.modelSelection) }
+          : {}),
+      });
+    } catch {
+      return finish('unavailable', null, null);
+    }
+    const isExecutable = (lookup: AgentConfigPointLookup) =>
+      lookup.config !== null &&
+      lookup.config.machineId === this.options.machineId &&
+      getEmbeddedHarnessTargetError(lookup.config) === undefined;
     const read = async () =>
       await readMergedAgentConfigById(
         this.options.workspaceDocument.repo,
@@ -1475,14 +1509,15 @@ export class MollyOperationCoordinator {
         agentConfigId
       );
     const initial = await read();
-    if (initial.config) return finish('available', initial, null);
+    if (initial.config)
+      return finish(isExecutable(initial) ? 'available' : 'unavailable', initial, null);
     const synced = await this.options.workspaceDocument.syncMachineFlockDoc(
       this.options.machineId,
       { reason: 'orchestration-delivery-configuration', scheduleRetry: true }
     );
     if (!synced) return finish('unknown', initial, false);
     const afterSync = await read();
-    return afterSync.config
+    return isExecutable(afterSync)
       ? finish('available', afterSync, true)
       : finish('unavailable', afterSync, true);
   }

@@ -5,6 +5,10 @@ import {
   getServerNow,
   machineSupportsLocalFileResourcesProtocol,
   machineSupportsSubagentCancellation,
+  machineSupportsDesignContinuationPreparation,
+  DesignContinuationPreparationResultSchema,
+  type DesignContinuationPreparationSpec,
+  type DesignContinuationPreparationResult,
   type MachineProtocolCapabilities,
   type CodeCollabV2Error,
   type CodeCollabV2FileIndexRequest,
@@ -645,6 +649,39 @@ export function createWorkspaceMachineRpcFacade(deps: WorkspaceMachineRpcFacadeD
     }
   };
 
+  const requestDesignContinuationPreparation = async (
+    machineId: MachineId,
+    params: DesignContinuationPreparationSpec
+  ): Promise<DesignContinuationPreparationResult> => {
+    const protocolCapabilities = await deps.getMachineProtocolCapabilities(machineId);
+    if (!machineSupportsDesignContinuationPreparation({ protocolCapabilities }))
+      throw new Error('design_continuation_unsupported');
+    if (!(await canUseLocalMachineRpc(machineId)))
+      throw new Error('design_continuation_local_machine_unavailable');
+    const response = await getLocalMachineRpcSender()?.({
+      machineId,
+      workspaceId,
+      method: 'session/design-continuation-prepare',
+      params,
+      timeoutMs: 120_000,
+    });
+    if (!response || !response.ok)
+      throw new Error(
+        response && !response.ok ? response.error : 'design_continuation_prepare_failed'
+      );
+    const parsed = DesignContinuationPreparationResultSchema.safeParse(response.result);
+    if (
+      !parsed.success ||
+      parsed.data.record.workspaceId !== workspaceId ||
+      parsed.data.record.source.machineId !== machineId ||
+      parsed.data.record.source.id !== params.sourceSessionId ||
+      parsed.data.record.source.userId !== params.requestedByUserId ||
+      parsed.data.record.target.agentConfigId !== params.targetAgentConfigId
+    )
+      throw new Error('design_continuation_binding_mismatch');
+    return parsed.data;
+  };
+
   const requestSessionFork = async (
     machineId: MachineId,
     args: SessionForkSpec,
@@ -907,6 +944,7 @@ export function createWorkspaceMachineRpcFacade(deps: WorkspaceMachineRpcFacadeD
     requestSessionSteer,
     requestSessionTerminate,
     requestSessionFork,
+    requestDesignContinuationPreparation,
     requestSessionEditAndResend,
     requestSessionDispatchTurn,
     requestSessionPrepare,

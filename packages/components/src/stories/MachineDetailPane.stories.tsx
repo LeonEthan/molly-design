@@ -111,10 +111,6 @@ function StoryWrapper({
           canDelete={canDelete}
           onRename={async () => {}}
           onDelete={async () => {}}
-          onAddConfig={() => {}}
-          onEditConfig={() => {}}
-          onDeleteConfig={async () => {}}
-          onRefreshConfig={async () => {}}
           onPing={showPing ? async () => 18 : undefined}
           onRestartDaemon={showRestart ? async () => {} : undefined}
           daemonUpdate={

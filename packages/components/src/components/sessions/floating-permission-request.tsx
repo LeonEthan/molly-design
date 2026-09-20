@@ -91,6 +91,8 @@ export interface FloatingPermissionRequestProps {
   sessionId: SessionId;
   sessionStatus: SessionStatus | undefined;
   sessionHistory: SessionDoc['history'] | undefined;
+  /** The owning conversation supplies its ordinary Stop action only when cancellable. */
+  onStop?: () => Promise<void>;
 }
 
 export interface PermissionRequestCardProps {
@@ -101,6 +103,7 @@ export interface PermissionRequestCardProps {
   isResolved?: boolean;
   isCancelled?: boolean;
   isReady?: boolean;
+  isStopping?: boolean;
   pendingOptionId?: string | null;
   selectedOptionId?: string | null;
   onSelect: (optionId: string) => void;
@@ -187,6 +190,7 @@ export function PermissionRequestCard({
   isResolved = false,
   isCancelled = false,
   isReady = true,
+  isStopping = false,
   pendingOptionId = null,
   selectedOptionId = null,
   onSelect,
@@ -195,7 +199,7 @@ export function PermissionRequestCard({
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(!defaultCollapsed);
   const showDetails = !defaultCollapsed || expanded;
-  const disabled = isResolved || isCancelled || pendingOptionId !== null || !isReady;
+  const disabled = isResolved || isCancelled || isStopping || pendingOptionId !== null || !isReady;
   const selectedOption =
     selectedOptionId == null
       ? null
@@ -323,10 +327,12 @@ function PermissionCard({
   sessionId,
   pending,
   isReady,
+  isStopping,
 }: {
   sessionId: SessionId;
   pending: PendingPermission;
   isReady: boolean;
+  isStopping: boolean;
 }) {
   const { respondToPermission } = usePermissionResponse();
   const [pendingOptionId, setPendingOptionId] = useState<string | null>(null);
@@ -347,7 +353,7 @@ function PermissionCard({
 
   const handleSelect = useCallback(
     async (optionId: string) => {
-      if (isResolved || !isReady || pendingOptionId !== null) return;
+      if (isResolved || isStopping || !isReady || pendingOptionId !== null) return;
       setPendingOptionId(optionId);
       try {
         await respondToPermission(
@@ -363,6 +369,7 @@ function PermissionCard({
     },
     [
       isResolved,
+      isStopping,
       isReady,
       pendingOptionId,
       respondToPermission,
@@ -374,7 +381,7 @@ function PermissionCard({
 
   const handleSubmitAnswers = useCallback(
     async (answers: AskUserQuestionAnswers) => {
-      if (isResolved || !isReady || pendingOptionId !== null) return;
+      if (isResolved || isStopping || !isReady || pendingOptionId !== null) return;
       if (!answerOptionId) return;
       setPendingOptionId(answerOptionId);
       try {
@@ -395,6 +402,7 @@ function PermissionCard({
     },
     [
       isResolved,
+      isStopping,
       isReady,
       pendingOptionId,
       pending.turnId,
@@ -407,7 +415,7 @@ function PermissionCard({
   );
 
   const handleCancelQuestion = useCallback(async () => {
-    if (isResolved || !isReady || pendingOptionId !== null) return;
+    if (isResolved || isStopping || !isReady || pendingOptionId !== null) return;
     if (!cancelOptionId) return;
     setPendingOptionId(cancelOptionId);
     try {
@@ -423,6 +431,7 @@ function PermissionCard({
     }
   }, [
     isResolved,
+    isStopping,
     isReady,
     pendingOptionId,
     pending.turnId,
@@ -439,7 +448,7 @@ function PermissionCard({
         mode={{
           kind: 'interactive',
           isReady,
-          disabled: isResolved,
+          disabled: isResolved || isStopping,
           isPendingSubmit: pendingOptionId !== null && pendingOptionId === answerOptionId,
           isPendingCancel: pendingOptionId !== null && pendingOptionId === cancelOptionId,
           onSubmit: (answers) => {
@@ -460,6 +469,7 @@ function PermissionCard({
       isResolved={isResolved}
       isCancelled={permission.outcome?.outcome === 'cancelled'}
       isReady={isReady}
+      isStopping={isStopping}
       pendingOptionId={pendingOptionId}
       selectedOptionId={
         permission.outcome?.outcome === 'selected' ? permission.outcome.optionId : null
@@ -475,8 +485,12 @@ export function FloatingPermissionRequest({
   sessionId,
   sessionStatus,
   sessionHistory,
+  onStop,
 }: FloatingPermissionRequestProps) {
+  const { t } = useTranslation();
   const { isReady } = usePermissionResponse();
+  const [isStopping, setIsStopping] = useState(false);
+  const [stopFailed, setStopFailed] = useState(false);
   const askQuestionScrollRef = useRef<HTMLDivElement>(null);
 
   const pendingList = useMemo(() => {
@@ -502,8 +516,38 @@ export function FloatingPermissionRequest({
           sessionId={sessionId}
           pending={pending}
           isReady={isReady}
+          isStopping={isStopping}
         />
       ))}
+      {onStop && (
+        <div className="flex items-center justify-end gap-2">
+          {stopFailed && (
+            <span role="alert" className="text-xs text-destructive">
+              {t('sessions.stopError')}
+            </span>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isStopping}
+            onClick={() => {
+              setIsStopping(true);
+              setStopFailed(false);
+              void onStop()
+                .catch(() => setStopFailed(true))
+                .finally(() => setIsStopping(false));
+            }}
+          >
+            {isStopping ? (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            ) : (
+              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+            )}
+            {t('sessions.stop')}
+          </Button>
+        </div>
+      )}
     </ConversationColumn>
   );
 

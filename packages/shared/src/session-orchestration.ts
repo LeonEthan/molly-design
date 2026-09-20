@@ -215,18 +215,21 @@ export type FrozenOperationContinuationConfig = {
   /** Frozen causal Turn for delegated Operations; recovery must not re-resolve it. */
   sourceTurnId?: string;
   /**
-   * Effective per-target create config captured at acceptance. Null entries
+   * Effective per-target create/chat config captured at acceptance. Null entries
    * correspond to batch items rejected before a target was accepted.
    */
   targetDispatchConfigs?: Array<{
+    agentConfigId?: string;
     modeId?: string;
     modelId?: string;
+    modelSelection?: SessionTurnInputConfig['modelSelection'];
     configOptionValues?: Record<string, string | boolean>;
     /**
      * Frozen capability gate for the built-in Molly Task MCP tools, carried
      * from the driving Turn so recovery keeps the same tool surface.
      */
     taskToolsEnabled?: boolean;
+    mcpServerIds?: SessionTurnInputConfig['mcpServerIds'];
     inheritSessionDefaults?: false;
   } | null>;
 };

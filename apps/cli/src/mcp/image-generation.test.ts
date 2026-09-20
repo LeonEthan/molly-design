@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { crc32, deflateSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
+import sharp from 'sharp';
 import {
   IMAGE_CONNECTION_VERSION,
   type ImageConnectionSettings,
@@ -19,6 +20,7 @@ import {
   editImageAsset,
   readImageDimensions,
   writeGeneratedImageAsset,
+  inspectGeneratedImage,
 } from './image-generation';
 
 /** A key value that must never appear in an error, a log, or a tool result. */
@@ -83,6 +85,123 @@ function scriptedTransport(handler: (request: ImageHttpRequest) => ImageHttpResp
 const jsonResponse = (status: number, body: unknown): ImageHttpResponse => ({
   status,
   bytes: new TextEncoder().encode(JSON.stringify(body)),
+});
+
+describe('decoded image admission', () => {
+  it.each(['png', 'jpeg', 'gif'] as const)(
+    'decodes %s while preserving original bytes and digest',
+    async (format) => {
+      const bytes = await sharp({
+        create: { width: 3, height: 2, channels: 4, background: '#123456' },
+      })
+        .toFormat(format)
+        .toBuffer();
+      const workdir = await makeWorkdir();
+      const asset = await writeGeneratedImageAsset(workdir, bytes);
+      expect(asset).toMatchObject({
+        width: 3,
+        height: 2,
+        mimeType: `image/${format}`,
+        sha256: sha256Of(bytes),
+      });
+      await expect(readFile(asset.absolutePath)).resolves.toEqual(bytes);
+    }
+  );
+
+  it.each(['png', 'jpeg', 'gif'] as const)(
+    'rejects a %s header without decodable pixels before publication',
+    async (format) => {
+      const bytes =
+        format === 'png'
+          ? pngFixture(3, 2).subarray(0, 33)
+          : format === 'jpeg'
+            ? jpegFixture(3, 2)
+            : gifFixture(3, 2);
+      // These are deliberately sufficient for the old header-only check.
+      expect(readImageDimensions(bytes, `image/${format}`)).toEqual({ width: 3, height: 2 });
+      const workdir = await makeWorkdir();
+      await expect(writeGeneratedImageAsset(workdir, bytes)).rejects.toThrow(ImageGenerationError);
+      expect(await readdir(workdir)).toEqual([]);
+    }
+  );
+
+  it('rejects damaged compressed pixels even with a valid dimension header', async () => {
+    const bytes = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+      'base64'
+    );
+    expect(readImageDimensions(bytes, 'image/png')).toEqual({ width: 1, height: 1 });
+    await expect(inspectGeneratedImage(bytes)).rejects.toThrow('invalid, truncated');
+  });
+
+  it('uses the per-frame dimensions of a fully decoded animated GIF', async () => {
+    const bytes = await sharp(Buffer.alloc(2 * 6 * 4, 200), {
+      raw: { width: 2, height: 6, channels: 4, pageHeight: 3 },
+    })
+      .gif({ keepDuplicateFrames: true })
+      .toBuffer();
+    expect((await sharp(bytes, { pages: -1 }).metadata()).pages).toBe(2);
+    await expect(inspectGeneratedImage(bytes)).resolves.toMatchObject({ width: 2, height: 3 });
+    // A logical screen of 8000² is within the single-frame cap, but not for two frames.
+    bytes.writeUInt16LE(8000, 6);
+    bytes.writeUInt16LE(8000, 8);
+    await expect(inspectGeneratedImage(bytes)).rejects.toThrow(ImageGenerationError);
+  });
+
+  it('checks WebP source/mask dimensions before a paid request and retains ordered original uploads', async () => {
+    const workdir = await makeWorkdir();
+    const source = await sharp(pngFixture(2, 3)).webp().toBuffer();
+    await writeFile(path.join(workdir, 'source.webp'), source);
+    await writeFile(path.join(workdir, 'mask.png'), pngFixture(3, 2));
+    const options = {
+      settings,
+      prompt: 'synthetic edit',
+      workdir,
+      images: ['source.webp'],
+      mask: 'mask.png',
+    };
+    const transport: ImageHttpTransport = async () => {
+      throw new Error('unexpected paid dispatch');
+    };
+    await expect(editImageAsset({ ...options, transport })).rejects.toThrow('mask dimensions');
+    await writeFile(path.join(workdir, 'mask.png'), pngFixture(2, 3));
+    const result = await editImageAsset({
+      ...options,
+      transport: async (request) => {
+        expect(
+          request.multipart?.files.map((file) => [
+            file.field,
+            file.mimeType,
+            Buffer.from(file.bytes),
+          ])
+        ).toEqual([
+          ['image[]', 'image/webp', source],
+          ['mask', 'image/png', pngFixture(2, 3)],
+        ]);
+        return jsonResponse(200, { data: [{ b64_json: pngFixture(2, 3).toString('base64') }] });
+      },
+    });
+    expect(result).toMatchObject({ width: 2, height: 3 });
+  });
+
+  it('rejects a corrupt source before dispatch and preserves caller cancellation', async () => {
+    const workdir = await makeWorkdir();
+    await writeFile(path.join(workdir, 'source.png'), pngFixture(2, 3).subarray(0, 33));
+    await expect(
+      editImageAsset({
+        settings,
+        prompt: 'synthetic',
+        workdir,
+        images: ['source.png'],
+        transport: async () => {
+          throw new Error('unexpected paid dispatch');
+        },
+      })
+    ).rejects.toThrow('invalid, truncated');
+    await expect(
+      inspectGeneratedImage(pngFixture(2, 3), AbortSignal.abort(new Error('cancelled by owner')))
+    ).rejects.toThrow('cancelled by owner');
+  });
 });
 
 const bytesResponse = (status: number, bytes: Uint8Array): ImageHttpResponse => ({ status, bytes });
@@ -168,7 +287,11 @@ describe('readImageDimensions', () => {
     expect(readImageDimensions(new Uint8Array([1, 2, 3]), 'image/png')).toBeNull();
     expect(readImageDimensions(new Uint8Array(0), 'image/jpeg')).toBeNull();
     expect(readImageDimensions(Buffer.from([0xff, 0xd8, 0x00, 0x00]), 'image/jpeg')).toBeNull();
-    expect(readImageDimensions(new Uint8Array(24), 'image/png')).toEqual({ width: 0, height: 0 });
+    expect(readImageDimensions(new Uint8Array(24), 'image/png')).toBeNull();
+    const wrongChunk = pngFixture(1, 1);
+    wrongChunk.write('IDAT', 12, 'ascii');
+    expect(readImageDimensions(wrongChunk, 'image/png')).toBeNull();
+    expect(readImageDimensions(jpegFixture(1, 1).subarray(0, 12), 'image/jpeg')).toBeNull();
   });
 });
 
@@ -380,6 +503,64 @@ describe('generateImageAsset', () => {
 });
 
 describe('writeGeneratedImageAsset', () => {
+  it('refuses a symlinked media directory without touching its destination', async () => {
+    const workdir = await makeWorkdir();
+    const outside = await makeWorkdir();
+    await symlink(outside, path.join(workdir, 'media'));
+    await expect(writeGeneratedImageAsset(workdir, pngFixture(1, 1))).rejects.toThrow(
+      /media directory/
+    );
+    await expect(readdir(outside)).resolves.toEqual([]);
+  });
+
+  it('accepts a trusted workspace alias but resolves the real media parent', async () => {
+    const container = await makeWorkdir();
+    const workdir = path.join(container, 'workspace');
+    await mkdir(workdir);
+    const alias = path.join(container, 'alias');
+    await symlink(workdir, alias);
+    const png = pngFixture(1, 1);
+    const asset = await writeGeneratedImageAsset(alias, png);
+    await expect(readFile(path.join(workdir, asset.path))).resolves.toEqual(png);
+  });
+
+  it('publishes concurrent identical imports without replacing an existing inode', async () => {
+    const workdir = await makeWorkdir();
+    const png = pngFixture(1, 1);
+    const assets = await Promise.all([
+      writeGeneratedImageAsset(workdir, png),
+      writeGeneratedImageAsset(workdir, png),
+    ]);
+    expect(assets[0]).toEqual(assets[1]);
+    await expect(readdir(path.join(workdir, 'media'))).resolves.toEqual([`${sha256Of(png)}.png`]);
+    const target = path.join(workdir, 'media', `${sha256Of(png)}.png`);
+    const before = await stat(target);
+    await writeGeneratedImageAsset(workdir, png);
+    expect((await stat(target)).ino).toBe(before.ino);
+  });
+
+  it.each([
+    'unknown dimensions',
+    'zero dimensions',
+    'oversized edge',
+    'oversized pixels',
+    'oversized bytes',
+  ])('refuses %s before creating the media directory', async (kind) => {
+    const workdir = await makeWorkdir();
+    let png = pngFixture(1, 1);
+    if (kind === 'unknown dimensions') png = png.subarray(0, 20);
+    if (kind === 'zero dimensions') png.writeUInt32BE(0, 16);
+    if (kind === 'oversized edge') png.writeUInt32BE(16_385, 16);
+    if (kind === 'oversized pixels') {
+      png.writeUInt32BE(16_384, 16);
+      png.writeUInt32BE(16_384, 20);
+    }
+    if (kind === 'oversized bytes')
+      png = Buffer.concat([png, Buffer.alloc(IMAGE_GENERATION_MAX_IMAGE_BYTES)]);
+    await expect(writeGeneratedImageAsset(workdir, png)).rejects.toThrow(ImageGenerationError);
+    await expect(readdir(workdir)).resolves.toEqual([]);
+  });
+
   it('is content-addressed and leaves unrelated files in media/ alone', async () => {
     const workdir = await makeWorkdir();
     await mkdir(path.join(workdir, 'media'), { recursive: true });
@@ -539,5 +720,18 @@ it('refuses non-http and embedded-credential returned URLs before downloading', 
       generateImageAsset({ settings, workdir, transport, prompt: 'generate' })
     ).rejects.toThrow('http(s) without embedded credentials');
     expect(requests).toEqual(['https://images.example.com/v1/images/generations']);
+  }
+});
+
+it('rejects malformed base64 rather than silently normalizing provider output', async () => {
+  const workdir = await makeWorkdir();
+  const payload = pngFixture(1, 1).toString('base64');
+  for (const malformed of [`!${payload}`, `${payload}\n`, payload.replace(/=+$/, '')]) {
+    const transport: ImageHttpTransport = async () =>
+      jsonResponse(200, { data: [{ b64_json: malformed }] });
+    await expect(
+      generateImageAsset({ settings, workdir, transport, prompt: 'synthetic' })
+    ).rejects.toThrow(/base64/);
+    await expect(readdir(workdir)).resolves.toEqual([]);
   }
 });

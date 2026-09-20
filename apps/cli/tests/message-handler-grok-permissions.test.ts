@@ -72,7 +72,8 @@ function fixture(initialMode = 'ask') {
         id: SessionId,
         requestId: string,
         req: RequestPermissionRequest,
-        client: AgentClient
+        client: AgentClient,
+        signal?: AbortSignal
       ) => Promise<RequestPermissionResponse>)
     | undefined;
   const doc = withHistoryPort({
@@ -164,9 +165,15 @@ function fixture(initialMode = 'ask') {
   ).startSessionActivePresence(sessionId);
   return {
     doc,
-    invoke: (req: RequestPermissionRequest) => {
+    invoke: (req: RequestPermissionRequest, signal?: AbortSignal) => {
       if (!permissionHandler) throw new Error('Permission handler was not registered');
-      return permissionHandler(sessionId, req.toolCall.toolCallId, req, client as AgentClient);
+      return permissionHandler(
+        sessionId,
+        req.toolCall.toolCallId,
+        req,
+        client as AgentClient,
+        signal
+      );
     },
     setMode: (value: string) => {
       mode = value;
@@ -196,6 +203,64 @@ function fixture(initialMode = 'ask') {
 }
 
 describe('Grok Always Approve in the durable permission flow', () => {
+  it('cancels one owned request durably without clearing another pending question', async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    const first = f.invoke(request('first'), controller.signal);
+    await f.waitForPending();
+    const second = f.invoke(request('second'));
+    await f.waitForPending(2);
+    controller.abort();
+    expect(await first).toEqual({ outcome: { outcome: 'cancelled' } });
+    expect(f.outcome('first')).toEqual({ outcome: 'cancelled' });
+    expect(f.outcome('second')).toBeUndefined();
+    expect(f.state().awaitingUser).toBe(true);
+    await f.answer('first', once);
+    expect(await first).toEqual({ outcome: { outcome: 'cancelled' } });
+    await f.answer('second', { outcome: 'cancelled' });
+    await second;
+    expect(f.state()).toEqual({
+      awaitingUser: false,
+      historySubscriptions: 0,
+      configSubscriptions: 0,
+    });
+  });
+
+  it('handles cancellation before and during permission preparation', async () => {
+    const f = fixture();
+    const early = new AbortController();
+    early.abort();
+    expect(await f.invoke(request('never-opened'), early.signal)).toEqual({
+      outcome: { outcome: 'cancelled' },
+    });
+    expect(f.outcome('never-opened')).toBeUndefined();
+    const during = new AbortController();
+    f.doc.setStatus.mockImplementationOnce(async () => {
+      during.abort();
+    });
+    expect(await f.invoke(request('preparing'), during.signal)).toEqual({
+      outcome: { outcome: 'cancelled' },
+    });
+    expect(f.outcome('preparing')).toEqual({ outcome: 'cancelled' });
+    expect(f.state()).toEqual({
+      awaitingUser: false,
+      historySubscriptions: 0,
+      configSubscriptions: 0,
+    });
+  });
+
+  it('rejects dismissal acknowledgment when the cancellation cannot be persisted', async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    const pending = f.invoke(request('failed-cancel'), controller.signal);
+    await f.waitForPending();
+    f.doc.updateHistory.mockRejectedValueOnce(new Error('synthetic disk failure'));
+    const rejected = expect(pending).rejects.toThrow('harness_question_dismiss_failed');
+    controller.abort();
+    await rejected;
+    expect(f.outcome('failed-cancel')).toBeUndefined();
+    expect(f.state().historySubscriptions).toBe(0);
+  });
   it('answers once without entering the waiting UI, and records the outcome', async () => {
     const f = fixture('always-approve');
     await expect(f.invoke(request('tool'))).resolves.toEqual({ outcome: once });

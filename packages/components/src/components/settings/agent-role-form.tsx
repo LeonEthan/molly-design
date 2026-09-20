@@ -5,6 +5,7 @@ import {
   AGENT_ROLE_NAME_MAX_LENGTH,
   DEFAULT_AGENT_ROLE_EMOJI,
   type AgentConfigId,
+  type AgentRole,
   type MachineId,
 } from '@molly/shared';
 import type {
@@ -56,6 +57,10 @@ export type AgentRoleFormProps = {
   /** A write that failed, or one that is saved locally but not yet synced. */
   error?: string;
   isEditing?: boolean;
+  isMigrating?: boolean;
+  submitDisabled?: boolean;
+  readOnly?: boolean;
+  migrationBackup?: AgentRole['embeddedMigration'];
   onSubmit: () => void;
   onCancel: () => void;
   className?: string;
@@ -84,17 +89,23 @@ export function AgentRoleForm({
   submitting = false,
   error,
   isEditing = false,
+  isMigrating = false,
+  submitDisabled = false,
+  readOnly = false,
+  migrationBackup,
   onSubmit,
   onCancel,
   className,
 }: AgentRoleFormProps) {
   const { t } = useTranslation();
   const fieldId = useId();
-  const update = (patch: Partial<AgentRoleFormValue>) => onChange({ ...value, ...patch });
+  const update = (patch: Partial<AgentRoleFormValue>) => {
+    if (!readOnly) onChange({ ...value, ...patch });
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    onSubmit();
+    if (!readOnly) onSubmit();
   };
 
   const configOptionSelectors = selectorOptions
@@ -105,7 +116,20 @@ export function AgentRoleForm({
 
   return (
     <form className={cn('flex min-h-0 flex-col', className)} onSubmit={submit}>
-      <div className="scrollbar-pro min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <fieldset
+        disabled={readOnly}
+        className="scrollbar-pro min-h-0 min-w-0 flex-1 space-y-3 overflow-y-auto px-5 py-4"
+      >
+        {migrationBackup ? (
+          <details className="rounded border border-border/60 p-2 text-xs">
+            <summary className="cursor-pointer">
+              {t('settings.agentRoles.migration.backup')}
+            </summary>
+            <pre className="mt-2 whitespace-pre-wrap break-all text-muted-foreground">
+              {JSON.stringify(migrationBackup.source, null, 2)}
+            </pre>
+          </details>
+        ) : null}
         {/* The Role's own label, shown as itself rather than inside a titled
             card: an emoji and a name need no section heading to be read. */}
         <div className="space-y-1.5">
@@ -310,15 +334,26 @@ export function AgentRoleForm({
         </div>
 
         {error ? <FormMessage tone="error">{error}</FormMessage> : null}
-      </div>
+        {hasError('model_required') ? (
+          <FormMessage tone="error">{t('settings.agentRoles.migration.modelRequired')}</FormMessage>
+        ) : null}
+      </fieldset>
 
       <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-5 py-3">
         <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
           {t('common.cancel')}
         </Button>
-        <Button type="submit" size="sm" disabled={submitting || errors.length > 0}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={readOnly || submitting || submitDisabled || errors.length > 0}
+        >
           {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
-          {isEditing ? t('common.save') : t('settings.agentRoles.form.create')}
+          {isMigrating
+            ? t('settings.agentRoles.migration.action')
+            : isEditing
+              ? t('common.save')
+              : t('settings.agentRoles.form.create')}
         </Button>
       </footer>
     </form>
@@ -437,9 +472,8 @@ function RunConfigIssueText({ issue }: { issue: AgentRoleRunConfigIssue }) {
 /**
  * A capability selector over the values the agent publishes.
  *
- * There is no "agent default" entry: a Role that stores nothing tells its owner
- * nothing about what will run, so the form seeds the agent's own default and the
- * control always shows a concrete choice.
+ * There is no "agent default" entry. The parent may seed legacy defaults;
+ * Molly models stay blank until the user explicitly chooses a connection/model.
  */
 function ValueSelect({
   label,

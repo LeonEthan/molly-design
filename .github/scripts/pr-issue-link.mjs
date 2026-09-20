@@ -2,8 +2,9 @@ const RELATED_ISSUE_HEADING = '## Related issue';
 const CLOSING_KEYWORD = /^(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)$/i;
 const REFERENCE_KEYWORD = /^(?:refs?|references?)$/i;
 const KEYWORD_PREFIX = /^(?<keyword>[a-z]+)\s*:?\s+(?<reference>.+)$/i;
-const FULL_ISSUE_URL = /^https:\/\/github\.com\/LodyAI\/Lody\/issues\/(?<number>[1-9]\d*)\/?$/i;
-const SHORT_ISSUE_REFERENCE = /^(?:LodyAI\/Lody)?#(?<number>[1-9]\d*)$/i;
+const FULL_ISSUE_URL =
+  /^https:\/\/github\.com\/LeonEthan\/molly-design\/issues\/(?<number>[1-9]\d*)\/?$/i;
+const SHORT_ISSUE_REFERENCE = /^(?:LeonEthan\/molly-design)?#(?<number>[1-9]\d*)$/i;
 
 function relatedIssueSectionRange(lines) {
   const start = lines.findIndex((line) => line.trimEnd() === RELATED_ISSUE_HEADING);

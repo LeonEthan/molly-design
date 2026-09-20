@@ -5,14 +5,10 @@ Entry points: [README](README.md#repository).
 
 ## Working with the user
 
-Finish authorized work; clarify material gaps while continuing independent work.
-Reuse prior authorization.
 Planning/review does not authorize runtime implementation or publication.
 Explicit tasks allow five image generate/edit calls total across runs; ask before
 exceeding five unless a larger budget is already authorized.
-User instructions override skills. If blocked by a skill, link, quote and explain
-its instruction. Preserve unrelated changes. Report outcomes, evidence and limits. Complete required checks; expand verification
-only for new changes, failures or unresolved concerns.
+Preserve unrelated changes. Report outcomes, evidence and limits.
 
 ## Design principles and migration scope
 
@@ -91,17 +87,18 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
   changes, read [platform contracts](packages/platform/AGENTS.md).
 - Before daemon negotiation, MCP/Role catalogs or their UI consumers, per-turn MCP
   selection, or Role creation/dispatch, read [shared contracts](packages/shared/AGENTS.md).
-- Keep `packages/acp-extension-kimi` in its isolated submodule, outside root pnpm.
-  Consume only its separately built, checksummed managed-runtime artifact and
-  versioned ACP contract. Reuse shared contracts from the public
-  `LodyAI/acp-extension-core` submodule through root pnpm; never duplicate them.
+- Default workspace/CI uses ACP core, DSH capability contracts and Bento.
+  Claude/Codex/Grok/Kimi submodules and `site-docs` are retained upstream material,
+  outside root pnpm. Initialize them explicitly only for scoped historical work;
+  never duplicate shared ACP contracts or add legacy runtime installs to desktop setup.
+  Historical Kimi packaging still uses a separately built, checksummed runtime artifact.
 - Viewer packaging/version changes follow its [rules](packages/code-review-viewer/AGENTS.md).
   Package-scope or cloud/local composition changes require `pnpm check:public-boundary`.
 
 ## Contributions and checks
 
-- Identify once: Lody team if the user says so or GitHub login is `zxch3n`,
-  `Leeeon233` or `wibus-wee`; otherwise community. Read [.github/AGENTS.md](.github/AGENTS.md)
+- Identify once: Molly maintainer if the user says so or GitHub login is
+  `LeonEthan`; otherwise community. Read [.github/AGENTS.md](.github/AGENTS.md)
   before planning community contributions and before any PR/Issue work.
 - Node `>=22.14.0 <23 || >=23.6.0` (Node-API 10); pnpm from `package.json`. Run `pnpm install` (skip nested checkouts);
   standalone work uses a separate clone. `pnpm start:local` and root `pnpm build`

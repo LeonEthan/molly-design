@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Product and account support
-    url: https://lody.ai/support
-    about: Get help with hosted services, Web or mobile apps, accounts, and billing.
-  - name: Community questions
-    url: https://discord.gg/E8mZtMu38s
-    about: Ask usage questions and discuss Lody with the community.
+  - name: Molly usage and troubleshooting
+    url: https://github.com/LeonEthan/molly-design#readme
+    about: Installation, configuration, recovery, and current support limits.
   - name: Security vulnerability
-    url: https://github.com/LodyAI/Lody/security/policy
+    url: https://github.com/LeonEthan/molly-design/security/policy
     about: Do not open a public issue. Follow the private reporting instructions in the security policy.

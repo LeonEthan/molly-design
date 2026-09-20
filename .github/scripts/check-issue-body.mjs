@@ -5,7 +5,7 @@ const ISSUE_FORMS = [
     requiredHeadings: [
       '### Affected area',
       '### Installation method',
-      '### Lody version or commit',
+      '### Molly version or commit',
       '### Operating system',
       '### What happened?',
       '### What did you expect?',
@@ -75,7 +75,9 @@ function hasCheckedConfirmation(section, text) {
 
 export function checkIssueBody(issue) {
   const title = issue?.title?.trim() ?? '';
-  const body = (issue?.body ?? '').replace(/\r\n/g, '\n');
+  const body = (issue?.body ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^### Lody version or commit$/gm, '### Molly version or commit');
   const form = ISSUE_FORMS.find((candidate) => title.startsWith(candidate.titlePrefix));
   const findings = [];
 

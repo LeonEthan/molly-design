@@ -4,7 +4,7 @@ import { execFileSync as defaultExecFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const EXCLUDED_FILTERS = ['!@molly/electron', '!acp-extension-codex', '!acp-extension-claude'];
+const EXCLUDED_FILTERS = ['!@molly/electron'];
 
 function loadScope(scopePath) {
   try {

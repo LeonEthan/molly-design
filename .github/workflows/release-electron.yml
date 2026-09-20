@@ -1,16 +1,9 @@
 name: Release Electron
 
-# Builds and publishes the public Molly Design desktop app for macOS, Windows and
-# Linux. Windows/Linux in-app updates use electron-updater metadata (latest*.yml).
-# macOS updates use Sparkle appcast.xml produced after packaging.
-#
-# The tag is the source of truth for the released version: `package-electron.mjs`
-# injects it through extraMetadata so apps/electron/package.json never silently
-# ships a stale version. electron-updater resolves its feed from the `publish`
-# block in electron-builder.yml, which electron-builder bakes into the packaged
-# app-update.yml — the public renderer build strips every VITE_* value, so the
-# cloud composition's VITE_ELECTRON_UPDATE_URL injection is not available here.
-# Sparkle reads SUFeedURL / SUPublicEDKey from Info.plist instead.
+# Official first-release scope: macOS Apple Silicon only.
+# Other platform build commands remain experimental local tooling.
+# The resolved version is shared by packaging and publication; macOS requires
+# Developer ID signing, notarization and the Molly Sparkle signing identity.
 
 on:
   push:
@@ -41,24 +34,15 @@ env:
 
 jobs:
   build:
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
             target: mac
-            # Both slices from one runner: beforePack swaps the embedded CLI's
-            # native bindings per arch, so a universal build is rejected upstream.
-            package_args: '--mac --arm64 --x64'
-          - os: windows-2022
-            target: win
-            package_args: '--win'
-          - os: ubuntu-latest
-            target: linux
-            # snap is deliberately omitted: electron-builder needs snapcraft on the
-            # runner to produce it. `pnpm --dir apps/electron build:linux` still
-            # builds it locally for anyone who has snapcraft installed.
-            package_args: '--linux AppImage deb'
+            package_args: '--mac --arm64'
     runs-on: ${{ matrix.os }}
     environment: release
     env:
@@ -70,18 +54,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # All four acp-extension submodules are public, so no deploy key is needed.
-          submodules: recursive
           persist-credentials: false
 
+      - name: Initialize desktop source dependencies
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+
       - name: Resolve release version
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
         shell: bash
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" == "push" ]]; then
             version="${GITHUB_REF_NAME#v}"
           else
-            version="${{ inputs.version }}"
+            version="${REQUESTED_VERSION}"
             version="${version#v}"
           fi
 
@@ -94,6 +82,7 @@ jobs:
             exit 1
           fi
 
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "MOLLY_OSS_RELEASE_VERSION=${version}" >> "$GITHUB_ENV"
           echo "Packaging Molly Design ${version}"
 
@@ -186,7 +175,7 @@ jobs:
         run: echo "${GITHUB_WORKSPACE}/apps/electron/node_modules/.bin" >> "$GITHUB_PATH"
 
       # Same Action kansoku uses in desktop-release.yml. publish stays false:
-      # Lody's ubuntu job publishes mac/win/linux together.
+      # The publication job uploads only this macOS arm64 release's assets.
       - name: Sign appcast and generate Sparkle deltas
         if: matrix.target == 'mac'
         uses: Innei/electron-sparkle-updater/action@002472bdb78a9608eddc8b39202572af3f7986fb # v1
@@ -262,15 +251,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
 
-          if [[ "${{ github.event_name }}" == "push" ]]; then
-            tag="${GITHUB_REF_NAME}"
-          else
-            version="${{ inputs.version }}"
-            tag="v${version#v}"
-          fi
+          tag="v${RELEASE_VERSION}"
+          (cd release-assets && sha256sum * > SHA256SUMS.txt)
 
           # electron-updater's GitHub provider resolves assets from the tag that
           # matches `v${version}`, so the tag name is part of the update contract.
@@ -281,6 +267,6 @@ jobs:
             gh release upload "${tag}" release-assets/* --clobber
           else
             gh release create "${tag}" release-assets/* \
-              --title "Molly Design ${tag#v}" \
+              --title "Molly ${tag#v} — macOS Apple Silicon" \
               --generate-notes
           fi

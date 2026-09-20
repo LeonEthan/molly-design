@@ -26,7 +26,7 @@ export function hasIssueLabel(issue, name) {
 
 export function formatIssueFindings(result) {
   return [
-    'Issue does not match a Lody Issue Form:',
+    'Issue does not match a Molly Issue Form:',
     '',
     ...result.findings.map((finding) => `- ${finding}`),
   ].join('\n');
@@ -36,7 +36,7 @@ export function buildInvalidIssueComment({ author, findings }) {
   const visibleFindings = findings.trim().split('\n').slice(0, 50).join('\n');
   return [
     COMMENT_MARKER,
-    `@${author}, this issue does **not** match Lody's Bug report or Feature request form.`,
+    `@${author}, this issue does **not** match Molly's Bug report or Feature request form.`,
     '',
     `It is marked \`${NEEDS_ISSUE_BODY_LABEL.name}\`. Update the title and body without removing required sections or confirmations; the warning is cleared automatically when the issue passes validation. Repository owners and automated bots are exempt, but organization members are not.`,
     '',

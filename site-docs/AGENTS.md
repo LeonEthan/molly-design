@@ -8,10 +8,12 @@ tuning shortcut are in [`README.md`](README.md).
 
 ## Invariants
 
-- `site-docs/` is the current TanStack Start + Vite + Fumadocs public site. It
-  owns the marketing landing, docs, blog, changelog, pricing, download, and
-  legal/support pages. The dev server runs on port 3002. There is no second
-  legacy site tree.
+- `site-docs/` is retained upstream Lody site source, outside Molly’s default
+  workspace and CI. It is not Molly product documentation. Its TanStack Start
+  - Vite + Fumadocs implementation
+    owns the marketing landing, docs, blog, changelog, pricing, download, and
+    legal/support pages. The dev server runs on port 3002. There is no second
+    legacy site tree.
 - Content SSOT for docs/blog/changelog/legal is `content/**`. Edit those MDX
   files directly. Public document images and compatibility files are tracked in
   `public/_docs-assets/` and `public/.well-known/`.
@@ -64,7 +66,7 @@ tuning shortcut are in [`README.md`](README.md).
   content during install; never use the switch unless a later build/generate step
   is guaranteed.
 - `vite.config.ts` is the build integration point. Keep TanStack Start, Fumadocs
-  MDX, Tailwind, React, and preview-only aliases there.   `build.modulePreload`
+  MDX, Tailwind, React, and preview-only aliases there. `build.modulePreload`
   filters HTML hosts only; JS hosts keep extracted route CSS so client nav to
   `/price` or legal is not unstyled. `finalize-prerender-html.mjs` strips leftover
   HTML preloads and inlines first-paint CSS on landing so the H1 is not waiting

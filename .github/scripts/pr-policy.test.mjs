@@ -51,8 +51,8 @@ Run policy tests.
 
 const internalPullRequest = {
   author_association: 'NONE',
-  base: { ref: 'main', repo: { id: 100, full_name: 'LodyAI/Lody' } },
-  head: { repo: { id: 100, full_name: 'LodyAI/Lody' } },
+  base: { ref: 'main', repo: { id: 100, full_name: 'LeonEthan/molly-design' } },
+  head: { repo: { id: 100, full_name: 'LeonEthan/molly-design' } },
   labels: [],
   additions: 20,
   deletions: 5,
@@ -64,7 +64,7 @@ const internalPullRequest = {
 
 const externalPullRequest = {
   ...internalPullRequest,
-  head: { repo: { id: 200, full_name: 'contributor/Lody' } },
+  head: { repo: { id: 200, full_name: 'contributor/Molly' } },
 };
 
 function apiError(status) {
@@ -172,8 +172,8 @@ void describe('pull request validation', () => {
     const { github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: { ...externalPullRequest, additions: 200, deletions: 1 },
       defaultBranch: 'main',
     });
@@ -183,7 +183,7 @@ void describe('pull request validation', () => {
     assert.ok(result.validation.findings.some((finding) => finding.includes('changes 201 lines')));
     assert.ok(
       result.validation.findings.some((finding) =>
-        finding.includes('require the prior Lody Issue reference')
+        finding.includes('require the prior Molly Issue reference')
       )
     );
   });
@@ -192,8 +192,8 @@ void describe('pull request validation', () => {
     const { activity, github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: { ...externalPullRequest, body: validBody, additions: 900, deletions: 101 },
       defaultBranch: 'main',
     });
@@ -205,19 +205,17 @@ void describe('pull request validation', () => {
       )
     );
     assert.deepEqual(activity.issueReads, [
-      { owner: 'LodyAI', repo: 'Lody', issue_number: 121 },
+      { owner: 'LeonEthan', repo: 'molly-design', issue_number: 121 },
     ]);
   });
 
   void it('accepts community PRs over 1000 lines when the author is assigned', async () => {
-    const issues = new Map([
-      [121, { assignees: [{ login: 'contributor' }] }],
-    ]);
+    const issues = new Map([[121, { assignees: [{ login: 'contributor' }] }]]);
     const { github } = createGithub({ issues });
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: { ...externalPullRequest, body: validBody, additions: 900, deletions: 101 },
       defaultBranch: 'main',
     });
@@ -232,8 +230,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: internalPullRequest,
       defaultBranch: 'main',
     });
@@ -255,8 +253,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: { ...internalPullRequest, body: '## Related issue\n\n#121\n' },
       defaultBranch: 'main',
     });
@@ -264,8 +262,8 @@ void describe('pull request reconciliation', () => {
     assert.equal(result.state, 'skipped');
     assert.deepEqual(activity.pullUpdates, [
       {
-        owner: 'LodyAI',
-        repo: 'Lody',
+        owner: 'LeonEthan',
+        repo: 'molly-design',
         pull_number: 42,
         body: '## Related issue\n\nCloses #121\n',
       },
@@ -288,8 +286,8 @@ void describe('pull request reconciliation', () => {
     };
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest,
       defaultBranch: 'main',
     });
@@ -309,8 +307,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: externalPullRequest,
       defaultBranch: 'main',
       now: new Date('2026-08-30T00:00:00.000Z'),
@@ -333,8 +331,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub({ comments });
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest: {
         ...externalPullRequest,
         body: validBody,
@@ -359,8 +357,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub();
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest,
       defaultBranch: 'main',
     });
@@ -393,8 +391,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub({ comments, latestPullRequest });
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest,
       defaultBranch: 'main',
       expireOverdue: true,
@@ -434,8 +432,8 @@ void describe('pull request reconciliation', () => {
     const { activity, github } = createGithub({ comments, latestPullRequest });
     const result = await reconcilePullRequest({
       github,
-      owner: 'LodyAI',
-      repo: 'Lody',
+      owner: 'LeonEthan',
+      repo: 'molly-design',
       pullRequest,
       defaultBranch: 'main',
       expireOverdue: true,

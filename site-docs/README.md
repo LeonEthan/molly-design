@@ -1,4 +1,10 @@
-# site-docs
+# site-docs (retained upstream source)
+
+This is Lody website material, excluded from Molly’s default workspace, install,
+typecheck and tests. It is not Molly’s help site or a supported standalone
+installation target: its workspace imports need the upstream workspace. For site
+maintenance, use the [Lody repository](https://github.com/LodyAI/Lody). Molly usage
+lives in [the user guide](../USER_GUIDE.md). The map below describes retained source.
 
 The public Lody site: TanStack Start + Vite + Fumadocs. It owns the marketing
 landing, docs, blog, changelog, pricing, download, and legal/support pages, and
@@ -7,17 +13,17 @@ builds to `site-docs/out/client`. Binding rules live in
 
 ## Directory map
 
-| Directory | Owns | Rules |
-| --- | --- | --- |
-| `app/` | CSS only: reading theme, landing, pricing | [`app/AGENTS.md`](app/AGENTS.md) |
-| `components/` | Landing, marketing, and product-replica React components | [`components/AGENTS.md`](components/AGENTS.md) |
-| `content/` | MDX SSOT for docs, blog, changelog, legal | [`content/AGENTS.md`](content/AGENTS.md) |
-| `context/` | Landing demo sequencing and screenshot notes | — |
-| `lib/` | Server-only content lookups, metadata, browser-safe helpers | [`lib/AGENTS.md`](lib/AGENTS.md) |
-| `public/` | Static assets, `.well-known/`, generated SEO files | [`public/AGENTS.md`](public/AGENTS.md) |
-| `scripts/` | Path enumeration and SEO/content generators | [`scripts/AGENTS.md`](scripts/AGENTS.md) |
-| `src/` | Router, file routes, page adapters | [`src/AGENTS.md`](src/AGENTS.md) |
-| `types/` | Hand-written declarations for `@/*` app components | — |
+| Directory     | Owns                                                        | Rules                                          |
+| ------------- | ----------------------------------------------------------- | ---------------------------------------------- |
+| `app/`        | CSS only: reading theme, landing, pricing                   | [`app/AGENTS.md`](app/AGENTS.md)               |
+| `components/` | Landing, marketing, and product-replica React components    | [`components/AGENTS.md`](components/AGENTS.md) |
+| `content/`    | MDX SSOT for docs, blog, changelog, legal                   | [`content/AGENTS.md`](content/AGENTS.md)       |
+| `context/`    | Landing demo sequencing and screenshot notes                | —                                              |
+| `lib/`        | Server-only content lookups, metadata, browser-safe helpers | [`lib/AGENTS.md`](lib/AGENTS.md)               |
+| `public/`     | Static assets, `.well-known/`, generated SEO files          | [`public/AGENTS.md`](public/AGENTS.md)         |
+| `scripts/`    | Path enumeration and SEO/content generators                 | [`scripts/AGENTS.md`](scripts/AGENTS.md)       |
+| `src/`        | Router, file routes, page adapters                          | [`src/AGENTS.md`](src/AGENTS.md)               |
+| `types/`      | Hand-written declarations for `@/*` app components          | —                                              |
 
 ## Component responsibilities
 
@@ -49,11 +55,11 @@ Edit `components/underwater-background.tsx` (scene/shaders) and
 `app/underwater.css` (layout/legibility); copy and CTA live in
 `components/landing.tsx`. Every scene knob lives in one `PARAMS` object, and
 `DEFAULT_PARAMS` is the shipped look. Open any page with `?tune` for a live slider
-panel, then bake copied values into `DEFAULT_PARAMS`. Verify with
+panel, then bake copied values into `DEFAULT_PARAMS`. In an upstream workspace that includes this package, verify with
 `pnpm --filter @molly/site-docs build` and a screenshot; WebGL renders in headless
 Chromium. There is no second legacy site tree.
 
 ## Local development
 
-The dev server runs on port 3002. Use
+When maintained in an upstream workspace, the dev server runs on port 3002. Use
 `pnpm --filter @molly/site-docs preview:static` to emulate the static host.

@@ -25,7 +25,7 @@ function pkg(name, dir, { test: hasTest = true, typecheck = true, deps = [] } = 
 
 function syntheticWorkspace() {
   return finalizeWorkspace([
-    pkg('lody', 'apps/cli', {
+    pkg('molly', 'apps/cli', {
       deps: [
         '@molly/cli-supervisor',
         '@molly/code-review-helper',
@@ -77,7 +77,6 @@ function syntheticWorkspace() {
     pkg('@loro-dev/ignore', 'packages/ignore'),
     pkg('@molly/loro-streams-rpc', 'packages/loro-streams-rpc', { deps: ['@molly/shared'] }),
     pkg('@molly/turn-diff-store', 'packages/turn-diff-store'),
-    pkg('@molly/site-docs', 'site-docs', { deps: ['@molly/components', '@molly/shared'] }),
     pkg('@molly/e2e', 'e2e', { test: false, typecheck: false }),
     pkg('acp-extension-claude', 'packages/acp-extension-claude'),
     pkg('acp-extension-codex', 'packages/acp-extension-codex'),
@@ -137,19 +136,18 @@ void test('1. docs-only skip-tests', () => {
 void test('2. cli-only source', () => {
   const scope = select(['apps/cli/src/index.ts']);
   assert.equal(scope.mode, 'affected');
-  assert.deepEqual(scope.testPackages, ['lody']);
+  assert.deepEqual(scope.testPackages, ['molly']);
   assertExcludes(scope.testPackages, ['@molly/components', '@molly/electron']);
 });
 
-void test('3. components-only source fans out through helper to lody', () => {
+void test('3. components-only source fans out through helper to molly', () => {
   const scope = select(['packages/components/src/index.ts']);
   assert.equal(scope.mode, 'affected');
   assertIncludes(scope.testPackages, [
     '@molly/components',
     '@molly/code-review-helper',
     '@molly/electron',
-    '@molly/site-docs',
-    'lody',
+    'molly',
   ]);
 });
 
@@ -157,10 +155,9 @@ void test('4. shared source is near-full affected', () => {
   const scope = select(['packages/shared/src/index.ts']);
   assertIncludes(scope.testPackages, [
     '@molly/shared',
-    'lody',
+    'molly',
     '@molly/components',
     '@molly/electron',
-    '@molly/site-docs',
     '@molly/platform',
   ]);
 });
@@ -187,7 +184,7 @@ void test('7. test-only in a leaf does not fan out', () => {
 void test('8. test-only in a hub does not fan out', () => {
   const scope = select(['packages/shared/tests/foo.test.ts']);
   assert.deepEqual(scope.testPackages, ['@molly/shared']);
-  assertExcludes(scope.testPackages, ['lody', '@molly/components']);
+  assertExcludes(scope.testPackages, ['molly', '@molly/components']);
   assert.deepEqual(scope.fanoutPackages, []);
 });
 
@@ -196,11 +193,11 @@ void test('9. markdown-only inside a package is skip-tests', () => {
   assert.equal(scope.mode, 'skip-tests');
 });
 
-void test('10. runtime markdown exception fans out to lody', () => {
+void test('10. runtime markdown exception fans out to molly', () => {
   const scope = select(['packages/code-review-helper/prompts/review-helper-agent.md']);
   assert.equal(scope.mode, 'affected');
   assertIncludes(scope.seedPackages, ['@molly/code-review-helper']);
-  assertIncludes(scope.fanoutPackages, ['lody']);
+  assertIncludes(scope.fanoutPackages, ['molly']);
 });
 
 void test('10a. imported review fixture is helper test-only', () => {
@@ -230,31 +227,23 @@ void test('13. git failure is full even with docs files', () => {
   assert.equal(scope.reason, 'git_diff_failed');
 });
 
-void test('14. site-docs public asset is site-docs test-only', () => {
-  const scope = select(['site-docs/public/favicon.ico']);
-  assert.equal(scope.mode, 'affected');
-  assert.deepEqual(scope.testPackages, ['@molly/site-docs']);
-  assert.deepEqual(scope.fanoutPackages, []);
-});
-
-void test('14a. site-docs MDX only is not skip-tests', () => {
-  const scope = select(['site-docs/content/docs/en/(features)/session-handoff.mdx']);
-  assert.equal(scope.mode, 'affected');
-  assert.deepEqual(scope.testPackages, ['@molly/site-docs']);
-  assert.deepEqual(scope.fanoutPackages, []);
-  assert.equal(scope.runCheckQuick, true);
-  assert.equal(scope.runTypecheck, true);
-});
-
-void test('15. site-docs code seeds site-docs', () => {
-  const scope = select(['site-docs/lib/metadata.ts']);
-  assert.deepEqual(scope.testPackages, ['@molly/site-docs']);
+void test('retained Lody website does not participate in desktop CI', () => {
+  for (const file of [
+    'site-docs/public/favicon.ico',
+    'site-docs/content/docs/en/help.mdx',
+    'site-docs/lib/metadata.ts',
+  ]) {
+    const scope = select([file]);
+    assert.equal(scope.mode, 'skip-tests');
+    assert.deepEqual(scope.testPackages, []);
+    assert.equal(scope.runTypecheck, false);
+  }
 });
 
 void test('16. locales seed components and electron with fan-out', () => {
   const scope = select(['locales/en.json']);
   assertIncludes(scope.seedPackages, ['@molly/components', '@molly/electron']);
-  assertIncludes(scope.fanoutPackages, ['@molly/code-review-helper', 'lody', '@molly/site-docs']);
+  assertIncludes(scope.fanoutPackages, ['@molly/code-review-helper', 'molly']);
 });
 
 void test('17. e2e only keeps check:quick', () => {
@@ -267,7 +256,7 @@ void test('17. e2e only keeps check:quick', () => {
 
 void test('18. mixed docs + cli is cli-only affected', () => {
   const scope = select(['README.md', 'apps/cli/src/index.ts']);
-  assert.deepEqual(scope.testPackages, ['lody']);
+  assert.deepEqual(scope.testPackages, ['molly']);
 });
 
 void test('19. ci-full label forces full', () => {
@@ -305,7 +294,7 @@ void test('25. cross-package rename seeds both packages', () => {
 void test('26. deleted source still seeds fan-out', () => {
   const scope = select(['packages/platform/src/gone.ts']);
   assertIncludes(scope.seedPackages, ['@molly/platform']);
-  assertIncludes(scope.fanoutPackages, ['@molly/components', 'lody']);
+  assertIncludes(scope.fanoutPackages, ['@molly/components', 'molly']);
 });
 
 void test('29. always-full glob drift and rooted package.json', () => {
@@ -313,7 +302,7 @@ void test('29. always-full glob drift and rooted package.json', () => {
   assert.equal(classifyPath('patches/loro-repo.patch', workspace).kind, 'always-full');
   const cliPackage = classifyPath('apps/cli/package.json', workspace);
   assert.equal(cliPackage.kind, 'source');
-  assert.deepEqual(cliPackage.packages, ['lody']);
+  assert.deepEqual(cliPackage.packages, ['molly']);
   const locales = classifyPath('locales/en.json', workspace);
   assert.equal(locales.kind, 'source');
   assert.deepEqual(locales.packages, ['@molly/components', '@molly/electron']);
@@ -324,22 +313,16 @@ void test('30. kimi submodule is always-full', () => {
   assert.equal(select(['packages/acp-extension-kimi']).mode, 'full');
 });
 
-void test('31. cli-supervisor source tests lody and electron', () => {
+void test('31. cli-supervisor source tests molly and electron', () => {
   const scope = select(['packages/cli-supervisor/src/index.ts']);
-  assertIncludes(scope.testPackages, ['@molly/cli-supervisor', '@molly/electron', 'lody']);
+  assertIncludes(scope.testPackages, ['@molly/cli-supervisor', '@molly/electron', 'molly']);
 });
 
 void test('32. cloud-api source has no own tests and fans out', () => {
   const scope = select(['packages/cloud-api/src/index.ts']);
   assert.deepEqual(
     scope.testPackages.sort(),
-    [
-      '@molly/code-review-helper',
-      '@molly/components',
-      '@molly/electron',
-      '@molly/site-docs',
-      'lody',
-    ].sort()
+    ['@molly/code-review-helper', '@molly/components', '@molly/electron', 'molly'].sort()
   );
 });
 
@@ -359,7 +342,7 @@ overrides:
 
 void test('33b. loadWorkspace on the real repo does not throw on missing ACP package.json', () => {
   const loaded = loadWorkspace(REPO_ROOT);
-  assert.ok(loaded.byName.get('lody'));
+  assert.ok(loaded.byName.get('molly'));
   assert.ok(loaded.byName.get('@molly/components'));
   assert.ok(loaded.byName.has('acp-extension-core'));
   const mapped = classifyPath('packages/acp-extension-core/src/foo.ts', loaded);
@@ -400,7 +383,7 @@ void test('35b. complete scope writes every required key', () => {
 void test('36. helper source does not typecheck the viewer', () => {
   const scope = select(['packages/code-review-helper/src/index.ts']);
   assertExcludes(scope.typecheckPackages, ['@molly/code-review-viewer']);
-  assertIncludes(scope.fanoutPackages, ['lody']);
+  assertIncludes(scope.fanoutPackages, ['molly']);
 });
 
 void test('excluded ACP packages never appear in testPackages', () => {
@@ -433,7 +416,26 @@ void test('platform source log includes helper and site-docs', () => {
     '@molly/components',
     '@molly/code-review-helper',
     '@molly/electron',
-    '@molly/site-docs',
-    'lody',
+    'molly',
   ]);
+});
+
+void test('real workspace includes required contracts and excludes retired projects', () => {
+  const loaded = loadWorkspace(REPO_ROOT);
+  for (const name of ['molly', '@molly/harness-pi', 'acp-extension-core', 'acp-extension-dsh']) {
+    assert.ok(loaded.byName.has(name), name);
+  }
+  for (const name of [
+    '@molly/site-docs',
+    'acp-extension-claude',
+    'acp-extension-codex',
+    'acp-extension-grok',
+    'acp-extension-kimi',
+  ]) {
+    assert.equal(loaded.byName.has(name), false, name);
+  }
+  for (const entry of loaded.packages) {
+    for (const dependency of entry.workspaceDeps)
+      assert.ok(loaded.byName.has(dependency), `${entry.name} -> ${dependency}`);
+  }
 });

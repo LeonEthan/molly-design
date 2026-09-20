@@ -22,7 +22,7 @@ void test('27. electron last-run argv omits maxWorkers on the electron command',
     scope: {
       mode: 'affected',
       runTests: true,
-      testPackages: ['@molly/electron', 'lody'],
+      testPackages: ['@molly/electron', 'molly'],
     },
     execFileSync,
   });
@@ -33,9 +33,11 @@ void test('27. electron last-run argv omits maxWorkers on the electron command',
     '--filter',
     '!@molly/electron',
   ]);
-  assert.ok(calls[0].args.includes('lody'));
+  assert.ok(calls[0].args.includes('molly'));
   assert.ok(calls[0].args.includes('--maxWorkers=2'));
-  assert.ok(!calls[0].args.includes('@molly/electron') || calls[0].args.includes('!@molly/electron'));
+  assert.ok(
+    !calls[0].args.includes('@molly/electron') || calls[0].args.includes('!@molly/electron')
+  );
   assert.deepEqual(calls[1].args, ['--filter', '@molly/electron', 'run', 'test']);
   assert.ok(!calls[1].args.includes('--maxWorkers=2'));
 });
@@ -43,7 +45,7 @@ void test('27. electron last-run argv omits maxWorkers on the electron command',
 void test('28. full mode argv is exactly pnpm test:ci', () => {
   const { calls, execFileSync } = recordExec();
   runCiTests({
-    scope: { mode: 'full', runTests: true, testPackages: ['lody'] },
+    scope: { mode: 'full', runTests: true, testPackages: ['molly'] },
     execFileSync,
   });
   assert.deepEqual(calls, [{ cmd: 'pnpm', args: ['test:ci'] }]);

@@ -25,9 +25,13 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          submodules: recursive
+      - name: Initialize desktop source dependencies
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22.22.0'
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
       - run: node packages/design-bento/scripts/build.mjs
       - run: node packages/design-bento/scripts/verify-resources.mjs

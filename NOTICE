@@ -13,7 +13,12 @@ Additional source components retain their own provenance and licenses:
 * Bento is pinned from https://github.com/nyblnet/bento and is distributed under
   the MIT License. See packages/design-bento/README.md and the bundled license
   files.
-* Authoring and editor adapters record their source commits and derivation in
+* Authoring and editor adapters derived from agentic-listing-design include
+  code owned by LeonEthan. On 2026-09-20, the rights holder confirmed ownership
+  and authorized distribution of that self-owned code migrated into Molly
+  under Apache License 2.0 (see LICENSE). This grant does not relicense Bento,
+  third-party skills, fonts, icons, or other independently licensed material.
+  Adapter source commits, derivation, and the grant scope are recorded in
   packages/design-authoring/source-manifest.json and
   packages/design-bento/source-manifest.json.
 * ACP extension submodules retain their upstream repositories and licenses in

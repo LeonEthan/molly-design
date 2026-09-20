@@ -5,13 +5,13 @@ import { checkIssueBody } from './check-issue-body.mjs';
 
 const bugBody = `### Affected area
 
-CLI / daemon
+Embedded local service
 
 ### Installation method
 
 Built from source
 
-### Lody version or commit
+### Molly version or commit
 
 test
 
@@ -45,7 +45,7 @@ Always
 
 const featureBody = `### Affected area
 
-CLI / daemon
+Embedded local service
 
 ### Problem or workflow pressure
 
@@ -65,6 +65,14 @@ The workflow becomes easier.
 void describe('Issue body validation', () => {
   void it('does not require maintainer agreement for bug reports', () => {
     const result = checkIssueBody({ title: '[Bug] Command failure', body: bugBody });
+    assert.equal(result.ok, true);
+  });
+
+  void it('keeps existing reports valid after the version heading rename', () => {
+    const result = checkIssueBody({
+      title: '[Bug] Existing report',
+      body: bugBody.replace('### Molly version or commit', '### Lody version or commit'),
+    });
     assert.equal(result.ok, true);
   });
 

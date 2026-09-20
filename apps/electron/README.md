@@ -10,9 +10,8 @@ Molly desktop application built with Electron, React, and TypeScript.
 
 ### Install
 
-```bash
-$ pnpm install
-```
+Follow the root [contributor setup](../../CONTRIBUTING.md#get-the-code); install
+from the repository root, including its three required source submodules.
 
 ### Open-source desktop development
 
@@ -33,8 +32,10 @@ and should not be used as the normal development command.
 
 ### Build
 
-Every build command below uses the local OSS renderer, embeds the local-only
-CLI, and has no update publishing target or notarization identity.
+Run these commands from `apps/electron`. They use the local renderer and embedded
+service. Packaging defaults to no publication; explicitly supplied signing
+credentials determine signed/notarized versus ad-hoc output. Official release CI
+targets macOS arm64 only; Intel macOS, Windows and Linux remain experimental.
 
 ```bash
 # For Windows
@@ -84,3 +85,18 @@ hashes; it does not establish that Windows/Linux native executables run. Local
 packages do not enable the inherited Lody updater, including with
 `MOLLY_ELECTRON_ENABLE_UPDATER=1`. Packaging is not signing, notarization or release
 publication.
+
+## First-release readiness
+
+The release workflow targets macOS Apple Silicon and requires Developer ID,
+notarization and Sparkle signing credentials in the existing release environment.
+It shares one resolved version across packaging and publication and publishes
+`SHA256SUMS.txt` alongside artifacts. Build-only dispatch does not publish.
+
+Before a public release, the maintainer must verify the final signed/notarized
+DMG on a clean profile: configure a model, create/revise artwork, edit/save/export,
+restart and recover. Test automatic upgrade between two identifiable signed Molly
+versions while retaining artwork, assets, settings and native history. Existing
+local ad-hoc package evidence does not satisfy these distribution/upgrade checks.
+See [current acceptance evidence](../../USER_GUIDE.md#release-status-and-support-limits)
+and the [release specification](../../specs/molly-design-independent-release.zh.md).

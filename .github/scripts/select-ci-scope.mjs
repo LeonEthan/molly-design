@@ -18,7 +18,11 @@ export const MODES = Object.freeze({
   FULL: 'full',
 });
 
-export const EXCLUDED_PACKAGES = Object.freeze(['acp-extension-claude', 'acp-extension-codex']);
+export const EXCLUDED_PACKAGES = Object.freeze([
+  'acp-extension-claude',
+  'acp-extension-codex',
+  'acp-extension-grok',
+]);
 
 export const ALWAYS_FULL_GLOBS = Object.freeze([
   'package.json',
@@ -78,18 +82,15 @@ const SKIPPABLE_GLOBS = Object.freeze([
   '.github/CLAUDE.md',
   '.github/codex-review.md',
   '.github/workflow-security.md',
-  'site-docs/README.md',
+  'site-docs/**',
   '.vscode/**',
 ]);
 
 const REMAINING_MARKDOWN = '**/*.{md,mdx}';
 
 const ACP_PREFIXES = Object.freeze([
-  ['packages/acp-extension-claude', 'acp-extension-claude'],
-  ['packages/acp-extension-codex', 'acp-extension-codex'],
   ['packages/acp-extension-core', 'acp-extension-core'],
   ['packages/acp-extension-dsh', 'acp-extension-dsh'],
-  ['packages/acp-extension-grok', 'acp-extension-grok'],
 ]);
 
 const GITHUB_OUTPUT_KEYS = Object.freeze([
@@ -336,16 +337,6 @@ function longestPackage(filePath, workspace) {
 }
 
 function extraMapClassification(filePath) {
-  if (
-    filePath === 'site-docs/content' ||
-    filePath.startsWith('site-docs/content/') ||
-    filePath === 'site-docs/public' ||
-    filePath.startsWith('site-docs/public/') ||
-    filePath === 'site-docs/context' ||
-    filePath.startsWith('site-docs/context/')
-  ) {
-    return { kind: 'test', packages: ['@molly/site-docs'] };
-  }
   if (filePath === 'locales' || filePath.startsWith('locales/')) {
     return { kind: 'source', packages: ['@molly/components', '@molly/electron'] };
   }

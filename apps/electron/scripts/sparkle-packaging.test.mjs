@@ -76,6 +76,19 @@ void test('pins the Sparkle signing Action and scopes release credentials to tru
   assert.doesNotMatch(signingStep, /APPLE_API_KEY|CSC_LINK|CSC_KEY_PASSWORD/u)
 })
 
+void test('publishes only the first-release architecture with the resolved package version', () => {
+  assert.match(releaseWorkflow, /package_args: '--mac --arm64'/u)
+  assert.doesNotMatch(releaseWorkflow, /package_args:.*(?:--x64|--win|--linux)/u)
+  const resolveStep = releaseWorkflowStep('Resolve release version')
+  assert.match(resolveStep, /echo "version=\$\{version\}" >> "\$GITHUB_OUTPUT"/u)
+  assert.match(releaseWorkflow, /version: \$\{\{ steps\.version\.outputs\.version \}\}/u)
+  const publishStep = releaseWorkflowStep('Publish GitHub Release')
+  assert.match(publishStep, /RELEASE_VERSION: \$\{\{ needs\.build\.outputs\.version \}\}/u)
+  assert.match(publishStep, /tag="v\$\{RELEASE_VERSION\}"/u)
+  assert.doesNotMatch(publishStep, /inputs\.version/u)
+  assert.match(publishStep, /sha256sum \* > SHA256SUMS\.txt/u)
+})
+
 void test('treats explicit --mac and host-default darwin packaging as Sparkle package runs', () => {
   assert.equal(isMacPackaging(['--mac', '--arm64', '--x64'], 'linux'), true)
   assert.equal(isMacPackaging(['--dir'], 'darwin'), true)

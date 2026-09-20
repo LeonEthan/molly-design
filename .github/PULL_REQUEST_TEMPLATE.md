@@ -1,5 +1,5 @@
 <!--
-Fork-based contributions must reference a Lody issue below. Keep the change focused:
+Fork-based contributions must reference a Molly issue below. Keep the change focused:
 all policy findings share one seven-day correction period. Community PRs over 1000
 lines (additions + deletions) need a maintainer assignment on the linked Issue;
 over 200 without its prior Issue adds a size-specific finding. Same-repository
@@ -17,7 +17,7 @@ Required for fork PRs. Same-repository branches may leave this empty. Link the
 Issue that provides context for the contribution; prior approval is not
 required.
 Use `Closes #123` when merging this PR should close the Issue. Use `Refs #123`
-only when the Issue must remain open. A bare `#123` or full Lody Issue URL is
+only when the Issue must remain open. A bare `#123` or full Molly Issue URL is
 normalized to `Closes #123` by the PR policy workflow.
 -->
 

@@ -112,5 +112,11 @@
     "src/validate.ts": "YAML file/snapshot boundary; unused PPTD v2 validator removed",
     "src/semantic-assets.ts": "Native structured asset fields only; legacy theme traversal removed",
     "src/canvas-format.ts": "Single molly-canvas/1 YAML projection using literal Bento editable fields and kernel validation"
+  },
+  "adapterLicense": {
+    "spdx": "Apache-2.0",
+    "scope": "Rights-holder-owned agentic-listing-design code migrated into this package; third-party components retain their own licenses.",
+    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20.",
+    "notice": "../../NOTICE"
   }
 }

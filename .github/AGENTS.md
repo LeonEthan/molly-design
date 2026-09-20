@@ -25,11 +25,9 @@ Workflow-file security constraints live in
 
 ## Contribution contract
 
-- One-shot identity: Lody team if the user says so, or GitHub login is
-  `zxch3n`, `Leeeon233`, or `wibus-wee` (`gh api user --jq .login`, or git
-  `user.name` Zixuan Chen, Leon Zhao, or Wibus Wu). Otherwise community; do
-  not keep checking. Same-repository branches stay `internal` regardless of
-  login.
+- One-shot identity: Molly maintainer if the user says so or GitHub login is
+  `LeonEthan` (`gh api user --jq .login`); otherwise community. Same-repository
+  branches stay `internal` regardless of login. Check once per task.
 - Community PRs stay under 1000 changed lines (additions + deletions) unless a
   maintainer assigned the linked Issue to the author. Larger work: file an
   Issue with analysis and wait to be assigned; do not open the PR. Maintainers
@@ -41,10 +39,10 @@ Workflow-file security constraints live in
 - An Agent opens every pull request as a draft (`gh pr create --draft`) and then
   tells its user to mark it ready for review once they judge it ready for
   maintainers. An Agent leaves draft state only when its user asks.
-- Every fork-based PR references a Lody Issue and retains the complete Context
+- Every fork-based PR references a Molly Issue and retains the complete Context
   handoff block and its markers. Use `Closes #123` when merging the PR should
   close the Issue and `Refs #123` only when it must stay open. A bare `#123` or
-  full Lody Issue URL in `## Related issue` defaults to `Closes #123`.
+  full Molly Issue URL in `## Related issue` defaults to `Closes #123`.
 - Every Authoring context field is a concise public summary. `N/A` and redacted
   values are not accepted because maintainers need enough provenance, scope,
   and risk information to assess the contribution.
@@ -110,7 +108,7 @@ their failures and perform expiry.
 
 - Issue Forms cover only components present in the public repository. Keep Bug
   and Feature title prefixes, issue types, and existing labels aligned; route
-  product support and security reports out of public issues, and request only
+  usage help to the README and security reports to Molly’s security policy, and request only
   diagnostics contributors have checked and redacted.
 - `scripts/check-issue-body.mjs` mirrors required rendered headings and
   confirmations in both Issue Forms. Non-owner, non-bot issues that bypass or

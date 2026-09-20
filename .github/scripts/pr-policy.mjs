@@ -144,19 +144,13 @@ function checkPullRequestPolicy(pullRequest, { authorAssignedToRelatedIssue = fa
     );
   } else if (lines > MAX_EXTERNAL_CHANGED_LINES && !hasRelatedIssueReference(pullRequest.body)) {
     findings.push(
-      `PR changes ${lines} lines; changes over ${MAX_EXTERNAL_CHANGED_LINES} lines require the prior Lody Issue reference in ## Related issue.`
+      `PR changes ${lines} lines; changes over ${MAX_EXTERNAL_CHANGED_LINES} lines require the prior Molly Issue reference in ## Related issue.`
     );
   }
   return { ok: findings.length === 0, findings };
 }
 
-async function resolveAuthorAssignedToRelatedIssue({
-  github,
-  owner,
-  repo,
-  pullRequest,
-  warnings,
-}) {
+async function resolveAuthorAssignedToRelatedIssue({ github, owner, repo, pullRequest, warnings }) {
   const lines = changedLines(pullRequest);
   if (lines <= MAX_COMMUNITY_REVIEW_LINES) {
     return false;
@@ -202,7 +196,7 @@ function isGracePeriodExpired(invalidSince, now = new Date()) {
 
 export function formatCheckerFindings(result) {
   return [
-    'PR does not meet Lody contribution requirements:',
+    'PR does not meet Molly contribution requirements:',
     '',
     ...result.findings.map((finding) => `- ${finding}`),
     '',
@@ -239,7 +233,7 @@ function buildAttentionComment({ author, findings, invalidSince }) {
 function buildExpiredComment({ author }) {
   return [
     EXPIRED_COMMENT_MARKER,
-    `@${author}, this pull request was closed because it did not meet Lody's contribution requirements for ${GRACE_PERIOD_DAYS} days.`,
+    `@${author}, this pull request was closed because it did not meet Molly's contribution requirements for ${GRACE_PERIOD_DAYS} days.`,
     '',
     'Open a new pull request using the current template to continue contributing this change. This pull request will not be reopened.',
   ].join('\n');

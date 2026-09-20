@@ -4,7 +4,6 @@
  * contain PPTD-E* / common.kimiRuntime.
  */
 
-import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -110,14 +109,5 @@ describe('live PPTD/Kimi fingerprints', () => {
     }
     expect(manifest.files['src/validate.ts']?.derivation).toBe('adapted');
     expect(manifest.files['skills/imagegen/LICENSE.txt']?.derivation).toBe('verbatim');
-  });
-
-  it('keeps git history of the old PPTD/Folio lineage', () => {
-    const log = spawnSync('git', ['log', '--format=%s', '-30'], {
-      cwd: packageRoot,
-      encoding: 'utf8',
-    });
-    expect(log.status).toBe(0);
-    expect(log.stdout).toMatch(/PPTD|Folio/);
   });
 });

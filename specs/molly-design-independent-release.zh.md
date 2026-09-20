@@ -110,3 +110,12 @@ Developer ID 签名和 macOS 公证仍是建议的发布准备，未被本轮单
 本规格在 T26 品牌与帮助范围、T23 首次设计引导范围及 T29 验收记录之外增加独立品牌和自动更新要求；旧验收不自动覆盖新增范围。既有主数据隔离已经实现，但少数旧路径仍须核查；继承更新地址存在不证明当前本地应用发生跨产品更新。
 
 设计行为沿用[设计平台规格](graphic-design-platform.zh.md)。源码依据、旧决定关系和本轮进展由[独立发布提案](../.agents/notes/proposed/feature/2026-09-13-geon-independent-brand-release.zh.md)记录。关联 Issue：[T26](https://github.com/LeonEthan/molly-design/issues/28)、[T29](https://github.com/LeonEthan/molly-design/issues/31)。本轮仅完成文档与 tracker 操作，未运行新安装包验收。
+
+## 2026-09-20 仓库收敛实施
+
+首发继续限定 macOS arm64；正式发布工作流已收敛为该目标，其他平台保留本地实验构建，
+不作为正式支持承诺。默认工作区只初始化 ACP core、DSH 能力合同与 Bento；DSH 仍有
+共享层消费者，暂不删除。旧适配器与 Lody 网站保留来源记录，但退出默认依赖安装和检查。
+独立贡献入口、来源授权与维护边界见[实施记录](../.agents/notes/implemented/process/2026-09-20-independent-repository-convergence.zh.md)。
+
+这些仓库修改不构成公开发布、签名、公证、真实升级验收或本 Spec 的整份批准。

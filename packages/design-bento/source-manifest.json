@@ -98,5 +98,11 @@
     "Molly Design generic bridge readonly rejects semantic mutations; product session exposes readonly and flush without Agent lifecycle",
     "The assembled static-v1 font default is Inter and its OFL WOFF2 faces are embedded in the isolated canvas shell; canonical omissions and pinned vendor bytes remain unchanged",
     "Molly-authored selection-toolbar.ts renders fixed-screen controls in the isolated canvas; the temporary canvas copy excludes its UI from selection gestures and consumes shared command types"
-  ]
+  ],
+  "adapterLicense": {
+    "spdx": "Apache-2.0",
+    "scope": "Rights-holder-owned agentic-listing-design code migrated into this package; third-party components retain their own licenses.",
+    "authorization": "Rights holder LeonEthan confirmed ownership and Apache-2.0 distribution on 2026-09-20.",
+    "notice": "../../NOTICE"
+  }
 }

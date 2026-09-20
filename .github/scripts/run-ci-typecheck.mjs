@@ -4,8 +4,6 @@ import { execFileSync as defaultExecFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-const EXCLUDED_FILTERS = ['!acp-extension-claude', '!acp-extension-codex'];
-
 function loadScope(scopePath) {
   try {
     const scope = JSON.parse(readFileSync(scopePath, 'utf8'));
@@ -42,11 +40,10 @@ export function runCiTypecheck({
     return 'skip';
   }
 
-  runPnpm(execFileSync, cwd, ['--filter', 'lody', 'prepare:acp-adapters']);
+  runPnpm(execFileSync, cwd, ['--fail-if-no-match', '--filter', 'molly', 'prepare:acp-adapters']);
   runPnpm(execFileSync, cwd, [
     '-r',
     '--workspace-concurrency=1',
-    ...EXCLUDED_FILTERS.flatMap((filter) => ['--filter', filter]),
     ...typecheckPackages.flatMap((name) => ['--filter', name]),
     'run',
     'typecheck',

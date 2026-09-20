@@ -27,9 +27,9 @@ the wrong place. Route it rather than delete it:
 | Product intent, guarantees, protocol          | [`specs/`](../specs/AGENTS.md)    | It needs explicit human approval           |
 | Why a choice was made, what was rejected      | [Notes](notes/AGENTS.md)          | It is dated history, not current authority |
 
-Explanations live under `.agents/` rather than a root `docs/`: `site-docs/` already
-owns the user-facing documentation at `lody.ai/docs`, and a second root `docs/`
-would read as product documentation to anyone browsing the repository.
+Explanations live under `.agents/` rather than a root `docs/`: Molly’s README and `USER_GUIDE.md` own user-facing help. `site-docs/` is retained
+Lody website source outside the default workspace. A new documentation tree
+would duplicate these entry points.
 
 Splitting a constraint from its reason is normal and preferred: keep the one-line
 rule in `AGENTS.md` and link the note that explains it. Never move a binding

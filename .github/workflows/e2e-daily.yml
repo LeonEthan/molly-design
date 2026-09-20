@@ -36,8 +36,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: recursive
           persist-credentials: false
+
+      - name: Initialize desktop source dependencies
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

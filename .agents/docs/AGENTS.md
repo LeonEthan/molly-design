@@ -6,8 +6,8 @@ how subsystems fit together. It is the home for content that outgrew an
 `AGENTS.md` but is not a rule, not human-approved intent, and not one
 directory's own index.
 
-User-facing product documentation is not here. `site-docs/` owns the public site
-behind `lody.ai/docs`, and human-reviewed behavior Specs live in
+User-facing product documentation is not here. Molly’s README and `USER_GUIDE.md`
+own public help; `site-docs/` retains upstream Lody material. Human-reviewed behavior Specs live in
 [`specs/`](../../specs/AGENTS.md). Do not add private implementation details,
 operator configuration, deployment presets, sensitive data, or internal task
 records; only public evidence belongs anywhere under `.agents/`.

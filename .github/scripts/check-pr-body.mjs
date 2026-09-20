@@ -138,7 +138,7 @@ export function checkPullRequestBody(body) {
 
   if (requiredHeadingCounts.get('## Related issue') === 1 && !hasRelatedIssueReference(text)) {
     findings.push(
-      '## Related issue must contain a Lody issue reference such as `Closes #123` or `Refs #123`.'
+      '## Related issue must contain a Molly issue reference such as `Closes #123` or `Refs #123`.'
     );
   }
 
@@ -231,7 +231,7 @@ function main() {
     return;
   }
 
-  console.error('PR body does not match the Lody pull request template:\n');
+  console.error('PR body does not match the Molly pull request template:\n');
   for (const finding of result.findings) {
     console.error(`- ${finding}`);
   }

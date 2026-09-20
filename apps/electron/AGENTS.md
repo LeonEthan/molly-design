@@ -113,8 +113,9 @@ contracts, and window/renderer integration rules live in
 - macOS releases must be signed and notarized. `generate_appcast` refuses archives
   that fail `codesign --verify --deep --strict`, and Gatekeeper needs a notarized
   first-install DMG. Windows and Linux do not have this constraint.
-- CI packages Linux as `AppImage deb` only; `snap` stays in the target list for local
-  builds because it needs snapcraft on the machine.
+- Official release CI packages macOS arm64 only. Intel macOS, Windows and Linux
+  commands remain experimental local builds; widening release scope needs native
+  acceptance evidence. Linux snap requires local snapcraft.
 
 ## Verification
 

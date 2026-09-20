@@ -10,8 +10,10 @@ that the CLI materializes into design-session workdirs.
 Sources: remaining intake runtime files come from
 https://github.com/LeonEthan/agentic-listing-design pinned at
 `7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12` (Bento submodule
-`813c71fff72491e6898f5e55a20da44a562be586`, MIT). The original repository has no
-root license file. `source-manifest.json` records live pins with upstream path,
+`813c71fff72491e6898f5e55a20da44a562be586`, MIT). The pinned original repository has no root license file. Rights holder LeonEthan
+authorized its migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
+see [NOTICE](../../NOTICE) and the manifest’s `adapterLicense`. Third-party
+components retain their individual licenses. `source-manifest.json` records live pins with upstream path,
 derivation (`verbatim` / `adapted` / `ported`), and hashes; rewritten skills and
 the PPTD catalogue/example are not live ALD pins. `scripts/build.mjs` re-verifies
 verbatim files on every build. The imagegen skill ships the upstream MIT

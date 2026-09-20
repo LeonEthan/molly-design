@@ -1,11 +1,13 @@
 packages:
   - packages/*
-  # Full upstream-derived runtime workspace; built and validated independently.
+  # Retained upstream checkouts; not part of the embedded-Pi desktop build.
+  - '!packages/acp-extension-claude'
+  - '!packages/acp-extension-codex'
+  - '!packages/acp-extension-grok'
   - '!packages/acp-extension-kimi'
   - apps/cli
   - apps/electron
   - e2e
-  - site-docs
 
 catalog:
   '@agentclientprotocol/sdk': ^1.3.0

@@ -15,6 +15,19 @@ const NO_ATTRIBUTION_LICENSE_TOKENS = new Set(['0BSD', 'CC0-1.0', 'UNLICENSE', '
 
 const VENDORED_ATTRIBUTIONS = [
   {
+    id: 'molly-design-adapters',
+    kind: 'vendored',
+    scope: 'vendored-source',
+    name: 'agentic-listing-design adapters',
+    license: 'Apache-2.0',
+    homepage: 'https://github.com/LeonEthan/agentic-listing-design',
+    author: 'LeonEthan',
+    description:
+      'Rights-holder-owned adapters migrated into Molly, authorized under Apache-2.0 on 2026-09-20. Third-party components retain their own licenses.',
+    assets: ['Design authoring and Bento editor adapters'],
+    noticePath: 'NOTICE',
+  },
+  {
     id: 'vendored-vscode-fuzzy-scorer',
     kind: 'vendored',
     scope: 'vendored-source',

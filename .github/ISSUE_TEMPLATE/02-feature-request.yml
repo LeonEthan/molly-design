@@ -1,5 +1,5 @@
 name: Feature request
-description: Propose an improvement to Lody's open-source components
+description: Propose an improvement to Molly's open-source components
 title: '[Feature Request] '
 labels:
   - enhancement
@@ -8,20 +8,20 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping shape Lody. Start with the problem and desired outcome; a complete implementation design is not required. Analysis of a large change is welcome here. Do not open a community PR over 1000 changed lines unless a maintainer assigns you this Issue.
+        Thanks for helping shape Molly. Start with the problem and desired outcome; a complete implementation design is not required. Analysis of a large change is welcome here. Do not open a community PR over 1000 changed lines unless a maintainer assigns you this Issue.
 
         Keep every required section and confirmation. Issues that bypass or remove the form are marked `status:needs-issue-body` until corrected; only repository owners and automated bots are exempt.
 
-        This tracker covers the open-source desktop app, CLI, daemon, agent runtime, and packages in this repository. For hosted services, Web or mobile apps, accounts, or billing, use [Lody Support](https://lody.ai/support).
+        This tracker covers Molly’s local desktop app, embedded Agent runtime, editor, and supporting packages. Molly does not provide a hosted service, account system, or standalone CLI product.
 
   - type: dropdown
     id: area
     attributes:
       label: Affected area
-      description: Which open-source part of Lody would this improve?
+      description: Which open-source part of Molly would this improve?
       options:
         - Desktop app
-        - CLI / daemon
+        - Embedded local service
         - Agent runtime / ACP
         - Session / workspace / local sync
         - GitHub / code review

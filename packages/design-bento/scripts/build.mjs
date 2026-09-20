@@ -194,6 +194,8 @@ try {
   const shell = Buffer.from(html.replace('</head>', `<style>${interCss}</style></head>`));
   writeFileSync(join(output, 'editor.html'), shell);
   cpSync(join(root, 'sample.json'), join(output, 'sample.json'));
+  cpSync(resolve(root, '../../LICENSE'), join(output, 'MOLLY-LICENSE'));
+  cpSync(resolve(root, '../../NOTICE'), join(output, 'MOLLY-NOTICE'));
   cpSync(join(root, 'bento/LICENSE'), join(output, 'BENTO-LICENSE'));
   cpSync(join(root, 'SPACE-MONO-LICENSE'), join(output, 'SPACE-MONO-LICENSE'));
   cpSync(join(root, 'FONTAWESOME-LICENSE'), join(output, 'FONTAWESOME-LICENSE'));

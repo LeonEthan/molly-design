@@ -15,7 +15,14 @@ for (const [file, key] of [
   const content = readFileSync(new URL(file, resources));
   assert.equal(createHash('sha256').update(content).digest('hex'), manifest[key]);
 }
-for (const license of ['BENTO-LICENSE', 'SPACE-MONO-LICENSE', 'FONTAWESOME-LICENSE']) {
+for (const license of [
+  'MOLLY-LICENSE',
+  'MOLLY-NOTICE',
+  'BENTO-LICENSE',
+  'SPACE-MONO-LICENSE',
+  'FONTAWESOME-LICENSE',
+  'INTER-LICENSE',
+]) {
   assert.ok(readFileSync(new URL(license, resources)).length > 0);
 }
 console.log(JSON.stringify({ platform: process.platform, arch: process.arch, ...manifest }));

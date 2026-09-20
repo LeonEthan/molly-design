@@ -1,7 +1,7 @@
 # Security policy
 
 Please do not disclose security vulnerabilities in a public issue. Use the
-repository's GitHub Security Advisory reporting flow so maintainers can triage
+[Molly’s private vulnerability reporting flow](https://github.com/LeonEthan/molly-design/security/advisories/new) so maintainers can triage
 and coordinate a fix before disclosure.
 
 Do not include real credentials, access tokens, private repository content, or

@@ -1,9 +1,10 @@
 # Pinned Bento resources
 
-P0 loads a synthetic single-canvas design through Molly's Electron File menu.
-The CLI owns the current JSON at `<Molly data root>/chats/molly-p0/design.json`;
-Electron owns a sandboxed, network-blocked Bento view and PNG/JPEG rendering.
-This fixed sample is not a new Session or a general document import API. P1 adds editable Session canvases; Agent generation remains P2.
+This package assembles the pinned Bento editor, Molly adapters and offline rendering
+resources. Electron owns the isolated canvas and PNG/JPEG rendering; the embedded
+local service owns persisted BentoDoc artwork. YAML conversion is owned by
+[design-authoring](../design-authoring/README.md). Current save/version contracts
+are described in [design persistence](../../apps/cli/src/design/README.md).
 
 Run `corepack pnpm --dir packages/design-bento build`. Normal Electron development
 and production builds invoke the same builder. Install the pinned Bento submodule
@@ -12,13 +13,15 @@ and npm are required; the upstream npm lockfile pins build dependencies.
 
 `source-manifest.json` identifies the source commit, five ordered patches, and
 copied files. `vendor/packages` contains only the contracts, kernel and editor
-source closure required by those patches. The capability matrix is retained as
-source evidence, not a claim that P0 validates every capability. Authoring/PPTD,
+source closure required by those patches. The capability matrix records source evidence; the current authoring validator
+determines admitted fields. Authoring/PPTD,
 quality orchestration, revision persistence, Web/HTTP/SSE applications and Agent
 Runtime Manager are not migrated. The source repository is
 https://github.com/LeonEthan/agentic-listing-design at
-`7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12`; the original source has no root license
-file. Preserve its provenance rather than attributing that adapter code to Bento.
+`7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12`; the pinned original source has no root license file. Its rights holder LeonEthan
+authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
+see [NOTICE](../../NOTICE) and `adapterLicense` in the source manifest.
+Bento and other third-party components retain their individual licenses.
 
 Bento is pinned to `813c71fff72491e6898f5e55a20da44a562be586` (MIT, see
 `bento/LICENSE`). Its own `slides` and `kernel` sources are assembled with the
@@ -42,57 +45,14 @@ The builder emits `apps/electron/resources/design/editor.html`, sample JSON,
 licenses and `build.json` with source and output hashes. No sibling checkout or
 absolute source path is needed. The renderer uses the locked Electron 39.5.1
 Chromium and the same Bento stage projection for display and export. PNG captures
-the isolated transparent stage at 800×600; JPEG composites white first. There is
+the isolated transparent artwork stage; JPEG composites white first. There is
 no window-chrome screenshot or fallback renderer.
-
-P0 does not accept arbitrary documents. Saved sample changes fail without replacing
-existing bytes. Repeating an open after a lost child-process response reuses the
-already persisted file. No notification or separate chat metadata write is needed
-to reconstruct this sample. Future Session association must derive from its stable
-workspace/relative path after durable save, without rolling back saved content.
-
-## P1 manual designs
-
-`apps/cli/src/design/store.ts` owns `<Molly data root>/chats/<sessionId>/design.json`.
-The file atomically contains the canonical BentoDoc, referenced content-addressed
-asset bytes, and Session association. Assets are embedded so a confirmed save has
-no partially committed external asset table. The module is the single committer:
-the Electron-owned CLI worker forwards UI requests over stdin, and the daemon calls
-the same exported operations in-process after a turn (P2.3). Both paths verify
-expected content hashes and semantic kernel commands, fsync replacement bytes, then
-acknowledge. A lost reply can be retried; a different baseline is a conflict — the
-daemon preserves the existing draft and returns `DESIGN_CONFLICT`, leaving the Agent
-to re-read, compare and explicitly continue or resubmit. Two callers
-still do not mean two writers: commits are coordinated by content only, so a caller
-that loses the baseline race never sees its bytes land. Historical candidate files
-remain readable as ordinary files, but no new candidate production or adoption flow exists.
-
-`design-pending/` contains only unfinished Session associations. UI repair authors
-those through the existing workspace writer, then acknowledges them to the CLI.
-Acknowledged Sessions are not reconstructed by scanning design files, so ordinary
-Session deletion keeps its existing meaning. No conversation or undo log is copied
-when conflict edits become an independent design.
-
-Each native view retains its editor while its canvas tab is open, including hidden
-panels and Session route switches. A committed turn re-creates clean instances from
-the store so an open view cannot keep showing, or later saving, a superseded document. Explicit close releases undo
-history. Save failures
-block leaving with retry/discard choices; an unexpected crash recovers the last
-confirmed file. Export uses an isolated instance of the same saved Bento document,
-with fixed resources, decoded images and loaded fonts before stage capture.
-
-P1 bounds canvases to 4096 pixels per side and imports PNG/JPEG/GIF images up to
-16 MiB and 16 megapixels. These are resource limits, not new output formats. The
-semantic controls expose these limits. `src/product-session.ts`, `src/selection-toolbar.ts` and `src/image.ts`
-are local overlays of the pinned adapters; the builder applies them after copying
-vendor sources. The source manifest records relative kernel imports and stricter
-TypeScript adaptations. Original upstream identity and licenses remain unchanged.
 
 ## Historical projection types
 
 `vendor/packages/contracts/src/pptd-v3.ts` records Molly's earlier adaptation
 of the pinned Bento v4 types. It remains pinned source evidence, not a live PPTD
-import/export entry. The current `geon-canvas/1` single-file conversion and
+import/export entry. The current `molly-canvas/1` single-file conversion and
 projection capability mapping belong to `@molly/design-authoring`;
 see its [README](../design-authoring/README.md).
 The source manifest pins this additional file separately and records its origin.
@@ -164,3 +124,31 @@ zoom/scroll bounds. `window.bento.fit()` reuses native fit and centering. Electr
 fits new document instances and resized containers before publishing prepared pixels;
 unchanged retained instances keep manual zoom across hide/show.
 It does not persist document state or know about Agent execution or Git history.
+
+## Build and upgrade
+
+From a normal root install, run:
+
+```sh
+pnpm --dir packages/design-bento build
+node packages/design-bento/scripts/verify-resources.mjs
+```
+
+Each build verifies vendored hashes, creates a temporary detached worktree at the
+manifest's Bento commit, sparsely checks out `slides`, `kernel` and `scripts`,
+applies the ordered patches, copies adapters and local overlays, runs the pinned
+`slides/package-lock.json` through `npm ci`, then builds one offline HTML resource.
+Root pnpm and upstream npm are deliberately separate dependency closures. A cold
+build requires registry access; the root install alone is not an offline-build
+preparation. The worktree is removed after success or failure; npm's normal cache
+can reuse downloaded packages without introducing another artifact store.
+
+For an upgrade, change the source pin only after inspecting its upstream diff;
+review each patch and source-manifest entry, then run resource verification,
+authoring round-trip tests, the desktop build and native edit/save/export acceptance.
+A clean `git apply` or a hash match does not establish visual compatibility. Keep
+Molly overlays under this package; never modify the pinned checkout as an implicit
+build input. The existing builder remains the single assembly path.
+
+Resources include Apache-2.0 `MOLLY-LICENSE` and `MOLLY-NOTICE` for Molly and the
+rights-holder-owned migrated adapters, alongside Bento and font/icon notices.

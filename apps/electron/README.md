@@ -47,6 +47,11 @@ $ pnpm build:mac
 $ pnpm build:linux
 ```
 
+Packaging excludes previous `dist` outputs and `.sparkle-local` update fixtures,
+including when a custom output directory is selected. Generated `resources/cli`
+bytes are excluded from formatting: the embedded engine manifest seals their
+hashes. Rebuild and sync these resources instead of editing them in place.
+
 ### Molly P0 design sample
 
 The File menu opens the fixed Molly sample and exports PNG/JPEG. Both development

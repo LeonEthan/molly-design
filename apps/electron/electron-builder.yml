@@ -16,6 +16,9 @@ files:
   # list into the whole include set. The skill re-includes below are positive, so
   # the include-everything default is stated here instead of left implicit.
   - '**/*'
+  # Local update fixtures and previous installers are not application resources.
+  # Keep this exclusion when the caller chooses a different output directory.
+  - '!{.sparkle-local,dist}/**'
   - '!**/.vscode/*'
   - '!src/*'
   - '!scripts/*'

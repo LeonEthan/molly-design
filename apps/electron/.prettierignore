@@ -6,3 +6,5 @@ tsconfig.json
 tsconfig.*.json
 
 resources/design
+resources/cli
+.sparkle-local

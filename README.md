@@ -40,10 +40,11 @@ Gatekeeper or remove quarantine attributes to run it.
 On first launch macOS asks whether Molly may use its "Molly Safe Storage" keychain
 entry, which protects saved connection credentials. **Always Allow** keeps saved
 connections readable across restarts, **Allow** grants once, and **Deny** leaves the
-app usable but unable to read saved connections until you re-enter them in Settings.
+app usable but unable to read saved connections while access is denied; the store is
+preserved and macOS asks again on the next launch.
 Ad-hoc local builds do not share a stable signing identity, so macOS asks again for
 each new build. Answer this prompt before driving the app through automation
-interfaces: they stay unresponsive while it is pending.
+interfaces: a pending prompt can leave them unresponsive.
 
 ## Configure connections
 
@@ -120,11 +121,12 @@ force a retry.
 
 ## Troubleshooting
 
-- **First launch appears stalled and automation interfaces do not respond.** The
-  keychain prompt above is still pending, possibly behind the window; answer it.
-- **Saved connections are missing or unreadable.** The prompt was denied or the
-  build changed. Re-enter the connection in Settings; the encrypted store is not
-  portable across machines or OS accounts.
+- **First launch appears stalled and automation interfaces do not respond.** A
+  pending keychain prompt can explain this; it may sit behind the window. Answer it.
+- **Saved connections cannot be read.** Access was denied or the build changed. The
+  encrypted store is preserved; authorize the macOS prompt on the next launch, or
+  re-enter the connection in Settings. A copied store is not guaranteed to work on
+  another machine or OS account.
 - **An image call ends with an unknown outcome after a timeout.** Molly keeps the
   receipt, neither retries a possibly-paid request nor reports it as successful.
   Retry only with an explicit new request, which may charge again.
@@ -153,11 +155,18 @@ and the [final package delivery note](.agents/notes/implemented/testing/2026-09-
 The macOS arm64 delivery package was verified from a DMG-installed copy: first launch,
 session reopening, artwork rendering (including previously generated images), manual
 edit and autosave, PNG export, legacy-continuation canvas routing and restart
-persistence. Configured-model turns and image generation were verified on the earlier
-installed builds recorded in the linked notes. Windows/Linux resource builds are not
-native
+persistence. Configured-model turns were verified on earlier installed builds
+([install and Kimi connection](.agents/notes/implemented/bug-fix/2026-09-20-packaged-helper-startup.zh.md),
+[editable artwork journey](.agents/notes/implemented/bug-fix/2026-09-20-editable-design-journey.zh.md)),
+real image generation/editing in one artwork
+([image journey](.agents/notes/implemented/testing/2026-09-20-image-generate-edit-replace.zh.md),
+including its retry-authorization disclosure), and legacy continuation on a hybrid
+package
+([continuation acceptance](.agents/notes/implemented/testing/2026-09-20-design-session-continuation-acceptance.zh.md)).
+Windows/Linux resource builds are not native
 execution evidence. The reviewed `pi-ask-question` subset has
-SDK tests; native question interaction and restoration remain open. None of these
+SDK tests, and native question interaction was verified on an installed build;
+restoration across restarts remains open. None of these
 checks establishes a universal canvas-size or performance limit.
 
 Deferred beyond this delivery: Google and other SDK upgrades, the plugin

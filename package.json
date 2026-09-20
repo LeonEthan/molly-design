@@ -52,14 +52,14 @@
     "build:electron:linux": "corepack pnpm --dir apps/electron build:linux"
   },
   "keywords": [
-    "cli",
-    "server",
-    "typescript",
-    "command-line",
+    "graphic-design",
+    "desktop",
+    "canvas",
     "agent",
-    "remote-execution"
+    "local-first",
+    "typescript"
   ],
-  "author": "LodyAI",
+  "author": "Molly contributors",
   "engines": {
     "node": ">=22.14.0 <23 || >=23.6.0"
   },

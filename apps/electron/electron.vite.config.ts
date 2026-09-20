@@ -100,7 +100,7 @@ export default defineConfig(({ mode }) => {
       define: viteEnvDefine,
       build: {
         externalizeDeps: {
-          exclude: ['@molly/cli-supervisor', '@molly/shared', '@loro-dev/ignore', 'effect']
+          exclude: ['@molly/cli-supervisor', '@molly/shared', '@molly/ignore', 'effect']
         }
       }
     },

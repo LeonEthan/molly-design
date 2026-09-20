@@ -131,7 +131,7 @@ await writeFile(
   `${baseConfig}\n[plugins]\ndisabled=${JSON.stringify(inspection.plugins.map((p) => p.name))}\n`
 );
 const adapter = fileURLToPath(
-  new URL('../../../packages/acp-extension-grok/src/index.js', import.meta.url)
+  new URL('../../../vendor/acp-extension-grok/src/index.js', import.meta.url)
 );
 child = spawn(process.execPath, [adapter], {
   cwd: work,

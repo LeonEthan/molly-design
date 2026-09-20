@@ -20,7 +20,7 @@ import * as tar from 'tar';
 import { compressStream } from 'zstd-stream';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const kimiRoot = join(repoRoot, 'packages/acp-extension-kimi');
+const kimiRoot = join(repoRoot, 'vendor/acp-extension-kimi');
 const kimiApp = join(kimiRoot, 'apps/kimi-code');
 const args = parseArgs(process.argv.slice(2));
 const outputDir = resolve(repoRoot, args.output ?? 'dist/kimi-runtime');

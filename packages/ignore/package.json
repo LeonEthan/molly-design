@@ -1,5 +1,5 @@
 {
-  "name": "@loro-dev/ignore",
+  "name": "@molly/ignore",
   "version": "0.0.0",
   "description": "Gitignore-aware workspace directory walking and an ignore-skipping filesystem watcher.",
   "type": "module",

@@ -74,15 +74,15 @@ function syntheticWorkspace() {
     }),
     pkg('@molly/code-review-viewer', 'packages/code-review-viewer', { test: false }),
     pkg('@molly/configs', 'packages/configs', { test: false, typecheck: false }),
-    pkg('@loro-dev/ignore', 'packages/ignore'),
+    pkg('@molly/ignore', 'packages/ignore'),
     pkg('@molly/loro-streams-rpc', 'packages/loro-streams-rpc', { deps: ['@molly/shared'] }),
     pkg('@molly/turn-diff-store', 'packages/turn-diff-store'),
     pkg('@molly/e2e', 'e2e', { test: false, typecheck: false }),
-    pkg('acp-extension-claude', 'packages/acp-extension-claude'),
-    pkg('acp-extension-codex', 'packages/acp-extension-codex'),
+    pkg('acp-extension-claude', 'vendor/acp-extension-claude'),
+    pkg('acp-extension-codex', 'vendor/acp-extension-codex'),
     pkg('acp-extension-core', 'packages/acp-extension-core', { test: false, typecheck: false }),
     pkg('acp-extension-dsh', 'packages/acp-extension-dsh', { test: false, typecheck: false }),
-    pkg('acp-extension-grok', 'packages/acp-extension-grok', { test: false, typecheck: false }),
+    pkg('acp-extension-grok', 'vendor/acp-extension-grok', { test: false, typecheck: false }),
   ]);
 }
 
@@ -177,7 +177,7 @@ void test('6. root package.json is always-full', () => {
 void test('7. test-only in a leaf does not fan out', () => {
   const scope = select(['packages/ignore/test/gitignore.test.ts']);
   assert.equal(scope.mode, 'affected');
-  assert.deepEqual(scope.testPackages, ['@loro-dev/ignore']);
+  assert.deepEqual(scope.testPackages, ['@molly/ignore']);
   assert.deepEqual(scope.fanoutPackages, []);
 });
 
@@ -310,7 +310,7 @@ void test('29. always-full glob drift and rooted package.json', () => {
 });
 
 void test('30. kimi submodule is always-full', () => {
-  assert.equal(select(['packages/acp-extension-kimi']).mode, 'full');
+  assert.equal(select(['vendor/acp-extension-kimi']).mode, 'full');
 });
 
 void test('31. cli-supervisor source tests molly and electron', () => {

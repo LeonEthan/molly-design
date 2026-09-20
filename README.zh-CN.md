@@ -65,7 +65,7 @@ corepack pnpm start:local
 | `packages/acp-extension-core`、`packages/acp-extension-dsh` | 必需的上游协议与能力合同             |
 | `e2e`                                                       | 桌面验收工具                         |
 
-其他 ACP 子模块与 `site-docs` 保留上游或历史材料，不参与默认工作区。
+`vendor/` 下的其他 ACP 子模块与 `site-docs` 保留上游或历史材料，不参与默认工作区。
 Lody 网站不是 Molly 产品文档。修改这些项目之前请阅读[依赖维护说明](CONTRIBUTING.md#source-dependencies)。
 
 ## 贡献与帮助

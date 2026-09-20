@@ -44,6 +44,8 @@
           # Include both workspace files and submodule gitlink updates.
           - 'packages/acp-extension-*'
           - 'packages/acp-extension-*/**'
+          - 'vendor/acp-extension-*'
+          - 'vendor/acp-extension-*/**'
 
 'scope: docs':
   - changed-files:

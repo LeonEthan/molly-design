@@ -3,7 +3,7 @@ import { bindLiveSource, type LiveSource } from './design-live-source'
 import { fitDesignViewport } from './design-viewport'
 import { WebContentsView, type BrowserWindow } from 'electron'
 import { lstatSync } from 'node:fs'
-import { startWorkspaceFileWatcher, type WorkspaceFileWatcher } from '@loro-dev/ignore'
+import { startWorkspaceFileWatcher, type WorkspaceFileWatcher } from '@molly/ignore'
 import { SourceObservation } from './design-source-observation'
 import { dirname, relative, resolve } from 'node:path'
 import {

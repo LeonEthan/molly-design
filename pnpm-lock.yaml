@@ -368,12 +368,12 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^4.0.0
         version: 4.0.0(electron@39.5.1)
-      '@loro-dev/ignore':
-        specifier: workspace:*
-        version: link:../../packages/ignore
       '@molly/cli-supervisor':
         specifier: workspace:*
         version: link:../../packages/cli-supervisor
+      '@molly/ignore':
+        specifier: workspace:*
+        version: link:../../packages/ignore
       '@molly/platform':
         specifier: workspace:*
         version: link:../../packages/platform

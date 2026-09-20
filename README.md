@@ -70,7 +70,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, checks and dependency 
 | `packages/acp-extension-core`, `packages/acp-extension-dsh` | Required upstream protocol/capability contracts                |
 | `e2e`                                                       | Desktop acceptance tooling                                     |
 
-Other ACP submodules and `site-docs` retain upstream/historical material outside the
+Other ACP submodules under `vendor/` and `site-docs` retain upstream/historical
+material outside the
 default workspace. The Lody website is not Molly documentation. See the
 [dependency maintenance guide](CONTRIBUTING.md#source-dependencies) before changing them.
 

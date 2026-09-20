@@ -41,8 +41,8 @@ export const ALWAYS_FULL_GLOBS = Object.freeze([
   '.gitmodules',
   'tsconfig.json',
   'tsconfig.*.json',
-  'packages/acp-extension-kimi',
-  'packages/acp-extension-kimi/**',
+  'vendor/acp-extension-kimi',
+  'vendor/acp-extension-kimi/**',
 ]);
 
 const TEST_PATTERNS = Object.freeze([

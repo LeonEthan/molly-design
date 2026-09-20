@@ -31,7 +31,7 @@ void test('affected typecheck always prepares adapters first', () => {
     scope: {
       mode: 'affected',
       runTypecheck: true,
-      typecheckPackages: ['@loro-dev/ignore', 'molly'],
+      typecheckPackages: ['@molly/ignore', 'molly'],
     },
     execFileSync,
   });
@@ -43,7 +43,7 @@ void test('affected typecheck always prepares adapters first', () => {
   ]);
   assert.equal(calls[1].args[0], '-r');
   assert.ok(calls[1].args.includes('--workspace-concurrency=1'));
-  assert.ok(calls[1].args.includes('@loro-dev/ignore'));
+  assert.ok(calls[1].args.includes('@molly/ignore'));
   assert.ok(calls[1].args.includes('molly'));
 });
 

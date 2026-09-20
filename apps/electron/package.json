@@ -47,7 +47,7 @@
     "jotai": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "@loro-dev/ignore": "workspace:*"
+    "@molly/ignore": "workspace:*"
   },
   "devDependencies": {
     "zod": "catalog:",

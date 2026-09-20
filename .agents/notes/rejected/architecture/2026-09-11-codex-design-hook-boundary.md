@@ -40,11 +40,11 @@ its native arm64 binary SHA-256 was
 The checked-out public ACP submodule is `acp-extension-codex` **1.10.0**, commit
 `9b4c96140c90100ea60c1f4ce3a7fdd7e6cb4b4f`.
 
-The ACP [entry](../../../../packages/acp-extension-codex/src/index.ts) reads
+The ACP [entry](../../../../vendor/acp-extension-codex/src/index.ts) reads
 `CODEX_PATH` and JSON `CODEX_CONFIG`; its
-[process launcher](../../../../packages/acp-extension-codex/src/CodexJsonRpcConnection.ts)
+[process launcher](../../../../vendor/acp-extension-codex/src/CodexJsonRpcConnection.ts)
 starts that executable with `app-server` and inherited environment.
-[`CodexAcpClient.createSessionConfig`](../../../../packages/acp-extension-codex/src/CodexAcpClient.ts)
+[`CodexAcpClient.createSessionConfig`](../../../../vendor/acp-extension-codex/src/CodexAcpClient.ts)
 merges session config and forwards actual ACP MCP servers as `mcp_servers` in
 `thread/start` and `thread/resume`. Pi's missing-MCP workaround does not apply.
 This launch/configuration statement is source inspection, not a new ACP end-to-end run.
@@ -117,7 +117,7 @@ Official runtime source was inspected at tag `rust-v0.153.4`, commit
 - [MCP hook mapping](https://github.com/openai/codex/blob/rust-v0.153.4/codex-rs/core/src/tools/handlers/mcp.rs#L412)
   uses the actual namespaced tool and its arguments/results.
 
-ACP's [event handler](../../../../packages/acp-extension-codex/src/CodexEventHandler.ts)
+ACP's [event handler](../../../../vendor/acp-extension-codex/src/CodexEventHandler.ts)
 currently ignores `rawResponseItem/completed` and `rawResponse/completed`. Even
 forwarding these asynchronous post-response notifications would not establish an
 acknowledged pre-generation snapshot. A transcript path is neither a flush guarantee

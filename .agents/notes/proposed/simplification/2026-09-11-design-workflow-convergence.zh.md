@@ -32,7 +32,7 @@ Bento 的[分组控件](../../../../packages/design-bento/vendor/packages/editor
 
 ### 冲突使用 Agent 工具反馈，不能冒称复用统一合并服务
 
-[Lody ACP 文件入口](../../../../apps/cli/src/agent/agent-client.ts)读取旧字节用于 diff 后执行 `fs.writeFile`，没有通用 CAS 或语义合并服务。[Kimi Edit](../../../../packages/acp-extension-kimi/packages/agent-core/src/tools/builtin/file/edit.ts)则在 `old_string` 不匹配时返回错误并要求重读。这证明可复用的是工具错误返回给 Agent、由其继续处理的范式；不证明所有 Write/Shell 路径已经有同等保护。
+[Lody ACP 文件入口](../../../../apps/cli/src/agent/agent-client.ts)读取旧字节用于 diff 后执行 `fs.writeFile`，没有通用 CAS 或语义合并服务。[Kimi Edit](../../../../vendor/acp-extension-kimi/packages/agent-core/src/tools/builtin/file/edit.ts)则在 `old_string` 不匹配时返回错误并要求重读。这证明可复用的是工具错误返回给 Agent、由其继续处理的范式；不证明所有 Write/Shell 路径已经有同等保护。
 
 | 时机 | 处理合同 |
 | --- | --- |

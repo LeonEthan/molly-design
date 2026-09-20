@@ -7,7 +7,7 @@ how subsystems fit together. It is the home for content that outgrew an
 directory's own index.
 
 User-facing product documentation is not here. Molly’s README and `USER_GUIDE.md`
-own public help; `site-docs/` retains upstream Lody material. Human-reviewed behavior Specs live in
+own public help. Human-reviewed behavior Specs live in
 [`specs/`](../../specs/AGENTS.md). Do not add private implementation details,
 operator configuration, deployment presets, sensitive data, or internal task
 records; only public evidence belongs anywhere under `.agents/`.

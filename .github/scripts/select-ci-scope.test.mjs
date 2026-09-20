@@ -227,19 +227,6 @@ void test('13. git failure is full even with docs files', () => {
   assert.equal(scope.reason, 'git_diff_failed');
 });
 
-void test('retained Lody website does not participate in desktop CI', () => {
-  for (const file of [
-    'site-docs/public/favicon.ico',
-    'site-docs/content/docs/en/help.mdx',
-    'site-docs/lib/metadata.ts',
-  ]) {
-    const scope = select([file]);
-    assert.equal(scope.mode, 'skip-tests');
-    assert.deepEqual(scope.testPackages, []);
-    assert.equal(scope.runTypecheck, false);
-  }
-});
-
 void test('16. locales seed components and electron with fan-out', () => {
   const scope = select(['locales/en.json']);
   assertIncludes(scope.seedPackages, ['@molly/components', '@molly/electron']);
@@ -410,7 +397,7 @@ void test("listChangedFiles fail-open is the caller's job when exec throws", () 
   );
 });
 
-void test('platform source log includes helper and site-docs', () => {
+void test('platform source log includes helper surfaces', () => {
   const scope = select(['packages/platform/src/index.ts']);
   assertIncludes(scope.fanoutPackages, [
     '@molly/components',

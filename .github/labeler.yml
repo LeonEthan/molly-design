@@ -50,7 +50,6 @@
 'scope: docs':
   - changed-files:
       - any-glob-to-any-file:
-          - 'site-docs/**'
           - 'README*.md'
           - 'CONTRIBUTING.md'
           - 'DEV.md'

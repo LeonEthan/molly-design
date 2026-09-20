@@ -46,13 +46,12 @@ git submodule update --init packages/acp-extension-core packages/acp-extension-d
 
 ## Source dependencies
 
-| Source                                        | Why it remains                                                           | Maintenance boundary                                                                                                           |
-| --------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| ACP core                                      | Shared protocol types and host contracts                                 | Root pnpm builds the pinned submodule; coordinate producer/consumer changes.                                                   |
-| ACP DSH                                       | `packages/shared/src/deepseek-harness.ts` imports capability definitions | Keep until its real consumers are retired; it is not an enabled desktop engine.                                                |
-| Bento                                         | Editor and renderer sources                                              | Its npm lockfile, source manifest, patches and Molly overlays are assembled in a temporary worktree.                           |
-| Claude/Codex/Grok/Kimi submodules (`vendor/`) | Historical probes and upstream provenance                                | Outside default pnpm/CI. Initialize a specific path only for scoped maintenance; Kimi is a separate upstream workspace.        |
-| `site-docs`                                   | Retained Lody website source                                             | Outside default pnpm/CI; not a maintained Molly site or standalone install target. Consult Lody upstream for site development. |
+| Source                                        | Why it remains                                                           | Maintenance boundary                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| ACP core                                      | Shared protocol types and host contracts                                 | Root pnpm builds the pinned submodule; coordinate producer/consumer changes.                                            |
+| ACP DSH                                       | `packages/shared/src/deepseek-harness.ts` imports capability definitions | Keep until its real consumers are retired; it is not an enabled desktop engine.                                         |
+| Bento                                         | Editor and renderer sources                                              | Its npm lockfile, source manifest, patches and Molly overlays are assembled in a temporary worktree.                    |
+| Claude/Codex/Grok/Kimi submodules (`vendor/`) | Historical probes and upstream provenance                                | Outside default pnpm/CI. Initialize a specific path only for scoped maintenance; Kimi is a separate upstream workspace. |
 
 Do not run recursive submodule initialization for ordinary desktop work. Do not
 merge upstream repositories into Molly just to remove nesting. Update source pins,

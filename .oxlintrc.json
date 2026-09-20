@@ -9,7 +9,6 @@
     "apps/*/scripts/**/*",
     "apps/electron/scripts/**/*",
     "apps/web/public/**/*.js",
-    "site-docs/**/*",
     "vendor/acp-extension-claude/**/*",
     "packages/acp-extension-core/**/*",
     "vendor/acp-extension-codex/**/*",

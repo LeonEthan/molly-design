@@ -88,7 +88,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 - Before daemon negotiation, MCP/Role catalogs or their UI consumers, per-turn MCP
   selection, or Role creation/dispatch, read [shared contracts](packages/shared/AGENTS.md).
 - Default workspace/CI uses ACP core, DSH capability contracts and Bento.
-  Claude/Codex/Grok/Kimi submodules under `vendor/` and `site-docs` are retained
+  Claude/Codex/Grok/Kimi submodules under `vendor/` are retained
   upstream material, outside root pnpm. Initialize them explicitly only for
   scoped historical work;
   never duplicate shared ACP contracts or add legacy runtime installs to desktop setup.

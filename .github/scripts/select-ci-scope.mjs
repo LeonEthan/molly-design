@@ -82,7 +82,6 @@ const SKIPPABLE_GLOBS = Object.freeze([
   '.github/CLAUDE.md',
   '.github/codex-review.md',
   '.github/workflow-security.md',
-  'site-docs/**',
   '.vscode/**',
 ]);
 

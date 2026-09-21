@@ -54,7 +54,7 @@ export class OnboardingPage {
 
   async skipConfigurationAndEnterProduct(): Promise<void> {
     await this.openAgentConfiguration();
-    await this.page.getByRole('button', { name: /^(Skip for now|稍后再配置)$/u }).click();
+    await this.page.getByRole('button', { name: /^(Skip for now|稍后再说)$/u }).click();
     await expect(
       this.page.getByRole('heading', { name: /^(Explore Molly|探索 Molly)$/u })
     ).toBeVisible();
@@ -66,7 +66,7 @@ export class OnboardingPage {
   async openAgentConfiguration(): Promise<void> {
     await this.page.getByRole('button', { name: /^(Skip intro|跳过介绍)$/u }).click();
     await expect(
-      this.page.getByRole('heading', { name: /^(Connect your Agent|连接你的 Agent)$/u })
+      this.page.getByRole('heading', { name: /^(Connect a model|连接模型)$/u })
     ).toBeVisible();
   }
 }

@@ -61,6 +61,14 @@ internal data-plane machinery — a construction no shipping surface can produce
 - **Fixture hygiene**: the event log lives in the retained artifact directory,
   so `startModelServer` truncates it before spawning — a previous run's
   `server-start` entry otherwise satisfies the wait with a dead port.
+- **Scripted ACP fixture retired**: `fixtures/scripted-acp.mjs`, its test, the
+  fixture's custom-agent command line helpers, and the process classifier's
+  `scripted-acp.mjs` arm are removed with their last consumers. The
+  update-acceptance lane (`scripts/update-acceptance.mts`, not covered by the
+  package tsconfig) is ported to the same wire: seed via
+  `seedDeterministicModelConnection`, `prompt-start`/`prompt-end` become
+  `request-start`/`request-complete`, and turn teardown is the request-scoped
+  `request-cancelled` event.
 
 ## Alternatives considered
 
@@ -87,7 +95,9 @@ internal data-plane machinery — a construction no shipping surface can produce
 - Issue #51 is **not** closed by this change: only a successful full Daily may
   close it, and the Daily runs the complete matrix on CI.
 - Scout soak journeys were updated to the same flows but not soak-run here.
-- The installed-acceptance lane is untouched; it consumes the same harness but
-  was not exercised.
+- The update-acceptance lane was ported mechanically and type-checked against
+  the package config (four pre-existing latent errors in untouched regions
+  remain), but it was **not executed** — it requires the packaged two-version
+  Sparkle rig.
 - Worktree-session cleanup for historical documents remains live product code
   with Node-level coverage only.

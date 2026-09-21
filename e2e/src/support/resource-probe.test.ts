@@ -14,7 +14,7 @@ void describe('process tree evidence', () => {
       21 20 2000 2.5 Electron Helper --type=renderer
       22 20 3000 3.5 Electron resources/cli/index.js start --secret redacted-at-output
       23 22 4000 4.5 codex app-server --token never-retained
-      24 22 5000 5.5 node /fixture/scripted-acp.mjs --fixture-data synthetic
+      24 22 5000 5.5 node /fixture/legacy-acp.js --fixture-data synthetic
       99 1 9000 9.5 unrelated
     `);
     assert.deepEqual(selectProcessTree(rows, 20), [

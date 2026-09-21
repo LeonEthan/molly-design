@@ -41,7 +41,10 @@ import { createIsolatedEnvironment } from '../src/support/electron-harness.js';
 import { reserveTcpPort } from '../src/support/world-utils.js';
 import { OnboardingPage } from '../src/support/pages/onboarding-page.js';
 import { SessionPage } from '../src/support/pages/session-page.js';
-import { WorkSessionFixture } from '../src/support/fixtures/work-session-fixture.js';
+import {
+  WorkSessionFixture,
+  type ScriptedRuntimeEvent,
+} from '../src/support/fixtures/work-session-fixture.js';
 
 const e2eDir = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = resolve(e2eDir, '..');
@@ -383,9 +386,11 @@ async function followUpAndWaitEnd(
   fixture: WorkSessionFixture,
   text: string
 ): Promise<void> {
-  const priorCount = fixture.readAcpEvents().filter((event) => event.event === 'prompt-end').length;
+  const priorCount = fixture
+    .readEvents()
+    .filter((event) => event.event === 'request-complete' && event.mode === 'reply').length;
   await sendInSession(page, text);
-  await fixture.waitForAcpEvent('prompt-end', priorCount + 1);
+  await fixture.waitForEvent('request-complete', priorCount + 1);
 }
 
 /** The attachment name may live in text, title, alt or aria-label (thumbnail chips). */
@@ -406,49 +411,36 @@ async function holdInSession(
   page: Page,
   fixture: WorkSessionFixture,
   text: string
-): Promise<ReturnType<WorkSessionFixture['readAcpEvents']>[number]> {
+): Promise<ScriptedRuntimeEvent> {
   await sendInSession(page, text);
   await expect(page.getByRole('button', { name: /^(Stop|停止)$/u })).toBeVisible({
     timeout: 60_000,
   });
-  const events = await fixture.waitForAcpEvent('prompt-start');
+  const events = await fixture.waitForEvent('request-start');
   const waiting = [...events].reverse().find((event) => event.mode === 'hold');
-  if (!waiting) throw new Error('scripted ACP did not observe the held follow-up');
+  if (!waiting) throw new Error('scripted model server did not observe the held follow-up');
   return waiting;
 }
 
 async function releaseHeldSession(
   page: Page,
   fixture: WorkSessionFixture,
-  waiting: ReturnType<WorkSessionFixture['readAcpEvents']>[number]
+  waiting: ScriptedRuntimeEvent
 ): Promise<void> {
   await page.getByRole('button', { name: /^(Stop|停止)$/u }).click();
+  // Stopping the turn aborts the engine's fetch; the scripted server observes
+  // the response stream closing as the honest teardown signal.
   await expect
     .poll(
       () =>
         fixture
-          .readAcpEvents()
+          .readEvents()
           .some(
-            (entry) =>
-              entry.event === 'session-cancel' &&
-              entry.pid === waiting.pid &&
-              entry.sessionId === waiting.sessionId
+            (entry) => entry.event === 'request-cancelled' && entry.requestId === waiting.requestId
           ),
       { timeout: 30_000, intervals: [50, 100, 250, 500] }
     )
     .toBe(true);
-  await expect
-    .poll(() => {
-      const ends = fixture.readAcpEvents().filter(
-        (entry) =>
-          entry.event === 'prompt-end' &&
-          entry.pid === waiting.pid &&
-          entry.sessionId === waiting.sessionId &&
-          entry.at > waiting.at
-      );
-      return ends.at(-1)?.stopReason;
-    }, { timeout: 30_000, intervals: [50, 100, 250, 500] })
-    .toBe('cancelled');
   await expect(page.getByRole('button', { name: /^(Stop|停止)$/u })).toBeHidden({
     timeout: 30_000,
   });
@@ -470,8 +462,9 @@ async function positiveLane(): Promise<void> {
     record('bootstrap-onboarding', true);
 
     const session = new SessionPage(page, fixture);
-    await session.configureCustomAgentFromSettings();
-    record('scripted-agent-configured', true);
+    await fixture.startModelServer();
+    await session.seedDeterministicModelConnection();
+    record('scripted-model-configured', true);
 
     await openAbout(page);
     const initial = await updaterState(page);
@@ -785,8 +778,8 @@ async function positiveLane(): Promise<void> {
     }
   } finally {
     await safeClose(app);
-    if (existsSync(fixture.acpEventLogPath))
-      copyFileSync(fixture.acpEventLogPath, join(evidenceDir, 'scripted-acp-events.jsonl'));
+    if (existsSync(fixture.eventLogPath))
+      copyFileSync(fixture.eventLogPath, join(evidenceDir, 'scripted-runtime-events.jsonl'));
     fixture.dispose();
   }
 }

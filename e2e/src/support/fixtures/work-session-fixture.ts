@@ -5,22 +5,14 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { expect } from '@playwright/test';
-// The shared barrel targets bundler resolution; load its runtime contract here
-// without pulling that barrel into this suite's NodeNext type graph.
-const sharedPackage: string = '@molly/shared';
-const { formatCustomAcpCommandLine } = await import(sharedPackage);
 
 const execFileAsync = promisify(execFile);
-const SCRIPTED_ACP_ENTRY = resolve(
-  dirname(fileURLToPath(import.meta.url)),
-  '../../../fixtures/scripted-acp.mjs'
-);
 const SCRIPTED_MODEL_SERVER_ENTRY = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../fixtures/scripted-model-server.mjs'
 );
 
-/** One JSONL log mixes scripted-ACP process events and model-server wire events. */
+/** One JSONL log of scripted model-server wire events. */
 export type ScriptedRuntimeEvent = {
   at: string;
   pid: number;
@@ -35,25 +27,10 @@ export type ScriptedRuntimeEvent = {
   transport?: string;
 };
 
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return !(
-      error instanceof Error &&
-      'code' in error &&
-      (error as NodeJS.ErrnoException).code === 'ESRCH'
-    );
-  }
-}
-
 export class WorkSessionFixture {
   readonly projectName = 'lody-e2e-work';
   readonly projectRoot: string;
   readonly eventLogPath: string;
-  readonly scriptedAcpEntry = SCRIPTED_ACP_ENTRY;
-  readonly scriptedAgentCommandLine: string;
   private modelServer: ChildProcess | null = null;
   modelServerPort: number | null = null;
 
@@ -63,10 +40,6 @@ export class WorkSessionFixture {
   ) {
     this.projectRoot = join(tempRoot, this.projectName);
     this.eventLogPath = eventLogPath ?? join(tempRoot, 'scripted-runtime-events.jsonl');
-    this.scriptedAgentCommandLine = formatCustomAcpCommandLine({
-      command: process.execPath,
-      args: [this.scriptedAcpEntry, this.eventLogPath],
-    });
   }
 
   /** The bundled engine's only external wire: a deterministic loopback model. */
@@ -155,26 +128,6 @@ export class WorkSessionFixture {
       })
       .toBeGreaterThanOrEqual(minimumCount);
     return this.readEvents().filter((entry) => entry.event === event);
-  }
-
-  getStartedAgentPids(): number[] {
-    return [
-      ...new Set(
-        this.readEvents()
-          .filter((entry) => entry.event === 'process-start')
-          .map((entry) => entry.pid)
-      ),
-    ];
-  }
-
-  async expectAgentProcessesExited(pids = this.getStartedAgentPids()): Promise<void> {
-    expect(pids.length, 'The scripted ACP process never started').toBeGreaterThan(0);
-    await expect
-      .poll(() => pids.filter(isProcessAlive), {
-        timeout: 30_000,
-        intervals: [50, 100, 250, 500],
-      })
-      .toEqual([]);
   }
 
   dispose(): void {

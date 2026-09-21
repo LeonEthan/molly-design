@@ -266,8 +266,8 @@
       "runtime": "simulator",
       "title": "Create a workspace MCP server and preserve explicit turn selection through dispatch",
       "owner": "workspace-catalog",
-      "fixture": "synthetic-stdio-mcp-and-scripted-acp",
-      "fingerprint": "6b0a21b7f13f9d43adfa0ec34d26d4cae3a4a63871a67dbbcad1ea1eb307cba4",
+      "fixture": "synthetic-stdio-mcp-and-scripted-model",
+      "fingerprint": "a552d1bb66b182164c82b1d428126d7d5e997d15fdac58ea0c7cea7feafad0f9",
       "ownerPaths": [
         "apps/cli/src/agent/session-mcp-resolver.ts",
         "apps/cli/src/lib/workspace-mcp-store.ts",
@@ -402,8 +402,8 @@
       "runtime": "simulator",
       "title": "Fork a completed Session into an independent worktree Session",
       "owner": "session-lifecycle",
-      "fixture": "synthetic-git-and-scripted-acp",
-      "fingerprint": "35f80dbd4dd21492ab30c54ff6915cc715f210ad78c1659f5d911e01c1d3b8b0",
+      "fixture": "synthetic-git-and-scripted-model",
+      "fingerprint": "d19a20bd7e7f4b69880199eaa585e93bc45a42b98a7af4c8fb03230addea642b",
       "ownerPaths": [
         "apps/cli/src/session/session-fork-service.ts",
         "apps/cli/src/session/session-fork-operation-store.ts",

@@ -77,7 +77,7 @@ export function parseProcessTable(output: string): ProcessTableRow[] {
 function classifyProcess(command: string, pid: number, rootPid: number): ProcessKind {
   if (pid === rootPid) return 'electron-main';
   if (/resources[/\\]cli[/\\]index\.js/u.test(command)) return 'bundled-cli';
-  if (/(?:-acp\.js\b|scripted-acp\.mjs\b|\bapp-server\b|code-mode-host\b)/u.test(command)) {
+  if (/(?:-acp\.js\b|\bapp-server\b|code-mode-host\b)/u.test(command)) {
     return 'agent-runtime';
   }
   if (/--type=renderer\b/u.test(command)) return 'renderer';

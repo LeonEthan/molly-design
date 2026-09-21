@@ -1,15 +1,16 @@
+import { isDesktopDeepLinkProtocol } from './desktop-deep-link-protocol';
 import { readWorkspaceSlugFromPath } from './deep-link-path';
 
 /**
- * Map a `lody://chat/new` deep link (fired by `molly app <dir>` in a terminal) to
- * the new-chat landing with that local project preselected. Mirrors
+ * Map a `molly-design://chat/new` deep link (fired by `molly app <dir>` in a
+ * terminal) to the new-chat landing with that local project preselected. Mirrors
  * resolveDesktopCheckoutReturnDeepLinkPath.
  *
  * The link carries ids only. The CLI resolved — and, when needed, registered —
  * the directory before opening the app, so the app must never register a project
- * from a deep link: any web page can navigate the OS to `lody://…`, and turning
- * a link-supplied path into a local project would hand agents access to it.
- * An unknown project id simply stays unselected on the landing.
+ * from a deep link: any web page can navigate the OS to a registered scheme, and
+ * turning a link-supplied path into a local project would hand agents access to
+ * it. An unknown project id simply stays unselected on the landing.
  *
  * Producer: `apps/cli/src/lib/desktop-deep-link.ts`.
  */
@@ -24,7 +25,7 @@ export function resolveDesktopOpenLocalProjectDeepLinkPath(
     return null;
   }
 
-  if (parsed.protocol !== 'lody:' || parsed.hostname !== 'chat') {
+  if (!isDesktopDeepLinkProtocol(parsed.protocol) || parsed.hostname !== 'chat') {
     return null;
   }
   if (parsed.pathname.replace(/^\/+|\/+$/g, '') !== 'new') {

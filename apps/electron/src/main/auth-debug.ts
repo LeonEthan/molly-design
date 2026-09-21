@@ -125,6 +125,6 @@ export function describeUrlForAuthDebug(rawUrl: string | null | undefined): Auth
 export function describeDeepLinkForAuthDebug(rawUrl: string | null | undefined): AuthDebugMeta {
   return {
     ...describeUrlForAuthDebug(rawUrl),
-    isMollyProtocol: typeof rawUrl === 'string' && /^lody:\/\//i.test(rawUrl.trim())
+    isMollyProtocol: typeof rawUrl === 'string' && /^molly-design:\/\//i.test(rawUrl.trim())
   }
 }

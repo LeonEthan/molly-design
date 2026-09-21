@@ -11,6 +11,9 @@ describe('desktop invite deep links', () => {
 
     expect(deepLink).toBe('lody://invite/open?invitationId=invite%2F123');
     expect(resolveDesktopInviteDeepLinkPath(deepLink)).toBe('/invite/invite%2F123');
+    expect(
+      resolveDesktopInviteDeepLinkPath('molly-design://invite/open?invitationId=invite%2F123')
+    ).toBe('/invite/invite%2F123');
   });
 
   it('rejects malformed or unrelated deep links', () => {

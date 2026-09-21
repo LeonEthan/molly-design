@@ -1,3 +1,4 @@
+import { isDesktopDeepLinkProtocol } from '@/lib/desktop-deep-link-protocol';
 import { isIOSRuntimeEnvironment, isNativeAppShell } from '@/lib/native-platform';
 
 const ANDROID_BROWSER_PATTERN = /Android/i;
@@ -15,7 +16,7 @@ export function resolveDesktopInviteDeepLinkPath(deepLinkUrl: string): string | 
     return null;
   }
 
-  if (parsed.protocol !== 'lody:' || parsed.hostname !== 'invite') {
+  if (!isDesktopDeepLinkProtocol(parsed.protocol) || parsed.hostname !== 'invite') {
     return null;
   }
 

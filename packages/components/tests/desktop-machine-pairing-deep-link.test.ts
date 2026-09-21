@@ -3,6 +3,9 @@ import { readDesktopMachinePairingRequestId } from '../src/lib/desktop-machine-p
 
 describe('desktop machine pairing deep links', () => {
   it('reads only the non-secret request id', () => {
+    expect(
+      readDesktopMachinePairingRequestId('molly-design://machine/connect?requestId=request-123')
+    ).toBe('request-123');
     expect(readDesktopMachinePairingRequestId('lody://machine/connect?requestId=request-123')).toBe(
       'request-123'
     );

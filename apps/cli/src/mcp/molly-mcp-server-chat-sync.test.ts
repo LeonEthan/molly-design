@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const mocks = vi.hoisted(() => ({
   accept: vi.fn(),
@@ -115,8 +118,18 @@ const callAndMapMcpError = async (call: () => Promise<unknown>) => {
 };
 
 describe('session chat prevalidation sync failures', () => {
+  // getCliAuthContextOrThrow reads <MOLLY_DATA_DIR>/local-identity.json from disk;
+  // pin an isolated fixture so the result never depends on the host's ~/.molly.
+  let mollyDataDir: string;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    mollyDataDir = mkdtempSync(join(tmpdir(), 'molly-chat-sync-test-'));
+    writeFileSync(
+      join(mollyDataDir, 'local-identity.json'),
+      JSON.stringify({ userId: 'local:test-user-id', createdAt: '2026-01-01T00:00:00.000Z' })
+    );
+    vi.stubEnv('MOLLY_DATA_DIR', mollyDataDir);
     vi.stubEnv('MOLLY_MCP_MACHINE_ID', 'machine-id');
     vi.stubEnv('MOLLY_MCP_WORKSPACE_ID', 'workspace-id');
     vi.stubEnv('MOLLY_MCP_SESSION_ID', requesterSession.id);
@@ -142,6 +155,7 @@ describe('session chat prevalidation sync failures', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    rmSync(mollyDataDir, { recursive: true, force: true });
   });
 
   it('preserves retryable sync semantics through single chat before accepting an operation', async () => {

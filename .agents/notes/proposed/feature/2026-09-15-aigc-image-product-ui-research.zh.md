@@ -10,7 +10,7 @@ Translation: pending
 
 ## 调研方法与来源说明
 
-方法：WebSearch 定位候选来源，FetchURL 读全文验证后采信；优先一手来源（官方产品页、帮助中心/文档、官方发布稿）。每条论点附来源 URL；只能找到二手评测/媒体报道的标注"（二手来源）"；查不到的明确写"未找到公开资料"。时效说明：Midjourney 官方文档站（docs.midjourney.com）拦截直接抓取，其内容通过 Wayback Machine 2025-2026 年快照验证，正文引用现行文档 URL 并附存档链接；Visual Electric 已于 2025 年 10 月被 Perplexity 收购并停服，只能依据发布期的一手演示报道（二手转述）。界面截图存档于本笔记同目录 `assets/2026-09-15-aigc-image-product-ui-research/`，正文以相对路径引用并在图注注明来源页面 URL；优先官方帮助/文档/官网配图，其次可信评测配图，未找到可引用截图的产品在对应章节内注明，不以无关图片充数。
+方法：WebSearch 定位候选来源，FetchURL 读全文验证后采信；优先一手来源（官方产品页、帮助中心/文档、官方发布稿）。每条论点附来源 URL；只能找到二手评测/媒体报道的标注"（二手来源）"；查不到的明确写"未找到公开资料"。时效说明：Midjourney 官方文档站（docs.midjourney.com）拦截直接抓取，其内容通过 Wayback Machine 2025-2026 年快照验证，正文引用现行文档 URL 并附存档链接；Visual Electric 已于 2025 年 10 月被 Perplexity 收购并停服，只能依据发布期的一手演示报道（二手转述）。调研期界面截图曾存档于本笔记同目录 assets 子目录；公开发布前已全部移除（第三方产品界面受版权保护，不随仓库再分发），正文保留文字描述与来源页面 URL。
 
 ---
 
@@ -25,15 +25,15 @@ Lovart（lovart.ai，LiblibAI 海外产品，2025-05-13 Beta、2025-07-23 全球
 - **chat 面板在右侧**：画布居左、chat 居右（约占屏宽 28-30%）；顶部 app bar 为标题 + 保存状态图标、试用入口、credits 余额、头像。面板的折叠行为仍未见公开资料（依据：用户提供的工作区截图，2026-09 现行版本；二手评测描述为"chat 式 prompt 窗口 + 可感知图层的画布"：[skywork.ai 评测 2025-09-11](https://skywork.ai/blog/agent/lovart-ai-review-2025)）。
 - Lovart 无公开帮助中心（help/docs 子域不可达）。下图为用户提供的**一手工作区截图**（2026-09 现行版本，填补了本节此前的截图缺口）；其后两图分别来自 Product Hunt 官方 gallery 与二手评测整理，仅作补充参考。
 
-![Lovart ChatCanvas 工作区画布区：选中图片出现顶部上下文工具栏](assets/2026-09-15-aigc-image-product-ui-research/lovart-workspace-chatcanvas.png)
+图：Lovart ChatCanvas 工作区画布区：选中图片出现顶部上下文工具栏（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Lovart 完整工作区（用户提供截图，2026-09）——左画布右 chat；选中画布上的图片后，画布顶部出现上下文工具栏（快捷编辑 Tab / HD 放大 / 去背景 / 橡皮工具 / 图层拆分 / 编辑文字 / 多角度 / 动态图片 / ⋯ / 下载），选中元素带蓝色框线与"名称 + 尺寸"标签；画布底部为图标浮动工具坞（选择/图片/网格/形状/钢笔/文本/上传等）+ 左下角图层图标与 36% 缩放显示。（**按仓库边界裁去了右侧 chat 面板**——原截图含真实用户 prompt 与 agent 回复，属于不可入库的 captured transcript；右侧面板内的模型 chip（Midjourney）、内嵌"图片生成"结果缩略图（2 张变体）与 👍👎、底部输入框上方挂引用附件 chip、输入区 + 附件 / Agent 模式 chip / 模型选择，以本条文字记录为准。）
 
-![Lovart 一次 prompt 产出的多规格品牌资产散布在无限画布上](assets/2026-09-15-aigc-image-product-ui-research/lovart-canvas-multi-asset.png)
+图：Lovart 一次 prompt 产出的多规格品牌资产散布在无限画布上（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Lovart 画布形态——一个品牌 brief 产出 Roll-up/Poster/Flyers/Menu/Banner/Social/Stickers 等多规格资产，自由散布在无限画布上（画布自由排布模式）。来源：[Product Hunt Lovart 官方 gallery](https://www.producthunt.com/products/lovart)（官方供图，但非完整工作区视图，证据力弱）。
 
-![Lovart 信息架构脑图（二手评测整理）](assets/2026-09-15-aigc-image-product-ui-research/lovart-ia-map.png)
+图：Lovart 信息架构脑图（二手评测整理）（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：二手评测整理的 Lovart 信息架构——画布 Tools/Frames、Add to Chat、右侧 AI designer 交互界面（chat + 画布同构模式）。来源：[人人都是产品经理调研报告 2025-06-17](http://woshipm.com/evaluating/6230911.html)（二手来源）。
 
@@ -93,11 +93,11 @@ Canva 是用户量最大的在线设计平台（非 AI-native，但 Magic Studio
 - **Ask Canva**：选中元素或整个页面 → 上下文工具栏出现 Ask Canva → 在 Comments 或 Canva AI 侧面板打开对话 → 文字描述要求 → AI 自动应用修改；选中页面时提供预设 prompt（Redesign this page / Add background / Change style）（[官方帮助 Edit designs with Ask Canva](https://www.canva.com/help/edit-designs-with-ask-canva/)）。这正是"选区作为 chat 引用"的形态：选中对象即对话上下文，动作用自然语言区分，而非每动作一按钮。
 - **Canva AI**：对话式创意伙伴，一次对话从创意到成稿，产出完全分层可编辑，可继续对话精修也可手动修改（[canva.com/ai-assistant](https://www.canva.com/ai-assistant/)）。
 
-![Canva AI 对话界面](assets/2026-09-15-aigc-image-product-ui-research/canva-ai-conversation.webp)
+图：Canva AI 对话界面（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Canva AI 对话入口——输入框 + Design/Write/Code/Brand 模式 chips（chat 引用派形态）。来源：[canva.com/ai-assistant](https://www.canva.com/ai-assistant/)。
 
-![Canva 编辑器全景](assets/2026-09-15-aigc-image-product-ui-research/canva-editor-full.png)
+图：Canva 编辑器全景（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：编辑器全景（用户提供截图）——四层 chrome：顶部 session bar（File/Resize/Editing ▾/居中标题/右侧 Share）、左侧 object panel（Canva AI 居首位，Templates/Elements/Text/Brand/Uploads/Tools/Projects/Apps）、画布、底部状态导航条（Add page/Notes/zoom 滑杆/Pages/全屏/帮助图标）。另有一张选中文字元素的特写（未归档）：顶部 contextual toolbar 整排切换为字体/字号/颜色/样式/Effects/Animate/Position，选中框上方浮出迷你条（Ask Canva + 旋转/锁定/复制/删除/⋯）——"选中驱动"与"chat 引用单入口"的同屏实证。
 
@@ -130,7 +130,7 @@ Recraft 是 AI-native 图像/设计画布，2026 年 8 月文档反映其最新�
 - 多选：右侧面板切换为批量操作 + 对齐选项（[Canvas](https://www.recraft.ai/docs/recraft-studio/work-area/canvas)）。
 - 右键菜单：空画布右键顶部是 "Create new"（可在指定位置直接生成）；对象右键为 copy/duplicate/delete/export/arrange（[Canvas](https://www.recraft.ai/docs/recraft-studio/work-area/canvas)）。
 
-![Recraft 空画布右键 Create new 菜单](assets/2026-09-15-aigc-image-product-ui-research/recraft-context-menu-create-new.png)
+图：Recraft 空画布右键 Create new 菜单（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Recraft 空画布右键菜单——Create new 组（Mockup M / Frame F / Image set S / Upload），生成类动作收在上下文菜单而非顶层工具栏（选中驱动模式）。来源：[Recraft 官方文档 Canvas](https://www.recraft.ai/docs/recraft-studio/work-area/canvas)。
 
@@ -159,13 +159,13 @@ Ideogram 的 Canvas 是"无限创意画板"，官方文档极其完整，是"选
 - 选中图片后**图片下方出现 image panel**：生成组图（4 张）显示 1/4 箭头在变体间切换 + More；单图显示 Duplicate、Remove + More（[Canvas Overview](https://docs.ideogram.ai/canvas-and-editing/canvas/canvas-overview)）。
 - **More 菜单**收纳全部进阶操作并分组：Edit（Remix、Magic Fill、Extend、Upscale、Remove background）、Reference、Manage（Copy、Duplicate、图层顺序 Bring to front/Bring forward/Send backward/Send to back、Download PNG|JPG、Remove from canvas）。约 12 个动作，选中物旁一个 "⋯" 全部装下（[Canvas Overview](https://docs.ideogram.ai/canvas-and-editing/canvas/canvas-overview)）。
 
-![Ideogram 选中图 More 菜单](assets/2026-09-15-aigc-image-product-ui-research/ideogram-more-menu.png)
+图：Ideogram 选中图 More 菜单（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Ideogram 选中图旁的 More 菜单——Retry/Use prompt/Remix/Magic Fill/Extend/Upscale/Remove background/Download PNG▸/Pin/Make private/Delete 全部收在一个 "⋯" 里（选中驱动上下文菜单模式）。来源：[Ideogram 官方文档 Canvas Overview](https://docs.ideogram.ai/canvas-and-editing/canvas/canvas-overview)。
 
 - 右侧 details panel 显示选中图的 prompt、尺寸、风格、seed 等，可手动开关（[Canvas Overview](https://docs.ideogram.ai/canvas-and-editing/canvas/canvas-overview)）。
 
-![Ideogram 右侧 details 面板](assets/2026-09-15-aigc-image-product-ui-research/ideogram-details-panel.png)
+图：Ideogram 右侧 details 面板（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Ideogram 右侧 details 面板——Prompt/Remix/Upscale/Remove background 动作按钮 + Download▾ 下拉 + prompt/model/seed 元数据（选中物的属性与动作都进侧栏，不进顶层）。来源：[Ideogram 官方文档 Canvas Overview](https://docs.ideogram.ai/canvas-and-editing/canvas/canvas-overview)。
 
@@ -190,7 +190,7 @@ Midjourney 的网页 Editor（2024 年起全量）把 inpaint/pan/zoom/retexture
 
 - 编辑在 midjourney.com 的 Editor 中进行，支持编辑 MJ 图库图与上传的外部图。工具清单：Undo/Redo/Reset、Suggest Prompt（反推 prompt）、Move/Resize（比例预设 + Image Scale 滑杆 + 拖动画布边缘灰色条改比例）、Paint（Erase/Restore 画笔 + Brush Size 滑杆）、Smart Select（正/负点选建立选区蒙版，"Erase Selection"/"Erase Background" 应用）、Layers（多图层，勾选标记活动层）、Retexture（保留结构构图、整图换新风格）（[Midjourney 官方文档 Editor](https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)，[2025-04 Wayback 存档](https://web.archive.org/web/20250419064535/https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)）。
 
-![Midjourney 图片旁 Creation Actions 面板](assets/2026-09-15-aigc-image-product-ui-research/midjourney-creation-actions.png)
+图：Midjourney 图片旁 Creation Actions 面板（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Midjourney 图片旁的 Creation Actions 面板——Vary/Upscale/Remix/Pan/Zoom + More（Rerun/Edit/Use），动作附着于图片（选中驱动模式）。来源：[Midjourney 官方文档 Editor](https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)（[2025-04 Wayback 存档](https://web.archive.org/web/20250419064535/https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)）。
 
@@ -198,7 +198,7 @@ Midjourney 的网页 Editor（2024 年起全量）把 inpaint/pan/zoom/retexture
 
 - Web Editor 流程：擦除要重生的区域（Paint/Smart Select）→ 在 **Imagine bar**（prompt 输入条）描述 → Submit Edit → 结果面板返回 4 张（[Editor 文档](https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)）。
 
-![Midjourney Smart Select 面板](assets/2026-09-15-aigc-image-product-ui-research/midjourney-editor-smart-select.png)
+图：Midjourney Smart Select 面板（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Editor 的 Smart Select——Include/Exclude 点选建立绿色蒙版，Erase Selection/Erase Background 应用（选区是模式化工具状态，不是工具栏按钮）。来源：同上。
 
@@ -206,7 +206,7 @@ Midjourney 的网页 Editor（2024 年起全量）把 inpaint/pan/zoom/retexture
 
 **生成历史/版本**：每次编辑的结果追加进结果面板（每次 4 张，可继续编辑或导出）；编辑中作品保存在 Editor 内，可随时回去继续，Upscale 后才进入 Create/Organize 画廊（[Editor 文档](https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)）。
 
-![Midjourney Editor 结果面板](assets/2026-09-15-aigc-image-product-ui-research/midjourney-editor-results.png)
+图：Midjourney Editor 结果面板（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Editor 结果面板——版本缩略图追加排列 + Export Edit（Upscale to Gallery / Download Image 一个入口两个选项）（缩略图链即版本史模式）。来源：[Midjourney 官方文档 Editor](https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)（[2025-04 Wayback 存档](https://web.archive.org/web/20250419064535/https://docs.midjourney.com/hc/en-us/articles/32764383466893-Editor)）。
 
@@ -228,20 +228,20 @@ Krea 的两块界面与调研问题相关：Realtime（实时画布）与 Edit�
 - 编辑项加载后提供：Change Region、Annotate、Crop or Expand、Image Adjustments、Change Lighting、Draw、Change Camera Angle、Color Palette（[Krea 官方文档 Edit](https://www.krea.ai/docs/user-guide/features/edit)）。
 - **Change Region**：先选"如何定义选区"——整图 / 画笔（可调笔刷大小）/ 矩形 / **Auto Mask**（悬停即自动检测并高亮区域）→ 在 prompt 字段用自然语言描述修改 → Generate。结果出现在主画布，**页面底部的缩略图预览可对比或回退到之前的版本**（[Edit](https://www.krea.ai/docs/user-guide/features/edit)）。
 
-![Krea Change Region 蒙版选区](assets/2026-09-15-aigc-image-product-ui-research/krea-change-region.png)
+图：Krea Change Region 蒙版选区（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Krea Edit 的 Change Region——蒙版选区高亮叠加在图上，prompt 描述修改（选区 + prompt 的局部重绘模式）。来源：[Krea 官方文档 Edit](https://www.krea.ai/docs/user-guide/features/edit)。
 
 - Annotate：给不同区域各配一条 prompt，分区控制构图（[Edit](https://www.krea.ai/docs/user-guide/features/edit)）。
 - Image Adjustments：亮度/对比/饱和/色温滑杆，**Apply 前非破坏**（[Edit](https://www.krea.ai/docs/user-guide/features/edit)）。
 
-![Krea Image Adjustments 滑杆面板](assets/2026-09-15-aigc-image-product-ui-research/krea-image-adjustments.png)
+图：Krea Image Adjustments 滑杆面板（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Krea Image Adjustments——亮度/对比/饱和/色温滑杆 + Done（调整项收在编辑面板内，非顶层工具栏）。来源：[Krea 官方文档 Edit](https://www.krea.ai/docs/user-guide/features/edit)。
 
 **生成历史/导出/状态**：Edit 底部缩略图链即版本对比/回退；Realtime 输出面板底部两个动作：Upscale、Download；后续动作是"送去 Enhancer / 送去 Video"，从 edit 面板进入（[Edit](https://www.krea.ai/docs/user-guide/features/edit)、[Realtime](https://www.krea.ai/docs/user-guide/features/realtime)）。
 
-![Krea 底部版本缩略图链](assets/2026-09-15-aigc-image-product-ui-research/krea-thumbnails.png)
+图：Krea 底部版本缩略图链（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Krea Edit 左下角的版本缩略图链——两版并列、其一选中，点击即对比/回退（缩略图链即版本史模式）。来源：[Krea 官方文档 Edit](https://www.krea.ai/docs/user-guide/features/edit)。Realtime 的状态反馈就是实时输出本身。另有 node 工作流画布（无限画布上连接输入/参数/输出），属进阶形态（[Krea 官方文档 Nodes workflows](https://www.krea.ai/docs/user-guide/features/nodes)）。
 
@@ -272,20 +272,20 @@ Leonardo（现属 Canva）有 Canvas Editor 与 Realtime Canvas 两个相关界�
 
 - **底部 prompt bar**：Generate image / Generate video 在页面底部；左侧工具栏放 Artboard、Shapes、Text 等；右侧 toolbar 放 Adobe Stock 搜索（[Adobe 官方帮助 Create boards，2026-06 更新](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)）。
 
-![Firefly Boards 底部 Generate 面板与模型选择](assets/2026-09-15-aigc-image-product-ui-research/firefly-boards-prompt-bar.png)
+图：Firefly Boards 底部 Generate 面板与模型选择（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：Firefly Boards 底部 Generate image 面板——prompt 输入 + 模型选择弹出层（Adobe/Custom/Partner 模型分组），生成入口在底部条而非顶层工具栏。来源：[Adobe 官方帮助 Create boards](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)。
 
 - 生成的变体先出现在 **filmstrip**（底部缩略图带），拖上画布（[同上](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)）。
 - **选中图片后出现的上下文选项**（重点先例）：Vary、Edit（Generative fill / Generative expand / Edit text in image / partner 模型精修）、Convert（Image to video / Image to 3D）、Remove background、Crop、**Download**、**More**（Open copy in Photoshop / Adobe Express、Copy link、Find similar inspiration、剪切/复制/删除/翻转/重排）——约 10+ 动作，主行 + More 两层装下（[同上](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)）。
 
-![Firefly Boards 选中图片的上下文工具条](assets/2026-09-15-aigc-image-product-ui-research/firefly-boards-selected-options.png)
+图：Firefly Boards 选中图片的上下文工具条（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：选中图片后出现的浮动工具条——Load/Vary▾/Edit▾/Convert▾/图图标/Download/⋯，More 菜单展开收纳其余动作（选中驱动上下文工具条模式）。来源：[Adobe 官方帮助 Create boards](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)。
 
 - **多选**激活另一组：Remix（以所选图为灵感生成混合变体）、Collect items（收进 artboard）、Arrange（Rows/Columns/Mosaic）、Align、Download、More（[同上](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)）。
 
-![Firefly Boards 多选工具条](assets/2026-09-15-aigc-image-product-ui-research/firefly-boards-multiselect.png)
+图：Firefly Boards 多选工具条（界面截图存档已在公开发布前从仓库移除，不再分发第三方产品界面；本节文字描述与来源链接为准。）
 
 图：多选时切换为另一组紧凑工具条——Remix/Collect/Arrange/Align/Download/⋯（canvas states 驱动工具条内容切换）。来源：[Adobe 官方帮助 Create boards](https://helpx.adobe.com/firefly/web/create-mood-boards/firefly-boards/create-mood-boards.html)。
 

@@ -64,7 +64,7 @@ vendor/patch/source-manifest rules.
 
 The [Lody ACP file entry](../../../../apps/cli/src/agent/agent-client.ts) reads old bytes
 for diff and then executes `fs.writeFile`; there is no universal CAS or semantic merge
-service. [Kimi Edit](../../../../vendor/acp-extension-kimi/packages/agent-core/src/tools/builtin/file/edit.ts)
+service. [Kimi Edit](https://github.com/LodyAI/acp-extension-kimi/blob/aab809cca845e4b1d0a0db243d336ab5f128b177/packages/agent-core/src/tools/builtin/file/edit.ts)
 returns an error when `old_string` does not match and asks for a re-read. This proves that
 the reusable paradigm is tool error returned to the Agent for it to continue; it does not
 prove that all Write/Shell paths already have equal protection.

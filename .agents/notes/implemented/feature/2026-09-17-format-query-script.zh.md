@@ -14,7 +14,7 @@ Translation: current
 - 目标 Agent 材料只有一份 compact 指南：[`artwork-format.md`](../../../../packages/design-authoring/skills/graphic-design/references/artwork-format.md) 自称 "compact"，类型字段 "not a complete whitelist"（:1、:48），并要求"不得因 TypeScript 类型或 Bento 内部提及就写字段"（:111-112）。同时 [`graphic-canvas-profile.md`](../../../../packages/design-authoring/skills/graphic-design/references/graphic-canvas-profile.md) 说明现有投影文档可携带指南未列举的可编辑 Bento 字段（:91-96）。Agent 面对的"允许写什么"因此是一个三信息源（prose、frozen matrix、vendored schema）之间的模糊地带。
 - 负反馈循环覆盖不到"静默丢失"类失败：指南自己定义"解析通过但 reset/placeholder/flatten 也是失败能力"（artwork-format.md:127-130），这类问题 validator 放行，发生在 import/render 层，Agent 无法在 finalize 输出里看到。
 - push 模式失效的实证：Agent 可能只读到长格式指南的开头。纸面完整的静态文档不等于上下文里被读完。
-- 数据可达性的事实更正（Codex 对抗分析，已复核）：物化 bundle [`molly-authoring.mjs`](../../../../packages/design-authoring/skills/graphic-design/scripts/lib/molly-authoring.mjs) 已导出 `AUTHORING_PROJECTION_CAPABILITIES` 与 `FROZEN_CAPABILITY_MATRIX`（:11855、:11859）。真问题是"无文档化、难发现、原始 matrix ≠ 创作语法"，不是不可达。
+- 数据可达性的事实更正（Codex 对抗分析，已复核）：物化 bundle `packages/design-authoring/skills/graphic-design/scripts/lib/molly-authoring.mjs`（esbuild 产物，由 `pnpm build` 重新生成，不入库）已导出 `AUTHORING_PROJECTION_CAPABILITIES` 与 `FROZEN_CAPABILITY_MATRIX`（:11855、:11859）。真问题是"无文档化、难发现、原始 matrix ≠ 创作语法"，不是不可达。
 - matrix 不能当数据源（致命反例，已复核）：`common.theme` 与 `chart.seriesDefaults` 均为 matrix 的 active 行，却被当前 validator 显式拒绝（[`canvas-format.ts`](../../../../packages/design-authoring/src/canvas-format.ts) :223、:290）。`common.createDelete` 等动作能力行、`image.pipeline` 等 derived 行没有可写 YAML 语法。active 标签不能替代当前准入证据。
 
 ## 调研收敛

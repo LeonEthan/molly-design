@@ -9,7 +9,7 @@ import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
-const runtime = (process.env.MOLLY_PROBE_GROK ?? process.env.LODY_PROBE_GROK);
+const runtime = process.env.MOLLY_PROBE_GROK ?? process.env.LODY_PROBE_GROK;
 assert.ok(runtime, 'Set MOLLY_PROBE_GROK to the official Grok 1.0.13 executable');
 assert.match(execFileSync(runtime, ['--version'], { encoding: 'utf8' }), /^grok 1\.0\.13 /);
 const root = await mkdtemp(path.join(tmpdir(), 'molly-grok-hooks-'));

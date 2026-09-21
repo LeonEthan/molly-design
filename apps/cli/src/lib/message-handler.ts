@@ -2839,7 +2839,7 @@ export class MessageHandler {
       token: this.token,
       userId: this.userId,
       userName: this.userId,
-      userEmail: buildMissingEmail('lody', this.userId),
+      userEmail: buildMissingEmail('molly', this.userId),
       machineId: this.machineId,
       machineName: this.machineName,
     };
@@ -7745,6 +7745,9 @@ export class MessageHandler {
     }
     if (capability.reason === 'not_daemon') {
       return `Machine ${action} requires the CLI to be launched with \`molly daemon start\`.`;
+    }
+    if (capability.reason === 'unsupported_install') {
+      return `Machine ${action} is unavailable: this installation has no published package channel. Update through the Molly desktop release instead.`;
     }
     return `Machine ${action} is not available in this process.`;
   }

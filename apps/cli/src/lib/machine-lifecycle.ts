@@ -31,6 +31,12 @@ export const DEFAULT_MACHINE_UPGRADE_TARGET_VERSION = 'latest';
 export const MACHINE_UPGRADE_TIMEOUT_MS = 120_000;
 export const MOLLY_DAEMON_SUPERVISED_ENV = 'MOLLY_DAEMON_SUPERVISED';
 
+// NOT a Molly-owned package: `lody` on npm belongs to a third party, so an
+// npm-based self-upgrade would install and execute code we do not control.
+// The upgrade path is disarmed at the capability layer (daemon reports
+// canRemoteUpgrade: false, reason 'unsupported_install') until Molly publishes
+// its own package; this constant remains only because the intent-file
+// machinery and its tests are retained wire-contract surface.
 const MOLLY_NPM_PACKAGE_NAME = 'lody';
 const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
 const SEMVER_TARGET_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -57,7 +63,11 @@ export const resolveMachineLifecycleCapability = (
     return {
       launchMode: 'daemon',
       canRemoteRestart: true,
-      canRemoteUpgrade: true,
+      // Remote npm upgrade is disabled: no Molly-owned npm package exists, and
+      // installing the third-party `lody` package would execute foreign code.
+      // Updates ship through the desktop release channel instead.
+      canRemoteUpgrade: false,
+      reason: 'unsupported_install',
     };
   }
 

@@ -41,11 +41,14 @@ describe('machine lifecycle helpers', () => {
     expect(resolveNpmExecutable('linux')).toBe('npm');
   });
 
-  it('enables remote lifecycle only for supervised daemon workers', () => {
+  it('enables remote restart but not npm upgrade for supervised daemon workers', () => {
+    // canRemoteUpgrade stays false until Molly publishes its own npm package;
+    // the `lody` package on npm is third-party and must never be installed.
     expect(resolveMachineLifecycleCapability('daemon')).toEqual({
       launchMode: 'daemon',
       canRemoteRestart: true,
-      canRemoteUpgrade: true,
+      canRemoteUpgrade: false,
+      reason: 'unsupported_install',
     });
   });
 

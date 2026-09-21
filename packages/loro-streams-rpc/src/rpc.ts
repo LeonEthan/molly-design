@@ -43,7 +43,6 @@ import type {
   MachinePingResponse,
   MachineRestartResponse,
   MachineStatusResponse,
-  MachineUpgradeResponse,
   SessionCancelResponse,
   SessionPreparationCancelSpec,
   SessionPreparationSpec,
@@ -90,7 +89,6 @@ import {
   MachinePingResponseSchema,
   MachineRestartResponseSchema,
   MachineStatusResponseSchema,
-  MachineUpgradeResponseSchema,
   SessionCancelResponseSchema,
   SessionPreparationCancelSpecSchema,
   SessionPreparationSpecSchema,
@@ -167,7 +165,6 @@ export const LoroStreamsRpcMethodSchema = z.enum([
   'machine/status',
   'machine/ping',
   'machine/restart',
-  'machine/upgrade',
   'machine/acp-capabilities-refresh',
   'machine/acp-capabilities-refresh-cancel',
   'machine/acp-authenticate',
@@ -251,17 +248,6 @@ export const LoroMachineRestartRpcRequestSchema = BaseRpcRequestSchema.extend({
     .strict(),
 }).strict();
 
-export const LoroMachineUpgradeRpcRequestSchema = BaseRpcRequestSchema.extend({
-  method: z.literal('machine/upgrade'),
-  params: z
-    .object({
-      requesterUserId: z.string().trim().min(1),
-      requestToken: z.string().trim().min(1),
-      requestId: z.string().trim().min(1),
-      targetVersion: z.string().trim().min(1).optional(),
-    })
-    .strict(),
-}).strict();
 
 export const LoroMachineAcpCapabilitiesRefreshRpcRequestSchema = BaseRpcRequestSchema.extend({
   method: z.literal('machine/acp-capabilities-refresh'),
@@ -564,7 +550,6 @@ export const LoroStreamsRpcRequestSchema = z.discriminatedUnion('method', [
   LoroMachineStatusRpcRequestSchema,
   LoroMachinePingRpcRequestSchema,
   LoroMachineRestartRpcRequestSchema,
-  LoroMachineUpgradeRpcRequestSchema,
   LoroMachineAcpCapabilitiesRefreshRpcRequestSchema,
   LoroMachineAcpCapabilitiesRefreshCancelRpcRequestSchema,
   LoroMachineAcpAuthenticateRpcRequestSchema,
@@ -674,7 +659,6 @@ export const LoroStreamsRpcResponseSchema = BaseRpcResponseSchema;
 export type LoroMachineStatusRpcRequest = z.infer<typeof LoroMachineStatusRpcRequestSchema>;
 export type LoroMachinePingRpcRequest = z.infer<typeof LoroMachinePingRpcRequestSchema>;
 export type LoroMachineRestartRpcRequest = z.infer<typeof LoroMachineRestartRpcRequestSchema>;
-export type LoroMachineUpgradeRpcRequest = z.infer<typeof LoroMachineUpgradeRpcRequestSchema>;
 export type LoroMachineAcpCapabilitiesRefreshRpcRequest = z.infer<
   typeof LoroMachineAcpCapabilitiesRefreshRpcRequestSchema
 >;
@@ -1412,7 +1396,6 @@ export type LoroMachineRpcResult =
   | MachineStatusResponse
   | MachinePingResponse
   | MachineRestartResponse
-  | MachineUpgradeResponse
   | CodeCollabV2RpcResponse
   | CodeCollabV2Error
   | FilePreviewV3Response
@@ -1447,7 +1430,7 @@ const toLegacyRpcErrorResponse = (
     agentType: string;
   },
   pingContext?: { requestId: string },
-  lifecycleContext?: { requestId: string; targetVersion?: string },
+  lifecycleContext?: { requestId: string },
   binaryContext?: { agentType: string; requestId?: string },
   cancelContext?: { sessionId: string },
   forkContext?: { sourceSessionId: string; targetSessionId: string },
@@ -1489,19 +1472,6 @@ const toLegacyRpcErrorResponse = (
       success: false,
       accepted: false,
       disposition: 'error',
-      error: `${error.code}: ${error.message}`,
-    };
-  }
-
-  if (method === 'machine/upgrade') {
-    return {
-      type: 'machine/upgrade_response',
-      machineId: machineId as MachineUpgradeResponse['machineId'],
-      requestId: lifecycleContext?.requestId ?? '',
-      success: false,
-      accepted: false,
-      disposition: 'error',
-      targetVersion: lifecycleContext?.targetVersion,
       error: `${error.code}: ${error.message}`,
     };
   }
@@ -1754,10 +1724,6 @@ const parseRpcSuccessResult = async (
     const parsed = MachineRestartResponseSchema.safeParse(response.result);
     return parsed.success ? (parsed.data as MachineRestartResponse) : null;
   }
-  if (response.method === 'machine/upgrade') {
-    const parsed = MachineUpgradeResponseSchema.safeParse(response.result);
-    return parsed.success ? (parsed.data as MachineUpgradeResponse) : null;
-  }
   if (response.method === 'machine/acp-capabilities-refresh') {
     const parsed = MachineAcpCapabilitiesRefreshResponseSchema.safeParse(response.result);
     return parsed.success ? (parsed.data as MachineAcpCapabilitiesRefreshResponse) : null;
@@ -1857,7 +1823,7 @@ export type LoroStreamsRpcPendingRegistration = {
     agentType: string;
   };
   pingContext?: { requestId: string };
-  lifecycleContext?: { requestId: string; targetVersion?: string };
+  lifecycleContext?: { requestId: string };
   binaryContext?: { agentType: string; requestId?: string };
   cancelContext?: { sessionId: string };
   forkContext?: { sourceSessionId: string; targetSessionId: string };
@@ -2384,25 +2350,6 @@ export class LoroStreamsMachineRpcClient {
         requestId: options.requestId,
       },
     })) as MachineRestartResponse | null;
-  }
-
-  async requestMachineUpgrade(options: {
-    requesterUserId: string;
-    requestToken: string;
-    requestId: string;
-    targetVersion?: string;
-    timeoutMs?: number;
-  }): Promise<MachineUpgradeResponse | null> {
-    return (await this.sendRequest({
-      method: 'machine/upgrade',
-      timeoutMs: options.timeoutMs ?? 30_000,
-      params: {
-        requesterUserId: options.requesterUserId,
-        requestToken: options.requestToken,
-        requestId: options.requestId,
-        targetVersion: options.targetVersion,
-      },
-    })) as MachineUpgradeResponse | null;
   }
 
   async requestMachineAcpCapabilitiesRefresh(options: {
@@ -3036,16 +2983,6 @@ export class LoroStreamsMachineRpcClient {
           };
         }
       | {
-          method: 'machine/upgrade';
-          timeoutMs: number;
-          params: {
-            requesterUserId: string;
-            requestToken: string;
-            requestId: string;
-            targetVersion?: string;
-          };
-        }
-      | {
           method: 'machine/acp-capabilities-refresh';
           timeoutMs: number;
           onAcpBinaryProgress?: (message: MachineAcpBinaryProgressMessage) => void;
@@ -3304,11 +3241,9 @@ export class LoroStreamsMachineRpcClient {
       pingContext:
         args.method === 'machine/ping' ? { requestId: args.params.requestId } : undefined,
       lifecycleContext:
-        args.method === 'machine/upgrade'
-          ? { requestId: args.params.requestId, targetVersion: args.params.targetVersion }
-          : args.method === 'machine/restart'
-            ? { requestId: args.params.requestId }
-            : undefined,
+        args.method === 'machine/restart'
+          ? { requestId: args.params.requestId }
+          : undefined,
       binaryContext:
         args.method === 'machine/acp-authenticate'
           ? { agentType: 'unknown', requestId: args.params.requestId }
@@ -3419,9 +3354,6 @@ export class LoroStreamsMachineRpcClient {
           request = { ...envelope, method: args.method, params: args.params };
           break;
         case 'machine/restart':
-          request = { ...envelope, method: args.method, params: args.params };
-          break;
-        case 'machine/upgrade':
           request = { ...envelope, method: args.method, params: args.params };
           break;
         case 'machine/acp-capabilities-refresh':

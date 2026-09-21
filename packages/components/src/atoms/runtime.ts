@@ -29,7 +29,6 @@ import type {
   MachinePingResponse,
   MachineRestartResponse,
   MachineStatusResponse,
-  MachineUpgradeResponse,
   MachineAcpCapabilitiesRefreshResponse,
   MachineAcpAuthenticateResponse,
   MachineAcpAuthenticationProgressMessage,
@@ -248,11 +247,6 @@ export type WorkspaceRuntime = {
     requestId: string,
     options?: { timeoutMs?: number }
   ) => Promise<MachineRestartResponse | null>;
-  waitForMachineUpgradeResponse: (
-    machineId: MachineId,
-    requestId: string,
-    options?: { timeoutMs?: number }
-  ) => Promise<MachineUpgradeResponse | null>;
   requestMachineAcpCapabilitiesRefresh: (
     request: Extract<ClientToServer, { type: 'machine/acp-capabilities-refresh' }>,
     options?: {

@@ -1,9 +1,4 @@
-import type { ChildProcess, SpawnOptions } from 'node:child_process';
-import spawn from 'cross-spawn';
-import * as fs from 'node:fs/promises';
-import * as path from 'node:path';
 import { z } from 'zod';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import {
   deriveConvexSiteUrl,
   type MachineLifecycleCapability,
@@ -14,38 +9,31 @@ import {
 import {
   CLI_EXIT_CODE_AUTH_FAILURE,
   CLI_EXIT_CODE_REMOTE_RESTART,
-  CLI_EXIT_CODE_REMOTE_UPGRADE,
   CLI_EXIT_CODE_RETRYABLE_STARTUP,
   CLI_EXIT_CODE_SUPERVISOR_CONTRACT_MISMATCH,
 } from '@molly/shared/node/local-cli-supervisor';
 import { MOLLY_AUTH_SITE_URL, MOLLY_AUTH_URL } from '@/utils/const';
 
 // The reserved Worker exit codes are part of the shared Supervisor<->Worker
-// contract; Electron consumes the same values from @molly/shared.
+// contract; Electron consumes the same values from @molly/shared. Exit code 43
+// (remote upgrade) is retired with the upgrade machinery.
 export const EXIT_CODE_RETRYABLE_STARTUP = CLI_EXIT_CODE_RETRYABLE_STARTUP;
 export const EXIT_CODE_REMOTE_RESTART = CLI_EXIT_CODE_REMOTE_RESTART;
-export const EXIT_CODE_REMOTE_UPGRADE = CLI_EXIT_CODE_REMOTE_UPGRADE;
 export const EXIT_CODE_AUTH_FAILURE = CLI_EXIT_CODE_AUTH_FAILURE;
 export const EXIT_CODE_SUPERVISOR_CONTRACT_MISMATCH = CLI_EXIT_CODE_SUPERVISOR_CONTRACT_MISMATCH;
-export const DEFAULT_MACHINE_UPGRADE_TARGET_VERSION = 'latest';
-export const MACHINE_UPGRADE_TIMEOUT_MS = 120_000;
 export const MOLLY_DAEMON_SUPERVISED_ENV = 'MOLLY_DAEMON_SUPERVISED';
 
-// NOT a Molly-owned package: `lody` on npm belongs to a third party, so an
-// npm-based self-upgrade would install and execute code we do not control.
-// The upgrade path is disarmed at the capability layer (daemon reports
-// canRemoteUpgrade: false, reason 'unsupported_install') until Molly publishes
-// its own package; this constant remains only because the intent-file
-// machinery and its tests are retained wire-contract surface.
-const MOLLY_NPM_PACKAGE_NAME = 'lody';
-const NPM_REGISTRY_URL = 'https://registry.npmjs.org';
-const SEMVER_TARGET_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+// Remote upgrade is retired, not gated: the npm `lody` package belongs to a
+// third party, so the old self-upgrade would have installed and executed code
+// Molly does not control, and this local-only product has no package channel of
+// its own. Updates ship through the desktop release channel instead.
+export type MachineLifecycleAction = 'restart';
 
-export type MachineLifecycleAction = 'restart' | 'upgrade';
-
-export type MachineProcessLifecycleAction =
-  | { action: 'restart'; exitCode: typeof EXIT_CODE_REMOTE_RESTART; requestId: string }
-  | { action: 'upgrade'; exitCode: typeof EXIT_CODE_REMOTE_UPGRADE; requestId: string };
+export type MachineProcessLifecycleAction = {
+  action: 'restart';
+  exitCode: typeof EXIT_CODE_REMOTE_RESTART;
+  requestId: string;
+};
 
 export const resolveMachineLifecycleCapability = (
   launchMode: 'daemon' | 'electron' | undefined
@@ -54,7 +42,6 @@ export const resolveMachineLifecycleCapability = (
     return {
       launchMode: 'electron',
       canRemoteRestart: false,
-      canRemoteUpgrade: false,
       reason: 'electron',
     };
   }
@@ -63,27 +50,14 @@ export const resolveMachineLifecycleCapability = (
     return {
       launchMode: 'daemon',
       canRemoteRestart: true,
-      // Remote npm upgrade is disabled: no Molly-owned npm package exists, and
-      // installing the third-party `lody` package would execute foreign code.
-      // Updates ship through the desktop release channel instead.
-      canRemoteUpgrade: false,
-      reason: 'unsupported_install',
     };
   }
 
   return {
     launchMode: 'foreground',
     canRemoteRestart: false,
-    canRemoteUpgrade: false,
     reason: 'not_daemon',
   };
-};
-
-type LifecycleLogger = {
-  info?: (message: string) => void;
-  warn?: (message: string) => void;
-  error?: (message: string) => void;
-  debug?: (message: string) => void;
 };
 
 const MachineLifecycleVerifyResponseSchema = z
@@ -92,25 +66,6 @@ const MachineLifecycleVerifyResponseSchema = z
     requesterUserId: z.string().trim().min(1),
   })
   .strict();
-
-const DaemonUpgradeIntentSchema = z
-  .object({
-    version: z.literal(1),
-    action: z.literal('upgrade'),
-    requestId: z.string().trim().min(1),
-    requesterUserId: z.string().trim().min(1),
-    targetVersion: z.string().trim().min(1),
-    currentVersion: z.string().trim().min(1).optional(),
-    requestedAtMs: z.number().finite().nonnegative(),
-  })
-  .strict();
-
-export type DaemonUpgradeIntent = z.infer<typeof DaemonUpgradeIntentSchema>;
-
-export const DAEMON_UPGRADE_INTENT_FILE = path.join(
-  getMollyDataDir('local'),
-  'daemon-upgrade-intent.json'
-);
 
 const resolveConvexSiteUrl = (): string | null => {
   if (MOLLY_AUTH_SITE_URL) {
@@ -122,14 +77,6 @@ const resolveConvexSiteUrl = (): string | null => {
   return null;
 };
 
-export const normalizeMachineUpgradeTargetVersion = (targetVersion?: string): string => {
-  const target = targetVersion?.trim() || DEFAULT_MACHINE_UPGRADE_TARGET_VERSION;
-  if (target === DEFAULT_MACHINE_UPGRADE_TARGET_VERSION || SEMVER_TARGET_RE.test(target)) {
-    return target;
-  }
-  throw new Error('Upgrade target must be "latest" or an exact semver version.');
-};
-
 export const verifyMachineLifecycleRequest = async (args: {
   token: string;
   workspaceId: WorkspaceId;
@@ -138,7 +85,6 @@ export const verifyMachineLifecycleRequest = async (args: {
   requesterUserId: string;
   requestId: string;
   requestToken: string;
-  targetVersion?: string;
   fetchImpl?: typeof fetch;
 }): Promise<{ ok: true } | { ok: false; error: string; status?: number; retriable?: boolean }> => {
   const siteUrl = resolveConvexSiteUrl();
@@ -160,9 +106,6 @@ export const verifyMachineLifecycleRequest = async (args: {
         requesterUserId: args.requesterUserId,
         requestId: args.requestId,
         requestToken: args.requestToken,
-        ...(args.action === 'upgrade'
-          ? { targetVersion: normalizeMachineUpgradeTargetVersion(args.targetVersion) }
-          : {}),
       }),
     });
 
@@ -190,186 +133,5 @@ export const verifyMachineLifecycleRequest = async (args: {
       error: error instanceof Error ? error.message : String(error),
       retriable: true,
     };
-  }
-};
-
-export const writeDaemonUpgradeIntent = async (intent: Omit<DaemonUpgradeIntent, 'version'>) => {
-  const value: DaemonUpgradeIntent = { version: 1, ...intent };
-  const parsed = DaemonUpgradeIntentSchema.parse(value);
-  const dir = path.dirname(DAEMON_UPGRADE_INTENT_FILE);
-  await fs.mkdir(dir, { recursive: true });
-  const tmpPath = path.join(
-    dir,
-    `.${path.basename(DAEMON_UPGRADE_INTENT_FILE)}.${process.pid}.tmp`
-  );
-  await fs.writeFile(tmpPath, `${JSON.stringify(parsed, null, 2)}\n`, {
-    encoding: 'utf8',
-    mode: 0o600,
-  });
-  await fs.rename(tmpPath, DAEMON_UPGRADE_INTENT_FILE);
-};
-
-export const readDaemonUpgradeIntent = async (): Promise<DaemonUpgradeIntent | null> => {
-  try {
-    const raw = await fs.readFile(DAEMON_UPGRADE_INTENT_FILE, 'utf8');
-    const parsed = DaemonUpgradeIntentSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
-};
-
-export const clearDaemonUpgradeIntent = async (): Promise<void> => {
-  try {
-    await fs.unlink(DAEMON_UPGRADE_INTENT_FILE);
-  } catch {
-    // best effort
-  }
-};
-
-export const resolveNpmExecutable = (platform: NodeJS.Platform = process.platform): string =>
-  platform === 'win32' ? 'npm.cmd' : 'npm';
-
-export const buildMollyUpgradeInstallArgs = (targetVersion: string): string[] => [
-  'install',
-  '-g',
-  `${MOLLY_NPM_PACKAGE_NAME}@${normalizeMachineUpgradeTargetVersion(targetVersion)}`,
-  `--registry=${NPM_REGISTRY_URL}`,
-];
-
-type SpawnLike = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
-
-const runCommand = async (args: {
-  command: string;
-  commandArgs: readonly string[];
-  timeoutMs: number;
-  spawnImpl: SpawnLike;
-  signal?: AbortSignal;
-}): Promise<{
-  code: number | null;
-  stdout: string;
-  stderr: string;
-  timedOut: boolean;
-  aborted: boolean;
-}> => {
-  if (args.signal?.aborted) {
-    throw new DOMException('Daemon upgrade canceled', 'AbortError');
-  }
-  const child = args.spawnImpl(args.command, args.commandArgs, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: process.env,
-  });
-  let stdout = '';
-  let stderr = '';
-  const append = (current: string, chunk: Buffer): string =>
-    `${current}${chunk.toString()}`.slice(-64 * 1024);
-  child.stdout?.on('data', (chunk: Buffer) => {
-    stdout = append(stdout, chunk);
-  });
-  child.stderr?.on('data', (chunk: Buffer) => {
-    stderr = append(stderr, chunk);
-  });
-
-  return await new Promise((resolve, reject) => {
-    let timedOut = false;
-    let aborted = false;
-    let processError: Error | null = null;
-    let terminationStarted = false;
-    let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
-    let exitConfirmationTimer: ReturnType<typeof setTimeout> | null = null;
-    const requestTermination = () => {
-      if (terminationStarted) return;
-      terminationStarted = true;
-      child.kill('SIGTERM');
-      forceKillTimer = setTimeout(() => child.kill('SIGKILL'), 2_000);
-      forceKillTimer.unref?.();
-      exitConfirmationTimer = setTimeout(() => {
-        cleanup();
-        reject(new Error('Upgrade process did not confirm exit after SIGKILL'));
-      }, 7_000);
-      exitConfirmationTimer.unref?.();
-    };
-    const onAbort = () => {
-      if (aborted) return;
-      aborted = true;
-      requestTermination();
-    };
-    args.signal?.addEventListener('abort', onAbort, { once: true });
-    if (args.signal?.aborted) onAbort();
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      requestTermination();
-    }, args.timeoutMs);
-    timeout.unref?.();
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      if (forceKillTimer) clearTimeout(forceKillTimer);
-      if (exitConfirmationTimer) clearTimeout(exitConfirmationTimer);
-      args.signal?.removeEventListener('abort', onAbort);
-    };
-    child.once('error', (error) => {
-      processError = error;
-    });
-    child.once('close', (code) => {
-      cleanup();
-      if (processError) {
-        reject(processError);
-        return;
-      }
-      resolve({ code, stdout, stderr, timedOut, aborted });
-    });
-  });
-};
-
-/** Returns true only when the upgrade intent existed and npm install succeeded. */
-export const runDaemonUpgradeFromIntent = async (args: {
-  logger: LifecycleLogger;
-  timeoutMs?: number;
-  spawnImpl?: SpawnLike;
-  signal?: AbortSignal;
-}): Promise<boolean> => {
-  const intent = await readDaemonUpgradeIntent();
-  if (!intent) {
-    args.logger.warn?.('[daemon-upgrade] no upgrade intent found; respawning without upgrade');
-    return false;
-  }
-
-  try {
-    const targetVersion = normalizeMachineUpgradeTargetVersion(intent.targetVersion);
-    const npmExecutable = resolveNpmExecutable();
-    const installArgs = buildMollyUpgradeInstallArgs(targetVersion);
-    args.logger.info?.(
-      `[daemon-upgrade] installing ${MOLLY_NPM_PACKAGE_NAME}@${targetVersion} for request ${intent.requestId}`
-    );
-    const result = await runCommand({
-      command: npmExecutable,
-      commandArgs: installArgs,
-      timeoutMs: args.timeoutMs ?? MACHINE_UPGRADE_TIMEOUT_MS,
-      spawnImpl: args.spawnImpl ?? spawn,
-      signal: args.signal,
-    });
-    if (result.aborted) {
-      throw new DOMException('Daemon upgrade canceled', 'AbortError');
-    }
-    if (result.timedOut) {
-      args.logger.error?.(
-        `[daemon-upgrade] npm install timed out after ${args.timeoutMs ?? MACHINE_UPGRADE_TIMEOUT_MS}ms`
-      );
-      return false;
-    }
-    if (result.code !== 0) {
-      const detail = (result.stderr || result.stdout || 'no output').replace(/\s+/g, ' ').trim();
-      args.logger.error?.(
-        `[daemon-upgrade] npm install failed with code ${result.code}: ${detail.slice(0, 500)}`
-      );
-      return false;
-    }
-    args.logger.info?.(
-      `[daemon-upgrade] npm install completed for ${MOLLY_NPM_PACKAGE_NAME}@${targetVersion}`
-    );
-    return true;
-  } finally {
-    await clearDaemonUpgradeIntent();
   }
 };

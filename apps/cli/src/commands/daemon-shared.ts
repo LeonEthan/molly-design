@@ -110,11 +110,11 @@ export function resolveMollyBin(): string {
 
 // --- Daemon runner readiness handshake -------------------------------------
 //
-// `molly daemon start` (and the watchdog upgrade handoff) spawn a detached
-// `daemon-runner` with an extra pipe on fd 3. The runner writes exactly one
-// JSON line describing its launch outcome, then closes the fd. A successful
-// outcome means the supervised Worker reached its local-ready boundary, not
-// merely that the watchdog claimed the Host lease and wrote its PID record.
+// `molly daemon start` spawns a detached `daemon-runner` with an extra pipe on
+// fd 3. The runner writes exactly one JSON line describing its launch outcome,
+// then closes the fd. A successful outcome means the supervised Worker reached
+// its local-ready boundary, not merely that the watchdog claimed the Host
+// lease and wrote its PID record.
 
 export const DAEMON_RUNNER_READY_FD_ENV = 'MOLLY_DAEMON_RUNNER_READY_FD';
 const DAEMON_RUNNER_READY_FD = 3;
@@ -204,8 +204,8 @@ export function interpretDaemonRunnerLaunchOutcome(
       };
     case 'error':
       // The report is written before the runner's fatal cleanup releases its
-      // Host lease. Await this exact child so upgrade handoff fallback cannot
-      // race the failing replacement and mistake it for a new owner.
+      // Host lease. Await this exact child so a failing replacement cannot be
+      // mistaken for a new owner.
       return {
         outcome: { status: 'error', runnerPid, message: outcome.message },
         cancelRunner: true,

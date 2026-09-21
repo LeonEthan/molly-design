@@ -77,7 +77,6 @@ const createFleetHarness = (catalog: LocalWorkspaceCatalogService, port?: CloudP
     machineLifecycleCapability: {
       launchMode: 'foreground',
       canRemoteRestart: false,
-      canRemoteUpgrade: false,
       reason: 'not_daemon',
     },
   }) as unknown as {

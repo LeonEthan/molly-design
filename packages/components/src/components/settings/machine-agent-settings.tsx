@@ -29,12 +29,7 @@ import { useMachineActions } from '@/hooks/use-machine-actions';
 import { useMachineFlockAgentConfigsForMachineIds } from '@/hooks/use-machine-flock-agent-configs';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { canDeleteOfflineMachine, canManageAllMachines } from '@/lib/machine-deletion';
-import {
-  fetchLatestCliVersion,
-  isCliVersionOutdated,
-  mintMachineLifecycleRequestToken,
-  type MachineLifecycleAction,
-} from '@/lib/machine-lifecycle-api';
+import { mintMachineLifecycleRequestToken } from '@/lib/machine-lifecycle-api';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useStableSession } from '@/hooks/useStableSession';
 import { useOnlineMachineIds } from '@/hooks/use-machine-online-status';
@@ -176,7 +171,7 @@ function MachineSettingsView({
   const sessionMetaCache = useAtomValue(sessionMetaCacheAtom);
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
-  // Remote daemon restart/upgrade is brokered through the cloud control plane
+  // Remote daemon restart is brokered through the cloud control plane
   // (lifecycle token mint); machine sharing needs workspace members. Both are
   // cloud-only surfaces hidden on the local platform.
   const remoteMachinesAvailable = false;
@@ -467,7 +462,6 @@ function MachineSettingsView({
     localMachineId,
     canManageAllMachines: canManageOthers,
   });
-  const [latestCliVersion, setLatestCliVersion] = useState<string | null>(null);
 
   const isLocal = !!resolvedSelectedMachine && resolvedSelectedMachine.id === localMachineId;
   const isOwn = resolvedSelectedMachine ? isOwnMachine(resolvedSelectedMachine) : false;
@@ -507,20 +501,6 @@ function MachineSettingsView({
     selectedCanManageLifecycle &&
     selectedIsOnline &&
     selectedLifecycleCapability?.canRemoteRestart === true;
-  const selectedCanRemoteUpgrade =
-    selectedCanManageLifecycle &&
-    selectedIsOnline &&
-    selectedLifecycleCapability?.canRemoteUpgrade === true;
-  const selectedUpdateAvailable =
-    selectedCanRemoteUpgrade &&
-    isCliVersionOutdated(resolvedSelectedMachine?.cliVersion, latestCliVersion ?? undefined);
-  const selectedDaemonUpdate =
-    selectedUpdateAvailable && resolvedSelectedMachine?.cliVersion && latestCliVersion
-      ? {
-          currentVersion: resolvedSelectedMachine.cliVersion,
-          latestVersion: latestCliVersion,
-        }
-      : undefined;
   const machineMonitor = useMachineMonitor({
     machineId: resolvedSelectedMachine?.id ?? null,
     enabled: true,
@@ -577,19 +557,6 @@ function MachineSettingsView({
     [runtime, t]
   );
 
-  useEffect(() => {
-    // The latest-version probe only feeds the remote upgrade affordance; skip
-    // the network call entirely when remote lifecycle is unavailable.
-    if (!remoteMachinesAvailable) return undefined;
-    let cancelled = false;
-    void fetchLatestCliVersion().then((result) => {
-      if (cancelled) return;
-      setLatestCliVersion(result.ok ? result.latestVersion : null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [remoteMachinesAvailable]);
 
   const pingMachine = useCallback(
     (machineId: MachineId): Promise<number> => {
@@ -610,12 +577,8 @@ function MachineSettingsView({
     [runtime, t, workspaceId]
   );
 
-  const requestMachineLifecycle = useCallback(
-    async (args: {
-      machineId: MachineId;
-      action: MachineLifecycleAction;
-      targetVersion?: string;
-    }) => {
+  const restartMachine = useCallback(
+    async (machineId: MachineId) => {
       if (!runtime || !workspaceId || !authToken) {
         throw new Error(t('chat.validation.missingContext', 'Missing workspace context'));
       }
@@ -623,83 +586,40 @@ function MachineSettingsView({
       const requestId = createMachineRequestId();
       const minted = await mintMachineLifecycleRequestToken({
         workspaceId,
-        machineId: args.machineId,
-        action: args.action,
+        machineId,
+        action: 'restart',
         requestId,
-        targetVersion: args.targetVersion,
         sessionToken: authToken,
       });
       if (!minted.ok) {
         throw new Error(minted.error);
       }
 
-      if (args.action === 'restart') {
-        const responsePromise = runtime.waitForMachineRestartResponse(args.machineId, requestId, {
-          timeoutMs: 30000,
-        });
-        runtime.sendControl({
-          type: 'machine/restart',
-          machineId: args.machineId,
-          workspaceId,
-          requesterUserId: minted.requesterUserId,
-          requestToken: minted.requestToken,
-          requestId,
-        });
-        const response = await responsePromise;
-        if (!response) {
-          throw new Error(
-            t('settings.agent.machineLifecycle.restartTimeout', 'Restart request timed out')
-          );
-        }
-        if (!response.success || !response.accepted) {
-          throw new Error(
-            response.error ||
-              t('settings.agent.machineLifecycle.restartFailed', 'Restart request failed')
-          );
-        }
-        return;
-      }
-
-      const responsePromise = runtime.waitForMachineUpgradeResponse(args.machineId, requestId, {
-        timeoutMs: 120000,
+      const responsePromise = runtime.waitForMachineRestartResponse(machineId, requestId, {
+        timeoutMs: 30000,
       });
       runtime.sendControl({
-        type: 'machine/upgrade',
-        machineId: args.machineId,
+        type: 'machine/restart',
+        machineId,
         workspaceId,
         requesterUserId: minted.requesterUserId,
         requestToken: minted.requestToken,
         requestId,
-        targetVersion: args.targetVersion,
       });
       const response = await responsePromise;
       if (!response) {
         throw new Error(
-          t('settings.agent.machineLifecycle.upgradeTimeout', 'Update request timed out')
+          t('settings.agent.machineLifecycle.restartTimeout', 'Restart request timed out')
         );
       }
       if (!response.success || !response.accepted) {
         throw new Error(
           response.error ||
-            t('settings.agent.machineLifecycle.upgradeFailed', 'Update request failed')
+            t('settings.agent.machineLifecycle.restartFailed', 'Restart request failed')
         );
       }
     },
     [authToken, runtime, t, workspaceId]
-  );
-
-  const restartMachine = useCallback(
-    async (machineId: MachineId) => {
-      await requestMachineLifecycle({ machineId, action: 'restart' });
-    },
-    [requestMachineLifecycle]
-  );
-
-  const upgradeMachine = useCallback(
-    async (machineId: MachineId, targetVersion: string) => {
-      await requestMachineLifecycle({ machineId, action: 'upgrade', targetVersion });
-    },
-    [requestMachineLifecycle]
   );
 
   const hasMachines = machines.size > 0;
@@ -774,9 +694,7 @@ function MachineSettingsView({
           onRename={actions.renameMachine}
           onDelete={actions.deleteMachine}
           onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
-          daemonUpdate={isOwn ? selectedDaemonUpdate : undefined}
           onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
-          onUpgradeDaemon={isOwn && selectedDaemonUpdate ? upgradeMachine : undefined}
           monitorSnapshot={machineMonitor.snapshot}
           monitorState={machineMonitor.state}
           monitorSessionMetas={monitorSessionMetas}
@@ -824,10 +742,8 @@ function MachineSettingsView({
             onRename={actions.renameMachine}
             onDelete={actions.deleteMachine}
             onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
-            daemonUpdate={isOwn ? selectedDaemonUpdate : undefined}
-            onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
-            onUpgradeDaemon={isOwn && selectedDaemonUpdate ? upgradeMachine : undefined}
-            monitorSnapshot={machineMonitor.snapshot}
+              onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
+              monitorSnapshot={machineMonitor.snapshot}
             monitorState={machineMonitor.state}
             monitorSessionMetas={monitorSessionMetas}
             onOpenMonitorSession={openMonitorSession}

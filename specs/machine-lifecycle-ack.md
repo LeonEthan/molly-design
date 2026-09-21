@@ -5,10 +5,12 @@ Translation: pending
 
 ## Accepted work and response delivery
 
-An authorized restart or upgrade that the CLI has accepted must proceed even when
-its acknowledgement cannot be delivered. Upgrade acceptance still requires the
-existing upgrade intent to be written successfully. Rejected operations never
-trigger a lifecycle exit.
+An authorized restart that the CLI has accepted must proceed even when its
+acknowledgement cannot be delivered. Rejected operations never trigger a
+lifecycle exit. Remote upgrade no longer exists in this contract: the former
+npm self-install path was removed because the package it installed is not
+Molly-owned, and this local product ships updates through the desktop release
+channel.
 
 The RPC server first attempts to deliver the accepted response, with a total
 five-second budget. Success, exhausted delivery retries, or deadline expiry then
@@ -20,7 +22,7 @@ The existing process boundary retains its one-time exit guard. This contract doe
 not add process-wide preparation serialization or cross-restart request deduplication.
 The deadline bounds waiting, not cancellation of the underlying HTTP request.
 A client timeout means the outcome is unconfirmed; it does not cancel accepted work
-or prove that the daemon failed to restart or upgrade. Completion reporting is separate.
+or prove that the daemon failed to restart. Completion reporting is separate.
 
 ## Implementation evidence
 

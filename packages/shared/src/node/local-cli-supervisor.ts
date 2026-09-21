@@ -15,8 +15,8 @@ export const LOCAL_CLI_SUPERVISOR_CONTRACT_VERSION = '1';
 export const CLI_EXIT_CODE_RETRYABLE_STARTUP = 2;
 /** Worker exits with this after the RPC handler acknowledges a remote restart. */
 export const CLI_EXIT_CODE_REMOTE_RESTART = 42;
-/** Worker exits with this after the RPC handler acknowledges a remote upgrade. */
-export const CLI_EXIT_CODE_REMOTE_UPGRADE = 43;
+// Exit code 43 is retired and must not be reused: it belonged to the removed
+// remote-upgrade handoff (npm self-install), which no longer exists.
 /** Credentials are missing/invalid; supervising hosts must go fatal, not crash-loop. */
 export const CLI_EXIT_CODE_AUTH_FAILURE = 44;
 /** The launch identity/contract failed validation; the host and worker releases are incompatible. */

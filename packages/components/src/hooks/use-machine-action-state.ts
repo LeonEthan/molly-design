@@ -8,23 +8,19 @@ export type MachineActionCallbacks = {
   onDelete: (machine: MachineViewMeta) => Promise<void>;
   onPing?: (machineId: MachineId) => Promise<number>;
   onRestartDaemon?: (machineId: MachineId) => Promise<void>;
-  onUpgradeDaemon?: (machineId: MachineId, targetVersion: string) => Promise<void>;
 };
 
 /**
- * Rename/delete/ping/restart/upgrade state and handlers for the local machine.
+ * Rename/delete/ping/restart state and handlers for the local machine.
  */
 export function useMachineActionState({
   machine,
-  daemonUpdate,
   onRename,
   onDelete,
   onPing,
   onRestartDaemon,
-  onUpgradeDaemon,
 }: MachineActionCallbacks & {
   machine: MachineViewMeta;
-  daemonUpdate?: { currentVersion: string; latestVersion: string };
 }) {
   const { t } = useTranslation();
 
@@ -36,7 +32,6 @@ export function useMachineActionState({
   const [pinging, setPinging] = useState(false);
   const [pingLatencyMs, setPingLatencyMs] = useState<number | null>(null);
   const [restartingDaemon, setRestartingDaemon] = useState(false);
-  const [upgradingDaemon, setUpgradingDaemon] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const commitRename = useCallback(async () => {
@@ -89,7 +84,7 @@ export function useMachineActionState({
   }, [machine.id, onPing, pinging, t]);
 
   const handleRestartDaemon = useCallback(async () => {
-    if (!onRestartDaemon || restartingDaemon || upgradingDaemon) return;
+    if (!onRestartDaemon || restartingDaemon) return;
     try {
       setRestartingDaemon(true);
       await onRestartDaemon(machine.id);
@@ -103,24 +98,7 @@ export function useMachineActionState({
     } finally {
       setRestartingDaemon(false);
     }
-  }, [machine.id, onRestartDaemon, restartingDaemon, upgradingDaemon, t]);
-
-  const handleUpgradeDaemon = useCallback(async () => {
-    if (!onUpgradeDaemon || !daemonUpdate || restartingDaemon || upgradingDaemon) return;
-    try {
-      setUpgradingDaemon(true);
-      await onUpgradeDaemon(machine.id, daemonUpdate.latestVersion);
-      toast.success(
-        t('settings.agent.machineLifecycle.upgradeAccepted', 'Update request accepted')
-      );
-    } catch (error) {
-      toast.error(t('settings.agent.machineLifecycle.upgradeFailed', 'Update request failed'), {
-        description: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setUpgradingDaemon(false);
-    }
-  }, [machine.id, onUpgradeDaemon, daemonUpdate, restartingDaemon, upgradingDaemon, t]);
+  }, [machine.id, onRestartDaemon, restartingDaemon, t]);
 
   return {
     renaming,
@@ -138,8 +116,6 @@ export function useMachineActionState({
     pingLatencyMs,
     handlePing,
     restartingDaemon,
-    upgradingDaemon,
     handleRestartDaemon,
-    handleUpgradeDaemon,
   };
 }

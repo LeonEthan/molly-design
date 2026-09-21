@@ -15,9 +15,9 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
   and signal exits; `daemon-runner.ts` owns watchdog fatal and signal exits. Never force exit from
   reusable libraries, session/agent internals, TUI/watch flows, or worker code — expose cleanup
   and let the process boundary decide.
-- Remote daemon restart/upgrade: after a bounded ACK attempt, even on delivery failure,
+- Remote daemon restart: after a bounded ACK attempt, even on delivery failure,
   accepted work asks `start.ts` to exit with the reserved lifecycle code; the watchdog
-  upgrades/restarts after exit. See [ACK contract](../../../../specs/machine-lifecycle-ack.md).
+  restarts after exit. See [ACK contract](../../../../specs/machine-lifecycle-ack.md).
 - `start.ts` and `molly daemon start` compose only the local installation identity and
   Agent service. The daemon foreground command rejects `--auth`; the runner's ready
   handshake remains the startup success signal.

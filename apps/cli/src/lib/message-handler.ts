@@ -72,8 +72,6 @@ import {
   MachinePingRequestValidated,
   MachineRestartRequestValidated,
   MachineRestartResponse,
-  MachineUpgradeRequestValidated,
-  MachineUpgradeResponse,
   MachineAcpCapabilitiesRefreshRequestValidated,
   MachineAcpCapabilitiesRefreshResponse,
   type MachineAcpAuthenticateRequestValidated,
@@ -180,11 +178,8 @@ import { ProviderSetupManager } from './provider-setup-manager';
 import { MachineFlockCommandWatcher } from './loro/machine-flock-command-watcher';
 import {
   EXIT_CODE_REMOTE_RESTART,
-  EXIT_CODE_REMOTE_UPGRADE,
   type MachineProcessLifecycleAction,
-  normalizeMachineUpgradeTargetVersion,
   verifyMachineLifecycleRequest,
-  writeDaemonUpgradeIntent,
 } from './machine-lifecycle';
 import { formatErrorMessage } from '@/utils/format-error';
 import { startTraceSpan, traceAsync } from '@/utils/trace-span';
@@ -2984,11 +2979,10 @@ export class MessageHandler {
     this.machineLifecycleCapability = config.machineLifecycleCapability ?? {
       launchMode: 'foreground',
       canRemoteRestart: false,
-      canRemoteUpgrade: false,
       reason: 'not_daemon',
     };
     this.logger.debug(
-      `[machine-lifecycle] launchMode=${this.machineLifecycleCapability.launchMode} canRestart=${this.machineLifecycleCapability.canRemoteRestart} canUpgrade=${this.machineLifecycleCapability.canRemoteUpgrade}`
+      `[machine-lifecycle] launchMode=${this.machineLifecycleCapability.launchMode} canRestart=${this.machineLifecycleCapability.canRemoteRestart}`
     );
     this.cloudPort = config.cloudPort;
     this.notificationService = this.cloudPort.notifications;
@@ -7057,9 +7051,6 @@ export class MessageHandler {
       case 'machine/restart':
         await this.handleMachineRestart(message, context);
         break;
-      case 'machine/upgrade':
-        await this.handleMachineUpgrade(message, context);
-        break;
       case 'machine/acp-capabilities-refresh':
         await this.handleMachineAcpCapabilitiesRefresh(message, context);
         break;
@@ -7713,24 +7704,6 @@ export class MessageHandler {
     };
   }
 
-  private machineUpgradeFailure(
-    requestId: string,
-    disposition: MachineUpgradeResponse['disposition'],
-    error: string,
-    targetVersion?: string
-  ): MachineUpgradeResponse {
-    return {
-      type: 'machine/upgrade_response',
-      machineId: this.machineId,
-      requestId,
-      success: false,
-      accepted: false,
-      disposition,
-      ...(targetVersion === undefined ? {} : { targetVersion }),
-      error,
-    };
-  }
-
   private lifecycleErrorDisposition(result: {
     ok: false;
     status?: number;
@@ -7738,16 +7711,13 @@ export class MessageHandler {
     return result.status === 401 || result.status === 403 ? 'unauthorized' : 'error';
   }
 
-  private machineLifecycleUnsupportedMessage(action: 'restart' | 'upgrade'): string {
+  private machineLifecycleUnsupportedMessage(action: 'restart'): string {
     const capability = this.machineLifecycleCapability;
     if (capability.reason === 'electron') {
       return `Machine ${action} is not available for the Electron-managed CLI.`;
     }
     if (capability.reason === 'not_daemon') {
       return `Machine ${action} requires the CLI to be launched with \`molly daemon start\`.`;
-    }
-    if (capability.reason === 'unsupported_install') {
-      return `Machine ${action} is unavailable: this installation has no published package channel. Update through the Molly desktop release instead.`;
     }
     return `Machine ${action} is not available in this process.`;
   }
@@ -7826,122 +7796,11 @@ export class MessageHandler {
     };
   }
 
-  private async prepareMachineUpgrade(args: {
-    requesterUserId: string;
-    requestToken: string;
-    requestId: string;
-    targetVersion?: string;
-  }): Promise<MachineUpgradeResponse> {
-    let targetVersion: string;
-    try {
-      targetVersion = normalizeMachineUpgradeTargetVersion(args.targetVersion);
-    } catch (error) {
-      return this.machineUpgradeFailure(
-        args.requestId,
-        'invalid_target',
-        formatErrorMessage(error)
-      );
-    }
-
-    if (!this.machineLifecycleCapability.canRemoteUpgrade) {
-      return this.machineUpgradeFailure(
-        args.requestId,
-        'unsupported_launch_mode',
-        this.machineLifecycleUnsupportedMessage('upgrade'),
-        targetVersion
-      );
-    }
-    if (this.pendingProcessLifecycleAction) {
-      return this.machineUpgradeFailure(
-        args.requestId,
-        'already_pending',
-        'A machine lifecycle operation is already pending.',
-        targetVersion
-      );
-    }
-    if (!this.onProcessLifecycleAction) {
-      return this.machineUpgradeFailure(
-        args.requestId,
-        'unsupported_install',
-        'Machine upgrade is not available in this process.',
-        targetVersion
-      );
-    }
-
-    const verified = await verifyMachineLifecycleRequest({
-      token: this.token,
-      workspaceId: this.workspaceId,
-      machineId: this.machineId,
-      action: 'upgrade',
-      requesterUserId: args.requesterUserId,
-      requestId: args.requestId,
-      requestToken: args.requestToken,
-      targetVersion,
-    });
-    if (!verified.ok) {
-      this.logger.warn(`[machine-lifecycle] upgrade verification failed: ${verified.error}`);
-      return this.machineUpgradeFailure(
-        args.requestId,
-        this.lifecycleErrorDisposition(verified),
-        verified.error,
-        targetVersion
-      );
-    }
-
-    try {
-      await writeDaemonUpgradeIntent({
-        action: 'upgrade',
-        requestId: args.requestId,
-        requesterUserId: args.requesterUserId,
-        targetVersion,
-        currentVersion: this.cliVersion,
-        requestedAtMs: getServerNow(),
-      });
-    } catch (error) {
-      return this.machineUpgradeFailure(
-        args.requestId,
-        'error',
-        `Could not persist upgrade intent: ${formatErrorMessage(error)}`,
-        targetVersion
-      );
-    }
-
-    this.pendingProcessLifecycleAction = {
-      action: 'upgrade',
-      exitCode: EXIT_CODE_REMOTE_UPGRADE,
-      requestId: args.requestId,
-    };
-    this.logger.info(
-      `[machine-lifecycle] upgrade accepted for request ${args.requestId} target=${targetVersion}`
-    );
-    return {
-      type: 'machine/upgrade_response',
-      machineId: this.machineId,
-      requestId: args.requestId,
-      success: true,
-      accepted: true,
-      disposition: 'accepted',
-      currentVersion: this.cliVersion,
-      targetVersion,
-    };
-  }
-
   private async handleMachineRestart(
     message: MachineRestartRequestValidated,
     dispatchContext: MessageDispatchContext = this.createRuntimeDispatchContext()
   ): Promise<void> {
     const response = await this.prepareMachineRestart(message);
-    dispatchContext.send(response);
-    if (response.accepted) {
-      this.triggerPendingProcessLifecycleAction(response.requestId);
-    }
-  }
-
-  private async handleMachineUpgrade(
-    message: MachineUpgradeRequestValidated,
-    dispatchContext: MessageDispatchContext = this.createRuntimeDispatchContext()
-  ): Promise<void> {
-    const response = await this.prepareMachineUpgrade(message);
     dispatchContext.send(response);
     if (response.accepted) {
       this.triggerPendingProcessLifecycleAction(response.requestId);

@@ -641,7 +641,6 @@ describe('local session control node validators', () => {
       lifecycle: {
         launchMode: 'daemon' as const,
         canRemoteRestart: true,
-        canRemoteUpgrade: true,
       },
     };
 
@@ -654,7 +653,6 @@ describe('local session control node validators', () => {
         lifecycle: {
           launchMode: 'electron',
           canRemoteRestart: false,
-          canRemoteUpgrade: false,
           reason: 'electron',
         },
       })
@@ -662,19 +660,17 @@ describe('local session control node validators', () => {
   });
 
   it('accepts unsupported launch mode lifecycle responses in ts and cjs validators', () => {
-    for (const type of ['machine/restart_response', 'machine/upgrade_response'] as const) {
-      const response = {
-        type,
-        machineId: 'machine-1',
-        requestId: 'request-1',
-        success: false,
-        accepted: false,
-        disposition: 'unsupported_launch_mode' as const,
-        error: 'not daemon supervised',
-      };
-      expect(isLocalSessionControlResponse(response)).toBe(true);
-      expect(isLocalSessionControlResponseCjs(response)).toBe(true);
-    }
+    const response = {
+      type: 'machine/restart_response' as const,
+      machineId: 'machine-1',
+      requestId: 'request-1',
+      success: false,
+      accepted: false,
+      disposition: 'unsupported_launch_mode' as const,
+      error: 'not daemon supervised',
+    };
+    expect(isLocalSessionControlResponse(response)).toBe(true);
+    expect(isLocalSessionControlResponseCjs(response)).toBe(true);
   });
 
   it('accepts Code Collab host start responses in ts and cjs validators', () => {

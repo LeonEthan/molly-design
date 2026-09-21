@@ -30,7 +30,6 @@ import type {
   MachinePingResponse,
   MachineRestartResponse,
   MachineStatusResponse,
-  MachineUpgradeResponse,
   PreviewTarget,
   PreviewTargetApproval,
   SessionCancelResponse,
@@ -112,7 +111,6 @@ const CONTROL_METHODS: ReadonlySet<string> = new Set([
   'machine/status',
   'machine/ping',
   'machine/restart',
-  'machine/upgrade',
   'machine/acp-capabilities-refresh-cancel',
   'session/cancel',
   'session/live-status',
@@ -290,18 +288,11 @@ type RpcServerDeps = {
     requestToken: string;
     requestId: string;
   }) => Promise<MachineRestartResponse>;
-  upgradeMachine?: (args: {
-    requesterUserId: string;
-    requestToken: string;
-    requestId: string;
-    targetVersion?: string;
-  }) => Promise<MachineUpgradeResponse>;
   /** Accepted operations proceed after the ACK succeeds, fails, or reaches its deadline. */
-  onMachineLifecycleResponseSettled?: (
-    args:
-      | { action: 'restart'; response: MachineRestartResponse }
-      | { action: 'upgrade'; response: MachineUpgradeResponse }
-  ) => void;
+  onMachineLifecycleResponseSettled?: (args: {
+    action: 'restart';
+    response: MachineRestartResponse;
+  }) => void;
   refreshMachineAcpCapabilities: (args: {
     configId: AgentConfigId;
     onAcpBinaryProgress?: (message: MachineAcpBinaryProgressMessage) => void;
@@ -775,26 +766,6 @@ export class LoroStreamsMachineRpcServer {
           });
           await this.settleMachineLifecycleResponse(request.replyTo, request.id, {
             action: 'restart',
-            response,
-          });
-          return;
-        }
-        case 'machine/upgrade': {
-          if (!this.deps.upgradeMachine) {
-            await this.appendErrorResponse(request.replyTo, request.id, request.method, {
-              code: LORO_STREAMS_RPC_ERROR_CODES.methodUnavailable,
-              message: 'Machine upgrade is not available on this machine.',
-            });
-            return;
-          }
-          const response = await this.deps.upgradeMachine({
-            requesterUserId: request.params.requesterUserId,
-            requestToken: request.params.requestToken,
-            requestId: request.params.requestId,
-            targetVersion: request.params.targetVersion,
-          });
-          await this.settleMachineLifecycleResponse(request.replyTo, request.id, {
-            action: 'upgrade',
             response,
           });
           return;
@@ -1514,19 +1485,17 @@ export class LoroStreamsMachineRpcServer {
   private async settleMachineLifecycleResponse(
     replyTo: string,
     requestId: string,
-    event:
-      | { action: 'restart'; response: MachineRestartResponse }
-      | { action: 'upgrade'; response: MachineUpgradeResponse }
+    event: { action: 'restart'; response: MachineRestartResponse }
   ): Promise<void> {
-    const method = event.action === 'restart' ? 'machine/restart' : 'machine/upgrade';
+    const method = 'machine/restart' as const;
     if (!event.response.accepted) {
       await this.appendResultResponse(replyTo, requestId, method, event.response);
       return;
     }
 
-    // Preparation already accepted the operation (including persisting upgrade
-    // intent). Delivery failure must not leave it pending forever. The race also
-    // observes a late append rejection without triggering the action a second time.
+    // Preparation already accepted the operation. Delivery failure must not
+    // leave it pending forever. The race also observes a late append rejection
+    // without triggering the action a second time.
     let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -1584,7 +1553,6 @@ export class LoroStreamsMachineRpcServer {
       | MachineAcpAuthenticateResponse
       | MachineAcpAuthenticationProgressMessage
       | MachineRestartResponse
-      | MachineUpgradeResponse
       | MachineAcpBinaryStatusResponse
       | MachineAcpBinaryInstallResponse
       | MachineAcpBinaryProgressMessage

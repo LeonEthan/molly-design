@@ -16,9 +16,10 @@ subdirectory; this file is the navigation index. Cross-module explanations live 
   receipt and inspects attachments without publishing or running the target.
 - `machine-runtime.ts` — local machine runtime bootstrap, session dispatch and
   local control/Machine RPC. Remote bridge attach/detach/revoke was removed.
-- `machine-lifecycle.ts` — remote lifecycle verification and upgrade intents; runs the
-  fixed npm install through `cross-spawn` so Windows `npm.cmd` shims use the command
-  interpreter. `../commands/daemon-runner.ts` owns restart and upgrade handoff.
+- `machine-lifecycle.ts` — remote restart verification against the auth site.
+  Remote upgrade (npm self-install) was removed: the `lody` npm package is
+  third-party, and updates ship through the desktop release channel.
+  `../commands/daemon-runner.ts` owns the restart respawn.
 - `cloud-cli-port.ts` — inherited cloud composition still used by remaining one-shot
   command paths. The embedded `start.ts` now constructs only the local port and
   injects it through Fleet → Lody → MachineRuntime → MessageHandler/Loro/session services.

@@ -214,12 +214,11 @@ export interface MachineStatusRequest {
 
 export type MachineLifecycleLaunchMode = 'daemon' | 'foreground' | 'electron' | 'unknown';
 
-export type MachineLifecycleUnsupportedReason = 'not_daemon' | 'electron' | 'unsupported_install';
+export type MachineLifecycleUnsupportedReason = 'not_daemon' | 'electron';
 
 export interface MachineLifecycleCapability {
   launchMode: MachineLifecycleLaunchMode;
   canRemoteRestart: boolean;
-  canRemoteUpgrade: boolean;
   reason?: MachineLifecycleUnsupportedReason;
 }
 
@@ -253,9 +252,7 @@ export type MachineLifecycleDisposition =
   | 'accepted'
   | 'already_pending'
   | 'unauthorized'
-  | 'invalid_target'
   | 'unsupported_launch_mode'
-  | 'unsupported_install'
   | 'error';
 
 export interface MachineRestartRequest {
@@ -276,31 +273,6 @@ export interface MachineRestartResponse {
   success: boolean;
   accepted: boolean;
   disposition: MachineLifecycleDisposition;
-  error?: string;
-}
-
-export interface MachineUpgradeRequest {
-  type: 'machine/upgrade';
-  machineId: MachineId;
-  workspaceId: WorkspaceId;
-  requesterUserId: string;
-  /** Signed requester proof minted by the backend for this lifecycle request. */
-  requestToken: string;
-  /** Client-generated operation id bound into requestToken for replay defense. */
-  requestId: string;
-  /** Defaults to `latest`; exact semver-like versions are also accepted. */
-  targetVersion?: string;
-}
-
-export interface MachineUpgradeResponse {
-  type: 'machine/upgrade_response';
-  machineId: MachineId;
-  requestId: string;
-  success: boolean;
-  accepted: boolean;
-  disposition: MachineLifecycleDisposition;
-  currentVersion?: string;
-  targetVersion?: string;
   error?: string;
 }
 
@@ -725,7 +697,6 @@ export type LocalSessionControlRequest =
   | MachineStatusRequest
   | MachinePingRequest
   | MachineRestartRequest
-  | MachineUpgradeRequest
   | MachineAcpCapabilitiesRefreshRequest
   | MachineAcpAuthenticateRequest
   | MachineAcpBinaryStatusRequest
@@ -748,7 +719,6 @@ export type LocalSessionControlResponse =
   | MachineStatusResponse
   | MachinePingResponse
   | MachineRestartResponse
-  | MachineUpgradeResponse
   | MachineAcpCapabilitiesRefreshResponse
   | MachineAcpAuthenticateResponse
   | MachineAcpAuthenticationProgressMessage
@@ -1167,7 +1137,6 @@ export type ClientToServer =
   | MachineStatusRequest
   | MachinePingRequest
   | MachineRestartRequest
-  | MachineUpgradeRequest
   | MachineAcpCapabilitiesRefreshRequest
   | MachineAcpAuthenticateRequest
   | MachineAcpBinaryStatusRequest
@@ -1184,7 +1153,6 @@ export type ServerToClient =
   | MachineStatusResponse
   | MachinePingResponse
   | MachineRestartResponse
-  | MachineUpgradeResponse
   | MachineAcpCapabilitiesRefreshResponse
   | MachineAcpAuthenticateResponse
   | MachineAcpAuthenticationProgressMessage
@@ -1201,7 +1169,6 @@ export type MachineToServer =
   | MachineStatusResponse
   | MachinePingResponse
   | MachineRestartResponse
-  | MachineUpgradeResponse
   | MachineAcpCapabilitiesRefreshResponse
   | MachineAcpAuthenticateResponse
   | MachineAcpAuthenticationProgressMessage
@@ -1218,7 +1185,6 @@ export type ServerToMachine =
   | MachineStatusRequest
   | MachinePingRequest
   | MachineRestartRequest
-  | MachineUpgradeRequest
   | MachineAcpCapabilitiesRefreshRequest
   | MachineAcpAuthenticateRequest
   | MachineAcpBinaryStatusRequest

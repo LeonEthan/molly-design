@@ -1069,17 +1069,12 @@ export const MachineLifecycleLaunchModeSchema = z.enum([
   'unknown',
 ]);
 
-export const MachineLifecycleUnsupportedReasonSchema = z.enum([
-  'not_daemon',
-  'electron',
-  'unsupported_install',
-]);
+export const MachineLifecycleUnsupportedReasonSchema = z.enum(['not_daemon', 'electron']);
 
 export const MachineLifecycleCapabilitySchema = z
   .object({
     launchMode: MachineLifecycleLaunchModeSchema,
     canRemoteRestart: z.boolean(),
-    canRemoteUpgrade: z.boolean(),
     reason: MachineLifecycleUnsupportedReasonSchema.optional(),
   })
   .strict();
@@ -1119,9 +1114,7 @@ export const MachineLifecycleDispositionSchema = z.enum([
   'accepted',
   'already_pending',
   'unauthorized',
-  'invalid_target',
   'unsupported_launch_mode',
-  'unsupported_install',
   'error',
 ]);
 
@@ -1144,32 +1137,6 @@ export const MachineRestartResponseSchema = z
     success: z.boolean(),
     accepted: z.boolean(),
     disposition: MachineLifecycleDispositionSchema,
-    error: z.string().optional(),
-  })
-  .strict();
-
-export const MachineUpgradeRequestSchema = z
-  .object({
-    type: z.literal('machine/upgrade'),
-    machineId: MachineIdSchema,
-    workspaceId: WorkspaceIdSchema,
-    requesterUserId: z.string().trim().min(1),
-    requestToken: z.string().trim().min(1),
-    requestId: z.string().trim().min(1),
-    targetVersion: z.string().trim().min(1).optional(),
-  })
-  .strict();
-
-export const MachineUpgradeResponseSchema = z
-  .object({
-    type: z.literal('machine/upgrade_response'),
-    machineId: MachineIdSchema,
-    requestId: z.string().trim().min(1),
-    success: z.boolean(),
-    accepted: z.boolean(),
-    disposition: MachineLifecycleDispositionSchema,
-    currentVersion: z.string().optional(),
-    targetVersion: z.string().optional(),
     error: z.string().optional(),
   })
   .strict();
@@ -2009,7 +1976,6 @@ export const LocalSessionControlRequestSchema = z.discriminatedUnion('type', [
   MachineStatusRequestSchema,
   MachinePingRequestSchema,
   MachineRestartRequestSchema,
-  MachineUpgradeRequestSchema,
   MachineAcpCapabilitiesRefreshRequestSchema,
   MachineAcpAuthenticateRequestSchema,
   MachineAcpBinaryStatusRequestSchema,
@@ -2033,7 +1999,6 @@ export const LocalSessionControlResponseSchema = z.discriminatedUnion('type', [
   MachineStatusResponseSchema,
   MachinePingResponseSchema,
   MachineRestartResponseSchema,
-  MachineUpgradeResponseSchema,
   MachineAcpCapabilitiesRefreshResponseSchema,
   MachineAcpAuthenticateResponseSchema,
   MachineAcpAuthenticationProgressMessageSchema,
@@ -2794,7 +2759,6 @@ export const ClientToServerSchema = z.discriminatedUnion('type', [
   MachineStatusRequestSchema,
   MachinePingRequestSchema,
   MachineRestartRequestSchema,
-  MachineUpgradeRequestSchema,
   MachineAcpCapabilitiesRefreshRequestSchema,
   MachineAcpAuthenticateRequestSchema,
   MachineAcpBinaryStatusRequestSchema,
@@ -2811,7 +2775,6 @@ export const ServerToClientSchema = z.discriminatedUnion('type', [
   MachineStatusResponseSchema,
   MachinePingResponseSchema,
   MachineRestartResponseSchema,
-  MachineUpgradeResponseSchema,
   MachineAcpCapabilitiesRefreshResponseSchema,
   MachineAcpAuthenticateResponseSchema,
   MachineAcpAuthenticationProgressMessageSchema,
@@ -2828,7 +2791,6 @@ export const MachineToServerSchema = z.discriminatedUnion('type', [
   MachineStatusResponseSchema,
   MachinePingResponseSchema,
   MachineRestartResponseSchema,
-  MachineUpgradeResponseSchema,
   MachineAcpCapabilitiesRefreshResponseSchema,
   MachineAcpAuthenticateResponseSchema,
   MachineAcpAuthenticationProgressMessageSchema,
@@ -2845,7 +2807,6 @@ export const ServerToMachineSchema = z.discriminatedUnion('type', [
   MachineStatusRequestSchema,
   MachinePingRequestSchema,
   MachineRestartRequestSchema,
-  MachineUpgradeRequestSchema,
   MachineAcpCapabilitiesRefreshRequestSchema,
   MachineAcpAuthenticateRequestSchema,
   MachineAcpBinaryStatusRequestSchema,
@@ -2867,8 +2828,6 @@ export const ServerReceiveMessageSchema = z.discriminatedUnion('type', [
   MachinePingResponseSchema,
   MachineRestartRequestSchema,
   MachineRestartResponseSchema,
-  MachineUpgradeRequestSchema,
-  MachineUpgradeResponseSchema,
   MachineAcpCapabilitiesRefreshRequestSchema,
   MachineAcpCapabilitiesRefreshResponseSchema,
   MachineAcpAuthenticateRequestSchema,
@@ -2898,8 +2857,6 @@ export const ServerSendMessageSchema = z.discriminatedUnion('type', [
   MachinePingResponseSchema,
   MachineRestartRequestSchema,
   MachineRestartResponseSchema,
-  MachineUpgradeRequestSchema,
-  MachineUpgradeResponseSchema,
   MachineAcpCapabilitiesRefreshRequestSchema,
   MachineAcpCapabilitiesRefreshResponseSchema,
   MachineAcpAuthenticateRequestSchema,
@@ -3421,8 +3378,6 @@ import type {
   MachinePingResponse,
   MachineRestartRequest,
   MachineRestartResponse,
-  MachineUpgradeRequest,
-  MachineUpgradeResponse,
   MachineAcpCapabilitiesRefreshRequest,
   MachineAcpCapabilitiesRefreshResponse,
   MachineAcpAuthenticateRequest,
@@ -3473,8 +3428,6 @@ export type {
   MachinePingResponse as MachinePingResponseValidated,
   MachineRestartRequest as MachineRestartRequestValidated,
   MachineRestartResponse as MachineRestartResponseValidated,
-  MachineUpgradeRequest as MachineUpgradeRequestValidated,
-  MachineUpgradeResponse as MachineUpgradeResponseValidated,
   MachineAcpCapabilitiesRefreshRequest as MachineAcpCapabilitiesRefreshRequestValidated,
   MachineAcpCapabilitiesRefreshResponse as MachineAcpCapabilitiesRefreshResponseValidated,
   MachineAcpAuthenticateRequest as MachineAcpAuthenticateRequestValidated,

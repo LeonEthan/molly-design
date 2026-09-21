@@ -67,10 +67,9 @@ type StoryProps = {
   ownerName?: string | null;
   showPing?: boolean;
   showRestart?: boolean;
-  /** Mocks the presence transport as synced + heartbeating so `isOnline` (and
-   * anything gated on it, like the daemon-update banner) reads true. */
+  /** Mocks the presence transport as synced + heartbeating so `isOnline`
+   * reads true. */
   presenceOnline?: boolean;
-  showUpdate?: boolean;
 };
 
 function StoryWrapper({
@@ -82,7 +81,6 @@ function StoryWrapper({
   showPing = false,
   showRestart = false,
   presenceOnline = false,
-  showUpdate = false,
 }: StoryProps) {
   const [store] = useState(() => {
     const nextStore = createStore();
@@ -113,10 +111,6 @@ function StoryWrapper({
           onDelete={async () => {}}
           onPing={showPing ? async () => 18 : undefined}
           onRestartDaemon={showRestart ? async () => {} : undefined}
-          daemonUpdate={
-            showUpdate ? { currentVersion: '0.44.0', latestVersion: '0.45.2' } : undefined
-          }
-          onUpgradeDaemon={showUpdate ? async () => {} : undefined}
         />
       </div>
     </Provider>
@@ -203,12 +197,3 @@ export const DesktopDevicesActions: Story = {
   },
 };
 
-export const DesktopDaemonUpdateBanner: Story = {
-  args: {
-    showPing: true,
-    showRestart: true,
-    canDelete: true,
-    presenceOnline: true,
-    showUpdate: true,
-  },
-};

@@ -471,7 +471,7 @@ function isLocalSessionControlRequest(value) {
     );
   }
 
-  if (value.type === 'machine/restart' || value.type === 'machine/upgrade') {
+  if (value.type === 'machine/restart') {
     return (
       typeof value.machineId === 'string' &&
       typeof value.workspaceId === 'string' &&
@@ -480,10 +480,7 @@ function isLocalSessionControlRequest(value) {
       typeof value.requestToken === 'string' &&
       value.requestToken.trim().length > 0 &&
       typeof value.requestId === 'string' &&
-      value.requestId.trim().length > 0 &&
-      (value.type === 'machine/restart' ||
-        typeof value.targetVersion === 'undefined' ||
-        (typeof value.targetVersion === 'string' && value.targetVersion.trim().length > 0))
+      value.requestId.trim().length > 0
     );
   }
 
@@ -655,11 +652,9 @@ function isMachineLifecycleCapability(value) {
       value.launchMode === 'electron' ||
       value.launchMode === 'unknown') &&
     typeof value.canRemoteRestart === 'boolean' &&
-    typeof value.canRemoteUpgrade === 'boolean' &&
     (typeof value.reason === 'undefined' ||
       value.reason === 'not_daemon' ||
-      value.reason === 'electron' ||
-      value.reason === 'unsupported_install')
+      value.reason === 'electron')
   );
 }
 
@@ -744,7 +739,7 @@ function isLocalSessionControlResponse(value) {
     );
   }
 
-  if (value.type === 'machine/restart_response' || value.type === 'machine/upgrade_response') {
+  if (value.type === 'machine/restart_response') {
     return (
       typeof value.machineId === 'string' &&
       typeof value.requestId === 'string' &&
@@ -754,13 +749,9 @@ function isLocalSessionControlResponse(value) {
       (value.disposition === 'accepted' ||
         value.disposition === 'already_pending' ||
         value.disposition === 'unauthorized' ||
-        value.disposition === 'invalid_target' ||
         value.disposition === 'unsupported_launch_mode' ||
-        value.disposition === 'unsupported_install' ||
         value.disposition === 'error') &&
-      isOptionalString(value.error) &&
-      (value.type === 'machine/restart_response' ||
-        (isOptionalString(value.currentVersion) && isOptionalString(value.targetVersion)))
+      isOptionalString(value.error)
     );
   }
 

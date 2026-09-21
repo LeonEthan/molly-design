@@ -29,7 +29,6 @@ import {
   removePidFile,
   reportDaemonRunnerLaunchOutcome,
   resolveMollyBin,
-  spawnDaemonRunnerAndAwaitReady,
   writePidFile,
   type DaemonPidRecord,
 } from './daemon-shared';
@@ -39,12 +38,10 @@ import { captureSupervisorEvent } from './analytics-events';
 import { getRuntimeDiagnostics } from '@/utils/runtime-diagnostics';
 import {
   EXIT_CODE_REMOTE_RESTART,
-  EXIT_CODE_REMOTE_UPGRADE,
   EXIT_CODE_AUTH_FAILURE,
   EXIT_CODE_RETRYABLE_STARTUP,
   EXIT_CODE_SUPERVISOR_CONTRACT_MISMATCH,
   MOLLY_DAEMON_SUPERVISED_ENV,
-  runDaemonUpgradeFromIntent,
 } from '@/lib/machine-lifecycle';
 import {
   describeDaemonWorkerStartupFailure,
@@ -230,10 +227,7 @@ export const daemonRunnerCommand = new Command('daemon-runner')
       // A new process exit timestamp means the worker crashed/exited.
       if (state.lastExitAtMs !== undefined && state.lastExitAtMs !== lastExitAtMs) {
         lastExitAtMs = state.lastExitAtMs;
-        if (
-          state.lastExitCode !== EXIT_CODE_REMOTE_RESTART &&
-          state.lastExitCode !== EXIT_CODE_REMOTE_UPGRADE
-        ) {
+        if (state.lastExitCode !== EXIT_CODE_REMOTE_RESTART) {
           captureSupervisorEvent('worker_crashed', {
             exit_code: state.lastExitCode ?? null,
             crash_count_consecutive: state.retryAttempt ?? 0,
@@ -267,7 +261,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
     };
 
     let terminating = false;
-    let pendingUpgradeHandoff = false;
     const finish = async (code: number) => {
       if (terminating) return;
       terminating = true;
@@ -278,54 +271,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
       await flushTelemetry();
       process.exit(code);
     };
-
-    // After a successful remote upgrade the Worker is stopped, the Host lease
-    // is already released, and this (old-code) watchdog replaces itself with a
-    // detached runner from the new install. Falling back to in-place restart
-    // keeps the machine online when the replacement cannot claim ownership.
-    async function performUpgradeHandoff(): Promise<void> {
-      pendingUpgradeHandoff = false;
-      logger.info('Handing the daemon watchdog off to the upgraded CLI...');
-      try {
-        const handoff = await spawnDaemonRunnerAndAwaitReady(passthroughArgs);
-        if (handoff.status === 'ready') {
-          logger.info(`Upgraded daemon watchdog is running (PID ${handoff.pid}).`);
-          // The replacement overwrote the PID record; the conditional
-          // removePidFile inside finish() will leave it in place.
-          await finish(0);
-          return;
-        }
-        logger.error(
-          `Watchdog handoff failed (${handoff.status}); restarting on the current version.`
-        );
-      } catch (error) {
-        logger.error(
-          `Watchdog handoff failed: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-      const reacquired = await acquireLocalCliHostLease({
-        instanceId: supervisorIdentity.instanceId,
-        mode: 'daemon',
-        shutdownControl: {
-          token: supervisorIdentity.token,
-          onRequest: () => requestHostShutdown(),
-        },
-      });
-      if (reacquired.status === 'occupied') {
-        logger.error(
-          'Another local CLI host claimed ownership during the failed handoff; exiting.'
-        );
-        await finish(1);
-        return;
-      }
-      hostLease = reacquired.lease;
-      pidRecord = writePidFile(
-        process.pid,
-        supervisorIdentity.instanceId,
-        supervisorIdentity.token
-      );
-      await supervisor.start();
-    }
 
     const supervisor = new CliSupervisor({
       prepareLaunch: async (signal) => {
@@ -366,7 +311,7 @@ export const daemonRunnerCommand = new Command('daemon-runner')
           await lease?.close();
         },
       },
-      decideExit: async (result, signal) => {
+      decideExit: async (result) => {
         // A retryable startup exit is not the launch outcome yet. Keep the
         // foreground handshake open while the supervisor retries; only a
         // non-retryable initial exit is reported as the startup failure.
@@ -384,19 +329,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
         if (result.code === EXIT_CODE_REMOTE_RESTART) {
           logger.info('Worker requested remote restart; respawning.');
           return { action: 'restart', message: 'Remote restart requested' };
-        }
-        if (result.code === EXIT_CODE_REMOTE_UPGRADE) {
-          logger.info('Worker requested remote upgrade; installing before handoff.');
-          const upgraded = await runDaemonUpgradeFromIntent({ logger, signal });
-          if (upgraded) {
-            // Stop cleanly so the Host lease is released, then hand the
-            // watchdog role to the freshly installed CLI in onTerminal. This
-            // is what upgrades the watchdog code itself, not just the Worker.
-            pendingUpgradeHandoff = true;
-            return { action: 'stop', message: 'Remote upgrade installed; handing off watchdog' };
-          }
-          logger.warn('Upgrade did not complete; respawning the current version.');
-          return { action: 'restart', message: 'Remote upgrade failed; restarted current version' };
         }
         if (result.code === EXIT_CODE_AUTH_FAILURE) {
           return {
@@ -448,10 +380,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
         }
       },
       onTerminal: (termination) => {
-        if (pendingUpgradeHandoff && termination.reason === 'clean_exit') {
-          void performUpgradeHandoff();
-          return;
-        }
         void finish(termination.reason === 'clean_exit' ? 0 : 1);
       },
     });

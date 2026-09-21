@@ -1,54 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildMollyUpgradeInstallArgs,
-  normalizeMachineUpgradeTargetVersion,
-  resolveMachineLifecycleCapability,
-  resolveNpmExecutable,
-} from './machine-lifecycle';
+import { resolveMachineLifecycleCapability } from './machine-lifecycle';
 
 describe('machine lifecycle helpers', () => {
-  it('defaults upgrade target to latest', () => {
-    expect(normalizeMachineUpgradeTargetVersion()).toBe('latest');
-    expect(normalizeMachineUpgradeTargetVersion('  latest  ')).toBe('latest');
-  });
-
-  it('accepts exact semver-like upgrade targets', () => {
-    expect(normalizeMachineUpgradeTargetVersion('1.2.3')).toBe('1.2.3');
-    expect(normalizeMachineUpgradeTargetVersion('1.2.3-beta.1')).toBe('1.2.3-beta.1');
-  });
-
-  it('rejects arbitrary npm package specs', () => {
-    expect(() => normalizeMachineUpgradeTargetVersion('git+https://example.com/repo.git')).toThrow(
-      /exact semver/
-    );
-    expect(() => normalizeMachineUpgradeTargetVersion('file:/tmp/lody.tgz')).toThrow(
-      /exact semver/
-    );
-    expect(() => normalizeMachineUpgradeTargetVersion('next')).toThrow(/exact semver/);
-  });
-
-  it('builds a fixed npm global install command for lody only', () => {
-    expect(buildMollyUpgradeInstallArgs('1.2.3')).toEqual([
-      'install',
-      '-g',
-      'lody@1.2.3',
-      '--registry=https://registry.npmjs.org',
-    ]);
-  });
-
-  it('uses npm.cmd on Windows', () => {
-    expect(resolveNpmExecutable('win32')).toBe('npm.cmd');
-    expect(resolveNpmExecutable('linux')).toBe('npm');
-  });
-
-  it('enables remote restart but not npm upgrade for supervised daemon workers', () => {
-    // canRemoteUpgrade stays false until Molly publishes its own npm package;
-    // the `lody` package on npm is third-party and must never be installed.
+  it('enables remote restart for supervised daemon workers', () => {
     expect(resolveMachineLifecycleCapability('daemon')).toEqual({
       launchMode: 'daemon',
       canRemoteRestart: true,
-      canRemoteUpgrade: false,
-      reason: 'unsupported_install',
     });
   });
 
@@ -56,7 +13,6 @@ describe('machine lifecycle helpers', () => {
     expect(resolveMachineLifecycleCapability('electron')).toEqual({
       launchMode: 'electron',
       canRemoteRestart: false,
-      canRemoteUpgrade: false,
       reason: 'electron',
     });
   });
@@ -65,7 +21,6 @@ describe('machine lifecycle helpers', () => {
     expect(resolveMachineLifecycleCapability(undefined)).toEqual({
       launchMode: 'foreground',
       canRemoteRestart: false,
-      canRemoteUpgrade: false,
       reason: 'not_daemon',
     });
   });

@@ -47,7 +47,7 @@ and the `file/preview` namespace are in
   `save-text` per absolute path in `code-collab-v2-service.ts`), not in the request loop.
 - Control-plane methods (`machine/status`, `machine/ping`, `session/cancel`,
   `session/live-status`, `session/steer`, `session/terminate`, `machine/restart`,
-  `machine/upgrade`, `session/dispatch-turn`)
+  `session/dispatch-turn`)
   bypass the shared semaphore and run on a small dedicated lane
   (`CONTROL_METHODS` in `machine-rpc-server.ts`) so saturated code-collab
   handlers cannot delay them at intake. Control handlers must stay fast

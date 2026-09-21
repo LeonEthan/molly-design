@@ -12,7 +12,6 @@ import {
 import {
   Activity,
   ChevronUp,
-  Download,
   Laptop,
   Loader2,
   LogOut,
@@ -78,9 +77,7 @@ export type MachineDetailPaneProps = {
   onRename: (machineId: MachineId, newName: string) => Promise<void>;
   onDelete: (machine: MachineViewMeta) => Promise<void>;
   onPing?: (machineId: MachineId) => Promise<number>;
-  daemonUpdate?: { currentVersion: string; latestVersion: string };
   onRestartDaemon?: (machineId: MachineId) => Promise<void>;
-  onUpgradeDaemon?: (machineId: MachineId, targetVersion: string) => Promise<void>;
   monitorSnapshot?: MachineMonitorSnapshot | null;
   monitorState?: MachineMonitorViewState;
   monitorSessionMetas?: readonly SessionMeta[];
@@ -111,9 +108,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
     onRename,
     onDelete,
     onPing,
-    daemonUpdate,
     onRestartDaemon,
-    onUpgradeDaemon,
     monitorSnapshot = null,
     monitorState = 'disabled',
     monitorSessionMetas = [],
@@ -145,17 +140,13 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
     pingLatencyMs,
     handlePing,
     restartingDaemon,
-    upgradingDaemon,
     handleRestartDaemon,
-    handleUpgradeDaemon,
   } = useMachineActionState({
     machine,
-    daemonUpdate,
     onRename,
     onDelete,
     onPing,
     onRestartDaemon,
-    onUpgradeDaemon,
   });
   const pendingRenameRef = useRef(false);
 
@@ -164,22 +155,20 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
   const removeVisible = !isMobile && !renaming && manageableOwnMachine;
   const managementGroupVisible = restartVisible || (!isMobile && !renaming && !!onPing);
   const destructiveGroupVisible = removeVisible;
-  const updateVisible = isOnline && !!daemonUpdate && !!onUpgradeDaemon;
   // Desktop renders every action inline in the header (rename pencil, share
   // switch, ping, restart, revoke, delete); the ⋮ menu is mobile-only.
   const actionsMenuVisible =
     !renaming &&
     isMobile &&
     !readOnly &&
-    (isOwn || canDelete || !!onRestartDaemon || !!onPing || (updateVisible && !!daemonUpdate));
+    (isOwn || canDelete || !!onRestartDaemon || !!onPing);
   const externalAccordionHeader = accordion?.headerRenderedExternally === true;
   const detailToolbarVisible =
     !externalAccordionHeader ||
     manageableOwnMachine ||
     !!onPing ||
     restartVisible ||
-    destructiveGroupVisible ||
-    updateVisible;
+    destructiveGroupVisible;
 
   const metaBadges = (
     <>
@@ -345,7 +334,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                         'settings.agent.machineLifecycle.restartButton',
                         'Restart daemon'
                       )}
-                      disabled={restartingDaemon || upgradingDaemon}
+                      disabled={restartingDaemon}
                       onClick={() => void handleRestartDaemon()}
                     >
                       {restartingDaemon ? (
@@ -430,11 +419,9 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                         <span>{t('workspace.machines.editName', 'Edit machine name')}</span>
                       </DropdownMenuItem>
                     )}
-                    {isMobile &&
-                      isOwn &&
-                      (onPing || (updateVisible && daemonUpdate) || onRestartDaemon) && (
-                        <DropdownMenuSeparator />
-                      )}
+                    {isMobile && isOwn && (onPing || onRestartDaemon) && (
+                      <DropdownMenuSeparator />
+                    )}
                     {isMobile && onPing && (
                       <DropdownMenuItem
                         onSelect={(event) => {
@@ -460,28 +447,10 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                         )}
                       </DropdownMenuItem>
                     )}
-                    {isMobile && updateVisible && daemonUpdate && (
-                      <DropdownMenuItem
-                        onSelect={() => void handleUpgradeDaemon()}
-                        disabled={restartingDaemon || upgradingDaemon}
-                      >
-                        {upgradingDaemon ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Download className="h-3.5 w-3.5" />
-                        )}
-                        <span>
-                          {t(
-                            'settings.agent.machineLifecycle.upgradeAndRestartButton',
-                            'Update and restart'
-                          )}
-                        </span>
-                      </DropdownMenuItem>
-                    )}
                     {onRestartDaemon && (
                       <DropdownMenuItem
                         onSelect={() => void handleRestartDaemon()}
-                        disabled={restartingDaemon || upgradingDaemon}
+                        disabled={restartingDaemon}
                       >
                         {restartingDaemon ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -555,43 +524,6 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
               {metaBadges}
             </div>
           ) : null}
-          {updateVisible && daemonUpdate && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-xs font-medium text-foreground">
-                  {t('settings.agent.machineLifecycle.updateAvailable', 'Update available')}
-                </div>
-                <div className="font-mono text-[11px] text-muted-foreground">
-                  {t(
-                    'settings.agent.machineLifecycle.updateVersion',
-                    'v{{current}} -> v{{latest}}',
-                    {
-                      current: daemonUpdate.currentVersion,
-                      latest: daemonUpdate.latestVersion,
-                    }
-                  )}
-                </div>
-              </div>
-              <div className="shrink-0">
-                <Button
-                  size="sm"
-                  className="h-8 px-3"
-                  disabled={restartingDaemon || upgradingDaemon}
-                  onClick={() => void handleUpgradeDaemon()}
-                >
-                  {upgradingDaemon ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  {t(
-                    'settings.agent.machineLifecycle.upgradeAndRestartButton',
-                    'Update and restart'
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
         </header>
       ) : null}
 

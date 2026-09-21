@@ -1079,7 +1079,8 @@ describe('LoroStreamsMachineRpcServer', () => {
     server.stop();
   });
 
-  describe.each(['restart', 'upgrade'] as const)('machine %s ACK delivery', (action) => {
+  describe('machine restart ACK delivery', () => {
+    const action = 'restart' as const;
     it.each([
       'success',
       'failure',
@@ -1124,7 +1125,6 @@ describe('LoroStreamsMachineRpcServer', () => {
         getMachineStatus: vi.fn(),
         refreshMachineAcpCapabilities: vi.fn(),
         restartMachine: async () => ({ ...response, type: 'machine/restart_response' }),
-        upgradeMachine: async () => ({ ...response, type: 'machine/upgrade_response' }),
         onMachineLifecycleResponseSettled: (event) => deliveredActions.push(event.action),
       });
       fake.pushBatch({
@@ -1143,7 +1143,6 @@ describe('LoroStreamsMachineRpcServer', () => {
               requesterUserId: 'synthetic-user',
               requestToken: 'synthetic-token',
               requestId: 'lifecycle-1',
-              ...(action === 'upgrade' ? { targetVersion: '1.2.3' } : {}),
             },
           },
         ],

@@ -24,7 +24,6 @@ import {
   type MachineStatusResponse,
   type MachinePingResponse,
   type MachineRestartResponse,
-  type MachineUpgradeResponse,
   type MachineAcpCapabilitiesRefreshResponse,
   type MachineAcpAuthenticateResponse,
   type MachineAcpAuthenticationProgressMessage,
@@ -140,7 +139,6 @@ const RECONNECTING_STATUS_DISPLAY_DELAY_MS = 1_000;
 const META_FIRST_SYNC_TIMEOUT_MS = 120_000;
 const LOCAL_MACHINE_ID_READY_TIMEOUT_MS = 2_000;
 const MACHINE_RESTART_RPC_TIMEOUT_MS = 30_000;
-const MACHINE_UPGRADE_RPC_TIMEOUT_MS = 120_000;
 
 function waitForPromiseOrAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | null> {
   if (signal.aborted) return Promise.resolve(null);
@@ -541,9 +539,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
   const machineRestartRegistry = createPendingResponseRegistry<MachineRestartResponse>(
     MACHINE_RESTART_RPC_TIMEOUT_MS
   );
-  const machineUpgradeRegistry = createPendingResponseRegistry<MachineUpgradeResponse>(
-    MACHINE_UPGRADE_RPC_TIMEOUT_MS
-  );
   const machineAcpBinaryProgressListeners = new Map<
     string,
     Set<(message: MachineAcpBinaryProgressMessage) => void>
@@ -645,12 +640,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
 
   const handleMachineRestartResponse = (message: MachineRestartResponse) =>
     machineRestartRegistry.handle(
-      getMachineLifecyclePendingKey(message.machineId as MachineId, message.requestId),
-      message
-    );
-
-  const handleMachineUpgradeResponse = (message: MachineUpgradeResponse) =>
-    machineUpgradeRegistry.handle(
       getMachineLifecyclePendingKey(message.machineId as MachineId, message.requestId),
       message
     );
@@ -955,16 +944,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
       options.timeoutMs
     );
 
-  const waitForMachineUpgradeResponse = (
-    machineId: MachineId,
-    requestId: string,
-    options: { timeoutMs?: number } = {}
-  ): Promise<MachineUpgradeResponse | null> =>
-    machineUpgradeRegistry.wait(
-      getMachineLifecyclePendingKey(machineId, requestId),
-      options.timeoutMs
-    );
-
   const docMetaRouteHandle = repo.watch(
     (event) => {
       if (event.kind !== 'doc-metadata') {
@@ -1001,7 +980,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     | MachineStatusResponse
     | MachinePingResponse
     | MachineRestartResponse
-    | MachineUpgradeResponse
     | MachineAcpCapabilitiesRefreshResponse
     | MachineAcpAuthenticateResponse
     | MachineAcpAuthenticationProgressMessage
@@ -1032,10 +1010,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     }
     if (message.type === 'machine/restart_response') {
       handleMachineRestartResponse(message);
-      return;
-    }
-    if (message.type === 'machine/upgrade_response') {
-      handleMachineUpgradeResponse(message);
       return;
     }
     if (message.type === 'machine/acp-authenticate_response') {
@@ -1070,7 +1044,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
         | 'machine/status'
         | 'machine/ping'
         | 'machine/restart'
-        | 'machine/upgrade'
         | 'machine/acp-capabilities-refresh'
         | 'machine/acp-authenticate'
         | 'machine/acp-binary-status'
@@ -1085,7 +1058,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
         | 'machine/status'
         | 'machine/ping'
         | 'machine/restart'
-        | 'machine/upgrade'
         | 'machine/acp-authenticate'
         | 'machine/acp-binary-status'
         | 'machine/acp-binary-install';
@@ -1104,7 +1076,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     message.type === 'machine/status' ||
     message.type === 'machine/ping' ||
     message.type === 'machine/restart' ||
-    message.type === 'machine/upgrade' ||
     message.type === 'machine/acp-authenticate' ||
     message.type === 'machine/acp-binary-status' ||
     message.type === 'machine/acp-binary-install';
@@ -1118,7 +1089,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     message.type === 'machine/status' ||
     message.type === 'machine/ping' ||
     message.type === 'machine/restart' ||
-    message.type === 'machine/upgrade' ||
     message.type === 'machine/acp-capabilities-refresh' ||
     message.type === 'machine/acp-authenticate' ||
     message.type === 'machine/acp-binary-status' ||
@@ -1274,7 +1244,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
           controlMessage.type === 'machine/status_response' ||
           controlMessage.type === 'machine/ping_response' ||
           controlMessage.type === 'machine/restart_response' ||
-          controlMessage.type === 'machine/upgrade_response' ||
           controlMessage.type === 'machine/acp-capabilities-refresh_response' ||
           controlMessage.type === 'machine/acp-authenticate_response' ||
           controlMessage.type === 'machine/acp-authentication-progress' ||
@@ -1428,19 +1397,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
         success: false,
         accepted: false,
         disposition: 'error',
-        error,
-      });
-      return;
-    }
-    if (message.type === 'machine/upgrade') {
-      handleMachineUpgradeResponse({
-        type: 'machine/upgrade_response',
-        machineId: message.machineId,
-        requestId: message.requestId,
-        success: false,
-        accepted: false,
-        disposition: 'error',
-        targetVersion: message.targetVersion,
         error,
       });
       return;
@@ -2906,7 +2862,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     waitForMachineStatusResponse,
     waitForMachinePingResponse,
     waitForMachineRestartResponse,
-    waitForMachineUpgradeResponse,
     requestMachineAcpCapabilitiesRefresh,
     waitForMachineAcpAuthenticateResponse,
     subscribeMachineAcpAuthenticationProgress,

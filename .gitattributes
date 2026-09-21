@@ -1,3 +1,4 @@
 # Preserve the exact text bytes checked against upstream source manifests.
 packages/design-authoring/** text=auto eol=lf
 packages/design-bento/** text=auto eol=lf
+packages/harness-pi/** text=auto eol=lf

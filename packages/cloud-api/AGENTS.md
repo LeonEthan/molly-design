@@ -1,6 +1,6 @@
 # Cloud API Client Contract
 
-This package is the public, client-facing contract for optional Lody Cloud
+This package is the public, client-facing contract for optional cloud
 features. It may contain stable operation names and request/response DTOs, but
 never Convex schemas, handlers, generated server APIs, secrets, deployment
 configuration, or business-rule implementations.

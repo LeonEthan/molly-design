@@ -25,7 +25,7 @@ catalog:
   better-auth: 1.5.5
   better-auth-capacitor: 0.3.6
   # >=13.0.2 ships prebuilt N-API binaries and has no install script. Keep this
-  # lower bound so `npx lody` also works when package install scripts are disabled.
+  # lower bound so `npx molly` also works when package install scripts are disabled.
   better-sqlite3: ^13.0.2
   convex: ^1.33.1
   effect: 3.18.4

@@ -35,7 +35,7 @@
     "agent",
     "local-execution"
   ],
-  "author": "Leon Zhao",
+  "author": "Molly contributors",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.14.0 <23 || >=23.6.0"
@@ -109,6 +109,5 @@
     "smol-toml": "1.6.1",
     "tinypool": "^1.0.0",
     "typescript": "^5.9.3"
-  },
-  "private": true
+  }
 }

@@ -21,7 +21,7 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
   `fontFamily: "Inter"` pass save validation in one build and fail with PPTD-E012 in the other.
   Rationale and the third (design-authoring helper) site: `packages/design-bento/README.md`.
 - Import the CLI's own `version` from `@/pkg`, never a relative `../package.json`; the package
-  `name` stays `lody` internally. This package is private, has no public bin, and is shipped only inside Molly.
+  `name` is `molly`. This package is private, has no public bin, and is shipped only inside Molly.
 - Keep shared Core preparation before bundling. External
   ACP entrypoints/presets and external Pi shims are retired; dev, production, staging and afterPack reject stale
   artifacts through `assertNoLegacyHarnessArtifacts`. Preserve user CLI installs/caches.

@@ -66,7 +66,7 @@ Two dev-build choices are load-bearing:
 The CLI's own `version` comes from `@/pkg` because each build composition aliases it to the
 manifest that actually gets published (cloud builds point it at the private composing package). A
 relative `../package.json` import bakes the stale OSS version into the published bundle — that is
-what made `lody@0.82.1 --version` print `0.76.0`. The package `name` stays `lody` in every
+what made `lody@0.82.1 --version` print `0.76.0`. The package `name` is `molly` in every
 composition.
 
 ## Retired developer workflows

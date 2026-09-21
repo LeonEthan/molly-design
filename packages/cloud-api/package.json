@@ -2,7 +2,7 @@
   "name": "@molly/cloud-api",
   "private": true,
   "version": "0.0.1",
-  "description": "Public client contract for optional Lody Cloud integrations.",
+  "description": "Public client contract for optional cloud integrations.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

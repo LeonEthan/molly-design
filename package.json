@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "description": "Local-first desktop workspace for graphic design with an Agent",
   "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LeonEthan/molly-design.git"
+  },
   "scripts": {
     "preinstall": "node scripts/check-node-runtime.mjs && node scripts/guard-nested-workspace-install.mjs",
     "build": "corepack pnpm --dir apps/electron build",

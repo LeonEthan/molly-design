@@ -1,6 +1,7 @@
 {
   "name": "@molly/e2e",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "acceptance": "node scripts/run-acceptance.mjs",

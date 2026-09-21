@@ -14,8 +14,9 @@ apply; read this file before changing a workflow.
   `github.event.repository.default_branch`. Never checkout or execute the PR
   head, and never use the possibly stale `pull_request.base.sha`.
 - Code CI runs on `pull_request` with read-only repository permissions and
-  initializes only the desktop source submodules: ACP core, DSH capabilities,
-  and Bento. Retained legacy runtimes are not default CI dependencies.
+  initializes only the desktop source submodules: ACP core and DSH
+  capabilities (Bento is vendored in-tree, not a submodule). Retained legacy
+  runtimes are not default CI dependencies.
 - Desktop journey authoring runs on a maintainer machine. GitHub workflows never
   receive Codex credentials or publish author output; an ordinary PR exposes the
   reviewed patch to the existing read-only code checks.

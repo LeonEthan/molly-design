@@ -1,6 +1,7 @@
 {
   "name": "@molly/platform",
   "private": true,
+  "license": "Apache-2.0",
   "version": "0.0.1",
   "description": "Platform provider contracts: the seam between the open-source local build and the cloud build (PlatformProvider for the frontend, CloudPort for the CLI).",
   "type": "module",

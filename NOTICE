@@ -22,7 +22,9 @@ Additional source components retain their own provenance and licenses:
   packages/design-authoring/source-manifest.json and
   packages/design-bento/source-manifest.json.
 * ACP extension submodules retain their upstream repositories and licenses in
-  their respective checkouts under packages/acp-extension-*.
+  their respective checkouts: packages/acp-extension-core and
+packages/acp-extension-dsh in the default workspace, and vendor/acp-extension-*
+for the retained upstream Claude/Codex/Grok/Kimi material.
 
 For the complete generated list of dependency notices, see
 THIRD_PARTY_NOTICES.md. This file is a provenance summary and does not replace

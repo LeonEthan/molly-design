@@ -3,6 +3,7 @@
   "productName": "Molly",
   "desktopName": "dev.molly-design.app.desktop",
   "private": true,
+  "license": "Apache-2.0",
   "version": "0.1.0",
   "description": "Molly — local desktop canvas for Agent-assisted graphic design",
   "main": "./out/main/index.js",

@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#53](https://github.com/LeonEthan/molly-design/pull/53)
+
 ## Abstract
 
 The Ubuntu Daily journey repeatedly failed before useful product coverage, first

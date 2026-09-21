@@ -173,10 +173,10 @@ SHA256 `033586c1079167f3f752bdfb6c0fc0046b80e03c00e6d1405c53ff9a2ef5ebdd`）。
   native 未保存对话框。该边界和确定性测试见
   [离开等待加载](../../implemented/bug-fix/2026-09-12-leave-attach-loading-race.md)。
 - 首轮 owned process、端点和临时 profile 清理通过，并导出新的保留副本
-  `/Users/macmini/FolioReview-567741b-20260912`。独立新进程随后从该复制 profile 打开
+  `~/FolioReview-567741b-20260912`。独立新进程随后从该复制 profile 打开
   两个作品，核对 source identity、ready/editable 状态、最终快照、保存回读、PPTD
   素材和版本历史，严格清理自身进程与端点；证据
-  `/Users/macmini/copied-profile-verification-akD0AA/result.json`。
+  `~/copied-profile-verification-akD0AA/result.json`。
 
 运行时保留了旧用户应用与历史 Electron 实例，因此耗时只作为当次观察，不是隔离性能
 基准，也没有得到目标机器可接受阈值。Agent 的图片检查不能代替用户对生图可用性、
@@ -202,7 +202,7 @@ SHA256 `033586c1079167f3f752bdfb6c0fc0046b80e03c00e6d1405c53ff9a2ef5ebdd`）。
 用户随后对照原图 `17c17e…10f6` 与 edit 输出 `3cc494…057f`，确认保留构图、
 文字留白和真实光照、将主要绿叶改为铜色与琥珀色、不添加文字或水印的目标已达到，
 结果可接受。这补齐上述单图真实 edit 的人工判断，不扩大为多参考图或 mask 验收。
-本地对比材料位于 `/Users/macmini/FolioReview-567741b-20260912-followup/编辑目标对比.md`；
+本地对比材料位于 `~/FolioReview-567741b-20260912-followup/编辑目标对比.md`；
 未新增付费调用。真实安装包入口、单图 edit 与真实多图负载三项现已勾选；生成失败
 回执和 Agent 选中图片后调用 edit 并替换目标的完整路径仍按各自证据保留。
 

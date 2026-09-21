@@ -146,7 +146,7 @@ The copied review profile was then opened by a separate packaged process. Both
 canvases reported ready and editable, and their exact snapshots, saves, PPTD
 sources, assets and version histories matched the first run. Owned-process and
 port cleanup passed; its independent result is
-`/Users/macmini/copied-profile-verification-akD0AA/result.json`. The source
+`~/copied-profile-verification-akD0AA/result.json`. The source
 journey deliberately retains its `humanVisual` and `humanEditing` fields as
 pending.
 

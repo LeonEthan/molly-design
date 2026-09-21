@@ -172,7 +172,7 @@ The prepared local directory `e2e/artifacts/acceptance/t29-b86-human-review`
 contains `开始验收.md`, `Open Geon Review.command`, three actual editable Session
 sources and matching PNG/JPEG exports, package identity, measurements and the
 copied-profile verification. Its launcher uses the independent short profile
-`/Users/macmini/GeonReview-b86-20260911`, a fresh endpoint and the original b86
+`~/GeonReview-b86-20260911`, a fresh endpoint and the original b86
 installed executable. All three Sessions were mechanically reopened, compared,
 saved and source-previewed from that new root after the original temporary data
 was removed. This does not sign the human fields above. Keep the app and profile

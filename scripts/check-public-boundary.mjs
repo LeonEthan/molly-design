@@ -37,7 +37,10 @@ const publishableTextExtensions = new Set([
   '.yml',
 ]);
 const documentationBoundaryAllowlist = new Set(['AGENTS.md']);
-const internalPathPattern = /\/Users\/(?:leon|zxch3n)|\/home\/zxch3n|github---loro-dev---lody/u;
+// Real developer/machine identities observed in this project's history. The
+// repo's placeholder convention (alice, developer, x, …) stays allowed, so a
+// new genuine identity must be added here the moment it first leaks.
+const internalPathPattern = /\/Users\/(?:leon|zxch3n|macmini)|\/home\/zxch3n|github---loro-dev---lody/u;
 const hostedPresetPattern =
   /lody-server\.zx-073\.workers\.dev|main\.lody\.pages\.dev|impressive-guineapig-165|gateway\.lody\.uk|api\.streams-api-x\.loro\.dev|streams-api-proxy\.loro\.dev|convex\.lody\.ai|m\.lody\.ai|npmmirror\.com/u;
 const publicRuntimeArtifactHostPattern = /api\.lody\.ai/u;

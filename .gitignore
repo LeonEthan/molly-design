@@ -153,6 +153,13 @@ apps/electron/resources/cli/
 .claude/scheduled_tasks.lock
 .dev.vars
 
+# Local-only machine state (never publish): legacy workspace marker, runtime
+# attachments, local pnpm store, personal agent settings
+/.maka-workspace.json
+/.lody/
+/.pnpm-store/
+/.claude/settings.json
+
 # Locally-installed App Store agent skills (kept local, not committed)
 /.agents/skills/apple-appstore-reviewer/
 /.agents/skills/appstore-info-generator/

@@ -21,7 +21,7 @@ performance limits and public release are not established.
 
 The user confirmed that all three human scene journeys are complete and passed
 at their overall reviewed scope. The local guide is
-`/Users/macmini/FolioReview-70c9932-20260912-journeys/三场景完整人工旅程.md`.
+`~/FolioReview-70c9932-20260912-journeys/三场景完整人工旅程.md`.
 This supplements the earlier six checks and edit-target acceptance. Individual
 unfilled checklist fields remain unfilled; they are not a reason to request the
 same overall human verdict again or evidence of specific unreported observations.
@@ -68,9 +68,9 @@ from `567741bde4b0459e33711687ab438aaae70caafb` (DMG SHA-256
 SHA-256 `033586c1079167f3f752bdfb6c0fc0046b80e03c00e6d1405c53ff9a2ef5ebdd`).
 Its full journey is `/tmp/folio-t29-real-images-nPfTcw/evidence/result.json`;
 the copied-profile process result is
-`/Users/macmini/copied-profile-verification-akD0AA/result.json`. Both verify the
+`~/copied-profile-verification-akD0AA/result.json`. Both verify the
 embedded source identity and clean owned-process/endpoint teardown. The copied
-review artifact remains at `/Users/macmini/FolioReview-567741b-20260912`; the user
+review artifact remains at `~/FolioReview-567741b-20260912`; the user
 has filled in its six human checks.
 
 ## Human review supplement (2026-09-12, 567741b)
@@ -246,7 +246,7 @@ The ignored artifact directory
 `开始验收.md`, `Open Folio Review.command`, identity/hashes, three exact editable
 PPTD projections, saved canonical documents, actual PNG/JPEG exports, all nine
 measurement samples and three imported Session identities. The launcher uses
-`/Users/macmini/FolioReview-b86-20260911` and a fresh isolated endpoint without
+`~/FolioReview-b86-20260911` and a fresh isolated endpoint without
 external provider credentials. A reviewer must configure an authorized connection
 for their own Agent journey. The supplied provider-wire results are not a claim
 of creative quality.

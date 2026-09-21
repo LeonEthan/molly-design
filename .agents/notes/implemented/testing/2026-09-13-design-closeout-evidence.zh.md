@@ -109,7 +109,7 @@ PR smoke `34764848785` 在 CLI Vite 构建阶段复现约 2 GB 默认堆上限 O
 - 终端确定性测试：修复前失败，修复后两项通过；包含重复清理和关闭失败后显式重试。全仓 `pnpm check`、格式化、文档/公开边界检查通过。
 - [运行时源提交的 full Daily](https://github.com/LeonEthan/Geon/actions/runs/34766275797) 与 [PR smoke](https://github.com/LeonEthan/Geon/actions/runs/34766272803) 保留独立 CI 结论。默认分支 full Daily 成功之前 #2 保持打开。
 
-本机交付目录：`/Users/macmini/GeonReview-ffe0e91-20260913`，保存 DMG、校验值及当前包验收证据。公开分发仍归 #32，不把本地安装包通过等同于正式签名、公证和更新发布通过。
+本机交付目录：`~/GeonReview-ffe0e91-20260913`，保存 DMG、校验值及当前包验收证据。公开分发仍归 #32，不把本地安装包通过等同于正式签名、公证和更新发布通过。
 
 `34766275797` 的 macOS/Linux 通过，Windows 原生 PTY 服务探针通过；完整场景停在新加入的真实输出断言，因为宿主为 cmd.exe，不能直接执行 PowerShell 表达式。明确启动 PowerShell 修正此夹具假设，保留该失败；不放宽输出或资源释放断言。
 

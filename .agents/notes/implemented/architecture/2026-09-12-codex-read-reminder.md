@@ -119,7 +119,7 @@ bytes. The binary-looking Git diff is not a new encoding change.
 ## Validation
 
 The managed binary used was
-`/Users/macmini/.lody/agent-binaries/codex/0.153.4/darwin-arm64/bin/codex`.
+`~/.lody/agent-binaries/codex/0.153.4/darwin-arm64/bin/codex`.
 The final synthetic probe summary is `/tmp/folio-t18-reminder-probe-final.log`,
 with isolated evidence under
 `/var/folders/dn/56hdvtt50g19brtctz0c9c7w0000gn/T/folio-codex-reminder-ShNfZy`.

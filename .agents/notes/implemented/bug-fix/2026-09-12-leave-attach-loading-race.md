@@ -117,5 +117,5 @@ coverage.
 A separate process opened the copied profile and found both canvases ready and
 editable with their exact snapshots, saves and version histories intact. It
 also passed owned-process and endpoint cleanup; evidence is
-`/Users/macmini/copied-profile-verification-akD0AA/result.json`. These automated
+`~/copied-profile-verification-akD0AA/result.json`. These automated
 results do not supply the pending human editing verdict.

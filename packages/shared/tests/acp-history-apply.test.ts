@@ -82,9 +82,9 @@ const replayInChunks = (
 
 const ACP_NOTIFICATION_FIXTURES = [
   'codex-terminal-notifications.sample.json',
-  'claude-code-notifications.captured.json',
-  'claude-code-terminal-notifications.captured.json',
-  'claude-code-thinking-notifications.captured.json',
+  'claude-code-notifications.sample.json',
+  'claude-code-terminal-notifications.sample.json',
+  'claude-code-thinking-notifications.sample.json',
   'kimi-shell-notifications.sample.json',
 ] as const;
 

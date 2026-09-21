@@ -81,9 +81,9 @@ const buildHistory = async (
 describe('ACP history batching equivalence', () => {
   it.each([
     'codex-terminal-notifications.sample.json',
-    'claude-code-notifications.captured.json',
-    'claude-code-terminal-notifications.captured.json',
-    'claude-code-thinking-notifications.captured.json',
+    'claude-code-notifications.sample.json',
+    'claude-code-terminal-notifications.sample.json',
+    'claude-code-thinking-notifications.sample.json',
     'kimi-shell-notifications.sample.json',
   ])('preserves history when replaying %s as a batch or as individual updates', async (fixture) => {
     const notifications = loadFixtureNotifications(fixture);

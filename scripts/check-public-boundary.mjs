@@ -165,9 +165,12 @@ async function main() {
     }
   }
 
+  // Transcript-shaped fixtures are never publishable: raw `.jsonl` captures and
+  // the historical `*.captured.json` naming (retired in favor of `.sample.json`)
+  // both suggest real recorded sessions. Synthetic fixtures use `.sample.json`.
   const capturedFixtures = files.filter(
     (file) =>
-      file.endsWith('.jsonl') &&
+      (file.endsWith('.jsonl') || file.endsWith('.captured.json')) &&
       (file.includes('/stories/fixtures/') || file.includes('/tests/fixtures/'))
   );
   for (const file of capturedFixtures) {

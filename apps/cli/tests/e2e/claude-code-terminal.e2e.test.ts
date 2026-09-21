@@ -318,7 +318,7 @@ After running all commands, tell me which command had the most interesting outpu
       // Save raw notifications
       const rawNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-terminal-notifications.captured.json'
+        'claude-code-terminal-notifications.sample.json'
       );
       fs.writeFileSync(
         rawNotificationsPath,
@@ -330,7 +330,7 @@ After running all commands, tell me which command had the most interesting outpu
       // Save summarized notifications
       const summarizedNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-terminal-notifications-summarized.captured.json'
+        'claude-code-terminal-notifications-summarized.sample.json'
       );
       fs.writeFileSync(
         summarizedNotificationsPath,
@@ -342,7 +342,7 @@ After running all commands, tell me which command had the most interesting outpu
       // Save session history
       const historyPath = path.join(
         fixturesDir,
-        'claude-code-terminal-session-history.captured.json'
+        'claude-code-terminal-session-history.sample.json'
       );
       fs.writeFileSync(historyPath, JSON.stringify(summarizeHistory(history), null, 2), 'utf8');
       console.log(`Saved session history to: ${historyPath}`);
@@ -350,7 +350,7 @@ After running all commands, tell me which command had the most interesting outpu
       // Save terminal records
       const terminalRecordsPath = path.join(
         fixturesDir,
-        'claude-code-terminal-records.captured.json'
+        'claude-code-terminal-records.sample.json'
       );
       fs.writeFileSync(terminalRecordsPath, JSON.stringify(getRecords(), null, 2), 'utf8');
       console.log(`Saved terminal records to: ${terminalRecordsPath}`);

@@ -487,7 +487,7 @@ e2eDescribe('acp history e2e (codex stream)', () => {
           '..',
           'fixtures',
           'acp',
-          'codex-terminal-notifications.captured.json'
+          'codex-terminal-notifications.sample.json'
         );
         fs.mkdirSync(path.dirname(fixturePath), { recursive: true });
         fs.writeFileSync(

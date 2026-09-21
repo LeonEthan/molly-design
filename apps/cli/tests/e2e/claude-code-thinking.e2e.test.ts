@@ -246,7 +246,7 @@ After your deep analysis, summarize your key insights in 3 bullet points and end
       // Save raw notifications
       const rawNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-thinking-notifications.captured.json'
+        'claude-code-thinking-notifications.sample.json'
       );
       fs.writeFileSync(
         rawNotificationsPath,
@@ -258,7 +258,7 @@ After your deep analysis, summarize your key insights in 3 bullet points and end
       // Save summarized notifications
       const summarizedNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-thinking-notifications-summarized.captured.json'
+        'claude-code-thinking-notifications-summarized.sample.json'
       );
       fs.writeFileSync(
         summarizedNotificationsPath,
@@ -280,7 +280,7 @@ After your deep analysis, summarize your key insights in 3 bullet points and end
         }));
       const historyPath = path.join(
         fixturesDir,
-        'claude-code-thinking-session-history.captured.json'
+        'claude-code-thinking-session-history.sample.json'
       );
       fs.writeFileSync(historyPath, JSON.stringify(summarizeHistory(history), null, 2), 'utf8');
       console.log(`Saved session history to: ${historyPath}`);

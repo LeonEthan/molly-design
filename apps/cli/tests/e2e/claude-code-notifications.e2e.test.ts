@@ -360,7 +360,7 @@ Work through these tasks systematically.`,
       // Save raw notifications
       const rawNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-notifications.captured.json'
+        'claude-code-notifications.sample.json'
       );
       fs.writeFileSync(
         rawNotificationsPath,
@@ -372,7 +372,7 @@ Work through these tasks systematically.`,
       // Save summarized notifications
       const summarizedNotificationsPath = path.join(
         fixturesDir,
-        'claude-code-notifications-summarized.captured.json'
+        'claude-code-notifications-summarized.sample.json'
       );
       fs.writeFileSync(
         summarizedNotificationsPath,
@@ -382,7 +382,7 @@ Work through these tasks systematically.`,
       console.log(`Saved summarized notifications to: ${summarizedNotificationsPath}`);
 
       // Save session history
-      const historyPath = path.join(fixturesDir, 'claude-code-session-history.captured.json');
+      const historyPath = path.join(fixturesDir, 'claude-code-session-history.sample.json');
       fs.writeFileSync(historyPath, JSON.stringify(summarizeHistory(history), null, 2), 'utf8');
       console.log(`Saved session history to: ${historyPath}`);
 
@@ -397,7 +397,7 @@ Work through these tasks systematically.`,
       // Save terminal records
       const terminalRecordsPath = path.join(
         fixturesDir,
-        'claude-code-terminal-records.captured.json'
+        'claude-code-terminal-records.sample.json'
       );
       fs.writeFileSync(terminalRecordsPath, JSON.stringify(getRecords(), null, 2), 'utf8');
       console.log(`Saved terminal records to: ${terminalRecordsPath}`);

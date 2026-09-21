@@ -571,7 +571,7 @@ function TourWindow({
                         // resolution is this component resolving, not a flag.
                         <div data-tour-anchor="permission" className="px-3 pb-2">
                           <PermissionRequestCard
-                            title="Bash(pnpm typecheck)"
+                            title="Render(design.yaml)"
                             options={[
                               { optionId: 'allow', name: 'Allow once', kind: 'allow_once' },
                               { optionId: 'deny', name: 'Not this time', kind: 'reject_once' },

@@ -471,7 +471,7 @@ export const TOUR_CHANGES: SessionDiffChangeEntry[] = [
  *  - Compression is stated on screen.
  */
 const buildTourRunItems = (t: TFunction): MessageContent[] => [
-  toolCall('read-1', 'Read(design.pptd)', 'read', '182 lines'),
+  toolCall('read-1', 'Read(design.yaml)', 'read', '182 lines'),
   {
     type: 'text',
     text: t('onboarding.preview.designRead'),
@@ -482,23 +482,23 @@ const buildTourRunItems = (t: TFunction): MessageContent[] => [
     type: 'text',
     text: t('onboarding.preview.designLayout'),
   },
-  toolCall('edit-1', 'Edit(design.pptd)', 'edit', '+41 −0'),
-  toolCall('edit-2', 'Edit(design.pptd)', 'edit', '+8 −27'),
+  toolCall('edit-1', 'Edit(design.yaml)', 'edit', '+41 −0'),
+  toolCall('edit-2', 'Edit(design.yaml)', 'edit', '+8 −27'),
   // Everything from here only exists because the permission was allowed.
-  toolCall('bash-1', 'Render(design.pptd)', 'execute', '2 errors'),
+  toolCall('bash-1', 'Render(design.yaml)', 'execute', '2 errors'),
   {
     type: 'text',
     text: t('onboarding.preview.designRefine'),
   },
-  toolCall('edit-3', 'Edit(design.pptd)', 'edit', '+4 −2'),
-  toolCall('edit-4', 'Edit(design.pptd)', 'edit', '+3 −11'),
-  toolCall('bash-2', 'Render(design.pptd)', 'execute', 'clean'),
-  toolCall('bash-3', 'Read(preview.png)', 'execute', '14 passed'),
+  toolCall('edit-3', 'Edit(design.yaml)', 'edit', '+4 −2'),
+  toolCall('edit-4', 'Edit(design.yaml)', 'edit', '+3 −11'),
+  toolCall('bash-2', 'Render(design.yaml)', 'execute', 'clean'),
+  toolCall('bash-3', 'Read(preview.png)', 'execute', '1.2 MB'),
   {
     type: 'text',
     text: t('onboarding.preview.designReview'),
   },
-  toolCall('git-1', 'Read(design.pptd)', 'execute', '8 files'),
+  toolCall('git-1', 'Read(design.yaml)', 'execute', '8 sections'),
   {
     type: 'text',
     text: t('onboarding.preview.designDone'),
@@ -522,7 +522,7 @@ export function buildPermissionItem(answeredOptionId: string | null): MessageCon
   return {
     type: 'tool_call',
     toolCallId: 'onboarding-tour-permission-call',
-    title: 'Bash(pnpm typecheck)',
+    title: 'Render(design.yaml)',
     status: answeredOptionId === null ? 'pending' : 'completed',
     kind: 'execute',
     permissionRequest: {
@@ -542,11 +542,11 @@ export function buildPermissionItem(answeredOptionId: string | null): MessageCon
 export const TOUR_DENIED_ITEMS: MessageContent[] = [
   {
     type: 'text',
-    text: 'Understood — I won’t run anything. The changes are in place but unverified.',
+    text: 'Understood — I won’t run anything. The edits are saved but unrendered.',
   },
   {
     type: 'text',
-    text: 'When you’re ready, run your typecheck and tell me what it says.',
+    text: 'When you’re ready, run the render and tell me what it shows.',
   },
 ];
 
@@ -571,7 +571,7 @@ export const TOUR_SUBAGENT_ITEM: MessageContent = {
   type: 'subagent_task',
   taskId: 'onboarding-tour-subagent',
   subagentType: 'explore',
-  description: 'Find every other caller of the old helper',
+  description: 'Collect the brief’s color references into one palette',
   status: 'in_progress',
 } as MessageContent;
 

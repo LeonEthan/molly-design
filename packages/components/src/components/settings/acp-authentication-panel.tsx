@@ -691,7 +691,7 @@ export function AcpAuthenticationAuthorizationView({
             {authorization.message ??
               t(
                 'agents.authentication.browserOpened',
-                'Complete authorization in the browser window, then return to Lody.'
+                'Complete authorization in the browser window, then return to Molly.'
               )}
           </p>
         </div>

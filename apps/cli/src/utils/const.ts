@@ -8,14 +8,12 @@ import { z } from 'zod';
 export let MOLLY_AUTH_URL = process.env.MOLLY_AUTH_URL ?? process.env.LODY_AUTH_URL;
 export let MOLLY_AUTH_SITE_URL = process.env.MOLLY_AUTH_SITE_URL ?? process.env.LODY_AUTH_SITE_URL;
 export let MOLLY_SERVER_URL = process.env.MOLLY_SERVER_URL ?? process.env.LODY_SERVER_URL;
-export let SITE_URL = process.env.SITE_URL ?? 'https://lody.ai';
 export let SITE_APP_BASE_PATH = '';
 
 export const loadEnv = () => {
   MOLLY_AUTH_URL = process.env['MOLLY_AUTH_URL'] ?? process.env.LODY_AUTH_URL;
   MOLLY_AUTH_SITE_URL = process.env['MOLLY_AUTH_SITE_URL'] ?? process.env.LODY_AUTH_SITE_URL;
   MOLLY_SERVER_URL = process.env['MOLLY_SERVER_URL'] ?? process.env.LODY_SERVER_URL;
-  SITE_URL = process.env['SITE_URL'] ?? 'https://lody.ai';
   SITE_APP_BASE_PATH = process.env['SITE_APP_BASE_PATH'] ?? '';
 };
 

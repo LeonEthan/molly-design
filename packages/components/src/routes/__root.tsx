@@ -67,7 +67,7 @@ function ErrorBoundaryProbe() {
 
   if (eventProbeCount > 0 || consumeErrorBoundaryProbe()) {
     const error = new Error('Molly ErrorBoundary probe');
-    error.name = 'LodyErrorBoundaryProbeError';
+    error.name = 'MollyErrorBoundaryProbeError';
     throw error;
   }
 

@@ -139,7 +139,7 @@ export function buildTourSession(identity: TourIdentity = DEFAULT_TOUR_IDENTITY)
       branch: 'main',
     },
     baseBranch: 'main',
-    branchName: 'lody/extract-token-handling',
+    branchName: 'molly/extract-token-handling',
     lastMessageAt: TOUR_TIME.getTime(),
   };
 }
@@ -173,7 +173,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-1',
     title: 'Extract token handling',
-    branchName: 'lody/extract-token-handling',
+    branchName: 'molly/extract-token-handling',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 53,
@@ -187,7 +187,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-2',
     title: 'Add tests for expiry',
-    branchName: 'lody/expiry-tests',
+    branchName: 'molly/expiry-tests',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 34,
@@ -201,7 +201,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-3',
     title: 'Update the login docs',
-    branchName: 'lody/login-docs',
+    branchName: 'molly/login-docs',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 12,
@@ -215,7 +215,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-4',
     title: 'Rename the session helpers',
-    branchName: 'lody/rename-session-helpers',
+    branchName: 'molly/rename-session-helpers',
     // Another machine — the entire point of that beat, visible in the row the
     // product would show it in.
     machineName: 'Studio',
@@ -232,7 +232,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-5',
     title: 'Check the migration script',
-    branchName: 'lody/migration-check',
+    branchName: 'molly/migration-check',
     machineName: 'Studio',
     repoFullName: TOUR_PROJECT_SECONDARY,
     latestMessageAt: TOUR_TIME,
@@ -247,7 +247,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-6',
     title: 'Cache the workspace lookup',
-    branchName: 'lody/cache-workspace-lookup',
+    branchName: 'molly/cache-workspace-lookup',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 18,
@@ -261,7 +261,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-7',
     title: 'Drop the unused legacy exports',
-    branchName: 'lody/drop-legacy-exports',
+    branchName: 'molly/drop-legacy-exports',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 2,
@@ -275,7 +275,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-8',
     title: 'Retry the flaky upload test',
-    branchName: 'lody/flaky-upload-test',
+    branchName: 'molly/flaky-upload-test',
     machineName: 'Studio',
     repoFullName: TOUR_PROJECT_SECONDARY,
     latestMessageAt: TOUR_TIME,
@@ -290,7 +290,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-9',
     title: 'Rate-limit the preview tunnel',
-    branchName: 'lody/preview-rate-limit',
+    branchName: 'molly/preview-rate-limit',
     machineName: 'Studio',
     repoFullName: TOUR_PROJECT_SECONDARY,
     latestMessageAt: TOUR_TIME,
@@ -305,7 +305,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-10',
     title: 'Write the release notes',
-    branchName: 'lody/release-notes',
+    branchName: 'molly/release-notes',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 44,
@@ -319,7 +319,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-11',
     title: 'Fix the dark-mode contrast on chips',
-    branchName: 'lody/chip-contrast',
+    branchName: 'molly/chip-contrast',
     machineName: 'This machine',
     latestMessageAt: TOUR_TIME,
     addedLines: 7,
@@ -333,7 +333,7 @@ export const TOUR_TASKS: TaskListTask[] = [
   {
     taskId: 'tour-12',
     title: 'Split the settings route',
-    branchName: 'lody/split-settings-route',
+    branchName: 'molly/split-settings-route',
     machineName: 'Studio',
     repoFullName: TOUR_PROJECT_SECONDARY,
     latestMessageAt: TOUR_TIME,
@@ -383,7 +383,7 @@ export const TOUR_PR_DETAILS: GitHubPullRequestDetails = {
   draft: false,
   htmlUrl: 'https://github.com/you/your-project/pull/128',
   baseRef: 'main',
-  headRef: 'lody/extract-token-handling',
+  headRef: 'molly/extract-token-handling',
   headSha: 'a1b2c3d4e5f60718',
   user: TOUR_PR_AUTHOR,
   createdAt: TOUR_TIME_ISO,
@@ -826,7 +826,7 @@ export function buildTourStableSession(identity: TourIdentity) {
 
 /** What the scripted terminal prints, in order, once it is attached. */
 const TERMINAL_SCRIPT: string[] = [
-  '[38;5;244m~/Code/your-project on [38;5;114mlody/extract-token-handling[0m\r\n',
+  '[38;5;244m~/Code/your-project on [38;5;114mmolly/extract-token-handling[0m\r\n',
   '❯ git status --short\r\n',
   ' [32mM[0m src/auth/session.ts\r\n',
   ' [32mM[0m src/auth/index.ts\r\n',

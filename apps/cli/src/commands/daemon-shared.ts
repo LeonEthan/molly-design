@@ -104,8 +104,8 @@ export function removePidFile(
 }
 
 export function resolveMollyBin(): string {
-  // In bundled mode, process.argv[1] points to the lody entry (dist/index.js)
-  return process.argv[1] ?? 'lody';
+  // In bundled mode, process.argv[1] points to the CLI entry (dist/index.js)
+  return process.argv[1] ?? 'molly';
 }
 
 // --- Daemon runner readiness handshake -------------------------------------

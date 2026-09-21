@@ -898,7 +898,7 @@ describe('LodyOperationCoordinator', () => {
     expect(harness.continueSession.mock.calls[0]?.[0]).toMatchObject({
       userId: 'user-1',
       userName: 'user-1',
-      userEmail: buildMissingEmail('lody', 'user-1'),
+      userEmail: buildMissingEmail('molly', 'user-1'),
     });
   });
 

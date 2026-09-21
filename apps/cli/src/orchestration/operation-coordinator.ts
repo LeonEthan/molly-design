@@ -1432,7 +1432,7 @@ export class MollyOperationCoordinator {
   ): Promise<{ name: string; email: string }> {
     const fallback = {
       name: requesterUserId,
-      email: buildMissingEmail('lody', requesterUserId),
+      email: buildMissingEmail('molly', requesterUserId),
     };
     const resolver = this.options.userResolver;
     if (!resolver) {

@@ -1916,7 +1916,7 @@ export class SessionDispatchWatcher {
   }
 
   private fallbackUserProfile(userId: string): SessionUserProfile {
-    const email = buildMissingEmail('lody', userId);
+    const email = buildMissingEmail('molly', userId);
     return {
       id: userId,
       name: email,

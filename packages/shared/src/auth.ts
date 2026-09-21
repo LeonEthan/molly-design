@@ -1,4 +1,6 @@
-export const MISSING_EMAIL_DOMAIN = 'missing-email.lody.invalid';
+export const MISSING_EMAIL_DOMAIN = 'missing-email.molly.invalid';
+/** Rows written before the Molly rename still carry this domain; keep recognizing them. */
+export const LEGACY_MISSING_EMAIL_DOMAIN = 'missing-email.lody.invalid';
 export const MISSING_EMAIL_PREFIX = 'missing-email';
 
 export const CONVEX_AUTH_ERROR_CODE = {
@@ -48,4 +50,6 @@ export const buildMissingEmail = (providerId: string, providerUserId: string | n
 };
 
 export const isMissingEmail = (email?: string | null) =>
-  Boolean(email) && email!.endsWith(`@${MISSING_EMAIL_DOMAIN}`);
+  Boolean(email) &&
+  (email!.endsWith(`@${MISSING_EMAIL_DOMAIN}`) ||
+    email!.endsWith(`@${LEGACY_MISSING_EMAIL_DOMAIN}`));

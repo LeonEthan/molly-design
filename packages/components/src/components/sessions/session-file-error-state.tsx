@@ -101,7 +101,7 @@ function providerReasonPresentation(
         title: t('sessions.fileError.encoding.title', 'Encoding is not supported'),
         description: t(
           'sessions.fileError.encoding.description',
-          'This file is not encoded as UTF-8. Convert it to UTF-8 before opening it in Lody.'
+          'This file is not encoded as UTF-8. Convert it to UTF-8 before opening it in Molly.'
         ),
       };
     case 'unsupported-special':
@@ -110,7 +110,7 @@ function providerReasonPresentation(
         title: t('sessions.fileError.unsupported.title', 'File type is not supported'),
         description: t(
           'sessions.fileError.unsupported.description',
-          'This is a special system file that cannot be displayed safely in Lody.'
+          'This is a special system file that cannot be displayed safely in Molly.'
         ),
       };
     case 'path-collision':

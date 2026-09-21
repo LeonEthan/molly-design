@@ -44,7 +44,7 @@ export class SessionUserResolver {
       return {
         id: userId,
         name: userId,
-        email: buildMissingEmail('lody', userId),
+        email: buildMissingEmail('molly', userId),
       };
     }
 
@@ -97,13 +97,13 @@ export class SessionUserResolver {
       (accountEmail && !isMissingEmail(accountEmail) ? accountEmail : undefined) ??
       buildGitHubNoreplyEmail(profile.githubAccountId, profile.githubLogin) ??
       accountEmail ??
-      buildMissingEmail('lody', userId);
+      buildMissingEmail('molly', userId);
     const name = trimNonEmpty(profile.name) ?? trimNonEmpty(profile.githubLogin) ?? email;
     return { id: userId, name, email };
   }
 
   private fallbackUser(userId: string): SessionUserProfile {
-    const email = buildMissingEmail('lody', userId);
+    const email = buildMissingEmail('molly', userId);
     return {
       id: userId,
       name: email,

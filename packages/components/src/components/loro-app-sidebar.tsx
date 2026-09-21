@@ -293,7 +293,7 @@ export function RemoveLocalProjectDialog({
               ? t('sidebar.localProjects.remove.remoteDescription', { device })
               : t(
                   'sidebar.localProjects.remove.description',
-                  'This removes the project from Lody.'
+                  'This removes the project from Molly.'
                 )}
             {isRemote && !deviceOnline ? ` ${t('sidebar.localProjects.remove.offline')}` : null}
           </DialogDescription>

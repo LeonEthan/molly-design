@@ -34,7 +34,6 @@ function syntheticWorkspace() {
         '@molly/platform',
         '@molly/shared',
         '@molly/turn-diff-store',
-        '@molly/code-review-viewer',
         'acp-extension-claude',
         'acp-extension-codex',
         'acp-extension-dsh',
@@ -72,7 +71,6 @@ function syntheticWorkspace() {
     pkg('@molly/code-review-helper', 'packages/code-review-helper', {
       deps: ['@molly/components'],
     }),
-    pkg('@molly/code-review-viewer', 'packages/code-review-viewer', { test: false }),
     pkg('@molly/configs', 'packages/configs', { test: false, typecheck: false }),
     pkg('@molly/ignore', 'packages/ignore'),
     pkg('@molly/loro-streams-rpc', 'packages/loro-streams-rpc', { deps: ['@molly/shared'] }),
@@ -367,12 +365,6 @@ void test('35b. complete scope writes every required key', () => {
   assert.match(body, /^typecheck_packages=/m);
 });
 
-void test('36. helper source does not typecheck the viewer', () => {
-  const scope = select(['packages/code-review-helper/src/index.ts']);
-  assertExcludes(scope.typecheckPackages, ['@molly/code-review-viewer']);
-  assertIncludes(scope.fanoutPackages, ['molly']);
-});
-
 void test('excluded ACP packages never appear in testPackages', () => {
   const scope = select(['packages/shared/src/index.ts']);
   assertExcludes(scope.testPackages, EXCLUDED_PACKAGES);
@@ -414,6 +406,7 @@ void test('real workspace includes required contracts and excludes retired proje
   }
   for (const name of [
     '@molly/site-docs',
+    '@molly/code-review-viewer',
     'acp-extension-claude',
     'acp-extension-codex',
     'acp-extension-grok',

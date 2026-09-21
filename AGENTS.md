@@ -93,8 +93,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
   scoped historical work;
   never duplicate shared ACP contracts or add legacy runtime installs to desktop setup.
   Historical Kimi packaging still uses a separately built, checksummed runtime artifact.
-- Viewer packaging/version changes follow its [rules](packages/code-review-viewer/AGENTS.md).
-  Package-scope or cloud/local composition changes require `pnpm check:public-boundary`.
+- Package-scope or cloud/local composition changes require `pnpm check:public-boundary`.
 
 ## Contributions and checks
 

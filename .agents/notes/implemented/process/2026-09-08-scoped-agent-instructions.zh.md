@@ -22,7 +22,7 @@ PR: https://github.com/LodyAI/Lody/pull/473
 | --- | --- | --- |
 | 根：平台组装、设置能力、遥测、运行时下载通道 | [platform 规则](../../../../packages/platform/AGENTS.md) | 根要求修改这些行为前阅读；全局公开仓库与 local 边界仍留在根。 |
 | 根：协议协商、MCP 选择、目录持久化、Role 安全与派发 | [shared 规则](../../../../packages/shared/AGENTS.md) | 根触发条件覆盖目录 UI、每轮选择及 Role 创建/派发；原契约完整保留。 |
-| 根：viewer 发布版本 | [已有 viewer 规则](../../../../packages/code-review-viewer/AGENTS.md) | 根将打包和版本修改指向已有的详细定义。 |
+| 根：viewer 发布版本 | [已有 viewer 规则](https://github.com/LeonEthan/molly-design/blob/e1db5ccc267a2fad906aaf17067599bf55e340cf/packages/code-review-viewer/AGENTS.md) | 根将打包和版本修改指向已有的详细定义。 |
 | 根：社区贡献大小与分配细则 | [已有 GitHub 规则](../../../../.github/AGENTS.md) | 根仍识别身份，要求规划社区工作以及 PR/Issue 工作前阅读。 |
 | CLI：Session/Task MCP 工具 | [MCP 规则](../../../../apps/cli/src/mcp/AGENTS.md) | CLI 要求工具、调用方及委托 Task 自动化修改前阅读；子 Session 来源、模型校验和反馈隐私仍在 CLI 父级。 |
 | components 包级：崩溃恢复、文件预览、Code Collab | [辅助模块规则](../../../../packages/components/src/lib/AGENTS.md) | 包级触发条件明确覆盖 UI、hooks、providers、缓存、诊断及 IPC 调用方。 |

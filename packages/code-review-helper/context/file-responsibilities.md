@@ -107,6 +107,6 @@ import.meta.url)`; folders use a plain lucide icon. Re-sync `mappings.ts` and th
   `./standalone`), `curated-shiki-langs.ts` / `curated-shiki-themes.ts` (build-time
   shiki trimming). `vite.standalone.config.ts` + `scripts/embed-standalone.mjs` build
   it — see [../standalone-build.md](../standalone-build.md). The built viewer is
-  republished by the sibling `@molly/code-review-viewer` package and fetched on demand by
-  `molly review`.
+  consumed only by this package's `review-helper export --format html`; the sibling
+  `@molly/code-review-viewer` republish package is retired.
 - `prompts/review-helper-agent.md` is the prompt handed to arbitrary agents.

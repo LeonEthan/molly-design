@@ -18,11 +18,11 @@ over `file://` with no server. It backs `molly review <file>.review.md` (CLI) an
 
 ## How the viewer reaches the CLI
 
-The ~8 MB `standalone.html` is NOT bundled into `lody`. The sibling package
-`@molly/code-review-viewer` copies it verbatim and publishes it publicly; `molly review`
-downloads it from jsDelivr at the pinned version, sha256-verifies, and caches it (see
-`packages/code-review-viewer` + the CLI's `src/lib/review-viewer.ts`). Only the small
-agent prompt is embedded in the CLI.
+The ~8 MB `standalone.html` has exactly one consumer: this package's own
+`review-helper export --format html`, which splices a snapshot into the template. The
+historical `@molly/code-review-viewer` republish package (jsDelivr fetch + sha256 cache
+for the retired `review` command) is removed. Only the small agent prompt is embedded
+in the CLI.
 
 ## Why a string module for the prompt (not `?raw`)
 

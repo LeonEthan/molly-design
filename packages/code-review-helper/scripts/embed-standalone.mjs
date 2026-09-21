@@ -10,9 +10,8 @@
  *   - dist-standalone/embedded-prompt.ts → `reviewPrompt` (the agent prompt markdown)
  *
  * The ~8 MB single-file viewer (`dist-standalone/standalone.html`) is NOT embedded
- * here: it is shipped via the public `@molly/code-review-viewer` npm package and
- * fetched on demand by `molly review` (see that package + the CLI's review-viewer
- * resolver). Keeping it out of the bundle keeps the `lody` package small.
+ * here: its only consumer is this package's own `review-helper export --format html`.
+ * Keeping it out of the bundle keeps the `lody` package small.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';

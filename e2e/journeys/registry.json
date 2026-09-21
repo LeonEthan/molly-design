@@ -159,7 +159,6 @@
       "fixture": "synthetic-large-diff-and-scripted-acp",
       "fingerprint": "b5f672ce3fafd7b8ebb8223b3b2c79a2b1ef83e0103a43508814920f26bb59f0",
       "ownerPaths": [
-        "packages/code-review-viewer/",
         "packages/components/src/ui/diff-viewer/",
         "packages/components/src/components/sessions/"
       ],

@@ -1,6 +1,7 @@
 # Lody 上游可靠性与长对话更新采纳
 
-Status: draft
+Status: approved
+Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Date: 2026-09-17
 Translation: current
 

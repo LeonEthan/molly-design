@@ -1,6 +1,7 @@
 # Chat image selection and export
 
-Status: draft
+Status: approved
+Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: pending
 
 A user can select messages directly in a session conversation and preview them

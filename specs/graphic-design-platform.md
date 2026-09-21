@@ -1,6 +1,7 @@
 # Molly Graphic Design Workbench
 
-Status: draft
+Status: approved
+Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Previous approval: [2026-09-15](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md#第一阶段批准2026-09-15)
 Previous approval: [2026-09-16](../.agents/notes/implemented/bug-fix/2026-09-16-canvas-review-fixes.zh.md#spec-批准记录2026-09-16)
 Translation: current

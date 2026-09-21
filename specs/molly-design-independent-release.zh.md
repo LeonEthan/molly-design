@@ -1,6 +1,7 @@
 # Molly 独立品牌与桌面首发
 
-Status: draft
+Status: approved
+Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [English](molly-design-independent-release.md)

@@ -18,8 +18,10 @@ product, and removes the daemon's remote npm upgrade machinery end to end — th
 `lody` npm package is third-party, so installing it would execute foreign code
 ([daemon remote upgrade removal](../simplification/2026-09-21-daemon-remote-upgrade-removal.md)).
 Release and runtime-artifact hosting stays on the personal GitHub account for now
-(no organization). Deferred by design: spec approvals (human-only) and GitHub
-Release creation (no signed artifacts yet).
+(no organization), and the first GitHub Release remains deferred until
+signed/notarized artifacts exist. On 2026-09-21 the owner approved all 16 draft
+specs at revision `a7a297ae` ([approval record](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477));
+their Status lines flip to `approved` with that link.
 
 ## What changed
 
@@ -82,8 +84,8 @@ Release creation (no signed artifacts yet).
 - The wire-compat `lody:`/`lody*` storage keys, `_meta.lody` fields, ACP submodule
   upstream URLs and historical note content are intentionally retained per
   `specs/lody-upstream-adoption.md`.
-- Not done here: spec re-approval (requires linked human approval), the first
-  GitHub Release (needs signed/notarized artifacts), and the
-  `code-review-viewer` retirement decision. The E2E smoke suite fails on main
-  independent of this change — its steps still drive the pre-redesign "Add
-  provider" settings flow; fixing the harness is a separate decision.
+- Not done here: the first GitHub Release (deferred until signed/notarized
+  artifacts exist; personal-account hosting). Spec re-approval landed via the
+  linked owner approval; `code-review-viewer` retirement and the E2E smoke
+  harness repair (stale "Add provider" steps vs. the redesigned settings UI)
+  were approved and proceed as follow-up work on this branch.

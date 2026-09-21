@@ -92,8 +92,8 @@ describe('SessionUserResolver', () => {
 
     await expect(resolver.resolve('user_a')).resolves.toEqual({
       id: 'user_a',
-      name: buildMissingEmail('lody', 'user_a'),
-      email: buildMissingEmail('lody', 'user_a'),
+      name: buildMissingEmail('molly', 'user_a'),
+      email: buildMissingEmail('molly', 'user_a'),
     });
   });
 
@@ -106,8 +106,8 @@ describe('SessionUserResolver', () => {
 
     await expect(resolver.resolve('user_a')).resolves.toEqual({
       id: 'user_a',
-      name: buildMissingEmail('lody', 'user_a'),
-      email: buildMissingEmail('lody', 'user_a'),
+      name: buildMissingEmail('molly', 'user_a'),
+      email: buildMissingEmail('molly', 'user_a'),
     });
   });
 

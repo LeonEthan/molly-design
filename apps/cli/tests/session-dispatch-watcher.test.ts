@@ -321,8 +321,8 @@ describe('SessionDispatchWatcher', () => {
         type: 'session/chat',
         sessionId,
         userTurnId: 'turn-chat-1',
-        userName: buildMissingEmail('lody', userId),
-        userEmail: buildMissingEmail('lody', userId),
+        userName: buildMissingEmail('molly', userId),
+        userEmail: buildMissingEmail('molly', userId),
       }),
       { dispatchSource: 'crdt' }
     );

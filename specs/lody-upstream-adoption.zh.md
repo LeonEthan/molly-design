@@ -2,7 +2,9 @@
 
 Status: draft
 Date: 2026-09-17
-Translation: pending
+Translation: current
+
+[English](lody-upstream-adoption.md)
 
 ## 场景与目标
 

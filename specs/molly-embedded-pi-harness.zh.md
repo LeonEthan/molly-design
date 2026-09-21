@@ -1,7 +1,9 @@
 # Molly 内置 Pi Harness
 
 Status: draft
-Translation: pending
+Translation: current
+
+[English](molly-embedded-pi-harness.md)
 
 ## Problem Statement
 

@@ -1,7 +1,9 @@
 # Molly 独立品牌与桌面首发
 
 Status: draft
-Translation: pending
+Translation: current
+
+[English](molly-design-independent-release.md)
 
 Issue: [#32](https://github.com/LeonEthan/molly-design/issues/32)
 

@@ -1,7 +1,5 @@
 name: Design resources
 on:
-  push:
-    branches: [codex/p0-resource-verification]
   pull_request:
     paths:
       - packages/design-bento/**

@@ -174,8 +174,8 @@ jobs:
         shell: bash
         run: echo "${GITHUB_WORKSPACE}/apps/electron/node_modules/.bin" >> "$GITHUB_PATH"
 
-      # Same Action kansoku uses in desktop-release.yml. publish stays false:
-      # The publication job uploads only this macOS arm64 release's assets.
+      # publish stays false: the publication job uploads only this macOS
+      # arm64 release's assets.
       - name: Sign appcast and generate Sparkle deltas
         if: matrix.target == 'mac'
         uses: Innei/electron-sparkle-updater/action@002472bdb78a9608eddc8b39202572af3f7986fb # v1

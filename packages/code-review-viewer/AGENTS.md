@@ -1,7 +1,8 @@
 # @molly/code-review-viewer
 
 Workspace build package that produces the prebuilt single-file code-review viewer
-used by the `lody` CLI without bundling ~8 MB into the CLI.
+without bundling ~8 MB into a consumer. The Molly OSS CLI currently has no `review`
+command; the package is retained private build machinery, not a published artifact.
 
 ## Invariants
 
@@ -9,9 +10,9 @@ used by the `lody` CLI without bundling ~8 MB into the CLI.
   shipped asset: `standalone.html` (the inlined viewer, generated — gitignored).
 - `standalone.html` is produced by `@molly/code-review-helper`'s `build:standalone`
   and copied here verbatim by `scripts/build-viewer.mjs`; never hand-edit it.
-- A published viewer version MUST stay in lockstep with the matching `lody`
-  release. The CLI embeds this exact version + the sha256 of `standalone.html`
-  (the `./manifest` export) for its local viewer asset.
+- If a viewer consumer ships, its version MUST stay in lockstep with the
+  matching Molly release. Consumers embed this exact version + the sha256 of
+  `standalone.html` (the `./manifest` export) for their local viewer asset.
 - `MOLLY_RELEASE_VERSION` may override only the generated manifest version for a
   downstream immutable package build. It must never rewrite this package's tracked
   metadata; without the override, `package.json` is authoritative.

@@ -880,10 +880,9 @@ function scriptSetsEphemeralEnv(shell: WorktreeSetupShell, script: string): bool
   return /(^|[\n;&|])\s*export\s+[A-Za-z_]/.test(script);
 }
 
-function getWorktreeScriptEnvDocsUrl(language: string | undefined): string {
-  const isChinese = language?.toLowerCase().startsWith('zh') ?? false;
-  const path = isChinese ? '/zh/docs/worktrees' : '/docs/worktrees';
-  return `https://lody.ai${path}#available-environment-variables`;
+function getWorktreeScriptEnvDocsUrl(_language: string | undefined): string {
+  // No published docs site yet; the source lists the exact MOLLY_WORKTREE_* set.
+  return 'https://github.com/LeonEthan/molly-design/blob/main/apps/cli/src/session/worktree/worktree-setup-runner.ts';
 }
 
 export function WorktreeSetupEditor({

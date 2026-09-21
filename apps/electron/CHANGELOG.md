@@ -1,5 +1,10 @@
 # Changelog
 
+> Frozen upstream history. These entries were generated for the predecessor
+> project (Lody) and its issue/commit links point at a repository that is not
+> publicly reachable. Molly does not append to this file; per-release changes
+> ship with GitHub Releases on https://github.com/LeonEthan/molly-design.
+
 ## [0.76.0](https://github.com/loro-dev/lody/compare/lody-electron-v0.75.1...lody-electron-v0.76.0) (2026-08-03)
 
 ### Bug Fixes

@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-20T13:43:40.360Z",
+  "generatedAt": "2026-09-21T02:42:45.884Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -12,7 +12,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "scope": "vendored-source",
       "name": "agentic-listing-design adapters",
       "license": "Apache-2.0",
-      "homepage": "https://github.com/LeonEthan/agentic-listing-design",
+      "homepage": "https://github.com/LeonEthan/molly-design/blob/main/NOTICE",
       "author": "LeonEthan",
       "description": "Rights-holder-owned adapters migrated into Molly, authorized under Apache-2.0 on 2026-09-20. Third-party components retain their own licenses.",
       "assets": [
@@ -202,7 +202,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://github.com/microsoft/vscode",
       "author": "Microsoft",
-      "description": "Bundled VSCode workbench themes used by Lody for theme adaptation.",
+      "description": "Bundled VSCode workbench themes used by Molly for theme adaptation.",
       "assets": [
         "Dark 2026",
         "Light 2026",
@@ -223,7 +223,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://github.com/miguelsolorio/vscode-symbols",
       "author": "Miguel Solorio",
-      "description": "Vendored file and folder icons used across Lody file views.",
+      "description": "Vendored file and folder icons used across Molly file views.",
       "assets": [
         "File icons",
         "Folder icons"

@@ -16,8 +16,8 @@ recorded as applied in the vendored tree, and copied files. `vendor/packages` co
 source closure required by those patches. The capability matrix records source evidence; the current authoring validator
 determines admitted fields. Authoring/PPTD,
 quality orchestration, revision persistence, Web/HTTP/SSE applications and Agent
-Runtime Manager are not migrated. The source repository is
-https://github.com/LeonEthan/agentic-listing-design at
+Runtime Manager are not migrated. The source repository
+`agentic-listing-design` (private; not publicly distributed) is pinned at
 `7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12`; the pinned original source has no root license file. Its rights holder LeonEthan
 authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
 see [NOTICE](../../NOTICE) and `adapterLicense` in the source manifest.

@@ -1,5 +1,6 @@
 {
   "repository": "https://github.com/LeonEthan/agentic-listing-design",
+  "repositoryVisibility": "private — provenance identifier only, not publicly reachable",
   "commit": "7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12",
   "bentoCommit": "813c71fff72491e6898f5e55a20da44a562be586",
   "bentoRepository": "https://github.com/nyblnet/bento",

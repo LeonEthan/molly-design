@@ -53,7 +53,7 @@ const ConfConstructor: typeof Conf = resolvedConf
  */
 export class GlobalShortcutsService {
   private readonly store = new ConfConstructor<GlobalShortcutsSchema>({
-    projectName: 'lody-desktop',
+    projectName: 'molly-desktop',
     configName: 'global-shortcuts',
     defaults: { overrides: {} },
     schema: {

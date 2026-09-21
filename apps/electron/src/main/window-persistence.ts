@@ -48,7 +48,7 @@ if (typeof ConfConstructor !== 'function') {
 }
 
 const windowStateStore = new ConfConstructor<WindowStateSchema>({
-  projectName: 'lody-desktop',
+  projectName: 'molly-desktop',
   configName: 'window-state',
   defaults: {
     mainWindow: {

@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OnboardingPage } from '../support/pages/onboarding-page.js';
 import { ReviewPage } from '../support/pages/review-page.js';
-import { SCRIPTED_AGENT_NAME, SessionPage } from '../support/pages/session-page.js';
+import { SessionPage } from '../support/pages/session-page.js';
 import { WorkSessionPage } from '../support/pages/work-session-page.js';
 import {
   createSyntheticReviewRepository,
@@ -13,7 +13,6 @@ import {
 } from '../support/fixtures/synthetic-review-repository.js';
 import {
   WorkSessionFixture,
-  type ScriptedAcpEvent,
 } from '../support/fixtures/work-session-fixture.js';
 import { ElectronHarness } from '../support/electron-harness.js';
 import type { ScenarioArtifacts } from '../support/world-utils.js';
@@ -109,12 +108,13 @@ async function setupJourney(
     if (!harness.page) throw new Error('Electron did not open a main window');
     const onboarding = new OnboardingPage(harness.page);
     await onboarding.waitForLocalBootstrap();
-    fixture = await WorkSessionFixture.create(join(journeyDir, 'scripted-acp.ndjson'));
+    fixture = await WorkSessionFixture.create(join(journeyDir, 'scripted-runtime.ndjson'));
     const session = new SessionPage(harness.page, fixture);
     const review = new ReviewPage(harness.page);
     const work = new WorkSessionPage(harness.page);
+    await fixture.startModelServer();
     await onboarding.skipConfigurationAndEnterProduct();
-    await session.configureCustomAgentFromSettings();
+    await session.seedDeterministicModelConnection();
     return { artifacts, harness, fixture, session, review, work };
   } catch (error) {
     if (harness.page) {
@@ -143,7 +143,7 @@ async function runSessionIteration(
   );
   const active = captureActive ? await captureActive() : null;
   await session.stopHeldSession(prompt);
-  await session.archiveAndDeleteSession(prompt);
+  await session.archiveAndDeleteSession();
   return active;
 }
 
@@ -154,9 +154,7 @@ async function runReviewIteration(
   repository: SyntheticReviewRepository,
   captureActive?: () => Promise<ScoutCheckpoint['active']>
 ): Promise<ScoutCheckpoint['active'] | null> {
-  const prompt = await session.createCompletedSession(
-    `Scout Review lifecycle ${iteration} [SCOUT:REPLY]`
-  );
+  await session.createCompletedSession(`Scout Review lifecycle ${iteration} [SCOUT:REPLY]`);
   await review.openChangesPanel(repository.changedPaths);
   await review.openChangedFile(PRIMARY_REVIEW_DIFF_PATH, repository.changedPaths);
   await review.hide();
@@ -165,28 +163,23 @@ async function runReviewIteration(
   const active = captureActive ? await captureActive() : null;
   await review.closeDiffViewer();
   await review.closeChangesPanel();
-  await session.archiveAndDeleteSession(prompt);
+  await session.archiveAndDeleteSession();
   return active;
 }
 
 async function runWorkIteration(
   iteration: number,
-  fixture: WorkSessionFixture,
   work: WorkSessionPage,
+  session: SessionPage,
   captureActive?: () => Promise<ScoutCheckpoint['active']>
 ): Promise<ScoutCheckpoint['active'] | null> {
-  const priorPromptEnds = fixture
-    .readAcpEvents()
-    .filter((event) => event.event === 'prompt-end').length;
-  await work.startLegacyWorktreeSession(fixture, `Scout Work lifecycle ${iteration} [SCOUT:REPLY]`);
-  const completed = await fixture.waitForAcpEvent('prompt-end', priorPromptEnds + 1);
-  const prompt = completed.at(-1) as ScriptedAcpEvent;
+  await session.createCompletedSession(`Scout Work lifecycle ${iteration} [SCOUT:REPLY]`);
   const marker = `lody-scout-terminal-${iteration}`;
   await work.openTerminalAndRun(`printf '${marker}\\n'`, marker);
   const resources = await work.captureResources();
   const active = captureActive ? await captureActive() : null;
   await work.archiveAndDeletePermanently(resources);
-  await work.expectResourcesReleased(resources, [prompt.pid]);
+  await work.expectResourcesReleased(resources);
   return active;
 }
 
@@ -217,7 +210,6 @@ async function runJourney(
       await context.work.selectLocalProject(project.name);
     } else if (journey === 'work') {
       await context.work.addLocalProject(fixture.projectRoot, fixture.projectName);
-      await context.work.selectAgent(SCRIPTED_AGENT_NAME);
     }
 
     const totalIterations = options.warmup + options.iterations;
@@ -243,7 +235,7 @@ async function runJourney(
           captureActive
         );
       } else {
-        active = await runWorkIteration(run, fixture, context.work, captureActive);
+        active = await runWorkIteration(run, context.work, context.session, captureActive);
       }
 
       if (captureAblationWarmup || checkpointDue) {

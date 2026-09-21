@@ -18,8 +18,8 @@
     那么 关闭 Review 和 Session 后相关视图被释放
 
   @lody @P0 @essence @runtime-simulator @LODY-WORK-001
-  场景: 用户删除带 ACP 和 Terminal 的 worktree Session
+  场景: 用户删除带 Agent 和 Terminal 的 Session
     假如 已配置确定性 Agent 的隔离桌面
     并且 已添加干净的合成 Git 项目
-    当 用户打开已有 worktree Session 并启动 Terminal
-    那么 永久删除后 Work 进程、终端和 worktree 被释放
+    当 用户在 Session 中完成回复并启动 Terminal
+    那么 永久删除后终端被释放且项目目录保留

@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -15,14 +15,24 @@ const SCRIPTED_ACP_ENTRY = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../../fixtures/scripted-acp.mjs'
 );
+const SCRIPTED_MODEL_SERVER_ENTRY = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../../fixtures/scripted-model-server.mjs'
+);
 
-export type ScriptedAcpEvent = {
+/** One JSONL log mixes scripted-ACP process events and model-server wire events. */
+export type ScriptedRuntimeEvent = {
   at: string;
   pid: number;
   event: string;
   sessionId?: string;
   mode?: string;
   stopReason?: string;
+  requestId?: string;
+  port?: number;
+  model?: string;
+  streaming?: boolean;
+  transport?: string;
 };
 
 function isProcessAlive(pid: number): boolean {
@@ -41,20 +51,38 @@ function isProcessAlive(pid: number): boolean {
 export class WorkSessionFixture {
   readonly projectName = 'lody-e2e-work';
   readonly projectRoot: string;
-  readonly acpEventLogPath: string;
+  readonly eventLogPath: string;
   readonly scriptedAcpEntry = SCRIPTED_ACP_ENTRY;
   readonly scriptedAgentCommandLine: string;
+  private modelServer: ChildProcess | null = null;
+  modelServerPort: number | null = null;
 
   private constructor(
     readonly tempRoot: string,
     eventLogPath?: string
   ) {
     this.projectRoot = join(tempRoot, this.projectName);
-    this.acpEventLogPath = eventLogPath ?? join(tempRoot, 'scripted-acp-events.jsonl');
+    this.eventLogPath = eventLogPath ?? join(tempRoot, 'scripted-runtime-events.jsonl');
     this.scriptedAgentCommandLine = formatCustomAcpCommandLine({
       command: process.execPath,
-      args: [this.scriptedAcpEntry, this.acpEventLogPath],
+      args: [this.scriptedAcpEntry, this.eventLogPath],
     });
+  }
+
+  /** The bundled engine's only external wire: a deterministic loopback model. */
+  async startModelServer(): Promise<void> {
+    if (this.modelServer) return;
+    // The log lives in the retained artifact directory, so a previous run's
+    // entries (including a dead server's `server-start` port) may still be
+    // present; truncate to keep waitForEvent scoped to this server.
+    writeFileSync(this.eventLogPath, '', 'utf8');
+    this.modelServer = spawn(process.execPath, [SCRIPTED_MODEL_SERVER_ENTRY, this.eventLogPath], {
+      stdio: 'ignore',
+    });
+    const started = await this.waitForEvent('server-start');
+    const port = started.at(-1)?.port;
+    if (typeof port !== 'number') throw new Error('Scripted model server did not bind a port');
+    this.modelServerPort = port;
   }
 
   static async create(eventLogPath?: string): Promise<WorkSessionFixture> {
@@ -100,14 +128,14 @@ export class WorkSessionFixture {
     }
   }
 
-  readAcpEvents(): ScriptedAcpEvent[] {
+  readEvents(): ScriptedRuntimeEvent[] {
     try {
-      return readFileSync(this.acpEventLogPath, 'utf8')
+      return readFileSync(this.eventLogPath, 'utf8')
         .split('\n')
         .filter(Boolean)
         .flatMap((line) => {
           try {
-            return [JSON.parse(line) as ScriptedAcpEvent];
+            return [JSON.parse(line) as ScriptedRuntimeEvent];
           } catch {
             // A process may be in the middle of appending the final JSONL record.
             return [];
@@ -119,20 +147,20 @@ export class WorkSessionFixture {
     }
   }
 
-  async waitForAcpEvent(event: string, minimumCount = 1): Promise<ScriptedAcpEvent[]> {
+  async waitForEvent(event: string, minimumCount = 1): Promise<ScriptedRuntimeEvent[]> {
     await expect
-      .poll(() => this.readAcpEvents().filter((entry) => entry.event === event).length, {
+      .poll(() => this.readEvents().filter((entry) => entry.event === event).length, {
         timeout: 30_000,
         intervals: [50, 100, 250, 500],
       })
       .toBeGreaterThanOrEqual(minimumCount);
-    return this.readAcpEvents().filter((entry) => entry.event === event);
+    return this.readEvents().filter((entry) => entry.event === event);
   }
 
   getStartedAgentPids(): number[] {
     return [
       ...new Set(
-        this.readAcpEvents()
+        this.readEvents()
           .filter((entry) => entry.event === 'process-start')
           .map((entry) => entry.pid)
       ),
@@ -150,6 +178,8 @@ export class WorkSessionFixture {
   }
 
   dispose(): void {
+    this.modelServer?.kill('SIGTERM');
+    this.modelServer = null;
     rmSync(this.tempRoot, { recursive: true, force: true });
   }
 }

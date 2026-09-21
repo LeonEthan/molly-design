@@ -86,6 +86,8 @@ their Status lines flip to `approved` with that link.
   `specs/lody-upstream-adoption.md`.
 - Not done here: the first GitHub Release (deferred until signed/notarized
   artifacts exist; personal-account hosting). Spec re-approval landed via the
-  linked owner approval; `code-review-viewer` retirement and the E2E smoke
-  harness repair (stale "Add provider" steps vs. the redesigned settings UI)
-  were approved and proceed as follow-up work on this branch.
+  linked owner approval; `code-review-viewer` retirement landed in
+  `03a8448d`, and the E2E smoke harness was rebuilt on a scripted model wire
+  with WORK-001 rescoped to the reachable product surface
+  ([deterministic model wire](../testing/2026-09-21-e2e-deterministic-model-wire.md);
+  issue #51 stays open until a full Daily passes).

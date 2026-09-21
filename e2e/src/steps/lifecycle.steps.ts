@@ -12,15 +12,15 @@ Given('已配置确定性 Agent 的隔离桌面', async function (this: MollyWor
 });
 
 When('用户创建一个持续运行的 Session', async function (this: MollyWorld) {
-  this.activeAcpEvent = await this.sessionPage!.createHeldSession();
+  this.activeRuntimeEvent = await this.sessionPage!.createHeldSession();
 });
 
 When('用户停止当前 Agent', async function (this: MollyWorld) {
-  await this.sessionPage!.stopHeldSession(this.activeAcpEvent!);
+  await this.sessionPage!.stopHeldSession(this.activeRuntimeEvent!);
 });
 
 Then('关闭 Session 后 Agent 进程被释放', async function (this: MollyWorld) {
-  await this.sessionPage!.archiveAndDeleteSession(this.activeAcpEvent!);
+  await this.sessionPage!.archiveAndDeleteSession();
   await this.harness!.capturePostGcSnapshot();
 });
 
@@ -31,7 +31,7 @@ Given('已注册包含大型变更的合成项目', async function (this: MollyW
 });
 
 When('用户创建 Session 并打开全部变更', async function (this: MollyWorld) {
-  this.activeAcpEvent = await this.sessionPage!.createCompletedSession();
+  this.activeRuntimeEvent = await this.sessionPage!.createCompletedSession();
   await this.reviewPage!.openChangesPanel(this.reviewFixture!.changedPaths);
 });
 
@@ -51,7 +51,7 @@ When('用户切换大型 diff 并隐藏再恢复 Review', async function (this: 
 Then('关闭 Review 和 Session 后相关视图被释放', async function (this: MollyWorld) {
   await this.reviewPage!.closeDiffViewer();
   await this.reviewPage!.closeChangesPanel();
-  await this.sessionPage!.archiveAndDeleteSession(this.activeAcpEvent!);
+  await this.sessionPage!.archiveAndDeleteSession();
   await this.harness!.capturePostGcSnapshot();
 });
 
@@ -60,19 +60,12 @@ Given('已添加干净的合成 Git 项目', async function (this: MollyWorld) {
     this.workFixture!.projectRoot,
     this.workFixture!.projectName
   );
-  await this.workPage!.selectAgent('Deterministic E2E Agent');
 });
 
-When('用户打开已有 worktree Session 并启动 Terminal', async function (this: MollyWorld) {
-  const promptEnds = this.workFixture!.readAcpEvents().filter(
-    (event) => event.event === 'prompt-end'
-  ).length;
-  await this.workPage!.startLegacyWorktreeSession(
-    this.workFixture!,
-    'Exercise legacy Work lifecycle [SCOUT:REPLY]'
+When('用户在 Session 中完成回复并启动 Terminal', async function (this: MollyWorld) {
+  this.activeRuntimeEvent = await this.sessionPage!.createCompletedSession(
+    'Exercise work lifecycle [SCOUT:REPLY]'
   );
-  const completed = await this.workFixture!.waitForAcpEvent('prompt-end', promptEnds + 1);
-  this.activeAcpEvent = completed.at(-1)!;
   const terminalCommand = process.platform === 'win32'
     ? 'cmd.exe /d /c echo lody-terminal-rea^dy'
     : "printf 'lody-terminal-%s\\n' ready";
@@ -80,11 +73,11 @@ When('用户打开已有 worktree Session 并启动 Terminal', async function (t
   this.workResources = await this.workPage!.captureResources();
 });
 
-Then('永久删除后 Work 进程、终端和 worktree 被释放', async function (this: MollyWorld) {
+Then('永久删除后终端被释放且项目目录保留', async function (this: MollyWorld) {
   await this.workPage!.archiveAndDeletePermanently(this.workResources!);
-  await this.workPage!.expectResourcesReleased(this.workResources!, [this.activeAcpEvent!.pid]);
-  expect(this.workFixture!.readAcpEvents()).toContainEqual(
-    expect.objectContaining({ event: 'prompt-end', stopReason: 'end_turn' })
+  await this.workPage!.expectResourcesReleased(this.workResources!);
+  expect(this.workFixture!.readEvents()).toContainEqual(
+    expect.objectContaining({ event: 'request-complete', mode: 'reply' })
   );
   await this.harness!.capturePostGcSnapshot();
 });

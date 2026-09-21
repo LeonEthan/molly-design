@@ -4,7 +4,7 @@ import { OnboardingPage } from './pages/onboarding-page.js';
 import { ReviewPage } from './pages/review-page.js';
 import { SessionPage } from './pages/session-page.js';
 import { WorkSessionPage, type WorkSessionResources } from './pages/work-session-page.js';
-import { WorkSessionFixture, type ScriptedAcpEvent } from './fixtures/work-session-fixture.js';
+import { WorkSessionFixture, type ScriptedRuntimeEvent } from './fixtures/work-session-fixture.js';
 import type { SyntheticReviewRepository } from './fixtures/synthetic-review-repository.js';
 import { createScenarioArtifacts, type ScenarioArtifacts } from './world-utils.js';
 
@@ -17,7 +17,7 @@ export class MollyWorld extends World {
   workPage: WorkSessionPage | null = null;
   workFixture: WorkSessionFixture | null = null;
   reviewFixture: SyntheticReviewRepository | null = null;
-  activeAcpEvent: ScriptedAcpEvent | null = null;
+  activeRuntimeEvent: ScriptedRuntimeEvent | null = null;
   workResources: WorkSessionResources | null = null;
 
   prepare(tags: readonly string[]): void {
@@ -36,15 +36,16 @@ export class MollyWorld extends World {
 
   async configureScriptedAgent(): Promise<void> {
     if (!this.artifacts || !this.onboarding || !this.harness?.page) {
-      throw new Error('Scenario is not ready for scripted Agent setup');
+      throw new Error('Scenario is not ready for scripted runtime setup');
     }
     await this.onboarding.waitForLocalBootstrap();
     this.workFixture = await WorkSessionFixture.create(
-      `${this.artifacts.scenarioDir}/scripted-acp.ndjson`
+      `${this.artifacts.scenarioDir}/scripted-runtime.ndjson`
     );
+    await this.workFixture.startModelServer();
     this.sessionPage = new SessionPage(this.harness.page, this.workFixture);
     await this.onboarding.skipConfigurationAndEnterProduct();
-    await this.sessionPage.configureCustomAgentFromSettings();
+    await this.sessionPage.seedDeterministicModelConnection();
   }
 
   disposeFixtures(): void {

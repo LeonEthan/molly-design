@@ -1,7 +1,9 @@
 import { expect, type Page } from '@playwright/test';
-import { type ScriptedAcpEvent, WorkSessionFixture } from '../fixtures/work-session-fixture.js';
+import { type ScriptedRuntimeEvent, WorkSessionFixture } from '../fixtures/work-session-fixture.js';
 
-const PROVIDER_NAME = 'Deterministic E2E Agent';
+const CONNECTION_NAME = 'Deterministic E2E Model';
+const MODEL_NAME = 'E2E Deterministic';
+const MODEL_OPTION_NAME = `${CONNECTION_NAME} · ${MODEL_NAME}`;
 const HELD_RESPONSE = 'Synthetic response started.';
 
 export class SessionPage {
@@ -10,36 +12,69 @@ export class SessionPage {
     private readonly fixture: WorkSessionFixture
   ) {}
 
-  async configureCustomAgentFromSettings(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Settings', exact: true }).click();
-    const settings = this.page.getByRole('dialog').filter({
-      has: this.page.getByRole('navigation', { name: /^(Settings|设置)$/u }),
+  /**
+   * Seeds the bundled engine's only external wire through the real settings IPC:
+   * one OpenAI-compatible connection backed by the fixture's scripted server.
+   * Saving does not probe the endpoint, so this stays fully deterministic.
+   */
+  async seedDeterministicModelConnection(): Promise<void> {
+    const port = this.fixture.modelServerPort;
+    if (typeof port !== 'number') throw new Error('Scripted model server is not running');
+    const saved = await this.page.evaluate(async (input) => {
+      if (!window.ipc) throw new Error('Electron IPC is unavailable');
+      return (await window.ipc.invoke('modelConnections.save', input)) as { id?: string };
+    }, {
+      providerPresetId: 'openai-compatible',
+      displayName: CONNECTION_NAME,
+      baseUrl: `http://127.0.0.1:${port}/v1`,
+      enabled: true,
+      customModels: [
+        {
+          modelId: 'e2e-deterministic',
+          name: MODEL_NAME,
+          input: ['text'],
+          contextWindow: 128_000,
+          maxTokens: 4_096,
+          thinking: ['off'],
+          // The design session always registers host tools, and the engine
+          // rejects catalog models that declare no tool-call support
+          // (harness_model_tools_unsupported). The scripted server simply
+          // never emits tool_calls, so no tool ever executes.
+          toolCalls: true,
+          usageInStreaming: false,
+          maxTokensField: 'max_tokens',
+        },
+      ],
+      apiKey: 'e2e-deterministic-key',
     });
-    await expect(settings).toBeVisible();
-    await settings.getByRole('button', { name: 'Agents', exact: true }).click();
+    expect(saved?.id, 'The deterministic model connection was not saved').toEqual(
+      expect.any(String)
+    );
+  }
 
-    const addProvider = this.page.getByRole('button', {
-      name: /^(Add provider|添加 Provider)$/u,
-    });
-    await expect(addProvider.first()).toBeEnabled({ timeout: 60_000 });
-    await addProvider.first().click();
-    await this.page.getByRole('option', { name: /^(Custom command|自定义命令)$/u }).click();
-    await this.page.locator('#agent-config-name').fill(PROVIDER_NAME);
-    await this.page.locator('#custom-acp-command').fill(this.fixture.scriptedAgentCommandLine);
-    await this.page.getByRole('button', { name: /^(Test command|测试命令)$/u }).click();
-    await expect(this.page.getByText(/^(Ready|就绪)$/u).first()).toBeVisible({ timeout: 60_000 });
-    await this.page.getByRole('button', { name: /^(Create|创建)$/u }).click();
-    await expect(this.page.getByText(PROVIDER_NAME, { exact: true })).toBeVisible({
-      timeout: 30_000,
-    });
+  /** The draft composer lists the connection only after the daemon re-projects it. */
+  async selectDeterministicModel(): Promise<void> {
+    await this.page
+      .getByRole('button', { name: /^(Run configuration|运行设置)$/u })
+      .first()
+      .click();
+    const modelTrigger = this.page.getByRole('menuitem', { name: /^(Model|模型)/u });
+    await expect(modelTrigger).toBeVisible({ timeout: 30_000 });
+    await modelTrigger.hover();
+    // The option's accessible name appends the raw model id on a second line.
+    const option = this.page
+      .getByRole('menuitemradio')
+      .filter({ hasText: MODEL_OPTION_NAME });
+    await expect(option).toBeVisible({ timeout: 60_000 });
+    await option.click();
+    await expect(option).toHaveAttribute('aria-checked', 'true');
     await this.page.keyboard.press('Escape');
-    await expect(settings).toBeHidden();
-    await expect(this.page.locator('#chat-prompt')).toBeEditable({ timeout: 60_000 });
   }
 
   async createHeldSession(
     prompt = 'Exercise deterministic lifecycle [SCOUT:HOLD]'
-  ): Promise<ScriptedAcpEvent> {
+  ): Promise<ScriptedRuntimeEvent> {
+    await this.selectDeterministicModel();
     await this.page.locator('#chat-prompt').fill(prompt);
     await this.page.getByRole('button', { name: /^(Send|发送)$/u }).click();
     await expect(this.page).toHaveURL(/#\/local\/sessions\/[^/?#]+(?:\?.*)?$/u, {
@@ -50,56 +85,60 @@ export class SessionPage {
     });
     await expect(this.page.getByRole('button', { name: /^(Stop|停止)$/u })).toBeVisible();
 
-    const promptEvents = await this.fixture.waitForAcpEvent('prompt-start');
-    const waiting = [...promptEvents].reverse().find((event) => event.mode === 'hold');
-    expect(waiting, 'The scripted ACP did not observe the held prompt').toBeDefined();
-    expect(waiting?.sessionId).toEqual(expect.any(String));
+    const started = await this.fixture.waitForEvent('request-start');
+    const waiting = [...started].reverse().find((event) => event.mode === 'hold');
+    expect(waiting, 'The scripted model server did not observe the held prompt').toBeDefined();
+    expect(waiting?.requestId).toEqual(expect.any(String));
     return waiting!;
   }
 
   async createCompletedSession(
     prompt = 'Exercise deterministic reply [SCOUT:REPLY]'
-  ): Promise<ScriptedAcpEvent> {
-    const priorCount = this.fixture
-      .readAcpEvents()
-      .filter((event) => event.event === 'prompt-end').length;
+  ): Promise<ScriptedRuntimeEvent> {
+    const replyCompletes = () =>
+      this.fixture
+        .readEvents()
+        .filter((event) => event.event === 'request-complete' && event.mode === 'reply');
+    const priorCount = replyCompletes().length;
+    await this.selectDeterministicModel();
     await this.page.locator('#chat-prompt').fill(prompt);
     await this.page.getByRole('button', { name: /^(Send|发送)$/u }).click();
     await expect(this.page).toHaveURL(/#\/local\/sessions\/[^/?#]+(?:\?.*)?$/u, {
       timeout: 60_000,
     });
-    await expect(this.page.getByText(/Synthetic (?:response|diff revision)/u).first()).toBeVisible({
+    await expect(this.page.getByText(/Synthetic response complete\./u).first()).toBeVisible({
       timeout: 60_000,
     });
-    const completed = await this.fixture.waitForAcpEvent('prompt-end', priorCount + 1);
-    return completed.at(-1)!;
+    await expect
+      .poll(() => replyCompletes().length, { timeout: 30_000, intervals: [50, 100, 250, 500] })
+      .toBeGreaterThanOrEqual(priorCount + 1);
+    return replyCompletes().at(-1)!;
   }
 
-  async stopHeldSession(waiting: ScriptedAcpEvent): Promise<void> {
+  async stopHeldSession(waiting: ScriptedRuntimeEvent): Promise<void> {
     await this.page.getByRole('button', { name: /^(Stop|停止)$/u }).click();
-    await this.waitForSessionEvent('session-cancel', waiting);
-    const completed = await this.waitForSessionEvent('prompt-end', waiting);
-    expect(completed.stopReason).toBe('cancelled');
+    // Stopping the turn aborts the engine's fetch; the scripted server observes
+    // the socket close as the honest teardown signal.
+    await this.waitForRequestEvent('request-cancelled', waiting);
     await expect(this.page.getByRole('button', { name: /^(Stop|停止)$/u })).toBeHidden({
       timeout: 30_000,
     });
   }
 
-  async archiveSessionAndWaitForRuntimeExit(waiting: ScriptedAcpEvent): Promise<void> {
+  async archiveSessionAndWaitForRuntimeExit(): Promise<void> {
     await this.page
       .getByRole('button', { name: /^(More actions|更多操作)$/u })
       .last()
       .click();
     await this.page.getByRole('menuitem', { name: /^(Archive session|归档会话)$/u }).click();
     await expect(this.page).toHaveURL(/#\/local\/chat(?:\?.*)?$/u, { timeout: 30_000 });
-    await this.fixture.expectAgentProcessesExited([waiting.pid]);
   }
 
-  async archiveAndDeleteSession(waiting: ScriptedAcpEvent): Promise<void> {
+  async archiveAndDeleteSession(): Promise<void> {
     const match = /#\/local\/sessions\/([^?]+)/u.exec(this.page.url());
     if (!match?.[1]) throw new Error(`Expected a Session route, received ${this.page.url()}`);
     const sessionId = decodeURIComponent(match[1]);
-    await this.archiveSessionAndWaitForRuntimeExit(waiting);
+    await this.archiveSessionAndWaitForRuntimeExit();
     await this.page.evaluate((id) => {
       window.location.hash = `/local/sessions/${encodeURIComponent(id)}`;
     }, sessionId);
@@ -115,22 +154,17 @@ export class SessionPage {
     await expect(this.page.locator('#chat-prompt')).toBeEditable({ timeout: 30_000 });
   }
 
-  private async waitForSessionEvent(
+  private async waitForRequestEvent(
     event: string,
-    prompt: ScriptedAcpEvent
-  ): Promise<ScriptedAcpEvent> {
-    let match: ScriptedAcpEvent | undefined;
+    request: ScriptedRuntimeEvent
+  ): Promise<ScriptedRuntimeEvent> {
+    let match: ScriptedRuntimeEvent | undefined;
     await expect
       .poll(
         () => {
           match = this.fixture
-            .readAcpEvents()
-            .find(
-              (entry) =>
-                entry.event === event &&
-                entry.pid === prompt.pid &&
-                entry.sessionId === prompt.sessionId
-            );
+            .readEvents()
+            .find((entry) => entry.event === event && entry.requestId === request.requestId);
           return match !== undefined;
         },
         { timeout: 30_000, intervals: [50, 100, 250, 500] }
@@ -140,4 +174,4 @@ export class SessionPage {
   }
 }
 
-export { PROVIDER_NAME as SCRIPTED_AGENT_NAME };
+export { CONNECTION_NAME as SCRIPTED_MODEL_CONNECTION_NAME };

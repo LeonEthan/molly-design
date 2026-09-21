@@ -29,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, ubuntu-latest, windows-latest]
+        os: [macos-15, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ matrix.os == 'windows-latest' && 60 || 45 }}
     steps:
@@ -66,18 +66,7 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm --dir apps/electron build
 
-      - name: Run desktop journeys (Linux under Xvfb)
-        if: matrix.os == 'ubuntu-latest'
-        shell: bash
-        env:
-          SUITE: ${{ github.event.inputs.suite == 'smoke' && 'smoke' || 'full' }}
-        run: |
-          set -o pipefail
-          mkdir -p e2e/artifacts
-          xvfb-run -a pnpm --filter @molly/e2e "$SUITE" 2>&1 | tee e2e/artifacts/cucumber-output.log
-
       - name: Run desktop journeys
-        if: matrix.os != 'ubuntu-latest'
         shell: bash
         env:
           SUITE: ${{ github.event.inputs.suite == 'smoke' && 'smoke' || 'full' }}
@@ -97,7 +86,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # The artifact name carries the OS. The Daily failure reconciler uses
-          # the macOS artifact as its canonical evidence; Linux and Windows
+          # the macOS artifact as its canonical evidence; Windows
           # evidence stays in Actions artifacts until the lane proves stable.
           name: desktop-e2e-daily-${{ github.event.inputs.suite == 'smoke' && 'smoke' || 'full' }}-${{ matrix.os }}-${{ github.run_id }}
           path: e2e/artifacts/

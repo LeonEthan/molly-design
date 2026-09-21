@@ -67,9 +67,9 @@ also applies.
   screenshot, Playwright trace, renderer/main logs, CLI backlog, process and
   memory snapshot, and machine-readable failure index.
 - Daily regression records each scenario independently, deletes passing videos,
-  and retains one `failure.webm` per failed scenario. It runs one macOS, Linux,
+  and retains one `failure.webm` per failed scenario. It runs one macOS
   and Windows matrix per suite; the failure-issue reconciler treats the macOS
-  artifact as canonical evidence until the other legs prove stable. The
+  artifact as canonical evidence until the Windows leg proves stable. The
   read-only runner only
   uploads evidence; a trusted default-branch reconciler validates recordings and
   posts independently retryable Daily comments linking to the Actions artifacts.

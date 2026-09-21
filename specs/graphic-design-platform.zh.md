@@ -1,12 +1,14 @@
 # Molly 平面设计工作台
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Previous approval: [2026-09-15](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md#第一阶段批准2026-09-15)
 Previous approval: [2026-09-16](../.agents/notes/implemented/bug-fix/2026-09-16-canvas-review-fixes.zh.md#spec-批准记录2026-09-16)
 Translation: current
 
 [English](graphic-design-platform.md)
+
+2026-09-21 起退役 Linux 桌面支持。正式发布范围仍为 macOS arm64；Intel macOS 与 Windows 保留本地实验构建。下文 Linux 构建证据保留为历史事实；Ubuntu CI 与跨平台 Bento 资源检查不表示桌面支持。
 
 2026-09-15 已批准修订：用户已确认先清理旧转换语义并将画稿投影合并为单个 `design.yaml`，类型区块重组以完整往返及 Agent 可操作性为条件；增加指定参考图与固定提示词的真实 Kimi Code CLI 黄金复刻验收。本修订的第一阶段方案已于 2026-09-15 获用户明确批准。已确认方向、第一阶段实施及验收见[单画布重构记录](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md)。
 

@@ -16,6 +16,9 @@ const ARCH_NAMES = { 0: 'ia32', 1: 'x64', 2: 'armv7l', 3: 'arm64', 4: 'universal
 export default async function beforePack(context) {
   const archName = ARCH_NAMES[context.arch]
   const platform = context.electronPlatformName === 'mas' ? 'darwin' : context.electronPlatformName
+  if (platform !== 'darwin' && platform !== 'win32') {
+    throw new Error(`Unsupported desktop packaging platform: ${platform}. Use macOS or Windows.`)
+  }
   if (!archName || archName === 'universal') {
     throw new Error(
       `Unsupported packaging arch ${String(context.arch)} for the embedded CLI sqlite binding; ` +

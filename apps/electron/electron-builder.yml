@@ -71,7 +71,7 @@ asarUnpack:
   - '**/node_modules/electron-sparkle-updater/native/build/Release/*.node'
 # Keep only the app locales we actually ship to reduce Chromium locale payload.
 # Both naming forms are required: macOS resources use the underscore form
-# (`en_US`) while Windows/Linux Chromium `locales/*.pak` use the hyphen form
+# (`en_US`) while Windows Chromium `locales/*.pak` use the hyphen form
 # (`en-US.pak`). Dropping `en-US` leaves the Windows package with NO locale
 # `.pak`, which fatally crashes the renderer (exit -36861) the first time it
 # renders localized UI such as an `<input type=file>` button (Electron #45251).
@@ -85,7 +85,7 @@ win:
 nsis:
   # GitHub Releases rewrites spaces in uploaded asset names to periods, which would
   # desynchronize the file names electron-builder records in latest*.yml from the
-  # ones electron-updater can actually download on Windows/Linux. productName is
+  # ones electron-updater can actually download on Windows. productName is
   # "Molly", so every artifact name here uses a space-free token instead of
   # ${productName}. macOS updates use Sparkle appcast.xml, not latest-mac.yml.
   artifactName: MollyDesign-${version}-${arch}-setup.${ext}
@@ -121,27 +121,11 @@ mac:
 dmg:
   artifactName: MollyDesign-${version}-${arch}.${ext}
   writeUpdateInfo: false
-linux:
-  icon: build/icon.png
-  executableName: mollyDesign
-  syncDesktopName: true
-  target:
-    - AppImage
-    - snap
-    - deb
-  maintainer: Molly contributors
-  category: Utility
-appImage:
-  artifactName: MollyDesign-${version}-${arch}.${ext}
-snap:
-  artifactName: MollyDesign-${version}-${arch}.${ext}
-deb:
-  artifactName: MollyDesign-${version}-${arch}.${ext}
 includePdb: false
 npmRebuild: false
 # The public build has no VITE_ELECTRON_UPDATE_URL to inject: electron.vite.config.ts
 # deliberately strips every VITE_* value so public builds stay deterministic. This
-# provider is baked into the packaged app-update.yml for Windows/Linux electron-updater.
+# provider is baked into the packaged app-update.yml for Windows electron-updater.
 # macOS Sparkle reads SUFeedURL / SUPublicEDKey from Info.plist instead. Generating
 # latest*.yml for non-mac targets still depends on this block being present.
 publish:

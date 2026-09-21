@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { packageManagerEnvironment } from './package-manager-environment.mjs'
 import test from 'node:test'
+import beforePack from './eb-before-pack.mjs'
 import path from 'node:path'
 import {
   DEFAULT_SPARKLE_APPCAST_URL,
@@ -165,5 +167,21 @@ void test('pins collector pnpm to the caller entrypoint across quoted paths and 
     assert.notEqual(env.PATH, process.env.PATH)
   } finally {
     rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test('rejects Linux desktop targets before staging native dependencies', async () => {
+  await assert.rejects(
+    beforePack({ arch: 3, electronPlatformName: 'linux' }),
+    /Unsupported desktop packaging platform: linux/u
+  )
+  for (const args of [['--linux'], ['--linux=deb'], ['-l', 'AppImage']]) {
+    const result = spawnSync(
+      process.execPath,
+      [fileURLToPath(new URL('./package-electron.mjs', import.meta.url)), ...args],
+      { encoding: 'utf8' }
+    )
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, /Linux desktop packaging is no longer supported/u)
   }
 })

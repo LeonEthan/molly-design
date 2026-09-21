@@ -22,7 +22,7 @@ use the providers you explicitly configure; no Molly cloud account is required.
 **Release status:** development build; first-release target is **macOS Apple Silicon**.
 There is scoped installed-package evidence, but the complete migrated workflow,
 public signed/notarized distribution and two-version automatic upgrade acceptance
-are not complete. macOS Intel, Windows and Linux builds remain experimental.
+are not complete. macOS Intel and Windows builds remain experimental. Linux desktop support is retired.
 See [tested journeys and limits](USER_GUIDE.md#release-status-and-support-limits).
 
 ## Get started

@@ -33,17 +33,12 @@ contracts, and window/renderer integration rules live in
   already prepared and validated the OSS build artifacts. That low-level command must
   remain `--skipBuild --mode oss`.
 
-## Build toolchain and window identity
+## Build toolchain
 
 - Electron 39's Chromium supports native top-level await. Keep renderer and module
   worker builds on native TLA; do not add `vite-plugin-top-level-await` or an
   equivalent full-bundle AST compatibility rewrite. Reprocessing Rollup's complete
   output graph materially increases production renderer peak memory.
-- Linux window identity is one contract: the composition's packaged `desktopName`,
-  electron-builder's `syncDesktopName`, the pre-ready `app.setDesktopName` value,
-  and the AppImage runtime desktop entry must all resolve to the same desktop-file
-  basename. KDE uses that identity to associate Wayland/X11 windows with the
-  installed icon.
 
 ## Embedded CLI and native dependencies
 
@@ -65,7 +60,7 @@ contracts, and window/renderer integration rules live in
   database before signing.
 - Keep `better-sqlite3 >= 13.0.2`, CLI `engines.node >= 22.14.0`, the first-import
   guard in `sqlite-runtime-support.ts`, and its tests aligned. Older Node versions can
-  segfault while loading the N-API 10 binding. Linux armv7 is unsupported.
+  segfault while loading the N-API 10 binding.
 - When upgrading `@lydell/node-pty`, audit package layout and Windows ConPTY binding
   names. Apply the staged asar-path repair after downloading target artifacts; a pnpm
   patch cannot cover cross-architecture packages fetched during packaging.
@@ -83,7 +78,7 @@ contracts, and window/renderer integration rules live in
   never `electron-builder` directly. It injects the released version via
   `extraMetadata` so `package.json` is a fallback rather than the release source of
   truth, and it forces `--publish never` unless a caller opts in.
-- Windows/Linux electron-updater still uses the `publish` block: Vite strips every
+- Windows electron-updater still uses the `publish` block: Vite strips every
   `VITE_*` value, so `AppUpdaterService` falls back to packaged `app-update.yml` and
   `latest*.yml`. Tag contract is `v${version}`.
 - macOS uses Sparkle (`electron-sparkle-updater`): `SUFeedURL` + `SUPublicEDKey` in
@@ -97,12 +92,6 @@ contracts, and window/renderer integration rules live in
   them as job-level environment variables. Previous zips stay out of the published asset list. Sparkle load
   failure falls back to electron-updater. Sparkle UI stays silent; progress and
   ready-to-install go through `ElectronUpdaterState` for the renderer banner.
-- Linux `.deb` installs go through `app-updater-linux-install.ts`, never
-  electron-updater's `DebUpdater`: its `spawnSync` freezes the main process for
-  the whole polkit prompt, which no JS-side timeout can interrupt. Spawn
-  asynchronously, quit only after a zero exit, and treat a signalled installer
-  as a failure rather than the success `spawnSync` reports. AppImage needs no
-  privileged helper and stays on electron-updater.
 - A downloaded package outlives a failed check or install. While
   `downloadedFile` is set, `recordError` keeps `phase: 'downloaded'`; dropping
   to `error` hides the sidebar banner and the About install button, which are
@@ -112,10 +101,11 @@ contracts, and window/renderer integration rules live in
   `${productName}` in `artifactName`.
 - macOS releases must be signed and notarized. `generate_appcast` refuses archives
   that fail `codesign --verify --deep --strict`, and Gatekeeper needs a notarized
-  first-install DMG. Windows and Linux do not have this constraint.
-- Official release CI packages macOS arm64 only. Intel macOS, Windows and Linux
+  first-install DMG. Windows does not have this constraint.
+- Official release CI packages macOS arm64 only. Intel macOS and Windows
   commands remain experimental local builds; widening release scope needs native
-  acceptance evidence. Linux snap requires local snapcraft.
+  acceptance evidence. Linux desktop packaging and integration are retired;
+  Linux CI runners and platform-neutral resource probes remain.
 
 ## Verification
 

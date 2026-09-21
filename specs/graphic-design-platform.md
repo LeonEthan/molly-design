@@ -1,12 +1,14 @@
 # Molly Graphic Design Workbench
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Previous approval: [2026-09-15](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md#第一阶段批准2026-09-15)
 Previous approval: [2026-09-16](../.agents/notes/implemented/bug-fix/2026-09-16-canvas-review-fixes.zh.md#spec-批准记录2026-09-16)
 Translation: current
 
 [中文](graphic-design-platform.zh.md)
+
+As of 2026-09-21, Linux desktop support is retired. Official release scope remains macOS arm64; Intel macOS and Windows keep experimental local builds. Historical Linux build evidence below remains historical; Ubuntu CI and cross-platform Bento resource checks do not imply desktop support.
 
 2026-09-15 approved revision: the user confirmed retiring old conversion semantics and consolidating the artwork projection into one `design.yaml`; type-block restructuring is conditional on complete roundtrip and Agent operability checks. A real Kimi Code CLI golden replication case with a fixed reference and prompt is required. The user explicitly approved this first-stage revision on 2026-09-15. Confirmed direction, completed first-stage implementation and acceptance are recorded in the [single-canvas redesign note](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md).
 

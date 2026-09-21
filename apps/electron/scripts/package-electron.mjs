@@ -112,6 +112,9 @@ function resolveRunner() {
 }
 
 const forwardedArguments = stripArgumentSeparators(process.argv.slice(2))
+if (forwardedArguments.some((argument) => /^(?:--linux|-l)(?:=|$)/u.test(argument))) {
+  throw new Error('Linux desktop packaging is no longer supported. Use macOS or Windows.')
+}
 const version = resolveVersion(forwardedArguments)
 const electronBuilderArguments = withExplicitPublishPolicy(forwardedArguments)
 assertPublishPolicyIsExplicit(electronBuilderArguments)

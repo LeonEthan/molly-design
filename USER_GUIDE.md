@@ -136,8 +136,8 @@ real image generation/editing in one artwork
 including its retry-authorization disclosure), and legacy continuation on a hybrid
 package
 ([continuation acceptance](.agents/notes/implemented/testing/2026-09-20-design-session-continuation-acceptance.zh.md)).
-Windows/Linux resource builds are not native
-execution evidence. The reviewed `pi-ask-question` subset has
+Windows resource builds are not native execution evidence. Linux desktop support
+is retired; Linux CI and resource-integrity checks do not imply product support. The reviewed `pi-ask-question` subset has
 SDK tests, and native question interaction was verified on an installed build;
 restoration across restarts remains open. None of these
 checks establishes a universal canvas-size or performance limit.

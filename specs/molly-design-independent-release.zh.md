@@ -1,10 +1,12 @@
 # Molly 独立品牌与桌面首发
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [English](molly-design-independent-release.md)
+
+2026-09-21 起退役 Linux 桌面支持，包括打包、更新及 desktop-file 集成。Intel macOS 与 Windows 保留本地实验构建，正式发布范围仍为 macOS arm64。Ubuntu CI runner 与跨平台资源完整性检查属于基础设施，不构成产品支持承诺。
 
 Issue: [#32](https://github.com/LeonEthan/molly-design/issues/32)
 

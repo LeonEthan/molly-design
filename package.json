@@ -53,8 +53,7 @@
     "install:all": "corepack pnpm install",
     "build:electron": "corepack pnpm --dir apps/electron build",
     "build:electron:mac": "corepack pnpm --dir apps/electron build:mac",
-    "build:electron:win": "corepack pnpm --dir apps/electron build:win",
-    "build:electron:linux": "corepack pnpm --dir apps/electron build:linux"
+    "build:electron:win": "corepack pnpm --dir apps/electron build:win"
   },
   "keywords": [
     "graphic-design",

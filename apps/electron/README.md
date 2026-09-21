@@ -35,7 +35,9 @@ and should not be used as the normal development command.
 Run these commands from `apps/electron`. They use the local renderer and embedded
 service. Packaging defaults to no publication; explicitly supplied signing
 credentials determine signed/notarized versus ad-hoc output. Official release CI
-targets macOS arm64 only; Intel macOS, Windows and Linux remain experimental.
+targets macOS arm64 only; Intel macOS and Windows remain experimental.
+Linux desktop packaging, updates and desktop-file integration are retired. Ubuntu
+CI runners and cross-platform Bento resource checks remain infrastructure checks.
 
 ```bash
 # For Windows
@@ -43,9 +45,6 @@ $ pnpm build:win
 
 # For macOS
 $ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
 ```
 
 Packaging excludes previous `dist` outputs and `.sparkle-local` update fixtures,
@@ -81,7 +80,7 @@ package bytes on every target, in addition to native dependency gates. It can
 also be run directly with
 `node packages/design-bento/scripts/verify-resources.mjs <packaged-design-directory>`
 from the repository root. Cross-host packaging verifies resource presence and
-hashes; it does not establish that Windows/Linux native executables run. Local
+hashes; it does not establish that Windows native executables run. Local
 packages do not enable the inherited Lody updater, including with
 `MOLLY_ELECTRON_ENABLE_UPDATER=1`. Packaging is not signing, notarization or release
 publication.

@@ -1,4 +1,4 @@
-import { execFileSync, spawn } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { appendFileSync, existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -13,11 +13,6 @@ import type {
 import { IPC_PUSH_CHANNELS } from '@molly/shared/electron-ipc'
 import { formatUnknownError } from '../utils'
 import { setAppQuitting } from '../window-state'
-import {
-  resolveLinuxDebInstallPlan,
-  runLinuxDebInstall,
-  type LinuxDebInstallPlan
-} from './app-updater-linux-install'
 import { readUpdaterReleaseMetadata } from './app-updater-metadata'
 import { sparkleEventToStatePatch } from './app-updater-sparkle-events'
 import {
@@ -93,7 +88,6 @@ export class AppUpdaterService {
   /** Package electron-updater has on disk, cleared when a newer one supersedes it. */
   private downloadedFile: string | undefined
   private errorCount = 0
-  private installInFlight = false
   private preparationInFlight = false
   private configurationUnavailable = false
 
@@ -274,13 +268,6 @@ export class AppUpdaterService {
       }
     }
 
-    const linuxPlan = resolveLinuxDebInstallPlan({
-      platform: process.platform,
-      downloadedFile: this.downloadedFile,
-      appImagePath: process.env.APPIMAGE
-    })
-    if (linuxPlan) return await this.installLinuxDeb(linuxPlan)
-
     try {
       // Ensure macOS close handlers don't hide windows and block updater-triggered quit.
       setAppQuitting(true)
@@ -312,47 +299,6 @@ export class AppUpdaterService {
         error: message
       }
     }
-  }
-
-  /**
-   * Install a `.deb` without entering electron-updater's blocking
-   * `spawnSync`, so the app stays responsive while polkit holds its password
-   * prompt open. Quitting is ours too: it must happen only after the package
-   * manager has actually succeeded.
-   */
-  private async installLinuxDeb(
-    plan: LinuxDebInstallPlan
-  ): Promise<QuitAndInstallElectronUpdateResult> {
-    // The window stays interactive during the prompt, so a second click would
-    // raise a second password prompt for the same install.
-    if (this.installInFlight) {
-      return {
-        ok: false,
-        error: 'update_install_in_progress'
-      }
-    }
-
-    this.installInFlight = true
-    try {
-      const result = await runLinuxDebInstall(plan, (command, args) =>
-        spawn(command, args, { stdio: ['ignore', 'ignore', 'pipe'] })
-      )
-      if (!result.ok) {
-        this.recordError(result.error)
-        return {
-          ok: false,
-          error: result.error
-        }
-      }
-    } finally {
-      this.installInFlight = false
-    }
-
-    // Close handlers must not hide windows and block the updater-driven quit.
-    setAppQuitting(true)
-    app.relaunch()
-    app.quit()
-    return { ok: true }
   }
 
   /**

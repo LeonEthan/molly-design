@@ -41,6 +41,10 @@ export default async function afterPack(context) {
   const archName = ARCH_NAMES[context.arch]
   const platform = context.electronPlatformName
 
+  if (!['darwin', 'mas', 'win32'].includes(platform)) {
+    throw new Error(`Unsupported desktop packaging platform: ${platform}. Use macOS or Windows.`)
+  }
+
   const productFilename = context.packager.appInfo.productFilename
   let binaryPath
   let resourcesDir
@@ -51,10 +55,7 @@ export default async function afterPack(context) {
   } else {
     const executableName =
       context.packager.platformSpecificBuildOptions?.executableName ?? productFilename
-    binaryPath = path.join(
-      context.appOutDir,
-      platform === 'win32' ? `${executableName}.exe` : executableName
-    )
+    binaryPath = path.join(context.appOutDir, `${executableName}.exe`)
     resourcesDir = path.join(context.appOutDir, 'resources')
   }
   // Verify the bytes actually collected by Builder, on cross-host targets too.

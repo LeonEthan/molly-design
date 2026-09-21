@@ -33,7 +33,7 @@ No existing owning note was found for the upgrade launcher.
   describes the interpreter requirement.
 - [Implementation](../../../../apps/cli/src/lib/machine-lifecycle.ts) uses the existing
   dependency; no manifest or lockfile change is needed.
-- [Regression tests](../../../../apps/cli/src/lib/machine-lifecycle-upgrade.test.ts)
+- [Regression tests](https://github.com/LeonEthan/molly-design/blob/3db2bcff50eec1aa5bfdf07c6264f81f29a99ad9/apps/cli/src/lib/machine-lifecycle-upgrade.test.ts)
   isolate PATH to a temporary npm shim in a directory containing spaces. They run
   a `.cmd` on Windows and a shell script on POSIX, with exit codes 0 and 1.
 - Targeted lifecycle tests passed (10 tests) on macOS, and `pnpm check` passed

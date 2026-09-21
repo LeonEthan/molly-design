@@ -28,7 +28,7 @@ Windows 命令脚本的解析和转义。测试使用合成 npm 可执行文件�
 - [Node 的 Windows 命令脚本文档](https://nodejs.org/api/child_process.html#spawning-bat-and-cmd-files-on-windows)
   说明了对解释器的要求。
 - [实现](../../../../apps/cli/src/lib/machine-lifecycle.ts)使用已有依赖，无需修改 manifest 或锁文件。
-- [回归测试](../../../../apps/cli/src/lib/machine-lifecycle-upgrade.test.ts)把 PATH 隔离到含空格的临时目录，
+- [回归测试](https://github.com/LeonEthan/molly-design/blob/3db2bcff50eec1aa5bfdf07c6264f81f29a99ad9/apps/cli/src/lib/machine-lifecycle-upgrade.test.ts)把 PATH 隔离到含空格的临时目录，
   Windows 执行 `.cmd`，POSIX 执行 shell 脚本，覆盖退出码 0 和 1。
 - macOS 上的 10 项定向生命周期测试通过；允许已有本地 IPC 测试在沙箱外创建 socket 后，
   `pnpm check` 通过。测试不覆盖 registry 访问、原生模块替换、Windows 进程树取消

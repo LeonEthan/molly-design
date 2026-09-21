@@ -11,12 +11,15 @@ but with concrete pre-launch gaps: main CI was red, the renderer still rejected
 `molly-design://` deep links, eight files leaked local machine paths, and 17
 third-party product screenshots sat in git. This change repairs CI, fixes the
 deep-link scheme mismatch, redacts local paths, removes the screenshots, purifies
-LICENSE back to canonical Apache-2.0 (GitHub detected "Other"), and sweeps
-user-visible Lody residuals. The daemon's remote npm upgrade is disarmed because
-the `lody` npm package is third-party — installing it would execute foreign code.
-Deferred by design: spec approvals (human-only), GitHub Release creation (no signed
-artifacts yet), onboarding-tour narrative, and full removal of the upgrade
-machinery.
+LICENSE back to canonical Apache-2.0 (GitHub detected "Other"), sweeps
+user-visible Lody residuals, renames transcript-shaped fixtures to the synthetic
+`.sample.json` convention, aligns the onboarding tour's main run with the design
+product, and removes the daemon's remote npm upgrade machinery end to end — the
+`lody` npm package is third-party, so installing it would execute foreign code
+([daemon remote upgrade removal](../simplification/2026-09-21-daemon-remote-upgrade-removal.md)).
+Release and runtime-artifact hosting stays on the personal GitHub account for now
+(no organization). Deferred by design: spec approvals (human-only) and GitHub
+Release creation (no signed artifacts yet).
 
 ## What changed
 
@@ -44,17 +47,43 @@ machinery.
   tour fixture branch names, placeholder emails (`missing-email.molly.invalid`,
   legacy domain still recognized), `SITE_URL` dead default, three dead lody.ai
   modules deleted, and stale "package name stays lody" docs corrected.
+- **Fixture naming**: the ten ACP history/notification fixtures under
+  `apps/cli/tests/fixtures/acp/` moved from `*.captured.json` to `*.sample.json`,
+  the synthetic-fixture convention; `check-public-boundary.mjs` now rejects both
+  `.jsonl` and the retired `.captured.json` suffix under fixture directories so
+  transcript-shaped names cannot return.
+- **Onboarding narrative**: local onboarding copy was already design-flavored and
+  the coding tour never mounts on the local platform (`showsSession` gates it to
+  non-local platforms; local steps are ceremony → providers → projects →
+  firstTask), so the honest scope was removing dead copy and aligning the tour's
+  main run: orphan `onboarding.ceremony.*` and `onboarding.firstTask.preparingAgent`
+  locale keys removed (5 keys × 2), and the tour fixtures now work a design brief
+  (`design.yaml`, render permission, palette subagent) instead of a test suite.
+  The tour's sidebar/PR/terminal fixtures stay coding surfaces: the tour's own
+  rule forbids claims its components cannot render, and cloud setup retains
+  `TourStill` per `onboarding/AGENTS.md`.
+- **Daemon remote upgrade removal**: the full `machine/upgrade` stack — wire
+  schemas, RPC client/server, renderer token mint and settings UI, daemon handler,
+  supervisor exit code 43, and npm self-install handoff — is excised, not gated;
+  restart is retained. Rationale and evidence:
+  [daemon remote upgrade removal](../simplification/2026-09-21-daemon-remote-upgrade-removal.md).
+- **Release hosting**: releases and runtime artifacts stay under the personal
+  GitHub account; no organization exists yet. Recorded here so the first Release
+  runbook does not re-open the question.
 
 ## Verification and limits
 
 - Targeted vitest runs pass for every touched area (chat-sync ×3, deep-link ×12,
-  lifecycle ×10, const ×9); typecheck passes for shared, cli, components and
-  electron; `docs check` in a clean worktree without vendor submodules reports 0
-  errors; `check:public-boundary` passes.
+  lifecycle, const ×9, RPC server/client, local session control, ACP history
+  batching, machine settings panes, onboarding flow); typecheck passes for shared,
+  cli, components, loro-streams-rpc and electron; `docs check` in a clean worktree
+  without vendor submodules reports 0 errors; `lint:i18n` and
+  `check:public-boundary` pass.
 - The wire-compat `lody:`/`lody*` storage keys, `_meta.lody` fields, ACP submodule
   upstream URLs and historical note content are intentionally retained per
   `specs/lody-upstream-adoption.md`.
 - Not done here: spec re-approval (requires linked human approval), the first
-  GitHub Release (needs signed/notarized artifacts), onboarding-tour narrative
-  rewrite, `code-review-viewer` retirement decision, and full excision of the
-  daemon upgrade machinery (capability gate is the minimal closure).
+  GitHub Release (needs signed/notarized artifacts), and the
+  `code-review-viewer` retirement decision. The E2E smoke suite fails on main
+  independent of this change — its steps still drive the pre-redesign "Add
+  provider" settings flow; fixing the harness is a separate decision.

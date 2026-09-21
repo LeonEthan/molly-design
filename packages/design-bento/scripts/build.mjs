@@ -39,18 +39,10 @@ for (const [file, expected] of Object.entries(manifest.files)) {
 // Windows TEMP may use an 8.3 alias; Vite module IDs must use one canonical path.
 const temporary = realpathSync.native(mkdtempSync(join(tmpdir(), 'molly-bento-')));
 const tree = join(temporary, 'bento');
-let registered = false;
 try {
-  run(
-    'git',
-    ['worktree', 'add', '--detach', '--no-checkout', tree, manifest.bentoCommit],
-    join(root, 'bento')
-  );
-  registered = true;
-  run('git', ['sparse-checkout', 'set', 'slides', 'kernel', 'scripts'], tree);
-  run('git', ['checkout'], tree);
-  for (const patch of manifest.patches)
-    run('git', ['apply', '--whitespace=error', join(root, 'patches', patch)], tree);
+  // The vendored Bento tree (bento/) already carries the applied Molly patches.
+  // Assemble in a temporary copy so npm's isolated closure never touches it.
+  cpSync(join(root, 'bento'), tree, { recursive: true });
   const destination = join(tree, 'slides/src/a1a2/packages');
   cpSync(join(root, 'vendor/packages'), destination, { recursive: true });
   for (const file of Object.keys(manifest.files).filter(
@@ -221,9 +213,5 @@ try {
   );
   console.log(`Bento resources built: ${output}`);
 } finally {
-  try {
-    if (registered) run('git', ['worktree', 'remove', '--force', tree], join(root, 'bento'));
-  } finally {
-    rmSync(temporary, { recursive: true, force: true });
-  }
+  rmSync(temporary, { recursive: true, force: true });
 }

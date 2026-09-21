@@ -2,7 +2,9 @@
   "repository": "https://github.com/LeonEthan/agentic-listing-design",
   "commit": "7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12",
   "bentoCommit": "813c71fff72491e6898f5e55a20da44a562be586",
-  "patches": [
+  "bentoRepository": "https://github.com/nyblnet/bento",
+  "bentoVendored": "bento/ holds the slides, kernel and scripts subtrees of bentoCommit with these Molly patches already applied",
+  "appliedPatches": [
     "canvas-moveable-deferred-dragstart.patch",
     "a1a2-semantic-editor.patch",
     "web-product-session.patch",
@@ -82,11 +84,6 @@
     "vendor/packages/editor-bento/src/ui/dom/table.ts": "0b9c05642ff58edee31be7e7f4b93d3bc0cbafbcc76a0c482bef21a9b34adfac",
     "vendor/packages/editor-bento/src/ui/dom/chart.ts": "5d9f8fbf50c8e7effe764caec880fa450ea48f7e146f418f7135b608ff28976b",
     "vendor/packages/editor-bento/src/ui/dom/mount.ts": "28ba65b5f4b335f737192483ea611291b06e934a36f05830cacb087da5e13d60",
-    "patches/canvas-moveable-deferred-dragstart.patch": "917d6bd5867c6f71a475dc4d4dee5dda33412ada820a259e82e926b0c29e7bda",
-    "patches/a1a2-semantic-editor.patch": "dffbaee6a9532ad871cef194492043b47423b84605509b8d0caaf3bc6ba96534",
-    "patches/web-product-session.patch": "0aa74adba7ab99fcd82abf4287b9bddf81afbdd5c5fc4e48148ed87847ace695",
-    "patches/a1a2-native-mutation-seal.patch": "5c6091d214350174c11ba5ee3f951029bcfa45524db13d8e553a4f5b95dcf9b5",
-    "patches/gd4c-frame-decorators.patch": "8aca515c15e81ccd9ab2058443da598a80bfd8ade095748897c9df5741ac8d87",
     "vendor/packages/contracts/capability-matrix/v1.json": "a96c9959ba6beeb66aca16fa8f48da3993b394ea526ca979c5949aab8e2dfd48",
     "vendor/packages/contracts/capability-matrix/loader.ts": "f9a222b94901e28961ce440f28be0cc678ca1c834e05b13cbe694d5500eef8cc",
     "vendor/packages/contracts/src/pptd-v3.ts": "60ca3db47e42cd667fbd080f6a5fd1f4fb6816325f132742606295d8bfb16522"

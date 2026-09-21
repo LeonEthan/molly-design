@@ -7,12 +7,12 @@ local service owns persisted BentoDoc artwork. YAML conversion is owned by
 are described in [design persistence](../../apps/cli/src/design/README.md).
 
 Run `corepack pnpm --dir packages/design-bento build`. Normal Electron development
-and production builds invoke the same builder. Install the pinned Bento submodule
-with `git submodule update --init packages/design-bento/bento` first. Node 22.14+
+and production builds invoke the same builder. The Bento source is vendored
+in-tree under `bento/`; no submodule step is needed. Node 22.14+
 and npm are required; the upstream npm lockfile pins build dependencies.
 
-`source-manifest.json` identifies the source commit, five ordered patches, and
-copied files. `vendor/packages` contains only the contracts, kernel and editor
+`source-manifest.json` identifies the source commit, the five Molly patches
+recorded as applied in the vendored tree, and copied files. `vendor/packages` contains only the contracts, kernel and editor
 source closure required by those patches. The capability matrix records source evidence; the current authoring validator
 determines admitted fields. Authoring/PPTD,
 quality orchestration, revision persistence, Web/HTTP/SSE applications and Agent
@@ -23,9 +23,9 @@ authorized the migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
 see [NOTICE](../../NOTICE) and `adapterLicense` in the source manifest.
 Bento and other third-party components retain their individual licenses.
 
-Bento is pinned to `813c71fff72491e6898f5e55a20da44a562be586` (MIT, see
-`bento/LICENSE`). Its own `slides` and `kernel` sources are assembled with the
-adapter closure. Font Awesome Free glyph attribution is in `FONTAWESOME-LICENSE`;
+Bento is vendored at `813c71fff72491e6898f5e55a20da44a562be586` (MIT, see
+`bento/LICENSE`) with the recorded Molly patches already applied. Its own
+`slides` and `kernel` sources are assembled with the adapter closure. Font Awesome Free glyph attribution is in `FONTAWESOME-LICENSE`;
 Space Mono's bundled fixture font is covered by `SPACE-MONO-LICENSE`.
 Molly's omitted text font resolves to Inter in the assembled contract copy. The
 isolated canvas embeds Fontsource Inter 5.2.8 WOFF2 faces (regular/bold, normal/italic,
@@ -134,21 +134,22 @@ pnpm --dir packages/design-bento build
 node packages/design-bento/scripts/verify-resources.mjs
 ```
 
-Each build verifies vendored hashes, creates a temporary detached worktree at the
-manifest's Bento commit, sparsely checks out `slides`, `kernel` and `scripts`,
-applies the ordered patches, copies adapters and local overlays, runs the pinned
+Each build verifies vendored hashes, copies the vendored `bento/` tree to a
+temporary directory, copies adapters and local overlays, applies the recorded
+in-script adaptations, runs the pinned
 `slides/package-lock.json` through `npm ci`, then builds one offline HTML resource.
 Root pnpm and upstream npm are deliberately separate dependency closures. A cold
 build requires registry access; the root install alone is not an offline-build
-preparation. The worktree is removed after success or failure; npm's normal cache
+preparation. The temporary copy is removed after success or failure; npm's normal cache
 can reuse downloaded packages without introducing another artifact store.
 
 For an upgrade, change the source pin only after inspecting its upstream diff;
-review each patch and source-manifest entry, then run resource verification,
+refresh the vendored `bento/` tree from the new commit, re-apply the recorded
+Molly adaptations listed in the source manifest, then run resource verification,
 authoring round-trip tests, the desktop build and native edit/save/export acceptance.
-A clean `git apply` or a hash match does not establish visual compatibility. Keep
-Molly overlays under this package; never modify the pinned checkout as an implicit
-build input. The existing builder remains the single assembly path.
+A hash match does not establish visual compatibility. Keep
+Molly overlays under this package; the vendored tree carries only the recorded
+adaptations. The existing builder remains the single assembly path.
 
 Resources include Apache-2.0 `MOLLY-LICENSE` and `MOLLY-NOTICE` for Molly and the
 rights-holder-owned migrated adapters, alongside Bento and font/icon notices.

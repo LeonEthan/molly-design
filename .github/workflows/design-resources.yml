@@ -20,13 +20,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      # Source hashes and patches require byte-identical LF checkouts on Windows.
+      # Source hashes require byte-identical LF checkouts on Windows.
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - name: Initialize desktop source dependencies
-        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 
       - uses: actions/setup-node@v4
         with:

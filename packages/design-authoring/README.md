@@ -9,7 +9,7 @@ that the CLI materializes into design-session workdirs.
 
 Sources: remaining intake runtime files come from
 https://github.com/LeonEthan/agentic-listing-design pinned at
-`7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12` (Bento submodule
+`7fd3c0691876ec7428fe3f3ef1ef6c4c46cdef12` (Bento
 `813c71fff72491e6898f5e55a20da44a562be586`, MIT). The pinned original repository has no root license file. Rights holder LeonEthan
 authorized its migrated, self-owned adapter code under Apache-2.0 on 2026-09-20;
 see [NOTICE](../../NOTICE) and the manifest’s `adapterLicense`. Third-party

@@ -36,26 +36,26 @@ Keep the selected Issue Form structure, required answers, confirmations, and `[B
 
 ## Get the Code
 
-The default desktop build needs three pinned source dependencies:
+The default desktop build needs two pinned source dependencies:
 
 ```sh
 git clone https://github.com/LeonEthan/molly-design.git
 cd molly-design
-git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 ```
 
 ## Source dependencies
 
-| Source                                        | Why it remains                                                           | Maintenance boundary                                                                                                    |
-| --------------------------------------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-| ACP core                                      | Shared protocol types and host contracts                                 | Root pnpm builds the pinned submodule; coordinate producer/consumer changes.                                            |
-| ACP DSH                                       | `packages/shared/src/deepseek-harness.ts` imports capability definitions | Keep until its real consumers are retired; it is not an enabled desktop engine.                                         |
-| Bento                                         | Editor and renderer sources                                              | Its npm lockfile, source manifest, patches and Molly overlays are assembled in a temporary worktree.                    |
-| Claude/Codex/Grok/Kimi submodules (`vendor/`) | Historical probes and upstream provenance                                | Outside default pnpm/CI. Initialize a specific path only for scoped maintenance; Kimi is a separate upstream workspace. |
+| Source                                        | Why it remains                                                           | Maintenance boundary                                                                                                                                                      |
+| --------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ACP core                                      | Shared protocol types and host contracts                                 | Root pnpm builds the pinned submodule; coordinate producer/consumer changes.                                                                                              |
+| ACP DSH                                       | `packages/shared/src/deepseek-harness.ts` imports capability definitions | Keep until its real consumers are retired; it is not an enabled desktop engine.                                                                                           |
+| Bento                                         | Editor and renderer sources                                              | Vendored in-tree under `packages/design-bento/bento/` with Molly patches applied; its npm lockfile, source manifest and Molly overlays are assembled in a temporary copy. |
+| Claude/Codex/Grok/Kimi submodules (`vendor/`) | Historical probes and upstream provenance                                | Outside default pnpm/CI. Initialize a specific path only for scoped maintenance; Kimi is a separate upstream workspace.                                                   |
 
 Do not run recursive submodule initialization for ordinary desktop work. Do not
 merge upstream repositories into Molly just to remove nesting. Update source pins,
-patches, provenance and affected checks together; keep original author/license notices.
+provenance and affected checks together; keep original author/license notices.
 For Bento maintenance, see [its build guide](packages/design-bento/README.md#build-and-upgrade).
 Root `pnpm install` does not install Bento's isolated npm dependency tree.
 

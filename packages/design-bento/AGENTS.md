@@ -1,9 +1,12 @@
 # Design renderer resources
 
 Root repository rules apply. `CLAUDE.md` links here; edit `AGENTS.md` only.
-Read [README.md](README.md) and preserve pinned vendor/submodule bytes and provenance.
+Read [README.md](README.md) and preserve pinned vendor bytes and provenance. The
+`bento/` tree is vendored upstream source with the Molly adaptations recorded in
+`source-manifest.json` already applied; change it only through a recorded refresh,
+never as an untracked edit.
 
-The builder assembles local adaptations in a temporary checkout. Product defaults
+The builder assembles local adaptations in a temporary copy. Product defaults
 are rendering decisions: omitted canonical fields stay omitted. The isolated
 canvas must bundle its own licensed Inter font faces; fonts loaded by the React
 shell do not cross WebContents boundaries. Preview and export consume the same

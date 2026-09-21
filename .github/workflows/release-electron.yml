@@ -57,7 +57,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialize desktop source dependencies
-        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 
       - name: Resolve release version
         id: version

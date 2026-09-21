@@ -16,6 +16,3 @@
 [submodule "packages/acp-extension-dsh"]
 	path = packages/acp-extension-dsh
 	url = https://github.com/LodyAI/acp-extension-dsh.git
-[submodule "packages/design-bento/bento"]
-	path = packages/design-bento/bento
-	url = https://github.com/nyblnet/bento.git

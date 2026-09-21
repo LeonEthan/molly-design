@@ -31,7 +31,7 @@ Translation: pending
 | YAML       | [canvas-format.ts](../../../../packages/design-authoring/src/canvas-format.ts) 接受 `size/elements` 并明确拒绝 `pages`                                                                                                     | 不能只在 UI 添加多个舞台后声称保存和 Agent 编辑已支持                                 |
 | 导出与宿主 | [design-service.ts](../../../../apps/electron/src/main/services/design-service.ts) 创建沙盒 WebContentsView；导出选择单个 `.ed-stage-scale .bento-slide` 并核对画布尺寸                                                    | 需要按画板选择目标，保留同渲染路径、字体/素材就绪和保存确认                           |
 
-文字属性命令目前是整元素修改：[web-product-session.patch](../../../../packages/design-bento/patches/web-product-session.patch) 的 `text-style` 会通过 `setText` 设置字段并清除 runs 上同字段的覆盖。若未来要求只改选中文字片段，需要保留 Range、映射富文本 runs 并定义提交边界，不能由“已有文字工具栏”推导为已支持。
+文字属性命令目前是整元素修改：[web-product-session.patch](../../../../packages/design-bento/source-manifest.json) 的 `text-style` 会通过 `setText` 设置字段并清除 runs 上同字段的覆盖。若未来要求只改选中文字片段，需要保留 Range、映射富文本 runs 并定义提交边界，不能由“已有文字工具栏”推导为已支持。
 
 ## 选区悬浮栏：建议路线
 

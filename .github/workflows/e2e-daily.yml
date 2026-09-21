@@ -39,7 +39,7 @@ jobs:
           persist-credentials: false
 
       - name: Initialize desktop source dependencies
-        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4

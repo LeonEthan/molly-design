@@ -42,7 +42,7 @@ macOS Intel、Windows 和 Linux 构建为实验性支持。
 ```sh
 git clone https://github.com/LeonEthan/molly-design.git
 cd molly-design
-git submodule update --init packages/acp-extension-core packages/acp-extension-dsh packages/design-bento/bento
+git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 corepack pnpm install
 corepack pnpm start:local
 ```

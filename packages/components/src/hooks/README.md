@@ -33,7 +33,22 @@ The local platform auth provider derives a static session view from the CLI-owne
 installation snapshot. `useStableSession` reads that context for existing UI
 consumers and performs no authentication request or retry.
 
+## `use-session-actions.ts`
+
+Native design editors survive ordinary navigation, so permanent deletion must
+explicitly close them. Both direct and archived deletion preflight all lifecycle
+canvases through `design.leave`, then use `design.close` before deleting documents
+or queueing machine cleanup. The native service owns flushing, unsaved-edit dialogs,
+and WebContents disposal; the hook does not delete artwork bytes. A failed or
+cancelled preflight leaves all editors and session documents available.
+
 ## Workspace catalog hooks
+
+Machine Flock timing goes to `PerformanceObserver` and slow-operation debug output.
+`use-machine-flock-rows.ts` clears its own completed measure immediately after
+recording it; observers still receive the queued entry, while retrospective
+`performance.getEntriesByType('measure')` does not accumulate every completed read
+or sync. Other sources' measures are untouched.
 
 The workspace catalog is ONE small document, but a consumer mounts for every visible
 session plus every hidden child tab and side chat, so per-mount leases multiply room

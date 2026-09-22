@@ -65,6 +65,19 @@ editor controls, save/reopen, conflict protection and exact 913×617 PNG/JPEG
 exports, and checks that local updates remain disabled even with the legacy
 force-enable flag. These opt-in probes use synthetic designs and no model calls.
 
+Canvas disposal retires per-surface callbacks and closes owned contents. Electron
+partitions live for the process lifetime, so clean partitions are reused through
+exclusive leases with fresh origins, after native destruction and request drainage.
+Cleanup failure quarantines the partition; simultaneous editors/previews/exports
+never share a lease. Hidden editors retain their original contents and lease.
+The focused regression is `pnpm --filter @molly/e2e canvas:resources`; see the
+[lifecycle note](../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-reuse.zh.md)
+and earlier [callback-retention fix](../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-callback-retention.zh.md).
+Remaining process-memory trends need allocation and lifetime evidence: Chromium
+also retains bounded storage caches and delayed frame resources. See the
+[native-memory attribution](../../.agents/notes/implemented/testing/2026-09-22-memory-growth-attribution.zh.md)
+before interpreting a post-GC private-memory increase as another canvas leak.
+
 For installed-package verification, copy the application from its DMG into a
 private test location. Set both `MOLLY_DATA_DIR` and
 `MOLLY_ELECTRON_USER_DATA_DIR` to separate private test directories and launch the

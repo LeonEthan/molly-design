@@ -364,33 +364,36 @@ async function renderSourcePreview(
       resource.dispose()
       return { status: 'superseded' as const }
     }
-    const view = new WebContentsView({
-      webPreferences: {
-        session: resource.isolated,
-        sandbox: true,
-        contextIsolation: true,
-        nodeIntegration: false,
-        backgroundThrottling: false
-      }
-    })
-    const [width, height] = owner.getContentSize()
-    const intended = boundsByHost.get(hostId) ??
-      currentDesignBounds(hostId) ?? { x: 0, y: 0, width, height }
-    view.setBounds({
-      x: Math.round(intended.x),
-      y: Math.round(intended.y),
-      width: Math.max(1, Math.round(intended.width)),
-      height: Math.max(1, Math.round(intended.height))
-    })
+    const view = resource.own(
+      () =>
+        new WebContentsView({
+          webPreferences: {
+            session: resource.isolated,
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false,
+            backgroundThrottling: false
+          }
+        })
+    )
     const preparing = staging.get(hostId) ?? new Set<WebContentsView>()
     preparing.add(view)
     staging.set(hostId, preparing)
-    view.setVisible(boundsByHost.has(hostId) || isDesignVisible(hostId))
-    owner.contentView.addChildView(view, 0)
-    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-    view.webContents.on('will-navigate', (event) => event.preventDefault())
-    view.webContents.on('will-redirect', (event) => event.preventDefault())
     try {
+      const [width, height] = owner.getContentSize()
+      const intended = boundsByHost.get(hostId) ??
+        currentDesignBounds(hostId) ?? { x: 0, y: 0, width, height }
+      view.setBounds({
+        x: Math.round(intended.x),
+        y: Math.round(intended.y),
+        width: Math.max(1, Math.round(intended.width)),
+        height: Math.max(1, Math.round(intended.height))
+      })
+      view.setVisible(boundsByHost.has(hostId) || isDesignVisible(hostId))
+      owner.contentView.addChildView(view, 0)
+      view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+      view.webContents.on('will-navigate', (event) => event.preventDefault())
+      view.webContents.on('will-redirect', (event) => event.preventDefault())
       await view.webContents.loadURL(resource.url)
       await view.webContents.executeJavaScript(`new Promise((resolve, reject) => {
         const timer = setTimeout(() => { observer.disconnect(); reject(Error('Preview rendering timed out')); }, 30000);

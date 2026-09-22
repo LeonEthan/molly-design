@@ -1,36 +1,174 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 1460c6b29d66d8e6e2c594e8aab02653d5c9fef4..627d4bb447c32b18843cfb76ea69772f3ff982d5 100644
+index 1460c6b29d66d8e6e2c594e8aab02653d5c9fef4..51f7204dff4a1f459ed447738ff9b6f332831b57 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -3527,6 +3527,7 @@ var LoroRepo = class LoroRepo {
--	async ready() {
--		if (this.metaPersister) {
--			const version = this.metaFlock.version();
--			this.metaPersister.start(version);
--		}
+@@ -1098,7 +1098,7 @@ var LazyMetadataCache = class {
+-		const cached = this.cache.get(docId);
++		const cached = this.cache.get(docId);
+-		if (cached !== void 0) return cached;
++		if (cached !== void 0) return cached;
+-		const meta = this.readFromFlock(docId);
++		const meta = this.readFromFlock(docId);
+-		if (meta) this.cache.set(docId, meta);
++		if (meta && !this.retireDeleted(docId)) this.cache.set(docId, meta);
+-		return meta;
++		return meta;
 -	}
++	}
+-	/**
++	/**
+@@ -1118,7 +1118,7 @@ var LazyMetadataCache = class {
+-	* The caller is responsible for writing to Flock.
++	* The caller is responsible for writing to Flock.
+-	*/
++	*/
+-	set(docId, meta) {
++	set(docId, meta) {
+-		this.cache.set(docId, meta);
++		if (!this.retireDeleted(docId)) this.cache.set(docId, meta);
+-		this.docIdIndexDirty = true;
++		this.docIdIndexDirty = true;
+-	}
++	}
+-	/**
++	/**
+@@ -1132,6 +1132,14 @@ var LazyMetadataCache = class {
+-	/**
++	/**
+-	* Clear all cached data.
++	* Clear all cached data.
+-	*/
++	*/
++	// Field-row events carry their own patch, so deleted metadata can be read
++	// from Flock on demand. Legacy whole-object rows still need a previous
++	// snapshot to report removed fields precisely; retain those until migrated.
++	retireDeleted(docId) {
++		if (this.metaFlock.get(["e", docId]) !== false || this.metaFlock.get(["m", docId]) !== void 0) return false;
++		this.cache.delete(docId);
++		return true;
++	}
+-	clear() {
++	clear() {
+-		this.cache.clear();
++		this.cache.clear();
+-		this.docIdIndex = void 0;
++		this.docIdIndex = void 0;
+@@ -1341,7 +1349,10 @@ var MetadataManager = class {
+-		const nextExistence = this.readExistenceStateFromFlock(docId);
++		const nextExistence = this.readExistenceStateFromFlock(docId);
+-		if (previousExistence !== nextExistence) this.cache.markDocIdsDirty();
++		if (previousExistence !== nextExistence) this.cache.markDocIdsDirty();
+-		this.applyExistenceState(docId, previousExistence, nextExistence, by);
++		this.applyExistenceState(docId, previousExistence, nextExistence, by);
+-		if (!(options.metadataChanged ?? Boolean(options.metadataPatchHint))) return;
++		if (!(options.metadataChanged ?? Boolean(options.metadataPatchHint))) {
++			this.cache.retireDeleted(docId);
++			return;
++		}
+-		const previousMetadata = this.cache.peek(docId);
++		const previousMetadata = this.cache.peek(docId);
+-		const nextMetadata = nextExistence === "missing" ? void 0 : this.cache.readFromFlock(docId);
++		const nextMetadata = nextExistence === "missing" ? void 0 : this.cache.readFromFlock(docId);
+-		const patch = this.computeMetadataPatch(previousMetadata, nextMetadata, options.metadataPatchHint);
++		const patch = this.computeMetadataPatch(previousMetadata, nextMetadata, options.metadataPatchHint);
+@@ -3525,6 +3536,7 @@ var LoroRepo = class LoroRepo {
+-		return repo;
++		return repo;
+-	}
++	}
+-	async ready() {
 +	async ready() {
 +		await this.syncRunner.ensureMetaLiveMonitor();
+-		if (this.metaPersister) {
 +		if (this.metaPersister) {
+-			const version = this.metaFlock.version();
 +			const version = this.metaFlock.version();
+-			this.metaPersister.start(version);
 +			this.metaPersister.start(version);
-+		}
-+	}
 diff --git a/dist/index.js b/dist/index.js
-index 36afa6cc081db6f3d6b5073133cf9c8f209f92c2..7e2f66756d2d742b587f920a0dd0696973e48e02 100644
+index 36afa6cc081db6f3d6b5073133cf9c8f209f92c2..f5aa656b4ffc70a9a0db20b45d98e8324be53366 100644
 --- a/dist/index.js
 +++ b/dist/index.js
-@@ -3524,6 +3524,7 @@ var LoroRepo = class LoroRepo {
--	async ready() {
--		if (this.metaPersister) {
--			const version = this.metaFlock.version();
--			this.metaPersister.start(version);
--		}
+@@ -1095,7 +1095,7 @@ var LazyMetadataCache = class {
+-		const cached = this.cache.get(docId);
++		const cached = this.cache.get(docId);
+-		if (cached !== void 0) return cached;
++		if (cached !== void 0) return cached;
+-		const meta = this.readFromFlock(docId);
++		const meta = this.readFromFlock(docId);
+-		if (meta) this.cache.set(docId, meta);
++		if (meta && !this.retireDeleted(docId)) this.cache.set(docId, meta);
+-		return meta;
++		return meta;
 -	}
++	}
+-	/**
++	/**
+@@ -1115,7 +1115,7 @@ var LazyMetadataCache = class {
+-	* The caller is responsible for writing to Flock.
++	* The caller is responsible for writing to Flock.
+-	*/
++	*/
+-	set(docId, meta) {
++	set(docId, meta) {
+-		this.cache.set(docId, meta);
++		if (!this.retireDeleted(docId)) this.cache.set(docId, meta);
+-		this.docIdIndexDirty = true;
++		this.docIdIndexDirty = true;
+-	}
++	}
+-	/**
++	/**
+@@ -1129,6 +1129,14 @@ var LazyMetadataCache = class {
+-	/**
++	/**
+-	* Clear all cached data.
++	* Clear all cached data.
+-	*/
++	*/
++	// Field-row events carry their own patch, so deleted metadata can be read
++	// from Flock on demand. Legacy whole-object rows still need a previous
++	// snapshot to report removed fields precisely; retain those until migrated.
++	retireDeleted(docId) {
++		if (this.metaFlock.get(["e", docId]) !== false || this.metaFlock.get(["m", docId]) !== void 0) return false;
++		this.cache.delete(docId);
++		return true;
++	}
+-	clear() {
++	clear() {
+-		this.cache.clear();
++		this.cache.clear();
+-		this.docIdIndex = void 0;
++		this.docIdIndex = void 0;
+@@ -1338,7 +1346,10 @@ var MetadataManager = class {
+-		const nextExistence = this.readExistenceStateFromFlock(docId);
++		const nextExistence = this.readExistenceStateFromFlock(docId);
+-		if (previousExistence !== nextExistence) this.cache.markDocIdsDirty();
++		if (previousExistence !== nextExistence) this.cache.markDocIdsDirty();
+-		this.applyExistenceState(docId, previousExistence, nextExistence, by);
++		this.applyExistenceState(docId, previousExistence, nextExistence, by);
+-		if (!(options.metadataChanged ?? Boolean(options.metadataPatchHint))) return;
++		if (!(options.metadataChanged ?? Boolean(options.metadataPatchHint))) {
++			this.cache.retireDeleted(docId);
++			return;
++		}
+-		const previousMetadata = this.cache.peek(docId);
++		const previousMetadata = this.cache.peek(docId);
+-		const nextMetadata = nextExistence === "missing" ? void 0 : this.cache.readFromFlock(docId);
++		const nextMetadata = nextExistence === "missing" ? void 0 : this.cache.readFromFlock(docId);
+-		const patch = this.computeMetadataPatch(previousMetadata, nextMetadata, options.metadataPatchHint);
++		const patch = this.computeMetadataPatch(previousMetadata, nextMetadata, options.metadataPatchHint);
+@@ -3522,6 +3533,7 @@ var LoroRepo = class LoroRepo {
+-		return repo;
++		return repo;
+-	}
++	}
+-	async ready() {
 +	async ready() {
 +		await this.syncRunner.ensureMetaLiveMonitor();
+-		if (this.metaPersister) {
 +		if (this.metaPersister) {
+-			const version = this.metaFlock.version();
 +			const version = this.metaFlock.version();
+-			this.metaPersister.start(version);
 +			this.metaPersister.start(version);
-+		}
-+	}

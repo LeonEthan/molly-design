@@ -22,6 +22,7 @@ collects Electron main and renderer garbage, and captures the post-GC state.
 pnpm e2e:scout
 pnpm e2e:scout -- --journey review --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
+pnpm e2e:scout -- --journey work --iterations 30 --warmup 3 --checkpoint-every 5 --heap-baseline
 ```
 
 ## Measurements
@@ -31,6 +32,29 @@ heap, DOM nodes/documents/listeners, CLI and ACP RSS/CPU/process counts, and
 renderer long-task/layout/style/task/layer-paint counters. Process-table
 commands are classified in memory and discarded; artifacts contain metrics,
 PIDs, and parent PIDs but not raw command lines or environment variables.
+
+For retained-object diagnosis, `--heap-baseline` saves main/renderer snapshots
+after the first measured post-GC checkpoint in `heap-baseline/`, and always saves
+the final pair in `heap/`. The option is recorded in the round summary. Heap
+capture perturbs timing and memory, so use this opt-in run for object/reference
+comparison, not as a replacement for the normal soak's performance evidence.
+Default sampling and trend thresholds are unchanged.
+
+Post-GC memory is not the size of the live object graph. On macOS, main
+`privateBytes` is Chromium's physical-footprint accounting after subtracting
+shared resident memory; a change in that subtraction can increase the private
+metric while the total footprint falls. V8 can also retain mostly empty heap
+capacity after ordinary GC. A deterministic detailed memory dump invokes V8's
+low-memory collection and can reclaim that capacity, so its curve is not a
+normal Scout baseline.
+
+Repeated Work iterations create distinct durable records and canvas origins.
+Separate retained data, cache filling and delayed native release from an
+unbounded lifecycle defect. For example, the pinned Chromium keeps unloaded
+frame keepalive contexts briefly and caches unused localStorage areas with a
+per-storage-context eviction boundary. The
+[allocation investigation](../.agents/notes/implemented/testing/2026-09-22-memory-growth-attribution.zh.md)
+records controlled release/eviction evidence and the limits of those conclusions.
 
 The report includes both Theil-Sen slope per checkpoint and a slope normalized
 to one user-journey iteration. Only resources with a controllable GC or an

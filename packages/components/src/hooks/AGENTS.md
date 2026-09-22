@@ -32,6 +32,10 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
 
 ## Session, auth, and app shell
 
+- Permanent session deletion checks retained canvases across the selected lifecycle
+  before disposing views or queueing machine cleanup. Reuse native save/close guards;
+  cancellation or failure preserves session documents. Navigation/archival alone
+  must not dispose retained editors, and closing views never deletes artwork files.
 - `useStableSession` reads the local platform's static authentication context.
   The CLI-owned installation snapshot supplies user identity; no renderer auth
   refresh, retry, or product-cloud sign-out is part of this hook.
@@ -49,6 +53,9 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
 
 ## Workspace catalog
 
+- Machine Flock timing entries are transient diagnostics: clear each completed
+  measure by its own name after enqueueing it for observers; never clear other
+  owners' timing entries or retain a per-read global timeline.
 - `use-workspace-catalog.ts` reads a ref-counted per-workspace room in
   `lib/workspace-catalog-room.ts`; it must not open the Flock document, subscribe, or
   join the room per mount. MCP servers and Agent Roles are two row families of that ONE

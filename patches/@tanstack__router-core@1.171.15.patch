@@ -1,0 +1,287 @@
+diff --git a/dist/cjs/scroll-restoration.cjs b/dist/cjs/scroll-restoration.cjs
+index 1dadeb0d311c763e0d2a619993f4198d946dfab3..ef917546040b4d1c0f31ef6ece9df05afccae4c3 100644
+--- a/dist/cjs/scroll-restoration.cjs
++++ b/dist/cjs/scroll-restoration.cjs
+@@ -19,11 +19,43 @@ function createScrollRestorationCache() {
+ function persistScrollRestorationCache() {
+-	try {
++	try {
+-		safeSessionStorage?.setItem(storageKey, JSON.stringify(scrollRestorationCache));
++		safeSessionStorage?.setItem(storageKey, JSON.stringify(scrollRestorationCache));
++		safeSessionStorage?.setItem(navigationOwnersStorageKey, JSON.stringify(navigationOwners));
+-	} catch {
++	} catch {
+-		if (process.env.NODE_ENV !== "production") console.warn("[ts-router] Could not persist scroll restoration state to sessionStorage.");
++		if (process.env.NODE_ENV !== "production") console.warn("[ts-router] Could not persist scroll restoration state to sessionStorage.");
+-	}
++	}
+ }
+ const scrollRestorationCache = /* @__PURE__ */ createScrollRestorationCache();
++const navigationOwnersStorageKey = `${storageKey}:navigation-owners`;
++const navigationOwners = (() => {
++  try {
++    const value = JSON.parse(safeSessionStorage?.getItem(navigationOwnersStorageKey) || "{}");
++    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
++  } catch {
++    return {};
++  }
++})();
++function getScrollNavigation() {
++  return window.navigation;
++}
++function rememberScrollNavigation(location) {
++  const entry = getScrollNavigation()?.currentEntry;
++  const key = location.state.__TSR_key;
++  if (entry?.id && key && key === history.state?.__TSR_key) {
++    navigationOwners[key] = entry.id;
++  }
++}
++function retireDisposedScrollEntries() {
++  const navigation = getScrollNavigation();
++  if (!navigation?.currentEntry || !navigation.entries) return;
++  const liveIds = new Set(navigation.entries().map((entry) => entry.id));
++  for (const [key, id] of Object.entries(navigationOwners)) {
++    if (typeof id === "string" && !liveIds.has(id)) {
++      delete scrollRestorationCache[key];
++      delete navigationOwners[key];
++    }
++  }
++}
++
+ const scrollRestorationIdAttribute = "data-scroll-restoration-id";
+ /**
+ * The default `getKey` function for `useScrollRestoration`.
+@@ -96,16 +128,24 @@ function setupScrollRestoration(router, force) {
+-		scroll.restoration = true;
++		scroll.restoration = true;
+-		ignoreScroll = false;
++		ignoreScroll = false;
+-		history.scrollRestoration = "manual";
++		history.scrollRestoration = "manual";
++    const ownsNativeEntries = !router.options.getScrollRestorationKey;
++    if (ownsNativeEntries) {
++      rememberScrollNavigation(router.stores.location.get());
++      retireDisposedScrollEntries();
++      router.subscribe("onRendered", (event) => { rememberScrollNavigation(event.toLocation); queueMicrotask(retireDisposedScrollEntries); });
++    }
+-		document.addEventListener("scroll", (event) => {
++		document.addEventListener("scroll", (event) => {
+-			if (ignoreScroll) return;
++			if (ignoreScroll) return;
+-			trackedScrollTargets.add(event.target);
++			trackedScrollTargets.add(event.target);
+-		}, true);
++		}, true);
+-		router.subscribe("onBeforeLoad", (event) => {
++		router.subscribe("onBeforeLoad", (event) => {
++      if (ownsNativeEntries) { if (event.fromLocation) rememberScrollNavigation(event.fromLocation); rememberScrollNavigation(event.toLocation); }
+-			if (event.fromLocation) snapshotCurrentScrollTargets(getKey(event.fromLocation));
++			if (event.fromLocation) snapshotCurrentScrollTargets(getKey(event.fromLocation));
+-			trackedScrollTargets.clear();
++			trackedScrollTargets.clear();
+-		});
++		});
+-		addEventListener("pagehide", () => {
++		addEventListener("pagehide", () => {
+-			snapshotCurrentScrollTargets(getKey(router.stores.resolvedLocation.get() ?? router.stores.location.get()));
++			snapshotCurrentScrollTargets(getKey(router.stores.resolvedLocation.get() ?? router.stores.location.get()));
++			if (ownsNativeEntries) retireDisposedScrollEntries();
+-			persistScrollRestorationCache();
++			persistScrollRestorationCache();
+-		});
++		});
+-	}
++	}
+diff --git a/dist/esm/scroll-restoration.js b/dist/esm/scroll-restoration.js
+index 4c061dd10869fc2cbd2f866b7e4b5bde633987b1..9c8fbf99d6d4326edda70442550817eacb1aa490 100644
+--- a/dist/esm/scroll-restoration.js
++++ b/dist/esm/scroll-restoration.js
+@@ -19,11 +19,43 @@ function createScrollRestorationCache() {
+ function persistScrollRestorationCache() {
+-	try {
++	try {
+-		safeSessionStorage?.setItem(storageKey, JSON.stringify(scrollRestorationCache));
++		safeSessionStorage?.setItem(storageKey, JSON.stringify(scrollRestorationCache));
++		safeSessionStorage?.setItem(navigationOwnersStorageKey, JSON.stringify(navigationOwners));
+-	} catch {
++	} catch {
+-		if (process.env.NODE_ENV !== "production") console.warn("[ts-router] Could not persist scroll restoration state to sessionStorage.");
++		if (process.env.NODE_ENV !== "production") console.warn("[ts-router] Could not persist scroll restoration state to sessionStorage.");
+-	}
++	}
+ }
+ const scrollRestorationCache = /* @__PURE__ */ createScrollRestorationCache();
++const navigationOwnersStorageKey = `${storageKey}:navigation-owners`;
++const navigationOwners = (() => {
++  try {
++    const value = JSON.parse(safeSessionStorage?.getItem(navigationOwnersStorageKey) || "{}");
++    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
++  } catch {
++    return {};
++  }
++})();
++function getScrollNavigation() {
++  return window.navigation;
++}
++function rememberScrollNavigation(location) {
++  const entry = getScrollNavigation()?.currentEntry;
++  const key = location.state.__TSR_key;
++  if (entry?.id && key && key === history.state?.__TSR_key) {
++    navigationOwners[key] = entry.id;
++  }
++}
++function retireDisposedScrollEntries() {
++  const navigation = getScrollNavigation();
++  if (!navigation?.currentEntry || !navigation.entries) return;
++  const liveIds = new Set(navigation.entries().map((entry) => entry.id));
++  for (const [key, id] of Object.entries(navigationOwners)) {
++    if (typeof id === "string" && !liveIds.has(id)) {
++      delete scrollRestorationCache[key];
++      delete navigationOwners[key];
++    }
++  }
++}
++
+ const scrollRestorationIdAttribute = "data-scroll-restoration-id";
+ /**
+ * The default `getKey` function for `useScrollRestoration`.
+@@ -96,16 +128,24 @@ function setupScrollRestoration(router, force) {
+-		scroll.restoration = true;
++		scroll.restoration = true;
+-		ignoreScroll = false;
++		ignoreScroll = false;
+-		history.scrollRestoration = "manual";
++		history.scrollRestoration = "manual";
++    const ownsNativeEntries = !router.options.getScrollRestorationKey;
++    if (ownsNativeEntries) {
++      rememberScrollNavigation(router.stores.location.get());
++      retireDisposedScrollEntries();
++      router.subscribe("onRendered", (event) => { rememberScrollNavigation(event.toLocation); queueMicrotask(retireDisposedScrollEntries); });
++    }
+-		document.addEventListener("scroll", (event) => {
++		document.addEventListener("scroll", (event) => {
+-			if (ignoreScroll) return;
++			if (ignoreScroll) return;
+-			trackedScrollTargets.add(event.target);
++			trackedScrollTargets.add(event.target);
+-		}, true);
++		}, true);
+-		router.subscribe("onBeforeLoad", (event) => {
++		router.subscribe("onBeforeLoad", (event) => {
++      if (ownsNativeEntries) { if (event.fromLocation) rememberScrollNavigation(event.fromLocation); rememberScrollNavigation(event.toLocation); }
+-			if (event.fromLocation) snapshotCurrentScrollTargets(getKey(event.fromLocation));
++			if (event.fromLocation) snapshotCurrentScrollTargets(getKey(event.fromLocation));
+-			trackedScrollTargets.clear();
++			trackedScrollTargets.clear();
+-		});
++		});
+-		addEventListener("pagehide", () => {
++		addEventListener("pagehide", () => {
+-			snapshotCurrentScrollTargets(getKey(router.stores.resolvedLocation.get() ?? router.stores.location.get()));
++			snapshotCurrentScrollTargets(getKey(router.stores.resolvedLocation.get() ?? router.stores.location.get()));
++			if (ownsNativeEntries) retireDisposedScrollEntries();
+-			persistScrollRestorationCache();
++			persistScrollRestorationCache();
+-		});
++		});
+-	}
++	}
+diff --git a/src/scroll-restoration.ts b/src/scroll-restoration.ts
+index 5e4ae0d3ee352f28b309d40f34adc9aa2a78e721..cf2eb0ed07865bc7698135add8d8f1322ad83b33 100644
+--- a/src/scroll-restoration.ts
++++ b/src/scroll-restoration.ts
+@@ -44,6 +44,7 @@ function persistScrollRestorationCache() {
+       storageKey,
+       JSON.stringify(scrollRestorationCache),
+     )
++    safeSessionStorage?.setItem(navigationOwnersStorageKey, JSON.stringify(navigationOwners))
+   } catch {
+     if (process.env.NODE_ENV !== 'production') {
+       console.warn(
+@@ -54,6 +55,50 @@ function persistScrollRestorationCache() {
+ }
+-
++
+ const scrollRestorationCache = /* @__PURE__ */ createScrollRestorationCache()
++// Native history entries, unlike history.length, identify exactly which keys
++// can still be reached. Unmapped legacy entries and custom getKey caches remain
++// untouched: absence of ownership evidence is not permission to discard state.
++const navigationOwnersStorageKey = `${storageKey}:navigation-owners`
++const navigationOwners: Record<string, string> = (() => {
++  try {
++    const value = JSON.parse(safeSessionStorage?.getItem(navigationOwnersStorageKey) || '{}')
++    return value && typeof value === 'object' && !Array.isArray(value) ? value : {}
++  } catch {
++    return {}
++  }
++})()
++
++type ScrollNavigation = {
++  currentEntry: { id: string } | null
++  entries(): Array<{ id: string }>
++}
++
++function getScrollNavigation(): ScrollNavigation | undefined {
++  return (window as Window & { navigation?: ScrollNavigation }).navigation
++}
++
++function rememberScrollNavigation(location: ParsedLocation) {
++  const entry = getScrollNavigation()?.currentEntry
++  const key = location.state.__TSR_key
++  // Memory histories and locations that have not committed must not be assigned
++  // ownership of the browser's current entry.
++  if (entry?.id && key && key === history.state?.__TSR_key) {
++    navigationOwners[key] = entry.id
++  }
++}
++
++function retireDisposedScrollEntries() {
++  const navigation = getScrollNavigation()
++  if (!navigation?.currentEntry || !navigation.entries) return
++  const liveIds = new Set(navigation.entries().map((entry) => entry.id))
++  for (const [key, id] of Object.entries(navigationOwners)) {
++    if (typeof id === 'string' && !liveIds.has(id)) {
++      delete scrollRestorationCache[key]
++      delete navigationOwners[key]
++    }
++  }
++}
++
+ const scrollRestorationIdAttribute = 'data-scroll-restoration-id'
+-
++
+ /**
+@@ -203,6 +248,15 @@ export function setupScrollRestoration(router: AnyRouter, force?: boolean) {
+-
++
+     history.scrollRestoration = 'manual'
+-
++
++    const ownsNativeEntries = !router.options.getScrollRestorationKey
++    if (ownsNativeEntries) {
++      rememberScrollNavigation(router.stores.location.get())
++      retireDisposedScrollEntries()
++      // The restore handler below still needs fromLocation during replace/branch
++      // transitions. Retire only after every synchronous onRendered subscriber.
++      router.subscribe('onRendered', (event) => { rememberScrollNavigation(event.toLocation); queueMicrotask(retireDisposedScrollEntries) })
++    }
++
+     document.addEventListener(
+       'scroll',
+       (event) => {
+@@ -214,6 +268,7 @@ export function setupScrollRestoration(router: AnyRouter, force?: boolean) {
+       true,
+     )
+     router.subscribe('onBeforeLoad', (event) => {
++      if (ownsNativeEntries) { if (event.fromLocation) rememberScrollNavigation(event.fromLocation); rememberScrollNavigation(event.toLocation) }
+       if (event.fromLocation) {
+         snapshotCurrentScrollTargets(getKey(event.fromLocation))
+       }
+@@ -225,6 +280,7 @@ export function setupScrollRestoration(router: AnyRouter, force?: boolean) {
+           router.stores.resolvedLocation.get() ?? router.stores.location.get(),
+         ),
+       )
++      if (ownsNativeEntries) retireDisposedScrollEntries()
+       persistScrollRestorationCache()
+     })
+   }

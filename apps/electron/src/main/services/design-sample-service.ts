@@ -1,11 +1,11 @@
-import { app, BrowserWindow, dialog, protocol, session } from 'electron'
+import { app, BrowserWindow, dialog, protocol } from 'electron'
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { open, readFile, rename, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { acquireDesignSession } from './design-session'
 
-const origin = 'molly-design://sample'
 const run = promisify(execFile)
 const resourceRoot = () =>
   app.isPackaged
@@ -72,57 +72,70 @@ async function createSampleWindow(show: boolean) {
   if (createHash('sha256').update(shell).digest('hex') !== manifest.shellSha256) {
     throw new Error('Bento resource integrity failure')
   }
-  const isolated = session.fromPartition(`molly-design-${randomUUID()}`)
-  isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
-  isolated.setPermissionCheckHandler(() => false)
-  isolated.webRequest.onBeforeRequest((details, callback) => {
-    callback({
-      cancel: !details.url.startsWith(`${origin}/`) && !/^(data|blob):/.test(details.url)
-    })
-  })
-  await isolated.protocol.handle('molly-design', (request) => {
-    const url = new URL(request.url)
-    if (request.method !== 'GET' || url.host !== 'sample')
-      return new Response(null, { status: 403 })
-    const headers = {
-      'Cache-Control': 'no-store',
-      'Content-Security-Policy':
-        "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self' data:; worker-src blob:; base-uri 'none'; form-action 'none'"
-    }
-    if (url.pathname === '/editor.html')
-      return new Response(shell, { headers: { ...headers, 'Content-Type': 'text/html' } })
-    if (url.pathname === '/ws/molly-p0') return Response.json(payload, { headers })
-    return new Response(null, { status: 404 })
-  })
-  const window = new BrowserWindow({
-    width: 800,
-    height: 600,
-    useContentSize: true,
-    show: false,
-    title: 'Molly — Sample',
-    backgroundColor: '#00000000',
-    transparent: true,
-    resizable: false,
-    webPreferences: {
-      session: isolated,
-      sandbox: true,
-      contextIsolation: true,
-      nodeIntegration: false
-    }
-  })
-  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-  window.webContents.on('will-navigate', (event) => event.preventDefault())
-  window.webContents.on('will-redirect', (event) => event.preventDefault())
-  window.on('closed', () => {
-    isolated.protocol.unhandle('molly-design')
-  })
+  const lease = await acquireDesignSession()
+  const isolated = lease.session
+  const host = 'sample-' + randomUUID()
+  const origin = 'molly-design://' + host
   try {
-    await window.loadURL(`${origin}/editor.html?ws=molly-p0`)
-    await window.webContents.executeJavaScript(prepareStage)
-    if (show) window.show()
-    return window
+    isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+    isolated.setPermissionCheckHandler(() => false)
+    isolated.webRequest.onBeforeRequest((details, callback) => {
+      callback({
+        cancel: !details.url.startsWith(`${origin}/`) && !/^(data|blob):/.test(details.url)
+      })
+    })
+    await isolated.protocol.handle('molly-design', (request) =>
+      lease.run(() => {
+        const url = new URL(request.url)
+        if (request.method !== 'GET' || url.protocol !== 'molly-design:' || url.host !== host)
+          return new Response(null, { status: 403 })
+        const headers = {
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy':
+            "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self' data:; worker-src blob:; base-uri 'none'; form-action 'none'"
+        }
+        if (url.pathname === '/editor.html')
+          return new Response(shell, { headers: { ...headers, 'Content-Type': 'text/html' } })
+        if (url.pathname === '/ws/molly-p0') return Response.json(payload, { headers })
+        return new Response(null, { status: 404 })
+      })
+    )
+    const window = lease.own(
+      () =>
+        new BrowserWindow({
+          width: 800,
+          height: 600,
+          useContentSize: true,
+          show: false,
+          title: 'Molly — Sample',
+          backgroundColor: '#00000000',
+          transparent: true,
+          resizable: false,
+          webPreferences: {
+            session: isolated,
+            sandbox: true,
+            contextIsolation: true,
+            nodeIntegration: false
+          }
+        })
+    )
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    window.webContents.on('will-navigate', (event) => event.preventDefault())
+    window.webContents.on('will-redirect', (event) => event.preventDefault())
+    window.on('closed', () => {
+      lease.dispose()
+    })
+    try {
+      await window.loadURL(`${origin}/editor.html?ws=molly-p0`)
+      await window.webContents.executeJavaScript(prepareStage)
+      if (show) window.show()
+      return window
+    } catch (error) {
+      window.destroy()
+      throw error
+    }
   } catch (error) {
-    window.destroy()
+    lease.dispose()
     throw error
   }
 }

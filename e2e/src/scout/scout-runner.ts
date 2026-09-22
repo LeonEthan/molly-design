@@ -11,9 +11,7 @@ import {
   SECONDARY_REVIEW_DIFF_PATH,
   type SyntheticReviewRepository,
 } from '../support/fixtures/synthetic-review-repository.js';
-import {
-  WorkSessionFixture,
-} from '../support/fixtures/work-session-fixture.js';
+import { WorkSessionFixture } from '../support/fixtures/work-session-fixture.js';
 import { ElectronHarness } from '../support/electron-harness.js';
 import type { ScenarioArtifacts } from '../support/world-utils.js';
 import {
@@ -30,6 +28,7 @@ type ScoutOptions = {
   warmup: number;
   checkpointEvery: number;
   ablation: boolean;
+  heapBaseline: boolean;
 };
 
 type JourneyResult = {
@@ -72,7 +71,14 @@ function parseOptions(): ScoutOptions {
       `Scout requires at least 4 measured checkpoints; received ${checkpointCount} from ${iterations} iterations sampled every ${checkpointEvery}`
     );
   }
-  return { journeys, iterations, warmup, checkpointEvery, ablation };
+  return {
+    journeys,
+    iterations,
+    warmup,
+    checkpointEvery,
+    ablation,
+    heapBaseline: process.argv.includes('--heap-baseline'),
+  };
 }
 
 function createRoundId(): string {
@@ -248,6 +254,13 @@ async function runJourney(
           active,
           postGc,
         });
+        if (
+          options.heapBaseline &&
+          phase === 'measure' &&
+          checkpoints.filter((checkpoint) => checkpoint.phase === 'measure').length === 1
+        ) {
+          await harness.captureHeapSnapshots(join(harness.artifacts.scenarioDir, 'heap-baseline'));
+        }
       }
       process.stdout.write(
         `[scout:${journey}] ${phase} ${phase === 'warmup' ? run : measuredIteration}/${
@@ -258,7 +271,7 @@ async function runJourney(
 
     analysis = analyzeScoutCheckpoints(checkpoints);
     const suspectedTrends = analysis.suspectedTrends.map((trend) => ({ journey, ...trend }));
-    if (suspectedTrends.length > 0) {
+    if (suspectedTrends.length > 0 || options.heapBaseline) {
       await harness.captureHeapSnapshots(join(harness.artifacts.scenarioDir, 'heap'));
       await harness.stopTrace(join(harness.artifacts.scenarioDir, 'trace.zip'));
     }

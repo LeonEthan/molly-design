@@ -3,6 +3,12 @@
 Parent `AGENTS.md` files also apply. `CLAUDE.md` is a symlink; edit `AGENTS.md` only.
 Child directories (`sessions/`, `chat/`, `settings/`, …) own their own rules.
 
+## Terminal resources
+
+After changing xterm or its dependency patch, run
+`pnpm --filter @molly/e2e terminal:resources` against a prepared desktop build.
+Public terminal disposal must release its window and media-query listeners.
+
 ## Sidebar and session rows
 
 Ownership and explanations: [README.md](README.md).

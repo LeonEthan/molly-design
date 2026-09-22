@@ -22,6 +22,7 @@ collects Electron main and renderer garbage, and captures the post-GC state.
 pnpm e2e:scout
 pnpm e2e:scout -- --journey review --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
+pnpm e2e:scout -- --journey work --iterations 30 --warmup 3 --checkpoint-every 5 --heap-baseline
 ```
 
 ## Measurements
@@ -31,6 +32,13 @@ heap, DOM nodes/documents/listeners, CLI and ACP RSS/CPU/process counts, and
 renderer long-task/layout/style/task/layer-paint counters. Process-table
 commands are classified in memory and discarded; artifacts contain metrics,
 PIDs, and parent PIDs but not raw command lines or environment variables.
+
+For retained-object diagnosis, `--heap-baseline` saves main/renderer snapshots
+after the first measured post-GC checkpoint in `heap-baseline/`, and always saves
+the final pair in `heap/`. The option is recorded in the round summary. Heap
+capture perturbs timing and memory, so use this opt-in run for object/reference
+comparison, not as a replacement for the normal soak's performance evidence.
+Default sampling and trend thresholds are unchanged.
 
 The report includes both Theil-Sen slope per checkpoint and a slope normalized
 to one user-journey iteration. Only resources with a controllable GC or an

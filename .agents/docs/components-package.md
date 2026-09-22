@@ -34,6 +34,32 @@ and the public issue tracker. The inherited broad `lody*` cache wipe and
 sign-out reset are retired: deleting local-only data or another app's browser
 state cannot be treated as a recoverable cloud cache clear.
 
+## Session state after deletion
+
+Session navigation intentionally preserves composer Role choices, but `atomFamily`
+also retains its parameter-to-atom index after all consumers unmount. The shared
+`docMetaSubscriptionAtom` retires the deleted Session's metadata/relationship,
+presence and Role-selection families when the repo reports explicit deletion.
+This applies to local UI and daemon-observed deletion through the same boundary;
+temporary missing metadata and archival are not deletion. A later authoritative
+restore reads fresh metadata and hydrates Role state from durable Turns instead of
+reviving a deleted unsent choice. Repo tombstones and artwork files are unaffected.
+See the [retirement decision](../notes/implemented/bug-fix/2026-09-22-session-atom-retirement.zh.md).
+
+The pinned `loro-repo` patch also releases cached field-row metadata after deletion
+and avoids repopulating it during reads/listing. Flock retains metadata and deletion
+history; restored documents rehydrate from it. Legacy whole-object rows retain their
+previous snapshot because metadata events need it to report removed fields.
+
+Router scroll restoration keeps TanStack's existing keys and positions. The pinned
+router-core patch records their native `NavigationHistoryEntry.id` owners and retires
+only owners absent from `navigation.entries()`, after rendering. The owner index is
+persisted beside scroll positions for reloads. Custom restoration keys, unsupported
+Navigation API hosts and unmapped pre-upgrade entries keep the original behavior.
+The native `router:resources` probe covers browser eviction, traversal, replace,
+branching and reload without creating model sessions. See the
+[follow-up memory decision](../notes/implemented/bug-fix/2026-09-22-history-metadata-retirement.zh.md).
+
 ## File preview versus Code Collab
 
 File routing, cache, and caller contracts live in

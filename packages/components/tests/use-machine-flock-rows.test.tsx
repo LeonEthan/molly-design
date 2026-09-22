@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { createElement, Fragment, useEffect } from 'react';
+import { performance as nodePerformance, PerformanceObserver } from 'node:perf_hooks';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
@@ -175,6 +176,82 @@ function render(node: ReturnType<typeof createElement>): void {
 }
 
 describe('useMachineFlockRows', () => {
+  it('releases completed diagnostic measures while preserving observer delivery and other owners', async () => {
+    // jsdom does not implement User Timing. Exercise the real timing buffer with
+    // a fixed clock; neither elapsed time nor observer scheduling decides the test.
+    vi.stubGlobal('performance', {
+      now: () => 0,
+      measure: nodePerformance.measure.bind(nodePerformance),
+      clearMeasures: nodePerformance.clearMeasures.bind(nodePerformance),
+    });
+    const unrelated = 'another-owner:measure';
+    nodePerformance.measure(unrelated, { start: 0, duration: 0 });
+    const deliveredNames: string[] = [];
+    const observer = new PerformanceObserver((list) => {
+      deliveredNames.push(...list.getEntries().map((entry) => entry.name));
+    });
+    observer.observe({ entryTypes: ['measure'] });
+    let failRead = false;
+    const runtime = {
+      workspaceId: 'workspace-flock-measure-lifetime' as WorkspaceId,
+      workspaceSlug: 'workspace-flock-measure-lifetime',
+      repo: {
+        openFlockDoc: async () => ({
+          flock: {
+            subscribe: () => () => {},
+            scan: () => {
+              if (failRead) throw new Error('synthetic read failure');
+              return [];
+            },
+          },
+          syncOnce: async () => ({ ok: true, transports: [] }),
+        }),
+      },
+    } as unknown as WorkspaceRuntime;
+    try {
+      const store = createStore();
+      store.set(runtimeAtom, runtime);
+      store.set(currentWorkspaceIdAtom, runtime.workspaceId);
+      store.set(currentWorkspaceSlugAtom, 'workspace-flock-measure-lifetime');
+      render(
+        createElement(
+          Provider,
+          { store },
+          createElement(RowsProbe, {
+            machineId: 'machine-flock-measure-lifetime',
+            remoteMachineIds: [],
+            onRows: () => {},
+          })
+        )
+      );
+      await flushMicrotasks();
+      deliveredNames.push(...observer.takeRecords().map((entry) => entry.name));
+      for (let iteration = 0; iteration < 3; iteration++) {
+        await act(async () => {
+          await resyncMachineFlockRows(runtime, 'machine-flock-measure-lifetime' as MachineId);
+        });
+      }
+      failRead = true;
+      await expect(
+        resyncMachineFlockRows(runtime, 'machine-flock-measure-lifetime' as MachineId)
+      ).rejects.toThrow('synthetic read failure');
+      deliveredNames.push(...observer.takeRecords().map((entry) => entry.name));
+      for (const label of ['open-doc', 'read-local', 'sync-once', 'read-resync']) {
+        expect(deliveredNames.some((name) => name.startsWith(`lody:machine-flock:${label}`))).toBe(
+          true
+        );
+      }
+      expect(nodePerformance.getEntriesByType('measure').map((entry) => entry.name)).toEqual([
+        unrelated,
+      ]);
+    } finally {
+      unmountCurrentRoot();
+      observer.disconnect();
+      nodePerformance.clearMeasures();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('does not let a failed best-effort cloud leg deny a local-plane sync', async () => {
     // report.ok ANDs every attempted transport, so on a dual-homed doc a cloud
     // failure would deny an otherwise-good sync. Selection, not merging: ask

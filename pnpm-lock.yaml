@@ -122,14 +122,20 @@ patchedDependencies:
   '@radix-ui/react-scroll-area@1.2.10':
     hash: 242628a68cf58b131ec97c29e6637d7fd88ec311072b756212f09da46b733083
     path: patches/@radix-ui__react-scroll-area@1.2.10.patch
+  '@tanstack/router-core@1.171.15':
+    hash: 8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b
+    path: patches/@tanstack__router-core@1.171.15.patch
   '@tanstack/router-generator@1.159.4':
     hash: 14fe630c2d7f306f8e60169e6a0116cf02de74368af213699cb449aeeecc663a
     path: patches/@tanstack__router-generator@1.159.4.patch
+  '@xterm/xterm@5.5.0':
+    hash: c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5
+    path: patches/@xterm__xterm@5.5.0.patch
   app-builder-lib@26.15.3:
     hash: 80637977dda4ea924da866a67751774a621195429af5af0f103e9129b3bec57f
     path: patches/app-builder-lib@26.15.3.patch
   loro-repo@0.20.0:
-    hash: 74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357
+    hash: bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564
     path: patches/loro-repo.patch
   mdast-util-gfm-autolink-literal@2.0.1:
     hash: b03e2c531618296b99e716d479b68761f6ebc6c81dcd1e9359e80b71e6b5ee8e
@@ -310,7 +316,7 @@ importers:
         version: 2.3.2(loro-crdt@1.15.1)
       loro-repo:
         specifier: 'catalog:'
-        version: 0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
+        version: 0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
       ora:
         specifier: ^8.2.0
         version: 8.2.0
@@ -506,7 +512,7 @@ importers:
         version: 24.10.12
       loro-repo:
         specifier: 'catalog:'
-        version: 0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
+        version: 0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
       tsx:
         specifier: ^4.23.5
         version: 4.23.7
@@ -840,10 +846,10 @@ importers:
         version: 0.1.0(react@19.2.0)
       '@xterm/addon-fit':
         specifier: ^0.10.0
-        version: 0.10.0(@xterm/xterm@5.5.0)
+        version: 0.10.0(@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5))
       '@xterm/xterm':
         specifier: ^5.5.0
-        version: 5.5.0
+        version: 5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)
       '@zumer/snapdom':
         specifier: ^2.24.15
         version: 2.24.15
@@ -921,7 +927,7 @@ importers:
         version: 2.3.2(loro-crdt@1.15.1)(loro-mirror@2.3.2(loro-crdt@1.15.1))(react@19.2.0)
       loro-repo:
         specifier: 'catalog:'
-        version: 0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
+        version: 0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1)
       loro-websocket:
         specifier: 'catalog:'
         version: 0.6.2(@loro-dev/flock@4.4.4)(loro-crdt@1.15.1)
@@ -1315,7 +1321,7 @@ importers:
         version: 24.10.12
       loro-repo:
         specifier: 'catalog:'
-        version: 0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)(loro-crdt@1.15.1)
+        version: 0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)(loro-crdt@1.15.1)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
@@ -16473,7 +16479,7 @@ snapshots:
     dependencies:
       '@tanstack/history': 1.162.0
       '@tanstack/react-store': 0.9.3(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       isbot: 5.1.34
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
@@ -16481,7 +16487,7 @@ snapshots:
   '@tanstack/react-start-client@1.168.16(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/start-client-core': 1.170.14
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
@@ -16490,7 +16496,7 @@ snapshots:
   '@tanstack/react-start-rsc@0.1.32(esbuild@0.28.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(rolldown@1.1.5)(rollup@4.57.1)(vite@8.1.5(@types/node@24.10.12)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/router-utils': 1.162.2
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-fn-stubs': 1.162.0
@@ -16518,7 +16524,7 @@ snapshots:
   '@tanstack/react-start-server@1.167.22(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
       '@tanstack/react-router': 1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/start-server-core': 1.169.17
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
@@ -16593,7 +16599,7 @@ snapshots:
       tiny-invariant: 1.3.3
       tiny-warning: 1.0.3
 
-  '@tanstack/router-core@1.171.15':
+  '@tanstack/router-core@1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)':
     dependencies:
       '@tanstack/history': 1.162.0
       cookie-es: 3.1.1
@@ -16632,7 +16638,7 @@ snapshots:
   '@tanstack/router-generator@1.167.21':
     dependencies:
       '@babel/types': 7.29.0
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/router-utils': 1.162.2
       '@tanstack/virtual-file-routes': 1.162.0
       jiti: 2.7.0
@@ -16647,7 +16653,7 @@ snapshots:
       '@babel/core': 7.29.0
       '@babel/template': 7.28.6
       '@babel/types': 7.29.0
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/router-generator': 1.167.21
       '@tanstack/router-utils': 1.162.2
       chokidar: 5.0.0
@@ -16671,7 +16677,7 @@ snapshots:
       '@babel/core': 7.29.0
       '@babel/template': 7.28.6
       '@babel/types': 7.29.0
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/router-generator': 1.167.21
       '@tanstack/router-utils': 1.162.2
       chokidar: 5.0.0
@@ -16720,7 +16726,7 @@ snapshots:
 
   '@tanstack/start-client-core@1.170.14':
     dependencies:
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/start-fn-stubs': 1.162.0
       '@tanstack/start-storage-context': 1.167.17
       seroval: 1.6.0
@@ -16734,7 +16740,7 @@ snapshots:
       '@babel/code-frame': 7.27.1
       '@babel/core': 7.29.0
       '@babel/types': 7.29.0
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/router-generator': 1.167.21
       '@tanstack/router-plugin': 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(esbuild@0.28.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@8.1.5(@types/node@24.10.12)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))
       '@tanstack/router-utils': 1.162.2
@@ -16771,7 +16777,7 @@ snapshots:
   '@tanstack/start-server-core@1.169.17':
     dependencies:
       '@tanstack/history': 1.162.0
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
       '@tanstack/start-client-core': 1.170.14
       '@tanstack/start-storage-context': 1.167.17
       fetchdts: 0.1.7
@@ -16783,7 +16789,7 @@ snapshots:
 
   '@tanstack/start-storage-context@1.167.17':
     dependencies:
-      '@tanstack/router-core': 1.171.15
+      '@tanstack/router-core': 1.171.15(patch_hash=8696decf00587f1c33574c72e874a95ad50fb242d8b124078cfb4aac8edd419b)
     optional: true
 
   '@tanstack/store@0.8.0': {}
@@ -17552,11 +17558,11 @@ snapshots:
 
   '@xmldom/xmldom@0.8.11': {}
 
-  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0)':
+  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5))':
     dependencies:
-      '@xterm/xterm': 5.5.0
+      '@xterm/xterm': 5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)
 
-  '@xterm/xterm@5.5.0': {}
+  '@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)': {}
 
   '@zag-js/dismissable@1.42.0':
     dependencies:
@@ -20747,7 +20753,7 @@ snapshots:
 
   loro-protocol@0.3.0: {}
 
-  loro-repo@0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)(loro-crdt@1.15.1):
+  loro-repo@0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@12.10.0)(loro-crdt@1.15.1):
     dependencies:
       '@loro-dev/flock-wasm': 0.4.3
       '@loro-dev/streams-crdt': 0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1)
@@ -20764,7 +20770,7 @@ snapshots:
       - utf-8-validate
       - yjs
 
-  loro-repo@0.20.0(patch_hash=74be8ab90bed65c9ce8b0d7cb32f8cafdbd0ecda6d9b7c8048836600d116d357)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1):
+  loro-repo@0.20.0(patch_hash=bedebf72a3543ec16a158fa0e08d2429810f1ad56ed0190f4b446945598e6564)(@loro-dev/flock-wasm@0.4.3)(@loro-dev/flock@4.4.4)(@loro-dev/streams-crdt@0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1))(@types/better-sqlite3@7.6.13)(better-sqlite3@13.0.3)(loro-crdt@1.15.1):
     dependencies:
       '@loro-dev/flock-wasm': 0.4.3
       '@loro-dev/streams-crdt': 0.15.1(@loro-dev/flock-wasm@0.4.3)(loro-crdt@1.15.1)

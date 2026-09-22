@@ -53,6 +53,17 @@ Parent `AGENTS.md` files also apply.
   syncing state follows that same scoped readiness, not the coarser connection
   state; an online transport does not imply that workspace data is ready.
 
+- Session atom-family caches retire on authoritative document deletion in the
+  shared metadata subscription, including deletion observed from the daemon.
+  Navigation, archival and temporarily missing metadata preserve transient Role
+  choices; retirement leaves durable metadata/tombstones and artwork files intact.
+
+- Router scroll positions follow native history-entry ownership where available.
+  Retire only proven disposed entries after restoration; preserve reachable history,
+  reload state, custom keys and legacy entries without ownership evidence.
+- Deleted field-row metadata may leave LoroRepo's JS read cache, but Flock rows and
+  existence history remain authoritative. Preserve whole-object legacy diff baselines.
+
 ## Billing data
 
 - When authenticated user and workspace resolution completes, preload the billing

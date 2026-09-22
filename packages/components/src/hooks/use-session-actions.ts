@@ -48,9 +48,25 @@ import {
 import { resolveSessionCreateRepoFullName } from '@/lib/session-repo';
 import { collectSessionLifecycleIds } from '@/lib/session-lifecycle';
 import { capturePostHogEvent } from '@/lib/posthog-analytics';
-import { sendIpc } from '@/lib/electron-ipc-client';
+import { getIpcServices, sendIpc } from '@/lib/electron-ipc-client';
 
 const log = debug('lody:session-actions');
+
+async function closeSessionCanvases(sessionIds: Iterable<SessionId>): Promise<void> {
+  const design = getIpcServices()?.design;
+  if (!design) return;
+  const ids = [...sessionIds];
+  // Check the whole lifecycle first: a child with unsaved edits must be able
+  // to cancel without disposing its parent's still-open editor.
+  for (const sessionId of ids) {
+    if (!(await design.leave(sessionId))) throw new Error('Canvas close cancelled');
+  }
+  for (const sessionId of ids) {
+    // Hidden editors survive navigation. Permanent deletion is an explicit close,
+    // including its save/discard guard, not merely another renderer unmount.
+    if (!(await design.close(sessionId))) throw new Error('Canvas close cancelled');
+  }
+}
 
 type RepoDocMetaPatch = Parameters<WorkspaceRuntime['repo']['upsertDocMeta']>[1];
 type CreateSessionResult = {
@@ -1100,6 +1116,7 @@ export function useSessionActions(): SessionActions {
         }
       }
       const uniqueIds = Array.from(allIds);
+      await closeSessionCanvases(uniqueIds);
       await Promise.all(
         uniqueIds.map(async (id) => {
           await deleteSessionDocuments(id);
@@ -1309,6 +1326,9 @@ export function useSessionActions(): SessionActions {
       const rootMeta = { ...loadedMeta, id: loadedMeta.id ?? sessionId };
       const lifecycleSessions = getSessionLifecycleMetas(sessionId, rootMeta);
 
+      // Do not queue filesystem cleanup or delete any session document if a
+      // retained canvas refuses to close.
+      await closeSessionCanvases(lifecycleSessions.map((session) => session.id));
       for (const session of lifecycleSessions.reverse()) {
         await deleteArchivedSessionMeta(session);
       }

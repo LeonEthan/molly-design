@@ -1,5 +1,5 @@
 import { createStore } from 'jotai';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LoroRepo } from 'loro-repo';
 import {
   getAgentConfigRoomId,
@@ -19,7 +19,17 @@ import {
   machineMetaCacheAtom,
   sessionListAtom,
   sessionMetaCacheAtom,
+  sessionMetaAtomFamily,
+  childSessionsAtomFamily,
+  archivedChildSessionsAtomFamily,
+  openedSessionsAtomFamily,
+  sideSessionsAtomFamily,
 } from '../src/atoms/doc-meta';
+import { sessionLivePresenceAtomFamily, sessionLiveStatusAtomFamily } from '../src/atoms/presence';
+import {
+  sessionAgentRoleSelectionAtomFamily,
+  sessionAgentRoleDurableSnapshotAtomFamily,
+} from '../src/atoms/session-agent-roles';
 import { runtimeAtom, type WorkspaceRuntime } from '../src/atoms/runtime';
 
 type RepoWithSyncRunner = LoroRepo & {
@@ -146,6 +156,112 @@ const createRuntime = (repo: LoroRepo): WorkspaceRuntime =>
   }) as WorkspaceRuntime;
 
 describe('docMetaSubscriptionAtom', () => {
+  it('retires unmounted per-session atoms only after an explicit document deletion', async () => {
+    vi.useFakeTimers();
+    const sessionId = 'deleted-atom-lifetime' as SessionId;
+    const siblingId = 'retained-atom-lifetime' as SessionId;
+    const docId = getSessionRoomId(sessionId);
+    const siblingDocId = getSessionRoomId(siblingId);
+    const snapshots = new Map<string, Record<string, unknown> | undefined>();
+    const families = [
+      childSessionsAtomFamily,
+      archivedChildSessionsAtomFamily,
+      openedSessionsAtomFamily,
+      sideSessionsAtomFamily,
+      sessionLivePresenceAtomFamily,
+      sessionLiveStatusAtomFamily,
+      sessionAgentRoleSelectionAtomFamily,
+      sessionAgentRoleDurableSnapshotAtomFamily,
+    ];
+    const repo = new CompatRepoDouble(
+      [sessionId, siblingId].map((id) => ({
+        docId: getSessionRoomId(id),
+        exists: true,
+        meta: { id, title: 'Synthetic cache lifetime', isArchived: false },
+      })),
+      snapshots
+    );
+    const store = createStore();
+    const unmount = store.sub(docMetaSubscriptionAtom, () => {});
+    try {
+      store.set(runtimeAtom, createRuntime(repo as unknown as LoroRepo));
+      await vi.runAllTimersAsync();
+      const atoms = [sessionMetaAtomFamily(docId), ...families.map((family) => family(sessionId))];
+      const siblingAtoms = families.map((family) => family(siblingId));
+      const unmountAtoms = atoms.map((entry) => store.sub(entry, () => {}));
+      store.set(sessionAgentRoleSelectionAtomFamily(sessionId), {
+        providerKey: 'synthetic-provider',
+        roleId: null,
+        basedOnTurnKeys: [],
+      });
+      store.set(sessionAgentRoleDurableSnapshotAtomFamily(sessionId), {
+        providerKey: 'synthetic-provider',
+        roleId: null,
+        roleRevision: undefined,
+        currentTurnKey: 'old-turn',
+        knownTurnKeys: ['old-turn'],
+      });
+      unmountAtoms.forEach((dispose) => dispose());
+
+      // Navigation and archival preserve identity and unsent choices.
+      repo.emit({ kind: 'doc-metadata', docId, patch: { isArchived: true }, by: 'live' });
+      await vi.runAllTimersAsync();
+      expect(sessionMetaAtomFamily(docId)).toBe(atoms[0]);
+      expect(store.get(sessionAgentRoleSelectionAtomFamily(sessionId))?.providerKey).toBe(
+        'synthetic-provider'
+      );
+
+      // Missing metadata can be temporary; it is not authority to retire drafts.
+      repo.emit({
+        kind: 'doc-existence-changed',
+        docId,
+        from: 'active',
+        to: 'missing',
+        by: 'live',
+      });
+      await vi.runAllTimersAsync();
+      expect([...sessionMetaAtomFamily.getParams()]).toContain(docId);
+      for (const family of families) expect([...family.getParams()]).toContain(sessionId);
+
+      repo.emit({
+        kind: 'doc-existence-changed',
+        docId,
+        from: 'missing',
+        to: 'deleted',
+        by: 'live',
+      });
+      await vi.runAllTimersAsync();
+      expect(store.get(sessionMetaCacheAtom)[docId]).toBeUndefined();
+      expect([...sessionMetaAtomFamily.getParams()]).not.toContain(docId);
+      for (const family of families) expect([...family.getParams()]).not.toContain(sessionId);
+      families.forEach((family, index) => expect(family(siblingId)).toBe(siblingAtoms[index]));
+      expect(store.get(sessionMetaCacheAtom)[siblingDocId]?.id).toBe(siblingId);
+
+      // A later authoritative restore hydrates a fresh identity, not deleted drafts.
+      snapshots.set(docId, { exists: true, meta: { id: sessionId, title: 'Restored' } });
+      repo.emit({
+        kind: 'doc-existence-changed',
+        docId,
+        from: 'deleted',
+        to: 'active',
+        by: 'live',
+      });
+      await vi.runAllTimersAsync();
+      expect(sessionMetaAtomFamily(docId)).not.toBe(atoms[0]);
+      expect(store.get(sessionMetaAtomFamily(docId))?.title).toBe('Restored');
+      expect(store.get(sessionAgentRoleSelectionAtomFamily(sessionId))).toBeUndefined();
+      expect(store.get(sessionAgentRoleDurableSnapshotAtomFamily(sessionId))).toBeUndefined();
+    } finally {
+      unmount();
+      sessionMetaAtomFamily.remove(docId);
+      for (const family of families) {
+        family.remove(sessionId);
+        family.remove(siblingId);
+      }
+      vi.useRealTimers();
+    }
+  });
+
   it('observes archive updates that land while the bootstrap snapshot is being read', async () => {
     const sessionId = 'archived-during-bootstrap' as SessionId;
     const docId = getSessionRoomId(sessionId);

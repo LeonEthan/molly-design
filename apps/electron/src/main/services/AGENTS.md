@@ -31,6 +31,12 @@ Views accept validated CLI design-worker documents without Node, preload,
 permissions or external network.
 Bind saves to Session/host; CLI owns bytes, Electron renders and shows dialogs.
 Retain hidden editors; explicit close saves before disposal.
+Canvas leases are exclusive, even for same-artwork siblings, with fresh origins.
+Disposal revokes callbacks and closes owned contents. Reuse follows destruction,
+request drainage and successful storage/cache cleanup; failures stay denied.
+Recheck lease liveness after awaits before mutations; Session identity is reusable.
+Hidden editors retain their lease. Run native `canvas:resources` for lifetime changes.
+See the [lifecycle note](../../../../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-reuse.zh.md).
 Source previews never register for save/flush; preserve
 canonical instances and reject late results after consumer/source changes.
 Source previews share exact dependency watches and serialized conversion only

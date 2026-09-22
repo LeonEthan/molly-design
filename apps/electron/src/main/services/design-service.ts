@@ -19,7 +19,6 @@ import {
   app,
   BrowserWindow,
   WebContentsView,
-  session,
   dialog,
   nativeImage,
   type NativeImage
@@ -35,6 +34,7 @@ import { openDesignCanvasNeedsReload, selectCanvasInstance } from './design-canv
 import { DesignCanvasAccess, type CanvasInstance } from './design-canvas-access'
 import { drainRelevantLoads } from './design-leave-drain-core'
 import { waitForCanvasReady } from './design-canvas-ready-core'
+import { acquireDesignSession } from './design-session'
 
 /** Historical candidate files are read back through the existing design worker channel; new candidate production is retired. */
 type DesignCandidateRequest = { sessionId: string; candidateId: string }
@@ -137,132 +137,147 @@ export async function surface(
   const manifest = JSON.parse(await readFile(join(resources(), 'design/build.json'), 'utf8'))
   if (createHash('sha256').update(shell).digest('hex') !== manifest.shellSha256)
     throw Error('Bento resource integrity failure')
-  const isolated = session.fromPartition('molly-canvas-' + randomUUID())
+  const lease = await acquireDesignSession()
+  const isolated = lease.session
   const host = 'canvas-' + randomUUID()
   const origin = 'molly-design://' + host
   const id = payload.association.sessionId
-  isolated.setPermissionRequestHandler((_c, _p, done) => done(false))
-  isolated.setPermissionCheckHandler(() => false)
-  isolated.webRequest.onBeforeRequest((details, done) =>
-    done({ cancel: !details.url.startsWith(origin + '/') && !/^(data|blob):/.test(details.url) })
-  )
-  await isolated.protocol.handle('molly-design', async (request) => {
-    const url = new URL(request.url)
-    const headers = {
-      'Cache-Control': 'no-store',
-      'Content-Security-Policy':
-        "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self' data:; worker-src blob:; base-uri 'none'; form-action 'none'"
-    }
-    if (url.protocol !== 'molly-design:' || url.host !== host)
-      return new Response(null, { status: 403 })
-    if (request.method === 'GET' && url.pathname === '/editor.html')
-      return new Response(shell, { headers: { ...headers, 'Content-Type': 'text/html' } })
-    if (request.method === 'GET' && url.pathname === '/ws/' + id)
-      return Response.json(payload, { headers })
-    if (editable && request.method === 'POST' && url.pathname === '/ws/' + id + '/save') {
-      try {
-        const text = await request.text()
-        if (text.length > 64 * 1024 * 1024) throw Error('Design exceeds 64 MiB')
-        const input = JSON.parse(text)
-        const saved = await designCanvasAccess.write(id, input.writePermit, () =>
-          designRequest({
-            operation: 'save',
-            sessionId: id,
-            baseRevisionId: input.baseRevisionId,
-            content: { doc: input.doc, assets: input.assets }
-          })
-        )
-        payload = saved
-        const record = hostId ? records.get(hostId) : undefined
-        if (record) record.revisionId = saved.revisionId
-        notifyDesignState(id)
-        return Response.json({ ok: true, revisionId: saved.revisionId }, { headers })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        return Response.json(
-          { ok: false, code: message, error: message },
-          { status: message === 'DESIGN_CONFLICT' ? 409 : 400, headers }
-        )
-      }
-    }
-    if (
-      editable &&
-      hostId &&
-      request.method === 'POST' &&
-      url.pathname === '/ws/' + id + '/toolbar'
-    ) {
-      try {
-        const text = await request.text()
-        if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Toolbar request too large')
-        const input = DesignToolbarRequestSchema.parse(JSON.parse(text))
-        const record = records.get(hostId)
-        const assertCurrent = () => {
-          if (
-            !record ||
-            records.get(hostId) !== record ||
-            record.view.webContents.session !== isolated ||
-            hosts.get(hostId) !== id
-          )
-            throw Error('Current artwork is not visible')
+  try {
+    isolated.setPermissionRequestHandler((_c, _p, done) => done(false))
+    isolated.setPermissionCheckHandler(() => false)
+    isolated.webRequest.onBeforeRequest((details, done) =>
+      done({ cancel: !details.url.startsWith(origin + '/') && !/^(data|blob):/.test(details.url) })
+    )
+    await isolated.protocol.handle('molly-design', (request) =>
+      lease.run(async () => {
+        const url = new URL(request.url)
+        const headers = {
+          'Cache-Control': 'no-store',
+          'Content-Security-Policy':
+            "default-src 'none'; script-src 'self' 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'self' data:; worker-src blob:; base-uri 'none'; form-action 'none'"
         }
-        assertCurrent()
-        if (input.type === 'command') {
-          const result = await applyDesignCommand(
-            id,
-            hostId,
-            input.command,
-            input.selectionEpoch,
-            assertCurrent
-          )
-          return Response.json(result, { headers })
+        if (url.protocol !== 'molly-design:' || url.host !== host)
+          return new Response(null, { status: 403 })
+        if (request.method === 'GET' && url.pathname === '/editor.html')
+          return new Response(shell, { headers: { ...headers, 'Content-Type': 'text/html' } })
+        if (request.method === 'GET' && url.pathname === '/ws/' + id)
+          return Response.json(payload, { headers })
+        if (editable && request.method === 'POST' && url.pathname === '/ws/' + id + '/save') {
+          try {
+            const text = await request.text()
+            lease.assertActive()
+            if (text.length > 64 * 1024 * 1024) throw Error('Design exceeds 64 MiB')
+            const input = JSON.parse(text)
+            const saved = await designCanvasAccess.write(id, input.writePermit, () => {
+              lease.assertActive()
+              return designRequest({
+                operation: 'save',
+                sessionId: id,
+                baseRevisionId: input.baseRevisionId,
+                content: { doc: input.doc, assets: input.assets }
+              })
+            })
+            lease.assertActive()
+            payload = saved
+            const record = hostId ? records.get(hostId) : undefined
+            if (record) record.revisionId = saved.revisionId
+            notifyDesignState(id)
+            return Response.json({ ok: true, revisionId: saved.revisionId }, { headers })
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            return Response.json(
+              { ok: false, code: message, error: message },
+              { status: message === 'DESIGN_CONFLICT' ? 409 : 400, headers }
+            )
+          }
         }
-        const reference = await getDesignSelection(
-          id,
-          hostId,
-          input.action === 'edit' || input.action === 'generate' ? 'image' : undefined,
-          { selectionEpoch: input.selectionEpoch, assertCurrent }
-        )
-        assertCurrent()
-        record!.owner.webContents.send('design.selectionAction', {
-          hostId,
-          action: input.action,
-          reference
-        })
-        return Response.json({ ok: true }, { headers })
-      } catch (error) {
-        return Response.json(
-          { ok: false, error: String(error).slice(0, 500) },
-          { status: 400, headers }
-        )
-      }
-    }
-    if (editable && request.method === 'POST' && url.pathname === '/ws/' + id + '/selection') {
-      // Display-only hint for the shell's composer selection. Element references
-      // still originate exclusively from the validated selection capture.
-      try {
-        const text = await request.text()
-        if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Selection report too large')
-        const summary = DesignSelectionSummarySchema.parse(JSON.parse(text))
-        if (hostId && records.get(hostId)?.view.webContents.session !== isolated)
-          throw Error('Retired canvas')
-        if (hostId) {
-          if (summary.count > 0) lastSelectionSummaries.set(hostId, summary)
-          else lastSelectionSummaries.delete(hostId)
+        if (
+          editable &&
+          hostId &&
+          request.method === 'POST' &&
+          url.pathname === '/ws/' + id + '/toolbar'
+        ) {
+          try {
+            const text = await request.text()
+            lease.assertActive()
+            if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Toolbar request too large')
+            const input = DesignToolbarRequestSchema.parse(JSON.parse(text))
+            const record = records.get(hostId)
+            const assertCurrent = () => {
+              lease.assertActive()
+              if (
+                !record ||
+                records.get(hostId) !== record ||
+                record.view.webContents.session !== isolated ||
+                hosts.get(hostId) !== id
+              )
+                throw Error('Current artwork is not visible')
+            }
+            assertCurrent()
+            if (input.type === 'command') {
+              const result = await applyDesignCommand(
+                id,
+                hostId,
+                input.command,
+                input.selectionEpoch,
+                assertCurrent
+              )
+              return Response.json(result, { headers })
+            }
+            const reference = await getDesignSelection(
+              id,
+              hostId,
+              input.action === 'edit' || input.action === 'generate' ? 'image' : undefined,
+              { selectionEpoch: input.selectionEpoch, assertCurrent }
+            )
+            assertCurrent()
+            record!.owner.webContents.send('design.selectionAction', {
+              hostId,
+              action: input.action,
+              reference
+            })
+            return Response.json({ ok: true }, { headers })
+          } catch (error) {
+            return Response.json(
+              { ok: false, error: String(error).slice(0, 500) },
+              { status: 400, headers }
+            )
+          }
         }
-        const record = hostId ? records.get(hostId) : undefined
-        if (record && !record.owner.isDestroyed())
-          record.owner.webContents.send('design.selection', { hostId, ...summary })
-        return Response.json({ ok: true }, { headers })
-      } catch {
-        return Response.json({ ok: false }, { status: 400, headers })
-      }
+        if (editable && request.method === 'POST' && url.pathname === '/ws/' + id + '/selection') {
+          // Display-only hint for the shell's composer selection. Element references
+          // still originate exclusively from the validated selection capture.
+          try {
+            const text = await request.text()
+            lease.assertActive()
+            if (text.length > DESIGN_SELECTION_BODY_LIMIT) throw Error('Selection report too large')
+            const summary = DesignSelectionSummarySchema.parse(JSON.parse(text))
+            if (hostId && records.get(hostId)?.view.webContents.session !== isolated)
+              throw Error('Retired canvas')
+            if (hostId) {
+              if (summary.count > 0) lastSelectionSummaries.set(hostId, summary)
+              else lastSelectionSummaries.delete(hostId)
+            }
+            const record = hostId ? records.get(hostId) : undefined
+            if (record && !record.owner.isDestroyed())
+              record.owner.webContents.send('design.selection', { hostId, ...summary })
+            return Response.json({ ok: true }, { headers })
+          } catch {
+            return Response.json({ ok: false }, { status: 400, headers })
+          }
+        }
+        return new Response(null, { status: 403 })
+      })
+    )
+    return {
+      isolated,
+      url: origin + '/editor.html?ws=' + id + (editable || preview ? '&autosave=1&molly=1' : ''),
+      own: lease.own,
+      dispose: lease.dispose
     }
-    return new Response(null, { status: 403 })
-  })
-  return {
-    isolated,
-    url: origin + '/editor.html?ws=' + id + (editable || preview ? '&autosave=1&molly=1' : ''),
-    dispose: () => isolated.protocol.unhandle('molly-design')
+  } catch (error) {
+    lease.dispose()
+    throw error
   }
 }
 
@@ -321,71 +336,76 @@ export async function attachDesign(
       opening = (async () => {
         const payload = await designRequest({ operation: 'read', sessionId: id })
         const source = await surface(payload, true, hostId)
-        const view = new WebContentsView({
-          webPreferences: {
-            session: source.isolated,
-            sandbox: true,
-            contextIsolation: true,
-            nodeIntegration: false
-          }
-        })
-        const access: CanvasInstance = {
-          artworkId: id,
-          setReadonly: async (value, reason) => {
-            await view.webContents.executeJavaScript(
-              'window.molly.setReadonly(' +
-                JSON.stringify(value) +
-                ',' +
-                JSON.stringify(reason) +
-                ')'
-            )
-          },
-          flush: async (permit) => {
-            const result = await view.webContents.executeJavaScript(
-              'window.molly.flush(' + JSON.stringify(permit) + ')'
-            )
-            if (!result?.ok) throw Error(result?.error ?? 'Canvas is not ready; edits are retained')
-          }
-        }
-        const entry = {
-          artworkId: id,
-          access,
-          view,
-          owner,
-          dispose: source.dispose,
-          revisionId: payload.revisionId
-        }
-        records.set(hostId, entry)
-        owner.contentView.addChildView(view, 0)
-        view.setBounds({
-          x: Math.round(bounds.x),
-          y: Math.round(bounds.y),
-          width: Math.max(1, Math.round(bounds.width)),
-          height: Math.max(1, Math.round(bounds.height))
-        })
-        // Loading may outlive a panel close before the record existed.
-        view.setVisible(hosts.get(hostId) === id)
-        view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-        view.webContents.on('will-navigate', (event) => event.preventDefault())
-        view.webContents.on('will-redirect', (event) => event.preventDefault())
-        view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
         try {
+          const view = source.own(
+            () =>
+              new WebContentsView({
+                webPreferences: {
+                  session: source.isolated,
+                  sandbox: true,
+                  contextIsolation: true,
+                  nodeIntegration: false
+                }
+              })
+          )
+          const access: CanvasInstance = {
+            artworkId: id,
+            setReadonly: async (value, reason) => {
+              await view.webContents.executeJavaScript(
+                'window.molly.setReadonly(' +
+                  JSON.stringify(value) +
+                  ',' +
+                  JSON.stringify(reason) +
+                  ')'
+              )
+            },
+            flush: async (permit) => {
+              const result = await view.webContents.executeJavaScript(
+                'window.molly.flush(' + JSON.stringify(permit) + ')'
+              )
+              if (!result?.ok)
+                throw Error(result?.error ?? 'Canvas is not ready; edits are retained')
+            }
+          }
+          const entry = {
+            artworkId: id,
+            access,
+            view,
+            owner,
+            dispose: source.dispose,
+            revisionId: payload.revisionId
+          }
+          records.set(hostId, entry)
+          owner.contentView.addChildView(view, 0)
+          view.setBounds({
+            x: Math.round(bounds.x),
+            y: Math.round(bounds.y),
+            width: Math.max(1, Math.round(bounds.width)),
+            height: Math.max(1, Math.round(bounds.height))
+          })
+          // Loading may outlive a panel close before the record existed.
+          view.setVisible(hosts.get(hostId) === id)
+          view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+          view.webContents.on('will-navigate', (event) => event.preventDefault())
+          view.webContents.on('will-redirect', (event) => event.preventDefault())
+          view.webContents.on('will-prevent-unload', (event) => event.preventDefault())
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
+          await designCanvasAccess.register(access)
+          if (!reconcile)
+            await access.setReadonly(designCanvasAccess.isReadonly(id), '只读 / Read-only')
+          try {
+            if (reconcile) await queryCanvasState?.()
+          } catch {
+            await designCanvasAccess.disconnected()
+          }
+          installCloseGuard(owner)
+          return entry
         } catch (error) {
           destroyDesignInstance(hostId)
+          source.dispose()
           throw error
         }
-        await designCanvasAccess.register(access)
-        if (!reconcile)
-          await access.setReadonly(designCanvasAccess.isReadonly(id), '只读 / Read-only')
-        try {
-          if (reconcile) await queryCanvasState?.()
-        } catch {
-          await designCanvasAccess.disconnected()
-        }
-        installCloseGuard(owner)
-        return entry
       })()
       loading.set(hostId, opening)
       void opening.finally(() => loading.delete(hostId)).catch(() => {})
@@ -436,8 +456,6 @@ function destroyDesignInstance(key: string) {
   lastSelectionSummaries.delete(key)
   designCanvasAccess.unregister(record.access)
   if (!record.owner.isDestroyed()) record.owner.contentView.removeChildView(record.view)
-  if (!record.view.webContents.isDestroyed())
-    record.view.webContents.close({ waitForBeforeUnload: false })
   record.dispose()
 }
 export function destroyDesign(id: string) {
@@ -859,22 +877,25 @@ export async function renderSavedDesign(
 ): Promise<Buffer> {
   const source = await surface(payload, false)
   const { width, height } = payload.doc.canvas
-  const window = new BrowserWindow({
-    show: false,
-    width,
-    height,
-    useContentSize: true,
-    transparent: true,
-    backgroundColor: '#00000000',
-    webPreferences: {
-      session: source.isolated,
-      sandbox: true,
-      nodeIntegration: false,
-      contextIsolation: true,
-      backgroundThrottling: false,
-      offscreen: true
-    }
-  })
+  const window = source.own(
+    () =>
+      new BrowserWindow({
+        show: false,
+        width,
+        height,
+        useContentSize: true,
+        transparent: true,
+        backgroundColor: '#00000000',
+        webPreferences: {
+          session: source.isolated,
+          sandbox: true,
+          nodeIntegration: false,
+          contextIsolation: true,
+          backgroundThrottling: false,
+          offscreen: true
+        }
+      })
+  )
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   try {
     await window.loadURL(source.url)

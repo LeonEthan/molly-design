@@ -192,12 +192,20 @@ function getPerformanceNow(): number {
 
 function recordMachineFlockRowsMeasure(label: string, startMs: number): void {
   const durationMs = getPerformanceNow() - startMs;
-  if (typeof performance !== 'undefined' && typeof performance.measure === 'function') {
+  if (
+    typeof performance !== 'undefined' &&
+    typeof performance.measure === 'function' &&
+    typeof performance.clearMeasures === 'function'
+  ) {
+    const name = `lody:${label}:${++machineFlockRowsPerfMeasureSeq}`;
     try {
-      performance.measure(`lody:${label}:${++machineFlockRowsPerfMeasureSeq}`, {
+      performance.measure(name, {
         start: startMs,
         duration: durationMs,
       });
+      // Observers receive the queued entry; the global timeline must not retain
+      // every completed read for the lifetime of this renderer.
+      performance.clearMeasures(name);
     } catch {
       // Diagnostic-only mark; ignore unsupported performance APIs.
     }

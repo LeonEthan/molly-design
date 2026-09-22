@@ -35,6 +35,7 @@ import {
   type SessionActions,
 } from '../src/hooks/use-session-actions';
 import { buildResendInputBlocks } from '../src/lib/undelivered-user-turn';
+import * as electronIpc from '../src/lib/electron-ipc-client';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -1145,6 +1146,171 @@ describe('useSessionActions', () => {
       expect.any(Object)
     );
   });
+
+  it.each(['archived', 'direct'] as const)(
+    '%s deletion releases retained canvases before deleting session data',
+    async (mode) => {
+      const sessionId = 'session-canvas-release' as SessionId;
+      const retained = new Set([sessionId]);
+      const documents = new Set([getSessionRoomId(sessionId)]);
+      const events: string[] = [];
+      vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue({
+        design: {
+          leave: async () => true,
+          close: async (id: SessionId) => {
+            retained.delete(id);
+            events.push('canvas-released');
+            return true;
+          },
+        },
+      } as unknown as electronIpc.IpcServices);
+      const runtime = createRuntime({
+        repo: {
+          getDocMeta: async () => ({ meta: { id: sessionId, isArchived: true } }),
+          deleteDoc: async (roomId: string) => {
+            documents.delete(roomId);
+            events.push('document-deleted');
+          },
+        } as unknown as WorkspaceRuntime['repo'],
+      });
+      const actions = await renderActions(runtime);
+      if (mode === 'archived') await actions.deleteArchivedSession(sessionId);
+      else await actions.deleteSessions([sessionId]);
+      expect([...retained]).toEqual([]);
+      expect([...documents]).toEqual([]);
+      expect(events).toEqual(['canvas-released', 'document-deleted']);
+    }
+  );
+
+  it.each([
+    ['archived', 'cancel'],
+    ['archived', 'failure'],
+    ['direct', 'cancel'],
+    ['direct', 'failure'],
+  ] as const)('%s deletion preserves session data on canvas %s', async (mode, outcome) => {
+    const sessionId = 'session-canvas-preserved' as SessionId;
+    const documents = new Set([getSessionRoomId(sessionId)]);
+    const mutations: string[] = [];
+    vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue({
+      design: {
+        leave: async () => true,
+        close: async () => {
+          if (outcome === 'failure') throw new Error('canvas flush failed');
+          return false;
+        },
+      },
+    } as unknown as electronIpc.IpcServices);
+    const runtime = createRuntime({
+      repo: {
+        getDocMeta: async () => ({
+          meta: {
+            id: sessionId,
+            isArchived: true,
+            machineId: 'machine-1',
+            repoFullName: 'fixture/repo',
+            branchName: 'fixture',
+            isWorktree: true,
+          },
+        }),
+        deleteDoc: async (roomId: string) => {
+          documents.delete(roomId);
+        },
+        upsertDocMeta: async () => {
+          mutations.push('metadata');
+        },
+        openFlockDoc: async () => {
+          mutations.push('cleanup-queue');
+          throw new Error('unexpected cleanup');
+        },
+      } as unknown as WorkspaceRuntime['repo'],
+    });
+    const actions = await renderActions(runtime);
+    await expect(
+      mode === 'archived'
+        ? actions.deleteArchivedSession(sessionId)
+        : actions.deleteSessions([sessionId])
+    ).rejects.toThrow(/canvas/i);
+    expect([...documents]).toEqual([getSessionRoomId(sessionId)]);
+    expect(mutations).toEqual([]);
+  });
+
+  it.each(['archived', 'direct'] as const)(
+    '%s deletion checks descendant edits before disposing any canvas or session',
+    async (mode) => {
+      const parent = { id: 'delete-parent' as SessionId, isArchived: true } as SessionMeta;
+      const child = {
+        id: 'delete-child' as SessionId,
+        parentSessionId: parent.id,
+        isArchived: true,
+      } as SessionMeta;
+      const meta = Object.fromEntries([parent, child].map((s) => [getSessionRoomId(s.id), s]));
+      const retained = new Set([parent.id, child.id]);
+      const documents = new Set(Object.keys(meta));
+      vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue({
+        design: {
+          leave: async (id: SessionId) => id !== child.id,
+          close: async (id: SessionId) => {
+            retained.delete(id);
+            return true;
+          },
+        },
+      } as unknown as electronIpc.IpcServices);
+      const runtime = createRuntime({
+        repo: {
+          getDocMeta: async (room: string) => ({ meta: meta[room] }),
+          deleteDoc: async (room: string) => {
+            documents.delete(room);
+          },
+        } as unknown as WorkspaceRuntime['repo'],
+      });
+      const actions = await renderActions(runtime, { sessionMetaCache: meta });
+      await expect(
+        mode === 'archived'
+          ? actions.deleteArchivedSession(parent.id)
+          : actions.deleteSessions([parent.id])
+      ).rejects.toThrow(/canvas/i);
+      expect([...retained]).toEqual([parent.id, child.id]);
+      expect([...documents]).toEqual(Object.keys(meta));
+    }
+  );
+
+  it.each(['archived', 'direct'] as const)(
+    '%s deletion waits for native canvas close acknowledgement',
+    async (mode) => {
+      const sessionId = 'session-close-pending' as SessionId;
+      const documents = new Set([getSessionRoomId(sessionId)]);
+      const started = createDeferred();
+      const completed = createDeferred();
+      vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue({
+        design: {
+          leave: async () => true,
+          close: async () => {
+            started.resolve();
+            await completed.promise;
+            return true;
+          },
+        },
+      } as unknown as electronIpc.IpcServices);
+      const runtime = createRuntime({
+        repo: {
+          getDocMeta: async () => ({ meta: { id: sessionId, isArchived: true } }),
+          deleteDoc: async (room: string) => {
+            documents.delete(room);
+          },
+        } as unknown as WorkspaceRuntime['repo'],
+      });
+      const actions = await renderActions(runtime);
+      const deletion =
+        mode === 'archived'
+          ? actions.deleteArchivedSession(sessionId)
+          : actions.deleteSessions([sessionId]);
+      await started.promise;
+      expect([...documents]).toEqual([getSessionRoomId(sessionId)]);
+      completed.resolve();
+      await deletion;
+      expect([...documents]).toEqual([]);
+    }
+  );
 
   it('writes legacy delete queue before deleting archived code sessions', async () => {
     const sessionId = 'session-delete-legacy-queue' as SessionId;

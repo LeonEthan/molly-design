@@ -43,6 +43,8 @@ pnpm e2e:build
 pnpm e2e:smoke
 pnpm e2e:full
 pnpm e2e:scout
+pnpm --filter @molly/e2e terminal:resources
+pnpm --filter @molly/e2e canvas:resources
 pnpm e2e:scout -- --journey review --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
 pnpm e2e:acceptance -- --subject desktop-local-bootstrap
@@ -66,6 +68,20 @@ Optional before/after JSON and a retained-path summary are copied into the
 round, then covered by its checksummed manifest.
 Scout operation, classification, and triage are specified in
 [the Scout contract](./SCOUT.md).
+
+`terminal:resources` is a narrow native regression for the installed xterm bundle:
+three public open/dispose cycles must leave no window/media-query listeners. It
+uses the isolated Electron harness and a disposable blank window, without model
+credentials or a provider connection. It is not a substitute for Work's PTY and
+session-deletion journey. Run it after changing xterm or its dependency patch.
+
+`canvas:resources` repeatedly opens/closes two synthetic artworks through the real
+design IPC/worker/Bento path. It verifies serial Session reuse, fresh origins,
+cookie cleanup, retired-origin refusal, concurrent isolation (also for the same
+artwork), hidden-view retention and no effect on a live sibling during cleanup.
+Its final main heap must contain no retained editor-shell Buffer backing stores.
+These are identity/state assertions, not memory thresholds; no model credentials
+are needed. This probe does not replace Scout or prove zero native allocation.
 
 ## Journey registry
 
@@ -184,3 +200,7 @@ Windows Daily also runs `node e2e/scripts/probe-windows-pty.mjs` before building
 The separate [real Kimi golden replication case](KIMI-REPLICATION-ACCEPTANCE.md#run-the-golden-case)
 uses the fixed MagSafe reference and exact prompt, then retains actual exports and
 editable review evidence. It is explicitly invoked and is not a deterministic CI scenario.
+
+For Issue #45's native scroll-cache lifecycle regression, run
+`pnpm --filter @molly/e2e router:resources` after the desktop build. It covers history
+eviction and back/forward/replace/branch/reload restoration without credentials.

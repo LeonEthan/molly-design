@@ -34,6 +34,8 @@ Translation: pending
 
 ## 本地交付结果
 
-代码分为三个本地提交：`bcf49330` 独立保存版本修复、`e2bdc48a` 浏览器及 Pinterest 账号功能、`26a57302` 既有桌面 harness 的浏览授权旅程。未推送或发布。
+代码分为三个实现提交：`bcf49330` 独立保存版本修复、`e2bdc48a` 浏览器及 Pinterest 账号功能、`26a57302` 既有桌面 harness 的浏览授权旅程；`3749e136` 补充本机签名包交付记录。后续合并交付由 [PR #56](https://github.com/LeonEthan/molly-design/pull/56) 跟踪，公开发布仍不在本轮范围。
 
 `pnpm build` 通过；随后使用之前已授权的同一 Apple Development 身份，通过仓库打包入口生成 `apps/electron/dist/pinterest-first-release-20260923/mac-arm64/Molly.app`，源码标记为 `26a57302`。CookieEncryption、原生 Chrome 读取绑定、官方 MCP/transport、Bento、Pi 和内置 CLI 启动探针均通过，`codesign --verify --deep --strict` 通过，并确认签名 Team 与此前验收包一致、非 ad-hoc。此包包含等待提示与 Pinterest 单站点修复；未启动它读取真实账号，也未重新运行模型验收。包只用于本机开发验证，未公证、未启用发布。
+
+2026-09-24 最终审查固定比较 `7bd3e187...3749e136`：Standards/security 检查运行/站点授权、撤销和接管、CDP 目标隔离及素材网络路径，Spec/account 检查 Pinterest 范围、导入失败保留、分区 Cookie 拒绝、界面指引与版本收据，两项均未发现 P0/P1。审查为静态检查，不扩充真实网站测试；本轮仅补交付记录链接，CI 结果与合并状态以 PR 为准。

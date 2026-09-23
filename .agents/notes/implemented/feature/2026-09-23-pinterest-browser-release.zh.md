@@ -31,3 +31,9 @@ Translation: pending
 - 本次等待变化由合成回归覆盖；既有签名验收包早于该修复。更新包的构建和签名结果单独记录，不冒充新的真实账号验收。
 
 此项完成条件是 Pinterest 核心能力与授权等待修复的代码收尾；公开发布、Developer ID 公证分发、升级演练和 Amazon 验收是后续任务。
+
+## 本地交付结果
+
+代码分为三个本地提交：`bcf49330` 独立保存版本修复、`e2bdc48a` 浏览器及 Pinterest 账号功能、`26a57302` 既有桌面 harness 的浏览授权旅程。未推送或发布。
+
+`pnpm build` 通过；随后使用之前已授权的同一 Apple Development 身份，通过仓库打包入口生成 `apps/electron/dist/pinterest-first-release-20260923/mac-arm64/Molly.app`，源码标记为 `26a57302`。CookieEncryption、原生 Chrome 读取绑定、官方 MCP/transport、Bento、Pi 和内置 CLI 启动探针均通过，`codesign --verify --deep --strict` 通过，并确认签名 Team 与此前验收包一致、非 ad-hoc。此包包含等待提示与 Pinterest 单站点修复；未启动它读取真实账号，也未重新运行模型验收。包只用于本机开发验证，未公证、未启用发布。

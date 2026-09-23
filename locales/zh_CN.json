@@ -4063,6 +4063,7 @@
   "design.versionOrigin": "基于 V{{number}}",
   "design.saveVersion": "保存版本",
   "design.versionSaved": "已存为 V{{number}}",
+  "design.saveVersionReloadFailed": "已存为 V{{number}}，但画布未能刷新：",
   "design.restoreReloadFailed": "已恢复并保存，但画布未能重新加载：",
   "design.saveCopy": "另存为新作品",
   "design.canvas": "设计画布",

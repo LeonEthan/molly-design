@@ -520,6 +520,16 @@ export function DesignCanvas({
       if (!service) throw Error('Local workspace is not ready');
       const version = await service.saveVersion(artworkId);
       await refreshVersions();
+      if (version.reloadError)
+        throw Error(
+          t(
+            'design.saveVersionReloadFailed',
+            'Saved as V{{number}}, but the canvas could not refresh: ',
+            {
+              number: version.number,
+            }
+          ) + version.reloadError
+        );
       toast.success(t('design.versionSaved', 'Saved as V{{number}}', { number: version.number }));
     });
   const exportArtwork = (format: 'png' | 'jpeg') =>

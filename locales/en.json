@@ -4063,6 +4063,7 @@
   "design.versionOrigin": "Based on V{{number}}",
   "design.saveVersion": "Save version",
   "design.versionSaved": "Saved as V{{number}}",
+  "design.saveVersionReloadFailed": "Saved as V{{number}}, but the canvas could not refresh: ",
   "design.restoreReloadFailed": "Restored and saved, but the canvas could not reload: ",
   "design.saveCopy": "Save as new design",
   "design.canvas": "Design canvas",

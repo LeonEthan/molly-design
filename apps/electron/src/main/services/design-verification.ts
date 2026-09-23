@@ -35,6 +35,10 @@ export async function verifyDesign(directory: string) {
   assert.ok(expectedUserData, 'Use an isolated MOLLY_ELECTRON_USER_DATA_DIR')
   assert.equal(app.getPath('userData'), resolve(expectedUserData))
   await mkdir(directory, { recursive: true })
+  if (process.argv.includes('--molly-p1-version-only')) {
+    await verifyDesignVersions(directory)
+    return
+  }
   const dimensions = { width: 913, height: 617 }
   for (const forceEnable of [false, true]) {
     const updater = new AppUpdaterService({

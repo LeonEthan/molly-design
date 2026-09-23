@@ -19,6 +19,8 @@ import { createMollySession } from './session-factory';
 import { createApprovedTools, hashToolset } from './approved-tools';
 import type { WorkerConfig } from './worker-config';
 import { describeToolCall } from './tool-presentation';
+import { AgentBrowserCommandSchema } from '@molly/shared/browser-agent-rpc';
+import { classifyBrowserHostname } from '@molly/shared/browser-url';
 
 export async function probeWorker() {
   const runtime = await ModelRuntime.create({
@@ -46,11 +48,55 @@ export async function runWorker(
   mcpCredentialProvider?: McpCredentialProvider
 ): Promise<void> {
   let adapter: MollyAcpAdapter;
+  let browserTaskGrant: { runId: string; runtimeEpoch: string; sites: Set<string> } | undefined;
+  let browserActiveSite: { runId: string; site: string } | undefined;
   const connection = new AgentSideConnection(
     (peer) => {
       const approve: Parameters<typeof createApprovedTools>[0]['approve'] = async (request) => {
         const sessionId = adapter.currentSessionId;
         if (!sessionId || request.signal?.aborted) return false;
+        const run = adapter.currentRunScope;
+        const browser =
+          request.name === 'molly/molly_browser'
+            ? AgentBrowserCommandSchema.safeParse(request.arguments)
+            : undefined;
+        if (
+          browserTaskGrant &&
+          (!run ||
+            browserTaskGrant.runId !== run.runId ||
+            browserTaskGrant.runtimeEpoch !== run.runtimeEpoch)
+        ) {
+          browserTaskGrant = undefined;
+        }
+        if (browserActiveSite && (!run || browserActiveSite.runId !== run.runId))
+          browserActiveSite = undefined;
+        let site: string | undefined;
+        if (browser?.success && browser.data.kind === 'navigate') {
+          try {
+            const url = new URL(browser.data.url);
+            if (
+              ['http:', 'https:'].includes(url.protocol) &&
+              classifyBrowserHostname(url.hostname) === 'public'
+            ) {
+              site = url.hostname.toLowerCase().replace(/^www\./, '');
+            }
+          } catch {
+            // The browser host gives the actual URL error after ordinary approval.
+          }
+        } else if (browser?.success) {
+          site = browserActiveSite?.site;
+        }
+        if (browser?.success && run && site && browserTaskGrant?.sites.has(site)) {
+          if (browser.data.kind === 'navigate') browserActiveSite = { runId: run.runId, site };
+          return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
+        }
+        const canGrantTask = Boolean(
+          config.permissionProfileId === 'browse-task-v1' &&
+          browser?.success &&
+          run &&
+          site &&
+          (!browserTaskGrant || browserTaskGrant.sites.size < 8)
+        );
         const response = await peer.requestPermission({
           sessionId,
           toolCall: {
@@ -60,14 +106,37 @@ export async function runWorker(
           },
           options: [
             { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+            ...(canGrantTask
+              ? [
+                  {
+                    optionId: 'allow-browse-task',
+                    name: `Allow browsing, clicks, input and selected-image saves on ${site} for this task`,
+                    kind: 'allow_once' as const,
+                  },
+                ]
+              : []),
             { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
           ],
         });
-        return (
-          !request.signal?.aborted &&
-          response.outcome.outcome === 'selected' &&
-          response.outcome.optionId === 'allow-once'
-        );
+        if (request.signal?.aborted || response.outcome.outcome !== 'selected') return false;
+        if (response.outcome.optionId === 'allow-once') {
+          if (browser?.success && browser.data.kind === 'navigate' && run && site)
+            browserActiveSite = { runId: run.runId, site };
+          return true;
+        }
+        if (response.outcome.optionId === 'allow-browse-task' && canGrantTask && run && site) {
+          if (!browserTaskGrant)
+            browserTaskGrant = {
+              runId: run.runId,
+              runtimeEpoch: run.runtimeEpoch,
+              sites: new Set(),
+            };
+          browserTaskGrant.sites.add(site);
+          if (browser?.success && browser.data.kind === 'navigate')
+            browserActiveSite = { runId: run.runId, site };
+          return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
+        }
+        return false;
       };
       const tools = createApprovedTools({ cwd: config.cwd, shellPath: config.shellPath, approve });
       adapter = new MollyAcpAdapter(

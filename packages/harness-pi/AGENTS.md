@@ -37,6 +37,10 @@ Read [README](README.md) before changing session construction or packaged resour
 - Unknown MCP delivery and dispatched image failures end the run. A new tool-call
   ID cannot bypass its durable retry fence; only explicit user continuation may
   start another operation. Asset receipts confer recovery identity, not commit authority.
+- Built-in browser calls use the existing MCP approval path. An explicit site
+  task grant lives only in the active run/epoch, grows by approved site at most
+  eight times, and is recorded as authorization provenance in the tool journal.
+  Do not restore a live grant from history or reuse `session/set_mode` for it.
 - Resolve MCP resource links only through the producing connection, with separate
   approval and dispatch receipts. Verify returned URI identity; never dereference
   them through host fetch or filesystem APIs. Image-result reads remain inside the

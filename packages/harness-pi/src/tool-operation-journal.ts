@@ -10,6 +10,7 @@ import {
   type HarnessImageImportResult,
   type HarnessRunSnapshot,
 } from '@molly/shared/embedded-harness';
+import type { BrowserTaskApproval } from './approved-tools';
 
 const RecordSchema = PaidOperationSchema.extend({
   parentOperationId: z
@@ -17,13 +18,23 @@ const RecordSchema = PaidOperationSchema.extend({
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
   requiresExplicitRetry: z.boolean().optional(),
-  authorization: z
-    .object({
-      kind: z.literal('allow_once'),
-      runtimeEpoch: z.string().min(1),
-      toolCallId: z.string().min(1).max(512),
-    })
-    .strict(),
+  authorization: z.discriminatedUnion('kind', [
+    z
+      .object({
+        kind: z.literal('allow_once'),
+        runtimeEpoch: z.string().min(1),
+        toolCallId: z.string().min(1).max(512),
+      })
+      .strict(),
+    z
+      .object({
+        kind: z.literal('browse_task'),
+        runtimeEpoch: z.string().min(1),
+        toolCallId: z.string().min(1).max(512),
+        sites: z.array(z.string().min(1)).min(1).max(8),
+      })
+      .strict(),
+  ]),
   requestDigest: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 type OperationReceipt = z.infer<typeof RecordSchema>;
@@ -79,7 +90,7 @@ export class ToolOperationJournal {
     return { ...record, ...recoverPaidOperation(record) };
   }
 
-  /** Call only after the matching live request has received allow_once. */
+  /** Call only after the matching live request has received an approval decision. */
   async dispatch(
     input: {
       snapshot: Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch'>;
@@ -88,6 +99,7 @@ export class ToolOperationJournal {
       toolCallId: string;
       toolName: string;
       arguments: Record<string, unknown>;
+      authorization?: BrowserTaskApproval;
       /** Only the host's built-in image server may supply the private image receipt. */
       builtinImage?: boolean;
       /** Declared external image calls may be paid, but their private receipts are untrusted. */
@@ -142,9 +154,10 @@ export class ToolOperationJournal {
       state: 'prepared',
       assetDigests: [],
       authorization: {
-        kind: 'allow_once',
+        kind: input.authorization?.kind ?? 'allow_once',
         runtimeEpoch: input.snapshot.runtimeEpoch,
         toolCallId: input.toolCallId,
+        ...(input.authorization ? { sites: input.authorization.sites } : {}),
       },
       requestDigest: createHash('sha256').update(JSON.stringify(input.arguments)).digest('hex'),
     });

@@ -91,6 +91,29 @@ export const ElectronPublicBrowserVisibilityInputSchema = ElectronPublicBrowserI
   { visible: z.boolean() }
 ).strict();
 
+export const ElectronBrowserAccountSiteInputSchema = z
+  .object({
+    site: z.enum(['pinterest.com']),
+  })
+  .strict();
+export type ElectronBrowserAccountSiteInput = z.infer<typeof ElectronBrowserAccountSiteInputSchema>;
+export const ElectronBrowserAccountImportInputSchema = ElectronBrowserAccountSiteInputSchema.extend(
+  {
+    profileId: z.string().min(1).max(512),
+    replaceExisting: z.boolean(),
+  }
+).strict();
+export type ElectronBrowserAccountImportInput = z.infer<
+  typeof ElectronBrowserAccountImportInputSchema
+>;
+export type ElectronBrowserAccountSummary = {
+  persistent: boolean;
+  importAvailable: boolean;
+  importUnavailableReason?: 'package-required' | 'signing-required' | 'secure-storage-unavailable';
+  sites: Array<{ site: ElectronBrowserAccountSiteInput['site']; cookieCount: number }>;
+};
+export type ElectronChromeProfileChoice = { id: string; name: string; isDefault: boolean };
+
 export type ElectronPublicBrowserCreateInput = z.infer<
   typeof ElectronPublicBrowserCreateInputSchema
 >;
@@ -116,6 +139,8 @@ export type ElectronPublicBrowserState = {
   canGoForward: boolean;
   error?: string;
   blockedUrl?: string;
+  agentControl?: 'agent' | 'human' | 'human-takeover';
+  accountImport?: { site: ElectronBrowserAccountSiteInput['site']; imported: number; at: number };
 };
 
 export type ElectronPublicBrowserResult =

@@ -11,13 +11,17 @@ launch, right-click the app and choose **Open**, then confirm. Do not disable
 Gatekeeper or remove quarantine attributes to run it.
 
 On first launch macOS asks whether Molly may use its "Molly Safe Storage" keychain
-entry, which protects saved connection credentials. **Always Allow** keeps saved
-connections readable across restarts, **Allow** grants once, and **Deny** leaves the
+entry, which protects saved connection credentials. In a consistently signed build,
+**Always Allow** keeps saved connections readable across restarts; **Allow** grants
+once, and **Deny** leaves the
 app usable but unable to read saved connections while access is denied; the store is
 preserved and macOS asks again on the next launch.
-Ad-hoc local builds do not share a stable signing identity, so macOS asks again for
-each new build. Answer this prompt before driving the app through automation
-interfaces: a pending prompt can leave them unresponsive.
+Ad-hoc local builds do not share a stable signing identity. macOS can ask again
+after a rebuild and even repeatedly for subsequent accesses if **Allow** grants
+only one access. Repeated prompts are not the intended account-import experience.
+Ad-hoc builds keep browser sessions in memory and disable Chrome account import;
+use a consistently signed build for that test. A pending prompt can leave the
+app and automation interfaces unresponsive.
 
 ## Configure connections
 
@@ -62,6 +66,14 @@ Then try:
 You can also select and edit text, change colors, insert an image and adjust the
 layout directly in Bento. Save the design before exporting PNG or JPEG. Generated
 images are optional; text and shape design does not require an image service.
+
+## Built-in browser research (current development build)
+
+In a design session, `molly_browser` controls only the website in Molly's Browser sidebar. Its first site visit uses the existing tool approval prompt: allow one call or authorize browsing, clicks, input and selected-image saves on that site for the current task. Another site needs another approval. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover.
+
+In a stably signed macOS package with secure storage, open **Settings → Website accounts**, choose the Chrome profile that is signed in, then select **Import from Chrome** for Pinterest. macOS may ask you to allow access to Chrome Safe Storage; enter your Mac login password only in that system dialog and keep Molly open. The initial read allows up to five minutes for authorization. If it times out, finish any pending system prompt and retry manually; existing Molly cookies stay unchanged. Molly reads only the selected site's cookies and reloads that site if it is open. If the selected source or Molly site cookies contain unsupported partitions, Molly stops the whole import before changing its cookies; sign in directly in Molly instead. Verify the account on the website itself; Cookie counts are not proof of sign-in. **Clear Molly cookies** does not clear Chrome, other site storage, or guarantee server-side logout. This flow does not install a Chrome extension or give the Agent access to Chrome tabs.
+
+Pinterest is the first-release scope. A local Apple Development-signed package verified Chrome account import, signed-in search and detail browsing, a JPEG save, sign-in persistence after restarting the same app, and clearing. The Agent can save a selected PNG/JPEG/GIF image into the current design's `media/` and use the returned path in YAML. WebP/AVIF and page downloads remain unsupported. Amazon account import and shopping Q&A, and account import from other browsers or operating systems, are deferred. Websites can still request sign-in or verification. This local acceptance does not establish Developer ID distribution, notarization or upgrade behavior.
 
 ## Continue, preview and recover
 

@@ -9,14 +9,20 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { createToolEnvironment } from './environment';
 
+export type BrowserTaskApproval = { kind: 'browse_task'; sites: string[] };
+export type ToolApprovalResult = boolean | BrowserTaskApproval;
+
 export type ToolApproval = (request: {
   toolCallId: string;
   name: string;
   arguments: unknown;
   signal?: AbortSignal;
-}) => Promise<boolean>;
+}) => Promise<ToolApprovalResult>;
 
-export function waitForApproval(pending: Promise<boolean>, signal?: AbortSignal): Promise<boolean> {
+export function waitForApproval(
+  pending: Promise<ToolApprovalResult>,
+  signal?: AbortSignal
+): Promise<ToolApprovalResult> {
   if (!signal) return pending;
   if (signal.aborted) return Promise.resolve(false);
   return new Promise((resolve, reject) => {

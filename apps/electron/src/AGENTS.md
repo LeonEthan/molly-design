@@ -60,29 +60,26 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
 - `sessionControl.send` streams intermediate responses on `sessionControl.response`
   keyed by request id. The renderer subscribes before `invoke`, removes the
   listener after settlement, and treats only the final response as completion.
-- The public browser (`services/public-browser-service.ts`) has NO network guard:
-  no resolver check, no per-request hostname policy — only engine routing, so a
-  loopback address is refused here and sent to Managed Preview. The view is a
-  sandboxed `WebContentsView` with no preload, script injection, page capture,
-  or agent-facing tool; the only reader of what it renders is the person looking
-  at it, so it is strictly less capable than the user's own Chrome and a guard
-  protects nothing. The one it used to have blocked every fake-IP proxy user.
-  Engine routing is a check on the hostname TEXT: a public name that RESOLVES to
-  loopback (`localtest.me`) still renders here, showing this machine's loopback
-  rather than the agent's. Do not describe the split as resolution-accurate — it
-  is a routing miss, not an exposure, and closing it means resolving every
-  hostname again.
-  Two triggers require bringing a guard back, and both are about who is on the
-  other end, not about the address. A non-human READER — agent DOM access,
-  screenshots, a preload bridge — makes rendered content exfiltratable. A
-  non-human NAVIGATOR already exists: a Managed Preview page is agent-authored
-  and can post navigation requests to the panel, so `session-browser-panel.tsx`
-  refuses private-LAN destinations from page content. Keep that refusal on the
-  panel side; this process cannot tell the two sources apart.
-  The engine-routing check runs on `will-navigate` AND `will-redirect`, like
-  `installNavigationGuard` in `window.ts`: `will-navigate` does not fire for a
-  server-side 3xx, so a public page redirecting to loopback would otherwise
-  commit here and never reach Managed Preview.
+- The public browser retains hostname-based engine routing for manual browsing;
+  `will-navigate` and `will-redirect` both enforce it. The Agent reader has a
+  separate lease in `public-browser-agent-controller.ts`: bind one Session page
+  and active run, check site/URL/DNS/proxy before requests, verify response peers
+  before exposing DOM or screenshots, and revoke on takeover, cancellation or
+  host loss. While leased, block human mouse/keyboard input at the WebContents
+  event boundary; manual toolbar actions take over before navigating, and
+  closing a leased page blocks that run from silently recreating it. The Agent
+  receives finite operations, never arbitrary script/CDP,
+  cookies, or a target id. Keep `will-download` denied. Selected image bytes use
+  `public-browser-asset-fetch.ts` with a pinned public socket and per-redirect
+  validation; do not turn page downloads into an asset path.
+- A packaged, stably signed Molly shares a persistent browser partition across
+  its Session pages; development and ad-hoc macOS builds use memory only. Cookie
+  import requires a stable macOS signing identity, secure storage and an explicit source Chrome
+  profile and site selection. Electron main uses the pinned native reader for only
+  that site's cookies, keeps values out of renderer and Agent responses, and pauses
+  Agent page access before writing. No extension or daemon import RPC participates.
+  The packaged binary must verify the `EnableCookieEncryption` fuse before signing.
+  Cookie writes alone do not prove website sign-in.
 - Image preview export (`services/image-export-service.ts`) keeps the native
   menu, clipboard, and save dialog here because the renderer holds the only copy
   of the image (a `blob:` URL main cannot download). Bytes cross once, after the

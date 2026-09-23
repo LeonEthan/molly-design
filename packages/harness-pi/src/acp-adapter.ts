@@ -140,6 +140,10 @@ export class MollyAcpAdapter implements acp.Agent {
     return this.owned?.manager.getSessionId();
   }
 
+  get currentRunScope(): Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch'> | undefined {
+    return this.running?.snapshot;
+  }
+
   async initialize(params?: acp.InitializeRequest): Promise<acp.InitializeResponse> {
     if (this.claimed || this.questionUI) throw new Error('harness_already_initialized');
     if (
@@ -314,7 +318,15 @@ export class MollyAcpAdapter implements acp.Agent {
       cwd: this.input.cwd,
       approve: this.approveMcp,
       imageImportAvailable: this.importImages !== undefined,
-      dispatch: async (serverName, toolCallId, toolName, args, invoke, boundImage) => {
+      dispatch: async (
+        serverName,
+        toolCallId,
+        toolName,
+        args,
+        invoke,
+        boundImage,
+        authorization
+      ) => {
         const run = this.running;
         if (!run || run.controller.signal.aborted) throw new Error('harness_run_retired');
         const server = params.mcpServers.find((entry) => entry.name === serverName);
@@ -343,6 +355,7 @@ export class MollyAcpAdapter implements acp.Agent {
               toolCallId,
               toolName,
               arguments: args,
+              ...(authorization ? { authorization } : {}),
               builtinImage: isBuiltinImage,
               externalImage: isExternalImage,
               importImages:

@@ -45,10 +45,7 @@
         "workspace initialization completes",
         "session composer is editable"
       ],
-      "cleanup": [
-        "desktop process tree exits",
-        "isolated endpoint can be rebound"
-      ],
+      "cleanup": ["desktop process tree exits", "isolated endpoint can be rebound"],
       "coverage": {
         "renderer": "Intro and local entry",
         "electronIpc": "Real window and invoke bridge",
@@ -104,10 +101,7 @@
         "the held model request is cancelled after Stop",
         "Session disappears after permanent deletion"
       ],
-      "cleanup": [
-        "model request is cancelled",
-        "Session durable state is deleted"
-      ],
+      "cleanup": ["model request is cancelled", "Session durable state is deleted"],
       "coverage": {
         "renderer": "Session lifecycle",
         "electronIpc": "Real window and invoke bridge",
@@ -122,9 +116,7 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": [
-        "session"
-      ],
+      "scoutJourneys": ["session"],
       "blockedReason": null,
       "estimatedMinutes": 2
     },
@@ -168,11 +160,7 @@
         "Terminal command produces its marker",
         "permanent delete releases the Terminal and preserves the project directory"
       ],
-      "cleanup": [
-        "model turn completes",
-        "Terminal exits",
-        "project directory remains intact"
-      ],
+      "cleanup": ["model turn completes", "Terminal exits", "project directory remains intact"],
       "coverage": {
         "renderer": "Work lifecycle",
         "electronIpc": "Real window, IPC, and Terminal",
@@ -187,9 +175,7 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": [
-        "work"
-      ],
+      "scoutJourneys": ["work"],
       "blockedReason": null,
       "estimatedMinutes": 3
     },
@@ -235,10 +221,7 @@
         "Review survives hide and restore",
         "Review state is released after Session deletion"
       ],
-      "cleanup": [
-        "Review tabs close",
-        "Session durable state is deleted"
-      ],
+      "cleanup": ["Review tabs close", "Session durable state is deleted"],
       "coverage": {
         "renderer": "Large diff Review lifecycle",
         "electronIpc": "Real window and diff RPC",
@@ -253,11 +236,115 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": [
-        "review"
-      ],
+      "scoutJourneys": ["review"],
       "blockedReason": null,
       "estimatedMinutes": 4
+    },
+    {
+      "id": "LODY-BROWSER-001",
+      "state": "active",
+      "priority": "P1",
+      "runtime": "simulator",
+      "title": "Deny an Agent request to navigate the embedded browser to a local address",
+      "owner": "embedded-browser",
+      "feature": "src/features/browser-permission.feature",
+      "fixture": "scripted-model-wire",
+      "fingerprint": "c340236a6f3c46ffe08095dd02e3c8210fe975a6f9411c9c1f5bf4e858c50b6b",
+      "ownerPaths": [
+        "apps/electron/src/main/services/public-browser-agent-host-service.ts",
+        "packages/harness-pi/src/worker-main.ts",
+        "packages/components/src/components/sessions/"
+      ],
+      "actions": [
+        {
+          "id": "model.seedScriptedConnection"
+        },
+        {
+          "id": "browser.requestPrivateNavigation"
+        },
+        {
+          "id": "browser.denyPermission"
+        }
+      ],
+      "checkpoints": [
+        "the browser request reaches the existing Pi approval prompt",
+        "the user can deny the request without granting task-wide browsing",
+        "the tool result reports user denial and no page data"
+      ],
+      "cleanup": [
+        "isolated desktop process tree exits",
+        "isolated workspace and profile are removed"
+      ],
+      "coverage": {
+        "renderer": "Session tool approval prompt",
+        "electronIpc": "Real browser host availability and RPC",
+        "bundledCli": "Real Pi to MCP tool dispatch",
+        "durableState": "Isolated Session only",
+        "externalWire": "Scripted model tool call"
+      },
+      "signals": {
+        "criticality": 4,
+        "boundaryRisk": 5,
+        "changeFrequency": 4,
+        "escapedDefect": false
+      },
+      "freshness": 5,
+      "scoutJourneys": [],
+      "blockedReason": null,
+      "estimatedMinutes": 2
+    },
+    {
+      "id": "LODY-BROWSER-002",
+      "state": "active",
+      "priority": "P1",
+      "runtime": "simulator",
+      "title": "Allow once cannot navigate the embedded browser to a local address",
+      "owner": "embedded-browser",
+      "feature": "src/features/browser-permission.feature",
+      "fixture": "scripted-model-wire",
+      "fingerprint": "3454fa0c7515be11d4aa522ea5daabbf274c439f0ea6da7fcd6bc9457eca4a05",
+      "ownerPaths": [
+        "apps/electron/src/main/services/public-browser-agent-policy.ts",
+        "packages/harness-pi/src/worker-main.ts",
+        "packages/components/src/components/sessions/"
+      ],
+      "actions": [
+        {
+          "id": "model.seedScriptedConnection"
+        },
+        {
+          "id": "browser.requestPrivateNavigation"
+        },
+        {
+          "id": "browser.allowOnce"
+        }
+      ],
+      "checkpoints": [
+        "the browser request reaches the existing Pi approval prompt",
+        "loopback navigation offers no task-wide website grant",
+        "the browser policy blocks the local address without page data"
+      ],
+      "cleanup": [
+        "isolated desktop process tree exits",
+        "isolated workspace and profile are removed"
+      ],
+      "coverage": {
+        "renderer": "Session tool approval prompt",
+        "electronIpc": "Real browser host and private-network guard",
+        "bundledCli": "Real Pi to MCP tool dispatch",
+        "durableState": "Isolated Session only",
+        "externalWire": "Scripted model tool call"
+      },
+      "signals": {
+        "criticality": 5,
+        "boundaryRisk": 5,
+        "changeFrequency": 4,
+        "escapedDefect": false
+      },
+      "freshness": 5,
+      "scoutJourneys": [],
+      "blockedReason": null,
+      "estimatedMinutes": 2
     },
     {
       "id": "LODY-MCP-001",
@@ -297,10 +384,7 @@
         "driving turn carries the explicit MCP selection into ACP startup",
         "catalog entry is removed without changing prior turn input"
       ],
-      "cleanup": [
-        "synthetic MCP process exits",
-        "workspace MCP catalog entry is deleted"
-      ],
+      "cleanup": ["synthetic MCP process exits", "workspace MCP catalog entry is deleted"],
       "coverage": {
         "renderer": "MCP settings and composer selection",
         "electronIpc": "Real window and workspace RPC",
@@ -320,9 +404,7 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": [
-        "session"
-      ],
+      "scoutJourneys": ["session"],
       "blockedReason": null,
       "estimatedMinutes": 6
     },
@@ -366,10 +448,7 @@
         "Session records Role id and revision",
         "later Role edits do not alter the accepted Session execution target"
       ],
-      "cleanup": [
-        "Session is permanently deleted",
-        "Agent Role catalog row is deleted"
-      ],
+      "cleanup": ["Session is permanently deleted", "Agent Role catalog row is deleted"],
       "coverage": {
         "renderer": "Agent Role settings and composer selection",
         "electronIpc": "Real window and workspace RPC",
@@ -389,9 +468,7 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": [
-        "session"
-      ],
+      "scoutJourneys": ["session"],
       "blockedReason": "A deterministic Agent Role revision fixture and stable Settings Page Object actions are not registered yet.",
       "estimatedMinutes": 7
     },
@@ -431,10 +508,7 @@
         "fork records its origin and owns an independent worktree",
         "source Session remains unchanged when the fork is deleted"
       ],
-      "cleanup": [
-        "fork ACP process exits",
-        "fork worktree and Session are deleted"
-      ],
+      "cleanup": ["fork ACP process exits", "fork worktree and Session are deleted"],
       "coverage": {
         "renderer": "Session fork destination and origin",
         "electronIpc": "Real window and Session RPC",
@@ -454,10 +528,7 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": [
-        "session",
-        "work"
-      ],
+      "scoutJourneys": ["session", "work"],
       "blockedReason": "Design Sessions expose no worktree creation path: creation has no worktree selector and the embedded engine advertises no sessionFork capability, so the fork destination menu never renders. The scripted-ACP fixture premise retired with the legacy harness; re-author against the scripted model wire if a product worktree path returns.",
       "estimatedMinutes": 8
     },
@@ -498,9 +569,7 @@
         "pin state is durable",
         "archived Session can be restored without losing history"
       ],
-      "cleanup": [
-        "Session is permanently deleted"
-      ],
+      "cleanup": ["Session is permanently deleted"],
       "coverage": {
         "renderer": "Session metadata and Archive UI",
         "electronIpc": "Real window and Session RPC",
@@ -520,9 +589,7 @@
         "escapedDefect": false
       },
       "freshness": 3,
-      "scoutJourneys": [
-        "session"
-      ],
+      "scoutJourneys": ["session"],
       "blockedReason": null,
       "estimatedMinutes": 4
     }

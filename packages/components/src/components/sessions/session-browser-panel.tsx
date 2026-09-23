@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
-import { useAtomValue } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from '@tanstack/react-router';
+import { ElectronBrowserAccountSiteInputSchema } from '@molly/shared/electron-ipc';
 import {
   BrowserAddressError,
   formatPreviewTargetUrl,
@@ -18,9 +20,17 @@ import {
   type VisualAnnotationReferencePayload,
 } from '@molly/shared';
 
-import { activeWorkspaceRuntimeAtom, userAtom } from '@/atoms';
+import {
+  activeWorkspaceRuntimeAtom,
+  currentWorkspaceSlugAtom,
+  settingsActiveTabAtom,
+  settingsDialogOpenAtom,
+  userAtom,
+} from '@/atoms';
 import { Button } from '@/ui/button';
 import { isElectronRenderer } from '@/lib/electron';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { getPlatform } from '@/lib/commands/platform';
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { samePreviewTargetOrigin } from '@/lib/session-browser-url';
@@ -69,7 +79,12 @@ function SessionBrowserPanelController({
 }: SessionBrowserPanelProps) {
   const { t } = useTranslation();
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
+  const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const user = useAtomValue(userAtom);
+  const isMobile = useIsMobile();
+  const routeNavigate = useNavigate();
+  const setSettingsTab = useSetAtom(settingsActiveTabAtom);
+  const setSettingsOpen = useSetAtom(settingsDialogOpenAtom);
   const sessionDoc = useSessionDoc(session.id);
   const legacyPreview = getSessionPreviewLegacyFields(session);
   const suggestedAddress = useMemo(() => {
@@ -485,12 +500,14 @@ function SessionBrowserPanelController({
       publicState?.canGoBack &&
       getPublicBrowserBridge()
     ) {
-      void getPublicBrowserBridge()?.back(`session-browser-${session.id}`).then(
-        (result) => {
-          if (!result.ok) setError(result.error);
-        },
-        (commandError: unknown) => setError(errorMessage(commandError))
-      );
+      void getPublicBrowserBridge()
+        ?.back(`session-browser-${session.id}`)
+        .then(
+          (result) => {
+            if (!result.ok) setError(result.error);
+          },
+          (commandError: unknown) => setError(errorMessage(commandError))
+        );
       return;
     }
     if (currentAddress?.engine === 'managed-preview' && managedState?.canGoBack) {
@@ -513,12 +530,14 @@ function SessionBrowserPanelController({
       publicState?.canGoForward &&
       getPublicBrowserBridge()
     ) {
-      void getPublicBrowserBridge()?.forward(`session-browser-${session.id}`).then(
-        (result) => {
-          if (!result.ok) setError(result.error);
-        },
-        (commandError: unknown) => setError(errorMessage(commandError))
-      );
+      void getPublicBrowserBridge()
+        ?.forward(`session-browser-${session.id}`)
+        .then(
+          (result) => {
+            if (!result.ok) setError(result.error);
+          },
+          (commandError: unknown) => setError(errorMessage(commandError))
+        );
       return;
     }
     if (currentAddress?.engine === 'managed-preview' && managedState?.canGoForward) {
@@ -537,12 +556,14 @@ function SessionBrowserPanelController({
 
   const handleReload = useCallback(() => {
     if (currentAddress?.engine === 'public-web' && getPublicBrowserBridge()) {
-      void getPublicBrowserBridge()?.reload(`session-browser-${session.id}`).then(
-        (result) => {
-          if (!result.ok) setError(result.error);
-        },
-        (commandError: unknown) => setError(errorMessage(commandError))
-      );
+      void getPublicBrowserBridge()
+        ?.reload(`session-browser-${session.id}`)
+        .then(
+          (result) => {
+            if (!result.ok) setError(result.error);
+          },
+          (commandError: unknown) => setError(errorMessage(commandError))
+        );
       return;
     }
     if (viewerUrl) {
@@ -558,12 +579,14 @@ function SessionBrowserPanelController({
 
   const handleStop = useCallback(() => {
     if (currentAddress?.engine === 'public-web' && getPublicBrowserBridge()) {
-      void getPublicBrowserBridge()?.stop(`session-browser-${session.id}`).then(
-        (result) => {
-          if (!result.ok) setError(result.error);
-        },
-        (commandError: unknown) => setError(errorMessage(commandError))
-      );
+      void getPublicBrowserBridge()
+        ?.stop(`session-browser-${session.id}`)
+        .then(
+          (result) => {
+            if (!result.ok) setError(result.error);
+          },
+          (commandError: unknown) => setError(errorMessage(commandError))
+        );
       return;
     }
     if (currentAddress?.engine === 'managed-preview' && annotationAvailable) {
@@ -595,6 +618,30 @@ function SessionBrowserPanelController({
     },
     [commitHistory]
   );
+
+  // An Agent may create and navigate this page before the Browser panel is
+  // opened. Observe that existing page without issuing a second navigation.
+  useEffect(() => {
+    const bridge = getPublicBrowserBridge();
+    if (!bridge) return undefined;
+    const browserId = `session-browser-${session.id}`;
+    let live = true;
+    const off = bridge.onState((state) => {
+      if (live && state.browserId === browserId) handlePublicState(state);
+    });
+    void bridge.getState(browserId).then(
+      (state) => {
+        if (live && state) handlePublicState(state);
+      },
+      (stateError: unknown) => {
+        if (live) setError(errorMessage(stateError));
+      }
+    );
+    return () => {
+      live = false;
+      off();
+    };
+  }, [handlePublicState, session.id]);
 
   const handleManagedState = useCallback(
     (state: ManagedBrowserStateMessage['payload']) => {
@@ -629,6 +676,39 @@ function SessionBrowserPanelController({
 
   const loading =
     currentAddress?.engine === 'public-web' ? publicState?.phase === 'loading' : managedLoading;
+  const publicHost =
+    currentAddress?.engine === 'public-web'
+      ? new URL(currentAddress.logicalUrl).hostname.toLowerCase()
+      : '';
+  const importSite = isElectronRenderer()
+    ? ElectronBrowserAccountSiteInputSchema.shape.site.options.find(
+        (site) => publicHost === site || publicHost.endsWith(`.${site}`)
+      )
+    : undefined;
+
+  const openAccountSettings = () => {
+    if (isMobile && workspaceSlug) {
+      void routeNavigate({
+        to: '/$workspaceName/settings/browser-accounts',
+        params: { workspaceName: workspaceSlug },
+      });
+      return;
+    }
+    setSettingsTab('browser-accounts');
+    setSettingsOpen(true);
+  };
+  const changeAgentBrowserControl = async (take: boolean) => {
+    const bridge = getPublicBrowserBridge();
+    if (!bridge) return;
+    try {
+      const result = take
+        ? await bridge.takeAgentControl(`session-browser-${session.id}`)
+        : await bridge.resumeAgentControl(`session-browser-${session.id}`);
+      if (!result.ok) throw new Error(result.error);
+    } catch (controlError) {
+      setError(errorMessage(controlError));
+    }
+  };
   const navigationBusy = busy || managedNavigationPhase !== null;
   const canGoBack =
     (currentAddress?.engine === 'public-web' && publicState?.canGoBack === true) ||
@@ -660,6 +740,68 @@ function SessionBrowserPanelController({
         onStop={handleStop}
         onToggleAnnotation={() => setAnnotationEnabled((current) => !current)}
       />
+      {currentAddress?.engine === 'public-web' && publicState?.agentControl === 'agent' ? (
+        <div className="border-b px-3 py-2 text-xs">
+          <span className="mr-2">
+            {t('sessions.browser.agentControlling', 'Agent is controlling this page.')}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void changeAgentBrowserControl(true)}
+          >
+            {t('sessions.browser.takeControl', 'Take control')}
+          </Button>
+        </div>
+      ) : null}
+      {currentAddress?.engine === 'public-web' && publicState?.agentControl === 'human-takeover' ? (
+        <div className="border-b px-3 py-2 text-xs">
+          <span className="mr-2">
+            {t(
+              'sessions.browser.humanControlling',
+              'Agent page access is paused while you control this page.'
+            )}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void changeAgentBrowserControl(false)}
+          >
+            {t('sessions.browser.resumeAgent', 'Resume Agent')}
+          </Button>
+        </div>
+      ) : null}
+      {importSite ? (
+        <div className="border-b px-3 py-2 text-xs">
+          <p className="mb-2 text-muted-foreground">
+            {t(
+              'sessions.browser.accountChoices',
+              'Use this site anonymously, sign in on the page, or import its Chrome cookies in Molly settings. The Agent pauses while you take control.'
+            )}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {getPlatform() === 'mac' ? (
+              <Button type="button" variant="outline" size="sm" onClick={openAccountSettings}>
+                {t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')}
+              </Button>
+            ) : null}
+            <Button type="button" variant="ghost" size="sm" onClick={openAccountSettings}>
+              {t('sessions.browser.manageAccounts', 'Manage website accounts')}
+            </Button>
+          </div>
+          {publicState?.accountImport?.site === importSite ? (
+            <p className="mt-2 text-muted-foreground">
+              {t(
+                'sessions.browser.cookiesImported',
+                'Molly now stores {{count}} cookies for this site. Check the website to verify sign-in.',
+                { count: publicState.accountImport.imported }
+              )}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {error ? (
         <div
           role="alert"
@@ -733,7 +875,6 @@ function SessionBrowserPanelController({
           </p>
         </div>
       )}
-
     </div>
   );
 }

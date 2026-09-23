@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 // is keyed on the last user message:
 //   contains 'You generate titles for'  -> short canned title
 //   contains '[SCOUT:HOLD]'             -> stream HELD start, never finish
+//   contains '[E2E:BROWSER:PRIVATE]'     -> request one embedded-browser tool call
 //   otherwise                           -> short canned reply, stop
 // Every request and its terminal outcome land in the JSONL event log so the
 // harness can assert observable signals instead of timing.
@@ -56,9 +57,7 @@ function completion(model, text) {
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
     model,
-    choices: [
-      { index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' },
-    ],
+    choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: 'stop' }],
   };
 }
 
@@ -96,11 +95,21 @@ async function handleRequest(req, res) {
   const text = lastUserText(body);
   const mode = text.includes('You generate titles for')
     ? 'title'
-    : text.includes('[SCOUT:HOLD]')
-      ? 'hold'
-      : 'reply';
+    : text.includes('[E2E:BROWSER:PRIVATE]')
+      ? 'browser-private'
+      : text.includes('[SCOUT:HOLD]')
+        ? 'hold'
+        : 'reply';
+  const toolResult = Array.isArray(body?.messages)
+    ? body.messages.findLast((message) => message?.role === 'tool')
+    : undefined;
   const requestId = randomUUID();
-  record('request-start', { requestId, mode, model: body?.model, streaming: body?.stream === true });
+  record('request-start', {
+    requestId,
+    mode,
+    model: body?.model,
+    streaming: body?.stream === true,
+  });
 
   if (body?.stream !== true) {
     record('request-complete', { requestId, mode, transport: 'json' });
@@ -115,6 +124,58 @@ async function handleRequest(req, res) {
     connection: 'keep-alive',
   });
   res.write(chunk(body?.model, { role: 'assistant' }));
+
+  if (mode === 'browser-private' && !toolResult) {
+    const tools = Array.isArray(body?.tools) ? body.tools : [];
+    const browserTool = tools.find(
+      (tool) =>
+        typeof tool?.function?.name === 'string' && tool.function.name.includes('molly_browser')
+    );
+    if (!browserTool) {
+      record('browser-tool-missing', { requestId, mode });
+      res.write(chunk(body?.model, { content: 'Synthetic browser tool was unavailable.' }));
+      res.write(chunk(body?.model, {}, 'stop'));
+    } else {
+      record('browser-tool-dispatched', { requestId, mode });
+      res.write(
+        chunk(
+          body?.model,
+          {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'synthetic-browser-private',
+                type: 'function',
+                function: {
+                  name: browserTool.function.name,
+                  arguments: JSON.stringify({ kind: 'navigate', url: 'http://127.0.0.1:8333/' }),
+                },
+              },
+            ],
+          },
+          'tool_calls'
+        )
+      );
+    }
+    res.write('data: [DONE]\n\n');
+    res.end(() => record('request-complete', { requestId, mode }));
+    return;
+  }
+
+  if (mode === 'browser-private') {
+    const resultText = String(toolResult.content ?? '');
+    record('browser-tool-result', {
+      requestId,
+      mode,
+      deniedByUser: resultText.includes('harness_permission_denied'),
+      blockedPrivateHost: resultText === 'harness_browser_destination_denied',
+    });
+    res.write(chunk(body?.model, { content: 'Synthetic browser probe complete.' }));
+    res.write(chunk(body?.model, {}, 'stop'));
+    res.write('data: [DONE]\n\n');
+    res.end(() => record('request-complete', { requestId, mode }));
+    return;
+  }
 
   if (mode === 'hold') {
     res.write(chunk(body?.model, { content: HELD_TEXT }));

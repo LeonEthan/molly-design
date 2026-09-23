@@ -17,6 +17,10 @@ Legacy history may retain plaintext. Saving does not attest authenticated execut
 
 ## Layout and components
 
+- Website-account import shows its pending authorization state and manual retry
+  guidance; passwords belong only in the macOS system dialog. Use the shared site
+  contract for supported imports; cookie counts do not attest website sign-in.
+
 - Advanced compatible models use explicit bounded metadata on the connection row.
   Explain protocol/declared capabilities and missing tool support; saving is not a
   probe, model selection or price estimate. Native presets retain SDK catalogs.

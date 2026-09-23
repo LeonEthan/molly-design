@@ -1,0 +1,28 @@
+{
+  "commit": "3fecd4f931666fecd1fbd7c214ce544409ead6e8",
+  "license": "MIT",
+  "source": "https://raw.githubusercontent.com/microsoft/vscode/3fecd4f931666fecd1fbd7c214ce544409ead6e8/",
+  "files": {
+    "src/vs/base/common/arrays.ts": "e9a08190d445f28485a24c8b2701b5d91fda0702f3999f96d53f0cfebc032c0a",
+    "src/vs/base/common/arraysFind.ts": "b170eb4ef83d61dabeb8aaa3355b006a95f575c6e5a9bba3176ac67f8b446a8b",
+    "src/vs/base/common/assert.ts": "16b9d0b4b5abe860fa90388d9db8202bc157efab7104acb5964e58dc25c020ad",
+    "src/vs/base/common/collections.ts": "643a53c117abaa383e2a3d047589d5b79a826c280df1974cdd64be4d8f7835a9",
+    "src/vs/base/common/errors.ts": "4771945225f0689ea9feef5fcf148dc493791edaf8693d5e11b057ce4a8d0b6e",
+    "src/vs/base/common/event.ts": "90252004ebb0dcb55cf7a544c314a76d674c1a55dd2e0c4a74f395c8e7da87b2",
+    "src/vs/base/common/functional.ts": "976c27e04b82913ad0e068cce30d74212c2c86a86f866038156b6fd9dca27610",
+    "src/vs/base/common/iterator.ts": "a787d959a2904785ea351dba98bffdcd37fcb367c0eb97f065277add1ce86aa6",
+    "src/vs/base/common/lifecycle.ts": "3ce8457a9317bf4b5008a22ddd9fe43a6d68b3069d57f8ec7549d3188e80d424",
+    "src/vs/base/common/linkedList.ts": "fc6120f8be8fb3198daf3c214eedd777001a608a6721642ce7f7e888fd9c0df1",
+    "src/vs/base/common/map.ts": "54d5814a5f86b4900ebb64ef9b9513d468b2b72a57bbf6ac4fa189dd457a9f0d",
+    "src/vs/base/common/platform.ts": "c6e8f86c52ca1b521ec5a3a852791e621a632b96e63325fc2892eea281f90d98",
+    "src/vs/base/common/process.ts": "c72b499f137a9f52134cd816db076f02712b7ee279f2957b53740639f80d9083",
+    "src/vs/base/common/stopwatch.ts": "e56bb28c1a532616d5e85ff3576d2cfaa57d0a42f8382999e6e13859869bfae8",
+    "src/vs/base/common/types.ts": "0a17b8d00093ff63b8387508fcacfe82dfb1838ddcc44bd8315eabfd48c32076",
+    "src/vs/base/common/uuid.ts": "99dc9f90c4c015697ee0ca04664d644990a3c7dfad59e147dde3e6ea5afefa67",
+    "src/vs/nls.ts": "48840e7c0453b4998e3b2e1eb881f42ca78fb54e807589f1e0fe218a03de5616",
+    "src/vs/platform/browserView/common/cdp/proxy.ts": "deb317e3e20d3b4814274166aacd11c86feec231b0d2839fc273ba31e62d0232",
+    "src/vs/platform/browserView/common/cdp/types.ts": "477b67945309a0e3989e9258379436b515fe9ed23fe5fbcf47a32292e0434949",
+    "src/vs/platform/browserView/electron-main/browserViewCDPTarget.ts": "0aba38b0b2855703854f70c7fab11dc9b452b58bbfa8415c3c1ff8f60e295b84",
+    "src/vs/platform/browserView/electron-main/browserViewDebugger.ts": "54767c87e39278517b28d96d11fbaef93970a66b7935d7d00c443823e319bee7"
+  }
+}

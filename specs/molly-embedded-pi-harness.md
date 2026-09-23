@@ -1,7 +1,7 @@
 # Molly embedded Pi harness
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [中文](molly-embedded-pi-harness.zh.md)
@@ -93,6 +93,8 @@ Credentials are protected by SecretStore, and ordinary configuration stores only
 
 Authorization is bound to the actual run, worker epoch, request and connection revision. Out-of-workspace reads/writes, arbitrary shells, stdio command changes and secret-receiving-domain changes have explicit authorization boundaries; paid tools default to per-call authorization, with a user-granted limited count allowed. Authorization checks land on the execution path; a public read-before reminder is not read proof or write authorization.
 
+The embedded browser tool runs through the existing MCP bridge and host approval pipeline. Users may authorize specified top-level sites and a limited browser tool scope for the current task. Approval requests, per-call checks and operation records must retain the actual source of authorization rather than presenting task authorization as a fresh human approval for each call. The scope expires with the run/epoch, cancellation, completion, page closure or human takeover; restoring history cannot restore live authorization. Navigation or reading outside the approved sites waits for expanded task authorization, and one task exclusively observes and operates the page. This authority does not extend to native shell, external MCP, Chrome or high-impact website actions, and does not reuse session-level `session/set_mode`.
+
 Model requests, compaction and plugin sub-requests are all attributed to an explicit connection and usage record; the first version's title is generated locally from the user's first sentence. Bounded transport retries must not become replays of whole tasks or tool side effects. When cost has no reliable basis, show unknown or estimated.
 
 ### MCP and paid images
@@ -100,6 +102,8 @@ Model requests, compaction and plugin sub-requests are all attributed to an expl
 Reuse the workspace MCP catalog and per-turn selection, preserving the semantics of an explicit empty selection. Support the verified stdio/Streamable HTTP subset; tools have a stable namespace, origin and schema version. The tool set is frozen when a task is accepted, revocation blocks execution immediately, an in-flight schema change fails clearly, and new tools take effect at a safe boundary. Unimplemented capabilities such as sampling, elicitation and OAuth are not claimed as supported.
 
 Keep the session/host capability gating of `molly_generate_image`, `molly_edit_image` and `molly_render_preview`. External image capability is bound through preset adapters or declarative field mapping; when binding is impossible it can still serve as an ordinary tool, honestly showing image capability as not ready. The image model must be explicitly configured by the user — never an LLM model name or a product default.
+
+The browser tool enters the frozen tool catalog only when the Molly desktop and the currently controllable page are ready. Both catalog discovery and actual calls reject unauthorized tools. Page text, structure and screenshots enter the model as ordinary observations, without the paid identity of image generation or editing. Lost connections, revocation or changed page identity fail explicitly; unknown side effects are not automatically retried or replayed. Chrome sign-in import is a user action, not an Agent tool.
 
 URLs, base64, MCP images/resources enter the existing asset store only after origin, path, MIME, size, dimension and download-boundary checks. A remote file URI does not authorize local reads; redirects re-validate the target, and secrets are not forwarded to a new domain. An asset result itself never commits to or replaces the canvas.
 

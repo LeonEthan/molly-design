@@ -24,6 +24,7 @@ import { KeyboardShortcutsSetting } from './keyboard-shortcuts-setting';
 import { AboutSettingsComponent } from './about-setting';
 import { AgentRolesSetting } from './agent-roles-setting';
 import { ImageConnectionSetting } from './image-connection-setting';
+import { BrowserAccountsSetting } from './browser-accounts-setting';
 import { McpSetting } from './mcp-setting';
 import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
 
@@ -229,6 +230,8 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
       return <AgentRolesSetting />;
     case 'image-connection':
       return <ImageConnectionSetting />;
+    case 'browser-accounts':
+      return <BrowserAccountsSetting />;
     case 'mcp':
       return <McpSetting />;
     case 'machines':

@@ -89,6 +89,19 @@ export async function verifyDesignVersions(directory: string) {
     assert.deepEqual((await read()).doc, unsaved)
     await restore(v1)
     assert.deepEqual((await read()).doc, first.doc)
+    await add('shape')
+    await canvas().webContents.executeJavaScript(
+      "window.molly.snapshot = () => { throw Error('Synthetic canvas snapshot failure') }; true"
+    )
+    const savedWithReloadError = await createDesignVersion(id)
+    assert.match(savedWithReloadError.reloadError ?? '', /Script failed to execute/)
+    assert.equal((await readDesignCanvasState(id)).baseVersionId, savedWithReloadError.commitId)
+    assert.equal(
+      (await designRequest<DesignVersion[]>({ operation: 'history-list', sessionId: id })).at(-1)
+        ?.commitId,
+      savedWithReloadError.commitId,
+      'A canvas refresh failure must not hide a version already written to Git'
+    )
     await writeFile(
       join(directory, 'version-result.json'),
       JSON.stringify(
@@ -102,7 +115,8 @@ export async function verifyDesignVersions(directory: string) {
           unchangedSaveIdempotent: true,
           branchOriginPreserved: true,
           unversionedEditsProtected: true,
-          reopenPreserved: true
+          reopenPreserved: true,
+          postCommitReloadErrorReported: true
         },
         null,
         2

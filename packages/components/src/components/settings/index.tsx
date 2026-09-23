@@ -8,4 +8,4 @@ export { ProjectSettingsComponent, ProjectSettingsView } from './project-setting
 export { SettingsCategoryGrid, SettingsCategoryList } from './settings-category-list';
 export { SettingsHeader } from './settings-header';
 export const settingContainerClass =
-  'space-y-3 px-4 py-2 overflow-x-hidden md:mx-auto md:max-w-4xl md:px-2';
+  'space-y-5 px-4 py-2 overflow-x-hidden md:mx-auto md:max-w-4xl md:px-0';

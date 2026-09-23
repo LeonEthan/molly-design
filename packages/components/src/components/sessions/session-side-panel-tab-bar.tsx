@@ -134,12 +134,11 @@ type SessionSidePanelTabBarProps = {
   className?: string;
 };
 
-const TAB_CLASS = `group relative flex h-7 max-w-[180px] shrink-0 cursor-pointer items-center gap-1.5 rounded-md text-[13px] transition-colors ${WINDOW_DRAG_EXEMPT_CLASS}`;
-// Soft cool-gray pills on the white side panel (Linear-like), not heavy slate washes.
-const ACTIVE_TAB_CLASS =
-  'bg-foreground/[0.08] text-tab-active-foreground shadow-[inset_0_0_0_1px_hsl(var(--border)/0.7)]';
+const TAB_CLASS = `group relative flex h-8 max-w-[180px] shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-transparent text-[13px] transition-colors ${WINDOW_DRAG_EXEMPT_CLASS}`;
+// Match the session strip’s soft surface ladder on the side-panel background.
+const ACTIVE_TAB_CLASS = 'bg-foreground/[0.08] font-medium text-tab-active-foreground';
 const INACTIVE_TAB_CLASS =
-  'bg-foreground/[0.035] text-tab-inactive-foreground hover:bg-foreground/[0.06] hover:text-tab-hover-foreground';
+  'bg-foreground/[0.03] font-normal text-tab-inactive-foreground hover:bg-foreground/[0.05] hover:text-tab-hover-foreground';
 
 function SidePanelTabIcon({ tab }: { tab: SessionSidePanelTabItem }) {
   if (tab.pending) {
@@ -298,9 +297,11 @@ export const SessionSidePanelTabBar = memo(function SessionSidePanelTabBar({
                     type="button"
                     disabled={busy}
                     className={cn(
-                      'ml-auto shrink-0 rounded-sm p-0.5 transition-[opacity,background-color,color]',
-                      'hover:bg-muted-foreground/10 hover:text-tab-hover-foreground',
-                      active ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      'ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring/40',
+                      'hover:bg-foreground/[0.08] hover:text-tab-hover-foreground',
+                      active
+                        ? 'opacity-100'
+                        : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                     )}
                     aria-label={closeTabLabel(tab.label)}
                     onClick={(event) => {
@@ -308,7 +309,7 @@ export const SessionSidePanelTabBar = memo(function SessionSidePanelTabBar({
                       if (!busy) onTabClose(tab.id);
                     }}
                   >
-                    <X className="h-3 w-3" />
+                    <X className="h-3.5 w-3.5" />
                   </button>
                 ) : null}
               </div>
@@ -326,7 +327,7 @@ export const SessionSidePanelTabBar = memo(function SessionSidePanelTabBar({
             disabled={availablePanels.length === 0}
             aria-label={addPanelLabel}
             className={cn(
-              'flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-hover-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent',
+              'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-hover hover:text-hover-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent',
               WINDOW_DRAG_EXEMPT_CLASS
             )}
           >

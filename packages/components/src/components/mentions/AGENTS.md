@@ -26,14 +26,15 @@ Pipeline background: [ui-mentions.md](../../../../../.agents/docs/ui-mentions.md
   candidates.
 - Issues and PRs rank over their own slice of the shared cache, partitioned once
   by `useMentionCategories`.
-- File, Session, Agent Role, Issue, and PR candidates use the vendored VS Code
+- File, Session, Issue, and PR candidates use the vendored VS Code
   `scoreFuzzy` with non-contiguous matching, wrapped by any source-specific
   ordering. Skills and commands keep their own ranking.
 - A candidate describes its side panel through the neutral
   `MentionCandidateDetail` fields, which render verbatim — put i18n'd text
-  there, never a raw enum. The one exception is `detail.agentRole`, rendering
-  `sessions/agent-role-detail-pane.tsx`: desktop only, fixed height, stable
-  scrollbar gutter.
+  there, never a raw enum.
+- Agent Roles are retired: no category, catalog hydration, or before-send
+  instruction expansion. A restored Role range sends as plain text. Existing
+  transcript spans keep their frozen labels and marks.
 - Lazy work is `MentionCategory.activation`; category navigation starts its
   destination synchronously through `MentionItem.onMentionNavigate`, while
   `selectMentionViewActivations` covers typed/pasted prefixes, direct triggers,

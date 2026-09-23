@@ -197,8 +197,6 @@ function StoryShell({ recents }: { recents: ReadonlyArray<RecentRunConfigItem> }
             <DesktopRunConfigMenu
               agentSelection={{ agentId: codexId, machineId }}
               availableAgentConfigs={agents}
-              showAgentNameInTrigger
-              onAgentConfigChange={fn()}
               modelOptions={modelOptions}
               selectedModelId={model}
               onModelChange={setModel}

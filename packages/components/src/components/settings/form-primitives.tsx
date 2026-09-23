@@ -5,7 +5,7 @@ import { Label } from '@/ui/label';
  * The shared grammar of the settings editors.
  *
  * Every settings form — MCP connection, Agent Role — is the same stack of
- * bordered sections holding labelled fields, so the spacing and typography live
+ * soft sections holding labelled fields, so the spacing and typography live
  * here once. A local copy per editor is how three dialogs that are supposed to
  * look like one surface drift apart one padding value at a time.
  */
@@ -20,12 +20,10 @@ export function Section({
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3 rounded-lg border border-border/70 bg-card/60 p-3">
+    <section className="space-y-5 rounded-2xl border border-border/40 bg-card p-5">
       <header>
-        <h3 className="text-xs font-semibold text-muted-foreground">{title}</h3>
-        {hint ? (
-          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground/90">{hint}</p>
-        ) : null}
+        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        {hint ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
       </header>
       {children}
     </section>
@@ -47,15 +45,15 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
         {icon ? <span className="text-muted-foreground">{icon}</span> : null}
         <Label htmlFor={htmlFor} className="text-xs font-medium">
           {label}
         </Label>
       </div>
       {children}
-      {hint ? <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p> : null}
+      {hint ? <p className="text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

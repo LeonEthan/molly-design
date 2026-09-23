@@ -416,7 +416,7 @@ describe('SessionList opened-by rendering', () => {
     });
 
     const row = container?.querySelector('[data-sidebar-session-id="opened-2"]');
-    expect(row?.className).toContain('bg-sidebar-foreground/10');
+    expect(row?.className).toContain('bg-sidebar-foreground/[0.06]');
     expect(row?.querySelector('[data-session-working-spinner]')).not.toBeNull();
   });
 });

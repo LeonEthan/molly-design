@@ -8,11 +8,11 @@ the reasoning behind those rules.
 
 ## Ownership
 
-| Area    | Owner                                    | Contract                               |
-| ------- | ---------------------------------------- | -------------------------------------- |
-| Stream  | `view.tsx`, `build-chat-stream-items.ts` | Stable Virtua rows and scroll.         |
-| Turns   | `assistant-turn-render-blocks.ts`        | Activity groups and foldable segments. |
-| Outline | `conversation-outline-*`                 | Round ticks and navigation.            |
+| Area      | Owner                                            | Contract                                                                          |
+| --------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Stream    | `view.tsx`, `build-chat-stream-items.ts`         | Stable Virtua rows and scroll.                                                    |
+| Turns     | `assistant-turn-render-blocks.ts`                | Activity groups and foldable segments.                                            |
+| Outline   | `conversation-outline-*`                         | Round ticks and navigation.                                                       |
 | Selection | [`message-selection.tsx`](message-selection.tsx) | Temporary message selection, drag rectangle, range modifiers, and edge scrolling. |
 
 - `conversation-outline-rail.tsx` renders one tick per round (a user turn plus its
@@ -27,6 +27,30 @@ the reasoning behind those rules.
 - `session-file-card.tsx`, `session-file-preview-dialog.tsx`, and
   [session-files-rendering.md](session-files-rendering.md) own attachment and
   image-preview rendering.
+
+## Conversation presentation
+
+File activity labels keep their full action word on one line while the filename
+uses the remaining space and truncates. Permission-card content and actions share
+the header's 16px horizontal inset. The raw-error dialog returns keyboard focus to
+the current notice trigger on close, including after viewport changes replace a
+virtualized row; error extraction and copying retain their existing behavior.
+
+`markdown-renderer.tsx` keeps body line-height at 1.75, with 16px paragraph
+spacing, 6px between list items, and semibold emphasis. Headings retain their
+semantic levels and font-size scaling. Activity prose uses normal weight and
+1.6 line-height; its compact headings remain distinct from answer headings.
+
+`conversation-panel.ts` supplies the shared frame for existing tool, terminal
+and plan surfaces: a soft border without shadow, 16px horizontal padding and a
+tinted header above the body surface. Plan checklist rows use a faint tint
+without a second border. These styles leave streaming, search and turn folding
+unchanged. The [Seede style note](../../../../../.agents/notes/implemented/feature/2026-09-22-seede-ui-style-direction.zh.md)
+owns the rollout and visual evidence.
+
+Markdown action glyphs use the shared `ui/icons.tsx` facade, including Streamdown's
+copy, download and loading slots. This replaces library defaults without changing
+which controls are enabled or how streaming and Mermaid opening work.
 
 ## Coverage
 

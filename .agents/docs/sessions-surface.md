@@ -47,6 +47,20 @@ this page is the full text of the rules summarised there.
   wide markdown, tool output, and user content own their nested horizontal scrollers
   and must never make the whole conversation pane pan sideways.
 
+User text bubbles use a soft foreground tint with normal foreground text and an
+18px radius. Mention chips and search highlights inherit the ordinary theme
+colours; there is no inverted-primary override inside the bubble. Landing and
+session composers share a 24px editable-field surface, including the opaque
+mention cover, and keep focus feedback on the outer shell.
+
+Conversation Markdown keeps 1.75 line height, with 16px between ordinary
+paragraphs and 6px between list items. Emphasis retains semantic markup at 600;
+table headers use 500, while table body cells and activity prose use normal
+weight. Shared tool/plan panels use the same lighter border and shadow-free frame,
+with 16px horizontal body padding; expanded plans do not add another border around
+every item. Turn-configuration popovers share the roomier spacing. These changes
+leave streaming, folding, search and the vertical-only list ownership unchanged.
+
 The runtime uses `ConversationView` over the shared session-data reader. Opening imports
 the document and builds its shallow directory; visible ranges acquire body leases.
 The default retained tail is 20 turns, body cache 200. Design receipts and provider

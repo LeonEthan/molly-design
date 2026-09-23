@@ -2,6 +2,23 @@ import type {
   DesignSelectionSummary,
   DesignToolbarPresentation,
 } from '@molly/shared/design-selection-commands';
+import {
+  arrowShapeIcon,
+  chevronDownIcon,
+  ellipseIcon,
+  imageIcon,
+  lineIcon,
+  minusIcon,
+  mousePointer2Icon,
+  plusIcon,
+  rectangleIcon,
+  redo2Icon,
+  renderUiIconSvg,
+  triangleIcon,
+  typeIcon,
+  undo2Icon,
+  type UiIconNode,
+} from '@molly/shared/ui-icons';
 import { createSelectionToolbar } from './selection-toolbar';
 
 /** Product editor persistence and its fixed, revision-bound parent bridge. */
@@ -55,7 +72,44 @@ export function createProductSession(options: {
   options.setReadonly(true);
   document.body.dataset.readonly = 'true';
   const style = document.createElement('style');
-  style.textContent = `:root{color-scheme:light dark}.ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}.ed-corner-br{inset-inline-end:auto!important;left:14px!important}#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:6px;padding:5px 11px;background:Canvas;color:CanvasText;border-radius:9px;font:12px system-ui;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);opacity:.85}#autosave-status .dot{width:6px;height:6px;border-radius:50%;background:#14ae5c;flex:none}#autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:#888}#autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:#f24822}.molly-dock{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:2px;background:Canvas;color:CanvasText;border-radius:9px;padding:5px 8px;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04)}.molly-dock button{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font:600 14px system-ui;padding:0}.molly-dock button:hover{background:#8882}.molly-dock button.on{background:CanvasText;color:Canvas}.molly-dock svg{width:16px;height:16px;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}.molly-dock svg.fill{fill:currentColor;stroke:none}.molly-dock .sep{width:1px;height:18px;background:#8884;margin:0 4px}.molly-dock .caret{width:7px;height:7px;stroke-width:3;margin-left:-3px}body[data-readonly="true"] .molly-dock button.create{opacity:.35;pointer-events:none}.molly-shape-popup{position:fixed;left:50%;bottom:58px;transform:translateX(-50%);z-index:2147483001;display:none;flex-direction:column;background:Canvas;color:CanvasText;border-radius:13px;padding:6px;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);min-width:170px;max-height:50vh;overflow:auto}.molly-shape-popup.open{display:flex}.molly-shape-popup button{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font:12.5px system-ui;text-align:left}.molly-shape-popup button:hover{background:#8882}.molly-shape-popup svg{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.8;fill:none;stroke-linecap:round;stroke-linejoin:round}`;
+  style.textContent = `
+:root{color-scheme:light dark}
+.ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}
+.ed-corner-br{inset-inline-end:auto!important;left:14px!important}
+.ed-zoombtn:has(.molly-zoom-icon){padding:5px 6px}
+.molly-zoom-icon{display:block;width:14px;height:14px}
+/* Keep Moveable's 14px targets and inverse-zoom geometry; only the painted
+   handles shrink. The opaque centers stay legible over light and dark artwork. */
+.ed-stage-scale .moveable-control-box{--moveable-color:#8796ab}
+.ed-stage-scale .moveable-control-box .moveable-control{border:0;background:transparent}
+.ed-stage-scale .moveable-control-box .moveable-control::after{content:"";position:absolute;left:50%;top:50%;width:7px;height:7px;box-sizing:border-box;transform:translate(-50%,-50%);border:1px solid var(--moveable-color);border-radius:50%;background:#fff;pointer-events:none}
+.ed-stage-scale .moveable-control-box .moveable-n::after,.ed-stage-scale .moveable-control-box .moveable-s::after{width:14px;height:5px;border-radius:999px}
+.ed-stage-scale .moveable-control-box .moveable-e::after,.ed-stage-scale .moveable-control-box .moveable-w::after{width:5px;height:14px;border-radius:999px}
+.ed-stage-scale .moveable-control-box .moveable-control:hover::after{border-color:#627994;background:#edf2f7}
+/* Reserve the 281px dock, the 14px edge inset and a 12px minimum gap. */
+#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:6px;max-width:calc(50vw - 168px);box-sizing:border-box;padding:5px 11px;background:Canvas;color:CanvasText;border-radius:9px;font:12px system-ui;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);opacity:.85}
+#autosave-status .message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#autosave-status .dot{width:6px;height:6px;border-radius:50%;background:#14ae5c;flex:none}
+#autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:#888}
+#autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:#f24822}
+.molly-dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:Canvas;color:CanvasText;border-radius:999px;padding:8px 10px;box-shadow:0 6px 20px rgb(0 0 0 / .12),0 0 0 1px rgb(0 0 0 / .04)}
+.molly-dock button{width:38px;height:38px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:inherit;cursor:pointer;font:400 18px system-ui;padding:0}
+.molly-dock button:hover{background:#8882}
+.molly-dock button.on{background:CanvasText;color:Canvas}
+.molly-dock svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.molly-dock .sep{width:1px;height:18px;background:#8884;margin:0 4px}
+.molly-dock .caret{width:12px;height:12px;margin-left:-2px}
+.molly-dock button:disabled{opacity:.35;pointer-events:none}
+.molly-shape-popup{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:2147483001;display:none;flex-direction:column;background:Canvas;color:CanvasText;border-radius:16px;padding:6px;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);min-width:170px;max-height:50vh;overflow:auto}
+.molly-shape-popup.open{display:flex}
+.molly-shape-popup button{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:12.5px system-ui;text-align:left}
+.molly-shape-popup button:hover{background:#8882}
+.molly-shape-popup svg{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+/* Keep zoom and save feedback reachable when all three bottom surfaces cannot
+   fit on one row. Extremely narrow docks scroll without shrinking the targets. */
+/* With the dock raised, reserve 140px for zoom plus edge insets and a gap. */
+@media(max-width:640px){.molly-dock{bottom:64px}.molly-shape-popup{bottom:130px}#autosave-status{max-width:calc(100vw - 180px)}}
+`;
   document.head.append(style);
   const dock = document.createElement('div');
   dock.className = 'molly-dock';
@@ -70,6 +124,7 @@ export function createProductSession(options: {
     button.title = label;
     button.setAttribute('aria-label', label);
     if (extraClass) button.className = extraClass;
+    button.disabled = readonly && (extraClass === 'create' || extraClass === 'history');
     button.onclick = onClick;
     dock.append(button);
     return button;
@@ -83,51 +138,47 @@ export function createProductSession(options: {
     options.commitPending();
     options.applyCommands({ verb: 'add-element', ...payload });
   };
-  const icon = (paths: string, filled = false) =>
-    `<svg viewBox="0 0 24 24"${filled ? ' class="fill"' : ''}>${paths}</svg>`;
+  dockButton(renderUiIconSvg(mousePointer2Icon), '选择 / Select', () => {}, 'on');
   dockButton(
-    icon('<path d="m4 3 7 17 2.5-7.5L21 10 4 3z"/>', true),
-    '选择 / Select',
-    () => {},
-    'on'
-  );
-  dockButton(
-    icon('<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>'),
+    renderUiIconSvg(undo2Icon),
     '撤销 / Undo (⌘Z)',
-    clickHidden('.ed-group-history > button:nth-child(1)')
+    clickHidden('.ed-group-history > button:nth-child(1)'),
+    'history'
   );
   dockButton(
-    icon('<path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>'),
+    renderUiIconSvg(redo2Icon),
     '重做 / Redo (⇧⌘Z)',
-    clickHidden('.ed-group-history > button:nth-child(2)')
+    clickHidden('.ed-group-history > button:nth-child(2)'),
+    'history'
   );
   dockSep();
-  dockButton('T', '文本 / Text (T)', () => addElement({ kind: 'text' }), 'create');
+  dockButton(
+    renderUiIconSvg(typeIcon),
+    '文本 / Text (T)',
+    () => addElement({ kind: 'text' }),
+    'create'
+  );
   const shapePopup = document.createElement('div');
   shapePopup.className = 'molly-shape-popup';
   // Insert menu mirrors the kernel's modeled presets; each entry carries the
   // exact add-element payload (one command = one undo batch).
-  const shapeItems: Array<[string, string, Record<string, unknown>]> = [
-    [
-      '<rect x="4" y="4" width="16" height="16"/>',
-      '矩形 / Rectangle',
-      { kind: 'shape', shapeName: 'rect' },
-    ],
-    ['<circle cx="12" cy="12" r="8"/>', '椭圆 / Ellipse', { kind: 'shape', shapeName: 'ellipse' }],
-    ['<path d="M12 5l8 15H4z"/>', '三角形 / Triangle', { kind: 'shape', shapeName: 'triangle' }],
-    ['<path d="M3 10h11V6l7 6-7 6v-4H3z"/>', '箭头 / Arrow', { kind: 'shape', shapeName: 'arrow' }],
-    ['<path d="M5 19 19 5"/>', '直线 / Line', { kind: 'line' }],
+  const shapeItems: Array<[readonly UiIconNode[], string, Record<string, unknown>]> = [
+    [rectangleIcon, '矩形 / Rectangle', { kind: 'shape', shapeName: 'rect' }],
+    [ellipseIcon, '椭圆 / Ellipse', { kind: 'shape', shapeName: 'ellipse' }],
+    [triangleIcon, '三角形 / Triangle', { kind: 'shape', shapeName: 'triangle' }],
+    [arrowShapeIcon, '箭头 / Arrow', { kind: 'shape', shapeName: 'arrow' }],
+    [lineIcon, '直线 / Line', { kind: 'line' }],
   ];
   dockButton(
-    icon('<rect x="4" y="4" width="16" height="16" rx="2"/>') +
-      '<svg class="caret" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+    renderUiIconSvg(rectangleIcon) +
+      renderUiIconSvg(chevronDownIcon, { size: 12, className: 'caret' }),
     '形状 / Shape',
     () => {
       if (!shapePopup.classList.contains('open')) {
         shapePopup.innerHTML = '';
-        for (const [paths, label, payload] of shapeItems) {
+        for (const [nodes, label, payload] of shapeItems) {
           const item = document.createElement('button');
-          item.innerHTML = `${icon(paths)}<span>${label}</span>`;
+          item.innerHTML = `${renderUiIconSvg(nodes, { size: 16 })}<span>${label}</span>`;
           item.onclick = () => {
             addElement(payload);
             shapePopup.classList.remove('open');
@@ -140,9 +191,7 @@ export function createProductSession(options: {
     'create'
   );
   dockButton(
-    icon(
-      '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/>'
-    ),
+    renderUiIconSvg(imageIcon),
     '图片 / Image',
     () => {
       if (readonly) return;
@@ -161,6 +210,17 @@ export function createProductSession(options: {
     },
     'create'
   );
+  // The Editor mounts these buttons before attaching the product session.
+  // Keep its listeners and live percentage label; replace only the two glyphs.
+  const zoomButtons = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.ed-zoombar .ed-zoombtn:not(.ed-zoomlabel)')
+  );
+  for (const [index, nodes] of [minusIcon, plusIcon].entries()) {
+    const button = zoomButtons.at(index);
+    if (!button) continue;
+    button.innerHTML = renderUiIconSvg(nodes, { size: 14, className: 'molly-zoom-icon' });
+    button.setAttribute('aria-label', button.title);
+  }
   document.addEventListener('pointerdown', (event) => {
     const target = event.target as Element | null;
     if (!target?.closest('.molly-shape-popup') && !target?.closest('.molly-dock'))
@@ -173,8 +233,14 @@ export function createProductSession(options: {
   const statusDot = document.createElement('span');
   statusDot.className = 'dot';
   const statusText = document.createElement('span');
+  statusText.className = 'message';
   status.append(statusDot, statusText);
   document.body.appendChild(status);
+  const setStatusMessage = (message: string) => {
+    statusText.textContent = message;
+    status.title = message;
+    status.setAttribute('aria-label', message);
+  };
   const dirty = () => pendingText || editSeq !== savedSeq;
   const identity = () => ({
     sessionId: options.sessionId,
@@ -208,8 +274,9 @@ export function createProductSession(options: {
     state = next;
     error = next === 'error' || next === 'conflict' || next === 'waiting' ? message : '';
     status.dataset.state = next;
-    statusText.textContent =
-      readonly && next !== 'error' && next !== 'conflict' ? readonlyMessage : message;
+    setStatusMessage(
+      readonly && next !== 'error' && next !== 'conflict' ? readonlyMessage : message
+    );
     options.setDirty(dirty());
     emit('editor-status', { state, dirty: dirty(), error, ready, composing });
   };
@@ -290,8 +357,11 @@ export function createProductSession(options: {
   };
   const setReadonly = (value: boolean, message = '只读 / Read-only') => {
     readonlyMessage = message;
+    for (const button of dock.querySelectorAll<HTMLButtonElement>('button.create,button.history'))
+      button.disabled = value;
+    if (value) shapePopup.classList.remove('open');
     if (value === readonly) {
-      if (readonly) statusText.textContent = readonlyMessage;
+      if (readonly) setStatusMessage(readonlyMessage);
       return;
     }
     // Block new input before committing the already-buffered text synchronously.
@@ -309,7 +379,7 @@ export function createProductSession(options: {
       options.setReadonly(value);
     }
     document.body.dataset.readonly = String(value);
-    statusText.textContent = value ? readonlyMessage : dirty() ? '修改尚未保存' : '已自动保存';
+    setStatusMessage(value ? readonlyMessage : dirty() ? '修改尚未保存' : '已自动保存');
     if (!value && dirty()) schedule();
   };
   const blockInput = (event: Event) => {

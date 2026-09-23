@@ -98,15 +98,11 @@ The overlay lives on the conversation column rather than inside each keep-alive
 tab page, where hidden panes and draft tabs would make it vanish or stack on the
 wrong surface.
 
-## Agent Roles
+## Historical Agent Role mentions
 
-A Role mention borrows the session mention's shape with a different payload. The
-emoji replaces the category glyph because the category header already says these
-are Agent Roles, so a second generic glyph only crowds out the Role's own mark;
-the emoji is boxed and clipped because the icon slot covers one character of real
-text and an emoji glyph is wider than a latin one. The committed range carries
-only the Role id, and only the composer holds the live catalog, which is why the
-composer wraps the caller's chip resolver.
+The live composer no longer offers, hydrates or expands Roles. Restored Role
+ranges remain plain text on a new send; the history renderer still understands
+existing frozen spans and never reads the mutable Role catalog.
 
 The transcript freezes the mark with the span so renaming or re-marking a Role
 later cannot repaint history, and painting a bubble never waits on a mutable
@@ -118,10 +114,3 @@ chip.
 `agent_role` is the one kind the copy button collapses back to its label: the
 rewritten region is an instruction addressed to this agent and means nothing
 pasted elsewhere, while the chip on screen says `@Reviewer`.
-
-The Role's own pane replaced the neutral detail rows because a Role is one object
-with one reading — which agent, which machine, which values it pins, and its
-instruction — so the neutral rows were a second description that had already
-drifted (printing stored ids raw, labelling the permission mode "Reasoning"). That
-pane is desktop-only: the docked mobile strip is too narrow and has no hover to
-preview with.

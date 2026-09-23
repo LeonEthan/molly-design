@@ -15,7 +15,7 @@
 
 /** Outer frame. Carries the border, the base surface, and the clipping. */
 export const CONVERSATION_PANEL_FRAME_CLASS =
-  'overflow-hidden rounded-xl border border-border/60 bg-background/70 shadow-xs';
+  'overflow-hidden rounded-xl border border-border/40 bg-background/70 shadow-none';
 
 /**
  * Header band — the raised fill. `border-b` belongs here only when a body
@@ -40,13 +40,13 @@ export const CONVERSATION_PANEL_FRAME_CLASS =
  * `sessions/AGENTS.md` on the surface ladder).
  */
 export const CONVERSATION_PANEL_HEADER_CLASS =
-  'flex items-center gap-2 bg-muted-foreground/[0.09] px-3 py-1.5 text-foreground';
+  'flex items-center gap-2 bg-muted-foreground/[0.09] px-4 py-2 text-foreground';
 
-export const CONVERSATION_PANEL_HEADER_RULE_CLASS = 'border-b border-border/60';
+export const CONVERSATION_PANEL_HEADER_RULE_CLASS = 'border-b border-border/40';
 
 /** Header label: quiet next to the content it introduces. */
 export const CONVERSATION_PANEL_TITLE_CLASS =
-  'min-w-0 flex-1 truncate text-[11px] font-medium text-muted-foreground';
+  'min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground';
 
 /** Body padding. No fill of its own — the frame already provides the surface. */
-export const CONVERSATION_PANEL_BODY_CLASS = 'px-3 py-2';
+export const CONVERSATION_PANEL_BODY_CLASS = 'px-4 py-3';

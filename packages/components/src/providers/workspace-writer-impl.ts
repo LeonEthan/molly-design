@@ -5,8 +5,6 @@ import {
   getSessionRoomId,
   isWorkspaceMcpServerMeta,
   writeWorkspaceMcpServerToFlock,
-  writeWorkspaceAgentRoleToFlock,
-  normalizeAgentRole,
   parseMachineFlockRow,
   getMachineFlockAgentConfigs,
   serializeMachineFlockKey,
@@ -25,10 +23,6 @@ import {
   type PreviewVisualCommentDocInput,
 } from '@molly/shared';
 import type { SessionId } from '@molly/shared/ids';
-import {
-  getEmbeddedHarnessTargetError,
-  validateMollyRunConfigProjection,
-} from '@molly/shared/embedded-harness';
 import type { LoroRepo } from 'loro-repo';
 import type {
   PreviewVisualCommentDocStore,
@@ -197,73 +191,14 @@ export function createDirectWorkspaceWriter(deps: DirectWorkspaceWriterDeps): Wo
     },
 
     async flockRowPut(flockDocId, key, value) {
+      if (flockDocId.endsWith(':wf:workspace') && key[0] === 'agentRole') {
+        throw new Error('agent_roles_retired');
+      }
       const handle = await deps.repo.openFlockDoc(flockDocId);
       if (flockDocId.endsWith(':wf:workspace') && key[0] === 'mcpServer') {
         if (key.length !== 2 || !isWorkspaceMcpServerMeta(value) || value.id !== key[1])
           throw new Error('invalid_workspace_mcp_entry');
         writeWorkspaceMcpServerToFlock(handle.flock, value);
-        return;
-      }
-      if (flockDocId.endsWith(':wf:workspace') && key[0] === 'agentRole') {
-        const role = normalizeAgentRole(value);
-        if (key.length !== 2 || !role || role.id !== key[1])
-          throw new Error('invalid_workspace_agent_role');
-        const previousValue = handle.flock.get([...key]);
-        const previous = normalizeAgentRole(previousValue);
-        const previousSnapshot = JSON.stringify(previousValue);
-        if (previous?.embeddedMigration && !role.embeddedMigration)
-          throw new Error('agent_role_migration_backup_immutable');
-        const workspaceId = flockDocId.slice(0, -':wf:workspace'.length) as WorkspaceId;
-        const machine = await deps.repo.openFlockDoc(
-          getMachineFlockDocId(workspaceId, role.machineId)
-        );
-        const sourceMachine =
-          previous && !role.embeddedMigration && previous.machineId !== role.machineId
-            ? await deps.repo.openFlockDoc(getMachineFlockDocId(workspaceId, previous.machineId))
-            : machine;
-        const readConfig = (catalog: typeof machine, id: AgentConfigId) => {
-          const configKey = machineFlockKeys.agentConfig(id);
-          const row = parseMachineFlockRow(configKey, catalog.flock.get(configKey));
-          return row
-            ? getMachineFlockAgentConfigs({ [serializeMachineFlockKey(configKey)]: row })[id]
-            : undefined;
-        };
-        // Re-read after all asynchronous catalog opens. No await remains before commit.
-        const currentValue = handle.flock.get([...key]);
-        const current = normalizeAgentRole(currentValue);
-        if (
-          JSON.stringify(currentValue) !== previousSnapshot &&
-          JSON.stringify(current) !== JSON.stringify(role)
-        )
-          throw new Error(
-            role.embeddedMigration
-              ? 'agent_role_migration_source_changed'
-              : 'agent_role_source_changed'
-          );
-        const config = readConfig(machine, role.agentConfigId);
-        if (
-          !config ||
-          config.id !== role.agentConfigId ||
-          config.machineId !== role.machineId ||
-          getEmbeddedHarnessTargetError(config) !== undefined
-        )
-          throw new Error(
-            role.embeddedMigration
-              ? 'agent_role_migration_target_unavailable'
-              : 'agent_role_target_unavailable'
-          );
-        if (previous && !role.embeddedMigration) {
-          const sourceConfig = readConfig(sourceMachine, previous.agentConfigId);
-          if (
-            !sourceConfig ||
-            sourceConfig.machineId !== previous.machineId ||
-            getEmbeddedHarnessTargetError(sourceConfig) !== undefined
-          )
-            throw new Error('agent_role_migration_required');
-        }
-        validateMollyRunConfigProjection(role.runConfig);
-        // Backup comparison and the single-row commit have no asynchronous gap.
-        writeWorkspaceAgentRoleToFlock(handle.flock, role);
         return;
       }
       handle.flock.set([...key], value as Parameters<typeof handle.flock.set>[1]);
@@ -275,13 +210,10 @@ export function createDirectWorkspaceWriter(deps: DirectWorkspaceWriterDeps): Wo
       key: readonly string[],
       value: unknown
     ): Promise<{ inserted: boolean; value: unknown }> {
+      if (flockDocId.endsWith(':wf:workspace') && key[0] === 'agentRole') {
+        throw new Error('agent_roles_retired');
+      }
       const handle = await deps.repo.openFlockDoc(flockDocId);
-      if (flockDocId.endsWith(':wf:workspace') && key[0] === 'agentRole')
-        throw new Error(
-          normalizeAgentRole(value)?.embeddedMigration
-            ? 'agent_role_migration_source_changed'
-            : 'agent_role_insert_requires_validated_write'
-        );
       return handle.flock.txn(() => {
         const existing = handle.flock.get([...key]);
         if (existing !== undefined) {
@@ -294,6 +226,9 @@ export function createDirectWorkspaceWriter(deps: DirectWorkspaceWriterDeps): Wo
     },
 
     async flockRowDelete(flockDocId, key) {
+      if (flockDocId.endsWith(':wf:workspace') && key[0] === 'agentRole') {
+        throw new Error('agent_roles_retired');
+      }
       const handle = await deps.repo.openFlockDoc(flockDocId);
       handle.flock.delete([...key]);
       handle.flock.commit();

@@ -94,6 +94,37 @@ readonly and fully offscreen selections hide it. Popups share the native view an
 stay within its viewport; shell presentation supplies current translated labels
 and light/dark appearance. No geometry or new document state crosses IPC.
 
+The native dock and selection toolbar render the same original SVG geometry as
+the React shell through `@molly/shared/ui-icons`, including text, dropdown and
+zoom glyphs. The dock uses 20px outline icons with a 1.5 stroke and 38px circular
+targets inside a capsule. The selection toolbar uses 18px icons with the same
+stroke, 32px buttons, 16px container/menu corners and a matching soft shadow;
+numeric fields remain 51×28px. At canvas widths of 640px or less, the dock and its
+shape menu rise above the existing zoom
+and save row. Narrower docks scroll horizontally without shrinking targets.
+The save/status pill truncates within the space left by zoom and the dock, with
+the complete message retained in its accessible name and hover title. Creation
+and undo/redo dock buttons use native disabled state while readonly; entering
+readonly also closes the shape menu. Unlocking restores those existing controls.
+These styles belong to the local adapters, independent of the shell's CSS.
+
+The native selection box uses a muted blue-grey 1px outline. Corner and rotation
+handles paint 7px white circles; edge midpoints paint 14×5px capsules aligned
+with their edge. All use a 1px outline inside Moveable's original 14px hit targets.
+Hover strengthens only the handle under the pointer. The existing inverse-zoom
+transforms keep their screen size constant; the styles affect editor controls,
+not artwork borders or exported content.
+
+A single selection with a rectangular frame (text, image, shape, icon, table or
+chart) also shows its live width × height below the bottom midpoint, rounded to
+at most one decimal in artwork pixels. The readout
+uses the native element's current CSS border box, so it updates during resizing
+before the committed summary and is independent of viewport zoom or rotation.
+It shares the existing toolbar's geometry observation and teardown, stays visible
+during dragging, and hides for empty, multiple, line or readonly selections.
+The label passes pointer input through and reserves a row when the toolbar flips
+below the selection; it adds no document state or geometry IPC.
+
 The host-bound `/toolbar` endpoint validates commands before the existing kernel
 bridge, and validates reference actions before sending a captured reference back
 to the ordinary composer. An ephemeral selection epoch rejects delayed operations

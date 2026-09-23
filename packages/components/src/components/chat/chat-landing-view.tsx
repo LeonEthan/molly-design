@@ -235,9 +235,7 @@ export function ChatLandingView({
   errorLabels = {},
 }: ChatLandingViewProps) {
   const isDark = tone === 'dark';
-  const { mentionActionsRef, dropZone, overlayActive } = useSessionMentionDrop(
-    !submissionPending
-  );
+  const { mentionActionsRef, dropZone, overlayActive } = useSessionMentionDrop(!submissionPending);
 
   const {
     somethingWentWrong = 'Something went wrong',
@@ -251,8 +249,8 @@ export function ChatLandingView({
   );
 
   const primaryActionButtonClassName = cn(
-    'h-8 w-8 rounded-full shadow-xs transition-all',
-    'bg-foreground text-background hover:bg-foreground/90 hover:text-background active:translate-y-[1px] focus-visible:ring-ring focus-visible:ring-offset-background'
+    'h-9 w-9 rounded-full transition-colors',
+    'bg-foreground text-background hover:bg-foreground/90 hover:text-background focus-visible:ring-ring focus-visible:ring-offset-background'
   );
 
   // No-agent-config hint shown in scrollable area (not as overlay)
@@ -341,12 +339,12 @@ export function ChatLandingView({
         onClick={onSubmit}
         disabled={submitDisabled}
         aria-label={submissionPending ? submittingLabel : submitLabel}
-        className={cn(primaryActionButtonClassName, 'h-7 w-7')}
+        className={primaryActionButtonClassName}
       >
         {submissionPending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <ArrowUp className="h-4 w-4" />
+          <ArrowUp className="h-5 w-5" />
         )}
       </Button>
     </ErrorBoundary>

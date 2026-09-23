@@ -25,13 +25,6 @@ import {
   type SessionMentionProjectKey,
   type SessionMentionProjectScope,
 } from '@/components/mentions/mention-session-source';
-import {
-  buildAgentRoleMentionContext,
-  hydrateAgentRoleMentionsFromText,
-  useAgentRoleMentionItems,
-  type AgentRoleMentionItem,
-} from '@/components/mentions/mention-agent-role-source';
-import { applyAgentRoleEmojiChip } from '@/components/mentions/mention-chips';
 import { useMentionHydration } from '@/components/mentions/mention-hydration';
 import {
   sanitizeMentionRanges,
@@ -57,7 +50,7 @@ import {
   type SkillMentionItem,
   useMentionProjectSkills,
 } from '@/components/mentions/mention-skill-source';
-import { getAgentRoleEmoji, type AcpCommandSummary } from '@molly/shared';
+import { type AcpCommandSummary } from '@molly/shared';
 import { Mention, MentionInput, MentionLabel, useMentionContext } from '@/ui/mention';
 import type { Mention as MentionRange, MentionChipResolver } from '@/ui/mention/index';
 import {
@@ -106,8 +99,6 @@ function TwoLevelMentionMenu({
   sessionItems,
   sessionProjectKey,
   commandsEnabled,
-  enableAgentRoleMentions,
-  agentRoleItems,
   surface,
 }: {
   fileData: MentionFileDataState;
@@ -129,8 +120,6 @@ function TwoLevelMentionMenu({
   sessionItems: SessionMentionItem[];
   sessionProjectKey: SessionMentionProjectKey;
   commandsEnabled: boolean;
-  enableAgentRoleMentions: boolean;
-  agentRoleItems: readonly AgentRoleMentionItem[];
   surface: MentionSurface;
 }) {
   const context = useMentionContext('TwoLevelMentionMenu');
@@ -314,11 +303,6 @@ function TwoLevelMentionMenu({
     ]
   );
 
-  const agentRoleSource = React.useMemo<MentionCategorySources['agentRole']>(
-    () => ({ enabled: enableAgentRoleMentions, items: agentRoleItems }),
-    [agentRoleItems, enableAgentRoleMentions]
-  );
-
   const commandSource = React.useMemo<MentionCategorySources['command']>(
     () => ({ enabled: enableCommandMentions, commands: availableCommands ?? [] }),
     [availableCommands, enableCommandMentions]
@@ -331,10 +315,9 @@ function TwoLevelMentionMenu({
         issuePr: issuePrSource,
         skill: skillSource,
         session: sessionSource,
-        agentRole: agentRoleSource,
         command: commandSource,
       }),
-      [agentRoleSource, commandSource, fileSource, issuePrSource, sessionSource, skillSource]
+      [commandSource, fileSource, issuePrSource, sessionSource, skillSource]
     )
   );
 
@@ -466,30 +449,6 @@ function SessionMentionHydrator({
   return null;
 }
 
-function AgentRoleMentionHydrator({
-  getKnownFileTokens,
-  text,
-  items,
-  enabled,
-}: {
-  /** Paths the file source knows; they win a token both sources claim. */
-  getKnownFileTokens: () => ReadonlySet<string>;
-  text: string;
-  items: readonly AgentRoleMentionItem[];
-  enabled: boolean;
-}) {
-  const hydrate = React.useCallback(
-    (value: string) =>
-      value.includes('@')
-        ? hydrateAgentRoleMentionsFromText(value, items, getKnownFileTokens())
-        : null,
-    [getKnownFileTokens, items]
-  );
-  useMentionHydration('AgentRoleMentionHydrator', { text, enabled, hydrate });
-
-  return null;
-}
-
 // ============================================================================
 // Imperative insertion
 // ============================================================================
@@ -504,7 +463,11 @@ function AgentRoleMentionHydrator({
  * re-slugging every visible session on every session-list tick.
  */
 export type CombinedMentionTextareaHandle = {
-  insertDesignElementMention: (reference: DesignElementReference, label: string, prompt?: string) => boolean;
+  insertDesignElementMention: (
+    reference: DesignElementReference,
+    label: string,
+    prompt?: string
+  ) => boolean;
   /**
    * Mirror the canvas selection as a promptless design-element chip: a live
    * selection replaces the previously mirrored chip, an empty selection
@@ -540,103 +503,119 @@ function MentionActionsBridge({
   // Payload of the chip the last sync wrote, so a later sync replaces exactly
   // that chip and never one the user attached through an explicit action.
   const lastSyncedDesignValue = React.useRef<string | undefined>(undefined);
-  React.useImperativeHandle(
-    actionsRef,
-    () => {
-      // Shared write path for design-element chips: drops the mirrored chip,
-      // then splices the request into the post-removal text. Going through the
-      // context setters (never onMentionInsert) keeps the two edits consistent
-      // in one commit and lets the sync path skip the focus grab.
-      const commitDesignElementRequest = (
-        request: ReturnType<typeof buildDesignElementMentionInsertion>,
-        focus: boolean
-      ) => {
-        let text = context.inputValue;
-        const synced = lastSyncedDesignValue.current;
-        lastSyncedDesignValue.current = undefined;
-        let removedSynced = false;
-        if (synced !== undefined) {
-          const stale = mentions.find((mention) => mention.kind === 'design_element' && mention.value === synced);
-          if (stale) {
-            removedSynced = true;
-            context.onMentionsRemove([stale]);
-            text = removeMentionText(text, stale, text[stale.end] === ' ');
-          }
+  React.useImperativeHandle(actionsRef, () => {
+    // Shared write path for design-element chips: drops the mirrored chip,
+    // then splices the request into the post-removal text. Going through the
+    // context setters (never onMentionInsert) keeps the two edits consistent
+    // in one commit and lets the sync path skip the focus grab.
+    const commitDesignElementRequest = (
+      request: ReturnType<typeof buildDesignElementMentionInsertion>,
+      focus: boolean
+    ) => {
+      let text = context.inputValue;
+      const synced = lastSyncedDesignValue.current;
+      lastSyncedDesignValue.current = undefined;
+      let removedSynced = false;
+      if (synced !== undefined) {
+        const stale = mentions.find(
+          (mention) => mention.kind === 'design_element' && mention.value === synced
+        );
+        if (stale) {
+          removedSynced = true;
+          context.onMentionsRemove([stale]);
+          text = removeMentionText(text, stale, text[stale.end] === ' ');
         }
-        const at = text.length;
-        const splice: MentionSplice = {
-          replaceStart: at,
-          replaceEnd: at,
-          prefix: resolveMentionInsertPrefix(text, at, request.separate),
-          text: request.text,
-          suffix: request.suffix,
-          value: request.value,
-          kind: request.kind,
-          commitRange: true,
-        };
-        const inserted = applyMentionSplice(text, [], splice);
-        context.onMentionsChange((previous) => applyMentionSplice(text, previous, splice).mentions);
-        context.onValueChange((previous) => {
-          const next = [...(previous ?? [])];
-          if (!next.includes(request.value)) next.push(request.value);
-          return next;
-        });
-        context.onInputValueChange(inserted.value);
-        context.onPendingSelectionChange({ start: inserted.caret, end: inserted.caret, expectedValue: inserted.value });
-        if (focus) context.inputRef.current?.focus();
-        return removedSynced;
+      }
+      const at = text.length;
+      const splice: MentionSplice = {
+        replaceStart: at,
+        replaceEnd: at,
+        prefix: resolveMentionInsertPrefix(text, at, request.separate),
+        text: request.text,
+        suffix: request.suffix,
+        value: request.value,
+        kind: request.kind,
+        commitRange: true,
       };
-      return {
-        insertDesignElementMention: (reference, label, prompt) => {
-          if (composing.current) throw Error(t('design.finishComposition', 'Finish composing text before adding an element reference'));
-          const request = buildDesignElementMentionInsertion(reference, label, prompt);
-          const alreadyPresent = mentions.some((mention) => mention.kind === 'design_element' && mention.value === request.value);
-          // An explicit prompt consumes the mirrored chip instead of
-          // duplicating the same reference; a promptless repeat stays a no-op.
-          if (alreadyPresent && !prompt) return false;
-          commitDesignElementRequest(request, true);
-          return true;
-        },
-        syncDesignElementMention: (reference, label) => {
-          if (composing.current) return false;
-          if (!reference) {
-            const synced = lastSyncedDesignValue.current;
-            lastSyncedDesignValue.current = undefined;
-            if (synced === undefined) return true;
-            const stale = mentions.find((mention) => mention.kind === 'design_element' && mention.value === synced);
-            if (stale) {
-              context.onMentionsRemove([stale]);
-              context.onInputValueChange(removeMentionText(context.inputValue, stale, context.inputValue[stale.end] === ' '));
-            }
-            return true;
+      const inserted = applyMentionSplice(text, [], splice);
+      context.onMentionsChange((previous) => applyMentionSplice(text, previous, splice).mentions);
+      context.onValueChange((previous) => {
+        const next = [...(previous ?? [])];
+        if (!next.includes(request.value)) next.push(request.value);
+        return next;
+      });
+      context.onInputValueChange(inserted.value);
+      context.onPendingSelectionChange({
+        start: inserted.caret,
+        end: inserted.caret,
+        expectedValue: inserted.value,
+      });
+      if (focus) context.inputRef.current?.focus();
+      return removedSynced;
+    };
+    return {
+      insertDesignElementMention: (reference, label, prompt) => {
+        if (composing.current)
+          throw Error(
+            t(
+              'design.finishComposition',
+              'Finish composing text before adding an element reference'
+            )
+          );
+        const request = buildDesignElementMentionInsertion(reference, label, prompt);
+        const alreadyPresent = mentions.some(
+          (mention) => mention.kind === 'design_element' && mention.value === request.value
+        );
+        // An explicit prompt consumes the mirrored chip instead of
+        // duplicating the same reference; a promptless repeat stays a no-op.
+        if (alreadyPresent && !prompt) return false;
+        commitDesignElementRequest(request, true);
+        return true;
+      },
+      syncDesignElementMention: (reference, label) => {
+        if (composing.current) return false;
+        if (!reference) {
+          const synced = lastSyncedDesignValue.current;
+          lastSyncedDesignValue.current = undefined;
+          if (synced === undefined) return true;
+          const stale = mentions.find(
+            (mention) => mention.kind === 'design_element' && mention.value === synced
+          );
+          if (stale) {
+            context.onMentionsRemove([stale]);
+            context.onInputValueChange(
+              removeMentionText(context.inputValue, stale, context.inputValue[stale.end] === ' ')
+            );
           }
-          const request = buildDesignElementMentionInsertion(reference, label);
-          const alreadyPresent = mentions.some((mention) => mention.kind === 'design_element' && mention.value === request.value);
-          if (alreadyPresent) {
-            // A payload-equal chip is either this mirror's own (nothing to do)
-            // or one the user attached explicitly or restored from a draft:
-            // user-owned chips are never adopted, so a later passive sync can
-            // never retire them.
-            return true;
-          }
-          commitDesignElementRequest(request, false);
-          lastSyncedDesignValue.current = request.value;
           return true;
-        },
-        insertSessionMention: (sessionId: string) => {
-          // Session mentions being disabled IS an empty list, so the lookup is
-          // also the enablement check — there is nothing to mention.
-          const item = items.find((candidate) => candidate.sessionId === sessionId);
-          if (!item) return false;
-          const insertion = buildSessionMentionInsertion(mentions, item);
-          if (!insertion) return false;
-          onMentionInsert(insertion);
+        }
+        const request = buildDesignElementMentionInsertion(reference, label);
+        const alreadyPresent = mentions.some(
+          (mention) => mention.kind === 'design_element' && mention.value === request.value
+        );
+        if (alreadyPresent) {
+          // A payload-equal chip is either this mirror's own (nothing to do)
+          // or one the user attached explicitly or restored from a draft:
+          // user-owned chips are never adopted, so a later passive sync can
+          // never retire them.
           return true;
-        },
-      };
-    },
-    [items, mentions, onMentionInsert, composing, t, context]
-  );
+        }
+        commitDesignElementRequest(request, false);
+        lastSyncedDesignValue.current = request.value;
+        return true;
+      },
+      insertSessionMention: (sessionId: string) => {
+        // Session mentions being disabled IS an empty list, so the lookup is
+        // also the enablement check — there is nothing to mention.
+        const item = items.find((candidate) => candidate.sessionId === sessionId);
+        if (!item) return false;
+        const insertion = buildSessionMentionInsertion(mentions, item);
+        if (!insertion) return false;
+        onMentionInsert(insertion);
+        return true;
+      },
+    };
+  }, [items, mentions, onMentionInsert, composing, t, context]);
 
   return null;
 }
@@ -815,35 +794,6 @@ export const CombinedMentionTextarea = React.forwardRef<
       () => getMentionSourceProjectKey(mentionSource),
       [mentionSource]
     );
-    const agentRoleContext = React.useMemo(
-      () =>
-        buildAgentRoleMentionContext({
-          mentionSource,
-          currentMachineId: skillAgent?.machineId,
-        }),
-      [mentionSource, skillAgent?.machineId]
-    );
-    const agentRoleItems = useAgentRoleMentionItems(agentRoleContext);
-    // A committed range carries only the Role id, so the caller's chip resolver
-    // cannot reach the Role's emoji on its own. The composer already owns the
-    // mentionable list, so it upgrades the glyph on the way through.
-    const agentRoleEmojiById = React.useMemo(
-      () =>
-        new Map(
-          agentRoleItems.map((item) => [item.role.id as string, getAgentRoleEmoji(item.role)])
-        ),
-      [agentRoleItems]
-    );
-    const resolveMentionChip = React.useMemo<MentionChipResolver | undefined>(() => {
-      if (!getMentionChip) return undefined;
-      return (mention, text) => {
-        const chip = getMentionChip(mention, text);
-        if (!chip || mention.kind !== 'agent_role') return chip;
-        const emoji = agentRoleEmojiById.get(mention.value);
-        return emoji ? applyAgentRoleEmojiChip(chip, emoji) : chip;
-      };
-    }, [agentRoleEmojiById, getMentionChip]);
-
     const { skillState, skillItems, knownSkillTokens } = useMentionProjectSkills(
       mentionSource,
       skillsActive,
@@ -951,17 +901,13 @@ export const CombinedMentionTextarea = React.forwardRef<
     // the mention tree can never disagree about a type. They drifted once
     // already: a composer with only issues rendered a plain textarea.
     const enableSessionMentions = sessionItems.length > 0;
-    // Having any mentionable Role IS the enablement rule: the list is already
-    // filtered by visibility, executability, and work context, so an empty one
-    // means there is nothing this composer could offer.
-    const enableAgentRoleMentions = agentRoleItems.length > 0;
     const enableAtMentions =
-      enableFileMentions ||
-      enableIssueMentions ||
-      enableSkillMentions ||
-      enableSessionMentions ||
-      enableAgentRoleMentions;
-    const enableMentions = enableAtMentions || enableCommandMentions || hasExternalMentionSupport || Boolean(mentionActionsRef);
+      enableFileMentions || enableIssueMentions || enableSkillMentions || enableSessionMentions;
+    const enableMentions =
+      enableAtMentions ||
+      enableCommandMentions ||
+      hasExternalMentionSupport ||
+      Boolean(mentionActionsRef);
 
     // `/` trigger is only active when the entire input is a slash command (e.g. "" or "/review")
     const isSlashOnly = !value || /^\/\S*$/.test(value);
@@ -1006,7 +952,7 @@ export const CombinedMentionTextarea = React.forwardRef<
         mentions={mergedMentions}
         onMentionsChange={handleMentionsChange}
         onMentionClick={onMentionClick}
-        getMentionChip={resolveMentionChip}
+        getMentionChip={getMentionChip}
         value={mentionValues}
         onValueChange={handleMentionValuesChange}
         onFilter={(options) => options}
@@ -1029,14 +975,12 @@ export const CombinedMentionTextarea = React.forwardRef<
             items={sessionItems}
             enabled={enableSessionMentions}
           />
-          <AgentRoleMentionHydrator
-            getKnownFileTokens={getKnownFileTokens}
-            text={value}
-            items={agentRoleItems}
-            enabled={enableAgentRoleMentions}
-          />
           {mentionActionsRef ? (
-            <MentionActionsBridge actionsRef={mentionActionsRef} items={sessionItems} composing={composing} />
+            <MentionActionsBridge
+              actionsRef={mentionActionsRef}
+              items={sessionItems}
+              composing={composing}
+            />
           ) : null}
           {enableSkillMentions ? (
             <SkillMentionHydrator
@@ -1069,8 +1013,14 @@ export const CombinedMentionTextarea = React.forwardRef<
           containerClassName={containerClassName}
           className={cn('resize-none', className)}
           {...props}
-          onCompositionStart={(event) => { composing.current = true; props.onCompositionStart?.(event); }}
-          onCompositionEnd={(event) => { composing.current = false; props.onCompositionEnd?.(event); }}
+          onCompositionStart={(event) => {
+            composing.current = true;
+            props.onCompositionStart?.(event);
+          }}
+          onCompositionEnd={(event) => {
+            composing.current = false;
+            props.onCompositionEnd?.(event);
+          }}
         />
         <TwoLevelMentionMenu
           fileData={fileData}
@@ -1091,8 +1041,6 @@ export const CombinedMentionTextarea = React.forwardRef<
           sessionItems={sessionItems}
           sessionProjectKey={sessionProjectKey}
           commandsEnabled={commandsEnabled}
-          enableAgentRoleMentions={enableAgentRoleMentions}
-          agentRoleItems={agentRoleItems}
           surface={mentionSurface}
         />
       </Mention>

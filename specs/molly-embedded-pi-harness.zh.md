@@ -1,7 +1,7 @@
 # Molly 内置 Pi Harness
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval (before Role retirement): [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [English](molly-embedded-pi-harness.md)
@@ -40,7 +40,7 @@ Translation: current
 18. As a user, I want unknown paid-operation results to remain identifiable without automatic resubmission, so that reconnection does not silently charge me again.
 19. As a returning user, I want old artworks, assets and conversation history preserved, so that migration does not discard my work.
 20. As a returning user, I want an explicit action to continue an old design with the built-in engine, so that historical runtime identities are not silently reused.
-21. As a user of an old Role, I want migration to preserve its origin and usable preferences, so that it cannot secretly restart a retired CLI.
+21. As a returning user, I want Role selection and execution retired while its historical records remain readable, so that new work uses explicit model and reasoning choices.
 22. As a local Pi user, I want Molly to leave my separate configuration and installation untouched, so that adopting Molly does not disrupt other tools.
 23. As a user receiving this delivery, I want a runnable package and concise supported-capability notes, so that I know what I can use and what remains deferred.
 
@@ -55,7 +55,7 @@ Translation: current
 | R1   | 安装包启动与交付   | 解决打包后 Helper 启动超时，生成 macOS arm64 本地安装包；从包安装的应用能启动内置引擎，不依赖全局 Pi/Node，不首启下载 harness；资源与版本身份一致。                         |
 | R2   | 一个完整设计旅程   | 使用明确配置的 Kimi k3-256k/high 和图片服务，在同一个作品上完成创作、生成图片、基本图片编辑与应用、人工修改后继续、保存、导出、重开及继续；不另建海报/信息图/长图排列矩阵。 |
 | R3   | 设置与关键交互收尾 | 在上述旅程检查连接/模型选择、必要错误提示、取消与预装问答；用户能配置和操作，未验证能力没有完整支持承诺。优先复用现有界面和权限流程。                                       |
-| R4   | 旧数据继续         | 实际走一次旧设计会话继续和一次旧 Role 迁移；来源及旧数据保留，继续进入内置 Pi。备份、重入和全部旧执行入口门禁复用已有回归覆盖，不再次排列所有故障。                         |
+| R4   | 旧数据继续         | 实际走一次旧设计会话继续，并确认 Role 入口已退役；来源及旧数据保留，继续进入内置 Pi。备份、重入和全部旧执行入口门禁复用已有回归覆盖，不再次排列所有故障。                         |
 | R5   | 交付说明与最终检查 | 提供安装包、简洁配置说明、支持状态和已知限制；完成与最终变更相关的检查及仓库规定的交付/提交检查。既有无关失败独立列明，不通过删除断言掩盖。                                 |
 
 R1 → R2 是关键路径；R3 嵌入 R2，随后完成 R4 和 R5。新增真实缺陷先最小复现再修复，不因顺手发现可优化项扩大范围。R1–R5 全部有对应证据且没有未解决的核心功能、安全或数据损坏问题，才可将本次收敛交付记为完成；不声称原方案延期部分已完成。
@@ -116,6 +116,8 @@ adapter 综合原生错误、取消、未完成工具和原生运行边界判定
 设计提交继续独立验证 schema、kernel replay、素材、可信来源和当前版本；失败保留 canonical、草稿及诊断。无新产物可以是合法问答。不增加候选审批、读取证明、必调 finalize、自动修复或新历史存储。
 
 ### 迁移与支持边界
+
+Role 选择、创建、管理、迁移、`@` 引用展开和新程序化创建参数均退役。新工作直接选择连接、模型与 reasoning；旧 Role 记录及历史来源保留，但不重新应用到新消息。已接受 Operation 的恢复继续使用已冻结的配置。见 [Role 退役记录](../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md)。此范围变化将本 Spec 返回 draft；先前审批不覆盖此修订。
 
 画布、素材、草稿、聊天和历史原地保留。旧 AgentConfig/Role 保留来源且不可执行；用户显式“用 Molly 继续此设计”时创建新的 Pi 上下文，带入明确的历史上下文和可信素材。旧工具记录仅作为历史数据，不执行，不伪造跨 harness 原生身份。
 

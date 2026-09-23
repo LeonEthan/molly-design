@@ -17,7 +17,8 @@ Index and rationale: [README.md](README.md).
   Existing worktree Sessions keep their runtime semantics. GitHub projects
   are machine-independent. Machine changes filter local projects/configs and clear
   incompatible local projects without replacement.
-- Desktop footer order: run config → permission → usage. Provider interaction mode
+- Desktop landing footer starts with canvas size beside the attachment entry;
+  the remaining footer order is run config → permission → usage. Provider interaction mode
   belongs inside run config; the standalone button is explicit permission mode,
   falling back to legacy ACP modes. Usage reads the selected agent's Machine
   Flock subscription limits; hide it for custom or environment-overridden providers.
@@ -36,6 +37,7 @@ Index and rationale: [README.md](README.md).
 - Custom canvas dimensions enter both artwork creation and the durable first-turn
   text from one submission snapshot. Auto adds no fixed-size instruction; retries
   rebuild from the untouched draft. Keep automatic titles based on user-authored text.
+  Presets use the same custom dimensions; custom popover edits apply only on confirmation.
 
 - The chat-route URL declares selection, never one-shot event nonces. Once it names
   a selection, mirror composer steering through desktop `onSelectionUrlSync` using

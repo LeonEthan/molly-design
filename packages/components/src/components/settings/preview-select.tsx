@@ -161,7 +161,7 @@ export function PreviewSelect<T extends string>({
               key={option.value}
               data-preview-item
               className={cn(
-                'relative flex min-h-[30px] w-full cursor-default select-none items-center rounded-[5px] py-1 pl-2 pr-8 text-[13px] outline-hidden',
+                'relative flex min-h-9 w-full cursor-default select-none items-center rounded-sm py-1.5 pl-3 pr-8 text-[13px] outline-hidden',
                 index === highlightedIndex
                   ? 'bg-hover text-hover-foreground'
                   : 'hover:bg-hover hover:text-hover-foreground'

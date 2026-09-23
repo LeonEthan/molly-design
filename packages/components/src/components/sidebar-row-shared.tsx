@@ -331,9 +331,9 @@ export type SessionRowOpenedByTreeSlot =
 const TREE_CHILD_SLOT_CLASS = 'w-[26px] justify-start';
 const TREE_CONTROL_LEFT_CLASS = 'left-[7px]';
 const TREE_LINE_CLASS = 'bg-sidebar-foreground/20';
-/** Cover row padding/border from the 14px slot, plus 1px for list `gap-px`. */
-const TREE_TRUNK_FROM_PREV_CLASS = '-top-2';
-const TREE_TRUNK_INTO_NEXT_CLASS = '-bottom-[9px]';
+/** Cover the 36px row around the 14px slot, plus 1px for list `gap-px`. */
+const TREE_TRUNK_FROM_PREV_CLASS = '-top-[11px]';
+const TREE_TRUNK_INTO_NEXT_CLASS = '-bottom-3';
 
 /**
  * Maps one {@link OpenedBySessionTreeNode} to the leading slot's tree state.
@@ -444,7 +444,11 @@ export function SessionRowLeadingSlot({
   const childTree = openedByTree?.kind === 'child' ? openedByTree : null;
   const openerTree = openedByTree?.kind === 'opener' ? openedByTree : null;
   const restClassName = showMenuButton
-    ? cn('transition-opacity duration-100', fadeClassName)
+    ? cn(
+        'transition-opacity duration-100',
+        fadeClassName,
+        'group-has-[[data-session-row-more]:focus-visible]/session-leading:opacity-0'
+      )
     : undefined;
   const controlLeftClassName = childTree ? TREE_CONTROL_LEFT_CLASS : 'left-1/2';
 
@@ -452,7 +456,7 @@ export function SessionRowLeadingSlot({
     <div
       data-session-row-leading-slot=""
       className={cn(
-        'relative flex h-3.5 shrink-0 items-center',
+        'group/session-leading relative flex h-3.5 shrink-0 items-center',
         childTree ? TREE_CHILD_SLOT_CLASS : 'w-3.5 justify-center'
       )}
     >
@@ -472,7 +476,15 @@ export function SessionRowLeadingSlot({
             'relative z-20 flex h-3.5 w-3.5 items-center justify-center rounded-sm',
             'text-sidebar-foreground-muted transition-[opacity,color] duration-100',
             'hover:text-sidebar-foreground focus-visible:outline-hidden',
-            showMenuButton && cn(restClassName, restPointerClassName)
+            showMenuButton &&
+              cn(
+                restClassName,
+                restPointerClassName,
+                'group-has-[[data-session-row-more]:focus-visible]/session-leading:pointer-events-none',
+                // Keyboard focus on disclosure keeps it visible even when the
+                // pointer is resting on the row and would normally show ⋯.
+                'group-has-[[data-session-opened-by-toggle]:focus-visible]/session-leading:opacity-100 group-has-[[data-session-opened-by-toggle]:focus-visible]/session-leading:pointer-events-auto'
+              )
           )}
         >
           <ChevronDown
@@ -510,6 +522,7 @@ export function SessionRowLeadingSlot({
       {showMenuButton ? (
         <button
           type="button"
+          data-session-row-more=""
           aria-label={menuLabel}
           onClick={(event) => {
             // Open the row's existing right-click menu from a left click on ⋯.
@@ -529,13 +542,15 @@ export function SessionRowLeadingSlot({
             // Overlay a 20px hit target centered on the 14px leading slot so the ⋯
             // gets a visible rounded hover chip (it reads as clickable) without
             // the tiny slot footprint clipping the background.
-            'absolute top-1/2 z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md opacity-0 pointer-events-none',
+            'absolute top-1/2 z-20 flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full opacity-0 pointer-events-none',
+            'focus-visible:opacity-100 focus-visible:pointer-events-auto',
+            'group-has-[[data-session-opened-by-toggle]:focus-visible]/session-leading:opacity-0 group-has-[[data-session-opened-by-toggle]:focus-visible]/session-leading:pointer-events-none',
             controlLeftClassName,
             'text-sidebar-foreground-muted transition-[opacity,color,background-color] duration-100',
-            'hover:bg-sidebar-foreground/15 hover:text-sidebar-foreground',
+            'hover:bg-sidebar-foreground/[0.08] hover:text-sidebar-foreground',
             // The trigger itself stays pressed-looking while its menu is open,
             // not just the row around it.
-            'group-data-[menu-open]:bg-sidebar-foreground/15 group-data-[menu-open]:text-sidebar-foreground',
+            'group-data-[menu-open]:bg-sidebar-foreground/[0.08] group-data-[menu-open]:text-sidebar-foreground',
             revealClassName
           )}
         >
@@ -596,10 +611,12 @@ export function SidebarRowArchiveButton({
     <Tooltip delayDuration={500}>
       <TooltipTrigger asChild>
         <SidebarConfirmArchiveButton
+          data-session-row-archive=""
           label={label}
           confirmLabel={confirmLabel}
           className={cn(
             'absolute right-0 top-0 z-20 opacity-0 pointer-events-none',
+            'focus-visible:opacity-100 focus-visible:pointer-events-auto',
             revealClassName
           )}
           onConfirm={onConfirm}
@@ -663,13 +680,21 @@ export function SidebarRowEndSlot({
     <div
       data-session-row-end-slot=""
       className={cn(
-        'relative flex h-5 shrink-0 items-center justify-center pointer-events-none',
+        'group/session-end relative flex h-5 shrink-0 items-center justify-center pointer-events-none',
         reserve ? 'min-w-5' : 'w-0'
       )}
     >
       {hasRest ? (
         <span
-          className={cn('flex', archive && cn('transition-opacity duration-100', fadeClassName))}
+          className={cn(
+            'flex',
+            archive &&
+              cn(
+                'transition-opacity duration-100',
+                fadeClassName,
+                'group-has-[[data-session-row-archive]:focus-visible]/session-end:opacity-0'
+              )
+          )}
         >
           {restContent}
         </span>
@@ -716,7 +741,7 @@ export function GitHubOwnerIcon({
 // further /55 fade: that made "Pinned"/"Chats" and the filter icon nearly
 // illegible on light sidebars).
 const SECTION_HEADER_BUTTON_CLASS = cn(
-  'relative flex h-7 min-w-0 flex-1 select-none items-center gap-1.5 rounded-md px-2 text-left',
+  'relative flex h-8 min-w-0 flex-1 select-none items-center gap-2 rounded-lg px-2 text-left',
   'border border-transparent bg-transparent',
   'text-[13px] font-medium text-sidebar-foreground-muted transition-colors',
   // The outer row paints the focus ring; suppress the global :focus-visible
@@ -760,7 +785,7 @@ export function SidebarSectionHeader({
     if (canToggle) onToggleCollapsed?.();
   };
   return (
-    <div className="group flex h-7 items-center gap-1 rounded-md pr-2 has-[[role=button]:focus-visible]:shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.5)]">
+    <div className="group flex h-8 items-center gap-1 rounded-lg pr-2 has-[[role=button]:focus-visible]:shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.5)]">
       <div
         role={canToggle ? 'button' : undefined}
         tabIndex={canToggle ? 0 : -1}
@@ -830,8 +855,8 @@ export function SidebarListSkeleton({
   return (
     <div className={cn('flex flex-col', className)} data-sidebar-loading-skeleton="">
       <div className={cn('flex flex-col gap-0.5', sectionClassName)}>
-        <div className="group flex h-7 items-center">
-          <div className="relative flex h-7 min-w-0 flex-1 items-center gap-1 rounded-md px-2">
+        <div className="group flex h-8 items-center">
+          <div className="relative flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg px-2">
             {showHeaderIcon ? (
               <span className="flex h-5 w-5 shrink-0 items-center">
                 <Skeleton className="h-3.5 w-3.5 rounded-sm" />
@@ -842,10 +867,7 @@ export function SidebarListSkeleton({
         </div>
         <div className="flex flex-col gap-px">
           {SIDEBAR_SKELETON_ROW_WIDTHS.map((width, index) => (
-            <div
-              key={index}
-              className="flex h-7 min-w-0 items-center gap-1.5 rounded-md px-2"
-            >
+            <div key={index} className="flex h-9 min-w-0 items-center gap-2 rounded-lg px-2">
               <Skeleton className="h-3.5 w-3.5 shrink-0 rounded-full" />
               <Skeleton className={cn('h-3 min-w-0', width)} />
               <Skeleton className="ml-auto h-3 w-8 shrink-0" />

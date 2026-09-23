@@ -106,14 +106,14 @@ export function AgentRolesSetting() {
 
   return (
     <div className={settingContainerClass}>
-      <p className="text-xs leading-snug text-muted-foreground">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         {t('settings.agentRoles.description')}
       </p>
 
       <section className="flex flex-col">
-        <div className="flex items-center justify-between gap-2 pb-1 pt-0.5">
+        <div className="flex items-center justify-between gap-3 pb-3">
           <div className="flex min-w-0 items-center gap-2">
-            <h3 className="text-xs font-semibold text-muted-foreground">
+            <h3 className="text-sm font-medium text-foreground">
               {t('settings.agentRoles.catalogTitle')}
             </h3>
             {roles.length > 0 ? (
@@ -131,7 +131,7 @@ export function AgentRolesSetting() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                className="h-8 w-8 rounded-full text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 aria-label={addLabel}
                 onClick={openAdd}
               >
@@ -143,7 +143,7 @@ export function AgentRolesSetting() {
         </div>
 
         {roles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/60 bg-card/30 px-6 py-8 text-center text-sm">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-border/40 bg-card px-6 py-10 text-center text-sm">
             <UserRoundCog className="h-6 w-6 text-muted-foreground/70" aria-hidden="true" />
             <p className="mt-2 text-muted-foreground">{t('settings.agentRoles.empty')}</p>
             <Button size="sm" className="mt-3" onClick={openAdd}>
@@ -258,15 +258,15 @@ export function AgentRoleRow({
     availability.kind === 'unavailable' && availability.reason === 'agent_config_retired';
 
   return (
-    <div className="overflow-hidden rounded-lg bg-foreground/[0.04]">
+    <div className="overflow-hidden rounded-xl border border-border/40 bg-card">
       <div className="flex w-full min-w-0 items-center transition-colors hover:bg-hover/40">
         <button
           type="button"
           onClick={onEdit}
           aria-label={canManage && !retired ? t('common.edit') : t('common.view')}
-          className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-2 text-left focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring"
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-4 py-3 text-left focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
         >
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-foreground/[0.05] text-sm leading-none">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-foreground/[0.05] text-sm leading-none">
             <span aria-hidden="true">{getAgentRoleEmoji(role)}</span>
           </span>
           <span className="min-w-0 flex-1">

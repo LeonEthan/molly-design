@@ -42,10 +42,9 @@ safety. Removal requires a reviewed replacement write boundary (PR #460).
   proxy-authoring/write-intent mirror.
 - Every room uses the local transport. Session owner assertions remain checked
   for historical readback, but do not select a transport or authorize remote RPC.
-- Role writes validate the exact published Molly target and model projection at
-  the writer boundary, including new rows. Legacy rebinding requires the explicit
-  migration backup. Recheck the source after catalog awaits before committing;
-  concurrent edits/deletes survive. Generic insert-if-absent cannot author Roles.
+- Roles are retired. The renderer writer rejects Role put, insert-if-absent and
+  delete operations before opening the workspace document. Existing rows stay
+  readable; design continuation publication remains independent.
 - The local renderer identity comes atomically from the Electron local-platform snapshot
   and uses the CLI catalog's persistent `local:*` id. Do not substitute a constant or
   temporary user.

@@ -24,10 +24,10 @@ Parent instructions apply.
   Serialize per-workspace Agent configuration writes before checking local name/count bounds;
   the shared CRDT is not a global CAS. Keep catalog writes locally durable while surfacing sync
   failures as unsynced.
-- `session_create` and `session_create_many` resolve an explicit Agent Role id directly from
-  the workspace catalog; no driving-Turn mention authorization is required. Resolve its target,
-  Prompt prefix, revision, and concrete run config before Operation acceptance. Recovery uses
-  the frozen canonical Prompt and target dispatch config and never rereads the mutable catalog.
+- New `session_create` and `session_create_many` requests accept explicit target
+  and run config only; strict schemas reject retired Role arguments, including
+  batch defaults. Accepted Operations recover their frozen canonical Prompt and
+  dispatch config without rereading a mutable catalog.
 - Session orchestration derives its human identity from the active execution runtime populated
   by the dispatch payload, not from the daemon credential, Session owner, or observed history.
   An absent active runtime fails closed; never reconstruct invocation identity from history.
@@ -37,10 +37,6 @@ Parent instructions apply.
   actor tag adds no information. Recovery uses the Operation's owner Machine plus current
   authorization; it does not freeze the daemon account that originally accepted the Operation.
   Every MCP Session path rejects a runtime invocation without userId.
-- Direct Role creation stays on the ordinary `molly_session_create` and
-  `molly_session_create_many` tools. When `agentRoleId` is present, tolerate manual Machine, Agent,
-  and run-config fields but remove them before resolution: the current Role row is authoritative
-  and those fields must not influence validation, canonical identity, recovery, or dispatch.
 - The driving Turn's frozen `taskToolsEnabled` gates the complete `molly_task_*` family for
   both stdio and HTTP transports. Missing means disabled. Do not merely hide creation: disabled
   servers publish no Task tools, and a still-resident Agent whose next Turn disables the feature

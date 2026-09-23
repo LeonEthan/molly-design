@@ -36,14 +36,13 @@ state cannot be treated as a recoverable cloud cache clear.
 
 ## Session state after deletion
 
-Session navigation intentionally preserves composer Role choices, but `atomFamily`
-also retains its parameter-to-atom index after all consumers unmount. The shared
-`docMetaSubscriptionAtom` retires the deleted Session's metadata/relationship,
-presence and Role-selection families when the repo reports explicit deletion.
-This applies to local UI and daemon-observed deletion through the same boundary;
+`atomFamily` retains its parameter-to-atom index after all consumers unmount.
+The shared `docMetaSubscriptionAtom` retires the deleted Session's metadata,
+relationships, presence and legacy Role-selection cache when the repo reports
+explicit deletion. Local UI and daemon-observed deletion use the same boundary;
 temporary missing metadata and archival are not deletion. A later authoritative
-restore reads fresh metadata and hydrates Role state from durable Turns instead of
-reviving a deleted unsent choice. Repo tombstones and artwork files are unaffected.
+restore reads fresh metadata; retired Role choices are not rehydrated by the
+product composer. Repo tombstones and artwork files are unaffected.
 See the [retirement decision](../notes/implemented/bug-fix/2026-09-22-session-atom-retirement.zh.md).
 
 The pinned `loro-repo` patch also releases cached field-row metadata after deletion
@@ -88,6 +87,22 @@ the field and page colors, which keeps a dark theme's raised fill and lifts a li
 theme's field onto the page. Keeping gray exclusively for `disabled:bg-muted` is what
 makes disabled state legible at all.
 
+The current chrome radius ladder is 8/10/12/16/24px for small controls,
+controls, cards, menus and composers. The base and unlayered host rebinds in
+`tailwind/index.css` agree; validate their computed values in Electron. UI operation/status
+icons use the editable SVG catalog in `packages/shared/src/ui-icons/svg` and the
+React facade in `src/ui/icons.tsx`. Exact `lucide-react` aliases cover inherited
+imports in desktop, Storybook and tests. The isolated Bento dock, selection toolbar
+and zoom controls render the same generated geometry with a 1.5 stroke;
+artwork and provider assets keep their own styling. See the
+[first visual-refresh slice](../notes/implemented/feature/2026-09-22-seede-ui-style-direction.zh.md).
+
+Keyboard focus uses the shared inset fallback or a control's own `focus-visible`
+ring. The former global `!important` reset of Tailwind ring variables erased the
+explicit indicator on buttons, tabs and settings actions, so it has been removed.
+Hover-only sidebar actions also reveal themselves on their own keyboard focus;
+their overlapping status/tree glyphs yield the same slot while that focus is visible.
+
 ## Emoji picker dataset
 
 `frimousse` fetches its dataset from a public CDN by default, which leaves the picker
@@ -110,6 +125,14 @@ would have to load in the background to know whether to render at all.
 
 ## First design session and image settings
 
+Desktop settings shares the softer surface and outline-icon treatment described in
+the [Seede direction note](../notes/implemented/feature/2026-09-22-seede-ui-style-direction.zh.md).
+Its local tabs use a 208px navigation column, a subtle selected-row tint and
+24px section corners. `CompactSection` / `CompactRow` and the editors' `Section` /
+`Field` own spacing and typography; normal rows keep content-sized controls and
+readable helper text. The Agents tab has a visible page title. Model, image, MCP
+forms retain their existing validation, persistence and capability rules.
+
 Agents settings now mounts the encrypted `ModelConnectionSetting` independently of
 machine management. `AgentEngineCatalog` explains model selection and lists only
 names of this machine's legacy configs and pending setups as retired/read-only.
@@ -131,16 +154,11 @@ does not prove a live session negotiated question UI or that native acceptance p
 The current question extension excludes terminal UI and grill-me; command mapping
 remains open. Storybook covers narrow loading, unavailable and included states.
 
-Role discovery passes exact config metadata and machine capability catalogs to the
-shared availability rule. Retired targets and launch overrides remain readable but
-unmentionable; current authoritative model/effort support is required for availability.
-New Role authoring offers Molly only, while old Roles open for viewing and explicit
-migration rather than ordinary saves. UI checks do not replace backend acceptance.
-The renderer writer separately validates new and migrated Role targets and model
-projections. It requires a backup when rebinding a legacy source, rejects concurrent
-source changes across catalog reads, and excludes Roles from generic insert-if-absent.
-This protects local catalog authoring; runtime capability and credential checks still
-belong to execution acceptance and dispatch.
+Role selection, management, migration and mention expansion are retired. Legacy
+settings links resolve to Preferences, and the renderer writer rejects all Role
+mutations while keeping historical rows readable. New MCP creates reject Role
+arguments; accepted operations recover their frozen payloads. See the
+[Role retirement decision](../notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md).
 
 Local onboarding keeps its capability-selected steps and optional exploration exit.
 Its first task exposes the published connection/model and model-specific thinking
@@ -152,7 +170,7 @@ as the landing composer. Before leaving onboarding it puts the prompt and reserv
 canvas ID in the landing draft, sharing the existing submitting state across the
 route transition. Failed creation restores an editable draft; successful acceptance
 clears only the matching draft and leaves the accepted Session in history. Settings
-remain the single home for Agent, Role, MCP and machine image connection configuration.
+remain the single home for model, MCP and machine image connection configuration.
 The image form uses the shared endpoint validator, requires the user's model and keeps
 stored keys out of rendered inputs. Image connection readiness affects generation and
 editing tools, never existing artwork editing, saving or export. See the

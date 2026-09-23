@@ -3,12 +3,14 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import wasm from 'vite-plugin-wasm';
 import { loroCrdtWasmUrlWorkaround, VITEST_INLINE_WASM_DEPS } from './vite-wasm-workarounds';
+import { rendererBundleAliases } from './vite-renderer-bundle-aliases';
 
 export default defineConfig({
   define: {
     'import.meta.env.VITE_PREVIEW_PUBLIC_BASE_DOMAIN': JSON.stringify('mylody.app'),
   },
   plugins: [loroCrdtWasmUrlWorkaround(), tsconfigPaths(), wasm(), topLevelAwait()],
+  resolve: { alias: rendererBundleAliases() },
   test: {
     // `src/**` is included so a test written next to its module runs instead of
     // silently never running. Two such files had accumulated under `src/lib`,

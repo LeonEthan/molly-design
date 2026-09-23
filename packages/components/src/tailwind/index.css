@@ -83,19 +83,16 @@ pre,
   font-variant-ligatures: contextual;
 }
 
+/* Operation glyphs retain one light stroke, including legacy per-call weights.
+   The facade uses inline stroke width for explicit absoluteStrokeWidth requests.
+   Retained brands, artwork and charts keep their own geometry and styling. */
+svg.lucide:not([data-molly-brand]) {
+  stroke-width: 1.5;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
-  }
-  /* Neutral mention chip inside the inverted user bubble (spec §5): the
-     frozen soft tint is a color-mix() of the bubble ink, which a channel
-     token rebind cannot express (consumers wrap tokens in hsl(var()/alpha)).
-     Paint the hook class directly, scoped to the bubble so composer chips
-     keep the global muted ink. Lives in the utilities layer so it beats the
-     text-muted-foreground utility's own color declaration (layer order wins
-     over specificity across layers). */
-  [data-molly-user-bubble] .mn-mention-chip--neutral {
-    color: color-mix(in srgb, hsl(var(--primary-foreground)) 68%, transparent);
   }
   .field-sizing-content {
     field-sizing: content;
@@ -1003,13 +1000,14 @@ pre,
     --font-terminal:
       'SF Mono', 'JetBrains Mono', 'Fira Code', 'Inconsolata', 'Source Code Pro', ui-monospace,
       'SFMono-Regular', 'Monaco', 'Menlo', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
-    /* Frozen radius ladder (visual-refresh spec §2): 4px badges, 5px default
-       controls, 9px floating bars/cards/dialogs, 13px menus/popovers/composer. */
-    --radius: 0.25rem;
-    --radius-sm: 0.25rem;
-    --radius-md: 0.3125rem;
-    --radius-lg: 0.5625rem;
-    --radius-xl: 0.8125rem;
+    /* Soft chrome: 8px small controls, 10px controls, 12px cards,
+       16px menus/popovers and 24px composers. Keep the host rebind below aligned. */
+    --radius: 0.5rem;
+    --radius-sm: 0.5rem;
+    --radius-md: 0.625rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-2xl: 1.5rem;
 
     /* Pro control sizing (VS Code/Linear style) */
     --control-h: 36px;
@@ -1253,13 +1251,6 @@ pre,
      draw a stray primary border around the hovered/open row. */
   :where([role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']):focus-visible {
     box-shadow: none;
-  }
-
-  *:focus,
-  *:focus-visible {
-    outline: none !important;
-    --tw-ring-offset-shadow: 0 0 #0000 !important;
-    --tw-ring-shadow: 0 0 #0000 !important;
   }
 
   /* Global CodeMirror cursor visibility fixes */
@@ -2129,14 +2120,18 @@ pre,
   }
 }
 
-/* Host-flattening guard for the frozen radius ladder: some host builds (the
+/* Host-flattening guard for the radius ladder: some host builds (the
    electron renderer's CSS minifier) flatten Tailwind's default theme into an
    UNLAYERED :root,:host block. Unlayered declarations beat every @layer, so
    the base-layer rebind above loses for exactly the tokens Tailwind also
-   emits — observed live: --radius-xl resolving to the 12px default instead of
-   the frozen 13px on every rounded-xl surface (SelectContent, frozen menus).
-   Rebind it unlayered, later in source order than the theme block, so the
-   frozen ladder holds in every host. Keep this in sync with the base block. */
+   emits. Rebind the ladder unlayered, later in source order than the theme
+   block, so shared controls resolve identically in every host. Keep this in
+   sync with the base block. */
 :root {
-  --radius-xl: 0.8125rem;
+  --radius: 0.5rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
 }

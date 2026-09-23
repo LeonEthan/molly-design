@@ -33,9 +33,9 @@ What each file in this directory is responsible for. Binding rules live in
 | `session-chat-input-area.tsx`                                   | Composer: attachments, run-config footer, submit                                                                                                    |
 | `message-queue/`                                                | Queued turns ([scope AGENTS.md](message-queue/AGENTS.md))                                                                                           |
 | `session-message-submit-route.ts`                               | Send vs. queue vs. steer routing decision                                                                                                           |
-| `desktop-run-config-menu.tsx`                                   | Desktop run-config dropdown + permission-mode button                                                                                                |
+| `desktop-run-config-menu.tsx`                                   | Desktop provider/model picker with reasoning + permission-mode button                                                                               |
 | `recent-run-config-menu-group.tsx`                              | "Recently used" run-config entries                                                                                                                  |
-| `composer-agent-role-panel.tsx`, `agent-role-detail-pane.tsx`   | Agent Role selection and the single Role detail pane                                                                                                |
+| `composer-agent-role-panel.tsx`, `agent-role-detail-pane.tsx`   | Legacy, unmounted Role selection and detail components                                                                                                |
 | `floating-permission-request.tsx`, `ask-user-question-card.tsx` | Floating permission requests and agent questions                                                                                                    |
 | `design-file-receipt.tsx`                                       | Durable save receipts and diagnostics; original files open through the ordinary file viewer                                                         |
 | `notification-permission-prompt.tsx`                            | Notification permission ask                                                                                                                         |
@@ -85,7 +85,7 @@ What each file in this directory is responsible for. Binding rules live in
 - [Side panel, side chats, opened sessions, browser mount](../../../../../.agents/docs/sessions-side-panel.md)
 - [Browser engines, Managed Preview, HTML viewer, annotations](../../../../../.agents/docs/sessions-browser.md)
 - [Conversation surface](../../../../../.agents/docs/sessions-surface.md)
-- [Run config and Agent Roles](../../../../../.agents/docs/sessions-run-config.md)
+- [Run config and model menus](../../../../../.agents/docs/sessions-run-config.md)
 - [Live status and dispatch](../../../../../.agents/docs/sessions-live-status.md)
 - [Composer info bar](../../../../../.agents/docs/sessions-info-bar.md)
 - [Auto review and status slot](../../../../../.agents/docs/sessions-auto-review.md)
@@ -158,6 +158,13 @@ return to the confirmed current draft. Reload failures preserve unsaved edits. C
 scale and canvas-coordinate center survive surface replacement within native bounds.
 
 ### Design versions
+
+The canvas action row uses 36px controls and pill-shaped version status, with
+separate icon-only Save version and history actions, plus labelled Export. Save
+version keeps its translated accessible name and tooltip. History and export
+menus use the same softer surface and 36px item height. The row wraps within its
+panel; preview/save errors keep their original status semantics in a quieter
+inset surface. Selection popups remain inside the native canvas.
 
 The separate Save version button flushes current edits and saves exact assets in
 immutable local Git history. Ordinary autosave does not create a version. Clicking

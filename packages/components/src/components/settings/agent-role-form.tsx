@@ -118,7 +118,7 @@ export function AgentRoleForm({
     <form className={cn('flex min-h-0 flex-col', className)} onSubmit={submit}>
       <fieldset
         disabled={readOnly}
-        className="scrollbar-pro min-h-0 min-w-0 flex-1 space-y-3 overflow-y-auto px-5 py-4"
+        className="scrollbar-pro min-h-0 min-w-0 flex-1 space-y-5 overflow-y-auto px-5 py-5"
       >
         {migrationBackup ? (
           <details className="rounded border border-border/60 p-2 text-xs">
@@ -310,19 +310,19 @@ export function AgentRoleForm({
         {/* Stated rather than left to be discovered: a Role looks like a
             standing assistant, so its owner has to be told the sessions it
             creates keep nothing between them. */}
-        <div className="rounded-lg border border-border/70 bg-card/60 px-3 py-2.5">
+        <div className="rounded-xl bg-foreground/[0.04] px-4 py-4">
           <p className="text-sm">{t('settings.agentRoles.form.memory')}</p>
-          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {t('settings.agentRoles.form.memoryHint')}
           </p>
         </div>
 
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-4">
           <div className="min-w-0">
             <Label htmlFor={`${fieldId}-share`} className="text-sm">
               {t('settings.agentRoles.form.share')}
             </Label>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {t('settings.agentRoles.form.shareHint')}
             </p>
           </div>
@@ -339,7 +339,7 @@ export function AgentRoleForm({
         ) : null}
       </fieldset>
 
-      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-5 py-3">
+      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/40 bg-card px-5 py-4">
         <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
           {t('common.cancel')}
         </Button>
@@ -520,7 +520,7 @@ function ConfigOptionField({
             {selector.label}
           </Label>
           {selector.description ? (
-            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {selector.description}
             </p>
           ) : null}

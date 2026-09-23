@@ -11,6 +11,7 @@
       "react": ["./node_modules/@types/react"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
       "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime"],
+      "lucide-react": ["./src/ui/icons.tsx"],
       "@/*": ["./src/*"],
       "@/lib/*": ["./src/lib/*"],
       "@/ui/*": ["./src/ui/*"],

@@ -267,9 +267,9 @@ function DemoComposer({
         size="icon"
         variant="ghost"
         aria-label="Send"
-        className={cn(primaryActionClassName, 'h-6 w-6')}
+        className="h-9 w-9 rounded-full bg-foreground text-background transition-colors hover:bg-foreground/90 hover:text-background"
       >
-        <ArrowUp className="h-4 w-4" />
+        <ArrowUp className="h-5 w-5" />
       </Button>
     ) : (
       <Button type="button" className={primaryActionClassName}>

@@ -11,6 +11,7 @@ import {
   getAgentConfigRoomId,
 } from '@molly/shared';
 
+import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import { agentConfigMetaCacheAtom } from '@/atoms/doc-meta';
 import {
   DesktopMachineMenu,
@@ -25,7 +26,7 @@ import type { AcpSessionSelectOption } from '@/components/shared/acp-session-sel
 
 /**
  * The desktop composer's two consolidated footer buttons: the run-config
- * dropdown (agent / model / reasoning submenus + Plan / Fast toggles) and the
+ * dropdown (direct provider/model choices, reasoning + Plan / Fast toggles) and the
  * standalone permission-mode button — both on the standard DropdownMenu
  * surface (distinct background + layered float shadow). The full in-context
  * page is `SessionConversationPage.stories` (`DesktopIdle`).
@@ -224,10 +225,8 @@ function StoryShell({
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
             agentSelection={machineSelected ? { agentId: codexId, machineId } : null}
-            allowedMachineIds={machineSelected ? [machineId] : []}
             disabledReason={machineSelected ? undefined : 'Select a machine first'}
             agentLocked={!isEmptyConversation}
-            onAgentConfigChange={fn()}
             modelOptions={modelOptions}
             selectedModelId={model}
             onModelChange={setModel}
@@ -293,7 +292,6 @@ function GrokConfigShell() {
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
             agentSelection={{ agentId: grokId, machineId }}
-            allowedMachineIds={[machineId]}
             agentLocked
             modelOptions={[]}
             selectedModelId={null}
@@ -354,6 +352,44 @@ function DeepSeekWarningShell() {
   );
 }
 
+function ProviderModelShell({ empty = false }: { empty?: boolean }) {
+  const [model, setModel] = useState(MOLLY_UNSELECTED_MODEL);
+  const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>({
+    reasoning_effort: 'medium',
+  });
+  const config: AgentConfigMeta = { ...agents[0]!, name: 'Molly', agentType: 'molly' };
+  const options = empty
+    ? []
+    : ['Studio', 'Review'].flatMap((connection) =>
+        [1, 2, 3, 4].map((index) => ({
+          value: encodeMollyModelOption(connection.toLowerCase(), `aurora-${index}`),
+          label: `${connection} · Aurora ${index}`,
+          description: `aurora-${index}`,
+        }))
+      );
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background p-8">
+      <DesktopRunConfigMenu
+        agentSelection={{ agentId: config.id, machineId }}
+        availableAgentConfigs={[config]}
+        modelOptions={[
+          { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
+          ...options,
+        ]}
+        selectedModelId={model}
+        onModelChange={setModel}
+        configOptionSelectors={
+          empty ? [] : selectors.filter((selector) => selector.category === 'thought_level')
+        }
+        configOptionValues={values}
+        onConfigOptionChange={(key, value) =>
+          setValues((previous) => ({ ...previous, [key]: value }))
+        }
+      />
+    </div>
+  );
+}
+
 function EmptyMachineScopeShell() {
   return (
     <div className="flex min-h-dvh items-center justify-center bg-background p-8">
@@ -362,7 +398,7 @@ function EmptyMachineScopeShell() {
   );
 }
 
-function LeftOpeningAgentMenuShell() {
+function LeftOpeningReasoningMenuShell() {
   const store = useMemo(() => {
     const next = createStore();
     next.set(
@@ -371,19 +407,22 @@ function LeftOpeningAgentMenuShell() {
     );
     return next;
   }, []);
-  const [selection, setSelection] = useState({ agentId: codexId, machineId });
+  const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>({});
 
   return (
     <Provider store={store}>
       <div className="relative h-[670px] w-[900px] overflow-hidden bg-background">
         <div className="absolute left-[650px] top-[619px]">
           <DesktopRunConfigMenu
-            agentSelection={selection}
+            agentSelection={{ agentId: grokId, machineId }}
             availableAgentConfigs={agents}
-            allowedMachineIds={[machineId]}
-            onAgentConfigChange={setSelection}
-            modelOptions={modelOptions}
-            selectedModelId={modelOptions[0]?.value ?? null}
+            modelOptions={[{ value: 'grok-build', label: 'Grok Build' }]}
+            selectedModelId="grok-build"
+            configOptionSelectors={grokSelectors}
+            configOptionValues={values}
+            onConfigOptionChange={(key, value) =>
+              setValues((previous) => ({ ...previous, [key]: value }))
+            }
           />
         </div>
       </div>
@@ -430,7 +469,16 @@ export const MachineScopeEmpty: Story = {
   args: { isEmptyConversation: true },
   render: () => <EmptyMachineScopeShell />,
 };
-export const LeftOpeningAgentMenu: Story = {
+export const LeftOpeningReasoningMenu: Story = {
   args: { isEmptyConversation: true },
-  render: () => <LeftOpeningAgentMenuShell />,
+  render: () => <LeftOpeningReasoningMenuShell />,
+};
+
+export const ProviderAndModel: Story = {
+  args: { isEmptyConversation: true },
+  render: () => <ProviderModelShell />,
+};
+export const NoModelConnections: Story = {
+  args: { isEmptyConversation: true },
+  render: () => <ProviderModelShell empty />,
 };

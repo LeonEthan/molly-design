@@ -337,7 +337,7 @@ export function GeneralSettingsComponent() {
   return (
     <>
       <div className={settingContainerClass}>
-        <div className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/70 bg-card/60 text-sm">
+        <CompactSection>
           <CompactRow
             label={t(
               'settings.general.sessions.queuedMessageBehavior.label',
@@ -399,7 +399,7 @@ export function GeneralSettingsComponent() {
               />
             )}
           </CompactRow>
-        </div>
+        </CompactSection>
         {isElectron && (
           <CompactSection title={t('settings.general.autoLaunch.title', 'Startup')}>
             <CliDaemonSetting />

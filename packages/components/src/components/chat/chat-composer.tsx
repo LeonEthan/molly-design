@@ -203,9 +203,9 @@ export function getChatComposerTextareaClassName({
     isLanding
       ? 'min-h-[120px] border-transparent bg-transparent px-0 py-0 sm:min-h-[140px]'
       : cn(
-          'border-transparent bg-transparent px-1 py-0',
-          // Mobile session composer floors at a single line; desktop keeps two.
-          isMobile ? 'min-h-[24px]' : 'min-h-[48px]'
+          'border-transparent bg-transparent px-1 py-1',
+          // Mobile floors at a single line; desktop leaves room around two lines.
+          isMobile ? 'min-h-[24px]' : 'min-h-[64px]'
         ),
     'focus-visible:outline-hidden focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
     'text-input-foreground placeholder:text-input-placeholder'
@@ -555,23 +555,20 @@ export function ChatComposer({
    * The colour a mention decoration paints to hide the textarea's own glyphs
    * before redrawing them in the mention colour. It has to equal whatever this
    * composer paints behind the textarea, or the "invisible" cover shows up as a
-   * rectangle — which is exactly what `--input` did here, since this surface is
-   * deliberately `bg-background` rather than the muddy `bg-input`.
+   * rectangle. Both the shell and the cover use the editable-field surface.
    *
    * KEEP IN SYNC with the `bg-*` classes below. CSS cannot read an ancestor's
    * background, so this is a copy, and a copy can drift.
    */
-  const mentionSurfaceClassName =
-    '[--mention-chip-surface:hsl(var(--background))] dark:[--mention-chip-surface:color-mix(in_srgb,hsl(var(--input))_90%,hsl(var(--background)))]';
+  const mentionSurfaceClassName = '[--mention-chip-surface:hsl(var(--input-field))]';
 
-  // Linear-like light surface: white canvas + hairline border + soft lift.
-  // Avoid heavy bg-input fills that read as muddy gray on cool-white themes.
+  // Editable surfaces use the same field token as their opaque mention chips.
   const mentionContainerClassName = !isLanding
     ? cn(
         'w-full',
         'focus-within:ring-1 focus-within:ring-offset-0',
         'focus-within:outline-hidden',
-        'rounded-2xl border border-foreground/[0.10] bg-background focus-within:ring-ring/30 dark:border-input-border/70 dark:bg-input/90',
+        'rounded-2xl border border-input-border/70 bg-input-field focus-within:border-primary/60 focus-within:ring-ring/20',
         mentionSurfaceClassName
       )
     : undefined;
@@ -593,18 +590,21 @@ export function ChatComposer({
 
   const actionWidthClassName = isLanding ? 'w-auto shrink-0' : 'w-auto';
 
-  const landingContainerClassName = cn(
-    'flex flex-col gap-4 rounded-xl border px-4 pt-4 pb-3 transition-shadow focus-within:ring-1',
-    'border-foreground/[0.10] bg-background shadow-[0_1px_2px_hsl(0_0%_0%/0.04),0_8px_24px_-12px_hsl(0_0%_0%/0.08)] focus-within:ring-ring/30',
-    'dark:border-input-border/60 dark:bg-input/90 dark:shadow-[0_22px_70px_-48px_rgba(15,23,42,0.25)] dark:focus-within:ring-ring/40',
+  const composerSurfaceClassName = cn(
+    'rounded-2xl border border-input-border/70 bg-input-field transition-[border-color,box-shadow] duration-150',
+    'shadow-[0_2px_6px_hsl(0_0%_0%/0.03),0_10px_28px_-16px_hsl(0_0%_0%/0.14)]',
+    'focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/20',
     mentionSurfaceClassName
   );
 
+  const landingContainerClassName = cn(
+    'flex flex-col gap-4 px-5 pt-5 pb-3',
+    composerSurfaceClassName
+  );
+
   const sessionContainerClassName = cn(
-    'flex flex-col gap-1 rounded-xl border border-input-border px-2 py-1.5 transition-colors duration-150',
-    'bg-background focus-within:border-primary focus-within:ring-1 focus-within:ring-primary',
-    'dark:bg-input/90',
-    mentionSurfaceClassName
+    'flex flex-col gap-2 px-3 pt-3 pb-2.5',
+    composerSurfaceClassName
   );
 
   const boxContainerClassName = isLanding ? landingContainerClassName : sessionContainerClassName;

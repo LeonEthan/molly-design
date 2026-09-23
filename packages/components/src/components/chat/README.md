@@ -11,8 +11,10 @@ reasoning behind those rules.
   primary/secondary action placement.
 - `chat-landing.tsx` — new-chat orchestration: selector state, mobile sheet
   wiring, submit behavior, and the nodes passed into `ChatComposer`.
-- `canvas-size-selector.tsx` — the Auto/custom dimensions popover at the right end
-  of the project selector row, aligned with the composer. Enter uses existing submission and naming;
+- `canvas-size-selector.tsx` — the Auto/preset/custom dimensions popover at the
+  composer's bottom left, beside attachments. Five common pixel presets share the
+  existing custom-size contract; custom fields apply together and dismiss without changes.
+  Enter in the prompt uses existing submission and naming;
   artwork persistence precedes acceptance using the reserved draft session identity.
 - `canvas-submission.ts` — validates custom dimensions and pairs initial artwork size
   with the localized size request in durable first-turn input; Auto stays unconstrained.

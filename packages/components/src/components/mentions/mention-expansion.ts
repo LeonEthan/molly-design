@@ -13,11 +13,6 @@ import {
   type SkillMentionAgent,
 } from '@/components/mentions/mention-skill-source';
 import { buildSessionMentionRewrites } from '@/components/mentions/mention-session-source';
-import {
-  buildAgentRoleMentionContext,
-  buildAgentRoleMentionRewrites,
-  useAgentRoleMentionItems,
-} from '@/components/mentions/mention-agent-role-source';
 import { buildPastedTextRewrites, type PastedTextDraft } from '@/lib/pasted-text-draft';
 import type { Mention as MentionRange } from '@/ui/mention/index';
 
@@ -77,6 +72,7 @@ const REWRITTEN_SPAN_KINDS = [
   'design_element',
   'skill',
   'session',
+  // Retired Role ranges stay plain text and do not produce a new span or instruction.
   'agent_role',
   'pasted_text',
 ] satisfies MessageTextSpanKind[];
@@ -118,18 +114,6 @@ export function useMentionPromptExpansion({
   promptValue,
 }: MentionPromptExpansionInput): (args: MentionPromptExpansionArgs) => ExpandedMentionPrompt {
   const skillRewrites = useSkillMentionRewrites(source, skillAgent, promptValue);
-  const agentRoleContext = React.useMemo(
-    () =>
-      buildAgentRoleMentionContext({
-        mentionSource: source,
-        currentMachineId: skillAgent?.machineId,
-      }),
-    [skillAgent?.machineId, source]
-  );
-  // Same owner as the composer menu, by module: both read the shared catalog
-  // room, so the list the user picked from is the list this authorizes against.
-  const agentRoleItems = useAgentRoleMentionItems(agentRoleContext);
-
   return React.useCallback(
     ({ text, mentions = [], pastedTextDrafts = [] }: MentionPromptExpansionArgs) => ({
       ...applyTextRewrites(text, [
@@ -137,10 +121,9 @@ export function useMentionPromptExpansion({
         ...skillRewrites(text),
         ...buildSessionMentionRewrites(text, mentions),
         ...buildDesignElementMentionRewrites(text, mentions),
-        ...buildAgentRoleMentionRewrites(text, mentions, agentRoleItems),
         ...buildVerbatimMentionRewrites(text, mentions),
       ]),
     }),
-    [agentRoleItems, skillRewrites]
+    [skillRewrites]
   );
 }

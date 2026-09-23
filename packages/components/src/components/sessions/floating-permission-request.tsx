@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2, Stop } from '@/ui/icons';
 import { Button } from '@/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/ui/card';
 import { ScrollArea } from '@/ui/scroll-area';
@@ -261,7 +261,7 @@ export function PermissionRequestCard({
       </CardHeader>
       <CardContent
         hidden={!showDetails}
-        className={cn('px-3 pt-2', showFooter ? 'pb-1.5' : 'pb-2.5')}
+        className={cn('px-4 pt-2', showFooter ? 'pb-1.5' : 'pb-2.5')}
       >
         <div className="flex flex-col gap-0.5">
           {options.map((option) => {
@@ -310,7 +310,7 @@ export function PermissionRequestCard({
         </div>
       </CardContent>
       {showFooter && showDetails && (
-        <CardFooter className="px-3 pb-2.5 pt-1">
+        <CardFooter className="px-4 pb-2.5 pt-1">
           <div className="text-xs text-muted-foreground">
             {t(
               'sessions.permissionActionsDisabled',
@@ -542,7 +542,7 @@ export function FloatingPermissionRequest({
             {isStopping ? (
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
             ) : (
-              <span className="h-2.5 w-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+              <Stop className="h-6 w-6" aria-hidden="true" />
             )}
             {t('sessions.stop')}
           </Button>

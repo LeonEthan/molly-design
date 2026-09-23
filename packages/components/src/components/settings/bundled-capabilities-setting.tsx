@@ -12,7 +12,7 @@ export function BundledCapabilitiesView({ snapshot }: { snapshot: Snapshot | nul
       title={t('settings.models.capabilitiesTitle')}
       description={t('settings.models.capabilitiesHint')}
     >
-      <div className="space-y-3 p-3 text-sm">
+      <div className="space-y-4 px-5 pb-5 pt-1 text-sm leading-relaxed">
         {snapshot === undefined ? (
           <p role="status">{t('settings.models.capabilitiesLoading')}</p>
         ) : snapshot === null ? (

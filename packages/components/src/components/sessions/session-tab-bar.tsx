@@ -2,7 +2,11 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Loader2, X, History, Undo2, Pin, FileDiff, Hand } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WINDOW_DRAG_EXEMPT_CLASS, useWindowDragRegionClass } from '@/ui/window-drag-region';
-import { getSessionLaunchConfigLegacyFields, type SessionId, type SessionMeta } from '@molly/shared';
+import {
+  getSessionLaunchConfigLegacyFields,
+  type SessionId,
+  type SessionMeta,
+} from '@molly/shared';
 import { useTranslation } from 'react-i18next';
 import { useAtomValue } from 'jotai';
 import { getAgentMetaByIdAtomFamily } from '@/atoms/agents';
@@ -94,33 +98,19 @@ interface SessionTabBarProps {
   onMentionSession?: (sessionId: string) => void;
 }
 
-/* One canvas: `bg-background` runs unbroken from this bar down through the
-   message list, and the tabs sit ON it without breaking it. The ACTIVE tab is
-   the heaviest thing in the row — it wears the app's floating-panel material
-   (`bg-sidebar` + `border-sidebar-border` + the same drop shadow as the side
-   panel and terminal dock), so "the one in a box" reads as the current page.
-   Inactive tabs get a flat borderless wash and dimmed text; they must stay
-   lighter-weight than the active tab, since chrome is what the eye scores as
-   selected among siblings.
-
-   Keep the surface ladder ordered — canvas → inactive → active — measured, not
-   assumed. `bg-sidebar` gives light that ladder for free (canvas 241 → active
-   229), but DARK needs the override: Vesper's sideBar is #161616, a mere 6
-   above the #101010 canvas and BELOW the inactive wash (26), so the active pill
-   rendered as a dent and only its border kept it legible. Hence the `dark:`
-   pair, which lands canvas 16 → inactive 26 → active 42, border 70.
-   `--tab-active`/`--tab-inactive` are useless here: both collapse onto
-   `--background` in dark, which is what forced the original `/[0.22]` vs
-   `/[0.12]` tints — a 10% gap that rendered as one gray.
-   `border-transparent` on the base keeps every state on the same box model, so
-   switching tabs never shifts a label by a pixel. */
+/* The strip shares the conversation canvas. Active tabs use the stronger 8%
+   foreground tint; inactive tabs use 3% (5% on hover). Keep this surface ladder
+   canvas → inactive → active in both themes and measure its composited colors
+   in the shipping host. The transparent border keeps every state on the same
+   box model, while the 32px pill inside the 44px strip preserves the y=8 line
+   with adjacent panels. A lone tab still drops its fill. */
 const TAB_ITEM_CLASS =
-  'group relative flex h-8 w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-md border border-transparent px-3 text-[13px] transition-colors cursor-pointer';
+  'group relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-transparent px-3 text-[13px] transition-colors cursor-pointer';
 const TAB_ITEM_ACTIVE_CLASS = TAB_PILL_ACTIVE_CLASS;
 const TAB_ITEM_INACTIVE_CLASS = TAB_PILL_INACTIVE_CLASS;
 const TAB_INLINE_ACTION_CLASS =
-  'ml-auto shrink-0 rounded-sm p-0.5 opacity-70 transition-[opacity,background-color,color] hover:bg-muted-foreground/10 hover:text-tab-hover-foreground hover:opacity-100';
-const TAB_BAR_ACTION_CLASS = `flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-hover-foreground ${WINDOW_DRAG_EXEMPT_CLASS}`;
+  'ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full opacity-70 transition-[opacity,background-color,color] hover:bg-foreground/[0.08] hover:text-tab-hover-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring/40';
+const TAB_BAR_ACTION_CLASS = `flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-hover hover:text-hover-foreground ${WINDOW_DRAG_EXEMPT_CLASS}`;
 
 function clientPointFromDragEnd(event: DragEndEvent): { x: number; y: number } | null {
   const source = event.activatorEvent;
@@ -270,12 +260,12 @@ function TabContent({
           the user. Waiting is the sidebar's `Hand`, NOT a dot: `--primary` and
           `--status-warning` are both amber in the shipped themes, so an amber
           waiting dot beside a primary unread dot read as the same marker.
-          Fixed 12px box so every state keeps the label on the same pixel. */}
-      <span className="inline-flex h-3 w-3 shrink-0 items-center justify-center">
+          Fixed 14px box so every state keeps the label on the same pixel. */}
+      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center">
         {isWaiting ? (
-          <Hand className="h-3 w-3 text-status-warning" />
+          <Hand className="h-3.5 w-3.5 text-status-warning" />
         ) : isWorking ? (
-          <Loader2 className="h-3 w-3 animate-spin text-tab-active-accent" />
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-tab-active-accent" />
         ) : isUnread ? (
           <span
             data-session-tab-unread=""
@@ -287,7 +277,7 @@ function TabContent({
             cliType={session.cliType}
             agentType={session.agentType}
             env={iconEnv}
-            className="h-3 w-3 opacity-60"
+            className="h-3.5 w-3.5 opacity-70"
           />
         )}
       </span>
@@ -312,7 +302,7 @@ function TabContent({
         <Tooltip>
           <TooltipTrigger asChild>
             <span className={cn(TAB_INLINE_ACTION_CLASS, iconVisibility)}>
-              <Pin className="h-3 w-3" />
+              <Pin className="h-3.5 w-3.5" />
             </span>
           </TooltipTrigger>
           <TooltipContent side="bottom">
@@ -330,7 +320,7 @@ function TabContent({
           }}
           aria-label={t('sessions.tabs.closeTab', 'Close tab')}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -365,7 +355,9 @@ function DraftTabContent({
   t: (key: string, fallback: string) => string;
 }) {
   const showClose = onClose;
-  const closeIconVisibility = isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+  const closeIconVisibility = isActive
+    ? 'opacity-100'
+    : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
   const label = getDraftTabLabel(draft, t('sessions.tabs.newTab', 'New Tab'));
   const tabId = `draft-tab-${draft.id}`;
   // Drafts carry no env snapshot of their own; resolve the chosen config so the
@@ -406,7 +398,7 @@ function DraftTabContent({
           agentType={draft.agentType}
           brandId={draftAgentConfig?.brandId}
           env={draftAgentConfig?.env}
-          className="h-3 w-3 opacity-60"
+          className="h-3.5 w-3.5 opacity-70"
         />
       </span>
       <span className="truncate">{label}</span>
@@ -420,7 +412,7 @@ function DraftTabContent({
           }}
           aria-label={t('sessions.tabs.closeTab', 'Close tab')}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -444,7 +436,9 @@ function ViewerTabContent({
   t: (key: string, fallback: string, opts?: Record<string, unknown>) => string;
 }) {
   const showClose = onClose;
-  const closeIconVisibility = isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-100';
+  const closeIconVisibility = isActive
+    ? 'opacity-100'
+    : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
   const tabId = `viewer-tab-${tab.id}`;
   const saveStateLabel = tab.saving
     ? t('sessions.fileViewer.tabSaving', 'Saving')
@@ -484,9 +478,9 @@ function ViewerTabContent({
     >
       <span className="shrink-0">
         {tab.type === 'file' && tab.filePath ? (
-          <FileIcon filePath={tab.filePath} className="h-3 w-3" />
+          <FileIcon filePath={tab.filePath} className="h-3.5 w-3.5" />
         ) : (
-          <FileDiff className="h-3 w-3 opacity-60" />
+          <FileDiff className="h-3.5 w-3.5 opacity-70" />
         )}
       </span>
       {saveStateLabel ? (
@@ -516,7 +510,7 @@ function ViewerTabContent({
             fileName: tab.label,
           })}
         >
-          <X className="h-3 w-3" />
+          <X className="h-3.5 w-3.5" />
         </button>
       )}
     </div>
@@ -722,7 +716,7 @@ export const SessionTabBar = memo(function SessionTabBar({
     clearSessionMentionDrag();
   }, []);
 
-  const iconVisibility = 'opacity-0 group-hover:opacity-100';
+  const iconVisibility = 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100';
 
   const sharedTabProps = {
     defaultTitle,
@@ -892,29 +886,29 @@ function ArchivedTabsPopover({
         </TooltipContent>
       </Tooltip>
       <PopoverContent align="end" className="w-72 p-0" sideOffset={4}>
-        <div className="border-b border-border px-3 py-2">
+        <div className="border-b border-border/40 px-4 py-3">
           <p className="text-xs font-medium text-popover-foreground/70">
             {t('sessions.tabs.archivedTabs', 'Archived tabs')}
           </p>
         </div>
         <ScrollArea className="max-h-60">
-          <div className="py-1">
+          <div className="p-1.5">
             {sorted.map((session) => {
               const label = session.title?.trim() || t('sessions.tabs.newTab', 'New Tab');
               const time = formatRelativeTime(session.lastMessageAt ?? session.createdAt, t);
               return (
                 <div
                   key={session.id}
-                  className="flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-hover/60"
+                  className="flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-2 text-xs transition-colors hover:bg-foreground/[0.04]"
                 >
                   <span className="shrink-0 text-popover-foreground/65">
-                    <SessionAgentIcon session={session} className="h-3 w-3" />
+                    <SessionAgentIcon session={session} className="h-3.5 w-3.5" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{label}</span>
                   <span className="shrink-0 text-popover-foreground/65">{time}</span>
                   <button
                     type="button"
-                    className="shrink-0 rounded-xs p-0.5 text-popover-foreground/70 transition-colors hover:bg-hover hover:text-hover-foreground"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-popover-foreground/70 transition-colors hover:bg-hover hover:text-hover-foreground"
                     onClick={() => {
                       void onRestore(session.id);
                     }}

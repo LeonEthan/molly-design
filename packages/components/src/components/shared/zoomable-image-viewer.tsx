@@ -14,6 +14,7 @@ import {
   type ImagePreviewExportOutcome,
 } from '@/lib/image-preview-export';
 import { cn } from '@/lib/utils';
+import { LoaderCircle, X } from '@/ui/icons';
 import 'react-photo-view/dist/react-photo-view.css';
 import './zoomable-image-viewer.css';
 
@@ -237,6 +238,7 @@ function OpenZoomableImageViewer({
   readonly onIndexChange?: (index: number) => void;
   readonly portalContainer?: HTMLElement;
 }) {
+  const { t } = useTranslation();
   const isMobile = useIsMobile();
   const isElectronFullscreen = useElectronFullscreen();
   useImagePreviewContextMenu(images);
@@ -259,6 +261,17 @@ function OpenZoomableImageViewer({
       className={sliderClassName}
       images={images}
       visible
+      loadingElement={<LoaderCircle className="h-9 w-9 animate-spin text-white" />}
+      toolbarRender={({ onClose: closeSlider }) => (
+        <button
+          type="button"
+          className="PhotoView-Slider__toolbarIcon molly-photo-slider-close"
+          aria-label={t('common.close', 'Close')}
+          onClick={closeSlider}
+        >
+          <X className="h-6 w-6" />
+        </button>
+      )}
       onClose={onClose}
       index={index}
       {...(onIndexChange ? { onIndexChange } : {})}

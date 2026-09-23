@@ -622,14 +622,14 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
       draggable
       onDragStart={(event) => startSessionMentionDrag(event, { sessionId: session.id, title })}
       className={cn(
-        'group w-full rounded-md px-2 text-left',
-        'py-1',
+        'group min-h-9 w-full rounded-lg px-2 text-left',
+        'py-[7px]',
         'border border-transparent bg-transparent',
         !showSelectedState &&
           !isMobile &&
-          'hover:bg-sidebar-hover data-[menu-open]:bg-sidebar-hover',
+          'hover:bg-sidebar-foreground/[0.04] data-[menu-open]:bg-sidebar-foreground/[0.04]',
         showSelectedState &&
-          'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
+          'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
         // The selected tint is too light for the inverted selection
         // foreground (see SidebarUpdatedSessionList) — keep the plain sidebar
         // foreground on selected rows.
@@ -644,7 +644,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
         onNavigate(session.id);
       }}
     >
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         <SessionRowLeadingSlot
           showMenuButton={hasContextMenuActions}
           menuLabel={moreActionsLabel}
@@ -683,7 +683,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           hasUnreadMessages={hasUnreadMessages}
           restIcon={
             showPr || showWorktreeIcon ? (
-              <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-2">
                 <SessionRowWorktreeIndicator isWorktree={showWorktreeIcon} />
                 {showPr ? <SessionPrIcon prStatus={prStatus} prCiState={prInfo.ciState} /> : null}
               </span>
@@ -892,6 +892,7 @@ const hoverActionClassName = cn(
   'inline-flex h-5 w-5 items-center justify-center rounded-sm',
   'text-muted-foreground/70 transition-[opacity,background-color,color] duration-100',
   'opacity-0 pointer-events-none',
+  'focus-visible:opacity-100 focus-visible:pointer-events-auto',
   'group-hover:opacity-100 group-hover:pointer-events-auto',
   'group-data-[menu-open]:opacity-100 group-data-[menu-open]:pointer-events-auto',
   'hover:text-foreground hover:bg-muted/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60'
@@ -1041,14 +1042,14 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                   // `asChild`, so their `data-state` values collide here.
                   data-menu-open={projectMenuOpen ? '' : undefined}
                   className={cn(
-                    'group relative w-full rounded-md pl-2 pr-3 py-1 text-left',
+                    'group relative min-h-9 w-full rounded-lg pl-2 pr-3 py-[7px] text-left',
                     'border border-transparent bg-transparent',
                     !showSelectedState &&
                       !isMobile &&
-                      'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-hover data-[menu-open]:text-sidebar-hover-foreground',
+                      'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
                     showSelectedState &&
-                      'border-sidebar-foreground/10 bg-sidebar-foreground/10 hover:bg-sidebar-foreground/10',
-                    'flex min-w-0 flex-1 select-none items-center gap-2 text-xs font-semibold transition-colors',
+                      'bg-sidebar-foreground/[0.06] hover:bg-sidebar-foreground/[0.06]',
+                    'flex min-w-0 flex-1 select-none items-center gap-2 text-[13px] font-medium transition-colors',
                     projectCanNavigate ? 'cursor-pointer' : 'cursor-default',
                     removalState && 'text-muted-foreground',
                     showSelectedState
@@ -1069,7 +1070,7 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                 >
                   <button
                     type="button"
-                    className="relative -mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center"
+                    className="group/folder-toggle relative -mr-1.5 flex h-5 w-5 shrink-0 items-center justify-center"
                     aria-label={toggleLabel}
                     onClick={(event) => {
                       event.preventDefault();
@@ -1082,14 +1083,18 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                         'absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-current transition-opacity duration-100',
                         // Mobile: chevron is always visible so the folder icon must hide
                         // permanently to avoid stacking. Desktop keeps the hover swap.
-                        isMobile ? 'opacity-0' : 'opacity-80 group-hover:opacity-0'
+                        isMobile
+                          ? 'opacity-0'
+                          : 'opacity-80 group-hover:opacity-0 group-focus-visible/folder-toggle:opacity-0'
                       )}
                     />
                     <ChevronDown
                       className={cn(
                         'absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 text-current',
                         'transition-[opacity,translate,scale] duration-100',
-                        isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                        isMobile
+                          ? 'opacity-100'
+                          : 'opacity-0 group-hover:opacity-100 group-focus-visible/folder-toggle:opacity-100',
                         collapsed ? '-rotate-90' : 'rotate-0'
                       )}
                     />
@@ -2877,7 +2882,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         className={cn(
           isMobile
             ? 'h-full w-full rounded-none border-0 shadow-none'
-            : 'mb-2 ml-2 mr-1 mt-2 h-[calc(100%_-_1rem)] rounded-xl border border-sidebar-border/80 bg-sidebar shadow-[0_1px_4px_-1px_rgba(0,0,0,0.18)]',
+            : 'mb-2 ml-2 mr-1 mt-2 h-[calc(100%_-_1rem)] rounded-xl border border-sidebar-border/40 bg-sidebar',
           isElectron && !isElectronFullscreen && 'z-20'
         )}
         workspaceName={resolvedWorkspaceName}

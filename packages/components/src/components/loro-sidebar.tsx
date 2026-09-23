@@ -550,11 +550,11 @@ function NavButton({
         type="button"
         onClick={onClick}
         className={cn(
-          'group flex w-full select-none items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm outline-hidden transition',
+          'group flex min-h-9 w-full select-none items-center gap-2 rounded-lg px-2 py-2 text-left text-sm outline-hidden transition',
           'focus-visible:ring-1 focus-visible:ring-sidebar-ring/30',
           active
-            ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
-            : 'text-sidebar-foreground dark:text-sidebar-foreground/75 hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
+            ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
+            : 'text-sidebar-foreground dark:text-sidebar-foreground/75 hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
           // Keep the label clear of the trailing control instead of letting it
           // truncate under it.
           action && 'pr-8'
@@ -581,17 +581,17 @@ export function getLoroSidebarFooterClassName(isMobile: boolean): string {
     isMobile
       ? 'pl-[calc(6px+var(--safe-area-left))] pr-[calc(12px+var(--safe-area-right))] pt-1 pb-2'
       : 'px-1.5 py-1',
-    'border-sidebar-border'
+    'border-sidebar-border/40'
   );
 }
 
 export function getLoroSidebarFooterIconButtonClassName(isMobile: boolean, active = false): string {
   return cn(
-    isMobile ? 'h-12 w-12 rounded-xl [&_svg]:h-5 [&_svg]:w-5' : 'h-7 w-7 rounded-md',
+    isMobile ? 'h-12 w-12 rounded-xl [&_svg]:h-5 [&_svg]:w-5' : 'h-8 w-8 rounded-full',
     'transition-colors focus-visible:ring-1 focus-visible:ring-sidebar-ring/40',
     active
-      ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
-      : 'text-sidebar-foreground dark:text-sidebar-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
+      ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
+      : 'text-sidebar-foreground dark:text-sidebar-foreground-muted hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground'
   );
 }
 
@@ -947,7 +947,7 @@ export const LoroSidebar = memo(function LoroSidebar({
               aria-label="Collapse sidebar"
               onClick={() => onRequestCollapse()}
               className={cn(
-                'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-md',
+                'absolute right-1.5 flex h-7 w-7 items-center justify-center rounded-full',
                 isElectronMacOS ? '-top-0.5' : 'top-2',
                 'text-sidebar-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
                 windowDrag && WINDOW_DRAG_EXEMPT_CLASS,
@@ -1137,7 +1137,7 @@ export const LoroSidebar = memo(function LoroSidebar({
                               className={cn(
                                 'flex items-center gap-2 rounded-lg px-2 py-2 text-[12px]',
                                 item.isSelected
-                                  ? 'bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
+                                  ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
                                   : 'text-sidebar-foreground-muted hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
                               )}
                             >

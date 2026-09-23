@@ -22,7 +22,6 @@ import { ProjectSettingsComponent } from './project-settings';
 import { MachineAgentSettings } from './machine-agent-settings';
 import { KeyboardShortcutsSetting } from './keyboard-shortcuts-setting';
 import { AboutSettingsComponent } from './about-setting';
-import { AgentRolesSetting } from './agent-roles-setting';
 import { ImageConnectionSetting } from './image-connection-setting';
 import { McpSetting } from './mcp-setting';
 import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
@@ -51,7 +50,8 @@ export function DesktopSettingsModal() {
     >
       <DialogContent
         noAnimation
-        className="flex h-[min(90vh,950px)] w-[84vw] max-w-[1100px] flex-col gap-0 overflow-hidden p-0 sm:p-0"
+        overlayClassName="bg-black/25 dark:bg-black/45"
+        className="flex h-[min(90vh,950px)] w-[min(1100px,calc(100vw-48px))] max-w-[1100px] flex-col gap-0 overflow-hidden rounded-2xl border-border/50 bg-background p-0 sm:rounded-2xl sm:p-0"
       >
         <SettingsModalBody />
       </DialogContent>
@@ -100,10 +100,7 @@ function SettingsModalBody() {
   ];
   // These tabs render their own in-content header (title + per-tab actions like
   // "add project"), so we drop the chrome title to avoid showing it twice.
-  const selfTitledTab =
-    resolvedActiveTab === 'projects' ||
-    resolvedActiveTab === 'machines' ||
-    resolvedActiveTab === 'agents';
+  const selfTitledTab = resolvedActiveTab === 'projects' || resolvedActiveTab === 'machines';
   const usesInternalScrolling = resolvedActiveTab === 'projects';
 
   return (
@@ -114,19 +111,19 @@ function SettingsModalBody() {
           id={navigationScopeId}
           role="navigation"
           aria-label={t('settings.title')}
-          className="flex w-60 flex-col border-e bg-background"
+          className="flex w-52 shrink-0 flex-col border-e border-border/40 bg-card/65"
         >
-          <nav className="min-h-0 flex-1 overflow-y-auto p-3">
-            <div className="space-y-4">
+          <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
+            <div className="space-y-6">
               {groupedSections.map((section) => {
                 const tabs = navigationTabs.filter((tab) => tab.section === section.id);
                 if (tabs.length === 0) return null;
                 return (
                   <section key={section.id} aria-label={section.label}>
-                    <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground/55">
+                    <h2 className="px-3 pb-2 text-[11px] font-medium text-muted-foreground">
                       {section.label}
                     </h2>
-                    <div className="space-y-0.5">
+                    <div className="space-y-1">
                       {tabs.map((tab) => {
                         const Icon = tab.icon;
                         return (
@@ -138,18 +135,14 @@ function SettingsModalBody() {
                             data-scope-item="row"
                             data-settings-tab-id={tab.id}
                             className={cn(
-                              'flex w-full items-center gap-2.5 rounded-md px-2.5 py-1 text-start text-sm font-medium transition-colors',
+                              'flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-start text-sm font-normal transition-colors',
                               resolvedActiveTab === tab.id
-                                ? 'bg-secondary text-secondary-foreground'
-                                : 'text-muted-foreground hover:bg-secondary/50 hover:text-secondary-foreground'
+                                ? 'bg-foreground/[0.06] font-medium text-foreground'
+                                : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
                             )}
                             onClick={() => selectTab(tab.id)}
                           >
-                            <Icon
-                              className="h-4 w-4 shrink-0 opacity-80"
-                              strokeWidth={1.75}
-                              aria-hidden="true"
-                            />
+                            <Icon className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
                             <span className="min-w-0 truncate">{t(tab.labelKey)}</span>
                           </button>
                         );
@@ -170,22 +163,22 @@ function SettingsModalBody() {
           {selfTitledTab ? (
             <DialogTitle className="sr-only">{t(activeTabConfig.labelKey)}</DialogTitle>
           ) : (
-            <header className="mt-2 flex h-12 shrink-0 items-center px-8">
-              <DialogTitle className="text-xl font-semibold leading-none">
+            <header className="flex min-h-20 shrink-0 items-center px-7 pr-14">
+              <DialogTitle className="text-xl font-medium leading-tight">
                 {t(activeTabConfig.labelKey)}
               </DialogTitle>
             </header>
           )}
           <div className="min-h-0 flex-1">
             {usesInternalScrolling ? (
-              <div className="h-full px-6 pb-6 pt-6">
+              <div className="h-full px-7 pb-7 pt-7">
                 <div className="mx-auto h-full max-w-5xl">
                   <SettingsTabContent tabId={resolvedActiveTab} />
                 </div>
               </div>
             ) : (
               <ScrollArea className="h-full">
-                <div className={cn('px-6 pb-6', selfTitledTab ? 'pt-6' : 'pt-0')}>
+                <div className={cn('px-7 pb-7', selfTitledTab ? 'pt-7' : 'pt-0')}>
                   <div className="mx-auto max-w-5xl">
                     <SettingsTabContent tabId={resolvedActiveTab} />
                   </div>
@@ -209,6 +202,7 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
       return <GeneralSettingsComponent />;
     case 'appearance':
       return <AppearanceSettingsComponent />;
+    case 'agent-roles':
     case 'account':
     case 'workspace':
     case 'people':
@@ -225,8 +219,6 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
           onSelectedMachineChange={setSelectedMachineId}
         />
       );
-    case 'agent-roles':
-      return <AgentRolesSetting />;
     case 'image-connection':
       return <ImageConnectionSetting />;
     case 'mcp':

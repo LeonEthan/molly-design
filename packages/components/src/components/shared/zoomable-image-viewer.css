@@ -117,3 +117,51 @@
 .molly-photo-slider--desktop .PhotoView-Slider__ArrowRight:hover svg {
   background: rgb(255 255 255 / 22%);
 }
+
+/* Use the public toolbar slot for an accessible close button. The library's
+   fixed close glyph has no replacement prop, so hide only that direct child. */
+.molly-photo-slider .PhotoView-Slider__BannerRight > svg.PhotoView-Slider__toolbarIcon {
+  display: none;
+}
+
+.molly-photo-slider .molly-photo-slider-close {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  color: white;
+}
+
+.molly-photo-slider .molly-photo-slider-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+}
+
+/* Keep the library's arrow hit areas, visibility, loop and keyboard handling.
+   Its SVG retains the existing hover surface; only the painted path changes. */
+.molly-photo-slider .PhotoView-Slider__ArrowLeft svg path,
+.molly-photo-slider .PhotoView-Slider__ArrowRight svg path {
+  visibility: hidden;
+}
+
+.molly-photo-slider .PhotoView-Slider__ArrowLeft::after,
+.molly-photo-slider .PhotoView-Slider__ArrowRight::after {
+  content: '';
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+  background-color: white;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
+.molly-photo-slider .PhotoView-Slider__ArrowLeft::after {
+  mask-image: url('../../../../shared/src/ui-icons/svg/ArrowLeft.svg');
+}
+
+.molly-photo-slider .PhotoView-Slider__ArrowRight::after {
+  mask-image: url('../../../../shared/src/ui-icons/svg/ArrowRight.svg');
+}

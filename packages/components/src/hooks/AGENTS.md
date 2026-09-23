@@ -62,16 +62,10 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
   document, so `use-workspace-mcp-catalog.ts` and `use-workspace-agent-roles.ts` derive
   from that room instead of opening a second one. Keep the shared snapshot identity
   stable across mounts.
-- Catalog `upsert`/`remove` (Agent Roles and MCP alike) resolve on DURABILITY; the
-  upload runs on its own and no surface waits for it or reports it.
-- `use-workspace-agent-roles.ts` filters the catalog through the shared
-  `listAccessibleAgentRoles` / `resolveAgentRoleAvailability` rules, never a local
-  predicate. Availability stays `unknown` — not `unavailable` — until that machine's
-  agent-config rows are read, so subscribe exactly the machines the given Roles point at.
-  Pass exact target metadata and machine capability catalogs to that shared rule;
-  an ID-to-machine match alone does not make a Role executable.
-  A Settings row states only reasons about its own binding; `machine_offline` belongs to
-  the group's machine pill.
+- MCP catalog `upsert`/`remove` resolve on DURABILITY; the upload runs on its own
+  and no surface waits for it or reports it.
+- Role hooks remain legacy helpers, unmounted by the product composer and settings.
+  Stored Role ids never restore selection, prefix prompts or drive new execution.
 
 ## Code Collab
 
@@ -86,5 +80,3 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
   closes every borrower Scope before destroying the repo, and cache-resource identity is
   part of provider memoization. Local-machine RPC snapshots seed the shared resource
   before it is visible; later Flock events stay deduplicated across mounts.
-
-Known other-provider Roles never inherit the unsynced-catalog Turn fallback.

@@ -619,8 +619,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
   // Typography splits with color: repo headers read as content (xs semibold),
   // the "Chats" header reads as section chrome (13px medium) so
   // section labels visually recede from titles at a glance.
-  const headerTypographyClass =
-    group.kind === 'repo' ? 'text-xs font-semibold' : 'text-[13px] font-medium';
+  const headerTypographyClass = 'text-[13px] font-medium';
   const headerToggleHoverClass =
     group.kind === 'repo' ? 'hover:text-sidebar-hover-foreground' : 'hover:text-sidebar-foreground';
 
@@ -631,7 +630,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
         group.collapsed ? 'mb-1 last:mb-0' : 'mb-2.5 last:mb-0'
       )}
     >
-      <div className="group flex h-7 items-center">
+      <div className="group flex h-8 items-center">
         <div
           role={canNavigate || canToggle ? 'button' : undefined}
           tabIndex={canNavigate || canToggle ? 0 : -1}
@@ -639,12 +638,12 @@ const SessionGroupSection = memo(function SessionGroupSection({
           data-scope-item="row"
           data-sidebar-group-key={group.key}
           className={cn(
-            'relative flex h-7 w-full select-none items-center gap-1 rounded-md px-2 text-left',
+            'relative flex h-8 w-full select-none items-center gap-2 rounded-lg px-2 text-left',
             'border border-transparent',
             'min-w-0 flex-1 transition-colors',
             headerTypographyClass,
             showActiveGroupState
-              ? 'cursor-pointer border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10'
+              ? 'cursor-pointer bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
               : canNavigate
                 ? cn(
                     'cursor-pointer bg-transparent',
@@ -870,18 +869,18 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   })
                 }
                 className={cn(
-                  'group relative w-full rounded-md text-left',
+                  'group relative min-h-9 w-full rounded-lg text-left',
                   // Both chat and repo rows are a single line now; the repo row's
                   // low-signal metadata (time / repo / branch / PR) moves to the
                   // desktop hover info card so both organize modes read equally compact.
-                  'px-2 py-1',
+                  'px-2 py-[7px]',
                   'border border-transparent bg-transparent',
                   !showSelectedState &&
                     isSelectable &&
                     !isMobile &&
-                    'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
+                    'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
                   showSelectedState &&
-                    'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
+                    'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
                   // Keyboard-only focus ring. Plain :focus-within also matches
                   // after a mouse click (the overlay <a> keeps focus), which
                   // left a permanent inset ring on the selected row that read
@@ -918,11 +917,11 @@ const SessionGroupSection = memo(function SessionGroupSection({
                     // The overlay anchor covers the row, so it is what a drag
                     // starts on; left draggable it would drag its link instead.
                     draggable={false}
-                    className="absolute inset-0 z-10 rounded-md focus:outline-hidden focus-visible:shadow-none"
+                    className="absolute inset-0 z-10 rounded-lg focus:outline-hidden focus-visible:shadow-none"
                     onClick={handleAnchorClick}
                   />
                 ) : null}
-                <div className="flex min-w-0 items-center gap-1.5">
+                <div className="flex min-w-0 items-center gap-2">
                   <SessionRowLeadingSlot
                     showMenuButton={hasMenuActions}
                     menuLabel={moreActionsLabel}
@@ -931,7 +930,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   <div
                     className={cn(
                       'min-w-0 flex-1 flex items-center gap-1 truncate text-sm',
-                      // See SidebarUpdatedSessionList: the selected row is a 10%
+                      // See SidebarUpdatedSessionList: the selected row is a 6%
                       // tint, too light for the inverted selection foreground.
                       showSelectedState
                         ? 'text-sidebar-foreground'
@@ -1208,7 +1207,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
               className={cn(
                 'flex select-none items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-sidebar-foreground-muted/80',
                 'transition-colors',
-                'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
+                'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
                 'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-sidebar-ring/40'
               )}
               aria-label={toggleListLabel}
@@ -1396,7 +1395,7 @@ export const SessionList = memo(function SessionList({
     return (
       <div className="flex flex-col">
         {headerAction ? (
-          <div className="flex h-7 shrink-0 items-center justify-end">{headerAction}</div>
+          <div className="flex h-8 shrink-0 items-center justify-end">{headerAction}</div>
         ) : null}
         <SidebarListSkeleton className={className} />
       </div>
@@ -1428,7 +1427,7 @@ export const SessionList = memo(function SessionList({
   if (!groups.length) {
     // Keep the header action reachable even when every group filtered out.
     if (headerAction) {
-      return <div className="flex h-7 shrink-0 items-center justify-end">{headerAction}</div>;
+      return <div className="flex h-8 shrink-0 items-center justify-end">{headerAction}</div>;
     }
     return null;
   }

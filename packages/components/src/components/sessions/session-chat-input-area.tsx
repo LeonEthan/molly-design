@@ -15,24 +15,9 @@ import {
   type MutableRefObject,
 } from 'react';
 import { useAtomValue } from 'jotai';
-import { ArrowUp, Loader2 } from 'lucide-react';
+import { ArrowUp, Loader2, Stop } from '@/ui/icons';
 import { Button } from '@/ui/button';
 import type { AcpSessionSelectOption } from '@/components/shared/acp-session-select';
-import { useSessionAgentRole, type SessionAgentRoleControl } from '@/hooks/use-session-agent-role';
-import { buildAgentRoleFormValueFromRunConfig } from '@/lib/agent-role-form';
-import {
-  doesAgentRolePinPermissionMode,
-  resolveTurnAgentRoleForRunConfig,
-  type ComposerRunConfigOverrides,
-  type SessionTurnAgentRoleSelection as ComposerTurnAgentRoleSelection,
-} from '@/lib/composer-agent-roles';
-import { resolvePermissionModeFace } from '@/lib/permission-mode-face';
-import {
-  AgentRoleEditorDialog,
-  openAgentRoleEditorForCreate,
-  type AgentRoleEditorState,
-} from '@/components/settings/agent-role-editor-dialog';
-import { useWorkspaceAgentRoles } from '@/hooks/use-workspace-agent-roles';
 import {
   DesktopPermissionModeButton,
   DesktopRunConfigMenu,
@@ -67,8 +52,6 @@ import {
 import { IMAGE_UPLOAD_REASONS, type ImageUploadReason } from '@molly/shared';
 import type {
   AcpCommandSummary,
-  AgentRole,
-  AgentRoleId,
   CommentReferencePayload,
   SessionMeta,
   SessionId,
@@ -133,7 +116,6 @@ import {
   canUseElectronLocalFileSend,
   sendSessionFileToLocalRuntime,
 } from '@/lib/electron-session-file-sender';
-import type { AgentSelection } from '@/components/shared/agent-selector';
 import { useCodeCollabSessionFileProvider } from '@/hooks/use-code-collab-session-file-provider';
 import { useCodeCollabRequestedRole } from '@/hooks/use-code-collab-requested-role';
 import { selectPastedClipboardFiles, splitImageAndFileAttachments } from '@/lib/file-drop';
@@ -391,15 +373,8 @@ export interface SessionChatInputAreaProps {
   designAgentConfigs?: readonly AgentConfigMeta[];
   selectedModeId: string | null;
   selectedModelId: string | null;
-  /** Role identity restored from the latest accepted/queued Turn. */
-  durableAgentRoleId?: AgentRoleId | null;
-  durableAgentRoleRevision?: number;
-  durableAgentRoleSourceTurnKey?: string;
-  durableAgentRoleKnownTurnKeys?: readonly string[];
   /** False while this Session's durable document is still hydrating. */
-  durableAgentRoleReady?: boolean;
-  /** True when the composer run config differs through an unsent user edit. */
-  runConfigHasUserEdits?: boolean;
+  sessionConfigReady?: boolean;
   modeOptions: AcpSessionSelectOption[];
   modelOptions: AcpSessionSelectOption[];
   /** Subscription limits already resolved from this session's machine Flock data. */
@@ -438,21 +413,9 @@ export interface SessionChatInputAreaProps {
   onModeChange: (value: string) => void;
   onModelChange: (value: string) => void;
   onConfigOptionChange?: (configId: string, value: AcpConfigOptionValue) => void;
-  onSendMessage: (
-    inputBlocks: SessionInputBlock[],
-    agentRole: SessionTurnAgentRoleSelection
-  ) => Promise<boolean>;
+  onSendMessage: (inputBlocks: SessionInputBlock[]) => Promise<boolean>;
   onStop: () => void | Promise<void>;
   onRemoveQueueItem: (itemId: string) => Promise<void>;
-  /** When provided and conversation is empty, the agent config badge becomes a selector. */
-  onAgentConfigChange?: (selection: AgentSelection) => void;
-  /**
-   * New-Session surfaces may provide complete Role semantics. Existing
-   * Sessions omit this and keep the same-agent-type run-config-only behavior.
-   */
-  agentRoleControl?: SessionAgentRoleControl;
-  /** Receives durable Role editor saves owned by a new-Session surface. */
-  onAgentRoleSaved?: (role: AgentRole, meta: { created: boolean }) => void;
   initialInputText?: string;
   onInputValueChange?: (value: string) => void;
   disableImageUpload?: boolean;
@@ -467,8 +430,6 @@ export interface SessionChatInputAreaProps {
     references: VisualAnnotationReferencePayload[]
   ) => void | Promise<void>;
 }
-
-export type SessionTurnAgentRoleSelection = ComposerTurnAgentRoleSelection;
 
 export type SessionChatInputAreaHandle = {
   setInputText: (text: string) => void;
@@ -490,10 +451,6 @@ export type SessionChatInputAreaHandle = {
   ) => boolean;
   syncDesignElementMention: (reference: DesignElementReference | null, label: string) => boolean;
   insertSessionMention: (sessionId: string) => boolean;
-  /** Role identity committed in the currently rendered composer. */
-  getAgentRoleSelection: (
-    runConfigOverrides?: ComposerRunConfigOverrides
-  ) => SessionTurnAgentRoleSelection;
 };
 
 export const SessionChatInputArea = memo(
@@ -513,12 +470,7 @@ export const SessionChatInputArea = memo(
       designAgentConfigs,
       selectedModeId,
       selectedModelId,
-      durableAgentRoleId,
-      durableAgentRoleRevision,
-      durableAgentRoleSourceTurnKey,
-      durableAgentRoleKnownTurnKeys,
-      durableAgentRoleReady,
-      runConfigHasUserEdits,
+      sessionConfigReady,
       modeOptions,
       modelOptions,
       rateLimits,
@@ -539,9 +491,6 @@ export const SessionChatInputArea = memo(
       onSendMessage,
       onStop,
       onRemoveQueueItem: _onRemoveQueueItem,
-      onAgentConfigChange,
-      agentRoleControl,
-      onAgentRoleSaved,
       initialInputText,
       onInputValueChange,
       disableImageUpload = false,
@@ -589,13 +538,6 @@ export const SessionChatInputArea = memo(
         textareaRef.current?.focus({ preventScroll: true });
       }
     }, [claimNavigationFocus]);
-    const agentRoleTurnSelectionRef = useRef<SessionTurnAgentRoleSelection>(undefined);
-    const selectedAgentRoleRef = useRef<AgentRole | undefined>(undefined);
-    const agentRoleRunConfigRef = useRef({
-      modeId: selectedModeId,
-      modelId: selectedModelId,
-      configOptionValues: configOptionValues ?? {},
-    });
     const attachmentInputRef = useRef<HTMLInputElement>(null);
     const activeSessionIdRef = useRef(session.id);
     activeSessionIdRef.current = session.id;
@@ -1609,13 +1551,6 @@ export const SessionChatInputArea = memo(
         syncDesignElementMention: (reference, label) =>
           !isArchived &&
           (mentionActionsRef.current?.syncDesignElementMention(reference, label) ?? false),
-        getAgentRoleSelection: (runConfigOverrides) =>
-          resolveTurnAgentRoleForRunConfig({
-            turnSelection: agentRoleTurnSelectionRef.current,
-            role: selectedAgentRoleRef.current,
-            current: agentRoleRunConfigRef.current,
-            overrides: runConfigOverrides,
-          }),
       }),
       [
         setInputText,
@@ -1669,7 +1604,7 @@ export const SessionChatInputArea = memo(
         });
         return;
       }
-      if (durableAgentRoleReady === false) {
+      if (sessionConfigReady === false) {
         return;
       }
       if (isMachineRemoved) {
@@ -1795,7 +1730,7 @@ export const SessionChatInputArea = memo(
       const submission = beginSubmission({ dismissKeyboard: false });
       if (!submission) return;
       try {
-        const accepted = await onSendMessage(inputBlocks, agentRoleTurnSelectionRef.current);
+        const accepted = await onSendMessage(inputBlocks);
         if (accepted) {
           if (submission.isCurrent()) {
             clearInput();
@@ -1829,7 +1764,7 @@ export const SessionChatInputArea = memo(
       clearPendingFiles,
       freeTurnLimitNotice,
       isArchived,
-      durableAgentRoleReady,
+      sessionConfigReady,
       isExternalHistoryRefreshing,
       isMachineRemoved,
       onSendMessage,
@@ -1885,7 +1820,7 @@ export const SessionChatInputArea = memo(
       isMachineRemoved ||
       isArchived ||
       isExternalHistoryRefreshing ||
-      durableAgentRoleReady === false ||
+      sessionConfigReady === false ||
       Boolean(freeTurnLimitNotice && freeTurnLimitNotice.current >= freeTurnLimitNotice.limit);
     const attachmentAddEnabled = !isArchived;
     const sessionLocalFileSource = useMemo(
@@ -2046,129 +1981,8 @@ export const SessionChatInputArea = memo(
         })),
       [pendingFiles]
     );
-    /* Existing Sessions use their exact machine/provider, run-config-only Role control.
-       A not-yet-created child-tab draft supplies its own complete new-Session
-       control instead. The row is NOT gated on `isEmptyConversation`: these
-       values stay changeable every turn in an existing conversation too. */
-    const [agentRoleEditor, setAgentRoleEditor] = useState<AgentRoleEditorState | null>(null);
-    const { roles: accessibleAgentRoles } = useWorkspaceAgentRoles();
-    const sessionAgentRole = useSessionAgentRole({
-      sessionId: session.id,
-      provenanceRoleId: session.agentRoleId,
-      provenanceRoleRevision: session.agentRoleRevision,
-      durableRoleId: durableAgentRoleId,
-      durableRoleRevision: durableAgentRoleRevision,
-      durableSourceTurnKey: durableAgentRoleSourceTurnKey,
-      durableKnownSourceTurnKeys: durableAgentRoleKnownTurnKeys,
-      durableRoleReady: durableAgentRoleReady,
-      machineId: session.machineId,
-      agentConfigId: session.agentConfigId,
-      modelOptions,
-      selectedModelId,
-      onModelChange,
-      modeOptions,
-      selectedModeId,
-      onModeChange,
-      configOptionSelectors: configOptionSelectors ?? [],
-      configOptionValues,
-      runConfigHasUserEdits,
-      onConfigOptionChange,
-    });
-    const effectiveAgentRoleControl = agentRoleControl ?? sessionAgentRole;
-    const selectedAgentRoleItem = effectiveAgentRoleControl.selectedRoleId
-      ? effectiveAgentRoleControl.items.find(
-          (item) => item.role.id === effectiveAgentRoleControl.selectedRoleId
-        )
-      : undefined;
-    const selectedAgentRoleItemId = selectedAgentRoleItem?.role.id;
-    const selectedAgentRoleItemRevision = selectedAgentRoleItem?.role.revision;
-    const agentRoleTurnSelection = useMemo<SessionTurnAgentRoleSelection>(
-      () =>
-        agentRoleControl
-          ? selectedAgentRoleItemId && selectedAgentRoleItemRevision !== undefined
-            ? {
-                agentRoleId: selectedAgentRoleItemId,
-                agentRoleRevision: selectedAgentRoleItemRevision,
-              }
-            : null
-          : sessionAgentRole.turnSelection,
-      [
-        agentRoleControl,
-        selectedAgentRoleItemId,
-        selectedAgentRoleItemRevision,
-        sessionAgentRole.turnSelection,
-      ]
-    );
-    useLayoutEffect(() => {
-      agentRoleTurnSelectionRef.current = agentRoleTurnSelection;
-      selectedAgentRoleRef.current = selectedAgentRoleItem?.role;
-      agentRoleRunConfigRef.current = {
-        modeId: selectedModeId,
-        modelId: selectedModelId,
-        configOptionValues: configOptionValues ?? {},
-      };
-    }, [
-      agentRoleTurnSelection,
-      configOptionValues,
-      selectedAgentRoleItem?.role,
-      selectedModeId,
-      selectedModelId,
-    ]);
-    const agentRolesProp = useMemo(
-      () => ({
-        items: effectiveAgentRoleControl.items,
-        selectedRoleId: effectiveAgentRoleControl.selectedRoleId,
-        onSelect: effectiveAgentRoleControl.onSelect,
-        onCreate: () =>
-          setAgentRoleEditor(
-            openAgentRoleEditorForCreate(
-              buildAgentRoleFormValueFromRunConfig({
-                machineId: session.machineId,
-                agentConfigId: session.agentConfigId,
-                modeId: selectedModeId,
-                modelId: modelOptions.length > 0 ? selectedModelId : null,
-                configOptionValues,
-              })
-            )
-          ),
-      }),
-      [
-        configOptionValues,
-        modelOptions.length,
-        selectedModelId,
-        selectedModeId,
-        session.agentConfigId,
-        session.machineId,
-        effectiveAgentRoleControl,
-      ]
-    );
-    const selectedAgentRolePinsPermissionMode = useMemo(() => {
-      if (!effectiveAgentRoleControl.selectedRoleId) return false;
-      const selectedRole = effectiveAgentRoleControl.items.find(
-        (item) => item.role.id === effectiveAgentRoleControl.selectedRoleId
-      )?.role;
-      if (!selectedRole) return false;
-      const { source } = resolvePermissionModeFace({
-        modeOptions,
-        selectedModeId,
-        configOptionSelectors,
-        configOptionValues,
-      });
-      return doesAgentRolePinPermissionMode(selectedRole, source);
-    }, [
-      configOptionSelectors,
-      configOptionValues,
-      modeOptions,
-      selectedModeId,
-      effectiveAgentRoleControl.items,
-      effectiveAgentRoleControl.selectedRoleId,
-    ]);
-    const desktopAgentMachineIds = useMemo(
-      () => (session.machineId ? [session.machineId] : undefined),
-      [session.machineId]
-    );
     /* Desktop mirrors the mobile consolidation with TWO buttons: one
-       run-config dropdown (agent/model/reasoning submenus + Plan/Fast
+       run-config dropdown (direct model choices, reasoning + Plan/Fast
        toggles) and a standalone permission-mode button showing the full
        mode name. The old bottom bar (machine chip + workdir + mode
        selectors) is gone — machine/workdir identity moved to the header
@@ -2181,33 +1995,26 @@ export const SessionChatInputArea = memo(
               ? { agentId: session.agentConfigId, machineId: session.machineId }
               : null
           }
-          allowedMachineIds={desktopAgentMachineIds}
           availableAgentConfigs={designAgentConfigs}
           agentLocked={
             !(isEmptyConversation || allowDesignAgentSwitch) || submissionPending || isAgentBusy
           }
           fallbackAgent={{ cliType: session.cliType, agentType: session.agentType }}
-          onAgentConfigChange={onAgentConfigChange}
           modelOptions={modelOptions}
           selectedModelId={selectedModelId}
           onModelChange={onModelChange}
           configOptionSelectors={configOptionSelectors}
           configOptionValues={configOptionValues}
           onConfigOptionChange={onConfigOptionChange}
+        />
+        <DesktopPermissionModeButton
           modeOptions={modeOptions}
           selectedModeId={selectedModeId}
-          agentRoles={agentRolesProp}
+          onModeChange={onModeChange}
+          configOptionSelectors={configOptionSelectors}
+          configOptionValues={configOptionValues}
+          onConfigOptionChange={onConfigOptionChange}
         />
-        {selectedAgentRolePinsPermissionMode ? null : (
-          <DesktopPermissionModeButton
-            modeOptions={modeOptions}
-            selectedModeId={selectedModeId}
-            onModeChange={onModeChange}
-            configOptionSelectors={configOptionSelectors}
-            configOptionValues={configOptionValues}
-            onConfigOptionChange={onConfigOptionChange}
-          />
-        )}
       </>
     ) : null;
     const selectedModelLabel = modelOptions.find(
@@ -2267,9 +2074,9 @@ export const SessionChatInputArea = memo(
       </div>
     ) : null;
     /* Keep desktop actions compact while preserving the mobile touch target. */
-    const primaryActionSizeClassName = isMobile ? 'h-8 w-8' : 'h-[30px] w-[30px]';
+    const primaryActionSizeClassName = isMobile ? 'h-8 w-8' : 'h-9 w-9';
     const primaryActionSurfaceClassName =
-      'rounded-full shadow-xs transition-all hover:-translate-y-[1px] bg-foreground text-background hover:bg-foreground/90 hover:text-background';
+      'rounded-full transition-colors bg-foreground text-background hover:bg-foreground/90 hover:text-background';
     const primaryActionNode = showStopButton ? (
       <Button
         onClick={() => {
@@ -2280,10 +2087,7 @@ export const SessionChatInputArea = memo(
         aria-label={t('sessions.stop')}
         className={cn(primaryActionSizeClassName, primaryActionSurfaceClassName)}
       >
-        <span
-          className={cn('rounded-[3px] bg-current', isMobile ? 'h-3 w-3' : 'h-2.5 w-2.5')}
-          aria-hidden="true"
-        />
+        <Stop className={isMobile ? 'h-7 w-7' : 'h-6 w-6'} aria-hidden="true" />
       </Button>
     ) : (
       <Button
@@ -2302,7 +2106,7 @@ export const SessionChatInputArea = memo(
         {submissionPending || hasBlockingImages || isExternalHistoryRefreshing ? (
           <Loader2 className={isMobile ? 'h-5 w-5 animate-spin' : 'h-4 w-4 animate-spin'} />
         ) : (
-          <ArrowUp className={isMobile ? 'h-5 w-5' : 'h-4 w-4'} />
+          <ArrowUp className="h-5 w-5" />
         )}
       </Button>
     );
@@ -2386,21 +2190,6 @@ export const SessionChatInputArea = memo(
           protectFromEdgeBackZone: isMobile,
         })}
       >
-        {/* The Role editor is a Dialog, so it is hosted OUT here rather than
-            inside the run-config menu or the mobile drawer, where it would
-            unmount with them the moment it opened. Mounted only while OPEN:
-            it reads machine visibility, and the composer must stay renderable
-            in hosts that do not provide that context. */}
-        {agentRoleEditor ? (
-          <AgentRoleEditorDialog
-            editor={agentRoleEditor}
-            accessibleRoles={accessibleAgentRoles}
-            onChange={setAgentRoleEditor}
-            onClose={() => setAgentRoleEditor(null)}
-            onSaved={onAgentRoleSaved}
-            source="session_composer"
-          />
-        ) : null}
         <ConversationColumn>
           <div aria-hidden="true" className="h-1" />
           {queueDisplay ? <div className="pb-2">{queueDisplay}</div> : null}

@@ -8,15 +8,7 @@ import {
 } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { startSessionMentionDrag } from '@/lib/session-mention-drag';
-import {
-  Archive,
-  GitBranch,
-  Link2,
-  Mail,
-  Pencil,
-  Pin,
-  PinOff,
-} from 'lucide-react';
+import { Archive, GitBranch, Link2, Mail, Pencil, Pin, PinOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
@@ -166,7 +158,7 @@ export type SidebarUpdatedContextMenuLabels = {
  * state), so the control stays reachable in every list state.
  */
 function HeaderActionRow({ action }: { action: ReactNode }) {
-  return <div className="flex h-7 shrink-0 items-center justify-end">{action}</div>;
+  return <div className="flex h-8 shrink-0 items-center justify-end">{action}</div>;
 }
 
 function toDate(value: SidebarUpdatedItem['latestMessageAt']): Date | null {
@@ -461,7 +453,7 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
         {headerAction ? <HeaderActionRow action={headerAction} /> : null}
         <div
           className={cn(
-            'mt-2 flex flex-col items-start gap-1 rounded-md border border-dashed border-sidebar-border/70 px-3 py-4',
+            'mt-2 flex flex-col items-start gap-2 rounded-xl border border-sidebar-border/40 px-4 py-5',
             className
           )}
         >
@@ -693,7 +685,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
       className={cn(
         'min-w-0 flex-1 truncate',
         titleFontClassName,
-        // The selected row keeps the 10% tint (bg-sidebar-foreground/10).
+        // The selected row keeps a 6% sidebar-foreground tint.
         // Sidebar chrome no longer uses the solid selection anywhere, so the
         // title matches the container's plain sidebar foreground.
         showSelectedState
@@ -728,14 +720,14 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         // only. The bucket wrapper above also uses an (unnamed) `group` for its
         // header chevron — without naming, hovering any row would match the bucket's
         // group-hover and reveal every row's archive button at once.
-        'group/row relative flex w-full items-center rounded-md px-2 py-1 text-left',
+        'group/row relative flex min-h-9 w-full items-center rounded-lg px-2 py-[7px] text-left',
         'border border-transparent bg-transparent',
         !showSelectedState &&
           onSelect &&
           !isMobile &&
-          'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-hover data-[menu-open]:text-sidebar-hover-foreground',
+          'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
         showSelectedState &&
-          'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
+          'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
         // Keyboard-only focus ring — see SessionList: plain :focus-within also
         // matches after mouse clicks via the overlay <a> and left a permanent
         // inset ring on the selected row.
@@ -766,7 +758,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         <a
           href={href}
           aria-label={item.title}
-          className="absolute inset-0 z-10 rounded-md focus:outline-hidden focus-visible:shadow-none"
+          className="absolute inset-0 z-10 rounded-lg focus:outline-hidden focus-visible:shadow-none"
           // The overlay anchor covers the row, so it is what a drag starts on;
           // left draggable it would drag its link instead.
           draggable={false}
@@ -774,7 +766,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         />
       ) : null}
 
-      <div className="flex w-full min-w-0 items-center gap-1.5 text-sm">
+      <div className="flex w-full min-w-0 items-center gap-2 text-sm">
         <SessionRowLeadingSlot
           showMenuButton={hasMenuActions}
           menuLabel={contextMenuLabels.moreActions}

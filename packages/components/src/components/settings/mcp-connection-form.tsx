@@ -200,7 +200,7 @@ export function McpConnectionForm({
 
   return (
     <form className={cn('flex min-h-0 flex-col', className)} onSubmit={submit}>
-      <div className="scrollbar-pro min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div className="scrollbar-pro min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
         <Section title={t('settings.mcp.form.sectionIdentity')}>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Field htmlFor={`${fieldId}-name`} label={t('settings.mcp.form.name')}>
@@ -380,12 +380,12 @@ export function McpConnectionForm({
           ) : null}
         </Section>
 
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-4">
           <div className="min-w-0">
             <Label htmlFor={`${fieldId}-default`} className="text-sm">
               {t('settings.mcp.form.defaultEnabled')}
             </Label>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               {t('settings.mcp.form.defaultEnabledHint')}
             </p>
           </div>
@@ -413,7 +413,7 @@ export function McpConnectionForm({
         ) : null}
       </div>
 
-      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/60 px-5 py-3">
+      <footer className="flex shrink-0 items-center justify-end gap-2 border-t border-border/40 bg-card px-5 py-4">
         <Button type="button" variant="outline" size="sm" disabled={submitting} onClick={onCancel}>
           {t('common.cancel')}
         </Button>

@@ -68,26 +68,19 @@ Files: [README.md](README.md). Scopes:
 - Most rendering changes belong in `../ai-gui/view.tsx`; the conversation
   `VList` is vertical-only and wide content owns its own scroller.
 
-## [Run config and Agent Roles](../../../../../.agents/docs/sessions-run-config.md)
+## [Run config](../../../../../.agents/docs/sessions-run-config.md)
 
-- A Role never falls back: `machineId + agentConfigId` are exact. Keep unavailable
-  Roles listed and disabled with reasons. Drafts authorize the whole Role;
-  sessions apply only its run config.
-- A Role owns all config. Other knobs are inert; pinned permission hides
-  `DesktopPermissionModeButton`. Changing another knob unnames the Role without
-  clearing values.
+- Desktop opens the published connection/model catalog directly; preserve opaque
+  model ids and model-specific reasoning capabilities. Roles are retired: no
+  selection, creation, prompt prefix, draft restoration or recent-Role replay.
+- New composer Turns freeze `agentRoleId: null`; historical Session provenance
+  stays untouched. Child drafts inherit explicit run config, not Role identity.
 - Derive selection with `useAcpSessionConfigSelectionState`; never store or
-  effect-reconcile it (#185).
-- Idle design Agent switching uses the same-machine catalog without an Agent-type
-  list; execution or an active Turn blocks it.
-- Freeze `agentRoleId` + `agentRoleRevision` into the Turn `inputConfig` on send;
-  `SessionMeta.agentRoleId` is creation provenance and is never rewritten.
+  effect-reconcile it (#185). Gate sends on Session document readiness.
 - Two durable authorities: the latest accepted/queued Turn `inputConfig`, and
   `SessionDoc.acpRuntimeConfig` fenced by `userTurnId`. Apply that baseline only
   to unedited composer fields, never infer runtime config from a permission
   click, and freeze a non-Plan mode for explicit execution actions.
-- `AgentRoleDetailPane` is the ONE pane that reads a Role and shows only what it
-  pins; `AgentRoleEditorDialog` is the one editor.
 
 ## [Live status and dispatch](../../../../../.agents/docs/sessions-live-status.md)
 

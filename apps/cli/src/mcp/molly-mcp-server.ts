@@ -15,15 +15,12 @@ import {
   getActiveTaskSessionLinks,
   getMachineFlockAcpCapabilities,
   getMachineFlockDocId,
-  getWorkspaceFlockDocId,
   getServerNow,
   getSessionRoomId,
   hasAgentRunConfigSelection,
   isLoroRepoDocDeleted,
   isMachineDocRoomId,
   readMachineFlockRowsFromFlock,
-  readWorkspaceFlockRowsFromFlock,
-  listWorkspaceAgentRoles,
   summarizeAgentRunConfigCapabilities,
   type AcpCapabilityCacheEntry,
   type AgentRunConfigSelection,
@@ -45,7 +42,6 @@ import {
   type MollySessionPresenceState,
   type LocalSessionControlRequest,
   type AgentConfigMeta,
-  type AgentRole,
   type LocalProjectId,
   type LocalProjectMeta,
   type MachineId,
@@ -446,14 +442,6 @@ const SessionCreateCommandInputShape = {
     .max(MOLLY_OPERATION_MAX_DEADLINE_SECONDS)
     .optional(),
   prompt: z.string().trim().min(1).describe('Initial user prompt for the new session.'),
-  agentRoleId: z
-    .string()
-    .trim()
-    .min(1)
-    .optional()
-    .describe(
-      'Agent Role id from the workspace catalog. When set, machine, agent config, and run config come from the current Role row.'
-    ),
   machineId: z.string().trim().min(1).optional().describe('Target machine id.'),
   agentConfigId: z.string().trim().min(1).optional().describe('Target agent config id.'),
   ...SessionRunConfigInputShape,
@@ -515,22 +503,6 @@ const sessionCreateCommandSchemas = [
     })
     .strict(),
 ] as const;
-
-const AGENT_ROLE_MANUAL_OVERRIDE_FIELDS = [
-  'machineId',
-  'agentConfigId',
-  ...(Object.keys(SessionRunConfigInputShape) as Array<keyof typeof SessionRunConfigInputShape>),
-] as const;
-
-const omitAgentRoleManualOverrides = (
-  input: SessionCreateCommandInput
-): SessionCreateCommandInput => {
-  const normalized = { ...input };
-  for (const field of AGENT_ROLE_MANUAL_OVERRIDE_FIELDS) {
-    delete normalized[field];
-  }
-  return normalized;
-};
 
 const SessionCreateRuntimeInputSchema = z.xor([
   z
@@ -630,12 +602,6 @@ const SessionChatToolInputSchema = z
 
 const SessionCreateBatchItemShape = {
   prompt: z.string().trim().min(1).optional(),
-  agentRoleId: z
-    .string()
-    .trim()
-    .min(1)
-    .optional()
-    .describe('Agent Role id from the workspace catalog.'),
   machineId: z.string().trim().min(1).optional(),
   agentConfigId: z.string().trim().min(1).optional(),
   ...SessionRunConfigInputShape,
@@ -1318,107 +1284,20 @@ type ResolvedMcpSessionCreate = {
   input: SessionCreateCommandInput;
   prompt: string;
   dispatchConfig: ResolvedTurnDispatchConfig;
-  role?: AgentRole;
-};
-
-const composeAgentRolePrompt = (promptPrefix: string | undefined, prompt: string): string => {
-  const prefix = promptPrefix?.trim();
-  return prefix ? `${prefix}\n\n${prompt}` : prompt;
-};
-
-const loadWorkspaceAgentRoleCatalog = async (
-  manager: LoroDocumentManager,
-  workspaceId: WorkspaceId
-): Promise<ReadonlyMap<string, AgentRole>> => {
-  const docId = getWorkspaceFlockDocId(workspaceId);
-  await manager.syncFlockDocOrThrow(docId, {
-    timeoutMs: 10_000,
-    reason: 'mcp-agent-role-read',
-  });
-  const handle = await manager.repo.openFlockDoc(docId);
-  return new Map(
-    listWorkspaceAgentRoles(readWorkspaceFlockRowsFromFlock(handle.flock)).map((role) => [
-      role.id,
-      role,
-    ])
-  );
 };
 
 const resolveMcpSessionCreate = (
   input: SessionCreateCommandInput,
-  invoking: InvokingTurnContext | undefined,
-  requester: Pick<SessionMeta, 'machineId' | 'project'>,
-  role: AgentRole | undefined
-): ResolvedMcpSessionCreate => {
-  if (!input.agentRoleId) {
-    return {
-      input,
-      prompt: input.prompt,
-      dispatchConfig: {
-        ...buildMcpTurnDispatchConfig(input),
-        taskToolsEnabled: invoking?.frozenInputConfig.taskToolsEnabled === true,
-        mcpServerIds: [...(invoking?.frozenInputConfig.mcpServerIds ?? [])],
-      },
-    };
-  }
-
-  if (!role || role.id !== input.agentRoleId) {
-    throw new MollyOperationStoreError(
-      'AGENT_ROLE_NOT_FOUND',
-      `Agent Role ${input.agentRoleId} does not exist in the workspace catalog.`,
-      false
-    );
-  }
-  const project = requester.project;
-  if (project?.kind !== 'github' && role.machineId !== requester.machineId) {
-    throw new MollyOperationStoreError(
-      'AGENT_ROLE_MACHINE_MISMATCH',
-      project?.kind === 'local'
-        ? `Agent Role ${role.name} must run on the Local Project's Machine.`
-        : `Agent Role ${role.name} must run on the current Machine in a chat Session.`,
-      false
-    );
-  }
-
-  let useCurrentSessionAsParent = input.useCurrentSessionAsParent;
-  let workContext = input.workContext;
-  if (
-    project?.kind === 'github' &&
-    useCurrentSessionAsParent !== true &&
-    workContext === undefined
-  ) {
-    workContext = {
-      kind: 'github',
-      repo: project.repoFullName,
-      ...(project.branch ? { branch: project.branch } : {}),
-    };
-  } else if (
-    project?.kind === 'local' &&
-    useCurrentSessionAsParent === undefined &&
-    workContext === undefined
-  ) {
-    useCurrentSessionAsParent = true;
-  }
-
-  const resolvedInput = {
-    ...omitAgentRoleManualOverrides(input),
-    machineId: role.machineId,
-    agentConfigId: role.agentConfigId,
-    ...(useCurrentSessionAsParent !== undefined ? { useCurrentSessionAsParent } : {}),
-    ...(workContext !== undefined ? { workContext } : {}),
-  } as SessionCreateCommandInput;
-  return {
-    input: resolvedInput,
-    prompt: composeAgentRolePrompt(role.promptPrefix, input.prompt),
-    dispatchConfig: {
-      ...role.runConfig,
-      taskToolsEnabled: invoking?.frozenInputConfig.taskToolsEnabled === true,
-      mcpServerIds: [...(invoking?.frozenInputConfig.mcpServerIds ?? [])],
-      inheritSessionDefaults: false,
-    },
-    role,
-  };
-};
+  invoking: InvokingTurnContext | undefined
+): ResolvedMcpSessionCreate => ({
+  input,
+  prompt: input.prompt,
+  dispatchConfig: {
+    ...buildMcpTurnDispatchConfig(input),
+    taskToolsEnabled: invoking?.frozenInputConfig.taskToolsEnabled === true,
+    mcpServerIds: [...(invoking?.frozenInputConfig.mcpServerIds ?? [])],
+  },
+});
 
 const buildResolvedMcpCreateCanonicalCommand = (
   resolved: ResolvedMcpSessionCreate,
@@ -1427,25 +1306,13 @@ const buildResolvedMcpCreateCanonicalCommand = (
   prompt: resolved.prompt,
   ...(resolved.input.machineId ? { machineId: resolved.input.machineId } : {}),
   ...(resolved.input.agentConfigId ? { agentConfigId: resolved.input.agentConfigId } : {}),
-  ...(resolved.role
-    ? {
-        agentRoleId: resolved.role.id,
-        agentRoleRevision: resolved.role.revision,
-        agentRoleRunConfig: resolved.role.runConfig,
-      }
-    : buildMcpRunConfigCanonicalCommand(resolved.input)),
+  ...buildMcpRunConfigCanonicalCommand(resolved.input),
   ...(resolved.input.useCurrentSessionAsParent !== undefined
     ? { useCurrentSessionAsParent: resolved.input.useCurrentSessionAsParent }
     : {}),
   ...(resolved.input.workContext ? { workContext: resolved.input.workContext } : {}),
   ...(deadlineSeconds !== undefined ? { deadlineSeconds } : {}),
 });
-
-const bindAgentRoleCreateOptions = (options: CreateOptions, role: AgentRole | undefined): void => {
-  if (!role) return;
-  options.agentRoleId = role.id;
-  options.agentRoleRevision = role.revision;
-};
 
 const buildMcpCreateOptions = (
   input: SessionCreateCommandInput,
@@ -2729,15 +2596,7 @@ const startSessionCreateOperation = async (args: SessionCreateCommandInput): Pro
         );
       }
       const invoking = await resolveInvokingTurnContext(currentSession);
-      const roleCatalog = args.agentRoleId
-        ? await loadWorkspaceAgentRoleCatalog(manager, workspace.id as WorkspaceId)
-        : undefined;
-      const resolved = resolveMcpSessionCreate(
-        args,
-        invoking,
-        currentSession,
-        args.agentRoleId ? roleCatalog?.get(args.agentRoleId) : undefined
-      );
+      const resolved = resolveMcpSessionCreate(args, invoking);
       const canonicalCommand = buildResolvedMcpCreateCanonicalCommand(
         resolved,
         args.deadlineSeconds
@@ -2759,7 +2618,7 @@ const startSessionCreateOperation = async (args: SessionCreateCommandInput): Pro
       await assertMachineOnlineForSingleCommand(manager, targetMachineId, ctx);
       const createOptions = buildMcpCreateOptions(resolved.input, ctx);
       bindMcpCreateContext(createOptions, invoking.identity, currentSession);
-      bindAgentRoleCreateOptions(createOptions, resolved.role);
+
       createOptions.workspaceMetaPrewriteSatisfied = true;
       let effectiveDispatchConfig: ResolvedTurnDispatchConfig;
       try {
@@ -2853,7 +2712,6 @@ const startSessionCreateOperation = async (args: SessionCreateCommandInput): Pro
             created_via: 'mcp',
             mcp_create_mode: 'single',
             session_id: result.sessionId,
-            has_agent_role: Boolean(resolved.role),
             is_child_session: Boolean(result.parentSessionId),
           },
           { distinctId: auth.machineId }
@@ -3160,16 +3018,13 @@ const startSessionCreateManyOperation = async (
     }
     const expanded = args.items.map((item) => ({ ...(args.defaults ?? {}), ...item }));
     const invoking = await resolveInvokingTurnContext(requester);
-    const roleCatalog = expanded.some((item) => Boolean(item.agentRoleId))
-      ? await loadWorkspaceAgentRoleCatalog(manager, workspace.id as WorkspaceId)
-      : undefined;
     const resolvedItems = expanded.map((item) => {
       if (!item.prompt) return { resolved: undefined, error: undefined };
       try {
         const single = {
           operationId: args.operationId,
           prompt: item.prompt,
-          ...(item.agentRoleId ? { agentRoleId: item.agentRoleId } : {}),
+
           ...(item.machineId ? { machineId: item.machineId } : {}),
           ...(item.agentConfigId ? { agentConfigId: item.agentConfigId } : {}),
           ...buildMcpRunConfigCanonicalCommand(item),
@@ -3179,12 +3034,7 @@ const startSessionCreateManyOperation = async (
           ...(item.workContext ? { workContext: item.workContext } : {}),
         } as SessionCreateCommandInput;
         return {
-          resolved: resolveMcpSessionCreate(
-            single,
-            invoking,
-            requester,
-            item.agentRoleId ? roleCatalog?.get(item.agentRoleId) : undefined
-          ),
+          resolved: resolveMcpSessionCreate(single, invoking),
           error: undefined,
         };
       } catch (error) {
@@ -3287,7 +3137,7 @@ const startSessionCreateManyOperation = async (
         }
         const options = buildMcpCreateOptions(resolved.input, ctx);
         bindMcpCreateContext(options, invoking.identity, requester);
-        bindAgentRoleCreateOptions(options, resolved.role);
+
         try {
           const effectiveDispatchConfig = await validateSessionCreateOptions({
             auth,
@@ -3370,7 +3220,7 @@ const startSessionCreateManyOperation = async (
         try {
           const options = buildMcpCreateOptions(resolved.input, ctx);
           bindMcpCreateContext(options, invoking.identity, requester);
-          bindAgentRoleCreateOptions(options, resolved.role);
+
           options.sessionId = storedItem.target.sessionId;
           options.userTurnId = storedItem.target.userTurnId;
           options.chainDepth = invoking.chainDepth + 1;
@@ -3398,7 +3248,6 @@ const startSessionCreateManyOperation = async (
               created_via: 'mcp',
               mcp_create_mode: 'batch',
               session_id: result.sessionId,
-              has_agent_role: Boolean(resolved.role),
               is_child_session: Boolean(result.parentSessionId),
             },
             { distinctId: auth.machineId }
@@ -4015,8 +3864,6 @@ export const __mollyMcpServerInternals = {
   buildMcpCreateOptions,
   bindMcpCreateContext,
   buildMcpTurnDispatchConfig,
-  composeAgentRolePrompt,
-  loadWorkspaceAgentRoleCatalog,
   resolveMcpSessionCreate,
   buildResolvedMcpCreateCanonicalCommand,
   summarizeAgentConfig,
@@ -4509,7 +4356,7 @@ export function buildMollyMcpServer(
     {
       title: 'Create a Molly session',
       description:
-        'Start durable asynchronous work that creates a Molly session. Supply operationId; the result arrives automatically as a continuation, so do not poll operation_get. To use an Agent Role, pass agentRoleId; the current workspace catalog row supplies the exact Machine, Agent config, model, reasoning, and permission mode. If manual machine or run-config fields are also present, the Role takes precedence and those fields are ignored. To recover an already accepted create without resending its prompt, send only operationId with resume=true. useCurrentSessionAsParent=true and workContext are mutually exclusive schema branches. Machine/config ids and runConfig values for non-Role creates come from molly_session_create_options. The wait field is temporary legacy compatibility only.',
+        'Start durable asynchronous work that creates a Molly session. Supply operationId; the result arrives automatically as a continuation, so do not poll operation_get. To recover an already accepted create without resending its prompt, send only operationId with resume=true. useCurrentSessionAsParent=true and workContext are mutually exclusive schema branches. Machine/config ids and runConfig values for creates come from molly_session_create_options. The wait field is temporary legacy compatibility only.',
       inputSchema: SessionCreateToolInputSchema,
     },
     async (input) => {
@@ -4534,18 +4381,10 @@ export function buildMollyMcpServer(
             throw new Error(`Session not found: ${ctx.sessionId}`);
           }
           const invoking = await resolveInvokingTurnContext(currentSession);
-          const roleCatalog = args.agentRoleId
-            ? await loadWorkspaceAgentRoleCatalog(manager, workspace.id as WorkspaceId)
-            : undefined;
-          const resolved = resolveMcpSessionCreate(
-            args,
-            invoking,
-            currentSession,
-            args.agentRoleId ? roleCatalog?.get(args.agentRoleId) : undefined
-          );
+          const resolved = resolveMcpSessionCreate(args, invoking);
           const options = buildMcpCreateOptions(resolved.input, ctx);
           bindMcpCreateContext(options, invoking.identity, currentSession);
-          bindAgentRoleCreateOptions(options, resolved.role);
+
           options.workspaceMetaPrewriteSatisfied = true;
           const result = await createSessionResult(
             auth,
@@ -4562,7 +4401,6 @@ export function buildMollyMcpServer(
               created_via: 'mcp',
               mcp_create_mode: 'legacy_single',
               session_id: result.sessionId,
-              has_agent_role: Boolean(resolved.role),
               is_child_session: Boolean(result.parentSessionId),
             },
             { distinctId: auth.machineId }
@@ -4668,7 +4506,7 @@ export function buildMollyMcpServer(
     {
       title: 'Create multiple Molly sessions',
       description:
-        'Start one durable batch Operation for 1-20 Session creates. defaults and items shallow-merge; nested objects replace wholesale. Each item may use an agentRoleId from the workspace catalog. When a Role item also includes manual machine, agent config, or run-config fields, the Role takes precedence and those fields are ignored. Non-Role items accept modelId, reasoningEffort, fastMode, and planMode. Ordered item failures are isolated. Completion arrives automatically as one continuation, so do not poll operation_get in a loop.',
+        'Start one durable batch Operation for 1-20 Session creates. defaults and items shallow-merge; nested objects replace wholesale. Items accept modelId, reasoningEffort, fastMode, and planMode. Ordered item failures are isolated. Completion arrives automatically as one continuation, so do not poll operation_get in a loop.',
       inputSchema: SessionCreateManyToolInputSchema,
     },
     async (input) => {

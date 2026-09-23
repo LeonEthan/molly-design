@@ -11,9 +11,7 @@ function queryByRole(
     [...root.querySelectorAll<HTMLElement>(selector)].find(
       (node) =>
         !node.closest('[hidden]') &&
-        (!options?.name ||
-          node.getAttribute('aria-label') === options.name ||
-          node.textContent === options.name)
+        (!options?.name || (node.getAttribute('aria-label') ?? node.textContent) === options.name)
     ) ?? null
   );
 }
@@ -253,7 +251,8 @@ it('disables the font trigger without font choices and opens no popup', () => {
   expect(queryByRole(document.body, 'dialog')).toBeNull();
 });
 
-it('uses generic actions for mixed and oversized selections and hides on readonly/empty', () => {  toolbar.update({ count: 9, kinds: ['text'] }, ['one'], 1);
+it('uses generic actions for mixed and oversized selections and hides on readonly/empty', () => {
+  toolbar.update({ count: 9, kinds: ['text'] }, ['one'], 1);
   vi.advanceTimersByTime(20);
   expect(queryByRole(document.body, 'button', { name: 'Bold' })).toBeNull();
   click('Regenerate selection');
@@ -281,4 +280,69 @@ it('updates the theme without losing a focused draft or closing its popup', () =
   click('Text color');
   toolbar.present({ dark: false, actionsEnabled: true, labels: {} });
   expect(getByRole(document.body, 'dialog').dataset.dark).toBe('false');
+});
+
+it.each(['text', 'image', 'shape', 'icon', 'table', 'chart'] as const)(
+  'keeps the %s size readout live while resizing, independent of transformed screen bounds',
+  async (kind) => {
+    const node = document.querySelector<HTMLElement>('[data-el-id="one"]')!;
+    node.style.width = '100.25px';
+    node.style.height = '80.5px';
+    node.style.transform = 'rotate(30deg)';
+    select(kind);
+    const readout = document.querySelector<HTMLElement>('.molly-selection-size')!;
+    expect(readout.hidden).toBe(false);
+    // The fixture's screen bounds are 400 × 200; summary dimensions are 100 × 80.
+    expect(readout.textContent).toBe('100.3 × 80.5');
+    toolbar.present({
+      dark: false,
+      actionsEnabled: true,
+      labels: { elementWidth: '宽度', elementHeight: '高度' },
+    });
+    vi.advanceTimersByTime(20);
+    expect(readout.getAttribute('aria-label')).toBe('宽度: 100.3 px, 高度: 80.5 px');
+    node.dispatchEvent(
+      new MouseEvent('pointerdown', { bubbles: true, clientX: 100, clientY: 200 })
+    );
+    node.style.width = '214.5px';
+    node.style.height = '93.75px';
+    node.dispatchEvent(
+      new MouseEvent('pointermove', { bubbles: true, clientX: 140, clientY: 230 })
+    );
+    await Promise.resolve();
+    vi.advanceTimersByTime(20);
+    expect(queryByRole(document.body, 'toolbar')).toBeNull();
+    expect(readout.hidden).toBe(false);
+    expect(readout.textContent).toBe('214.5 × 93.8');
+    window.dispatchEvent(new MouseEvent('pointerup'));
+    vi.advanceTimersByTime(20);
+    expect(getByRole(document.body, 'toolbar')).toBeTruthy();
+    expect(readout.textContent).toBe('214.5 × 93.8');
+  }
+);
+
+it('limits the size readout to one visible editable boxed element and removes it on dispose', () => {
+  const node = document.querySelector<HTMLElement>('[data-el-id="one"]')!;
+  node.style.width = '150px';
+  node.style.height = '90px';
+  select('image');
+  const readout = document.querySelector<HTMLElement>('.molly-selection-size')!;
+  expect(readout.hidden).toBe(false);
+  toolbar.setReadonly(true);
+  expect(readout.hidden).toBe(true);
+  toolbar.setReadonly(false);
+  vi.advanceTimersByTime(20);
+  expect(readout.hidden).toBe(false);
+  select('line', {}, 2);
+  expect(readout.hidden).toBe(true);
+  toolbar.update({ count: 2, kinds: ['text', 'image'] }, ['one', 'two'], 3);
+  vi.advanceTimersByTime(20);
+  expect(readout.hidden).toBe(true);
+  select('text', {}, 4);
+  node.remove();
+  toolbar.refresh();
+  vi.advanceTimersByTime(20);
+  expect(readout.hidden).toBe(true);
+  toolbar.dispose();
+  expect(document.querySelector('.molly-selection-size')).toBeNull();
 });

@@ -256,15 +256,14 @@ describe('recent Agent Role entries', () => {
     );
   });
 
-  it('reads as the Role, not as the agent it is bound to', () => {
+  it('never offers a retired Role entry even when its catalog row still exists', () => {
     const items = buildRecentRunConfigItems({
       records: [record({ agentRoleId: 'role-1' })],
       agentConfigs,
       agentRoles: [role('role-1', 'Code Reviewer')],
       currentKey: null,
     });
-    expect(items[0]?.role).toEqual({ name: 'Code Reviewer', emoji: '\u{1F50D}' });
-    expect(items[0]?.agent.name).toBe('Claude');
+    expect(items).toEqual([]);
   });
 
   // A Role never falls back, so an entry whose Role is gone or cannot run must

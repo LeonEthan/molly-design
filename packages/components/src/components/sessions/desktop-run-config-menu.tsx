@@ -1,22 +1,26 @@
 import { useMemo, type ReactNode } from 'react';
 import { useAtomValue } from 'jotai';
-import { Bot, Check, ListChecks, Monitor, Plus, ShieldAlert, Zap } from 'lucide-react';
+import {
+  Brain,
+  Check,
+  ChevronDown,
+  ListChecks,
+  Monitor,
+  ShieldAlert,
+  Sparkles,
+  Zap,
+} from '@/ui/icons';
+import { MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
 import {
   classifyPermissionModeFace,
-  getAgentRoleEmoji,
   type AgentConfigCliType,
   type AgentConfigMeta,
-  type AgentRole,
-  type AgentRoleId,
   type MachineId,
-  type MachineViewMeta,
 } from '@molly/shared';
 
 import { getAllAgentConfigAtom } from '@/atoms';
 import { getModeIcon as getPermissionModeIcon } from '@/components/chat/chat-landing-selectors';
-import { AgentIcon } from '@/components/icons/agent-icon';
-import { ComposerAgentRolePanel } from '@/components/sessions/composer-agent-role-panel';
 import {
   RecentRunConfigMenuGroup,
   type RecentRunConfigItem,
@@ -42,12 +46,8 @@ import {
 import { orderAcpConfigOptionSelectors } from '@/lib/acp-selector-order';
 import { openExternalUrl } from '@/lib/native-browser';
 import { resolvePermissionModeFace } from '@/lib/permission-mode-face';
-import {
-  doesAgentRolePinPermissionMode,
-  type ComposerAgentRoleItem,
-} from '@/lib/composer-agent-roles';
 import { cn } from '@/lib/utils';
-import { useOnlineMachines } from '@/hooks/use-online-machines';
+import { Button } from '@/ui/button';
 import { Badge } from '@/ui/badge';
 import { Switch } from '@/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
@@ -66,10 +66,10 @@ import {
 /**
  * Desktop composer run-config controls. Two buttons on the composer footer:
  *
- *   [ agent icon + model · reasoning (· plan/fast glyphs) ⌄ ]  [ permission icon + name ⌄ ]
+ *   [ model icon + connection/model · reasoning ⌄ ]  [ permission icon + name ⌄ ]
  *
- * `DesktopRunConfigMenu` consolidates Agent / Model / Interaction / Reasoning
- * (side submenus) plus Plan / Fast (toggle rows) into one dropdown;
+ * `DesktopRunConfigMenu` opens the connection/model catalog directly;
+ * Reasoning and other supported run options remain beside that list.
  * `DesktopPermissionModeButton` stays a separate button because permission is
  * the knob users flip most — its face shows the full permission name and opens
  * a flat permission list.
@@ -105,10 +105,7 @@ function OptionItem({
         event.preventDefault();
         onSelect();
       }}
-      // Tighter vertical rhythm than the default menu item (py-2): these rows
-      // carry a two-line label + description, so a smaller pad keeps the list
-      // from getting tall enough to overflow.
-      className="items-start gap-2 py-1"
+      className="min-h-9 items-start gap-2 rounded-lg px-2.5 py-2 aria-checked:bg-foreground/[0.06]"
     >
       {/* Center the icon/check on the label's first line box (text-[0.8rem] +
           leading-tight = 16px): vertically centered on single-line rows, and
@@ -134,16 +131,19 @@ function ValueSubTrigger({
   label,
   value,
   icon,
+  leadingIcon,
   disabled = false,
 }: {
   label: string;
   value: string | null;
+  leadingIcon?: ReactNode;
   /** Rides beside the value, for a row whose value has a mark of its own. */
   icon?: ReactNode;
   disabled?: boolean;
 }) {
   return (
-    <DropdownMenuSubTrigger className="pr-1.5" disabled={disabled}>
+    <DropdownMenuSubTrigger className="min-h-9 gap-2.5 rounded-lg pr-2" disabled={disabled}>
+      {leadingIcon ? <span className="text-muted-foreground">{leadingIcon}</span> : null}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <span className="ml-4 flex min-w-0 max-w-40 items-center gap-1.5 text-xs text-muted-foreground">
         {icon}
@@ -194,7 +194,7 @@ function ToggleItem({
   );
 }
 
-/* Shared trigger chrome for both footer buttons. */
+/* Compact permission trigger chrome. */
 const TRIGGER_CLASS = cn(
   'inline-flex h-7 min-w-0 select-none items-center gap-1.5 rounded-[4px] px-2 text-xs leading-tight',
   'text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
@@ -292,22 +292,12 @@ export function DesktopMachineMenu({
   );
 }
 
-/* ── Run config (agent + model + reasoning + plan/fast) ──────────────── */
+/* ── Provider/model and reasoning ─────────────────────────────────── */
 
 export type DesktopRunConfigMenuProps = {
   agentSelection: AgentSelection | null;
-  /** Restrict agents to the session/project machine. Omit for new chats that
-   * may run on any online machine. */
-  allowedMachineIds?: MachineId[];
-  /**
-   * Explicit agent pool for non-composer surfaces such as machine settings.
-   * Unlike the default pool, these configs are not filtered by online presence.
-   */
+  /** Explicit configuration metadata for the selected runtime, never a harness picker. */
   availableAgentConfigs?: ReadonlyArray<AgentConfigMeta>;
-  /** Include the selected agent name in the trigger face. */
-  showAgentNameInTrigger?: boolean;
-  /** Trigger copy while no agent has been selected. */
-  emptyAgentLabel?: string;
   /** Keep the whole run-config menu inert and explain why on hover/focus. */
   disabledReason?: string;
   agentLocked?: boolean;
@@ -315,18 +305,9 @@ export type DesktopRunConfigMenuProps = {
     cliType?: AgentConfigCliType | null;
     agentType?: string | null;
   };
-  onAgentConfigChange?: (selection: AgentSelection) => void;
   modelOptions: ReadonlyArray<AcpSessionSelectOption>;
   selectedModelId: string | null;
   onModelChange?: (value: string) => void;
-  /**
-   * Permission inputs, read-only here: the standalone
-   * `DesktopPermissionModeButton` is still the control. They are needed because
-   * a selected Role pins permission too, and its face states everything the
-   * Role decided rather than leaving one knob's value somewhere else.
-   */
-  modeOptions?: ReadonlyArray<AcpSessionSelectOption>;
-  selectedModeId?: string | null;
   configOptionSelectors?: AcpConfigOptionSelector[];
   configOptionValues?: Record<string, AcpConfigOptionValue>;
   onConfigOptionChange?: (configId: string, value: AcpConfigOptionValue) => void;
@@ -337,52 +318,25 @@ export type DesktopRunConfigMenuProps = {
    */
   recentRunConfigs?: ReadonlyArray<RecentRunConfigItem>;
   onRecentRunConfigSelect?: (id: string) => void;
-  /**
-   * Agent Roles for the machine this chat starts on, as the row above Agent.
-   *
-   * Omit to leave the row out entirely: a surface where the agent cannot change
-   * (an in-session composer, a settings preview) has nothing a Role could
-   * apply, and offering one there would promise a switch that cannot happen.
-   */
-  agentRoles?: {
-    items: ReadonlyArray<ComposerAgentRoleItem>;
-    /** The Role the current configuration still IS, not merely the last picked. */
-    selectedRoleId: AgentRoleId | null;
-    /** `null` clears the Role and leaves the configuration exactly as it stands. */
-    onSelect: (roleId: AgentRoleId | null) => void;
-    /** Opens the Role editor seeded with what the composer is set to right now. */
-    onCreate?: () => void;
-    onEdit?: (roleId: AgentRoleId) => void;
-    /** The machine those Roles are bound to, for resolving their stored ids. */
-    machine?: MachineViewMeta | null;
-  };
 };
 
 export function DesktopRunConfigMenu({
   agentSelection,
-  allowedMachineIds,
   availableAgentConfigs,
-  showAgentNameInTrigger = false,
-  emptyAgentLabel,
   disabledReason,
   agentLocked = false,
   fallbackAgent,
-  onAgentConfigChange,
   modelOptions,
   selectedModelId,
   onModelChange,
-  modeOptions = [],
-  selectedModeId = null,
   configOptionSelectors = [],
   configOptionValues,
   onConfigOptionChange,
   recentRunConfigs,
   onRecentRunConfigSelect,
-  agentRoles,
 }: DesktopRunConfigMenuProps) {
   const { t } = useTranslation();
   const executorConfigs = useAtomValue(getAllAgentConfigAtom);
-  const onlineMachines = useOnlineMachines(allowedMachineIds);
   const selectableAgentConfigs = availableAgentConfigs ?? executorConfigs;
   const {
     modelSelectors,
@@ -400,18 +354,6 @@ export function DesktopRunConfigMenu({
     [otherSelectors]
   );
 
-  /* Agent options follow the caller's machine scope. On chat landing the
-     explicit machine picker owns that scope, including GitHub/no-project drafts. */
-  const agentOptions = useMemo(() => {
-    if (availableAgentConfigs) {
-      return availableAgentConfigs.map((config) => ({ config, machineName: '' }));
-    }
-    const machineNames = new Map(onlineMachines.map((machine) => [machine.id, machine.name]));
-    return executorConfigs.flatMap((config) => {
-      const machineName = machineNames.get(config.machineId);
-      return machineName ? [{ config, machineName }] : [];
-    });
-  }, [availableAgentConfigs, executorConfigs, onlineMachines]);
   const selectedAgentConfig = useMemo(
     () =>
       agentSelection
@@ -421,12 +363,14 @@ export function DesktopRunConfigMenu({
         : null,
     [agentSelection, selectableAgentConfigs]
   );
-  const isAgentLocked = agentLocked || onAgentConfigChange == null || agentOptions.length === 0;
 
   /* Model (free-standing modelOptions first, else the model config selector). */
   const modelConfigSelector: AcpSelectConfigOptionSelector | undefined = modelSelectors[0];
   const modelPickerOptions = useMemo(
-    () => (modelOptions.length > 0 ? modelOptions : (modelConfigSelector?.options ?? [])),
+    () =>
+      (modelOptions.length > 0 ? modelOptions : (modelConfigSelector?.options ?? [])).filter(
+        (option) => option.value !== MOLLY_UNSELECTED_MODEL
+      ),
     [modelConfigSelector, modelOptions]
   );
   const modelValue: string | null =
@@ -439,7 +383,9 @@ export function DesktopRunConfigMenu({
           ) as string) ?? null)
         : null;
   const modelLabel =
-    modelPickerOptions.find((opt) => opt.value === modelValue)?.label ?? modelValue;
+    modelValue && modelValue !== MOLLY_UNSELECTED_MODEL
+      ? (modelPickerOptions.find((opt) => opt.value === modelValue)?.label ?? modelValue)
+      : t('chat.runConfig.selectModel', 'Select model');
   const showDeepSeekDelegationWarning = shouldShowDeepSeekDelegationWarning({
     cliType: selectedAgentConfig?.cliType ?? fallbackAgent?.cliType,
     agentType: selectedAgentConfig?.agentType ?? fallbackAgent?.agentType,
@@ -492,31 +438,20 @@ export function DesktopRunConfigMenu({
     ? resolveOnOffConfigOptionEnabled(fastSelector, configOptionValues?.[fastSelector.configId])
     : false;
 
-  /* The Role the composer currently IS: the caller only passes an id while the
-     live configuration still matches that Role, so the face can name it. */
-  const selectedRole: AgentRole | undefined = useMemo(
-    () =>
-      agentRoles?.selectedRoleId
-        ? agentRoles.items.find((item) => item.role.id === agentRoles.selectedRoleId)?.role
-        : undefined,
-    [agentRoles]
-  );
-
-  /* The half of the face that describes the run configuration rather than what
-     was picked. Built as parts so the separator dots can be placed by the
-     caller: inside the trigger it continues the agent name, while a Role
-     renders it OUTSIDE the trigger, where a leading dot would dangle. */
   const configFaceParts: ReactNode[] = [];
   if (modelLabel) {
     configFaceParts.push(
-      <span key="model" className="block min-w-0 max-w-40 truncate text-left [direction:rtl]">
-        <span dir="ltr">{modelLabel}</span>
+      <span key="model" className="block min-w-0 max-w-64 truncate text-left" title={modelLabel}>
+        {modelLabel}
       </span>
     );
   }
   if (thinkingLabel) {
     configFaceParts.push(
-      <span key="thinking" className="shrink-0">
+      <span
+        key="thinking"
+        className="shrink-0 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] leading-4"
+      >
         {thinkingLabel}
       </span>
     );
@@ -531,55 +466,19 @@ export function DesktopRunConfigMenu({
       <Zap key="fast" className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
     );
   }
-  /* Permission joins the face ONLY behind a Role, and only one the Role pins:
-     otherwise the standalone permission button is showing the same value a step
-     to the right, and saying it twice is worse than saying it once. */
-  const permissionFace = resolvePermissionModeFace({
-    modeOptions,
-    selectedModeId,
-    configOptionSelectors,
-    configOptionValues,
-  });
-  if (
-    selectedRole &&
-    permissionFace.label &&
-    doesAgentRolePinPermissionMode(selectedRole, permissionFace.source)
-  ) {
-    // A warning-tone permission (full access / skip permissions) keeps its
-    // amber shield here. The rest of the face is deliberately quiet because a
-    // Role already decided it — but "this Role runs with full access" is not a
-    // detail, and it is the one value that no longer has a button carrying it.
-    const warning = classifyPermissionModeFace(permissionFace.value);
-    configFaceParts.push(
-      warning.kind !== 'hidden' && warning.tone === 'warning' ? (
-        <span key="permission" className="flex shrink-0 items-center gap-1 text-status-warning">
-          <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          {permissionFace.label}
-        </span>
-      ) : (
-        <span key="permission" className="shrink-0">
-          {permissionFace.label}
-        </span>
-      )
-    );
-  }
   const withFaceDots = (parts: ReactNode[], leadingDot: boolean): ReactNode[] =>
     parts.flatMap((part, index) =>
       index === 0 && !leadingDot ? [part] : [<FaceDot key={`dot-${index}`} />, part]
     );
 
-  const agentLabel = t('chat.agentSelector.placeholder', 'Agent');
-  const modelRowLabel = t('chat.runConfig.modelLabel', 'Model');
+  const modelRowLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
   const modelSearchPlaceholder = t('chat.runConfig.modelSearchPlaceholder', 'Search models');
   const modelSearchEmptyLabel = t('chat.runConfig.modelSearchEmpty', 'No models match');
   const reasoningLabel = t('chat.runConfig.reasoningLabel', 'Reasoning');
   const planRowLabel = t('chat.mobileNewChat.planModeLabel', 'Plan');
   const fastRowLabel = t('chat.runConfig.fastLabel', 'Fast');
 
-  const roleLabel = t('chat.runConfig.roles.label', 'Role');
   const hasAnyRow =
-    agentRoles != null ||
-    agentOptions.length > 0 ||
     selectedAgentConfig != null ||
     modelPickerOptions.length > 0 ||
     extraSelectSelectors.length > 0 ||
@@ -589,55 +488,23 @@ export function DesktopRunConfigMenu({
     fastSelector != null;
   if (!hasAnyRow) return null;
 
-  const runConfigButtonAriaLabel = t('chat.runConfig.buttonAriaLabel', 'Run configuration');
+  const runConfigButtonAriaLabel = modelRowLabel;
   const triggerButton = (
-    <button
+    <Button
       type="button"
+      variant="ghost"
       className={cn(
-        TRIGGER_CLASS,
+        'h-7 min-w-0 select-none gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground data-[state=open]:bg-hover data-[state=open]:text-foreground',
         disabledReason &&
           'cursor-default opacity-70 hover:bg-transparent hover:text-muted-foreground'
       )}
       aria-label={runConfigButtonAriaLabel}
       aria-disabled={disabledReason ? true : undefined}
     >
-      {selectedRole ? (
-        <span className="shrink-0 text-sm leading-none" aria-hidden="true">
-          {getAgentRoleEmoji(selectedRole)}
-        </span>
-      ) : selectedAgentConfig ? (
-        <AgentIcon
-          cliType={selectedAgentConfig.cliType}
-          agentType={selectedAgentConfig.agentType}
-          brandId={selectedAgentConfig.brandId}
-          env={selectedAgentConfig.env}
-          className="h-4 w-4 shrink-0"
-        />
-      ) : fallbackAgent?.cliType && fallbackAgent.agentType ? (
-        <AgentIcon
-          cliType={fallbackAgent.cliType}
-          agentType={fallbackAgent.agentType}
-          className="h-4 w-4 shrink-0"
-        />
-      ) : (
-        <Bot className="h-4 w-4 shrink-0" aria-hidden="true" />
-      )}
-      {/* A Role names itself and nothing else: it IS the whole run
-          configuration, so its values belong beside the button rather than
-          crowding the one thing there is to click. */}
-      {selectedRole ? (
-        <span className="block min-w-0 max-w-44 truncate text-left">{selectedRole.name}</span>
-      ) : (
-        <>
-          {showAgentNameInTrigger ? (
-            <span className="block min-w-0 max-w-36 truncate text-left">
-              {selectedAgentConfig?.name ?? emptyAgentLabel ?? agentLabel}
-            </span>
-          ) : null}
-          {withFaceDots(configFaceParts, showAgentNameInTrigger)}
-        </>
-      )}
-    </button>
+      <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+      {withFaceDots(configFaceParts, false)}
+      <ChevronDown aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+    </Button>
   );
 
   const menu = (
@@ -652,106 +519,71 @@ export function DesktopRunConfigMenu({
       ) : (
         <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
       )}
-      <DropdownMenuContent align="start" className="min-w-56">
+      <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-24px)] rounded-xl p-1.5">
+        <DropdownMenuLabel className="px-3 pb-1 pt-2 text-[11px] font-normal normal-case tracking-normal">
+          {modelRowLabel}
+        </DropdownMenuLabel>
+        <div className="flex max-h-72 min-h-0 flex-col overflow-hidden">
+          <MenuOptionSearchList
+            options={modelPickerOptions}
+            onSelect={(opt) => handleModelSelect(opt.value)}
+            searchPlaceholder={modelSearchPlaceholder}
+            emptyText={
+              modelPickerOptions.length
+                ? modelSearchEmptyLabel
+                : t('chat.runConfig.noModels', 'Add a model connection in Settings to get started.')
+            }
+            renderOption={(opt, select) => (
+              <OptionItem
+                key={opt.value}
+                label={opt.label}
+                description={opt.description}
+                selected={opt.value === modelValue}
+                disabled={opt.disabled}
+                onSelect={select}
+              />
+            )}
+          />
+        </div>
+        {thinkingSelector ||
+        extraSelectSelectors.length > 0 ||
+        interactionSelector ||
+        showDeepSeekDelegationWarning ? (
+          <DropdownMenuSeparator />
+        ) : null}
+        {thinkingSelector ? (
+          <DropdownMenuSub>
+            <ValueSubTrigger
+              label={reasoningLabel}
+              value={thinkingLabel}
+              leadingIcon={<Brain aria-hidden="true" className="size-4" />}
+            />
+            <DropdownMenuSubContent>
+              {thinkingSelector.options.map((opt) => (
+                <OptionItem
+                  key={opt.value}
+                  label={opt.label}
+                  description={opt.description}
+                  selected={opt.value === thinkingValue}
+                  disabled={opt.disabled}
+                  onSelect={() =>
+                    onConfigOptionChange?.(
+                      thinkingSelector.configId,
+                      opt.value as AcpConfigOptionValue
+                    )
+                  }
+                />
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+
         {onRecentRunConfigSelect ? (
           <RecentRunConfigMenuGroup
             items={recentRunConfigs ?? []}
             onSelect={onRecentRunConfigSelect}
           />
         ) : null}
-        {/* Above Agent, because a Role ANSWERS every row under it at once. With
-            no Role to pick yet the row's value is the way to make one, seeded
-            with whatever those rows are set to right now. */}
-        {agentRoles ? (
-          agentRoles.items.length === 0 ? (
-            <DropdownMenuItem
-              disabled={!agentRoles.onCreate}
-              onSelect={() => agentRoles.onCreate?.()}
-            >
-              <span className="min-w-0 flex-1 truncate">{roleLabel}</span>
-              <span className="ml-4 inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
-                {t('chat.runConfig.roles.create', 'New role')}
-              </span>
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuSub>
-              <ValueSubTrigger
-                label={roleLabel}
-                value={selectedRole?.name ?? t('chat.runConfig.roles.none', 'None')}
-                icon={
-                  selectedRole ? (
-                    <span className="text-sm leading-none" aria-hidden="true">
-                      {getAgentRoleEmoji(selectedRole)}
-                    </span>
-                  ) : null
-                }
-              />
-              <DropdownMenuSubContent className="p-0">
-                <ComposerAgentRolePanel
-                  items={agentRoles.items}
-                  machine={agentRoles.machine}
-                  selectedRoleId={agentRoles.selectedRoleId}
-                  onSelect={agentRoles.onSelect}
-                  onCreate={agentRoles.onCreate}
-                  onEdit={agentRoles.onEdit}
-                />
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )
-        ) : null}
-        {agentOptions.length > 0 || selectedAgentConfig ? (
-          isAgentLocked ? (
-            <DropdownMenuItem disabled>
-              <span className="min-w-0 flex-1 truncate">{agentLabel}</span>
-              <span className="ml-4 flex max-w-36 items-center gap-1.5 text-xs text-muted-foreground">
-                {selectedAgentConfig ? (
-                  <AgentIcon
-                    cliType={selectedAgentConfig.cliType}
-                    agentType={selectedAgentConfig.agentType}
-                    brandId={selectedAgentConfig.brandId}
-                    env={selectedAgentConfig.env}
-                    className="h-3 w-3 shrink-0"
-                  />
-                ) : null}
-                <span className="truncate">{selectedAgentConfig?.name}</span>
-              </span>
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuSub>
-              <ValueSubTrigger label={agentLabel} value={selectedAgentConfig?.name ?? null} />
-              <DropdownMenuSubContent>
-                {agentOptions.map(({ config, machineName }) => (
-                  <OptionItem
-                    key={`${config.id}:${config.machineId}`}
-                    icon={
-                      <AgentIcon
-                        cliType={config.cliType}
-                        agentType={config.agentType}
-                        brandId={config.brandId}
-                        env={config.env}
-                        className="h-4 w-4 shrink-0"
-                      />
-                    }
-                    label={config.name}
-                    description={allowedMachineIds ? undefined : machineName}
-                    selected={
-                      config.id === agentSelection?.agentId &&
-                      config.machineId === agentSelection.machineId
-                    }
-                    onSelect={() =>
-                      onAgentConfigChange?.({
-                        agentId: config.id as AgentSelection['agentId'],
-                        machineId: config.machineId as MachineId,
-                      })
-                    }
-                  />
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          )
-        ) : null}
-
         {extraSelectSelectors.map((selector) => {
           const selectedValue =
             (resolveConfigOptionValue(
@@ -786,43 +618,6 @@ export function DesktopRunConfigMenu({
           );
         })}
 
-        {modelPickerOptions.length > 0 ? (
-          <DropdownMenuSub>
-            <ValueSubTrigger label={modelRowLabel} value={modelLabel} />
-            <DropdownMenuSubContent
-              // `p-0` + column layout so the search row stays put while only the
-              // options scroll; the padding it drops moves onto the list itself.
-              className="flex max-w-80 flex-col overflow-y-hidden p-0"
-              // Cap the list so a long model list scrolls inside a compact menu
-              // instead of running the full viewport height. Inline (not a max-h-*
-              // class) so it reliably wins over the base content's max-h, and clamps
-              // to the available height so it never overflows off-screen.
-              style={{
-                maxHeight: 'min(20rem, var(--radix-dropdown-menu-content-available-height, 20rem))',
-              }}
-            >
-              {/* A provider can publish dozens of models; past
-                  `OPTION_SEARCH_MIN_OPTIONS` this list gains a fuzzy search row. */}
-              <MenuOptionSearchList
-                options={modelPickerOptions}
-                onSelect={(opt) => handleModelSelect(opt.value)}
-                searchPlaceholder={modelSearchPlaceholder}
-                emptyText={modelSearchEmptyLabel}
-                renderOption={(opt, select) => (
-                  <OptionItem
-                    key={opt.value}
-                    label={opt.label}
-                    description={opt.description}
-                    selected={opt.value === modelValue}
-                    disabled={opt.disabled}
-                    onSelect={select}
-                  />
-                )}
-              />
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
-
         {showDeepSeekDelegationWarning ? (
           <DropdownMenuItem
             asChild
@@ -856,29 +651,6 @@ export function DesktopRunConfigMenu({
                   onSelect={() =>
                     onConfigOptionChange?.(
                       interactionSelector.configId,
-                      opt.value as AcpConfigOptionValue
-                    )
-                  }
-                />
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
-
-        {thinkingSelector ? (
-          <DropdownMenuSub>
-            <ValueSubTrigger label={reasoningLabel} value={thinkingLabel} />
-            <DropdownMenuSubContent>
-              {thinkingSelector.options.map((opt) => (
-                <OptionItem
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  selected={opt.value === thinkingValue}
-                  disabled={opt.disabled}
-                  onSelect={() =>
-                    onConfigOptionChange?.(
-                      thinkingSelector.configId,
                       opt.value as AcpConfigOptionValue
                     )
                   }
@@ -925,25 +697,7 @@ export function DesktopRunConfigMenu({
     </DropdownMenu>
   );
 
-  /* The values a Role pins, stated but INERT: only the Role itself is a control,
-     because changing one of these by hand is what stops the configuration being
-     that Role — and a knob that silently unnames the thing beside it is a trap.
-     The Detailed tab is where they are changed. */
-  const roleConfigFace =
-    selectedRole && configFaceParts.length > 0 ? (
-      <span className="pointer-events-none flex min-w-0 select-none items-center gap-1 text-[11px] leading-tight text-muted-foreground/60">
-        {withFaceDots(configFaceParts, false)}
-      </span>
-    ) : null;
-
-  return roleConfigFace ? (
-    <>
-      {menu}
-      {roleConfigFace}
-    </>
-  ) : (
-    menu
-  );
+  return menu;
 }
 
 function FaceDot() {

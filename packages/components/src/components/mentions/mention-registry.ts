@@ -611,7 +611,7 @@ export type MentionSourceKey = keyof MentionCategorySources;
  */
 export function useMentionCategories(sources: MentionCategorySources): MentionCategory[] {
   const { t } = useTranslation();
-  const { file, issuePr, skill, command, session, agentRole } = sources;
+  const { file, issuePr, skill, command, session } = sources;
 
   // Partitioned once: the cache holds both types, and re-splitting it inside
   // `getCandidates` would walk the whole list twice on every keystroke.
@@ -707,17 +707,6 @@ export function useMentionCategories(sources: MentionCategorySources): MentionCa
       });
     }
 
-    if (agentRole?.enabled) {
-      categories.push({
-        id: 'agent_role',
-        namespace: 'role',
-        label: t('mention.category.agentRole.label', 'Agent Roles'),
-        icon: 'agent_role',
-        ...sourceCategoryFields('agentRole', agentRole),
-        getCandidates: (term, limit) => buildAgentRoleCandidates(agentRole.items, term, limit),
-      });
-    }
-
     if (command?.enabled) {
       categories.push({
         id: 'command',
@@ -731,5 +720,5 @@ export function useMentionCategories(sources: MentionCategorySources): MentionCa
     }
 
     return categories;
-  }, [agentRole, command, file, issuePr, issueSuggestions, prSuggestions, session, skill, t]);
+  }, [command, file, issuePr, issueSuggestions, prSuggestions, session, skill, t]);
 }

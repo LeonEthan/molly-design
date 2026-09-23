@@ -140,12 +140,18 @@
       "import": "./src/node/*.ts",
       "require": "./src/node/*.cjs"
     },
-    "./session-data": "./src/session-data/index.ts"
+    "./session-data": "./src/session-data/index.ts",
+    "./ui-icons": {
+      "types": "./src/ui-icons/index.ts",
+      "import": "./src/ui-icons/index.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "pnpm icons:check && vitest run",
+    "test:watch": "vitest",
+    "icons:generate": "node scripts/generate-ui-icons.mjs",
+    "icons:check": "node scripts/generate-ui-icons.mjs --check"
   },
   "dependencies": {
     "@bokuweb/zstd-wasm": "^0.0.27",

@@ -433,7 +433,7 @@ function ProjectSettingsDesktop({
     <div className={cn(settingContainerClass, 'flex h-full min-h-0 flex-col md:max-w-6xl')}>
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-base font-semibold text-foreground">
+          <h2 className="text-xl font-medium text-foreground">
             {t('settings.tabs.projects', 'Projects')}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
@@ -485,8 +485,8 @@ function ProjectSettingsDesktop({
               ) : null
             }
           />
-          <div className="flex min-h-0 min-w-0 flex-1">
-            <div className="scrollbar-pro w-[240px] shrink-0 overflow-y-auto border-r border-border/60 py-1 pr-2">
+          <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/40 bg-card">
+            <div className="scrollbar-pro w-[220px] shrink-0 overflow-y-auto border-r border-border/40 p-3">
               {currentSelections.length === 0 ? (
                 <div className="flex flex-col items-start gap-2 px-2 py-4">
                   <p className="text-xs text-muted-foreground">

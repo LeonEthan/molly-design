@@ -3,15 +3,9 @@
 import { act, createElement, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import {
-  type AgentConfigId,
-  type AgentConfigMeta,
-  type MachineId,
-} from '@molly/shared';
+import { type AgentConfigId, type AgentConfigMeta, type MachineId } from '@molly/shared';
+import { encodeMollyModelOption, MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 
-// The menu resolves its default agent pool from machine presence; these
-// surfaces pass their agent in explicitly, so the pool is not under test.
-vi.mock('../src/hooks/use-online-machines', () => ({ useOnlineMachines: () => [] }));
 vi.mock('../src/components/mentions/mention-session-source', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useSessionMentionItems: () => [],
@@ -94,7 +88,7 @@ describe('composer model picker search', () => {
     container = undefined;
   });
 
-  /* ── Desktop: the run-config dropdown's Model submenu ── */
+  /* ── Desktop: direct provider/model choices ── */
 
   type MenuProps = ComponentProps<typeof DesktopRunConfigMenu>;
   const desktopProps: MenuProps = {
@@ -108,27 +102,20 @@ describe('composer model picker search', () => {
     onConfigOptionChange: () => undefined,
   };
 
-  const openModelSubmenu = async (props: Partial<MenuProps> = {}) => {
+  const openModelMenu = async (props: Partial<MenuProps> = {}) => {
     await act(async () => {
       root?.render(createElement(DesktopRunConfigMenu, { ...desktopProps, ...props }));
     });
     // Radix opens the menu on pointerdown, not click.
     await act(async () => {
       container
-        ?.querySelector('button[aria-label="Run configuration"]')
+        ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
-    });
-    const modelRow = [...document.querySelectorAll('[role="menuitem"]')].find((node) =>
-      node.textContent?.trim().startsWith('Model')
-    );
-    await act(async () => {
-      (modelRow as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
     return {
       search,
-      // The submenu's own rows: the parent menu's Model/Agent rows are in a
-      // different content element.
+      // The first menu exposes the model choices directly.
       rows: () => {
         const submenu = search
           ? search.closest('[data-radix-menu-content]')
@@ -140,27 +127,102 @@ describe('composer model picker search', () => {
     };
   };
 
-  it('opens the Model submenu with every model and a way to search them', async () => {
-    const { search, rows } = await openModelSubmenu();
+  it('opens the model picker with every model and a way to search them', async () => {
+    const { search, rows } = await openModelMenu();
     expect(search).not.toBeNull();
     expect(rows()).toHaveLength(manyModels.length);
   });
 
+  it('selects the exact connection when two connections expose the same model', async () => {
+    const onModelChange = vi.fn();
+    const studio = encodeMollyModelOption('studio', 'aurora/1');
+    const review = encodeMollyModelOption('review', 'aurora/1');
+    await openModelMenu({
+      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
+      modelOptions: [
+        { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
+        { value: studio, label: 'Studio · Aurora 1' },
+        { value: review, label: 'Review · Aurora 1' },
+      ],
+      selectedModelId: studio,
+      onModelChange,
+    });
+    const menu = document.querySelector('[role="menu"]');
+    const rows = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
+    expect(rows.map((row) => row.textContent)).toEqual(['Studio · Aurora 1', 'Review · Aurora 1']);
+    expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
+    expect(menu?.querySelector('[role="menuitem"]')).toBeNull();
+    await act(async () => {
+      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onModelChange).toHaveBeenCalledWith(review);
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('shows an actionable empty state instead of offering the unselected sentinel', async () => {
+    const { rows } = await openModelMenu({
+      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
+      modelOptions: [{ value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' }],
+      selectedModelId: MOLLY_UNSELECTED_MODEL,
+    });
+    expect(container?.textContent).toContain('Select model');
+    expect(rows()).toEqual([]);
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain(
+      'Add a model connection in Settings to get started.'
+    );
+  });
+
+  it('retains reasoning as a separately selectable configuration', async () => {
+    const onConfigOptionChange = vi.fn();
+    await openModelMenu({
+      modelOptions: fewModels,
+      onConfigOptionChange,
+      configOptionSelectors: [
+        {
+          type: 'select',
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Reasoning',
+          currentValue: 'medium',
+          options: [
+            { value: 'medium', label: 'Medium' },
+            { value: 'high', label: 'High' },
+          ],
+        },
+      ],
+    });
+    const reasoning = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((row) =>
+      row.textContent?.startsWith('Reasoning')
+    );
+    expect(container?.textContent).toContain('Medium');
+    await act(async () => {
+      reasoning?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const high = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+      (row) => row.textContent === 'High'
+    );
+    expect(high).toBeDefined();
+    await act(async () => {
+      high?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
+  });
+
   it('narrows the list to fuzzy matches as the user types', async () => {
-    const { search, rows } = await openModelSubmenu();
+    const { search, rows } = await openModelMenu();
     // Not a substring of the label OR the id — a subsequence of both.
     await typeInto(search as HTMLInputElement, 'op5');
     expect(rows()).toEqual(['Opus 5']);
   });
 
   it('finds a model by its id, which the row does not even show', async () => {
-    const { search, rows } = await openModelSubmenu();
+    const { search, rows } = await openModelMenu();
     await typeInto(search as HTMLInputElement, 'haiku-4');
     expect(rows()).toEqual(['Haiku 4.5']);
   });
 
   it('says so when nothing matches instead of showing an empty menu', async () => {
-    const { search, rows } = await openModelSubmenu();
+    const { search, rows } = await openModelMenu();
     await typeInto(search as HTMLInputElement, 'zzz');
     expect(rows()).toEqual([]);
     const submenu = (search as HTMLInputElement).closest('[data-radix-menu-content]');
@@ -169,7 +231,7 @@ describe('composer model picker search', () => {
 
   it('takes the top match on Enter, so a search never needs the mouse', async () => {
     const onModelChange = vi.fn();
-    const { search } = await openModelSubmenu({ onModelChange });
+    const { search } = await openModelMenu({ onModelChange });
     await typeInto(search as HTMLInputElement, 'grok');
     await act(async () => {
       (search as HTMLInputElement).dispatchEvent(
@@ -180,7 +242,7 @@ describe('composer model picker search', () => {
   });
 
   it('moves into the list on ArrowDown, since the field is not a menu row', async () => {
-    const { search } = await openModelSubmenu();
+    const { search } = await openModelMenu();
     await act(async () => {
       (search as HTMLInputElement).dispatchEvent(
         new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
@@ -194,7 +256,7 @@ describe('composer model picker search', () => {
      the row under the cursor). Typing then has to keep filtering — otherwise it
      drives the menu's own typeahead and the search box looks broken. */
   it('keeps typing in the search field when focus has moved onto a row', async () => {
-    const { search, rows } = await openModelSubmenu();
+    const { search, rows } = await openModelMenu();
     const submenu = (search as HTMLInputElement).closest('[data-radix-menu-content]');
     const firstRow = submenu?.querySelector<HTMLElement>('[role="menuitemradio"]');
     await act(async () => {
@@ -208,7 +270,7 @@ describe('composer model picker search', () => {
   });
 
   it('leaves a short list alone — a search field there costs more than it saves', async () => {
-    const { search, rows } = await openModelSubmenu({
+    const { search, rows } = await openModelMenu({
       modelOptions: fewModels,
       selectedModelId: fewModels[0]?.value ?? null,
     });
@@ -230,7 +292,7 @@ describe('composer model picker search', () => {
     });
     await act(async () => {
       container
-        ?.querySelector('button[aria-label="Run configuration"]')
+        ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 
@@ -255,7 +317,7 @@ describe('composer model picker search', () => {
     });
     await act(async () => {
       container
-        ?.querySelector('button[aria-label="Run configuration"]')
+        ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
 
@@ -282,14 +344,8 @@ describe('composer model picker search', () => {
     // Open menu on pointerdown
     await act(async () => {
       container
-        ?.querySelector('button[aria-label="Run configuration"]')
+        ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
-    });
-    const modelRow = [...document.querySelectorAll('[role="menuitem"]')].find((node) =>
-      node.textContent?.trim().startsWith('Model')
-    );
-    await act(async () => {
-      (modelRow as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
     expect(search).not.toBeNull();
@@ -304,6 +360,4 @@ describe('composer model picker search', () => {
     expect(document.activeElement).toBe(search);
     expect(document.activeElement).not.toBe(textareaRef.current);
   });
-
-
 });

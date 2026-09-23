@@ -1787,12 +1787,6 @@ const SessionDetail = ({
             parentSessionId: activeSession.id,
             title: draftTitle || undefined,
             titleSource: draftTitle ? 'draft' : undefined,
-            ...(payload.agentRoleId && typeof payload.agentRoleRevision === 'number'
-              ? {
-                  agentRoleId: payload.agentRoleId,
-                  agentRoleRevision: payload.agentRoleRevision,
-                }
-              : {}),
           },
           pendingHistoryEntry
         );

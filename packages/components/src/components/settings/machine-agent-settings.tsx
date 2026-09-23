@@ -145,7 +145,7 @@ function EmbeddedAgentSettings() {
   const configs = useAtomValue(getAllAgentConfigAtom);
   const setups = useAtomValue(getAllProviderSetupsAtom);
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <ModelConnectionSetting />
       <BundledCapabilitiesSetting />
       <AgentEngineCatalog

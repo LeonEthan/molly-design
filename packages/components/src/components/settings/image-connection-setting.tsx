@@ -154,17 +154,17 @@ export function ImageConnectionForm({
 
   return (
     <form className={className} onSubmit={submit}>
-      <div className="space-y-3">
+      <div className="space-y-5">
         <Section
           title={t('settings.imageConnection.sectionConnection')}
           hint={t('settings.imageConnection.sectionConnectionHint')}
         >
-          <div className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/60 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-3">
             <div className="min-w-0">
               <Label htmlFor={`${fieldId}-enabled`} className="text-sm">
                 {t('settings.imageConnection.enabled')}
               </Label>
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                 {t('settings.imageConnection.enabledHint')}
               </p>
             </div>
@@ -298,7 +298,7 @@ export function ImageConnectionForm({
               {testing ? t('settings.imageConnection.testing') : t('settings.imageConnection.test')}
             </Button>
             {testBlockedReason ? (
-              <p className="text-[11px] leading-snug text-muted-foreground">{testBlockedReason}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{testBlockedReason}</p>
             ) : null}
           </div>
           <ImageConnectionTestSummary state={testState} />
@@ -313,8 +313,8 @@ export function ImageConnectionForm({
           </p>
         ) : null}
 
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] leading-snug text-muted-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             {ready
               ? t('settings.imageConnection.statusReady')
               : t('settings.imageConnection.statusNotReady')}
@@ -414,7 +414,7 @@ export function ImageConnectionSetting() {
   };
   if (!ipc) return <p>{t('settings.imageConnection.unavailable')}</p>;
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <p className="text-xs text-muted-foreground">{t('settings.imageConnection.intro')}</p>
       {stored?.legacyHistoryMayContainKey && (
         <p role="alert" className="text-xs text-warning-foreground">

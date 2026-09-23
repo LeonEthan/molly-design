@@ -158,8 +158,8 @@ test('one canvas keeps canonical until a valid live snapshot and locks actions t
   expect(state.visible).toBe(true);
   await execution('turn-1', true);
   expect(state.visible).toBe(true);
-  const save = [...container.querySelectorAll('button')].find((b) =>
-    b.textContent?.includes('Save version')
+  const save = [...container.querySelectorAll('button')].find(
+    (b) => b.getAttribute('aria-label') === 'Save version'
   )!;
   expect(save.disabled).toBe(true);
   await execution('turn-1');

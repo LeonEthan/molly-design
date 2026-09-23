@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ComponentProps, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { AlertCircle, Check, Copy } from 'lucide-react';
@@ -21,6 +21,7 @@ import {
 export type ChatFailedDetailDialogProps = ChatFailedErrorReportInput & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: ComponentProps<typeof DialogContent>['onCloseAutoFocus'];
   /** Shortened message rendered above the raw text, when it adds anything. */
   summary?: string;
 };
@@ -33,6 +34,7 @@ export type ChatFailedDetailDialogProps = ChatFailedErrorReportInput & {
 export function ChatFailedDetailDialog({
   open,
   onOpenChange,
+  onCloseAutoFocus,
   summary,
   ...report
 }: ChatFailedDetailDialogProps) {
@@ -79,7 +81,10 @@ export function ChatFailedDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* `w-[calc(100vw-2rem)]` keeps the raw error readable on phones, where the
           shared dialog default reserves 2rem of margin on each side. */}
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl gap-3">
+      <DialogContent
+        className="w-[calc(100vw-2rem)] max-w-2xl gap-3"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <DialogHeader className="pr-6 text-left sm:text-left">
           <DialogTitle className="flex items-start gap-2 text-base">
             <AlertCircle className="mt-0.5 size-4 shrink-0 text-destructive" aria-hidden="true" />

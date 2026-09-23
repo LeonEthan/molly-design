@@ -2359,6 +2359,7 @@ const ChatFailedNoticeView = ({
     (!usesAcpProtocolAuthentication(sessionMeta.cliType) ||
       machineSupportsAcpProtocolAuthentication(sessionMachineMeta));
   const [detailOpen, setDetailOpen] = useState(false);
+  const detailTriggerRef = useRef<HTMLButtonElement>(null);
 
   const meta = notice.meta as
     | {
@@ -2590,6 +2591,7 @@ const ChatFailedNoticeView = ({
       <div role="alert" className="flex w-fit max-w-full flex-wrap items-center gap-2">
         {hasDetail ? (
           <button
+            ref={detailTriggerRef}
             type="button"
             aria-haspopup="dialog"
             className={cn(rowClassName, 'cursor-pointer')}
@@ -2606,6 +2608,14 @@ const ChatFailedNoticeView = ({
         <ChatFailedDetailDialog
           open={detailOpen}
           onOpenChange={setDetailOpen}
+          onCloseAutoFocus={(event) => {
+            // The notice owns the trigger outside Dialog; use its current node
+            // because virtual rows can be replaced while the details are open.
+            if (detailTriggerRef.current) {
+              event.preventDefault();
+              detailTriggerRef.current.focus({ preventScroll: true });
+            }
+          }}
           title={reasonMessage}
           action={actionMessage}
           summary={detailMessage}
@@ -3255,17 +3265,25 @@ const AssistantTurnConfigInfoButton = ({
           ) : null}
         </Tooltip>
       </TooltipProvider>
-      <PopoverContent align="start" side="bottom" sideOffset={6} className="w-64 gap-0 p-0">
-        <div className="border-b border-border/60 px-3 py-2">
-          <div className="text-[11px] font-medium text-foreground">
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={6}
+        className="w-64 gap-0 rounded-xl p-0"
+      >
+        <div className="px-4 pb-2 pt-4">
+          <div className="text-xs font-medium text-foreground">
             {t('sessions.turnConfig.title', 'Turn configuration')}
           </div>
         </div>
-        <dl className="space-y-1.5 px-3 py-2.5">
+        <dl className="space-y-2 px-4 pb-4 pt-1">
           {configRows.map((row) => (
-            <div key={row.label} className="flex items-start justify-between gap-3 text-[11px]">
+            <div
+              key={row.label}
+              className="flex items-start justify-between gap-3 text-xs leading-relaxed"
+            >
               <dt className="shrink-0 text-muted-foreground">{row.label}</dt>
-              <dd className="flex min-w-0 items-center justify-end gap-1.5 text-right font-medium text-foreground">
+              <dd className="flex min-w-0 items-center justify-end gap-1.5 text-right text-foreground">
                 {row.label === 'Model' ? (
                   <AgentAvatar
                     className="h-3.5 w-3.5 shrink-0"
@@ -3280,7 +3298,7 @@ const AssistantTurnConfigInfoButton = ({
             </div>
           ))}
           {configRows.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('sessions.turnConfig.empty', 'No configuration recorded for this turn.')}
             </p>
           ) : null}
@@ -3306,11 +3324,11 @@ const ACTIVITY_STEP_BUTTON_CLASS = cn(
 );
 const ACTIVITY_STEP_TITLE_CLASS = cn('min-w-0 flex-1', ACTIVITY_PROCESS_TEXT_CLASS);
 const ACTIVITY_STEP_BODY_CLASS =
-  'text-[12.5px] font-medium leading-[1.5] text-muted-foreground ' +
+  'text-[12.5px] font-normal leading-[1.6] text-muted-foreground ' +
   '[&_:is(h1,h2,h3,h4,h5,h6)]:!my-1 [&_:is(h1,h2,h3,h4,h5,h6)]:!text-[12.5px] ' +
   '[&_:is(h1,h2,h3,h4,h5,h6)]:!font-medium [&_:is(h1,h2,h3,h4,h5,h6)]:!text-muted-foreground ' +
   '[&_:is(h1,h2,h3,h4,h5,h6):first-child]:!mt-0 ' +
-  '[&_p]:!mb-1 [&_p:last-child]:!mb-0 [&_li:not(:first-child)]:!mt-0.5';
+  '[&_p]:!mb-2 [&_p:last-child]:!mb-0 [&_ul>li:not(:first-child)]:!mt-1 [&_ol>li:not(:first-child)]:!mt-1';
 
 const ActivityGroupHeader = ({
   summary,
@@ -5286,7 +5304,7 @@ const UserPlainTextBlock = ({
     <div className="flex max-w-full justify-end sm:pl-2">
       <div
         data-molly-user-bubble=""
-        className="min-w-0 max-w-full rounded-[13px] bg-primary px-[13px] py-2"
+        className="min-w-0 max-w-full rounded-[18px] bg-foreground/[0.06] px-4 py-3"
       >
         <div
           className={cn(
@@ -5295,24 +5313,17 @@ const UserPlainTextBlock = ({
             // unbreakable token (e.g. a pasted log URL). `break-words`/`overflow-wrap:break-word`
             // wraps visually but does NOT shrink min-content, so it must not be set here —
             // it would win by source order and let the bubble overflow its column on every engine.
-            'min-w-0 max-w-full whitespace-pre-wrap text-primary-foreground [overflow-wrap:anywhere]',
+            'min-w-0 max-w-full whitespace-pre-wrap text-foreground [overflow-wrap:anywhere]',
             isLong && !isFullTextVisible ? 'overflow-hidden' : ''
           )}
-          style={{
-            // The bubble is the fg inversion (spec §5 user bubble). Colored
-            // chips re-derive their colour from --primary, so rebind it to the
-            // inverted ink — channels to channels, the only rebind the
-            // hsl(var()/alpha) token contract accepts (a complete color-mix()
-            // here is invalid and silently dropped). The neutral chip tint,
-            // search marks and the expand button are painted with explicit
-            // bubble-ink / amber classes instead of page-ink tokens. The
-            // bubble's own bg/text read the ORIGINAL scope one level up.
-            '--primary': 'var(--primary-foreground)',
-            ...conversationTextFontSizeStyle(fontSize),
-            ...(isLong && !isFullTextVisible
-              ? { maxHeight: userTextCollapsedHeight(fontSize) }
-              : {}),
-          } as React.CSSProperties}
+          style={
+            {
+              ...conversationTextFontSizeStyle(fontSize),
+              ...(isLong && !isFullTextVisible
+                ? { maxHeight: userTextCollapsedHeight(fontSize) }
+                : {}),
+            } as React.CSSProperties
+          }
           data-search-block-id={searchBlockId}
         >
           {/* Search wins over chips: both want to split the same string, and a
@@ -5334,10 +5345,7 @@ const UserPlainTextBlock = ({
               type="button"
               variant="ghost"
               size="sm"
-              // Bubble ink at rest, full ink on hover: text-muted-foreground /
-              // hover:text-foreground here would resolve to the PAGE ink
-              // (hover paints foreground on the primary bubble = invisible).
-              className="h-7 px-2 text-xs text-primary-foreground/60 hover:text-primary-foreground"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setIsExpanded((prev) => !prev)}
             >
               {isExpanded ? 'Show less' : 'Show more'}
@@ -5455,7 +5463,7 @@ const ThoughtCard = ({
       left={
         <Fragment>
           <Sparkles className="h-3.5 w-3.5 flex-none shrink-0 text-muted-foreground" />
-          <span className="text-[13px] font-semibold leading-tight text-muted-foreground">
+          <span className="text-[13px] font-medium leading-snug text-muted-foreground">
             Agent thinking
           </span>
         </Fragment>
@@ -5480,12 +5488,12 @@ const PlanBlock = ({
   entries: PlanEntryItem[];
   fontSize: ConversationFontSize;
 }) => (
-  <div className="space-y-2 rounded-lg border border-border/70 bg-background/80 p-2.5">
-    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+  <div className="space-y-3 rounded-xl border border-border/40 bg-background/80 p-4">
+    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
       <ListChecks className="h-4 w-4" />
       Plan
     </div>
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       {entries.map((entry, index) => (
         <PlanEntryRow key={`${entry.content}-${index}`} entry={entry} fontSize={fontSize} />
       ))}
@@ -5755,10 +5763,10 @@ const PlanEntryRow = ({
     PRIORITY_META[String(entry.priority) as keyof typeof PRIORITY_META] ?? PRIORITY_META.medium;
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-background/60 p-2.5">
+    <div className="flex flex-col gap-1 rounded-lg bg-foreground/[0.03] px-3 py-2.5">
       <div className="flex items-center justify-between gap-1.5">
         <div
-          className="flex items-center gap-1.5 font-medium"
+          className="flex min-w-0 items-center gap-2 leading-relaxed"
           style={conversationTextFontSizeStyle(fontSize)}
         >
           <StatusIcon className={cn('h-4 w-4 flex-none shrink-0', statusMeta.className)} />
@@ -5766,7 +5774,7 @@ const PlanEntryRow = ({
         </div>
         <Badge
           variant="outline"
-          className={cn('text-[10px] font-semibold uppercase', priorityMeta.className)}
+          className={cn('shrink-0 text-[10px] font-medium', priorityMeta.className)}
         >
           {priorityMeta.label}
         </Badge>
@@ -6074,12 +6082,13 @@ const ToolCallCard = memo(function ToolCallCard({
         >
           <KindIcon className={kindIconClass} />
           {isFileAction && fileName ? (
-            <div className="flex min-w-0 items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
               <span
                 className={cn(
                   isActivityRow
                     ? ACTIVITY_STEP_TITLE_CLASS
-                    : 'text-[13px] font-semibold leading-tight'
+                    : 'text-[13px] font-medium leading-snug',
+                  'flex-none whitespace-nowrap'
                 )}
               >
                 {kindMeta?.label ?? title}
@@ -6133,7 +6142,7 @@ const ToolCallCard = memo(function ToolCallCard({
                   ? ACTIVITY_STEP_TITLE_CLASS
                   : isTerminalExecuteToolCall
                     ? 'text-xs font-medium'
-                    : 'text-[13px] font-semibold leading-tight'
+                    : 'text-[13px] font-medium leading-snug'
               )}
             />
           )}

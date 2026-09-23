@@ -4,18 +4,10 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  AGENT_ROLE_VERSION,
   SESSION_FILE_MAX_COUNT,
   TASK_LABEL_MAX_COUNT,
   getSessionRoomId,
-  workspaceFlockKeys,
-  type AgentConfigId,
-  type AgentRole,
-  type AgentRoleId,
-  type MachineId,
   type SessionId,
-  type SessionTurnInputConfig,
-  type WorkspaceId,
 } from '@molly/shared';
 import {
   LocalDaemonAvailabilityError,
@@ -68,10 +60,7 @@ const {
   buildMcpCreateOptions,
   bindMcpCreateContext,
   buildMcpTurnDispatchConfig,
-  composeAgentRolePrompt,
-  loadWorkspaceAgentRoleCatalog,
   resolveMcpSessionCreate,
-  buildResolvedMcpCreateCanonicalCommand,
   buildOperationTargetCancelArgs,
   summarizeAgentConfig,
   getSessionContext,
@@ -91,21 +80,6 @@ const createMcpContext = (): ReturnType<typeof getSessionContext> => ({
   localControlSocketPath: '/tmp/lody-control.sock',
   workdir: '/tmp/workspace',
   taskToolsEnabled: false,
-});
-
-const agentRole = (overrides: Partial<AgentRole> = {}): AgentRole => ({
-  v: AGENT_ROLE_VERSION,
-  id: 'reviewer' as AgentRoleId,
-  ownerUserId: 'user-1',
-  visibility: 'private',
-  name: 'Reviewer',
-  machineId: 'remote-machine' as MachineId,
-  agentConfigId: 'claude-opus' as AgentConfigId,
-  runConfig: {},
-  revision: 7,
-  createdAt: 1,
-  updatedAt: 1,
-  ...overrides,
 });
 
 describe('shared Operation store path', () => {
@@ -546,31 +520,6 @@ describe('session MCP input schemas', () => {
     ).toBe(false);
   });
 
-  it('accepts Agent Role creates even when callers include Role-owned overrides', () => {
-    expect(
-      SessionCreateToolInputSchema.safeParse({
-        operationId: 'role-review-1',
-        prompt: 'review this',
-        agentRoleId: 'reviewer',
-      }).success
-    ).toBe(true);
-    expect(
-      SessionCreateToolInputSchema.safeParse({
-        operationId: 'role-review-1',
-        prompt: 'review this',
-        agentRoleId: 'reviewer',
-        modelId: 'opus',
-      }).success
-    ).toBe(true);
-    expect(
-      SessionCreateManyToolInputSchema.safeParse({
-        operationId: 'role-review-many-1',
-        defaults: { agentRoleId: 'reviewer' },
-        items: [{ prompt: 'one' }, { prompt: 'two', reasoningEffort: 'high' }],
-      }).success
-    ).toBe(true);
-  });
-
   it.each([{ mcpServerIds: [] }, { mcpServerIds: ['synthetic-causal-mcp'] }])(
     'freezes ordinary create MCP selection from the invoking turn %#',
     ({ mcpServerIds }) => {
@@ -580,202 +529,36 @@ describe('session MCP input schemas', () => {
         {
           chainDepth: 0,
           frozenInputConfig: { cliType: 'builtin', agentType: 'molly', mcpServerIds },
-        },
-        { machineId: 'synthetic-machine' },
-        undefined
+        }
       );
       mcpServerIds.push('later-mcp');
       expect(resolved.dispatchConfig.mcpServerIds).toEqual(expected);
     }
   );
 
-  it('resolves an Agent Role directly from the workspace catalog', () => {
-    const role = agentRole({
-      runConfig: {
-        modeId: 'default',
-        modelId: 'opus',
-        configOptionValues: { reasoning_effort: 'medium' },
-      },
-      promptPrefix: 'Act as a careful reviewer.',
-    });
-    const frozenInputConfig: SessionTurnInputConfig = {
-      cliType: 'builtin',
-      agentType: 'molly',
-      mcpServerIds: ['synthetic-mcp'],
-    };
-    const resolved = resolveMcpSessionCreate(
-      {
-        operationId: 'role-review-1',
-        prompt: 'Review the current diff.',
-        agentRoleId: 'reviewer',
-        machineId: 'manual-machine',
-        agentConfigId: 'manual-agent',
-        modelId: 'manual-model',
-        reasoningEffort: 'high',
-        useCurrentSessionAsParent: false,
-      },
-      { chainDepth: 0, frozenInputConfig },
-      {
-        machineId: 'current-machine',
-        project: { kind: 'github', repoFullName: 'loro-dev/lody-oss', branch: 'feature/roles' },
-      },
-      role
-    );
-
-    expect(role.revision).toBe(7);
-    expect(resolved.prompt).toBe('Act as a careful reviewer.\n\nReview the current diff.');
-    expect(resolved.input).toMatchObject({
-      machineId: 'remote-machine',
-      agentConfigId: 'claude-opus',
-      useCurrentSessionAsParent: false,
-      workContext: {
-        kind: 'github',
-        repo: 'loro-dev/lody-oss',
-        branch: 'feature/roles',
-      },
-    });
-    expect(resolved.input).not.toHaveProperty('modelId');
-    expect(resolved.input).not.toHaveProperty('reasoningEffort');
-    expect(resolved.dispatchConfig).toEqual({
-      modeId: 'default',
-      modelId: 'opus',
-      configOptionValues: { reasoning_effort: 'medium' },
-      taskToolsEnabled: false,
-      mcpServerIds: ['synthetic-mcp'],
-      inheritSessionDefaults: false,
-    });
-    expect(buildResolvedMcpCreateCanonicalCommand(resolved)).toMatchObject({
-      prompt: 'Act as a careful reviewer.\n\nReview the current diff.',
-      agentRoleId: 'reviewer',
-      agentRoleRevision: 7,
-      machineId: 'remote-machine',
-      agentConfigId: 'claude-opus',
-    });
-  });
-
-  it('freezes only the migrated Role config, never its legacy backup or native options', () => {
-    const legacy = agentRole({
-      promptPrefix: 'Legacy-only prompt',
-      runConfig: {
-        modelId: 'legacy-model',
-        modeId: 'skip-permissions',
-        configOptionValues: { legacy_option: 'historical-only' },
-      },
-    });
-    const migrated = agentRole({
-      agentConfigId: 'molly-config' as AgentRole['agentConfigId'],
-      revision: 8,
-      promptPrefix: 'Current explicit prompt',
-      runConfig: {
-        modelId: 'molly-model:synthetic-connection/synthetic-model',
-        configOptionValues: { reasoning_effort: 'high' },
-      },
-      embeddedMigration: { v: 1, migratedAt: 10, source: legacy },
-    });
-    const resolved = resolveMcpSessionCreate(
-      {
-        operationId: 'synthetic-migrated-role',
-        prompt: 'Synthetic task',
-        agentRoleId: migrated.id,
-      },
-      { chainDepth: 0, frozenInputConfig: {} as SessionTurnInputConfig },
-      { machineId: migrated.machineId },
-      migrated
-    );
-    expect(resolved.dispatchConfig).toEqual({
-      ...migrated.runConfig,
-      taskToolsEnabled: false,
-      mcpServerIds: [],
-      inheritSessionDefaults: false,
-    });
-    expect(buildResolvedMcpCreateCanonicalCommand(resolved)).toMatchObject({
-      agentConfigId: 'molly-config',
-      agentRoleRevision: 8,
-      prompt: 'Current explicit prompt\n\nSynthetic task',
-    });
-    expect(JSON.stringify(buildResolvedMcpCreateCanonicalCommand(resolved))).not.toContain(
-      'legacy'
-    );
-    expect(legacy.runConfig.modeId).toBe('skip-permissions');
-  });
-
-  it('loads Role rows from the workspace catalog without a Turn authorization record', async () => {
-    const role = agentRole();
-    const syncFlockDocOrThrow = vi.fn(async () => undefined);
-    const openFlockDoc = vi.fn(async () => ({
-      flock: {
-        scan: ({ prefix }: { prefix?: readonly unknown[] } = {}) =>
-          prefix?.[0] === 'agentRole'
-            ? [{ key: workspaceFlockKeys.agentRole(role.id), value: role }]
-            : [],
-      },
-    }));
-    const manager = {
-      syncFlockDocOrThrow,
-      repo: { openFlockDoc },
-    } as unknown as LoroDocumentManager;
-
-    const catalog = await loadWorkspaceAgentRoleCatalog(manager, 'workspace-id' as WorkspaceId);
-
-    expect(catalog.get(role.id)).toEqual(role);
-    expect(syncFlockDocOrThrow).toHaveBeenCalledWith('workspace-id:wf:workspace', {
-      timeoutMs: 10_000,
-      reason: 'mcp-agent-role-read',
-    });
-  });
-
-  it('keeps Local Project Role execution on its Machine and defaults to a child Session', () => {
-    const frozenInputConfig = {} as SessionTurnInputConfig;
-    const role = agentRole({
-      id: 'implementer' as AgentRoleId,
-      name: 'Implementer',
-      machineId: 'local-machine' as MachineId,
-      agentConfigId: 'codex' as AgentConfigId,
-      revision: 1,
-    });
-    const input = {
-      operationId: 'role-implement-1',
-      prompt: 'Implement this.',
-      agentRoleId: 'implementer',
-    } as const;
+  it('rejects retired Role arguments for new single and batch creates', () => {
+    const single = { operationId: 'synthetic-create', prompt: 'Synthetic task' };
+    expect(SessionCreateToolInputSchema.safeParse(single).success).toBe(true);
     expect(
-      resolveMcpSessionCreate(
-        input,
-        { chainDepth: 0, frozenInputConfig },
-        {
-          machineId: 'local-machine',
-          project: { kind: 'local', localProjectId: 'project-id', useWorktree: true },
-        },
-        role
-      ).input.useCurrentSessionAsParent
+      SessionCreateToolInputSchema.safeParse({ ...single, agentRoleId: 'retired-role' }).success
+    ).toBe(false);
+    for (const request of [
+      {
+        operationId: 'synthetic-batch',
+        defaults: { agentRoleId: 'retired-role' },
+        items: [{ prompt: 'Synthetic task' }],
+      },
+      {
+        operationId: 'synthetic-batch',
+        items: [{ prompt: 'Synthetic task', agentRoleId: 'retired-role' }],
+      },
+    ]) {
+      expect(SessionCreateManyToolInputSchema.safeParse(request).success).toBe(false);
+    }
+    expect(
+      SessionCreateToolInputSchema.safeParse({ operationId: 'previously-accepted', resume: true })
+        .success
     ).toBe(true);
-    expect(() =>
-      resolveMcpSessionCreate(
-        input,
-        { chainDepth: 0, frozenInputConfig },
-        {
-          machineId: 'different-machine',
-          project: { kind: 'local', localProjectId: 'project-id', useWorktree: true },
-        },
-        role
-      )
-    ).toThrow(/Local Project's Machine/);
-    expect(composeAgentRolePrompt('  ', 'Implement this.')).toBe('Implement this.');
-  });
-
-  it('requires only that the Role id exists in the workspace catalog', () => {
-    expect(() =>
-      resolveMcpSessionCreate(
-        {
-          operationId: 'missing-role',
-          prompt: 'Review this.',
-          agentRoleId: 'reviewer',
-        },
-        { chainDepth: 0, frozenInputConfig: {} },
-        { machineId: 'current-machine', project: undefined },
-        undefined
-      )
-    ).toThrow(/does not exist in the workspace catalog/);
   });
 
   it('defers run config to capability resolution instead of guessing ACP option ids', () => {

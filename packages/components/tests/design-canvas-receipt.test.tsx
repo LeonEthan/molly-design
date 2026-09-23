@@ -160,8 +160,8 @@ it('a committed receipt cannot release the authoritative processing lock', async
   );
   state.history = [receipt('new')];
   await render();
-  const save = [...container.querySelectorAll('button')].find((b) =>
-    b.textContent?.includes('Save version')
+  const save = [...container.querySelectorAll('button')].find(
+    (b) => b.getAttribute('aria-label') === 'Save version'
   )!;
   expect(save.disabled).toBe(true);
   await act(async () => finish());

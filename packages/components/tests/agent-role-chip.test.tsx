@@ -37,8 +37,8 @@ vi.mock('../src/components/mentions/mention-session-source', async (importOrigin
   useSessionMentionItems: () => [],
 }));
 
-// The real hook reads the visible-machine index, which needs the authenticated
-// Convex context; the composer tests stub it the same way.
+// A stale catalog can still contain Roles, but the retired composer source must
+// not use it to decorate or reactivate a saved draft token.
 vi.mock('../src/components/mentions/mention-agent-role-source', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useAgentRoleMentionItems: () => agentRoleItems,
@@ -67,7 +67,7 @@ const role = (emoji?: string): AgentRole => ({
   updatedAt: 1,
 });
 
-describe('agent role chip in the composer', () => {
+describe('retired Role ranges in the composer', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
 
@@ -104,20 +104,23 @@ describe('agent role chip in the composer', () => {
     return container as HTMLDivElement;
   };
 
-  it('paints the role own emoji over the committed token', async () => {
+  it('preserves the saved token without resolving the catalog emoji', async () => {
     agentRoleItems = [{ slug: 'Code-Reviewer', role: role('🔍') }];
     const view = await renderComposer();
-    expect(view.textContent).toContain('🔍');
+    expect(view.querySelector('textarea')?.value).toBe('ping @Code-Reviewer now');
+    expect(view.textContent).not.toContain('🔍');
   });
 
-  it('falls back to the shared default glyph for a role with no emoji', async () => {
+  it('does not restore the default Role glyph from a stale catalog row', async () => {
     agentRoleItems = [{ slug: 'Code-Reviewer', role: role() }];
     const view = await renderComposer();
-    expect(view.textContent).toContain(DEFAULT_AGENT_ROLE_EMOJI);
+    expect(view.querySelector('textarea')?.value).toBe('ping @Code-Reviewer now');
+    expect(view.textContent).not.toContain(DEFAULT_AGENT_ROLE_EMOJI);
   });
 
   it('paints nothing role-specific for a role the composer no longer offers', async () => {
     const view = await renderComposer();
+    expect(view.querySelector('textarea')?.value).toBe('ping @Code-Reviewer now');
     expect(view.textContent).not.toContain(DEFAULT_AGENT_ROLE_EMOJI);
   });
 });

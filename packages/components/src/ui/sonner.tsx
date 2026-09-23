@@ -1,5 +1,15 @@
 import { Toaster as Sonner, ToasterProps } from 'sonner';
 import { useResolvedTheme } from '@/theme-provider';
+import { CircleCheck, CircleX, Info, LoaderCircle, TriangleAlert, X } from './icons';
+
+const TOASTER_ICONS = {
+  success: <CircleCheck className="h-4 w-4" />,
+  info: <Info className="h-4 w-4" />,
+  warning: <TriangleAlert className="h-4 w-4" />,
+  error: <CircleX className="h-4 w-4" />,
+  loading: <LoaderCircle className="h-4 w-4 animate-spin" />,
+  close: <X className="h-3.5 w-3.5" />,
+} satisfies NonNullable<ToasterProps['icons']>;
 
 const TOASTER_OFFSET = {
   top: 'calc(24px + env(safe-area-inset-top, 0px))',
@@ -14,8 +24,7 @@ const MOBILE_TOASTER_OFFSET = {
  * class below). `-mr-5` gives back the close button's `pr-9` lane so the button
  * sits symmetrically inside the toast padding.
  */
-const TOAST_BUTTON_CLASS_NAME =
-  'mt-2.5! ml-0! -mr-5! h-7! basis-full! justify-center! rounded-md!';
+const TOAST_BUTTON_CLASS_NAME = 'mt-2.5! ml-0! -mr-5! h-7! basis-full! justify-center! rounded-md!';
 
 const Toaster = ({
   closeButton = true,
@@ -24,6 +33,7 @@ const Toaster = ({
   mobileOffset = MOBILE_TOASTER_OFFSET,
   style,
   toastOptions,
+  icons,
   ...props
 }: ToasterProps) => {
   // The app resolves light/dark itself (`ThemeProvider`), so Sonner must be told
@@ -39,6 +49,7 @@ const Toaster = ({
       theme={resolvedTheme}
       className="toaster group"
       closeButton={closeButton}
+      icons={{ ...TOASTER_ICONS, ...icons }}
       position={position}
       offset={offset}
       mobileOffset={mobileOffset}
@@ -83,8 +94,7 @@ const Toaster = ({
           // elevated `color-mix` (same recipe as the app's dropdown surfaces in
           // `menu-styles.ts`) so the toast stays distinct from the page even in
           // themes where `--popover` equals `--background` (e.g. light mode).
-          '--normal-bg':
-            'color-mix(in oklab, hsl(var(--popover)) 92%, hsl(var(--foreground)) 8%)',
+          '--normal-bg': 'color-mix(in oklab, hsl(var(--popover)) 92%, hsl(var(--foreground)) 8%)',
           '--normal-text': 'hsl(var(--popover-foreground))',
           '--normal-border': 'hsl(var(--border))',
           // Cancel Sonner's default corner-float transform so the close button

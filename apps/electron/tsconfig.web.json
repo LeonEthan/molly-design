@@ -19,6 +19,7 @@
       "react": ["./node_modules/@types/react"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime"],
       "react/jsx-dev-runtime": ["./node_modules/@types/react/jsx-dev-runtime"],
+      "lucide-react": ["../../packages/components/src/ui/icons.tsx"],
       "@molly/components": ["../../packages/components/src"],
       "@molly/components/*": ["../../packages/components/src/*"],
       "@/ui": ["../../packages/components/src/ui"],

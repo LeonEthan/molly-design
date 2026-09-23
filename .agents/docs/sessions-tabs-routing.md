@@ -62,34 +62,23 @@ this page is the full text of the rules summarised there.
     pills land on 8 (2 + (44 − 32) / 2). Changing the row height, the pill height,
     or the cards' `mt-2` silently breaks that line — re-derive it, and measure
     with `getBoundingClientRect`, don't eyeball.
-    **One canvas, and the ACTIVE tab is the heaviest thing in the row.**
-    `bg-background` runs unbroken from this bar down through the message list and
-    out to the frame; tabs sit ON that canvas and must not break it (do not give
-    the bar row its own strip color). The active tab wears the app's
-    floating-panel material — `bg-sidebar` + `border-sidebar-border/80` + the same
-    drop shadow as the side panel / terminal dock — so "the one in a box" reads as
-    the current page. Inactive tabs get a flat borderless wash
-    (`bg-muted-foreground/[0.07]`) + dimmed text. Keep that weight order: among
-    siblings in a row the eye scores chrome as selected, so anything that gives
-    inactive tabs MORE chrome than the active one reads inverted (tried it — the
-    active tab then looks like a static heading). A `solo` tab spans the row and
-    therefore drops the fill; a full-width pill would paint the whole bar.
-    **Keep the surface ladder ordered — canvas → inactive → active — and MEASURE
-    it (`getComputedStyle`), don't eyeball the token names.** Light gets that
-    ladder from `bg-sidebar` for free (canvas 241 → active 229). Dark does not, so
-    the active pill carries `dark:bg-muted-foreground/[0.18]` +
-    `dark:border-muted-foreground/[0.24]`: Vesper's `sideBar.background` is
-    `#161616`, only 6 above the `#101010` canvas AND below the inactive wash (26),
-    so `bg-sidebar` alone rendered the active tab as a dent with only its border
-    holding it up. The override lands 16 → 26 → 42, border 70. Do NOT reach for
-    `--tab-active` / `--tab-inactive` / `bg-tab-active`: both collapse onto
-    `--background` in dark (Vesper `tab.inactiveBackground` == `editor.background`),
-    which is why the original `/[0.22]` vs `/[0.12]` tints existed — a 10% gap that
-    rendered as one gray and was the actual cause of "I can't tell which tab is
-    active". Two alpha tints of one color are fine per se; the gap and the ordering
-    are what matter. Text hierarchy DOES resolve in both themes — keep
-    `--tab-*-foreground`. `session-side-panel-tab-bar.tsx` still uses the old alpha
-    pills; its container is the floating card, not the canvas.
+    **One canvas, with an ordered tab surface ladder.** `bg-background` runs
+    unbroken from the strip through the conversation. Shared `tab-pill-strip.tsx`
+    uses foreground tint at 3% for inactive tabs, 5% on hover and 8% for the active
+    tab; active text is medium and inactive text normal. A transparent 1px border
+    preserves geometry, without adding an active shadow. A lone tab drops its fill.
+    The pill stays 32px high with 12px corners; the 14px leading status slot and
+    20px circular close target retain their existing priority and interaction.
+    Close controls appear on hover and keyboard focus. Side-panel tabs use the
+    same tint ladder on their own panel background and are also 32px high.
+    **Measure the composited canvas → inactive → active colors in both themes.**
+    Do not substitute `--tab-active` / `--tab-inactive`: those can collapse onto
+    the canvas background. Keep the existing `--tab-*-foreground` text tokens.
+    The 2026-09-22 Electron capture measured composited grayscale values of
+    245 → 239 → 228 in light and 30 → 37 → 48 in dark, while retaining y=8/h=32.
+    These are evidence for the captured themes, not fixed theme palette values.
+    This replaces the earlier active border/shadow treatment under the
+    [Seede visual refresh](../notes/implemented/feature/2026-09-22-seede-ui-style-direction.zh.md).
     Repo identity lives in the desktop-only `session-info-bar.tsx` glued above
     the composer (the "canonical cluster + fixed stage" bar detailed below; it
     replaced the header `PullRequestBadge` and the old `session-context-strip.tsx`)

@@ -22,26 +22,17 @@ selection, or Role creation/dispatch. These contracts bind all producers and con
   document and selected ids in each user turn input config. Do not add machine bindings.
   Preserve `mcpServerIds: []` as an explicit empty selection; dispatch must carry the
   driving turn's selection into ACP startup rather than rereading session history.
-- MCP/Role writes resolve on local Flock durability, then upload. Settings neither
+- MCP writes resolve on local Flock durability, then upload. Settings neither
   await nor report upload; its failure cannot fail or roll back the write. CLI
   reports sync results. See
   [catalog explanation](../../.agents/docs/workspace-catalog-durability.md).
-- Roles share one Flock `agentRole` family; sharing changes `visibility`. Exclude
-  secrets, API keys, MCP selections and memory; apply
-  `isSensitiveAgentRoleConfigOptionKey` on read/write. Permission pins
-  (`runConfig.modeId`/`_permission`) hide the composer permission button but retain
-  visible warning modes. Role-level auto-approval policy stays out of scope.
-  Settings/mentions use `canReadAgentRole`/`canManageAgentRole`; MCP resolves explicit
-  catalog ids without mention-scoped authorization.
-- Explicit Role migration commits an immutable, normalized source backup and the
-  new config in one row. Recheck source before writing; reject stale retries and
-  backup removal. Backup run options are history only, never execution defaults.
-- Roles bind exact `machineId + agentConfigId`, never fall back, and remain listed
-  with reasons but unmentionable for retired engines, overrides, stale catalogs or run config.
-  Before Operation acceptance, MCP resolves the current `agentRoleId` row and freezes
-  canonical Prompt, target, Role revision, and dispatch config into the Operation;
-  edits/deletion cannot change recovery or retry. `SessionMeta.agentRoleId` and
-  `agentRoleRevision` are display-only creation provenance.
+- Agent Roles are retired from product selection, management, mentions and new
+  MCP session creation. Renderer writes to the `agentRole` family fail with
+  `agent_roles_retired`; new MCP create schemas reject Role arguments. Preserve
+  stored rows, frozen transcript spans and historical Session/Turn provenance.
+  Recovery of already accepted Operations uses their frozen canonical payload;
+  it neither resolves a mutable Role nor starts a retired harness. See the
+  [retirement decision](../../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md).
 
 ## Embedded harness credentials
 

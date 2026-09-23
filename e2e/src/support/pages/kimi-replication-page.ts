@@ -15,7 +15,7 @@ export class KimiReplicationPage {
   ): Promise<void> {
     const page = this.page;
     const runConfiguration = page.getByRole('button', {
-      name: 'Run configuration',
+      name: 'Provider and model',
       exact: true,
     });
     await expect
@@ -23,7 +23,9 @@ export class KimiReplicationPage {
         async () => {
           await page.keyboard.press('Escape');
           await runConfiguration.click();
-          await page.getByRole('menuitem', { name: new RegExp(`^${section} `) }).click();
+          if (section === 'Reasoning') {
+            await page.getByRole('menuitem', { name: /^Reasoning / }).click();
+          }
           const option = page.getByRole('menuitemradio', { name: choice, exact: true });
           if (!(await option.isVisible())) return false;
           try {
@@ -73,7 +75,7 @@ export class KimiReplicationPage {
     await expect(page.locator('#chat-prompt')).toBeEditable({ timeout: 120_000 });
     await this.selectRunConfigurationChoice('Model', 'K3');
     await this.selectRunConfigurationChoice('Reasoning', 'Thinking High');
-    await expect(page.getByRole('button', { name: 'Run configuration', exact: true })).toHaveText(
+    await expect(page.getByRole('button', { name: 'Provider and model', exact: true })).toHaveText(
       /K3\s*·?\s*Thinking High/
     );
   }

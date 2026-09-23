@@ -3,32 +3,13 @@
 import { act, createElement, createRef, type RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AgentRole, AgentRoleId, SessionMeta, SessionInputBlock } from '@molly/shared';
-
-const sessionAgentRoleState = vi.hoisted(() => ({
-  control: {
-    items: [],
-    selectedRoleId: null,
-    onSelect: () => undefined,
-  } as {
-    items: Array<{ role: AgentRole; availability: { kind: 'available' } }>;
-    selectedRoleId: AgentRoleId | null;
-    onSelect: (roleId: AgentRoleId | null) => void;
-  },
-}));
+import type { AgentRoleId, SessionMeta, SessionInputBlock } from '@molly/shared';
 
 vi.mock('@posthog/react', () => ({ usePostHog: () => null }));
 
 vi.mock('../src/components/mentions/mention-session-source', async (importOriginal) => ({
   ...(await importOriginal()),
   useSessionMentionItems: () => [],
-}));
-
-// Agent Roles read the visible-machine index, which needs the authenticated
-// Convex context; the same reason the session source above is stubbed.
-vi.mock('../src/components/mentions/mention-agent-role-source', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useAgentRoleMentionItems: () => [],
 }));
 
 vi.mock('../src/components/sessions/desktop-run-config-menu', async () => {
@@ -39,9 +20,6 @@ vi.mock('../src/components/sessions/desktop-run-config-menu', async () => {
     DesktopRunConfigMenu: () => null,
   };
 });
-vi.mock('../src/hooks/use-session-agent-role', () => ({
-  useSessionAgentRole: () => sessionAgentRoleState.control,
-}));
 vi.mock('../src/components/sessions/session-usage-popover', () => ({
   SessionUsagePopover: () => null,
 }));
@@ -82,11 +60,6 @@ describe('SessionChatInputArea submission feedback', () => {
   let container: HTMLDivElement | null = null;
 
   beforeEach(async () => {
-    sessionAgentRoleState.control = {
-      items: [],
-      selectedRoleId: null,
-      onSelect: () => undefined,
-    };
     await initI18n('en');
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
@@ -103,30 +76,7 @@ describe('SessionChatInputArea submission feedback', () => {
     });
   });
 
-  const renderPermissionModeCase = async (runConfig: AgentRole['runConfig']) => {
-    const selectedRoleId = 'role-1' as AgentRoleId;
-    sessionAgentRoleState.control = {
-      items: [
-        {
-          role: {
-            v: 1,
-            id: selectedRoleId,
-            revision: 1,
-            name: 'Reviewer',
-            visibility: 'private',
-            ownerUserId: 'user-1',
-            machineId: 'machine-1',
-            agentConfigId: 'agent-1',
-            runConfig,
-            createdAt: 1,
-            updatedAt: 1,
-          } as AgentRole,
-          availability: { kind: 'available' },
-        },
-      ],
-      selectedRoleId,
-      onSelect: () => undefined,
-    };
+  const renderPermissionModeCase = async (agentRoleId?: AgentRoleId) => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -136,6 +86,8 @@ describe('SessionChatInputArea submission feedback', () => {
         createElement(SessionChatInputArea, {
           session: {
             id: 'session-role-permission',
+            agentRoleId,
+            agentRoleRevision: agentRoleId ? 1 : undefined,
             userId: 'user-1',
             machineId: 'machine-1',
             agentConfigId: 'agent-1',
@@ -164,17 +116,15 @@ describe('SessionChatInputArea submission feedback', () => {
     });
   };
 
-  it('hides the desktop permission button when the selected Role pins permission', async () => {
-    await renderPermissionModeCase({ modeId: 'ask' });
-    expect(container.querySelector('[data-testid="desktop-permission-mode-button"]')).toBeNull();
-  });
-
-  it('keeps the desktop permission button when the selected Role does not pin it', async () => {
-    await renderPermissionModeCase({});
-    expect(
-      container.querySelector('[data-testid="desktop-permission-mode-button"]')
-    ).not.toBeNull();
-  });
+  it.each([undefined, 'historical-role' as AgentRoleId])(
+    'keeps permission editable with historical Role provenance %s',
+    async (agentRoleId) => {
+      await renderPermissionModeCase(agentRoleId);
+      expect(
+        container.querySelector('[data-testid="desktop-permission-mode-button"]')
+      ).not.toBeNull();
+    }
+  );
 
   it('does not submit against transient run-config defaults while the Session doc hydrates', async () => {
     const onSendMessage = vi.fn(async () => true);
@@ -201,7 +151,7 @@ describe('SessionChatInputArea submission feedback', () => {
           isAgentBusy: false,
           isDark: false,
           isEmptyConversation: false,
-          durableAgentRoleReady: false,
+          sessionConfigReady: false,
           selectedModeId: null,
           selectedModelId: 'provider-default',
           modeOptions: [],

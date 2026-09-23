@@ -1,7 +1,7 @@
 # Molly embedded Pi harness
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval (before Role retirement): [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [中文](molly-embedded-pi-harness.zh.md)
@@ -40,7 +40,7 @@ This is a follow-up revision proposal to the multi-Agent selection and CLI boots
 18. As a user, I want unknown paid-operation results to remain identifiable without automatic resubmission, so that reconnection does not silently charge me again.
 19. As a returning user, I want old artworks, assets and conversation history preserved, so that migration does not discard my work.
 20. As a returning user, I want an explicit action to continue an old design with the built-in engine, so that historical runtime identities are not silently reused.
-21. As a user of an old Role, I want migration to preserve its origin and usable preferences, so that it cannot secretly restart a retired CLI.
+21. As a returning user, I want Role selection and execution retired while its historical records remain readable, so that new work uses explicit model and reasoning choices.
 22. As a local Pi user, I want Molly to leave my separate configuration and installation untouched, so that adopting Molly does not disrupt other tools.
 23. As a user receiving this delivery, I want a runnable package and concise supported-capability notes, so that I know what I can use and what remains deferred.
 
@@ -55,7 +55,7 @@ The existing embedded worker, ACP, connections and credentials, MCP, image impor
 | R1    | Installer startup and delivery       | Resolve the packaged Helper startup timeout, produce the macOS arm64 local installer; an app installed from the package starts the embedded engine without relying on global Pi/Node and without a first-launch harness download; resources and version identity are consistent.                              |
 | R2    | One complete design journey          | Using the explicitly configured Kimi k3-256k/high and an image service, complete on the same artwork: creation, image generation, basic image edit and apply, continue after manual edits, save, export, reopen and continue; do not build another poster/infographic/long-image permutation matrix.          |
 | R3    | Settings and key interaction wrap-up | During the journey above, check connection/model selection, necessary error messages, cancellation and the preinstalled Q&A; the user can configure and operate, and unverified capabilities carry no full-support promise. Prefer reusing the existing UI and permission flows.                              |
-| R4    | Old-data continuation                | Actually walk through one old design-session continuation and one old Role migration; provenance and old data are preserved, and continuation lands on the embedded Pi. Backup, re-entry and the gates on all old execution entries reuse existing regression coverage instead of re-permuting every failure. |
+| R4    | Old-data continuation                | Actually walk through one old design-session continuation and confirm Role entry points are retired; provenance and old data are preserved, and continuation lands on the embedded Pi. Backup, re-entry and the gates on all old execution entries reuse existing regression coverage instead of re-permuting every failure. |
 | R5    | Delivery notes and final checks      | Provide the installer, concise configuration instructions, support status and known limitations; complete the checks related to the final changes and the repository's required delivery/commit checks. Existing unrelated failures are listed independently, not masked by deleting assertions.              |
 
 R1 → R2 is the critical path; R3 is embedded in R2, then R4 and R5 complete. Newly found real defects are reproduced minimally before fixing; scope does not grow over conveniently spotted optimizations. Only when R1–R5 all have corresponding evidence and there are no unresolved core-functionality, security or data-corruption issues may this convergence delivery be recorded as complete; the deferred parts of the original plan are not claimed as done.
@@ -116,6 +116,8 @@ Recovery rebuilds only persisted facts. A task provably not yet dispatched may c
 Design commits continue to independently validate schema, kernel replay, assets, trusted provenance and the current version; failures preserve the canonical, the drafts and the diagnostics. No new artifact can be a legitimate Q&A answer. No candidate approvals, read proofs, mandatory finalize calls, automatic repair or new history stores are added.
 
 ### Migration and support boundaries
+
+Role selection, creation, management, migration, `@` expansion and new programmatic-create arguments are retired. New work selects its connection, model and reasoning directly. Stored Role rows and historical provenance remain readable but are not reapplied to new messages. Already accepted Operations recover their frozen configuration. See the [Role retirement decision](../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md). This scope change returns this Spec to draft; the previous approval does not cover this revision.
 
 Canvases, assets, drafts, chats and history are preserved in place. Old AgentConfig/Role entries keep their provenance and are not executable; when the user explicitly chooses "continue this design with Molly", a new Pi context is created carrying the explicit historical context and trusted assets. Old tool records serve only as historical data — they are not executed, and no cross-harness native identity is forged.
 

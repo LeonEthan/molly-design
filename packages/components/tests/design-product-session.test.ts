@@ -30,9 +30,12 @@ it('prevents double-click editing while readonly and restores it when unlocked',
   const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
   const text = document.createElement('div');
   text.textContent = 'Saved title';
-  text.addEventListener('dblclick', () => { text.contentEditable = 'true'; });
+  text.addEventListener('dblclick', () => {
+    text.contentEditable = 'true';
+  });
   document.body.append(text);
-  const doubleClick = () => text.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+  const doubleClick = () =>
+    text.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
 
   doubleClick();
   expect(text.contentEditable).not.toBe('true');
@@ -43,6 +46,152 @@ it('prevents double-click editing while readonly and restores it when unlocked',
   api.setReadonly(true);
   doubleClick();
   expect(text.contentEditable).toBe('false');
+});
+
+it('disables dock mutations and closes an open shape menu while readonly, then restores editing', async () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  let content = 'initial';
+  const history = document.createElement('div');
+  history.className = 'ed-group-history';
+  for (const value of ['undone', 'redone']) {
+    const button = document.createElement('button');
+    button.onclick = () => {
+      content = value;
+    };
+    history.append(button);
+  }
+  document.body.append(history);
+  const ready = new Promise<void>((resolve) =>
+    window.addEventListener('molly:ready', () => resolve(), { once: true })
+  );
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({ content }),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: (payload) => {
+      content = JSON.stringify(payload);
+    },
+    pickImageFile: () => {
+      content = 'image picker opened';
+    },
+  });
+  await ready;
+  const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
+  const dock = document.querySelector('.molly-dock')!;
+  const buttons = [...dock.querySelectorAll<HTMLButtonElement>('button')];
+  const mutationButtons = buttons.filter((button) => !button.classList.contains('on'));
+  const shape = dock.querySelector<HTMLButtonElement>('[aria-label="形状 / Shape"]')!;
+  const popup = document.querySelector('.molly-shape-popup')!;
+  expect(mutationButtons.every((button) => button.disabled)).toBe(true);
+  expect(buttons[0].disabled).toBe(false);
+  for (const button of mutationButtons) button.click();
+  expect(content).toBe('initial');
+  expect(popup.classList.contains('open')).toBe(false);
+
+  api.setReadonly(false);
+  expect(mutationButtons.every((button) => !button.disabled)).toBe(true);
+  shape.click();
+  expect(popup.classList.contains('open')).toBe(true);
+  const retainedShapeItem = popup.querySelector<HTMLButtonElement>('button')!;
+  api.setReadonly(true);
+  expect(popup.classList.contains('open')).toBe(false);
+  expect(mutationButtons.every((button) => button.disabled)).toBe(true);
+  for (const button of mutationButtons) button.click();
+  retainedShapeItem.click();
+  expect(content).toBe('initial');
+  expect(popup.classList.contains('open')).toBe(false);
+
+  api.setReadonly(false);
+  shape.click();
+  popup.querySelector<HTMLButtonElement>('button')!.click();
+  expect(JSON.parse(content)).toEqual({ verb: 'add-element', kind: 'shape', shapeName: 'rect' });
+  dock.querySelector<HTMLButtonElement>('[aria-label="撤销 / Undo (⌘Z)"]')!.click();
+  expect(content).toBe('undone');
+  dock.querySelector<HTMLButtonElement>('[aria-label="重做 / Redo (⇧⌘Z)"]')!.click();
+  expect(content).toBe('redone');
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('preserves the full status message for accessible and hover text when the pill is truncated', () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+  });
+  const api = (
+    window as unknown as { molly: { setReadonly(value: boolean, message?: string): void } }
+  ).molly;
+  const status = document.getElementById('autosave-status')!;
+  const message = '正在处理画布，暂时只读 / Processing canvas, read-only';
+  api.setReadonly(true, message);
+  expect(status.textContent).toBe(message);
+  expect(status.title).toBe(message);
+  expect(status.getAttribute('aria-label')).toBe(message);
+  api.setReadonly(false);
+  expect(status.textContent).toBe('已自动保存');
+  expect(status.title).toBe('已自动保存');
+  expect(status.getAttribute('aria-label')).toBe('已自动保存');
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('preserves the native zoom controls and live percentage while replacing their glyphs', () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  const bar = document.createElement('div');
+  bar.className = 'ed-zoombar';
+  bar.innerHTML =
+    '<button class="ed-zoombtn" title="Zoom out">−</button><button class="ed-zoombtn ed-zoomlabel" title="Reset zoom">100%</button><button class="ed-zoombtn" title="Zoom in">+</button>';
+  document.body.append(bar);
+  const [out, label, into] = bar.querySelectorAll<HTMLButtonElement>('button');
+  out.addEventListener('click', () => {
+    label.textContent = '80%';
+  });
+  into.addEventListener('click', () => {
+    label.textContent = '125%';
+  });
+  label.addEventListener('click', () => {
+    label.textContent = '100%';
+  });
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+  });
+  expect(out.getAttribute('aria-label')).toBe('Zoom out');
+  expect(into.getAttribute('aria-label')).toBe('Zoom in');
+  expect(label.textContent).toBe('100%');
+  out.click();
+  expect(label.textContent).toBe('80%');
+  into.click();
+  expect(label.textContent).toBe('125%');
+  label.click();
+  expect(label.textContent).toBe('100%');
+  window.dispatchEvent(new Event('pagehide'));
 });
 
 it('publishes the complete generic canvas API at the real ready boundary', async () => {

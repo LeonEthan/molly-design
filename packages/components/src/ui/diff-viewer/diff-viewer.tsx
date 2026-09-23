@@ -11,6 +11,8 @@ import {
 import type { DiffLineAnnotation, FileDiffMetadata, SupportedLanguages } from '@pierre/diffs';
 import { parseDiffFromFile } from '@pierre/diffs';
 import { useTranslation } from 'react-i18next';
+import expandIconUrl from '../../../../shared/src/ui-icons/svg/ChevronUp.svg?url';
+import expandBothIconUrl from '../../../../shared/src/ui-icons/svg/ChevronsUpDown.svg?url';
 
 import * as Collapsible from '@radix-ui/react-collapsible';
 import { ChevronDown, MessageSquare } from 'lucide-react';
@@ -49,6 +51,22 @@ import { SessionCommentAddButton } from './session-comment-add-button';
 import { isCommentableDiffLineType } from './session-comment-line';
 import { EMPTY_COMMENT_REFERENCE_KEYS } from '@/components/chat/comment-reference-state';
 import { DiffFileHeaderActions } from './diff-file-header-actions';
+
+// The public unsafeCSS slot reaches the diff's shadow root. Keep its original
+// expand elements and transforms (the base glyph points up) so direction, hit areas and events stay owned
+// by the library; replace only the sprite paint with our canonical SVG masks.
+const DIFF_OPERATION_ICON_CSS = `
+  [data-expand-button] [data-icon] {
+    background-color: currentColor;
+    mask: url("${expandIconUrl}") center / contain no-repeat;
+  }
+  [data-expand-both] [data-icon] {
+    mask-image: url("${expandBothIconUrl}");
+  }
+  [data-expand-button] [data-icon] > use {
+    display: none;
+  }
+`;
 
 /** Minimum container width (in pixels) to auto-switch to split view */
 const SPLIT_VIEW_MIN_WIDTH = 1024;
@@ -952,6 +970,7 @@ function DiffViewerImpl({
       overflow: 'wrap',
       disableFileHeader: true,
       ...(options as FileDiffProps<CommentAnnotationMeta>['options']),
+      unsafeCSS: `${DIFF_OPERATION_ICON_CSS}\n${options?.unsafeCSS ?? ''}`,
       ...(commentsEnabled
         ? {
             enableHoverUtility: !isMobile,

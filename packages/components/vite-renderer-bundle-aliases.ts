@@ -21,6 +21,10 @@ export function isMermaidRuntimeDependency(id: string): boolean {
 export function rendererBundleAliases(): Alias[] {
   return [
     {
+      find: /^lucide-react$/u,
+      replacement: fileURLToPath(new URL('./src/ui/icons.tsx', import.meta.url)),
+    },
+    {
       find: 'shiki/bundle/full',
       replacement: 'shiki',
     },

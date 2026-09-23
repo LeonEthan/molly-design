@@ -5,6 +5,23 @@ import type {
   DesignToolbarPresentation,
   DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
+import {
+  alignCenterIcon,
+  alignJustifyIcon,
+  alignLeftIcon,
+  alignRightIcon,
+  boldIcon,
+  chevronDownIcon,
+  cropIcon,
+  imagePlusIcon,
+  italicIcon,
+  paletteIcon,
+  pencilIcon,
+  referenceIcon,
+  regenerateIcon,
+  renderUiIconSvg,
+  type UiIconNode,
+} from '@molly/shared/ui-icons';
 
 const PALETTE = [
   '#000000',
@@ -46,20 +63,21 @@ export function placeToolbar(
   };
 }
 
-const paths = {
-  reference:
-    '<path d="M21 11a8 8 0 0 1-8 8H5l-4 3V11a8 8 0 0 1 8-8h4a8 8 0 0 1 8 8Z"/><path d="M6 8h10M6 12h7"/>',
-  generate:
-    '<rect x="3" y="4" width="14" height="16" rx="2"/><path d="m3 16 5-5 8 9M20 2v6M17 5h6"/>',
-  edit: '<path d="m15 4 5 5M3 21l4-1L21 6l-5-5L2 15v6Z"/>',
-  style:
-    '<path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 1-4 2 2 0 0 1 1-4h2a3 3 0 0 0 3-3c0-4-4-7-9-7Z"/><path d="M7 8h.01M12 6h.01M17 8h.01M5 13h.01"/>',
-  regenerate: '<path d="M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0 1 14-1l1 6M4 12l1 6a8 8 0 0 0 14-1"/>',
-  bold: '<path d="M6 3h7a5 5 0 0 1 0 9H6Zm0 9h8a5 5 0 0 1 0 9H6Z"/>',
-  italic: '<path d="M10 3h10M4 21h10M15 3 9 21"/>',
-  crop: '<path d="M6 2v16h16M2 6h16v16M20 2 2 20"/>',
+const icons = {
+  reference: referenceIcon,
+  generate: imagePlusIcon,
+  edit: pencilIcon,
+  style: paletteIcon,
+  regenerate: regenerateIcon,
+  bold: boldIcon,
+  italic: italicIcon,
 };
-const svg = (path: string) => `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+const alignmentIcons = {
+  left: alignLeftIcon,
+  center: alignCenterIcon,
+  right: alignRightIcon,
+  justify: alignJustifyIcon,
+};
 
 export function createSelectionToolbar(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
@@ -82,34 +100,36 @@ export function createSelectionToolbar(options: {
   const signal = controller.signal;
   const style = document.createElement('style');
   style.textContent = `
-.molly-selection-toolbar,.molly-selection-popup,.molly-selection-tooltip{--surface:#fff;--ink:#242424;--muted:#f2f2f2;--line:#e4e4e4;position:fixed;z-index:2147483100;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 5px 20px #0002;border-radius:9px;font:12px Inter,system-ui,sans-serif;box-sizing:border-box;color-scheme:light}
-[data-molly-toolbar][data-dark=true]{--surface:#262626;--ink:#ededed;--muted:#373737;--line:#464646;color-scheme:dark}
-.molly-selection-toolbar{display:flex;align-items:center;gap:2px;padding:5px;max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:thin}
+.molly-selection-toolbar,.molly-selection-popup,.molly-selection-tooltip{--surface:#fff;--ink:#242424;--muted:#f2f2f2;--line:#00000010;position:fixed;z-index:2147483100;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .12);border-radius:16px;font:12px Inter,system-ui,sans-serif;box-sizing:border-box;color-scheme:light}
+[data-molly-toolbar][data-dark=true]{--surface:#262626;--ink:#ededed;--muted:#373737;--line:#ffffff14;color-scheme:dark}
+.molly-selection-toolbar{display:flex;align-items:center;gap:3px;padding:6px;max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:thin}
 [data-molly-toolbar][hidden]{display:none!important}
 [data-molly-toolbar] button,[data-molly-toolbar] input{font:inherit;color:inherit;box-sizing:border-box}
-[data-molly-toolbar] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:5px;background:transparent;min-width:30px;height:30px;padding:0 7px;white-space:nowrap;cursor:pointer;flex:none}
+[data-molly-toolbar] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:8px;background:transparent;min-width:32px;height:32px;padding:0 8px;white-space:nowrap;cursor:pointer;flex:none}
 [data-molly-toolbar] button:hover,[data-molly-toolbar] button[aria-pressed=true],[data-molly-toolbar] button[aria-expanded=true]{background:var(--muted)}
 [data-molly-toolbar] button:disabled,[data-molly-toolbar] input:disabled{opacity:.4;cursor:default}
 [data-molly-toolbar] :focus-visible{outline:2px solid #6195ed;outline-offset:-2px}
-[data-molly-toolbar] svg{height:15px;width:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-[data-molly-toolbar] input{height:28px;min-width:0;width:51px;border:0;border-radius:4px;background:var(--muted);padding:0 5px;text-align:center}
+[data-molly-toolbar] svg{height:18px;width:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+[data-molly-toolbar] svg.caret{height:12px;width:12px;flex:none}
+[data-molly-toolbar] input{height:28px;min-width:0;width:51px;border:0;border-radius:8px;background:var(--muted);padding:0 5px;text-align:center}
 [data-molly-toolbar] input[type=number]{appearance:textfield;-moz-appearance:textfield}
 [data-molly-toolbar] input::-webkit-inner-spin-button{appearance:none}
-[data-molly-toolbar] .field{display:flex;align-items:center;gap:3px;padding:0 3px;flex:none}
-[data-molly-toolbar] .field>span{font-size:10px;opacity:.6}
-[data-molly-toolbar] .count{display:flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:4px;background:var(--ink);color:var(--surface);flex:none;margin:0 4px}
-[data-molly-toolbar] .sep{height:18px;width:1px;background:var(--line);margin:0 4px;flex:none}
+[data-molly-toolbar] .field{display:flex;align-items:center;gap:4px;padding:0 2px;flex:none}
+[data-molly-toolbar] .field>span{font-size:11px;opacity:.65}
+[data-molly-toolbar] .count{display:flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 6px;border-radius:999px;background:var(--muted);font-weight:500;flex:none;margin:0 3px}
+[data-molly-toolbar] .sep{height:18px;width:1px;background:var(--line);margin:0 5px;flex:none}
 [data-molly-toolbar] .swatch{width:17px;height:17px;border:1px solid #8886;border-radius:50%;display:block}
 .molly-selection-popup{z-index:2147483101;padding:8px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;min-width:150px}
 .molly-selection-popup .choices{display:flex;flex-direction:column;gap:2px}
-.molly-selection-popup .choices button{justify-content:flex-start;width:100%}
-.molly-selection-popup .palette{display:grid;grid-template-columns:repeat(6,26px);gap:3px;margin-bottom:8px}
-.molly-selection-popup .palette button{min-width:26px;width:26px;height:26px;padding:3px}
+.molly-selection-popup .choices button{justify-content:flex-start;width:100%;height:34px}
+.molly-selection-popup .palette{display:grid;grid-template-columns:repeat(6,28px);gap:4px;margin-bottom:10px}
+.molly-selection-popup .palette button{min-width:28px;width:28px;height:28px;padding:4px}
 .molly-selection-popup .crop-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
 .molly-selection-popup .crop-fields label{display:flex;flex-direction:column;gap:5px}
 .molly-selection-popup .crop-fields input{width:88px}
 .molly-selection-popup input[type=color]{padding:2px;width:45px;vertical-align:middle}
-.molly-selection-tooltip{z-index:2147483102;padding:6px 9px;pointer-events:none;max-width:calc(100vw - 16px)}
+.molly-selection-tooltip{z-index:2147483102;border-radius:10px;padding:7px 10px;pointer-events:none;max-width:calc(100vw - 16px)}
+.molly-selection-size{position:fixed;z-index:2147483099;box-sizing:border-box;pointer-events:none;user-select:none;white-space:nowrap;border-radius:5px;padding:2px 6px;background:#566b86;color:#fff;font:500 11px/16px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
 .molly-selection-error{color:#ef6464;max-width:220px;white-space:normal;padding:4px 8px;flex:none;font-size:11px}
 `;
   document.head.append(style);
@@ -124,7 +144,11 @@ export function createSelectionToolbar(options: {
   tooltip.dataset.mollyToolbar = '';
   tooltip.setAttribute('role', 'tooltip');
   tooltip.hidden = true;
-  document.body.append(bar, tooltip);
+  const sizeLabel = document.createElement('div');
+  sizeLabel.className = 'molly-selection-size';
+  sizeLabel.dataset.mollyToolbar = '';
+  sizeLabel.hidden = true;
+  document.body.append(bar, tooltip, sizeLabel);
   const label = (key: string, fallback: string) => presentation?.labels[key] ?? fallback;
   const closePopup = (focus = false) => {
     popup?.remove();
@@ -138,13 +162,14 @@ export function createSelectionToolbar(options: {
   };
   function position() {
     frame = 0;
+    sizeLabel.hidden = true;
     const nodes = ids.map((id) =>
       document.querySelector<HTMLElement>(`.ed-stage-scale [data-el-id="${CSS.escape(id)}"]`)
     );
     const rects = nodes
       .filter((node): node is HTMLElement => !!node)
       .map((node) => node.getBoundingClientRect());
-    if (readonly || !presentation || dragging || !summary.count || !rects.length) {
+    if (readonly || !presentation || !summary.count || !rects.length) {
       bar.hidden = true;
       closePopup();
       tooltip.hidden = true;
@@ -156,8 +181,58 @@ export function createSelectionToolbar(options: {
       right: Math.max(...rects.map((r) => r.right)),
       bottom: Math.max(...rects.map((r) => r.bottom)),
     };
+    const selected = summary.elements?.[0];
+    if (
+      summary.count === 1 &&
+      ids.length === 1 &&
+      selected?.id === ids[0] &&
+      selected.kind !== 'line' &&
+      nodes[0] &&
+      anchor.right > 0 &&
+      anchor.bottom > 0 &&
+      anchor.left < innerWidth &&
+      anchor.top < innerHeight
+    ) {
+      // The live border box changes before the committed selection summary.
+      // CSS dimensions stay in artwork pixels across viewport zoom and rotation.
+      const css = getComputedStyle(nodes[0]);
+      const width = Number.parseFloat(css.width);
+      const height = Number.parseFloat(css.height);
+      if (Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0) {
+        const w = Math.round(width * 10) / 10;
+        const h = Math.round(height * 10) / 10;
+        sizeLabel.textContent = `${w} × ${h}`;
+        sizeLabel.setAttribute(
+          'aria-label',
+          `${label('elementWidth', 'Width')}: ${w} px, ${label('elementHeight', 'Height')}: ${h} px`
+        );
+        sizeLabel.hidden = false;
+        const handle = document
+          .querySelector('.ed-stage-scale .moveable-control[data-direction="s"]')
+          ?.getBoundingClientRect();
+        const x = handle?.width
+          ? (handle.left + handle.right) / 2
+          : (anchor.left + anchor.right) / 2;
+        const y = handle?.height ? (handle.top + handle.bottom) / 2 : anchor.bottom;
+        sizeLabel.style.left = `${Math.max(8, Math.min(x - sizeLabel.offsetWidth / 2, innerWidth - sizeLabel.offsetWidth - 8))}px`;
+        sizeLabel.style.top = `${Math.max(8, Math.min(y + 12, innerHeight - sizeLabel.offsetHeight - 8))}px`;
+      }
+    }
+    if (dragging) {
+      bar.hidden = true;
+      closePopup();
+      tooltip.hidden = true;
+      return;
+    }
     bar.hidden = false;
-    const place = placeToolbar(anchor, bar.offsetWidth, bar.offsetHeight, {
+    // When the toolbar flips below the selection, leave the readout its own row.
+    const toolbarAnchor = sizeLabel.hidden
+      ? anchor
+      : {
+          ...anchor,
+          bottom: Math.max(anchor.bottom, sizeLabel.offsetTop + sizeLabel.offsetHeight),
+        };
+    const place = placeToolbar(toolbarAnchor, bar.offsetWidth, bar.offsetHeight, {
       width: innerWidth,
       height: innerHeight,
     });
@@ -218,17 +293,16 @@ export function createSelectionToolbar(options: {
     void request({ type: 'command', selectionEpoch: epoch, command: value });
   function button(
     parent: HTMLElement,
-    text: string,
+    content: string | readonly UiIconNode[],
     name: string,
-    click: () => void,
-    icon = false
+    click: () => void
   ) {
     const createdEpoch = epoch;
     const node = document.createElement('button');
     node.type = 'button';
     node.setAttribute('aria-label', name);
-    if (icon) node.innerHTML = svg(text);
-    else node.textContent = text;
+    if (typeof content === 'string') node.textContent = content;
+    else node.innerHTML = renderUiIconSvg(content, { size: 18 });
     node.disabled = busy;
     node.addEventListener('click', () => {
       if (createdEpoch === epoch && !readonly) click();
@@ -352,7 +426,7 @@ export function createSelectionToolbar(options: {
     commit: (value: string) => void
   ) {
     const name = label(key, fallback);
-    const trigger = button(bar, `${items.find((item) => item[0] === value)?.[1] ?? name} ⌄`, name, () => {
+    const trigger = button(bar, items.find((item) => item[0] === value)?.[1] ?? name, name, () => {
       openPopup(trigger, name, (node) => {
         const list = document.createElement('div');
         list.className = 'choices';
@@ -363,6 +437,10 @@ export function createSelectionToolbar(options: {
         node.append(list);
       });
     });
+    trigger.insertAdjacentHTML(
+      'beforeend',
+      renderUiIconSvg(chevronDownIcon, { size: 12, className: 'caret' })
+    );
     // Zero choices is a producer-side error (the summary always injects the
     // pinned default family); render the trigger disabled rather than opening
     // an empty popup.
@@ -372,49 +450,44 @@ export function createSelectionToolbar(options: {
   }
   function crop(current: DesignSelectedElement) {
     const name = label('crop', 'Crop');
-    const trigger = button(
-      bar,
-      paths.crop,
-      name,
-      () =>
-        openPopup(trigger, name, (node) => {
-          const grid = document.createElement('div');
-          grid.className = 'crop-fields';
-          const fields = ['Left', 'Top', 'Right', 'Bottom'].map((edge, i) => {
-            const wrap = document.createElement('label');
-            wrap.textContent = label(`crop${edge}`, edge);
-            const input = document.createElement('input');
-            input.type = 'number';
-            input.step = '0.01';
-            input.min = '-10';
-            input.max = '0.999999';
-            input.value = String(current.crop?.[i] ?? 0);
-            input.setAttribute('aria-label', wrap.textContent);
-            wrap.append(input);
-            grid.append(wrap);
-            return input;
-          });
-          node.append(grid);
-          const apply = button(node, label('applyCrop', 'Apply'), label('applyCrop', 'Apply'), () =>
-            command({
-              verb: 'image-crop',
-              crop: fields.map((input) => Number(input.value)) as [number, number, number, number],
-            })
-          );
-          const validate = () => {
-            const [l, t, r, b] = fields.map((input) => Number(input.value));
-            apply.disabled =
-              fields.some((input) => !input.value.trim() || !input.checkValidity()) ||
-              l + r >= 1 ||
-              t + b >= 1;
-          };
-          fields.forEach((input) => (input.oninput = validate));
-          validate();
-          button(node, label('resetCrop', 'Reset'), label('resetCrop', 'Reset'), () =>
-            command({ verb: 'image-crop', crop: null })
-          );
-        }),
-      true
+    const trigger = button(bar, cropIcon, name, () =>
+      openPopup(trigger, name, (node) => {
+        const grid = document.createElement('div');
+        grid.className = 'crop-fields';
+        const fields = ['Left', 'Top', 'Right', 'Bottom'].map((edge, i) => {
+          const wrap = document.createElement('label');
+          wrap.textContent = label(`crop${edge}`, edge);
+          const input = document.createElement('input');
+          input.type = 'number';
+          input.step = '0.01';
+          input.min = '-10';
+          input.max = '0.999999';
+          input.value = String(current.crop?.[i] ?? 0);
+          input.setAttribute('aria-label', wrap.textContent);
+          wrap.append(input);
+          grid.append(wrap);
+          return input;
+        });
+        node.append(grid);
+        const apply = button(node, label('applyCrop', 'Apply'), label('applyCrop', 'Apply'), () =>
+          command({
+            verb: 'image-crop',
+            crop: fields.map((input) => Number(input.value)) as [number, number, number, number],
+          })
+        );
+        const validate = () => {
+          const [l, t, r, b] = fields.map((input) => Number(input.value));
+          apply.disabled =
+            fields.some((input) => !input.value.trim() || !input.checkValidity()) ||
+            l + r >= 1 ||
+            t + b >= 1;
+        };
+        fields.forEach((input) => (input.oninput = validate));
+        validate();
+        button(node, label('resetCrop', 'Reset'), label('resetCrop', 'Reset'), () =>
+          command({ verb: 'image-crop', crop: null })
+        );
+      })
     );
     trigger.setAttribute('aria-haspopup', 'dialog');
     trigger.setAttribute('aria-expanded', 'false');
@@ -461,10 +534,9 @@ export function createSelectionToolbar(options: {
     ) => {
       const b = button(
         bar,
-        paths[name],
+        icons[name],
         label(key, fallback),
-        () => void request({ type: 'action', selectionEpoch: epoch, action: name }),
-        true
+        () => void request({ type: 'action', selectionEpoch: epoch, action: name })
       );
       b.disabled = busy || !presentation?.actionsEnabled;
     };
@@ -513,24 +585,17 @@ export function createSelectionToolbar(options: {
           command({ verb: 'text-style', fontSize })
         );
         for (const key of ['bold', 'italic'] as const) {
-          const b = button(
-            bar,
-            paths[key],
-            label(key, key === 'bold' ? 'Bold' : 'Italic'),
-            () => command({ verb: 'text-style', [key]: !c[key] }),
-            true
+          const b = button(bar, icons[key], label(key, key === 'bold' ? 'Bold' : 'Italic'), () =>
+            command({ verb: 'text-style', [key]: !c[key] })
           );
           b.setAttribute('aria-pressed', String(c[key] === true));
         }
         for (const align of ['left', 'center', 'right', 'justify'] as const) {
-          const x = align === 'center' ? 6 : align === 'right' ? 9 : 3;
-          const path = `<path d="M3 5h18M${x} 10h${align === 'justify' ? 18 : 12}M3 15h18M${x} 20h${align === 'justify' ? 18 : 12}"/>`;
           const b = button(
             bar,
-            path,
+            alignmentIcons[align],
             label(`align${align[0].toUpperCase()}${align.slice(1)}`, `Align ${align}`),
-            () => command({ verb: 'text-style', alignH: align }),
-            true
+            () => command({ verb: 'text-style', alignH: align })
           );
           b.setAttribute('aria-pressed', String(c.alignH === align));
         }
@@ -689,6 +754,7 @@ export function createSelectionToolbar(options: {
       if (epoch !== selectionEpoch) {
         generation++;
         bar.hidden = true;
+        sizeLabel.hidden = true;
         busy = false;
         closePopup();
         signature = '';
@@ -702,7 +768,10 @@ export function createSelectionToolbar(options: {
     },
     setReadonly(value: boolean) {
       readonly = value;
-      if (value) closePopup();
+      if (value) {
+        sizeLabel.hidden = true;
+        closePopup();
+      }
       render(true);
     },
     present(value: DesignToolbarPresentation) {
@@ -722,6 +791,7 @@ export function createSelectionToolbar(options: {
       closePopup();
       bar.remove();
       tooltip.remove();
+      sizeLabel.remove();
       style.remove();
     },
   };

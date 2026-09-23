@@ -3,21 +3,9 @@
 import { act, createElement, type ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import {
-  AGENT_ROLE_VERSION,
-  type AgentConfigId,
-  type AgentConfigMeta,
-  type AgentRole,
-  type AgentRoleId,
-  type MachineId,
-} from '@molly/shared';
-
-// The menu resolves its default agent pool from machine presence; this surface
-// passes `availableAgentConfigs` instead, so the pool is not what is under test.
-vi.mock('../src/hooks/use-online-machines', () => ({ useOnlineMachines: () => [] }));
+import { type AgentConfigId, type AgentConfigMeta, type MachineId } from '@molly/shared';
 
 import { DesktopRunConfigMenu } from '../src/components/sessions/desktop-run-config-menu';
-import type { ComposerAgentRoleItem } from '../src/lib/composer-agent-roles';
 import { initI18n } from '../src/i18n';
 import { TooltipProvider } from '../src/ui/tooltip';
 
@@ -36,48 +24,20 @@ const agentConfig: AgentConfigMeta = {
   env: {},
 };
 
-const role: AgentRole = {
-  v: AGENT_ROLE_VERSION,
-  id: 'role-1' as AgentRoleId,
-  ownerUserId: 'user-1',
-  visibility: 'private',
-  name: 'Code Reviewer',
-  emoji: '🔍',
-  machineId,
-  agentConfigId: agentConfig.id,
-  runConfig: { modelId: 'gpt-5.5', modeId: 'read-only' },
-  revision: 1,
-  createdAt: 1,
-  updatedAt: 1,
-};
-
-const roleItem: ComposerAgentRoleItem = {
-  role,
-  availability: { kind: 'available' },
-  agentConfig,
-};
-
 type MenuProps = ComponentProps<typeof DesktopRunConfigMenu>;
 
 const baseProps: MenuProps = {
   agentSelection: { agentId: agentConfig.id, machineId },
   availableAgentConfigs: [agentConfig],
-  showAgentNameInTrigger: true,
   modelOptions: [{ value: 'gpt-5.5', label: '5.5' }],
   selectedModelId: 'gpt-5.5',
-  modeOptions: [
-    { value: 'read-only', label: 'Read-only' },
-    { value: 'agent', label: 'Agent' },
-  ],
-  selectedModeId: 'read-only',
-  onAgentConfigChange: () => undefined,
   onModelChange: () => undefined,
   configOptionSelectors: [],
   configOptionValues: {},
   onConfigOptionChange: () => undefined,
 };
 
-describe('DesktopRunConfigMenu role face', () => {
+describe('Desktop model picker without Roles', () => {
   let root: Root | undefined;
   let container: HTMLDivElement | undefined;
 
@@ -112,17 +72,19 @@ describe('DesktopRunConfigMenu role face', () => {
     return container as HTMLDivElement;
   };
 
-  it('names the agent and its values together when no Role is selected', async () => {
+  it('names the model without exposing a harness or Role control', async () => {
     const view = await render();
-    const trigger = view.querySelector('button[aria-label="Run configuration"]');
-    expect(trigger?.textContent).toContain('Codex Primary');
+    const trigger = view.querySelector('button[aria-label="Provider and model"]');
+    expect(trigger?.textContent).not.toContain('Codex Primary');
     expect(trigger?.textContent).toContain('5.5');
   });
 
   it('keeps the menu closed and explains when a machine must be selected first', async () => {
     const disabledReason = 'Select a machine first';
     const view = await render({ disabledReason });
-    const trigger = view.querySelector<HTMLButtonElement>('button[aria-label="Run configuration"]');
+    const trigger = view.querySelector<HTMLButtonElement>(
+      'button[aria-label="Provider and model"]'
+    );
     expect(trigger?.getAttribute('aria-disabled')).toBe('true');
 
     await act(async () => {
@@ -139,96 +101,20 @@ describe('DesktopRunConfigMenu role face', () => {
     });
   });
 
-  it('gives the button to the Role alone and leaves its values inert beside it', async () => {
-    const view = await render({
-      agentRoles: { items: [roleItem], selectedRoleId: role.id, onSelect: () => undefined },
-    });
-    const trigger = view.querySelector('button[aria-label="Run configuration"]');
-    // The Role IS the whole run configuration, so it is the only thing to click.
-    expect(trigger?.textContent).toContain('Code Reviewer');
-    expect(trigger?.textContent).not.toContain('Codex Primary');
-    expect(trigger?.textContent).not.toContain('5.5');
-
-    // Its values are still stated — outside the button, and outside every other
-    // control: changing one by hand is what stops the configuration being that
-    // Role, so it must not be a knob sitting next to the Role's own name.
-    expect(view.textContent).toContain('5.5');
-    const valueFace = [...view.querySelectorAll('span')].find(
-      (node) => node.textContent === '5.5' || node.textContent?.startsWith('5.5')
-    );
-    expect(valueFace?.closest('button')).toBeNull();
-  });
-
-  it('states the permission the Role pins, since it is part of what was picked', async () => {
-    const view = await render({
-      agentRoles: { items: [roleItem], selectedRoleId: role.id, onSelect: () => undefined },
-    });
-    const trigger = view.querySelector('button[aria-label="Run configuration"]');
-    expect(trigger?.textContent).not.toContain('Read-only');
-    // Beside the button, with the rest of the values the Role decided — the
-    // composer drops its own permission button while a Role pins it.
-    expect(view.textContent).toContain('Read-only');
-  });
-
-  it('leaves permission out of the face when the Role does not pin it', async () => {
-    const view = await render({
-      agentRoles: {
-        items: [{ ...roleItem, role: { ...role, runConfig: { modelId: 'gpt-5.5' } } }],
-        selectedRoleId: role.id,
-        onSelect: () => undefined,
-      },
-    });
-    expect(view.textContent).not.toContain('Read-only');
-  });
-
   const openMenu = async (view: HTMLElement) => {
     // Radix opens the menu on pointerdown, not click.
     await act(async () => {
       view
-        .querySelector('button[aria-label="Run configuration"]')
+        .querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
     return document.querySelector('[role="menu"]') as HTMLElement;
   };
-
-  it('leads the menu with the Role row, above the rows a Role answers', async () => {
-    const view = await render({
-      agentRoles: { items: [roleItem], selectedRoleId: role.id, onSelect: () => undefined },
-    });
+  it('opens model choices without Role selection or creation', async () => {
+    const view = await render();
     const menu = await openMenu(view);
-    const rows = [...menu.querySelectorAll('[role="menuitem"]')].map((node) =>
-      node.textContent?.trim()
-    );
-    const roleRow = rows.findIndex((text) => text?.startsWith('Role'));
-    const agentRow = rows.findIndex((text) => text?.startsWith('Agent'));
-    expect(roleRow).toBeGreaterThanOrEqual(0);
-    expect(agentRow).toBeGreaterThan(roleRow);
-    // The row states which Role, so the menu never opens denying its own face.
-    expect(rows[roleRow]).toContain('Code Reviewer');
-  });
-
-  it('turns the Role row value into the way to make one when there are none', async () => {
-    const onCreate = vi.fn();
-    const view = await render({
-      agentRoles: { items: [], selectedRoleId: null, onSelect: () => undefined, onCreate },
-    });
-    const menu = await openMenu(view);
-    const roleRow = [...menu.querySelectorAll('[role="menuitem"]')].find((node) =>
-      node.textContent?.trim().startsWith('Role')
-    );
-    expect(roleRow?.textContent).toContain('New role');
-    await act(async () => {
-      (roleRow as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onCreate).toHaveBeenCalled();
-  });
-
-  it('drops the Role face as soon as the selection is no longer that Role', async () => {
-    const view = await render({
-      agentRoles: { items: [roleItem], selectedRoleId: null, onSelect: () => undefined },
-    });
-    const trigger = view.querySelector('button[aria-label="Run configuration"]');
-    expect(trigger?.textContent).toContain('Codex Primary');
-    expect(trigger?.textContent).not.toContain('Code Reviewer');
+    expect(menu.querySelector('[role="menuitemradio"]')?.textContent).toContain('5.5');
+    expect(menu.textContent).not.toMatch(/Role|New role|角色/);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 });

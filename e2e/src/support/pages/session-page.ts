@@ -20,33 +20,36 @@ export class SessionPage {
   async seedDeterministicModelConnection(): Promise<void> {
     const port = this.fixture.modelServerPort;
     if (typeof port !== 'number') throw new Error('Scripted model server is not running');
-    const saved = await this.page.evaluate(async (input) => {
-      if (!window.ipc) throw new Error('Electron IPC is unavailable');
-      return (await window.ipc.invoke('modelConnections.save', input)) as { id?: string };
-    }, {
-      providerPresetId: 'openai-compatible',
-      displayName: CONNECTION_NAME,
-      baseUrl: `http://127.0.0.1:${port}/v1`,
-      enabled: true,
-      customModels: [
-        {
-          modelId: 'e2e-deterministic',
-          name: MODEL_NAME,
-          input: ['text'],
-          contextWindow: 128_000,
-          maxTokens: 4_096,
-          thinking: ['off'],
-          // The design session always registers host tools, and the engine
-          // rejects catalog models that declare no tool-call support
-          // (harness_model_tools_unsupported). The scripted server simply
-          // never emits tool_calls, so no tool ever executes.
-          toolCalls: true,
-          usageInStreaming: false,
-          maxTokensField: 'max_tokens',
-        },
-      ],
-      apiKey: 'e2e-deterministic-key',
-    });
+    const saved = await this.page.evaluate(
+      async (input) => {
+        if (!window.ipc) throw new Error('Electron IPC is unavailable');
+        return (await window.ipc.invoke('modelConnections.save', input)) as { id?: string };
+      },
+      {
+        providerPresetId: 'openai-compatible',
+        displayName: CONNECTION_NAME,
+        baseUrl: `http://127.0.0.1:${port}/v1`,
+        enabled: true,
+        customModels: [
+          {
+            modelId: 'e2e-deterministic',
+            name: MODEL_NAME,
+            input: ['text'],
+            contextWindow: 128_000,
+            maxTokens: 4_096,
+            thinking: ['off'],
+            // The design session always registers host tools, and the engine
+            // rejects catalog models that declare no tool-call support
+            // (harness_model_tools_unsupported). The scripted server simply
+            // never emits tool_calls, so no tool ever executes.
+            toolCalls: true,
+            usageInStreaming: false,
+            maxTokensField: 'max_tokens',
+          },
+        ],
+        apiKey: 'e2e-deterministic-key',
+      }
+    );
     expect(saved?.id, 'The deterministic model connection was not saved').toEqual(
       expect.any(String)
     );
@@ -55,16 +58,11 @@ export class SessionPage {
   /** The draft composer lists the connection only after the daemon re-projects it. */
   async selectDeterministicModel(): Promise<void> {
     await this.page
-      .getByRole('button', { name: /^(Run configuration|运行设置)$/u })
+      .getByRole('button', { name: /^(Provider and model|模型与服务商)$/u })
       .first()
       .click();
-    const modelTrigger = this.page.getByRole('menuitem', { name: /^(Model|模型)/u });
-    await expect(modelTrigger).toBeVisible({ timeout: 30_000 });
-    await modelTrigger.hover();
     // The option's accessible name appends the raw model id on a second line.
-    const option = this.page
-      .getByRole('menuitemradio')
-      .filter({ hasText: MODEL_OPTION_NAME });
+    const option = this.page.getByRole('menuitemradio').filter({ hasText: MODEL_OPTION_NAME });
     await expect(option).toBeVisible({ timeout: 60_000 });
     await option.click();
     await expect(option).toHaveAttribute('aria-checked', 'true');

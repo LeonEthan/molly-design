@@ -61,10 +61,8 @@ const recentRunConfigRecordSchema = z.object({
   /**
    * The Agent Role this run was started as, when it was started as one.
    *
-   * A Role is one whole run configuration, so it belongs in this list like any
-   * other — but it is not INTERCHANGEABLE with the same values picked by hand:
-   * a Role also carries its instruction and its provenance, so the two are
-   * different entries and the id is part of the identity key.
+   * Retained for historical storage identity. Role entries are excluded from
+   * the product menu and cannot be replayed as ordinary configuration.
    */
   agentRoleId: z.string().nullable().optional(),
   usedAt: z.number(),
@@ -270,7 +268,8 @@ export function buildRecentRunConfigItems({
     const config = configByKey.get(`${record.machineId} ${record.agentId}`);
     if (!config) continue;
     const role = record.agentRoleId ? roleById.get(record.agentRoleId) : undefined;
-    if (record.agentRoleId && !role) continue;
+    // Retired Roles cannot be reapplied from the local recent list.
+    if (record.agentRoleId) continue;
     seen.add(key);
     items.push({
       id: key,

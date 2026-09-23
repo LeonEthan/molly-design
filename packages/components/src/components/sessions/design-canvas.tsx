@@ -601,8 +601,11 @@ export function DesignCanvas({
           '[data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-id="chat"], [data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-resize-handle-id]{display:none}'
         }
       </style>
-      <div className="flex flex-wrap items-center gap-2 border-b bg-card p-2">
-        <span className="text-sm text-muted-foreground" role="status">
+      <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border/40 bg-background px-3 py-2">
+        <span
+          className="max-w-full rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
+          role="status"
+        >
           {currentVersion
             ? canvasState?.changed
               ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
@@ -612,16 +615,24 @@ export function DesignCanvas({
             : t('design.currentCanvas', 'Current draft')}
         </span>
         <TooltipProvider>
-          <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy || readonlyView || !canvasState?.changed}
-              onClick={saveVersion}
-            >
-              <Save className="size-4" />
-              {t('design.saveVersion', 'Save version')}
-            </Button>
+          <div className="ml-auto flex shrink-0 items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-full"
+                    disabled={busy || readonlyView || !canvasState?.changed}
+                    onClick={saveVersion}
+                    aria-label={t('design.saveVersion', 'Save version')}
+                  >
+                    <Save className="size-[18px]" aria-hidden="true" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{t('design.saveVersion', 'Save version')}</TooltipContent>
+            </Tooltip>
             <DropdownMenu
               onOpenChange={(open) => {
                 if (open) void refreshVersions().catch((cause) => setError(String(cause)));
@@ -633,20 +644,24 @@ export function DesignCanvas({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8"
+                      className="size-9 rounded-full"
                       disabled={busy}
                       aria-label={t('design.versions', 'Version history')}
                     >
-                      <History className="size-4" />
+                      <History className="size-[18px]" />
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
                 <TooltipContent>{t('design.versions', 'Version history')}</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuContent
+                align="end"
+                className="max-h-[60vh] w-80 max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl border-border/50 p-1.5"
+              >
                 {[...versions].reverse().map((version) => (
                   <DropdownMenuItem
                     key={version.commitId}
+                    className="min-h-9 rounded-md px-3 py-2 text-xs leading-relaxed"
                     disabled={busy || readonlyView}
                     onClick={() => chooseVersion(version.commitId)}
                   >
@@ -671,21 +686,35 @@ export function DesignCanvas({
                 <TooltipTrigger asChild>
                   <DropdownMenuTrigger asChild>
                     <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
+                      variant="secondary"
+                      size="sm"
+                      className="h-9 rounded-full bg-foreground/[0.08] px-3 font-medium text-foreground hover:bg-foreground/[0.12]"
                       disabled={busy || readonlyView}
                       aria-label={t('design.export', 'Export')}
                     >
-                      <Download className="size-4" />
+                      <Download className="size-[18px]" />
+                      {t('design.export', 'Export')}
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
                 <TooltipContent>{t('design.export', 'Export')}</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => exportArtwork('png')}>PNG</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportArtwork('jpeg')}>JPEG</DropdownMenuItem>
+              <DropdownMenuContent
+                align="end"
+                className="min-w-40 rounded-xl border-border/50 p-1.5"
+              >
+                <DropdownMenuItem
+                  className="min-h-9 rounded-md px-3"
+                  onClick={() => exportArtwork('png')}
+                >
+                  PNG
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="min-h-9 rounded-md px-3"
+                  onClick={() => exportArtwork('jpeg')}
+                >
+                  JPEG
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <DropdownMenu>
@@ -695,17 +724,21 @@ export function DesignCanvas({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="size-8"
+                      className="size-9 rounded-full"
                       aria-label={t('design.more', 'More')}
                     >
-                      <MoreHorizontal className="size-4" />
+                      <MoreHorizontal className="size-[18px]" />
                     </Button>
                   </DropdownMenuTrigger>
                 </TooltipTrigger>
                 <TooltipContent>{t('design.more', 'More')}</TooltipContent>
               </Tooltip>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent
+                align="end"
+                className="min-w-40 rounded-xl border-border/50 p-1.5"
+              >
                 <DropdownMenuItem
+                  className="min-h-9 rounded-md px-3"
                   disabled={busy || readonlyView}
                   onClick={() =>
                     run(() =>
@@ -723,7 +756,7 @@ export function DesignCanvas({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8"
+                  className="size-9 rounded-full"
                   aria-label={
                     focused
                       ? t('design.showChat', 'Show conversation')
@@ -731,7 +764,11 @@ export function DesignCanvas({
                   }
                   onClick={() => setFocused((value) => !value)}
                 >
-                  {focused ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+                  {focused ? (
+                    <Minimize2 className="size-[18px]" />
+                  ) : (
+                    <Maximize2 className="size-[18px]" />
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
@@ -744,21 +781,27 @@ export function DesignCanvas({
         </TooltipProvider>
       </div>
       {preview && previewError && (
-        <details className="border-b p-2 text-xs text-muted-foreground">
-          <summary>
+        <details className="mx-3 mt-3 rounded-xl border border-border/40 bg-foreground/[0.03] px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+          <summary className="cursor-pointer">
             {t('design.previewWaiting', 'Waiting for a valid draft. Keeping the current canvas.')}
           </summary>
           <p className="mt-1 whitespace-pre-wrap">{previewError}</p>
         </details>
       )}
       {preview && automaticError && (
-        <p role="alert" className="border-b p-2 text-xs text-destructive">
+        <p
+          role="alert"
+          className="mx-3 mt-3 rounded-xl bg-destructive/5 px-3 py-2 text-xs leading-relaxed text-destructive"
+        >
           {t('design.previewAutomaticUnavailable', 'Automatic preview updates unavailable.')}{' '}
           {automaticError}
         </p>
       )}
       {error && (
-        <p role="alert" className="p-2 text-destructive">
+        <p
+          role="alert"
+          className="mx-3 mt-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm leading-relaxed text-destructive"
+        >
           {error}
         </p>
       )}

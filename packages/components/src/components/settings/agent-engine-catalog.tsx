@@ -19,7 +19,7 @@ export function AgentEngineCatalog({
       title={t('settings.models.engineTitle')}
       description={t('settings.models.engineHint')}
     >
-      <div className="space-y-3 p-3 text-sm">
+      <div className="space-y-4 px-5 pb-5 pt-1 text-sm leading-relaxed">
         <p>{t('settings.models.engineSelectionHint')}</p>
         {(legacy.length > 0 || setups.length > 0) && (
           <div className="space-y-2 border-t pt-3">

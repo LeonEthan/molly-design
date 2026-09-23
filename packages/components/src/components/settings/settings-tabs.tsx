@@ -9,7 +9,6 @@ import {
   Palette,
   Plug,
   SlidersHorizontal,
-  UserRoundCog,
 } from 'lucide-react';
 
 export type SettingsSectionId = 'account' | 'personal' | 'workspace' | 'other';
@@ -104,16 +103,6 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
     path: '/$workspaceName/settings/agents',
   },
   {
-    // Beside Agents on purpose: a provider says how an agent starts, a Role
-    // says how one is used, and the two must not read as one editor.
-    id: 'agent-roles',
-    section: 'workspace',
-    labelKey: 'settings.tabs.agentRoles',
-    descriptionKey: 'settings.categories.agentRoles.description',
-    icon: UserRoundCog,
-    path: '/$workspaceName/settings/agent-roles',
-  },
-  {
     // Beside the agent catalog on purpose: the image connection is the other
     // per-machine, user-typed credential the design surfaces read, and it shares
     // that boundary (this machine's Flock doc) rather than the workspace catalog.
@@ -171,7 +160,7 @@ export function getActiveSettingsTabId(pathname: string): SettingsTabId | null {
     ['/settings/devices', 'machines'],
     ['/settings/agents', 'agents'],
     ['/settings/agent-config', 'agents'],
-    ['/settings/agent-roles', 'agent-roles'],
+    ['/settings/agent-roles', 'preferences'],
     ['/settings/image-connection', 'image-connection'],
     ['/settings/mcp', 'mcp'],
     ['/settings/projects', 'projects'],

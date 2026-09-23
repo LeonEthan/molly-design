@@ -297,19 +297,19 @@ export function AgentRoleEditorDialog({
           isMobile ? undefined : 'z-[var(--z-dialog)] bg-black/20'
         }
         className={cn(
-          'flex max-h-[min(680px,88dvh)] w-[min(620px,96dvw)] max-w-none flex-col gap-0 overflow-hidden p-0 sm:max-w-none sm:p-0',
+          'flex max-h-[min(680px,88dvh)] w-[min(620px,96dvw)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl border-border/50 bg-background p-0 sm:max-w-none sm:rounded-2xl sm:p-0',
           !isMobile && 'shadow-popover'
         )}
       >
-        <header className="shrink-0 border-b border-border/60 px-5 py-3 pr-12">
-          <DialogTitle className="text-sm font-semibold">
+        <header className="shrink-0 border-b border-border/40 px-5 py-5 pr-12">
+          <DialogTitle className="text-base font-medium">
             {migrating
               ? t('settings.agentRoles.migration.title')
               : editor?.mode === 'edit'
                 ? t('settings.agentRoles.editTitle')
                 : t('settings.agentRoles.addTitle')}
           </DialogTitle>
-          <DialogDescription className="mt-0.5 text-xs leading-snug text-muted-foreground">
+          <DialogDescription className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {migrating
               ? t('settings.agentRoles.migration.description')
               : t('settings.agentRoles.dialogDescription')}

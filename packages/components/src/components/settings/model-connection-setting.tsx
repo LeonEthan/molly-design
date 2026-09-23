@@ -84,8 +84,8 @@ export function ModelConnectionForm({
     await onSave(input);
   };
   return (
-    <form className="space-y-3 p-3" onSubmit={(event) => void submit(event)}>
-      <div className="space-y-1">
+    <form className="space-y-5 p-5" onSubmit={(event) => void submit(event)}>
+      <div className="space-y-2">
         <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
         <Input
           id={`${id}-name`}
@@ -95,7 +95,7 @@ export function ModelConnectionForm({
           onChange={(event) => setName(event.target.value)}
         />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         <Label htmlFor={`${id}-provider`}>{t('settings.models.provider')}</Label>
         <Select
           value={provider}
@@ -119,7 +119,7 @@ export function ModelConnectionForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-1">
+      <div className="space-y-2">
         <Label htmlFor={`${id}-endpoint`}>{t('settings.models.endpoint')}</Label>
         <Input
           id={`${id}-endpoint`}
@@ -151,7 +151,7 @@ export function ModelConnectionForm({
           )}
         </>
       )}
-      <div className="space-y-1">
+      <div className="space-y-2">
         <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
         <Input
           id={`${id}-key`}
@@ -237,21 +237,21 @@ export function ModelConnectionSetting() {
       description={t('settings.models.notVerified')}
     >
       {!available ? (
-        <p className="p-3 text-xs text-muted-foreground">{t('settings.models.unavailable')}</p>
+        <p className="p-5 text-xs text-muted-foreground">{t('settings.models.unavailable')}</p>
       ) : (
         <>
           {error && (
-            <p role="alert" className="p-3 text-xs text-destructive">
+            <p role="alert" className="p-5 text-xs text-destructive">
               {t('settings.models.error')}
             </p>
           )}
           {!ready && !error && (
-            <p role="status" className="p-3 text-xs text-muted-foreground">
+            <p role="status" className="p-5 text-xs text-muted-foreground">
               {t('settings.models.loading')}
             </p>
           )}
           {connections.map((connection) => (
-            <div key={connection.id} className="flex items-center justify-between gap-3 p-3">
+            <div key={connection.id} className="flex items-center justify-between gap-4 px-5 py-4">
               <div className="min-w-0">
                 <p className="truncate text-sm">{connection.displayName}</p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -290,7 +290,7 @@ export function ModelConnectionSetting() {
               onCancel={() => setEditing(null)}
             />
           ) : (
-            <div className="p-3">
+            <div className="px-5 pb-5 pt-4">
               {ready && connections.length === 0 && (
                 <p className="mb-3 text-xs text-muted-foreground">{t('settings.models.empty')}</p>
               )}

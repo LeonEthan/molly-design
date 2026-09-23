@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Bot,
   FolderOpen,
+  Globe2,
   ImageIcon,
   Info,
   Keyboard,
@@ -11,6 +12,7 @@ import {
   SlidersHorizontal,
   UserRoundCog,
 } from 'lucide-react';
+import { isElectronRenderer } from '@/lib/electron';
 
 export type SettingsSectionId = 'account' | 'personal' | 'workspace' | 'other';
 
@@ -18,6 +20,7 @@ export type SettingsTabId =
   | 'account'
   | 'preferences'
   | 'appearance'
+  | 'browser-accounts'
   | 'keyboard-shortcuts'
   | 'workspace'
   | 'people'
@@ -35,6 +38,7 @@ export type SettingsPath =
   | '/$workspaceName/settings/account'
   | '/$workspaceName/settings/preferences'
   | '/$workspaceName/settings/appearance'
+  | '/$workspaceName/settings/browser-accounts'
   | '/$workspaceName/settings/keyboard-shortcuts'
   | '/$workspaceName/settings/workspace'
   | '/$workspaceName/settings/people'
@@ -56,6 +60,7 @@ export type SettingsTabConfig = {
   icon: LucideIcon;
   /** The workspace machine inventory has no useful distinction in a solo workspace. */
   multiMemberOnly?: boolean;
+  localDesktopOnly?: boolean;
   path: SettingsPath;
 };
 
@@ -77,6 +82,15 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
     descriptionKey: 'settings.categories.appearance.description',
     icon: Palette,
     path: '/$workspaceName/settings/appearance',
+  },
+  {
+    id: 'browser-accounts',
+    section: 'personal',
+    labelKey: 'settings.tabs.browserAccounts',
+    descriptionKey: 'settings.categories.browserAccounts.description',
+    icon: Globe2,
+    localDesktopOnly: true,
+    path: '/$workspaceName/settings/browser-accounts',
   },
   {
     id: 'keyboard-shortcuts',
@@ -154,7 +168,11 @@ export function useVisibleSettingsTabs(options?: {
   includeMultiMemberOnly?: boolean;
 }): SettingsTabConfig[] {
   const includeMultiMemberOnly = options?.includeMultiMemberOnly ?? true;
-  return SETTINGS_TAB_CONFIGS.filter((tab) => !tab.multiMemberOnly || includeMultiMemberOnly);
+  return SETTINGS_TAB_CONFIGS.filter(
+    (tab) =>
+      (!tab.multiMemberOnly || includeMultiMemberOnly) &&
+      (!tab.localDesktopOnly || isElectronRenderer())
+  );
 }
 
 export function getActiveSettingsTabId(pathname: string): SettingsTabId | null {
@@ -163,6 +181,7 @@ export function getActiveSettingsTabId(pathname: string): SettingsTabId | null {
     ['/settings/preferences', 'preferences'],
     ['/settings/general', 'preferences'],
     ['/settings/appearance', 'appearance'],
+    ['/settings/browser-accounts', 'browser-accounts'],
     ['/settings/keyboard-shortcuts', 'keyboard-shortcuts'],
     ['/settings/my-machines', 'machines'],
     ['/settings/workspace', 'preferences'],

@@ -1,4 +1,10 @@
 import { LocalFileResolutionSchema } from './local-file-preview';
+import {
+  AgentBrowserCommandSchema,
+  AgentBrowserHostLeaseSchema,
+  AgentBrowserHostReportSchema,
+  AgentBrowserRpcResultSchema,
+} from './browser-agent-rpc';
 import { PublicImageConnectionSchema } from './image-connection';
 import { z } from 'zod';
 import { HarnessHostExchangeSchema, HarnessHostResultSchema } from './embedded-harness';
@@ -333,6 +339,37 @@ export const DesignToolHookResultSchema = z
 
 export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('browser/execute'),
+    ownerSessionId: SessionIdSchema,
+    params: z.object({
+      requestId: z.string().uuid(),
+      launchId: z.string().uuid(),
+      command: AgentBrowserCommandSchema,
+    }).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('browser/cancel'),
+    ownerSessionId: SessionIdSchema,
+    params: z.object({ requestId: z.string().uuid(), launchId: z.string().uuid() }).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
+    method: z.enum(['browser/takeover', 'browser/resume']),
+    ownerSessionId: SessionIdSchema,
+    params: z.object({ runId: z.string().min(1).max(200) }).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('browser/host-status'),
+    params: z.object({}).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('browser/host'),
+    params: z.object({
+      reports: z.array(AgentBrowserHostReportSchema).max(8),
+      leases: z.array(AgentBrowserHostLeaseSchema).max(8),
+      takeovers: z.array(AgentBrowserHostLeaseSchema).max(8),
+    }).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/tool-hook'),
     params: z
       .object({
@@ -565,6 +602,7 @@ export type LocalMachineRpcRequest = z.infer<typeof LocalMachineRpcRequestSchema
 export type LocalMachineRpcRequestValidated = LocalMachineRpcRequest;
 
 export const LocalMachineRpcResultSchema = z.union([
+  AgentBrowserRpcResultSchema,
   HarnessHostResultSchema,
   DesignSourcePathResultSchema,
   ImageConnectionRpcResultSchema,

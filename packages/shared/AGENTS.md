@@ -3,7 +3,7 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 
 Read before changing daemon negotiation, MCP/Role catalogs or UI, per-turn MCP
-selection, or Role creation/dispatch. These contracts bind all producers and consumers.
+selection, or Role dispatch. These contracts bind producers and consumers.
 
 ## Machine protocol negotiation
 
@@ -72,22 +72,27 @@ dispatch owns runtime availability; schema presence does not enable execution.
   carries `ownerSessionId` and the daemon resolves the workdir from it, never from a caller path.
   `design/render-host-status` is its availability probe, and `design/render-host` is the host's own
   poll: the desktop calls the daemon, never the reverse, so the bridge adds no inbound surface.
-- The preview answer is a **nested** union — rendered and refused share the `type` and differ in
-  `ok` — because a discriminated union cannot hold two options with the same discriminator value.
-  Adding a variant means adding it to the nesting level it belongs to.
+- The preview answer uses a nested `ok` union within `type`; add variants at the
+  correct nesting level.
 - Capability exists only while a host polls within `DESIGN_RENDER_HOST_TTL_MS`, and the poll
   interval must stay well under it. Both ends bound one exchange at 8 items (work out, reports
   back); the daemon's queue ceiling and the request schemas must move together.
-- Preview work renders at the document's canvas dimensions. Turn completion never
-  generates dedicated thumbnails or writes their references. Legacy optional
-  outcome fields are ignored in the read view without rewriting history or deleting
-  files. General image reading and PNG/JPEG exports remain independent.
+- Preview work uses document canvas dimensions. Turn completion never generates
+  thumbnails. Ignore legacy optional outcome fields without rewriting history;
+  image reading and PNG/JPEG exports remain independent.
+
+## Browser RPC
+
+`browser/execute` uses the owner-only socket and binds run/launch/page.
+Recheck results; never replay uncertain actions. Import Chrome accounts in
+Electron main only. Models see flat `AgentBrowserToolInputSchema`; validate
+with `AgentBrowserCommandSchema` before execution. See
+[browser docs](../../.agents/docs/sessions-browser.md).
 
 ## Installation identity
 
-The public local profile is Molly (machine token `molly`). Keep its data
-directory, host endpoint, protocol, app ID, packaged desktop identity, and every
-CLI marker store isolated from Lody.
+Molly's public local profile uses machine token `molly`. Isolate its data,
+endpoint, protocol, app ID, packaged identity and CLI markers from Lody.
 Update both TypeScript and CommonJS installation profiles together; never migrate
 or delete Lody data.
 

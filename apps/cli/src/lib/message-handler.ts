@@ -7,6 +7,10 @@ import { ARTWORK_ENTRY } from '@molly/design-authoring';
 import { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
 import { EmbeddedHarnessCatalogPublisher } from '@/agent/embedded-harness-catalog';
 import { LegacyImageMigration } from '@/design/legacy-image-migration';
+import { BrowserHost } from '@/browser/browser-host';
+import { parseBrowserAddress } from '@molly/shared/browser-url';
+import { writeGeneratedImageAsset } from '@/mcp/image-generation';
+import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
 import { clearImageConnectionFromFlock, getMachineFlockImageConnection } from '@molly/shared';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
@@ -814,6 +818,12 @@ export class MessageHandler {
    * the same preview to two hosts is exactly what a second instance would cause.
    */
   private readonly designRenderHost = new DesignRenderHost();
+  private readonly browserHost = new BrowserHost();
+  private readonly browserScopes = new Map<
+    SessionId,
+    { runId: string; launchId: string; sites: string[] }
+  >();
+  private readonly browserTakeovers = new Map<SessionId, string>();
   private readonly harnessCredentials = new HarnessCredentialBroker();
   private readonly embeddedHarnessCatalog: EmbeddedHarnessCatalogPublisher;
   private readonly legacyImageMigration = new LegacyImageMigration();
@@ -6402,6 +6412,198 @@ export class MessageHandler {
     };
 
     switch (request.method) {
+      case 'browser/host-status': {
+        return { type: 'browser/host-status' as const, connected: this.browserHost.isConnected() };
+      }
+      case 'browser/host': {
+        for (const takeover of request.params.takeovers) {
+          const current = this.browserScopes.get(takeover.sessionId as SessionId);
+          if (current?.runId === takeover.runId) {
+            this.browserTakeovers.set(takeover.sessionId as SessionId, takeover.runId);
+          }
+        }
+        const isActive = (scope: AgentBrowserScope): boolean => {
+          const sessionId = scope.sessionId as SessionId;
+          const current = this.browserScopes.get(sessionId);
+          const session = this.sessionManager.getSession(sessionId);
+          return Boolean(
+            current &&
+            current.runId === scope.runId &&
+            this.browserTakeovers.get(sessionId) !== scope.runId &&
+            session?.agentClient &&
+            session.getDesignHookLaunchId?.() === current.launchId &&
+            this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId ===
+              scope.runId
+          );
+        };
+        const revoke = [
+          ...this.browserHost
+            .takeRevocations()
+            .map(({ sessionId, browserId, runId }) => ({ sessionId, browserId, runId })),
+          ...request.params.leases.filter((lease) => !isActive({ ...lease, sites: [] })),
+        ].slice(0, 8);
+        return {
+          type: 'browser/host' as const,
+          requests: this.browserHost.exchange(request.params.reports, isActive),
+          revoke,
+        };
+      }
+      case 'browser/cancel': {
+        const sessionId = request.ownerSessionId as SessionId;
+        const saved = this.browserScopes.get(sessionId);
+        if (saved?.launchId === request.params.launchId) {
+          this.browserHost.cancel(request.params.requestId, {
+            sessionId,
+            browserId: `session-browser-${sessionId}`,
+            runId: saved.runId,
+            sites: saved.sites,
+          });
+        }
+        return { type: 'browser/cancel' as const, ok: true as const };
+      }
+      case 'browser/takeover': {
+        const sessionId = request.ownerSessionId as SessionId;
+        if (this.browserScopes.get(sessionId)?.runId === request.params.runId) {
+          this.browserTakeovers.set(sessionId, request.params.runId);
+        }
+        return { type: 'browser/control' as const, ok: true };
+      }
+      case 'browser/resume': {
+        const sessionId = request.ownerSessionId as SessionId;
+        const active = this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId;
+        if (active !== request.params.runId || this.browserTakeovers.get(sessionId) !== active) {
+          return { type: 'browser/control' as const, ok: false };
+        }
+        this.browserTakeovers.delete(sessionId);
+        return { type: 'browser/control' as const, ok: true };
+      }
+      case 'browser/execute': {
+        const sessionId = request.ownerSessionId as SessionId;
+        const design = await this.readDesignSession(sessionId);
+        const session = this.sessionManager.getSession(sessionId);
+        const active = this.executionService.getActiveInvocationContext(sessionId);
+        const runId = active?.sourceTurnId;
+        const launchId = session?.getDesignHookLaunchId?.();
+        if (
+          !design ||
+          !session?.agentClient ||
+          !runId ||
+          !launchId ||
+          launchId !== request.params.launchId
+        ) {
+          return {
+            type: 'browser/execute' as const,
+            ok: false as const,
+            error: 'No active authorized design browser run.',
+          };
+        }
+        if (this.browserTakeovers.get(sessionId) === runId) {
+          return {
+            type: 'browser/execute' as const,
+            ok: false as const,
+            error: 'The user has taken control of the browser page.',
+          };
+        }
+        if (
+          this.browserTakeovers.has(sessionId) &&
+          this.browserTakeovers.get(sessionId) !== runId
+        ) {
+          this.browserTakeovers.delete(sessionId);
+        }
+        let saved = this.browserScopes.get(sessionId);
+        if (!saved || saved.runId !== runId || saved.launchId !== launchId) {
+          saved = { runId, launchId, sites: [] };
+          this.browserScopes.set(sessionId, saved);
+        }
+        if (request.params.command.kind === 'navigate') {
+          try {
+            const address = parseBrowserAddress(request.params.command.url);
+            if (address.engine !== 'public-web' || address.targetClass !== 'public')
+              throw new Error('Agent browser requires a public website.');
+            const host = new URL(address.logicalUrl).hostname.toLowerCase();
+            const site = host.startsWith('www.') ? host.slice(4) : host;
+            // One active top-level site per page. A past one-shot navigation
+            // cannot silently authorize a later cross-site click.
+            saved.sites = [site];
+          } catch (error) {
+            return {
+              type: 'browser/execute' as const,
+              ok: false as const,
+              error: formatErrorMessage(error).slice(0, 1_000),
+            };
+          }
+        }
+        if (saved.sites.length === 0) {
+          return {
+            type: 'browser/execute' as const,
+            ok: false as const,
+            error: 'Open an approved website before observing the browser.',
+          };
+        }
+        const scope: AgentBrowserScope = {
+          sessionId,
+          browserId: `session-browser-${sessionId}`,
+          runId,
+          sites: [...saved.sites],
+        };
+        const outcome = await this.browserHost.enqueue({
+          requestId: request.params.requestId,
+          scope,
+          command: request.params.command,
+        });
+        if (
+          this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId !== runId ||
+          this.sessionManager.getSession(sessionId)?.getDesignHookLaunchId?.() !== launchId
+        ) {
+          return {
+            type: 'browser/execute' as const,
+            ok: false as const,
+            error: 'Browser run ended before the operation result was returned.',
+          };
+        }
+        if (!outcome.ok) {
+          return { type: 'browser/execute' as const, ok: false as const, error: outcome.error };
+        }
+        if (outcome.reply.kind === 'asset') {
+          try {
+            const workspace = await this.resolveActiveDesignContext(sessionId, design.artworkId);
+            if (
+              this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId !== runId
+            ) {
+              throw new Error('Browser run ended before image publication.');
+            }
+            const asset = await writeGeneratedImageAsset(
+              workspace.artifactWorkdir,
+              Buffer.from(outcome.reply.base64, 'base64')
+            );
+            return {
+              type: 'browser/execute' as const,
+              ok: true as const,
+              reply: {
+                kind: 'text' as const,
+                text: JSON.stringify({
+                  pageUrl: outcome.reply.pageUrl,
+                  imageUrl: outcome.reply.imageUrl,
+                  path: asset.path,
+                  sha256: asset.sha256,
+                  mimeType: asset.mimeType,
+                  width: asset.width,
+                  height: asset.height,
+                  bytes: asset.bytes,
+                  note: 'Saved image bytes in the current design media directory. This does not modify or commit the canvas.',
+                }),
+              },
+            };
+          } catch (error) {
+            return {
+              type: 'browser/execute' as const,
+              ok: false as const,
+              error: formatErrorMessage(error).slice(0, 1_000),
+            };
+          }
+        }
+        return { type: 'browser/execute' as const, ok: true as const, reply: outcome.reply };
+      }
       case 'design/source-path': {
         const sessionId = request.ownerSessionId as SessionId;
         const design = await this.readDesignSession(sessionId);

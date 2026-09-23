@@ -1,7 +1,7 @@
 # Molly 内置 Pi Harness
 
-Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Status: draft
+Previous approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
 Translation: current
 
 [English](molly-embedded-pi-harness.md)
@@ -93,6 +93,8 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 授权关联实际 run、worker epoch、请求和连接 revision。工作区外读写、任意 shell、stdio 命令变更和秘密接收域变更有明确授权边界；付费工具默认逐次授权，可使用用户明确授予的有限次数。授权检查落实到执行路径；公开先读提醒不构成读证明或写授权。
 
+内置浏览工具经已有 MCP 桥和宿主审批管线执行。用户可授权当前任务内指定顶层站点和有限浏览工具；批准请求、逐调用检查与操作记录须保留授权的真实来源，不能把任务授权写成每次都获人工批准。任务范围随 run/epoch、取消、结束、页面关闭和人工接管失效；恢复历史不能恢复活授权。站点外导航/读取等待本任务扩权，页面观察与操作由同一个任务独占。该授权不扩及原生 shell、外部 MCP、Chrome 或高影响网站操作，不借用会话级 `session/set_mode`。
+
 模型请求、压缩及插件子请求都归属明确连接和使用量记录；首版标题由用户首句本地生成。有限传输重试不得变成整个任务或工具副作用的重放。费用无可靠依据时显示未知或估算。
 
 ### MCP 与付费图片
@@ -100,6 +102,8 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 复用 workspace MCP catalog 和每轮选择，保留显式空选择的语义。支持经验证的 stdio/Streamable HTTP 子集；工具有稳定命名空间、来源和 schema 版本。接受任务时冻结工具集合，撤销立即阻止执行，执行中 schema 变更明确失败，新工具在安全边界生效。未实现的 sampling、elicitation、OAuth 等能力不宣称支持。
 
 保留 `molly_generate_image`、`molly_edit_image` 和 `molly_render_preview` 的会话/宿主能力门控。外部图片能力通过预置适配或声明式字段映射绑定；无法绑定时仍可作为普通工具，如实显示图片能力未就绪。图片模型必须由用户明确配置，不使用 LLM 模型名或产品默认值。
+
+浏览工具只在 Molly 桌面及当前可控制页面就绪时进入冻结的工具目录；目录发现和实际调用都拒绝未授权工具。页面文本、结构和截图作为普通观察结果进入模型，不具有图像生成/编辑的付费身份。工具失去连接、撤销或页面身份变化时明确失败；未知副作用不自动重试或重放。Chrome 登录导入由用户操作，不成为 Agent 工具。
 
 URL、base64、MCP image/resource 经来源、路径、MIME、大小、尺寸和下载边界检查后进入既有素材存储。远程 file URI 不授权读取本机；重定向重新校验目标，不将秘密转发到新域。素材结果本身不提交或替换画布。
 

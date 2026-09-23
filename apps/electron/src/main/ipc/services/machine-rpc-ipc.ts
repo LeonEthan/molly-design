@@ -39,7 +39,11 @@ export class MachineRpcIpc extends IpcService {
 
   @IpcMethod()
   async send(message: LocalMachineRpcRequest) {
-    if (message.method === 'harness/host' || message.method === 'design/image-connection')
+    if (
+      message.method === 'harness/host' ||
+      message.method === 'design/image-connection' ||
+      message.method.startsWith('browser/')
+    )
       throw new Error('main_process_only_method')
     return await getIpcServiceDeps().cliService.sendLocalMachineRpc(message)
   }

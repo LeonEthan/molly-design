@@ -60,6 +60,10 @@ managePackageManagerVersions: true
 minimumReleaseAge: 10080
 # Reviewed writer/storage fixes pinned to this exact coordinated release.
 minimumReleaseAgeExclude:
+  # Exact upstream combination verified by the embedded-browser MCP probe.
+  - '@playwright/mcp@0.0.82'
+  - 'playwright@1.64.0-alpha-1789764292000'
+  - 'playwright-core@1.64.0-alpha-1789764292000'
   - loro-mirror@2.3.2
   - loro-mirror-jotai@2.3.2
   - loro-mirror-react@2.3.2

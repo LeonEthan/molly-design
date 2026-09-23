@@ -8,3 +8,6 @@ tsconfig.*.json
 resources/design
 resources/cli
 .sparkle-local
+
+# Generated unchanged MIT upstream adapter; regenerate with sync-browser-cdp.mjs.
+src/main/services/browser-cdp-upstream.js

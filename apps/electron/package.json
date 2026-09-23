@@ -10,7 +10,7 @@
   "homepage": "https://github.com/LeonEthan/molly-design",
   "scripts": {
     "format": "prettier --write .",
-    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test src/main/context-menu-template.test.mjs src/system-language-argument.test.mjs src/main/reload-shortcut.test.mjs src/main/close-focused-tab-or-window.test.mjs src/main/onboarding-launch-policy.test.mjs src/main/user-data-migration-core.test.mjs src/main/auto-launch-policy.test.mjs src/main/window-theme.test.mjs src/main/local-platform-snapshot.test.mjs src/main/ipc/ipc-channel-list.test.mjs src/main/services/model-connection-store.test.mjs src/main/services/local-file-resource.test.mjs src/main/services/image-export-core.test.mjs src/main/services/design-render-host-core.test.mjs src/main/services/design-viewport.test.mjs src/main/services/design-canvas-ready-core.test.mjs src/main/services/design-leave-drain-core.test.mjs src/main/services/design-canvas-sync-core.test.mjs src/main/services/design-worker.test.mjs src/main/services/design-session-disposal.test.mjs src/main/services/design-session-pool-core.test.mjs src/main/services/public-browser-state.test.mjs src/main/services/app-updater-metadata.test.mjs src/main/services/app-updater-sparkle-policy.test.mjs src/main/services/app-updater-sparkle-events.test.mjs src/main/services/loro-data-plane-relay.test.mjs src/renderer/renderer-csp.test.mjs src/renderer/src/renderer-error-reporting.test.mjs scripts/sparkle-packaging.test.mjs",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test src/main/services/browser-account-signing.test.mjs src/main/services/browser-account-source.test.mjs src/main/context-menu-template.test.mjs src/system-language-argument.test.mjs src/main/reload-shortcut.test.mjs src/main/close-focused-tab-or-window.test.mjs src/main/onboarding-launch-policy.test.mjs src/main/user-data-migration-core.test.mjs src/main/auto-launch-policy.test.mjs src/main/window-theme.test.mjs src/main/local-platform-snapshot.test.mjs src/main/ipc/ipc-channel-list.test.mjs src/main/services/model-connection-store.test.mjs src/main/services/local-file-resource.test.mjs src/main/services/image-export-core.test.mjs src/main/services/design-render-host-core.test.mjs src/main/services/design-viewport.test.mjs src/main/services/design-canvas-ready-core.test.mjs src/main/services/design-leave-drain-core.test.mjs src/main/services/design-canvas-sync-core.test.mjs src/main/services/design-worker.test.mjs src/main/services/design-session-disposal.test.mjs src/main/services/design-session-pool-core.test.mjs src/main/services/public-browser-agent-policy.test.mjs src/main/services/public-browser-state.test.mjs src/main/services/app-updater-metadata.test.mjs src/main/services/app-updater-sparkle-policy.test.mjs src/main/services/app-updater-sparkle-events.test.mjs src/main/services/loro-data-plane-relay.test.mjs src/renderer/renderer-csp.test.mjs src/renderer/src/renderer-error-reporting.test.mjs scripts/sparkle-packaging.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-transform-types --test src/main/services/public-browser-asset-fetch.test.mjs",
     "lint": "eslint --cache .",
     "typecheck:node": "tsgo --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsgo --noEmit -p tsconfig.web.json --composite false",
@@ -33,9 +33,12 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@molly/cli-supervisor": "workspace:*",
+    "@molly/ignore": "workspace:*",
     "@molly/platform": "workspace:*",
     "@molly/shared": "workspace:*",
+    "@playwright/mcp": "0.0.82",
     "@tanstack/react-router": "catalog:",
     "conf": "^15.1.0",
     "effect": "catalog:",
@@ -44,15 +47,16 @@
     "electron-updater": "^6.3.9",
     "image-dimensions": "^2.5.1",
     "jotai": "catalog:",
+    "playwright": "1.64.0-alpha-1789764292000",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "@molly/ignore": "workspace:*"
+    "rookie-cookies": "0.6.0"
   },
   "devDependencies": {
-    "zod": "catalog:",
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^2.0.0",
+    "@electron/fuses": "1.8.0",
     "@molly/components": "workspace:*",
     "@molly/configs": "workspace:*",
     "@tailwindcss/container-queries": "^0.1.1",
@@ -73,6 +77,7 @@
     "tailwindcss": "^4.3.0",
     "typescript": "^5.9.3",
     "vite": "^7.2.6",
-    "vite-plugin-wasm": "^3.5.0"
+    "vite-plugin-wasm": "^3.5.0",
+    "zod": "catalog:"
   }
 }

@@ -12,8 +12,8 @@ Preserve unrelated changes. Report outcomes, evidence and limits.
 
 ## Design principles and migration scope
 
-Question requirements, delete unnecessary mechanisms, then simplify and optimize. Build only
-what is needed now; completed code and concept images do not establish necessity.
+From first principles: question requirements, delete unnecessary mechanisms, then simplify and
+optimize. Build only what is needed now; completed code and concept images do not establish necessity.
 
 - Reuse Lody's architecture, UI and agent lifecycle with Bento. Migration only
   reduces scope; additions need explicit confirmation. Reuse modules before adding
@@ -112,6 +112,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
   or scheduler luck; do not assert mock call counts.
 - Keep edits traceable, contracts explicit; remove only unused code. Update the
   nearest public `AGENTS.md` for changed invariants/boundaries.
+- No local comments: rename, extract, or retype; external constraints cite the issue/Spec.
 
 ## Code Review Rules
 
@@ -125,8 +126,7 @@ Details: [.github/codex-review.md](.github/codex-review.md).
 
 ## Agent skills
 
-- Issues: `LeonEthan/molly-design` via `gh`; see [issue tracker](.agents/agent-skills/issue-tracker.md).
-- Triage labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`,
-  `wontfix`; see [triage rules](.agents/agent-skills/triage-labels.md).
-- Domain: one root `CONTEXT.md` glossary and `.agents/docs/adr/`; top-level `docs/`
-  is a closed product path. See [domain rules](.agents/agent-skills/domain.md).
+- Issues (`gh` on `LeonEthan/molly-design`): [issue tracker](.agents/agent-skills/issue-tracker.md); triage: [labels](.agents/agent-skills/triage-labels.md).
+- Domain (`CONTEXT.md` glossary, `.agents/docs/adr/`; top-level `docs/` is a closed product path): [domain rules](.agents/agent-skills/domain.md).
+- Task flows (bug fix / investigation / ship PR): [playbooks](.agents/agent-skills/playbooks.md); cite [principles](.agents/agent-skills/engineering-principles.md) by name.
+- Verify on the real surface: [verification](.agents/agent-skills/verification.md); long/unattended work: [decision log](.agents/agent-skills/decision-log.md).

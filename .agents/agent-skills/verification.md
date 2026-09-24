@@ -20,6 +20,7 @@ behavior. Pick the row matching the change and check the real artifact:
 | Contract / protocol | Exercise both sides against each other, not each against a mock |
 | Performance | Before/after measurement on the same workload; cite the numbers |
 | Docs, Specs, notes | `pnpm run docs check`, then read the result as its intended reader |
+| Design artifacts (Artwork, BentoDoc, YAML projections, Agent drafts) | Get evidence from Molly's own surfaces before concluding: render with the `molly_render_preview` MCP tool, and run the graphic-design skill's `scripts/render-preview.mjs` (intake) and `scripts/finalize.mjs` (diagnostics). Reading the files alone is not proof. Visual quality follows the [root rule on human judgment](../../AGENTS.md#design-platform-agent-naive-environment) |
 
 Rules of observation:
 

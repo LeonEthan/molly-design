@@ -32,7 +32,7 @@ mechanics live in the linked owner or skill file.
 | attack-the-premise | When two fixes sharing one premise have failed the same gate, stop. Write the premise down, census which actors hold the imbalance, and question the premise instead of writing a third fix that assumes it. | Debugging that keeps bouncing | [Playbooks](playbooks.md#bug-fix) |
 | prove-on-the-real-surface | Verify against the real artifact (run the app, read the stored value, replay real input), not a proxy, a self-report, or "it compiles". | Before declaring done | [Verification](verification.md) |
 | name-the-safety-fact | For a small-looking change, name the one fact it is safe because of, then prove that fact by running code. | "Trivial" changes, review sign-off | [Verification](verification.md#blast-radius) |
-| names-over-comments | The urge to write a local comment is a signal to rename, extract, or retype; external constraints cite the issue/Spec. API docs and tool directives are out of scope. | Writing or reviewing a function body | [Root rules](../../AGENTS.md) |
+| names-over-comments | The urge to write a local comment is a signal to rename, extract, or retype; external constraints cite the issue/Spec. API docs and tool directives are out of scope. | Writing or reviewing a function body in first-party code. Does not apply to vendored upstream (`packages/design-bento/bento/`, `packages/design-bento/vendor/`, `vendor/`); when Molly patches upstream and must explain why, cite an issue or note instead of a long inline comment. | [Root rules](../../AGENTS.md) |
 
 ## Steering with names
 

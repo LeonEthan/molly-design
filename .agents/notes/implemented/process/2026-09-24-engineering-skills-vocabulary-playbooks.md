@@ -1,6 +1,6 @@
 # Named engineering principles and task playbooks for agent work
 
-Status: proposed
+Status: implemented
 Translation: current
 PR: https://github.com/LeonEthan/molly-design/pull/3
 
@@ -17,8 +17,9 @@ vocabulary that mostly names existing constraints, three task playbooks, a
 verification standard, and a lightweight decision log. Two maintainer-requested
 conventions joined the same change: a named first-principles design rule and a
 scoped ban on local comments. pstack's autonomy-oriented elements were rejected
-because planning here never authorizes implementation or publication. The documents land together with
-this note; their steering value is proposed, not yet measured.
+because planning here never authorizes implementation or publication. The
+documents landed with PR #3; their steering value remains unmeasured until used
+on real tasks.
 
 ## Problem
 
@@ -63,10 +64,11 @@ issue-tracker/domain pattern (plain Markdown, linked from root `AGENTS.md`,
 tool-neutral):
 
 - `engineering-principles.md`: the vocabulary. Six principles name existing
-  rules (index only, no rule change); five adopted principles
-  (falsifiable-done, repro-before-fix, attack-the-premise,
-  prove-on-the-real-surface, name-the-safety-fact) add new guidance whose
-  mechanics live in the other leaves.
+  rules (index only, no rule change); seven adopted principles add new
+  guidance — five with mechanics in the other leaves (falsifiable-done,
+  repro-before-fix, attack-the-premise, prove-on-the-real-surface,
+  name-the-safety-fact), plus `first-principles` and `names-over-comments`
+  covered below.
 - `playbooks.md`: bug fix, read-only investigation, shipping a PR — sequences
   built from this repository's tooling (`pnpm check`, `docs check`, `gh`,
   Conventional Commits, note rules, P0/P1 review rules).
@@ -117,8 +119,8 @@ line to fund the two rules above: 8129 of 8192 bytes after all changes.
   exactly one leaf.
 - The triage label names left the root section; discovery now depends on the
   "triage: labels" pointer. Labels remain defined in `triage-labels.md`.
-- Root `AGENTS.md` headroom is 127 bytes after the change; the next addition
-  there likely needs its own compression or relocation.
+- Root `AGENTS.md` headroom is 63 bytes after the change; the next addition
+  there needs its own compression or relocation.
 - Steering value (humans citing names, agents following playbooks) is an
   expectation, unverified until used on real tasks.
 - The pstack evaluation reflects the pack as cloned on 2026-09-24; upstream
@@ -128,8 +130,10 @@ line to fund the two rules above: 8129 of 8192 bytes after all changes.
 
 - Byte counts measured: root `AGENTS.md` 7803 → 8129 (gate 8192) after the two
   new rules and the pointer merge.
-- Docs-only change; `pnpm run docs check` passes as of 2026-09-24. Full
-  `pnpm check` not run: no code or manifest changed.
+- Docs-only change. `pnpm run docs check` errors [] and `pnpm check` exit 0,
+  both run 2026-09-24 before commit. (Correction: the proposed revision said
+  the full check was not run; it ran before commit.)
+- Implemented via PR #3, merged 2026-09-24 (ff495327).
 
 ## Source
 

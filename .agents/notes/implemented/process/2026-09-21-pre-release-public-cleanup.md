@@ -20,7 +20,7 @@ product, and removes the daemon's remote npm upgrade machinery end to end — th
 Release and runtime-artifact hosting stays on the personal GitHub account for now
 (no organization), and the first GitHub Release remains deferred until
 signed/notarized artifacts exist. On 2026-09-21 the owner approved all 16 draft
-specs at revision `a7a297ae` ([approval record](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477));
+specs at revision `a7a297ae` ([approval record](2026-09-24-github-repository-rebuild.md#pr-52-owner-approval));
 their Status lines flip to `approved` with that link.
 
 ## What changed

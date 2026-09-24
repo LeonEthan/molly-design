@@ -25,6 +25,7 @@ export type IntroScene = (typeof SCENES)[number]['id'];
 export const INTRO_SHOT_COUNT = SCENES.length;
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+const currentTimeMs = () => performance.now();
 
 function subscribeToMotionPreference(onChange: () => void) {
   const preference = window.matchMedia(REDUCED_MOTION_QUERY);
@@ -198,13 +199,16 @@ export function IntroSequence({
   playing = true,
   onStart,
   soundControl,
+  getElapsedMs = currentTimeMs,
 }: {
   playing?: boolean;
   onStart: () => void;
   soundControl?: ReactNode;
+  getElapsedMs?: () => number;
 }) {
   const [index, setIndex] = useState(0);
   const [manual, setManual] = useState(false);
+  const remainingRef = useRef(3000);
   const reducedMotion = useSyncExternalStore(
     subscribeToMotionPreference,
     prefersReducedMotion,
@@ -212,9 +216,20 @@ export function IntroSequence({
   );
   useEffect(() => {
     if (!playing || manual || reducedMotion || index === INTRO_SHOT_COUNT - 1) return undefined;
-    const timer = window.setTimeout(() => setIndex((value) => value + 1), 3000);
-    return () => window.clearTimeout(timer);
-  }, [index, playing, manual, reducedMotion]);
+    const startedAt = getElapsedMs();
+    let advanced = false;
+    const timer = window.setTimeout(() => {
+      advanced = true;
+      remainingRef.current = 3000;
+      setIndex((value) => value + 1);
+    }, remainingRef.current);
+    return () => {
+      window.clearTimeout(timer);
+      if (!advanced) {
+        remainingRef.current = Math.max(0, remainingRef.current - (getElapsedMs() - startedAt));
+      }
+    };
+  }, [index, playing, manual, reducedMotion, getElapsedMs]);
   return (
     <IntroPage
       scene={SCENES[index].id}

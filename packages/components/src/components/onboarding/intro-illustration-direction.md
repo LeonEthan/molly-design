@@ -40,13 +40,27 @@ Local setup independently uses `MollySetupArtwork` with the existing
 `../../assets/molly-editorial-v3.png`. Replacing opening artwork must not alter that
 setup backdrop, its phases, completion persistence or theme ownership.
 
-Step 01 retains the existing `../../assets/molly-opening-v1.mp3` and playback policy:
-the opening twenty seconds of the previously authorized MiniMax Music-3.0 source,
-normalized to -20 LUFS with a 0.4-second fade-in and four-second fade-out. It attempts
-autoplay, supports mute and existing gesture recovery, never loops, and stops when
-leaving the opening. This is deliberately an intermediate implementation: step 03
-owns the new complete nine-second cue and explicit sound-button recovery; step 04
-owns foreground/background pause and resume. No new music has been generated.
+The opening now bundles `../../assets/molly-opening-v2.mp3`, a nine-second passage
+from the user-supplied MiniMax track. Its extraction, processing, measured levels,
+hashes and audible-watermark review boundary are recorded in the adjacent
+`../../assets/molly-opening-v2.source.md`. The cue starts enabled at a restrained
+level, never loops, and stops immediately on entry to setup. Muting does not stop
+the opening clock; unmuting or explicitly enabling sound after blocked autoplay
+seeks to the current elapsed opening time and cannot restart the cue after nine
+seconds. Unrelated pointer and keyboard input may unlock interaction sounds but
+cannot recover the opening cue.
+
+`use-onboarding-audio.ts` owns one foreground elapsed clock. `IntroSequence` reads
+that clock through `getElapsedMs` when preserving the remainder of a three-second
+scene interval; selecting a scene never seeks the audio. In Electron, the main
+window pushes its native foreground state through preload, which retains the
+latest value for a newly mounted opening. This covers macOS minimize events that
+do not change Chromium's document focus or visibility. The web fallback combines
+window focus and document visibility. Repeated or overlapping signals have no
+additional effect, and returning resumes the remaining scene interval and cue
+position when the active foreground source permits it. Manual reading and reduced-motion mode stay manual; mute, blocked
+autoplay and an ended cue retain their state. A new opening visit starts at scene
+one, without persisting scene, elapsed-time or sound state.
 
 The earlier four-category artwork and audio production history remains in the
 [independent-release record](../../../../../.agents/notes/proposed/feature/2026-09-13-geon-independent-brand-release.zh.md).

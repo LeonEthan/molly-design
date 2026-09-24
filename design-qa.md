@@ -1,7 +1,7 @@
 # Welcome opening — implementation QA
 
 Date: 2026-09-24
-Result: **passed** for the bounded step 01 and step 02 checks below. Step 01 was committed at the user's request; step 02 is implemented and verified. Steps 03–04 remain outside this result.
+Result: **passed** for the bounded step 01 and step 02 desktop checks and step 03 standalone-cue listening. Step 04's deterministic checks pass; its post-fix native foreground acceptance is pending an unlocked desktop. Historical status statements below describe each step at the time it was tested.
 
 ## Reference and actual artifacts
 
@@ -12,15 +12,15 @@ Result: **passed** for the bounded step 01 and step 02 checks below. Step 01 was
 
 ## Design comparison
 
-| Surface | Observation |
-| --- | --- |
-| Composition | Inspected the approved concept and both actual six-panel sheets. Three subjects, their order, shared artwork and final setup CTA are preserved. The taller native frames have more vertical space than the concept panels; artwork uses contain sizing. |
-| Type and copy | Real localized headings, supporting text, callout and example labels match the approved copy. English Unexpected connections. appears once. Chinese serif rendering uses the platform font fallback, rather than reproducing the concept's generated lettering. |
-| Color and surfaces | Warm near-white shell, dark text, thin divider, three dashes and final pill CTA follow the reference. Artwork retains its yellow/slate accents. |
-| Assets | Three authorized edits produced standalone artwork: collage 1254 × 1254, others 1851 × 849. No artificial upscaling or invented date/venue. Brush texture and small details are generated interpretations, not pixel-identical copies. Exact source/edit provenance is adjacent to each production asset. |
-| Icons | Existing Molly mark retained. Sound icons use licensed canonical Lucide geometry through the shared icon registry. Sound state follows the retained audio policy rather than the concept's static muted glyph. |
-| Interaction | Three-second boundaries and final hold work. Skip and Start setup enter Connect a model; Back returns to scene 1. The old editorial setup image remains independent of the opening. |
-| Accessibility | Real text, button labels and focus styling remain. At enlarged zoom, vertical scrolling exposes the controls without horizontal overflow. Interactive progress and reduced-motion manual playback belong to step 02; those are not claimed as completed here. |
+| Surface            | Observation                                                                                                                                                                                                                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Composition        | Inspected the approved concept and both actual six-panel sheets. Three subjects, their order, shared artwork and final setup CTA are preserved. The taller native frames have more vertical space than the concept panels; artwork uses contain sizing.                                                   |
+| Type and copy      | Real localized headings, supporting text, callout and example labels match the approved copy. English Unexpected connections. appears once. Chinese serif rendering uses the platform font fallback, rather than reproducing the concept's generated lettering.                                           |
+| Color and surfaces | Warm near-white shell, dark text, thin divider, three dashes and final pill CTA follow the reference. Artwork retains its yellow/slate accents.                                                                                                                                                           |
+| Assets             | Three authorized edits produced standalone artwork: collage 1254 × 1254, others 1851 × 849. No artificial upscaling or invented date/venue. Brush texture and small details are generated interpretations, not pixel-identical copies. Exact source/edit provenance is adjacent to each production asset. |
+| Icons              | Existing Molly mark retained. Sound icons use licensed canonical Lucide geometry through the shared icon registry. Sound state follows the retained audio policy rather than the concept's static muted glyph.                                                                                            |
+| Interaction        | Three-second boundaries and final hold work. Skip and Start setup enter Connect a model; Back returns to scene 1. The old editorial setup image remains independent of the opening.                                                                                                                       |
+| Accessibility      | Real text, button labels and focus styling remain. At enlarged zoom, vertical scrolling exposes the controls without horizontal overflow. Interactive progress and reduced-motion manual playback belong to step 02; those are not claimed as completed here.                                             |
 
 ## Reproduced layout defect and narrow fix
 
@@ -30,12 +30,12 @@ The fix changes only two layout declarations: safe vertical centering on the scr
 
 To avoid excessive testing, the final run covers only both languages, three scenes, and these four conditions:
 
-| Native window | Electron zoom | Result |
-| --- | --- | --- |
-| 900 × 670 | 100% | Passed |
-| 620 × 600 | 100% | Passed |
-| 900 × 670 | 150% | Passed; original failure case |
-| 620 × 600 | 200% | Passed; original failure case |
+| Native window | Electron zoom | Result                        |
+| ------------- | ------------- | ----------------------------- |
+| 900 × 670     | 100%          | Passed                        |
+| 620 × 600     | 100%          | Passed                        |
+| 900 × 670     | 150%          | Passed; original failure case |
+| 620 × 600     | 200%          | Passed; original failure case |
 
 All 24 scene states passed header visibility, horizontal overflow, heading bounds, footer separation and action hit-testing after scrolling where needed. All eight language/window/zoom paths passed terminal hold, Start setup, Back and Skip; no renderer page errors were observed. Image decode and font readiness were awaited; scene timing uses an injected clock. The app uses isolated renderer/runtime data and restores the previous saved window bounds. No full suite was rerun for the CSS fix.
 
@@ -69,7 +69,6 @@ Electron app build/type checks, changed-file formatting and documentation checks
 
 The user requested committing this slice and proceeding to step 02 after the connector fix. Ran `pnpm format` and `pnpm check`. Workspace type checks passed; new lint errors were corrected and the gate resumed from lint without repeating completed type checks. Full CI tests passed (components: 418 files / 3207 tests), as did translation and import/platform checks. Public-boundary checking identified two asset provenance files containing internal absolute paths; these now retain only artifact identifiers and pass the boundary check. The vendor Claude tsconfig lookup emitted a non-fatal diagnostic during component collection; the retained vendor checkout was not changed.
 
-
 ## Step 02 — manual reading and reduced motion
 
 Result: **passed**. Progress segments are now native buttons with localized accessible names, `aria-current` state and keyboard-visible focus. Pointer activation, Enter or Space selects immediately and stops automatic advancement for that visit, including activation of the already-current segment. Reduced motion prevents automatic advancement and fades without muting audio. Setup Back begins a fresh visit; no new persisted state or audio timeline was introduced.
@@ -83,3 +82,21 @@ Evidence: [Chinese keyboard focus](output/welcome-redesign-2026-09-24/verificati
 - Electron app build/type checks, changed-file lint (zero errors, one warning), translation-key validation, documentation checks and whitespace checks passed. Existing bundle-size and 16 documentation warnings remain.
 
 New nine-second music, explicit blocked-audio recovery and foreground/background pause/resume remain steps 03–04. This result does not claim those behaviors are implemented.
+
+## Step 03 audio integration
+
+The user-supplied MiniMax track was made into a nine-second cue and bundled in the Electron renderer. The user listened to the final standalone file and replied “LGTM” on 2026-09-24. [Cue source and processing](packages/components/src/assets/molly-opening-v2.source.md) retain the source hash, extracted interval, measured duration and level. The old twenty-second asset was removed.
+
+The sound button now exclusively recovers blocked opening music at the elapsed opening position; unrelated input still unlocks separate interaction sounds but cannot restart the cue. Muting keeps opening time moving, recovery at or after nine seconds stays silent, and the setup action stops the player before navigation. Foreground/background pause remains step 04.
+
+- Focused mounted audio and onboarding-flow tests: **2 files / 14 tests passed**, with fake time and controllable media promises. The component type check and changed-file lint passed.
+- Electron `build:app` and its node/web type checks passed. Its emitted MP3 has the same SHA-256 as the source-tree cue. The build retained existing bundle warnings.
+- Documentation and whitespace checks passed. Human listening of early exit, mute/unmute and blocked recovery **inside the actual Electron opening** remains outstanding; standalone-cue approval is not evidence for those interaction sounds.
+
+## Step 04 foreground pause and resume
+
+The opening now uses one foreground elapsed clock for the scene intervals and music. A native Electron window signal pauses both on minimize, hide or blur and resumes them on a focused visible window; document visibility and focus remain the browser fallback. Preload retains the most recent native state for an opening mounted after the first window event. Manual reading, reduced motion, mute, blocked autoplay and the final cue state remain independent of focus changes.
+
+The need for the native signal was reproduced on macOS: minimizing the previous build emitted neither renderer `visibilitychange` nor `blur`; real MP3 playback advanced from 0 to 4.869 seconds during a five-second minimized interval. A repeat without Playwright's clock advanced to 4.933 seconds. The updated build passes Electron node/web type checks and emits the new main/preload/renderer bridge. Five mounted interruption tests pass, including stale Chromium focus with a native background event, alongside the existing audio and flow tests.
+
+The local arm64 unpacked-app package completed, including its embedded CLI, native-binding and image-decoder probes; it was not published. The MP3 inside `Molly.app/Contents/Resources/app.asar` matches the source asset byte-for-byte (SHA-256 `818f68f42f8bbdaf18450e844b4c83fdbb6494974aa93054de1c331f58cefeae`). The [native foreground probe](.scratch/welcome-onboarding/verify-background-resume.cjs) is prepared to check a 2.4-second partial scene, minimized and unfocused intervals, return position, manual reading, cue expiry and setup handoff against the real player. The current host is locked; macOS refuses to focus the isolated Electron window, so the post-fix minimize/restore path has **not** yet passed or failed on the native surface. This lock condition does not establish a product defect. The probe will be rerun after the desktop is unlocked, and its [results](output/welcome-redesign-2026-09-24/verification/background-resume-results.json) will be recorded here. Human in-app hearing of mute, recovery and early exit also remains outstanding.

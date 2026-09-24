@@ -108,6 +108,7 @@ describe('desktop onboarding flow', () => {
 
   beforeEach(async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     await initI18n('en');
     localStorage.clear();
     mocks.useVisibleLocalProjects.mockReturnValue({ projects: new Map() });

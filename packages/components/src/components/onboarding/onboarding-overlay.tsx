@@ -135,11 +135,10 @@ export function OnboardingOverlay({
     },
     [captureStepExit, setPersistedPhase]
   );
-  const goAfterCeremony = useCallback(
-    () =>
-      advanceTo(cloudAccount ? 'login' : multiWorkspace ? 'workspace' : 'providers', 'continue'),
-    [advanceTo, cloudAccount, multiWorkspace]
-  );
+  const goAfterCeremony = useCallback(() => {
+    stopOnboardingAudio();
+    advanceTo(cloudAccount ? 'login' : multiWorkspace ? 'workspace' : 'providers', 'continue');
+  }, [advanceTo, cloudAccount, multiWorkspace, stopOnboardingAudio]);
   const goBeforeProviders = useCallback(
     () => advanceTo(multiWorkspace ? 'workspace' : cloudAccount ? 'login' : 'ceremony', 'back'),
     [advanceTo, cloudAccount, multiWorkspace]

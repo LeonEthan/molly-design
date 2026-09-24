@@ -4,6 +4,8 @@ import { isIpcInvokeChannel } from './ipc-invoke-policy'
 
 const pendingDeepLinks: unknown[] = []
 const deepLinkHandlers = new Set<(payload: unknown) => void>()
+let windowForeground: boolean | null = null
+const windowForegroundHandlers = new Set<(payload: unknown) => void>()
 
 ipcRenderer.on(IPC_PUSH_CHANNELS.appDeepLink, (_event, url: unknown) => {
   if (deepLinkHandlers.size === 0) {
@@ -12,6 +14,14 @@ ipcRenderer.on(IPC_PUSH_CHANNELS.appDeepLink, (_event, url: unknown) => {
   }
   for (const handler of deepLinkHandlers) {
     handler(url)
+  }
+})
+
+ipcRenderer.on(IPC_PUSH_CHANNELS.appWindowForeground, (_event, value: unknown) => {
+  if (typeof value !== 'boolean') return
+  windowForeground = value
+  for (const handler of windowForegroundHandlers) {
+    handler(value)
   }
 })
 
@@ -34,6 +44,13 @@ export const ipcBridge = {
       }
       return () => {
         deepLinkHandlers.delete(listener)
+      }
+    }
+    if (channel === IPC_PUSH_CHANNELS.appWindowForeground) {
+      windowForegroundHandlers.add(listener)
+      if (windowForeground !== null) listener(windowForeground)
+      return () => {
+        windowForegroundHandlers.delete(listener)
       }
     }
     const handler = (_event: unknown, payload: unknown) => listener(payload)

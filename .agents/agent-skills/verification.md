@@ -20,6 +20,7 @@ behavior. Pick the row matching the change and check the real artifact:
 | Contract / protocol | Exercise both sides against each other, not each against a mock |
 | Performance | Before/after measurement on the same workload; cite the numbers |
 | Docs, Specs, notes | `pnpm run docs check`, then read the result as its intended reader |
+| 设计产物 / Design artifacts (Artwork / BentoDoc / YAML projection / Agent drafts) | First get evidence with MCP `molly_render_preview` and skill scripts `node scripts/render-preview.mjs` / `node scripts/finalize.mjs` (intake diagnostics); do not conclude from only reading files. Visual quality: [root rules](../../AGENTS.md#design-platform-agent-naive-environment) |
 
 Rules of observation:
 

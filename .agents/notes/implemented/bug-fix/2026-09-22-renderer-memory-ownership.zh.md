@@ -2,7 +2,7 @@
 
 Status: implemented
 Translation: pending
-PR: [#54](https://github.com/LeonEthan/molly-design/pull/54)
+PR: [#54](../process/2026-09-24-github-repository-rebuild.md#pr-54)
 
 ## 摘要
 

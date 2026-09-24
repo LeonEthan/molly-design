@@ -3,7 +3,7 @@
 Status: implemented
 Translation: pending
 
-PR: [#53](https://github.com/LeonEthan/molly-design/pull/53)
+PR: [#53](../process/2026-09-24-github-repository-rebuild.md#pr-53)
 
 ## Abstract
 

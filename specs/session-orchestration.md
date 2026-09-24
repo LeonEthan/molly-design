@@ -1,7 +1,7 @@
 # Session orchestration chain depth
 
 Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](https://github.com/LeonEthan/molly-design/pull/52#issuecomment-5755930477)
+Approval: [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
 Translation: current
 
 [中文](session-orchestration.zh.md)

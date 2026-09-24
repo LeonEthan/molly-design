@@ -132,6 +132,7 @@ describe('desktop onboarding flow', () => {
     container.remove();
     document.body.innerHTML = '';
     uninstallElectronWindowIpc();
+    vi.useRealTimers();
     vi.clearAllMocks();
   });
 
@@ -146,11 +147,46 @@ describe('desktop onboarding flow', () => {
       );
     });
 
-    expect(container.textContent).toContain('Make an impression.');
+    expect(container.textContent).toContain('Unexpected connections.');
     expect(container.querySelector('img')).not.toBeNull();
     expect(container.textContent).not.toContain('Preparing your workspace');
     expect(mocks.getCliState).not.toHaveBeenCalled();
   });
+
+  it.each(['Skip', 'Start setup'])(
+    'hands %s to local setup and replays from Back',
+    async (action) => {
+      vi.useFakeTimers();
+      const platform = createLocalPlatformProvider({
+        session: createStaticStore({ status: 'unauthenticated' }),
+        workspaces: createStaticStore({ status: 'ready', workspaces: [], activeWorkspaceId: null }),
+      });
+      await act(async () =>
+        root?.render(
+          <Provider store={store}>
+            <PlatformContext.Provider value={platform}>
+              <OnboardingOverlay onCompleted={async () => true} />
+            </PlatformContext.Provider>
+          </Provider>
+        )
+      );
+      if (action === 'Start setup') {
+        await act(async () => vi.advanceTimersByTime(3000));
+        await act(async () => vi.advanceTimersByTime(3000));
+      }
+      await act(async () => findButton(container, action).click());
+      expect(store.get(desktopOnboardingPhaseAtom)).toBe('providers');
+      expect(container.textContent).toContain('Connect a model');
+      expect(container.querySelector('[data-testid=model-connections]')).not.toBeNull();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain(
+        'molly-editorial-v3.png'
+      );
+      await act(async () => findButton(container, 'Back').click());
+      expect(store.get(desktopOnboardingPhaseAtom)).toBe('ceremony');
+      expect(container.querySelector('h1')?.textContent).toBe('Unexpected connections.');
+      expect(container.querySelector('.molly-intro-count')?.textContent).toBe('01 / 03');
+    }
+  );
 
   it('derives steps and repairs stale phases from platform capabilities', () => {
     expect(getDesktopOnboardingSteps({ cloudAccount: false, multiWorkspace: false })).toEqual([

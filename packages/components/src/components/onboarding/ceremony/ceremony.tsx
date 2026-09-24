@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { IntroSequence } from './intro-sequence';
 import type { OnboardingAudio } from './use-onboarding-audio';
 import { unlockSound, setOnboardingSoundMuted } from './ui-sounds';
+import { Volume2, VolumeX } from '@/ui/icons';
 
 // The onboarding ceremony: the opening title sequence, and nothing else.
 //
@@ -52,18 +53,37 @@ export function OnboardingCeremony({
 
   return (
     <div className="fixed inset-0 z-10 overflow-hidden text-slate-950">
-      <IntroSequence playing={playing} onStart={onFinish} />
-      <button
-        type="button"
-        aria-pressed={audio.muted}
-        className="app-region-no-drag absolute right-8 top-10 z-20 border-b border-[#aaa998] px-2 py-2 text-sm text-[#555b4c]"
-        onClick={() => {
-          if (audio.needsGesture && !audio.muted) startAudio();
-          else audio.toggleMuted();
-        }}
-      >
-        {t(audio.needsGesture || audio.muted ? 'onboarding.audio.enable' : 'onboarding.audio.mute')}
-      </button>
+      <IntroSequence
+        playing={playing}
+        onStart={onFinish}
+        soundControl={
+          <button
+            type="button"
+            aria-pressed={audio.muted}
+            className="app-region-no-drag molly-intro-sound"
+            aria-label={t(
+              audio.needsGesture || audio.muted
+                ? 'onboarding.audio.enable'
+                : 'onboarding.audio.mute'
+            )}
+            title={t(
+              audio.needsGesture || audio.muted
+                ? 'onboarding.audio.enable'
+                : 'onboarding.audio.mute'
+            )}
+            onClick={() => {
+              if (audio.needsGesture && !audio.muted) startAudio();
+              else audio.toggleMuted();
+            }}
+          >
+            {audio.needsGesture || audio.muted ? (
+              <VolumeX aria-hidden="true" className="size-4" />
+            ) : (
+              <Volume2 aria-hidden="true" className="size-4" />
+            )}
+          </button>
+        }
+      />
     </div>
   );
 }

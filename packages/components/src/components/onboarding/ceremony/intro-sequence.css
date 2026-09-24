@@ -204,13 +204,29 @@
 .molly-intro-segments {
   gap: 8px;
 }
-.molly-intro-segments span {
+.molly-intro-segments button {
+  display: inline-flex;
+  align-items: center;
   width: 32px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+.molly-intro-segments button:focus-visible {
+  outline: 2px solid #26281f;
+  outline-offset: 3px;
+}
+.molly-intro-segments span {
+  width: 100%;
   height: 4px;
   border-radius: 2px;
   background: #d4d5d0;
 }
-.molly-intro-segments span[data-active='true'] {
+.molly-intro-segments button[aria-current='step'] span,
+.molly-intro-segments button:hover span {
   background: #26281f;
 }
 .molly-intro-count {
@@ -270,7 +286,7 @@
   .molly-intro-progress {
     gap: 12px;
   }
-  .molly-intro-segments span {
+  .molly-intro-segments button {
     width: 26px;
   }
 }

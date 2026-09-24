@@ -134,6 +134,7 @@ describe('desktop onboarding flow', () => {
     uninstallElectronWindowIpc();
     vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('renders the welcome step without waiting for the Electron CLI bootstrap', async () => {
@@ -153,9 +154,16 @@ describe('desktop onboarding flow', () => {
     expect(mocks.getCliState).not.toHaveBeenCalled();
   });
 
-  it.each(['Skip', 'Start setup'])(
-    'hands %s to local setup and replays from Back',
-    async (action) => {
+  it.each([
+    { action: 'Skip', reducedMotion: false },
+    { action: 'Start setup', reducedMotion: false },
+    { action: 'Start setup', reducedMotion: true },
+  ])(
+    'hands $action to local setup and resets manual reading from Back (reduced motion: $reducedMotion)',
+    async ({ action, reducedMotion }) => {
+      const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+      Object.defineProperty(motionPreference, 'matches', { value: reducedMotion });
+      vi.spyOn(window, 'matchMedia').mockReturnValue(motionPreference);
       vi.useFakeTimers();
       const platform = createLocalPlatformProvider({
         session: createStaticStore({ status: 'unauthenticated' }),
@@ -170,9 +178,13 @@ describe('desktop onboarding flow', () => {
           </Provider>
         )
       );
+      await act(async () =>
+        container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[1].click()
+      );
       if (action === 'Start setup') {
-        await act(async () => vi.advanceTimersByTime(3000));
-        await act(async () => vi.advanceTimersByTime(3000));
+        await act(async () =>
+          container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[2].click()
+        );
       }
       await act(async () => findButton(container, action).click());
       expect(store.get(desktopOnboardingPhaseAtom)).toBe('providers');
@@ -185,6 +197,10 @@ describe('desktop onboarding flow', () => {
       expect(store.get(desktopOnboardingPhaseAtom)).toBe('ceremony');
       expect(container.querySelector('h1')?.textContent).toBe('Unexpected connections.');
       expect(container.querySelector('.molly-intro-count')?.textContent).toBe('01 / 03');
+      await act(async () => vi.advanceTimersByTime(3000));
+      expect(container.querySelector('.molly-intro-count')?.textContent).toBe(
+        reducedMotion ? '01 / 03' : '02 / 03'
+      );
     }
   );
 

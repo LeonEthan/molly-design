@@ -1,7 +1,7 @@
-# Welcome opening — step 01 design QA
+# Welcome opening — implementation QA
 
 Date: 2026-09-24
-Result: **passed** for the bounded step 01 technical and agent visual review below. Production artwork remains subject to the user's visual judgment; this does not accept steps 02–04.
+Result: **passed** for the bounded step 01 and step 02 checks below. Step 01 was committed at the user's request; step 02 is implemented and verified. Steps 03–04 remain outside this result.
 
 ## Reference and actual artifacts
 
@@ -68,3 +68,18 @@ Electron app build/type checks, changed-file formatting and documentation checks
 ## Step 01 commit gate
 
 The user requested committing this slice and proceeding to step 02 after the connector fix. Ran `pnpm format` and `pnpm check`. Workspace type checks passed; new lint errors were corrected and the gate resumed from lint without repeating completed type checks. Full CI tests passed (components: 418 files / 3207 tests), as did translation and import/platform checks. Public-boundary checking identified two asset provenance files containing internal absolute paths; these now retain only artifact identifiers and pass the boundary check. The vendor Claude tsconfig lookup emitted a non-fatal diagnostic during component collection; the retained vendor checkout was not changed.
+
+
+## Step 02 — manual reading and reduced motion
+
+Result: **passed**. Progress segments are now native buttons with localized accessible names, `aria-current` state and keyboard-visible focus. Pointer activation, Enter or Space selects immediately and stops automatic advancement for that visit, including activation of the already-current segment. Reduced motion prevents automatic advancement and fades without muting audio. Setup Back begins a fresh visit; no new persisted state or audio timeline was introduced.
+
+The first real-desktop Tab check failed because Electron's existing capture-phase handler cancelled default traversal on ordinary buttons. Added a full-screen `data-native-tab-surface` opt-in for the opening, including Tab entry from the unfocused document. The native probe verifies general chrome still cancels Tab once the opening unmounts. This is a scoped host integration fix, rather than relying on browser-only tests or mislabelling the screen as a dialog.
+
+Evidence: [Chinese keyboard focus](output/welcome-redesign-2026-09-24/verification/step2-zh_CN-standard.png), [English reduced motion](output/welcome-redesign-2026-09-24/verification/step2-en-reduced.png), [200% keyboard setup focus](output/welcome-redesign-2026-09-24/verification/step2-en-reduced-200.png), [native results](output/welcome-redesign-2026-09-24/verification/step2-results.json). Captures were inspected against the approved composition and the corrected step 01 page: artwork, connector, copy and action layout remain intact. Keyboard focus adds a visible ring around the segment; pointer presentation retains the three dashes.
+
+- Focused mounted regression: **3 files / 18 tests passed**, using fake clocks and explicit preference/media signals. No new full-suite run for step 02.
+- Real Electron: four Chinese/English × standard/reduced-motion flows, using the default Chinese window and minimum English window. Verified keyboard entry, Tab/Enter/Space activation, selected labels, terminal hold, fresh Back behavior, no horizontal overflow or renderer errors, plus one 200% minimum-window keyboard handoff.
+- Electron app build/type checks, changed-file lint (zero errors, one warning), translation-key validation, documentation checks and whitespace checks passed. Existing bundle-size and 16 documentation warnings remain.
+
+New nine-second music, explicit blocked-audio recovery and foreground/background pause/resume remain steps 03–04. This result does not claim those behaviors are implemented.

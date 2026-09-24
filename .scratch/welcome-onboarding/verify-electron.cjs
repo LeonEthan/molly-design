@@ -115,7 +115,7 @@ const cases = [];
               )
             );
             await fs.writeFile(path.join(output, name + '.png'), pixels);
-            const action = page.locator('.molly-intro-footer button');
+            const action = page.locator('.molly-intro-footer > button');
             await action.scrollIntoViewIfNeeded();
             const hit = await action.evaluate((e) => {
               const r = e.getBoundingClientRect();
@@ -131,7 +131,7 @@ const cases = [];
           }
           await page.clock.runFor(30000);
           assert(await page.locator('.molly-intro-expression').isVisible());
-          await page.locator('.molly-intro-footer button').click();
+          await page.locator('.molly-intro-footer > button').click();
           await page
             .getByRole('heading', {
               name: locale === 'en' ? 'Connect a model' : '连接模型',
@@ -142,7 +142,7 @@ const cases = [];
             .getByRole('button', { name: locale === 'en' ? 'Back' : '返回', exact: true })
             .click();
           await page.locator('.molly-intro-inspiration').waitFor();
-          await page.locator('.molly-intro-footer button').click();
+          await page.locator('.molly-intro-footer > button').click();
           await page
             .getByRole('heading', {
               name: locale === 'en' ? 'Connect a model' : '连接模型',

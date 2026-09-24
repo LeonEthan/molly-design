@@ -22,8 +22,19 @@ scene indefinitely. Skip and Start setup immediately enter the existing setup pa
 The artwork uses contain sizing; narrow layouts preserve readable copy and controls.
 At enlarged zoom, the frame scrolls from its top and the footer can wrap, keeping
 the sound and setup controls reachable when the CSS viewport is smaller than the frame.
-Reduced-motion currently removes the fade. Interactive progress and reduced-motion
-manual playback belong to local execution step 02, not the current step 01.
+The three progress segments are native buttons with localized names and current-page
+state. Tab moves between sound, scene selectors and the setup action; Enter and Space
+activate the focused selector. Selecting any segment, including the current one,
+stops automatic advancement for that opening visit. Focus remains on the selector
+while the scene changes. The full-screen opening opts into Electron Tab traversal
+with `data-native-tab-surface`; other app chrome retains its existing policy.
+
+Reduced-motion preferences disable automatic advancement and the fade. All scenes
+remain available manually, and audio is not implicitly muted. Live preference changes
+are observed; once a user has selected a segment, changing preferences or resuming
+`playing` cannot restart automatic advancement. Returning from setup mounts a fresh
+opening at scene 1 using the current motion preference. No selection/manual flag is
+persisted, and selecting a scene does not operate on the audio player.
 
 Local setup independently uses `MollySetupArtwork` with the existing
 `../../assets/molly-editorial-v3.png`. Replacing opening artwork must not alter that

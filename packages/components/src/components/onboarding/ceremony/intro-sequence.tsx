@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import mollyMark from '@/assets/molly-mark.svg';
 import inspiration from '@/assets/molly-intro-inspiration.png';
@@ -16,6 +23,18 @@ const SCENES = [
 
 export type IntroScene = (typeof SCENES)[number]['id'];
 export const INTRO_SHOT_COUNT = SCENES.length;
+
+const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
+
+function subscribeToMotionPreference(onChange: () => void) {
+  const preference = window.matchMedia(REDUCED_MOTION_QUERY);
+  preference.addEventListener('change', onChange);
+  return () => preference.removeEventListener('change', onChange);
+}
+
+function prefersReducedMotion() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
 
 function CreationConnector() {
   const ref = useRef<SVGSVGElement>(null);
@@ -72,10 +91,12 @@ function CreationConnector() {
 export function IntroPage({
   scene,
   onStart,
+  onSelect,
   soundControl,
 }: {
   scene: IntroScene;
   onStart: () => void;
+  onSelect: (scene: IntroScene) => void;
   soundControl?: ReactNode;
 }) {
   const { t, i18n } = useTranslation();
@@ -84,7 +105,7 @@ export function IntroPage({
   const isChinese = i18n.resolvedLanguage === 'zh_CN';
   const isFinal = scene === 'expression';
   return (
-    <div className="molly-intro" lang={isChinese ? 'zh-CN' : 'en'}>
+    <div className="molly-intro" lang={isChinese ? 'zh-CN' : 'en'} data-native-tab-surface="">
       {SCENES.map((item) => (
         <link key={item.id} rel="preload" as="image" href={item.image} />
       ))}
@@ -133,13 +154,31 @@ export function IntroPage({
           ) : null}
         </main>
         <footer className="molly-intro-footer">
-          <div className="molly-intro-progress" aria-hidden="true">
-            <div className="molly-intro-segments">
-              {SCENES.map((item) => (
-                <span key={item.id} data-active={item.id === scene} />
+          <div className="molly-intro-progress">
+            <div
+              className="molly-intro-segments"
+              role="group"
+              aria-label={t('onboarding.intro.navigation')}
+            >
+              {SCENES.map((item, pageIndex) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="app-region-no-drag"
+                  aria-label={t('onboarding.intro.selectScene', {
+                    number: pageIndex + 1,
+                    title: t(`onboarding.intro.${item.id}.title`),
+                  })}
+                  aria-current={item.id === scene ? 'step' : undefined}
+                  onClick={() => onSelect(item.id)}
+                >
+                  <span aria-hidden="true" />
+                </button>
               ))}
             </div>
-            <span className="molly-intro-count">0{index + 1} / 03</span>
+            <span className="molly-intro-count" aria-hidden="true">
+              0{index + 1} / 03
+            </span>
           </div>
           <Button
             variant={isFinal ? 'default' : 'ghost'}
@@ -165,10 +204,26 @@ export function IntroSequence({
   soundControl?: ReactNode;
 }) {
   const [index, setIndex] = useState(0);
+  const [manual, setManual] = useState(false);
+  const reducedMotion = useSyncExternalStore(
+    subscribeToMotionPreference,
+    prefersReducedMotion,
+    () => true
+  );
   useEffect(() => {
-    if (!playing || index === INTRO_SHOT_COUNT - 1) return undefined;
+    if (!playing || manual || reducedMotion || index === INTRO_SHOT_COUNT - 1) return undefined;
     const timer = window.setTimeout(() => setIndex((value) => value + 1), 3000);
     return () => window.clearTimeout(timer);
-  }, [index, playing]);
-  return <IntroPage scene={SCENES[index].id} onStart={onStart} soundControl={soundControl} />;
+  }, [index, playing, manual, reducedMotion]);
+  return (
+    <IntroPage
+      scene={SCENES[index].id}
+      onStart={onStart}
+      soundControl={soundControl}
+      onSelect={(scene) => {
+        setManual(true);
+        setIndex(SCENES.findIndex((item) => item.id === scene));
+      }}
+    />
+  );
 }

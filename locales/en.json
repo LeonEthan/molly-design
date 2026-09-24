@@ -4213,6 +4213,8 @@
   "onboarding.intro.invitation.description": "An independent workspace for your ideas. Welcome to Molly.",
   "onboarding.audio.enable": "Enable sound",
   "onboarding.audio.mute": "Mute",
+  "onboarding.intro.navigation": "Welcome scenes",
+  "onboarding.intro.selectScene": "Scene {{number}}: {{title}}",
   "onboarding.intro.inspiration.title": "Unexpected connections.",
   "onboarding.intro.inspiration.artPhrase": "Unexpected connections.",
   "onboarding.intro.inspiration.description": "A reference. A few words. A new beginning.",

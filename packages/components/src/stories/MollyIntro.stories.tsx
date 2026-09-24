@@ -23,7 +23,12 @@ const meta = {
       </div>
     ),
   ],
-  args: { scene: 'inspiration', onStart: () => {}, soundControl: <PreviewSoundControl /> },
+  args: {
+    scene: 'inspiration',
+    onStart: () => {},
+    onSelect: () => {},
+    soundControl: <PreviewSoundControl />,
+  },
   globals: { locale: 'en', theme: 'light' },
 } satisfies Meta<typeof IntroPage>;
 export default meta;

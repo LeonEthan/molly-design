@@ -33,6 +33,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
 
 ## Renderer and window integration
 
+- A mounted full-screen `data-native-tab-surface` opts into native browser Tab traversal within that surface and from the unfocused document. Onboarding uses this explicit opt-in; general app chrome keeps its existing Tab suppression.
 - Generic update metadata may carry localized Markdown under
   `vendor.mollyChangelog.locales.{en,zh_CN}` (legacy `lodyChangelog` read fallback) in addition to the standard English
   `releaseNotes` fallback. Main validates and bounds those remote strings before

@@ -3,12 +3,17 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
+import { initI18n } from '../src/i18n';
+import { OnboardingCeremony } from '../src/components/onboarding/ceremony/ceremony';
 import {
   useOnboardingAudio,
   type OnboardingAudio,
 } from '../src/components/onboarding/ceremony/use-onboarding-audio';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it('plays the local cue once, supports mute and gesture recovery, and stops pending playback on exit', async () => {
   const players: FakeAudio[] = [];
@@ -94,4 +99,68 @@ it('plays the local cue once, supports mute and gesture recovery, and stops pend
   }
   expect(players[0].src).toBe('');
   expect(players[0].paused).toBe(true);
+});
+
+it('keeps the playing score unmuted and at its current position during reduced-motion manual reading', async () => {
+  await initI18n('en');
+  const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+  Object.defineProperty(motionPreference, 'matches', { value: true });
+  vi.spyOn(window, 'matchMedia').mockReturnValue(motionPreference);
+  class FakeAudio {
+    paused = true;
+    ended = false;
+    muted = false;
+    loop = false;
+    volume = 1;
+    currentTime = 0;
+    play() {
+      this.paused = false;
+      return Promise.resolve();
+    }
+    pause() {
+      this.paused = true;
+    }
+    removeAttribute() {}
+    load() {}
+  }
+  const player = new FakeAudio();
+  vi.stubGlobal(
+    'Audio',
+    class {
+      constructor() {
+        return player;
+      }
+    }
+  );
+  function Opening() {
+    const audio = useOnboardingAudio();
+    return <OnboardingCeremony audio={audio} onFinish={() => {}} />;
+  }
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(<Opening />));
+    expect(player.paused).toBe(false);
+    expect(player.muted).toBe(false);
+    player.currentTime = 4.25;
+    for (const index of [2, 0, 1]) {
+      await act(async () =>
+        container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[index].click()
+      );
+      expect(container.querySelector('.molly-intro-count')?.textContent).toBe(`0${index + 1} / 03`);
+      expect(player.currentTime).toBe(4.25);
+      expect(player.paused).toBe(false);
+      expect(player.muted).toBe(false);
+    }
+    player.currentTime = 20;
+    player.ended = true;
+    player.paused = true;
+    await act(async () =>
+      container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[0].click()
+    );
+    expect(player.currentTime).toBe(20);
+    expect(player.paused).toBe(true);
+  } finally {
+    act(() => root.unmount());
+  }
 });

@@ -4212,6 +4212,8 @@
   "onboarding.intro.invitation.description": "属于你的独立创作空间。欢迎来到 Molly。",
   "onboarding.audio.enable": "开启声音",
   "onboarding.audio.mute": "静音",
+  "onboarding.intro.navigation": "欢迎页导航",
+  "onboarding.intro.selectScene": "第 {{number}} 页：{{title}}",
   "onboarding.intro.inspiration.title": "让灵感相遇。",
   "onboarding.intro.inspiration.artPhrase": "Unexpected connections.",
   "onboarding.intro.inspiration.description": "一张参考，一句话，一个新的开始。",

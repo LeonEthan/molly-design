@@ -2,6 +2,7 @@
 
 Status: proposed
 Translation: current
+PR: https://github.com/LeonEthan/molly-design/pull/3
 
 [English](2026-09-24-engineering-skills-vocabulary-playbooks.md) | 中文
 

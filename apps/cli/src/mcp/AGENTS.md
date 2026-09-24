@@ -11,10 +11,9 @@ Parent instructions apply.
 - Dedicated credential fields accept `${VAR}` references or daemon environment passthrough,
   not literal secrets. Tool responses must never echo connection values.
 - Configurations affect only later turns or sessions; the running Agent does not hot-load them.
-- The MCP HTTP host answers a strict HTTP client (Grok's Rust `rmcp`), which reports a
-  never-completing response as a transport failure, not an MCP error. Every request must
-  reach a terminated response: `GET /mcp` is answered with 405 rather than handed to the
-  SDK, which in stateless JSON mode opens an SSE stream it can never write to or close.
+- Grok's Rust `rmcp` treats unterminated HTTP as transport failure. Terminate
+  every response; answer `GET /mcp` with 405 because the stateless JSON SDK
+  would open an unwritable SSE stream.
 - Agent child processes reach the host over loopback, so a proxy must never intercept it.
   `@molly/shared/proxy-env` `withLoopbackNoProxy` is applied last when assembling agent env
   (`session.ts` `buildShellEnv`, `acp-runner.ts`) and writes BOTH `NO_PROXY` and
@@ -46,12 +45,15 @@ Parent instructions apply.
   Molly desktop. Both gates are the daemon's: send `ownerSessionId`, and treat a missing gate as
   unregistered — absent from `tools/list`, never advertised-then-refused. Contract:
   `packages/shared/AGENTS.md`.
+- `molly_browser`: gate list/call on active local design run; bind page/media to
+  Session. Expose flat required-`kind` schema to models; validate the strict
+  action union before dispatch. See [browser docs](../../../../.agents/docs/sessions-browser.md).
 
 ## Session and Task tool contracts
 
-- MCP session tools use stable machine/session/agent-config ids and strict, narrow input schemas.
-  Create/chat Commands require a caller-chosen Operation id, and Create persists the Operation
-  before its fallible availability step: a transient post-accept failure returns the active fixed
+- MCP session tools use stable ids and narrow input schemas.
+  Create/chat require a caller-chosen Operation id, and Create persists it
+  before availability: a transient post-accept failure returns the active fixed
   target for daemon replay, and `session_create({ operationId, resume: true })` recovers it without
   the prompt. Completion is delivered automatically — no public wait tool — and legacy `wait=true`
   is a temporary adapter new callers must not use.

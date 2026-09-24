@@ -7,6 +7,7 @@ import {
 } from './services/design-service'
 import { startDesignCanvasHost } from './services/design-canvas-host-service'
 import { startDesignRenderHost } from './services/design-render-host-service'
+import { startPublicBrowserAgentHost } from './services/public-browser-agent-host-service'
 import { startHarnessCredentialHost } from './services/harness-credential-host'
 import { verifyDesignSample } from './services/design-sample-verification'
 import { registerDesignSampleScheme } from './services/design-sample-service'
@@ -244,6 +245,8 @@ if (hasSingleInstanceLock) {
     app.once('will-quit', () => stopDesignCanvasHost())
     const stopDesignRenderHost = startDesignRenderHost(cliService)
     app.once('will-quit', () => stopDesignRenderHost())
+    const stopPublicBrowserAgentHost = startPublicBrowserAgentHost(cliService, publicBrowserService)
+    app.once('will-quit', () => stopPublicBrowserAgentHost())
     const stopHarnessCredentialHost = startHarnessCredentialHost(cliService)
     app.once('will-quit', () => stopHarnessCredentialHost())
 

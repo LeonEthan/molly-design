@@ -179,6 +179,52 @@ describe('frozen MCP tools', () => {
     );
   });
 
+  it.each([
+    ['Agent browser requires a public website.', 'harness_browser_destination_denied'],
+    ['Agent browser requires a public page.', 'harness_browser_destination_denied'],
+    [
+      'Agent browser cannot access local, private, or reserved hosts.',
+      'harness_browser_destination_denied',
+    ],
+    [
+      'image generation failed: the returned bytes are not a PNG, JPEG, or GIF image, so the design intake could not import them',
+      'harness_browser_image_format_unsupported',
+    ],
+    ['Browser element reference is stale.', 'harness_browser_reference_stale'],
+    ['Selected browser reference is not a loaded image.', 'harness_browser_image_unavailable'],
+    ['Browser screenshot exceeds the size limit.', 'harness_browser_screenshot_unavailable'],
+    ['Browser screenshot was not a JPEG image.', 'harness_browser_screenshot_unavailable'],
+    [
+      'Browser page is still loading; observe again after it settles.',
+      'harness_browser_page_not_ready',
+    ],
+    [
+      'Agent browser could not verify the current document response.',
+      'harness_browser_page_unverified',
+    ],
+    [
+      'Agent browser network blocked: The browser could not verify a public response peer.',
+      'harness_browser_network_blocked',
+    ],
+    ['The user has taken control of the browser page.', 'harness_browser_user_takeover'],
+  ])('passes only the fixed browser failure for %s', async (message, code) => {
+    const f = fixture();
+    f.input.serverName = 'molly';
+    f.change([{ ...descriptor, name: 'molly_browser' }]);
+    f.result({ isError: true, content: [{ type: 'text', text: message }] });
+    const [tool] = await defineMcpTools(f.input);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(code);
+  });
+
+  it('does not forward arbitrary browser error text to the Agent', async () => {
+    const f = fixture();
+    f.input.serverName = 'molly';
+    f.change([{ ...descriptor, name: 'molly_browser' }]);
+    f.result({ isError: true, content: [{ type: 'text', text: 'SYNTHETIC_SECRET' }] });
+    const [tool] = await defineMcpTools(f.input);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+  });
+
   it('reads links only through their producing client after separate approval and dispatch', async () => {
     const f = fixture();
     const events: string[] = [];

@@ -1,4 +1,5 @@
 import type {
+  ElectronBrowserAccountSiteInput,
   ElectronPublicBrowserBounds,
   ElectronPublicBrowserState,
   IpcPushMap,
@@ -90,6 +91,7 @@ export function getPublicBrowserBridge() {
     capability: 'web-contents-view-v1' as const,
     create: (browserId: string, bounds: ElectronPublicBrowserBounds) =>
       pub.create({ browserId, bounds }),
+    getState: (browserId: string) => pub.getState({ browserId }),
     navigate: (browserId: string, url: string) => pub.navigate({ browserId, url }),
     back: (browserId: string) => pub.back({ browserId }),
     forward: (browserId: string) => pub.forward({ browserId }),
@@ -99,6 +101,17 @@ export function getPublicBrowserBridge() {
       pub.setBounds({ browserId, bounds }),
     setVisible: (browserId: string, visible: boolean) => pub.setVisible({ browserId, visible }),
     destroy: (browserId: string) => pub.destroy({ browserId }),
+    getAccountSummary: () => pub.getAccountSummary(),
+    getChromeProfiles: () => pub.getChromeProfiles(),
+    importChromeAccount: (
+      profileId: string,
+      site: ElectronBrowserAccountSiteInput['site'],
+      replaceExisting: boolean
+    ) => pub.importChromeAccount({ profileId, site, replaceExisting }),
+    clearAccountCookies: (site: ElectronBrowserAccountSiteInput['site']) =>
+      pub.clearAccountCookies({ site }),
+    takeAgentControl: (browserId: string) => pub.takeAgentControl({ browserId }),
+    resumeAgentControl: (browserId: string) => pub.resumeAgentControl({ browserId }),
     onState: (handler: (state: ElectronPublicBrowserState) => void) =>
       onIpcEvent('publicBrowser.state', handler),
   };

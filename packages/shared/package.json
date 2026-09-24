@@ -63,6 +63,14 @@
       "types": "./src/browser-url.ts",
       "import": "./src/browser-url.ts"
     },
+    "./browser-agent-rpc": {
+      "types": "./src/browser-agent-rpc.ts",
+      "import": "./src/browser-agent-rpc.ts"
+    },
+    "./browser-import-cookie": {
+      "types": "./src/browser-import-cookie.ts",
+      "import": "./src/browser-import-cookie.ts"
+    },
     "./local-loro-data-plane": {
       "types": "./src/local-loro-data-plane.ts",
       "import": "./src/local-loro-data-plane.ts"

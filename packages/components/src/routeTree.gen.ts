@@ -47,6 +47,7 @@ import { Route as WorkspaceNameAuthSettingsImageConnectionRouteImport } from './
 import { Route as WorkspaceNameAuthSettingsGithubRouteImport } from './routes/$workspaceName/_auth/settings/github'
 import { Route as WorkspaceNameAuthSettingsGeneralRouteImport } from './routes/$workspaceName/_auth/settings/general'
 import { Route as WorkspaceNameAuthSettingsDevicesRouteImport } from './routes/$workspaceName/_auth/settings/devices'
+import { Route as WorkspaceNameAuthSettingsBrowserAccountsRouteImport } from './routes/$workspaceName/_auth/settings/browser-accounts'
 import { Route as WorkspaceNameAuthSettingsBillingRouteImport } from './routes/$workspaceName/_auth/settings/billing'
 import { Route as WorkspaceNameAuthSettingsAppearanceRouteImport } from './routes/$workspaceName/_auth/settings/appearance'
 import { Route as WorkspaceNameAuthSettingsAiUsageRouteImport } from './routes/$workspaceName/_auth/settings/ai-usage'
@@ -266,6 +267,12 @@ const WorkspaceNameAuthSettingsDevicesRoute =
     path: '/devices',
     getParentRoute: () => WorkspaceNameAuthSettingsRoute,
   } as any)
+const WorkspaceNameAuthSettingsBrowserAccountsRoute =
+  WorkspaceNameAuthSettingsBrowserAccountsRouteImport.update({
+    id: '/browser-accounts',
+    path: '/browser-accounts',
+    getParentRoute: () => WorkspaceNameAuthSettingsRoute,
+  } as any)
 const WorkspaceNameAuthSettingsBillingRoute =
   WorkspaceNameAuthSettingsBillingRouteImport.update({
     id: '/billing',
@@ -358,6 +365,7 @@ export interface FileRoutesByFullPath {
   '/$workspaceName/settings/ai-usage': typeof WorkspaceNameAuthSettingsAiUsageRoute
   '/$workspaceName/settings/appearance': typeof WorkspaceNameAuthSettingsAppearanceRoute
   '/$workspaceName/settings/billing': typeof WorkspaceNameAuthSettingsBillingRoute
+  '/$workspaceName/settings/browser-accounts': typeof WorkspaceNameAuthSettingsBrowserAccountsRoute
   '/$workspaceName/settings/devices': typeof WorkspaceNameAuthSettingsDevicesRoute
   '/$workspaceName/settings/general': typeof WorkspaceNameAuthSettingsGeneralRoute
   '/$workspaceName/settings/github': typeof WorkspaceNameAuthSettingsGithubRoute
@@ -405,6 +413,7 @@ export interface FileRoutesByTo {
   '/$workspaceName/settings/ai-usage': typeof WorkspaceNameAuthSettingsAiUsageRoute
   '/$workspaceName/settings/appearance': typeof WorkspaceNameAuthSettingsAppearanceRoute
   '/$workspaceName/settings/billing': typeof WorkspaceNameAuthSettingsBillingRoute
+  '/$workspaceName/settings/browser-accounts': typeof WorkspaceNameAuthSettingsBrowserAccountsRoute
   '/$workspaceName/settings/devices': typeof WorkspaceNameAuthSettingsDevicesRoute
   '/$workspaceName/settings/general': typeof WorkspaceNameAuthSettingsGeneralRoute
   '/$workspaceName/settings/github': typeof WorkspaceNameAuthSettingsGithubRoute
@@ -456,6 +465,7 @@ export interface FileRoutesById {
   '/$workspaceName/_auth/settings/ai-usage': typeof WorkspaceNameAuthSettingsAiUsageRoute
   '/$workspaceName/_auth/settings/appearance': typeof WorkspaceNameAuthSettingsAppearanceRoute
   '/$workspaceName/_auth/settings/billing': typeof WorkspaceNameAuthSettingsBillingRoute
+  '/$workspaceName/_auth/settings/browser-accounts': typeof WorkspaceNameAuthSettingsBrowserAccountsRoute
   '/$workspaceName/_auth/settings/devices': typeof WorkspaceNameAuthSettingsDevicesRoute
   '/$workspaceName/_auth/settings/general': typeof WorkspaceNameAuthSettingsGeneralRoute
   '/$workspaceName/_auth/settings/github': typeof WorkspaceNameAuthSettingsGithubRoute
@@ -507,6 +517,7 @@ export interface FileRouteTypes {
     | '/$workspaceName/settings/ai-usage'
     | '/$workspaceName/settings/appearance'
     | '/$workspaceName/settings/billing'
+    | '/$workspaceName/settings/browser-accounts'
     | '/$workspaceName/settings/devices'
     | '/$workspaceName/settings/general'
     | '/$workspaceName/settings/github'
@@ -554,6 +565,7 @@ export interface FileRouteTypes {
     | '/$workspaceName/settings/ai-usage'
     | '/$workspaceName/settings/appearance'
     | '/$workspaceName/settings/billing'
+    | '/$workspaceName/settings/browser-accounts'
     | '/$workspaceName/settings/devices'
     | '/$workspaceName/settings/general'
     | '/$workspaceName/settings/github'
@@ -604,6 +616,7 @@ export interface FileRouteTypes {
     | '/$workspaceName/_auth/settings/ai-usage'
     | '/$workspaceName/_auth/settings/appearance'
     | '/$workspaceName/_auth/settings/billing'
+    | '/$workspaceName/_auth/settings/browser-accounts'
     | '/$workspaceName/_auth/settings/devices'
     | '/$workspaceName/_auth/settings/general'
     | '/$workspaceName/_auth/settings/github'
@@ -910,6 +923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WorkspaceNameAuthSettingsDevicesRouteImport
       parentRoute: typeof WorkspaceNameAuthSettingsRoute
     }
+    '/$workspaceName/_auth/settings/browser-accounts': {
+      id: '/$workspaceName/_auth/settings/browser-accounts'
+      path: '/browser-accounts'
+      fullPath: '/$workspaceName/settings/browser-accounts'
+      preLoaderRoute: typeof WorkspaceNameAuthSettingsBrowserAccountsRouteImport
+      parentRoute: typeof WorkspaceNameAuthSettingsRoute
+    }
     '/$workspaceName/_auth/settings/billing': {
       id: '/$workspaceName/_auth/settings/billing'
       path: '/billing'
@@ -1007,6 +1027,7 @@ interface WorkspaceNameAuthSettingsRouteChildren {
   WorkspaceNameAuthSettingsAiUsageRoute: typeof WorkspaceNameAuthSettingsAiUsageRoute
   WorkspaceNameAuthSettingsAppearanceRoute: typeof WorkspaceNameAuthSettingsAppearanceRoute
   WorkspaceNameAuthSettingsBillingRoute: typeof WorkspaceNameAuthSettingsBillingRoute
+  WorkspaceNameAuthSettingsBrowserAccountsRoute: typeof WorkspaceNameAuthSettingsBrowserAccountsRoute
   WorkspaceNameAuthSettingsDevicesRoute: typeof WorkspaceNameAuthSettingsDevicesRoute
   WorkspaceNameAuthSettingsGeneralRoute: typeof WorkspaceNameAuthSettingsGeneralRoute
   WorkspaceNameAuthSettingsGithubRoute: typeof WorkspaceNameAuthSettingsGithubRoute
@@ -1039,6 +1060,8 @@ const WorkspaceNameAuthSettingsRouteChildren: WorkspaceNameAuthSettingsRouteChil
       WorkspaceNameAuthSettingsAppearanceRoute,
     WorkspaceNameAuthSettingsBillingRoute:
       WorkspaceNameAuthSettingsBillingRoute,
+    WorkspaceNameAuthSettingsBrowserAccountsRoute:
+      WorkspaceNameAuthSettingsBrowserAccountsRoute,
     WorkspaceNameAuthSettingsDevicesRoute:
       WorkspaceNameAuthSettingsDevicesRoute,
     WorkspaceNameAuthSettingsGeneralRoute:

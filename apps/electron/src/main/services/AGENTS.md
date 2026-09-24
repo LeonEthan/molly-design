@@ -100,3 +100,19 @@ They never mutate the artwork or dispatch a separate image job.
 Application quit flushes editors before sealing design-worker requests; cancelled
 flush leaves the service usable. Even with no open editor, drain accepted requests,
 end worker input and await child exit before quitting. A closed worker never restarts.
+
+## Browser account imports
+
+Reject unsupported source or destination Cookie partitions before import mutations;
+never flatten identities for writes or rollback. Native reads stay site-scoped and
+Cookie values stay in main. The first release imports Pinterest only. The native
+report deadline includes human Keychain approval; retries require a fresh user
+action, and read failures preserve destination cookies. See the [account note](../../../../../.agents/notes/proposed/architecture/2026-09-22-embedded-browser-account-import.zh.md).
+
+## Agent browser driver
+
+Keep the official MCP server private to main and the Agent action union strict;
+never forward arbitrary tool names, code or filenames. Only the granted page and
+its descendants enter the CDP adapter. Revoke detaches before returning results.
+Input gating opens only for synchronous CDP dispatch, never across an await.
+Reuse the pinned adapter via its generator; do not edit generated upstream code.

@@ -4,6 +4,7 @@ import { OnboardingPage } from './pages/onboarding-page.js';
 import { ReviewPage } from './pages/review-page.js';
 import { SessionPage } from './pages/session-page.js';
 import { WorkSessionPage, type WorkSessionResources } from './pages/work-session-page.js';
+import { BrowserPermissionPage } from './pages/browser-permission-page.js';
 import { WorkSessionFixture, type ScriptedRuntimeEvent } from './fixtures/work-session-fixture.js';
 import type { SyntheticReviewRepository } from './fixtures/synthetic-review-repository.js';
 import { createScenarioArtifacts, type ScenarioArtifacts } from './world-utils.js';
@@ -15,6 +16,7 @@ export class MollyWorld extends World {
   reviewPage: ReviewPage | null = null;
   sessionPage: SessionPage | null = null;
   workPage: WorkSessionPage | null = null;
+  browserPermissionPage: BrowserPermissionPage | null = null;
   workFixture: WorkSessionFixture | null = null;
   reviewFixture: SyntheticReviewRepository | null = null;
   activeRuntimeEvent: ScriptedRuntimeEvent | null = null;
@@ -46,6 +48,11 @@ export class MollyWorld extends World {
     this.sessionPage = new SessionPage(this.harness.page, this.workFixture);
     await this.onboarding.skipConfigurationAndEnterProduct();
     await this.sessionPage.seedDeterministicModelConnection();
+    this.browserPermissionPage = new BrowserPermissionPage(
+      this.harness.page,
+      this.sessionPage,
+      this.workFixture
+    );
   }
 
   disposeFixtures(): void {

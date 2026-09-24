@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { flipFuses, FuseV1Options, FuseVersion, getCurrentFuseWire } from '@electron/fuses'
 import {
   assertNoLegacyHarnessArtifacts,
   verifyEmbeddedHarness
@@ -58,6 +60,58 @@ export default async function afterPack(context) {
     binaryPath = path.join(context.appOutDir, `${executableName}.exe`)
     resourcesDir = path.join(context.appOutDir, 'resources')
   }
+  // The browser's persistent account partition must never start writing real
+  // cookies into Electron's default plaintext store. Flip before Builder signs
+  // the package and verify the bytes in the exact executable being delivered.
+  await flipFuses(binaryPath, {
+    version: FuseVersion.V1,
+    resetAdHocDarwinSignature:
+      (platform === 'darwin' || platform === 'mas') && archName === 'arm64',
+    [FuseV1Options.EnableCookieEncryption]: true
+  })
+  const fuseWire = await getCurrentFuseWire(binaryPath)
+  if (fuseWire[FuseV1Options.EnableCookieEncryption] !== '1'.charCodeAt(0)) {
+    throw new Error('[browser-profile] packaged Electron does not encrypt cookies')
+  }
+  console.log(`[browser-profile] verified encrypted-cookie fuse for ${platform}-${archName}`)
+
+  if (platform === 'darwin' && archName === 'arm64') {
+    const readerProbe = spawnSync(
+      binaryPath,
+      [
+        '-e',
+        "const reader = require(process.argv[1]); if (!reader.version().startsWith('0.6.0')) process.exit(2)",
+        path.join(resourcesDir, 'app.asar', 'node_modules', 'rookie-cookies')
+      ],
+      {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        encoding: 'utf8',
+        timeout: 15_000
+      }
+    )
+    if (readerProbe.error || readerProbe.status !== 0)
+      throw new Error('[browser-profile] packaged Chrome reader could not load')
+    console.log('[browser-profile] verified packaged Chrome reader binding')
+  }
+
+  if (
+    (platform === process.platform || (platform === 'mas' && process.platform === 'darwin')) &&
+    archName === process.arch
+  ) {
+    const driverProbe = spawnSync(
+      binaryPath,
+      [
+        '-e',
+        "const {createRequire}=require('node:module'); const r=createRequire(process.argv[1]); const license=require('node:fs').readFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]),'browser-cdp-NOTICE.txt'),'utf8'); if(!license.includes('Microsoft Corporation') || typeof r('@playwright/mcp').createConnection!=='function' || typeof r('playwright').chromium.connectOverCDP!=='function') process.exit(2)",
+        path.join(resourcesDir, 'app.asar', 'package.json')
+      ],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 15_000 }
+    )
+    if (driverProbe.error || driverProbe.status !== 0)
+      throw new Error('[browser-driver] packaged Playwright MCP could not load')
+    console.log('[browser-driver] verified packaged Playwright MCP and transport API')
+  }
+
   // Verify the bytes actually collected by Builder, on cross-host targets too.
   const designProbe = spawnSync(
     process.execPath,

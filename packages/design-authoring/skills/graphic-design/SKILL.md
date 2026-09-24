@@ -43,6 +43,9 @@ Read only the references needed for the current work:
   When unsure which fields a kind admits, ask the validator-derived admission
   table: `node scripts/format.mjs kind <kind>` (or `node scripts/format.mjs
 excluded` for the explicit rejection list).
+- When the task calls for website research or finding online design material,
+  read [references/browser-research.md](references/browser-research.md) if the
+  `molly_browser` tool is available.
 
 Do not load references for modes or element families that the task does not use.
 

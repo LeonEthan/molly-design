@@ -587,7 +587,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         designImageImport: callbacks.importHarnessImages !== undefined,
         designImageRecovery: callbacks.recoverHarnessImages !== undefined,
         selection: ModelSelectionSchema.parse(this.config.modelSelection),
-        permissionProfileId: 'ask-every-tool-v1',
+        permissionProfileId: callbacks.designHooks ? 'browse-task-v1' : 'ask-every-tool-v1',
         systemPrompt:
           'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. Ask for approval before tool execution. Never retry an operation whose result is unknown.' +
           (designContinuationContext ? `\n\n${designContinuationContext}` : ''),

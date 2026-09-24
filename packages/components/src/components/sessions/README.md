@@ -174,3 +174,6 @@ record that logical source without deleting later versions. An unchanged draft d
 not create a duplicate. Version operations use the execution/processing gate.
 The label distinguishes Vn from “Based on Vn · New changes”; selections are recaptured
 after switching. See the [current design and validation plan](../../../../../.agents/notes/proposed/architecture/2026-09-18-version-based-canvas-editing.zh.md).
+If the Git version was written but the retained native canvas failed to refresh,
+the shell refreshes history and reports both the saved Vn and the reload failure.
+It does not claim the version save failed or create another version automatically.

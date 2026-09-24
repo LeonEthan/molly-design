@@ -16,7 +16,7 @@ import {
 } from '@molly/shared/embedded-harness';
 import { createToolEnvironment } from './environment';
 import { createBoundModelFetch } from './model-transport';
-import { waitForApproval, type ToolApproval } from './approved-tools';
+import { waitForApproval, type BrowserTaskApproval, type ToolApproval } from './approved-tools';
 import { CancellationDeliveryTransport } from './mcp-cancellation';
 import { resolveMcpContent } from './mcp-content';
 import { bindMcpImageTool } from './mcp-image-binding';
@@ -38,10 +38,59 @@ function schemaHash(tool: Tool): string {
     )
     .digest('hex');
 }
+
+/** Only fixed Molly-owned browser failures may cross the MCP error boundary. */
+function browserFailureCode(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null;
+  const reply = result as { isError?: unknown; content?: unknown };
+  if (reply.isError !== true || !Array.isArray(reply.content) || reply.content.length !== 1)
+    return null;
+  const part = reply.content[0] as { type?: unknown; text?: unknown };
+  if (part.type !== 'text' || typeof part.text !== 'string' || part.text.length > 1_000)
+    return null;
+  const message = part.text;
+  if (
+    message === 'Agent browser requires a public website.' ||
+    message === 'Agent browser requires a public page.' ||
+    message === 'Agent browser cannot access local, private, or reserved hosts.'
+  )
+    return 'harness_browser_destination_denied';
+  if (message.includes('the returned bytes are not a PNG, JPEG, or GIF image'))
+    return 'harness_browser_image_format_unsupported';
+  if (
+    message === 'Browser element reference is stale.' ||
+    message === 'Browser element reference is unknown or stale.' ||
+    message === 'Browser element changed or is no longer actionable.'
+  )
+    return 'harness_browser_reference_stale';
+  if (message === 'Selected browser reference is not a loaded image.')
+    return 'harness_browser_image_unavailable';
+  if (
+    message === 'Browser screenshot is empty or exceeds the size limit.' ||
+    message === 'Browser screenshot exceeds the size limit.' ||
+    message === 'Browser screenshot was not a JPEG image.'
+  )
+    return 'harness_browser_screenshot_unavailable';
+  if (message === 'Browser page is still loading; observe again after it settles.')
+    return 'harness_browser_page_not_ready';
+  if (
+    message === 'Agent browser page must be navigated under the network guard.' ||
+    message === 'Agent browser could not verify the current document response.'
+  )
+    return 'harness_browser_page_unverified';
+  if (message.startsWith('Agent browser network blocked: '))
+    return 'harness_browser_network_blocked';
+  if (message === 'The user has taken control of the browser page.')
+    return 'harness_browser_user_takeover';
+  return null;
+}
+
 export function mcpToolName(server: string, tool: string): string {
   if (
     server === 'molly' &&
-    ['molly_generate_image', 'molly_edit_image', 'molly_render_preview'].includes(tool)
+    ['molly_generate_image', 'molly_edit_image', 'molly_render_preview', 'molly_browser'].includes(
+      tool
+    )
   )
     return tool;
   const identity = createHash('sha256')
@@ -91,7 +140,8 @@ export async function defineMcpTools(input: {
       metadata?: Record<string, unknown>;
       readResource?: OperationResourceRead;
     }) => Promise<unknown>,
-    boundImage?: boolean
+    boundImage?: boolean,
+    authorization?: BrowserTaskApproval
   ) => Promise<unknown>;
 }) {
   return (await listTools(input.client, input.signal)).map((descriptor) => {
@@ -221,8 +271,13 @@ export async function defineMcpTools(input: {
               }
               return reply;
             },
-            image.status === 'bound'
+            image.status === 'bound',
+            typeof allowed === 'object' ? allowed : undefined
           );
+          if (input.serverName === 'molly' && tool.name === 'molly_browser') {
+            const failure = browserFailureCode(result);
+            if (failure) throw new Error(failure);
+          }
           const content = await resolveMcpContent(result, (uri, index) => readResource(uri, index));
           executionSignal.throwIfAborted();
           if (!input.isAvailable()) throw new Error('harness_mcp_connection_changed');
@@ -251,6 +306,15 @@ export async function defineMcpTools(input: {
             'harness_mcp_duplicate_tool',
             'harness_mcp_tool_failed',
             'harness_mcp_outcome_unknown',
+            'harness_browser_image_format_unsupported',
+            'harness_browser_reference_stale',
+            'harness_browser_image_unavailable',
+            'harness_browser_screenshot_unavailable',
+            'harness_browser_page_not_ready',
+            'harness_browser_page_unverified',
+            'harness_browser_network_blocked',
+            'harness_browser_user_takeover',
+            'harness_browser_destination_denied',
           ]);
           // Native history must not retain raw transport/server diagnostics or echoed credentials.
           // eslint-disable-next-line preserve-caught-error -- Deliberately discard secret-bearing causes.

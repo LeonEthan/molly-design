@@ -29,6 +29,10 @@ solid white; missing diagnostics is an empty array. `title` is file metadata,
 not a canonical title saved by the editor. Do not write `pages`, `version`, or
 `schemaVersion`.
 
+`background` and shape `fill` must be fill objects, never bare color strings.
+For a solid color, use `type: solid` and `color: '#F4F1EA'` under the fill field;
+`background: '#F4F1EA'` and `fill: '#F4F1EA'` are rejected at intake.
+
 Omit `fontFamily` to use Inter, the bundled licensed default family name. Other
 families need a `customFonts` registration whose `src` is a local `media/` font
 file.

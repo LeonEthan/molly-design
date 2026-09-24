@@ -7,11 +7,10 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 
 ## Authorization and identity
 
-- Authorize machines via the access capability and source CLI token. MCP uses the frozen
-  Turn requester; Operation rules: [../mcp/AGENTS.md](../mcp/AGENTS.md).
-- Never send an untrusted requester through workspace Machine RPC: it authenticates no member
-  identity.
-- Read live status from target-daemon Machine RPC, never durable metadata.
+- Authorize machines via access capability and CLI token. MCP uses the frozen
+  Turn requester; see [Operation rules](../mcp/AGENTS.md).
+- Workspace Machine RPC authenticates no member; never send an untrusted requester.
+- Read live status from target-daemon RPC, never durable metadata.
 - Derive the human identity from the active dispatch/execution runtime and fail closed when none
   exists; retries and recovery never reread mutable history.
 - Credentials stay execution-host scoped; attribution, auth, GitHub/Git use frozen
@@ -23,10 +22,10 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 
 - Queue-to-history promotion preserves every frozen Turn field, `agentRoleId` and
   `agentRoleRevision` included.
-- Absent session meta is "unknown", not foreign: hold the TTL-bounded RPC stash until meta lands;
-  drop it only on a definitive verdict.
-- Subscribe to RPC offers BEFORE awaiting Doc Room join/sync and never dispatch from the RPC
-  handler; history sync is the durable fallback, not a fast path.
+- Absent session meta is unknown: hold bounded RPC offers until it lands; drop
+  only on a definitive verdict.
+- Subscribe to RPC offers before Doc Room join/sync; never dispatch from the RPC
+  handler. History sync is the durable fallback.
 - Missing-history recovery never advances `lastHandledUserMsgId`: set the permanent one-shot
   `lastMissingHistoryUserMsgId` ack for that turn and surface `chat_failed`.
 - Retire an already-terminal stale activation into `settledActivationUserMsgId`; never claim the
@@ -60,7 +59,8 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 - Keep JSON-RPC/transport matching in `acp-error-classification.ts`: disposed/stale `-32603` is
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
 - Legacy: retry once before ACP output. Embedded Molly: exact native restore/settlement;
-  never replay prompts or history.
+  never replay prompts or history. Design runs use `browse-task-v1`; other runs
+  use `ask-every-tool-v1`.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

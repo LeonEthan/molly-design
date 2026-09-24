@@ -475,37 +475,49 @@ export async function saveDesign(id: string) {
   await designCanvasAccess.prepareForSend(id)
 }
 /** Version actions share the canonical replacement gate and flush every instance. */
-export async function createDesignVersion(id: string): Promise<DesignVersion> {
+export async function createDesignVersion(
+  id: string
+): Promise<DesignVersion & { reloadError?: string }> {
   await queryCanvasState?.()
-  return designCanvasAccess.replaceAfterFlush(id, async (assertIdle) => {
-    const current = await designRequest({ operation: 'read', sessionId: id })
-    assertIdle()
-    const version = await designRequest<DesignVersion>(
-      { operation: 'history-create', sessionId: id, baseRevisionId: current.revisionId },
-      assertIdle
-    )
-    const saved = await designRequest({ operation: 'read', sessionId: id })
-    // Metadata-only revision change preserves the native document and undo stack.
-    for (const record of recordsFor(id)) {
-      if (record.revisionId === saved.revisionId) continue
-      const snapshot = await record.view.webContents.executeJavaScript('window.molly.snapshot()')
-      if (
-        !isDeepStrictEqual(
-          { doc: snapshot.doc, assets: snapshot.assets },
-          { doc: saved.doc, assets: saved.assets }
-        )
-      ) {
-        await syncDesignCanvasFromStore(id)
-        break
-      }
-      await record.view.webContents.executeJavaScript(
-        `window.molly.rebase(${JSON.stringify(record.revisionId)},${JSON.stringify(saved.revisionId)})`
+  let written: DesignVersion | undefined
+  try {
+    return await designCanvasAccess.replaceAfterFlush(id, async (assertIdle) => {
+      const current = await designRequest({ operation: 'read', sessionId: id })
+      assertIdle()
+      const version = await designRequest<DesignVersion>(
+        { operation: 'history-create', sessionId: id, baseRevisionId: current.revisionId },
+        assertIdle
       )
-      record.revisionId = saved.revisionId
+      written = version
+      const saved = await designRequest({ operation: 'read', sessionId: id })
+      // Metadata-only revision change preserves the native document and undo stack.
+      for (const record of recordsFor(id)) {
+        if (record.revisionId === saved.revisionId) continue
+        const snapshot = await record.view.webContents.executeJavaScript('window.molly.snapshot()')
+        if (
+          !isDeepStrictEqual(
+            { doc: snapshot.doc, assets: snapshot.assets },
+            { doc: saved.doc, assets: saved.assets }
+          )
+        ) {
+          await syncDesignCanvasFromStore(id)
+          break
+        }
+        await record.view.webContents.executeJavaScript(
+          `window.molly.rebase(${JSON.stringify(record.revisionId)},${JSON.stringify(saved.revisionId)})`
+        )
+        record.revisionId = saved.revisionId
+      }
+      notifyDesignState(id)
+      return version
+    })
+  } catch (error) {
+    if (written) {
+      notifyDesignState(id)
+      return { ...written, reloadError: String(error) }
     }
-    notifyDesignState(id)
-    return version
-  })
+    throw error
+  }
 }
 
 export async function restoreDesignVersion(

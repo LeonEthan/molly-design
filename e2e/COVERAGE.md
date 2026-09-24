@@ -16,9 +16,11 @@ Backlog rows are evidence-backed gaps, not executable or promised scenarios.
 
 ## Active P1 journeys
 
-| Stable id         | Journey                                       | Renderer                    | Electron / IPC           | Bundled CLI        | Durable state                           | External wire  |
-| ----------------- | --------------------------------------------- | --------------------------- | ------------------------ | ------------------ | --------------------------------------- | -------------- |
-| `LODY-REVIEW-001` | Open, hide, and switch a synthetic large diff | Large diff Review lifecycle | Real window and diff RPC | Real owned runtime | Synthetic project and Session lifecycle | Scripted model |
+| Stable id          | Journey                                                                   | Renderer                     | Electron / IPC                              | Bundled CLI                  | Durable state                           | External wire            |
+| ------------------ | ------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------- | ---------------------------- | --------------------------------------- | ------------------------ |
+| `LODY-BROWSER-001` | Deny an Agent request to navigate the embedded browser to a local address | Session tool approval prompt | Real browser host availability and RPC      | Real Pi to MCP tool dispatch | Isolated Session only                   | Scripted model tool call |
+| `LODY-BROWSER-002` | Allow once cannot navigate the embedded browser to a local address        | Session tool approval prompt | Real browser host and private-network guard | Real Pi to MCP tool dispatch | Isolated Session only                   | Scripted model tool call |
+| `LODY-REVIEW-001`  | Open, hide, and switch a synthetic large diff                             | Large diff Review lifecycle  | Real window and diff RPC                    | Real owned runtime           | Synthetic project and Session lifecycle | Scripted model           |
 
 ## Evidence-backed backlog
 

@@ -143,6 +143,16 @@ Molly 内置 MCP 提供 generate 和 edit 两种能力，复用既有图像连�
 
 Git 分支操作、PR/CI 等开发功能退出设计主流程，并停止其不再需要的后台工作；设计版本历史是 Git 的新消费者，保留其必要基础能力，不复用自动提示 Agent commit/push 的流程。共享基础设施只在确认没有消费者后删除。终端、参考网页浏览、会话分叉按实际消费者逐项决定；通用文件、进程、工具、诊断、权限和恢复能力继续复用。新应用身份与数据目录须与现有 Lody 和相邻程序隔离。
 
+### 内置网页调研与素材
+
+首期交付让设计会话的 Agent 在用户可见的 Molly 内置浏览器中使用 Pinterest 账号搜索素材、浏览详情并保存选定图片；设置只提供 Pinterest 的 Chrome 账号导入。Amazon 搜索、商品详情与网页问答转为后续范围，不作为首期完成条件。浏览工具只操作当前会话获准的内置页面；来源 Chrome 仅在用户主动选择时向 Molly 导入指定网站的登录状态，不作为 Agent 的浏览目标。Molly 独立持有网站 profile；导入成功以网站在内置页实际识别账号为准，Cookie 写入或用户在内置页手工登录均不证明 Chrome 账号已复用。
+
+首次需要网站账号时，浏览器侧栏可按站点引导至 Molly 的网站账号设置，或由用户在 Molly 页面登录；无需预先完成必经设置。用户在 Molly 内选择来源 Chrome 用户配置和支持的网站并发起导入，必要时处理 macOS 的系统授权，不要求进入 Chrome 开发者模式、手工安装扩展或复制配对码。设置中管理导入与清理，导入期间明确提示系统授权与等待；读取超时后由用户处理系统弹框并手动重试，不自动重试，读取失败保留 Molly 原有 Cookie。Cookie 数量只说明本机数据状态，不代表网站已登录。未支持导入的站点仍可由用户在内置页登录；这不扩展 Agent 可操作的浏览器范围。
+
+用户授权按当前任务的站点和工具范围生效，完成、取消、页面关闭或人工接管后撤销。跨出获准顶层站点先暂停并请求扩大范围；同一页面不向第二个 Agent 任务开放实时观察。人工接管及登录/MFA 期间停止 Agent 读取和操作；恢复须重新观察，不能重放此前未知结果的动作。浏览授权不自动包含账号导入、发布、购买或修改账户的意图；普通点击和输入不被标为天然只读。现有 Agent 执行和产物处理期间的画布只读规则继续适用。
+
+Agent 选定的网页图片经持有网站 session 的受控字节获取和现有设计资产路径进入作品；首期仅接纳通过解码验证的 PNG/JPEG/GIF 输入，其他格式明确报告不支持，页面只提供下载的流程不支持。素材结果记录来源并不自动提交画布。网站登录限制、反自动化和目标地区功能可用性按实际验证披露，不承诺任意 Chrome profile、网站或账号可无条件迁移；浏览器、登录与素材网络路径均须限制 Agent 可读取的本机及私网目标。完整技术取舍和分步验收见[浏览器方案](../.agents/notes/proposed/architecture/2026-09-22-embedded-browser-account-import.zh.md)。
+
 遵循 [平台边界](../packages/platform/AGENTS.md) 和 [共享协议合同](../packages/shared/AGENTS.md)：不引入认证产品云请求或遥测。用户选择的 Agent 及图像服务仍可能访问外部模型，本地优先不等于离线生成；凭据不进入画稿、Role 或日志。没有 Agent 或图像服务时，已有作品仍可编辑、保存和导出。
 
 ## 待实施验证项
@@ -188,3 +198,7 @@ Git 分支操作、PR/CI 等开发功能退出设计主流程，并停止其不�
 [改造清单及分阶段实施计划](../.agents/notes/implemented/architecture/2026-09-09-graphic-design-platform.zh.md)记录源码证据、模块归属、实施顺序和阶段门槛。[按需同步与 hook 决策](../.agents/notes/rejected/architecture/2026-09-10-design-sync-hooks.zh.md)记录 P3 新增职责、复用依据及尚未验证的接入覆盖。2026-09-10 修订仅修改文档；以下 P0–P2 记录是既有实施证据，不代表 P3–P6 已执行。2026-09-11 新增[文件实时预览决策](../.agents/notes/implemented/architecture/2026-09-11-pptd-live-preview.zh.md)，记录源码复用、快照限制和已确认的只读/直接导入边界；同样只调整设计。
 
 P0 已实现固定合成样稿加载、当前文件持久化和 PNG/JPEG 导出；macOS arm64 开发构建及打包后应用的探针已通过。macOS DMG 构建、校验及从镜像复制后的应用运行和 ad-hoc 签名验证已通过；macOS/Windows/Linux 资源构建与完整性 CI 均已通过，Developer ID 签名及公证不属于本次本地验收；P1 已实现手工编辑闭环；P2.1–P2.7（技能与物化、回合输入物化、回合后采集与提交、图像连接与 `molly_generate_image`、结果卡与候选采用/丢弃、结果卡缩略图引用、持久化加固）已分九个独立提交实现。`molly_render_preview` 渲染预览按升级条款拆为 P2.4b 并已实现：拿不到「守护进程发起」的通道，所以方向反过来——运行中的 Molly 桌面轮询守护进程领取渲染任务，能力因此**可观测**（没有桌面在轮询就没有该工具，缺席仍是诚实状态），且不改会话文档 schema、不新增持久事件种类、不给 Electron 新增入站面。**P2 总验收已执行**——在 macOS arm64 打包应用内用真实 Agent 跑通「参考图 + 需求 → 可编辑作品 → 手工修改 → 保存重开 → PNG/JPEG 导出」，取消／权限回应／无效产物三条负路径均通过；视觉效果仍为人工判断。同轮发现一处打包缺陷并已修复：暂存的技能树被针对源码树的排除规则剥掉了 `SKILL.md`、参考文档与示例，包内因此只有技能脚本而没有技能说明。提交回合后已打开的画布不重绘（P2-A2）已随后修复：渲染器在 history 出现新的 committed revision 时调用 `design.syncFromStore`，Electron 在打开的编辑器修订与 store 不一致时销毁并按同一 host／bounds 重建，与采用候选共用 `reloadDesignCanvas`。当时 Molly OSS 首页参考图附件失败（P2-A3）仍待适配，且不并入 P3；此观察不能推广为 Lody 没有附件或本地存储。验收通过不表示整份草案获批，也不覆盖 Windows/Linux 实机验证、Developer ID 签名与公证。详见实施记录与[验收证据](https://github.com/LeonEthan/molly-design/blob/8bac4b433a3c7ac38ddd5be14b315363c75a8f92/output/folio-p2/acceptance.json)。
+
+## 内置浏览器实施证据（2026-09-23）
+
+官方 MCP 驱动已完成匿名 Pinterest 搜索、截图观察与 JPEG 保存。本机 Apple Development 签名包随后通过设置导入 Chrome 账号，网站识别登录态，真实 Agent 搜索并进入详情、保存图片；同一包重启保留登录态，清理后 Cookie 为零。首个完整轮次的结束判据有误，原始失败记录保留；控制权归还由独立短任务确认，不把两轮改写成单轮全绿。首期现明确收敛为 Pinterest；本机验收不证明 Developer ID 分发、公证、升级或 Amazon 支持。证据与本次授权等待修复见[收尾记录](../.agents/notes/implemented/feature/2026-09-23-pinterest-browser-release.zh.md)。Spec 保持 draft。

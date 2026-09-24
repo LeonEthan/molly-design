@@ -374,6 +374,9 @@ importers:
       '@electron-toolkit/utils':
         specifier: ^4.0.0
         version: 4.0.0(electron@39.5.1)
+      '@modelcontextprotocol/sdk':
+        specifier: 1.29.0
+        version: 1.29.0(zod@4.3.6)
       '@molly/cli-supervisor':
         specifier: workspace:*
         version: link:../../packages/cli-supervisor
@@ -386,6 +389,9 @@ importers:
       '@molly/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@playwright/mcp':
+        specifier: 0.0.82
+        version: 0.0.82
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -410,12 +416,18 @@ importers:
       jotai:
         specifier: 'catalog:'
         version: 2.17.1(@babel/core@7.29.0)(@babel/template@7.28.6)(@types/react@19.2.17)(react@19.2.0)
+      playwright:
+        specifier: 1.64.0-alpha-1789764292000
+        version: 1.64.0-alpha-1789764292000
       react:
         specifier: 'catalog:'
         version: 19.2.0
       react-dom:
         specifier: 'catalog:'
         version: 19.2.0(react@19.2.0)
+      rookie-cookies:
+        specifier: 0.6.0
+        version: 0.6.0
     devDependencies:
       '@electron-toolkit/eslint-config-prettier':
         specifier: ^3.0.0
@@ -426,6 +438,9 @@ importers:
       '@electron-toolkit/tsconfig':
         specifier: ^2.0.0
         version: 2.0.0(@types/node@24.10.12)
+      '@electron/fuses':
+        specifier: 1.8.0
+        version: 1.8.0
       '@molly/components':
         specifier: workspace:*
         version: link:../../packages/components
@@ -3785,6 +3800,11 @@ packages:
   '@pkgr/core@0.2.9':
     resolution: {integrity: sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA==}
     engines: {node: ^12.20.0 || ^14.18.0 || >=16.0.0}
+
+  '@playwright/mcp@0.0.82':
+    resolution: {integrity: sha512-OCqftfb8H4dnqm/njbTBRk3seUvUPttOlJUxCtEzXGETYOlRH5Qt3bbXIjmZIuWAxD9RF+yg1ASrPeXvm0y5cA==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   '@playwright/test@1.58.2':
     resolution: {integrity: sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA==}
@@ -9937,9 +9957,19 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  playwright-core@1.64.0-alpha-1789764292000:
+    resolution: {integrity: sha512-ZgRaybFv4rRy7QMGnYprEGFdNJnvapNqcaER2w96bDQA+40BWIle1el1Yh9KHD3E6XYmieMB+r+UxFTCauTGGQ==}
+    engines: {node: '>=20'}
+    hasBin: true
+
   playwright@1.58.2:
     resolution: {integrity: sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.64.0-alpha-1789764292000:
+    resolution: {integrity: sha512-3Ngs4ERGdC912uW3srEDtNVey4u1wSaQ/EFcKhxMpz0by0K6nidaJgM087pLpJc1osytiVnL7ack5gvgPArPNw==}
+    engines: {node: '>=20'}
     hasBin: true
 
   plist@3.1.0:
@@ -10630,6 +10660,42 @@ packages:
     resolution: {integrity: sha512-oQL6lgK3e2QZeQ7gcgIkS2YZPg5slw37hYufJ3edKlfQSGGm8ICoxswK15ntSzF/a8+h7ekRy7k7oWc3BQ7y8A==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  rookie-cookies-darwin-arm64@0.6.0:
+    resolution: {integrity: sha512-bZhUA5e3EGGWL7obpMKyFpw+SBauRD/umix9EPL25i2Gdvk1iSkqHEEVpAr2wUAoEnCeBAWlbFdd3pJ+6SGMBQ==}
+    engines: {node: '>=22'}
+    cpu: [arm64]
+    os: [darwin]
+
+  rookie-cookies-darwin-x64@0.6.0:
+    resolution: {integrity: sha512-FPhjqYAG0JXZ+cCshvvOOgZt/qLnMD5iqb6ufYcwanjgFT95Qf+AJ3P5ArhmChcNrTCsVr8lS8PQSSI0m/IDxQ==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [darwin]
+
+  rookie-cookies-linux-arm64-gnu@0.6.0:
+    resolution: {integrity: sha512-+N6jkh5SZren9dmG0xRzjk6GIu0yyIqmD7VHl2v2fQJFi5kAntyziNI6wAqsj0H6T+S7ebf7OGB2gqh+zt/zHw==}
+    engines: {node: '>=22'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  rookie-cookies-linux-x64-gnu@0.6.0:
+    resolution: {integrity: sha512-uUGfZNuNWQ6+2SipFsTTGLanOVVJiSHQlH7VtlR52qbN36+j3hdtUz1FxLLUqUPx6ljRsCnNwQSgalf6KJvtiA==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  rookie-cookies-win32-x64-msvc@0.6.0:
+    resolution: {integrity: sha512-mHi3vHJS3bb6QNX3zHIMLWyNhaQ9lo6SQ9H6ZKEwaQaB/4vGHpiclCy+5H35iy2sc2UPJHvyrnHsPvQRZ5mVxg==}
+    engines: {node: '>=22'}
+    cpu: [x64]
+    os: [win32]
+
+  rookie-cookies@0.6.0:
+    resolution: {integrity: sha512-QFNmmGEK6zujgjopRynAA8Q+YHAIgd5RELNEYLHd7K/VYwFm29mNCgMAs4A/GnmgPN+wE4Dc28C/Lj5x1m7z9A==}
+    engines: {node: '>=22'}
 
   rope-sequence@1.3.4:
     resolution: {integrity: sha512-UT5EDe2cu2E/6O4igUr5PSFs23nvvukicWHx6GnOPlHAiiYbzNuCRQCuiUdHJQcqKalLKlrYJnjY0ySGsXNQXQ==}
@@ -14719,6 +14785,11 @@ snapshots:
     optional: true
 
   '@pkgr/core@0.2.9': {}
+
+  '@playwright/mcp@0.0.82':
+    dependencies:
+      playwright: 1.64.0-alpha-1789764292000
+      playwright-core: 1.64.0-alpha-1789764292000
 
   '@playwright/test@1.58.2':
     dependencies:
@@ -21842,11 +21913,17 @@ snapshots:
 
   playwright-core@1.58.2: {}
 
+  playwright-core@1.64.0-alpha-1789764292000: {}
+
   playwright@1.58.2:
     dependencies:
       playwright-core: 1.58.2
     optionalDependencies:
       fsevents: 2.3.2
+
+  playwright@1.64.0-alpha-1789764292000:
+    dependencies:
+      playwright-core: 1.64.0-alpha-1789764292000
 
   plist@3.1.0:
     dependencies:
@@ -22715,6 +22792,29 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.57.1
       '@rollup/rollup-win32-x64-msvc': 4.57.1
       fsevents: 2.3.3
+
+  rookie-cookies-darwin-arm64@0.6.0:
+    optional: true
+
+  rookie-cookies-darwin-x64@0.6.0:
+    optional: true
+
+  rookie-cookies-linux-arm64-gnu@0.6.0:
+    optional: true
+
+  rookie-cookies-linux-x64-gnu@0.6.0:
+    optional: true
+
+  rookie-cookies-win32-x64-msvc@0.6.0:
+    optional: true
+
+  rookie-cookies@0.6.0:
+    optionalDependencies:
+      rookie-cookies-darwin-arm64: 0.6.0
+      rookie-cookies-darwin-x64: 0.6.0
+      rookie-cookies-linux-arm64-gnu: 0.6.0
+      rookie-cookies-linux-x64-gnu: 0.6.0
+      rookie-cookies-win32-x64-msvc: 0.6.0
 
   rope-sequence@1.3.4: {}
 

@@ -85,8 +85,9 @@ Parent instructions apply.
   purpose. The proposal writer hydrates the Session doc, flushes locally, and confirms remote sync
   before `ok`.
 
-- Image generate/edit use the user-selected model with no product default. Edits upload
-  bounded workspace files through the existing image transport; results are assets only,
+- Image generate/edit use the user-selected model with no product default. Edits send
+  bounded workspace files as ordered JSON data URLs; optional `background`/`output_format`
+  pass through, refusing transparent JPEG before dispatch. Results are assets only,
   never artwork commits. Preserve upstream failures without automatic paid retries.
   Return the private image receipt with dispatch/outcome facts and successful asset
   digests; transport loss or post-response import failure is not proof of non-dispatch.

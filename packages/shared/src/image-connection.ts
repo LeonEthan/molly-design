@@ -220,11 +220,6 @@ export type ImageHttpRequest = {
   headers: Record<string, string>;
   /** JSON request body, already serialized. Absent for GET. */
   body?: string;
-  /** Multipart edits: the transport owns encoding and its boundary header. */
-  multipart?: {
-    fields: Record<string, string>;
-    files: Array<{ field: string; filename: string; mimeType: string; bytes: Uint8Array }>;
-  };
   timeoutMs: number;
   /** Caller cancellation, combined with `timeoutMs` by the production transport. */
   signal?: AbortSignal;

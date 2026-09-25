@@ -138,6 +138,8 @@ import {
   generateImageBytes,
   editImageBytes,
   IMAGE_EDIT_MAX_INPUTS,
+  IMAGE_BACKGROUNDS,
+  IMAGE_OUTPUT_FORMATS,
 } from '@/mcp/image-generation';
 import {
   HARNESS_INLINE_IMAGE_RESULT_META,
@@ -293,6 +295,18 @@ const GenerateImageToolInputSchema = z
       .optional()
       .describe(
         'Optional output size passed through to the configured provider, for example "1024x1024". Omit to use the provider default.'
+      ),
+    background: z
+      .enum(IMAGE_BACKGROUNDS)
+      .optional()
+      .describe(
+        'Optional provider background. Use "transparent" for a standalone layer with real alpha (requires PNG output); omit to use the provider default.'
+      ),
+    output_format: z
+      .enum(IMAGE_OUTPUT_FORMATS)
+      .optional()
+      .describe(
+        'Optional provider output format: "png" (supports transparency) or "jpeg". Omit to use the provider default.'
       ),
   })
   .strict();
@@ -3987,6 +4001,8 @@ export function buildMollyMcpServer(
         settings: connection,
         prompt: args.prompt,
         ...(args.size === undefined ? {} : { size: args.size }),
+        ...(args.background === undefined ? {} : { background: args.background }),
+        ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
         workdir: gate.artworkWorkdir,
         transport: (async (request) => {
           if (request.method === 'POST') dispatched = true;
@@ -4068,7 +4084,7 @@ export function buildMollyMcpServer(
     {
       title: 'Edit images through Molly image connection',
       description:
-        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Uploads the actual files to the user's configured OpenAI Images-compatible /images/edits endpoint using their explicitly selected model. Supported input formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
+        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Sends the actual files as data URLs in a JSON request to the user's configured OpenAI Images-compatible /images/edits endpoint using their explicitly selected model. Supported input formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
       inputSchema: EditImageToolInputSchema,
     },
     runImageTool

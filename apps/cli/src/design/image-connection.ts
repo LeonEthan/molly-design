@@ -187,19 +187,7 @@ export const fetchImageHttpTransport: ImageHttpTransport = async (request) => {
     ? AbortSignal.any([request.signal, deadline.signal])
     : deadline.signal;
   try {
-    const multipart = request.multipart;
-    const form = multipart ? new FormData() : undefined;
-    if (form && multipart) {
-      for (const [name, value] of Object.entries(multipart.fields)) form.append(name, value);
-      for (const file of multipart.files) {
-        form.append(
-          file.field,
-          new Blob([new Uint8Array(file.bytes)], { type: file.mimeType }),
-          file.filename
-        );
-      }
-    }
-    const body = form ?? request.body;
+    const body = request.body;
     const response = await fetch(request.url, {
       method: request.method,
       headers: request.headers,

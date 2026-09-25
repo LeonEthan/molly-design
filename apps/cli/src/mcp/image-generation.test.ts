@@ -168,16 +168,10 @@ describe('decoded image admission', () => {
     const result = await editImageAsset({
       ...options,
       transport: async (request) => {
-        expect(
-          request.multipart?.files.map((file) => [
-            file.field,
-            file.mimeType,
-            Buffer.from(file.bytes),
-          ])
-        ).toEqual([
-          ['image[]', 'image/webp', source],
-          ['mask', 'image/png', pngFixture(2, 3)],
-        ]);
+        expect(JSON.parse(request.body ?? '')).toMatchObject({
+          images: [{ image_url: dataUrl('image/webp', source) }],
+          mask: { image_url: dataUrl('image/png', pngFixture(2, 3)) },
+        });
         return jsonResponse(200, { data: [{ b64_json: pngFixture(2, 3).toString('base64') }] });
       },
     });
@@ -211,6 +205,9 @@ const makeWorkdir = async (): Promise<string> =>
 
 const sha256Of = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
+const dataUrl = (mimeType: string, bytes: Uint8Array): string =>
+  `data:${mimeType};base64,${Buffer.from(bytes).toString('base64')}`;
+
 describe('buildImageGenerationRequest', () => {
   it('posts to the configured images endpoint with the model and a bearer header', () => {
     const request = buildImageGenerationRequest({ settings, prompt: 'a red kite' });
@@ -236,6 +233,50 @@ describe('buildImageGenerationRequest', () => {
     expect(() =>
       buildImageGenerationRequest({ settings, prompt: 'p', size: 'x'.repeat(40) })
     ).toThrow(ImageGenerationError);
+  });
+
+  it('forwards explicit background and output format, and omits them by default', () => {
+    const request = buildImageGenerationRequest({
+      settings,
+      prompt: 'p',
+      background: 'transparent',
+      outputFormat: 'png',
+    });
+    expect(JSON.parse(request.body ?? '{}')).toMatchObject({
+      background: 'transparent',
+      output_format: 'png',
+    });
+    const defaults = JSON.parse(
+      buildImageGenerationRequest({ settings, prompt: 'p' }).body ?? '{}'
+    );
+    expect(defaults).not.toHaveProperty('background');
+    expect(defaults).not.toHaveProperty('output_format');
+  });
+
+  it('refuses a transparent JPEG before any paid request', async () => {
+    expect(() =>
+      buildImageGenerationRequest({
+        settings,
+        prompt: 'p',
+        background: 'transparent',
+        outputFormat: 'jpeg',
+      })
+    ).toThrow(/output_format png/);
+    const workdir = await makeWorkdir();
+    await writeFile(path.join(workdir, 'source.png'), pngFixture(2, 2));
+    await expect(
+      editImageAsset({
+        settings,
+        prompt: 'p',
+        workdir,
+        images: ['source.png'],
+        background: 'transparent',
+        outputFormat: 'jpeg',
+        transport: async () => {
+          throw new Error('unexpected paid dispatch');
+        },
+      })
+    ).rejects.toThrow(/output_format png/);
   });
 
   it('never asks for more than the one image the tool can return', () => {
@@ -615,25 +656,20 @@ describe('image edits', () => {
       const transport: ImageHttpTransport = async (request) => {
         expect(request.url).toBe('https://images.example.com/v1/images/edits');
         expect(request.method).toBe('POST');
-        expect(request.body).toBeUndefined();
-        expect(request.headers['content-type']).toBeUndefined();
-        expect(request.multipart?.fields).toEqual({
+        expect(request.headers['content-type']).toBe('application/json');
+        expect(JSON.parse(request.body ?? '')).toEqual({
           model: settings.model,
           prompt: 'preserve first, borrow second palette',
-          n: '1',
+          n: 1,
           size: '1024x1024',
+          background: 'transparent',
+          output_format: 'png',
+          images: [
+            { image_url: dataUrl('image/png', first) },
+            { image_url: dataUrl('image/png', second) },
+          ],
+          ...(withMask ? { mask: { image_url: dataUrl('image/png', first) } } : {}),
         });
-        expect(
-          request.multipart?.files.map((file) => [
-            file.field,
-            file.mimeType,
-            Buffer.from(file.bytes),
-          ])
-        ).toEqual([
-          ['image[]', 'image/png', first],
-          ['image[]', 'image/png', second],
-          ...(withMask ? [['mask', 'image/png', first]] : []),
-        ]);
         return jsonResponse(200, { data: [{ b64_json: output.toString('base64') }] });
       };
       const asset = await editImageAsset({
@@ -643,6 +679,8 @@ describe('image edits', () => {
         prompt: 'preserve first, borrow second palette',
         images: ['first.png', 'reference.png'],
         size: '1024x1024',
+        background: 'transparent',
+        outputFormat: 'png',
         ...(withMask ? { mask: 'mask.png' } : {}),
       });
       expect(await readFile(asset.absolutePath)).toEqual(output);

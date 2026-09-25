@@ -2,7 +2,7 @@
 
 The opening follows the approved three-scene bilingual direction in the
 [welcome specification](../../../../../specs/welcome-onboarding.md) and its
-[design record](../../../../../.agents/notes/proposed/feature/2026-09-24-welcome-graphic-design-directions.zh.md).
+[design record](../../../../../.agents/notes/implemented/feature/2026-09-24-welcome-graphic-design-directions.zh.md).
 The handwritten Molly M remains separate from the artwork. A warm off-white shell,
 restrained controls and generous space connect three distinct graphic compositions:
 
@@ -14,8 +14,9 @@ Both languages share these three image assets. Headings, supporting text and con
 are localized DOM text, except Make your mark. which is part of the third artwork
 and has an accessible text heading. Adjacent `.prompt.md` files record each authorized
 image edit and actual delivered resolution. The six-panel concept preview is a review
-reference, never a production screenshot crop. The final three assets require human
-visual judgment; automated generation and checks do not establish legal clearance.
+reference, never a production screenshot crop. The owner accepted the final three
+assets visually in the task conversation on 2026-09-24. Automated generation and
+checks do not establish legal clearance.
 
 `ceremony/intro-sequence.tsx` advances at 0, 3 and 6 seconds, then holds the third
 scene indefinitely. Skip and Start setup immediately enter the existing setup path.

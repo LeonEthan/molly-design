@@ -103,6 +103,7 @@
     "src/latex.ts (retired unused PPTD v2 translation; provenance retained in Git history)"
   ],
   "localAdaptations": {
+    "skills/graphic-design/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers",
     "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
     "skills/graphic-design/references/replication.md": "Original reconstruction guide for the YAML canvas",
     "skills/graphic-design/references/graphic-canvas-profile.md": "Original Active Profile discipline for YAML/Bento authoring",

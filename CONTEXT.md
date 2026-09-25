@@ -32,6 +32,26 @@ _Avoid_: second authoritative artwork, Agent draft, PPTD
 The authoring files the Agent is currently modifying, associated with the artwork and version baseline it successfully read; re-syncing the current artwork does not overwrite the draft or silently change its baseline.
 _Avoid_: current artwork, historical version store
 
+**Composition draft**:
+A flattened visual proposal for an artwork's composition and appearance, used to select a design direction and compare later results. It is distinct from the editable authoring draft and the saved current artwork.
+_Avoid_: Agent authoring draft, current artwork
+
+**Delivery asset**:
+Material supplied for use in the final design, such as a product image or logo, whose identity and key appearance matter to the result. Its role differs from material supplied only to guide the design.
+_Avoid_: inspiration image, design reference
+
+**Design reference**:
+Material supplied to guide a design's composition, appearance or reconstruction, without necessarily becoming an asset in the final artwork.
+_Avoid_: delivery asset, current artwork
+
+**Generated layer**:
+A separately generated visual component intended to be arranged with other components in an artwork, including completion of portions hidden in its reference. It is not merely the visible pixels cropped from a flattened composition.
+_Avoid_: reference crop, flattened artwork
+
+**Transparent-padding trim**:
+Removal of fully transparent outer padding from an image while retaining its remaining pixel samples. It does not identify the subject or remove faint visible content.
+_Avoid_: layer generation, alpha denoising, subject extraction
+
 **Conflict draft (implemented; see "Editing and Agent turns" and "Current-artwork reading and file consistency" in specs/graphic-design-platform.md)**:
 Authoring files that failed the version check and remain in the workspace; the Agent re-reads the latest current artwork and handles the diff itself. It is not a separate candidate artwork for the user to accept/reject.
 _Avoid_: candidate approval, automatic merge on apply

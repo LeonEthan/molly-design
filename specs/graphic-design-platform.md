@@ -83,6 +83,8 @@ The 2026-09-12 revised goal is automatic write-back plus read reminders; the ear
 
 Design guidance and optional helper tools live in skills; the app only does structural validation and observable outcome classification, without mandating tool-call counts, visual self-review rounds or a fixed completion flow. A missing tool does not imply a missing built-in Agent capability. Formal export continues to use the fixed Bento rendering path.
 
+The [generative layered design task](generative-layered-design-workflow.md) defines the approved nine-stage creative workflow and its supporting changes, with methods and creative choices owned by the Agent.
+
 An Agent may render the YAML artwork projection through the existing `molly_render_preview`, then view it with an actually available image-reading tool and keep editing. The app does not require fetching images through result cards, nor equate render success with the model having read the image; when the preview tool is absent, the app only states the capability is unavailable and does not declare all visual review failed on the Agent's behalf. An optional finalize script is not a mandatory write order or a file-publish transaction.
 
 ## Built-in image tools

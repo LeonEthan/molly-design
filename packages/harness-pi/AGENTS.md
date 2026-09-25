@@ -34,9 +34,10 @@ Read [README](README.md) before changing session construction or packaged resour
   reopen through public APIs. Existing missing/corrupt native history stays untouched.
 - Journal every provider HTTP attempt before transport, compaction included.
   Restore cumulative Core accounting by request identity; unknown cost stays unknown.
-- Unknown MCP delivery and dispatched image failures end the run. A new tool-call
-  ID cannot bypass its durable retry fence; only explicit user continuation may
-  start another operation. Asset receipts confer recovery identity, not commit authority.
+- Unknown MCP delivery and dispatched image failures reach Pi as ordinary tool
+  results/errors; the Agent chooses any next call. Add no run stop, cross-call fence
+  or host retry. A dispatched tool-call ID never replays after crash or restart.
+  Asset receipts confer recovery identity, not commit authority.
 - Built-in browser calls use the existing MCP approval path. An explicit site
   task grant lives only in the active run/epoch, grows by approved site at most
   eight times, and is recorded as authorization provenance in the tool journal.
@@ -49,7 +50,7 @@ Read [README](README.md) before changing session construction or packaged resour
   becomes an asset only through owning-host import.
 - Image mappings use the selected catalog revision and explicit image model. Approve
   the mapped native arguments; validate before dispatch. External private receipts
-  confer no asset authority. Unsupported paid results stay inside the retry fence.
+  confer no asset authority. Unsupported paid results settle as failed, without assets.
 - Keep managed built-in and external image imports within that dispatch fence;
   only the owning host's verified response supplies asset digests. Built-in MCP
   returns bytes privately for host publication, bound to the frozen image connection.

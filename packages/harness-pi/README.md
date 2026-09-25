@@ -136,9 +136,12 @@ does not display raw tool arguments.
 `tool-operation-journal.ts` records minimal dispatch receipts,
 not a second transcript: MCP can make paid or irreversible calls outside the product's
 existing subagent Operation workflow, so it needs a pre-call replay fence of its own.
-Unknown outcomes remain unknown across new tool-call IDs and worker reloads. Dispatches
-within one run settle in order; an unknown MCP result or dispatched image failure ends
-native inference instead of letting the model retry. The built-in image receipt distinguishes
+Unknown outcomes stay recorded as unknown across worker reloads, and a dispatched
+tool-call ID is never replayed. Dispatches within one run settle in order; an unknown
+MCP result or dispatched image failure returns to the model as an ordinary tool
+result or error, and the Agent decides whether to call again
+([generative layered design](../../specs/generative-layered-design-workflow.md)).
+The harness adds no run stop or retry of its own. The built-in image receipt distinguishes
 pre-dispatch refusal, upstream rejection and uncertain delivery/import. Successful image
 digests are retained for recovery; receipts themselves do not import or commit a canvas.
 
@@ -231,8 +234,8 @@ permits `resources/read`; it expires at parent settlement. The journal drains re
 before settling the parent and serializes unrelated calls outside this fence, avoiding
 a nested queue deadlock or premature success. Ordinary tools retain their separately
 approved read path. Denied, cancelled, mismatched or lost linked results leave the
-paid parent unknown and stop inference, without regenerating. A declared image tool's returned failure
-also ends the run and remains fenced after reload. External `_meta` image receipts
+paid parent unknown and return a tool error, without regenerating. A declared image
+tool's returned failure is recorded as failed and returned to the model. External `_meta` image receipts
 are ignored. Host import, edit inputs and recovery use bounded full-pixel decoding,
 preserving original bytes; native decoder resources ship with the CLI. Arbitrary URL
 text is not downloaded; MCP URIs never become host fetch/filesystem authority. Remote

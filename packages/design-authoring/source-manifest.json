@@ -41,6 +41,9 @@
     "skills/graphic-design/references/general-poster.md": {
       "derivation": "original"
     },
+    "skills/graphic-design/references/layered-workflow.md": {
+      "derivation": "original"
+    },
     "skills/graphic-design/references/replication.md": {
       "derivation": "original"
     },
@@ -105,6 +108,7 @@
   "localAdaptations": {
     "skills/graphic-design/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers",
     "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
+    "skills/graphic-design/references/layered-workflow.md": "Original generative layered workflow guide",
     "skills/graphic-design/references/replication.md": "Original reconstruction guide for the YAML canvas",
     "skills/graphic-design/references/graphic-canvas-profile.md": "Original Active Profile discipline for YAML/Bento authoring",
     "skills/graphic-design/references/artwork-format.md": "Original YAML artwork format guide",

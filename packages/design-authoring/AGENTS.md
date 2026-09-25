@@ -13,9 +13,10 @@
 - Upstream-adapted files (`.prettierignore` lists them) stay close to the pinned
   upstream for reviewable diffs; `source-manifest.json` records every migration
   and is enforced by the build.
-- Agent materials describe real format/capabilities and optional methods, never
-  fixed creative sequences, analysis methods, review counts or finalize gates.
-  Missing tools do not imply the absence of other Agent visual capabilities.
+- Agent materials describe real format/capabilities and may recommend a creative
+  workflow the Agent adapts, repeats or skips; the application never enforces
+  sequences, analysis methods, review counts or finalize gates. Missing tools do
+  not imply the absence of other Agent visual capabilities.
 - Skill directories must be self-contained after materialization: scripts may
   import only `node:*` builtins or the bundled `scripts/lib/molly-authoring.mjs`.
 - `src/generated/` and `skills/graphic-design/scripts/lib/` are build outputs;

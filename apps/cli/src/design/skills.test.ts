@@ -187,7 +187,7 @@ describe('materializeDesignSkills', () => {
 describe('designSkillPointerLine', () => {
   it('points at the .claude project skill dir', () => {
     expect(designSkillPointerLine('/tmp/wd')).toBe(
-      'Design format and optional helpers: /tmp/wd/.claude/skills/graphic-design/SKILL.md. Choose your own creative methods and review.'
+      'Before design work, read the design skill: /tmp/wd/.claude/skills/graphic-design/SKILL.md. It covers the artwork format and a recommended workflow; adapt it to the task.'
     );
   });
 });
@@ -262,10 +262,13 @@ describe('packaged design materials', () => {
       /inspect → draft|inspect once|inspect in one pass|verify in two loops|never script pixel|do not write pixel-probing|rerun until|done check is executable|review is incomplete|never substitute another renderer/i
     );
     expect(text).toContain('Choose your own analysis, drafting, and review methods');
+    expect(graphicText).toContain('Adapt, reorder, repeat or skip stages');
+    expect(graphicText).toContain('references/layered-workflow.md');
     expect(text).toContain('actual image-reading tool');
     expect(text).toContain('molly_edit_image');
     expect(text).toContain('Molly has no default model');
-    expect(text).toContain('Files are uploaded as multipart data');
+    expect(text).toContain('sent as data URLs in a JSON request');
+    expect(text).toContain('`background: "transparent"`');
 
     expect(graphicText).toContain('design.yaml');
     expect(graphicText).toContain('molly-canvas/1');

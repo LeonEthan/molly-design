@@ -26,6 +26,27 @@ them, and imports the result as the editable document. The separate
 absent until synchronized. You do not write `design.json` yourself. Leftover
 `.pptd` files are not an authoring entry.
 
+## Recommended workflow
+
+For a new design, or a reconstruction that needs generated imagery, a proven
+path is:
+
+1. understand the intent, copy and supplied materials;
+2. look for inspiration on Pinterest;
+3. generate several whole-canvas drafts and choose one;
+4. regenerate each element of that draft as a complete transparent layer;
+5. recompose the layers in `design.yaml`;
+6. decide which text stays editable;
+7. render and review the whole composition, then adjust;
+8. check consistency with the brief and supplied materials;
+9. polish and deliver, stating remaining deviations.
+
+[references/layered-workflow.md](references/layered-workflow.md) explains each
+stage, its tools and what testing showed. Adapt, reorder, repeat or skip stages
+for the task; small edits to an existing artwork rarely need drafts. Without
+image tools, compose from supplied assets, native elements and other available
+capabilities.
+
 ## Route the task
 
 Read only the references needed for the current work:
@@ -33,6 +54,8 @@ Read only the references needed for the current work:
 - For a new design or an overall composition pass, read
   [references/general-poster.md](references/general-poster.md). This is the default
   design knowledge for this skill.
+- When generating imagery or building image layers, read
+  [references/layered-workflow.md](references/layered-workflow.md).
 - When reconstructing a supplied reference image, also read
   [references/replication.md](references/replication.md).
 - Before choosing element semantics or promising editability, read
@@ -61,9 +84,13 @@ helpers, not prerequisites for creation, rendering, submission, or turn completi
 
 - `node scripts/reference-pack.mjs pack <reference> <work>/inspect` provides
   dimensions, grid, bands, and palette artifacts. Its `crop` command extracts a
-  raster region into `media/`. See
-  [replication.md](references/replication.md) for this script's format limits;
-  use available image tools or other analysis methods as appropriate.
+  raster region. For 8-bit PNG layers, `alpha` reports transparency and visible
+  bounds, `trim` removes transparent padding and reports the offset, and
+  `compare` writes side-by-side, overlay and light/dark sheets for two same-size
+  images; every option is explicit and sources are never overwritten. See
+  [replication.md](references/replication.md) for this script's format limits
+  and [layered-workflow.md](references/layered-workflow.md) for the layer
+  helpers; use available image tools or other analysis methods as appropriate.
 - `node scripts/finalize.mjs <project>/design.yaml[.tmp]` checks structure and can
   promote a clean `.tmp` canvas. You may write `design.yaml` directly. Molly
   independently validates structure, assets, and versions at intake; it does not

@@ -78,12 +78,14 @@ bundled example, and optional helpers describe the YAML snapshot entry:
 enables an image connection). Runtime per-file `VENDOR.lock` freezing is replaced
 by this package's build-time source manifest.
 
-The materials describe capabilities and optional design methods, without fixed
-inspection/drafting/review order, analysis restrictions, or review counts. Rendering
+The materials describe capabilities, design methods and a recommended generative
+layered workflow ([Spec](../../specs/generative-layered-design-workflow.md)) that the
+Agent adapts, repeats or skips; nothing enforces an order, analysis restriction or
+review count. Rendering
 instructions retain actual image reading and autonomous corrections; missing tools
 are described individually. `finalize` is optional and never a turn/commit gate.
-Skill prose and the bundled example teach `design.yaml` (`format: molly-canvas/1`) / `media/` with Bento `id` / `kind`. The image skill describes text generation and multipart edits with workspace
-references and an optional mask. Both use the user’s required model without a
+Skill prose and the bundled example teach `design.yaml` (`format: molly-canvas/1`) / `media/` with Bento `id` / `kind`. The image skill describes text generation and JSON data-URL edits with workspace
+references, an optional mask and optional transparency/output format. Both use the user’s required model without a
 product default and return assets without committing artwork.
 
 The CLI staging/materialization integration test reads the delivered files, runs

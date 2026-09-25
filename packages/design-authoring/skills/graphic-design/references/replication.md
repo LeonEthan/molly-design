@@ -7,7 +7,10 @@ never the source image pasted back as a background.
 
 Also use [general-poster.md](general-poster.md) for composition judgment and
 [graphic-canvas-profile.md](graphic-canvas-profile.md) before choosing native
-element semantics.
+element semantics. When image tools are available, follow
+[layered-workflow.md](layered-workflow.md) with the supplied image as the chosen
+draft: skip draft generation and regenerate its raster objects as complete
+layers.
 
 ## Establish reference geometry
 
@@ -54,14 +57,20 @@ declares the needed render behavior and edit level:
   active text model requires it;
 - redraw flat blocks, rules, and simple geometry with supported editable
   primitives (`kind: shape` or `kind: line`);
-- extract photographs, product shots, textures, scenes, and other genuinely
-  raster regions into tight local crops under `media/`;
+- rebuild photographs, product shots, textures, scenes, and other genuinely
+  raster objects as separate image layers under `media/`. With image tools,
+  regenerate each object completely from the reference (see
+  [layered-workflow.md](layered-workflow.md)), because a crop keeps holes where
+  other objects overlapped it. Without them, extract tight crops and report the
+  holes and merged objects this leaves;
+- use a supplied delivery asset (a logo or product photo provided separately)
+  as supplied rather than regenerating it;
 - keep raster aspect ratios faithful and use supported `fit` or `crop` behavior;
 - do not claim native icons, tables, charts, masks, or other compound semantics
   merely because some external catalogue documents them.
 
-A crop may contain photographic content. Do not use a large crop containing
-rebuildable text or flat graphics to simulate editability. If the required
+A layer may contain photographic content. Do not use a large crop or layer
+containing rebuildable text or flat graphics to simulate editability. If the required
 semantic element is not Active, choose an explicitly supported editable
 decomposition or report the limitation.
 

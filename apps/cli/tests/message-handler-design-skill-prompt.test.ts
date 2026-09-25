@@ -195,7 +195,7 @@ describe('MessageHandler design skill prompt wiring', () => {
       const workdir = path.join(dataDir, 'chats', sessionId);
       const text = await buildText(handler, 'make a poster');
       expect(text).toContain(
-        `make a poster\n\nDesign format and optional helpers: ${workdir}/.claude/skills/graphic-design/SKILL.md. Choose your own creative methods and review.`
+        `make a poster\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md. It covers the artwork format and a recommended workflow; adapt it to the task.`
       );
       for (const base of ['.claude/skills', '.agents/skills']) {
         const dir = path.join(workdir, base, 'graphic-design');

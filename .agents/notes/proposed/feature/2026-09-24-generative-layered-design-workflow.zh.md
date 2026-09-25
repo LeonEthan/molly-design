@@ -104,3 +104,5 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 ## 验证限制
 
 现有证据覆盖基于保留、合成或单个新生成素材的分段环节，使用的是代理而非 OpenAI 官方端点，每个合成评审用例只运行一次。本任务尚未修改 Molly 运行时代码。尚未进行从需求到保存作品的完整运行，也未调用 Qwen、Seedream 或 OpenAI 官方端点。本地实验文件不在仓库内，无法据仓库复核。
+
+PR：[#17](https://github.com/LeonEthan/molly-design/pull/17)（Spec 与本记录）。

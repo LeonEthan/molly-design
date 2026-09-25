@@ -191,3 +191,5 @@ proxies rather than OpenAI's own endpoint, and one run per synthetic review case
 No Molly runtime code has changed for this task. No brief-to-saved-artwork run,
 Qwen or Seedream call, or official OpenAI endpoint call has been made. Local
 experiment files are not part of the repository and cannot be re-verified from it.
+
+PR: [#17](https://github.com/LeonEthan/molly-design/pull/17) (Spec and this record).

@@ -64,7 +64,7 @@ export class OnboardingPage {
   }
 
   async openAgentConfiguration(): Promise<void> {
-    await this.page.getByRole('button', { name: /^(Skip intro|跳过介绍)$/u }).click();
+    await this.page.getByRole('button', { name: /^(Skip|跳过|Start setup|开始设置)$/u }).click();
     await expect(
       this.page.getByRole('heading', { name: /^(Connect a model|连接模型)$/u })
     ).toBeVisible();

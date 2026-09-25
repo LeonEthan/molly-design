@@ -19,6 +19,6 @@
 
 - [规格草稿](../../specs/welcome-onboarding.md)：逐页文案、三秒翻页、九秒配乐及已确认行为。
 - [设计记录](../../.agents/notes/proposed/feature/2026-09-24-welcome-graphic-design-directions.zh.md)：设计取舍、批准范围与事实证据。
-- [中英两列三行预览](../../output/welcome-redesign-2026-09-24/three-page-bilingual-comparison.png)：视觉基准；不是可直接裁成正式资产的高清图。
+- 中英两列三行预览（仅本地生成物：`output/welcome-redesign-2026-09-24/three-page-bilingual-comparison.png`，未提交到仓库）：视觉基准；不是可直接裁成正式资产的高清图。
 
 保持三页、浅色界面及现有设置流程。额外图像生成或付费配乐调用仍需相应授权；确认执行计划不扩充已有生成额度。正式素材和听感需要实际验收。

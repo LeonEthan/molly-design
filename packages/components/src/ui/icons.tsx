@@ -6,6 +6,8 @@ import {
   type SVGProps,
 } from 'react';
 import {
+  volume2Icon,
+  volumeXIcon,
   activityIcon,
   alarmClockIcon,
   alignCenterIcon,
@@ -859,3 +861,6 @@ export {
   ZoomIn as ZoomInIcon,
   ZoomOut as ZoomOutIcon,
 };
+
+export const Volume2 = createUiIcon('Volume2', volume2Icon);
+export const VolumeX = createUiIcon('VolumeX', volumeXIcon);

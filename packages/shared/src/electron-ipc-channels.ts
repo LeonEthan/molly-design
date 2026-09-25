@@ -49,6 +49,7 @@ export type IpcPushMap = {
   'app.deepLink': string;
   'app.menuAction': string;
   'app.fullscreen': boolean;
+  'app.windowForeground': boolean;
   'app.nativeTheme': 'light' | 'dark';
   'app.globalShortcut': GlobalShortcutTriggeredPayload;
   'app.sessionCompletionClick': SessionCompletionNotificationClickPayload;
@@ -81,6 +82,7 @@ export const IPC_PUSH_CHANNELS = {
   appDeepLink: 'app.deepLink',
   appMenuAction: 'app.menuAction',
   appFullscreen: 'app.fullscreen',
+  appWindowForeground: 'app.windowForeground',
   appNativeTheme: 'app.nativeTheme',
   appGlobalShortcut: 'app.globalShortcut',
   appSessionCompletionClick: 'app.sessionCompletionClick',

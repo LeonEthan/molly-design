@@ -38,6 +38,14 @@ export function installNativeTabBehavior(): void {
       if (event.key !== 'Tab' || event.defaultPrevented) return
       const target = event.target instanceof Element ? event.target : document.activeElement
       if (target instanceof Element && target.closest(INTERACTIVE_TAB_CONTEXT)) return
+      const tabSurface = document.querySelector('[data-native-tab-surface]')
+      if (
+        tabSurface &&
+        (target === document.body ||
+          target === document.documentElement ||
+          tabSurface.contains(target))
+      )
+        return
       // General app chrome: swallow the focus-traversal so it feels like a native window.
       event.preventDefault()
     },

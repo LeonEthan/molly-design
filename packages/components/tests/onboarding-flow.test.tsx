@@ -108,6 +108,7 @@ describe('desktop onboarding flow', () => {
 
   beforeEach(async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     await initI18n('en');
     localStorage.clear();
     mocks.useVisibleLocalProjects.mockReturnValue({ projects: new Map() });
@@ -132,7 +133,9 @@ describe('desktop onboarding flow', () => {
     container.remove();
     document.body.innerHTML = '';
     uninstallElectronWindowIpc();
+    vi.useRealTimers();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('renders the welcome step without waiting for the Electron CLI bootstrap', async () => {
@@ -146,11 +149,61 @@ describe('desktop onboarding flow', () => {
       );
     });
 
-    expect(container.textContent).toContain('Make an impression.');
+    expect(container.textContent).toContain('Unexpected connections.');
     expect(container.querySelector('img')).not.toBeNull();
     expect(container.textContent).not.toContain('Preparing your workspace');
     expect(mocks.getCliState).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { action: 'Skip', reducedMotion: false },
+    { action: 'Start setup', reducedMotion: false },
+    { action: 'Start setup', reducedMotion: true },
+  ])(
+    'hands $action to local setup and resets manual reading from Back (reduced motion: $reducedMotion)',
+    async ({ action, reducedMotion }) => {
+      const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)');
+      Object.defineProperty(motionPreference, 'matches', { value: reducedMotion });
+      vi.spyOn(window, 'matchMedia').mockReturnValue(motionPreference);
+      vi.useFakeTimers();
+      const platform = createLocalPlatformProvider({
+        session: createStaticStore({ status: 'unauthenticated' }),
+        workspaces: createStaticStore({ status: 'ready', workspaces: [], activeWorkspaceId: null }),
+      });
+      await act(async () =>
+        root?.render(
+          <Provider store={store}>
+            <PlatformContext.Provider value={platform}>
+              <OnboardingOverlay onCompleted={async () => true} />
+            </PlatformContext.Provider>
+          </Provider>
+        )
+      );
+      await act(async () =>
+        container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[1].click()
+      );
+      if (action === 'Start setup') {
+        await act(async () =>
+          container.querySelectorAll<HTMLButtonElement>('.molly-intro-segments button')[2].click()
+        );
+      }
+      await act(async () => findButton(container, action).click());
+      expect(store.get(desktopOnboardingPhaseAtom)).toBe('providers');
+      expect(container.textContent).toContain('Connect a model');
+      expect(container.querySelector('[data-testid=model-connections]')).not.toBeNull();
+      expect(container.querySelector('img')?.getAttribute('src')).toContain(
+        'molly-editorial-v3.png'
+      );
+      await act(async () => findButton(container, 'Back').click());
+      expect(store.get(desktopOnboardingPhaseAtom)).toBe('ceremony');
+      expect(container.querySelector('h1')?.textContent).toBe('Unexpected connections.');
+      expect(container.querySelector('.molly-intro-count')?.textContent).toBe('01 / 03');
+      await act(async () => vi.advanceTimersByTime(3000));
+      expect(container.querySelector('.molly-intro-count')?.textContent).toBe(
+        reducedMotion ? '01 / 03' : '02 / 03'
+      );
+    }
+  );
 
   it('derives steps and repairs stale phases from platform capabilities', () => {
     expect(getDesktopOnboardingSteps({ cloudAccount: false, multiWorkspace: false })).toEqual([

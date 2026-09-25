@@ -374,6 +374,22 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
   setReloadTarget(window, mainTarget)
   attachMainWindowDiagnostics(window, recoveryTarget)
 
+  const sendForegroundState = () => {
+    if (!window.isDestroyed()) {
+      window.webContents.send(
+        'app.windowForeground',
+        window.isVisible() && !window.isMinimized() && window.isFocused()
+      )
+    }
+  }
+  window.on('show', sendForegroundState)
+  window.on('hide', sendForegroundState)
+  window.on('minimize', sendForegroundState)
+  window.on('restore', sendForegroundState)
+  window.on('focus', sendForegroundState)
+  window.on('blur', sendForegroundState)
+  window.webContents.on('did-finish-load', sendForegroundState)
+
   window.on('ready-to-show', () => {
     if (options.hideWindowOnAutoLaunch) {
       return

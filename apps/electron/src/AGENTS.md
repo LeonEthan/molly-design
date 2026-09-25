@@ -33,6 +33,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
 
 ## Renderer and window integration
 
+- A mounted full-screen `data-native-tab-surface` opts into native browser Tab traversal within that surface and from the unfocused document. Onboarding uses this explicit opt-in; general app chrome keeps its existing Tab suppression.
 - Generic update metadata may carry localized Markdown under
   `vendor.mollyChangelog.locales.{en,zh_CN}` (legacy `lodyChangelog` read fallback) in addition to the standard English
   `releaseNotes` fallback. Main validates and bounds those remote strings before
@@ -57,6 +58,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   so toolbar controls do not sit under them.
 - The onboarding window must be native Light before its first renderer paint; normal product windows start from the System theme source.
   An automatic login launch may suppress the initial product window, but onboarding and deep-link launches must remain visible.
+- The primary window pushes `app.windowForeground` from native show/hide, minimize/restore and focus/blur events, including its initial loaded state. Preload retains the latest boolean for late onboarding subscribers; Chromium document focus may remain stale on macOS minimize.
 - `sessionControl.send` streams intermediate responses on `sessionControl.response`
   keyed by request id. The renderer subscribes before `invoke`, removes the
   listener after settlement, and treats only the final response as completion.

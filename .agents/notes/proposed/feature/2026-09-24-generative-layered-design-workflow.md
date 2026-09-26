@@ -184,12 +184,51 @@ twice their size. Stated coordinates in prompts do not preserve layout.
   influenced by untrusted content the Agent reads.
 - Agent draft selection and reviews are advisory; human judgment decides quality.
 
+## Implementation (2026-09-25)
+
+The Spec's tasks were implemented after approval. Acceptance run 1 has not been made.
+
+| Task                  | What landed                                                                                                                                                                                                                                                                                                                                                                   | Tests (synthetic)                                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Image capability      | Optional `background` and `output_format` on both tools; transparent JPEG refused before dispatch; edits send ordered images and the mask as JSON data URLs; the multipart transport branch is removed                                                                                                                                                                        | Request, MCP and asset-import tests                                                                                |
+| Native tool errors    | The run stop and cross-call retry fence are removed; failed or uncertain image calls return to the model; a dispatched tool-call ID still never replays                                                                                                                                                                                                                       | Journal tests; ACP tests where the run continues and the model receives the tool result                            |
+| Optional asset helper | `reference-pack.mjs` gains `alpha`, `trim` and `compare`                                                                                                                                                                                                                                                                                                                      | Retained pixels, offsets, guarded crop, comparison sheets, source preservation                                     |
+| Design experience     | New `layered-workflow.md` reference; `SKILL.md` recommends the nine stages; reconstruction and imagegen guidance aligned; the per-turn pointer asks the Agent to read the skill first                                                                                                                                                                                         | Materialization and pointer tests                                                                                  |
+| Auto-review mode      | `Ask` and `Auto-review` published to the composer and frozen in each run snapshot; shell in `@anthropic-ai/sandbox-runtime` 0.0.77; effect-based policy; escalations judged by a classifier adapted from `pi-auto-approval` 0.1.1 on the journaled session model, falling back to the user; approvals recorded in the run journal; both packaged with provenance and licences | Policy, approval fallback, network review, sandbox routing, classifier, provenance and an adapter integration test |
+
+A manual check against the real macOS sandbox (not a repository test) showed:
+
+- writes and reads in the workspace worked;
+- a write to the home directory and a read of `~/.ssh` were blocked;
+- the sandbox temp directory was writable;
+- the npm registry was reachable;
+- `example.com` reached the review callback and stayed blocked when declined;
+- a workspace inside a denied private-data root stayed readable while a sibling file was blocked.
+
+The first probe exposed that `sandbox-runtime` sets the sandboxed `TMPDIR` from `CLAUDE_CODE_TMPDIR`, which is now set to a per-worker temp directory.
+
+Implementation choices within the Spec:
+
+- **Mode transport.** The mode travels as an ACP mode plus a `mode` config option for the Molly agent. The run-config applier validates it and the session stamps it into the run snapshot, so worker configuration stays per session.
+- **Scope.** Capabilities are published per agent configuration, so auto-review is offered to every Molly session. Non-design sessions simply have no design tools.
+- **Escalation argument.** Bash gains an optional `outside_sandbox` argument for escalation requests; other modes ignore it.
+- **Path forms.** File-tool paths starting with `~` or `@` are reviewed rather than resolved by Molly.
+- **Linux.** Linux needs `bwrap`, `socat` and `rg`. Without them, or on other platforms, shell keeps its prompt.
+- **Network.** Network decisions are remembered for the run, and network prompts appear as their own tool-call cards.
+
+Found during implementation:
+
+- The embedded system prompt still says "Ask for approval before tool execution. Never retry an operation whose result is unknown." It was left unchanged under the no-system-prompt decision. Run 1 shows whether it suppresses autonomy under auto-review.
+- Package-manager caches outside the workspace (`~/.npm`, the pnpm store) are not writable, so installs may need an escalation.
+
 ## Verification limits
 
 Evidence covers segmented stages on retained, synthetic or single fresh assets,
 proxies rather than OpenAI's own endpoint, and one run per synthetic review case.
-No Molly runtime code has changed for this task. No brief-to-saved-artwork run,
-Qwen or Seedream call, or official OpenAI endpoint call has been made. Local
+The implemented runtime is verified by synthetic tests and one manual macOS sandbox
+check; no real image call or packaged desktop run was made for it. No
+brief-to-saved-artwork run, Qwen or Seedream call, or official OpenAI endpoint call
+has been made. Local
 experiment files are not part of the repository and cannot be re-verified from it.
 
 PR: [#17](https://github.com/LeonEthan/molly-design/pull/17) (Spec and this record).

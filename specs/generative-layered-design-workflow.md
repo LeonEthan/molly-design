@@ -10,7 +10,7 @@ Translation: current
 
 Given a brief or reference image, Molly's embedded Agent completes the design process from intent understanding to final polish, delivering a layered artwork that users can edit, save, reopen and export. **Make the end-to-end path work first; optimize turn length, tokens and cost afterwards.** The core deliverable is a complete, usable skill solution. This round targets OpenAI Image 2.5 through the user's configured connection and explicit model; compatibility with other image models follows later without restricting the connection settings now.
 
-This document is the active task and plan, approved on 2026-09-25. The linked note keeps earlier analysis, experiments and discussion as validation records; where they differ, this document governs. Implementation and acceptance are not yet complete.
+This document is the active task and plan, approved on 2026-09-25. The linked note keeps earlier analysis, experiments and discussion as validation records; where they differ, this document governs. The implementation tasks have landed (see the note); acceptance run 1 is pending.
 
 ## Core workflow
 

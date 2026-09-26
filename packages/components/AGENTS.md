@@ -4,8 +4,7 @@
 Root `AGENTS.md` also applies.
 
 This package contains shared React UI for browser-shaped, Electron, and responsive
-mobile surfaces. Background for the rules below:
-[.agents/docs/components-package.md](../../.agents/docs/components-package.md).
+mobile surfaces.
 
 ## General rules
 

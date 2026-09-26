@@ -1,7 +1,7 @@
 # Molly 内置 Pi Harness
 
 Status: draft
-Previous approval (before Role retirement): [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
+Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Translation: current
 
 [English](molly-embedded-pi-harness.md)
@@ -14,7 +14,7 @@ Translation: current
 
 用户安装 Molly 后，只需配置模型连接、API Key 和明确的模型，即可开始设计，无需另装 Agent CLI 或全局 Node/npm。图片生成与编辑继续使用用户配置的图片 MCP/BYOK；没有图片连接时，文字、形状、手工编辑和渲染仍可使用。不同会话可以选择不同模型连接，但所有新执行使用同一版本的内置 Pi harness。
 
-本草案承接《Molly 内置 Pi Harness 改造任务方案书》v1.0（2026-09-19），并按 2026-09-20 的收敛要求重新定义本次剩余交付范围：完成安装包、一个完整设计旅程、关键交互、旧数据继续和交付说明。下文明确延期的项目不再是本次完成条件；原方案历史目标与已执行证据保留，不将延期记为实现完成。[实施计划](../.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md)保存实现与检查证据。本修订仍为 draft，不以任务状态或自动检查替代该修订的人类审批。
+本草案承接《Molly 内置 Pi Harness 改造任务方案书》v1.0（2026-09-19），并按 2026-09-20 的收敛要求重新定义本次剩余交付范围：完成安装包、一个完整设计旅程、关键交互、旧数据继续和交付说明。下文明确延期的项目不再是本次完成条件；原方案历史目标与已执行证据保留，不将延期记为实现完成。实施计划保存实现与检查证据。本修订仍为 draft，不以任务状态或自动检查替代该修订的人类审批。
 
 这是对[设计工作台 Spec](graphic-design-platform.zh.md)中多 Agent 选择和 CLI 引导目标的后续修订提案，不是对现有实现的描述。待实施时同步调整该 Spec、[上游采用范围](lody-upstream-adoption.zh.md)、相关作用域规则及黄金用例：保留已有验收历史，新内置 Pi 结果独立记录，不能把 Kimi CLI 的通过结果转记为 Pi 通过。本草案不改变 Bento 编辑范围、设计格式、历史后端或自主创作原则。
 
@@ -117,7 +117,7 @@ adapter 综合原生错误、取消、未完成工具和原生运行边界判定
 
 ### 迁移与支持边界
 
-Role 选择、创建、管理、迁移、`@` 引用展开和新程序化创建参数均退役。新工作直接选择连接、模型与 reasoning；旧 Role 记录及历史来源保留，但不重新应用到新消息。已接受 Operation 的恢复继续使用已冻结的配置。见 [Role 退役记录](../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md)。此范围变化将本 Spec 返回 draft；先前审批不覆盖此修订。
+Role 选择、创建、管理、迁移、`@` 引用展开和新程序化创建参数均退役。新工作直接选择连接、模型与 reasoning；旧 Role 记录及历史来源保留，但不重新应用到新消息。已接受 Operation 的恢复继续使用已冻结的配置。见 Role 退役记录。此范围变化将本 Spec 返回 draft；先前审批不覆盖此修订。
 
 画布、素材、草稿、聊天和历史原地保留。旧 AgentConfig/Role 保留来源且不可执行；用户显式“用 Molly 继续此设计”时创建新的 Pi 上下文，带入明确的历史上下文和可信素材。旧工具记录仅作为历史数据，不执行，不伪造跨 harness 原生身份。
 

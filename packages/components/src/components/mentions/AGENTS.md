@@ -3,7 +3,6 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 
 Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md).
-Pipeline background: [ui-mentions.md](../../../../../.agents/docs/ui-mentions.md).
 
 ## Triggers, menu, and candidates
 

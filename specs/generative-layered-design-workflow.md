@@ -1,7 +1,7 @@
 # Generative layered design: task and plan
 
 Status: approved
-Approval: [2026-09-25 owner approval](../.agents/notes/proposed/feature/2026-09-24-generative-layered-design-workflow.md#spec-approval-2026-09-25)
+Approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
 Translation: current
 
 [中文](generative-layered-design-workflow.zh.md)
@@ -66,6 +66,6 @@ Turn-length, token and cost optimization; automatic denoising or placement; dedi
 
 ## Evidence
 
-- [Draft and validation record](../.agents/notes/proposed/feature/2026-09-24-generative-layered-design-workflow.md): segmented real image API, transparent trim, desktop editing and embedded Kimi comparison/correction evidence, with limitations.
+- The [PR #17 summary](https://github.com/LeonEthan/molly-design/pull/17) records the approved scope. Detailed image API, transparent-trim, desktop-editing and embedded-Kimi experiments are local-only records; they are not acceptance of this implementation.
 - [Design platform contract](graphic-design-platform.md): editing, persistence and Agent lifecycle boundaries.
 - Current behavior inspected on 2026-09-25: the harness ends a run on dispatched image failure (`packages/harness-pi/src/acp-adapter.ts`); design runs prompt for every non-browser tool call (`packages/harness-pi/src/worker-main.ts`); intake imports only referenced assets (`packages/design-authoring/src/intake.ts`).

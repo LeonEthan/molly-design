@@ -19,7 +19,6 @@ Legacy manifests without dispatch content evidence retain the existing validated
 import and atomic version check; missing evidence is not proof of unchanged
 content. Changed projects retain structure, asset and version validation. Explicit
 resubmission attempts and broader candidate retirement are separate work.
-Decision: [T01](../../.agents/notes/implemented/simplification/2026-09-11-unchanged-pptd-outcome.md).
 
 ## Design image connection
 
@@ -31,4 +30,4 @@ returns a content-addressed workspace asset without changing or committing PPTD.
 The connection probe checks `/models` only, not image endpoint support; provider
 rejections remain visible without automatic paid retries or model fallback.
 Attachments, image reading, preview rendering and existing artwork editing/export
-remain independent. See [T09 evidence](../../.agents/notes/implemented/feature/2026-09-11-image-generation-editing.zh.md).
+remain independent.

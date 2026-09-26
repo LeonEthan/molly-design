@@ -2,7 +2,7 @@
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adapter background:
-[.agents/docs/cli-overview.md](../../.agents/docs/cli-overview.md). Scoped rules live under
+.agents/docs/cli-overview.md. Scoped rules live under
 `src/{agent,commands,session,mcp,orchestration,preview,lib}`.
 
 ## Build and packaging

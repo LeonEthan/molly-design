@@ -41,8 +41,7 @@ end-to-end map. The WS/DO control-plane path is DEPRECATED; do not add to it.
 
 Read [loro/AGENTS.md](loro/AGENTS.md) before enumerating rooms, publishing presence,
 writing machine Flock rows, or reacting to reconnection. Before changing
-`local-loro-data-plane-server.ts` (protocol v7, push, peer-scoped) read its
-[rules and design](../../../../.agents/docs/cli-lib-local-loro-data-plane.md): named
+`local-loro-data-plane-server.ts` (protocol v7, push, peer-scoped), preserve named
 `LoroDocumentManager` options, scheduler and bulk-writer limits, sender-enforced
 framing, the RAW-chunk `createJsonLineSplitter` requirement, renderer room lifetime.
 Two are never negotiable: a renderer joining a Session Doc room must not call
@@ -59,10 +58,9 @@ never pushed to renderers as local room health.
   periodic sweep force the cached commit probe; never act on a cached sample once
   anything looks like pressure; re-check with a short delay before failing a turn; keep
   eviction bounded per call. The threshold is a safety MARGIN, never "what a turn
-  needs". [Per-OS signals](../../../../.agents/docs/cli-lib-memory-pressure.md).
-- **Session file attachments**: read the
-  [local lifecycle](../../../../.agents/docs/cli-lib-session-files.md) before changing
-  staging or dispatch materialization. Dispatch sends ACP `resource_link` blocks
+  needs".
+- **Session file attachments**: preserve the staging and dispatch lifecycle.
+  Dispatch sends ACP `resource_link` blocks
   with `file://` URIs; never degrade this to text-only paths. Agent-shared paths
   and `resource_link file://...` output stay inside the session workspace. New
   attachments remain local; do not restore relay backfill.
@@ -88,8 +86,7 @@ never pushed to renderers as local room health.
   record per-worktree deleted/kept/failed results. The original project directory is
   never a deletion target, and cleanup failures must complete the command with a visible
   result rather than leave removal pending.
-- Before changing `provider-setup-manager.ts`, read its
-  [rules](../../../../.agents/docs/cli-lib-provider-setup.md): row ownership and the
+- Before changing `provider-setup-manager.ts`, preserve row ownership and the
   single publish commit, cancellation, when the queue may start in cloud versus OSS
   local mode, and the rule that a setup row never carries authorization URLs, codes,
   tokens, or raw provider output.

@@ -5,7 +5,7 @@ Edit `AGENTS.md`; `CLAUDE.md` links here.
 Files: [README.md](README.md). Scopes:
 [components/](components/AGENTS.md), [message-queue/](message-queue/AGENTS.md).
 
-## [Tabs and `?tab` routing](../../../../../.agents/docs/sessions-tabs-routing.md)
+## Tabs and `?tab` routing
 
 - Desktop chrome is ONE merged `SessionTabBar` row: traffic-light insets gated
   on `!useElectronFullscreen()`, pill/card geometry (y=8 line, `mt-0.5`,
@@ -21,7 +21,7 @@ Files: [README.md](README.md). Scopes:
 - `Change owner` writes the OWNER `SessionMeta.userId`, never sharing/visibility;
   they stay separate actions.
 
-## [Shell, side panel, side chats](../../../../../.agents/docs/sessions-side-panel.md)
+## Shell, side panel, side chats
 
 - Desktop file/diff/browser surfaces are closeable right-panel tabs, never split
   conversations. `sidePanelTabs` owns strip order and each close's fallback neighbour.
@@ -39,7 +39,7 @@ Files: [README.md](README.md). Scopes:
 - Panel mount is not preview ownership — never release an endpoint or revoke a
   tunnel from component cleanup.
 
-## [Browser and Managed Preview](../../../../../.agents/docs/sessions-browser.md)
+## Browser and Managed Preview
 
 - The engine split is the agent machine's own LOOPBACK (Managed Preview) vs.
   everything else, LAN included (public browser capability). Never fall back from
@@ -56,7 +56,7 @@ Files: [README.md](README.md). Scopes:
   on `sessionStopControl: 1`; unknown steer has no resend. Only execution/artifact
   completion releases canvas.
 
-## [Conversation surface](../../../../../.agents/docs/sessions-surface.md)
+## Conversation surface
 
 - Read receipts are gated on VISIBILITY, not on being mounted: keep the
   per-surface `isVisible` prop.
@@ -69,7 +69,7 @@ Files: [README.md](README.md). Scopes:
 - Most rendering changes belong in `../ai-gui/view.tsx`; the conversation
   `VList` is vertical-only and wide content owns its own scroller.
 
-## [Run config](../../../../../.agents/docs/sessions-run-config.md)
+## Run config
 
 - Desktop opens the published connection/model catalog directly; preserve opaque
   model ids and model-specific reasoning capabilities. Roles are retired: no
@@ -83,7 +83,7 @@ Files: [README.md](README.md). Scopes:
   to unedited composer fields, never infer runtime config from a permission
   click, and freeze a non-Plan mode for explicit execution actions.
 
-## [Live status and dispatch](../../../../../.agents/docs/sessions-live-status.md)
+## Live status and dispatch
 
 - Live working/waiting UI uses presence, never `SessionMeta.status`,
   `lastRunningSeen`, or the CLI dispatch pointers.
@@ -92,7 +92,7 @@ Files: [README.md](README.md). Scopes:
 - Submission routing has one conservative exception: queue behind an unfinished
   transcript when presence is absent. That barrier never relights Working UI.
 
-## [Composer info bar](../../../../../.agents/docs/sessions-info-bar.md)
+## Composer info bar
 
 - Canonical cluster in CONSTANT order + exactly one staged item; no items hides
   the bar (unless syncing) and the stage never empties or relayouts on click.
@@ -101,7 +101,7 @@ Files: [README.md](README.md). Scopes:
 - The Open preview chip stays gated on a real reported preview target, and
   repository actions are priority-ordered and never duplicated below the reply.
 
-## [Auto review, status slot](../../../../../.agents/docs/sessions-auto-review.md)
+## Auto review, status slot
 
 - PR panels and automatic code review are retired; never mount their polls or
   write legacy review settings. Preserve generic file/tool output and history.
@@ -109,7 +109,7 @@ Files: [README.md](README.md). Scopes:
   machine-offline): states hand off, never stack; machine-offline never blocks
   sends; doc-stream degradation is never re-added.
 
-## [Render cost](../../../../../.agents/docs/sessions-render-cost.md)
+## Render cost
 
 - Never subscribe page-level `activeSession` or message rows to Code Collab
   file-index Flock state or full `sessionMetaAtomFamily`; select what a row uses.
@@ -119,7 +119,7 @@ Files: [README.md](README.md). Scopes:
   `isSidebarOpen` write.
 - "Current branch" copy uses `SessionMeta.branchName` only.
 
-## [File surfaces](../../../../../.agents/docs/sessions-file-surfaces.md)
+## File surfaces
 
 - File actions use `hooks/use-session-file-actions.ts` + `lib/session-file-actions.ts`;
   never expose host actions on an incapable surface. Explicit OS open/reveal accepts
@@ -128,7 +128,7 @@ Files: [README.md](README.md). Scopes:
 - Viewers are intentionally NOT code-split; never reintroduce
   `lazy(() => import())` for them. v2 semantics: `specs/code-collab-v2.md`.
 
-## [Stories](../../../../../.agents/docs/sessions-stories.md)
+## Stories
 
 - Stories mock data and render real components; appearance belongs in production.
   `SessionConversationPage.stories.tsx` hand-composes leaves and drifts — keep it

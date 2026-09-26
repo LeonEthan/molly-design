@@ -1,7 +1,7 @@
 # Lody 上游可靠性与长对话更新采纳
 
 Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
+Approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Date: 2026-09-17
 Translation: current
 
@@ -165,6 +165,6 @@ join/取消超时时长、正文窗口大小、必要 adapter 精确版本和写
 
 ## 依据与当前验证状态
 
-- [调研及采纳决策](../.agents/notes/proposed/process/2026-09-17-lody-upstream-adoption.zh.md)：固定上游 `6f3a8855e94737ae65e2e57c625d74573adddc01`、Molly 调研基线 `75fe35085e3e0c512ef28cec3016b6c07c0866f7` 和各候选精确提交。写本 Spec 时 Molly 已前进到 `c1dc2aab`；未把原调研追认为新 HEAD 的全量运行时审查，实施前需复核差量。
-- [设计产品合同](graphic-design-platform.zh.md)、[临时历史校验绕过](session-validation-hotfix.zh.md)、[平台边界](../packages/platform/AGENTS.md)、[共享协议](../packages/shared/AGENTS.md)、[本地数据平面](../.agents/docs/cli-lib-local-loro-data-plane.md)：继续约束本任务；本 Spec 只规划有证据的差量。
+- 调研及采纳决策：固定上游 `6f3a8855e94737ae65e2e57c625d74573adddc01`、Molly 调研基线 `75fe35085e3e0c512ef28cec3016b6c07c0866f7` 和各候选精确提交。写本 Spec 时 Molly 已前进到 `c1dc2aab`；未把原调研追认为新 HEAD 的全量运行时审查，实施前需复核差量。
+- [设计产品合同](graphic-design-platform.zh.md)、[临时历史校验绕过](session-validation-hotfix.zh.md)、[平台边界](../packages/platform/AGENTS.md)、[共享协议](../packages/shared/AGENTS.md)、本地数据平面：继续约束本任务；本 Spec 只规划有证据的差量。
 - 已按用户“开始完整实现任务”的授权实施 U1–U9，切片验证与最终门禁记录在 owning note。必需的真实五 Agent 和 Windows/Linux 运行证据仍须分别提供；源码、合成测试和 macOS 构建不能替代这些验收。本 Spec 保持 draft，不因实现或测试自动获得批准。

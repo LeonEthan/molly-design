@@ -1,8 +1,8 @@
 # sessions — directory index
 
 What each file in this directory is responsible for. Binding rules live in
-[AGENTS.md](AGENTS.md); the long-form explanations it links to live under
-[`.agents/docs/`](../../../../../.agents/docs/) with the `sessions-` prefix.
+[AGENTS.md](AGENTS.md). Maintainers may keep additional explanations in the
+local-only `.agents/docs/` directory.
 
 ## Page shell and tabs
 
@@ -78,20 +78,6 @@ What each file in this directory is responsible for. Binding rules live in
 | `public-browser-surface.tsx`                                                                                                              | Public engine host (Electron `WebContentsView`)          |
 | `managed-preview-surface.tsx`, `managed-preview-frame-cache.ts`                                                                           | Managed Preview host and its LRU frame cache             |
 | `static-html-preview-document.ts`, `session-html-attachment-action.ts`                                                                    | Static `srcdoc` document policy for complete HTML text   |
-
-## Long-form explanations
-
-- [Session tabs, top bar, and `?tab` routing](../../../../../.agents/docs/sessions-tabs-routing.md)
-- [Side panel, side chats, opened sessions, browser mount](../../../../../.agents/docs/sessions-side-panel.md)
-- [Browser engines, Managed Preview, HTML viewer, annotations](../../../../../.agents/docs/sessions-browser.md)
-- [Conversation surface](../../../../../.agents/docs/sessions-surface.md)
-- [Run config and model menus](../../../../../.agents/docs/sessions-run-config.md)
-- [Live status and dispatch](../../../../../.agents/docs/sessions-live-status.md)
-- [Composer info bar](../../../../../.agents/docs/sessions-info-bar.md)
-- [Auto review and status slot](../../../../../.agents/docs/sessions-auto-review.md)
-- [File surfaces](../../../../../.agents/docs/sessions-file-surfaces.md)
-- [Render-cost invariants](../../../../../.agents/docs/sessions-render-cost.md)
-- [Stories and Storybook fidelity](../../../../../.agents/docs/sessions-stories.md)
 
 PR/CI actions, live GitHub review comments and automatic review settings/engines are
 retired from Molly. Generic file/diff viewers and send-to-chat references remain.
@@ -173,7 +159,7 @@ the same Git repository first. The selected base survives restart; subsequent sa
 record that logical source without deleting later versions. An unchanged draft does
 not create a duplicate. Version operations use the execution/processing gate.
 The label distinguishes Vn from “Based on Vn · New changes”; selections are recaptured
-after switching. See the [current design and validation plan](../../../../../.agents/notes/proposed/architecture/2026-09-18-version-based-canvas-editing.zh.md).
+after switching.
 If the Git version was written but the retained native canvas failed to refresh,
 the shell refreshes history and reports both the saved Vn and the reload failure.
 It does not claim the version save failed or create another version automatically.

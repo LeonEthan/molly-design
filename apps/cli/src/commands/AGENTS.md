@@ -68,7 +68,6 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
   Roles do not own MCP choices. Semantic model conversion preserves non-model controls.
   Structured model selections validate their ACP aliases before inheritance; freeze
   the resulting selection in Operation configs and history, including explicit retries.
-  See [acceptance](../../../../.agents/docs/cli-overview.md#embedded-session-acceptance).
 - `--local-project … --worktree` sets `ProjectRef.useWorktree`; daemon startup consumes it in
   `../session/session-execution-service.ts` and worktree creation happens in
   `../session/session-manager.ts`.

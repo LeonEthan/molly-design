@@ -1,7 +1,7 @@
 # 生成式分层设计：任务与方案
 
 Status: approved
-Approval: [2026-09-25 owner approval](../.agents/notes/proposed/feature/2026-09-24-generative-layered-design-workflow.md#spec-approval-2026-09-25)
+Approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
 Translation: current
 
 [English](generative-layered-design-workflow.md)
@@ -66,6 +66,6 @@ Translation: current
 
 ## 依据
 
-- [草稿与验证记录](../.agents/notes/proposed/feature/2026-09-24-generative-layered-design-workflow.zh.md)：真实图片接口、透明裁剪、桌面编辑和内置 Kimi 对比调整的分段证据及限制。
+- [PR #17 概要](https://github.com/LeonEthan/molly-design/pull/17)记录已批准范围。真实图片接口、透明裁剪、桌面编辑及内置 Kimi 实验的详细记录仅留本地；它们不代表本次实现已经验收。
 - [设计平台合同](graphic-design-platform.zh.md)：编辑、持久化和 Agent 生命周期边界。
 - 2026-09-25 核查的现有行为：已发出的图片调用失败会终止运行（`packages/harness-pi/src/acp-adapter.ts`）；设计运行中除浏览器外的每次工具调用都会提示（`packages/harness-pi/src/worker-main.ts`）；导入只收录被引用的素材（`packages/design-authoring/src/intake.ts`）。

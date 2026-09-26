@@ -22,8 +22,7 @@ mutation are retired, independently of native prompt replay prevention.
 `acp-session-config-applier.ts` rejects unsupported legacy options or a changed embedded
 model selection instead of silently continuing with an old configuration. The protected
 host exchange registers Molly when its catalog is available; registration does not
-migrate existing sessions or retire legacy execution. Migration status lives in the
-[harness implementation note](../../../../.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md).
+migrate existing sessions or retire legacy execution.
 
 `design-continuation-service.ts` prepares explicit legacy-design migration without
 starting an Agent. A workspace/source/version-derived target ID makes explicit retries
@@ -266,7 +265,6 @@ actual artifact processing. Release waits for the provider response independentl
 of a locally aborted prompt, and follows outer failure processing. The bridge is
 transient; no whole-turn disk lock is held. A connected desktop with no open canvas
 acknowledges an empty flush; a missing desktop fails explicitly after 30 seconds.
-See the [decision and evidence](../../../../.agents/notes/implemented/architecture/2026-09-11-canvas-serial-execution.zh.md).
 
 ### Grok Stop and explicit restoration
 
@@ -290,4 +288,4 @@ Successful closure keeps the ACP process connection available. The next explicit
 loads the same native session with the existing workdir, current MCP catalog, session metadata
 and Molly reminder reload, then reapplies the normal turn configuration. Stop during that load
 waits for restoration to settle and closes it before releasing the canvas. No file rollback,
-runtime patch or OS kill is added. See the [Grok cancellation record](../../../../.agents/notes/rejected/architecture/2026-09-11-grok-design-hook-runtime-gap.md).
+runtime patch or OS kill is added.

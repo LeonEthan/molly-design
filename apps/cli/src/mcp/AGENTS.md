@@ -47,7 +47,7 @@ Parent instructions apply.
   `packages/shared/AGENTS.md`.
 - `molly_browser`: gate list/call on active local design run; bind page/media to
   Session. Expose flat required-`kind` schema to models; validate the strict
-  action union before dispatch. See [browser docs](../../../../.agents/docs/sessions-browser.md).
+  action union before dispatch. See browser docs.
 
 ## Session and Task tool contracts
 

@@ -38,12 +38,19 @@ Read [README](README.md) before changing session construction or packaged resour
   results/errors; the Agent chooses any next call. Add no run stop, cross-call fence
   or host retry. A dispatched tool-call ID never replays after crash or restart.
   Asset receipts confer recovery identity, not commit authority.
+  Operation failure diagnostics contain only fixed stage names, never raw errors,
+  response bodies, headers or credentials; absent diagnostics remain unknown.
 - Auto-review applies only to runs whose snapshot freezes `auto-review`. Shell runs
   in the pinned OS sandbox (workspace/temp writes, credential and Molly private-data
-  reads denied, pre-allowed domains); Molly design tools and in-boundary file tools
-  run. Escalations go to the vendored classifier on the journaled session model;
+  reads denied, pre-allowed domains); Molly design tools, local attachment sharing
+  and in-boundary file tools run. Sharing retains host workspace checks and local
+  storage. Escalations go to the vendored classifier on the journaled session model;
   deny, failure or timeout asks the user. Record every decision in the run journal;
   a failed record denies. No sandbox means shell keeps its prompt.
+- Native macOS tools may write only the canonical current-user temp directory
+  reported by `getconf DARWIN_USER_TEMP_DIR`, alongside the worker-owned temp.
+  Never widen this exception to `/tmp` or `/var/folders` ancestors; delete only
+  worker-owned temporary files at shutdown.
 - Built-in browser calls use the existing MCP approval path. An explicit site
   task grant lives only in the active run/epoch, grows by approved site at most
   eight times, and is recorded as authorization provenance in the tool journal.
@@ -54,6 +61,9 @@ Read [README](README.md) before changing session construction or packaged resour
   live parent's dispatch fence; the scoped callback fixes run/server/tool identity,
   drains child reads before parent settlement and expires afterwards. Resource content
   becomes an asset only through owning-host import.
+- Only built-in `molly_render_preview` may classify exact Molly-owned font and
+  native-render failures into fixed Agent error codes. Keep unknown server text and
+  transport diagnostics redacted; errors never authorize retries or artwork repair.
 - Image mappings use the selected catalog revision and explicit image model. Approve
   the mapped native arguments; validate before dispatch. External private receipts
   confer no asset authority. Unsupported paid results settle as failed, without assets.

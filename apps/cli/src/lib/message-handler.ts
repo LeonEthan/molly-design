@@ -678,6 +678,10 @@ type ValidatedUploadFile = {
 };
 
 type UploadedSessionFile = SessionFilePayload & { downloadUrl: string };
+type LocallyUploadedSessionFile = UploadedSessionFile & {
+  transport: 'local';
+  machineId: MachineId;
+};
 
 /**
  * Persist workspace-relative attachment provenance with one cross-platform
@@ -7433,7 +7437,7 @@ export class MessageHandler {
   private async stageSessionFileLocally(args: {
     sessionId: SessionId;
     file: ValidatedUploadFile;
-  }): Promise<UploadedSessionFile> {
+  }): Promise<LocallyUploadedSessionFile> {
     const fileId = `file-${uuidV4()}`;
     await copyIntoSessionFileBlobStore({
       workspaceId: this.workspaceId,
@@ -7593,7 +7597,7 @@ export class MessageHandler {
       return;
     }
 
-    const uploadedFiles: UploadedSessionFile[] = [];
+    const uploadedFiles: LocallyUploadedSessionFile[] = [];
     const failures: string[] = [];
     const canonicalWorkspaceRoot = await fs.promises.realpath(workspaceRoot);
     for (const file of validatedFiles) {
@@ -7662,7 +7666,7 @@ export class MessageHandler {
       ...(partialMessage ? { message: partialMessage } : {}),
       historyEntryId,
       attachedTo,
-      files: uploadedFiles,
+      files: uploadedFiles.map(({ downloadUrl: _downloadUrl, ...file }) => file),
     });
   }
 

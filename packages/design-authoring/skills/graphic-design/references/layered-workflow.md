@@ -15,7 +15,8 @@ Molly does not check which stages you ran.
 
 Establish what the canvas must do (see [general-poster.md](general-poster.md)):
 purpose, audience, medium, canvas size, tone, and the exact copy. Keep supplied
-wording verbatim.
+wording verbatim. Read the user's design thinking, inspiration and references
+first; identify the direction they establish and any decisions still open.
 
 Sort supplied images into two groups:
 
@@ -27,13 +28,16 @@ Sort supplied images into two groups:
 
 Ask only when a missing fact blocks the work; otherwise state your assumptions.
 
-## 2. Look for inspiration
+## 2. Resolve inspiration gaps
 
-When `molly_browser` is available, search Pinterest for the subject, format and
-tone (see [browser-research.md](browser-research.md)). Look at a few strong
-results and note what to borrow: composition, palette, type treatment, image
-style. Save an image only when it will be an edit reference. Borrow ideas, not
-someone else's artwork, marks or photographs.
+Build on the supplied direction. When inspiration is absent or insufficient to
+support a design decision, actively research design sites such as Pinterest
+(see [browser-research.md](browser-research.md)). Choose queries for the open
+question: composition, palette, type treatment or image style. Use what you find
+to fill that gap while keeping the user's direction. When the supplied material
+already supports those decisions, proceed with it. Save an image only when it
+will be an edit reference. Borrow ideas, not someone else's artwork, marks or
+photographs.
 
 ## 3. Generate composition drafts
 
@@ -96,6 +100,12 @@ Generated solids can have alpha 253–254 rather than 255, so they stay slightly
 see-through when stacked. Judge this in a render.
 
 ## 5. Recompose in YAML
+
+Read [artwork-format.md](artwork-format.md) for the YAML structure and
+[../examples/minimal/design.yaml](../examples/minimal/design.yaml) for a complete
+image-and-text project. From this skill directory, `node scripts/format.mjs kind
+image` and `node scripts/format.mjs kind text` list admitted element fields;
+the format guide's text example shows the nested paragraph and run structure.
 
 Write one `image` element per layer, with array order as stacking order: the
 background first, then back to front. To change stacking, reorder the array;

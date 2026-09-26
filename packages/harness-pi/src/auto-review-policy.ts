@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
+import { HARNESS_IMAGE_RECOVERY_PERMISSION } from '@molly/shared/embedded-harness';
 import type { ReviewSubject } from '../vendor/pi-auto-approval/review';
 import type { ApprovalRecord } from './run-journal';
 
@@ -9,7 +10,10 @@ export const AUTO_REVIEW_DESIGN_TOOLS: ReadonlySet<string> = new Set([
   'molly/molly_edit_image',
   'molly/molly_render_preview',
   'molly/molly_resubmit_draft',
+  'molly/molly_upload_images',
+  'molly/molly_upload_files',
   'molly/resources/read',
+  HARNESS_IMAGE_RECOVERY_PERMISSION,
 ]);
 
 /** The optional bash argument an Agent sets to ask for execution outside the OS sandbox. */

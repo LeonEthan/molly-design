@@ -35,6 +35,7 @@ const RecordSchema = PaidOperationSchema.extend({
       .strict(),
   ]),
   requestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  failureStage: z.enum(['dispatch', 'receipt', 'import', 'persistence']).optional(),
 }).strict();
 type OperationReceipt = z.infer<typeof RecordSchema>;
 
@@ -147,6 +148,7 @@ export class ToolOperationJournal {
     await this.write(file, record, true);
     record.state = 'dispatched';
     await this.write(file, record);
+    let failureStage: NonNullable<OperationReceipt['failureStage']> = 'dispatch';
     try {
       let readsOpen = true;
       let pendingReads: Promise<unknown> = Promise.resolve();
@@ -179,6 +181,7 @@ export class ToolOperationJournal {
         await pendingReads;
       }
       if (input.builtinImage) {
+        failureStage = 'receipt';
         const parsed = ImageOperationResultSchema.safeParse(
           result &&
             typeof result === 'object' &&
@@ -194,12 +197,14 @@ export class ToolOperationJournal {
         record.assetDigests = input.importImages ? [] : parsed.data.assetDigests;
         if (record.state === 'succeeded' && input.importImages) {
           if (!parsed.data.dispatched) throw new Error('harness_image_receipt_invalid');
+          failureStage = 'import';
           const imported = HarnessImageImportResultSchema.parse(await input.importImages(result));
           record.assetDigests = imported.assets.map((asset) => asset.sha256);
           result = {
             content: [{ type: 'text', text: JSON.stringify({ importedAssets: imported.assets }) }],
           };
         }
+        failureStage = 'persistence';
         await this.write(file, record);
         return result;
       }
@@ -208,8 +213,10 @@ export class ToolOperationJournal {
           ? 'failed'
           : 'succeeded';
       if (input.externalImage && input.importImages && record.state === 'succeeded') {
+        failureStage = 'import';
         const imported = HarnessImageImportResultSchema.parse(await input.importImages(result));
         record.assetDigests = imported.assets.map((asset) => asset.sha256);
+        failureStage = 'persistence';
         await this.write(file, record);
         // Imported assets are available for an explicit native read. Do not present a
         // server-authored path/receipt as if it came from the owning design service.
@@ -217,10 +224,12 @@ export class ToolOperationJournal {
           content: [{ type: 'text', text: JSON.stringify({ importedAssets: imported.assets }) }],
         };
       }
+      failureStage = 'persistence';
       await this.write(file, record);
       return result;
     } catch {
       record.state = 'outcome_unknown';
+      record.failureStage = failureStage;
       // If settlement cannot be persisted, the durable dispatched receipt stays unknown.
       await this.write(file, record).catch(() => undefined);
       throw new Error('harness_mcp_outcome_unknown');

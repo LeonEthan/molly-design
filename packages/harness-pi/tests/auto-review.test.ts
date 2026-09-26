@@ -10,6 +10,7 @@ import { classifyEscalation } from '../src/auto-review-classifier';
 import { decideAutoReview, type AutoReviewBoundary } from '../src/auto-review-policy';
 import { RunJournal, type ApprovalRecord } from '../src/run-journal';
 import { createSandboxConfig, PRE_ALLOWED_DOMAINS } from '../src/sandbox';
+import { defineMcpTools } from '../src/mcp-bridge';
 import type { ReviewDecision } from '../vendor/pi-auto-approval/review';
 
 const roots: string[] = [];
@@ -84,6 +85,10 @@ describe('auto-review policy', () => {
       kind: 'allow',
       source: 'design_tool',
     });
+    expect(decideAutoReview({ name: 'molly/recover_images', arguments: {} }, b)).toEqual({
+      kind: 'allow',
+      source: 'design_tool',
+    });
     expect(decideAutoReview({ name: 'molly/molly_browser', arguments: {} }, b).kind).toBe('ask');
     expect(decideAutoReview({ name: 'external/delete_everything', arguments: {} }, b).kind).toBe(
       'ask'
@@ -146,6 +151,66 @@ const reviewDecision: ReturnType<typeof decideAutoReview> = {
 };
 
 describe('auto-review approval', () => {
+  it.each(['molly_upload_images', 'molly_upload_files'])(
+    'shares local attachments through %s automatically only in auto-review mode',
+    async (name) => {
+      const b = await boundary();
+      let mode: 'ask' | 'auto-review' = 'auto-review';
+      const asked: string[] = [];
+      const records: ApprovalRecord[] = [];
+      const delivered: unknown[] = [];
+      const tools = await defineMcpTools({
+        serverName: 'molly',
+        client: {
+          listTools: async () => ({ tools: [{ name, inputSchema: { type: 'object' as const } }] }),
+          callTool: async (request) => {
+            delivered.push(request.arguments);
+            return { content: [{ type: 'text' as const, text: 'Uploaded 1 local attachment' }] };
+          },
+          close: async () => {},
+          getServerCapabilities: () => ({}),
+          readResource: async () => ({ contents: [] }),
+        },
+        isAvailable: () => true,
+        dispatch: async (_server, _id, _name, _args, invoke) => invoke(),
+        approve: createAutoReviewApproval({
+          mode: () => mode,
+          decide: (request) => decideAutoReview(request, b),
+          review: async () => {
+            throw new Error('local sharing does not need a classifier');
+          },
+          record: async (request, source, decision) => {
+            records.push({ toolCallId: request.toolCallId, tool: request.name, source, decision });
+            return true;
+          },
+          askUser: async (request) => {
+            asked.push(request.name);
+            return false;
+          },
+        }),
+      });
+      const tool = tools[0];
+      if (!tool) throw new Error('missing upload tool');
+      const args = { paths: ['media/result.png'] };
+      await expect(tool.execute('auto-upload', args, undefined)).resolves.toMatchObject({
+        content: [{ type: 'text', text: 'Uploaded 1 local attachment' }],
+      });
+      expect(asked).toEqual([]);
+      expect(records).toEqual([
+        {
+          toolCallId: 'auto-upload',
+          tool: `molly/${name}`,
+          source: 'design_tool',
+          decision: 'allow',
+        },
+      ]);
+      mode = 'ask';
+      await expect(tool.execute('ask-upload', args, undefined)).rejects.toThrow();
+      expect(asked).toEqual([`molly/${name}`]);
+      expect(delivered).toEqual([args]);
+    }
+  );
+
   it('runs sandboxed shell without a prompt and records the source', async () => {
     const h = harness({ decision: { kind: 'allow', source: 'sandbox' } });
     expect(await h.call()).toEqual({ kind: 'sandboxed' });

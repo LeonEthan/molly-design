@@ -1057,10 +1057,24 @@ describe('owned ACP boundary', () => {
           await operations.read(operations.operationId(f.snapshot.runId, 'import-call'))
         ).toMatchObject({
           state: succeeded ? 'succeeded' : 'outcome_unknown',
+          ...(!succeeded
+            ? { failureStage: outcome === 'linked-denied' ? 'dispatch' : 'import' }
+            : {}),
           connectionId,
           connectionRevision: 4,
           assetDigests: succeeded ? [sha256] : [],
         });
+        expect(responses).toEqual([]);
+        expect(
+          await readFile(
+            join(
+              f.input.privateRoot,
+              'operations',
+              `${operations.operationId(f.snapshot.runId, 'import-call')}.json`
+            ),
+            'utf8'
+          )
+        ).not.toContain('SYNTHETIC_SECRET_MUST_NOT_PERSIST');
         expect(approvals).toEqual([
           `${serverName}/molly_generate_image`,
           ...(linked ? [`${serverName}/resources/read`] : []),

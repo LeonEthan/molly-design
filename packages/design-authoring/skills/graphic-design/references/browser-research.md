@@ -1,7 +1,14 @@
 # Website research in Molly
 
+Start with the user's design thinking, inspiration and references. If these are
+absent or leave a design decision unresolved, actively search design sites such
+as Pinterest for that gap. Choose queries that help decide composition, palette,
+type treatment or image style, and keep the user's direction as the basis for
+the result. When the supplied material is sufficient, proceed from it. A user
+request to research a site is also a reason to browse.
+
 Use `molly_browser` only when it appears in your current tool list. It controls
-the Session's built-in browser; it does not control Chrome. Open the requested
+the Session's built-in browser; it does not control Chrome. Open the relevant
 public site, take a snapshot, and use the snapshot's current element references
 for clicks, typing, and selected-image saves (for example, `ref: "e5"`).
 References come from Playwright MCP, not CSS selectors. Observe again after
@@ -10,6 +17,9 @@ when layout or image appearance matters.
 If the page is still loading, observe again after it settles. If the document
 cannot be verified, navigate to its current approved URL again; do not keep
 repeating snapshots. A blocked network response cannot be bypassed.
+
+If this tool is absent, assess the research capabilities actually available to
+you. Report an access limit when it leaves the design question unresolved.
 
 For a selected image, `save_image` writes supported PNG, JPEG, or GIF bytes into
 the current design's `media/` through Molly. Use the returned relative path in

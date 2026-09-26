@@ -89,6 +89,9 @@ or delete Lody data.
 
 ## Local reference attachments
 
+- Agent `session/file-upload` replies carry local file blocks with the owning
+  machine and no download URL. Preserve legacy `r2` reply decoding with its URL;
+  keep the TypeScript, CommonJS and Zod validators aligned.
 - Negotiate `localSessionAttachments` before reserved-session uploads or attachment
   identity parameters on `file/resolve-local`. Only the local desktop may stage
   bytes before Session creation; the reserved Session ID remains their storage owner.

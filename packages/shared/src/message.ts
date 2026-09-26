@@ -646,9 +646,8 @@ export interface SessionFileUploadResponse {
   attachedTo?: 'active_turn' | 'new_entry';
   /** The file blocks that were uploaded and appended to the session history. */
   files?: Array<
-    SessionFilePayload & {
-      downloadUrl: string;
-    }
+    SessionFilePayload &
+      ({ transport: 'local'; machineId: MachineId } | { transport: 'r2'; downloadUrl: string })
   >;
 }
 

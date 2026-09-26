@@ -786,6 +786,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
             embeddedControl && importHarnessImages
               ? (request) => embeddedControl.importImages(request, importHarnessImages)
               : undefined,
+          isAutoReviewRun: embeddedControl ? () => embeddedControl.autoReviewActive() : undefined,
           onHarnessImageRecovery:
             embeddedControl && recoverHarnessImages
               ? (request) => embeddedControl.recoverImages(request, recoverHarnessImages)

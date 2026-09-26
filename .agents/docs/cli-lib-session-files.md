@@ -6,6 +6,10 @@ installation profile. `message-handler.ts` stages user-picked files through
 agent-shared files locally, with workspace containment for agent paths. New history
 blocks use `transport: 'local'` and the owning machine ID. No new attachment is
 uploaded or backfilled to the retired product relay.
+The `session/file-upload` response carries those local blocks without a download
+URL, after the history write. Its Zod and TypeScript/CommonJS local-control
+validators also retain the older `r2` response shape for compatibility. Auto-review
+approves both built-in sharing tools; the daemon still enforces workspace containment.
 
 `materializeSessionFileAttachments` copies the bytes to the session workspace's
 attachment directory and sends ACP `resource_link` blocks with `file://` URIs. A

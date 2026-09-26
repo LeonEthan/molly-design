@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,8 +12,14 @@ import { PrivateControlPipe } from '../src/private-control-pipe';
 import { CancellationDeliveryTransport } from '../src/mcp-cancellation';
 import { ToolOperationJournal, type OperationResourceRead } from '../src/tool-operation-journal';
 
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...original, rename: vi.fn(original.rename) };
+});
+
 const roots: string[] = [];
 afterEach(async () => {
+  vi.mocked(rename).mockReset();
   vi.useRealTimers();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -215,11 +221,14 @@ describe('side-effect dispatch fence', () => {
         const raw = JSON.parse(await readFile(join(f.directory, `${operationId}.json`), 'utf8'));
         expect(raw.state).toBe('dispatched');
         effects.push('sent');
-        throw new Error('upstream response lost');
+        throw new Error('PRIVATE_SYNTHETIC_TRANSPORT_SECRET');
       })
     ).rejects.toThrow('harness_mcp_outcome_unknown');
     const restored = new ToolOperationJournal(f.directory);
-    expect((await restored.read(operationId)).state).toBe('outcome_unknown');
+    expect(await restored.read(operationId)).toMatchObject({
+      state: 'outcome_unknown',
+      failureStage: 'dispatch',
+    });
     await expect(
       restored.dispatch(f.input, async () => {
         effects.push('replayed');
@@ -229,6 +238,9 @@ describe('side-effect dispatch fence', () => {
     expect(await readdir(f.directory)).toEqual([`${operationId}.json`]);
     expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
       'PRIVATE_SYNTHETIC_PROMPT'
+    );
+    expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+      'PRIVATE_SYNTHETIC_TRANSPORT_SECRET'
     );
   });
 
@@ -279,6 +291,42 @@ describe('side-effect dispatch fence', () => {
     ).rejects.toThrow('harness_resource_parent_retired');
     expect(events).not.toContain('late');
   });
+
+  it.each(['missing', 'malformed', 'not-dispatched'] as const)(
+    'identifies an unusable built-in receipt without retaining its contents (%s)',
+    async (mode) => {
+      const f = await fixture();
+      const result = {
+        content: [{ type: 'text', text: 'PRIVATE_SYNTHETIC_RECEIPT_SECRET' }],
+        _meta: {
+          mollyImageOperation:
+            mode === 'missing'
+              ? undefined
+              : {
+                  version: 1,
+                  state: mode === 'malformed' ? 'PRIVATE_SYNTHETIC_RECEIPT_SECRET' : 'succeeded',
+                  dispatched: false,
+                  assetDigests: [],
+                },
+        },
+      };
+      await expect(
+        f.journal.dispatch(
+          { ...f.input, builtinImage: true, importImages: async () => ({ assets: [] }) },
+          async () => result
+        )
+      ).rejects.toThrow('harness_mcp_outcome_unknown');
+      const operationId = f.journal.operationId('run-1', 'call-1');
+      expect(await new ToolOperationJournal(f.directory).read(operationId)).toMatchObject({
+        state: 'outcome_unknown',
+        failureStage: 'receipt',
+        assetDigests: [],
+      });
+      expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+        'PRIVATE_SYNTHETIC_RECEIPT_SECRET'
+      );
+    }
+  );
 
   it('retains child and parent uncertainty even when the invoking callback swallows a read failure', async () => {
     const f = await fixture();
@@ -377,12 +425,50 @@ describe('side-effect dispatch fence', () => {
         result
       );
       const restored = new ToolOperationJournal(f.directory);
-      expect(await restored.read(restored.operationId('run-1', 'call-1'))).toMatchObject({
+      const receipt = await restored.read(restored.operationId('run-1', 'call-1'));
+      expect(receipt).toMatchObject({
         state,
         assetDigests,
       });
+      expect(receipt.failureStage).toBeUndefined();
     }
   );
+
+  it('identifies a settlement write failure without losing the dispatched replay fence', async () => {
+    const f = await fixture();
+    const effects: string[] = [];
+    await expect(
+      f.journal.dispatch({ ...f.input, builtinImage: true }, async () => {
+        effects.push('sent');
+        vi.mocked(rename).mockRejectedValueOnce(new Error('PRIVATE_SYNTHETIC_FILESYSTEM_SECRET'));
+        return {
+          content: [],
+          _meta: {
+            mollyImageOperation: {
+              version: 1,
+              state: 'succeeded',
+              dispatched: true,
+              assetDigests: [],
+            },
+          },
+        };
+      })
+    ).rejects.toThrow('harness_mcp_outcome_unknown');
+    const restored = new ToolOperationJournal(f.directory);
+    const operationId = restored.operationId('run-1', 'call-1');
+    expect(await restored.read(operationId)).toMatchObject({
+      state: 'outcome_unknown',
+      failureStage: 'persistence',
+    });
+    await expect(
+      restored.dispatch(f.input, async () => effects.push('replayed'))
+    ).rejects.toMatchObject({ code: 'EEXIST' });
+    expect(effects).toEqual(['sent']);
+    expect(await readdir(f.directory)).toEqual([`${operationId}.json`]);
+    expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+      'PRIVATE_SYNTHETIC_FILESYSTEM_SECRET'
+    );
+  });
 
   it('serializes a concurrent dispatch behind the settling one', async () => {
     const f = await fixture();

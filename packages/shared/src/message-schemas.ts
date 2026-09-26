@@ -1689,12 +1689,16 @@ export const SessionFileUploadResponseSchema = z
     attachedTo: z.enum(['active_turn', 'new_entry']).optional(),
     files: z
       .array(
-        // Cloud uploads are always relay-stored; only the send-local response
-        // may carry transport 'local'.
-        SessionFileBlockObjectSchema.extend({
-          downloadUrl: z.string().url(),
-          transport: z.literal('r2'),
-        }).strict()
+        z.discriminatedUnion('transport', [
+          SessionFileBlockObjectSchema.extend({
+            transport: z.literal('local'),
+            machineId: z.string().min(1),
+          }).strict(),
+          SessionFileBlockObjectSchema.extend({
+            downloadUrl: z.string().url(),
+            transport: z.literal('r2'),
+          }).strict(),
+        ])
       )
       .min(1)
       .max(SESSION_FILE_MAX_COUNT)

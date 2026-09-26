@@ -9,7 +9,8 @@ theme `$ref`, or leftover `.pptd` syntax.
 
 ## Project shape
 
-Deliver one self-contained project at the session workspace root:
+Deliver one self-contained project in the design authoring directory supplied
+with the turn:
 
 ```text
 design.yaml          # molly-canvas/1: the complete editable canvas
@@ -37,6 +38,13 @@ Omit `fontFamily` to use Inter, the bundled licensed default family name. Other
 families need a `customFonts` registration whose `src` is a local `media/` font
 file.
 
+A font file's presence and structural validation do not prove that Chromium can
+load it; copying a macOS system font carries the same limitation. A native
+preview font error points to a registered font that needs diagnosis and a
+compatible source, not to an unavailable rendering tool. Preserve the intended
+typography when correcting the registration, then use the native preview to
+check the result.
+
 ## Elements
 
 Each element uses Bento `id` and `kind`. IDs must be unique and stable. Array
@@ -49,9 +57,11 @@ and `chart`. Common fields include `bounds`, optional `rotation`, `flip`,
 `y ≥ 0`, `w > 0`, `h > 0`, `x + w ≤ canvas width`, and `y + h ≤ canvas height`.
 A block flush with the bottom edge uses `y = canvasH - h`.
 
-Kind-specific fields (not a complete whitelist): run `node scripts/format.mjs
-kind <kind>` from the skill directory for the validator-derived field table of
-one kind; it lists exactly what the intake validator admits.
+For the validator-derived list of admitted element fields, run
+`node scripts/format.mjs kind <kind>` from the skill directory, for example
+`node scripts/format.mjs kind image` or `node scripts/format.mjs kind text`.
+This lists field names; the descriptions and examples below explain their values
+and nested structure.
 
 - `text`: structured `text.paragraphs[].runs[]`. Do not write HTML `content`.
 - `shape`: `shapeName` (`rect`, `roundRect`, `ellipse`, `oval`, `triangle`,
@@ -94,7 +104,8 @@ fields and array order when editing a projected document.
 
 ## Minimal structural example
 
-Read [../examples/minimal/](../examples/minimal/) (`design.yaml`, `media/`). It demonstrates packaging, geometry, and
+Read [../examples/minimal/design.yaml](../examples/minimal/design.yaml) and its
+adjacent `media/`. It demonstrates packaging, geometry, and
 membership together: a solid background, a `rect` band, structured text, and an
 image with `fit: cover`. Copy its field shape; it is not a capability whitelist.
 A repository test runs intake against these files, so the example cannot
@@ -135,7 +146,8 @@ review sequence is a completion or commit requirement. Molly independently
 checks the collected project and versions. When rendering through
 `molly_render_preview`, open the PNG with an actual image-reading tool to judge
 composition and decide on edits. If `molly_render_preview` is absent, only that
-tool is unavailable.
+tool is unavailable. Previews made with another renderer can aid visual work,
+but do not establish that the formal Bento artwork renders correctly.
 
 Any silent drop, placeholder, reset after reopen, or mismatch between preview
 and export is a failed capability, even if the source parsed. Remove the

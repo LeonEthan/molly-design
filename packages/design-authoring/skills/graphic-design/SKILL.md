@@ -28,11 +28,12 @@ absent until synchronized. You do not write `design.json` yourself. Leftover
 
 ## Recommended workflow
 
-For a new design, or a reconstruction that needs generated imagery, a proven
+For a new design, or a reconstruction that needs generated imagery, a useful
 path is:
 
-1. understand the intent, copy and supplied materials;
-2. look for inspiration on Pinterest;
+1. understand the intent, copy, materials and the user's design thinking;
+2. build on supplied inspiration and references; research design sites when they
+   are absent or leave a design decision unresolved;
 3. generate several whole-canvas drafts and choose one;
 4. regenerate each element of that draft as a complete transparent layer;
 5. recompose the layers in `design.yaml`;
@@ -61,14 +62,15 @@ Read only the references needed for the current work:
 - Before choosing element semantics or promising editability, read
   [references/graphic-canvas-profile.md](references/graphic-canvas-profile.md).
 - When writing the project files, read
-  [references/artwork-format.md](references/artwork-format.md). Write Bento
-  `id` / `kind` fields. Do not invent syntax from a presentation catalogue.
-  When unsure which fields a kind admits, ask the validator-derived admission
-  table: `node scripts/format.mjs kind <kind>` (or `node scripts/format.mjs
-excluded` for the explicit rejection list).
-- When the task calls for website research or finding online design material,
-  read [references/browser-research.md](references/browser-research.md) if the
-  `molly_browser` tool is available.
+  [references/artwork-format.md](references/artwork-format.md) and use
+  [examples/minimal/design.yaml](examples/minimal/design.yaml) for a complete
+  image-and-text example. From this skill directory, run
+  `node scripts/format.mjs kind <kind>` for admitted element fields; the format
+  guide explains nested values such as structured text.
+- When supplied inspiration is absent or insufficient for a design decision, or
+  the user requests online research, read
+  [references/browser-research.md](references/browser-research.md). Research the
+  gap while preserving the user's direction.
 
 Do not load references for modes or element families that the task does not use.
 
@@ -103,6 +105,11 @@ helpers, not prerequisites for creation, rendering, submission, or turn completi
   validator intake runs. It is a lookup helper, not a writing gate.
 - `node scripts/render-preview.mjs <project>/design.yaml` checks intake locally.
   This script does not render an image or perform visual review.
+
+Keep temporary scripts and processing files in the artwork's working directory
+or the shell's `$TMPDIR`; use that supplied temp path instead of hardcoding `/tmp`.
+Prefer the shipped helpers. If an additional dependency is needed, keep its
+environment and caches in those writable locations rather than a user-wide install.
 
 When using `molly_render_preview`, open the returned PNG with an actual
 image-reading tool, inspect what was rendered, and continue modifying the project

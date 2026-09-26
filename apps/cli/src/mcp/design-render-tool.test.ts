@@ -20,6 +20,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { SessionId } from '@molly/shared';
+import { defineMcpTools } from '../../../../packages/harness-pi/src/mcp-bridge';
 import { renderHostFromRpcResult, resolveRenderHost } from './design-tools';
 import { buildMollyMcpServer, runWithMcpSessionContext } from './molly-mcp-server';
 
@@ -223,6 +224,29 @@ describe('resolveRenderHost', () => {
 });
 
 describe('molly_render_preview call', () => {
+  it.each([
+    ['Font failed to load', 'harness_render_font_failed'],
+    ['Canvas capture did not settle on the saved artwork', 'harness_render_failed'],
+    ['SYNTHETIC_RENDER_SECRET', 'harness_mcp_tool_failed'],
+  ])('delivers only a safe Agent failure for the native refusal %s', async (error, code) => {
+    await withAnsweringSocket(renderAnswer({ ok: false, error }), async (socketPath) => {
+      await withServer({ renderHost: true, localControlSocketPath: socketPath }, async (client) => {
+        const tools = await defineMcpTools({
+          serverName: 'molly',
+          client,
+          approve: async () => true,
+          isAvailable: () => true,
+          dispatch: async (_server, _id, _name, _args, invoke) => invoke(),
+        });
+        const tool = tools.find((entry) => entry.name === TOOL_NAME);
+        expect(tool).toBeDefined();
+        await expect(tool!.execute('preview', {}, undefined)).rejects.toThrow(
+          new RegExp(`^${code}$`)
+        );
+      });
+    });
+  });
+
   it('renders through the daemon and returns the landed preview', async () => {
     await withAnsweringSocket(
       renderAnswer({

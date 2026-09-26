@@ -37,7 +37,7 @@ export class EmbeddedHarnessControl {
   private busy = false;
   private mcpConnections: McpCredentialBinding[] = [];
   private activeController?: AbortController;
-  private activeRun?: { runId: string; turnId: string };
+  private activeRun?: { runId: string; turnId: string; permissionMode?: MollyPermissionMode };
   private selectedMcp: readonly McpServer[] = [];
   private stopPromise?: Promise<void>;
   private stopOnce(): Promise<void> {
@@ -180,6 +180,11 @@ export class EmbeddedHarnessControl {
     controller.signal.throwIfAborted();
     if (this.retired || this.activeRun !== run) throw new Error('harness_image_recovery_not_owned');
     return result;
+  }
+
+  /** Auto-review runs approve image and recovery calls in the worker, without a host prompt. */
+  autoReviewActive(): boolean {
+    return !this.retired && this.busy && this.activeRun?.permissionMode === 'auto-review';
   }
 
   /** Catalog ownership can revoke an idle or active worker, never retarget it. */
@@ -331,7 +336,11 @@ export class EmbeddedHarnessControl {
         })
       );
       controller.signal.throwIfAborted();
-      this.activeRun = { runId: snapshot.runId, turnId: snapshot.turnId };
+      this.activeRun = {
+        runId: snapshot.runId,
+        turnId: snapshot.turnId,
+        ...(snapshot.permissionMode ? { permissionMode: snapshot.permissionMode } : {}),
+      };
       const response = await input.prompt(snapshot);
       controller.signal.throwIfAborted();
       const outcome = HarnessRunOutcomeSchema.safeParse(response._meta?.mollyNativeOutcome);

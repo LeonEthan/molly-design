@@ -1,7 +1,9 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { promisify } from 'node:util';
 import {
   SandboxManager,
   type NetworkHostPattern,
@@ -54,9 +56,28 @@ export function deniedReadRoots(privateDataRoots: readonly string[], home = home
   return [...CREDENTIAL_PATHS.map((path) => join(home, path)), ...privateDataRoots];
 }
 
+export async function resolveNativeTemporaryDirectory(
+  platform: NodeJS.Platform,
+  resolveDirectory = async (): Promise<string> => {
+    const { stdout } = await promisify(execFile)('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], {
+      timeout: 5_000,
+      maxBuffer: 4096,
+      encoding: 'utf8',
+    });
+    return realpath(stdout.trim());
+  }
+): Promise<string | undefined> {
+  if (platform !== 'darwin') return undefined;
+  const directory = await resolveDirectory().catch(() => undefined);
+  return directory && /^\/private\/var\/folders\/[^/]+\/[^/]+\/T$/.test(directory)
+    ? directory
+    : undefined;
+}
+
 export function createSandboxConfig(input: {
   cwd: string;
   temporaryDirectory: string;
+  nativeTemporaryDirectory?: string;
   deniedReadRoots: readonly string[];
 }): SandboxRuntimeConfig {
   return {
@@ -64,7 +85,11 @@ export function createSandboxConfig(input: {
     filesystem: {
       denyRead: [...input.deniedReadRoots],
       allowRead: [input.cwd, input.temporaryDirectory],
-      allowWrite: [input.cwd, input.temporaryDirectory],
+      allowWrite: [
+        input.cwd,
+        input.temporaryDirectory,
+        ...(input.nativeTemporaryDirectory ? [input.nativeTemporaryDirectory] : []),
+      ],
       denyWrite: [],
     },
   };
@@ -105,6 +130,7 @@ export class WorkerSandbox {
         createSandboxConfig({
           cwd: this.input.cwd,
           temporaryDirectory,
+          nativeTemporaryDirectory: await resolveNativeTemporaryDirectory(process.platform),
           deniedReadRoots: this.input.deniedReadRoots,
         }),
         (target) => this.input.reviewNetwork(target),

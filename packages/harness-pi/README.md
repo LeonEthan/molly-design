@@ -37,8 +37,13 @@ Auto-review ([Spec](../../specs/generative-layered-design-workflow.md)) is the
 Linux bubblewrap with `bwrap`, `socat` and `rg`; otherwise unavailable). It denies reads
 of credential stores and Molly private data while re-allowing the session cwd, limits
 writes to the cwd and a per-worker temp directory, and pre-allows package registries,
-GitHub, font/icon services and common CDNs. `auto-review-policy.ts` decides by effect:
-sandboxed shell, Molly design tools and file tools inside the boundary run; a bash
+GitHub, font/icon services and common CDNs. On macOS, native tools such as `sips` also
+need the current user's native temp directory even when `TMPDIR` is set. The worker
+allows that exact canonical directory from `getconf DARWIN_USER_TEMP_DIR`; resolution
+failure grants no extra path. Its ancestors stay protected, and shutdown removes only
+the worker-owned temp. Tool caches should use the workspace or `$TMPDIR`.
+`auto-review-policy.ts` decides by effect:
+sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run; a bash
 `outside_sandbox` request, a protected read, a write outside the workspace and a
 sandbox connection to another domain are escalations. Browser and other MCP tools keep
 their ordinary approvals. `auto-review-classifier.ts` judges an escalation with the run's
@@ -48,6 +53,9 @@ decision parser and context projection adapted from Apache-2.0 `pi-auto-approval
 hook, commands, config files and audit log are not used. A deny, failure or timeout asks
 the user. The run journal records each approval's tool, source and decision without
 arguments.
+Local attachment sharing still validates workspace paths and symlinks at the host;
+its response carries a local machine identity without a download URL. Ask mode retains
+the ordinary approval for these tools.
 
 `extension-ui.ts` adapts select/input/confirm/notify to an owning host using existing
 Core question metadata. It binds run/caller/lifetime cancellation, clears timers,
@@ -162,6 +170,13 @@ result or error, and the Agent decides whether to call again
 The harness adds no run stop or retry of its own. The built-in image receipt distinguishes
 pre-dispatch refusal, upstream rejection and uncertain delivery/import. Successful image
 digests are retained for recovery; receipts themselves do not import or commit a canvas.
+When a dispatched call throws, its existing receipt may also retain a fixed `failureStage`:
+`dispatch` covers invocation and linked resource delivery, `receipt` covers built-in receipt
+validation, `import` covers the owning-host import boundary, and `persistence` covers
+settlement writes. These labels never contain the original error, response or credentials.
+They identify the failing boundary, not the upstream cause. A provider-reported unknown
+result, an interrupted worker or a failed diagnostic write can still have no stage;
+absence does not establish where the failure occurred or authorize another paid request.
 
 MCP tools use the existing ACP server list, frozen schemas and the host permission UI.
 They revalidate availability/schema after approval and deliver cancellation before closing
@@ -174,6 +189,11 @@ duplicate links share one read. Output has aggregate byte/block limits and canon
 base64 checks; the call and its reads share a 210-second execution deadline, with each
 resource read capped at 30 seconds. Ordinary resources deliver model context only;
 declared image results additionally pass the owning-host import gate described below.
+Only built-in `molly_render_preview` maps exact Molly-owned font failures to
+`harness_render_font_failed` and known native capture/layout failures to
+`harness_render_failed`. Unknown server text and transport diagnostics remain
+`harness_mcp_tool_failed`; an external tool with the same name gains no exception.
+These signals add no retry, repair or completion gate.
 The built-in MCP producer supplies its public contract revision. Image dispatch instead
 records the image connection revision frozen at run start; later configuration changes
 revoke the owning lease. Workspace MCP writes establish a local monotonic revision; historical

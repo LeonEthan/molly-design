@@ -8,6 +8,7 @@ capability or YAML syntax.
 
 Useful context includes:
 
+- the user's design thinking, inspiration, references and the direction to retain;
 - what a viewer should notice first, then understand, then remember or do;
 - who is looking, from how far, for how long, and on which medium;
 - the requested size, orientation, tone, assets, and output format;
@@ -17,6 +18,10 @@ If useful, keep a short working note of the core message, the largest object, th
 reading path, color roles, and the failure to avoid (illegible type, fake evidence,
 a crowded wall of equal boxes). Do not turn that note into a second source of truth
 for the finished files.
+
+When the supplied inspiration is absent or leaves a design decision unresolved,
+use [browser-research.md](browser-research.md) to research that gap on design
+sites. Carry the user's direction into the composition.
 
 ## Size the canvas for the actual output
 

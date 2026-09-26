@@ -66,6 +66,7 @@ never pushed to renderers as local room health.
   with `file://` URIs; never degrade this to text-only paths. Agent-shared paths
   and `resource_link file://...` output stay inside the session workspace. New
   attachments remain local; do not restore relay backfill.
+- Upload replies use local blocks without URLs and preserve workspace containment.
 - [acp/AGENTS.md](acp/AGENTS.md) specifies ACP buffering/flush in `message-handler.ts`,
   turn-evidence persistence, shutdown ordering, the non-expiring late-ACP target in
   `session-transient-store.ts`, and the `awaitTurnHistoryGate` requirement for

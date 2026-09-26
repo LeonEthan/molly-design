@@ -225,6 +225,48 @@ describe('frozen MCP tools', () => {
     await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
   });
 
+  it.each([
+    ['external', 'molly_render_preview'],
+    ['molly', 'draw'],
+  ])('does not classify preview failures from %s/%s', async (serverName, name) => {
+    const f = fixture();
+    f.input.serverName = serverName;
+    f.change([{ ...descriptor, name }]);
+    f.result({ isError: true, content: [{ type: 'text', text: 'Font failed to load' }] });
+    const [tool] = await defineMcpTools(f.input);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+  });
+
+  it('redacts preview diagnostics without treating a transport error as a native failure', async () => {
+    const f = fixture();
+    f.input.serverName = 'molly';
+    f.change([{ ...descriptor, name: 'molly_render_preview' }]);
+    const [tool] = await defineMcpTools(f.input);
+    for (const content of [
+      [{ type: 'text', text: 'Font failed to load: SYNTHETIC_SECRET' }],
+      [{ type: 'text', text: 'harness_render_font_failed' }],
+      [
+        {
+          type: 'text',
+          text: JSON.stringify({ error: 'Font failed to load', key: 'SYNTHETIC_SECRET' }),
+        },
+      ],
+      [
+        { type: 'text', text: 'Font failed to load' },
+        { type: 'text', text: 'SYNTHETIC_SECRET' },
+      ],
+    ]) {
+      f.result({ isError: true, content });
+      await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+        /^harness_mcp_tool_failed$/
+      );
+    }
+    f.input.client.callTool = async () => {
+      throw new Error('harness_render_font_failed');
+    };
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+  });
+
   it('reads links only through their producing client after separate approval and dispatch', async () => {
     const f = fixture();
     const events: string[] = [];

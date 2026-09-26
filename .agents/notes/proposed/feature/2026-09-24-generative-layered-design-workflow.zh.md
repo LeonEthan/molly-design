@@ -8,13 +8,13 @@ Translation: current
 
 ## 摘要
 
-Molly 的设计 Agent 能够编写可编辑的 `design.yaml` 作品，但缺少从需求到经过审视的分层设计的默认流程。已批准的[任务 Spec](../../../../specs/generative-layered-design-workflow.zh.md)把这套流程（需求整理、Pinterest 调研、草稿、依据选定草稿重新生成完整透明图层、重组与审视）写入 Skill，并配套带透明度选项的 JSON 图片编辑、沿用 Pi 原生的工具错误处理、沙箱加分类器的自动审批模式，以及可选的 Node alpha 辅助脚本。分段实验表明，透明参数真正到达服务端时 OpenAI Image 2.5 会返回原生 alpha，并在保留或合成素材上验证了导入、编辑、裁剪、保存/重开/导出以及内置 Agent 的校正；尚未跑过一次从需求到保存作品的完整流程，因此它是主要验收。本记录保留决定、证据和理由；Spec 是当前生效的方案。
+Molly 的设计 Agent 能编写可编辑 YAML，但缺少从需求到经过审视的分层作品的完整路径。初版实现结合 Skill 指引、透明 JSON 图片编辑、Pi 原生工具错误、沙箱自动审批和可选 Node 图像辅助工具。第 1 轮在宿主图片导入处失败；第 2 轮已提交作品，但暴露本地附件响应与原生临时目录问题，人工重开/导出及视觉验收仍未核实。后续修正这些边界，并按用户所给方向的缺口决定灵感调研，不增加运行时创作门槛。第 3 轮也提交了作品，但嵌入的 Kai 字体被 Chromium 拒绝，导致原生预览失败；修正后的字体副本已通过原生保存作品渲染路径，在 Molly 重开并导出 PNG/JPEG，人工编辑与视觉验收仍待完成。[任务 Spec](../../../../specs/generative-layered-design-workflow.zh.md)因灵感指引的意图调整回到 draft，修订后的流程仍待人工验收。
 
 ## 问题与目标
 
 负责人于 2026-09-24 定义核心流程：意图理解、灵感搜索、创意草稿与 Agent 择优、由图片模型拆解图层、YAML 重组、文字处理、整体审视、与用户素材和意图的一致性检查，以及最终打磨。目标是先跑通端到端流程，再优化回合长度、Token 和成本。
 
-## 决定（负责人，2026-09-24–25）
+## 初始决定（负责人，2026-09-24–25）
 
 - **规则范围。** 根 [AGENTS.md](../../../../AGENTS.md) 约束仓库开发，不禁止产品 Agent 的 Skill 推荐创作流程或重复调用图片接口。应用本身仍不强制任何创作步骤。
 - **用 Skill，而非系统提示词或编排。** 一个入口 Skill（`graphic-design`）加若干专题参考；`imagegen` 仍按能力下发。修改每回合指针，要求 Agent 在设计前读取 Skill。不增加阶段控制器、第二调度器或系统提示词改动。
@@ -30,7 +30,7 @@ Molly 的设计 Agent 能够编写可编辑的 `design.yaml` 作品，但缺少�
 
 ## Spec 批准（2026-09-25）
 
-2026-09-25，负责人审阅了引入[任务 Spec](../../../../specs/generative-layered-design-workflow.zh.md)及其英文版本的拉取请求中所提交的版本，回复 "LGTM"。该批准仅覆盖此版本；实施与验收仍待完成，之后若意图变化，Spec 回到 `draft`。
+2026-09-25，负责人审阅了引入[任务 Spec](../../../../specs/generative-layered-design-workflow.zh.md)及其英文版本的拉取请求中所提交的版本，回复 "LGTM"。该批准仅覆盖当时版本；实施与验收在当时尚未完成。之后的灵感指引修订使 Spec 回到 `draft`，此批准保留为历史依据。
 
 ## 证据
 
@@ -65,7 +65,9 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 | 盲测评审（全新上下文的 Codex 评审者） | 6 个合成用例（位置、缩放、微弱效果、遮挡、无变化、预期变化）全部满足预先登记的检查                                                             | 由裁判转交渲染；无对照组                                                           |
 | Molly 内置 Kimi 评审                  | 同样 6 个用例经 Molly 原生界面、原生预览和读图全部通过；共 146 次工具调用（每例 13–33 次）；一例在 `zIndex` 修改无效后通过阅读格式文档自行纠正 | 合成素材；提示词说明了任务；诊断代码有错误（颜色蒙版、整数溢出、夸大的零差异说法） |
 
-### 代码核查（2026-09-25）
+### 实施前代码核查（2026-09-25）
+
+以下描述实施前的代码，不能用作当前行为说明。
 
 - 已发出的图片调用失败或工具报错时，harness 会终止运行（[acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)）；MCP 交付结果未知时同样终止（[tool-operation-journal.ts](../../../../packages/harness-pi/src/tool-operation-journal.ts)）。
 - 设计运行中，除已授权站点上的浏览器调用外，每次工具调用都会提示（[worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)）；Molly 用宿主审批包装自有工具（[approved-tools.ts](../../../../packages/harness-pi/src/approved-tools.ts)）。
@@ -73,7 +75,7 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 - 导入只收录被引用的图片、图片填充和字体素材（[intake.ts](../../../../packages/design-authoring/src/intake.ts)），因此 `media/` 中未使用的草稿不会进入提交的作品，但仍留在磁盘上。
 - 每回合指针把 Skill 称为"可选辅助"（[skills.ts](../../../../apps/cli/src/design/skills.ts)）。
 
-## 自动审批方案评估
+## 初始自动审批方案评估
 
 | 候选                                                 | 结论           | 理由                                                                                                                                                                                                              |
 | ---------------------------------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -82,6 +84,14 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 | `@erichll/pi-auto-review` 0.21.0                     | 不采用         | 需要 Pi SDK `^0.87.1`（Molly 锁定 0.85.1）；每次审批都调用模型；为 Molly 所没有的操作系统沙箱适配器签发授权                                                                                                       |
 | `@gotgenes/pi-permission-system` 34.0.0              | 不采用         | 按命令形式定规则；通过 Molly 扩展界面不支持的 `ctx.ui.custom` 提示；会增加第二道审批。其 bash 解析可供借鉴                                                                                                        |
 | `pi-sandbox` 0.6.8                                   | 不采用         | 封装沙箱库的分支版本，并自述为浏览器工具增加了安全漏洞                                                                                                                                                            |
+
+### 单独评估 `@erichll/pi-sandbox` 0.21.1
+
+这个带 scope 的包与上表未带 scope 的 `pi-sandbox` 是不同项目；此前的否决不适用于它。发布版[包元数据](https://github.com/erichll/pi-packages/blob/f211b1233e4bc8e2109e8c105643110bc5e3f32f/packages/pi-sandbox/package.json)声明 Apache-2.0、Node `>=22.19.0`、Pi `^0.87.1`，并依赖 `@anthropic-ai/sandbox-runtime ^0.0.77` 与 `@erichll/pi-auto-review ^0.21.0`。Molly 当前锁定 Pi 0.85.1。
+
+公开的 [`./runner`](https://github.com/erichll/pi-packages/blob/f211b1233e4bc8e2109e8c105643110bc5e3f32f/packages/pi-sandbox/src/runner.ts)可独立于完整扩展评估：调用方提供文件策略、环境、取消、输出与网络审批回调，runner 为每条命令管理 broker 进程和私有临时目录，不注册完整扩展的工具、UI 或自动审批 broker。复用仍需验证 SDK 兼容性与打包后的 broker 资源，同时保留 Molly 的 run/epoch 授权和日志边界。其[文件策略](https://github.com/erichll/pi-packages/blob/f211b1233e4bc8e2109e8c105643110bc5e3f32f/packages/pi-sandbox/README.md#security-model)仍是静态的，仅换包不能证明原生 macOS 临时目录或本地附件响应正常。
+
+上游[变更记录](https://github.com/erichll/pi-packages/blob/f211b1233e4bc8e2109e8c105643110bc5e3f32f/packages/pi-sandbox/CHANGELOG.md)包含近期发布与加载修复：0.20.1 补齐运行时依赖，0.21.1 修复 Pi TUI alias。这说明维护活跃，不代表 Molly 集成已验收。本轮继续使用已有沙箱库，未采用这个 scoped 包；单独复用 runner 仍是可评估的选项。
 
 ## 考虑过的替代方案
 
@@ -103,7 +113,7 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 
 ## 实施（2026-09-25）
 
-Spec 批准后已实施其任务，第 1 项验收运行尚未进行。
+初版 Spec 批准后已实施其任务。下表记录初版实现，之后的运行与修正另见下文。
 
 | 任务         | 落地内容                                                                                                                                                                                                                                                        | 测试（合成）                                                         |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
@@ -138,8 +148,59 @@ Spec 范围内的实现选择：
 - 内置系统提示词原写有"Ask for approval before tool execution"，可能使 Agent 在自动审批下仍在对话中请求批准。负责人于 2026-09-25 同意在第 1 项运行前改为"The host handles tool approval; do not ask for it in chat."，系统提示词其余内容不变。
 - 工作区外的包管理缓存（`~/.npm`、pnpm store）不可写，安装可能需要越界审批。
 
+## 验收运行与修正（2026-09-25）
+
+第 1 轮保持失败结论。已有摘要记录约 18 分钟、44 次模型请求、53 次审批：49 次自动、1 次浏览器站点提示和 3 次图片恢复提示。3 次图片调用均受宿主导入授权不匹配影响：worker 已按自动审批放行，宿主仍要求匹配的人工提示。此外还暴露 `pip install --user` 被拦、原生 macOS 临时目录不可写，以及 Agent 长篇读取随包格式库。这些观察不能证明图片服务未执行或未计费。
+
+第 2 轮在 America/Los_Angeles 时间 22:08:03–22:29:42 运行，耗时 21 分 39 秒。本地日志与持久作品核查确认：
+
+- 27 次模型请求、44 次审批：42 次自动、2 次人工，人工提示均为 `molly_upload_images`；
+- 8 次图片操作：7 次 `succeeded`，1 次灯笼操作为 `outcome_unknown`；恢复读取核实了 7 份已存素材，没有自动付费重试；
+- 2 次原生渲染预览成功且均被 Agent 读取，finalize 检查通过，作品回执为 `committed`；
+- 两次图片分享均在本地处理后响应校验失败，随后 `sips` 后备路径又因原生 macOS 临时目录访问失败；
+- 普通中秋海报需求触发了分层指引读取，但没有浏览器调研；浏览器工具可用，且第 1 轮已使用过。
+
+22:36:09 与 22:36:36 的后续持久版本修改了标题和月份、删除印章，元素数从 13 减至 11。这证明后来有保存，不能证明操作者、显式保存还是自动保存，也不能证明重开/导出和视觉验收通过。旧的 unknown 图片回执未标出失败边界；下述新诊断不能追溯重建其原因。
+
+随后负责人授权以下修正：
+
+- **图片导入与恢复。** 仅在匹配运行冻结为自动审批时，宿主接受 worker 已审批的导入与恢复；run、epoch、连接归属检查仍在。询问模式仍要求匹配的审批。恢复只读，不发送付费请求。见 [Agent 合同](../../../../apps/cli/src/agent/AGENTS.md)。
+- **本地附件。** 自动审批覆盖内置图片与文件分享工具。`session/file-upload` 在历史写入后返回带本地传输类型和所属机器的文件块，不附下载 URL；Zod 与 TypeScript/CommonJS 校验器保持一致，并兼容旧 `r2` 响应。工作区包含关系检查保留，不新增云端上传路径。见[会话文件](../../../docs/cli-lib-session-files.md)。
+- **安全失败诊断。** 现有操作回执仅可记录 `dispatch`、`receipt`、`import`、`persistence` 四种固定 `failureStage`。不保存原始错误、请求头、响应正文或凭据；没有阶段仍表示未知。保留已发出调用不重放、素材回执及宿主不做付费重试。见 [harness 合同](../../../../packages/harness-pi/AGENTS.md)。
+- **原生临时目录。** macOS 解析并规范化当前用户的 `getconf DARWIN_USER_TEMP_DIR`，在 worker 私有临时目录和工作区之外仅增加该目录的写权限。不开放祖先目录，也不为让 `pip install --user` 成功而开放整个用户主目录。退出时仅清理 worker 自有临时文件。
+- **设计指引。** 优先用户提供的设计思考、灵感与参考；缺失或不足以支撑决策时，主动通过设计网站围绕缺口补足并保留用户方向。明确已有格式查询和最小示例入口；尚未证实缺少格式能力，因此不增加新工具或禁止读源码。优先使用随包辅助工具，临时脚本、依赖环境和缓存留在作品工作目录或 `$TMPDIR`。这些属于 Skill 指引，不是运行时阶段。
+
+真实 `WorkerSandbox` 检查复现了修改前 `sips` 返回 exit 13；只放行规范化后的当前用户临时目录后，同一合成 PNG 操作返回 exit 0。Swift 检查使用 `xcrun swift -module-cache-path "$TMPDIR/swift-cache" sample.swift`，同样返回 exit 0 并输出预期信号。工作区和 worker 临时目录读写正常，私有同级文件读取及允许范围外写入仍被拒绝。这些是局部手工检查，不代表所有原生工具兼容，也不是新一轮设计验收。
+
+Skill 物化测试通过 13 项，包含实际资源构建和暂存；辅助脚本测试通过 18 项，包含已有格式查询和文字示例。合并修改后的 `pnpm check` 与 `pnpm format` 均成功完成，包含类型、lint、测试、翻译、platform 和 public-boundary 检查。定向运行时回归覆盖修正后的审批、响应、回执和临时目录边界。完整本地构建成功，重建后的 Molly 桌面已打开新聊天，未启动 Agent 运行；启动检查不构成手工设计验收。
+
+## 第 3 轮：原生字体失败（2026-09-26）
+
+第 3 轮在 America/Los_Angeles 时间 2026-09-25 23:46:00 至 2026-09-26 00:14:37 运行，耗时 28 分 37 秒。本地日志与正式作品核查确认：
+
+- 46 次模型请求均成功；60 次审批全部自动通过，其中 29 次沙箱、21 次工作区、10 次设计工具审批；
+- 3 次图片生成、4 次编辑全部成功；
+- 3 次 `molly_render_preview` 均失败，Agent 实际只收到 `harness_mcp_tool_failed`；
+- 没有浏览器或网络调研、附件上传或图片恢复；物化后的 Skill、分层指引和浏览器指引与修订后的仓库版本一致；
+- finalize 检查通过，作品回执为 `committed`。Agent 改用了 Pillow 近似图，这不能验证正式 Bento 渲染。人工修改、保存/重开和导出仍未核实。
+
+独立的真实 Electron 检查复现了字体失败。嵌入的 Kai 素材具有 `00010000` SFNT 头（TTF）；Chromium 的 OpenType Sanitizer 报告 `bad table directory rangeShift` 和缺少 `OS/2`。同次调查中的 STFangsong 与随包 Inter 可以加载。这证明字体素材被拒绝，不能据此说原生渲染工具不存在，也不能推断为普遍的 TTC 或 dFont 缺陷。
+
+结构字体检查接受了 Kai 素材，intake、素材存储与 Bento 投影均保留其原字节。通过这些检查不代表兼容 Chromium。渲染器拒绝加载失败的字体是正确边界；以回退字体掩盖错误，或把 Pillow 图片当作原生证据，都会隐藏缺陷。通用 MCP 错误还让 Agent 看不到可处理的字体失败原因。
+
+作品格式指引现已说明：文件存在、结构检查通过或拷贝 macOS 系统字体，都不保证实际加载；字体错误应回到注册字体排查，并通过原生预览验证。没有更改 intake 规则、增加运行时创作门槛或改动 Spec 意图。
+
+以下修正与检查已完成：
+
+- **安全渲染错误。** 仅内置 `molly_render_preview` 返回的精确已知字体错误映射为 `harness_render_font_failed`；其他已识别渲染错误映射为 `harness_render_failed`。未知、外部及传输错误仍保持通用错误。单元测试和端到端 MCP 链路验证了这一边界，不暴露原始诊断载荷，也不重放调用。见 [MCP bridge](../../../../packages/harness-pi/src/mcp-bridge.ts) 及其[测试](../../../../packages/harness-pi/tests/mcp-bridge.test.ts)。
+- **原生复现。** 独立调用真实 `renderSavedDesign` 渲染原稿时，确实报出 `Font failed to load`；兼容副本成功渲染出完整的 1024 × 1536 PNG。
+- **显式字体修复。** 用临时 FontTools 工具重建 Kai 表目录，并补入明确标为推断的 `OS/2` 元数据。23 个原始表中，22 个逐字节相同；剩下的 `head` 表仅 `checksumAdjustment` 改变。字形、`cmap` 和度量表保持不变。这证明字体数据的保留，不代表所有渲染像素都相同。字体没有加入源码仓库。
+- **作品保留。** 正常退出应用后，经现有 `history-create` 操作把原稿存为 v1，通过比较并交换保存登记修正字体的新哈希，再存为 v2。原始 `Kai.ttf` 与历史回执不变；可变 YAML 只把 Kai 注册的 `src` 改为新文件。没有运行时字体自动转换、回退或创作门槛。
+- **自动验证。** 渲染错误修改后的全量 `pnpm check` 与 `pnpm format` 均通过。
+- **重开与原生导出。** `pnpm start:local` 完整重建并启动 Molly 后，原聊天重开，v2 海报整体及楷体标题均可见，没有字体错误，编辑控件和 Export 可用。对已落盘正式作品独立调用生产 `renderSavedDesign` 路径，得到 1024 × 1536 的 PNG 和 JPEG，未出现字体或 OTS 诊断；source-preview 也接受了草稿更新后的字体哈希。没有操作 UI 导出对话框，用户手工编辑/保存及视觉验收仍未进行。
+
 ## 验证限制
 
-现有证据覆盖基于保留、合成或单个新生成素材的分段环节，使用的是代理而非 OpenAI 官方端点，每个合成评审用例只运行一次。已实施的运行时仅经合成测试和一次 macOS 沙箱手动检查验证，未进行真实图片调用或打包桌面运行。尚未进行从需求到保存作品的完整运行，也未调用 Qwen、Seedream 或 OpenAI 官方端点。本地实验文件不在仓库内，无法据仓库复核。
+现有证据已包含三次真实设计运行，但均未完成修正后实现的整条人工验收。修正作品已有桌面重开和原生 PNG/JPEG 证据，UI 导出对话框及人工编辑/保存/视觉验收仍未测试。第 3 轮已有修订后的灵感指引，但没有调研，还把 2025 年称为今年；尚未通过新的 Agent 运行验证这些行为的修正。此前图片实验使用代理而非 OpenAI 官方端点；Qwen 与 Seedream 接入仍属独立任务。本地运行记录和实验文件留在仓库之外，这里仅记录汇总发现，因此无法只凭仓库文件复现全部证据。
 
 PR：[#17](https://github.com/LeonEthan/molly-design/pull/17)（Spec 与本记录）。

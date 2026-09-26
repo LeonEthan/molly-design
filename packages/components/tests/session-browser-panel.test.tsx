@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ElectronPublicBrowserState,
   MachineMeta,
   MachineId,
   PreviewConnection,
@@ -301,6 +302,34 @@ describe('SessionBrowserPanel controller', () => {
       await flushMicrotasks();
     });
   };
+
+  it('preserves an address draft during same-page state updates and follows navigation', async () => {
+    const rendered = await renderPanel(createRuntime().runtime);
+    await enterAddress(rendered, 'https://example.com/docs');
+    const surface = publicBrowserSurfaceRender.mock.lastCall?.[0] as {
+      onStateChange: (state: ElectronPublicBrowserState) => void;
+    };
+    const state: ElectronPublicBrowserState = {
+      browserId: `session-browser-${session.id}`,
+      phase: 'ready',
+      url: 'https://example.com/docs',
+      canGoBack: false,
+      canGoForward: false,
+    };
+    await act(async () => surface.onStateChange(state));
+    const input = rendered.querySelector<HTMLInputElement>('input[aria-label="Address"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(
+        input,
+        'https://example.com/new-draft'
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => surface.onStateChange({ ...state, title: 'Updated title' }));
+    expect(input.value).toBe('https://example.com/new-draft');
+    await act(async () => surface.onStateChange({ ...state, url: 'https://example.com/redirect' }));
+    expect(input.value).toBe('https://example.com/redirect');
+  });
 
   it('opens public URLs without sending them to the session runtime', async () => {
     const testRuntime = createRuntime();

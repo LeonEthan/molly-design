@@ -27,7 +27,6 @@ import { registerIpcServices } from './ipc/register-services'
 import { openMainWindow, openOrFocusMainWindow, setMainWindowProductReloadTarget } from './window'
 import { getMainWindow, setAppQuitting, setWindowsTrayAvailable } from './window-state'
 import { CliService } from './services/cli-service'
-import { TerminalRelay } from './services/terminal-relay'
 import { LoroDataPlaneRelay } from './services/loro-data-plane-relay'
 import { NotificationService } from './services/notification-service'
 import { AppUpdaterService } from './services/app-updater-service'
@@ -45,7 +44,6 @@ import { PublicBrowserService } from './services/public-browser-service'
 import { desktopInstallationProfile, isLocalPlatform } from './platform'
 import { mainPlatformKind } from './platform'
 import { getLocalLoroDataPlaneSocketPath } from '@molly/shared/node/local-ipc'
-import { getLocalTerminalSocketPath } from '@molly/shared/node/local-terminal'
 import { getInitialDesktopPath, markOnboardingCompleted } from './onboarding-state'
 import { extractDeepLinkFromArgv } from './deep-link-url'
 import { shouldHideMainWindowOnAutoLaunch } from './auto-launch-policy'
@@ -173,7 +171,6 @@ if (hasSingleInstanceLock) {
       protocol: MOLLY_PROTOCOL
     })
     const cliService = new CliService()
-    const terminalRelay = new TerminalRelay(getLocalTerminalSocketPath(mainPlatformKind))
     const loroDataPlaneRelay = new LoroDataPlaneRelay(
       getLocalLoroDataPlaneSocketPath(mainPlatformKind)
     )
@@ -227,7 +224,6 @@ if (hasSingleInstanceLock) {
       cliService,
       appUpdaterService,
       notificationService,
-      terminalRelay,
       publicBrowserService,
       loroDataPlaneRelay,
       windowBadgeService,
@@ -309,7 +305,6 @@ if (hasSingleInstanceLock) {
       setWindowsTrayAvailable(false)
       windowsTrayService.stop()
       windowBadgeService.reset()
-      terminalRelay.destroy()
       loroDataPlaneRelay.destroy()
       appUpdaterService.stop()
       publicBrowserService.destroyAll()
@@ -322,8 +317,8 @@ if (hasSingleInstanceLock) {
 
       // Defer the quit until the embedded CLI has actually exited. Killing it
       // fire-and-forget would let the app exit while the CLI is still shutting
-      // down, orphaning it holding the local ports + terminal socket and breaking
-      // the next launch. shutdownForQuit() SIGTERMs, waits briefly, then SIGKILLs.
+      // down, orphaning it holding the local ports and breaking the next
+      // launch. shutdownForQuit() SIGTERMs, waits briefly, then SIGKILLs.
       event.preventDefault()
       void Promise.allSettled([cliService.shutdownForQuit()]).finally(() => {
         cliShutdownComplete = true
@@ -334,7 +329,6 @@ if (hasSingleInstanceLock) {
     process.on('exit', () => {
       setWindowsTrayAvailable(false)
       windowsTrayService.stop()
-      terminalRelay.destroy()
       loroDataPlaneRelay.destroy()
       cliService.killAllProcesses()
       appUpdaterService.stop()

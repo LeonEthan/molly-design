@@ -13,7 +13,6 @@ export const ONBOARDING_DEBUG_ANCHORS = [
   'tab-bar',
   'info-bar',
   'side-panel',
-  'terminal',
   'studio',
   'phone',
 ] as const;

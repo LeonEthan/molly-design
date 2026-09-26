@@ -688,7 +688,7 @@ Auto 修订验证：扩展存储检查覆盖省略宽高时的缺省初始化，
 
 **复核结论（三项独立勘察一致）。** 守护进程→Electron main 的请求/应答通道**确实不存在**，P2.4 记录中的判断成立：
 
-- Electron main 侧没有任何入站监听（`apps/electron/src/main` 下不存在 `net.createServer`／`http.createServer`），其 socket 全部是**出站**客户端（[loro-data-plane-relay.ts](../../../../apps/electron/src/main/services/loro-data-plane-relay.ts)、[terminal-relay.ts](../../../../apps/electron/src/main/services/terminal-relay.ts)、[cli-service.ts](../../../../apps/electron/src/main/services/cli-service.ts)）。
+- Electron main 侧没有任何入站监听（`apps/electron/src/main` 下不存在 `net.createServer`／`http.createServer`），其 socket 全部是**出站**客户端（[loro-data-plane-relay.ts](../../../../apps/electron/src/main/services/loro-data-plane-relay.ts)、`terminal-relay.ts`（已随底部 Terminal 一并删除）、[cli-service.ts](../../../../apps/electron/src/main/services/cli-service.ts)）。
 - [local-machine-rpc.ts](../../../../packages/shared/src/local-machine-rpc.ts) 的请求联合（`code-collab/*`、`file/*`、`session/*`、`design/image-connection*`）**全部**由 Electron／渲染器发起、守护进程作答；守护进程只能应答，无法发起。
 - 唯一「守护进程发起请求并等应答」的先例是权限/elicitation 往返，且它由**共享 Loro 会话文档**中介：守护进程把请求写进 history（`handleAgentPermissionRequest`），**任何客户端**把结果写回，守护进程的 mirror 订阅解除等待。参与者是渲染器的 CRDT 写入方，**不是 Electron main**。
 - 无渲染能力声明：[machine-protocol-capabilities.ts](../../../../packages/shared/src/machine-protocol-capabilities.ts) 无 render 键；[packages/platform](../../../../packages/platform/src/capabilities.ts) 只有云/本地字符串开关与云端口，无 host/render 端口；`apps/cli/src/design/*` 对 Electron／渲染零引用。

@@ -1,7 +1,7 @@
 import { mollyStorage } from '@/lib/product-storage';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { DesignCanvas } from './design-canvas';
-import { Loader2, PanelBottom, PanelLeft, PanelRight } from 'lucide-react';
+import { Loader2, PanelLeft, PanelRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/ui/button';
 import { useRouter } from '@tanstack/react-router';
@@ -51,15 +51,9 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useFireOncePerKey } from '@/hooks/use-fire-once';
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { useStableCallback } from '@/hooks/use-stable-callback';
-import { useAtomValue, useSetAtom, useStore } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { selectAtom } from 'jotai/utils';
-import {
-  terminalControllerAtom,
-  terminalDockAvailableAtom,
-  terminalDockCanCreateAtom,
-  terminalDockOpenAtom,
-} from '@/components/terminal/terminal-controller';
-import { isElectronRenderer, isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
+import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowsCaptionPadClass } from '@/ui/window-drag-region';
 import {
   getZenAwarePanelToggleState,
@@ -67,7 +61,7 @@ import {
   showNavigationSidebarAtom,
   zenLayoutModeAtom,
 } from '@/atoms/layout-state';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDocumentTitle } from '@/hooks/use-document-title';
 import { useTabStatus, type TabStatus } from '@/hooks/use-tab-status';
 import {
@@ -203,7 +197,6 @@ import { useCodeCollabRequestedRole } from '@/hooks/use-code-collab-requested-ro
 import { resolveEffectiveCodeCollabWorkspaceId } from '@/lib/code-collab-workspace-id';
 import { LoadingPlaceholder } from '@/components/loading-placeholder';
 import { DesktopSessionDetailLayout } from './desktop-session-detail-layout';
-import { TerminalDockHost } from '@/components/terminal-dock-host';
 import {
   resolveSessionDetailPresenceState,
   resolveSessionDetailVisibilityState,
@@ -506,47 +499,6 @@ const getFileExtension = (filePath: string): string | null => {
   }
   return basename.slice(dotIndex + 1).toLowerCase();
 };
-
-// Toggles the bottom terminal dock, which is hidden by default and only mounted
-// in the desktop app (Electron). Shown only when a terminal-capable local session
-// is active — the dock publishes its controller only for local projects on this
-// machine, which flips `terminalDockAvailableAtom`. Kept as its own small
-// component so the frequent open/close state (`terminalDockOpenAtom`) re-renders
-// just this button, not the large SessionDetail tree. The controller is read
-// imperatively at click time, per the guidance in terminal-controller.ts.
-const TerminalDockToggleButton = memo(function TerminalDockToggleButton() {
-  const { t } = useTranslation();
-  const store = useStore();
-  const isOpen = useAtomValue(terminalDockOpenAtom);
-  const isAvailable = useAtomValue(terminalDockAvailableAtom);
-  const canCreate = useAtomValue(terminalDockCanCreateAtom);
-  if (!isElectronRenderer() || !isAvailable) return null;
-  // Visible for any local session, but disabled until a terminal can actually be
-  // created (the local daemon is still starting right after launch) so the toggle
-  // never silently dead-ends.
-  const label = !canCreate
-    ? t(
-        'sessions.terminal.unavailable',
-        'Terminal unavailable — the local daemon is still starting'
-      )
-    : isOpen
-      ? t('sessions.terminal.hide', 'Hide terminal panel')
-      : t('sessions.terminal.show', 'Show terminal panel');
-  return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      disabled={!canCreate}
-      onClick={() => store.get(terminalControllerAtom)?.toggleOpen()}
-      aria-label={label}
-      title={label}
-      className={cn('h-7 w-7 shrink-0 text-muted-foreground', isOpen && 'text-foreground')}
-    >
-      <PanelBottom className="h-4 w-4" />
-    </Button>
-  );
-});
 
 /**
  * Session detail page component.
@@ -3363,35 +3315,13 @@ const SessionDetail = ({
     run: handleToggleSidebar,
   });
 
-  const jotaiStore = useStore();
   useCommand({
-    id: 'session.newTabOrTerminal',
-    title: t('commands.session.newTabOrTerminal', 'New Tab or Terminal'),
+    id: 'session.newTab',
+    title: t('commands.session.newTab', 'New Tab'),
     category: 'Session',
-    keybindings: getCommandKeybindings('session.newTabOrTerminal'),
+    keybindings: getCommandKeybindings('session.newTab'),
     when: () => Boolean(activeSession),
-    run: () => {
-      // ⌥N: a new terminal when the terminal is focused, otherwise a new tab.
-      const controller = jotaiStore.get(terminalControllerAtom);
-      const terminalFocused = Boolean(
-        typeof document !== 'undefined' && document.activeElement?.closest('.molly-terminal-panel')
-      );
-      if (controller && terminalFocused) {
-        controller.openNewTerminal();
-      } else {
-        handleNewTab();
-      }
-    },
-  });
-
-  useCommand({
-    id: 'session.toggleTerminal',
-    title: t('commands.session.toggleTerminal', 'Toggle Terminal'),
-    category: 'View',
-    keybindings: getCommandKeybindings('session.toggleTerminal'),
-    // Only available while a terminal-capable session has published its controls.
-    when: () => Boolean(jotaiStore.get(terminalControllerAtom)),
-    run: () => jotaiStore.get(terminalControllerAtom)?.toggleOpen(),
+    run: handleNewTab,
   });
 
   useCommand({
@@ -4203,12 +4133,7 @@ const SessionDetail = ({
       className="h-full shrink-0"
       headerVariant="toolbar"
       onRevealDesignPanel={handleRevealDesignPanel}
-      headerEndSlot={
-        <>
-          <TerminalDockToggleButton />
-          {!isSidebarVisible ? sidebarToggleButton : null}
-        </>
-      }
+      headerEndSlot={<>{!isSidebarVisible ? sidebarToggleButton : null}</>}
       titleSyncing={activeSessionDocIsSyncing}
       hideMessageArea
       onArchiveSession={handleArchiveCurrentSession}
@@ -4503,7 +4428,6 @@ const SessionDetail = ({
         layoutId={activeSession.design ? 'session-design-panels' : undefined}
         topBar={tabBar}
         chatSurfaces={desktopChatSurfaces}
-        terminalDock={<TerminalDockHost />}
         secondaryPanel={desktopSecondaryPanel}
         sidebarOpen={isSidebarVisible}
         onSidebarCollapse={handleToggleSidebar}

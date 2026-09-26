@@ -695,7 +695,7 @@ export class CliService {
    *
    * `killAllProcesses()` only sends SIGTERM and never waits, so on Command+Q the
    * app would exit while the CLI was still shutting down — orphaning it holding the
-   * local probe/session-control ports and the terminal socket, which then breaks
+   * local probe/session-control ports, which then breaks
    * the next launch. Here we send SIGTERM, wait up to `graceMs` for a clean exit,
    * then SIGKILL anything still alive so nothing is left holding resources.
    */

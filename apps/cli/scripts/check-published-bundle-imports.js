@@ -30,19 +30,12 @@ const requiredPublishedRuntimeDependencies = [
   'sharp',
   'better-sqlite3',
   'loro-crdt',
-  '@lydell/node-pty',
   // Kept external from the bundle (resolves its own entry/worker.js relative to its
   // package dir); the diff line-count worker pool requires it at runtime.
   'tinypool',
 ];
-// @lydell/node-pty pins its per-platform binary packages to its own exact version, and
-// the Electron staging in apps/electron/scripts/cli-native-deps.mjs mirrors that package
-// layout — which changed shape between 1.1.0 and 1.2.0. A range here would let a publish
-// resolve a layout the packaging never saw. Do NOT drop to @lydell/node-pty@1.1.0: it
-// repackages node-pty 1.1.0-beta14, which predates the queued pty writer and writes
-// through tty.WriteStream, where EAGAIN is masked and can block (microsoft/node-pty#833).
 const requiredExactPublishedRuntimeDependencies = ['loro-crdt', 'sharp'];
-const requiredPinnedPublishedRuntimeDependencies = new Map([['@lydell/node-pty', '1.2.0-beta.14']]);
+const requiredPinnedPublishedRuntimeDependencies = new Map();
 
 for (const block of dependencyBlocks) {
   const dependencies = packageJson[block];
@@ -294,7 +287,6 @@ const Database = requireFromBundle('better-sqlite3');
 const probeDb = new Database(':memory:');
 probeDb.exec('CREATE TABLE t(a)');
 probeDb.close();
-requireFromBundle('@lydell/node-pty');
 requireFromBundle.resolve('loro-crdt');
 requireFromBundle.resolve('tinypool');
 originalStdoutWrite('Published CLI runtime CJS dependency smoke passed.\\n');

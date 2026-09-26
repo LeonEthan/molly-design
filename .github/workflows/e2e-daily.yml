@@ -56,10 +56,6 @@ jobs:
       - name: Check suite contract
         run: pnpm --filter @molly/e2e check
 
-      - name: Verify Windows native PTY lifecycle
-        if: matrix.os == 'windows-latest'
-        run: node e2e/scripts/probe-windows-pty.mjs
-
       - name: Build OSS desktop and bundled CLI
         env:
           # CLI Vite SSR chunk rendering exceeds Node's default heap on macOS.

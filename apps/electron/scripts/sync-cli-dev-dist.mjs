@@ -3,11 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertNoLegacyHarnessArtifacts } from '../../cli/scripts/verify-embedded-harness.mjs'
 
-import {
-  installEmbeddedNodePtyBinding,
-  installEmbeddedSqliteBinding,
-  stageCliRuntimePackages
-} from './cli-native-deps.mjs'
+import { installEmbeddedSqliteBinding, stageCliRuntimePackages } from './cli-native-deps.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -58,6 +54,5 @@ writeCliPackageMetadata()
 
 stageCliRuntimePackages()
 installEmbeddedSqliteBinding({ platform: process.platform, arch: process.arch })
-installEmbeddedNodePtyBinding({ platform: process.platform, arch: process.arch })
 
 console.log(`Synced CLI dist-dev to ${destDir}`)

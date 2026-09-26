@@ -128,9 +128,6 @@ patchedDependencies:
   '@tanstack/router-generator@1.159.4':
     hash: 14fe630c2d7f306f8e60169e6a0116cf02de74368af213699cb449aeeecc663a
     path: patches/@tanstack__router-generator@1.159.4.patch
-  '@xterm/xterm@5.5.0':
-    hash: c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5
-    path: patches/@xterm__xterm@5.5.0.patch
   app-builder-lib@26.15.3:
     hash: 80637977dda4ea924da866a67751774a621195429af5af0f103e9129b3bec57f
     path: patches/app-builder-lib@26.15.3.patch
@@ -184,9 +181,6 @@ importers:
 
   apps/cli:
     dependencies:
-      '@lydell/node-pty':
-        specifier: 1.2.0-beta.14
-        version: 1.2.0-beta.14
       better-sqlite3:
         specifier: 'catalog:'
         version: 13.0.3
@@ -859,12 +853,6 @@ importers:
       '@web-kits/audio':
         specifier: ^0.1.0
         version: 0.1.0(react@19.2.0)
-      '@xterm/addon-fit':
-        specifier: ^0.10.0
-        version: 0.10.0(@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5))
-      '@xterm/xterm':
-        specifier: ^5.5.0
-        version: 5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)
       '@zumer/snapdom':
         specifier: ^2.24.15
         version: 2.24.15
@@ -3395,39 +3383,6 @@ packages:
         optional: true
       loro-crdt:
         optional: true
-
-  '@lydell/node-pty-darwin-arm64@1.2.0-beta.14':
-    resolution: {integrity: sha512-C0Zxnl8rTrW/ngu1CKb1NoIiBxoCDL+9SpFSkOaV5MytE7pFN/qTVDFtuIOruE1SL6v17A71jI9bpUIBHn6jJA==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@lydell/node-pty-darwin-x64@1.2.0-beta.14':
-    resolution: {integrity: sha512-P77aRx2TzjmlX6D3XUjTEi4rxvjkJA8VIBwUwe23pphg5DKdc9/g5Y+IsN3KX3lmNmKFVTBIbKcNkl+n8Cgwiw==}
-    cpu: [x64]
-    os: [darwin]
-
-  '@lydell/node-pty-linux-arm64@1.2.0-beta.14':
-    resolution: {integrity: sha512-xZclf3acgWmHi7VMZeVBUJRyJQf78pjCkeBf3ofT/5Xvn5QkRICCZJXtcg1f2lJoCtdF1OWHkeddmJgVDOSv6Q==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@lydell/node-pty-linux-x64@1.2.0-beta.14':
-    resolution: {integrity: sha512-ijTyPgkECpLkrBqs/uuasaXgjv/lQf+5am19ywF6SQ6PsreHZgT36h2j5cdFTN551KHFEDMl6fCgMPDxEEyqxg==}
-    cpu: [x64]
-    os: [linux]
-
-  '@lydell/node-pty-win32-arm64@1.2.0-beta.14':
-    resolution: {integrity: sha512-yw1R4qPtspu0w2p4YhoYuznfQQsdHrVtQnKVDKYTjyuqzF720JZyIdfTRQ0Fl8ChcNesLIrq1kIBfkDPy7CXgg==}
-    cpu: [arm64]
-    os: [win32]
-
-  '@lydell/node-pty-win32-x64@1.2.0-beta.14':
-    resolution: {integrity: sha512-aenTbinERVvWgCQkFwqj9SOR+t/1ZVJ8RqMAk6nB9Lh7oiuRCDzVfs0fNhHRw7JtURZ4jG4i51jou0uXg2yrIw==}
-    cpu: [x64]
-    os: [win32]
-
-  '@lydell/node-pty@1.2.0-beta.14':
-    resolution: {integrity: sha512-RjQis46eBwL9xyDvfXqVsNS2JZ5zQQK/QAYsNE5j8sYPTf4/OpG5Ghm92WGn+w4Rsk3LTpj2adpaZM9Cb8rzDA==}
 
   '@malept/cross-spawn-promise@2.0.0':
     resolution: {integrity: sha512-1DpKU0Z5ThltBwjNySMC14g0CkbyhCaz9FkhxqNsZI6uAPJXFS8cMXlBKo26FJ8ZuW6S9GCMcR9IO5k2X5/9Fg==}
@@ -6268,14 +6223,6 @@ packages:
     resolution: {integrity: sha512-cQzWCtO6C8TQiYl1ruKNn2U6Ao4o4WBBcbL61yJl84x+j5sOWWFU9X7DpND8XZG3daDppSsigMdfAIl2upQBRw==}
     engines: {node: '>=10.0.0'}
     deprecated: this version has critical issues, please update to the latest version
-
-  '@xterm/addon-fit@0.10.0':
-    resolution: {integrity: sha512-UFYkDm4HUahf2lnEyHvio51TNGiLK66mqP2JoATy7hRZeXaGMRDr00JiSF7m63vR5WKATF605yEggJKsw0JpMQ==}
-    peerDependencies:
-      '@xterm/xterm': ^5.0.0
-
-  '@xterm/xterm@5.5.0':
-    resolution: {integrity: sha512-hqJHYaQb5OptNunnyAnkHyM8aCjZ1MEIDTQu1iIbbTD/xops91NB5yq1ZK/dC2JDbVWtF23zUtl9JE2NqwT87A==}
 
   '@zag-js/dismissable@1.42.0':
     resolution: {integrity: sha512-Cx/FAQ2MuQy3kecdmswrFk94Zie1ieBa1Pnt/2ECI5FR914EJd3DwY9Krsmlrq4Z15Wm+pVtfLXgakDewVgsiQ==}
@@ -14366,33 +14313,6 @@ snapshots:
       '@loro-dev/flock-wasm': 0.4.3
       loro-crdt: 1.15.1
 
-  '@lydell/node-pty-darwin-arm64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty-darwin-x64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty-linux-arm64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty-linux-x64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty-win32-arm64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty-win32-x64@1.2.0-beta.14':
-    optional: true
-
-  '@lydell/node-pty@1.2.0-beta.14':
-    optionalDependencies:
-      '@lydell/node-pty-darwin-arm64': 1.2.0-beta.14
-      '@lydell/node-pty-darwin-x64': 1.2.0-beta.14
-      '@lydell/node-pty-linux-arm64': 1.2.0-beta.14
-      '@lydell/node-pty-linux-x64': 1.2.0-beta.14
-      '@lydell/node-pty-win32-arm64': 1.2.0-beta.14
-      '@lydell/node-pty-win32-x64': 1.2.0-beta.14
-
   '@malept/cross-spawn-promise@2.0.0':
     dependencies:
       cross-spawn: 7.0.6
@@ -17628,12 +17548,6 @@ snapshots:
       react: 19.2.0
 
   '@xmldom/xmldom@0.8.11': {}
-
-  '@xterm/addon-fit@0.10.0(@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5))':
-    dependencies:
-      '@xterm/xterm': 5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)
-
-  '@xterm/xterm@5.5.0(patch_hash=c61c6ff03ecdcd3f8db9fe37841c0795351d0fad04391454bd930544b59374c5)': {}
 
   '@zag-js/dismissable@1.42.0':
     dependencies:

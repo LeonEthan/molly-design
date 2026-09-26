@@ -123,8 +123,7 @@ async function withStartupLock<T>(lockFilePath: string, fn: () => Promise<T>): P
 // `http.Server.close()` only stops accepting new connections and otherwise
 // waits for every open connection to end on its own; long-lived keep-alive
 // clients (Electron main polls these sockets continuously) would stall
-// shutdown, so track live connections and destroy them when stopping — same
-// hazard local-terminal-server.ts documents for its persistent relay client.
+// shutdown, so track live connections and destroy them when stopping.
 function trackConnections(server: http.Server, connections: Set<net.Socket>): void {
   server.on('connection', (socket) => {
     connections.add(socket);

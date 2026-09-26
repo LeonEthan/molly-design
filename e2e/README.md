@@ -22,7 +22,7 @@ start a normal Chromium browser or an Electron Vite web server.
 
 The legacy worktree lifecycle fixture seeds Session metadata through `LoroRepo`
 and the existing local data-plane IPC, then dispatches `session/create` through
-local session control. Its user path still verifies terminal/archive/delete and
+local session control. Its user path still verifies archive/delete and
 clean-worktree release. New design sessions use a folder directly and have no
 worktree selector; the fixture must not restore that retired UI or weaken dirty
 worktree protection. The standalone `session create` CLI currently requires cloud
@@ -43,7 +43,6 @@ pnpm e2e:build
 pnpm e2e:smoke
 pnpm e2e:full
 pnpm e2e:scout
-pnpm --filter @molly/e2e terminal:resources
 pnpm --filter @molly/e2e canvas:resources
 pnpm e2e:scout -- --journey review --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
@@ -68,12 +67,6 @@ Optional before/after JSON and a retained-path summary are copied into the
 round, then covered by its checksummed manifest.
 Scout operation, classification, and triage are specified in
 [the Scout contract](./SCOUT.md).
-
-`terminal:resources` is a narrow native regression for the installed xterm bundle:
-three public open/dispose cycles must leave no window/media-query listeners. It
-uses the isolated Electron harness and a disposable blank window, without model
-credentials or a provider connection. It is not a substitute for Work's PTY and
-session-deletion journey. Run it after changing xterm or its dependency patch.
 
 `canvas:resources` repeatedly opens/closes two synthetic artworks through the real
 design IPC/worker/Bento path. It verifies serial Session reuse, fresh origins,
@@ -194,8 +187,6 @@ Copy failure retains the source evidence; success uses normal temporary cleanup.
 Use a short stable data path on macOS because local Unix sockets have path limits.
 Reopen the exported profile and check its sessions, saves and source previews before
 calling it ready for human use; copying files alone is insufficient.
-
-Windows Daily also runs `node e2e/scripts/probe-windows-pty.mjs` before building. It exercises the real CLI terminal service under Node and Electron, closes the same Session through overlapping cleanup paths, and requires the native terminal exit receipt and a successful host exit. This catches native double-close crashes independently of the desktop journey.
 
 The separate [real Kimi golden replication case](KIMI-REPLICATION-ACCEPTANCE.md#run-the-golden-case)
 uses the fixed MagSafe reference and exact prompt, then retains actual exports and

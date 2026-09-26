@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-21T02:42:45.884Z",
+  "generatedAt": "2026-09-26T09:40:07.365Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -2490,31 +2490,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-lydell-node-pty-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@lydell/node-pty",
-      "license": "MIT",
-      "homepage": "https://github.com/lydell/node-pty#readme",
-      "author": "Simon Lydell",
-      "description": "Smaller distribution of node-pty.",
-      "versions": [
-        "1.2.0-beta.14"
-      ]
-    },
-    {
-      "id": "pkg-lydell-node-pty-darwin-arm64-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@lydell/node-pty-darwin-arm64",
-      "license": "MIT",
-      "homepage": "https://github.com/lydell/node-pty#readme",
-      "description": "The node-pty package, stripped down only for darwin-arm64.",
-      "versions": [
-        "1.2.0-beta.14"
-      ]
-    },
-    {
       "id": "pkg-marijn-find-cluster-break-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -2784,6 +2759,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://www.npmjs.com/package/@pierre/diffs",
       "versions": [
         "1.0.10"
+      ]
+    },
+    {
+      "id": "pkg-playwright-mcp-apache-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@playwright/mcp",
+      "license": "Apache-2.0",
+      "homepage": "https://playwright.dev",
+      "author": "Microsoft Corporation",
+      "description": "Playwright Tools for MCP",
+      "versions": [
+        "0.0.82"
       ]
     },
     {
@@ -5525,30 +5513,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "A declarative synthesizer for the web",
       "versions": [
         "0.1.0"
-      ]
-    },
-    {
-      "id": "pkg-xterm-addon-fit-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@xterm/addon-fit",
-      "license": "MIT",
-      "homepage": "https://github.com/xtermjs/xterm.js/tree/master#readme",
-      "author": "The xterm.js authors",
-      "versions": [
-        "0.10.0"
-      ]
-    },
-    {
-      "id": "pkg-xterm-xterm-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@xterm/xterm",
-      "license": "MIT",
-      "homepage": "https://github.com/xtermjs/xterm.js#readme",
-      "description": "Full xterm terminal, in your browser",
-      "versions": [
-        "5.5.0"
       ]
     },
     {
@@ -12322,6 +12286,32 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-playwright-apache-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "playwright",
+      "license": "Apache-2.0",
+      "homepage": "https://playwright.dev",
+      "author": "Microsoft Corporation",
+      "description": "A high-level API to automate web browsers",
+      "versions": [
+        "1.64.0-alpha-1789764292000"
+      ]
+    },
+    {
+      "id": "pkg-playwright-core-apache-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "playwright-core",
+      "license": "Apache-2.0",
+      "homepage": "https://playwright.dev",
+      "author": "Microsoft Corporation",
+      "description": "A high-level API to automate web browsers",
+      "versions": [
+        "1.64.0-alpha-1789764292000"
+      ]
+    },
+    {
       "id": "pkg-pngjs-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13673,6 +13663,30 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Next-generation ES module bundler",
       "versions": [
         "4.57.1"
+      ]
+    },
+    {
+      "id": "pkg-rookie-cookies-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "rookie-cookies",
+      "license": "MIT",
+      "homepage": "https://github.com/teng-lin/rookie-cookies#readme",
+      "description": "Load cookies from any browser on any platform",
+      "versions": [
+        "0.6.0"
+      ]
+    },
+    {
+      "id": "pkg-rookie-cookies-darwin-arm64-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "rookie-cookies-darwin-arm64",
+      "license": "MIT",
+      "homepage": "https://github.com/teng-lin/rookie-cookies#readme",
+      "description": "Load cookies from any browser on any platform",
+      "versions": [
+        "0.6.0"
       ]
     },
     {

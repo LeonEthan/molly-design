@@ -15,7 +15,6 @@ import {
   getLocalDaemonRunDir,
   getLocalLoroDataPlaneSocketPath,
 } from '../src/node/local-ipc';
-import { getLocalTerminalSocketPath } from '../src/node/local-terminal';
 import { getLocalWorkspaceCatalogPath } from '../src/node/local-workspace-catalog';
 
 const require = createRequire(import.meta.url);
@@ -155,7 +154,6 @@ describe('installation profile', () => {
       expect(getLocalWorkspaceCatalogPath('local')).toContain('.molly');
       expect(getLocalControlSocketPath('local')).toContain('molly-control');
       expect(getLocalLoroDataPlaneSocketPath('local')).toContain('molly-loro-data-plane');
-      expect(getLocalTerminalSocketPath('local')).toContain('molly-terminal');
     } finally {
       if (previousPlatform === undefined) delete process.env.MOLLY_PLATFORM;
       else process.env.MOLLY_PLATFORM = previousPlatform;
@@ -171,13 +169,6 @@ describe('installation profile', () => {
     expect(commonJs.getMollyDataDir('local', '/home/alice')).toBe(
       getMollyDataDir('local', '/home/alice')
     );
-  });
-
-  it('keeps the CommonJS terminal path platform parameter in parity', () => {
-    const commonJs = require('../src/node/local-terminal.cjs') as {
-      getLocalTerminalSocketPath(platform?: 'local' | 'cloud'): string;
-    };
-    expect(commonJs.getLocalTerminalSocketPath('local')).toBe(getLocalTerminalSocketPath('local'));
   });
 
   it('keeps the CommonJS E2E pipe parser in parity', () => {

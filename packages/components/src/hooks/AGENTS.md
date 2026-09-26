@@ -27,8 +27,7 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
   releases sticky suppression in the later parent layout effect of the same commit;
   no frame retries or guessed settle timers.
 - Preserve the app-specific adapters: per-session scroll restoration,
-  search/group-expansion suppression, and viewport resize handling for the
-  terminal dock.
+  search/group-expansion suppression, and viewport resize handling.
 
 ## Session, auth, and app shell
 

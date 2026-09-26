@@ -56,8 +56,8 @@ this page is the full text of the rules summarised there.
     below that threshold the active tab keeps that width and the others share the remainder.
     **The tab pills' top border shares one line with the sidebar and side-panel
     cards at y=8**, since every floating card is `mt-2` (sidebar in
-    `loro-app-sidebar.tsx`, side panel + terminal dock in `session-detail.tsx` /
-    `terminal-dock.tsx`). The bar row therefore takes `mt-0.5`, NOT `mt-2`: its
+    `loro-app-sidebar.tsx`, side panel in `session-detail.tsx`). The bar row
+    therefore takes `mt-0.5`, NOT `mt-2`: its
     h-8 pills are centered in an h-11 row, so the row starts 6px higher and the
     pills land on 8 (2 + (44 − 32) / 2). Changing the row height, the pill height,
     or the cards' `mt-2` silently breaks that line — re-derive it, and measure

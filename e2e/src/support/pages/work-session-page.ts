@@ -1,19 +1,14 @@
 import { existsSync } from 'node:fs';
 import { expect, type Page } from '@playwright/test';
 
-type TerminalSnapshot = {
-  terminalId: string;
-  title: string;
-  cwd?: string;
-};
-
 export type WorkSessionResources = {
   sessionId: string;
-  terminalIds: string[];
   projectRoot: string;
 };
 
 export class WorkSessionPage {
+  private projectRoot = '';
+
   constructor(private readonly page: Page) {}
 
   async addLocalProject(
@@ -21,6 +16,7 @@ export class WorkSessionPage {
     projectName: string,
     machineName?: string
   ): Promise<void> {
+    this.projectRoot = rootPath;
     await this.page.getByRole('button', { name: /^(Select a project|选择项目)$/u }).click();
     await this.page.getByRole('menuitem', { name: /^(Add a folder|添加文件夹)$/u }).click();
 
@@ -63,39 +59,11 @@ export class WorkSessionPage {
     return decodeURIComponent(match[1]);
   }
 
-  async openTerminalAndRun(command: string, outputMarker: string): Promise<TerminalSnapshot[]> {
-    await this.page.getByRole('button', { name: /^(Show terminal panel|显示终端面板)$/u }).click();
-    const terminal = this.page.locator('.molly-terminal-panel');
-    await expect(terminal).toBeVisible({ timeout: 30_000 });
-    const input = terminal.locator('.xterm-helper-textarea');
-    await input.focus();
-    await this.page.keyboard.type(command);
-    await this.page.keyboard.press('Enter');
-    await expect(terminal.locator('.xterm-rows')).toContainText(outputMarker, { timeout: 30_000 });
-
-    const sessionId = this.currentSessionId();
-    await expect
-      .poll(() => this.listTerminals(sessionId), {
-        timeout: 30_000,
-        intervals: [50, 100, 250, 500],
-      })
-      .not.toEqual([]);
-    return await this.listTerminals(sessionId);
-  }
-
   async captureResources(): Promise<WorkSessionResources> {
     const sessionId = this.currentSessionId();
-    const terminals = await this.listTerminals(sessionId);
-    expect(terminals.length, 'The Session has no live terminal to clean up').toBeGreaterThan(0);
-    const projectRoot = terminals.find((terminal) => terminal.cwd)?.cwd;
-    expect(projectRoot, 'The live terminal did not report its project cwd').toEqual(
-      expect.any(String)
-    );
-    await expect.poll(() => existsSync(projectRoot!)).toBe(true);
     return {
       sessionId,
-      terminalIds: terminals.map((terminal) => terminal.terminalId),
-      projectRoot: projectRoot!,
+      projectRoot: this.projectRoot,
     };
   }
 
@@ -107,12 +75,6 @@ export class WorkSessionPage {
       .click();
     await this.page.getByRole('menuitem', { name: /^(Archive session|归档会话)$/u }).click();
     await expect(this.page).toHaveURL(/#\/local\/chat(?:\?.*)?$/u, { timeout: 30_000 });
-    await expect
-      .poll(() => this.listTerminals(resources.sessionId), {
-        timeout: 30_000,
-        intervals: [50, 100, 250, 500],
-      })
-      .toEqual([]);
 
     await this.page.evaluate((sessionId) => {
       window.location.hash = `/local/sessions/${encodeURIComponent(sessionId)}`;
@@ -134,12 +96,6 @@ export class WorkSessionPage {
   }
 
   async expectResourcesReleased(resources: WorkSessionResources): Promise<void> {
-    await expect
-      .poll(async () => await this.listTerminals(resources.sessionId), {
-        timeout: 60_000,
-        intervals: [50, 100, 250, 500, 1000],
-      })
-      .toEqual([]);
     // Permanent delete releases Session resources but must never delete the
     // user's project directory.
     expect(existsSync(resources.projectRoot)).toBe(true);
@@ -149,11 +105,5 @@ export class WorkSessionPage {
     const match = /#\/local\/sessions\/([^?]+)/u.exec(this.page.url());
     if (!match?.[1]) throw new Error(`Expected a Session route, received ${this.page.url()}`);
     return decodeURIComponent(match[1]);
-  }
-
-  private async listTerminals(sessionId: string): Promise<TerminalSnapshot[]> {
-    return (await this.page.evaluate(async (targetSessionId) => {
-      return await window.ipc!.invoke('terminal.list', targetSessionId);
-    }, sessionId)) as TerminalSnapshot[];
   }
 }

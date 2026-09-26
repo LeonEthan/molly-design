@@ -24,12 +24,11 @@ describe('built-in commands', () => {
     expect(commands.getDefaultKeybindingsFor('session.focusInput')).toEqual([]);
     expect(commands.getDefaultKeybindingsFor('session.nextTab')).toEqual([]);
     expect(commands.getDefaultKeybindingsFor('session.previousVisible')).toEqual([]);
-    // ⌥N works on web too (always a new tab there); ⌘[/⌘] back/forward and the terminal
-    // toggle are electron-only; ⌘, settings is cross-platform (desktop's native menu shows
-    // it but doesn't register it — the registry owns the binding).
-    expect(commands.getDefaultKeybindingsFor('session.newTabOrTerminal')).toEqual(['Alt+n']);
+    // ⌥N works on web too; ⌘[/⌘] back/forward is electron-only; ⌘, settings is
+    // cross-platform (desktop's native menu shows it but doesn't register it —
+    // the registry owns the binding).
+    expect(commands.getDefaultKeybindingsFor('session.newTab')).toEqual(['Alt+n']);
     expect(commands.getDefaultKeybindingsFor('nav.back')).toEqual([]);
-    expect(commands.getDefaultKeybindingsFor('session.toggleTerminal')).toEqual([]);
     expect(commands.getDefaultKeybindingsFor('workspace.openSettings')).toEqual(['$mod+,']);
     expect(commands.getDefaultKeybindingsFor('layout.toggleZenMode')).toEqual(['$mod+.']);
     // Cyclers with no default binding stay rebindable from the settings page.
@@ -59,10 +58,6 @@ describe('built-in commands', () => {
     expect(commands.getDefaultKeybindingsFor('session.nextVisible')).toEqual(['$mod+Shift+]']);
     expect(commands.getDefaultKeybindingsFor('nav.back')).toEqual(['$mod+[']);
     expect(commands.getDefaultKeybindingsFor('nav.forward')).toEqual(['$mod+]']);
-    expect(commands.getDefaultKeybindingsFor('session.toggleTerminal')).toEqual([
-      'Ctrl+`',
-      '$mod+j',
-    ]);
     expect(commands.getDefaultKeybindingsFor('session.cycleMode')).toEqual(['Shift+Tab']);
     // ⌘, settings is now a cross-platform registry binding (the desktop native menu shows
     // ⌘, but registerAccelerator:false leaves the key to the registry), so it shows here too.

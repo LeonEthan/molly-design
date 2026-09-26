@@ -24,9 +24,7 @@ function setInputValue(input: HTMLInputElement, value: string): void {
 function AppearanceHarness({ isElectron }: { isElectron: boolean }) {
   const [theme, setTheme] = useState<Theme>('light');
   const [interfaceFontFamily, setInterfaceFontFamily] = useState('Atkinson Hyperlegible');
-  const [terminalFontFamily, setTerminalFontFamily] = useState('Maple Mono');
   const [conversationFontSize, setConversationFontSize] = useState(14);
-  const [fontSize, setFontSize] = useState(13);
 
   return (
     <AppearanceSettingsView
@@ -39,13 +37,9 @@ function AppearanceHarness({ isElectron }: { isElectron: boolean }) {
       isElectron={isElectron}
       interfaceFontFamily={interfaceFontFamily}
       onInterfaceFontFamilyChange={setInterfaceFontFamily}
-      terminalFontFamily={terminalFontFamily}
-      onTerminalFontFamilyChange={setTerminalFontFamily}
       systemFontFamilies={['Atkinson Hyperlegible', 'Fira Code', 'Maple Mono', 'SF Mono']}
       systemFontLoadState="loaded"
       onSystemFontMenuOpen={vi.fn()}
-      terminalFontSize={fontSize}
-      onTerminalFontSizeChange={setFontSize}
     />
   );
 }
@@ -130,34 +124,16 @@ describe('AppearanceSettingsView', () => {
     expect(sizeInput?.value).toBe('24');
   });
 
-  it('renders interface and terminal system font selectors in Electron', async () => {
+  it('renders the interface system font selector in Electron', async () => {
     await act(async () => root?.render(<AppearanceHarness isElectron />));
-
-    const sizeInput = container?.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
-    const preview = Array.from(container?.querySelectorAll('code') ?? []).find(
-      (node) => node.textContent === 'git status'
-    );
 
     const interfaceFontTrigger = Array.from(container?.querySelectorAll('button') ?? []).find(
       (node) => node.textContent?.includes('Atkinson Hyperlegible')
     );
-    const terminalFontTrigger = Array.from(container?.querySelectorAll('button') ?? []).find(
-      (node) => node.textContent?.includes('Maple Mono')
-    );
     expect(container?.textContent).toContain('Interface font');
+    expect(container?.textContent).not.toContain('Terminal');
     expect(container?.textContent).not.toContain('Choose a font installed on this computer.');
     expect(interfaceFontTrigger).toBeTruthy();
-    expect(terminalFontTrigger).toBeTruthy();
-    expect(sizeInput).toBeTruthy();
-    expect(preview).toBeTruthy();
-    expect(preview?.parentElement?.style.fontFamily).toContain('Maple Mono');
-    expect(preview?.style.fontFamily).toBe('inherit');
-    expect(container?.textContent).toContain('$');
-
-    await act(async () => {
-      setInputValue(sizeInput!, '16');
-    });
-    expect(preview?.parentElement?.style.fontSize).toBe('16px');
   });
 
   it('keeps the font menu inside a settings dialog so the list can scroll', async () => {

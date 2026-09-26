@@ -93,9 +93,8 @@ PNG 或 JPEG。生成图片是可选步骤，文字和形状设计不需要图�
 
 ## 发布状态与支持限制
 
-内置 Pi 迁移已有**局部验收证据**，并非完整验收。证据与剩余工作记录在
-[实施笔记](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md)与
-[最终安装包交付记录](.agents/notes/implemented/testing/2026-09-20-final-package-delivery.zh.md)。
+内置 Pi 迁移已有**局部验收证据**，并非完整验收。详细实施与安装包记录仅保留本地；
+这里概述已支持范围和剩余限制。
 
 | 连接                                                | 当前证据与限制                                                                                                                                                              |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -106,10 +105,8 @@ PNG 或 JPEG。生成图片是可选步骤，文字和形状设计不需要图�
 
 macOS arm64 交付包已从 DMG 安装副本完成验证：首次启动、会话重开、作品渲染（含此前
 生成的图片）、手工编辑与自动保存、PNG 导出、旧会话延续画布路由与重启持久化。已配置
-模型回合在此前的安装构建上验证（[安装与 Kimi 连接](.agents/notes/implemented/bug-fix/2026-09-20-packaged-helper-startup.zh.md)、
-[可编辑作品旅程](.agents/notes/implemented/bug-fix/2026-09-20-editable-design-journey.zh.md)），真实图片
-生成/编辑在同一作品中验证（[图片旅程](.agents/notes/implemented/testing/2026-09-20-image-generate-edit-replace.zh.md)，含其重试授权披露），旧会话延续在 hybrid 包上验证
-（[延续验收](.agents/notes/implemented/testing/2026-09-20-design-session-continuation-acceptance.zh.md)）。
+模型回合在此前的安装构建上验证。真实图片生成/编辑在同一作品中验证，包含重试授权
+披露；旧会话延续另在 hybrid 包上验证。
 Windows/Linux 资源构建不是原生执行证据。
 已审核的 `pi-ask-question` 子集有 SDK 测试，原生问答交互已在安装构建上验证；跨重启
 恢复仍待验证。这些检查不确立通用画布尺寸或性能上限。
@@ -117,9 +114,7 @@ Windows/Linux 资源构建不是原生执行证据。
 本次交付明确延期：Google 及其他 SDK 升级、插件斜杠命令体系、复杂图片组合（蒙版、
 多参考图、格式矩阵）、跨平台专项验收、长期性能测试，以及内置 Pi 升级/卸载演练。
 
-此前的[设计验收](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)与
-[五 Agent 矩阵](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)
-是迁移前运行时的历史证据，不能验证当前内置引擎。
+此前的设计验收与五 Agent 矩阵是迁移前运行时的历史证据，不能验证当前内置引擎。
 [验收说明](e2e/DESIGN-ACCEPTANCE.md)提供设计评审背景，不代表迁移已通过。
 
 本地临时签名包验证不代表公开发布、Developer ID 签名、公证或自动更新通道已就绪。

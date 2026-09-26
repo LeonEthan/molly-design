@@ -1,7 +1,7 @@
 # Molly embedded Pi harness
 
 Status: draft
-Previous approval (before Role retirement): [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
+Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Translation: current
 
 [中文](molly-embedded-pi-harness.zh.md)
@@ -14,7 +14,7 @@ Users need a Molly they can install, configure and keep creating with — not an
 
 After installing Molly, the user only configures a model connection, an API key and an explicit model to start designing — no separate Agent CLI or global Node/npm install. Image generation and editing continue to use the user-configured image MCP/BYOK; without an image connection, text, shapes, manual editing and rendering remain usable. Different sessions may choose different model connections, but all new executions use the same version of the embedded Pi harness.
 
-This draft follows the "Molly embedded Pi harness transformation plan" v1.0 (2026-09-19), and redefines the remaining delivery scope per the 2026-09-20 convergence requirement: the installer, one complete design journey, key interactions, old-data continuation and delivery notes. Items explicitly deferred below are no longer completion conditions for this round; the original plan's historical goals and executed evidence are preserved, and deferral is not recorded as completed implementation. The [implementation plan](../.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md) holds the implementation and check evidence. This revision remains draft; task status or automated checks do not replace human approval of this revision.
+This draft follows the "Molly embedded Pi harness transformation plan" v1.0 (2026-09-19), and redefines the remaining delivery scope per the 2026-09-20 convergence requirement: the installer, one complete design journey, key interactions, old-data continuation and delivery notes. Items explicitly deferred below are no longer completion conditions for this round; the original plan's historical goals and executed evidence are preserved, and deferral is not recorded as completed implementation. The implementation plan holds the implementation and check evidence. This revision remains draft; task status or automated checks do not replace human approval of this revision.
 
 This is a follow-up revision proposal to the multi-Agent selection and CLI bootstrap goals in the [design workbench Spec](graphic-design-platform.md), not a description of the current implementation. When implemented, that Spec, the [upstream adoption scope](lody-upstream-adoption.md), the relevant scoped rules and the golden cases are adjusted together: the existing acceptance history is preserved, new embedded-Pi results are recorded independently, and Kimi CLI pass results must not be transcribed as Pi passes. This draft changes neither Bento's editing scope, the design format, the history backend, nor the autonomous-creation principles.
 
@@ -117,7 +117,7 @@ Design commits continue to independently validate schema, kernel replay, assets,
 
 ### Migration and support boundaries
 
-Role selection, creation, management, migration, `@` expansion and new programmatic-create arguments are retired. New work selects its connection, model and reasoning directly. Stored Role rows and historical provenance remain readable but are not reapplied to new messages. Already accepted Operations recover their frozen configuration. See the [Role retirement decision](../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md). This scope change returns this Spec to draft; the previous approval does not cover this revision.
+Role selection, creation, management, migration, `@` expansion and new programmatic-create arguments are retired. New work selects its connection, model and reasoning directly. Stored Role rows and historical provenance remain readable but are not reapplied to new messages. Already accepted Operations recover their frozen configuration. See the Role retirement decision. This scope change returns this Spec to draft; the previous approval does not cover this revision.
 
 Canvases, assets, drafts, chats and history are preserved in place. Old AgentConfig/Role entries keep their provenance and are not executable; when the user explicitly chooses "continue this design with Molly", a new Pi context is created carrying the explicit historical context and trusted assets. Old tool records serve only as historical data — they are not executed, and no cross-harness native identity is forged.
 

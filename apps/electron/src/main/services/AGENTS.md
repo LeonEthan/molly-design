@@ -36,7 +36,6 @@ Disposal revokes callbacks and closes owned contents. Reuse follows destruction,
 request drainage and successful storage/cache cleanup; failures stay denied.
 Recheck lease liveness after awaits before mutations; Session identity is reusable.
 Hidden editors retain their lease. Run native `canvas:resources` for lifetime changes.
-See the [lifecycle note](../../../../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-reuse.zh.md).
 Source previews never register for save/flush; preserve
 canonical instances and reject late results after consumer/source changes.
 Source previews share exact dependency watches and serialized conversion only
@@ -107,7 +106,7 @@ Reject unsupported source or destination Cookie partitions before import mutatio
 never flatten identities for writes or rollback. Native reads stay site-scoped and
 Cookie values stay in main. The first release imports Pinterest only. The native
 report deadline includes human Keychain approval; retries require a fresh user
-action, and read failures preserve destination cookies. See the [account note](../../../../../.agents/notes/proposed/architecture/2026-09-22-embedded-browser-account-import.zh.md).
+action, and read failures preserve destination cookies.
 
 ## Agent browser driver
 

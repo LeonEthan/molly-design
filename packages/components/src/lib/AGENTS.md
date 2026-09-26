@@ -3,8 +3,6 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 These rules also bind callers changing crash recovery, localStorage caches, file
 surfaces, or Electron IPC typing. Read the relevant sections before those changes.
-Rationale: [components](../../../../.agents/docs/components-package.md) and
-[file paths](../../../../.agents/docs/components-file-paths.md).
 
 ## Electron IPC types
 
@@ -77,8 +75,7 @@ Rationale: [components](../../../../.agents/docs/components-package.md) and
 - Before reason mapping in `session-file-error-state.tsx`, classify "outside the workspace"
   as a policy rejection, not filesystem "Access denied"; CLI keeps that exact phrase.
   Classify "owner session mismatch" as a startup race and advise "try again".
-- Known gaps and their repair constraints: [path provenance and skipped entries](../../../../.agents/docs/components-file-paths.md#known-gaps).
-  When repairing skipped entries, distinguish directory read failures and account for
+- When repairing skipped entries, distinguish directory read failures and account for
   `openFile` retaining index `readonly`; an openable result must not become uneditable.
 
 ## ACP dispatch

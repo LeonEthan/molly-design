@@ -4,8 +4,8 @@
 
 Read the parent [sessions AGENTS.md](../AGENTS.md) first. This scope holds
 `file-tree-view.tsx` (the `VirtualFileTree` row renderer and its virtualization)
-and `file-tree-states.tsx` (empty/loading/error states). Surrounding file-surface
-rules: [.agents/docs/sessions-file-surfaces.md](../../../../../../.agents/docs/sessions-file-surfaces.md).
+and `file-tree-states.tsx` (empty/loading/error states). Parent file-surface rules
+apply.
 
 - **File tree: ONE row renderer** (`VirtualFileTree` in `components/file-tree-view.tsx`)
   and ONE virtualization gate, counting VISIBLE rows. A second tree-wide count

@@ -88,7 +88,7 @@ product default and return assets without committing artwork.
 
 The CLI staging/materialization integration test reads the delivered files, runs
 the bundled intake helper without finalize, and preserves user-edited materials
-on repeated sync. See the [decision and evidence](../../.agents/notes/implemented/simplification/2026-09-11-autonomous-design-skills.zh.md).
+on repeated sync.
 
 ## Build and test
 
@@ -130,8 +130,7 @@ geometry can be located without guessing which element failed.
 `AUTHORING_PROJECTION_CAPABILITIES` maps all active frozen v1 capability rows to this
 projection without enabling editor features.
 
-The [field audit and evidence](../../.agents/notes/implemented/architecture/2026-09-11-pptd-editable-roundtrip.zh.md)
-records the full scope. `tests/roundtrip.test.ts` covers every element kind, all
+`tests/roundtrip.test.ts` covers every element kind, all
 13 chart types, rich text/table fields, semantic assets, legacy BentoDoc migration,
 edit/undo/redo, and unknown nested fields. Visual quality and hook delivery are
 outside these data-conversion tests.

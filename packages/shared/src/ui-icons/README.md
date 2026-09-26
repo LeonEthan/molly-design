@@ -17,5 +17,3 @@ covers the editor's inherited Lucide imports. Streamdown, Sonner and image/diff
 viewers have adapters at their existing shared wrappers. Branding and content SVGs
 are outside this operation icon catalog. Add new icons here and expose them through
 the facade rather than embedding a separate path in a feature component.
-
-Design and verification: [SVG operation icon decision](../../../../.agents/notes/implemented/feature/2026-09-23-svg-operation-icons.zh.md).

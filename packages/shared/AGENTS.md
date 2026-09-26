@@ -24,15 +24,13 @@ selection, or Role dispatch. These contracts bind producers and consumers.
   driving turn's selection into ACP startup rather than rereading session history.
 - MCP writes resolve on local Flock durability, then upload. Settings neither
   await nor report upload; its failure cannot fail or roll back the write. CLI
-  reports sync results. See
-  [catalog explanation](../../.agents/docs/workspace-catalog-durability.md).
+  reports sync results.
 - Agent Roles are retired from product selection, management, mentions and new
   MCP session creation. Renderer writes to the `agentRole` family fail with
   `agent_roles_retired`; new MCP create schemas reject Role arguments. Preserve
   stored rows, frozen transcript spans and historical Session/Turn provenance.
   Recovery of already accepted Operations uses their frozen canonical payload;
-  it neither resolves a mutable Role nor starts a retired harness. See the
-  [retirement decision](../../.agents/notes/implemented/simplification/2026-09-23-retire-agent-roles.zh.md).
+  it neither resolves a mutable Role nor starts a retired harness.
 
 ## Embedded harness credentials
 
@@ -77,8 +75,7 @@ dispatch owns runtime availability; schema presence does not enable execution.
 `browser/execute` uses the owner-only socket and binds run/launch/page.
 Recheck results; never replay uncertain actions. Import Chrome accounts in
 Electron main only. Models see flat `AgentBrowserToolInputSchema`; validate
-with `AgentBrowserCommandSchema` before execution. See
-[browser docs](../../.agents/docs/sessions-browser.md).
+  with `AgentBrowserCommandSchema` before execution.
 
 ## Installation identity
 

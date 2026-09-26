@@ -1,7 +1,7 @@
 # Adopting Lody upstream reliability and long-conversation updates
 
 Status: approved
-Approval: [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
+Approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Date: 2026-09-17
 Translation: current
 
@@ -165,6 +165,6 @@ When any slice fails, preserve the evidence and user data; never bypass by clear
 
 ## Basis and current verification status
 
-- [Research and adoption decisions](../.agents/notes/proposed/process/2026-09-17-lody-upstream-adoption.zh.md): pinned upstream `6f3a8855e94737ae65e2e57c625d74573adddc01`, Molly research baseline `75fe35085e3e0c512ef28cec3016b6c07c0866f7`, and the exact commits of each candidate. When this Spec was written Molly had advanced to `c1dc2aab`; the original research was not retroactively recognized as a full runtime review of the new HEAD, so the diff must be re-checked before implementation.
-- [Design product contract](graphic-design-platform.md), [temporary history-validation bypass](session-validation-hotfix.md), [platform boundaries](../packages/platform/AGENTS.md), [shared protocol](../packages/shared/AGENTS.md), [local data plane](../.agents/docs/cli-lib-local-loro-data-plane.md): these continue to constrain this task; this Spec only plans evidence-backed diffs.
+- Research and adoption decisions: pinned upstream `6f3a8855e94737ae65e2e57c625d74573adddc01`, Molly research baseline `75fe35085e3e0c512ef28cec3016b6c07c0866f7`, and the exact commits of each candidate. When this Spec was written Molly had advanced to `c1dc2aab`; the original research was not retroactively recognized as a full runtime review of the new HEAD, so the diff must be re-checked before implementation.
+- [Design product contract](graphic-design-platform.md), [temporary history-validation bypass](session-validation-hotfix.md), [platform boundaries](../packages/platform/AGENTS.md), [shared protocol](../packages/shared/AGENTS.md), local data plane: these continue to constrain this task; this Spec only plans evidence-backed diffs.
 - U1–U9 have been implemented under the user's "start the full implementation task" authorization; slice verification and final gates are recorded in the owning note. The required real five-Agent and Windows/Linux runtime evidence must still be provided separately; source code, synthetic tests and macOS builds cannot substitute for that acceptance. This Spec remains draft and is not automatically approved by implementation or tests.

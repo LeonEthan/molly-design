@@ -8,6 +8,7 @@ branches do not create an Issue solely for contribution intake.
 The Issue is for tracking context; maintainers review the contribution through
 the normal PR process. Context handoff is public and cannot use N/A or redacted
 answers; an invalid body is closed after seven days and must then be resubmitted.
+See .github/AGENTS.md for contribution rules and specs/AGENTS.md for Spec changes.
 -->
 
 ## Related issue
@@ -31,8 +32,8 @@ normalized to `Closes #123` by the PR policy workflow.
 
 <!--
 Optional: a diagram, tree, or structural diff often explains a change faster than
-prose. Put it directly in Summary or Before / after. Examples and the rules for
-choosing a view: .agents/docs/visual-explanations.md
+prose. Put it directly in Summary or Before / after. Choose the smallest view
+that explains the change.
 Any supporting artifact must be reachable by reviewers; a local HTML file is not.
 Small fixes need no visual. Do not add one for ceremony.
 -->

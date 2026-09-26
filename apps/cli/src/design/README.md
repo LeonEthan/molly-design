@@ -163,9 +163,9 @@ handling; old proof events are rejected. Claude/Codex/Grok reminder sources and
 native config overlays, Grok plugin reload and Kimi CLI timeout adaptation are
 retired. Existing user CLI configuration and hook registrations are left untouched.
 Historical implementation evidence remains in the
-[Pi note](../../../../.agents/notes/implemented/architecture/2026-09-11-pi-design-hooks.md)
-and [Claude note](../../../../.agents/notes/implemented/architecture/2026-09-11-claude-design-hooks.md);
-the [replacement decision](../../../../.agents/notes/implemented/simplification/2026-09-12-editor-owned-pptd-save.md)
+Pi note
+and Claude note;
+the replacement decision
 describes current responsibilities.
 
 Each actual design Agent spawn registers a fresh launch ID for explicit exact
@@ -185,7 +185,7 @@ transcript replay is not a fallback. Historical external configurations remain
 readable but cannot execute; continuing an old design requires the explicit
 [migration flow](../session/README.md). The canvas and retained files stay in place.
 Earlier external Codex reminder behavior is recorded in the historical
-[implementation and native proof](../../../../.agents/notes/implemented/architecture/2026-09-12-codex-read-reminder.md),
+implementation and native proof,
 not enabled by the current package.
 
 ## Read-only source snapshots
@@ -216,8 +216,8 @@ it before publishing the content-addressed asset. Molly no longer reads Kimi CLI
 configuration or sets its global MCP timeout. The independently configured embedded
 Kimi provider uses the same protected model and MCP paths as other embedded providers.
 Historical CLI timeout behavior is recorded in the
-[deadline correction](../../../../.agents/notes/implemented/bug-fix/2026-09-12-image-mcp-client-deadline.md)
-and [server cancellation correction](../../../../.agents/notes/implemented/bug-fix/2026-09-12-image-mcp-request-cancellation.md).
+deadline correction
+and server cancellation correction.
 
 Embedded MCP tools use the frozen, selected catalog and host approval through
 [`harness-pi`](../../../../packages/harness-pi/README.md). This replaces the retired
@@ -225,7 +225,7 @@ Embedded MCP tools use the frozen, selected catalog and host approval through
 cleanup. The shared cancellation transport remains in the harness package, with
 native SDK in-memory delivery and bounded-timeout tests. Image configuration/model
 and render-host availability remain daemon gates. The older
-[implementation record](../../../../.agents/notes/implemented/architecture/2026-09-12-pi-geon-mcp-extension.md)
+implementation record
 is historical, not the current launch contract.
 
 ## Design history
@@ -247,4 +247,4 @@ the normal store save/CAS and current YAML projection publication. A failed prot
 cannot replace the current artwork; a canonical save followed by projection or
 canvas-reload failure remains a saved state with a recovery error. User repositories,
 branches, index, global configuration and remote operations are not involved.
-See the [decision and acceptance limits](../../../../.agents/notes/implemented/feature/2026-09-12-design-version-history.zh.md).
+See the decision and acceptance limits.

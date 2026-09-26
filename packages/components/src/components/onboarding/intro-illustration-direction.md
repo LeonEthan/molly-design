@@ -1,8 +1,7 @@
 # Molly opening direction
 
 The opening follows the approved three-scene bilingual direction in the
-[welcome specification](../../../../../specs/welcome-onboarding.md) and its
-[design record](../../../../../.agents/notes/implemented/feature/2026-09-24-welcome-graphic-design-directions.zh.md).
+[welcome specification](../../../../../specs/welcome-onboarding.md).
 The handwritten Molly M remains separate from the artwork. A warm off-white shell,
 restrained controls and generous space connect three distinct graphic compositions:
 
@@ -63,5 +62,5 @@ position when the active foreground source permits it. Manual reading and reduce
 autoplay and an ended cue retain their state. A new opening visit starts at scene
 one, without persisting scene, elapsed-time or sound state.
 
-The earlier four-category artwork and audio production history remains in the
-[independent-release record](../../../../../.agents/notes/proposed/feature/2026-09-13-geon-independent-brand-release.zh.md).
+The earlier four-category artwork and audio production history remains in
+local maintenance records.

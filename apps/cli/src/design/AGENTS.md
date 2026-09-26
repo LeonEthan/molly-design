@@ -49,8 +49,8 @@ Root and CLI instructions apply. `CLAUDE.md` links to this file.
   and retains the same product-owned Pi history; never replay product messages.
 
 See [runtime and files](README.md), the
-[replacement decision](../../../../.agents/notes/implemented/simplification/2026-09-12-editor-owned-pptd-save.md),
-and the [YAML turn/projection entry](../../../../.agents/notes/implemented/architecture/2026-09-14-yaml-turn-projection.md).
+replacement decision,
+and the YAML turn/projection entry.
 
 Embedded Pi uses its host-approved reminder and frozen Molly MCP catalog; preserve
 native settlement, approval, cancellation and owned-client cleanup in `harness-pi`.

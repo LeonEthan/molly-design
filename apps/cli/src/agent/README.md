@@ -75,8 +75,7 @@ Builtin Grok negotiates `fs.readTextFile: false`: its native file reader handles
 images and text. Advertising the standard host UTF-8 read RPC makes Grok route PNGs
 through text decoding and reject the result as binary. Host `writeTextFile`, permission
 handling, and other providers retain their existing behavior. The standard text RPC
-remains text-only; no binary extension or runtime patch is introduced. See the
-[file-read decision](../../../../.agents/notes/implemented/bug-fix/2026-09-12-grok-native-file-read.md).
+remains text-only; no binary extension or runtime patch is introduced.
 
 ### Grok permission handling
 
@@ -172,7 +171,7 @@ provider title settings only for Claude.
 Isolated title runs accept cancellation through the existing startup gate and finish
 through the owned child shutdown barrier. MessageHandler drains both session-title
 and branch-name callers before closing documents; cancellation cannot publish a title
-or derive a fallback branch name. See the [owning note](../../../../.agents/notes/implemented/bug-fix/2026-09-11-drain-isolated-title-agents.md).
+or derive a fallback branch name.
 
 Without a saved title model override, isolated title generation keeps the actual
 new ACP session's current model; list order does not imply a cheaper model or the

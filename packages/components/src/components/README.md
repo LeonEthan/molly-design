@@ -16,8 +16,7 @@ foreground tint when selected and 4% on hover. The shared leading slot preserves
 opener/child indentation and extends its tree lines to cover the roomier row.
 The sidebar card keeps a light border; footer actions use circular 32px targets.
 
-[Sidebar relationship rationale](../../../../.agents/docs/components-sidebar-session-tree.md)
-explains why exact opener navigation and root-row indentation use separate ids.
+Exact opener navigation and root-row indentation use separate ids.
 A child Tab may open an independent Session: the row sits under the root, but its
 navigation must still return to the precise creating Tab.
 

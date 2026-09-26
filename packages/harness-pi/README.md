@@ -4,8 +4,6 @@ This package isolates the pinned public Pi SDK dependency closure from the deskt
 renderer and CLI host. The host owns ACP, queueing, permissions, secrets and design
 transactions; Pi owns its native conversation state and model loop.
 
-Implementation is in progress under the
-[implementation plan](../../.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md).
 The package is not an installed-user CLI and does not discover a global Pi command.
 Production and development launch the same compiled sibling entry in the CLI bundle.
 The old external Pi launcher and separate design/MCP extensions are no longer

@@ -272,7 +272,7 @@ export async function defineMcpTools(input: {
               return reply;
             },
             image.status === 'bound',
-            typeof allowed === 'object' ? allowed : undefined
+            typeof allowed === 'object' && allowed.kind === 'browse_task' ? allowed : undefined
           );
           if (input.serverName === 'molly' && tool.name === 'molly_browser') {
             const failure = browserFailureCode(result);

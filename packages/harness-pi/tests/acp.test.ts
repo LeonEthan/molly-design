@@ -29,6 +29,8 @@ import { mcpToolName } from '../src/mcp-bridge';
 import { createApprovedTools, hashToolset } from '../src/approved-tools';
 import type { ImageRecoveryProvider } from '../src/image-recovery-tool';
 import { RunJournal } from '../src/run-journal';
+import { createAutoReviewApproval } from '../src/auto-review';
+import { decideAutoReview } from '../src/auto-review-policy';
 import { ToolOperationJournal } from '../src/tool-operation-journal';
 import {
   MOLLY_BUILTIN_MCP_CONNECTION,
@@ -1085,6 +1087,65 @@ describe('owned ACP boundary', () => {
       }
     }
   );
+  it('reviews an auto-review escalation with the session model before running it', async () => {
+    const responses = [
+      fauxAssistantMessage(
+        fauxToolCall(
+          'write',
+          { path: '../outside-workspace.txt', content: 'synthetic' },
+          { id: 'escalated-write' }
+        ),
+        { stopReason: 'toolUse', timestamp: 1 }
+      ),
+      fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 2 }),
+      fauxAssistantMessage('Done', { timestamp: 3 }),
+    ];
+    const asked: string[] = [];
+    let adapter: MollyAcpAdapter | undefined;
+    const f = await fixture(responses, async (request) => {
+      const current = adapter!;
+      return createAutoReviewApproval({
+        mode: () => current.currentRunScope?.permissionMode,
+        decide: (pending) =>
+          decideAutoReview(pending, {
+            cwd: f.input.cwd,
+            writableRoots: [f.input.cwd],
+            deniedReadRoots: [],
+            sandboxAvailable: false,
+          }),
+        review: (subject, signal) => current.reviewEscalation(subject, signal),
+        record: (pending, source, decision) =>
+          current
+            .recordApproval({
+              toolCallId: pending.toolCallId,
+              tool: pending.name,
+              source,
+              decision,
+            })
+            .then(() => true),
+        askUser: async (pending) => {
+          asked.push(pending.name);
+          return false;
+        },
+      })(request);
+    });
+    adapter = f.adapter;
+    f.snapshot.permissionMode = 'auto-review';
+    try {
+      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+      expect(responses).toEqual([]);
+      expect(asked).toEqual([]);
+      expect(JSON.stringify(f.messages)).toContain('Write outside the workspace');
+      await expect(
+        readFile(join(f.input.cwd, '..', 'outside-workspace.txt'), 'utf8')
+      ).resolves.toBe('synthetic');
+      expect((await f.journal.read(f.snapshot.runId)).approvals).toEqual([
+        { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
+      ]);
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
   it('persists native settlement and rejects a repeated dispatch identity', async () => {
     const f = await fixture();
     try {

@@ -55,7 +55,11 @@ import { RequestPermissionRequest, RequestPermissionResponse } from '@agentclien
 import { TerminalManager } from './terminal-manager';
 import { resolveACPProcessLaunchAsync } from '@/agent/setting';
 import type { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
-import { decodeMollyModelOption, type ModelConnection } from '@molly/shared/embedded-harness';
+import {
+  decodeMollyModelOption,
+  type ModelConnection,
+  type MollyPermissionMode,
+} from '@molly/shared/embedded-harness';
 import { buildGitHubCloneUrl, deriveRepoIdFromGitHubRepo, redactUrlAuth } from '@/utils/github';
 import type { CloudPort } from '@molly/platform';
 import type { RateLimit, SessionUsageUpdate } from 'acp-extension-core';
@@ -255,6 +259,7 @@ export interface ISession {
     signal: AbortSignal
   ): Promise<import('@agentclientprotocol/sdk').PromptResponse>;
   assertEmbeddedModelSelection?(selection: unknown): void;
+  setEmbeddedPermissionMode?(mode: MollyPermissionMode): void;
   needsEmbeddedRuntimeReplacement?(selection: unknown, mcpServerIds?: readonly string[]): boolean;
   isEmbeddedHarness?(): boolean;
   getAgentConfigId?(): AgentConfigId | undefined;

@@ -29,6 +29,17 @@ const RequestSchema = z
   .strict();
 export type ModelRequestRecord = z.infer<typeof RequestSchema>;
 
+/** Authorization provenance for one tool call or network escalation; never its arguments. */
+const ApprovalSchema = z
+  .object({
+    toolCallId: z.string().min(1).max(512),
+    tool: z.string().min(1).max(512),
+    source: z.enum(['sandbox', 'workspace', 'design_tool', 'browse_task', 'classifier', 'user']),
+    decision: z.enum(['allow', 'deny']),
+  })
+  .strict();
+export type ApprovalRecord = z.infer<typeof ApprovalSchema>;
+
 const RecordSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -36,6 +47,7 @@ const RecordSchema = z
     state: z.enum(['dispatched', 'settled']),
     outcome: HarnessRunOutcomeSchema.optional(),
     modelRequests: z.array(RequestSchema).max(10000).optional(),
+    approvals: z.array(ApprovalSchema).max(10000).optional(),
   })
   .strict()
   .refine((value) => (value.state === 'settled') === Boolean(value.outcome));
@@ -105,6 +117,16 @@ export class RunJournal {
         requests[index] = parsed;
       }
       await this.replace(runId, RecordSchema.parse({ ...previous, modelRequests: requests }));
+    });
+  }
+
+  async approval(runId: string, runtimeEpoch: string, approval: ApprovalRecord): Promise<void> {
+    return this.serial(runId, async () => {
+      const previous = await this.read(runId);
+      if (previous.snapshot.runtimeEpoch !== runtimeEpoch || previous.state !== 'dispatched')
+        throw new Error('harness_stale_request');
+      const approvals = [...(previous.approvals ?? []), ApprovalSchema.parse(approval)];
+      await this.replace(runId, RecordSchema.parse({ ...previous, approvals }));
     });
   }
 

@@ -38,6 +38,12 @@ Read [README](README.md) before changing session construction or packaged resour
   results/errors; the Agent chooses any next call. Add no run stop, cross-call fence
   or host retry. A dispatched tool-call ID never replays after crash or restart.
   Asset receipts confer recovery identity, not commit authority.
+- Auto-review applies only to runs whose snapshot freezes `auto-review`. Shell runs
+  in the pinned OS sandbox (workspace/temp writes, credential and Molly private-data
+  reads denied, pre-allowed domains); Molly design tools and in-boundary file tools
+  run. Escalations go to the vendored classifier on the journaled session model;
+  deny, failure or timeout asks the user. Record every decision in the run journal;
+  a failed record denies. No sandbox means shell keeps its prompt.
 - Built-in browser calls use the existing MCP approval path. An explicit site
   task grant lives only in the active run/epoch, grows by approved site at most
   eight times, and is recorded as authorization provenance in the tool journal.

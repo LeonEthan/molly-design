@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { createWorkerEnvironment } from '@molly/harness-pi/environment';
 import type { WorkerConfig } from '@molly/harness-pi/worker-config';
-import { ModelSelectionSchema } from '@molly/shared/embedded-harness';
+import {
+  MOLLY_DEFAULT_PERMISSION_MODE,
+  ModelSelectionSchema,
+  MollyPermissionModeSchema,
+  type MollyPermissionMode,
+} from '@molly/shared/embedded-harness';
 import {
   assertEmbeddedHarnessTarget,
   resolveEmbeddedHarnessLaunch,
@@ -137,6 +142,10 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
     if (!this.embeddedControl) throw new Error('harness_worker_unavailable');
     this.embeddedControl.assertSelection(selection);
   }
+  private embeddedPermissionMode: MollyPermissionMode = MOLLY_DEFAULT_PERMISSION_MODE;
+  setEmbeddedPermissionMode(mode: MollyPermissionMode): void {
+    this.embeddedPermissionMode = MollyPermissionModeSchema.parse(mode);
+  }
   needsEmbeddedRuntimeReplacement(
     selection: unknown,
     mcpServerIds: readonly string[] = []
@@ -161,6 +170,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
     return this.embeddedControl.prompt({
       turnId,
       signal,
+      permissionMode: this.embeddedPermissionMode,
       prepareMcp: (preparation, preparationSignal) =>
         client.prepareEmbeddedMcp(sessionId, preparation, preparationSignal),
       prompt: async (snapshot) => {
@@ -588,6 +598,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         designImageRecovery: callbacks.recoverHarnessImages !== undefined,
         selection: ModelSelectionSchema.parse(this.config.modelSelection),
         permissionProfileId: callbacks.designHooks ? 'browse-task-v1' : 'ask-every-tool-v1',
+        privateDataRoots: [getMollyDataDir()],
         systemPrompt:
           'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. Ask for approval before tool execution. Never retry an operation whose result is unknown.' +
           (designContinuationContext ? `\n\n${designContinuationContext}` : ''),

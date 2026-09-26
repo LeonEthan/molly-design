@@ -15,8 +15,10 @@ import type { AgentClient } from '@/agent/agent-client';
 import { getAcpRuntimeConfigPatchFromOptions } from '@/lib/acp/runtime-config';
 import type { Logger } from '@/utils/logger';
 import {
+  mollyRunPermissionMode,
   validateMollyRunConfigProjection,
   type ModelSelection,
+  type MollyPermissionMode,
 } from '@molly/shared/embedded-harness';
 
 const MAX_ACP_CONFIG_VALUE_LOG_LENGTH = 160;
@@ -53,6 +55,7 @@ export type AcpSessionConfigTarget = {
   acpSessionId: ACPSessionId | null;
   agentClient: AgentClient | null;
   assertEmbeddedModelSelection?: (selection: unknown) => void;
+  setEmbeddedPermissionMode?: (mode: MollyPermissionMode) => void;
 };
 
 export type AcpSessionRunConfig = {
@@ -105,6 +108,8 @@ export async function applyAcpSessionRunConfig(args: {
     signal?.throwIfAborted();
     if (!session.assertEmbeddedModelSelection) throw new Error('harness_worker_unavailable');
     session.assertEmbeddedModelSelection(validateMollyRunConfigProjection(config));
+    if (!session.setEmbeddedPermissionMode) throw new Error('harness_worker_unavailable');
+    session.setEmbeddedPermissionMode(mollyRunPermissionMode(config));
     return { rejectedSelections: [], warningSelections: [], runtimeConfigPatch: null };
   }
   const assertNotAborted = (): void => {

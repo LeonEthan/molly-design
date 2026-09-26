@@ -32,10 +32,12 @@ import {
 } from '@molly/shared/embedded-harness';
 import { createMollySession, type CreateMollySessionInput } from './session-factory';
 import { NativeRunOutcome } from './run-outcome';
-import { RunJournal } from './run-journal';
+import { RunJournal, type ApprovalRecord } from './run-journal';
 import { hashToolset, type ToolApproval } from './approved-tools';
 import { describeToolCall } from './tool-presentation';
 import { connectMcpBridge } from './mcp-bridge';
+import { classifyEscalation } from './auto-review-classifier';
+import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
 import { ToolOperationJournal } from './tool-operation-journal';
 import { z } from 'zod';
 import { resolveMcpContent } from './mcp-content';
@@ -137,8 +139,33 @@ export class MollyAcpAdapter implements acp.Agent {
     return this.owned?.manager.getSessionId();
   }
 
-  get currentRunScope(): Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch'> | undefined {
+  get currentRunScope():
+    | Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch' | 'permissionMode'>
+    | undefined {
     return this.running?.snapshot;
+  }
+
+  /** Classifier review of one auto-review escalation, bound to the active run. */
+  async reviewEscalation(subject: ReviewSubject, signal?: AbortSignal): Promise<ReviewDecision> {
+    const run = this.running;
+    const owned = this.owned;
+    const model = owned?.session.model;
+    if (!run || !owned || !model || run.controller.signal.aborted)
+      throw new Error('harness_run_retired');
+    return classifyEscalation({
+      runtime: owned.runtime,
+      model,
+      entries: owned.manager.getBranch(),
+      subject,
+      signal: signal ? AbortSignal.any([signal, run.controller.signal]) : run.controller.signal,
+    });
+  }
+
+  /** Authorization provenance for the active run; absent a run there is nothing to authorize. */
+  async recordApproval(approval: ApprovalRecord): Promise<void> {
+    const run = this.running;
+    if (!run) throw new Error('harness_run_retired');
+    await this.journal.approval(run.snapshot.runId, run.snapshot.runtimeEpoch, approval);
   }
 
   async initialize(params?: acp.InitializeRequest): Promise<acp.InitializeResponse> {

@@ -16,7 +16,10 @@ import {
   type McpCredentialProvider,
 } from './acp-adapter';
 import { createMollySession } from './session-factory';
-import { createApprovedTools, hashToolset } from './approved-tools';
+import { createApprovedTools, hashToolset, type ToolApproval } from './approved-tools';
+import { decideAutoReview } from './auto-review-policy';
+import { WorkerSandbox, deniedReadRoots } from './sandbox';
+import { createAutoReviewApproval, createNetworkReview, type RecordApproval } from './auto-review';
 import type { WorkerConfig } from './worker-config';
 import { describeToolCall } from './tool-presentation';
 import { AgentBrowserCommandSchema } from '@molly/shared/browser-agent-rpc';
@@ -50,9 +53,18 @@ export async function runWorker(
   let adapter: MollyAcpAdapter;
   let browserTaskGrant: { runId: string; runtimeEpoch: string; sites: Set<string> } | undefined;
   let browserActiveSite: { runId: string; site: string } | undefined;
+  let sandbox: WorkerSandbox | undefined;
+  const deniedRoots = deniedReadRoots([config.privateRoot, ...(config.privateDataRoots ?? [])]);
   const connection = new AgentSideConnection(
     (peer) => {
-      const approve: Parameters<typeof createApprovedTools>[0]['approve'] = async (request) => {
+      const record: RecordApproval = async (request, source, decision) =>
+        adapter
+          .recordApproval({ toolCallId: request.toolCallId, tool: request.name, source, decision })
+          .then(
+            () => true,
+            () => false
+          );
+      const askUser: ToolApproval = async (request) => {
         const sessionId = adapter.currentSessionId;
         if (!sessionId || request.signal?.aborted) return false;
         const run = adapter.currentRunScope;
@@ -87,6 +99,7 @@ export async function runWorker(
           site = browserActiveSite?.site;
         }
         if (browser?.success && run && site && browserTaskGrant?.sites.has(site)) {
+          if (!(await record(request, 'browse_task', 'allow'))) return false;
           if (browser.data.kind === 'navigate') browserActiveSite = { runId: run.runId, site };
           return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
         }
@@ -118,13 +131,18 @@ export async function runWorker(
             { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
           ],
         });
-        if (request.signal?.aborted || response.outcome.outcome !== 'selected') return false;
+        if (request.signal?.aborted || response.outcome.outcome !== 'selected') {
+          if (response.outcome.outcome === 'selected') await record(request, 'user', 'deny');
+          return false;
+        }
         if (response.outcome.optionId === 'allow-once') {
+          if (!(await record(request, 'user', 'allow'))) return false;
           if (browser?.success && browser.data.kind === 'navigate' && run && site)
             browserActiveSite = { runId: run.runId, site };
           return true;
         }
         if (response.outcome.optionId === 'allow-browse-task' && canGrantTask && run && site) {
+          if (!(await record(request, 'user', 'allow'))) return false;
           if (!browserTaskGrant)
             browserTaskGrant = {
               runId: run.runId,
@@ -136,9 +154,45 @@ export async function runWorker(
             browserActiveSite = { runId: run.runId, site };
           return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
         }
+        await record(request, 'user', 'deny');
         return false;
       };
-      const tools = createApprovedTools({ cwd: config.cwd, shellPath: config.shellPath, approve });
+      const review = (
+        subject: Parameters<MollyAcpAdapter['reviewEscalation']>[0],
+        signal?: AbortSignal
+      ) => adapter.reviewEscalation(subject, signal);
+      sandbox = new WorkerSandbox({
+        cwd: config.cwd,
+        shellPath: config.shellPath,
+        deniedReadRoots: deniedRoots,
+        reviewNetwork: createNetworkReview({
+          run: () => adapter.currentRunScope,
+          cwd: config.cwd,
+          review,
+          record,
+          askUser,
+        }),
+      });
+      const sandboxAvailable = sandbox.available;
+      const approve = createAutoReviewApproval({
+        mode: () => adapter.currentRunScope?.permissionMode,
+        decide: (request) =>
+          decideAutoReview(request, {
+            cwd: config.cwd,
+            writableRoots: [config.cwd, '/tmp', '/private/tmp'],
+            deniedReadRoots: deniedRoots,
+            sandboxAvailable,
+          }),
+        review,
+        record,
+        askUser,
+      });
+      const tools = createApprovedTools({
+        cwd: config.cwd,
+        shellPath: config.shellPath,
+        approve,
+        ...(sandboxAvailable ? { sandboxOperations: sandbox.operations() } : {}),
+      });
       adapter = new MollyAcpAdapter(
         peer,
         {
@@ -196,4 +250,5 @@ export async function runWorker(
   );
   await connection.closed;
   await adapter!.dispose();
+  await sandbox?.dispose();
 }

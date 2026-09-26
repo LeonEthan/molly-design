@@ -541,6 +541,25 @@ describe('owned worker host control', () => {
     f.pipe.destroy();
   });
 
+  it('freezes the requested permission mode into the run snapshot', async () => {
+    const f = fixture();
+    await f.control.bootstrap();
+    const snapshots: HarnessRunSnapshot[] = [];
+    const result = f.control.prompt({
+      turnId: 'turn-auto',
+      signal: new AbortController().signal,
+      permissionMode: 'auto-review',
+      prompt: async (snapshot) => {
+        snapshots.push(snapshot);
+        return f.complete(snapshot);
+      },
+    });
+    f.grant();
+    await result;
+    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual(['auto-review']);
+    f.pipe.destroy();
+  });
+
   it.each(['missing', 'stale', 'failed'] as const)(
     'refuses a resolved ACP prompt with %s native proof',
     async (kind) => {

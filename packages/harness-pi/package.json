@@ -17,12 +17,13 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "acp-extension-core": "workspace:*",
     "@agentclientprotocol/sdk": "catalog:",
-    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@anthropic-ai/sandbox-runtime": "0.0.77",
     "@earendil-works/pi-ai": "0.85.1",
-    "@molly/shared": "workspace:*",
+    "@earendil-works/pi-coding-agent": "0.85.1",
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@molly/shared": "workspace:*",
+    "acp-extension-core": "workspace:*",
     "typebox": "1.3.7",
     "zod": "catalog:"
   },

@@ -31,6 +31,24 @@ timeout non-consensual. Its only retained answer state is native tool-result his
 The build verifies adapted-source/license hashes and includes provenance and license
 resources in the sealed closure; TypeBox shares the SDK's pinned version.
 
+Auto-review ([Spec](../../specs/generative-layered-design-workflow.md)) is the
+`auto-review` Molly permission mode. `sandbox.ts` starts one
+`@anthropic-ai/sandbox-runtime` 0.0.77 manager per worker on first use (macOS Seatbelt;
+Linux bubblewrap with `bwrap`, `socat` and `rg`; otherwise unavailable). It denies reads
+of credential stores and Molly private data while re-allowing the session cwd, limits
+writes to the cwd and a per-worker temp directory, and pre-allows package registries,
+GitHub, font/icon services and common CDNs. `auto-review-policy.ts` decides by effect:
+sandboxed shell, Molly design tools and file tools inside the boundary run; a bash
+`outside_sandbox` request, a protected read, a write outside the workspace and a
+sandbox connection to another domain are escalations. Browser and other MCP tools keep
+their ordinary approvals. `auto-review-classifier.ts` judges an escalation with the run's
+session model through the same journaled provider path, using the reviewer prompt,
+decision parser and context projection adapted from Apache-2.0 `pi-auto-approval` 0.1.1
+([`vendor/pi-auto-approval/manifest.json`](vendor/pi-auto-approval/manifest.json)); its
+hook, commands, config files and audit log are not used. A deny, failure or timeout asks
+the user. The run journal records each approval's tool, source and decision without
+arguments.
+
 `extension-ui.ts` adapts select/input/confirm/notify to an owning host using existing
 Core question metadata. It binds run/caller/lifetime cancellation, clears timers,
 retires each pending request before releasing its answer and rejects terminal UI.

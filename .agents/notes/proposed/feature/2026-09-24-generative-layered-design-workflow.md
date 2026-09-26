@@ -218,7 +218,7 @@ Implementation choices within the Spec:
 
 Found during implementation:
 
-- The embedded system prompt still says "Ask for approval before tool execution. Never retry an operation whose result is unknown." It was left unchanged under the no-system-prompt decision. Run 1 shows whether it suppresses autonomy under auto-review.
+- The embedded system prompt said "Ask for approval before tool execution", which could make the Agent ask in chat under auto-review. On 2026-09-25 the owner approved replacing it with "The host handles tool approval; do not ask for it in chat." before run 1; no other system-prompt text changed.
 - Package-manager caches outside the workspace (`~/.npm`, the pnpm store) are not writable, so installs may need an escalation.
 
 ## Verification limits

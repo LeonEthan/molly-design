@@ -135,7 +135,7 @@ Spec 范围内的实现选择：
 
 实施中发现：
 
-- 内置系统提示词仍写有"Ask for approval before tool execution. Never retry an operation whose result is unknown."。依"不改系统提示词"的决定保持不变；第 1 项运行将显示它是否抑制自动审批下的自主性。
+- 内置系统提示词原写有"Ask for approval before tool execution"，可能使 Agent 在自动审批下仍在对话中请求批准。负责人于 2026-09-25 同意在第 1 项运行前改为"The host handles tool approval; do not ask for it in chat."，系统提示词其余内容不变。
 - 工作区外的包管理缓存（`~/.npm`、pnpm store）不可写，安装可能需要越界审批。
 
 ## 验证限制

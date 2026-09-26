@@ -600,7 +600,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         permissionProfileId: callbacks.designHooks ? 'browse-task-v1' : 'ask-every-tool-v1',
         privateDataRoots: [getMollyDataDir()],
         systemPrompt:
-          'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. Ask for approval before tool execution. Never retry an operation whose result is unknown.' +
+          'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. The host handles tool approval; do not ask for it in chat. Never retry an operation whose result is unknown.' +
           (designContinuationContext ? `\n\n${designContinuationContext}` : ''),
       };
       env = createWorkerEnvironment({ ...process.env, ...loginShellEnv }, privateRoot);

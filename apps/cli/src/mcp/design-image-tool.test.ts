@@ -64,8 +64,8 @@ it.each(['molly_generate_image', 'molly_edit_image'] as const)(
           },
           imageTransport: async (request) => {
             if (name === 'molly_edit_image')
-              expect(request.multipart?.files.map((file) => Buffer.from(file.bytes))).toEqual([
-                png,
+              expect(JSON.parse(request.body ?? '').images).toEqual([
+                { image_url: `data:image/png;base64,${png.toString('base64')}` },
               ]);
             return jsonResponse(200, { data: [{ b64_json: png.toString('base64') }] });
           },
@@ -714,6 +714,37 @@ describe('molly_generate_image call', () => {
     }
   });
 
+  it('forwards a transparent PNG request and refuses transparent JPEG before dispatch', async () => {
+    const workdir = await mkdtemp(path.join(os.tmpdir(), 'molly-design-image-'));
+    const png = pngFixture(8, 8);
+    const { calls, transport } = recordedTransport(() =>
+      jsonResponse(200, { data: [{ b64_json: png.toString('base64') }] })
+    );
+    const config = { designGate: readyGate, imageTransport: transport, workdir };
+
+    const layer = await callGenerate(config, {
+      prompt: 'isolated teapot',
+      background: 'transparent',
+      output_format: 'png',
+    });
+    expect(layer.isError).toBeFalsy();
+    expect(JSON.parse(calls[0]!.body ?? '{}')).toMatchObject({
+      background: 'transparent',
+      output_format: 'png',
+    });
+
+    const refused = await callGenerate(config, {
+      prompt: 'isolated teapot',
+      background: 'transparent',
+      output_format: 'jpeg',
+    });
+    expect(refused.isError).toBe(true);
+    expect(refused._meta?.mollyImageOperation).toMatchObject({
+      state: 'failed',
+      dispatched: false,
+    });
+  });
+
   it('refuses an empty prompt and unknown arguments', async () => {
     const empty = await callGenerate(
       { designGate: readyGate, imageTransport: async () => jsonResponse(200, {}) },
@@ -749,7 +780,9 @@ describe('molly_edit_image', () => {
     const uploaded: string[] = [];
     const transport: ImageHttpTransport = async (request) => {
       uploaded.push(request.url);
-      expect(Buffer.from(request.multipart?.files[0]?.bytes ?? [])).toEqual(png);
+      expect(JSON.parse(request.body ?? '').images).toEqual([
+        { image_url: `data:image/png;base64,${png.toString('base64')}` },
+      ]);
       return jsonResponse(200, { data: [{ b64_json: png.toString('base64') }] });
     };
     await withServer(

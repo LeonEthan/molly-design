@@ -4097,7 +4097,7 @@
   "settings.browserAccounts.importUnavailableReasons.secure-storage-unavailable": "macOS 安全存储不可用，已停止从 Chrome 导入账号。",
   "settings.browserAccounts.sitesTitle": "支持导入的网站",
   "settings.browserAccounts.sitesHint": "仅导入所选网站的 Cookie。请在 Molly 浏览器打开网站确认账号；部分网站仍可能要求重新登录。",
-  "settings.browserAccounts.cookieCount": "Molly 站点 Cookie：{{total}} 条",
+  "settings.browserAccounts.cookieCount": "已保存站点 Cookie：{{total}} 条 · 尚未验证登录状态",
   "settings.browserAccounts.importSite": "从 Chrome 导入",
   "settings.browserAccounts.importing": "正在导入…",
   "settings.browserAccounts.authorizationHint": "如果 macOS 弹出钥匙串授权框，请在系统弹框中输入 Mac 登录密码。读取期间请保持 Molly 打开，首次授权可能需要几分钟。不要在本页面输入密码。",

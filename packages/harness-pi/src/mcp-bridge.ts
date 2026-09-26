@@ -21,6 +21,10 @@ import { CancellationDeliveryTransport } from './mcp-cancellation';
 import { resolveMcpContent } from './mcp-content';
 import { bindMcpImageTool } from './mcp-image-binding';
 import type { OperationResourceRead } from './tool-operation-journal';
+import {
+  DesignAssetFailureSchema,
+  formatDesignAssetFailure,
+} from '@molly/shared/local-machine-rpc';
 
 type ClientPort = Pick<
   Client,
@@ -39,8 +43,7 @@ function schemaHash(tool: Tool): string {
     .digest('hex');
 }
 
-/** Only fixed Molly-owned browser failures may cross the MCP error boundary. */
-function browserFailureCode(result: unknown): string | null {
+function mcpErrorText(result: unknown): string | null {
   if (!result || typeof result !== 'object') return null;
   const reply = result as { isError?: unknown; content?: unknown };
   if (reply.isError !== true || !Array.isArray(reply.content) || reply.content.length !== 1)
@@ -48,7 +51,12 @@ function browserFailureCode(result: unknown): string | null {
   const part = reply.content[0] as { type?: unknown; text?: unknown };
   if (part.type !== 'text' || typeof part.text !== 'string' || part.text.length > 1_000)
     return null;
-  const message = part.text;
+  return part.text;
+}
+
+function browserFailureCode(result: unknown): string | null {
+  const message = mcpErrorText(result);
+  if (!message) return null;
   if (
     message === 'Agent browser requires a public website.' ||
     message === 'Agent browser requires a public page.' ||
@@ -82,6 +90,38 @@ function browserFailureCode(result: unknown): string | null {
     return 'harness_browser_network_blocked';
   if (message === 'The user has taken control of the browser page.')
     return 'harness_browser_user_takeover';
+  return null;
+}
+
+class MollyRenderFailure extends Error {}
+
+function renderFailure(result: unknown): MollyRenderFailure | null {
+  const message = mcpErrorText(result);
+  if (message !== null && result && typeof result === 'object') {
+    const meta = (result as { _meta?: unknown })._meta;
+    const parsed = DesignAssetFailureSchema.safeParse(
+      meta && typeof meta === 'object'
+        ? (meta as { mollyDesignAssetFailure?: unknown }).mollyDesignAssetFailure
+        : undefined
+    );
+    if (parsed.success) {
+      return new MollyRenderFailure(`harness_render_${formatDesignAssetFailure(parsed.data)}`);
+    }
+  }
+  if (
+    message === 'Font failed to load' ||
+    message === 'Canvas font failed to load' ||
+    message === 'Preview font failed to load'
+  )
+    return new MollyRenderFailure('harness_render_font_failed');
+  if (
+    message === 'Canvas rendering timed out' ||
+    message === 'Canvas dimensions differ' ||
+    message === 'Canvas capture did not settle on the saved artwork' ||
+    message === 'Canvas capture returned no PNG data' ||
+    message === 'Canvas capture returned an empty PNG'
+  )
+    return new MollyRenderFailure('harness_render_failed');
   return null;
 }
 
@@ -272,11 +312,15 @@ export async function defineMcpTools(input: {
               return reply;
             },
             image.status === 'bound',
-            typeof allowed === 'object' ? allowed : undefined
+            typeof allowed === 'object' && allowed.kind === 'browse_task' ? allowed : undefined
           );
           if (input.serverName === 'molly' && tool.name === 'molly_browser') {
             const failure = browserFailureCode(result);
             if (failure) throw new Error(failure);
+          }
+          if (input.serverName === 'molly' && tool.name === 'molly_render_preview') {
+            const failure = renderFailure(result);
+            if (failure) throw failure;
           }
           const content = await resolveMcpContent(result, (uri, index) => readResource(uri, index));
           executionSignal.throwIfAborted();
@@ -319,7 +363,8 @@ export async function defineMcpTools(input: {
           // Native history must not retain raw transport/server diagnostics or echoed credentials.
           // eslint-disable-next-line preserve-caught-error -- Deliberately discard secret-bearing causes.
           throw new Error(
-            error instanceof Error && safeCodes.has(error.message)
+            error instanceof MollyRenderFailure ||
+              (error instanceof Error && safeCodes.has(error.message))
               ? error.message
               : 'harness_mcp_tool_failed'
           );

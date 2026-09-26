@@ -103,7 +103,6 @@ export function buildTourMachine(identity: TourIdentity): MachineViewMeta {
     raceLimits: {},
   };
 }
-
 export function buildTourAgentConfig(identity: TourIdentity): AgentConfigMeta {
   return {
     id: TOUR_AGENT_CONFIG_ID,
@@ -817,4 +816,3 @@ export function buildTourStableSession(identity: TourIdentity) {
     refetch: async () => ({ data, error: null }),
   };
 }
-

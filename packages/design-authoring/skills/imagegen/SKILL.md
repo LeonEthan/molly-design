@@ -29,35 +29,50 @@ Never ask the user to paste an API key in chat; keys live in the app's settings 
 
 ## Using generated assets
 
-Choose your own prompting, inspection, and iteration approach for the task. Useful
-inputs include exact text, subject, composition, intended use, and constraints.
+For editable artwork, follow the `graphic-design` Skill's required workflow and
+task branches. Choose image prompting and inspection techniques within that
+workflow and the user's budget. Each call may be billed; an unknown result may
+already have consumed budget. Useful inputs include exact text, subject,
+composition, intended use, and constraints.
 `molly_generate_image` writes returned bytes under `media/` in the supplied
 design authoring directory and returns both the artwork-relative and absolute
 paths. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
 judge the result and decide whether further changes are useful. Report material
 limits and the resulting asset path.
 
-Prompt templates and taxonomy below are optional aids. They do not prescribe a
-creative sequence, number of reviews, or automatic paid retries.
+Prompt templates and taxonomy below are optional aids for image operations;
+they do not replace the design workflow or its research requirement.
 
 ## Tool inputs and provider limits
 
-- `molly_generate_image`: `prompt`, optional `size` (provider-defined).
+- `molly_generate_image`: `prompt`, optional `size`, `background` and
+  `output_format`.
 - `molly_edit_image`: `prompt`, `images` (1–16 workspace source/reference paths in
-  prompt order), optional `mask` and `size`. Files are uploaded as multipart data
-  to `/images/edits`; copy outside references into the workspace first. Each file
-  is limited to 16 MiB and the combined inputs to 64 MiB by Molly. Relative image
-  and mask paths use the design authoring directory; use absolute paths for
-  ordinary attachments elsewhere in the Session workspace.
+  prompt order), optional `mask`, `size`, `background` and `output_format`. Files
+  are sent as data URLs in a JSON request to `/images/edits`; copy outside
+  references into the workspace first. Each file is limited to 16 MiB and the
+  combined inputs to 64 MiB by Molly. Relative image and mask paths use the
+  design authoring directory; use absolute paths for ordinary attachments
+  elsewhere in the Session workspace.
+- `background`: `transparent`, `opaque` or `auto`. Use `transparent` with
+  `output_format: "png"` for a standalone layer with real alpha; Molly refuses
+  transparent JPEG before sending. Also describe the isolated subject in the
+  prompt. Read the result: a painted checkerboard is not transparency.
+- `output_format`: `png` or `jpeg`. Omit both fields to use the provider default.
+- `size` is passed through. GPT Image models need both edges to be multiples of
+  16, an aspect ratio within 3:1 and at least 655,360 pixels (for example
+  `1024x1536`); other providers have their own rules.
 - Masks are PNG files for the first image. Transparent areas indicate regions to
   edit; match the first image’s dimensions and the configured provider’s rules.
   A mask guides the model; it is not a guarantee of exact pixel preservation.
 - Both tools save a new asset. They do not replace or commit the current artwork;
   decide whether and how to use the result in the YAML artwork.
 
-Provider/model support for editing, multiple images, masks, sizes and input formats
-varies. Failures are returned as errors; Molly never changes models, substitutes a
-generation call for an edit, or retries paid requests automatically. Successful
+Provider/model support for editing, multiple images, masks, sizes, transparency and
+input formats varies. Failures come back to you as ordinary tool errors; read
+them and decide the next step. An error that reports an unknown outcome means the
+request may have run and been billed. Molly never changes models, substitutes a
+generation call for an edit, or retries paid requests on its own. Successful
 `/models` discovery in Settings does not establish image endpoint support.
 Returned assets currently must be PNG, JPEG or GIF for Bento intake. Inspect the
 actual result and report relevant service limitations.

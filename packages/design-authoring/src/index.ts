@@ -9,6 +9,12 @@
  */
 
 export { intakeAuthoring, type AuthoringIntakeResult } from './intake.ts';
+export {
+  MAX_ASSET_BYTES,
+  inspectAssetAdmission,
+  describeAssetAdmissionFailure,
+  type AssetAdmissionFailure,
+} from './asset-admission.ts';
 export { validate, validateSnapshot, type ValidateOptions } from './validate.ts';
 export {
   loadBentoDocV4,

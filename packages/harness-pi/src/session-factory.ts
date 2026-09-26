@@ -26,7 +26,7 @@ import {
   type ModelConnection,
   type ModelSelection,
 } from '@molly/shared/embedded-harness';
-import { MollyResourceLoader } from './resource-loader';
+import { MollyResourceLoader, type HostTimeSource } from './resource-loader';
 import { createBoundModelFetch } from './model-transport';
 import { resolveProductNativeSession, validateNativeSession } from './native-session';
 import { guardedProviderStream } from './provider-stream';
@@ -43,6 +43,7 @@ export type CreateMollySessionInput = {
   tools: ToolDefinition[];
   systemPrompt: string;
   readBeforeEditReminder?: string;
+  hostTime?: HostTimeSource;
   skills?: Skill[];
   /** Host-owned dialog UI; absent until the transport can cancel and retire its requests. */
   questionUI?: ExtensionUIContext;
@@ -63,6 +64,7 @@ export async function createMollySession(input: CreateMollySessionInput) {
     systemPrompt: input.systemPrompt,
     skills: input.skills,
     readBeforeEditReminder: input.readBeforeEditReminder,
+    hostTime: input.hostTime,
     hostToolNames: input.tools.map((tool) => tool.name),
     extensions: input.questionUI ? createQuestionExtensions() : undefined,
   });

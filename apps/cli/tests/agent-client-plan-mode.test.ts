@@ -59,6 +59,7 @@ function createTestClient(options?: {
   onHarnessImageRecovery?: (
     request: HarnessImageRecoveryRequest
   ) => Promise<HarnessImageRecoveryResult>;
+  isAutoReviewRun?: () => boolean;
 }) {
   const logger = createSilentLogger();
   const onUpdateMessage = vi.fn();
@@ -94,6 +95,7 @@ function createTestClient(options?: {
     onRequestPermission,
     onHarnessImageImport: options?.onHarnessImageImport,
     onHarnessImageRecovery: options?.onHarnessImageRecovery,
+    isAutoReviewRun: options?.isAutoReviewRun,
   });
 
   // Simulate session startup by setting internal fields directly
@@ -268,6 +270,64 @@ it.each([
     expect(accepted).toEqual(mode === 'host-error' ? [request] : []);
   }
 });
+
+it.each([true, false])(
+  'accepts an image import without a host prompt only in an auto-review run (%s)',
+  async (autoReview) => {
+    const accepted: unknown[] = [];
+    const sha256 = 'a'.repeat(64);
+    const assets: HarnessImageImportResult = {
+      assets: [
+        {
+          path: `media/${sha256}.png`,
+          absolutePath: `/synthetic/media/${sha256}.png`,
+          sha256,
+          mimeType: 'image/png',
+          width: 1,
+          height: 1,
+          bytes: 68,
+        },
+      ],
+    };
+    const { client } = createTestClient({
+      agentType: 'molly',
+      isAutoReviewRun: () => autoReview,
+      onHarnessImageImport: async (request) => {
+        accepted.push(request);
+        return assets;
+      },
+    });
+    const selector: SessionMcpCatalogSelector = () => ({ servers: [], problems: [] });
+    selector.guard = { isCurrent: () => true, subscribe: () => () => {} };
+    // @ts-expect-error - production catalog wiring without a child process.
+    await client.buildMcpServers('/tmp/synthetic', Promise.resolve(selector));
+    const request = HarnessImageImportRequestSchema.parse({
+      version: 1,
+      runId: 'b'.repeat(64),
+      runtimeEpoch: randomUUID(),
+      productSessionId: 'test-session',
+      turnId: 'turn',
+      connectionId: 'images',
+      connectionRevision: 1,
+      serverName: 'molly',
+      toolName: 'molly_generate_image',
+      toolCallId: 'tc-auto',
+      requestDigest: 'c'.repeat(64),
+      images: [{ mimeType: 'image/png', data: 'AAAA' }],
+    });
+    const result = client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, {
+      sessionId: 'acp-test',
+      request,
+    });
+    if (autoReview) {
+      await expect(result).resolves.toEqual(assets);
+      expect(accepted).toEqual([request]);
+    } else {
+      await expect(result).rejects.toThrow(/^harness_image_import_refused$/);
+      expect(accepted).toEqual([]);
+    }
+  }
+);
 
 it('rejects a permission approved after the bound MCP catalog was revoked', async () => {
   const { client, onRequestPermission } = createTestClient({ agentType: 'molly' });

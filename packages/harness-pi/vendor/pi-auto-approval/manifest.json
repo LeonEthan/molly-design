@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "name": "pi-auto-approval",
+  "version": "0.1.1",
+  "source": "https://www.npmjs.com/package/pi-auto-approval/v/0.1.1",
+  "commit": "33de98cb79d8a9a23300e9826504e5b69c6e1b52",
+  "npmIntegrity": "sha512-EQpRlC63ryzJWh2hYgnzyTtoAWfznft45C0fox1G/4qm8RsANRKS/CTGc0/A5mWVs7KeEp/w44jeW7HvJxnoOQ==",
+  "upstreamFiles": {
+    "src/prompt.ts": "164bc72f54e93ad5c0a53f475be2a9fcdb3db565be095601e01523e76d75771a",
+    "src/classifier.ts": "bb62b13f6add30841bdde6a9120a4fc048385477212cf5429dc3160507440aa2",
+    "src/context-projection.ts": "2f1aa1fe5ef63bb9ab9196a9db8469c93da88ff2c7b417cef2fcf3c95ef2910f",
+    "src/common.ts": "90d1ab1731d85aaddabdb1180f27733fa15b837efc0352afa582eec0981779fd"
+  },
+  "license": "Apache-2.0",
+  "licenseFile": "LICENSE",
+  "licenseSha256": "32b6006d3585723ebe405817736d91bc016e79615fc2ba538b3f6737b25a58da",
+  "entry": "review.ts",
+  "adaptedSha256": "77468bf5d168b68147a9f2bb08f412724a38d899ebd35c25f5df43c0fb7cc797",
+  "dependencies": {},
+  "selectedTools": [],
+  "selectedCommands": [],
+  "adaptations": [
+    "Select only the reviewer prompt, JSON decision parser and context projection; omit the tool_call hook, /auto-approval command, config files, audit log, model selector, provider attribution and human-approval UI.",
+    "Molly calls the classifier for auto-review escalations (unknown network domains, commands outside the OS sandbox, file access outside the workspace) and first public browser site grants through its own journaled session-model runtime.",
+    "State the sandbox context in the reviewer prompt; drop configurable allow/deny/environment guidance.",
+    "Project context from Pi session branch entries passed by the host; render image parts as [image].",
+    "Use repository formatting and single quotes.",
+    "Describe task-scoped public design research separately from purchases, publishing and account changes; retain host guards and bounded run/epoch grants."
+  ],
+  "activation": "Embedded Pi auto-review permission mode only; a deny, failure or timeout falls back to the user's prompt."
+}

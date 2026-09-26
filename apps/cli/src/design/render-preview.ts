@@ -37,6 +37,7 @@ import {
   AuthoringSnapshotError,
   collectAuthoring,
   intakeAuthoring,
+  type AssetAdmissionFailure,
 } from '@molly/design-authoring';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, readdir, unlink } from 'node:fs/promises';
@@ -86,7 +87,7 @@ export interface DesignPreviewContext {
 
 export type DesignPreviewResult =
   | { status: 'rendered'; path: string; width: number; height: number; bytes: number }
-  | { status: 'refused'; error: string };
+  | { status: 'refused'; error: string; assetFailure?: AssetAdmissionFailure };
 
 /** Re-exported so a caller of the preview path finds the queue interface where it always was. */
 export type { DesignRenderQueue };
@@ -100,7 +101,7 @@ export type DesignPreviewPayloadResult =
       height: number;
       sourceIdentity?: string;
     }
-  | { status: 'refused'; error: string };
+  | { status: 'refused'; error: string; assetFailure?: AssetAdmissionFailure };
 
 export type ObservedPreviewResult = (
   | DesignPreviewPayloadResult
@@ -169,9 +170,14 @@ export async function buildPreviewPayload(
           'Files changed during observation; refresh when a valid draft is available.'
         );
     } catch (error) {
-      return refused(
-        `${error instanceof AuthoringSnapshotError ? 'the project was rejected' : 'collecting the project failed'}: ${errorMessage(error)}`
-      );
+      return {
+        ...refused(
+          `${error instanceof AuthoringSnapshotError ? 'the project was rejected' : 'collecting the project failed'}: ${errorMessage(error)}`
+        ),
+        ...(error instanceof AuthoringSnapshotError && error.assetFailure
+          ? { assetFailure: error.assetFailure }
+          : {}),
+      };
     }
 
     observedIdentity = snapshotIdentity(snapshot);
@@ -179,9 +185,13 @@ export async function buildPreviewPayload(
       return { status: 'unchanged', sourceIdentity: observation.previousSourceIdentity };
     const intake = intakeAuthoring(ARTWORK_ENTRY, snapshot);
     if (intake.status === 'invalid') {
-      return refused(
-        describeDiagnostics(intake.diagnostics.map(({ code, message }) => ({ code, message })))
-      );
+      const assetFailure = intake.diagnostics.find(
+        (diagnostic) => diagnostic.assetFailure
+      )?.assetFailure;
+      return {
+        ...refused(describeDiagnostics(intake.diagnostics)),
+        ...(assetFailure ? { assetFailure } : {}),
+      };
     }
     if (intake.status === 'unsupported') {
       return refused(

@@ -116,20 +116,31 @@ describe('closed extension registrations', () => {
     const loader = new MollyResourceLoader({
       extensions: approved,
       readBeforeEditReminder: 'Read first.',
+      hostTime: {
+        now: () => new Date('2026-09-26T06:46:00.000Z'),
+        resolveTimeZone: () => 'America/Los_Angeles',
+      },
     });
     approved.extensions.reverse();
     const loaded = loader.getExtensions().extensions;
     expect(loaded.map((item) => item.path)).toEqual([
       'first',
       'second',
-      '<molly-read-before-edit-v1>',
+      '<molly-prompt-context-v1>',
     ]);
     expect(loaded.flatMap((item) => [...item.tools.keys()])).toEqual(['question', 'lookup']);
     expect(approved.extensions.map((item) => item.path)).toEqual(['second', 'first']);
     const hook = loaded[2]!.handlers.get('before_agent_start')![0]!;
-    expect(await hook({ systemPrompt: 'Approved context' })).toEqual({
-      systemPrompt: 'Approved context\n\nRead first.',
+    const event = { systemPrompt: 'Approved context' };
+    const result = await hook(event);
+    expect(result).toEqual({
+      systemPrompt: expect.stringMatching(/^Approved context\n\nHost time at prompt start/),
     });
+    expect(result).toEqual({
+      systemPrompt: expect.stringContaining('UTC time: 2026-09-26T06:46:00.000Z'),
+    });
+    expect(result).toEqual({ systemPrompt: expect.stringMatching(/\n\nRead first\.$/) });
+    expect(event).toEqual({ systemPrompt: 'Approved context' });
   });
 
   it('refuses a partially loaded extension set', () => {

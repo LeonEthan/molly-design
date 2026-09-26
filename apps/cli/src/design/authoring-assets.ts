@@ -8,13 +8,10 @@
  * could drift into accepting different MIME types.
  */
 
-import {
-  sniffStaticV1FontMime,
-  sniffStaticV1ImageMime,
-} from '../../../../packages/design-bento/vendor/packages/contracts/src/static-v1';
+import { describeAssetAdmissionFailure, inspectAssetAdmission } from '@molly/design-authoring';
 
 /** Matches the design store's per-asset cap (`store.ts` `designInput`). */
-export const MAX_ASSET_BYTES = 16 * 1024 * 1024;
+export { MAX_ASSET_BYTES } from '@molly/design-authoring';
 
 /**
  * The store admits exactly these MIME types, sniffed from the bytes themselves
@@ -24,10 +21,9 @@ export const MAX_ASSET_BYTES = 16 * 1024 * 1024;
 export function buildAssetDataUris(assets: Map<string, Uint8Array>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [hash, bytes] of assets) {
-    const mime = sniffStaticV1ImageMime(bytes) ?? sniffStaticV1FontMime(bytes);
-    if (mime === null) throw Error(`unsupported asset bytes for ${hash}`);
-    if (bytes.byteLength > MAX_ASSET_BYTES) throw Error(`asset exceeds 16 MiB: ${hash}`);
-    out[hash] = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
+    const admission = inspectAssetAdmission(bytes, `asset:${hash}`);
+    if (!admission.ok) throw Error(describeAssetAdmissionFailure(admission.failure));
+    out[hash] = `data:${admission.mime};base64,${Buffer.from(bytes).toString('base64')}`;
   }
   return out;
 }

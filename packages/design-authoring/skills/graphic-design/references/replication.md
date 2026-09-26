@@ -7,7 +7,10 @@ never the source image pasted back as a background.
 
 Also use [general-poster.md](general-poster.md) for composition judgment and
 [graphic-canvas-profile.md](graphic-canvas-profile.md) before choosing native
-element semantics.
+element semantics. Follow the reconstruction branch and research rule in
+[the main Skill](../SKILL.md#required-workflow). Use
+[layered-workflow.md](layered-workflow.md) for complete raster-object techniques
+with the prescribed reference as the selected composition.
 
 ## Establish reference geometry
 
@@ -54,14 +57,20 @@ declares the needed render behavior and edit level:
   active text model requires it;
 - redraw flat blocks, rules, and simple geometry with supported editable
   primitives (`kind: shape` or `kind: line`);
-- extract photographs, product shots, textures, scenes, and other genuinely
-  raster regions into tight local crops under `media/`;
+- rebuild photographs, product shots, textures, scenes, and other genuinely
+  raster objects as separate image layers under `media/`. With image tools,
+  regenerate each object completely from the reference (see
+  [layered-workflow.md](layered-workflow.md)), because a crop keeps holes where
+  other objects overlapped it. Without them, extract tight crops and report the
+  holes and merged objects this leaves;
+- use a supplied delivery asset (a logo or product photo provided separately)
+  as supplied rather than regenerating it;
 - keep raster aspect ratios faithful and use supported `fit` or `crop` behavior;
 - do not claim native icons, tables, charts, masks, or other compound semantics
   merely because some external catalogue documents them.
 
-A crop may contain photographic content. Do not use a large crop containing
-rebuildable text or flat graphics to simulate editability. If the required
+A layer may contain photographic content. Do not use a large crop or layer
+containing rebuildable text or flat graphics to simulate editability. If the required
 semantic element is not Active, choose an explicitly supported editable
 decomposition or report the limitation.
 
@@ -82,7 +91,7 @@ record of material deviations that affect fidelity or editability.
 
 ## Visual fidelity
 
-The optional `scripts/finalize.mjs` helper checks syntax; it does not establish
+The optional `scripts/finalize.mjs` helper checks structure and assets; it does not establish
 visual fidelity. When rendering with `molly_render_preview`, open the resulting
 PNG with an actual image-reading tool. Useful questions include:
 
@@ -91,8 +100,8 @@ PNG with an actual image-reading tool. Useful questions include:
 - Are alignment, spacing, layering, and color consistent with the reference?
 - Are missing objects and material fidelity differences understood?
 
-Choose review depth and iterations according to the task. View updated renders
-when needed to judge edits; no fixed review count or analysis sequence applies.
+Choose useful inspection methods and iterations within the user's constraints.
+Follow the main workflow's native review and repair loop after visual changes.
 If `molly_render_preview` is absent, only that tool is unavailable; assess other
 image-reading and rendering capabilities actually available to your Agent.
 Report actual inspection and remaining source-evidence or capability limits

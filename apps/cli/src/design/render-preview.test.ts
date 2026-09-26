@@ -170,6 +170,37 @@ const renderingQueue = (onPayload?: (payload: Record<string, unknown>) => void):
   });
 
 describe('buildPreviewPayload', () => {
+  it.each([false, true])(
+    'preserves a typed asset-size diagnostic (observation: %s)',
+    async (observe) => {
+      const { workdir } = createHarness();
+      const bytes = Buffer.alloc(16_777_217);
+      bytes.set(syntheticPng(8, 8, [31, 107, 138]));
+      writeFileSync(path.join(workdir, 'media', 'pic.png'), bytes);
+      const built = observe
+        ? await buildPreviewPayload(workdir, {})
+        : await buildPreviewPayload(workdir);
+      expect(built).toMatchObject({
+        status: 'refused',
+        assetFailure: {
+          code: 'asset_too_large',
+          path: 'media/pic.png',
+          actualBytes: 16_777_217,
+          limitBytes: 16_777_216,
+        },
+      });
+    }
+  );
+
+  it('preserves the asset path and expected kind for unsupported bytes', async () => {
+    const { workdir } = createHarness();
+    writeFileSync(path.join(workdir, 'media', 'pic.png'), 'not an image');
+    expect(await buildPreviewPayload(workdir)).toMatchObject({
+      status: 'refused',
+      assetFailure: { code: 'asset_format_unsupported', path: 'media/pic.png', kind: 'image' },
+    });
+  });
+
   it('imports the project through the same intake the post-turn collection uses', async () => {
     const { workdir } = createHarness();
     const built = await buildPreviewPayload(workdir);

@@ -72,7 +72,7 @@ const provider = createServer(async (req, res) => {
           )
       );
       assert(referenceDelivered, 'reference image bytes must reach the native provider');
-      const skillPath = messages.match(/Design format and optional helpers: (.+?SKILL\.md)/)?.[1];
+      const skillPath = messages.match(/Before design work, read the design skill: (.+?SKILL\.md)/)?.[1];
       assert(skillPath, 'packaged skill location must reach the native prompt');
       deliveredSkillPath = skillPath;
       content = [

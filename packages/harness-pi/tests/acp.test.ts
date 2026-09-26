@@ -29,6 +29,8 @@ import { mcpToolName } from '../src/mcp-bridge';
 import { createApprovedTools, hashToolset } from '../src/approved-tools';
 import type { ImageRecoveryProvider } from '../src/image-recovery-tool';
 import { RunJournal } from '../src/run-journal';
+import { createAutoReviewApproval } from '../src/auto-review';
+import { decideAutoReview } from '../src/auto-review-policy';
 import { ToolOperationJournal } from '../src/tool-operation-journal';
 import {
   MOLLY_BUILTIN_MCP_CONNECTION,
@@ -774,17 +776,17 @@ describe('owned ACP boundary', () => {
     }
   });
   it.each([
-    { mode: '--lose-response', reason: 'mcp_outcome_unknown', state: 'outcome_unknown' },
-    { mode: '--reject-image', reason: 'paid_retry_requires_user', state: 'failed' },
+    { mode: '--lose-response', state: 'outcome_unknown' },
+    { mode: '--reject-image', state: 'failed' },
   ])(
-    'interrupts native inference after $mode instead of asking the model to retry',
-    async ({ mode, reason, state }) => {
+    'returns $mode to the model as a tool result and continues native inference',
+    async ({ mode, state }) => {
       const responses = [
         fauxAssistantMessage(
           fauxToolCall('molly_generate_image', { prompt: 'Synthetic' }, { id: 'unknown-image' }),
           { stopReason: 'toolUse', timestamp: 1 }
         ),
-        fauxAssistantMessage('Must not request a second inference', { timestamp: 2 }),
+        fauxAssistantMessage('Agent decides after the tool error', { timestamp: 2 }),
       ];
       const f = await fixture(responses, async () => true, [
         {
@@ -805,14 +807,11 @@ describe('owned ACP boundary', () => {
         legacyHistoryMayContainKey: false,
       };
       try {
-        await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_interrupted');
-        expect((await f.journal.read(f.snapshot.runId)).outcome).toMatchObject({
-          status: 'interrupted',
-          reason,
-        });
-        expect(responses.map((response) => response.content)).toEqual([
-          [{ type: 'text', text: 'Must not request a second inference' }],
-        ]);
+        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+        expect(responses).toEqual([]);
+        expect(f.messages.at(-1)).toContainEqual(
+          expect.objectContaining({ role: 'toolResult', toolCallId: 'unknown-image' })
+        );
         const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
         expect(
           (await operations.read(operations.operationId(f.snapshot.runId, 'unknown-image'))).state
@@ -868,13 +867,13 @@ describe('owned ACP boundary', () => {
     }
   });
   it.each([
-    { mode: '--reject-image', state: 'failed', reason: 'paid_retry_requires_user' },
-    { mode: '--bad-image', state: 'outcome_unknown', reason: 'mcp_outcome_unknown' },
-    { mode: '--resource-mismatch', state: 'outcome_unknown', reason: 'mcp_outcome_unknown' },
-    { mode: '--resource-lost', state: 'outcome_unknown', reason: 'mcp_outcome_unknown' },
+    { mode: '--reject-image', state: 'failed' },
+    { mode: '--bad-image', state: 'outcome_unknown' },
+    { mode: '--resource-mismatch', state: 'outcome_unknown' },
+    { mode: '--resource-lost', state: 'outcome_unknown' },
   ])(
-    'ends external paid inference for $mode without a model retry',
-    async ({ mode, state, reason }) => {
+    'returns external paid $mode to the model as a tool error without an automatic retry',
+    async ({ mode, state }) => {
       const callId = 'external-paid-call';
       const responses = [
         fauxAssistantMessage(
@@ -885,7 +884,7 @@ describe('owned ACP boundary', () => {
           ),
           { stopReason: 'toolUse', timestamp: 1 }
         ),
-        fauxAssistantMessage('Must remain unconsumed', { timestamp: 2 }),
+        fauxAssistantMessage('Agent decides after the tool error', { timestamp: 2 }),
       ];
       const f = await fixture(responses, async () => true, [
         {
@@ -907,14 +906,8 @@ describe('owned ACP boundary', () => {
         },
       ]);
       try {
-        await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_interrupted');
-        expect((await f.journal.read(f.snapshot.runId)).outcome).toMatchObject({
-          status: 'interrupted',
-          reason,
-        });
-        expect(responses.map((response) => response.content)).toEqual([
-          [{ type: 'text', text: 'Must remain unconsumed' }],
-        ]);
+        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+        expect(responses).toEqual([]);
         const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
         expect(
           await operations.read(operations.operationId(f.snapshot.runId, callId))
@@ -941,7 +934,7 @@ describe('owned ACP boundary', () => {
       ).map((outcome) => ({ builtin, outcome }))
     )
   )(
-    'fences image import until the owning host settles (builtin=$builtin, $outcome)',
+    'settles image import through the owning host before the Agent continues (builtin=$builtin, $outcome)',
     async ({ builtin, outcome }) => {
       const serverName = builtin ? 'molly' : 'external-images';
       const connectionId = builtin ? '00000000-0000-4000-8000-000000000001' : 'external-images';
@@ -1026,15 +1019,8 @@ describe('owned ACP boundary', () => {
           legacyHistoryMayContainKey: false,
         };
       try {
-        if (succeeded) {
-          expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-          expect(JSON.stringify(f.messages)).toContain(asset.absolutePath);
-        } else {
-          await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_interrupted');
-          expect(responses.map((response) => response.content)).toEqual([
-            [{ type: 'text', text: 'Imported' }],
-          ]);
-        }
+        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+        if (succeeded) expect(JSON.stringify(f.messages)).toContain(asset.absolutePath);
         expect(received).toEqual(
           outcome === 'no-image' || outcome === 'linked-denied'
             ? []
@@ -1071,10 +1057,24 @@ describe('owned ACP boundary', () => {
           await operations.read(operations.operationId(f.snapshot.runId, 'import-call'))
         ).toMatchObject({
           state: succeeded ? 'succeeded' : 'outcome_unknown',
+          ...(!succeeded
+            ? { failureStage: outcome === 'linked-denied' ? 'dispatch' : 'import' }
+            : {}),
           connectionId,
           connectionRevision: 4,
           assetDigests: succeeded ? [sha256] : [],
         });
+        expect(responses).toEqual([]);
+        expect(
+          await readFile(
+            join(
+              f.input.privateRoot,
+              'operations',
+              `${operations.operationId(f.snapshot.runId, 'import-call')}.json`
+            ),
+            'utf8'
+          )
+        ).not.toContain('SYNTHETIC_SECRET_MUST_NOT_PERSIST');
         expect(approvals).toEqual([
           `${serverName}/molly_generate_image`,
           ...(linked ? [`${serverName}/resources/read`] : []),
@@ -1101,6 +1101,65 @@ describe('owned ACP boundary', () => {
       }
     }
   );
+  it('reviews an auto-review escalation with the session model before running it', async () => {
+    const responses = [
+      fauxAssistantMessage(
+        fauxToolCall(
+          'write',
+          { path: '../outside-workspace.txt', content: 'synthetic' },
+          { id: 'escalated-write' }
+        ),
+        { stopReason: 'toolUse', timestamp: 1 }
+      ),
+      fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 2 }),
+      fauxAssistantMessage('Done', { timestamp: 3 }),
+    ];
+    const asked: string[] = [];
+    let adapter: MollyAcpAdapter | undefined;
+    const f = await fixture(responses, async (request) => {
+      const current = adapter!;
+      return createAutoReviewApproval({
+        mode: () => current.currentRunScope?.permissionMode,
+        decide: (pending) =>
+          decideAutoReview(pending, {
+            cwd: f.input.cwd,
+            writableRoots: [f.input.cwd],
+            deniedReadRoots: [],
+            sandboxAvailable: false,
+          }),
+        review: (subject, signal) => current.reviewEscalation(subject, signal),
+        record: (pending, source, decision) =>
+          current
+            .recordApproval({
+              toolCallId: pending.toolCallId,
+              tool: pending.name,
+              source,
+              decision,
+            })
+            .then(() => true),
+        askUser: async (pending) => {
+          asked.push(pending.name);
+          return false;
+        },
+      })(request);
+    });
+    adapter = f.adapter;
+    f.snapshot.permissionMode = 'auto-review';
+    try {
+      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+      expect(responses).toEqual([]);
+      expect(asked).toEqual([]);
+      expect(JSON.stringify(f.messages)).toContain('Write outside the workspace');
+      await expect(
+        readFile(join(f.input.cwd, '..', 'outside-workspace.txt'), 'utf8')
+      ).resolves.toBe('synthetic');
+      expect((await f.journal.read(f.snapshot.runId)).approvals).toEqual([
+        { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
+      ]);
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
   it('persists native settlement and rejects a repeated dispatch identity', async () => {
     const f = await fixture();
     try {
@@ -1173,7 +1232,7 @@ describe('owned ACP boundary', () => {
     }
   });
 
-  it('cancels an image resource approval without reading or allowing a paid retry', async () => {
+  it('cancels an image resource approval without reading, importing or continuing inference', async () => {
     let notifyRequested!: () => void;
     const requested = new Promise<void>((resolve) => {
       notifyRequested = resolve;
@@ -1229,7 +1288,9 @@ describe('owned ACP boundary', () => {
       }
     );
     try {
-      const pending = expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_interrupted');
+      const pending = expect(f.adapter.prompt(f.request)).resolves.toMatchObject({
+        stopReason: 'cancelled',
+      });
       await requested;
       await f.adapter.cancel({ sessionId: f.request.sessionId });
       await pending;

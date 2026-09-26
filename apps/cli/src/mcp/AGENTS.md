@@ -47,7 +47,10 @@ Parent instructions apply.
   `packages/shared/AGENTS.md`.
 - `molly_browser`: gate list/call on active local design run; bind page/media to
   Session. Expose flat required-`kind` schema to models; validate the strict
-  action union before dispatch. See browser docs.
+  action union before dispatch. See browser docs in the local agent records.
+- `molly_render_preview` forwards asset diagnostics only from the validated local
+  RPC field, as fixed text and private MCP metadata. Never infer trusted metadata
+  from error strings; invalid fields follow the existing refusal path.
 
 ## Session and Task tool contracts
 
@@ -85,8 +88,9 @@ Parent instructions apply.
   purpose. The proposal writer hydrates the Session doc, flushes locally, and confirms remote sync
   before `ok`.
 
-- Image generate/edit use the user-selected model with no product default. Edits upload
-  bounded workspace files through the existing image transport; results are assets only,
+- Image generate/edit use the user-selected model with no product default. Edits send
+  bounded workspace files as ordered JSON data URLs; optional `background`/`output_format`
+  pass through, refusing transparent JPEG before dispatch. Results are assets only,
   never artwork commits. Preserve upstream failures without automatic paid retries.
   Return the private image receipt with dispatch/outcome facts and successful asset
   digests; transport loss or post-response import failure is not proof of non-dispatch.

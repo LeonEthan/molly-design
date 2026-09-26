@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, readdir, rename, unlink } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import {
@@ -17,7 +17,6 @@ const RecordSchema = PaidOperationSchema.extend({
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),
-  requiresExplicitRetry: z.boolean().optional(),
   authorization: z.discriminatedUnion('kind', [
     z
       .object({
@@ -36,6 +35,7 @@ const RecordSchema = PaidOperationSchema.extend({
       .strict(),
   ]),
   requestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  failureStage: z.enum(['dispatch', 'receipt', 'import', 'persistence']).optional(),
 }).strict();
 type OperationReceipt = z.infer<typeof RecordSchema>;
 
@@ -127,22 +127,6 @@ export class ToolOperationJournal {
   ): Promise<unknown> {
     const operationId = this.operationId(input.snapshot.runId, input.toolCallId);
     const file = join(this.directory, `${operationId}.json`);
-    await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    for (const entry of await readdir(this.directory)) {
-      if (
-        !/^[a-f0-9]{64}\.json$/.test(entry) ||
-        entry === `${operationId}.json` ||
-        entry === `${parentOperationId}.json`
-      )
-        continue;
-      const prior = await this.read(entry.slice(0, -5));
-      // A new call ID, tool or connection does not establish a new user operation.
-      // The host must end this run and accept explicit user input before trying again.
-      if (prior.runId === input.snapshot.runId && prior.state === 'outcome_unknown')
-        throw new Error('harness_mcp_outcome_unknown');
-      if (prior.runId === input.snapshot.runId && prior.requiresExplicitRetry)
-        throw new Error('harness_paid_retry_requires_user');
-    }
     const record = RecordSchema.parse({
       schemaVersion: 1,
       operationId,
@@ -164,6 +148,7 @@ export class ToolOperationJournal {
     await this.write(file, record, true);
     record.state = 'dispatched';
     await this.write(file, record);
+    let failureStage: NonNullable<OperationReceipt['failureStage']> = 'dispatch';
     try {
       let readsOpen = true;
       let pendingReads: Promise<unknown> = Promise.resolve();
@@ -196,6 +181,7 @@ export class ToolOperationJournal {
         await pendingReads;
       }
       if (input.builtinImage) {
+        failureStage = 'receipt';
         const parsed = ImageOperationResultSchema.safeParse(
           result &&
             typeof result === 'object' &&
@@ -209,28 +195,28 @@ export class ToolOperationJournal {
         if (!parsed.success) throw new Error('harness_image_receipt_missing');
         record.state = parsed.data.state;
         record.assetDigests = input.importImages ? [] : parsed.data.assetDigests;
-        record.requiresExplicitRetry = parsed.data.dispatched && parsed.data.state !== 'succeeded';
         if (record.state === 'succeeded' && input.importImages) {
           if (!parsed.data.dispatched) throw new Error('harness_image_receipt_invalid');
+          failureStage = 'import';
           const imported = HarnessImageImportResultSchema.parse(await input.importImages(result));
           record.assetDigests = imported.assets.map((asset) => asset.sha256);
           result = {
             content: [{ type: 'text', text: JSON.stringify({ importedAssets: imported.assets }) }],
           };
         }
+        failureStage = 'persistence';
         await this.write(file, record);
-        if (parsed.data.state === 'outcome_unknown') throw new Error('harness_mcp_outcome_unknown');
-        // Return a known failure unchanged; the adapter interrupts paid retries below.
         return result;
       }
       record.state =
         result && typeof result === 'object' && 'isError' in result && result.isError === true
           ? 'failed'
           : 'succeeded';
-      record.requiresExplicitRetry = input.externalImage === true && record.state === 'failed';
       if (input.externalImage && input.importImages && record.state === 'succeeded') {
+        failureStage = 'import';
         const imported = HarnessImageImportResultSchema.parse(await input.importImages(result));
         record.assetDigests = imported.assets.map((asset) => asset.sha256);
+        failureStage = 'persistence';
         await this.write(file, record);
         // Imported assets are available for an explicit native read. Do not present a
         // server-authored path/receipt as if it came from the owning design service.
@@ -238,10 +224,12 @@ export class ToolOperationJournal {
           content: [{ type: 'text', text: JSON.stringify({ importedAssets: imported.assets }) }],
         };
       }
+      failureStage = 'persistence';
       await this.write(file, record);
       return result;
     } catch {
       record.state = 'outcome_unknown';
+      record.failureStage = failureStage;
       // If settlement cannot be persisted, the durable dispatched receipt stays unknown.
       await this.write(file, record).catch(() => undefined);
       throw new Error('harness_mcp_outcome_unknown');

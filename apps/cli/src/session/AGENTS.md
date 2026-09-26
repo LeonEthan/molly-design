@@ -59,8 +59,8 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 - Keep JSON-RPC/transport matching in `acp-error-classification.ts`: disposed/stale `-32603` is
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
 - Legacy: retry once before ACP output. Embedded Molly: exact native restore/settlement;
-  never replay prompts or history. Design runs use `browse-task-v1`; other runs
-  use `ask-every-tool-v1`.
+  never replay prompts or history. Design runs use `browse-task-v1`, others
+  `ask-every-tool-v1`; run snapshots freeze `ask`/`auto-review` mode.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

@@ -50,7 +50,8 @@ Files: [README.md](README.md). Scopes:
 - Static HTML runs `allow-scripts`-only from a policy-owned `srcdoc`; truncated
   documents are never executable and static frames die with their tab.
 - Preview comment writes use `runtime.writer.mutatePreviewVisualComments`, never store `setState`.
-- Reattach hidden Agent pages without navigation; use takeover state.
+- Reattach hidden Agent pages without navigation; use takeover state. Keep the native
+  surface bridge stable across renders; same-page state must preserve address drafts.
 
 - Keep Stop reachable during permissions/questions. Gate paused Retry Stop/Continue
   on `sessionStopControl: 1`; unknown steer has no resend. Only execution/artifact

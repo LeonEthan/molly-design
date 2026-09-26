@@ -1,4 +1,5 @@
 import { readSessionHistory } from '@molly/shared/session-data';
+import { formatDesignAssetFailure } from '@molly/shared/local-machine-rpc';
 import { requestDesignResubmit, resolveDesignResubmit } from './design-tools';
 import { spawn } from 'child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -138,6 +139,8 @@ import {
   generateImageBytes,
   editImageBytes,
   IMAGE_EDIT_MAX_INPUTS,
+  IMAGE_BACKGROUNDS,
+  IMAGE_OUTPUT_FORMATS,
 } from '@/mcp/image-generation';
 import {
   HARNESS_INLINE_IMAGE_RESULT_META,
@@ -293,6 +296,18 @@ const GenerateImageToolInputSchema = z
       .optional()
       .describe(
         'Optional output size passed through to the configured provider, for example "1024x1024". Omit to use the provider default.'
+      ),
+    background: z
+      .enum(IMAGE_BACKGROUNDS)
+      .optional()
+      .describe(
+        'Optional provider background. Use "transparent" for a standalone layer with real alpha (requires PNG output); omit to use the provider default.'
+      ),
+    output_format: z
+      .enum(IMAGE_OUTPUT_FORMATS)
+      .optional()
+      .describe(
+        'Optional provider output format: "png" (supports transparency) or "jpeg". Omit to use the provider default.'
       ),
   })
   .strict();
@@ -3987,6 +4002,8 @@ export function buildMollyMcpServer(
         settings: connection,
         prompt: args.prompt,
         ...(args.size === undefined ? {} : { size: args.size }),
+        ...(args.background === undefined ? {} : { background: args.background }),
+        ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
         workdir: gate.artworkWorkdir,
         transport: (async (request) => {
           if (request.method === 'POST') dispatched = true;
@@ -4058,7 +4075,7 @@ export function buildMollyMcpServer(
     {
       title: 'Generate an image through Molly image connection',
       description:
-        "Generate one image with the image connection configured in Molly settings and write it into the current session workspace as a design asset. Use this for product shots, concept art, covers, illustrations, and other raster assets for the design you are building; it is available in design sessions only, and only when the user has configured and enabled an image connection. Returns an artwork-relative asset path (under media/ in the design authoring directory), its absolute path, sha256 and pixel dimensions. Reference that relative path from design.pptd in the authoring directory. Each call is a paid generation on the user's own account and is never retried automatically. Use an actual image-reading tool to judge outputs and choose further work according to the task. If this tool is absent, only this generation tool is unavailable; assess other Agent capabilities from the tools actually available. Never ask the user to paste an API key in chat.",
+        "Generate one image with the image connection configured in Molly settings and write it into the current session workspace as a design asset. Use this for product shots, concept art, covers, illustrations, and other raster assets for the design you are building; it is available in design sessions only, and only when the user has configured and enabled an image connection. Returns an artwork-relative asset path (under media/ in the design authoring directory), its absolute path, sha256 and pixel dimensions. Reference that relative path from design.yaml in the authoring directory. Each call is a paid generation on the user's own account and is never retried automatically. Use an actual image-reading tool to judge outputs and choose further work according to the task. If this tool is absent, only this generation tool is unavailable; assess other Agent capabilities from the tools actually available. Never ask the user to paste an API key in chat.",
       inputSchema: GenerateImageToolInputSchema,
     },
     runImageTool
@@ -4068,7 +4085,7 @@ export function buildMollyMcpServer(
     {
       title: 'Edit images through Molly image connection',
       description:
-        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Uploads the actual files to the user's configured OpenAI Images-compatible /images/edits endpoint using their explicitly selected model. Supported input formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
+        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Sends the actual files as data URLs in a JSON request to the user's configured OpenAI Images-compatible /images/edits endpoint using their explicitly selected model. Supported input formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
       inputSchema: EditImageToolInputSchema,
     },
     runImageTool
@@ -4108,7 +4125,7 @@ export function buildMollyMcpServer(
     {
       title: 'Render a preview of the current design project',
       description:
-        "Render the design session's current project (design.pptd and its assets) to a PNG with the Molly desktop, and return the absolute path of the written file. Open the returned PNG with an actual image-reading tool to judge layout, spacing, overflow, and text fit, then continue editing as useful. Choose review depth and iterations for the task. It is available in design sessions only, and only while the user has Molly open: rendering is done by the desktop app, not by this process. It reads the project files as they are now; it does not save, commit, or change anything, so it is safe to call at any point mid-work. Each call renders one image of the whole canvas. If this tool is absent, only this rendering tool is unavailable; other Agent image capabilities may still be available. Rendering and review are not completion or commit gates.",
+        "Render the design session's current project (design.yaml and its assets) to a PNG with the Molly desktop, and return the absolute path of the written file. Open the returned PNG with an actual image-reading tool to judge layout, spacing, overflow, and text fit, then continue editing as useful. Choose review depth and iterations for the task. It is available in design sessions only, and only while the user has Molly open: rendering is done by the desktop app, not by this process. It reads the project files as they are now; it does not save, commit, or change anything, so it is safe to call at any point mid-work. Each call renders one image of the whole canvas. If this tool is absent, only this rendering tool is unavailable; other Agent image capabilities may still be available. Rendering and review are not completion or commit gates.",
       inputSchema: z.object({}).strict(),
     },
     async () => {
@@ -4127,7 +4144,16 @@ export function buildMollyMcpServer(
           );
         }
         const result = await requestDesignRenderPreview(ctx);
-        if (result.status === 'refused') return textResult(result.error, true);
+        if (result.status === 'refused')
+          return {
+            ...textResult(
+              result.assetFailure ? formatDesignAssetFailure(result.assetFailure) : result.error,
+              true
+            ),
+            ...(result.assetFailure
+              ? { _meta: { mollyDesignAssetFailure: result.assetFailure } }
+              : {}),
+          };
         return jsonTextResult({
           ok: true,
           path: result.path,

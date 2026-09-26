@@ -20,6 +20,7 @@ import {
   HarnessImageRecoveryRequestSchema,
   type HarnessImageRecoveryRequest,
   type HarnessImageRecoveryResult,
+  type MollyPermissionMode,
 } from '@molly/shared/embedded-harness';
 import {
   WorkerConfigSchema,
@@ -36,7 +37,7 @@ export class EmbeddedHarnessControl {
   private busy = false;
   private mcpConnections: McpCredentialBinding[] = [];
   private activeController?: AbortController;
-  private activeRun?: { runId: string; turnId: string };
+  private activeRun?: { runId: string; turnId: string; permissionMode?: MollyPermissionMode };
   private selectedMcp: readonly McpServer[] = [];
   private stopPromise?: Promise<void>;
   private stopOnce(): Promise<void> {
@@ -181,6 +182,11 @@ export class EmbeddedHarnessControl {
     return result;
   }
 
+  /** Auto-review runs approve image and recovery calls in the worker, without a host prompt. */
+  autoReviewActive(): boolean {
+    return !this.retired && this.busy && this.activeRun?.permissionMode === 'auto-review';
+  }
+
   /** Catalog ownership can revoke an idle or active worker, never retarget it. */
   async invalidate(): Promise<void> {
     this.retired = true;
@@ -224,6 +230,7 @@ export class EmbeddedHarnessControl {
   async prompt(input: {
     turnId: string;
     signal: AbortSignal;
+    permissionMode?: MollyPermissionMode;
     prepareMcp?: (preparation: HarnessMcpPreparation, signal: AbortSignal) => Promise<unknown>;
     prompt: (
       snapshot: ReturnType<typeof HarnessRunSnapshotSchema.parse>
@@ -249,6 +256,7 @@ export class EmbeddedHarnessControl {
       toolsetHash: this.binding.toolsetHash,
       pluginSetHash: this.binding.pluginSetHash,
       permissionProfileId: this.config.permissionProfileId,
+      ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
     });
     const controller = new AbortController();
     this.activeController = controller;
@@ -328,7 +336,11 @@ export class EmbeddedHarnessControl {
         })
       );
       controller.signal.throwIfAborted();
-      this.activeRun = { runId: snapshot.runId, turnId: snapshot.turnId };
+      this.activeRun = {
+        runId: snapshot.runId,
+        turnId: snapshot.turnId,
+        ...(snapshot.permissionMode ? { permissionMode: snapshot.permissionMode } : {}),
+      };
       const response = await input.prompt(snapshot);
       controller.signal.throwIfAborted();
       const outcome = HarnessRunOutcomeSchema.safeParse(response._meta?.mollyNativeOutcome);

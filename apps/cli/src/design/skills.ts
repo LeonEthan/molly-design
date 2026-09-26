@@ -274,5 +274,5 @@ function isWithin(root: string, candidate: string): boolean {
 /** Prompt pointer line for design turns (see message-handler wiring). */
 export function designSkillPointerLine(workdir: string, skill = 'graphic-design'): string {
   const skillDir = path.join(path.resolve(workdir), '.claude', 'skills', skill);
-  return `Design format and optional helpers: ${skillDir}/SKILL.md. Choose your own creative methods and review.`;
+  return `Before design work, read the design skill: ${skillDir}/SKILL.md. It covers the artwork format and design workflow; choose methods suited to the task.`;
 }

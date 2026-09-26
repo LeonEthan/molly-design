@@ -30,3 +30,20 @@ The owner reviewed the initial English and Chinese generative layered design
 Spec and replied “LGTM” on 2026-09-25. The approved revision was introduced by
 [PR #17](https://github.com/LeonEthan/molly-design/pull/17) at commit
 `1317a809`. Later changes to the workflow need their own approval record.
+
+## 2026-09-26 generative layered design workflow rewrite
+
+The owner approved the revised workflow before implementation. The revision
+requires the Agent to follow all nine stages and to research design-site visuals
+unless the user explicitly prescribes a concrete template or reference target
+to follow without additional inspiration and the inspected target suffices.
+It removes blanket permission to skip or freely reorder stages. This approval
+covered the English and Chinese workflow Spec revisions.
+
+## 2026-09-26 generative layered design closeout
+
+After reviewing the revised workflow and acceptance summary, the owner explicitly
+requested the three closeout actions: commit the work, consolidate acceptance
+records, and approve the current English and Chinese layered-design Spec
+revisions. This is approval of the stated workflow and boundaries, not proof
+that every future design run or distribution configuration will succeed.

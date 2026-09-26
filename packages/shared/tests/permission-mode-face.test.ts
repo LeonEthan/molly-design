@@ -43,7 +43,7 @@ describe('classifyPermissionModeFace', () => {
 
   it('renders model-reviewed approval modes as a short text label, neutral tone', () => {
     // Claude auto and Codex auto review both route approval prompts to a model.
-    for (const modeId of ['auto', 'agent-auto-review']) {
+    for (const modeId of ['auto', 'agent-auto-review', 'auto-review']) {
       expect(classifyPermissionModeFace(modeId)).toEqual({
         kind: 'auto',
         tone: 'neutral',

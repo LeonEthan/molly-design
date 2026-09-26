@@ -215,6 +215,37 @@ export type DesignRenderHostReport = z.infer<typeof DesignRenderHostReportSchema
  * on `ok` only inside this branch, so both halves stay exhaustively typed
  * instead of collapsing into one object with optional fields.
  */
+const DesignAssetFailurePathSchema = z
+  .string()
+  .max(512)
+  .regex(/^media\/[\p{L}\p{N}\p{M}_. ()@+-]+$/u)
+  .refine((value) => value !== 'media/.' && value !== 'media/..');
+
+export const DesignAssetFailureSchema = z.discriminatedUnion('code', [
+  z
+    .object({
+      code: z.literal('asset_too_large'),
+      path: DesignAssetFailurePathSchema,
+      actualBytes: z.number().int().min(16_777_217).max(Number.MAX_SAFE_INTEGER),
+      limitBytes: z.literal(16_777_216),
+    })
+    .strict(),
+  z
+    .object({
+      code: z.literal('asset_format_unsupported'),
+      path: DesignAssetFailurePathSchema,
+      kind: z.enum(['image', 'font', 'asset']),
+    })
+    .strict(),
+]);
+export type DesignAssetFailure = z.infer<typeof DesignAssetFailureSchema>;
+
+export function formatDesignAssetFailure(failure: DesignAssetFailure): string {
+  return failure.code === 'asset_too_large'
+    ? `asset_too_large: ${failure.path} (${failure.actualBytes} bytes; limit ${failure.limitBytes} bytes)`
+    : `asset_format_unsupported: ${failure.path} (${failure.kind})`;
+}
+
 const DesignRenderPreviewResultSchema = z.discriminatedUnion('ok', [
   z
     .object({
@@ -237,6 +268,7 @@ const DesignRenderPreviewResultSchema = z.discriminatedUnion('ok', [
        * result, not a transport error — nothing about it is unexpected.
        */
       error: z.string().trim().min(1).max(2000),
+      assetFailure: DesignAssetFailureSchema.optional(),
     })
     .strict(),
 ]);
@@ -341,11 +373,13 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('browser/execute'),
     ownerSessionId: SessionIdSchema,
-    params: z.object({
-      requestId: z.string().uuid(),
-      launchId: z.string().uuid(),
-      command: AgentBrowserCommandSchema,
-    }).strict(),
+    params: z
+      .object({
+        requestId: z.string().uuid(),
+        launchId: z.string().uuid(),
+        command: AgentBrowserCommandSchema,
+      })
+      .strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('browser/cancel'),
@@ -363,11 +397,13 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('browser/host'),
-    params: z.object({
-      reports: z.array(AgentBrowserHostReportSchema).max(8),
-      leases: z.array(AgentBrowserHostLeaseSchema).max(8),
-      takeovers: z.array(AgentBrowserHostLeaseSchema).max(8),
-    }).strict(),
+    params: z
+      .object({
+        reports: z.array(AgentBrowserHostReportSchema).max(8),
+        leases: z.array(AgentBrowserHostLeaseSchema).max(8),
+        takeovers: z.array(AgentBrowserHostLeaseSchema).max(8),
+      })
+      .strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('design/tool-hook'),

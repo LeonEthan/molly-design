@@ -984,7 +984,9 @@ export function isLocalSessionControlResponse(
             (item) =>
               isObjectRecord(item) &&
               isSessionFilePayload(item) &&
-              typeof item.downloadUrl === 'string'
+              (item.transport === 'local'
+                ? item.downloadUrl === undefined
+                : typeof item.downloadUrl === 'string' && URL.canParse(item.downloadUrl))
           )))
     );
   }

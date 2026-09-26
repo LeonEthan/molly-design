@@ -25,8 +25,22 @@ export function describeToolCall(
   if (name === 'bash') {
     const command =
       raw && 'command' in raw && typeof raw.command === 'string' ? raw.command : undefined;
+    const outside = raw && 'outside_sandbox' in raw && raw.outside_sandbox === true;
     // The existing pending-permission card displays only the title, not rawInput.
-    return { title: command ? `bash: ${command}` : name, kind: 'execute', rawInput: args };
+    return {
+      title: command ? `bash${outside ? ' (outside sandbox)' : ''}: ${command}` : name,
+      kind: 'execute',
+      rawInput: args,
+    };
+  }
+  if (name === 'network') {
+    const host = raw && 'host' in raw && typeof raw.host === 'string' ? raw.host : undefined;
+    const port = raw && 'port' in raw && typeof raw.port === 'number' ? `:${raw.port}` : '';
+    return {
+      title: `Network access: ${host ?? 'unknown host'}${port}`,
+      kind: 'fetch',
+      rawInput: args,
+    };
   }
   return { title: name, kind: 'other', rawInput: args };
 }

@@ -1,5 +1,5 @@
 import { PassThrough } from 'node:stream';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,8 +12,14 @@ import { PrivateControlPipe } from '../src/private-control-pipe';
 import { CancellationDeliveryTransport } from '../src/mcp-cancellation';
 import { ToolOperationJournal, type OperationResourceRead } from '../src/tool-operation-journal';
 
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:fs/promises')>();
+  return { ...original, rename: vi.fn(original.rename) };
+});
+
 const roots: string[] = [];
 afterEach(async () => {
+  vi.mocked(rename).mockReset();
   vi.useRealTimers();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
@@ -215,11 +221,14 @@ describe('side-effect dispatch fence', () => {
         const raw = JSON.parse(await readFile(join(f.directory, `${operationId}.json`), 'utf8'));
         expect(raw.state).toBe('dispatched');
         effects.push('sent');
-        throw new Error('upstream response lost');
+        throw new Error('PRIVATE_SYNTHETIC_TRANSPORT_SECRET');
       })
     ).rejects.toThrow('harness_mcp_outcome_unknown');
     const restored = new ToolOperationJournal(f.directory);
-    expect((await restored.read(operationId)).state).toBe('outcome_unknown');
+    expect(await restored.read(operationId)).toMatchObject({
+      state: 'outcome_unknown',
+      failureStage: 'dispatch',
+    });
     await expect(
       restored.dispatch(f.input, async () => {
         effects.push('replayed');
@@ -229,6 +238,9 @@ describe('side-effect dispatch fence', () => {
     expect(await readdir(f.directory)).toEqual([`${operationId}.json`]);
     expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
       'PRIVATE_SYNTHETIC_PROMPT'
+    );
+    expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+      'PRIVATE_SYNTHETIC_TRANSPORT_SECRET'
     );
   });
 
@@ -280,6 +292,42 @@ describe('side-effect dispatch fence', () => {
     expect(events).not.toContain('late');
   });
 
+  it.each(['missing', 'malformed', 'not-dispatched'] as const)(
+    'identifies an unusable built-in receipt without retaining its contents (%s)',
+    async (mode) => {
+      const f = await fixture();
+      const result = {
+        content: [{ type: 'text', text: 'PRIVATE_SYNTHETIC_RECEIPT_SECRET' }],
+        _meta: {
+          mollyImageOperation:
+            mode === 'missing'
+              ? undefined
+              : {
+                  version: 1,
+                  state: mode === 'malformed' ? 'PRIVATE_SYNTHETIC_RECEIPT_SECRET' : 'succeeded',
+                  dispatched: false,
+                  assetDigests: [],
+                },
+        },
+      };
+      await expect(
+        f.journal.dispatch(
+          { ...f.input, builtinImage: true, importImages: async () => ({ assets: [] }) },
+          async () => result
+        )
+      ).rejects.toThrow('harness_mcp_outcome_unknown');
+      const operationId = f.journal.operationId('run-1', 'call-1');
+      expect(await new ToolOperationJournal(f.directory).read(operationId)).toMatchObject({
+        state: 'outcome_unknown',
+        failureStage: 'receipt',
+        assetDigests: [],
+      });
+      expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+        'PRIVATE_SYNTHETIC_RECEIPT_SECRET'
+      );
+    }
+  );
+
   it('retains child and parent uncertainty even when the invoking callback swallows a read failure', async () => {
     const f = await fixture();
     await expect(
@@ -299,14 +347,13 @@ describe('side-effect dispatch fence', () => {
         'outcome_unknown'
       );
     }
-    await expect(
-      restored.dispatch({ ...f.input, toolCallId: 'retry' }, async () => {
-        throw new Error('must not dispatch');
-      })
-    ).rejects.toThrow('harness_mcp_outcome_unknown');
+    const next = { content: [] };
+    expect(await restored.dispatch({ ...f.input, toolCallId: 'next' }, async () => next)).toBe(
+      next
+    );
   });
 
-  it('fences declared external image failures after reload and ignores forged private receipts', async () => {
+  it('records declared external image failures, ignores forged private receipts and leaves the next call to the Agent', async () => {
     const f = await fixture();
     const result = {
       isError: true,
@@ -324,16 +371,13 @@ describe('side-effect dispatch fence', () => {
     const restored = new ToolOperationJournal(f.directory);
     expect(await restored.read(restored.operationId('run-1', 'call-1'))).toMatchObject({
       state: 'failed',
-      requiresExplicitRetry: true,
       assetDigests: [],
     });
     const effects: string[] = [];
-    await expect(
-      restored.dispatch({ ...f.input, toolCallId: 'new-call' }, async () => {
-        effects.push('retry');
-      })
-    ).rejects.toThrow('harness_paid_retry_requires_user');
-    expect(effects).toEqual([]);
+    await restored.dispatch({ ...f.input, toolCallId: 'new-call' }, async () => {
+      effects.push('agent retry');
+    });
+    expect(effects).toEqual(['agent retry']);
   });
 
   it.each([false, true])('records the returned tool outcome (isError=%s)', async (isError) => {
@@ -345,7 +389,7 @@ describe('side-effect dispatch fence', () => {
     );
   });
 
-  it('fences new call IDs and connections after unknown delivery, including after reload', async () => {
+  it('leaves new call IDs to the Agent after unknown delivery while never replaying the lost call', async () => {
     const f = await fixture();
     const effects: string[] = [];
     await expect(
@@ -356,28 +400,17 @@ describe('side-effect dispatch fence', () => {
     ).rejects.toThrow('harness_mcp_outcome_unknown');
     const restored = new ToolOperationJournal(f.directory);
     await expect(
-      restored.dispatch(
-        {
-          ...f.input,
-          toolCallId: 'different-call',
-          toolName: 'edit',
-          connectionId: 'another-connection',
-        },
-        async () => effects.push('automatic retry')
-      )
-    ).rejects.toThrow('harness_mcp_outcome_unknown');
+      restored.dispatch(f.input, async () => effects.push('replay'))
+    ).rejects.toMatchObject({ code: 'EEXIST' });
     await restored.dispatch(
-      {
-        ...f.input,
-        snapshot: { ...f.input.snapshot, runId: 'explicit-next-user-run' },
-      },
-      async () => effects.push('explicit new operation')
+      { ...f.input, toolCallId: 'different-call', toolName: 'edit' },
+      async () => effects.push('agent-chosen call')
     );
-    expect(effects).toEqual(['original', 'explicit new operation']);
+    expect(effects).toEqual(['original', 'agent-chosen call']);
   });
 
   it.each(['succeeded', 'failed', 'outcome_unknown'] as const)(
-    'persists the trusted image receipt (%s) without treating paid failures as retry permission',
+    'persists the trusted image receipt (%s) and returns it to the Agent as the tool result',
     async (state) => {
       const f = await fixture();
       const assetDigests = state === 'succeeded' ? ['1'.repeat(64)] : [];
@@ -388,30 +421,56 @@ describe('side-effect dispatch fence', () => {
           mollyImageOperation: { version: 1, state, dispatched: true, assetDigests },
         },
       };
-      const pending = f.journal.dispatch({ ...f.input, builtinImage: true }, async () => result);
-      if (state === 'outcome_unknown')
-        await expect(pending).rejects.toThrow('harness_mcp_outcome_unknown');
-      else expect(await pending).toBe(result);
+      expect(await f.journal.dispatch({ ...f.input, builtinImage: true }, async () => result)).toBe(
+        result
+      );
       const restored = new ToolOperationJournal(f.directory);
-      expect(await restored.read(restored.operationId('run-1', 'call-1'))).toMatchObject({
+      const receipt = await restored.read(restored.operationId('run-1', 'call-1'));
+      expect(receipt).toMatchObject({
         state,
         assetDigests,
       });
-      if (state !== 'succeeded') {
-        const effects: string[] = [];
-        await expect(
-          restored.dispatch({ ...f.input, toolCallId: 'new-id' }, async () => {
-            effects.push('repeated');
-          })
-        ).rejects.toThrow(
-          state === 'failed' ? 'harness_paid_retry_requires_user' : 'harness_mcp_outcome_unknown'
-        );
-        expect(effects).toEqual([]);
-      }
+      expect(receipt.failureStage).toBeUndefined();
     }
   );
 
-  it('settles a concurrent dispatch before deciding whether a subsequent effect is safe', async () => {
+  it('identifies a settlement write failure without losing the dispatched replay fence', async () => {
+    const f = await fixture();
+    const effects: string[] = [];
+    await expect(
+      f.journal.dispatch({ ...f.input, builtinImage: true }, async () => {
+        effects.push('sent');
+        vi.mocked(rename).mockRejectedValueOnce(new Error('PRIVATE_SYNTHETIC_FILESYSTEM_SECRET'));
+        return {
+          content: [],
+          _meta: {
+            mollyImageOperation: {
+              version: 1,
+              state: 'succeeded',
+              dispatched: true,
+              assetDigests: [],
+            },
+          },
+        };
+      })
+    ).rejects.toThrow('harness_mcp_outcome_unknown');
+    const restored = new ToolOperationJournal(f.directory);
+    const operationId = restored.operationId('run-1', 'call-1');
+    expect(await restored.read(operationId)).toMatchObject({
+      state: 'outcome_unknown',
+      failureStage: 'persistence',
+    });
+    await expect(
+      restored.dispatch(f.input, async () => effects.push('replayed'))
+    ).rejects.toMatchObject({ code: 'EEXIST' });
+    expect(effects).toEqual(['sent']);
+    expect(await readdir(f.directory)).toEqual([`${operationId}.json`]);
+    expect(await readFile(join(f.directory, `${operationId}.json`), 'utf8')).not.toContain(
+      'PRIVATE_SYNTHETIC_FILESYSTEM_SECRET'
+    );
+  });
+
+  it('serializes a concurrent dispatch behind the settling one', async () => {
     const f = await fixture();
     const entered = deferred();
     const release = deferred();
@@ -425,13 +484,12 @@ describe('side-effect dispatch fence', () => {
       })
     ).rejects.toThrow('harness_mcp_outcome_unknown');
     await entered.promise;
-    const second = expect(
-      f.journal.dispatch({ ...f.input, toolCallId: 'concurrent' }, async () => {
-        effects.push('retry');
-      })
-    ).rejects.toThrow('harness_mcp_outcome_unknown');
+    const second = f.journal.dispatch({ ...f.input, toolCallId: 'concurrent' }, async () => {
+      effects.push('next');
+    });
+    expect(effects).toEqual(['original']);
     release.resolve();
     await Promise.all([first, second]);
-    expect(effects).toEqual(['original']);
+    expect(effects).toEqual(['original', 'next']);
   });
 });

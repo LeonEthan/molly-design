@@ -8,6 +8,7 @@ capability or YAML syntax.
 
 Useful context includes:
 
+- the user's design thinking, inspiration, references and the direction to retain;
 - what a viewer should notice first, then understand, then remember or do;
 - who is looking, from how far, for how long, and on which medium;
 - the requested size, orientation, tone, assets, and output format;
@@ -17,6 +18,9 @@ If useful, keep a short working note of the core message, the largest object, th
 reading path, color roles, and the failure to avoid (illegible type, fake evidence,
 a crowded wall of equal boxes). Do not turn that note into a second source of truth
 for the finished files.
+
+Apply the research rule in [the main Skill](../SKILL.md#2-inspect-references-and-research).
+Carry the inspected references and research observations into the composition.
 
 ## Size the canvas for the actual output
 
@@ -63,6 +67,13 @@ editable in Molly. Choose a direction because it carries the content.
   archival stamps, or scientific proof.
 - Keep dates, labels, units, places, data, and sources faithful to supplied or
   checkable material. Prefer a coarser true claim over a precise invented one.
+
+Preserve user-supplied target dates. Resolve relative dates such as "this year"
+from the current turn's date and timezone, and verify calendar conversions or
+event dates against a reliable source. File timestamps and existing artwork do
+not establish today's date. When an exact event date is not supplied, use accurate
+coarse or lunar wording, or omit the date; research an exact date when the task
+needs it instead of inventing one.
 
 ## Review the rendered canvas
 

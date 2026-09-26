@@ -62,6 +62,11 @@ const MAX_SIZE_SPEC_CHARS = 32;
 /** The asset directory a YAML artwork references as `media/...`. */
 export const DESIGN_MEDIA_DIRNAME = 'media';
 
+export const IMAGE_BACKGROUNDS = ['transparent', 'opaque', 'auto'] as const;
+export type ImageBackground = (typeof IMAGE_BACKGROUNDS)[number];
+export const IMAGE_OUTPUT_FORMATS = ['png', 'jpeg'] as const;
+export type ImageOutputFormat = (typeof IMAGE_OUTPUT_FORMATS)[number];
+
 export class ImageGenerationError extends Error {
   constructor(message: string) {
     super(message);
@@ -74,6 +79,10 @@ export interface GenerateImageOptions {
   prompt: string;
   /** Optional upstream `size` (e.g. `1024x1024`). Passed through verbatim. */
   size?: string;
+  /** Optional upstream `background`; `transparent` needs an alpha-capable output format. */
+  background?: ImageBackground;
+  /** Optional upstream `output_format`, limited to formats the design intake imports. */
+  outputFormat?: ImageOutputFormat;
   /** Absolute session workdir; the asset lands under `<workdir>/media/`. */
   workdir: string;
   transport: ImageHttpTransport;
@@ -213,8 +222,21 @@ async function downloadGeneratedImage(
  * of what it was called with.
  */
 export function buildImageGenerationRequest(
-  options: Pick<GenerateImageOptions, 'settings' | 'prompt' | 'size' | 'signal'>
+  options: Pick<
+    GenerateImageOptions,
+    'settings' | 'prompt' | 'size' | 'background' | 'outputFormat' | 'signal'
+  >
 ): ImageHttpRequest {
+  return imageJsonRequest(options, IMAGE_CONNECTION_GENERATIONS_PATH, imageRequestFields(options));
+}
+
+/** Shared configuration/prompt/option validation for both paid endpoints. */
+function imageRequestFields(
+  options: Pick<
+    GenerateImageOptions,
+    'settings' | 'prompt' | 'size' | 'background' | 'outputFormat'
+  >
+): Record<string, unknown> {
   if (!isImageConnectionReady(options.settings)) {
     throw new ImageGenerationError(
       'Image connection is incomplete or disabled: configure URL, API key and an explicit model in Molly settings.'
@@ -226,16 +248,34 @@ export function buildImageGenerationRequest(
   if (size !== undefined && size.length > MAX_SIZE_SPEC_CHARS) {
     throw new ImageGenerationError(`size is longer than ${MAX_SIZE_SPEC_CHARS} characters`);
   }
-  const body: Record<string, unknown> = {
+  if (options.background !== undefined && !IMAGE_BACKGROUNDS.includes(options.background)) {
+    throw new ImageGenerationError('background must be transparent, opaque or auto');
+  }
+  if (options.outputFormat !== undefined && !IMAGE_OUTPUT_FORMATS.includes(options.outputFormat)) {
+    throw new ImageGenerationError('output_format must be png or jpeg');
+  }
+  if (options.background === 'transparent' && options.outputFormat === 'jpeg') {
+    throw new ImageGenerationError(
+      'a transparent background needs output_format png; JPEG has no alpha channel. No image request was sent.'
+    );
+  }
+  return {
     model: options.settings.model,
     prompt: options.prompt,
     n: 1,
+    ...(size === undefined || size.length === 0 ? {} : { size }),
+    ...(options.background === undefined ? {} : { background: options.background }),
+    ...(options.outputFormat === undefined ? {} : { output_format: options.outputFormat }),
   };
-  if (size !== undefined && size.length > 0) {
-    body.size = size;
-  }
+}
+
+function imageJsonRequest(
+  options: Pick<GenerateImageOptions, 'settings' | 'signal'>,
+  apiPath: string,
+  body: Record<string, unknown>
+): ImageHttpRequest {
   return {
-    url: imageConnectionUrl(options.settings, IMAGE_CONNECTION_GENERATIONS_PATH),
+    url: imageConnectionUrl(options.settings, apiPath),
     method: 'POST',
     headers: {
       authorization: `Bearer ${options.settings.apiKey}`,
@@ -275,8 +315,7 @@ export async function editImageBytes(options: EditImageOptions): Promise<Uint8Ar
 
 export async function buildImageEditRequest(options: EditImageOptions): Promise<ImageHttpRequest> {
   options.signal?.throwIfAborted();
-  // Share configuration/prompt/size validation, without sending a generation request.
-  const generation = buildImageGenerationRequest(options);
+  const fields = imageRequestFields(options);
   if (options.images.length < 1 || options.images.length > IMAGE_EDIT_MAX_INPUTS) {
     throw new ImageGenerationError(
       `edit requires 1 to ${IMAGE_EDIT_MAX_INPUTS} source/reference images`
@@ -288,10 +327,10 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
     [root, sourceRoot].map(async (lexical) => ({ lexical, resolved: await realpath(lexical) }))
   );
   options.signal?.throwIfAborted();
-  const files: NonNullable<ImageHttpRequest['multipart']>['files'] = [];
+  const dataUrls: string[] = [];
   const dimensions: Array<{ width: number; height: number }> = [];
   let total = 0;
-  const appendFile = async (input: string, field: string, index: number) => {
+  const appendFile = async (input: string, field: 'image' | 'mask') => {
     options.signal?.throwIfAborted();
     const candidate = path.resolve(root, input);
     const resolved = await realpath(candidate);
@@ -351,19 +390,14 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
         );
       }
       dimensions.push(await decodeImageDimensions(content, mimeType, options.signal));
-      files.push({
-        field,
-        filename: `${field === 'mask' ? 'mask' : `image-${index}`}.${mimeType === 'image/webp' ? 'webp' : EXTENSION_BY_MIME[mimeType]}`,
-        mimeType,
-        bytes: content,
-      });
+      dataUrls.push(`data:${mimeType};base64,${content.toString('base64')}`);
     } finally {
       await handle.close();
     }
   };
-  for (const [index, input] of options.images.entries()) await appendFile(input, 'image[]', index);
+  for (const input of options.images) await appendFile(input, 'image');
   if (options.mask !== undefined) {
-    await appendFile(options.mask, 'mask', 0);
+    await appendFile(options.mask, 'mask');
     const sourceSize = dimensions[0];
     const maskSize = dimensions.at(-1);
     if (
@@ -374,21 +408,13 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
       throw new ImageGenerationError('mask dimensions must match the first source image');
     }
   }
-  const fields: Record<string, string> = {
-    model: options.settings.model,
-    prompt: options.prompt,
-    n: '1',
-  };
-  if (options.size?.trim()) fields.size = options.size.trim();
-  return {
-    url: imageConnectionUrl(options.settings, IMAGE_CONNECTION_EDITS_PATH),
-    method: 'POST',
-    headers: { authorization: generation.headers.authorization ?? '', accept: 'application/json' },
-    multipart: { fields, files },
-    timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-    maxBytes: IMAGE_GENERATION_MAX_RESPONSE_BYTES,
-  };
+  // specs/generative-layered-design-workflow.md: relays dropped multipart fields; JSON is verified.
+  const [mask] = options.mask === undefined ? [] : dataUrls.splice(-1);
+  return imageJsonRequest(options, IMAGE_CONNECTION_EDITS_PATH, {
+    ...fields,
+    images: dataUrls.map((url) => ({ image_url: url })),
+    ...(mask === undefined ? {} : { mask: { image_url: mask } }),
+  });
 }
 
 type GenerationPayload = { base64?: string; url?: string };

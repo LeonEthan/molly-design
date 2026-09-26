@@ -252,6 +252,32 @@ describe('design/render-host-status', () => {
 });
 
 describe('design/render-preview', () => {
+  it('preserves actionable asset admission fields before queuing a native render', async () => {
+    const handler = createHandler({
+      [DESIGN_SESSION_ID]: sessionMeta(DESIGN_SESSION_ID, true),
+    });
+    const workdir = writeProject(DESIGN_SESSION_ID);
+    mkdirSync(path.join(workdir, 'media'));
+    writeFileSync(path.join(workdir, 'media', 'Headline.ttf'), Buffer.alloc(16_777_217));
+    writeFileSync(
+      path.join(workdir, 'design.yaml'),
+      `${PAGE}customFonts:\n  - family: Headline\n    src: media/Headline.ttf\n`
+    );
+    await hostPoll(handler);
+
+    expect(await renderPreview(handler, DESIGN_SESSION_ID)).toMatchObject({
+      type: 'design/render-preview',
+      ok: false,
+      assetFailure: {
+        code: 'asset_too_large',
+        path: 'media/Headline.ttf',
+        actualBytes: 16_777_217,
+        limitBytes: 16_777_216,
+      },
+    });
+    expect(await hostPoll(handler)).toEqual([]);
+  });
+
   it('refuses a session that is not a design session', async () => {
     const handler = createHandler({
       [CODING_SESSION_ID]: sessionMeta(CODING_SESSION_ID, false),

@@ -694,6 +694,11 @@ export function classifyPermissionModeFace(modeId: string | null | undefined): P
       return { kind: 'hidden' };
     case 'agent-auto-review':
       return { kind: 'auto', tone: 'neutral', render: 'auto-label' };
+    // Molly embedded harness (MOLLY_PERMISSION_MODES)
+    case 'auto-review':
+      return { kind: 'auto', tone: 'neutral', render: 'auto-label' };
+    case 'ask':
+      return { kind: 'hidden' };
     case 'agent-full-access':
     case 'danger-full-access':
       return { kind: 'full-access', tone: 'warning', render: 'icon' };

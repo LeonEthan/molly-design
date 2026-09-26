@@ -54,6 +54,89 @@ async function fixture(id = 'connection-a') {
 }
 
 describe('owned Pi session', () => {
+  it.each([undefined, 'PUBLIC_HOOK_REMINDER'])(
+    'refreshes model-visible host time per prompt with reminder %s while keeping each tool loop stable',
+    async (readBeforeEditReminder) => {
+      const input = await fixture();
+      await writeFile(join(input.cwd, 'context.txt'), 'Synthetic tool result');
+      let instant = new Date('2026-12-31T23:59:58.000Z');
+      let timeZone = 'America/Los_Angeles';
+      const owned = await createMollySession({
+        ...input,
+        tools: [defineTool(createReadToolDefinition(input.cwd))],
+        readBeforeEditReminder,
+        hostTime: { now: () => instant, resolveTimeZone: () => timeZone },
+      });
+      const observedContexts: string[] = [];
+      const transportRequests: unknown[] = [];
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
+        transportRequests.push(args);
+        throw new Error('Unexpected transport');
+      });
+      const responses = [
+        fauxAssistantMessage(fauxToolCall('read', { path: 'context.txt' }), {
+          stopReason: 'toolUse',
+          timestamp: 1,
+        }),
+        fauxAssistantMessage('First prompt complete.', { timestamp: 2 }),
+        fauxAssistantMessage(fauxToolCall('read', { path: 'context.txt' }), {
+          stopReason: 'toolUse',
+          timestamp: 3,
+        }),
+        fauxAssistantMessage('Second prompt complete.', { timestamp: 4 }),
+      ];
+      owned.runtime.registerProvider('openai', {
+        api: owned.session.model!.api,
+        baseUrl: input.connection.baseUrl,
+        streamSimple: (_model, context) => {
+          observedContexts.push(context.systemPrompt ?? '');
+          const message = responses.shift();
+          if (!message) throw new Error('Unexpected inference');
+          instant = new Date('2027-01-01T08:00:02.000Z');
+          timeZone = 'Asia/Tokyo';
+          const stream = createAssistantMessageEventStream();
+          stream.push({
+            type: 'done',
+            reason: message.stopReason === 'toolUse' ? 'toolUse' : 'stop',
+            message,
+          });
+          stream.end();
+          return stream;
+        },
+      });
+      try {
+        await owned.session.prompt('Read the synthetic file before the new year.');
+        await owned.session.prompt('Read it again after the host clock and time zone change.');
+        expect(observedContexts).toHaveLength(4);
+        expect(observedContexts[0]).toContain('UTC time: 2026-12-31T23:59:58.000Z');
+        expect(observedContexts[0]).toContain('Local date and time: 2026-12-31 15:59:58');
+        expect(observedContexts[0]).toContain('IANA time zone: America/Los_Angeles');
+        expect(observedContexts[1]).toBe(observedContexts[0]);
+        expect(observedContexts[2]).toContain('UTC time: 2027-01-01T08:00:02.000Z');
+        expect(observedContexts[2]).toContain('Local date and time: 2027-01-01 17:00:02');
+        expect(observedContexts[2]).toContain('IANA time zone: Asia/Tokyo');
+        expect(observedContexts[2]).not.toContain('2026-12-31');
+        expect(observedContexts[2]).not.toContain('America/Los_Angeles');
+        expect(observedContexts[3]).toBe(observedContexts[2]);
+        for (const context of observedContexts) {
+          expect(context.split('Host time at prompt start')).toHaveLength(2);
+          expect(context.split('PUBLIC_HOOK_REMINDER')).toHaveLength(
+            readBeforeEditReminder ? 2 : 1
+          );
+          expect(context).toContain('HOST_APPROVED_CONTEXT');
+          expect(context).toContain(
+            'Geographic location: not provided by the host; use location explicitly supplied by the user.'
+          );
+          expect(context).toContain('A task or event may specify a different date.');
+          expect(context).not.toContain('UNAPPROVED_CONTEXT_MARKER');
+        }
+        expect(transportRequests).toEqual([]);
+      } finally {
+        owned.session.dispose();
+      }
+    }
+  );
+
   it('refuses a failed startup hook before acknowledging the native session', async () => {
     const events: string[] = [];
     vi.spyOn(MollyResourceLoader.prototype, 'getExtensions').mockReturnValue(
@@ -622,7 +705,9 @@ describe('owned Pi session', () => {
 
   it('does not discover resources and freezes the approved resource set', () => {
     const loader = new MollyResourceLoader({ systemPrompt: 'approved' });
-    expect(loader.getExtensions().extensions).toEqual([]);
+    expect(loader.getExtensions().extensions.map((extension) => extension.path)).toEqual([
+      '<molly-prompt-context-v1>',
+    ]);
     expect(loader.getSkills().skills).toEqual([]);
     expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
     expect(() => loader.extendResources()).toThrow('harness_resource_set_is_frozen');

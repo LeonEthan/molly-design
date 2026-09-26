@@ -5,6 +5,7 @@ import {
   isLocalSessionControlRequest,
   isLocalSessionControlResponse,
 } from '../src/node/local-session-control';
+import { LocalSessionControlResponseSchema } from '../src/message-schemas';
 
 const require = createRequire(import.meta.url);
 const {
@@ -288,6 +289,43 @@ describe('local session control node validators', () => {
     };
     expect(isLocalSessionControlResponse(response)).toBe(true);
     expect(isLocalSessionControlResponseCjs(response)).toBe(true);
+    expect(LocalSessionControlResponseSchema.safeParse(response).success).toBe(true);
+  });
+
+  it.each([
+    ['local attachment', { transport: 'local', machineId: 'machine-1' }, true],
+    ['missing owner', { transport: 'local' }, false],
+    ['empty owner', { transport: 'local', machineId: '' }, false],
+    [
+      'local placeholder URL',
+      { transport: 'local', machineId: 'machine-1', downloadUrl: '' },
+      false,
+    ],
+    ['relay missing URL', { transport: 'r2' }, false],
+    ['relay invalid URL', { transport: 'r2', downloadUrl: '' }, false],
+  ])('validates %s upload responses in schema, TS and CJS', (_name, transport, valid) => {
+    const response = {
+      type: 'session/file-upload_response',
+      sessionId: 'session-1',
+      workspaceId: 'workspace-1',
+      success: true,
+      files: [
+        {
+          type: 'file',
+          fileId: 'file-1',
+          fileName: 'result.png',
+          mimeType: 'image/png',
+          sizeBytes: 68,
+          sha256: 'a'.repeat(64),
+          textPreview: false,
+          uploadedAt: 1,
+          ...transport,
+        },
+      ],
+    };
+    expect(LocalSessionControlResponseSchema.safeParse(response).success).toBe(valid);
+    expect(isLocalSessionControlResponse(response)).toBe(valid);
+    expect(isLocalSessionControlResponseCjs(response)).toBe(valid);
   });
 
   it('rejects local-transport file blocks without a machineId (ts + cjs)', () => {

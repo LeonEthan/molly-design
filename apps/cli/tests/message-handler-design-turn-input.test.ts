@@ -69,7 +69,8 @@ const createHandler = (
   const sessionManager = {
     getSession: vi.fn(() => ({
       getHostWorkdir: () =>
-        workspaceRoot ?? path.join(process.env.MOLLY_DATA_DIR ?? '', 'chats', meta?.id ?? 'unknown'),
+        workspaceRoot ??
+        path.join(process.env.MOLLY_DATA_DIR ?? '', 'chats', meta?.id ?? 'unknown'),
       getWorkdir: () => undefined,
     })),
     on: vi.fn(),
@@ -261,7 +262,7 @@ describe('MessageHandler design turn-input wiring', () => {
       expect(blocks).toContainEqual({
         type: 'text',
         text: expect.stringContaining(
-          `make a poster\n\nDesign format and optional helpers: ${workdir}/.claude/skills/graphic-design/SKILL.md. Choose your own creative methods and review.`
+          `make a poster\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md`
         ),
       });
       expect(manifest.canvas).toEqual({ width: 1024, height: 768 });
@@ -344,7 +345,13 @@ describe('MessageHandler design turn-input wiring', () => {
         );
         const inputDir = path.join(dataDir, 'chats', sessionId, 'design-input', 'project-turn');
         const manifest = JSON.parse(fs.readFileSync(path.join(inputDir, 'manifest.json'), 'utf8'));
-        const artifactWorkdir = path.join(workspaceRoot, '.molly', 'artworks', sessionId, sessionId);
+        const artifactWorkdir = path.join(
+          workspaceRoot,
+          '.molly',
+          'artworks',
+          sessionId,
+          sessionId
+        );
         expect(manifest.artifactWorkdir).toBe(artifactWorkdir);
         expect(manifest.artworkId).toBe(sessionId);
         expect(manifest.artifactAtSend).toEqual({ status: 'absent' });
@@ -370,7 +377,7 @@ describe('MessageHandler design turn-input wiring', () => {
         {
           type: 'text',
           text: expect.stringContaining(
-            `internal\n\nDesign format and optional helpers: ${workdir}/.claude/skills/graphic-design/SKILL.md. Choose your own creative methods and review.`
+            `internal\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md`
           ),
         },
       ]);

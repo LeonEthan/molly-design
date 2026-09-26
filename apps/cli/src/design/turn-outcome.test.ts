@@ -338,6 +338,36 @@ async function moveBaseline(harness: Harness, revisionId: string): Promise<void>
 }
 
 describe('collectDesignTurnOutcome', () => {
+  it('rejects oversized assets with the same actionable intake diagnostic and preserves canonical', async () => {
+    const harness = createHarness();
+    const created = await createDesign(harness);
+    await writeArtifact(harness, PAGE);
+    await writeManifest(harness, created.revisionId);
+    const bytes = Buffer.alloc(16_777_217);
+    bytes.set(syntheticPng(8, 8, [31, 107, 138]));
+    writeFileSync(path.join(harness.workdir, 'media', 'pic.png'), bytes);
+    const attempt = await collectDesignTurnOutcome(contextFor(harness));
+    expect(attempt.status).toBe('recorded');
+    if (attempt.status !== 'recorded') return;
+    expect(attempt.outcome).toMatchObject({
+      status: 'invalid',
+      diagnostics: [
+        {
+          code: 'MOLLY-E005',
+          message: 'Asset media/pic.png is 16777217 bytes; limit is 16777216 bytes (16 MiB).',
+        },
+      ],
+    });
+    expect(
+      await designOperation(harness.root, {
+        operation: 'read',
+        sessionId: harness.sessionId,
+      })
+    ).toEqual(created);
+    expect(readFileSync(path.join(harness.workdir, 'media', 'pic.png')).equals(bytes)).toBe(true);
+    expect(recordedOutcome(harness)).toEqual(attempt.outcome);
+  });
+
   it('keeps legacy manifests without dispatch content evidence on the validated commit path', async () => {
     const harness = createHarness();
     const created = await createDesign(harness);

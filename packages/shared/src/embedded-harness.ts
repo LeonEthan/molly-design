@@ -484,6 +484,37 @@ export function decodeMollyModelOption(
   }
 }
 
+/**
+ * Molly permission modes. `ask` prompts for protected actions; `auto-review` runs shell in
+ * an OS sandbox and reviews escalations ([Spec](../../../specs/generative-layered-design-workflow.md)).
+ */
+export const MOLLY_PERMISSION_MODES = ['ask', 'auto-review'] as const;
+export const MollyPermissionModeSchema = z.enum(MOLLY_PERMISSION_MODES);
+export type MollyPermissionMode = z.infer<typeof MollyPermissionModeSchema>;
+export const MOLLY_DEFAULT_PERMISSION_MODE: MollyPermissionMode = 'ask';
+
+/** An absent mode is the default; any other value is an unsupported executable control. */
+export function resolveMollyPermissionMode(modeId: string | null | undefined): MollyPermissionMode {
+  if (!modeId) return MOLLY_DEFAULT_PERMISSION_MODE;
+  const parsed = MollyPermissionModeSchema.safeParse(modeId);
+  if (!parsed.success) throw new Error('harness_legacy_config_unsupported');
+  return parsed.data;
+}
+
+/** The run's permission mode from its ACP projection; `modeId` and a `mode` option must agree. */
+export function mollyRunPermissionMode(input: {
+  modeId?: string | null;
+  configOptionValues?: Record<string, unknown> | null;
+}): MollyPermissionMode {
+  const option = input.configOptionValues?.mode;
+  if (option !== undefined && typeof option !== 'string')
+    throw new Error('harness_legacy_config_unsupported');
+  const mode = resolveMollyPermissionMode(input.modeId ?? option);
+  if (option !== undefined && input.modeId && option !== input.modeId)
+    throw new Error('harness_permission_mode_conflict');
+  return mode;
+}
+
 /** ACP fields are UI projections only. Reject ambiguous or unsupported executable controls. */
 export function validateMollyRunConfigProjection(input: {
   modelSelection?: ModelSelection;
@@ -496,11 +527,9 @@ export function validateMollyRunConfigProjection(input: {
     input.modelSelection ??
       decodeMollyModelOption(input.modelId ?? options.model, options.reasoning_effort ?? 'off')
   );
-  if (
-    input.modeId ||
-    Object.keys(options).some((key) => !['model', 'reasoning_effort'].includes(key))
-  )
+  if (Object.keys(options).some((key) => !['model', 'reasoning_effort', 'mode'].includes(key)))
     throw new Error('harness_legacy_config_unsupported');
+  mollyRunPermissionMode(input);
   for (const option of [input.modelId, options.model]) {
     if (option == null) continue;
     const projected = decodeMollyModelOption(option, options.reasoning_effort ?? selected.thinking);
@@ -572,6 +601,7 @@ export const HarnessRunSnapshotSchema = z
     pluginSetHash: z.string().regex(/^[a-f0-9]{64}$/),
     toolsetHash: z.string().regex(/^[a-f0-9]{64}$/),
     permissionProfileId: identifier,
+    permissionMode: MollyPermissionModeSchema.optional(),
     artworkRevisionAtDispatch: identifier.optional(),
   })
   .strict()

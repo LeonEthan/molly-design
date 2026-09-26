@@ -11,6 +11,7 @@ import { BrowserHost } from '@/browser/browser-host';
 import { parseBrowserAddress } from '@molly/shared/browser-url';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
+import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
 import { clearImageConnectionFromFlock, getMachineFlockImageConnection } from '@molly/shared';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
@@ -677,6 +678,10 @@ type ValidatedUploadFile = {
 };
 
 type UploadedSessionFile = SessionFilePayload & { downloadUrl: string };
+type LocallyUploadedSessionFile = UploadedSessionFile & {
+  transport: 'local';
+  machineId: MachineId;
+};
 
 /**
  * Persist workspace-relative attachment provenance with one cross-platform
@@ -6913,6 +6918,9 @@ export class MessageHandler {
           },
           this.designRenderHost
         );
+        const assetFailure = DesignAssetFailureSchema.safeParse(
+          result.status === 'refused' ? result.assetFailure : undefined
+        );
         return result.status === 'rendered'
           ? {
               type: 'design/render-preview' as const,
@@ -6926,6 +6934,7 @@ export class MessageHandler {
               type: 'design/render-preview' as const,
               ok: false as const,
               error: result.error.slice(0, 2000),
+              ...(assetFailure.success ? { assetFailure: assetFailure.data } : {}),
             };
       }
       case 'code-collab/get-file-index':
@@ -7427,7 +7436,7 @@ export class MessageHandler {
   private async stageSessionFileLocally(args: {
     sessionId: SessionId;
     file: ValidatedUploadFile;
-  }): Promise<UploadedSessionFile> {
+  }): Promise<LocallyUploadedSessionFile> {
     const fileId = `file-${uuidV4()}`;
     await copyIntoSessionFileBlobStore({
       workspaceId: this.workspaceId,
@@ -7587,7 +7596,7 @@ export class MessageHandler {
       return;
     }
 
-    const uploadedFiles: UploadedSessionFile[] = [];
+    const uploadedFiles: LocallyUploadedSessionFile[] = [];
     const failures: string[] = [];
     const canonicalWorkspaceRoot = await fs.promises.realpath(workspaceRoot);
     for (const file of validatedFiles) {
@@ -7656,7 +7665,7 @@ export class MessageHandler {
       ...(partialMessage ? { message: partialMessage } : {}),
       historyEntryId,
       attachedTo,
-      files: uploadedFiles,
+      files: uploadedFiles.map(({ downloadUrl: _downloadUrl, ...file }) => file),
     });
   }
 

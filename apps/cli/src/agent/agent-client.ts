@@ -635,6 +635,8 @@ export interface AgentClientOptions {
   onHarnessImageRecovery?(
     request: HarnessImageRecoveryRequest
   ): Promise<HarnessImageRecoveryResult>;
+  /** True while the active run's frozen permission mode lets the worker approve image calls. */
+  isAutoReviewRun?(): boolean;
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
   onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
@@ -1668,8 +1670,11 @@ export class AgentClient implements acp.Client {
           !this.options.onHarnessImageRecovery ||
           this.connectionClosed ||
           (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
-          approval?.title !== HARNESS_IMAGE_RECOVERY_PERMISSION ||
-          approval.digest !== request.requestDigest ||
+          !(
+            this.options.isAutoReviewRun?.() ||
+            (approval?.title === HARNESS_IMAGE_RECOVERY_PERMISSION &&
+              approval.digest === request.requestDigest)
+          ) ||
           request.requestDigest !==
             createHash('sha256').update(JSON.stringify(request.query)).digest('hex')
         )
@@ -1693,8 +1698,11 @@ export class AgentClient implements acp.Client {
           !this.options.onHarnessImageImport ||
           this.connectionClosed ||
           (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
-          approval?.title !== `${request.serverName}/${request.toolName}` ||
-          approval.digest !== request.requestDigest
+          !(
+            this.options.isAutoReviewRun?.() ||
+            (approval?.title === `${request.serverName}/${request.toolName}` &&
+              approval.digest === request.requestDigest)
+          )
         )
           throw new Error('harness_image_import_not_authorized');
         this.imageImportApprovals.delete(request.toolCallId);

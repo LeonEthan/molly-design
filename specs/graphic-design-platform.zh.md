@@ -91,7 +91,7 @@ Agent 可调用已有 `molly_render_preview` 渲染 YAML 画稿投影，再用�
 
 Molly 内置 MCP 提供 generate 和 edit 两种能力，复用既有图像连接、会话权限、传输与 workspace 素材保存。用户配置 URL、Key 和必填 model；产品不设默认模型、不猜测模型别名或静默切换。已有用户配置保留其明确保存的值，空 model 不再自动补默认值。
 
-- Generate 接收提示词生成图片；edit 接收提示词与一张或多张原图/参考图，可选 mask。默认接入协议为 OpenAI Images-compatible 的 generations/edits，不要求每个供应商都支持全部参数；实际不支持时如实报错，不自动改走文生图或重复付费调用。
+- Generate 接收提示词生成图片；edit 接收提示词与一张或多张原图/参考图，可选 mask。默认接入协议为 OpenAI Images-compatible 的 generations/edits，不要求每个供应商都支持全部参数；实际不支持时如实报错，不自动改走文生图或重复付费调用。两者都接受可选的 `background` 与 `output_format`，透明 JPEG 在发送前拒绝；edit 以 JSON data URL 发送有序原图和可选 mask。
 - 工具结果保存为工作区素材，由 Agent 决定如何用于画稿投影；调用生图/编辑接口本身不提交或替换当前画稿。复用 Bento 已有裁切、替换及普通选区动作，不增加独立图像作业系统或 mask 编辑器。
 - 附件输入、Agent 看图及 Bento 手工图片操作独立于图像服务，不因未配置 image MCP 而被禁用。五种 Agent 是否能取得实际图片输入分别验证。
 

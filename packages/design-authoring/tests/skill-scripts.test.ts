@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 import { afterAll, describe, expect, it } from 'vitest';
 
 const skillDir = path.join(
@@ -26,7 +26,50 @@ function pngDims(bytes: Buffer): { width: number; height: number } {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
+type Rgba = [number, number, number, number];
+
 function syntheticPng(width: number, height: number, rgb: [number, number, number]): Buffer {
+  return encodeTestPng(width, height, 3, () => [...rgb, 255]);
+}
+
+function rgbaPng(width: number, height: number, pixel: (x: number, y: number) => Rgba): Buffer {
+  return encodeTestPng(width, height, 4, pixel);
+}
+
+/** Decodes the helper's own output: 8-bit, non-interlaced, filter 0 only. */
+function decodeTestPng(bytes: Buffer): {
+  width: number;
+  height: number;
+  pixel: (x: number, y: number) => number[];
+} {
+  const { width, height } = pngDims(bytes);
+  const channels = bytes[25] === 6 ? 4 : 3;
+  const idat: Buffer[] = [];
+  for (let offset = 8; offset < bytes.length; ) {
+    const length = bytes.readUInt32BE(offset);
+    if (bytes.toString('ascii', offset + 4, offset + 8) === 'IDAT')
+      idat.push(bytes.subarray(offset + 8, offset + 8 + length));
+    offset += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(idat));
+  const stride = width * channels + 1;
+  return {
+    width,
+    height,
+    pixel: (x, y) => {
+      expect(raw[y * stride]).toBe(0);
+      const start = y * stride + 1 + x * channels;
+      return [...raw.subarray(start, start + channels)];
+    },
+  };
+}
+
+function encodeTestPng(
+  width: number,
+  height: number,
+  channels: 3 | 4,
+  pixel: (x: number, y: number) => Rgba
+): Buffer {
   const crcTable = new Int32Array(256);
   for (let n = 0; n < 256; n++) {
     let c = n;
@@ -50,16 +93,18 @@ function syntheticPng(width: number, height: number, rgb: [number, number, numbe
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;
-  ihdr[9] = 2;
-  const stride = width * 3;
+  ihdr[9] = channels === 4 ? 6 : 2;
+  const stride = width * channels;
   const raw = Buffer.alloc(height * (stride + 1));
   for (let y = 0; y < height; y++) {
     raw[y * (stride + 1)] = 0;
     for (let x = 0; x < width; x++) {
-      const d = y * (stride + 1) + 1 + x * 3;
-      raw[d] = rgb[0];
-      raw[d + 1] = rgb[1];
-      raw[d + 2] = rgb[2];
+      const d = y * (stride + 1) + 1 + x * channels;
+      pixel(x, y)
+        .slice(0, channels)
+        .forEach((value, channel) => {
+          raw[d + channel] = value;
+        });
     }
   }
   return Buffer.concat([
@@ -75,6 +120,30 @@ function run(script: string, args: string[]) {
     encoding: 'utf8',
   });
 }
+
+describe('font-prepare.mjs', () => {
+  it('exposes isolated setup and complete-font conversion without installing on help', () => {
+    const result = run('font-prepare.mjs', ['--help']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('setup <environment-dir>');
+    expect(result.stdout).toContain('including all glyphs');
+  });
+
+  it.each([
+    ['woff', 'source.ttc', 'output.woff', '--python', 'missing-python'],
+    ['woff', 'source.ttc', 'output.woff', '--face', '-1', '--python', 'missing-python'],
+    ['faces', 'source.ttc', '--face', '1', '--python', 'missing-python'],
+    ['setup', 'environment', '--user'],
+  ])(
+    'rejects unsupported or ambiguous preparation arguments before running Python: %j',
+    (...args) => {
+      const result = run('font-prepare.mjs', args);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/font-prepare|Select a face/);
+      expect(result.stderr).not.toContain('ENOENT');
+    }
+  );
+});
 
 const workdirs: string[] = [];
 function workdir(): string {
@@ -149,9 +218,26 @@ describe('format.mjs', () => {
 });
 
 describe('finalize.mjs', () => {
+  it('rejects an oversized referenced asset without promoting the draft', () => {
+    const dir = workdir();
+    writeProject(dir, VALID_PAGE);
+    const bytes = Buffer.alloc(16_777_217);
+    syntheticPng(8, 8, [200, 30, 30]).copy(bytes);
+    writeFileSync(path.join(dir, 'media', 'pic.png'), bytes);
+    const result = run('finalize.mjs', [path.join(dir, 'design.yaml.tmp')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('media/pic.png');
+    expect(result.stderr).toContain('16777217');
+    expect(result.stderr).toContain('16777216');
+    expect(existsSync(path.join(dir, 'design.yaml'))).toBe(false);
+    expect(existsSync(path.join(dir, 'design.yaml.tmp'))).toBe(true);
+  });
+
   it('accepts the editable text example published in the format guide', () => {
     const guide = readFileSync(path.join(skillDir, 'references', 'artwork-format.md'), 'utf8');
-    const example = guide.match(/```yaml\n([\s\S]*?)```/)?.[1];
+    const example = [...guide.matchAll(/```yaml\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .find((block) => block?.trimStart().startsWith('- id:'));
     expect(example).toBeDefined();
     const dir = workdir();
     writeProject(
@@ -205,6 +291,21 @@ describe('render-preview.mjs', () => {
     const result = run('render-preview.mjs', [path.join(dir, 'design.yaml')]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MOLLY-E005');
+  });
+
+  it('reports the size failure before claiming local intake succeeds', () => {
+    const dir = workdir();
+    writeProject(dir, VALID_PAGE);
+    writeFileSync(path.join(dir, 'design.yaml'), readFileSync(path.join(dir, 'design.yaml.tmp')));
+    const bytes = Buffer.alloc(16_777_217);
+    syntheticPng(8, 8, [200, 30, 30]).copy(bytes);
+    writeFileSync(path.join(dir, 'media', 'pic.png'), bytes);
+    const result = run('render-preview.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('media/pic.png');
+    expect(result.stderr).toContain('16777217');
+    expect(result.stderr).toContain('16777216');
+    expect(result.stdout).not.toContain('intake OK');
   });
 });
 
@@ -265,5 +366,140 @@ describe('reference-pack.mjs', () => {
     ]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('outside image');
+  });
+});
+
+describe('reference-pack.mjs layer helpers', () => {
+  // 20x12 layer: opaque red 6x4 block at (5,3), faint halo alpha 20 at (2,1)..(14,9).
+  const layerPixel = (x: number, y: number): Rgba => {
+    if (x >= 5 && x < 11 && y >= 3 && y < 7) return [255, 0, 0, 255];
+    if (x >= 2 && x <= 14 && y >= 1 && y <= 9) return [0, 0, 255, 20];
+    return [0, 0, 0, 0];
+  };
+  const writeLayer = (dir: string): { file: string; bytes: Buffer } => {
+    const file = path.join(dir, 'layer.png');
+    const bytes = rgbaPng(20, 12, layerPixel);
+    writeFileSync(file, bytes);
+    return { file, bytes };
+  };
+
+  it('alpha reports counts and bounds, with threshold bounds only on request', () => {
+    const { file } = writeLayer(workdir());
+    const plain = run('reference-pack.mjs', ['alpha', file]);
+    expect(plain.status).toBe(0);
+    const report = JSON.parse(plain.stdout);
+    expect(report).toMatchObject({
+      width: 20,
+      height: 12,
+      pixels: 240,
+      opaque: 24,
+      partial: 13 * 9 - 24,
+      transparent: 240 - 13 * 9,
+      bounds: { x: 2, y: 1, width: 13, height: 9 },
+    });
+    expect(report).not.toHaveProperty('thresholdBounds');
+    const threshold = JSON.parse(
+      run('reference-pack.mjs', ['alpha', file, '--threshold', '128']).stdout
+    );
+    expect(threshold.thresholdBounds).toEqual({ x: 5, y: 3, width: 6, height: 4 });
+  });
+
+  it('trim removes only fully transparent padding by default and keeps every pixel', () => {
+    const dir = workdir();
+    const { file, bytes } = writeLayer(dir);
+    const out = path.join(dir, 'trimmed.png');
+    const result = run('reference-pack.mjs', ['trim', file, out]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({
+      sourceWidth: 20,
+      sourceHeight: 12,
+      x: 2,
+      y: 1,
+      width: 13,
+      height: 9,
+    });
+    const trimmed = decodeTestPng(readFileSync(out));
+    for (let y = 0; y < 9; y++)
+      for (let x = 0; x < 13; x++) expect(trimmed.pixel(x, y)).toEqual(layerPixel(x + 2, y + 1));
+    expect(readFileSync(file)).toEqual(bytes);
+  });
+
+  it('trim keeps only the region above an explicit alpha plus margin', () => {
+    const dir = workdir();
+    const { file } = writeLayer(dir);
+    const out = path.join(dir, 'guarded.png');
+    const result = run('reference-pack.mjs', [
+      'trim',
+      file,
+      out,
+      '--alpha-above',
+      '128',
+      '--margin',
+      '1',
+    ]);
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toMatchObject({ x: 4, y: 2, width: 8, height: 6 });
+    const guarded = decodeTestPng(readFileSync(out));
+    expect(guarded.pixel(1, 1)).toEqual([255, 0, 0, 255]);
+    expect(guarded.pixel(0, 0)).toEqual([0, 0, 255, 20]);
+  });
+
+  it('trim refuses to overwrite its source, orphan options and empty layers', () => {
+    const dir = workdir();
+    const { file, bytes } = writeLayer(dir);
+    const overwrite = run('reference-pack.mjs', ['trim', file, file]);
+    expect(overwrite.status).toBe(1);
+    expect(overwrite.stderr).toContain('must not overwrite');
+    expect(readFileSync(file)).toEqual(bytes);
+    const orphan = run('reference-pack.mjs', [
+      'trim',
+      file,
+      path.join(dir, 'o.png'),
+      '--margin',
+      '2',
+    ]);
+    expect(orphan.status).toBe(1);
+    expect(orphan.stderr).toContain('--margin applies only with --alpha-above');
+    const empty = path.join(dir, 'empty.png');
+    writeFileSync(
+      empty,
+      rgbaPng(4, 4, () => [0, 0, 0, 0])
+    );
+    const nothing = run('reference-pack.mjs', ['trim', empty, path.join(dir, 'e.png')]);
+    expect(nothing.status).toBe(1);
+    expect(nothing.stderr).toContain('nothing to keep');
+  });
+
+  it('compare writes side-by-side, overlay and light/dark sheets for same-size images', () => {
+    const dir = workdir();
+    const { file } = writeLayer(dir);
+    const other = path.join(dir, 'other.png');
+    writeFileSync(
+      other,
+      rgbaPng(20, 12, () => [0, 255, 0, 255])
+    );
+    const out = path.join(dir, 'compare');
+    const result = run('reference-pack.mjs', ['compare', file, other, out]);
+    expect(result.status).toBe(0);
+    expect(pngDims(readFileSync(path.join(out, 'side-by-side.png')))).toEqual({
+      width: 48,
+      height: 28,
+    });
+    const overlay = decodeTestPng(readFileSync(path.join(out, 'overlay.png')));
+    expect(overlay.pixel(6, 4)).toEqual([128, 128, 0]);
+    const lightDark = decodeTestPng(readFileSync(path.join(out, 'light-dark.png')));
+    expect({ width: lightDark.width, height: lightDark.height }).toEqual({ width: 48, height: 32 });
+    expect(lightDark.pixel(0, 0)).toEqual([255, 255, 255]);
+    expect(lightDark.pixel(28, 0)).toEqual([0, 0, 0]);
+    expect(lightDark.pixel(6, 4)).toEqual([255, 0, 0]);
+
+    const small = path.join(dir, 'small.png');
+    writeFileSync(
+      small,
+      rgbaPng(4, 4, () => [0, 0, 0, 255])
+    );
+    const mismatch = run('reference-pack.mjs', ['compare', file, small, path.join(dir, 'x')]);
+    expect(mismatch.status).toBe(1);
+    expect(mismatch.stderr).toContain('same-size');
   });
 });

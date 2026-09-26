@@ -37,7 +37,7 @@ reading and commit receipts; retire per-turn result cards and dedicated thumbnai
 Design saves update YAML from human edits independently of Agent execution. Keep
 public read-before-edit reminder hooks and native tool guards; no runtime patches
 or generation-level read proofs. Final commits check schema, kernel replay, assets
-and versions. No creative-step enforcement, silent repair or automatic paid retries. Before Agent
+and versions. Skills may recommend creative steps; enforce none, and add no silent repair or automatic paid retries. Before Agent
 execution, flush human edits; keep every Bento instance of that artwork read-only
 until execution and artifact processing end. The app enforces this through generic
 read-only and mutation checks; Bento does not track Agent lifecycle. Consumer-scoped

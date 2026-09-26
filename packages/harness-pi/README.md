@@ -17,8 +17,18 @@ removing the shim does not modify user Pi installations or old native histories.
 It rejects native/host name collisions, Molly/MCP namespace claims, duplicate extension
 tools and differing registration/definition names. Duplicate host definitions fail
 before private state is created; one host-guarded native definition remains valid.
-The loader snapshots approved extension order and appends the public read-before-edit
-reminder last. This is not a security boundary for arbitrary native code.
+The loader snapshots approved extension order and appends its public
+`before_agent_start` context hook last. For each prompt the hook samples the host
+clock and `Intl` timezone, adds UTC ISO time, local date/time and the IANA zone,
+then preserves the optional read-before-edit reminder. The SDK starts each hook
+chain from its base system prompt, so a later prompt refreshes this context without
+accumulating older timestamps; subsequent model requests in the same tool loop
+keep the prompt's snapshot. Host time is separate from the task or event date.
+The host supplies no geographic location; explicit user-provided location remains
+usable and is not inferred from the host zone.
+Injected time sources support deterministic real-SDK tests across a local day/year
+boundary and timezone changes. No settings, history fields or location lookup are added.
+This is not a security boundary for arbitrary native code.
 
 `question-extension.ts` selectively registers the dialog-backed `ask_question` tool
 from MIT-licensed `pi-ask-question` 0.4.0, pinned to the commit and hashes in
@@ -28,6 +38,38 @@ terminal rendering and the optional grill-me mode, bounds input and explicitly m
 timeout non-consensual. Its only retained answer state is native tool-result history.
 The build verifies adapted-source/license hashes and includes provenance and license
 resources in the sealed closure; TypeBox shares the SDK's pinned version.
+
+Auto-review ([Spec](../../specs/generative-layered-design-workflow.md)) is the
+`auto-review` Molly permission mode. `sandbox.ts` starts one
+`@anthropic-ai/sandbox-runtime` 0.0.77 manager per worker on first use (macOS Seatbelt;
+Linux bubblewrap with `bwrap`, `socat` and `rg`; otherwise unavailable). It denies reads
+of credential stores and Molly private data while re-allowing the session cwd, limits
+writes to the cwd and a per-worker temp directory, and pre-allows package registries,
+GitHub, font/icon services and common CDNs. On macOS, native tools such as `sips` also
+need the current user's native temp directory even when `TMPDIR` is set. The worker
+allows that exact canonical directory from `getconf DARWIN_USER_TEMP_DIR`; resolution
+failure grants no extra path. Its ancestors stay protected, and shutdown removes only
+the worker-owned temp. Tool caches should use the workspace or `$TMPDIR`.
+`auto-review-policy.ts` decides by effect:
+sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run; a bash
+`outside_sandbox` request, a protected read, a write outside the workspace and a
+sandbox connection to another domain are escalations. `browser-approval.ts` reviews
+the first public browser site grant through the same classifier and reuses it only
+within the active run/epoch (at most eight sites). Ask mode and external MCP tools
+retain their ordinary approvals; host URL/DNS and dispatch checks remain in force. `auto-review-classifier.ts` judges an escalation with the run's
+session model through the same journaled provider path, using the reviewer prompt,
+decision parser and context projection adapted from Apache-2.0 `pi-auto-approval` 0.1.1
+([`vendor/pi-auto-approval/manifest.json`](vendor/pi-auto-approval/manifest.json)); its
+hook, commands, config files and audit log are not used. A deny, failure or timeout asks
+the user. The run journal records each approval's tool, source and decision without
+arguments. Classifier records also carry a bounded `reviewOutcome`: allow, deny,
+timeout, invalid_response, failed or cancelled. Older records remain readable;
+no raw rationale/provider response is persisted. Cancellation and a failed journal
+write deny without a prompt. Sandbox feedback preserves the command's error and
+identifies observed denials as potentially incidental, not proof of its cause.
+Local attachment sharing still validates workspace paths and symlinks at the host;
+its response carries a local machine identity without a download URL. Ask mode retains
+the ordinary approval for these tools.
 
 `extension-ui.ts` adapts select/input/confirm/notify to an owning host using existing
 Core question metadata. It binds run/caller/lifetime cancellation, clears timers,
@@ -134,11 +176,21 @@ does not display raw tool arguments.
 `tool-operation-journal.ts` records minimal dispatch receipts,
 not a second transcript: MCP can make paid or irreversible calls outside the product's
 existing subagent Operation workflow, so it needs a pre-call replay fence of its own.
-Unknown outcomes remain unknown across new tool-call IDs and worker reloads. Dispatches
-within one run settle in order; an unknown MCP result or dispatched image failure ends
-native inference instead of letting the model retry. The built-in image receipt distinguishes
+Unknown outcomes stay recorded as unknown across worker reloads, and a dispatched
+tool-call ID is never replayed. Dispatches within one run settle in order; an unknown
+MCP result or dispatched image failure returns to the model as an ordinary tool
+result or error, and the Agent decides whether to call again
+([generative layered design](../../specs/generative-layered-design-workflow.md)).
+The harness adds no run stop or retry of its own. The built-in image receipt distinguishes
 pre-dispatch refusal, upstream rejection and uncertain delivery/import. Successful image
 digests are retained for recovery; receipts themselves do not import or commit a canvas.
+When a dispatched call throws, its existing receipt may also retain a fixed `failureStage`:
+`dispatch` covers invocation and linked resource delivery, `receipt` covers built-in receipt
+validation, `import` covers the owning-host import boundary, and `persistence` covers
+settlement writes. These labels never contain the original error, response or credentials.
+They identify the failing boundary, not the upstream cause. A provider-reported unknown
+result, an interrupted worker or a failed diagnostic write can still have no stage;
+absence does not establish where the failure occurred or authorize another paid request.
 
 MCP tools use the existing ACP server list, frozen schemas and the host permission UI.
 They revalidate availability/schema after approval and deliver cancellation before closing
@@ -151,6 +203,17 @@ duplicate links share one read. Output has aggregate byte/block limits and canon
 base64 checks; the call and its reads share a 210-second execution deadline, with each
 resource read capped at 30 seconds. Ordinary resources deliver model context only;
 declared image results additionally pass the owning-host import gate described below.
+Only built-in `molly_render_preview` maps exact Molly-owned font failures to
+`harness_render_font_failed` and known native capture/layout failures to
+`harness_render_failed`. Unknown server text and transport diagnostics remain
+`harness_mcp_tool_failed`; an external tool with the same name gains no exception.
+The built-in preview's validated asset-admission metadata maps to
+`harness_render_asset_too_large` or `harness_render_asset_format_unsupported`, with
+the bounded `media/<filename>` path and actual/allowed bytes or declared asset kind.
+The producer builds its text from the same validated fields. Invalid paths, unknown
+fields, forged error text and transport exceptions retain the generic failure;
+raw diagnostics never become asset metadata.
+These signals add no retry, repair or completion gate.
 The built-in MCP producer supplies its public contract revision. Image dispatch instead
 records the image connection revision frozen at run start; later configuration changes
 revoke the owning lease. Workspace MCP writes establish a local monotonic revision; historical
@@ -229,8 +292,8 @@ permits `resources/read`; it expires at parent settlement. The journal drains re
 before settling the parent and serializes unrelated calls outside this fence, avoiding
 a nested queue deadlock or premature success. Ordinary tools retain their separately
 approved read path. Denied, cancelled, mismatched or lost linked results leave the
-paid parent unknown and stop inference, without regenerating. A declared image tool's returned failure
-also ends the run and remains fenced after reload. External `_meta` image receipts
+paid parent unknown and return a tool error, without regenerating. A declared image
+tool's returned failure is recorded as failed and returned to the model. External `_meta` image receipts
 are ignored. Host import, edit inputs and recovery use bounded full-pixel decoding,
 preserving original bytes; native decoder resources ship with the CLI. Arbitrary URL
 text is not downloaded; MCP URIs never become host fetch/filesystem authority. Remote

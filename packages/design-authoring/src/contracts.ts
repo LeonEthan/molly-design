@@ -35,10 +35,12 @@ export {
 
 export { createVisualDocumentKernel } from '../../design-bento/vendor/packages/kernel/src/kernel.ts';
 import type {
-  Diagnostic as FrozenDiagnostic,
+  Diagnostic as UpstreamDiagnostic,
   DiagnosticCode as FrozenDiagnosticCode,
 } from '../../design-bento/vendor/packages/contracts/src/diagnostics.ts';
-export type { FrozenDiagnostic, FrozenDiagnosticCode };
+import type { AssetAdmissionFailure } from './asset-admission.ts';
+export type FrozenDiagnostic = UpstreamDiagnostic & { assetFailure?: AssetAdmissionFailure };
+export type { FrozenDiagnosticCode };
 export type LiveDiagnosticCode = FrozenDiagnosticCode extends `PPTD-${infer Rest}`
   ? `MOLLY-${Rest}`
   : never;
@@ -46,6 +48,7 @@ export type LiveDiagnostic = {
   code: LiveDiagnosticCode;
   path: string;
   message: string;
+  assetFailure?: AssetAdmissionFailure;
 };
 export type ValidatedArtwork = import('./canvas-format.ts').CanvasSource;
 export type FrozenAuthoringValidationResult =

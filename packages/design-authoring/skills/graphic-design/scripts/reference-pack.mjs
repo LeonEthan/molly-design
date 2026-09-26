@@ -17,13 +17,31 @@
 //       One metadata-free crop (fully re-encoded). Bounds are validated
 //       against the image.
 //
+// Molly-local layer helpers (8-bit PNG; every option is explicit and off by
+// default; outputs are new files and the source is never modified):
+//
+//   alpha <image.png> [--threshold N]
+//       Prints JSON: dimensions, transparent/partial/opaque pixel counts and
+//       the bounds of alpha > 0 (plus alpha > N when --threshold is given).
+//
+//   trim <image.png> <out.png> [--alpha-above N] [--margin M]
+//       Removes fully transparent outer padding. With --alpha-above, keeps
+//       only the region around pixels whose alpha exceeds N, expanded by M
+//       pixels (default 0) and clamped to the image. Prints JSON with the crop
+//       offset (x, y) in source pixels and the output size.
+//
+//   compare <a.png> <b.png> <out-dir>
+//       Two same-size images -> side-by-side.png (over a checkerboard),
+//       overlay.png (B at 50% over A) and light-dark.png (each image over
+//       white and black), for visual review.
+//
 // Format support: PNG (8-bit gray/RGB/RGBA/palette, non-interlaced) is fully
 // decoded; JPEG/GIF/BMP/WEBP report dimensions in meta.json but raster
-// artifacts (grid/bands/palette/crop) require PNG — convert first if needed.
-// All coordinates are original-image pixels.
+// artifacts (grid/bands/palette/crop/alpha/trim/compare) require PNG — convert
+// first if needed. All coordinates are original-image pixels.
 
 import { inflateSync, deflateSync } from 'node:zlib';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 const GRID_STEP = 100;
@@ -128,6 +146,7 @@ function decodePng(buf) {
   let colorType = 0;
   let interlace = 0;
   let plte = null;
+  let hasTrns = false;
   const idat = [];
   while (off + 12 <= buf.length) {
     const len = buf.readUInt32BE(off);
@@ -141,6 +160,8 @@ function decodePng(buf) {
       interlace = data[12];
     } else if (type === 'PLTE') {
       plte = data;
+    } else if (type === 'tRNS') {
+      hasTrns = true;
     } else if (type === 'IDAT') {
       idat.push(data);
     } else if (type === 'IEND') {
@@ -184,26 +205,33 @@ function decodePng(buf) {
     }
   }
 
-  // Convert to RGB, dropping alpha (matches the upstream convert("RGB")).
+  // RGBA for layer helpers; RGB drops alpha (matches the upstream convert("RGB")).
+  const rgba = Buffer.alloc(width * height * 4);
   const rgb = Buffer.alloc(width * height * 3);
   for (let i = 0; i < width * height; i++) {
     const s = i * channels;
-    const d = i * 3;
+    const d = i * 4;
     if (colorType === 2 || colorType === 6) {
-      rgb[d] = px[s];
-      rgb[d + 1] = px[s + 1];
-      rgb[d + 2] = px[s + 2];
+      rgba[d] = px[s];
+      rgba[d + 1] = px[s + 1];
+      rgba[d + 2] = px[s + 2];
+      rgba[d + 3] = colorType === 6 ? px[s + 3] : 255;
     } else if (colorType === 0 || colorType === 4) {
-      rgb[d] = rgb[d + 1] = rgb[d + 2] = px[s];
+      rgba[d] = rgba[d + 1] = rgba[d + 2] = px[s];
+      rgba[d + 3] = colorType === 4 ? px[s + 1] : 255;
     } else {
       const p = px[s] * 3;
       if (p + 2 >= plte.length) fail('palette index out of range');
-      rgb[d] = plte[p];
-      rgb[d + 1] = plte[p + 1];
-      rgb[d + 2] = plte[p + 2];
+      rgba[d] = plte[p];
+      rgba[d + 1] = plte[p + 1];
+      rgba[d + 2] = plte[p + 2];
+      rgba[d + 3] = 255;
     }
+    rgb[i * 3] = rgba[d];
+    rgb[i * 3 + 1] = rgba[d + 1];
+    rgb[i * 3 + 2] = rgba[d + 2];
   }
-  return { width, height, rgb };
+  return { width, height, rgb, rgba, hasTrns };
 }
 
 // ---- PNG encode (8-bit RGB, filter 0) ----
@@ -233,17 +261,17 @@ function pngChunk(type, data) {
   return out;
 }
 
-function encodePng(width, height, rgb) {
+function encodePng(width, height, pixels, channels = 3) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // color type RGB
-  const stride = width * 3;
+  ihdr[9] = channels === 4 ? 6 : 2; // color type RGBA or RGB
+  const stride = width * channels;
   const raw = Buffer.alloc(height * (stride + 1));
   for (let y = 0; y < height; y++) {
     raw[y * (stride + 1)] = 0;
-    rgb.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+    pixels.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
   }
   return Buffer.concat([
     PNG_SIG,
@@ -524,6 +552,237 @@ function crop(imagePath, boxArg, outPath) {
   console.log(`crop: ${outPath} (${w}x${h})`);
 }
 
+// ---- layer helpers ----
+
+function parseOptions(rest, allowed) {
+  const options = {};
+  for (let i = 0; i < rest.length; i += 2) {
+    const name = rest[i];
+    const value = rest[i + 1];
+    if (!allowed.includes(name) || value === undefined) {
+      fail(`unknown or incomplete option ${name ?? ''}; allowed: ${allowed.join(', ')}`);
+    }
+    const number = Number(value);
+    if (!Number.isInteger(number) || number < 0 || (name !== '--margin' && number > 254)) {
+      fail(`${name} must be an integer${name === '--margin' ? ' >= 0' : ' from 0 to 254'}`);
+    }
+    options[name.slice(2)] = number;
+  }
+  return options;
+}
+
+function readLayerPng(imagePath) {
+  const buf = readFileSync(imagePath);
+  const sniffed = sniffImage(buf);
+  if (sniffed.format !== 'PNG') {
+    fail(`${imagePath}: layer helpers need a PNG (got ${sniffed.format})`);
+  }
+  const decoded = decodePng(buf);
+  if (decoded.hasTrns) {
+    fail(`${imagePath}: tRNS transparency is not supported; export an RGBA PNG`);
+  }
+  return decoded;
+}
+
+function alphaBounds(decoded, above) {
+  const { width, height, rgba } = decoded;
+  let left = width;
+  let top = height;
+  let right = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (rgba[(y * width + x) * 4 + 3] <= above) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      if (y > bottom) bottom = y;
+    }
+  }
+  return right < 0 ? null : { x: left, y: top, width: right - left + 1, height: bottom - top + 1 };
+}
+
+function alpha(imagePath, rest) {
+  const options = parseOptions(rest, ['--threshold']);
+  const decoded = readLayerPng(imagePath);
+  let transparent = 0;
+  let opaque = 0;
+  for (let i = 3; i < decoded.rgba.length; i += 4) {
+    if (decoded.rgba[i] === 0) transparent += 1;
+    else if (decoded.rgba[i] === 255) opaque += 1;
+  }
+  const pixels = decoded.width * decoded.height;
+  const report = {
+    file: String(imagePath),
+    width: decoded.width,
+    height: decoded.height,
+    pixels,
+    transparent,
+    partial: pixels - transparent - opaque,
+    opaque,
+    bounds: alphaBounds(decoded, 0),
+    ...(options.threshold === undefined
+      ? {}
+      : { threshold: options.threshold, thresholdBounds: alphaBounds(decoded, options.threshold) }),
+  };
+  console.log(JSON.stringify(report, null, 2));
+}
+
+function assertNewOutput(sourcePaths, outPath) {
+  const target = path.resolve(outPath);
+  const resolvedTarget = existsSync(target) ? realpathSync(target) : target;
+  for (const source of sourcePaths) {
+    if (realpathSync(source) === resolvedTarget) fail('output must not overwrite a source image');
+  }
+}
+
+function cropRgba(rgba, w, x, y, cw, ch) {
+  const out = Buffer.alloc(cw * ch * 4);
+  for (let row = 0; row < ch; row++) {
+    rgba.copy(out, row * cw * 4, ((y + row) * w + x) * 4, ((y + row) * w + x + cw) * 4);
+  }
+  return out;
+}
+
+function trim(imagePath, outPath, rest) {
+  const options = parseOptions(rest, ['--alpha-above', '--margin']);
+  if (options.margin !== undefined && options['alpha-above'] === undefined) {
+    fail('--margin applies only with --alpha-above');
+  }
+  assertNewOutput([imagePath], outPath);
+  const decoded = readLayerPng(imagePath);
+  const kept = alphaBounds(decoded, options['alpha-above'] ?? 0);
+  if (kept === null) fail('no pixels above the alpha limit; nothing to keep');
+  const margin = options.margin ?? 0;
+  const x = Math.max(0, kept.x - margin);
+  const y = Math.max(0, kept.y - margin);
+  const width = Math.min(decoded.width, kept.x + kept.width + margin) - x;
+  const height = Math.min(decoded.height, kept.y + kept.height + margin) - y;
+  mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
+  writeFileSync(
+    outPath,
+    encodePng(width, height, cropRgba(decoded.rgba, decoded.width, x, y, width, height), 4)
+  );
+  console.log(
+    JSON.stringify(
+      {
+        file: String(outPath),
+        source: String(imagePath),
+        sourceWidth: decoded.width,
+        sourceHeight: decoded.height,
+        x,
+        y,
+        width,
+        height,
+        ...(options['alpha-above'] === undefined
+          ? {}
+          : { alphaAbove: options['alpha-above'], margin }),
+      },
+      null,
+      2
+    )
+  );
+}
+
+function compositeOver(rgba, width, height, background) {
+  const out = Buffer.alloc(width * height * 3);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const s = (y * width + x) * 4;
+      const d = (y * width + x) * 3;
+      const bg = background(x, y);
+      const a = rgba[s + 3] / 255;
+      for (let c = 0; c < 3; c++) out[d + c] = Math.round(rgba[s + c] * a + bg[c] * (1 - a));
+    }
+  }
+  return out;
+}
+
+const CHECKER = (x, y) =>
+  (Math.floor(x / 16) + Math.floor(y / 16)) % 2 === 0 ? [204, 204, 204] : [255, 255, 255];
+
+function pasteRgb(sheet, sheetWidth, tile, tileWidth, tileHeight, left, top) {
+  for (let row = 0; row < tileHeight; row++) {
+    tile.copy(
+      sheet,
+      ((top + row) * sheetWidth + left) * 3,
+      row * tileWidth * 3,
+      (row + 1) * tileWidth * 3
+    );
+  }
+}
+
+function compare(aPath, bPath, outDir) {
+  const a = readLayerPng(aPath);
+  const b = readLayerPng(bPath);
+  if (a.width !== b.width || a.height !== b.height) {
+    fail(`compare needs same-size images (${a.width}x${a.height} vs ${b.width}x${b.height})`);
+  }
+  mkdirSync(outDir, { recursive: true });
+  for (const name of ['side-by-side.png', 'overlay.png', 'light-dark.png']) {
+    assertNewOutput([aPath, bPath], path.join(outDir, name));
+  }
+  const { width, height } = a;
+  const gap = 8;
+  const label = 16;
+  const GAP_COLOR = [32, 32, 32];
+
+  const sideWidth = width * 2 + gap;
+  const sideHeight = height + label;
+  const side = Buffer.alloc(sideWidth * sideHeight * 3);
+  fillRect(side, sideWidth, 0, 0, sideWidth, sideHeight, GAP_COLOR);
+  pasteRgb(side, sideWidth, compositeOver(a.rgba, width, height, CHECKER), width, height, 0, label);
+  pasteRgb(
+    side,
+    sideWidth,
+    compositeOver(b.rgba, width, height, CHECKER),
+    width,
+    height,
+    width + gap,
+    label
+  );
+  drawText(side, sideWidth, sideHeight, 4, 4, 'A', [255, 255, 0]);
+  drawText(side, sideWidth, sideHeight, width + gap + 4, 4, 'B', [255, 255, 0]);
+  writeFileSync(path.join(outDir, 'side-by-side.png'), encodePng(sideWidth, sideHeight, side));
+
+  const base = compositeOver(a.rgba, width, height, CHECKER);
+  const overlay = Buffer.alloc(width * height * 3);
+  for (let i = 0; i < width * height; i++) {
+    const alphaB = b.rgba[i * 4 + 3] / 510;
+    for (let c = 0; c < 3; c++) {
+      overlay[i * 3 + c] = Math.round(b.rgba[i * 4 + c] * alphaB + base[i * 3 + c] * (1 - alphaB));
+    }
+  }
+  writeFileSync(path.join(outDir, 'overlay.png'), encodePng(width, height, overlay));
+
+  const gridWidth = width * 2 + gap;
+  const gridHeight = height * 2 + gap;
+  const grid = Buffer.alloc(gridWidth * gridHeight * 3);
+  fillRect(grid, gridWidth, 0, 0, gridWidth, gridHeight, GAP_COLOR);
+  for (const [row, image] of [a, b].entries()) {
+    for (const [column, color] of [
+      [255, 255, 255],
+      [0, 0, 0],
+    ].entries()) {
+      pasteRgb(
+        grid,
+        gridWidth,
+        compositeOver(image.rgba, width, height, () => color),
+        width,
+        height,
+        column * (width + gap),
+        row * (height + gap)
+      );
+    }
+  }
+  writeFileSync(path.join(outDir, 'light-dark.png'), encodePng(gridWidth, gridHeight, grid));
+
+  console.log(
+    `compare: ${outDir}/side-by-side.png overlay.png light-dark.png (${width}x${height}; ` +
+      'light-dark rows A then B, columns white then black)'
+  );
+}
+
 // ---- entry ----
 
 const args = process.argv.slice(2);
@@ -531,9 +790,22 @@ if (args[0] === 'pack' && args.length === 3) {
   pack(args[1], args[2]);
 } else if (args[0] === 'crop' && args.length === 4) {
   crop(args[1], args[2], args[3]);
+} else if (args[0] === 'alpha' && args.length >= 2) {
+  alpha(args[1], args.slice(2));
+} else if (args[0] === 'trim' && args.length >= 3) {
+  trim(args[1], args[2], args.slice(3));
+} else if (args[0] === 'compare' && args.length === 4) {
+  compare(args[1], args[2], args[3]);
 } else {
   console.error(
-    'usage:\n  node reference-pack.mjs pack <image> <out-dir>\n  node reference-pack.mjs crop <image> <x,y,w,h> <out.png>'
+    [
+      'usage:',
+      '  node reference-pack.mjs pack <image> <out-dir>',
+      '  node reference-pack.mjs crop <image> <x,y,w,h> <out.png>',
+      '  node reference-pack.mjs alpha <image.png> [--threshold N]',
+      '  node reference-pack.mjs trim <image.png> <out.png> [--alpha-above N] [--margin M]',
+      '  node reference-pack.mjs compare <a.png> <b.png> <out-dir>',
+    ].join('\n')
   );
   process.exit(2);
 }

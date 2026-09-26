@@ -7,6 +7,7 @@ import type {
 } from '@molly/shared';
 import {
   encodeMollyModelOption,
+  MOLLY_DEFAULT_PERMISSION_MODE,
   MOLLY_UNSELECTED_MODEL,
   type HarnessModelCatalog,
   type ModelConnection,
@@ -44,7 +45,28 @@ export function projectEmbeddedHarnessCatalog(
       modelReasoningEfforts[modelId] = [...model.thinking];
     }
   }
+  const modes: Array<{ id: string; name: string; description: string }> = [
+    { id: 'ask', name: 'Ask', description: 'Ask before protected actions' },
+    {
+      id: 'auto-review',
+      name: 'Auto-review',
+      description:
+        'Run shell commands in an OS sandbox without asking; a model reviews actions that leave it and asks you when it declines',
+    },
+  ];
   const configOptions: AcpConfigOptionSummary[] = [
+    {
+      id: 'mode',
+      name: 'Permission',
+      category: 'mode',
+      type: 'select',
+      currentValue: MOLLY_DEFAULT_PERMISSION_MODE,
+      options: modes.map((mode) => ({
+        value: mode.id,
+        name: mode.name,
+        description: mode.description,
+      })),
+    },
     {
       id: 'model',
       name: 'Model',
@@ -69,7 +91,7 @@ export function projectEmbeddedHarnessCatalog(
       })),
     },
   ];
-  return { models, configOptions, modelReasoningEfforts };
+  return { modes, models, configOptions, modelReasoningEfforts };
 }
 
 /** Only a protected desktop host may expose this engine. No model request or secret lookup. */
@@ -112,7 +134,7 @@ export class EmbeddedHarnessCatalogPublisher {
         configId,
         'builtin',
         'molly',
-        [],
+        projected.modes,
         projected.models.map((model) => ({
           ...model,
           description: model.description ?? undefined,

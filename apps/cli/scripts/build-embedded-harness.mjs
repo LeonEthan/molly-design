@@ -11,8 +11,13 @@ const pinnedRuntimePackages = {
   '@earendil-works/pi-coding-agent': '0.85.1',
   '@earendil-works/pi-ai': '0.85.1',
   '@modelcontextprotocol/sdk': '1.29.0',
+  '@anthropic-ai/sandbox-runtime': '0.0.77',
   typebox: '1.3.7',
 };
+const curatedExtensions = [
+  { name: 'pi-ask-question', entry: 'ask-question.ts' },
+  { name: 'pi-auto-approval', entry: 'review.ts' },
+];
 const external = Object.keys(pinnedRuntimePackages);
 
 function resolvePackage(name, parent) {
@@ -119,18 +124,21 @@ function fileDigests(root, directory = root) {
 
 export async function buildEmbeddedHarness(outputName = 'dist') {
   if (!['dist', 'dist-dev'].includes(outputName)) throw new Error('Invalid owned output directory');
-  const extensionRoot = path.join(harnessRoot, 'vendor/pi-ask-question');
-  const extensionManifest = JSON.parse(
-    fs.readFileSync(path.join(extensionRoot, 'manifest.json'), 'utf8')
-  );
-  for (const [file, expected] of [
-    ['ask-question.ts', extensionManifest.adaptedSha256],
-    ['LICENSE', extensionManifest.licenseSha256],
-  ]) {
-    const actual = createHash('sha256')
-      .update(fs.readFileSync(path.join(extensionRoot, file)))
-      .digest('hex');
-    if (actual !== expected) throw new Error(`Unreviewed curated extension content: ${file}`);
+  for (const extension of curatedExtensions) {
+    const extensionRoot = path.join(harnessRoot, 'vendor', extension.name);
+    const extensionManifest = JSON.parse(
+      fs.readFileSync(path.join(extensionRoot, 'manifest.json'), 'utf8')
+    );
+    for (const [file, expected] of [
+      [extension.entry, extensionManifest.adaptedSha256],
+      ['LICENSE', extensionManifest.licenseSha256],
+    ]) {
+      const actual = createHash('sha256')
+        .update(fs.readFileSync(path.join(extensionRoot, file)))
+        .digest('hex');
+      if (actual !== expected)
+        throw new Error(`Unreviewed curated extension content: ${extension.name}/${file}`);
+    }
   }
   const output = path.join(cliRoot, outputName);
   const directory = path.join(output, 'harness');
@@ -168,10 +176,15 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'model-catalog.json'),
     `${JSON.stringify(await createBundledModelCatalog())}\n`
   );
-  const extensionResources = path.join(directory, 'extensions/pi-ask-question');
-  fs.mkdirSync(extensionResources, { recursive: true });
-  for (const file of ['LICENSE', 'manifest.json']) {
-    fs.copyFileSync(path.join(extensionRoot, file), path.join(extensionResources, file));
+  for (const extension of curatedExtensions) {
+    const extensionResources = path.join(directory, 'extensions', extension.name);
+    fs.mkdirSync(extensionResources, { recursive: true });
+    for (const file of ['LICENSE', 'manifest.json']) {
+      fs.copyFileSync(
+        path.join(harnessRoot, 'vendor', extension.name, file),
+        path.join(extensionResources, file)
+      );
+    }
   }
   const files = fileDigests(directory);
   const manifest = {

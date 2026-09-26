@@ -4098,7 +4098,7 @@
   "settings.browserAccounts.importUnavailableReasons.secure-storage-unavailable": "macOS secure storage is unavailable; Chrome account import was stopped.",
   "settings.browserAccounts.sitesTitle": "Supported import sites",
   "settings.browserAccounts.sitesHint": "Import transfers only this website's cookies. Open the site in Molly to verify the account; some sites may still require sign-in.",
-  "settings.browserAccounts.cookieCount": "Molly site cookies: {{total}}",
+  "settings.browserAccounts.cookieCount": "Stored site cookies: {{total}} · Sign-in not verified",
   "settings.browserAccounts.importSite": "Import from Chrome",
   "settings.browserAccounts.importing": "Importing…",
   "settings.browserAccounts.authorizationHint": "If macOS shows a Keychain prompt, enter your Mac login password in that system dialog. Keep Molly open while it reads the account; first-time authorization can take a few minutes. Molly never asks for your password in this page.",

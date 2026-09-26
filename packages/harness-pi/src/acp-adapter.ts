@@ -14,7 +14,6 @@ import {
   type HarnessRunSnapshot,
   PI_ENGINE_VERSION,
   MOLLY_BUILTIN_MCP_CONNECTION,
-  ImageOperationResultSchema,
   MOLLY_PROVIDER_IDS,
   MOLLY_PREPARE_MCP_METHOD,
   HarnessMcpPreparationSchema,
@@ -33,10 +32,12 @@ import {
 } from '@molly/shared/embedded-harness';
 import { createMollySession, type CreateMollySessionInput } from './session-factory';
 import { NativeRunOutcome } from './run-outcome';
-import { RunJournal } from './run-journal';
+import { RunJournal, type ApprovalRecord } from './run-journal';
 import { hashToolset, type ToolApproval } from './approved-tools';
 import { describeToolCall } from './tool-presentation';
 import { connectMcpBridge } from './mcp-bridge';
+import { classifyEscalation } from './auto-review-classifier';
+import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
 import { ToolOperationJournal } from './tool-operation-journal';
 import { z } from 'zod';
 import { resolveMcpContent } from './mcp-content';
@@ -69,8 +70,6 @@ export class MollyAcpAdapter implements acp.Agent {
     tracker: NativeRunOutcome;
     snapshot: HarnessRunSnapshot;
     controller: AbortController;
-    sideEffectOutcomeUnknown?: boolean;
-    paidOperationFailed?: boolean;
     questionFailed?: boolean;
     extensionFailed?: boolean;
   };
@@ -140,8 +139,33 @@ export class MollyAcpAdapter implements acp.Agent {
     return this.owned?.manager.getSessionId();
   }
 
-  get currentRunScope(): Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch'> | undefined {
+  get currentRunScope():
+    | Pick<HarnessRunSnapshot, 'runId' | 'runtimeEpoch' | 'permissionMode'>
+    | undefined {
     return this.running?.snapshot;
+  }
+
+  /** Classifier review of one auto-review escalation, bound to the active run. */
+  async reviewEscalation(subject: ReviewSubject, signal?: AbortSignal): Promise<ReviewDecision> {
+    const run = this.running;
+    const owned = this.owned;
+    const model = owned?.session.model;
+    if (!run || !owned || !model || run.controller.signal.aborted)
+      throw new Error('harness_run_retired');
+    return classifyEscalation({
+      runtime: owned.runtime,
+      model,
+      entries: owned.manager.getBranch(),
+      subject,
+      signal: signal ? AbortSignal.any([signal, run.controller.signal]) : run.controller.signal,
+    });
+  }
+
+  /** Authorization provenance for the active run; absent a run there is nothing to authorize. */
+  async recordApproval(approval: ApprovalRecord): Promise<void> {
+    const run = this.running;
+    if (!run) throw new Error('harness_run_retired');
+    await this.journal.approval(run.snapshot.runId, run.snapshot.runtimeEpoch, approval);
   }
 
   async initialize(params?: acp.InitializeRequest): Promise<acp.InitializeResponse> {
@@ -346,99 +370,58 @@ export class MollyAcpAdapter implements acp.Agent {
         const image = run.snapshot.imageConnection;
         if (isBuiltinImage && !image) throw new Error('harness_image_connection_unavailable');
         const importImages = this.importImages;
-        try {
-          const result = await operations.dispatch(
-            {
-              snapshot: run.snapshot,
-              connectionId: isBuiltinImage ? image!.id : binding.data.id,
-              connectionRevision: isBuiltinImage ? image!.revision : binding.data.revision,
-              toolCallId,
-              toolName,
-              arguments: args,
-              ...(authorization ? { authorization } : {}),
-              builtinImage: isBuiltinImage,
-              externalImage: isExternalImage,
-              importImages:
-                ((isExternalImage && boundImage) || isBuiltinImage) && importImages
-                  ? async (reply) => {
-                      run.controller.signal.throwIfAborted();
-                      const content = await resolveMcpContent(reply, async () => {
-                        throw new Error('harness_mcp_image_resource_import_unavailable');
-                      });
-                      const request = HarnessImageImportRequestSchema.parse({
-                        version: 1,
-                        runId: run.snapshot.runId,
-                        runtimeEpoch: run.snapshot.runtimeEpoch,
-                        productSessionId: run.snapshot.sessionId,
-                        turnId: run.snapshot.turnId,
-                        connectionId: isBuiltinImage ? image!.id : binding.data.id,
-                        connectionRevision: isBuiltinImage
-                          ? image!.revision
-                          : binding.data.revision,
-                        serverName,
-                        toolName,
-                        toolCallId,
-                        requestDigest: createHash('sha256')
-                          .update(JSON.stringify(args))
-                          .digest('hex'),
-                        images: content
-                          .filter((part) => part.type === 'image')
-                          .map((part) => ({ mimeType: part.mimeType, data: part.data })),
-                      });
-                      const imported = await importImages(request, run.controller.signal);
-                      run.controller.signal.throwIfAborted();
-                      return imported;
-                    }
-                  : undefined,
-            },
-            async (context) => {
-              run.controller.signal.throwIfAborted();
-              return invoke({
-                ...context,
-                ...(isBuiltinImage && importImages
-                  ? { metadata: { [HARNESS_INLINE_IMAGE_RESULT_META]: 1 } }
-                  : {}),
-              });
-            }
-          );
-          if (isBuiltinImage) {
-            const receipt = ImageOperationResultSchema.safeParse(
-              result &&
-                typeof result === 'object' &&
-                '_meta' in result &&
-                result._meta &&
-                typeof result._meta === 'object' &&
-                'mollyImageOperation' in result._meta
-                ? result._meta.mollyImageOperation
-                : undefined
-            );
-            if (receipt.success && receipt.data.dispatched && receipt.data.state === 'failed')
-              throw new Error('harness_paid_retry_requires_user');
+        return await operations.dispatch(
+          {
+            snapshot: run.snapshot,
+            connectionId: isBuiltinImage ? image!.id : binding.data.id,
+            connectionRevision: isBuiltinImage ? image!.revision : binding.data.revision,
+            toolCallId,
+            toolName,
+            arguments: args,
+            ...(authorization ? { authorization } : {}),
+            builtinImage: isBuiltinImage,
+            externalImage: isExternalImage,
+            importImages:
+              ((isExternalImage && boundImage) || isBuiltinImage) && importImages
+                ? async (reply) => {
+                    run.controller.signal.throwIfAborted();
+                    const content = await resolveMcpContent(reply, async () => {
+                      throw new Error('harness_mcp_image_resource_import_unavailable');
+                    });
+                    const request = HarnessImageImportRequestSchema.parse({
+                      version: 1,
+                      runId: run.snapshot.runId,
+                      runtimeEpoch: run.snapshot.runtimeEpoch,
+                      productSessionId: run.snapshot.sessionId,
+                      turnId: run.snapshot.turnId,
+                      connectionId: isBuiltinImage ? image!.id : binding.data.id,
+                      connectionRevision: isBuiltinImage ? image!.revision : binding.data.revision,
+                      serverName,
+                      toolName,
+                      toolCallId,
+                      requestDigest: createHash('sha256')
+                        .update(JSON.stringify(args))
+                        .digest('hex'),
+                      images: content
+                        .filter((part) => part.type === 'image')
+                        .map((part) => ({ mimeType: part.mimeType, data: part.data })),
+                    });
+                    const imported = await importImages(request, run.controller.signal);
+                    run.controller.signal.throwIfAborted();
+                    return imported;
+                  }
+                : undefined,
+          },
+          async (context) => {
+            run.controller.signal.throwIfAborted();
+            return invoke({
+              ...context,
+              ...(isBuiltinImage && importImages
+                ? { metadata: { [HARNESS_INLINE_IMAGE_RESULT_META]: 1 } }
+                : {}),
+            });
           }
-          if (
-            isExternalImage &&
-            result &&
-            typeof result === 'object' &&
-            'isError' in result &&
-            result.isError === true
-          )
-            throw new Error('harness_paid_retry_requires_user');
-          return result;
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            ['harness_mcp_outcome_unknown', 'harness_paid_retry_requires_user'].includes(
-              error.message
-            )
-          ) {
-            run.sideEffectOutcomeUnknown = error.message === 'harness_mcp_outcome_unknown';
-            run.paidOperationFailed = error.message === 'harness_paid_retry_requires_user';
-            run.controller.abort();
-            // abort waits for tool settlement, so awaiting here would deadlock this tool.
-            void this.owned?.session.abort().catch(() => undefined);
-          }
-          throw error;
-        }
+        );
       },
     };
     this.bridge = await connectMcpBridge(
@@ -743,13 +726,9 @@ export class MollyAcpAdapter implements acp.Agent {
           ? { status: 'failed' as const, errorCode: 'extension_hook_failed' }
           : this.running.questionFailed
             ? { status: 'failed' as const, errorCode: 'extension_question_failed' }
-            : this.running.sideEffectOutcomeUnknown
-              ? { status: 'interrupted' as const, reason: 'mcp_outcome_unknown' }
-              : this.running.paidOperationFailed
-                ? { status: 'interrupted' as const, reason: 'paid_retry_requires_user' }
-                : updateFailed
-                  ? { status: 'interrupted' as const, reason: 'acp_delivery_failed' }
-                  : tracker.finish(owned.manager.getLeafId());
+            : updateFailed
+              ? { status: 'interrupted' as const, reason: 'acp_delivery_failed' }
+              : tracker.finish(owned.manager.getLeafId());
       await this.journal.settle(snapshot.runId, snapshot.runtimeEpoch, outcome);
       await this.publishUsage(params.sessionId);
       if (outcome.status === 'failed' || outcome.status === 'interrupted')

@@ -126,9 +126,8 @@ force a retry.
 ## Release status and support limits
 
 The embedded Pi migration has **scoped accepted evidence**, not full acceptance.
-Evidence and remaining work are recorded in the
-[implementation note](.agents/notes/proposed/architecture/2026-09-19-embedded-pi-harness-implementation.zh.md)
-and the [final package delivery note](.agents/notes/implemented/testing/2026-09-20-final-package-delivery.zh.md).
+Detailed implementation and package records are local-only; the supported scope
+and remaining limits are summarized here.
 
 | Connection                                            | Current evidence and limits                                                                                                                                                                                                                                                             |
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -140,14 +139,9 @@ and the [final package delivery note](.agents/notes/implemented/testing/2026-09-
 The macOS arm64 delivery package was verified from a DMG-installed copy: first launch,
 session reopening, artwork rendering (including previously generated images), manual
 edit and autosave, PNG export, legacy-continuation canvas routing and restart
-persistence. Configured-model turns were verified on earlier installed builds
-([install and Kimi connection](.agents/notes/implemented/bug-fix/2026-09-20-packaged-helper-startup.zh.md),
-[editable artwork journey](.agents/notes/implemented/bug-fix/2026-09-20-editable-design-journey.zh.md)),
-real image generation/editing in one artwork
-([image journey](.agents/notes/implemented/testing/2026-09-20-image-generate-edit-replace.zh.md),
-including its retry-authorization disclosure), and legacy continuation on a hybrid
-package
-([continuation acceptance](.agents/notes/implemented/testing/2026-09-20-design-session-continuation-acceptance.zh.md)).
+persistence. Configured-model turns were verified on earlier installed builds.
+Real image generation/editing in one artwork, including the retry-authorization
+disclosure, and legacy continuation on a hybrid package were verified separately.
 Windows resource builds are not native execution evidence. Linux desktop support
 is retired; Linux CI and resource-integrity checks do not imply product support. The reviewed `pi-ask-question` subset has
 SDK tests, and native question interaction was verified on an installed build;
@@ -159,9 +153,8 @@ slash-command system, complex image composition (masks, multiple reference image
 format matrices), dedicated cross-platform acceptance, long-term performance testing,
 and bundled-Pi upgrade/uninstall drills.
 
-The earlier [design acceptance](.agents/notes/implemented/testing/2026-09-11-complete-design-acceptance.md)
-and [five-Agent matrix](.agents/notes/implemented/testing/2026-09-11-installed-five-agent-matrix.md)
-are historical evidence for the pre-migration runtime. They do not validate the
+Earlier design acceptance and the five-Agent matrix are historical evidence for
+the pre-migration runtime. They do not validate the
 current embedded engine. See the [review procedure](e2e/DESIGN-ACCEPTANCE.md) for
 design review context, not a claim that the migration has passed.
 

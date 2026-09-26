@@ -618,7 +618,6 @@ export interface MessageHandlerConfig {
   cliVersion: string;
   machineLifecycleCapability?: MachineLifecycleCapability;
   supportRegistryAgentTypes?: string[];
-  closeSessionTerminals?: (sessionId: SessionId) => void;
   localWorkspaceCatalog?: LocalWorkspaceCatalogService;
   cleanupLocalProjectWorktreeSetupIfUnreferenced?: (
     localProjectId: LocalProjectId
@@ -783,7 +782,6 @@ export class MessageHandler {
   private machineName: string;
   private cliVersion: string;
   private supportRegistryAgentTypes: string[];
-  private closeSessionTerminals?: (sessionId: SessionId) => void;
   private cleanupLocalProjectWorktreeSetupIfUnreferenced?: (
     localProjectId: LocalProjectId
   ) => Promise<void>;
@@ -2985,7 +2983,6 @@ export class MessageHandler {
       this.logger
     );
     this.supportRegistryAgentTypes = config.supportRegistryAgentTypes ?? [];
-    this.closeSessionTerminals = config.closeSessionTerminals;
     this.cleanupLocalProjectWorktreeSetupIfUnreferenced =
       config.cleanupLocalProjectWorktreeSetupIfUnreferenced;
     this.onFatalAuthFailure = config.onFatalAuthFailure;
@@ -3801,7 +3798,6 @@ export class MessageHandler {
     this.logger.debug(`[${sessionId}] Archiving session resources`);
 
     this.clearSessionActivePresence(sessionId);
-    this.closeSessionTerminals?.(sessionId);
     this.logger.debug(`[${sessionId}] Active presence cleared`);
 
     await this.finalizeACPState(sessionId);
@@ -4161,7 +4157,6 @@ export class MessageHandler {
     await Promise.all(
       childSessionIds.map(async (childSessionId) => {
         this.clearSessionActivePresence(childSessionId);
-        this.closeSessionTerminals?.(childSessionId);
         await this.finalizeACPState(childSessionId);
         await this.previewService.closeSessionPreviewForCleanup(childSessionId, reason);
         await this.sessionManager.terminateSession(childSessionId, true);
@@ -4335,7 +4330,6 @@ export class MessageHandler {
     await this.terminateActiveChildSessions(sessionId, 'Parent session deleted');
 
     this.clearSessionActivePresence(sessionId);
-    this.closeSessionTerminals?.(sessionId);
 
     await this.finalizeACPState(sessionId);
 

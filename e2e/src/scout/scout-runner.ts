@@ -180,8 +180,6 @@ async function runWorkIteration(
   captureActive?: () => Promise<ScoutCheckpoint['active']>
 ): Promise<ScoutCheckpoint['active'] | null> {
   await session.createCompletedSession(`Scout Work lifecycle ${iteration} [SCOUT:REPLY]`);
-  const marker = `lody-scout-terminal-${iteration}`;
-  await work.openTerminalAndRun(`printf '${marker}\\n'`, marker);
   const resources = await work.captureResources();
   const active = captureActive ? await captureActive() : null;
   await work.archiveAndDeletePermanently(resources);

@@ -1,9 +1,9 @@
 # 生成式分层设计：任务与方案
 
 Status: approved
-Approval: [2026-09-26 closeout approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.zh.md#closeout-approval-2026-09-26)
-Previous revision approval: [2026-09-26 owner approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#workflow-rewrite-approval-2026-09-26)
-Previous approval: [2026-09-25 owner approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#spec-approval-2026-09-25)
+Approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
+Previous revision approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
+Previous approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
 Translation: current
 
 [English](generative-layered-design-workflow.md)
@@ -43,7 +43,7 @@ Translation: current
 
 ## 实施任务
 
-下表保留已完成的实施范围。后续修复依据[工作流 Skill 重写决定](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.zh.md#工作流-skill-重写方案2026-09-26)：已完成共享素材检查与安全诊断、入口及参考分工重写、随包材料验证及行为与人工验收。决定借鉴用户提供的邻仓演示文稿 Skill 的定义/分支/验证/交付组织方式，不引入其产品依赖。
+下表保留已完成的实施范围。获批的工作流 Skill 重写涵盖共享素材检查与安全诊断、入口及参考分工重写、随包材料验证及行为与人工验收。方案借鉴用户提供的邻仓演示文稿 Skill 的定义、分支、验证和交付组织方式，不引入其产品依赖。
 
 | 任务         | 交付内容                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -76,12 +76,12 @@ Translation: current
 
 ## 依据
 
-- [实现与验证记录](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.zh.md)：真实图片接口、透明裁剪、桌面编辑和内置 Kimi 对比调整的分段证据及限制。
+- [PR #17 概要](https://github.com/LeonEthan/molly-design/pull/17)记录最初获批范围。真实图片接口、透明裁剪、桌面编辑及内置 Kimi 实验的详细记录仅留本地；后续验收摘要见下文。
 - [设计平台合同](graphic-design-platform.zh.md)：编辑、持久化和 Agent 生命周期边界。
-- 关联验证记录分别说明实施前的检查、已落地的修改及之后的验收运行。接口测试通过不代表端到端或视觉验收通过。
+- 仅保留本地的验证记录分别说明实施前检查、已落地修改及之后的验收运行。接口测试通过不代表端到端或视觉验收通过。
 
 最新完整运行完成设计网站调研、分层创作、两次原生预览读图和应用保存，人工审批提示为零。
 用户明确确认已完成人工改字、保存、重开及导出。macOS arm64 签名包在正常退出重开后保持
 Pinterest 登录；之后发现的浏览器闪屏和输入回归已修复并在真实界面验证。
-批准依据与验收边界见所属记录的[最终验收](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.zh.md#closeout-approval-2026-09-26)。
+批准依据见[公开批准摘要](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)；验收边界见本节。
 仅浏览器修复未重跑付费设计任务；这些检查不证明公开公证分发、其他提供商或长期性能。

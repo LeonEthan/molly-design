@@ -102,11 +102,11 @@ boundary validation. Repository automation tests also run with
 `node --test .github/scripts/*.test.mjs`; packaging changes use the Electron
 packaging probes. A passing build is not installed-user or visual acceptance.
 
-For changes to important behavior or architecture, follow the
-[document maintenance workflow](./.agents/README.md). Specs explain intent and require explicit human
-review. Significant decisions belong in an Agent Note; routine styling and local
-fixes normally need only a PR explanation. You may contribute in either English
-or Chinese; maintainers can arrange the counterpart after merge. Invariants
+For changes to important behavior or architecture, follow [repository guidance](AGENTS.md)
+and the [Spec rules](specs/AGENTS.md). Specs explain intent and require explicit human
+review. Explain significant decisions and evidence in the PR body and affected
+tracked docs; routine styling and local fixes normally need only a PR explanation.
+You may contribute in either English or Chinese; maintainers can arrange the counterpart after merge. Invariants
 continue to live in the nearest `AGENTS.md`.
 
 1. Create a clearly named branch from the latest code.

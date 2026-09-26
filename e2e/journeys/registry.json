@@ -45,7 +45,10 @@
         "workspace initialization completes",
         "session composer is editable"
       ],
-      "cleanup": ["desktop process tree exits", "isolated endpoint can be rebound"],
+      "cleanup": [
+        "desktop process tree exits",
+        "isolated endpoint can be rebound"
+      ],
       "coverage": {
         "renderer": "Intro and local entry",
         "electronIpc": "Real window and invoke bridge",
@@ -101,7 +104,10 @@
         "the held model request is cancelled after Stop",
         "Session disappears after permanent deletion"
       ],
-      "cleanup": ["model request is cancelled", "Session durable state is deleted"],
+      "cleanup": [
+        "model request is cancelled",
+        "Session durable state is deleted"
+      ],
       "coverage": {
         "renderer": "Session lifecycle",
         "electronIpc": "Real window and invoke bridge",
@@ -116,23 +122,24 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": ["session"],
+      "scoutJourneys": [
+        "session"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 2
     },
     {
-      "id": "LODY-WORK-001",
+      "id": "LODY-SESSION-002",
       "state": "active",
       "priority": "P0",
       "runtime": "simulator",
-      "title": "Delete a Session with Agent and Terminal resources",
+      "title": "Delete a completed Session with Agent resources, preserving the project directory",
       "owner": "work-lifecycle",
       "feature": "src/features/lifecycle.feature",
       "fixture": "synthetic-git-and-scripted-model",
-      "fingerprint": "25d4522ff4188bb39e636262b06a35a2d1d77afc9a61b0b764b2998b6ad3ae1d",
+      "fingerprint": "c52ffe7a131dace94ba899f939a931363256f1e5ba9ece30d6c7590a61912393",
       "ownerPaths": [
         "apps/cli/src/session/",
-        "packages/components/src/components/terminal/",
         "packages/components/src/components/sessions/"
       ],
       "actions": [
@@ -146,9 +153,6 @@
           "id": "session.createCompleted"
         },
         {
-          "id": "terminal.openAndRunMarker"
-        },
-        {
           "id": "session.archive"
         },
         {
@@ -157,15 +161,17 @@
       ],
       "checkpoints": [
         "Session completes its scripted model turn",
-        "Terminal command produces its marker",
-        "permanent delete releases the Terminal and preserves the project directory"
+        "permanent delete releases Session resources and preserves the project directory"
       ],
-      "cleanup": ["model turn completes", "Terminal exits", "project directory remains intact"],
+      "cleanup": [
+        "model turn completes",
+        "project directory remains intact"
+      ],
       "coverage": {
         "renderer": "Work lifecycle",
-        "electronIpc": "Real window, IPC, and Terminal",
+        "electronIpc": "Real window and IPC",
         "bundledCli": "Real owned runtime",
-        "durableState": "Session and terminal cleanup; project directory preserved",
+        "durableState": "Session cleanup; project directory preserved",
         "externalWire": "Scripted model"
       },
       "signals": {
@@ -175,7 +181,9 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": ["work"],
+      "scoutJourneys": [
+        "work"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 3
     },
@@ -221,7 +229,10 @@
         "Review survives hide and restore",
         "Review state is released after Session deletion"
       ],
-      "cleanup": ["Review tabs close", "Session durable state is deleted"],
+      "cleanup": [
+        "Review tabs close",
+        "Session durable state is deleted"
+      ],
       "coverage": {
         "renderer": "Large diff Review lifecycle",
         "electronIpc": "Real window and diff RPC",
@@ -236,7 +247,9 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": ["review"],
+      "scoutJourneys": [
+        "review"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 4
     },
@@ -384,7 +397,10 @@
         "driving turn carries the explicit MCP selection into ACP startup",
         "catalog entry is removed without changing prior turn input"
       ],
-      "cleanup": ["synthetic MCP process exits", "workspace MCP catalog entry is deleted"],
+      "cleanup": [
+        "synthetic MCP process exits",
+        "workspace MCP catalog entry is deleted"
+      ],
       "coverage": {
         "renderer": "MCP settings and composer selection",
         "electronIpc": "Real window and workspace RPC",
@@ -404,7 +420,9 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": ["session"],
+      "scoutJourneys": [
+        "session"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 6
     },
@@ -448,7 +466,10 @@
         "Session records Role id and revision",
         "later Role edits do not alter the accepted Session execution target"
       ],
-      "cleanup": ["Session is permanently deleted", "Agent Role catalog row is deleted"],
+      "cleanup": [
+        "Session is permanently deleted",
+        "Agent Role catalog row is deleted"
+      ],
       "coverage": {
         "renderer": "Agent Role settings and composer selection",
         "electronIpc": "Real window and workspace RPC",
@@ -468,7 +489,9 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": ["session"],
+      "scoutJourneys": [
+        "session"
+      ],
       "blockedReason": "A deterministic Agent Role revision fixture and stable Settings Page Object actions are not registered yet.",
       "estimatedMinutes": 7
     },
@@ -508,7 +531,10 @@
         "fork records its origin and owns an independent worktree",
         "source Session remains unchanged when the fork is deleted"
       ],
-      "cleanup": ["fork ACP process exits", "fork worktree and Session are deleted"],
+      "cleanup": [
+        "fork ACP process exits",
+        "fork worktree and Session are deleted"
+      ],
       "coverage": {
         "renderer": "Session fork destination and origin",
         "electronIpc": "Real window and Session RPC",
@@ -528,70 +554,12 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": ["session", "work"],
+      "scoutJourneys": [
+        "session",
+        "work"
+      ],
       "blockedReason": "Design Sessions expose no worktree creation path: creation has no worktree selector and the embedded engine advertises no sessionFork capability, so the fork destination menu never renders. The scripted-ACP fixture premise retired with the legacy harness; re-author against the scripted model wire if a product worktree path returns.",
       "estimatedMinutes": 8
-    },
-    {
-      "id": "LODY-SESSION-002",
-      "state": "backlog",
-      "priority": "P1",
-      "runtime": "none",
-      "title": "Rename, pin, archive, and restore a local Session",
-      "owner": "session-lifecycle",
-      "fixture": "seeded-local-session",
-      "fingerprint": "846a5f9696ec4ea5751872782a0a4e294aeafcf3ad30687d96ab5bef01964506",
-      "ownerPaths": [
-        "packages/components/src/components/archive/",
-        "packages/components/src/components/sessions/rename-session-dialog.tsx",
-        "packages/components/src/components/sessions/session-pin.tsx",
-        "packages/components/src/lib/archived-session-tree.ts"
-      ],
-      "actions": [
-        {
-          "id": "session.seedLocal"
-        },
-        {
-          "id": "session.rename"
-        },
-        {
-          "id": "session.pin"
-        },
-        {
-          "id": "session.archive"
-        },
-        {
-          "id": "archive.restoreSession"
-        }
-      ],
-      "checkpoints": [
-        "renamed title survives navigation",
-        "pin state is durable",
-        "archived Session can be restored without losing history"
-      ],
-      "cleanup": ["Session is permanently deleted"],
-      "coverage": {
-        "renderer": "Session metadata and Archive UI",
-        "electronIpc": "Real window and Session RPC",
-        "bundledCli": "Real owned runtime",
-        "durableState": "Title, pin, archive, and restore",
-        "externalWire": "None"
-      },
-      "gap": "The current lifecycle deletes an archived Session but never verifies common metadata edits or restoration from Archive.",
-      "evidence": [
-        "packages/components/src/components/sessions/rename-session-dialog.tsx",
-        "packages/components/src/components/archive/archive-view.tsx"
-      ],
-      "signals": {
-        "criticality": 4,
-        "boundaryRisk": 3,
-        "changeFrequency": 3,
-        "escapedDefect": false
-      },
-      "freshness": 3,
-      "scoutJourneys": ["session"],
-      "blockedReason": null,
-      "estimatedMinutes": 4
     }
   ]
 }

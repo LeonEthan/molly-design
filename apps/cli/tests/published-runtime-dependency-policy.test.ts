@@ -23,11 +23,11 @@ describe('published runtime dependency policy', () => {
         dependencyBlocks: [
           {
             'loro-crdt': '^1.15.1',
-            '@lydell/node-pty': '1.2.0-beta.15',
+            sharp: '0.35.4',
           },
         ],
         exactDependencies: ['loro-crdt'],
-        pinnedDependencies: new Map([['@lydell/node-pty', '1.2.0-beta.14']]),
+        pinnedDependencies: new Map([['sharp', '0.35.3']]),
       })
     ).toEqual([
       {
@@ -36,9 +36,9 @@ describe('published runtime dependency policy', () => {
         actualVersion: '^1.15.1',
       },
       {
-        dependencyName: '@lydell/node-pty',
-        expectedVersion: '1.2.0-beta.14',
-        actualVersion: '1.2.0-beta.15',
+        dependencyName: 'sharp',
+        expectedVersion: '0.35.3',
+        actualVersion: '0.35.4',
       },
     ]);
   });

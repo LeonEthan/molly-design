@@ -62,45 +62,6 @@ export const interfaceFontFamilyAtom = atom(
   }
 );
 
-export const DEFAULT_TERMINAL_FONT_SIZE = 13;
-export const TERMINAL_FONT_SIZE_MIN = 9;
-export const TERMINAL_FONT_SIZE_MAX = 24;
-export const TERMINAL_FONT_FAMILY_MAX_LENGTH = 100;
-
-export function normalizeTerminalFontFamily(value: unknown): string {
-  return typeof value === 'string' && !isSymbolFontFamily(value)
-    ? value.trim().slice(0, TERMINAL_FONT_FAMILY_MAX_LENGTH)
-    : '';
-}
-
-export function normalizeTerminalFontSize(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return DEFAULT_TERMINAL_FONT_SIZE;
-  }
-  return Math.min(TERMINAL_FONT_SIZE_MAX, Math.max(TERMINAL_FONT_SIZE_MIN, Math.round(value)));
-}
-
-const terminalFontFamilyStorageAtom = atomWithProductStorage<unknown>('molly-terminal-font-family', '');
-
-export const terminalFontFamilyAtom = atom(
-  (get) => normalizeTerminalFontFamily(get(terminalFontFamilyStorageAtom)),
-  (_get, set, nextValue: string) => {
-    set(terminalFontFamilyStorageAtom, normalizeTerminalFontFamily(nextValue));
-  }
-);
-
-const terminalFontSizeStorageAtom = atomWithProductStorage<unknown>(
-  'molly-terminal-font-size',
-  DEFAULT_TERMINAL_FONT_SIZE
-);
-
-export const terminalFontSizeAtom = atom(
-  (get) => normalizeTerminalFontSize(get(terminalFontSizeStorageAtom)),
-  (_get, set, nextValue: number) => {
-    set(terminalFontSizeStorageAtom, normalizeTerminalFontSize(nextValue));
-  }
-);
-
 // Desktop settings modal open state. On desktop (non-mobile) the settings UI is a
 // modal overlay driven by this atom instead of a full-page route. Mobile keeps the
 // route-based settings page and ignores this atom.

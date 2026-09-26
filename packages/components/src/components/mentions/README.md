@@ -1,8 +1,7 @@
 # src/components/mentions
 
 Product-level mention sources built on the `src/ui/mention` primitive. Binding
-rules live in [AGENTS.md](AGENTS.md); the pipeline and its reasoning live in
-[ui-mentions.md](../../../../../.agents/docs/ui-mentions.md).
+rules live in [AGENTS.md](AGENTS.md); this file maps their implementation.
 
 ## Files
 

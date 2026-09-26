@@ -1,8 +1,8 @@
 # apps/cli/src/lib — file responsibilities
 
 Binding rules live in [AGENTS.md](AGENTS.md) and in the scoped `AGENTS.md` of each
-subdirectory; this file is the navigation index. Cross-module explanations live in
-[`.agents/docs/`](../../../../.agents/docs/AGENTS.md).
+subdirectory; this file is the navigation index. Maintainers may keep optional
+cross-module explanations under local-only `.agents/docs/`.
 
 ## Message hub and transports
 
@@ -28,7 +28,7 @@ subdirectory; this file is the navigation index. Cross-module explanations live 
   subscriptions and remote-bridge orchestration have been removed.
 - `local-loro-data-plane-server.ts` — Electron renderer ↔ CLI local Loro data plane
   (protocol v7). Design:
-  [`.agents/docs/cli-lib-local-loro-data-plane.md`](../../../../.agents/docs/cli-lib-local-loro-data-plane.md).
+  `.agents/docs/cli-lib-local-loro-data-plane.md`.
 - `local-ipc-socket-server.ts`, `local-control-handler.ts`, `local-session-control.ts`,
   `local-project-control-service.ts`, `local-project-control-client.ts` — the local
   daemon socket surface and its clients.
@@ -41,10 +41,10 @@ subdirectory; this file is the navigation index. Cross-module explanations live 
 - `session-file-blob-store.ts`, `session-file-attachments.ts`,
   `acp-agent-attachments.ts` — the local attachment lifecycle;
   see
-  [`.agents/docs/cli-lib-session-files.md`](../../../../.agents/docs/cli-lib-session-files.md).
+  `.agents/docs/cli-lib-session-files.md`.
 - `session-gc-manager.ts` — idle cleanup plus memory-pressure reclamation. Per-OS
   measurement rationale:
-  [`.agents/docs/cli-lib-memory-pressure.md`](../../../../.agents/docs/cli-lib-memory-pressure.md).
+  `.agents/docs/cli-lib-memory-pressure.md`.
 - `session-transient-store.ts` — buffered ACP updates and their turn ownership.
 - `session-activity-status.ts`, `session-live-status.ts` — derived busy/idle state.
 

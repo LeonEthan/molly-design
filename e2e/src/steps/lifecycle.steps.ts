@@ -62,18 +62,14 @@ Given('已添加干净的合成 Git 项目', async function (this: MollyWorld) {
   );
 });
 
-When('用户在 Session 中完成回复并启动 Terminal', async function (this: MollyWorld) {
+When('用户在 Session 中完成回复', async function (this: MollyWorld) {
   this.activeRuntimeEvent = await this.sessionPage!.createCompletedSession(
     'Exercise work lifecycle [SCOUT:REPLY]'
   );
-  const terminalCommand = process.platform === 'win32'
-    ? 'cmd.exe /d /c echo lody-terminal-rea^dy'
-    : "printf 'lody-terminal-%s\\n' ready";
-  await this.workPage!.openTerminalAndRun(terminalCommand, 'lody-terminal-ready');
   this.workResources = await this.workPage!.captureResources();
 });
 
-Then('永久删除后终端被释放且项目目录保留', async function (this: MollyWorld) {
+Then('永久删除后 Session 资源被释放且项目目录保留', async function (this: MollyWorld) {
   await this.workPage!.archiveAndDeletePermanently(this.workResources!);
   await this.workPage!.expectResourcesReleased(this.workResources!);
   expect(this.workFixture!.readEvents()).toContainEqual(

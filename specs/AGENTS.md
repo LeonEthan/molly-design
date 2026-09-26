@@ -1,15 +1,15 @@
 # Human-reviewed Specs
 
-Follow [document maintenance](../.agents/README.md). This directory
-contains only publicly shareable client behavior, architecture, and protocol
-Specs. No private implementation, operator configuration, or internal records.
-Use public evidence and identify what this repository cannot establish.
+This directory contains only publicly shareable client behavior, architecture,
+and protocol Specs. Exclude private implementation, operator configuration and
+internal records. Use public evidence and identify what this repository cannot
+establish. Keep explanatory material in the owning tracked README or PR body;
+local-only `.agents/` records are optional background.
 
-Translation follows the [shared language policy](../.agents/README.md#asynchronous-bilingual-documentation).
-Use the [structural writing guide](../.agents/README.md#structural-explanations)
-for diagrams, [`.agents/docs/`](../.agents/docs/AGENTS.md) for explanation that
-is not intent,
-and the [scoped SHA workflow](../.agents/content-review.md) for protected content.
+English and Chinese translations may follow asynchronously. `current` means the
+counterparts express the same intent; mark an older translation `stale` when
+meaning changes. A translation never grants approval. Registered SHA protection
+is reviewed through `pnpm run docs status` and `pnpm run docs check`.
 
 Specs express human intent and help people understand the system. Start with a
 scenario, then the responsibilities and important interactions. Be concise; omit

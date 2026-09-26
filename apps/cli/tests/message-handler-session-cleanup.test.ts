@@ -72,7 +72,6 @@ type MessageHandlerInternals = {
 function createHarness(options?: {
   sessionId?: SessionId;
   childSessionIds?: SessionId[];
-  closeSessionTerminals?: (sessionId: SessionId) => void;
   machineFlockRows?: MachineFlockScanRow[];
   sessionMetas?: SessionMeta[];
   activeSessionIds?: SessionId[];
@@ -186,7 +185,6 @@ function createHarness(options?: {
     cleanUp: vi.fn(async () => {}),
     setSessionError: vi.fn(async () => {}),
   };
-  const closeSessionTerminals = options?.closeSessionTerminals ?? vi.fn();
 
   const handler = new MessageHandler(
     sessionManager as unknown as SessionManager,
@@ -199,7 +197,6 @@ function createHarness(options?: {
       machineId,
       machineName: 'machine',
       cliVersion: '0.0.0',
-      closeSessionTerminals,
       cloudPort: createTestCloudPort(),
     }
   );
@@ -212,7 +209,6 @@ function createHarness(options?: {
     handler: internal,
     sessionId,
     childSessionIds,
-    closeSessionTerminals,
     sessionManager,
     repo,
     events,
@@ -224,28 +220,7 @@ function createHarness(options?: {
   };
 }
 
-describe('MessageHandler terminal cleanup', () => {
-  it('closes session terminals when archiving resources even without an active session', async () => {
-    const { handler, sessionId, closeSessionTerminals, sessionManager } = createHarness();
-
-    await handler.archiveSessionResources(sessionId);
-
-    expect(closeSessionTerminals).toHaveBeenCalledWith(sessionId);
-    expect(sessionManager.terminateSession).not.toHaveBeenCalled();
-  });
-
-  it('closes parent and active child terminals before permanent deletion cleanup', async () => {
-    const childSessionId = 'child-1' as SessionId;
-    const { handler, sessionId, closeSessionTerminals } = createHarness({
-      childSessionIds: [childSessionId],
-    });
-
-    await handler.deleteSessionResources(sessionId);
-
-    expect(closeSessionTerminals).toHaveBeenCalledWith(childSessionId);
-    expect(closeSessionTerminals).toHaveBeenCalledWith(sessionId);
-  });
-
+describe('MessageHandler session resource cleanup', () => {
   it('drops transient ACP retry state before deletion and rejects late output', async () => {
     const { handler, sessionId, repo } = createHarness();
 

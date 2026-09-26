@@ -80,7 +80,7 @@ If a panel is hidden during its first load, Electron retains the completed edito
 without revealing it; reopening reuses that instance. Initial display and viewport
 fitting both honor the host's current visibility intent.
 Unexpected dirty content blocks reload rather than being discarded. The original
-store CAS remains independent. See the [implementation note](../../.agents/notes/implemented/architecture/2026-09-11-canvas-serial-execution.zh.md), including the headless limitation.
+store CAS remains independent. Headless rendering is outside this verification.
 
 The generic `molly.selection()` bridge exposes the existing stable selection IDs.
 Electron captures those IDs, flushes, and pairs them with the saved canonical
@@ -130,7 +130,7 @@ bridge, and validates reference actions before sending a captured reference back
 to the ordinary composer. An ephemeral selection epoch rejects delayed operations
 after switching targets, including switching away and back. Retained views keep
 selection, zoom and toolbar across shell remounts. The old shell pill/spacer is
-retired. See the [implementation and visual evidence](../../.agents/notes/proposed/architecture/2026-09-17-free-canvas-multi-artboard-research.zh.md).
+retired.
 
 ## Image and selection actions
 

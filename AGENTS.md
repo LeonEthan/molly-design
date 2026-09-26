@@ -22,8 +22,8 @@ optimize. Build only what is needed now; completed code and concept images do no
   different purposes. Recompute derived views where feasible; justify persistence
   by current use. Keep exposed Bento edits lossless in YAML with minimal adaptation.
   Put scene knowledge in skills; base constraints on evidence.
-- Before design changes, read the [Spec](specs/graphic-design-platform.zh.md) and
-  [scope review](.agents/notes/proposed/simplification/2026-09-11-design-result-feedback.zh.md).
+- Before design changes, read the [Spec](specs/graphic-design-platform.zh.md).
+  Local-only `.agents/` records may supply additional context when present.
   Rules define the target; evidence establishes current support.
 
 ## Design platform: agent-naive environment
@@ -54,24 +54,23 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 
 ## Context and documentation
 
-- Read applicable `AGENTS.md`, relevant Specs, active notes, `.agents/docs/` and
-  module READMEs. Topic triggers apply across directories. Archives are history.
+- Read applicable `AGENTS.md`, relevant Specs and module READMEs. Local-only
+  `.agents/` records may add context but are not required in a fresh checkout.
 - Specs define intent, docs implementation, notes decisions. Distinguish bugs,
   stale docs and unimplemented intent using evidence; never rewrite intent to
   justify bugs.
 - Changed intent/guarantees return the [Spec](specs/AGENTS.md) to `draft`.
   `approved` requires linked human approval of that revision; review `outdated`.
   Only editorial changes preserving meaning retain approval.
-- Non-trivial changes and substantial research/design need an owning
-  [Agent Note](.agents/notes/AGENTS.md#when-to-write) in the same PR, if any. Only
-  mechanical/local edits without changed decisions are exempt. Link distinct
-  decisions; proposals stay `proposed`. Report deferred notes on read-only tasks.
+- Record non-trivial decisions and substantial research/design in the PR body and
+  affected tracked docs. Local `.agents/` notes may supplement that record but
+  are never required or committed. Read-only tasks report findings in the reply.
 - Update affected docs/READMEs. Run `pnpm run docs status` at start and
   `pnpm run docs check` at finish; keep `run` (bare `docs` opens package websites).
-  Review SHA-protected changes. Checks/translations
-  prove neither correctness nor approval. Translation may follow; see [maintenance](.agents/README.md).
+  Review registered SHA-protected changes. Checks and translations prove neither
+  correctness nor approval. Translation may follow the Spec's status policy.
 - Binding rules belong in the nearest `AGENTS.md` (<8 KiB); new scopes need a
-  `CLAUDE.md` symlink. Keep rationale in owning docs/notes.
+  `CLAUDE.md` symlink. Keep public rationale in owning docs or the PR body.
 
 ## Repository boundary
 
@@ -124,9 +123,7 @@ Details: [.github/codex-review.md](.github/codex-review.md).
   public/cloud/local boundary.
 - P1: likely shipped breakage or a durable catalog/session contract violation.
 
-## Agent skills
+## Local agent material
 
-- Issues (`gh` on `LeonEthan/molly-design`): [issue tracker](.agents/agent-skills/issue-tracker.md); triage: [labels](.agents/agent-skills/triage-labels.md).
-- Domain (`CONTEXT.md` glossary, `.agents/docs/adr/`; top-level `docs/` is a closed product path): [domain rules](.agents/agent-skills/domain.md).
-- Task flows (bug fix / investigation / ship PR): [playbooks](.agents/agent-skills/playbooks.md); cite [principles](.agents/agent-skills/engineering-principles.md) by name.
-- Verify on the real surface: [verification](.agents/agent-skills/verification.md); long/unattended work: [decision log](.agents/agent-skills/decision-log.md).
+`.agents/` is ignored by Git and exists only on machines that maintain it. Its
+skills and notes are optional aids, not public repository dependencies.

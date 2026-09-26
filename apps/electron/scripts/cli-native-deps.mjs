@@ -18,24 +18,19 @@ const require = createRequire(import.meta.url)
 
 // Mirror of the published CLI's runtime dependencies (enforced by
 // apps/cli/scripts/check-published-bundle-imports.js): the bundle keeps
-// better-sqlite3 and node-pty external, and worker_threads pools
+// better-sqlite3 external, and worker_threads pools
 // require.resolve('loro-crdt') at module scope to hand workers a real on-disk
 // package (workers cannot share the wasm module inlined into the bundle).
 // better-sqlite3 >=13 has no runtime require-chain of its own (node-addon-api is
 // build-time only); its prebuilt binaries live in `prebuilds/<platform>-<arch>.node`
 // inside the package and are staged per packaging target by
 // installEmbeddedSqliteBinding, so the whole 8-platform set never ships.
-// @lydell/node-pty's own binding lives in a sibling per-platform package
-// (@lydell/node-pty-<platform>-<arch>) that it pulls in through optionalDependencies,
-// so a package manager only installs the host's. It is staged per packaging target by
-// installEmbeddedNodePtyBinding instead of being listed here.
 // Each entry resolves from its dependent's real directory because pnpm's
 // strict layout exposes transitive deps only next to the package that
 // declares them (.pnpm/<pkg>/node_modules/<dep>), not under apps/cli.
 const CLI_RUNTIME_PACKAGE_CHAIN = [
   { name: 'better-sqlite3', from: 'cli' },
   { name: 'loro-crdt', from: 'cli' },
-  { name: '@lydell/node-pty', from: 'cli' },
   // tinypool drives the diff line-count worker pool; it stays external because it
   // resolves its own entry/worker.js relative to its package dir. Pure JS, no deps.
   { name: 'tinypool', from: 'cli' },
@@ -63,7 +58,6 @@ const EXCLUDED_PACKAGE_DIRS = new Set([
 export const stagedCliDir = path.join(electronAppRoot, 'resources', 'cli')
 export const stagedNodeModulesDir = path.join(stagedCliDir, 'node_modules')
 export const stagedSqliteDir = path.join(stagedNodeModulesDir, 'better-sqlite3')
-export const stagedNodePtyDir = path.join(stagedNodeModulesDir, '@lydell', 'node-pty')
 
 /**
  * better-sqlite3 >=13 resolves `prebuilds/<target>.node` from process.platform/arch
@@ -78,43 +72,6 @@ export function stagedSqliteBindingPath(target) {
   return path.join(stagedSqliteDir, 'prebuilds', sqlitePrebuildFileName(target))
 }
 
-/** Sibling package @lydell/node-pty requires the binding from, keyed by target. */
-export function nodePtyBinaryPackageName({ platform, arch }) {
-  return `@lydell/node-pty-${platform}-${arch}`
-}
-
-export function stagedNodePtyBinaryDir({ platform, arch }) {
-  return path.join(stagedNodeModulesDir, '@lydell', `node-pty-${platform}-${arch}`)
-}
-
-/**
- * Windows drives the pty through ConPTY (`windowsPtyAgent.js` requires `conpty.node`);
- * every other platform forks a pty directly (`unixTerminal.js` requires `pty.node`).
- * There is no `pty.node` in the win32 packages at all.
- */
-export function nodePtyBindingFileName({ platform }) {
-  return platform === 'win32' ? 'conpty.node' : 'pty.node'
-}
-
-export function stagedNodePtyBindingPath({ platform, arch }) {
-  return path.join(
-    stagedNodePtyBinaryDir({ platform, arch }),
-    'prebuilds',
-    `${platform}-${arch}`,
-    nodePtyBindingFileName({ platform })
-  )
-}
-
-/** macOS forks the pty through this helper binary; other platforms never read it. */
-export function stagedNodePtySpawnHelperPath({ platform, arch }) {
-  return path.join(
-    stagedNodePtyBinaryDir({ platform, arch }),
-    'prebuilds',
-    `${platform}-${arch}`,
-    'spawn-helper'
-  )
-}
-
 function resolvePackageDir(packageName, fromDir) {
   const resolveOptions = { paths: [fromDir] }
   try {
@@ -122,7 +79,7 @@ function resolvePackageDir(packageName, fromDir) {
     return path.dirname(require.resolve(`${packageName}/package.json`, resolveOptions))
   } catch (error) {
     if (error.code !== 'ERR_PACKAGE_PATH_NOT_EXPORTED') throw error
-    // @lydell/node-pty restricts `exports` to ".", so walk up from its entry point to
+    // The package restricts `exports` to ".", so walk up from its entry point to
     // the directory that owns package.json.
     let dir = path.dirname(require.resolve(packageName, resolveOptions))
     while (!fs.existsSync(path.join(dir, 'package.json'))) {
@@ -214,34 +171,6 @@ export function installEmbeddedSqliteBinding({ platform, arch }) {
   return bindingPath
 }
 
-/** Exact version @lydell/node-pty pins its binary packages to (they move in lockstep). */
-function resolveNodePtyBinaryVersion(packageName) {
-  const wrapperPackageJson = JSON.parse(
-    fs.readFileSync(path.join(stagedNodePtyDir, 'package.json'), 'utf8')
-  )
-  const version = wrapperPackageJson.optionalDependencies?.[packageName]
-  if (!version) {
-    throw new Error(
-      `@lydell/node-pty@${wrapperPackageJson.version} has no binary package ${packageName}. ` +
-        `That platform/arch has no prebuilt pty binding, so the embedded CLI cannot ship a terminal for it.`
-    )
-  }
-  return version
-}
-
-/**
- * The host's own binary package is already installed; foreign targets are not.
- *
- * The binary packages restrict `exports` to "." and expose no resolvable subpath, so
- * find them by layout instead: they are always siblings of the wrapper inside the
- * `@lydell` scope directory, under both pnpm's store and npm's flat tree.
- */
-function resolveInstalledNodePtyBinaryDir(packageName) {
-  const scopeDir = path.dirname(resolvePackageDir('@lydell/node-pty', cliAppRoot))
-  const candidate = path.join(scopeDir, packageName.slice('@lydell/'.length))
-  return fs.existsSync(path.join(candidate, 'package.json')) ? candidate : undefined
-}
-
 /**
  * Fetches a binary package for a platform/arch the build host is not. npm refuses to
  * install across its `os`/`cpu` fields without `--force`; the download itself is
@@ -276,65 +205,6 @@ function fetchNativePackage(packageName, version) {
     )
   }
   return { packageDir, cleanup: () => fs.rmSync(downloadDir, { recursive: true, force: true }) }
-}
-
-/**
- * Stages the prebuilt pty binary package matching the packaging target.
- *
- * @lydell/node-pty repackages node-pty's own prebuilt bindings as per-platform npm
- * packages and never runs node-gyp. The binding is an N-API addon
- * (napi_register_module_v1), so a single build loads under both Node and Electron —
- * no ABI-specific rebuild, same as better-sqlite3 since 13.0.0.
- */
-export function installEmbeddedNodePtyBinding({ platform, arch }) {
-  if (!fs.existsSync(path.join(stagedNodePtyDir, 'package.json'))) {
-    throw new Error(
-      `Staged @lydell/node-pty not found at ${stagedNodePtyDir}. Run \`pnpm run sync:cli\` first.`
-    )
-  }
-
-  const packageName = nodePtyBinaryPackageName({ platform, arch })
-  const version = resolveNodePtyBinaryVersion(packageName)
-
-  // Drop previously staged binary packages first: one resources/ dir is reused across
-  // the arches of a `--arm64 --x64` run, and a failed fetch must not leave a stale
-  // binary that the afterPack assertions would then happily accept.
-  removeStagedNodePtyBinaryPackages()
-
-  const installedDir = resolveInstalledNodePtyBinaryDir(packageName)
-  const downloaded = installedDir ? undefined : fetchNativePackage(packageName, version)
-  const targetDir = stagedNodePtyBinaryDir({ platform, arch })
-  try {
-    // Copied as a non-top-level dir so the `prebuilds/` exclusion does not apply: in this
-    // layout the binary lives there, and the package holds nothing else worth pruning.
-    copyPackageDir(installedDir ?? downloaded.packageDir, targetDir, { isTopLevel: false })
-  } finally {
-    downloaded?.cleanup()
-  }
-
-  const bindingPath = stagedNodePtyBindingPath({ platform, arch })
-  if (!fs.existsSync(bindingPath)) {
-    throw new Error(
-      `${packageName} staged without its ${nodePtyBindingFileName({ platform })} binding at ${bindingPath}.`
-    )
-  }
-  if (platform === 'darwin') {
-    // macOS execs spawn-helper to fork the pty. It is copied rather than produced by a
-    // build here, so re-assert the executable bit — a non-executable helper fails only
-    // at terminal-open time, long after packaging.
-    const spawnHelperPath = stagedNodePtySpawnHelperPath({ platform, arch })
-    if (!fs.existsSync(spawnHelperPath)) {
-      throw new Error(`${packageName} staged without spawn-helper at ${spawnHelperPath}.`)
-    }
-    fs.chmodSync(spawnHelperPath, 0o755)
-    repairStagedSpawnHelperAsarPath(targetDir, packageName)
-  }
-
-  console.log(
-    `Staged embedded pty binding ${packageName}@${version} (${platform}-${arch}` +
-      `${installedDir ? '' : ', downloaded'})`
-  )
-  return bindingPath
 }
 
 /** Sharp has a target-specific Node-API addon and (except Windows) a libvips package. */
@@ -390,55 +260,5 @@ export function assertEmbeddedSharpPackages(nodeModulesDir, target) {
     const resources = fs.readdirSync(path.join(directory, 'lib'))
     if (!resources.some((file) => /\.(node|dll|dylib|so(?:\.\d+)*)$/.test(file)))
       throw new Error(`Packaged image decoder binary missing: ${name}`)
-  }
-}
-
-const SPAWN_HELPER_ASAR_REWRITES = [
-  {
-    from: "helperPath = helperPath.replace('app.asar', 'app.asar.unpacked');",
-    to: "helperPath = helperPath.replace(/app\\.asar(?!\\.unpacked)/, 'app.asar.unpacked');"
-  },
-  {
-    from: "helperPath = helperPath.replace('node_modules.asar', 'node_modules.asar.unpacked');",
-    to: "helperPath = helperPath.replace(/node_modules\\.asar(?!\\.unpacked)/, 'node_modules.asar.unpacked');"
-  }
-]
-
-/**
- * Fixes node-pty's asar path rewrite in the staged copy (originally #2492).
- *
- * The embedded CLI is packed into `app.asar.unpacked/resources/cli`, so the resolved
- * spawn-helper path already contains `app.asar.unpacked`. node-pty's unconditional
- * `.replace('app.asar', 'app.asar.unpacked')` then rewrites that first substring and
- * yields `app.asar.unpacked.unpacked`, i.e. a helper macOS cannot exec.
- *
- * Applied here rather than through pnpm `patchedDependencies` because the affected file
- * ships inside the per-platform binary package, and the foreign-arch package is fetched
- * straight from the registry by fetchNodePtyBinaryPackage — a pnpm patch would never
- * reach it, silently leaving the `--x64` slice of a mac release broken.
- */
-function repairStagedSpawnHelperAsarPath(targetDir, packageName) {
-  const unixTerminalPath = path.join(targetDir, 'lib', 'unixTerminal.js')
-  const source = fs.readFileSync(unixTerminalPath, 'utf8')
-  let patched = source
-  for (const { from, to } of SPAWN_HELPER_ASAR_REWRITES) {
-    if (!patched.includes(from)) {
-      throw new Error(
-        `Cannot apply the spawn-helper asar fix to ${packageName}: expected to find ` +
-          `${JSON.stringify(from)} in ${unixTerminalPath}. node-pty likely reworked the ` +
-          `helper path; re-check it against app.asar.unpacked before shipping macOS.`
-      )
-    }
-    patched = patched.replace(from, to)
-  }
-  fs.writeFileSync(unixTerminalPath, patched)
-}
-
-function removeStagedNodePtyBinaryPackages() {
-  const scopeDir = path.join(stagedNodeModulesDir, '@lydell')
-  if (!fs.existsSync(scopeDir)) return
-  for (const entry of fs.readdirSync(scopeDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !entry.name.startsWith('node-pty-')) continue
-    fs.rmSync(path.join(scopeDir, entry.name), { recursive: true, force: true })
   }
 }

@@ -1,7 +1,7 @@
 # Molly independent brand and desktop first release
 
 Status: draft
-Previous approval: [2026-09-21 owner approval at a7a297ae](../.agents/notes/implemented/process/2026-09-24-github-repository-rebuild.md#pr-52-owner-approval)
+Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Translation: current
 
 [中文](molly-design-independent-release.zh.md)
@@ -12,7 +12,7 @@ Issue: [#32](https://github.com/LeonEthan/molly-design/issues/32)
 
 ## 2026-09-17 naming-unification revision proposal (pending review)
 
-The target spelling has been confirmed as `Molly` / `molly`. The implemented [naming-unification decision](../.agents/notes/implemented/feature/2026-09-17-molly-namespace-convergence.zh.md) proposes converging the current product display name to Molly, and unifying first-party packages, code identifiers, environment variables and newly written formats/paths under the molly naming. If this revision is adopted, the "item-by-item rulings on internal names" below are refined by that proposal, and the exclusion "no blanket rename of internal packages" changes to: first-party internal packages are included; external protocols and provenance are not.
+The target spelling has been confirmed as `Molly` / `molly`. The implemented naming-unification decision proposes converging the current product display name to Molly, and unifying first-party packages, code identifiers, environment variables and newly written formats/paths under the molly naming. If this revision is adopted, the "item-by-item rulings on internal names" below are refined by that proposal, and the exclusion "no blanket rename of internal packages" changes to: first-party internal packages are included; external protocols and provenance are not.
 
 Old artworks, attachments, drafts, settings and sessions must remain readable; new writes use the new names. Genuine upstream attribution, third-party ACP protocols and historical evidence keep their original names; existing Molly installation identities, data locations, repositories and update channels are not changed again just to shorten the display name. See the proposal for the concrete read-back, conflict handling, slicing and acceptance.
 
@@ -114,10 +114,10 @@ Developer ID signing and macOS notarization remain recommended release preparati
 
 This spec adds independent-brand and automatic-update requirements beyond the T26 brand-and-help scope, the T23 first-design-onboarding scope and the T29 acceptance records; old acceptance does not automatically cover the new scope. The existing primary-data isolation is already implemented, but a few old paths still need checking; the existence of an inherited update address does not prove the current local app updates across products.
 
-Design behavior follows the [design platform spec](graphic-design-platform.md). Source-code basis, relationships to earlier decisions and this round's progress are recorded in the [independent-release proposal](../.agents/notes/proposed/feature/2026-09-13-geon-independent-brand-release.zh.md). Related Issues: [T26](https://github.com/LeonEthan/molly-design/issues/28), [T29](https://github.com/LeonEthan/molly-design/issues/31). This round completed only documentation and tracker operations; no new installer acceptance was run.
+Design behavior follows the [design platform spec](graphic-design-platform.md). Source-code basis, relationships to earlier decisions and this round's progress are recorded in the independent-release proposal. Related Issues: [T26](https://github.com/LeonEthan/molly-design/issues/28), [T29](https://github.com/LeonEthan/molly-design/issues/31). This round completed only documentation and tracker operations; no new installer acceptance was run.
 
 ## 2026-09-20 repository convergence implementation
 
-The first release remains limited to macOS arm64; the release workflow has been converged to that target, and other platforms keep local experimental builds without a formal support commitment. The default workspace initializes only ACP core, the DSH capability contracts and Bento; DSH still has shared-layer consumers and is not removed for now. Retained old adapters and the Lody website keep their provenance records but leave the default dependency install and checks. The independent contribution entry, source authorization and maintenance boundaries are recorded in the [implementation note](../.agents/notes/implemented/process/2026-09-20-independent-repository-convergence.zh.md).
+The first release remains limited to macOS arm64; the release workflow has been converged to that target, and other platforms keep local experimental builds without a formal support commitment. The default workspace initializes only ACP core, the DSH capability contracts and Bento; DSH still has shared-layer consumers and is not removed for now. Retained old adapters and the Lody website keep their provenance records but leave the default dependency install and checks. The independent contribution entry, source authorization and maintenance boundaries are recorded in the implementation note.
 
 These repository changes constitute neither a public release, signing, notarization or real upgrade acceptance, nor a whole-Spec approval.

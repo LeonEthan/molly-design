@@ -45,8 +45,7 @@ semantic levels and font-size scaling. Activity prose uses normal weight and
 and plan surfaces: a soft border without shadow, 16px horizontal padding and a
 tinted header above the body surface. Plan checklist rows use a faint tint
 without a second border. These styles leave streaming, search and turn folding
-unchanged. The [Seede style note](../../../../../.agents/notes/implemented/feature/2026-09-22-seede-ui-style-direction.zh.md)
-owns the rollout and visual evidence.
+unchanged. Detailed rollout and visual evidence is retained locally.
 
 Markdown action glyphs use the shared `ui/icons.tsx` facade, including Streamdown's
 copy, download and loading slots. This replaces library defaults without changing

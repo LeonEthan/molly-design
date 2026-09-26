@@ -8,14 +8,14 @@ passed technical checks in `unified-canvas-20260918-03` plus its retained-profil
 resume; earlier timeout and driver failures remain recorded. Human visual and
 interaction acceptance remain pending; historical passes do not approve this change.
 
-This is a required real-model acceptance case for the
-[single-canvas authoring redesign](../.agents/notes/implemented/architecture/2026-09-15-single-canvas-authoring-redesign.zh.md).
+This is a required real-model acceptance case for the single-canvas authoring
+redesign.
 The user selected the reference, prompt, Agent and high visual-fidelity pass
 criterion on 2026-09-15. It supplements editable roundtrip and lifecycle tests.
 It is a separate live-model acceptance lane; the result record, not this definition, establishes execution.
 
-The 2026-09-18 [unified canvas and version-editing plan](../.agents/notes/proposed/architecture/2026-09-18-version-based-canvas-editing.zh.md)
-also requires this frozen case, extended by the final section below. The initial
+The 2026-09-18 unified canvas and version-editing plan also requires this frozen
+case, extended by the final section below. The initial
 reference, prompt, real Agent/model and human visual authority remain unchanged.
 
 ## Frozen input

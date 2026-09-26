@@ -52,9 +52,8 @@ Repeated Work iterations create distinct durable records and canvas origins.
 Separate retained data, cache filling and delayed native release from an
 unbounded lifecycle defect. For example, the pinned Chromium keeps unloaded
 frame keepalive contexts briefly and caches unused localStorage areas with a
-per-storage-context eviction boundary. The
-[allocation investigation](../.agents/notes/implemented/testing/2026-09-22-memory-growth-attribution.zh.md)
-records controlled release/eviction evidence and the limits of those conclusions.
+per-storage-context eviction boundary. Controlled release/eviction evidence and
+its limits remain in local maintenance records.
 
 The report includes both Theil-Sen slope per checkpoint and a slope normalized
 to one user-journey iteration. Only resources with a controllable GC or an

@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { assertNoLegacyHarnessArtifacts } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 import {
-  installEmbeddedNodePtyBinding,
   installEmbeddedSqliteBinding,
   installEmbeddedSharpBinding,
   stageCliRuntimePackages
@@ -64,7 +63,6 @@ writeCliPackageMetadata()
 // per packaging target (mac release builds both arm64 and x64).
 stageCliRuntimePackages()
 installEmbeddedSqliteBinding({ platform: process.platform, arch: process.arch })
-installEmbeddedNodePtyBinding({ platform: process.platform, arch: process.arch })
 installEmbeddedSharpBinding({ platform: process.platform, arch: process.arch })
 
 console.log(`Synced CLI dist to ${destDir}`)

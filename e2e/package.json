@@ -10,7 +10,6 @@
     "full": "cucumber-js --config cucumber.mjs --tags \"@P0 or @P1\"",
     "scout": "tsx src/scout/scout-runner.ts",
     "router:resources": "tsx src/support/router-resources-probe.ts",
-    "terminal:resources": "tsx src/support/terminal-resources-probe.ts",
     "canvas:resources": "tsx src/support/canvas-resources-probe.ts",
     "journey:author": "node scripts/run-journey-author.mjs",
     "journey:candidate": "node scripts/select-journey-candidate.mjs",

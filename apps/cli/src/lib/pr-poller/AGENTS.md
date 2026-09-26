@@ -6,5 +6,3 @@ Molly removed this product runtime in T24. Do not restart its polling, credentia
 harvesting, or automatic Agent/merge actions. Existing durable records and local
 files remain untouched. Generic task execution, file watching and design rendering
 have separate consumers and remain supported.
-
-See the [retirement decision](../../../../../.agents/notes/implemented/simplification/2026-09-11-developer-workflow-retirement.md).

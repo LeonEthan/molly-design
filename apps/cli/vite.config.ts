@@ -25,7 +25,6 @@ const bundledNodeBuiltins = new Set([
 const explicitlyExternal = new Set([
   'better-sqlite3',
   'sharp',
-  '@lydell/node-pty',
   '@sqlite.org/sqlite-wasm',
   'broadcast-channel',
   // TypeScript's CommonJS runtime reads __filename during sys initialization.

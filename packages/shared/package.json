@@ -103,10 +103,6 @@
       "types": "./src/message-schemas.ts",
       "import": "./src/message-schemas.ts"
     },
-    "./terminal-protocol": {
-      "types": "./src/terminal-protocol.ts",
-      "import": "./src/terminal-protocol.ts"
-    },
     "./ids": {
       "types": "./src/ids.ts",
       "import": "./src/ids.ts"

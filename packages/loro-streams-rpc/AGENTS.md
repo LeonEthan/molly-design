@@ -3,10 +3,9 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 Repo-wide guidelines live in the root `AGENTS.md`.
 
-Workspace/machine-level JSON RPC over Loro Streams. File responsibilities, the
-Web/CLI Code Collab seam, and the reasons behind the watchdog, shard selection,
-and the `file/preview` namespace are in
-[the Loro Streams Machine RPC map](../../.agents/docs/rpc-loro-streams-rpc.md).
+Workspace/machine-level JSON RPC over Loro Streams. File responsibilities and
+the Web/CLI Code Collab seam are in [README.md](README.md); the watchdog, shard
+selection and `file/preview` rules are below.
 
 ## Invariants
 

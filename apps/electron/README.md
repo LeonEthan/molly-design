@@ -70,13 +70,10 @@ partitions live for the process lifetime, so clean partitions are reused through
 exclusive leases with fresh origins, after native destruction and request drainage.
 Cleanup failure quarantines the partition; simultaneous editors/previews/exports
 never share a lease. Hidden editors retain their original contents and lease.
-The focused regression is `pnpm --filter @molly/e2e canvas:resources`; see the
-[lifecycle note](../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-reuse.zh.md)
-and earlier [callback-retention fix](../../.agents/notes/implemented/bug-fix/2026-09-21-design-session-callback-retention.zh.md).
+The focused regression is `pnpm --filter @molly/e2e canvas:resources`.
 Remaining process-memory trends need allocation and lifetime evidence: Chromium
-also retains bounded storage caches and delayed frame resources. See the
-[native-memory attribution](../../.agents/notes/implemented/testing/2026-09-22-memory-growth-attribution.zh.md)
-before interpreting a post-GC private-memory increase as another canvas leak.
+also retains bounded storage caches and delayed frame resources; a post-GC
+private-memory increase alone does not establish another canvas leak.
 
 For installed-package verification, copy the application from its DMG into a
 private test location. Set both `MOLLY_DATA_DIR` and
@@ -139,8 +136,7 @@ evidence defaults to ignored `e2e/artifacts/acceptance/browser-mcp-probe/`.
 Use a fresh output directory to preserve earlier evidence. The result, MCP calls,
 screenshot, asset, dependency lock and upstream source hashes describe the tested
 combination. This is a compatibility probe outside the production build, not the
-Pi/Session/permissions integration or real-site acceptance. See the
-[owning plan](../../.agents/notes/proposed/architecture/2026-09-22-embedded-browser-account-import.zh.md#b做一次成熟驱动最小接入验证).
+Pi/Session/permissions integration or real-site acceptance.
 
 Add `--product` and a fresh output directory to run the current product driver
 and controller against a synthetic search page and public pages. This mode uses

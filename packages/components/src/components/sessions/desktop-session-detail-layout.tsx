@@ -15,7 +15,6 @@ export type DesktopSessionDetailLayoutProps = {
   /** Single merged top row: session tabs + right-side window controls. */
   topBar: ReactNode;
   chatSurfaces: ReactNode;
-  terminalDock: ReactNode;
   secondaryPanel: ReactNode;
   sidebarOpen: boolean;
   onSidebarCollapse: () => void;
@@ -52,7 +51,6 @@ export function DesktopSessionDetailLayout({
   layoutId = 'session-detail-panels',
   topBar,
   chatSurfaces,
-  terminalDock,
   secondaryPanel,
   sidebarOpen,
   onSidebarCollapse,
@@ -160,7 +158,6 @@ export function DesktopSessionDetailLayout({
             {topBar}
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1 overflow-hidden">{chatSurfaces}</div>
-              {terminalDock}
             </div>
           </FocusScope>
         </ResizablePanel>

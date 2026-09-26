@@ -6,13 +6,11 @@ Read the parent [sessions AGENTS.md](../AGENTS.md) first. This scope renders the
 queued-turn list (`message-queue-display.tsx`, `message-queue-row.tsx`,
 `queued-image-preview.tsx`, `use-message-queue-editing.ts`) that
 `session-chat-input-area.tsx` mounts. Submission routing into the queue lives in
-`../session-message-submit-route.ts` and is described in
-[.agents/docs/sessions-live-status.md](../../../../../../.agents/docs/sessions-live-status.md).
+`../session-message-submit-route.ts`; the parent session rules govern dispatch.
 
 A queued item's Steer action uses native acknowledged steering only when the
 authoritative ACP capability cache advertises it. Never infer steering support
 from built-in/custom config type or agent identity; unsupported and stale cache
 entries retain the interrupt-and-send fallback.
 
-The queue intentionally stays OUT of the composer info bar
-([.agents/docs/sessions-info-bar.md](../../../../../../.agents/docs/sessions-info-bar.md)).
+The queue intentionally stays OUT of the composer info bar.

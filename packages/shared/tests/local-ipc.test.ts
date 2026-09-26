@@ -1,5 +1,4 @@
 import * as http from 'node:http';
-import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,7 +21,6 @@ import {
   readLocalDaemonRunFile,
   writeLocalDaemonRunFile,
 } from '../src/node/local-ipc';
-import { getLocalTerminalSocketPath } from '../src/node/local-terminal';
 
 const servers: http.Server[] = [];
 const tempDirs: string[] = [];
@@ -210,18 +208,9 @@ describe('local IPC socket client', () => {
       const runDir = getLocalDaemonRunDir();
       expect(path.dirname(getLocalControlSocketPath())).toBe(runDir);
       expect(path.dirname(getLocalProbeSocketPath())).toBe(runDir);
-      expect(path.dirname(getLocalTerminalSocketPath())).toBe(runDir);
       expect(runDir.startsWith(os.tmpdir())).toBe(false);
     }
   );
-
-  it('keeps the CommonJS terminal socket path in sync with the TypeScript module', () => {
-    const require = createRequire(import.meta.url);
-    const cjs = require('../src/node/local-terminal.cjs') as {
-      getLocalTerminalSocketPath: () => string;
-    };
-    expect(cjs.getLocalTerminalSocketPath()).toBe(getLocalTerminalSocketPath());
-  });
 
   it.skipIf(process.platform === 'win32' || process.getuid?.() === 0)(
     'throws typed run-file errors for permission failures',

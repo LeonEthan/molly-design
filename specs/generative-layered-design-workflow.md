@@ -1,9 +1,9 @@
 # Generative layered design: task and plan
 
 Status: approved
-Approval: [2026-09-26 closeout approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#closeout-approval-2026-09-26)
-Previous revision approval: [2026-09-26 owner approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#workflow-rewrite-approval-2026-09-26)
-Previous approval: [2026-09-25 owner approval](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#spec-approval-2026-09-25)
+Approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
+Previous revision approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
+Previous approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
 Translation: current
 
 [中文](generative-layered-design-workflow.zh.md)
@@ -43,8 +43,11 @@ Open briefs follow all nine stages. For a user-prescribed template or reconstruc
 
 ## Implementation tasks
 
-The table retains the implemented scope. The completed follow-up follows the
-[workflow Skill rewrite decision](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#workflow-skill-rewrite-proposal-2026-09-26): shared asset checks and safe diagnostics, coordinated entry/reference rewriting, packaged-material verification and behavioral/manual acceptance. The decision borrows the supplied neighboring presentation Skill's definition/branch/validation/delivery organization without importing its product dependencies.
+The table retains the implemented scope. The approved workflow Skill rewrite
+covered shared asset checks and safe diagnostics, coordinated entry/reference
+rewriting, packaged-material verification and behavioral/manual acceptance. It
+borrows the supplied neighboring presentation Skill's definition/branch/
+validation/delivery organization without importing its product dependencies.
 
 | Task                  | Deliverable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,15 +80,16 @@ Turn-length, token and cost optimization; automatic denoising or placement; dedi
 
 ## Evidence
 
-- [Implementation and validation record](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md): segmented real image API, transparent trim, desktop editing and embedded Kimi comparison/correction evidence, with limitations.
+- The [PR #17 summary](https://github.com/LeonEthan/molly-design/pull/17) records the approved initial scope. Detailed image API, transparent-trim, desktop-editing and embedded-Kimi experiments remain in local-only records; later acceptance is summarized below.
 - [Design platform contract](graphic-design-platform.md): editing, persistence and Agent lifecycle boundaries.
-- The linked validation record separates the pre-implementation inspection from the changes that landed and subsequent acceptance runs. Passing interface tests does not establish end-to-end or visual acceptance.
+- Local-only validation records separate pre-implementation inspection, landed changes and acceptance runs. Passing interface tests does not establish end-to-end or visual acceptance.
 
 The latest complete run performed design-site research, layered authoring, two
 inspected native previews and application saving with zero manual approval prompts.
 The owner confirmed manual text editing, save, reopen and export. The signed macOS
 arm64 app retained Pinterest login after normal quit/restart; a subsequent browser
-flicker/input regression was fixed and verified on that surface. See the owning
-record's [final acceptance](../.agents/notes/implemented/feature/2026-09-24-generative-layered-design-workflow.md#closeout-approval-2026-09-26) for approval and limits.
+flicker/input regression was fixed and verified on that surface. The
+[public approval summary](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
+records the owner's decision; this section states the acceptance limits.
 No new paid design run was needed for the browser-only fix; public notarization,
 other providers and long-term performance are not established by these checks.

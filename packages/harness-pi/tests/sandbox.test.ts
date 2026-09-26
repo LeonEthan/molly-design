@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { createSandboxConfig, resolveNativeTemporaryDirectory } from '../src/sandbox';
+import {
+  createSandboxConfig,
+  resolveNativeTemporaryDirectory,
+  sandboxFailureContext,
+} from '../src/sandbox';
+
+describe('sandbox failure evidence', () => {
+  it('keeps incidental sysctl denials separate from a helper argument failure', () => {
+    const error = 'reference-pack: unknown or incomplete option 250';
+    const context = sandboxFailureContext('node deny(1) sysctl-read kern.iossupportversion');
+    expect(error + context).toContain(error);
+    expect(context).toContain('may be incidental');
+    expect(context).not.toContain('outside_sandbox: true');
+    expect(context).not.toContain('The OS sandbox blocked this access');
+  });
+  it('preserves a real write denial without claiming it proves the cause', () => {
+    const denial = 'python deny(1) file-write-create /outside/site-packages/example.py';
+    expect(sandboxFailureContext(denial)).toContain(denial);
+    expect(sandboxFailureContext('  ')).toBe('');
+  });
+});
 
 describe('native temporary files', () => {
   it('uses only the canonical native user temp directory on macOS', async () => {

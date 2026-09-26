@@ -65,6 +65,9 @@ dispatch owns runtime availability; schema presence does not enable execution.
   poll: the desktop calls the daemon, never the reverse, so the bridge adds no inbound surface.
 - The preview answer uses a nested `ok` union within `type`; add variants at the
   correct nesting level.
+- Preview refusals may carry strict asset-admission metadata: fixed categories,
+  bounded single-file `media/` paths and validated size/kind fields. Producers
+  derive it from admission results; raw diagnostics confer no classification.
 - Capability exists only while a host polls within `DESIGN_RENDER_HOST_TTL_MS`, and the poll
   interval must stay well under it. Both ends bound one exchange at 8 items (work out, reports
   back); the daemon's queue ceiling and the request schemas must move together.

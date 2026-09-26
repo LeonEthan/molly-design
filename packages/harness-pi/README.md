@@ -19,8 +19,18 @@ removing the shim does not modify user Pi installations or old native histories.
 It rejects native/host name collisions, Molly/MCP namespace claims, duplicate extension
 tools and differing registration/definition names. Duplicate host definitions fail
 before private state is created; one host-guarded native definition remains valid.
-The loader snapshots approved extension order and appends the public read-before-edit
-reminder last. This is not a security boundary for arbitrary native code.
+The loader snapshots approved extension order and appends its public
+`before_agent_start` context hook last. For each prompt the hook samples the host
+clock and `Intl` timezone, adds UTC ISO time, local date/time and the IANA zone,
+then preserves the optional read-before-edit reminder. The SDK starts each hook
+chain from its base system prompt, so a later prompt refreshes this context without
+accumulating older timestamps; subsequent model requests in the same tool loop
+keep the prompt's snapshot. Host time is separate from the task or event date.
+The host supplies no geographic location; explicit user-provided location remains
+usable and is not inferred from the host zone.
+Injected time sources support deterministic real-SDK tests across a local day/year
+boundary and timezone changes. No settings, history fields or location lookup are added.
+This is not a security boundary for arbitrary native code.
 
 `question-extension.ts` selectively registers the dialog-backed `ask_question` tool
 from MIT-licensed `pi-ask-question` 0.4.0, pinned to the commit and hashes in
@@ -45,14 +55,20 @@ the worker-owned temp. Tool caches should use the workspace or `$TMPDIR`.
 `auto-review-policy.ts` decides by effect:
 sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run; a bash
 `outside_sandbox` request, a protected read, a write outside the workspace and a
-sandbox connection to another domain are escalations. Browser and other MCP tools keep
-their ordinary approvals. `auto-review-classifier.ts` judges an escalation with the run's
+sandbox connection to another domain are escalations. `browser-approval.ts` reviews
+the first public browser site grant through the same classifier and reuses it only
+within the active run/epoch (at most eight sites). Ask mode and external MCP tools
+retain their ordinary approvals; host URL/DNS and dispatch checks remain in force. `auto-review-classifier.ts` judges an escalation with the run's
 session model through the same journaled provider path, using the reviewer prompt,
 decision parser and context projection adapted from Apache-2.0 `pi-auto-approval` 0.1.1
 ([`vendor/pi-auto-approval/manifest.json`](vendor/pi-auto-approval/manifest.json)); its
 hook, commands, config files and audit log are not used. A deny, failure or timeout asks
 the user. The run journal records each approval's tool, source and decision without
-arguments.
+arguments. Classifier records also carry a bounded `reviewOutcome`: allow, deny,
+timeout, invalid_response, failed or cancelled. Older records remain readable;
+no raw rationale/provider response is persisted. Cancellation and a failed journal
+write deny without a prompt. Sandbox feedback preserves the command's error and
+identifies observed denials as potentially incidental, not proof of its cause.
 Local attachment sharing still validates workspace paths and symlinks at the host;
 its response carries a local machine identity without a download URL. Ask mode retains
 the ordinary approval for these tools.
@@ -193,6 +209,12 @@ Only built-in `molly_render_preview` maps exact Molly-owned font failures to
 `harness_render_font_failed` and known native capture/layout failures to
 `harness_render_failed`. Unknown server text and transport diagnostics remain
 `harness_mcp_tool_failed`; an external tool with the same name gains no exception.
+The built-in preview's validated asset-admission metadata maps to
+`harness_render_asset_too_large` or `harness_render_asset_format_unsupported`, with
+the bounded `media/<filename>` path and actual/allowed bytes or declared asset kind.
+The producer builds its text from the same validated fields. Invalid paths, unknown
+fields, forged error text and transport exceptions retain the generic failure;
+raw diagnostics never become asset metadata.
 These signals add no retry, repair or completion gate.
 The built-in MCP producer supplies its public contract revision. Image dispatch instead
 records the image connection revision frozen at run start; later configuration changes

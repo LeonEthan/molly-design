@@ -7,10 +7,10 @@ never the source image pasted back as a background.
 
 Also use [general-poster.md](general-poster.md) for composition judgment and
 [graphic-canvas-profile.md](graphic-canvas-profile.md) before choosing native
-element semantics. When image tools are available, follow
-[layered-workflow.md](layered-workflow.md) with the supplied image as the chosen
-draft: skip draft generation and regenerate its raster objects as complete
-layers.
+element semantics. Follow the reconstruction branch and research rule in
+[the main Skill](../SKILL.md#required-workflow). Use
+[layered-workflow.md](layered-workflow.md) for complete raster-object techniques
+with the prescribed reference as the selected composition.
 
 ## Establish reference geometry
 
@@ -91,7 +91,7 @@ record of material deviations that affect fidelity or editability.
 
 ## Visual fidelity
 
-The optional `scripts/finalize.mjs` helper checks syntax; it does not establish
+The optional `scripts/finalize.mjs` helper checks structure and assets; it does not establish
 visual fidelity. When rendering with `molly_render_preview`, open the resulting
 PNG with an actual image-reading tool. Useful questions include:
 
@@ -100,8 +100,8 @@ PNG with an actual image-reading tool. Useful questions include:
 - Are alignment, spacing, layering, and color consistent with the reference?
 - Are missing objects and material fidelity differences understood?
 
-Choose review depth and iterations according to the task. View updated renders
-when needed to judge edits; no fixed review count or analysis sequence applies.
+Choose useful inspection methods and iterations within the user's constraints.
+Follow the main workflow's native review and repair loop after visual changes.
 If `molly_render_preview` is absent, only that tool is unavailable; assess other
 image-reading and rendering capabilities actually available to your Agent.
 Report actual inspection and remaining source-evidence or capability limits

@@ -6,8 +6,6 @@ import {
   BENTO_ELEMENT_KINDS_V4,
   createVisualDocumentKernel,
   DIAGNOSTIC_CODES,
-  sniffStaticV1FontMime,
-  sniffStaticV1ImageMime,
   staticV1UnregisteredFontFamilies,
   type AssetIndex,
   type BentoDocV4,
@@ -16,6 +14,7 @@ import {
   type FrozenDiagnostic,
   type ImportResult,
 } from './contracts.ts';
+import { describeAssetAdmissionFailure, inspectAssetAdmission } from './asset-admission.ts';
 
 /** Bundled licensed default for omitted fontFamily (OFL Inter via @fontsource/inter). */
 export const AUTHORING_DEFAULT_FONT_FAMILY = 'Inter';
@@ -444,8 +443,14 @@ export function validateYaml(
         fail(at, `Missing asset: ${src}`, 'PPTD-E005');
         return src;
       }
-      if ((kind === 'font' ? sniffStaticV1FontMime(bytes) : sniffStaticV1ImageMime(bytes)) === null)
-        fail(at, `Invalid ${kind} bytes: ${src}`, 'PPTD-E005');
+      const admission = inspectAssetAdmission(bytes, src, kind);
+      if (!admission.ok)
+        diagnostics.push({
+          code: 'PPTD-E005',
+          path: at,
+          message: describeAssetAdmissionFailure(admission.failure),
+          assetFailure: admission.failure,
+        });
       return `asset:${hash(bytes)}`;
     });
     assertProjectionDocument(artworkToDocument(bound));
@@ -512,9 +517,9 @@ export function exportAuthoring(
     const digest = src.slice(6);
     const bytes = assets.get(digest);
     if (!bytes || hash(bytes) !== digest) throw Error(`Missing or corrupt asset: ${src}`);
-    if ((kind === 'font' ? sniffStaticV1FontMime(bytes) : sniffStaticV1ImageMime(bytes)) === null)
-      throw Error(`Invalid ${kind} bytes: ${src}`);
     const rel = `media/${digest}`;
+    const admission = inspectAssetAdmission(bytes, rel, kind);
+    if (!admission.ok) throw Error(describeAssetAdmissionFailure(admission.failure));
     snapshot.set(rel, new Uint8Array(bytes));
     return rel;
   });

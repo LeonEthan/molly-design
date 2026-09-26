@@ -112,6 +112,13 @@ The design worker returns a checksum/identity-verified original path, and ordina
 file preview supplies its bytes. No candidate approval, deletion, export-copy or
 history catalogue is needed. New candidate production is retired; final conflicts preserve the existing draft and receipt diagnostics.
 
+YAML validation and its local helpers, native preview and final collection reuse
+`@molly/design-authoring` asset admission: at most 16 MiB per referenced asset and
+the existing PNG/JPEG/GIF or TTF/OTF/WOFF/WOFF2 byte sniff. Known failures identify
+the relative media path; oversize failures include actual and limit bytes.
+The canonical store rechecks the same rule, MIME and digest. Byte admission does
+not prove Chromium font loading or native visual review.
+
 Live authoring display watches `design.yaml` and needed `media/` in the draft
 directory. Legacy `.pptd` is not a preview source. Invalid or unstable
 files keep the last valid preview and do not clear the current artwork.

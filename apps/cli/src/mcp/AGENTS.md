@@ -48,6 +48,9 @@ Parent instructions apply.
 - `molly_browser`: gate list/call on active local design run; bind page/media to
   Session. Expose flat required-`kind` schema to models; validate the strict
   action union before dispatch. See [browser docs](../../../../.agents/docs/sessions-browser.md).
+- `molly_render_preview` forwards asset diagnostics only from the validated local
+  RPC field, as fixed text and private MCP metadata. Never infer trusted metadata
+  from error strings; invalid fields follow the existing refusal path.
 
 ## Session and Task tool contracts
 

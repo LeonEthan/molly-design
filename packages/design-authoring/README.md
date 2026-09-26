@@ -32,6 +32,11 @@ Migrated (`src/`):
 - `canvas-format.ts` — literal structured YAML ↔ BentoDoc v4 conversion and kernel replay.
 - `migrate.ts` — `loadBentoDocV4` pinned v1/v2/v3 → v4 migration chain.
 - `semantic-assets.ts`, `product-boundary.ts` — native asset enumeration and excluded product probes.
+- `asset-admission.ts` — shared 16 MiB per-asset and existing byte-sniffed format
+  checks used by YAML validation, native preview and canonical storage. Failures
+  retain the authored media path, and size failures include actual and allowed
+  bytes. Only referenced assets are admitted; unused media does not become a
+  design requirement. These checks do not establish font decoding or rendering.
 - `migrate-two-file.ts` — explicit conversion of previous Molly YAML drafts to fresh output,
   leaving original bytes and turn state untouched. PPTD v2 import, HTML parsing, theme
   expansion, and their unused modules/exports have been retired.
@@ -66,6 +71,11 @@ bundled example, and optional helpers describe the YAML snapshot entry:
 - `scripts/format.mjs` — prints the `molly-canvas/1` admission table (root
   fields, per-kind fields, explicit exclusions) derived from the same validator
   intake runs. A lookup helper for agents, never a gate.
+- `scripts/font-prepare.mjs` — optional explicit pinned FontTools setup in an
+  isolated Python environment outside the collected artwork, face listing and
+  complete-font WOFF compression. It preserves source/glyphs/metrics, checks the
+  existing asset cap and refuses overwrites; it does not install globally or run
+  from intake. See `references/font-preparation.md`.
 - `scripts/reference-pack.mjs` — dependency-free Node port of the upstream Pillow
   inspection tool (pack: meta/grid/bands/palette; crop). Supported non-interlaced
   8-bit gray/RGB/RGBA/palette PNG is decoded via `node:zlib`; JPEG/GIF/BMP/WEBP report dimensions but raster artifacts require
@@ -78,12 +88,15 @@ bundled example, and optional helpers describe the YAML snapshot entry:
 enables an image connection). Runtime per-file `VENDOR.lock` freezing is replaced
 by this package's build-time source manifest.
 
-The materials describe capabilities, design methods and a recommended generative
-layered workflow ([Spec](../../specs/generative-layered-design-workflow.md)) that the
-Agent adapts, repeats or skips; nothing enforces an order, analysis restriction or
-review count. Rendering
-instructions retain actual image reading and autonomous corrections; missing tools
-are described individually. `finalize` is optional and never a turn/commit gate.
+The main graphic-design Skill owns the required nine-stage generative layered
+workflow ([Spec](../../specs/generative-layered-design-workflow.md)), its explicit
+task branches, reference-based research exception and completion claims.
+References supply techniques at the relevant step. Agents choose methods and
+iterations within user constraints, follow stage dependencies, and return to
+native rendering and image reading after visual changes. The application does
+not enforce creative stages or review counts. Missing tools are described
+individually. `finalize` is optional and never a turn/commit gate; native review
+and the application's later save receipt remain separate observations.
 Skill prose and the bundled example teach `design.yaml` (`format: molly-canvas/1`) / `media/` with Bento `id` / `kind`. The image skill describes text generation and JSON data-URL edits with workspace
 references, an optional mask and optional transparency/output format. Both use the user’s required model without a
 product default and return assets without committing artwork.

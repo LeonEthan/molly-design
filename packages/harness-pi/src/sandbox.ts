@@ -97,6 +97,12 @@ export function createSandboxConfig(input: {
 
 export type SandboxNetworkReview = (target: NetworkHostPattern) => Promise<boolean>;
 
+export function sandboxFailureContext(blocked: string): string {
+  return blocked.trim()
+    ? `\n${blocked.trim()}\nSandbox denials were observed during this command. They may be incidental; use the command's original error to diagnose the failure. Correct argument or dependency errors inside the workspace first. Request outside-sandbox execution only when a necessary access is confirmed blocked.\n`
+    : '';
+}
+
 /**
  * One OS sandbox per worker, started on first use. Unsupported platforms or missing
  * dependencies leave it unavailable; shell then keeps its ordinary prompt.
@@ -161,12 +167,8 @@ export class WorkerSandbox {
         });
         if (result.exitCode !== 0) {
           const blocked = SandboxManager.annotateStderrWithSandboxFailures(commandId, '');
-          if (blocked.trim())
-            options.onData(
-              Buffer.from(
-                `\n${blocked.trim()}\nThe OS sandbox blocked this access. If the task needs it, retry with ${'`outside_sandbox: true`'} for review.\n`
-              )
-            );
+          const context = sandboxFailureContext(blocked);
+          if (context) options.onData(Buffer.from(context));
         }
         SandboxManager.cleanupAfterCommand();
         return result;

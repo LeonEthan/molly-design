@@ -225,6 +225,100 @@ describe('resolveRenderHost', () => {
 
 describe('molly_render_preview call', () => {
   it.each([
+    {
+      category: 'size',
+      assetFailure: {
+        code: 'asset_too_large',
+        path: 'media/Headline.ttf',
+        actualBytes: 20_752_628,
+        limitBytes: 16_777_216,
+      },
+      text: 'asset_too_large: media/Headline.ttf (20752628 bytes; limit 16777216 bytes)',
+      agentError:
+        'harness_render_asset_too_large: media/Headline.ttf (20752628 bytes; limit 16777216 bytes)',
+    },
+    {
+      category: 'format',
+      assetFailure: {
+        code: 'asset_format_unsupported',
+        path: 'media/標題.ttf',
+        kind: 'font',
+      },
+      text: 'asset_format_unsupported: media/標題.ttf (font)',
+      agentError: 'harness_render_asset_format_unsupported: media/標題.ttf (font)',
+    },
+  ])(
+    'delivers an actionable asset-$category refusal through local control and MCP without raw diagnostics',
+    async ({ assetFailure, text, agentError }) => {
+      await withAnsweringSocket(
+        {
+          type: 'design/render-preview',
+          ok: false,
+          error: 'SYNTHETIC_PRIVATE_DIAGNOSTIC',
+          assetFailure,
+        },
+        async (socketPath) => {
+          await withServer(
+            { renderHost: true, localControlSocketPath: socketPath },
+            async (client) => {
+              const reply = await client.callTool({ name: TOOL_NAME, arguments: {} });
+              expect(reply).toMatchObject({
+                isError: true,
+                content: [
+                  {
+                    type: 'text',
+                    text,
+                  },
+                ],
+              });
+              expect(JSON.stringify(reply)).not.toContain('SYNTHETIC_PRIVATE_DIAGNOSTIC');
+              const tools = await defineMcpTools({
+                serverName: 'molly',
+                client,
+                approve: async () => true,
+                isAvailable: () => true,
+                dispatch: async (_server, _id, _name, _args, invoke) => invoke(),
+              });
+              const tool = tools.find((entry) => entry.name === TOOL_NAME);
+              expect(tool).toBeDefined();
+              await expect(tool!.execute('asset-preview', {}, undefined)).rejects.toThrow(
+                agentError
+              );
+            }
+          );
+        }
+      );
+    }
+  );
+
+  it.each([{ path: '../SYNTHETIC_SECRET.ttf' }, { secret: 'SYNTHETIC_SECRET' }, { limitBytes: 1 }])(
+    'does not forward invalid asset diagnostics through the MCP producer: %j',
+    async (overrides) => {
+      await withAnsweringSocket(
+        {
+          type: 'design/render-preview',
+          ok: false,
+          error: 'SYNTHETIC_SECRET',
+          assetFailure: {
+            code: 'asset_too_large',
+            path: 'media/Headline.ttf',
+            actualBytes: 20_752_628,
+            limitBytes: 16_777_216,
+            ...overrides,
+          },
+        },
+        async (socketPath) => {
+          const reply = await callRender({ renderHost: true, localControlSocketPath: socketPath });
+          expect(reply.isError).toBe(true);
+          expect(reply._meta).toBeUndefined();
+          expect(textOf(reply)).toBe('invalid_response:http_200');
+          expect(JSON.stringify(reply)).not.toContain('SYNTHETIC_SECRET');
+        }
+      );
+    }
+  );
+
+  it.each([
     ['Font failed to load', 'harness_render_font_failed'],
     ['Canvas capture did not settle on the saved artwork', 'harness_render_failed'],
     ['SYNTHETIC_RENDER_SECRET', 'harness_mcp_tool_failed'],

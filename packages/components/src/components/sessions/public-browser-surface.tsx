@@ -48,8 +48,7 @@ export function PublicBrowserSurface({
   const [phase, setPhase] = useState<ElectronPublicBrowserState['phase']>('idle');
   const [surfaceReady, setSurfaceReady] = useState(false);
   const [blockingOverlayOpen, setBlockingOverlayOpen] = useState(false);
-  const bridge =
-    typeof window === 'undefined' ? undefined : (getPublicBrowserBridge() ?? undefined);
+  const [bridge] = useState(getPublicBrowserBridge);
   const electron = isElectronRenderer();
   const nativeViewVisible = active && !blockingOverlayOpen;
 

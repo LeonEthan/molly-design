@@ -1,4 +1,7 @@
-import { DesignToolHookResultSchema } from '@molly/shared/local-machine-rpc';
+import {
+  DesignToolHookResultSchema,
+  type DesignAssetFailure,
+} from '@molly/shared/local-machine-rpc';
 /**
  * Availability of the built-in design tools (P2.4).
  *
@@ -223,7 +226,7 @@ export function renderHostFromRpcResult(result: unknown): boolean {
 
 export type DesignRenderRequest =
   | { status: 'rendered'; path: string; width: number; height: number; bytes: number }
-  | { status: 'refused'; error: string };
+  | { status: 'refused'; error: string; assetFailure?: DesignAssetFailure };
 
 /**
  * Ask the daemon to render one preview of the asking session's project.
@@ -262,7 +265,11 @@ export async function requestDesignRenderPreview(
         height: parsed.data.height,
         bytes: parsed.data.bytes,
       }
-    : { status: 'refused', error: parsed.data.error };
+    : {
+        status: 'refused',
+        error: parsed.data.error,
+        ...(parsed.data.assetFailure ? { assetFailure: parsed.data.assetFailure } : {}),
+      };
 }
 
 type DesignRpcAnswer = { ok: true; result: unknown } | { ok: false; error: string };

@@ -4,14 +4,41 @@ import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/r
 import type { ToolApproval, ToolApprovalResult } from './approved-tools';
 import type { AutoReviewDecision } from './auto-review-policy';
 import type { ApprovalRecord } from './run-journal';
+import { AutoReviewFailure } from './auto-review-classifier';
 
 export type RecordApproval = (
   request: { toolCallId: string; name: string },
   source: ApprovalRecord['source'],
-  decision: ApprovalRecord['decision']
+  decision: ApprovalRecord['decision'],
+  reviewOutcome?: ApprovalRecord['reviewOutcome']
 ) => Promise<boolean>;
 
 type Review = (subject: ReviewSubject, signal?: AbortSignal) => Promise<ReviewDecision>;
+
+export async function reviewApproval(input: {
+  request: Parameters<ToolApproval>[0];
+  subject: ReviewSubject;
+  review: Review;
+  record: RecordApproval;
+}): Promise<'allow' | 'ask' | 'deny'> {
+  let outcome: NonNullable<ApprovalRecord['reviewOutcome']>;
+  try {
+    outcome = (await input.review(input.subject, input.request.signal)).outcome;
+  } catch (error) {
+    outcome = error instanceof AutoReviewFailure ? error.kind : 'failed';
+  }
+  if (input.request.signal?.aborted) outcome = 'cancelled';
+  if (
+    !(await input.record(
+      input.request,
+      'classifier',
+      outcome === 'allow' ? 'allow' : 'deny',
+      outcome
+    ))
+  )
+    return 'deny';
+  return outcome === 'cancelled' ? 'deny' : outcome === 'allow' ? 'allow' : 'ask';
+}
 
 /**
  * Auto-review wraps the ordinary prompt: in-boundary actions run, escalations go to the
@@ -32,9 +59,14 @@ export function createAutoReviewApproval(input: {
         return decision.source === 'sandbox' ? { kind: 'sandboxed' } : true;
       }
       if (decision.kind === 'review') {
-        const verdict = await input.review(decision.subject, request.signal).catch(() => undefined);
-        if (verdict?.outcome === 'allow' && !request.signal?.aborted)
-          return await input.record(request, 'classifier', 'allow');
+        const verdict = await reviewApproval({
+          request,
+          subject: decision.subject,
+          review: input.review,
+          record: input.record,
+        });
+        if (request.signal?.aborted || verdict === 'deny') return false;
+        if (verdict === 'allow') return true;
       }
     }
     return await input.askUser(request);
@@ -65,18 +97,20 @@ export function createNetworkReview(input: {
       name: 'network',
       arguments: { host, ...(port === undefined ? {} : { port }) },
     };
-    const verdict = await input
-      .review({
+    const verdict = await reviewApproval({
+      request,
+      review: input.review,
+      record: input.record,
+      subject: {
         toolName: 'network',
         input: request.arguments,
         cwd: input.cwd,
         actionSummary: `Connect to ${target}, which is not pre-approved, from a sandboxed command`,
-      })
-      .catch(() => undefined);
-    const allowed =
-      verdict?.outcome === 'allow'
-        ? await input.record(request, 'classifier', 'allow')
-        : Boolean(await input.askUser(request));
+      },
+    });
+    if (input.run()?.runId !== run.runId || verdict === 'deny') return false;
+    const allowed = verdict === 'allow' ? true : Boolean(await input.askUser(request));
+    if (input.run()?.runId !== run.runId) return false;
     decisions.hosts.set(target, allowed);
     return allowed;
   };

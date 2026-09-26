@@ -109,6 +109,7 @@ function SessionBrowserPanelController({
     index: -1,
   });
   const [publicState, setPublicState] = useState<ElectronPublicBrowserState | null>(null);
+  const publicAddressRef = useRef<string | null>(null);
   const [publicNavigationRequestId, setPublicNavigationRequestId] = useState<number | null>(null);
   const [annotationEnabled, setAnnotationEnabled] = useState(false);
   const [annotationAvailable, setAnnotationAvailable] = useState(false);
@@ -176,6 +177,7 @@ function SessionBrowserPanelController({
     setLocalEndpoint(null);
     setHistory(resumeState?.history ?? { entries: [], index: -1 });
     setPublicState(null);
+    publicAddressRef.current = null;
     setPublicNavigationRequestId(null);
     setManagedState(null);
     setManagedCommand(undefined);
@@ -226,6 +228,7 @@ function SessionBrowserPanelController({
 
   const commitOpenedAddress = useCallback(
     (next: BrowserAddress, nextViewerUrl: string | null, historyIndex?: number) => {
+      publicAddressRef.current = next.engine === 'public-web' ? next.logicalUrl : null;
       setCurrentAddress(next);
       setAddress(next.logicalUrl);
       setViewerUrl(nextViewerUrl);
@@ -599,12 +602,15 @@ function SessionBrowserPanelController({
     (state: ElectronPublicBrowserState) => {
       setPublicState(state);
       if (state.url) {
-        setAddress(state.url);
         try {
           const parsed = parseBrowserAddress(state.url);
           if (parsed.engine !== 'public-web') {
             setError('Public browser attempted to navigate outside its public-network boundary.');
             return;
+          }
+          if (publicAddressRef.current !== parsed.logicalUrl) {
+            publicAddressRef.current = parsed.logicalUrl;
+            setAddress(parsed.logicalUrl);
           }
           setCurrentAddress(parsed);
           commitHistory(parsed.logicalUrl);

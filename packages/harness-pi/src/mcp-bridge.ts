@@ -21,6 +21,10 @@ import { CancellationDeliveryTransport } from './mcp-cancellation';
 import { resolveMcpContent } from './mcp-content';
 import { bindMcpImageTool } from './mcp-image-binding';
 import type { OperationResourceRead } from './tool-operation-journal';
+import {
+  DesignAssetFailureSchema,
+  formatDesignAssetFailure,
+} from '@molly/shared/local-machine-rpc';
 
 type ClientPort = Pick<
   Client,
@@ -93,6 +97,17 @@ class MollyRenderFailure extends Error {}
 
 function renderFailure(result: unknown): MollyRenderFailure | null {
   const message = mcpErrorText(result);
+  if (message !== null && result && typeof result === 'object') {
+    const meta = (result as { _meta?: unknown })._meta;
+    const parsed = DesignAssetFailureSchema.safeParse(
+      meta && typeof meta === 'object'
+        ? (meta as { mollyDesignAssetFailure?: unknown }).mollyDesignAssetFailure
+        : undefined
+    );
+    if (parsed.success) {
+      return new MollyRenderFailure(`harness_render_${formatDesignAssetFailure(parsed.data)}`);
+    }
+  }
   if (
     message === 'Font failed to load' ||
     message === 'Canvas font failed to load' ||

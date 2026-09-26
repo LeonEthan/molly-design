@@ -83,6 +83,12 @@
       "derivation": "verbatim",
       "upstreamSha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4",
       "sha256": "be54f1ced28a7ac1d68670eb2d560d1491d7e0efe38972d9ba3309110f7d45e4"
+    },
+    "skills/graphic-design/scripts/font-prepare.mjs": {
+      "derivation": "original"
+    },
+    "skills/graphic-design/references/font-preparation.md": {
+      "derivation": "original"
     }
   },
   "derivations": {
@@ -106,6 +112,8 @@
     "src/latex.ts (retired unused PPTD v2 translation; provenance retained in Git history)"
   ],
   "localAdaptations": {
+    "src/asset-admission.ts": "Shared original per-asset 16 MiB and existing sniffed-MIME admission for authoring, preview and canonical storage, with typed relative-path diagnostics",
+    "src/collect-authoring.ts": "Existing bounded semantic observations report typed per-asset size failures; full-tree and digest-only collection retain existing size behavior",
     "skills/graphic-design/scripts/reference-pack.mjs": "Ported inspection plus Molly-local alpha, trim and compare layer helpers",
     "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
     "skills/graphic-design/references/layered-workflow.md": "Original generative layered workflow guide",
@@ -117,7 +125,8 @@
     "src/projection-capabilities.ts": "Derived YAML representation mapping for every active row of the unchanged frozen v1 matrix",
     "src/validate.ts": "YAML file/snapshot boundary; unused PPTD v2 validator removed",
     "src/semantic-assets.ts": "Native structured asset fields only; legacy theme traversal removed",
-    "src/canvas-format.ts": "Single molly-canvas/1 YAML projection using literal Bento editable fields and kernel validation"
+    "src/canvas-format.ts": "Single molly-canvas/1 YAML projection using literal Bento editable fields and kernel validation",
+    "skills/graphic-design/scripts/font-prepare.mjs": "Optional explicit isolated pinned FontTools setup and lossless complete-face WOFF preparation; no intake mutation or current-copy subsetting"
   },
   "adapterLicense": {
     "spdx": "Apache-2.0",

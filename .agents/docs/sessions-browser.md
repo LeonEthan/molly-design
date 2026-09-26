@@ -24,6 +24,10 @@ this page is the full text of the rules summarised there.
   self-contained/no-network rule as a hard browser guarantee. The rendered frame exists only while
   its viewer tab and containing sidebar are visible. Key the file viewer by session + tab so switching
   session targets always returns HTML to code mode before the new file can execute.
+- The public surface retains its IPC bridge for the mounted surface lifetime, so
+  state-driven renders do not detach and reattach the native page. Address drafts
+  survive same-URL state notifications; an observed URL change updates the toolbar.
+  See the [browser stability fix](../notes/implemented/bug-fix/2026-09-26-public-browser-render-stability.md).
 - Session Browser has strict dual engines, split on exactly one question: is the address the
   agent machine's own LOOPBACK? Only that uses Managed Preview, where the machine opens one
   approved port on itself; those are the only pages eligible for Visual Annotation. Everything

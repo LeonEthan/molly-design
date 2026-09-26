@@ -13,12 +13,17 @@
 - Upstream-adapted files (`.prettierignore` lists them) stay close to the pinned
   upstream for reviewable diffs; `source-manifest.json` records every migration
   and is enforced by the build.
-- Agent materials describe real format/capabilities and may recommend a creative
-  workflow the Agent adapts, repeats or skips; the application never enforces
-  sequences, analysis methods, review counts or finalize gates. Missing tools do
-  not imply the absence of other Agent visual capabilities.
+- The main graphic-design Skill owns the required workflow, task branches,
+  research exception and completion claims; references supply techniques, not
+  competing workflows. The Agent follows stage dependencies and repair loops,
+  choosing methods and iterations within user constraints. The application never
+  enforces creative stages, analysis methods, review counts or finalize gates.
+  Missing tools do not imply the absence of other Agent visual capabilities.
 - Skill directories must be self-contained after materialization: scripts may
   import only `node:*` builtins or the bundled `scripts/lib/molly-authoring.mjs`.
+  Optional font conversion may explicitly prepare pinned FontTools in an isolated
+  Python environment outside the collected artwork. No global install, automatic
+  intake conversion or current-copy subsetting; preserve source files and glyphs.
 - `src/generated/` and `skills/graphic-design/scripts/lib/` are build outputs;
   never edit them by hand.
 
@@ -53,3 +58,8 @@
 - After kernel replay, YAML admission and canonical store validation share
   `assertRenderableLines` for the pinned renderer's smooth-line point contract.
   Reject incomplete cubic segments; never add points or change curve modes.
+
+- Referenced asset admission uses `asset-admission.ts` across YAML validation,
+  preview and canonical storage: preserve the 16 MiB per-asset cap and existing
+  MIME sniffers. Retain authored paths and exact size diagnostics. Byte admission
+  does not prove font decoding; never silently convert or substitute assets.

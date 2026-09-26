@@ -19,9 +19,8 @@ reading path, color roles, and the failure to avoid (illegible type, fake eviden
 a crowded wall of equal boxes). Do not turn that note into a second source of truth
 for the finished files.
 
-When the supplied inspiration is absent or leaves a design decision unresolved,
-use [browser-research.md](browser-research.md) to research that gap on design
-sites. Carry the user's direction into the composition.
+Apply the research rule in [the main Skill](../SKILL.md#2-inspect-references-and-research).
+Carry the inspected references and research observations into the composition.
 
 ## Size the canvas for the actual output
 
@@ -68,6 +67,13 @@ editable in Molly. Choose a direction because it carries the content.
   archival stamps, or scientific proof.
 - Keep dates, labels, units, places, data, and sources faithful to supplied or
   checkable material. Prefer a coarser true claim over a precise invented one.
+
+Preserve user-supplied target dates. Resolve relative dates such as "this year"
+from the current turn's date and timezone, and verify calendar conversions or
+event dates against a reliable source. File timestamps and existing artwork do
+not establish today's date. When an exact event date is not supplied, use accurate
+coarse or lunar wording, or omit the date; research an exact date when the task
+needs it instead of inventing one.
 
 ## Review the rendered canvas
 

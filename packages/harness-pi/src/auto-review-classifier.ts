@@ -9,6 +9,12 @@ import {
 
 export const AUTO_REVIEW_CLASSIFIER_TIMEOUT_MS = 60_000;
 
+export class AutoReviewFailure extends Error {
+  constructor(readonly kind: 'timeout' | 'invalid_response' | 'failed' | 'cancelled') {
+    super(`harness_auto_review_${kind}`);
+  }
+}
+
 export type ClassifierRuntime = {
   completeSimple(
     model: Model<Api>,
@@ -28,32 +34,42 @@ export async function classifyEscalation(input: {
   subject: ReviewSubject;
   signal: AbortSignal;
 }): Promise<ReviewDecision> {
-  const message = await input.runtime.completeSimple(
-    input.model,
-    {
-      systemPrompt: buildSystemPrompt(),
-      messages: [
-        {
-          role: 'user',
-          content: buildProjectedContext(input.entries, input.subject),
-          timestamp: Date.now(),
-        },
-      ],
-    },
-    {
-      signal: AbortSignal.any([
-        input.signal,
-        AbortSignal.timeout(AUTO_REVIEW_CLASSIFIER_TIMEOUT_MS),
-      ]),
-      temperature: 0,
-    }
-  );
+  const timeout = AbortSignal.timeout(AUTO_REVIEW_CLASSIFIER_TIMEOUT_MS);
+  const signal = AbortSignal.any([input.signal, timeout]);
+  const message = await input.runtime
+    .completeSimple(
+      input.model,
+      {
+        systemPrompt: buildSystemPrompt(),
+        messages: [
+          {
+            role: 'user',
+            content: buildProjectedContext(input.entries, input.subject),
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        signal,
+        temperature: 0,
+      }
+    )
+    .catch(() => {
+      throw new AutoReviewFailure(
+        input.signal.aborted ? 'cancelled' : timeout.aborted ? 'timeout' : 'failed'
+      );
+    });
+  if (signal.aborted) throw new AutoReviewFailure(input.signal.aborted ? 'cancelled' : 'timeout');
   if (message.stopReason === 'error' || message.stopReason === 'aborted')
-    throw new Error('harness_auto_review_classifier_failed');
-  return parseReviewDecision(
-    message.content
-      .map((part) => (part.type === 'text' ? part.text : ''))
-      .join('')
-      .trim() || undefined
-  );
+    throw new AutoReviewFailure('failed');
+  try {
+    return parseReviewDecision(
+      message.content
+        .map((part) => (part.type === 'text' ? part.text : ''))
+        .join('')
+        .trim() || undefined
+    );
+  } catch {
+    throw new AutoReviewFailure('invalid_response');
+  }
 }

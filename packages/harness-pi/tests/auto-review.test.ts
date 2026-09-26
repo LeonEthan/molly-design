@@ -6,7 +6,7 @@ import type { AssistantMessage } from '@earendil-works/pi-ai';
 import type { BashOperations } from '@earendil-works/pi-coding-agent';
 import { createApprovedTools, type ToolApprovalResult } from '../src/approved-tools';
 import { createAutoReviewApproval, createNetworkReview } from '../src/auto-review';
-import { classifyEscalation } from '../src/auto-review-classifier';
+import { AutoReviewFailure, classifyEscalation } from '../src/auto-review-classifier';
 import { decideAutoReview, type AutoReviewBoundary } from '../src/auto-review-policy';
 import { RunJournal, type ApprovalRecord } from '../src/run-journal';
 import { createSandboxConfig, PRE_ALLOWED_DOMAINS } from '../src/sandbox';
@@ -151,6 +151,47 @@ const reviewDecision: ReturnType<typeof decideAutoReview> = {
 };
 
 describe('auto-review approval', () => {
+  it.each(['timeout', 'invalid_response', 'failed', 'cancelled'] as const)(
+    'records a bounded %s outcome without retaining classifier text',
+    async (kind) => {
+      const records: ApprovalRecord[] = [];
+      const prompts: string[] = [];
+      const approve = createAutoReviewApproval({
+        mode: () => 'auto-review',
+        decide: () => reviewDecision,
+        review: async () => {
+          throw new AutoReviewFailure(kind);
+        },
+        record: async (request, source, decision, reviewOutcome) => {
+          records.push({
+            toolCallId: request.toolCallId,
+            tool: request.name,
+            source,
+            decision,
+            reviewOutcome,
+          });
+          return true;
+        },
+        askUser: async (request) => {
+          prompts.push(request.name);
+          return true;
+        },
+      });
+      expect(await approve({ toolCallId: 'call', name: 'bash', arguments: {} })).toBe(
+        kind !== 'cancelled'
+      );
+      expect(records).toEqual([
+        {
+          toolCallId: 'call',
+          tool: 'bash',
+          source: 'classifier',
+          decision: 'deny',
+          reviewOutcome: kind,
+        },
+      ]);
+      expect(prompts).toEqual(kind === 'cancelled' ? [] : ['bash']);
+    }
+  );
   it.each(['molly_upload_images', 'molly_upload_files'])(
     'shares local attachments through %s automatically only in auto-review mode',
     async (name) => {
@@ -380,8 +421,8 @@ describe('escalation classifier', () => {
   });
 
   it('treats a provider error or unparseable answer as a failure', async () => {
-    await expect(run(message('', 'error')).result).rejects.toThrow();
-    await expect(run(message('maybe')).result).rejects.toThrow();
+    await expect(run(message('', 'error')).result).rejects.toMatchObject({ kind: 'failed' });
+    await expect(run(message('maybe')).result).rejects.toMatchObject({ kind: 'invalid_response' });
   });
 });
 
@@ -425,6 +466,13 @@ describe('approval provenance', () => {
       source: 'sandbox',
       decision: 'allow',
     });
+    await journal.approval('run-provenance', 'epoch', {
+      toolCallId: 'reviewed',
+      tool: 'bash',
+      source: 'classifier',
+      decision: 'deny',
+      reviewOutcome: 'timeout',
+    });
     await expect(
       journal.approval('run-provenance', 'other-epoch', {
         toolCallId: 'late',
@@ -435,6 +483,13 @@ describe('approval provenance', () => {
     ).rejects.toThrow('harness_stale_request');
     expect((await journal.read('run-provenance')).approvals).toEqual([
       { toolCallId: 'call', tool: 'bash', source: 'sandbox', decision: 'allow' },
+      {
+        toolCallId: 'reviewed',
+        tool: 'bash',
+        source: 'classifier',
+        decision: 'deny',
+        reviewOutcome: 'timeout',
+      },
     ]);
   });
 });

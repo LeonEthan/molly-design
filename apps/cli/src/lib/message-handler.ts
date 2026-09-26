@@ -11,6 +11,7 @@ import { BrowserHost } from '@/browser/browser-host';
 import { parseBrowserAddress } from '@molly/shared/browser-url';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
+import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
 import { clearImageConnectionFromFlock, getMachineFlockImageConnection } from '@molly/shared';
 import { readSessionHistory } from '@molly/shared/session-data';
 import { readLatestTurn } from '@molly/shared/session-data';
@@ -6923,6 +6924,9 @@ export class MessageHandler {
           },
           this.designRenderHost
         );
+        const assetFailure = DesignAssetFailureSchema.safeParse(
+          result.status === 'refused' ? result.assetFailure : undefined
+        );
         return result.status === 'rendered'
           ? {
               type: 'design/render-preview' as const,
@@ -6936,6 +6940,7 @@ export class MessageHandler {
               type: 'design/render-preview' as const,
               ok: false as const,
               error: result.error.slice(0, 2000),
+              ...(assetFailure.success ? { assetFailure: assetFailure.data } : {}),
             };
       }
       case 'code-collab/get-file-index':

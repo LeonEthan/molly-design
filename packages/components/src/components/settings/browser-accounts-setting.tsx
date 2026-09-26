@@ -116,11 +116,6 @@ export function BrowserAccountsSetting() {
         </p>
       ) : (
         <>
-          {!summary.persistent ? (
-            <p className="text-xs text-muted-foreground">
-              {t('settings.browserAccounts.developmentMemory')}
-            </p>
-          ) : null}
           {summary.importAvailable ? (
             <Section
               title={t('settings.browserAccounts.chromeProfileTitle')}
@@ -195,6 +190,11 @@ export function BrowserAccountsSetting() {
                       </Button>
                     </div>
                   </div>
+                  {!summary.persistent ? (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('settings.browserAccounts.developmentMemory')}
+                    </p>
+                  ) : null}
                   {importingSite === site ? (
                     <p role="status" className="mt-2 text-xs text-muted-foreground">
                       {t('settings.browserAccounts.authorizationHint')}

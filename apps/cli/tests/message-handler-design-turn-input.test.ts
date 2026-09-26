@@ -262,7 +262,7 @@ describe('MessageHandler design turn-input wiring', () => {
       expect(blocks).toContainEqual({
         type: 'text',
         text: expect.stringContaining(
-          `make a poster\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md. It covers the artwork format and a recommended workflow; adapt it to the task.`
+          `make a poster\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md`
         ),
       });
       expect(manifest.canvas).toEqual({ width: 1024, height: 768 });
@@ -377,7 +377,7 @@ describe('MessageHandler design turn-input wiring', () => {
         {
           type: 'text',
           text: expect.stringContaining(
-            `internal\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md. It covers the artwork format and a recommended workflow; adapt it to the task.`
+            `internal\n\nBefore design work, read the design skill: ${workdir}/.claude/skills/graphic-design/SKILL.md`
           ),
         },
       ]);

@@ -29,17 +29,19 @@ Never ask the user to paste an API key in chat; keys live in the app's settings 
 
 ## Using generated assets
 
-Choose your own prompting, inspection, and iteration approach for the task. Useful
-inputs include exact text, subject, composition, intended use, and constraints.
+For editable artwork, follow the `graphic-design` Skill's required workflow and
+task branches. Choose image prompting and inspection techniques within that
+workflow and the user's budget. Each call may be billed; an unknown result may
+already have consumed budget. Useful inputs include exact text, subject,
+composition, intended use, and constraints.
 `molly_generate_image` writes returned bytes under `media/` in the supplied
 design authoring directory and returns both the artwork-relative and absolute
 paths. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
 judge the result and decide whether further changes are useful. Report material
 limits and the resulting asset path.
 
-Prompt templates and taxonomy below are optional aids. For drafts and
-transparent layers in a design, the graphic-design skill's layered workflow
-describes a tested path.
+Prompt templates and taxonomy below are optional aids for image operations;
+they do not replace the design workflow or its research requirement.
 
 ## Tool inputs and provider limits
 

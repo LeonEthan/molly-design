@@ -121,6 +121,30 @@ function run(script: string, args: string[]) {
   });
 }
 
+describe('font-prepare.mjs', () => {
+  it('exposes isolated setup and complete-font conversion without installing on help', () => {
+    const result = run('font-prepare.mjs', ['--help']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('setup <environment-dir>');
+    expect(result.stdout).toContain('including all glyphs');
+  });
+
+  it.each([
+    ['woff', 'source.ttc', 'output.woff', '--python', 'missing-python'],
+    ['woff', 'source.ttc', 'output.woff', '--face', '-1', '--python', 'missing-python'],
+    ['faces', 'source.ttc', '--face', '1', '--python', 'missing-python'],
+    ['setup', 'environment', '--user'],
+  ])(
+    'rejects unsupported or ambiguous preparation arguments before running Python: %j',
+    (...args) => {
+      const result = run('font-prepare.mjs', args);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toMatch(/font-prepare|Select a face/);
+      expect(result.stderr).not.toContain('ENOENT');
+    }
+  );
+});
+
 const workdirs: string[] = [];
 function workdir(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'molly-skill-test-'));
@@ -194,9 +218,26 @@ describe('format.mjs', () => {
 });
 
 describe('finalize.mjs', () => {
+  it('rejects an oversized referenced asset without promoting the draft', () => {
+    const dir = workdir();
+    writeProject(dir, VALID_PAGE);
+    const bytes = Buffer.alloc(16_777_217);
+    syntheticPng(8, 8, [200, 30, 30]).copy(bytes);
+    writeFileSync(path.join(dir, 'media', 'pic.png'), bytes);
+    const result = run('finalize.mjs', [path.join(dir, 'design.yaml.tmp')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('media/pic.png');
+    expect(result.stderr).toContain('16777217');
+    expect(result.stderr).toContain('16777216');
+    expect(existsSync(path.join(dir, 'design.yaml'))).toBe(false);
+    expect(existsSync(path.join(dir, 'design.yaml.tmp'))).toBe(true);
+  });
+
   it('accepts the editable text example published in the format guide', () => {
     const guide = readFileSync(path.join(skillDir, 'references', 'artwork-format.md'), 'utf8');
-    const example = guide.match(/```yaml\n([\s\S]*?)```/)?.[1];
+    const example = [...guide.matchAll(/```yaml\n([\s\S]*?)```/g)]
+      .map((match) => match[1])
+      .find((block) => block?.trimStart().startsWith('- id:'));
     expect(example).toBeDefined();
     const dir = workdir();
     writeProject(
@@ -250,6 +291,21 @@ describe('render-preview.mjs', () => {
     const result = run('render-preview.mjs', [path.join(dir, 'design.yaml')]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('MOLLY-E005');
+  });
+
+  it('reports the size failure before claiming local intake succeeds', () => {
+    const dir = workdir();
+    writeProject(dir, VALID_PAGE);
+    writeFileSync(path.join(dir, 'design.yaml'), readFileSync(path.join(dir, 'design.yaml.tmp')));
+    const bytes = Buffer.alloc(16_777_217);
+    syntheticPng(8, 8, [200, 30, 30]).copy(bytes);
+    writeFileSync(path.join(dir, 'media', 'pic.png'), bytes);
+    const result = run('render-preview.mjs', [path.join(dir, 'design.yaml')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('media/pic.png');
+    expect(result.stderr).toContain('16777217');
+    expect(result.stderr).toContain('16777216');
+    expect(result.stdout).not.toContain('intake OK');
   });
 });
 

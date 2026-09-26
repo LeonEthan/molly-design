@@ -7,6 +7,40 @@ import {
 } from '@earendil-works/pi-coding-agent';
 import { z } from 'zod';
 
+export type HostTimeSource = {
+  now: () => Date;
+  resolveTimeZone: () => string;
+};
+
+function hostTimeContext(source?: HostTimeSource): string {
+  const instant = source?.now() ?? new Date();
+  const timeZone = source?.resolveTimeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      calendar: 'gregory',
+      numberingSystem: 'latn',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(instant)
+      .map(({ type, value }) => [type, value])
+  );
+  return [
+    'Host time at prompt start (from the host clock):',
+    `UTC time: ${instant.toISOString()}`,
+    `Local date and time: ${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`,
+    `IANA time zone: ${timeZone}`,
+    'Use this clock to interpret relative time. A task or event may specify a different date.',
+    'Geographic location: not provided by the host; use location explicitly supplied by the user. Do not infer location from the host time zone.',
+  ].join('\n');
+}
+
 // Reserve the pinned SDK's native names even when a turn does not expose them.
 const nativeToolNames = ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls'];
 
@@ -41,6 +75,7 @@ export class MollyResourceLoader implements ResourceLoader {
       extensions?: LoadExtensionsResult;
       hostToolNames?: readonly string[];
       readBeforeEditReminder?: string;
+      hostTime?: HostTimeSource;
     }
   ) {
     this.extensions = input.extensions ?? {
@@ -50,35 +85,37 @@ export class MollyResourceLoader implements ResourceLoader {
     };
     if (this.extensions.errors.length > 0) throw new Error('harness_extension_load_failed');
     validateTools(this.extensions.extensions, input.hostToolNames ?? []);
-    // Preserve the host-approved hook order; the reminder is appended below.
-    this.extensions = { ...this.extensions, extensions: [...this.extensions.extensions] };
-    if (input.readBeforeEditReminder) {
-      const path = '<molly-read-before-edit-v1>';
-      const reminder: Extension = {
-        path,
-        resolvedPath: path,
-        sourceInfo: { path, source: 'molly-bundled', scope: 'temporary', origin: 'package' },
-        handlers: new Map([
+    const path = '<molly-prompt-context-v1>';
+    const promptContext: Extension = {
+      path,
+      resolvedPath: path,
+      sourceInfo: { path, source: 'molly-bundled', scope: 'temporary', origin: 'package' },
+      handlers: new Map([
+        [
+          'before_agent_start',
           [
-            'before_agent_start',
-            [
-              async (event: unknown) => ({
-                systemPrompt: `${z.object({ systemPrompt: z.string() }).parse(event).systemPrompt}\n\n${input.readBeforeEditReminder}`,
-              }),
-            ],
+            async (event: unknown) => ({
+              systemPrompt: [
+                z.object({ systemPrompt: z.string() }).parse(event).systemPrompt,
+                hostTimeContext(input.hostTime),
+                input.readBeforeEditReminder,
+              ]
+                .filter(Boolean)
+                .join('\n\n'),
+            }),
           ],
-        ]),
-        tools: new Map(),
-        commands: new Map(),
-        flags: new Map(),
-        shortcuts: new Map(),
-        messageRenderers: new Map(),
-      };
-      this.extensions = {
-        ...this.extensions,
-        extensions: [...this.extensions.extensions, reminder],
-      };
-    }
+        ],
+      ]),
+      tools: new Map(),
+      commands: new Map(),
+      flags: new Map(),
+      shortcuts: new Map(),
+      messageRenderers: new Map(),
+    };
+    this.extensions = {
+      ...this.extensions,
+      extensions: [...this.extensions.extensions, promptContext],
+    };
   }
 
   getExtensions() {

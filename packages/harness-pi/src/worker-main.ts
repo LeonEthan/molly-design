@@ -16,14 +16,13 @@ import {
   type McpCredentialProvider,
 } from './acp-adapter';
 import { createMollySession } from './session-factory';
-import { createApprovedTools, hashToolset, type ToolApproval } from './approved-tools';
+import { createApprovedTools, hashToolset } from './approved-tools';
 import { decideAutoReview } from './auto-review-policy';
 import { WorkerSandbox, deniedReadRoots } from './sandbox';
 import { createAutoReviewApproval, createNetworkReview, type RecordApproval } from './auto-review';
 import type { WorkerConfig } from './worker-config';
 import { describeToolCall } from './tool-presentation';
-import { AgentBrowserCommandSchema } from '@molly/shared/browser-agent-rpc';
-import { classifyBrowserHostname } from '@molly/shared/browser-url';
+import { createBrowserTaskApproval } from './browser-approval';
 
 export async function probeWorker() {
   const runtime = await ModelRuntime.create({
@@ -51,116 +50,62 @@ export async function runWorker(
   mcpCredentialProvider?: McpCredentialProvider
 ): Promise<void> {
   let adapter: MollyAcpAdapter;
-  let browserTaskGrant: { runId: string; runtimeEpoch: string; sites: Set<string> } | undefined;
-  let browserActiveSite: { runId: string; site: string } | undefined;
   let sandbox: WorkerSandbox | undefined;
   const deniedRoots = deniedReadRoots([config.privateRoot, ...(config.privateDataRoots ?? [])]);
   const connection = new AgentSideConnection(
     (peer) => {
-      const record: RecordApproval = async (request, source, decision) =>
+      const record: RecordApproval = async (request, source, decision, reviewOutcome) =>
         adapter
-          .recordApproval({ toolCallId: request.toolCallId, tool: request.name, source, decision })
+          .recordApproval({
+            toolCallId: request.toolCallId,
+            tool: request.name,
+            source,
+            decision,
+            ...(reviewOutcome ? { reviewOutcome } : {}),
+          })
           .then(
             () => true,
             () => false
           );
-      const askUser: ToolApproval = async (request) => {
-        const sessionId = adapter.currentSessionId;
-        if (!sessionId || request.signal?.aborted) return false;
-        const run = adapter.currentRunScope;
-        const browser =
-          request.name === 'molly/molly_browser'
-            ? AgentBrowserCommandSchema.safeParse(request.arguments)
-            : undefined;
-        if (
-          browserTaskGrant &&
-          (!run ||
-            browserTaskGrant.runId !== run.runId ||
-            browserTaskGrant.runtimeEpoch !== run.runtimeEpoch)
-        ) {
-          browserTaskGrant = undefined;
-        }
-        if (browserActiveSite && (!run || browserActiveSite.runId !== run.runId))
-          browserActiveSite = undefined;
-        let site: string | undefined;
-        if (browser?.success && browser.data.kind === 'navigate') {
-          try {
-            const url = new URL(browser.data.url);
-            if (
-              ['http:', 'https:'].includes(url.protocol) &&
-              classifyBrowserHostname(url.hostname) === 'public'
-            ) {
-              site = url.hostname.toLowerCase().replace(/^www\./, '');
-            }
-          } catch {
-            // The browser host gives the actual URL error after ordinary approval.
-          }
-        } else if (browser?.success) {
-          site = browserActiveSite?.site;
-        }
-        if (browser?.success && run && site && browserTaskGrant?.sites.has(site)) {
-          if (!(await record(request, 'browse_task', 'allow'))) return false;
-          if (browser.data.kind === 'navigate') browserActiveSite = { runId: run.runId, site };
-          return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
-        }
-        const canGrantTask = Boolean(
-          config.permissionProfileId === 'browse-task-v1' &&
-          browser?.success &&
-          run &&
-          site &&
-          (!browserTaskGrant || browserTaskGrant.sites.size < 8)
-        );
-        const response = await peer.requestPermission({
-          sessionId,
-          toolCall: {
-            toolCallId: request.toolCallId,
-            ...describeToolCall(request.name, request.arguments, config.cwd),
-            status: 'pending',
-          },
-          options: [
-            { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
-            ...(canGrantTask
-              ? [
-                  {
-                    optionId: 'allow-browse-task',
-                    name: `Allow browsing, clicks, input and selected-image saves on ${site} for this task`,
-                    kind: 'allow_once' as const,
-                  },
-                ]
-              : []),
-            { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
-          ],
-        });
-        if (request.signal?.aborted || response.outcome.outcome !== 'selected') {
-          if (response.outcome.outcome === 'selected') await record(request, 'user', 'deny');
-          return false;
-        }
-        if (response.outcome.optionId === 'allow-once') {
-          if (!(await record(request, 'user', 'allow'))) return false;
-          if (browser?.success && browser.data.kind === 'navigate' && run && site)
-            browserActiveSite = { runId: run.runId, site };
-          return true;
-        }
-        if (response.outcome.optionId === 'allow-browse-task' && canGrantTask && run && site) {
-          if (!(await record(request, 'user', 'allow'))) return false;
-          if (!browserTaskGrant)
-            browserTaskGrant = {
-              runId: run.runId,
-              runtimeEpoch: run.runtimeEpoch,
-              sites: new Set(),
-            };
-          browserTaskGrant.sites.add(site);
-          if (browser?.success && browser.data.kind === 'navigate')
-            browserActiveSite = { runId: run.runId, site };
-          return { kind: 'browse_task', sites: [...browserTaskGrant.sites] };
-        }
-        await record(request, 'user', 'deny');
-        return false;
-      };
       const review = (
         subject: Parameters<MollyAcpAdapter['reviewEscalation']>[0],
         signal?: AbortSignal
       ) => adapter.reviewEscalation(subject, signal);
+      const askUser = createBrowserTaskApproval({
+        cwd: config.cwd,
+        permissionProfileId: config.permissionProfileId,
+        run: () => adapter.currentRunScope,
+        review,
+        record,
+        ask: async (request, site) => {
+          const sessionId = adapter.currentSessionId;
+          if (!sessionId || request.signal?.aborted) return undefined;
+          const response = await peer.requestPermission({
+            sessionId,
+            toolCall: {
+              toolCallId: request.toolCallId,
+              ...describeToolCall(request.name, request.arguments, config.cwd),
+              status: 'pending',
+            },
+            options: [
+              { optionId: 'allow-once', name: 'Allow once', kind: 'allow_once' },
+              ...(site
+                ? [
+                    {
+                      optionId: 'allow-browse-task',
+                      name: `Allow browsing, clicks, input and selected-image saves on ${site} for this task`,
+                      kind: 'allow_once' as const,
+                    },
+                  ]
+                : []),
+              { optionId: 'deny', name: 'Deny', kind: 'reject_once' },
+            ],
+          });
+          if (request.signal?.aborted || response.outcome.outcome !== 'selected') return undefined;
+          const choice = response.outcome.optionId;
+          return choice === 'allow-once' || choice === 'allow-browse-task' ? choice : 'deny';
+        },
+      });
       sandbox = new WorkerSandbox({
         cwd: config.cwd,
         shellPath: config.shellPath,

@@ -267,6 +267,125 @@ describe('frozen MCP tools', () => {
     await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
   });
 
+  it.each([
+    '/private/SYNTHETIC_SECRET.ttf',
+    'media/../SYNTHETIC_SECRET.ttf',
+    'media/..',
+    'media/Font\\SYNTHETIC_SECRET.ttf',
+    'media/Font.ttf\nSYNTHETIC_SECRET',
+    'media/%2e%2e%2fSYNTHETIC_SECRET.ttf',
+    'https://example.invalid/SYNTHETIC_SECRET.ttf',
+  ])(
+    'redacts asset failure paths outside the bounded media filename contract: %s',
+    async (path) => {
+      const f = fixture();
+      f.input.serverName = 'molly';
+      f.change([{ ...descriptor, name: 'molly_render_preview' }]);
+      f.result({
+        isError: true,
+        content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+        _meta: {
+          mollyDesignAssetFailure: {
+            code: 'asset_too_large',
+            path,
+            actualBytes: 20_752_628,
+            limitBytes: 16_777_216,
+          },
+        },
+      });
+      const [tool] = await defineMcpTools(f.input);
+      await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+        /^harness_mcp_tool_failed$/
+      );
+    }
+  );
+
+  it.each([
+    { actualBytes: 10 },
+    { actualBytes: Number.MAX_SAFE_INTEGER + 1 },
+    { actualBytes: 20_752_628.5 },
+    { limitBytes: 100 },
+    { code: 'SYNTHETIC_SECRET' },
+    { secret: 'SYNTHETIC_SECRET' },
+  ])('redacts malformed or expanded asset metadata: %j', async (overrides) => {
+    const f = fixture();
+    f.input.serverName = 'molly';
+    f.change([{ ...descriptor, name: 'molly_render_preview' }]);
+    f.result({
+      isError: true,
+      content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+      _meta: {
+        mollyDesignAssetFailure: {
+          code: 'asset_too_large',
+          path: 'media/Headline.ttf',
+          actualBytes: 20_752_628,
+          limitBytes: 16_777_216,
+          ...overrides,
+        },
+      },
+    });
+    const [tool] = await defineMcpTools(f.input);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+  });
+
+  it.each([
+    ['external', 'molly_render_preview'],
+    ['molly', 'draw'],
+  ])('does not trust asset metadata from %s/%s', async (serverName, name) => {
+    const f = fixture();
+    f.input.serverName = serverName;
+    f.change([{ ...descriptor, name }]);
+    f.result({
+      isError: true,
+      content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+      _meta: {
+        mollyDesignAssetFailure: {
+          code: 'asset_format_unsupported',
+          path: 'media/Headline.ttf',
+          kind: 'font',
+        },
+      },
+    });
+    const [tool] = await defineMcpTools(f.input);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+  });
+
+  it('does not infer asset authority from error text or a transport exception', async () => {
+    const f = fixture();
+    f.input.serverName = 'molly';
+    f.change([{ ...descriptor, name: 'molly_render_preview' }]);
+    const failure = {
+      code: 'asset_format_unsupported',
+      path: 'media/Headline.ttf',
+      kind: 'font',
+    };
+    const [tool] = await defineMcpTools(f.input);
+    f.result({ isError: true, content: [{ type: 'text', text: JSON.stringify(failure) }] });
+    await expect(tool!.execute('text', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    f.result({
+      isError: true,
+      content: [
+        { type: 'text', text: 'Asset failed' },
+        { type: 'text', text: 'SYNTHETIC_SECRET' },
+      ],
+      _meta: { mollyDesignAssetFailure: failure },
+    });
+    await expect(tool!.execute('expanded', {}, undefined)).rejects.toThrow(
+      /^harness_mcp_tool_failed$/
+    );
+    f.input.client.callTool = async () => {
+      throw Object.assign(
+        new Error('harness_render_asset_format_unsupported: media/Headline.ttf (font)'),
+        {
+          _meta: { mollyDesignAssetFailure: failure },
+        }
+      );
+    };
+    await expect(tool!.execute('transport', {}, undefined)).rejects.toThrow(
+      /^harness_mcp_tool_failed$/
+    );
+  });
+
   it('reads links only through their producing client after separate approval and dispatch', async () => {
     const f = fixture();
     const events: string[] = [];

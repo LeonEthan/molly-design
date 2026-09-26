@@ -36,6 +36,9 @@ const ApprovalSchema = z
     tool: z.string().min(1).max(512),
     source: z.enum(['sandbox', 'workspace', 'design_tool', 'browse_task', 'classifier', 'user']),
     decision: z.enum(['allow', 'deny']),
+    reviewOutcome: z
+      .enum(['allow', 'deny', 'timeout', 'invalid_response', 'failed', 'cancelled'])
+      .optional(),
   })
   .strict();
 export type ApprovalRecord = z.infer<typeof ApprovalSchema>;

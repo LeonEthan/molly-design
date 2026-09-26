@@ -1,4 +1,5 @@
 import { readSessionHistory } from '@molly/shared/session-data';
+import { formatDesignAssetFailure } from '@molly/shared/local-machine-rpc';
 import { requestDesignResubmit, resolveDesignResubmit } from './design-tools';
 import { spawn } from 'child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -4143,7 +4144,16 @@ export function buildMollyMcpServer(
           );
         }
         const result = await requestDesignRenderPreview(ctx);
-        if (result.status === 'refused') return textResult(result.error, true);
+        if (result.status === 'refused')
+          return {
+            ...textResult(
+              result.assetFailure ? formatDesignAssetFailure(result.assetFailure) : result.error,
+              true
+            ),
+            ...(result.assetFailure
+              ? { _meta: { mollyDesignAssetFailure: result.assetFailure } }
+              : {}),
+          };
         return jsonTextResult({
           ok: true,
           path: result.path,

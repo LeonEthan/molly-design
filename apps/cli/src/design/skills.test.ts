@@ -186,8 +186,8 @@ describe('materializeDesignSkills', () => {
 
 describe('designSkillPointerLine', () => {
   it('points at the .claude project skill dir', () => {
-    expect(designSkillPointerLine('/tmp/wd')).toBe(
-      'Before design work, read the design skill: /tmp/wd/.claude/skills/graphic-design/SKILL.md. It covers the artwork format and a recommended workflow; adapt it to the task.'
+    expect(designSkillPointerLine('/tmp/wd')).toContain(
+      '/tmp/wd/.claude/skills/graphic-design/SKILL.md'
     );
   });
 });
@@ -258,11 +258,32 @@ describe('packaged design materials', () => {
     }
     const text = materials.join('\n');
     const graphicText = graphicMaterials.join('\n');
+    const graphic = path.join(workdir, '.agents/skills/graphic-design');
+    const entry = readFileSync(path.join(graphic, 'SKILL.md'), 'utf8');
+    const entryText = entry.replace(/\s+/g, ' ');
     expect(text).not.toMatch(
       /inspect → draft|inspect once|inspect in one pass|verify in two loops|never script pixel|do not write pixel-probing|rerun until|done check is executable|review is incomplete|never substitute another renderer/i
     );
-    expect(text).toContain('Choose your own analysis, drafting, and review methods');
-    expect(graphicText).toContain('Adapt, reorder, repeat or skip stages');
+    expect(graphicText).not.toMatch(
+      /choose your own analysis|methods, order|order and iteration count|no fixed limit|sufficient supplied material supports proceeding directly/i
+    );
+    expect(Array.from(entry.matchAll(/^### (\d+)\./gm), (match) => Number(match[1]))).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9,
+    ]);
+    expect(entryText).toContain('Follow these nine stages and their dependencies.');
+    expect(entryText).toContain('as Pinterest unless **all** of these conditions hold:');
+    expect(entryText).toContain(
+      'the user explicitly identifies a concrete template or reference target'
+    );
+    expect(entryText).toContain('following that target without additional design inspiration');
+    expect(entryText).toContain('you have actually inspected the target');
+    expect(entryText).toContain('the user has not also requested research');
+    expect(entryText).toContain('Local edits and reconstruction use this same rule.');
+    expect(entryText).toContain('final collection runs after your turn ends');
+    expect(entryText).toContain('Backgrounds can remain opaque.');
+    for (const [, target] of entry.matchAll(/\]\(([^)]+)\)/g)) {
+      expect(existsSync(path.resolve(graphic, target.split('#')[0])), target).toBe(true);
+    }
     expect(graphicText).toContain('references/layered-workflow.md');
     expect(text).toContain('actual image-reading tool');
     expect(text).toContain('molly_edit_image');
@@ -298,7 +319,6 @@ describe('packaged design materials', () => {
 
     // Directly authored final files are valid without running finalize, and the
     // shipped helper executes from the materialized tree with its bundled library.
-    const graphic = path.join(workdir, '.agents/skills/graphic-design');
     expect(existsSync(path.join(graphic, 'examples/minimal/design.yaml'))).toBe(true);
     expect(existsSync(path.join(graphic, 'examples/minimal/pages/canvas.yaml'))).toBe(false);
     expect(existsSync(path.join(graphic, 'examples/minimal/poster.pptd'))).toBe(false);
@@ -324,7 +344,7 @@ describe('packaged design materials', () => {
     ]);
     expect(readFileSync(edited, 'utf8')).toBe('# Human-owned design instructions\n');
     expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toContain(
-      'Choose your own analysis, drafting, and review methods'
+      'Follow these nine stages and their dependencies.'
     );
   });
 });

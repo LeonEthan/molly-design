@@ -25,10 +25,11 @@ import { createHash, type Hash } from 'node:crypto';
 import { parse } from 'yaml';
 import { listSemanticAssetRefs } from './semantic-assets.ts';
 import type { ValidatedArtwork } from './contracts.ts';
+import { assetSizeFailure, describeAssetAdmissionFailure, MAX_ASSET_BYTES, type AssetAdmissionFailure } from './asset-admission.ts';
 
 /** Snapshot collection integrity failure (symlink/hardlink/escape/non-regular). */
 export class AuthoringSnapshotError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly assetFailure?: AssetAdmissionFailure) {
     super(message);
     this.name = 'AuthoringSnapshotError';
   }
@@ -127,11 +128,12 @@ function scanAuthoring(
     if (real !== rootReal && !real.startsWith(prefix)) {
       throw new AuthoringSnapshotError(`collectAuthoring: path escapes dir: ${rel}`);
     }
-    if (
-      options.referencedOnly &&
-      (st.size > 16 * 1024 * 1024 || totalBytes + st.size > 48 * 1024 * 1024)
-    )
-      throw new AuthoringSnapshotError('authoring snapshot exceeds resource limit');
+    if (options.referencedOnly) {
+      const failure = rel.startsWith('media/') ? assetSizeFailure(rel, st.size) : undefined;
+      if (failure) throw new AuthoringSnapshotError(describeAssetAdmissionFailure(failure), failure);
+      if (st.size > MAX_ASSET_BYTES || totalBytes + st.size > 48 * 1024 * 1024)
+        throw new AuthoringSnapshotError('authoring snapshot exceeds resource limit');
+    }
     const fd = openSync(abs, constants.O_RDONLY | constants.O_NOFOLLOW);
     try {
       const opened = fstatSync(fd);

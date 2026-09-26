@@ -32,11 +32,7 @@
  * including embedded assets. There are no candidate approval or deletion APIs.
  */
 
-import {
-  sniffStaticV1ImageMime,
-  sniffStaticV1FontMime,
-  staticV1UnregisteredFontFamilies,
-} from '../../../../packages/design-bento/vendor/packages/contracts/src/static-v1';
+import { staticV1UnregisteredFontFamilies } from '../../../../packages/design-bento/vendor/packages/contracts/src/static-v1';
 import { createVisualDocumentKernel } from '../../../../packages/design-bento/vendor/packages/kernel/src/kernel';
 import type {
   BentoDocV4,
@@ -47,7 +43,11 @@ import { constants } from 'node:fs';
 import { mkdir, open, rename, unlink, lstat, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { assertRenderableLines } from '@molly/design-authoring';
+import {
+  assertRenderableLines,
+  describeAssetAdmissionFailure,
+  inspectAssetAdmission,
+} from '@molly/design-authoring';
 import { withDesignLock, type DesignLockTiming } from './lock';
 import { ensureCurrentProjection } from './current-projection';
 
@@ -338,9 +338,9 @@ function validateAssets(content: z.output<typeof designInput>) {
     );
     if (!match?.[2]) throw Error('Missing or unsupported asset: ' + key);
     const bytes = Buffer.from(match[2], 'base64');
-    if (bytes.length > 16 * 1024 * 1024) throw Error('Asset exceeds 16 MiB');
-    if ((sniffStaticV1ImageMime(bytes) ?? sniffStaticV1FontMime(bytes)) !== match[1])
-      throw Error('Asset MIME does not match its bytes');
+    const admission = inspectAssetAdmission(bytes, `asset:${key}`);
+    if (!admission.ok) throw Error(describeAssetAdmissionFailure(admission.failure));
+    if (admission.mime !== match[1]) throw Error('Asset MIME does not match its bytes');
     if (digest(bytes) !== key) throw Error('Asset checksum mismatch: ' + key);
     assets[key] = uri as string;
   }

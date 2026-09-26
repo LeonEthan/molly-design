@@ -49,7 +49,6 @@ const STILL_TRACKS: TourAppTracks = {
   subagents: 0,
   panel: 0,
   changes: 0,
-  terminal: 0,
   annotation: 0,
   pr: 0,
   typing: 0,
@@ -256,7 +255,6 @@ const DEBUG_ANCHORS = [
   'tab-bar',
   'info-bar',
   'side-panel',
-  'terminal',
   'studio',
   'phone',
 ] as const;

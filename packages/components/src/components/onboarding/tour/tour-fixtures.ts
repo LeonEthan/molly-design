@@ -3,7 +3,6 @@ import { createStore } from 'jotai';
 import {
   getAgentConfigRoomId,
   getMachineRoomId,
-  getServerNow,
   getSessionRoomId,
   type AgentConfigId,
   type AgentConfigCliType,
@@ -21,11 +20,8 @@ import {
   type SessionId,
   type SessionMeta,
   type SessionPullRequestMeta,
-  type TerminalDataEvent,
-  type TerminalSnapshot,
   type WorkspaceId,
 } from '@molly/shared';
-import type { TerminalChannel } from '@/components/terminal/terminal-channel';
 import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom, userAtom } from '@/atoms';
 import {
   agentConfigMetaCacheAtom,
@@ -42,7 +38,7 @@ import { createTourRepo } from './tour-repo';
 // The rule this file exists to enforce: the tour may script the DATA, never the
 // UI. Everything the user looks at during the film is the product's own
 // component tree — the sidebar, the stream, the side panel, the info bar, the
-// composer, the terminal — mounted against the fixtures below. There is no
+// composer — mounted against the fixtures below. There is no
 // second implementation of any screen, so there is nothing that can drift from
 // what the user will see five minutes later, and no claim the copy can make
 // that the components would not actually render.
@@ -822,79 +818,3 @@ export function buildTourStableSession(identity: TourIdentity) {
   };
 }
 
-// ─── Terminal ─────────────────────────────────────────────────────────────────
-
-/** What the scripted terminal prints, in order, once it is attached. */
-const TERMINAL_SCRIPT: string[] = [
-  '[38;5;244m~/Code/your-project on [38;5;114mmolly/extract-token-handling[0m\r\n',
-  '❯ git status --short\r\n',
-  ' [32mM[0m src/auth/session.ts\r\n',
-  ' [32mM[0m src/auth/index.ts\r\n',
-  '[32m??[0m src/auth/token.ts\r\n',
-  '\r\n❯ ',
-];
-
-/**
- * A `TerminalChannel` that plays a script.
- *
- * `TerminalDock` takes its channel as a parameter, so the tour can mount the
- * PRODUCT's terminal — real dock chrome, real tabs, real xterm, real ANSI —
- * against scripted bytes, instead of drawing a picture of a terminal. This is
- * what "the right-hand side is the real thing" has to mean in practice: the
- * seam is at the data, never at the component.
- */
-export function createTourTerminalChannel(): TerminalChannel & { dispose: () => void } {
-  const dataHandlers = new Set<(event: TerminalDataEvent) => void>();
-  const timers: number[] = [];
-  let opened = false;
-
-  const terminalId = 'onboarding-tour-terminal';
-  const snapshot: TerminalSnapshot = {
-    terminalId,
-    sessionId: TOUR_SESSION_ID,
-    title: 'zsh',
-    cwd: '/Users/you/Code/your-project',
-    createdAtMs: getServerNow(),
-  } as TerminalSnapshot;
-
-  const play = (): void => {
-    if (opened) return;
-    opened = true;
-    TERMINAL_SCRIPT.forEach((chunk, index) => {
-      timers.push(
-        window.setTimeout(
-          () => {
-            for (const handler of dataHandlers) handler({ type: 'data', terminalId, data: chunk });
-          },
-          160 + index * 190
-        )
-      );
-    });
-  };
-
-  return {
-    list: async () => (opened ? [snapshot] : []),
-    open: async () => {
-      play();
-      return { terminalId } as never;
-    },
-    attach: () => play(),
-    input: () => undefined,
-    resize: () => undefined,
-    close: () => undefined,
-    closeSession: () => undefined,
-    readClipboardText: () => '',
-    writeClipboardText: () => undefined,
-    onData: (handler) => {
-      dataHandlers.add(handler);
-      return () => dataHandlers.delete(handler);
-    },
-    onExit: () => () => undefined,
-    onTitle: () => () => undefined,
-    dispose: () => {
-      for (const timer of timers) window.clearTimeout(timer);
-      timers.length = 0;
-      dataHandlers.clear();
-    },
-  };
-}

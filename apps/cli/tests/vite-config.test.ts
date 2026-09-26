@@ -20,7 +20,6 @@ describe('CLI vite config', () => {
     expect(external('convex/browser', undefined, false)).toBe(false);
     expect(external('convex/server', undefined, false)).toBe(false);
     expect(external('better-sqlite3', undefined, false)).toBe(true);
-    expect(external('@lydell/node-pty', undefined, false)).toBe(true);
     expect(external('typescript', undefined, false)).toBe(true);
   });
 

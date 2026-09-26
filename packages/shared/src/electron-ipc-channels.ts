@@ -4,7 +4,6 @@ import type {
 } from './local-loro-data-plane';
 import type { DesignElementReference } from './design-element-reference';
 import type { DesignSelectionAction, DesignSelectionSummary } from './design-selection-commands';
-import type { TerminalDataEvent, TerminalExitEvent, TerminalTitleEvent } from './terminal-protocol';
 import type {
   CliOutputEvent,
   ElectronCliState,
@@ -34,11 +33,6 @@ export type IpcPushMap = {
   'design.selection': {
     hostId: string;
   } & DesignSelectionSummary;
-  'terminal.event':
-    | TerminalDataEvent
-    | TerminalExitEvent
-    | TerminalTitleEvent
-    | { type: 'error'; code: string; message: string };
   'loro.event': LocalLoroDataPlaneServerMessage;
   'loro.status': boolean;
   'cli.output': CliOutputEvent;
@@ -56,11 +50,6 @@ export type IpcPushMap = {
 };
 
 export type IpcSendMap = {
-  'terminal.attach': { terminalId: string; cols: number; rows: number };
-  'terminal.input': { terminalId: string; data: string };
-  'terminal.resize': { terminalId: string; cols: number; rows: number };
-  'terminal.close': { terminalId: string };
-  'terminal.closeSession': { sessionId: string };
   'loro.send': LocalLoroDataPlaneClientMessage;
   'loro.subscribe': null;
   'cli.subscribe': null;
@@ -71,7 +60,6 @@ export const IPC_PUSH_CHANNELS = {
   designPreview: 'design.preview',
   designSelection: 'design.selection',
   designSelectionAction: 'design.selectionAction',
-  terminalEvent: 'terminal.event',
   loroEvent: 'loro.event',
   loroStatus: 'loro.status',
   cliOutput: 'cli.output',
@@ -89,11 +77,6 @@ export const IPC_PUSH_CHANNELS = {
 } as const satisfies { [K: string]: keyof IpcPushMap };
 
 export const IPC_SEND_CHANNELS = {
-  terminalAttach: 'terminal.attach',
-  terminalInput: 'terminal.input',
-  terminalResize: 'terminal.resize',
-  terminalClose: 'terminal.close',
-  terminalCloseSession: 'terminal.closeSession',
   loroSend: 'loro.send',
   loroSubscribe: 'loro.subscribe',
   cliSubscribe: 'cli.subscribe',

@@ -5,7 +5,6 @@
 | `electron-harness.ts`                     | Isolated Electron/CLI process lifecycle, logs, traces, and teardown      |
 | `hooks.ts`                                | Scenario evidence retention policy                                       |
 | `resource-probe.ts`                       | Structured main, renderer, DOM, CPU, and memory snapshots                |
-| `terminal-resources-probe.ts`             | Native xterm open/dispose regression without model credentials           |
 | `canvas-resources-probe.ts`               | Native canvas Session recycling, isolation and heap-retention regression |
 | `world.ts`                                | Cucumber adapter for the shared harness                                  |
 | `world-utils.ts`                          | Stable artifact paths, port reservation, and cleanup assertions          |
@@ -15,7 +14,7 @@
 | `pages/session-page.ts`                   | Deterministic ACP conversation and Stop lifecycle                        |
 | `pages/browser-permission-page.ts`        | Scripted browser approval and private-network refusal                    |
 | `pages/kimi-replication-page.ts`          | Explicit live Kimi golden replication, export and reopen acceptance      |
-| `pages/work-session-page.ts`              | Worktree Session, terminal, deletion, and cleanup contract               |
+| `pages/work-session-page.ts`              | Worktree Session, deletion, and cleanup contract                         |
 | `fixtures/work-session-fixture.ts`        | Synthetic Git workspace and scripted ACP evidence                        |
 
 The harness passes only an explicit environment allowlist into Electron. Linux

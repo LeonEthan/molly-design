@@ -17,9 +17,9 @@
     并且 用户切换大型 diff 并隐藏再恢复 Review
     那么 关闭 Review 和 Session 后相关视图被释放
 
-  @lody @P0 @essence @runtime-simulator @LODY-WORK-001
-  场景: 用户删除带 Agent 和 Terminal 的 Session
+  @lody @P0 @essence @runtime-simulator @LODY-SESSION-002
+  场景: 用户删除带 Agent 的 Session 且项目目录保留
     假如 已配置确定性 Agent 的隔离桌面
     并且 已添加干净的合成 Git 项目
-    当 用户在 Session 中完成回复并启动 Terminal
-    那么 永久删除后终端被释放且项目目录保留
+    当 用户在 Session 中完成回复
+    那么 永久删除后 Session 资源被释放且项目目录保留

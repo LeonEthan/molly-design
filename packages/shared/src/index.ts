@@ -119,7 +119,6 @@ export * from './analytics';
 export * from './live-activity-summary';
 export * from './live-activity-permission-action';
 export * from './convex-site-url';
-export * from './terminal-protocol';
 export type { WebSocketMessage } from './message';
 
 export const LORO_STREAMS_BUCKET_ID = 'lody';

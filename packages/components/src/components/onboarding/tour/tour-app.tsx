@@ -20,7 +20,6 @@ import {
   type SessionSidePanelTabItem,
 } from '@/components/sessions/session-side-panel-tab-bar';
 import { SessionTabBar } from '@/components/sessions/session-tab-bar';
-import { TerminalDock } from '@/components/terminal/terminal-dock';
 import { buildAcpSelectorOptions } from '@/components/shared/acp-selector-options';
 import { StableSessionContext } from '@/hooks/useStableSession';
 import { cn } from '@/lib/utils';
@@ -34,7 +33,6 @@ import {
   buildTourSession,
   buildTourStableSession,
   createTourStore,
-  createTourTerminalChannel,
   type TourIdentity,
 } from './tour-fixtures';
 import { TourBrowserPreview } from './tour-browser-preview';
@@ -46,7 +44,7 @@ import { TourLocalBoundary } from './tour-local-boundary';
 // a card. This is `LoroSidebar` beside `DesktopSessionDetailLayout`, holding
 // `SessionTabBar`, `SessionChatStreamView`, `PermissionRequestCard`,
 // `SessionInfoBar`, `SessionChatInputArea`, `SessionSidePanelTabBar`,
-// `SessionChangesSidebar` and `TerminalDock` — every one of them the component
+// `SessionChangesSidebar` — every one of them the component
 // production mounts, in the position production mounts it.
 //
 // THREE THINGS THE OLD PREVIEW GOT WRONG, all of them the same mistake — it
@@ -84,7 +82,6 @@ export type TourAppTracks = {
   /** 0 closed → 1 open. Drives the REAL resizable side panel. */
   panel: number;
   changes: number;
-  terminal: number;
   annotation: number;
   pr: number;
   /** 0 → empty composer, 1 → the whole prompt typed. */
@@ -227,8 +224,6 @@ function TourWindow({
 }): React.JSX.Element {
   const { t } = useTranslation();
   const composerRef = useRef<SessionChatInputAreaHandle>(null);
-  const terminalChannel = useMemo(() => createTourTerminalChannel(), []);
-  useEffect(() => () => terminalChannel.dispose(), [terminalChannel]);
   const visibleTasks = useMemo(() => {
     const archived = Math.floor(tracks.archived);
     const visible = Math.max(archived, Math.min(TOUR_TASKS.length, Math.floor(tracks.tasks)));
@@ -455,10 +450,6 @@ function TourWindow({
         return null;
     }
   })();
-  // Latched: once the dock has been open it stays mounted, so re-opening it
-  // later costs a height change rather than another xterm.
-  const terminalEverOpened = useRef(false);
-  if (tracks.terminal > 0) terminalEverOpened.current = true;
 
   return (
     <div
@@ -654,30 +645,6 @@ function TourWindow({
                   />
                 }
               />
-            }
-            terminalDock={
-              terminalEverOpened.current ? (
-                <div
-                  data-tour-anchor="terminal"
-                  style={{
-                    // Height, not mount/unmount. The dock carries a real xterm;
-                    // building one while the camera is moving toward it is a
-                    // long commit on exactly the wrong frames. It mounts once,
-                    // at zero height, and thereafter only grows and shrinks.
-                    height: `${Math.round(tracks.terminal * 260)}px`,
-                    opacity: Math.min(1, tracks.terminal * 2),
-                    overflow: 'hidden',
-                    transition: 'height 420ms ease, opacity 420ms ease',
-                  }}
-                >
-                  <TerminalDock
-                    channel={terminalChannel}
-                    sessionId={TOUR_SESSION_ID}
-                    defaultView="terminal"
-                    autoOpenFirstTerminal
-                  />
-                </div>
-              ) : null
             }
             secondaryPanel={
               <div

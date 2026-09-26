@@ -49,7 +49,6 @@ catalog:
   zod: ^4.1.5
 
 ignoredBuiltDependencies:
-  - node-pty
   # >=13.0.2 has no install script; pnpm still offers to build it because the
   # package retains binding.gyp for explicit source builds.
   - better-sqlite3
@@ -102,7 +101,6 @@ packageManagerStrictVersion: true
 
 patchedDependencies:
   '@tanstack/router-core@1.171.15': patches/@tanstack__router-core@1.171.15.patch
-  '@xterm/xterm@5.5.0': patches/@xterm__xterm@5.5.0.patch
   '@radix-ui/react-scroll-area@1.2.10': patches/@radix-ui__react-scroll-area@1.2.10.patch
   app-builder-lib@26.15.3: patches/app-builder-lib@26.15.3.patch
   '@pierre/diffs@1.0.10': patches/@pierre__diffs@1.0.10.patch

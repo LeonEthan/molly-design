@@ -160,9 +160,10 @@ apps/electron/resources/cli/
 /.pnpm-store/
 /.claude/settings.json
 
+# Local agent instructions and records
+/.agents/
+
 # Locally-installed App Store agent skills (kept local, not committed)
-/.agents/skills/apple-appstore-reviewer/
-/.agents/skills/appstore-info-generator/
 /.claude/skills/apple-appstore-reviewer
 /.claude/skills/appstore-info-generator
 /skills-lock.json

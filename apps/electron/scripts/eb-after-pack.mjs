@@ -10,8 +10,6 @@ import {
 } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 import {
-  stagedNodePtyBindingPath,
-  stagedNodePtySpawnHelperPath,
   stagedNodeModulesDir,
   assertEmbeddedSharpPackages,
   stagedSqliteBindingPath
@@ -173,14 +171,13 @@ export default async function afterPack(context) {
   verifyEmbeddedHarness(stagedHarness)
   fs.cpSync(stagedHarness, packedHarness, { recursive: true, force: true })
   verifyEmbeddedHarness(packedHarness)
-  // beforePack staged both native bindings for this exact target, so mirror their
+  // beforePack staged the native bindings for this exact target, so mirror their
   // staged-relative locations rather than guessing the per-platform file names here.
   const nativeTarget = { platform: platform === 'mas' ? 'darwin' : platform, arch: archName }
   const packedNodeModulesDir = path.join(packedCliDir, 'node_modules')
   const packedFromStaged = (stagedPath) =>
     path.join(packedNodeModulesDir, path.relative(stagedNodeModulesDir, stagedPath))
   const packedBindingPath = packedFromStaged(stagedSqliteBindingPath(nativeTarget))
-  const packedNodePtyBindingPath = packedFromStaged(stagedNodePtyBindingPath(nativeTarget))
   fs.cpSync(stagedNodeModulesDir, packedNodeModulesDir, {
     recursive: true,
     force: true
@@ -188,19 +185,6 @@ export default async function afterPack(context) {
   assertEmbeddedSharpPackages(packedNodeModulesDir, nativeTarget)
   if (!fs.existsSync(packedBindingPath)) {
     throw new Error(`[embedded-cli] sqlite binding missing after copy: ${packedBindingPath}`)
-  }
-  if (!fs.existsSync(packedNodePtyBindingPath)) {
-    throw new Error(
-      `[embedded-cli] node-pty binding missing after copy: ${packedNodePtyBindingPath}`
-    )
-  }
-  if (platform === 'darwin' || platform === 'mas') {
-    const packedSpawnHelperPath = packedFromStaged(stagedNodePtySpawnHelperPath(nativeTarget))
-    if (!fs.existsSync(packedSpawnHelperPath)) {
-      throw new Error(
-        `[embedded-cli] node-pty spawn-helper missing after copy: ${packedSpawnHelperPath}`
-      )
-    }
   }
   console.log(`[embedded-cli] copied runtime node_modules into ${packedCliDir}`)
 
@@ -296,49 +280,6 @@ export default async function afterPack(context) {
     throw new Error(
       `[embedded-cli-smoke] embedded CLI failed to start (exit ${String(result.status)}) — ` +
         `the packaged app would crash-loop on CLI autostart.\n${detail}`
-    )
-  }
-
-  const nodePtyProbe = [
-    `const { createRequire } = require('node:module');`,
-    `const os = require('node:os');`,
-    `const req = createRequire(${JSON.stringify(path.resolve(cliEntry))});`,
-    `const pty = req('@lydell/node-pty');`,
-    `if (typeof pty.spawn !== 'function') throw new Error('node-pty spawn export missing');`,
-    `const marker = 'node-pty-spawn-ok';`,
-    `const isWindows = process.platform === 'win32';`,
-    `const shell = isWindows ? (process.env.ComSpec || 'cmd.exe') : '/bin/sh';`,
-    `const args = isWindows ? ['/d', '/s', '/c', 'echo ' + marker] : ['-lc', 'echo ' + marker];`,
-    `let output = '';`,
-    `const env = { ...process.env, TERM: 'xterm-256color' };`,
-    `if (!env.PATH) env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';`,
-    `const term = pty.spawn(shell, args, { cwd: os.tmpdir(), env, cols: 80, rows: 24, name: 'xterm-256color' });`,
-    `const timeout = setTimeout(() => { try { term.kill(); } catch {} console.error('node-pty spawn timed out'); process.exit(1); }, 15000);`,
-    `term.onData((data) => { output += data; process.stdout.write(data); });`,
-    `term.onExit(({ exitCode, signal }) => { clearTimeout(timeout); if (exitCode !== 0 || !output.includes(marker)) { console.error('node-pty spawn probe failed', { exitCode, signal, output }); process.exit(1); } console.log('node-pty-ok'); process.exit(0); });`
-  ].join('')
-  const nodePtyProbeResult = spawnSync(cliRuntimePath, ['-e', nodePtyProbe], {
-    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-    encoding: 'utf8',
-    timeout: SMOKE_TIMEOUT_MS,
-    windowsHide: true
-  })
-  if (
-    nodePtyProbeResult.error ||
-    nodePtyProbeResult.status !== 0 ||
-    !nodePtyProbeResult.stdout.includes('node-pty-ok')
-  ) {
-    const detail = [
-      nodePtyProbeResult.error?.message,
-      nodePtyProbeResult.stderr,
-      nodePtyProbeResult.stdout
-    ]
-      .filter(Boolean)
-      .join('\n')
-      .slice(-4000)
-    throw new Error(
-      `[embedded-cli-smoke] node-pty failed to spawn a pty in the packed app ` +
-        `(exit ${String(nodePtyProbeResult.status)}).\n${detail}`
     )
   }
 

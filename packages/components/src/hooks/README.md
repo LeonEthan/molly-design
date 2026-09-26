@@ -9,21 +9,21 @@ that carry an invariant — the directory itself is the list of hooks.
 `virtua` owns mounted rows, measurement, and index navigation. `use-stick-to-bottom`
 only observes content growth; it does not replace Virtua and does not own the
 product-level behaviors (per-session scroll restoration, search and group-expansion
-suppression and terminal-dock resizing) that the app adapters add
+suppression) that the app adapters add
 around it. That is why the two concerns stay separated and why recovering the
 viewport element by DOM query, `VList` handle, item-count effect, observer retry, or
 timer is banned: only the viewport's own React callback ref fires on the real mount
 and unmount commits, which is what an empty-to-populated conversation depends on.
 
-`ResizeObserver` records are the single source of viewport-size change because the
-terminal dock and window resizing change that same element; custom resize-event
+`ResizeObserver` records are the single source of viewport-size change because
+window resizing changes that same element; custom resize-event
 pumps and guessed transition durations were the earlier, unreliable version. Only
 height matters: a flex sibling such as the desktop sidebar can animate its width
 every frame, and forwarding width-only records competes with the content observer's
 bottom correction and visibly jitters the conversation.
 
 The composer one-shot ref preserves the reader's position while typing without
-changing keyboard, terminal, or window-resize follow behavior, which is why it is
+changing keyboard or window-resize follow behavior, which is why it is
 consumed for exactly one height resize and is not merged into programmatic-jump
 suppression.
 

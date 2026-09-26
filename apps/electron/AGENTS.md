@@ -44,26 +44,23 @@ contracts, and window/renderer integration rules live in
 
 - The embedded CLI launches built JavaScript only; there is no source-loader/Jiti
   fallback. Development and packaged builds must use the same output layout.
-- `better-sqlite3`, `@lydell/node-pty`, and `loro-crdt` remain external and must be
+- `better-sqlite3` and `loro-crdt` remain external and must be
   staged under `resources/cli/node_modules` by `scripts/sync-cli-dist.mjs` and
   `scripts/cli-native-deps.mjs`.
 - Image decoding uses pinned `sharp` plus target-specific addon/libvips packages.
   Verify staged resources for every target and run the real decoder on native builds.
-- `@lydell/node-pty` and `better-sqlite3 >= 13.0.2` use N-API artifacts. Stage the
+- `better-sqlite3 >= 13.0.2` uses N-API artifacts. Stage the
   target platform/architecture artifact; do not rebuild by Electron ABI.
 - Every embedded-CLI descendant launched through `process.execPath` must inherit
   `ELECTRON_RUN_AS_NODE` when it exists. On packaged macOS, omitting it launches a
   second GUI app instead of Node.
 - Electron Builder ignores nested staged `node_modules`. `eb-after-pack.mjs` must copy
   them into `app.asar.unpacked`, verify the sealed Pi closure and absence of retired
-  adapters/presets, then probe CLI `--help`, node-pty loading, and a real in-memory SQLite
+  adapters/presets, then probe CLI `--help` and a real in-memory SQLite
   database before signing.
 - Keep `better-sqlite3 >= 13.0.2`, CLI `engines.node >= 22.14.0`, the first-import
   guard in `sqlite-runtime-support.ts`, and its tests aligned. Older Node versions can
   segfault while loading the N-API 10 binding.
-- When upgrading `@lydell/node-pty`, audit package layout and Windows ConPTY binding
-  names. Apply the staged asar-path repair after downloading target artifacts; a pnpm
-  patch cannot cover cross-architecture packages fetched during packaging.
 - `electronLanguages` must include underscore names used by macOS resources and
   hyphenated names used by Chromium `.pak` files. The after-pack assertion for
   `locales/en-US.pak` is a release gate.

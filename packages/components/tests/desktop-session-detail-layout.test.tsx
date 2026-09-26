@@ -77,7 +77,6 @@ describe('DesktopSessionDetailLayout', () => {
           defaultSizes={{ main: 70, sidebar: 30 }}
           topBar={null}
           chatSurfaces={null}
-          terminalDock={null}
           secondaryPanel={null}
           sidebarOpen
           onSidebarCollapse={() => {}}
@@ -99,21 +98,20 @@ describe('DesktopSessionDetailLayout', () => {
     container = undefined;
   });
 
-  it('keeps the terminal dock inside the chat panel and outside the sidebar panel', () => {
+  it('keeps the chat surfaces inside the chat panel and outside the sidebar panel', () => {
     const mounted = renderLayout({
       topBar: <div data-testid="top-bar" />,
       chatSurfaces: <div data-testid="chat-surfaces" />,
-      terminalDock: <div data-testid="terminal-dock" />,
       secondaryPanel: <div data-testid="secondary-panel" />,
     });
 
-    const terminalDock = mounted.querySelector('[data-testid="terminal-dock"]');
+    const chatSurfaces = mounted.querySelector('[data-testid="chat-surfaces"]');
     const chatPanel = mounted.querySelector('[data-panel-id="chat"]');
     const sidebarPanel = mounted.querySelector('[data-panel-id="sidebar"]');
 
-    expect(terminalDock).not.toBeNull();
-    expect(chatPanel?.contains(terminalDock)).toBe(true);
-    expect(sidebarPanel?.contains(terminalDock)).toBe(false);
+    expect(chatSurfaces).not.toBeNull();
+    expect(chatPanel?.contains(chatSurfaces)).toBe(true);
+    expect(sidebarPanel?.contains(chatSurfaces)).toBe(false);
   });
 
   it('only enables the resize handle while the sidebar is open', () => {
@@ -160,7 +158,6 @@ describe('DesktopSessionDetailLayout sidebarMinWidthRequest', () => {
           defaultSizes={{ main: 70, sidebar: 30 }}
           topBar={null}
           chatSurfaces={null}
-          terminalDock={null}
           secondaryPanel={null}
           sidebarOpen
           onSidebarCollapse={() => {}}
@@ -276,7 +273,6 @@ describe('DesktopSessionDetailLayout sidebarRestoreSeq', () => {
           defaultSizes={{ main: 70, sidebar: 30 }}
           topBar={null}
           chatSurfaces={null}
-          terminalDock={null}
           secondaryPanel={null}
           sidebarOpen
           onSidebarCollapse={() => {}}

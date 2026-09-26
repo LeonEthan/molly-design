@@ -29,9 +29,9 @@ const SCENARIOS = {
     question: 'Can a user inspect, switch, hide, restore, and close large local diffs?',
   },
   work: {
-    id: 'LODY-WORK-001',
+    id: 'LODY-SESSION-002',
     question:
-      'Does deleting a worktree Session release its ACP process, Terminal, and worktree directory?',
+      'Does deleting a worktree Session release its ACP process while preserving the worktree directory?',
   },
 };
 
@@ -53,9 +53,9 @@ const SUBJECTS = {
     scenarios: [SCENARIOS.review],
   },
   'desktop-work-lifecycle': {
-    tags: '@LODY-WORK-001',
+    tags: '@LODY-SESSION-002',
     requirement:
-      'Permanent Work deletion releases the ACP process, Terminal, and generated worktree.',
+      'Permanent Work deletion releases the ACP process and preserves the generated worktree.',
     scenarios: [SCENARIOS.work],
   },
   'desktop-lifecycle': {

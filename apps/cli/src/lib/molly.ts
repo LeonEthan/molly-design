@@ -34,7 +34,6 @@ interface MollyOptions {
   localWorkspaceCatalog?: LocalWorkspaceCatalogService;
   memoryPressure: MemoryPressureSnapshotSource;
   machineLifecycleCapability: MachineLifecycleCapability;
-  closeSessionTerminals?: (sessionId: SessionId) => void;
   cleanupLocalProjectWorktreeSetupIfUnreferenced?: (
     localProjectId: LocalProjectId
   ) => Promise<void>;
@@ -105,7 +104,6 @@ export class Molly {
         ...(options.localWorkspaceCatalog
           ? { localWorkspaceCatalog: options.localWorkspaceCatalog }
           : {}),
-        closeSessionTerminals: options.closeSessionTerminals,
         cleanupLocalProjectWorktreeSetupIfUnreferenced:
           options.cleanupLocalProjectWorktreeSetupIfUnreferenced,
         onFatalAuthFailure: options.onFatalAuthFailure,

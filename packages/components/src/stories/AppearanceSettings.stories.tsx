@@ -20,8 +20,6 @@ function ControlledAppearanceSettings({ isElectron }: { isElectron: boolean }) {
   const [conversationFontSize, setConversationFontSize] =
     useState<AppearanceSettingsViewProps['conversationFontSize']>(14);
   const [interfaceFontFamily, setInterfaceFontFamily] = useState('Inter');
-  const [terminalFontFamily, setTerminalFontFamily] = useState('');
-  const [terminalFontSize, setTerminalFontSize] = useState(13);
 
   return (
     <div className="mx-auto max-w-4xl p-6">
@@ -35,13 +33,9 @@ function ControlledAppearanceSettings({ isElectron }: { isElectron: boolean }) {
         isElectron={isElectron}
         interfaceFontFamily={interfaceFontFamily}
         onInterfaceFontFamilyChange={setInterfaceFontFamily}
-        terminalFontFamily={terminalFontFamily}
-        onTerminalFontFamilyChange={setTerminalFontFamily}
         systemFontFamilies={systemFontFamilies}
         systemFontLoadState="loaded"
         onSystemFontMenuOpen={() => undefined}
-        terminalFontSize={terminalFontSize}
-        onTerminalFontSizeChange={setTerminalFontSize}
       />
     </div>
   );

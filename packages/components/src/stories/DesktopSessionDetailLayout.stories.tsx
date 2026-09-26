@@ -91,7 +91,6 @@ function LayoutHarness({
             </div>
           }
           chatSurfaces={<WidthReadout label="Conversation" />}
-          terminalDock={null}
           secondaryPanel={<WidthReadout label={empty ? 'Empty sidebar' : 'PR panel'} />}
           sidebarOpen={sidebarOpen}
           onSidebarCollapse={() => setSidebarOpen(false)}

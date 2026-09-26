@@ -14,8 +14,6 @@ import {
   type LocalSessionControlRequest,
   type LocalSessionControlResponse,
   type MachineLifecycleCapability,
-  type SessionId,
-  type SessionMeta,
 } from '@molly/shared';
 import type { LocalLoroDataPlaneServer } from '@molly/shared/local-loro-data-plane-server';
 import pkg from '@/pkg';
@@ -28,7 +26,6 @@ import {
 import { startMollyMcpHttpServer, stopMollyMcpHttpServer } from '@/mcp/molly-mcp-http-server';
 import type { LocalProbeConfig } from '@/lib/local-probe';
 import type { LocalSessionControlConfig } from '@/lib/local-session-control';
-import { startLocalTerminalServer, stopLocalTerminalServer } from '@/lib/local-terminal-server';
 import {
   startLocalLoroDataPlaneServer,
   stopLocalLoroDataPlaneServer,
@@ -36,12 +33,10 @@ import {
 import { LocalProjectControlService } from '@/lib/local-project-control-service';
 import { LocalProjectHistorySyncService } from '@/lib/local-project-history-sync-service';
 import { CliRuntimeStateReporter } from '@/lib/cli-runtime-state';
-import { makeTerminalPtyService, type TerminalPtyServiceApi } from '@/lib/terminal-pty-service';
 import {
   readMachineLocalProjects,
   removeMachineLocalProject,
   resolveWorkspaceLocalProject,
-  resolveWorkspaceLocalProjectRootPath,
   resolveWorkspaceLocalProjectRootPathWithRetry,
   resolveWorkspaceLocalProjectWithSyncOnMiss,
   upsertMachineLocalProject,
@@ -53,10 +48,6 @@ import {
   isLocalProjectWorktreeConfigRequest,
 } from '@/session/worktree/worktree-setup-config-store';
 import { formatErrorMessage } from '@/utils/format-error';
-import {
-  resolveTerminalWorkdirFromMetadata,
-  type TerminalSessionMetaLookup,
-} from '@/lib/terminal-workdir-resolver';
 import {
   localCatalogWorkspaceToWorkspaceListItem,
   makeLocalWorkspaceCatalog,
@@ -91,7 +82,6 @@ type WorkspaceListItem = {
 type WorkspaceRuntimeState = {
   workspace: WorkspaceListItem;
   lody: Molly;
-  unsubscribeTerminalCleanup: () => void;
   taskAutomation: TaskAutomationWorkspaceHandle | null;
 };
 
@@ -106,7 +96,6 @@ export class MollyFleet {
   private readonly localWorkspaceCatalog: LocalWorkspaceCatalogService;
   private readonly cloudPort: CloudPort;
   private readonly runtimeStateReporter: CliRuntimeStateReporter;
-  private readonly terminalPtyService: TerminalPtyServiceApi;
   private readonly memoryPressure: MemoryPressureSampler;
   private readonly onProcessLifecycleAction?: (action: MachineProcessLifecycleAction) => void;
   private readonly machineLifecycleCapability: MachineLifecycleCapability;
@@ -157,11 +146,6 @@ export class MollyFleet {
     this.memoryPressure = new MemoryPressureSampler(this.logger);
     this.onProcessLifecycleAction = options.onProcessLifecycleAction;
     this.localProjectControlService = new LocalProjectControlService(this.logger);
-    this.terminalPtyService = makeTerminalPtyService({
-      logger: this.logger,
-      resolveSessionWorkdir: async (sessionId) =>
-        await this.resolveTerminalSessionWorkdir(sessionId),
-    });
     this.workspaceWatchCoordinator = new WorkspaceWatchCoordinator(this.logger);
   }
 
@@ -192,12 +176,6 @@ export class MollyFleet {
       });
     });
     await Promise.all([
-      traceAsync(this.logger, 'startup.local_terminal', undefined, async () => {
-        await startLocalTerminalServer({
-          logger: this.logger,
-          terminalPtyService: this.terminalPtyService,
-        });
-      }),
       traceAsync(this.logger, 'startup.local_data_plane', undefined, async () => {
         await startLocalLoroDataPlaneServer({
           logger: this.logger,
@@ -271,7 +249,6 @@ export class MollyFleet {
     // Host lease remains held until this shutdown barrier completes.
     const localServicesStopped = Promise.allSettled([
       stopLocalIpcSocketServers(),
-      stopLocalTerminalServer(),
       stopLocalLoroDataPlaneServer(),
       stopMollyMcpHttpServer(),
     ]);
@@ -286,10 +263,8 @@ export class MollyFleet {
     for (const runtime of runtimes) {
       try {
         await runtime.lody.cleanup();
-        runtime.unsubscribeTerminalCleanup();
         await runtime.taskAutomation?.dispose();
       } catch (error) {
-        runtime.unsubscribeTerminalCleanup();
         this.logger.debug(
           `[fleet] Failed to cleanup workspace runtime ${runtime.workspace.id}: ${formatErrorMessage(
             error
@@ -307,7 +282,6 @@ export class MollyFleet {
         );
       }
     }
-    this.terminalPtyService.closeAll();
   }
 
   private async applyWorkspaceList(next: WorkspaceListItem[]): Promise<void> {
@@ -397,7 +371,6 @@ export class MollyFleet {
           localWorkspaceCatalog: this.localWorkspaceCatalog,
           memoryPressure: this.memoryPressure,
           machineLifecycleCapability: this.machineLifecycleCapability,
-          closeSessionTerminals: (sessionId) => this.terminalPtyService.closeSession(sessionId),
           cleanupLocalProjectWorktreeSetupIfUnreferenced: (localProjectId) =>
             this.cleanupLocalProjectWorktreeSetupIfUnreferenced(localProjectId),
           onProcessLifecycleAction: this.onProcessLifecycleAction,
@@ -417,9 +390,6 @@ export class MollyFleet {
         }
 
         const startedMolly = lody;
-        const unsubscribeTerminalCleanup = startedMolly.onSessionTerminated((sessionId) => {
-          this.terminalPtyService.closeSession(sessionId);
-        });
         // Delegated automation: this machine drains the queues of the agents that
         // live here, so entrusted work continues while nobody is looking.
         const taskAutomation = createTaskAutomationWorkspace({
@@ -461,7 +431,6 @@ export class MollyFleet {
         this.runtimes.set(workspace.id, {
           workspace,
           lody: startedMolly,
-          unsubscribeTerminalCleanup,
           taskAutomation,
         });
         this.logger.debug(`[fleet] Connected workspace: ${workspaceLabel} (${workspace.id})`);
@@ -540,9 +509,7 @@ export class MollyFleet {
 
     try {
       await state.lody.cleanup();
-      state.unsubscribeTerminalCleanup();
     } catch (error) {
-      state.unsubscribeTerminalCleanup();
       this.logger.debug(
         `[fleet] Failed to cleanup workspace runtime ${workspaceId}: ${formatErrorMessage(error)}`
       );
@@ -764,104 +731,6 @@ export class MollyFleet {
       return null;
     }
     return runtime.lody.documentManager.getLocalLoroDataPlaneServer();
-  }
-
-  private async lookupTerminalSessionMeta(
-    runtime: WorkspaceRuntimeState,
-    sessionId: SessionId
-  ): Promise<TerminalSessionMetaLookup> {
-    const record = await runtime.lody.documentManager.repo.getDocMeta(getSessionRoomId(sessionId));
-    if (!record?.meta) {
-      return { type: 'missing' };
-    }
-    if (isLoroRepoDocDeleted(record)) {
-      return { type: 'deleted' };
-    }
-    return { type: 'found', meta: record.meta as SessionMeta };
-  }
-
-  private async assertTerminalSessionAllowed(sessionId: SessionId): Promise<void> {
-    for (const runtime of this.runtimes.values()) {
-      const lookup = await this.lookupTerminalSessionMeta(runtime, sessionId);
-      if (lookup.type === 'missing') {
-        continue;
-      }
-      if (lookup.type === 'deleted') {
-        throw new Error(`session_deleted:${sessionId}`);
-      }
-      if (lookup.meta.isArchived) {
-        throw new Error(`session_archived:${sessionId}`);
-      }
-      if (lookup.meta.machineId !== this.machineId) {
-        throw new Error(`session_machine_mismatch:${sessionId}:${lookup.meta.machineId}`);
-      }
-      return;
-    }
-  }
-
-  private async resolveActiveTerminalSessionWorkdir(sessionId: SessionId): Promise<string | null> {
-    const matches: string[] = [];
-    for (const runtime of this.runtimes.values()) {
-      const workdir = await runtime.lody.resolveSessionWorkdir(sessionId);
-      if (workdir) {
-        matches.push(workdir);
-      }
-    }
-
-    if (matches.length > 1) {
-      throw new Error(`session_ambiguous:${sessionId}`);
-    }
-    return matches[0] ?? null;
-  }
-
-  private async resolveTerminalSessionWorkdirFromMetadata(sessionId: SessionId): Promise<string> {
-    const matches: string[] = [];
-    const errors: Error[] = [];
-
-    for (const runtime of this.runtimes.values()) {
-      try {
-        const workdir = await resolveTerminalWorkdirFromMetadata({
-          sessionId,
-          machineId: this.machineId,
-          lookupSessionMeta: async (targetSessionId) =>
-            await this.lookupTerminalSessionMeta(runtime, targetSessionId),
-          resolveLocalProjectRootPath: async (localProjectId) =>
-            await resolveWorkspaceLocalProjectRootPath(
-              runtime.lody.documentManager.repo,
-              runtime.workspace.id as WorkspaceId,
-              this.machineId,
-              localProjectId
-            ),
-        });
-        matches.push(workdir);
-      } catch (error) {
-        const message = formatErrorMessage(error);
-        if (message.startsWith('session_not_found:')) {
-          continue;
-        }
-        errors.push(error instanceof Error ? error : new Error(message));
-      }
-    }
-
-    if (matches.length > 1) {
-      throw new Error(`session_ambiguous:${sessionId}`);
-    }
-    if (matches.length === 1) {
-      return matches[0]!;
-    }
-    if (errors[0]) {
-      throw errors[0];
-    }
-    throw new Error(`session_not_found:${sessionId}`);
-  }
-
-  private async resolveTerminalSessionWorkdir(sessionId: SessionId): Promise<string> {
-    await this.assertTerminalSessionAllowed(sessionId);
-    const activeWorkdir = await this.resolveActiveTerminalSessionWorkdir(sessionId);
-    if (activeWorkdir) {
-      return activeWorkdir;
-    }
-    return await this.resolveTerminalSessionWorkdirFromMetadata(sessionId);
   }
 
   private toProjectControlError(

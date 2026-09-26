@@ -48,8 +48,6 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
 - Read context/local-agent-ownership.md before changing local ports/sockets, daemon PID state,
   Electron/daemon startup, Supervisor retries, or Worker shutdown; health probes are observation
   only and never authorize PID killing.
-- Read context/terminal-output-lifecycle.md before changing ACP terminal notification handling or
-  history compaction.
 
 ## Cross-entry agent contracts
 

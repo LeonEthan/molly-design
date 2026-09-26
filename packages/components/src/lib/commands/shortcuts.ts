@@ -18,8 +18,7 @@ export type ShortcutCommandId =
   | 'session.copyCurrentBranch'
   | 'session.copyUrl'
   | 'session.renameCurrent'
-  | 'session.newTabOrTerminal'
-  | 'session.toggleTerminal'
+  | 'session.newTab'
   | 'session.saveCurrentFile'
   | 'session.nextTab'
   | 'session.previousTab'
@@ -71,11 +70,8 @@ export const COMMAND_SHORTCUTS: Record<ShortcutCommandId, CommandKeybindings> = 
   'session.copyCurrentBranch': ['Alt+Shift+b'],
   'session.copyUrl': ['Alt+Shift+c'],
   'session.renameCurrent': ['F2'],
-  // ⌥N creates a new tab, or a new terminal when the terminal is focused (desktop).
-  // ⌘T is intentionally avoided — the browser claims it on web.
-  'session.newTabOrTerminal': ['Alt+n'],
-  // Open/close the terminal panel (desktop, local sessions only).
-  'session.toggleTerminal': [electron('Ctrl+`'), electron('$mod+j')],
+  // ⌥N creates a new tab. ⌘T is intentionally avoided — the browser claims it on web.
+  'session.newTab': ['Alt+n'],
   'session.saveCurrentFile': ['$mod+s'],
   // Tab + conversation switching use the Mac-browser convention: ⌘⇧[ / ⌘⇧] step
   // between conversations and ⌘⇧, / ⌘⇧. (i.e. ⌘⇧< / ⌘⇧>) between tabs. The bracket

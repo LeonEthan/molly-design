@@ -117,16 +117,10 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
     category: 'Session',
   },
   {
-    id: 'session.newTabOrTerminal',
-    titleKey: 'commands.session.newTabOrTerminal',
-    title: 'New Tab or Terminal',
+    id: 'session.newTab',
+    titleKey: 'commands.session.newTab',
+    title: 'New Tab',
     category: 'Session',
-  },
-  {
-    id: 'session.toggleTerminal',
-    titleKey: 'commands.session.toggleTerminal',
-    title: 'Toggle Terminal',
-    category: 'View',
   },
   {
     id: 'session.saveCurrentFile',

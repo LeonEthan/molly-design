@@ -8,6 +8,7 @@ branches do not create an Issue solely for contribution intake.
 The Issue is for tracking context; maintainers review the contribution through
 the normal PR process. Context handoff is public and cannot use N/A or redacted
 answers; an invalid body is closed after seven days and must then be resubmitted.
+See .github/AGENTS.md for contribution rules and specs/AGENTS.md for Spec changes.
 -->
 
 ## Related issue

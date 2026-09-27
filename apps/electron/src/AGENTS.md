@@ -58,6 +58,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   so toolbar controls do not sit under them.
 - The onboarding window must be native Light before its first renderer paint; normal product windows start from the System theme source.
   An automatic login launch may suppress the initial product window, but onboarding and deep-link launches must remain visible.
+- Saved main-window bounds win, fitted fully inside the display they overlap most (else the primary) so a window saved on a removed display never opens mostly off-screen. Without them, `window-default-bounds.ts` sizes the window from the primary display work area; never reintroduce a fixed store default, which would hide that state.
 - The primary window pushes `app.windowForeground` from native show/hide, minimize/restore and focus/blur events, including its initial loaded state. Preload retains the latest boolean for late onboarding subscribers; Chromium document focus may remain stale on macOS minimize.
 - `sessionControl.send` streams intermediate responses on `sessionControl.response`
   keyed by request id. The renderer subscribes before `invoke`, removes the

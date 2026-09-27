@@ -226,6 +226,20 @@ const STEP_COMPOSITION: Partial<Record<OnboardingStepKey, StageComposition>> = {
   },
 };
 
+const LOCAL_GROUP_HALF_WIDTH = 'min(44%, max(600px, 34vw))';
+
+const LOCAL_FORM_POSE: Omit<FormPose, 'edge'> = {
+  left: `calc(50% - ${LOCAL_GROUP_HALF_WIDTH})`,
+  top: 'clamp(56px, 13%, 160px)',
+  bottom: 'clamp(40px, 9%, 120px)',
+  width: 'min(40%, max(540px, 25vw))',
+};
+
+const LOCAL_ARTWORK_STYLE = {
+  right: `calc(50% - ${LOCAL_GROUP_HALF_WIDTH})`,
+  width: 'min(36%, max(460px, 26vw), calc((100vh - 200px) * 0.8))',
+} as const;
+
 const COMPACT_FORM =
   'max-[1080px]:left-[calc(50%_-_min(310px,43%))]! max-[1080px]:top-[9%]! max-[1080px]:bottom-[7%]! max-[1080px]:w-[min(620px,86%)]!';
 // Below the two-column breakpoint the centred form overlaps the product and
@@ -450,7 +464,9 @@ function OnboardingShellSurface({
     () => ({ ...DEFAULT_TOUR_IDENTITY, ...previewIdentity }),
     [previewIdentity]
   );
+  const isLocal = platform?.kind === 'local';
   const composition = STEP_COMPOSITION[stepKey] ?? STEP_COMPOSITION.appearance!;
+  const formPose = isLocal ? { ...composition.form, ...LOCAL_FORM_POSE } : composition.form;
   const debug = useAtomValue(onboardingDebugAtom);
   const baseShot = previewShot ?? STEP_FRAME[stepKey] ?? { anchor: 'window', padding: 26 };
   const shot = import.meta.env.DEV ? applyOnboardingDebugShot(baseShot, debug) : baseShot;
@@ -482,10 +498,11 @@ function OnboardingShellSurface({
         }}
       />
 
-      {platform?.kind === 'local' ? (
+      {isLocal ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute right-[8%] top-[22%] hidden w-[30%] max-w-[360px] opacity-60 lg:block"
+          className="pointer-events-none absolute top-1/2 hidden -translate-y-1/2 opacity-60 min-[1080px]:block"
+          style={LOCAL_ARTWORK_STYLE}
         >
           <MollySetupArtwork />
         </div>
@@ -558,10 +575,10 @@ function OnboardingShellSurface({
             }}
             className={`pointer-events-auto absolute z-10 flex min-h-0 flex-col will-change-transform ${COMPACT_FORM}`}
             style={{
-              left: composition.form.left,
-              top: composition.form.top,
-              bottom: composition.form.bottom,
-              width: composition.form.width,
+              left: formPose.left,
+              top: formPose.top,
+              bottom: formPose.bottom,
+              width: formPose.width,
             }}
             data-onboarding-form={stepKey}
           >
@@ -572,11 +589,15 @@ function OnboardingShellSurface({
                     {eyebrow}
                   </div>
                 )}
-                <h1 className="text-[31px] font-semibold leading-tight tracking-tight text-slate-950">
+                <h1
+                  className={`${isLocal ? 'text-[clamp(31px,2.1vw,44px)]' : 'text-[31px]'} font-semibold leading-tight tracking-tight text-slate-950`}
+                >
                   {title}
                 </h1>
                 {description == null ? null : (
-                  <div className="max-w-[40ch] text-[14.5px] leading-relaxed text-slate-600">
+                  <div
+                    className={`max-w-[40ch] ${isLocal ? 'text-[clamp(14.5px,1vw,18px)]' : 'text-[14.5px]'} leading-relaxed text-slate-600`}
+                  >
                     {description}
                   </div>
                 )}

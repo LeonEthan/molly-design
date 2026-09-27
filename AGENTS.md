@@ -23,7 +23,7 @@ optimize. Build only what is needed now; completed code and concept images do no
   by current use. Keep exposed Bento edits lossless in YAML with minimal adaptation.
   Put scene knowledge in skills; base constraints on evidence.
 - Before design changes, read the [Spec](specs/graphic-design-platform.zh.md).
-  Local-only `.agents/` records may supply additional context when present.
+  Tracked `.agents/` records supply shared development context.
   Rules define the target; evidence establishes current support.
 
 ## Design platform: agent-naive environment
@@ -54,8 +54,8 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 
 ## Context and documentation
 
-- Read applicable `AGENTS.md`, relevant Specs and module READMEs. Local-only
-  `.agents/` records may add context but are not required in a fresh checkout.
+- Read applicable `AGENTS.md`, relevant Specs and module READMEs. Read relevant
+  tracked `.agents/` records for shared development context.
 - Specs define intent, docs implementation, notes decisions. Distinguish bugs,
   stale docs and unimplemented intent using evidence; never rewrite intent to
   justify bugs.
@@ -63,8 +63,8 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
   `approved` requires linked human approval of that revision; review `outdated`.
   Only editorial changes preserving meaning retain approval.
 - Record non-trivial decisions and substantial research/design in the PR body and
-  affected tracked docs. Local `.agents/` notes may supplement that record but
-  are never required or committed. Read-only tasks report findings in the reply.
+  affected tracked docs, including relevant `.agents/` notes. Read-only tasks
+  report findings in the reply.
 - Update affected docs/READMEs. Run `pnpm run docs status` at start and
   `pnpm run docs check` at finish; keep `run` (bare `docs` opens package websites).
   Review registered SHA-protected changes. Checks and translations prove neither
@@ -123,7 +123,8 @@ Details: [.github/codex-review.md](.github/codex-review.md).
   public/cloud/local boundary.
 - P1: likely shipped breakage or a durable catalog/session contract violation.
 
-## Local agent material
+## Shared agent material
 
-`.agents/` is ignored by Git and exists only on machines that maintain it. Its
-skills and notes are optional aids, not public repository dependencies.
+Track `.agents/` in Git so clones and worktrees receive the same maintenance
+workflows, explanations and decision records. Keep its public-source boundaries;
+never add private records, captured transcripts, secrets or machine-local state.

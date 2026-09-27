@@ -2,7 +2,7 @@
 
 What each file in this directory is responsible for. Binding rules live in
 [AGENTS.md](AGENTS.md). Maintainers may keep additional explanations in the
-local-only `.agents/docs/` directory.
+tracked `.agents/docs/` directory.
 
 ## Page shell and tabs
 

@@ -68,6 +68,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, checks and dependency 
 | `packages/harness-pi`                                       | Bundled model engine and reviewed extensions                   |
 | `packages/platform`, `packages/shared`                      | Platform ports and shared contracts                            |
 | `packages/acp-extension-core`, `packages/acp-extension-dsh` | Required upstream protocol/capability contracts                |
+| `.agents`                                                  | Shared maintenance workflows, explanations and decision records |
 | `e2e`                                                       | Desktop acceptance tooling                                     |
 
 Other ACP submodules under `vendor/` retain upstream/historical material outside

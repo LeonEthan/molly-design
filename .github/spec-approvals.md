@@ -1,9 +1,9 @@
 # Spec approval records
 
 This public summary preserves the minimum approval provenance needed by the
-Specs after `.agents/` became local-only. It records owner decisions, not runtime
-verification. Historical source conversations and detailed agent notes are not
-included in this repository.
+Specs. It records owner decisions, not runtime verification. Shared decision
+notes live in the tracked `.agents/` tree; historical source conversations are
+not included in this repository.
 
 ## 2026-09-21 existing Specs
 

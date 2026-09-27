@@ -63,6 +63,7 @@ corepack pnpm start:local
 | `packages/harness-pi`                                       | 内置模型引擎与已审核扩展             |
 | `packages/platform`、`packages/shared`                      | 平台接口与共享合同                   |
 | `packages/acp-extension-core`、`packages/acp-extension-dsh` | 必需的上游协议与能力合同             |
+| `.agents`                                                  | 随 Git 共享的维护工作流、说明与决策记录 |
 | `e2e`                                                       | 桌面验收工具                         |
 
 `vendor/` 下的其他 ACP 子模块保留上游或历史材料，不参与默认工作区。

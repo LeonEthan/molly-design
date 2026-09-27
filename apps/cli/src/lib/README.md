@@ -2,7 +2,7 @@
 
 Binding rules live in [AGENTS.md](AGENTS.md) and in the scoped `AGENTS.md` of each
 subdirectory; this file is the navigation index. Maintainers may keep optional
-cross-module explanations under local-only `.agents/docs/`.
+cross-module explanations under tracked `.agents/docs/`.
 
 ## Message hub and transports
 

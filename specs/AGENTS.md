@@ -4,7 +4,7 @@ This directory contains only publicly shareable client behavior, architecture,
 and protocol Specs. Exclude private implementation, operator configuration and
 internal records. Use public evidence and identify what this repository cannot
 establish. Keep explanatory material in the owning tracked README or PR body;
-local-only `.agents/` records are optional background.
+tracked `.agents/` records provide shared development background.
 
 English and Chinese translations may follow asynchronously. `current` means the
 counterparts express the same intent; mark an older translation `stale` when

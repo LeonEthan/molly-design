@@ -2,6 +2,7 @@
 
 Status: proposed
 Translation: pending
+PR: [#28](https://github.com/LeonEthan/molly-design/pull/28)
 
 ## Abstract
 
@@ -52,6 +53,7 @@ The [native regression](../../../../e2e/CANVAS-FIRST-DRAG-REGRESSION.md) documen
 its command, synthetic fixture, assertions and baseline. It checks actual saved
 data after restart and records the saving state at native mousedown. Readonly
 coverage uses the public command boundary and disabled controls; it does not
-inject native mouse events past the desktop's readonly overlay. Automated native
+inject native mouse events past the desktop's readonly overlay. The freshly rebuilt desktop passed the native probe, `pnpm check`,
+`pnpm e2e:check`, formatting and documentation checks. Automated native
 results are local macOS evidence; human acceptance and other platforms remain
 outstanding.

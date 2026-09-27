@@ -34,3 +34,6 @@ The transparent-margin acceptance flags and optional launch device-scale factor
 are documented in [the acceptance record](../../TRANSPARENT-MARGIN-ACCEPTANCE.md).
 The harness keeps the requested factor across its own restart; ordinary callers
 leave it unset. All scale overrides must be observed, not inferred from arguments.
+
+`canvas-first-drag-probe.ts` drives native selection/drag, saving, history and
+reopen behavior for issue #21. See the [regression instructions](../../CANVAS-FIRST-DRAG-REGRESSION.md).

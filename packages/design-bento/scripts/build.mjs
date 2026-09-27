@@ -127,6 +127,46 @@ try {
     if (!interactions.includes(selector)) throw Error('Pinned canvas UI exclusion changed');
     interactions = interactions.replaceAll(selector, selector + ', [data-molly-toolbar]');
   }
+  const selectionHandoff = `      this.store.select(this.expandGroups(ids))
+      if (e.isDragStartEnd) {
+        e.inputEvent.preventDefault()
+        this.moveable.waitToChangeTarget().then(() => {
+          // The promise resolves on the NEXT target change — which may be a
+          // later, unrelated selection, long after this gesture ended. Firing
+          // dragStart with that stale inputEvent corrupts Moveable's drag
+          // state (later gestures throw on null dragInfo). Only hand the
+          // gesture over if the mouse is still down: a real drag in progress.
+          if (this.pointerDown) this.moveable.dragStart(e.inputEvent)
+        })
+      }`;
+  if (interactions.split(selectionHandoff).length !== 2)
+    throw Error('Pinned selection drag handoff changed');
+  interactions = interactions.replace(
+    selectionHandoff,
+    `      this.store.select(this.expandGroups(ids))
+      if (e.isDragStartEnd) {
+        e.inputEvent.preventDefault()
+        this.moveable.dragStart(e.inputEvent)
+      }`
+  );
+  const targetRefresh =
+    '    if (!same) this.moveable.target = targets\n    this.moveable.updateRect()';
+  if (interactions.split(targetRefresh).length !== 2)
+    throw Error('Pinned selection target refresh changed');
+  interactions = interactions.replace(
+    targetRefresh,
+    '    if (!same) this.moveable.target = targets\n    else this.moveable.updateRect()'
+  );
+  for (const retiredGuard of [
+    '  /** primary button is down — gates the deferred selectEnd dragStart (below) */\n  private pointerDown = false\n',
+    '      this.pointerDown = false\n',
+    "    window.addEventListener('mousedown', (ev) => { if (ev.button === 0) this.pointerDown = true }, true)\n",
+    "    window.addEventListener('mouseup', (ev) => { if (ev.button === 0) this.pointerDown = false }, true)\n",
+  ]) {
+    if (interactions.split(retiredGuard).length !== 2)
+      throw Error('Pinned deferred drag guard changed');
+    interactions = interactions.replace(retiredGuard, '');
+  }
   const viewportAnchor = '  setZoom(zoom: number) {';
   if (!interactions.includes(viewportAnchor)) throw Error('Pinned canvas zoom API changed');
   // Two rounded half-paddings exceed an odd-sized viewport by one pixel.

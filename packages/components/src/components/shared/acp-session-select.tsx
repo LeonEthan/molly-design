@@ -16,6 +16,8 @@ export type AcpSessionSelectOption = {
   label: string;
   description?: string;
   disabled?: boolean;
+  /** ACP select-group name; Molly groups models by their connection. */
+  group?: string;
 };
 
 export type AcpSessionSelectProps = {

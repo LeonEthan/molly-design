@@ -72,8 +72,9 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Desktop opens the published connection/model catalog directly; preserve opaque
-  model ids and model-specific reasoning capabilities. Roles are retired: no
+- Desktop opens an effort card when the model has several reasoning levels, else the
+  published model list (grouped by connection); preserve opaque model ids and
+  model-specific reasoning capabilities. Roles are retired: no
   selection, creation, prompt prefix, draft restoration or recent-Role replay.
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.

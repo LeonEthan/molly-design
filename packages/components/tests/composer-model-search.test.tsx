@@ -141,15 +141,17 @@ describe('composer model picker search', () => {
       availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
       modelOptions: [
         { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
-        { value: studio, label: 'Aurora 1 (Studio)', description: 'aurora/1' },
-        { value: review, label: 'Aurora 1 (Review)', description: 'aurora/1' },
+        { value: studio, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+        { value: review, label: 'Aurora 1', description: 'aurora/1', group: 'Review' },
       ],
       selectedModelId: studio,
       onModelChange,
     });
     const menu = document.querySelector('[role="menu"]');
     const rows = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
-    expect(rows.map((row) => row.textContent)).toEqual(['Aurora 1 (Studio)', 'Aurora 1 (Review)']);
+    expect(rows.map((row) => row.textContent)).toEqual(['Aurora 1', 'Aurora 1']);
+    expect(menu?.textContent).toContain('Studio');
+    expect(menu?.textContent).toContain('Review');
     expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
     expect(menu?.querySelector('[role="menuitem"]')).toBeNull();
     await act(async () => {
@@ -172,40 +174,66 @@ describe('composer model picker search', () => {
     );
   });
 
-  it('retains reasoning as a separately selectable configuration', async () => {
+  const reasoningSelector = {
+    type: 'select' as const,
+    configId: 'reasoning_effort',
+    category: 'thought_level',
+    label: 'Reasoning',
+    currentValue: 'medium',
+    options: [
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ],
+  };
+
+  it('opens on an effort card whose track steps the reasoning level', async () => {
     const onConfigOptionChange = vi.fn();
     await openModelMenu({
       modelOptions: fewModels,
+      selectedModelId: 'claude-opus-5',
       onConfigOptionChange,
-      configOptionSelectors: [
-        {
-          type: 'select',
-          configId: 'reasoning_effort',
-          category: 'thought_level',
-          label: 'Reasoning',
-          currentValue: 'medium',
-          options: [
-            { value: 'medium', label: 'Medium' },
-            { value: 'high', label: 'High' },
-          ],
-        },
-      ],
+      configOptionSelectors: [reasoningSelector],
     });
-    const reasoning = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((row) =>
-      row.textContent?.startsWith('Reasoning')
-    );
-    expect(container?.textContent).toContain('Medium');
+    const trigger = container?.querySelector('button[aria-label="Provider and model"]');
+    expect(trigger?.textContent).toContain('Opus 5');
+    expect(trigger?.textContent).toContain('Medium');
+    const slider = document.querySelector<HTMLElement>('[role="slider"]');
+    expect(slider?.getAttribute('aria-label')).toBe('Reasoning');
+    expect(slider?.getAttribute('aria-valuetext')).toBe('Medium');
+    expect(document.querySelector('[role="menuitemradio"]')).toBeNull();
     await act(async () => {
-      reasoning?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    const high = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
-      (row) => row.textContent === 'High'
-    );
-    expect(high).toBeDefined();
-    await act(async () => {
-      high?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
     expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
+    await act(async () => {
+      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    });
+    expect(onConfigOptionChange).toHaveBeenLastCalledWith('reasoning_effort', 'low');
+  });
+
+  it('reaches the model list from the effort card and returns after a choice', async () => {
+    const onModelChange = vi.fn();
+    await openModelMenu({
+      modelOptions: fewModels,
+      selectedModelId: 'claude-opus-5',
+      onModelChange,
+      configOptionSelectors: [reasoningSelector],
+    });
+    const modelButton = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (row) => row.textContent === 'Opus 5'
+    );
+    await act(async () => {
+      modelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const rows = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+    expect(rows.map((row) => row.textContent)).toEqual(['Opus 5', 'Sonnet 5']);
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain('Select model');
+    await act(async () => {
+      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
+    expect(document.querySelector('[role="slider"]')).not.toBeNull();
   });
 
   it('narrows the list to fuzzy matches as the user types', async () => {
@@ -221,12 +249,13 @@ describe('composer model picker search', () => {
     expect(rows()).toEqual(['Haiku 4.5']);
   });
 
-  it('finds a connection model by its raw provider id without showing that id', async () => {
+  it('groups connection models and finds them by raw id or connection without showing the id', async () => {
     const connectionModels = ['Studio', 'Review', 'Archive'].flatMap((connection) =>
       ['aurora/1', 'nimbus/2'].map((modelId) => ({
         value: encodeMollyModelOption(connection.toLowerCase(), modelId),
-        label: `${modelId === 'aurora/1' ? 'Aurora 1' : 'Nimbus 2'} (${connection})`,
+        label: modelId === 'aurora/1' ? 'Aurora 1' : 'Nimbus 2',
         description: modelId,
+        group: connection,
       }))
     );
     const { search, rows } = await openModelMenu({
@@ -234,11 +263,17 @@ describe('composer model picker search', () => {
       modelOptions: connectionModels,
       selectedModelId: connectionModels[0]?.value ?? null,
     });
+    const groupLabels = () =>
+      [...document.querySelectorAll('[data-radix-menu-content] div')]
+        .map((node) => node.textContent?.trim())
+        .filter((text) => text === 'Studio' || text === 'Review' || text === 'Archive');
     expect(rows()).toEqual(connectionModels.map((option) => option.label));
+    expect(groupLabels()).toEqual(['Studio', 'Review', 'Archive']);
     await typeInto(search as HTMLInputElement, 'nimbus/2');
-    expect(rows()).toEqual(['Nimbus 2 (Studio)', 'Nimbus 2 (Review)', 'Nimbus 2 (Archive)']);
+    expect(rows()).toEqual(['Nimbus 2', 'Nimbus 2', 'Nimbus 2']);
     await typeInto(search as HTMLInputElement, 'archive');
-    expect(rows()).toEqual(['Aurora 1 (Archive)', 'Nimbus 2 (Archive)']);
+    expect(rows()).toEqual(['Aurora 1', 'Nimbus 2']);
+    expect(groupLabels()).toEqual(['Archive']);
   });
 
   it('says so when nothing matches instead of showing an empty menu', async () => {

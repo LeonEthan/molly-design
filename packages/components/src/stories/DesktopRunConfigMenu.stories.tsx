@@ -353,7 +353,9 @@ function DeepSeekWarningShell() {
 }
 
 function ProviderModelShell({ empty = false }: { empty?: boolean }) {
-  const [model, setModel] = useState(MOLLY_UNSELECTED_MODEL);
+  const [model, setModel] = useState(
+    empty ? MOLLY_UNSELECTED_MODEL : encodeMollyModelOption('studio', 'aurora-2')
+  );
   const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>({
     reasoning_effort: 'medium',
   });
@@ -363,8 +365,9 @@ function ProviderModelShell({ empty = false }: { empty?: boolean }) {
     : ['Studio', 'Review'].flatMap((connection) =>
         [1, 2, 3, 4].map((index) => ({
           value: encodeMollyModelOption(connection.toLowerCase(), `aurora-${index}`),
-          label: `Aurora ${index} (${connection})`,
+          label: `Aurora ${index}`,
           description: `aurora-${index}`,
+          group: connection,
         }))
       );
   return (
@@ -398,7 +401,7 @@ function EmptyMachineScopeShell() {
   );
 }
 
-function LeftOpeningReasoningMenuShell() {
+function LeftOpeningSubmenuShell() {
   const store = useMemo(() => {
     const next = createStore();
     next.set(
@@ -469,9 +472,9 @@ export const MachineScopeEmpty: Story = {
   args: { isEmptyConversation: true },
   render: () => <EmptyMachineScopeShell />,
 };
-export const LeftOpeningReasoningMenu: Story = {
+export const LeftOpeningSubmenu: Story = {
   args: { isEmptyConversation: true },
-  render: () => <LeftOpeningReasoningMenuShell />,
+  render: () => <LeftOpeningSubmenuShell />,
 };
 
 export const ProviderAndModel: Story = {

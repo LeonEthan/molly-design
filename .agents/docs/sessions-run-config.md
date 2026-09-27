@@ -13,9 +13,11 @@ this page is the full text of the rules summarised there.
   `child-tab-empty-state.tsx`; it uses the same `px-3` + `ConversationColumn` as
   the composer, so its right edge and max width must stay aligned automatically.
   Desktop run knobs are TWO footer buttons from `desktop-run-config-menu.tsx`:
-  `DesktopRunConfigMenu` (thin SVG, pill-shaped `[model icon] model (connection) · reasoning ⌄`
-  face; opens the connection/model list directly, with Reasoning and other
-  supported select submenus + Plan/Fast toggle rows below) and
+  `DesktopRunConfigMenu` (pill-shaped `model  reasoning ⌄` face, reasoning muted;
+  when the model offers more than one reasoning level it opens an effort card —
+  current level, the model name leading to the model list, a stepped effort
+  track, and Fast as the card's corner toggle — otherwise the model list
+  directly; other supported select submenus and the Plan toggle row sit below) and
   `DesktopPermissionModeButton` (permission icon + full name; flat permission
   list). Explicit `_permission` config options take precedence over legacy ACP
   modes; provider interaction modes stay inside the run-config dropdown. Both
@@ -24,10 +26,13 @@ this page is the full text of the rules summarised there.
   harness has no Agent switcher. Connection and model identities come from the
   existing published catalog: display its labels and pass opaque option ids
   unchanged through the existing selection controller. Never reconstruct ids
-  from display names or fetch a parallel catalog. The catalog labels each Molly
-  option `Model (Connection)` and carries the raw provider model id as its
-  description (#12); model rows render the label on one line and leave the
-  description to search, so the id is findable but never shown. The unselected sentinel is
+  from display names or fetch a parallel catalog. The catalog names each Molly
+  option by its model, carries the raw provider model id as its description and
+  the connection's display name as its ACP select `group` (#12). Model rows show
+  one line under a label per connection (only when two or more connections
+  exist); search also matches the id and the connection, neither of which a row
+  repeats. The catalog has no product default model, so the list offers no
+  "Default" row, and the effort card has no reset. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
   catalog directs the user to add a model connection in Settings. Reasoning
   continues to use the controller’s model-specific capabilities.
@@ -37,12 +42,14 @@ this page is the full text of the rules summarised there.
   creation-time DeepSeek-V4-Pro seed rather than the parent's visible model.
   Keep the warning tied to that agent/model combination and its upstream
   discussion rather than turning it into a global banner.
-  Model/Reasoning choices and Plan/Fast toggle rows keep the menu open so users
-  can adjust several values; Escape or outside interaction dismisses it through
-  the shared composer focus policy.
+  Model/Reasoning choices and Plan/Fast toggles keep the menu open so users
+  can adjust several values (choosing a model returns to the effort card); Escape
+  or outside interaction dismisses it through the shared composer focus policy.
+  The effort track is plain menu content, not a menu item: it owns its arrow,
+  Home and End keys so the menu's roving focus does not take them.
   Once the model list reaches `OPTION_SEARCH_MIN_OPTIONS`
   (`lib/fuzzy-option-filter.ts` — the same threshold and matcher the mobile
-  sheet uses) the direct model list gains a fuzzy search row over
+  sheet uses) the model list gains a fuzzy search row over
   `MenuOptionSearchList`: a provider may publish dozens of models, and scrolling
   is not a way to find one. A search field inside a Radix menu must be
   `DropdownMenuSearchInput`, which owns the fight with the menu's typeahead and

@@ -24,6 +24,7 @@ export function projectEmbeddedHarnessCatalog(
     { modelId: MOLLY_UNSELECTED_MODEL, name: 'Select a connection and model' },
   ];
   const modelReasoningEfforts: Record<string, string[]> = { [MOLLY_UNSELECTED_MODEL]: ['off'] };
+  const modelConnectionNames: Record<string, string> = {};
   for (const connection of connections) {
     if (!connection.enabled) continue;
     const connectionModels =
@@ -38,9 +39,10 @@ export function projectEmbeddedHarnessCatalog(
       const modelId = encodeMollyModelOption(connection.id, model.modelId);
       models.push({
         modelId,
-        name: `${model.name} (${connection.displayName})`,
+        name: model.name,
         description: model.modelId,
       });
+      modelConnectionNames[modelId] = connection.displayName;
       modelReasoningEfforts[modelId] = [...model.thinking];
     }
   }
@@ -55,6 +57,9 @@ export function projectEmbeddedHarnessCatalog(
         value: model.modelId,
         name: model.name ?? model.modelId,
         description: model.description ?? undefined,
+        ...(modelConnectionNames[model.modelId]
+          ? { group: modelConnectionNames[model.modelId] }
+          : {}),
       })),
     },
     {

@@ -1,13 +1,14 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 
 import { filterFuzzyOptions, shouldOfferOptionSearch } from '@/lib/fuzzy-option-filter';
-import { DropdownMenuSearchInput } from '@/ui/dropdown-menu';
+import { DropdownMenuLabel, DropdownMenuSearchInput } from '@/ui/dropdown-menu';
 
 export type MenuSearchableOption = {
   value: string;
   label: string;
   description?: string;
   disabled?: boolean;
+  group?: string;
 };
 
 export type MenuOptionSearchListProps<TOption extends MenuSearchableOption> = {
@@ -32,6 +33,9 @@ export type MenuOptionSearchListProps<TOption extends MenuSearchableOption> = {
  * `flex flex-col overflow-y-hidden p-0`: the search row stays put while only
  * the list below it scrolls. Below `OPTION_SEARCH_MIN_OPTIONS` the field is not
  * rendered at all and the list reads exactly as it did before.
+ *
+ * Options that name two or more `group`s render under a label per group, in
+ * first-appearance order; within a group the search ranking is preserved.
  */
 export function MenuOptionSearchList<TOption extends MenuSearchableOption>({
   options,
@@ -49,9 +53,14 @@ export function MenuOptionSearchList<TOption extends MenuSearchableOption>({
         primary: option.label,
         // The id behind a pretty label and the provider's own blurb are worth
         // finding by, but never ahead of a visible name.
-        secondary: [option.value, option.description],
+        secondary: [option.value, option.description, option.group],
       })),
     [options, query]
+  );
+  const grouped = useMemo(() => new Set(options.map((option) => option.group)).size > 1, [options]);
+  const sections = useMemo(
+    () => (grouped ? groupOptions(filtered) : [{ group: undefined, options: [...filtered] }]),
+    [filtered, grouped]
   );
 
   const submitTopMatch = () => {
@@ -76,9 +85,30 @@ export function MenuOptionSearchList<TOption extends MenuSearchableOption>({
         {filtered.length === 0 ? (
           <div className="px-2.5 py-2 text-[0.8rem] text-muted-foreground">{emptyText}</div>
         ) : (
-          filtered.map((option) => renderOption(option, () => onSelect(option)))
+          sections.map((section) => (
+            <Fragment key={section.group ?? ''}>
+              {section.group !== undefined ? (
+                <DropdownMenuLabel className="px-2.5 pb-1 pt-2 text-[11px] font-normal normal-case tracking-normal text-muted-foreground">
+                  {section.group}
+                </DropdownMenuLabel>
+              ) : null}
+              {section.options.map((option) => renderOption(option, () => onSelect(option)))}
+            </Fragment>
+          ))
         )}
       </div>
     </div>
   );
+}
+
+function groupOptions<TOption extends MenuSearchableOption>(
+  options: readonly TOption[]
+): Array<{ group: string | undefined; options: TOption[] }> {
+  const byGroup = new Map<string | undefined, TOption[]>();
+  for (const option of options) {
+    const members = byGroup.get(option.group);
+    if (members) members.push(option);
+    else byGroup.set(option.group, [option]);
+  }
+  return [...byGroup].map(([group, members]) => ({ group, options: members }));
 }

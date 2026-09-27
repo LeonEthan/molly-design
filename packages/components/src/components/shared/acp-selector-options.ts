@@ -351,6 +351,7 @@ const buildConfigOptionSelectors = (
               ? formatModeLabel(v.value, v.name, target)
               : stripRecommended(v.name),
         description: v.description,
+        ...(v.group ? { group: v.group } : {}),
       })),
     };
   });
@@ -521,10 +522,11 @@ const buildModelOptions = (
   if (!modelOption) {
     return [];
   }
-  const options = modelOption.options.map((opt) => ({
+  const options: AcpSessionSelectOption[] = modelOption.options.map((opt) => ({
     value: opt.value,
     label: formatModelLabel(opt.name, target),
     description: opt.description,
+    ...(opt.group ? { group: opt.group } : {}),
   }));
   if (
     authority !== 'authoritative' &&

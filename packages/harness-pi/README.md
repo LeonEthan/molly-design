@@ -40,7 +40,8 @@ The build verifies adapted-source/license hashes and includes provenance and lic
 resources in the sealed closure; TypeBox shares the SDK's pinned version.
 
 Auto-review ([Spec](../../specs/generative-layered-design-workflow.md)) is the
-`auto-review` Molly permission mode. `sandbox.ts` starts one
+permission mode the host freezes into every Molly run; the composer offers no
+selector and earlier `ask` snapshots stay readable. `sandbox.ts` starts one
 `@anthropic-ai/sandbox-runtime` 0.0.77 manager per worker on first use (macOS Seatbelt;
 Linux bubblewrap with `bwrap`, `socat` and `rg`; otherwise unavailable). It denies reads
 of credential stores and Molly private data while re-allowing the session cwd, limits
@@ -55,7 +56,7 @@ sandboxed shell, Molly design tools, local attachment sharing and file tools ins
 `outside_sandbox` request, a protected read, a write outside the workspace and a
 sandbox connection to another domain are escalations. `browser-approval.ts` reviews
 the first public browser site grant through the same classifier and reuses it only
-within the active run/epoch (at most eight sites). Ask mode and external MCP tools
+within the active run/epoch (at most eight sites). External MCP tools
 retain their ordinary approvals; host URL/DNS and dispatch checks remain in force. `auto-review-classifier.ts` judges an escalation with the run's
 session model through the same journaled provider path, using the reviewer prompt,
 decision parser and context projection adapted from Apache-2.0 `pi-auto-approval` 0.1.1
@@ -68,8 +69,7 @@ no raw rationale/provider response is persisted. Cancellation and a failed journ
 write deny without a prompt. Sandbox feedback preserves the command's error and
 identifies observed denials as potentially incidental, not proof of its cause.
 Local attachment sharing still validates workspace paths and symlinks at the host;
-its response carries a local machine identity without a download URL. Ask mode retains
-the ordinary approval for these tools.
+its response carries a local machine identity without a download URL.
 
 `extension-ui.ts` adapts select/input/confirm/notify to an owning host using existing
 Core question metadata. It binds run/caller/lifetime cancellation, clears timers,

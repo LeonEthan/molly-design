@@ -41,8 +41,8 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   permission history; acknowledge dismissal only after cancellation settles. Prompt
   termination and connection closure abort their questions; late answers grant nothing.
 - Private image import/recovery needs the matching host `allow_once` prompt, except while
-  the active run's frozen mode is `auto-review`: the worker approved it, and the embedded
-  control still checks run, epoch and connection ownership.
+  the active run's frozen mode is `auto-review` (every new Molly run): the worker approved
+  it, and the embedded control still checks run, epoch and connection ownership.
 - Acknowledged steer is inject-or-refuse. `AgentSteerNotDeliveredError` requires local pre-write
   failure or agent JSON-RPC `invalid request`. Await the steer answer before abandoning the
   turn response; never classify uncertain delivery as refusal.

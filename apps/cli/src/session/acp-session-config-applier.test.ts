@@ -36,14 +36,10 @@ describe('applyAcpSessionRunConfig', () => {
       })
     ).rejects.toThrow('harness_worker_unavailable');
     const selections: unknown[] = [];
-    const modes: unknown[] = [];
     const bound = {
       ...session,
       assertEmbeddedModelSelection: (value: unknown) => {
         selections.push(value);
-      },
-      setEmbeddedPermissionMode: (mode: unknown) => {
-        modes.push(mode);
       },
     };
     await expect(
@@ -56,10 +52,10 @@ describe('applyAcpSessionRunConfig', () => {
     expect(selections).toEqual([modelSelection]);
     await applyAcpSessionRunConfig({
       session: bound,
-      config: { agentType: 'molly', modelSelection, modeId: 'auto-review' },
+      config: { agentType: 'molly', modelSelection, modeId: 'ask' },
       logger: createLogger(),
     });
-    expect(modes).toEqual(['ask', 'auto-review']);
+    expect(selections).toEqual([modelSelection, modelSelection]);
     await expect(
       applyAcpSessionRunConfig({
         session: bound,

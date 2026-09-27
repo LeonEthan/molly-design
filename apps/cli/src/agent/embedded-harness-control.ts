@@ -20,6 +20,7 @@ import {
   HarnessImageRecoveryRequestSchema,
   type HarnessImageRecoveryRequest,
   type HarnessImageRecoveryResult,
+  MOLLY_RUN_PERMISSION_MODE,
   type MollyPermissionMode,
 } from '@molly/shared/embedded-harness';
 import {
@@ -230,7 +231,6 @@ export class EmbeddedHarnessControl {
   async prompt(input: {
     turnId: string;
     signal: AbortSignal;
-    permissionMode?: MollyPermissionMode;
     prepareMcp?: (preparation: HarnessMcpPreparation, signal: AbortSignal) => Promise<unknown>;
     prompt: (
       snapshot: ReturnType<typeof HarnessRunSnapshotSchema.parse>
@@ -256,7 +256,7 @@ export class EmbeddedHarnessControl {
       toolsetHash: this.binding.toolsetHash,
       pluginSetHash: this.binding.pluginSetHash,
       permissionProfileId: this.config.permissionProfileId,
-      ...(input.permissionMode ? { permissionMode: input.permissionMode } : {}),
+      permissionMode: MOLLY_RUN_PERMISSION_MODE,
     });
     const controller = new AbortController();
     this.activeController = controller;

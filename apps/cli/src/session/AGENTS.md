@@ -60,7 +60,7 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
 - Legacy: retry once before ACP output. Embedded Molly: exact native restore/settlement;
   never replay prompts or history. Design runs use `browse-task-v1`, others
-  `ask-every-tool-v1`; run snapshots freeze `ask`/`auto-review` mode.
+  `ask-every-tool-v1`; new run snapshots freeze `auto-review`.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

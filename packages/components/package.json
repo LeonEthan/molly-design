@@ -48,6 +48,10 @@
       "import": "./src/lib/*.{ts,tsx}",
       "types": "./src/lib/*.{ts,tsx}"
     },
+    "./lib/molly-brand": {
+      "import": "./src/lib/molly-brand.ts",
+      "types": "./src/lib/molly-brand.ts"
+    },
     "./lib/resize-observer": {
       "import": "./src/lib/resize-observer.ts",
       "types": "./src/lib/resize-observer.ts"

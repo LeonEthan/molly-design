@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { MarkdownRenderer } from '@/components/ai-gui/markdown-renderer';
 import { ensureChatShareThemeScopes } from '@/components/chat-share-theme-scope';
 import mollyLogo from '@/assets/molly-icon.png';
+import { MollyWordmark } from '@/components/molly-wordmark';
 
 export interface ChatShareCardMessage {
   id: string;
@@ -269,10 +270,7 @@ export function ChatShareCard({
       {/* Header: small brand row on top, then the session title as a real
           document-style headline so it carries the image. */}
       <div className="px-6 pt-5">
-        <div className="flex items-center gap-2">
-          <img src={mollyLogo} alt="" className="size-3.5 scale-[1.64] rounded-md" />
-          <span className="text-sm font-semibold">Molly</span>
-        </div>
+        <MollyWordmark className="text-[15px]" />
         {title ? (
           <div className="mt-3 text-lg font-semibold leading-snug tracking-tight text-foreground">
             {title}
@@ -310,8 +308,7 @@ export function ChatShareCard({
               : 'border-t border-black/[0.05] bg-white/35 backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.04]'
           )}
         >
-          <img src={mollyLogo} alt="" className="size-7 scale-[1.64] rounded-md" />
-          <div className="text-[13px] font-medium text-muted-foreground">Molly</div>
+          <MollyWordmark className="text-[22px]" />
           {qrDataUrl ? (
             <img
               src={qrDataUrl}
@@ -331,9 +328,8 @@ export function ChatShareCard({
               : 'border-t border-black/[0.05] bg-white/35 backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.04]'
           )}
         >
-          <img src={mollyLogo} alt="" className="size-5 scale-[1.64] rounded-md" />
-          <div className="min-w-0 flex-1 -mt-0.5 text-[13px] font-medium text-muted-foreground">
-            Molly
+          <div className="min-w-0 flex-1">
+            <MollyWordmark className="text-[15px]" />
           </div>
           {qrDataUrl ? (
             <img
@@ -361,10 +357,18 @@ export function ChatShareCard({
               : 'border-t border-black/[0.05] dark:border-white/[0.07]'
           )}
         >
-          {meta?.icon ?? <img src={mollyLogo} alt="" className="size-5 scale-[1.64] rounded-md" />}
-          <div className="min-w-0 truncate text-[13px] font-semibold text-foreground">
-            {meta?.title ?? 'Molly'}
-          </div>
+          {meta?.icon || meta?.title ? (
+            <>
+              {meta.icon ?? (
+                <img src={mollyLogo} alt="" className="size-5 scale-[1.64] rounded-md" />
+              )}
+              <div className="min-w-0 truncate text-[13px] font-semibold text-foreground">
+                {meta.title ?? 'Molly'}
+              </div>
+            </>
+          ) : (
+            <MollyWordmark className="text-[15px] text-foreground" />
+          )}
           <div className="ml-auto min-w-0 text-right">
             {meta?.params && meta.params.length > 0 ? (
               <div className="flex items-baseline justify-end gap-2.5 truncate text-[12px] font-medium text-foreground">
@@ -395,8 +399,7 @@ export function ChatShareCard({
               : 'border-t border-black/[0.05] dark:border-white/[0.07]'
           )}
         >
-          <img src={mollyLogo} alt="" className="size-3.5 scale-[1.64] rounded-md" />
-          <span className="text-[11px] text-muted-foreground">Molly</span>
+          <MollyWordmark className="text-[13px] text-muted-foreground" />
         </div>
       )}
     </div>
@@ -412,8 +415,7 @@ export function ChatShareCard({
       {card}
       {footerVariant === 'canvas' ? (
         <div className="mt-8 flex items-center justify-center gap-2.5">
-          <img src={mollyLogo} alt="" className="size-5 scale-[1.64] rounded-md" />
-          <span className="text-[13px] font-medium tracking-wide text-white/85">Molly</span>
+          <MollyWordmark className="text-[17px] text-white/85" />
           {qrDataUrl ? (
             <img
               src={qrDataUrl}

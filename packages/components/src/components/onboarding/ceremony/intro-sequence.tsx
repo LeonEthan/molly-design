@@ -7,12 +7,12 @@ import {
   type ReactNode,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import mollyMark from '@/assets/molly-mark.svg';
 import inspiration from '@/assets/molly-intro-inspiration.png';
 import creation from '@/assets/molly-intro-creation.png';
 import expression from '@/assets/molly-intro-expression.png';
 import { ArrowRight } from '@/ui/icons';
 import { Button } from '@/ui/button';
+import { MollyWordmark } from '@/components/molly-wordmark';
 import './intro-sequence.css';
 
 const SCENES = [
@@ -112,10 +112,7 @@ export function IntroPage({
       ))}
       <div className="molly-intro-frame">
         <header className="molly-intro-header">
-          <div className="molly-intro-brand">
-            <img src={mollyMark} alt="" width={30} height={30} />
-            <span>Molly</span>
-          </div>
+          <MollyWordmark className="molly-intro-brand" />
           {soundControl}
         </header>
         <main

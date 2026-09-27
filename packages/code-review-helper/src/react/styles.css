@@ -3,6 +3,7 @@
 
 /* Bundle JetBrains Mono so all monospace text (paths, SHAs, line numbers, the
  * diff) renders in it consistently instead of falling back to the system mono. */
+@import '@fontsource/inter/latin-700.css';
 @import '@fontsource/jetbrains-mono/400.css';
 @import '@fontsource/jetbrains-mono/500.css';
 @import '@fontsource/jetbrains-mono/600.css';

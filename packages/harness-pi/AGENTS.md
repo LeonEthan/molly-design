@@ -44,7 +44,8 @@ Read [README](README.md) before changing session construction or packaged resour
   Asset receipts confer recovery identity, not commit authority.
   Operation failure diagnostics contain only fixed stage names, never raw errors,
   response bodies, headers or credentials; absent diagnostics remain unknown.
-- Auto-review applies only to runs whose snapshot freezes `auto-review`. Shell runs
+- The host freezes `auto-review` into every new run; Ask is retired and offered to no one.
+  Auto-review applies only to runs whose snapshot freezes it. Shell runs
   in the pinned OS sandbox (workspace/temp writes, credential and Molly private-data
   reads denied, pre-allowed domains); Molly design tools, local attachment sharing
   and in-boundary file tools run. Sharing retains host workspace checks and local
@@ -59,7 +60,7 @@ Read [README](README.md) before changing session construction or packaged resour
   Never widen this exception to `/tmp` or `/var/folders` ancestors; delete only
   worker-owned temporary files at shutdown.
 - Built-in browser calls use the existing MCP approval path. In auto-review, the
-  first public site grant goes through the classifier; ask mode remains manual.
+  first public site grant goes through the classifier.
   Site grants do not authorize purchases, publishing or account changes. A site
   task grant lives only in the active run/epoch, grows by approved site at most
   eight times, and is recorded as authorization provenance in the tool journal.

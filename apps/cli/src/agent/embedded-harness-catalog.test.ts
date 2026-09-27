@@ -190,7 +190,7 @@ it('publishes from the local machine authority without cloud confirmation and re
       id,
       'builtin',
       'molly',
-      projectEmbeddedHarnessCatalog(catalog, [connection]).modes,
+      [],
       projectEmbeddedHarnessCatalog(catalog, [connection]).models.map((model) => ({
         ...model,
         description: model.description ?? undefined,
@@ -204,12 +204,7 @@ it('publishes from the local machine authority without cloud confirmation and re
   ]);
 });
 
-it('publishes Ask as the default permission mode with Auto-review as the alternative', () => {
-  const { modes, configOptions } = projectEmbeddedHarnessCatalog(catalog, []);
-  expect(modes.map((mode) => mode.id)).toEqual(['ask', 'auto-review']);
-  expect(configOptions.find((option) => option.category === 'mode')).toMatchObject({
-    id: 'mode',
-    currentValue: 'ask',
-    options: [{ value: 'ask' }, { value: 'auto-review' }],
-  });
+it('publishes no permission selector because every Molly run auto-reviews', () => {
+  const { configOptions } = projectEmbeddedHarnessCatalog(catalog, []);
+  expect(configOptions.map((option) => option.id)).toEqual(['model', 'reasoning_effort']);
 });

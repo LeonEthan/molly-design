@@ -20,7 +20,7 @@
     "format": "prettier --write src/**/*.ts",
     "format:check": "prettier --check src/**/*.ts",
     "typecheck": "tsgo --noEmit",
-    "test": "vitest run",
+    "test": "pnpm run prepare:design-authoring && vitest run",
     "test:packaging": "node --test scripts/legacy-artifacts.test.mjs",
     "bench:acp-history": "vitest bench tests/acp-history.bench.ts",
     "bench:turn-diff-store": "pnpm --filter @molly/turn-diff-store bench",

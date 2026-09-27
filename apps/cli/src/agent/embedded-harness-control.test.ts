@@ -541,7 +541,7 @@ describe('owned worker host control', () => {
     f.pipe.destroy();
   });
 
-  it('freezes the requested permission mode into the run snapshot', async () => {
+  it('freezes auto-review into every run snapshot', async () => {
     const f = fixture();
     await f.control.bootstrap();
     const snapshots: HarnessRunSnapshot[] = [];
@@ -549,7 +549,6 @@ describe('owned worker host control', () => {
     const result = f.control.prompt({
       turnId: 'turn-auto',
       signal: new AbortController().signal,
-      permissionMode: 'auto-review',
       prompt: async (snapshot) => {
         snapshots.push(snapshot);
         active.push(f.control.autoReviewActive());

@@ -12,8 +12,6 @@ import {
   encodeMollyModelOption,
   decodeMollyModelOption,
   validateMollyRunConfigProjection,
-  resolveMollyPermissionMode,
-  mollyRunPermissionMode,
   MOLLY_UNSELECTED_MODEL,
   HarnessImageImportRequestSchema,
   HARNESS_IMAGE_MAX_ENCODED_BYTES,
@@ -144,18 +142,19 @@ describe('embedded harness boundaries', () => {
     expect(() => validateMollyRunConfigProjection({ ...input, modeId: 'yolo' })).toThrow(
       'harness_legacy_config_unsupported'
     );
-    expect(() =>
+    expect(
       validateMollyRunConfigProjection({
         ...input,
         modeId: 'ask',
-        configOptionValues: { mode: 'auto-review' },
+        configOptionValues: { ...input.configOptionValues, mode: 'auto-review' },
       })
-    ).toThrow('harness_permission_mode_conflict');
-    expect(mollyRunPermissionMode({ configOptionValues: { mode: 'auto-review' } })).toBe(
-      'auto-review'
-    );
-    expect(resolveMollyPermissionMode(undefined)).toBe('ask');
-    expect(resolveMollyPermissionMode('auto-review')).toBe('auto-review');
+    ).toEqual(selection);
+    expect(() =>
+      validateMollyRunConfigProjection({
+        ...input,
+        configOptionValues: { ...input.configOptionValues, mode: 'yolo' },
+      })
+    ).toThrow('harness_legacy_config_unsupported');
     expect(
       buildSessionTurnInputConfig({
         cliType: 'builtin',

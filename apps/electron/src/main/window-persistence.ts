@@ -5,14 +5,11 @@ import {
   type Rectangle
 } from 'electron'
 import Conf from 'conf'
-
-const DEFAULT_MAIN_WINDOW_BOUNDS = {
-  width: 900,
-  height: 670
-} as const
-
-export const MAIN_WINDOW_MIN_WIDTH = 620
-export const MAIN_WINDOW_MIN_HEIGHT = 600
+import {
+  MAIN_WINDOW_MIN_HEIGHT,
+  MAIN_WINDOW_MIN_WIDTH,
+  resolveDefaultMainWindowBounds
+} from './window-default-bounds'
 
 const WINDOW_STATE_DEBOUNCE_MS = 150
 const MIN_VISIBLE_WIDTH = 120
@@ -31,7 +28,7 @@ type PersistedWindowState = {
 }
 
 type WindowStateSchema = {
-  mainWindow: PersistedWindowState
+  mainWindow?: PersistedWindowState
 }
 
 const normalizedConfModule = Conf as
@@ -50,12 +47,6 @@ if (typeof ConfConstructor !== 'function') {
 const windowStateStore = new ConfConstructor<WindowStateSchema>({
   projectName: 'molly-desktop',
   configName: 'window-state',
-  defaults: {
-    mainWindow: {
-      bounds: DEFAULT_MAIN_WINDOW_BOUNDS,
-      isMaximized: false
-    }
-  },
   schema: {
     mainWindow: {
       type: 'object',
@@ -87,15 +78,17 @@ function roundCoordinate(value: number | undefined): number | undefined {
   return Math.round(value)
 }
 
+function getDefaultMainWindowBounds(): PersistedWindowBounds {
+  return resolveDefaultMainWindowBounds(screen.getPrimaryDisplay().workArea)
+}
+
 function normalizeBounds(bounds: PersistedWindowBounds): PersistedWindowBounds {
-  const width =
-    typeof bounds.width === 'number' && Number.isFinite(bounds.width)
-      ? Math.max(Math.round(bounds.width), MAIN_WINDOW_MIN_WIDTH)
-      : DEFAULT_MAIN_WINDOW_BOUNDS.width
-  const height =
-    typeof bounds.height === 'number' && Number.isFinite(bounds.height)
-      ? Math.max(Math.round(bounds.height), MAIN_WINDOW_MIN_HEIGHT)
-      : DEFAULT_MAIN_WINDOW_BOUNDS.height
+  const hasFiniteSize = Number.isFinite(bounds.width) && Number.isFinite(bounds.height)
+  if (!hasFiniteSize) {
+    return getDefaultMainWindowBounds()
+  }
+  const width = Math.max(Math.round(bounds.width), MAIN_WINDOW_MIN_WIDTH)
+  const height = Math.max(Math.round(bounds.height), MAIN_WINDOW_MIN_HEIGHT)
 
   return {
     width,
@@ -141,6 +134,9 @@ function ensureVisibleBounds(bounds: PersistedWindowBounds): PersistedWindowBoun
 
 function getMainWindowState(): PersistedWindowState {
   const savedState = windowStateStore.get('mainWindow')
+  if (savedState === undefined) {
+    return { bounds: getDefaultMainWindowBounds(), isMaximized: false }
+  }
   const normalizedBounds = ensureVisibleBounds(normalizeBounds(savedState.bounds))
 
   return {

@@ -42,6 +42,12 @@ export function runCiTypecheck({
 
   runPnpm(execFileSync, cwd, ['--fail-if-no-match', '--filter', 'molly', 'prepare:acp-adapters']);
   runPnpm(execFileSync, cwd, [
+    '--fail-if-no-match',
+    '--filter',
+    'molly',
+    'prepare:design-authoring',
+  ]);
+  runPnpm(execFileSync, cwd, [
     '-r',
     '--workspace-concurrency=1',
     ...typecheckPackages.flatMap((name) => ['--filter', name]),

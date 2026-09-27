@@ -25,7 +25,7 @@ void test('28. full mode argv is exactly pnpm typecheck', () => {
   assert.deepEqual(calls, [{ cmd: 'pnpm', args: ['typecheck'] }]);
 });
 
-void test('affected typecheck always prepares adapters first', () => {
+void test('affected typecheck always prepares adapters and design authoring first', () => {
   const { calls, execFileSync } = recordExec();
   runCiTypecheck({
     scope: {
@@ -41,10 +41,16 @@ void test('affected typecheck always prepares adapters first', () => {
     'molly',
     'prepare:acp-adapters',
   ]);
-  assert.equal(calls[1].args[0], '-r');
-  assert.ok(calls[1].args.includes('--workspace-concurrency=1'));
-  assert.ok(calls[1].args.includes('@molly/ignore'));
-  assert.ok(calls[1].args.includes('molly'));
+  assert.deepEqual(calls[1].args, [
+    '--fail-if-no-match',
+    '--filter',
+    'molly',
+    'prepare:design-authoring',
+  ]);
+  assert.equal(calls[2].args[0], '-r');
+  assert.ok(calls[2].args.includes('--workspace-concurrency=1'));
+  assert.ok(calls[2].args.includes('@molly/ignore'));
+  assert.ok(calls[2].args.includes('molly'));
 });
 
 void test('37. invalid scope file execs pnpm typecheck', () => {
@@ -65,8 +71,9 @@ void test('affected preparation targets the actual embedded runtime package', ()
     scope: { mode: 'affected', runTypecheck: true, typecheckPackages: [manifest.name] },
     execFileSync,
   });
-  const args = calls[0].args;
-  assert.equal(args[args.indexOf('--filter') + 1], manifest.name);
-  assert.ok(manifest.scripts[args.at(-1)]);
-  assert.ok(args.includes('--fail-if-no-match'));
+  for (const { args } of calls.slice(0, 2)) {
+    assert.equal(args[args.indexOf('--filter') + 1], manifest.name);
+    assert.ok(manifest.scripts[args.at(-1)]);
+    assert.ok(args.includes('--fail-if-no-match'));
+  }
 });

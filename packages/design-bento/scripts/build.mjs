@@ -73,6 +73,42 @@ try {
       'from "../../../../contracts/src/index.ts"'
     )
   );
+  cpSync(join(root, 'src/image-sampling.ts'), join(tree, 'slides/src/image-sampling.ts'));
+  const bootFile = join(tree, 'slides/src/a1a2/boot.ts');
+  const boot = readFileSync(bootFile, 'utf8');
+  const payloadAnchor = '  const payload = (await response.json()) as WorkspacePayload';
+  if (boot.split(payloadAnchor).length !== 2)
+    throw Error('Pinned image preparation boundary changed');
+  writeFileSync(
+    bootFile,
+    `import { prepareImageSampling } from '../image-sampling.ts'\n` +
+      boot.replace(
+        payloadAnchor,
+        payloadAnchor +
+          `\n  for (const source of new Set(payload.doc.elements.filter(element => element.kind === 'image').map(element => payload.assets[element.src.replace(/^asset:/, '')]))) {\n    if (source?.startsWith('data:image/')) await prepareImageSampling(source)\n  }`
+      )
+  );
+  const renderFile = join(tree, 'slides/src/render.ts');
+  const ordinaryImage = `      const img = document.createElement('img')
+      const imgSrc = assetSrc(doc, el.src)
+      if (imgSrc) img.src = imgSrc
+      else img.dataset.bentoOffline = '1'
+      img.draggable = false
+      img.style.cssText = \`width:100%;height:100%;object-fit:\${el.fit};border-radius:\${el.radius}px;display:block\`
+      node.appendChild(img)`;
+  const renderer = readFileSync(renderFile, 'utf8');
+  if (renderer.split(ordinaryImage).length !== 2)
+    throw Error('Pinned ordinary image renderer changed; review image sampling adaptation');
+  writeFileSync(
+    renderFile,
+    `import { renderSampledImage } from './image-sampling.ts'\n` +
+      renderer.replace(
+        ordinaryImage,
+        `      const imgSrc = assetSrc(doc, el.src)
+      if (imgSrc) node.appendChild(renderSampledImage(imgSrc, el, node))
+      else node.dataset.bentoOffline = '1'`
+      )
+  );
   const canvasFile = join(destination, 'editor-bento/src/ui/canvas.ts');
   writeFileSync(canvasFile, readFileSync(canvasFile, 'utf8').replace('16000', '4096'));
   // Adapt only the assembled copy. Canonical omitted values and pinned vendor

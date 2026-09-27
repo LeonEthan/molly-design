@@ -1,0 +1,1203 @@
+{
+  "issue": 15,
+  "status": "step-4-accepted",
+  "humanVisualAcceptance": {
+    "status": "passed",
+    "reviewer": "maintainer",
+    "recordedAt": "2026-09-27T06:47:00Z",
+    "scope": "Step-4 synthetic native exports reviewed by the maintainer; recorded coverage limitations remain unchanged."
+  },
+  "physicalDisplayCoverage": [2],
+  "exactComparisons": 144,
+  "sourceHashes": {
+    "packages/design-bento/src/image-sampling.ts": "9f70a5d994597615463cca882143a4457ee5280b138233c0f7b73ee9e88066a1",
+    "packages/design-bento/scripts/build.mjs": "867e3c4d3ab6bff1fb246ebfe6a0ae021ebdac2b589534de03e9c95d109f534c",
+    "packages/design-bento/scripts/test-image-sampling.cjs": "c8013c058e1c83cbcf9119c1d55207a99f176c9d7f4a732e7338a40be983f9a5",
+    "e2e/src/support/electron-harness.ts": "8f2c9b9dca2df5e7a026453f38d19271d4ea463405b7facfee68c4a18c208d58",
+    "e2e/src/support/transparent-margin-probe.ts": "a50271ecf86d39b22d1e3c39ac9060933df92aad83ee347b3b7fe2b92b3c6c3a",
+    "e2e/src/support/fixtures/transparent-margin.ts": "891b9f08ac7697a3398e4558bc229620af6a51204b117aa76a5cd07c1dfb0af4"
+  },
+  "runs": [
+    {
+      "scaleMode": "forced",
+      "scale": 1,
+      "runtime": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "electron": "39.5.1",
+        "chromium": "142.0.7444.265"
+      },
+      "buildHashes": {
+        "apps/electron/out/main/index.js": "0371e8ae10fa5df919ee74270591fd500ff605de591b8d0e340bf9bab37cec05",
+        "apps/electron/resources/cli/design.js": "90f78d44a46d86783f8e28e4ec816ec2f7767770ebc9be08a3c6e55da3e1e800",
+        "apps/electron/resources/design/editor.html": "b6481732581602b84694b4933b4e7310122912d6e8b1c6451ccff504832e4f84",
+        "apps/electron/resources/design/build.json": "28242145785b7f0d0b7c092c96827bf5de7375ccd0e32dd057743870d44eee9c"
+      },
+      "checkout": "a047ba68c78f1968a97459d9762c62811a1fac5d",
+      "cases": [
+        {
+          "name": "original",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "repeat",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "aligned",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "half",
+          "pngHash": "6e9c44a28ebf3397f7d3b8a47fd381ddc8c0c0bb69a97707fd117827188dcb3e",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "soft-edge",
+          "pngHash": "ee17d8db1cf3479ef07dacbab0e165ab48efb42450879692470b78b19707c79d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "soft-edge-aligned",
+          "pngHash": "ee17d8db1cf3479ef07dacbab0e165ab48efb42450879692470b78b19707c79d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "contain-17",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "contain-16",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "cover-17",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "cover-16",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "shadow-17",
+          "pngHash": "b3f8b2a428f558b778500c605276150206e10446ca8ba59c08c9a80257cb9875",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "shadow-16",
+          "pngHash": "b3f8b2a428f558b778500c605276150206e10446ca8ba59c08c9a80257cb9875",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "rotate-15-17",
+          "pngHash": "5ff935f2f19b12078b0d52281d2f3a02f6f0ccb0d0ea5cfc3386f384fb7dd62f",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "rotate-15-16",
+          "pngHash": "5ff935f2f19b12078b0d52281d2f3a02f6f0ccb0d0ea5cfc3386f384fb7dd62f",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "rotate-360-17",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        },
+        {
+          "name": "rotate-360-16",
+          "pngHash": "66e6f12f3cef2fae3e51628637c039c1b94a6113e16e71fd4deebc1cb69b9a9d",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [1]
+        }
+      ]
+    },
+    {
+      "scaleMode": "native",
+      "scale": 2,
+      "runtime": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "electron": "39.5.1",
+        "chromium": "142.0.7444.265"
+      },
+      "buildHashes": {
+        "apps/electron/out/main/index.js": "0371e8ae10fa5df919ee74270591fd500ff605de591b8d0e340bf9bab37cec05",
+        "apps/electron/resources/cli/design.js": "90f78d44a46d86783f8e28e4ec816ec2f7767770ebc9be08a3c6e55da3e1e800",
+        "apps/electron/resources/design/editor.html": "b6481732581602b84694b4933b4e7310122912d6e8b1c6451ccff504832e4f84",
+        "apps/electron/resources/design/build.json": "28242145785b7f0d0b7c092c96827bf5de7375ccd0e32dd057743870d44eee9c"
+      },
+      "checkout": "a047ba68c78f1968a97459d9762c62811a1fac5d",
+      "cases": [
+        {
+          "name": "original",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "repeat",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "aligned",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "half",
+          "pngHash": "c5bb7215a92c3c8615f937975edba92fed16f3eaabdc110de5d90874817bd1d1",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "soft-edge",
+          "pngHash": "dc0c9cb1fad3f3842066d8e013fb15f5ca96340be039a77283ee4cfd80b95e73",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "soft-edge-aligned",
+          "pngHash": "dc0c9cb1fad3f3842066d8e013fb15f5ca96340be039a77283ee4cfd80b95e73",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "contain-17",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "contain-16",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "cover-17",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "cover-16",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "shadow-17",
+          "pngHash": "e8d3a7de8519108984336a83bd4f202ece65b433d58535654b3e7f4698464c1b",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "shadow-16",
+          "pngHash": "e8d3a7de8519108984336a83bd4f202ece65b433d58535654b3e7f4698464c1b",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "rotate-15-17",
+          "pngHash": "77f15155fb4ba8d387936e0314cfdad49baefca9442f705f7538e45f9f2c0967",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "rotate-15-16",
+          "pngHash": "77f15155fb4ba8d387936e0314cfdad49baefca9442f705f7538e45f9f2c0967",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "rotate-360-17",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        },
+        {
+          "name": "rotate-360-16",
+          "pngHash": "b0a451a4a1893bbbae18cc194b1ee38470aa995f7e4470c219ccaaa5633416eb",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [2]
+        }
+      ],
+      "editing": {
+        "pointerSelection": [
+          {
+            "id": "full-0",
+            "type": "image",
+            "preview": ""
+          }
+        ],
+        "requestedDragPixels": [40, 28],
+        "observedDragPixels": [40.629486083984375, 28.00255584716797],
+        "before": [32, 40, 128, 128],
+        "after": [79.3, 72.6, 128, 128],
+        "assetsUnchanged": true,
+        "closedAndSaved": true
+      }
+    },
+    {
+      "scaleMode": "forced",
+      "scale": 3,
+      "runtime": {
+        "platform": "darwin",
+        "arch": "arm64",
+        "electron": "39.5.1",
+        "chromium": "142.0.7444.265"
+      },
+      "buildHashes": {
+        "apps/electron/out/main/index.js": "0371e8ae10fa5df919ee74270591fd500ff605de591b8d0e340bf9bab37cec05",
+        "apps/electron/resources/cli/design.js": "90f78d44a46d86783f8e28e4ec816ec2f7767770ebc9be08a3c6e55da3e1e800",
+        "apps/electron/resources/design/editor.html": "b6481732581602b84694b4933b4e7310122912d6e8b1c6451ccff504832e4f84",
+        "apps/electron/resources/design/build.json": "28242145785b7f0d0b7c092c96827bf5de7375ccd0e32dd057743870d44eee9c"
+      },
+      "checkout": "a047ba68c78f1968a97459d9762c62811a1fac5d",
+      "cases": [
+        {
+          "name": "original",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "repeat",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "aligned",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "half",
+          "pngHash": "667a5297287b6e4df10fbcbcbafca94e9b59b5b2bfeecba7e037b10183881b85",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "soft-edge",
+          "pngHash": "fc7d0cbf0a59887c29d93693eff9fbdd5ae50108f70ab41acfee7fbb4da4a951",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "soft-edge-aligned",
+          "pngHash": "fc7d0cbf0a59887c29d93693eff9fbdd5ae50108f70ab41acfee7fbb4da4a951",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "contain-17",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "contain-16",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "cover-17",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "cover-16",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "shadow-17",
+          "pngHash": "4a6099042ee27de05670ee2fb8270d913e4922702f70989cd506fbaec1842bc6",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "shadow-16",
+          "pngHash": "4a6099042ee27de05670ee2fb8270d913e4922702f70989cd506fbaec1842bc6",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "rotate-15-17",
+          "pngHash": "e14ca56bfbc947ea06f9b447c2a54009856395ad8c1575339dc2f3641fa21632",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "rotate-15-16",
+          "pngHash": "e14ca56bfbc947ea06f9b447c2a54009856395ad8c1575339dc2f3641fa21632",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "rotate-360-17",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        },
+        {
+          "name": "rotate-360-16",
+          "pngHash": "ee123459c3dc39f3175c0ee8c5938b652d370525ac855e60bd91d1baad207272",
+          "comparison": [
+            {
+              "row": 0,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 1,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            },
+            {
+              "row": 2,
+              "differingPixels": 0,
+              "maxChannelDifference": 0
+            }
+          ],
+          "unchanged": true,
+          "deviceScales": [3]
+        }
+      ]
+    }
+  ],
+  "closeoutValidation": {
+    "dateUTC": "2026-09-27",
+    "repositoryCheck": "passed",
+    "repositoryFormat": "passed"
+  }
+}

@@ -184,3 +184,17 @@ adaptations. The existing builder remains the single assembly path.
 
 Resources include Apache-2.0 `MOLLY-LICENSE` and `MOLLY-NOTICE` for Molly and the
 rights-holder-owned migrated adapters, alongside Bento and font/icon notices.
+
+## Transparent-margin image sampling
+
+The assembled ordinary-image renderer uses `src/image-sampling.ts` to paint at
+natural bitmap dimensions with compensated transforms. Unprofiled 8-bit static PNG
+sampling buffers remove only fully transparent padding and retain two transparent
+border pixels.
+These buffers live only in the renderer; stored assets, BentoDoc bounds and YAML
+remain unchanged. Initial painting uses numeric document bounds rather than CSS
+text readback. Image preparation finishes before initial workspace projection;
+live edits retain the existing frame fields.
+
+See [IMAGE-SAMPLING.md](IMAGE-SAMPLING.md#implemented-rendering-path) for clipping,
+format boundaries, evidence and remaining acceptance work.

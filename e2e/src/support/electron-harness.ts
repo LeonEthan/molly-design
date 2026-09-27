@@ -17,7 +17,13 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { _electron, expect, type CDPSession, type ElectronApplication, type Page } from '@playwright/test';
+import {
+  _electron,
+  expect,
+  type CDPSession,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test';
 import {
   assertNamedPipeReleased,
   assertTcpPortReleased,
@@ -112,9 +118,13 @@ export class ElectronHarness {
   private performanceSession: CDPSession | null = null;
   private rendererPaintCount = 0;
   private launchVerified = false;
-  private launchTarget: { installedExecutable?: string; expectedSourceCommit?: string } | null = null;
+  private launchTarget: { installedExecutable?: string; expectedSourceCommit?: string } | null =
+    null;
 
-  constructor(readonly artifacts: ScenarioArtifacts) {}
+  constructor(
+    readonly artifacts: ScenarioArtifacts,
+    private readonly deviceScaleFactor?: 1 | 2 | 3
+  ) {}
 
   async launch(): Promise<void> {
     if (this.app || this.tempRoot) throw new Error('Electron harness already owns a launch');
@@ -174,7 +184,8 @@ export class ElectronHarness {
   }
 
   async exportReviewProfile(destination: string): Promise<string> {
-    if (!this.launchVerified || !this.tempRoot) throw new Error('Review export needs a verified launch');
+    if (!this.launchVerified || !this.tempRoot)
+      throw new Error('Review export needs a verified launch');
     const owned = realpathSync(this.tempRoot);
     const target = join(realpathSync(dirname(resolve(destination))), basename(destination));
     if (existsSync(target) || target === owned || target.startsWith(owned + sep)) {
@@ -196,8 +207,10 @@ export class ElectronHarness {
 
   private captureLaunchTarget(): void {
     this.launchTarget = {
-      installedExecutable: (process.env.MOLLY_E2E_INSTALLED_EXECUTABLE ?? process.env.LODY_E2E_INSTALLED_EXECUTABLE),
-      expectedSourceCommit: (process.env.MOLLY_E2E_EXPECTED_SOURCE_COMMIT ?? process.env.LODY_E2E_EXPECTED_SOURCE_COMMIT),
+      installedExecutable:
+        process.env.MOLLY_E2E_INSTALLED_EXECUTABLE ?? process.env.LODY_E2E_INSTALLED_EXECUTABLE,
+      expectedSourceCommit:
+        process.env.MOLLY_E2E_EXPECTED_SOURCE_COMMIT ?? process.env.LODY_E2E_EXPECTED_SOURCE_COMMIT,
     };
   }
 
@@ -245,6 +258,9 @@ export class ElectronHarness {
     this.app = await _electron.launch({
       args: [
         '--js-flags=--expose-gc',
+        ...(this.deviceScaleFactor === undefined
+          ? []
+          : [`--force-device-scale-factor=${this.deviceScaleFactor}`]),
         // GitHub-hosted Linux runners restrict unprivileged user namespaces,
         // which breaks Electron's SUID sandbox from an unpacked dev tree.
         ...(process.platform === 'linux' && process.env.CI ? ['--no-sandbox'] : []),
@@ -495,21 +511,24 @@ export class ElectronHarness {
     }
     phase('directory-cleanup');
     try {
-      const survivors = () => ownedProcesses.filter(({ pid }) => {
-        try {
-          process.kill(pid, 0);
-          return true;
-        } catch (error) {
-          return (error as NodeJS.ErrnoException).code !== 'ESRCH';
-        }
-      });
+      const survivors = () =>
+        ownedProcesses.filter(({ pid }) => {
+          try {
+            process.kill(pid, 0);
+            return true;
+          } catch (error) {
+            return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+          }
+        });
       try {
         // Electron's root exit precedes descendant teardown on some platforms.
         // Observe only the captured owned PIDs; never signal unrelated processes.
-        await expect.poll(() => survivors(), {
-          timeout: TEARDOWN_OPERATION_TIMEOUT_MS,
-          message: 'Owned processes must exit before isolated data cleanup',
-        }).toEqual([]);
+        await expect
+          .poll(() => survivors(), {
+            timeout: TEARDOWN_OPERATION_TIMEOUT_MS,
+            message: 'Owned processes must exit before isolated data cleanup',
+          })
+          .toEqual([]);
       } catch {
         phase('surviving-owned-processes', survivors());
         throw new Error('Owned processes remain after Electron quit; isolated data retained');

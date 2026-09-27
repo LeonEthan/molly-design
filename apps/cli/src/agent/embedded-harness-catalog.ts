@@ -38,7 +38,7 @@ export function projectEmbeddedHarnessCatalog(
       const modelId = encodeMollyModelOption(connection.id, model.modelId);
       models.push({
         modelId,
-        name: `${connection.displayName} · ${model.name}`,
+        name: `${model.name} (${connection.displayName})`,
         description: model.modelId,
       });
       modelReasoningEfforts[modelId] = [...model.thinking];

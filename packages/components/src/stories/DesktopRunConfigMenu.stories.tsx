@@ -363,7 +363,7 @@ function ProviderModelShell({ empty = false }: { empty?: boolean }) {
     : ['Studio', 'Review'].flatMap((connection) =>
         [1, 2, 3, 4].map((index) => ({
           value: encodeMollyModelOption(connection.toLowerCase(), `aurora-${index}`),
-          label: `${connection} · Aurora ${index}`,
+          label: `Aurora ${index} (${connection})`,
           description: `aurora-${index}`,
         }))
       );

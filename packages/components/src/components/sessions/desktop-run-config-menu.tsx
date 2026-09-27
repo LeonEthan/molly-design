@@ -537,7 +537,6 @@ export function DesktopRunConfigMenu({
               <OptionItem
                 key={opt.value}
                 label={opt.label}
-                description={opt.description}
                 selected={opt.value === modelValue}
                 disabled={opt.disabled}
                 onSelect={select}

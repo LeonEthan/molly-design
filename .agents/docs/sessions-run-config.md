@@ -13,7 +13,7 @@ this page is the full text of the rules summarised there.
   `child-tab-empty-state.tsx`; it uses the same `px-3` + `ConversationColumn` as
   the composer, so its right edge and max width must stay aligned automatically.
   Desktop run knobs are TWO footer buttons from `desktop-run-config-menu.tsx`:
-  `DesktopRunConfigMenu` (thin SVG, pill-shaped `[model icon] connection · model · reasoning ⌄`
+  `DesktopRunConfigMenu` (thin SVG, pill-shaped `[model icon] model (connection) · reasoning ⌄`
   face; opens the connection/model list directly, with Reasoning and other
   supported select submenus + Plan/Fast toggle rows below) and
   `DesktopPermissionModeButton` (permission icon + full name; flat permission
@@ -24,7 +24,10 @@ this page is the full text of the rules summarised there.
   harness has no Agent switcher. Connection and model identities come from the
   existing published catalog: display its labels and pass opaque option ids
   unchanged through the existing selection controller. Never reconstruct ids
-  from display names or fetch a parallel catalog. The unselected sentinel is
+  from display names or fetch a parallel catalog. The catalog labels each Molly
+  option `Model (Connection)` and carries the raw provider model id as its
+  description (#12); model rows render the label on one line and leave the
+  description to search, so the id is findable but never shown. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
   catalog directs the user to add a model connection in Settings. Reasoning
   continues to use the controller’s model-specific capabilities.

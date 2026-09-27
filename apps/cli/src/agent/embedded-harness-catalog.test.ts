@@ -75,8 +75,12 @@ it("projects only each compatible connection's declared models without borrowing
   ]);
   expect(result.models.map((model) => model.name)).toEqual([
     'Select a connection and model',
-    'First · Custom',
-    'First · Custom',
+    'Custom (First)',
+    'Custom (First)',
+  ]);
+  expect(result.models.slice(1).map((model) => model.description)).toEqual([
+    'vendor/custom',
+    'vendor/custom',
   ]);
   expect(
     result.models.slice(1).map((model) => result.modelReasoningEfforts[model.modelId])

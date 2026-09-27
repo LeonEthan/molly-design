@@ -141,15 +141,15 @@ describe('composer model picker search', () => {
       availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
       modelOptions: [
         { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
-        { value: studio, label: 'Studio · Aurora 1' },
-        { value: review, label: 'Review · Aurora 1' },
+        { value: studio, label: 'Aurora 1 (Studio)', description: 'aurora/1' },
+        { value: review, label: 'Aurora 1 (Review)', description: 'aurora/1' },
       ],
       selectedModelId: studio,
       onModelChange,
     });
     const menu = document.querySelector('[role="menu"]');
     const rows = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
-    expect(rows.map((row) => row.textContent)).toEqual(['Studio · Aurora 1', 'Review · Aurora 1']);
+    expect(rows.map((row) => row.textContent)).toEqual(['Aurora 1 (Studio)', 'Aurora 1 (Review)']);
     expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
     expect(menu?.querySelector('[role="menuitem"]')).toBeNull();
     await act(async () => {
@@ -219,6 +219,26 @@ describe('composer model picker search', () => {
     const { search, rows } = await openModelMenu();
     await typeInto(search as HTMLInputElement, 'haiku-4');
     expect(rows()).toEqual(['Haiku 4.5']);
+  });
+
+  it('finds a connection model by its raw provider id without showing that id', async () => {
+    const connectionModels = ['Studio', 'Review', 'Archive'].flatMap((connection) =>
+      ['aurora/1', 'nimbus/2'].map((modelId) => ({
+        value: encodeMollyModelOption(connection.toLowerCase(), modelId),
+        label: `${modelId === 'aurora/1' ? 'Aurora 1' : 'Nimbus 2'} (${connection})`,
+        description: modelId,
+      }))
+    );
+    const { search, rows } = await openModelMenu({
+      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
+      modelOptions: connectionModels,
+      selectedModelId: connectionModels[0]?.value ?? null,
+    });
+    expect(rows()).toEqual(connectionModels.map((option) => option.label));
+    await typeInto(search as HTMLInputElement, 'nimbus/2');
+    expect(rows()).toEqual(['Nimbus 2 (Studio)', 'Nimbus 2 (Review)', 'Nimbus 2 (Archive)']);
+    await typeInto(search as HTMLInputElement, 'archive');
+    expect(rows()).toEqual(['Aurora 1 (Archive)', 'Nimbus 2 (Archive)']);
   });
 
   it('says so when nothing matches instead of showing an empty menu', async () => {

@@ -198,3 +198,6 @@ editable review evidence. It is explicitly invoked and is not a deterministic CI
 For Issue #45's native scroll-cache lifecycle regression, run
 `pnpm --filter @molly/e2e router:resources` after the desktop build. It covers history
 eviction and back/forward/replace/branch/reload restoration without credentials.
+
+The opt-in [canvas first-drag regression](CANVAS-FIRST-DRAG-REGRESSION.md) checks
+native selection handoff, save overlap, history and persisted movement for #21.

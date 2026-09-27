@@ -59,6 +59,12 @@ The source manifest pins this additional file separately and records its origin.
 
 ## Serial canvas editing
 
+Selection changes hand the current mouse gesture directly to Moveable. Assigning
+a changed target owns its geometry update; only unchanged targets receive the
+additional rectangle refresh. This prevents queued old-target state from resetting
+a new drag. The builder applies this correction to the assembled copy and retires
+the deferred handoff there. See the [native first-drag regression](../../e2e/CANVAS-FIRST-DRAG-REGRESSION.md).
+
 The desktop controls generic `molly.setReadonly`, `molly.flush`, `molly.state`
 and `molly.applyCommands`.
 Bento does not observe Agent status: the bridge rejects semantic mutations while

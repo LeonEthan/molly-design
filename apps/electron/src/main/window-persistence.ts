@@ -1,13 +1,9 @@
-import {
-  screen,
-  type BrowserWindow,
-  type BrowserWindowConstructorOptions,
-  type Rectangle
-} from 'electron'
+import { screen, type BrowserWindow, type BrowserWindowConstructorOptions } from 'electron'
 import Conf from 'conf'
 import {
   MAIN_WINDOW_MIN_HEIGHT,
   MAIN_WINDOW_MIN_WIDTH,
+  fitBoundsToWorkArea,
   resolveDefaultMainWindowBounds
 } from './window-default-bounds'
 
@@ -98,38 +94,12 @@ function normalizeBounds(bounds: PersistedWindowBounds): PersistedWindowBounds {
   }
 }
 
-function hasVisibleIntersection(bounds: PersistedWindowBounds, workArea: Rectangle): boolean {
-  const x = bounds.x
-  const y = bounds.y
-  if (x === undefined || y === undefined) {
-    return true
-  }
-
-  const visibleWidth =
-    Math.min(x + bounds.width, workArea.x + workArea.width) - Math.max(x, workArea.x)
-  const visibleHeight =
-    Math.min(y + bounds.height, workArea.y + workArea.height) - Math.max(y, workArea.y)
-
-  return visibleWidth >= MIN_VISIBLE_WIDTH && visibleHeight >= MIN_VISIBLE_HEIGHT
-}
-
 function ensureVisibleBounds(bounds: PersistedWindowBounds): PersistedWindowBounds {
-  if (bounds.x === undefined || bounds.y === undefined) {
-    return bounds
-  }
-
-  const hasVisibleDisplay = screen.getAllDisplays().some((display) => {
-    return hasVisibleIntersection(bounds, display.workArea)
-  })
-
-  if (hasVisibleDisplay) {
-    return bounds
-  }
-
-  return {
-    width: bounds.width,
-    height: bounds.height
-  }
+  return fitBoundsToWorkArea(
+    bounds,
+    screen.getAllDisplays().map((display) => display.workArea),
+    screen.getPrimaryDisplay().workArea
+  )
 }
 
 function getMainWindowState(): PersistedWindowState {

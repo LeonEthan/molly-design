@@ -37,3 +37,57 @@ export function resolveDefaultMainWindowBounds(workArea: WorkArea): DefaultWindo
     y: Math.round(workArea.y + Math.max(workArea.height - height, 0) / 2)
   }
 }
+
+export type SavedWindowBounds = {
+  width: number
+  height: number
+  x?: number
+  y?: number
+}
+
+function intersectionArea(bounds: WorkArea, workArea: WorkArea): number {
+  const width =
+    Math.min(bounds.x + bounds.width, workArea.x + workArea.width) - Math.max(bounds.x, workArea.x)
+  const height =
+    Math.min(bounds.y + bounds.height, workArea.y + workArea.height) -
+    Math.max(bounds.y, workArea.y)
+  return width > 0 && height > 0 ? width * height : 0
+}
+
+function clampToRange(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+export function fitBoundsToWorkArea(
+  bounds: SavedWindowBounds,
+  workAreas: readonly WorkArea[],
+  primaryWorkArea: WorkArea
+): SavedWindowBounds {
+  const { x, y } = bounds
+  const target =
+    x === undefined || y === undefined
+      ? primaryWorkArea
+      : workAreas.reduce<{ workArea: WorkArea; area: number }>(
+          (best, workArea) => {
+            const area = intersectionArea(
+              { x, y, width: bounds.width, height: bounds.height },
+              workArea
+            )
+            return area > best.area ? { workArea, area } : best
+          },
+          { workArea: primaryWorkArea, area: 0 }
+        ).workArea
+  const width = Math.max(Math.min(bounds.width, target.width), MAIN_WINDOW_MIN_WIDTH)
+  const height = Math.max(Math.min(bounds.height, target.height), MAIN_WINDOW_MIN_HEIGHT)
+
+  if (x === undefined || y === undefined) {
+    return { width, height }
+  }
+
+  return {
+    width,
+    height,
+    x: clampToRange(x, target.x, target.x + target.width - width),
+    y: clampToRange(y, target.y, target.y + target.height - height)
+  }
+}

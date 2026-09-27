@@ -26,3 +26,11 @@ scroll target. It checks that cache entries retire with native browser history w
 Back/Forward, replace, a new forward branch and renderer reload preserve restoration.
 Run `pnpm --filter @molly/e2e router:resources` after building. It uses no model or
 session documents; assertions use route-render signals and actual scroll positions.
+
+`transparent-margin-probe.ts` drives the real native PNG export for issue #15.
+See the [regression instructions and baseline](../../TRANSPARENT-MARGIN-REGRESSION.md).
+
+The transparent-margin acceptance flags and optional launch device-scale factor
+are documented in [the acceptance record](../../TRANSPARENT-MARGIN-ACCEPTANCE.md).
+The harness keeps the requested factor across its own restart; ordinary callers
+leave it unset. All scale overrides must be observed, not inferred from arguments.

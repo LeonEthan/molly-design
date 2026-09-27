@@ -24,3 +24,9 @@ The generic viewport API reports screen scale and canvas-coordinate center; fit
 reuses native zoomReset. Neither knows Agent or version lifecycle. Electron fits
 new renderers and resized containers, retaining zoom for unchanged hide/show.
 Adapt only the assembled checkout.
+
+Before changing image painting, read [IMAGE-SAMPLING.md](IMAGE-SAMPLING.md).
+Sampling buffers are derived renderer state; preserve source assets, canonical
+bounds and every nonzero-alpha pixel. Keep editable frame coordinates separate
+from paint transforms. Require the native transparent-margin regression to pass
+without relaxing its zero-difference assertion.

@@ -12,6 +12,9 @@ signal cannot make the merge gate untrustworthy.
 | Scout soak       | Repeated lifecycle and resource recovery analysis  | Nightly or manual           | Initially informational |
 | Acceptance       | Immutable before/after evidence for a delivery     | Explicit local run          | Human reviewer          |
 
+The opt-in [transparent-margin regression](TRANSPARENT-MARGIN-REGRESSION.md)
+reproduces issue #15 through native PNG export and retains its failing baseline.
+
 ## Architecture
 
 [`src/support/electron-harness.ts`](./src/support/electron-harness.ts) owns the

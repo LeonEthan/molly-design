@@ -1,0 +1,115 @@
+{
+  "issue": "https://github.com/LeonEthan/molly-design/issues/15",
+  "scope": "Built local desktop native PNG export; historical failure, not a passing oracle",
+  "sourceCheckout": "a047ba68c78f1968a97459d9762c62811a1fac5d",
+  "buildHashes": {
+    "apps/electron/out/main/index.js": "0371e8ae10fa5df919ee74270591fd500ff605de591b8d0e340bf9bab37cec05",
+    "apps/electron/resources/cli/design.js": "90f78d44a46d86783f8e28e4ec816ec2f7767770ebc9be08a3c6e55da3e1e800",
+    "apps/electron/resources/design/editor.html": "b0725730d83a83a3d9a877ba95c699c21fa565f3c7ede819cc84ac3c3d3d88f0",
+    "apps/electron/resources/design/build.json": "53152ca45862eb025fed80299ad853ca30ddc2c0a4c848db1538c3bc6d974c55"
+  },
+  "runtime": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "electron": "39.5.1",
+    "chromium": "142.0.7444.265",
+    "node": "22.22.0",
+    "displayScale": 2
+  },
+  "status": "pixel-invariance-failed",
+  "repeatByteIdentical": true,
+  "cases": [
+    {
+      "name": "original",
+      "pngHash": "1125f5ea2e0b39d0a78a7ae6a0095661449314eb32bd129f628c9c9addfba8b4",
+      "comparison": [
+        {
+          "row": 0,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 1,
+          "differingPixels": 4777,
+          "maxChannelDifference": 75
+        },
+        {
+          "row": 2,
+          "differingPixels": 4529,
+          "maxChannelDifference": 90
+        }
+      ],
+      "unchanged": true,
+      "deviceScales": [2]
+    },
+    {
+      "name": "repeat",
+      "pngHash": "1125f5ea2e0b39d0a78a7ae6a0095661449314eb32bd129f628c9c9addfba8b4",
+      "comparison": [
+        {
+          "row": 0,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 1,
+          "differingPixels": 4777,
+          "maxChannelDifference": 75
+        },
+        {
+          "row": 2,
+          "differingPixels": 4529,
+          "maxChannelDifference": 90
+        }
+      ],
+      "unchanged": true,
+      "deviceScales": [2]
+    },
+    {
+      "name": "aligned",
+      "pngHash": "45249b8b0bcee0f39517e7461008f8681c114e6d34ebae00e777d2aee1476846",
+      "comparison": [
+        {
+          "row": 0,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 1,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 2,
+          "differingPixels": 4331,
+          "maxChannelDifference": 37
+        }
+      ],
+      "unchanged": true,
+      "deviceScales": [2]
+    },
+    {
+      "name": "half",
+      "pngHash": "d7775572ad8bd364bc711ad70644dba2866f9503763fe099ebfaef0ccbdcd904",
+      "comparison": [
+        {
+          "row": 0,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 1,
+          "differingPixels": 0,
+          "maxChannelDifference": 0
+        },
+        {
+          "row": 2,
+          "differingPixels": 4529,
+          "maxChannelDifference": 90
+        }
+      ],
+      "unchanged": true,
+      "deviceScales": [2]
+    }
+  ]
+}

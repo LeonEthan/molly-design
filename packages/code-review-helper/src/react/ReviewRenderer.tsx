@@ -10,6 +10,11 @@ import {
 } from 'react';
 import { flushSync } from 'react-dom';
 import { FileDiff, type FileDiffProps } from '@pierre/diffs/react';
+import {
+  MOLLY_M_PATH,
+  MOLLY_M_VIEW_BOX,
+  MOLLY_WORDMARK_FONT_FAMILY,
+} from '@molly/components/lib/molly-brand';
 import { observeResizeOnAnimationFrame } from '@molly/components/lib/resize-observer';
 import { ErrorBoundary } from './error-boundary';
 import { useCodeReviewTheme } from './theme-provider';
@@ -164,10 +169,6 @@ interface AnnotationMeta {
   readonly findingRefs: readonly FindingLineMarker[];
 }
 
-// Molly mark shown in the sidebar header. Bundled with the package (copied from
-// @molly/components) so the renderer stays standalone; Vite inlines it as a data URL
-// in the single-file viewer build and serves it normally in Storybook.
-const mollyIconUrl = new URL('../assets/molly-icon.png', import.meta.url).href;
 
 export interface ReviewRendererProps {
   readonly bundle: ReviewBundleInput;
@@ -1081,12 +1082,24 @@ export function ReviewRenderer({
           )}
           aria-label="Review groups"
         >
-          <div className="flex items-center gap-2.5 px-1">
-            <img src={mollyIconUrl} alt="Molly" className="size-7 shrink-0 rounded-md" />
-            <h1 className="min-w-0 flex-1 truncate text-[15px] font-semibold leading-tight tracking-tight">
-              Molly Review
-            </h1>
-          </div>
+          <h1
+            style={{ fontFamily: MOLLY_WORDMARK_FONT_FAMILY }}
+            className="flex min-w-0 items-baseline whitespace-nowrap px-1 text-[17px] font-bold leading-tight tracking-[-0.01em]"
+          >
+            <svg
+              viewBox={MOLLY_M_VIEW_BOX}
+              fill="currentColor"
+              aria-hidden="true"
+              focusable="false"
+              className="h-[1.16em] w-auto shrink-0 translate-y-[0.15em] -mr-[0.02em] overflow-visible"
+            >
+              <path d={MOLLY_M_PATH} />
+            </svg>
+            <span className="sr-only">Molly Review</span>
+            <span aria-hidden="true" className="truncate">
+              olly Review
+            </span>
+          </h1>
 
           <nav className="-mx-1 grid gap-0.5" aria-label="Review group navigation">
             {bundle.groups.map((group) => {

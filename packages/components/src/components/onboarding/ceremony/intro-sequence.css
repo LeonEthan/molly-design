@@ -28,12 +28,7 @@
   min-height: 36px;
 }
 .molly-intro-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 18px;
-  font-weight: 550;
-  letter-spacing: -0.04em;
+  font-size: 22px;
 }
 .molly-intro-sound {
   display: inline-flex;

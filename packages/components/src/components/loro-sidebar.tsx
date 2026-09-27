@@ -57,6 +57,7 @@ import {
   type SidebarUpdatedSessionListLabels,
 } from './sidebar-updated-session-list';
 import { SidebarFilterPopover, type SidebarFilterLabels } from './sidebar-filter-popover';
+import { MollyWordmark } from './molly-wordmark';
 import { WorkspaceAvatar } from './workspace-avatar';
 import type { SidebarOrganizeMode } from '@/atoms/sidebar-state';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -925,8 +926,14 @@ export const LoroSidebar = memo(function LoroSidebar({
             </DropdownMenu>
           ) : (
             <div className="min-w-0 flex-1">
-              <div className={workspaceIdentityClassName} data-workspace-identity>
-                {workspaceIdentity}
+              <div
+                className={cn(workspaceIdentityClassName, 'flex text-[15px]')}
+                data-workspace-identity
+              >
+                <MollyWordmark />
+                {workspaceIdentityStatus ? (
+                  <ConnectionPill state={workspaceIdentityStatus} labels={mergedLabels} />
+                ) : null}
               </div>
             </div>
           )}

@@ -9,6 +9,7 @@ import mollyLogo from '../src/assets/molly-icon.png';
 import { LoadingPlaceholder } from '../src/components/loading-placeholder';
 import { LoroSidebar, type LoroSidebarProps } from '../src/components/loro-sidebar';
 import { initI18n } from '../src/i18n';
+import { MOLLY_WORDMARK_FONT_FAMILY } from '../src/lib/molly-brand';
 import { resolveWorkspaceIdentityLogo } from '../src/lib/workspace-identity';
 
 const sidebarProps: LoroSidebarProps = {
@@ -80,7 +81,10 @@ describe('workspace identity capability boundary', () => {
 
     const identity = container?.querySelector('[data-workspace-identity]');
     expect(identity?.tagName).toBe('DIV');
-    expect(identity?.textContent).toContain('Molly');
+    const wordmark = identity?.querySelector('[data-molly-wordmark]');
+    expect(wordmark?.getAttribute('role')).toBe('img');
+    expect(wordmark?.getAttribute('aria-label')).toBe('Molly');
+    expect((wordmark as HTMLElement | null)?.style.fontFamily).toBe(MOLLY_WORDMARK_FONT_FAMILY);
     expect(container?.querySelector('[data-workspace-switcher-trigger]')).toBeNull();
   });
 

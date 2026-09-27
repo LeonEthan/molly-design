@@ -33,8 +33,8 @@ Standalone local code-review renderer and agent prompt package.
 - A standalone single-file HTML viewer (no server, opens over `file://`) backs
   this package's own `review-helper export --format html`. Build + the shiki
   size-control trick are documented in [standalone-build.md](standalone-build.md).
-  The Molly mark (sidebar icon `src/assets/molly-icon.png` + "Molly Review" title) lives
-  inside `ReviewRenderer`, so Storybook and the generated HTML render identically (both
+  The Molly wordmark (inline M glyph from `@molly/components/lib/molly-brand` + "olly
+  Review", announced as "Molly Review") lives inside `ReviewRenderer`, so Storybook and the generated HTML render identically (both
   wrap it in `CodeReviewThemeProvider`). The built `dist-standalone/standalone.html` has no shipped consumer beyond
   `review-helper export --format html`; the sibling `@molly/code-review-viewer`
   republish package is retired. Only the agent prompt is embedded via

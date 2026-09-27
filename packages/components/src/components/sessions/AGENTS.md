@@ -72,8 +72,10 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Desktop opens an effort card when the model has several reasoning levels, else the
-  published model list (grouped by connection); preserve opaque model ids and
+- Desktop run config is one flat menu of value rows: Recently used, Agent (only
+  where the caller offers switching — the landing; a session's agent is fixed),
+  Model (submenu list grouped by connection), Reasoning (submenu stepped effort
+  track), then Plan/Fast switches. Preserve opaque model ids and
   model-specific reasoning capabilities. Roles are retired: no
   selection, creation, prompt prefix, draft restoration or recent-Role replay.
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance

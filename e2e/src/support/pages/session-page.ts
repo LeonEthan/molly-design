@@ -60,10 +60,17 @@ export class SessionPage {
       .getByRole('button', { name: /^(Provider and model|模型与服务商)$/u })
       .first()
       .click();
+    /* Model choices live in the Model row's submenu; hover opens it. */
+    await this.page
+      .getByRole('menuitem', { name: /^(Model|模型)/u })
+      .first()
+      .hover();
     const option = this.page.getByRole('menuitemradio', { name: MODEL_NAME, exact: true });
     await expect(option).toBeVisible({ timeout: 60_000 });
     await option.click();
     await expect(option).toHaveAttribute('aria-checked', 'true');
+    // First Escape closes the submenu, second the menu itself.
+    await this.page.keyboard.press('Escape');
     await this.page.keyboard.press('Escape');
   }
 

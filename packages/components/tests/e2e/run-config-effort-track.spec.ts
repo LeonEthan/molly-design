@@ -5,6 +5,7 @@ test('the effort track selects the stop under the pointer, including by drag', a
 
   const trigger = page.getByRole('button', { name: 'Provider and model' });
   await trigger.click();
+  await page.getByRole('menuitem', { name: /^Reasoning/ }).hover();
   const track = page.getByRole('slider', { name: 'Reasoning' });
   await expect(track).toHaveAttribute('aria-valuetext', 'Medium');
 
@@ -20,7 +21,8 @@ test('the effort track selects the stop under the pointer, including by drag', a
   await page.mouse.move(bounds.x + 2, middle, { steps: 8 });
   await page.mouse.up();
   await expect(track).toHaveAttribute('aria-valuetext', 'Low');
-  await expect(page.getByRole('menu')).toBeVisible();
+  // Root menu + Reasoning submenu both stay open through the drag.
+  await expect(page.getByRole('menu')).toHaveCount(2);
 
   await page.keyboard.press('Escape');
   await expect(trigger).toContainText('Low');

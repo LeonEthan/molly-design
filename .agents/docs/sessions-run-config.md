@@ -13,26 +13,30 @@ this page is the full text of the rules summarised there.
   `child-tab-empty-state.tsx`; it uses the same `px-3` + `ConversationColumn` as
   the composer, so its right edge and max width must stay aligned automatically.
   Desktop run knobs are TWO footer buttons from `desktop-run-config-menu.tsx`:
-  `DesktopRunConfigMenu` (pill-shaped `model  reasoning ⌄` face, reasoning muted;
-  when the model offers more than one reasoning level it opens an effort card —
-  current level, the model name leading to the model list, a stepped effort
-  track, and Fast as the card's corner toggle — otherwise the model list
-  directly; other supported select submenus and the Plan toggle row sit below) and
-  `DesktopPermissionModeButton` (permission icon + full name; flat permission
-  list). Explicit `_permission` config options take precedence over legacy ACP
-  modes; provider interaction modes stay inside the run-config dropdown. Both
-  are also used by the desktop chat landing; `DesktopRunConfigMenu` receives an
-  explicit runtime metadata rather than reading `SessionMeta`. The single Molly
-  harness has no Agent switcher. Connection and model identities come from the
+  `DesktopRunConfigMenu` (pill face `agent icon · model · reasoning ⌄`,
+  reasoning muted) and `DesktopPermissionModeButton` (permission icon + full
+  name; flat permission list). The run-config menu itself is one flat list of
+  value rows, each opening a submenu: Recently-used whole configurations on top
+  when the caller has them, then Agent (only where the caller offers switching
+  — the chat landing passes `onAgentChange` plus the machine-scoped configs; a
+  session's agent is fixed, so the row stays hidden there), Model, and
+  Reasoning (only when the model offers more than one level). Provider
+  interaction modes and extra selects keep their own rows; Plan/Fast are
+  switch rows at the bottom. Explicit `_permission` config options take
+  precedence over legacy ACP modes; provider interaction modes stay inside the
+  run-config dropdown. Both buttons are also used by the desktop chat landing;
+  `DesktopRunConfigMenu` receives an explicit runtime metadata rather than
+  reading `SessionMeta`. Connection and model identities come from the
   existing published catalog: display its labels and pass opaque option ids
   unchanged through the existing selection controller. Never reconstruct ids
   from display names or fetch a parallel catalog. The catalog names each Molly
   option by its model, carries the raw provider model id as its description and
-  the connection's display name as its ACP select `group` (#12). Model rows show
-  one line under a label per connection (only when two or more connections
+  the connection's display name as its ACP select `group` (#12). The Model row
+  names the selection `connection · model`, and its submenu lists one line per
+  model under a label per connection (only when two or more connections
   exist); search also matches the id and the connection, neither of which a row
   repeats. The catalog has no product default model, so the list offers no
-  "Default" row, and the effort card has no reset. The unselected sentinel is
+  "Default" row and no reset. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
   catalog directs the user to add a model connection in Settings. Reasoning
   continues to use the controller’s model-specific capabilities.
@@ -43,10 +47,11 @@ this page is the full text of the rules summarised there.
   Keep the warning tied to that agent/model combination and its upstream
   discussion rather than turning it into a global banner.
   Model/Reasoning choices and Plan/Fast toggles keep the menu open so users
-  can adjust several values (choosing a model returns to the effort card); Escape
-  or outside interaction dismisses it through the shared composer focus policy.
-  The effort track is plain menu content, not a menu item: it owns its arrow,
-  Home and End keys so the menu's roving focus does not take them.
+  can adjust several values; Escape or outside interaction dismisses it through
+  the shared composer focus policy. The Reasoning submenu holds a stepped
+  effort track as plain submenu content, not a menu item: it owns its arrow,
+  Home and End keys so the menu's roving focus does not take them (ArrowLeft
+  would otherwise close the submenu).
   Once the model list reaches `OPTION_SEARCH_MIN_OPTIONS`
   (`lib/fuzzy-option-filter.ts` — the same threshold and matcher the mobile
   sheet uses) the model list gains a fuzzy search row over

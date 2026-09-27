@@ -113,7 +113,16 @@ describe('Desktop model picker without Roles', () => {
   it('opens model choices without Role selection or creation', async () => {
     const view = await render();
     const menu = await openMenu(view);
-    expect(menu.querySelector('[role="menuitemradio"]')?.textContent).toContain('5.5');
+    // Model choices live in the Model row's submenu; ArrowRight opens it.
+    const modelRow = [...menu.querySelectorAll('[role="menuitem"]')].find((item) =>
+      item.textContent?.startsWith('Model')
+    ) as HTMLElement;
+    await act(async () => {
+      modelRow.focus();
+      modelRow.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    const submenu = [...document.querySelectorAll('[data-radix-menu-content]')].at(-1);
+    expect(submenu?.querySelector('[role="menuitemradio"]')?.textContent).toContain('5.5');
     expect(menu.textContent).not.toMatch(/Role|New role|角色/);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });

@@ -26,10 +26,11 @@ import type { AcpSessionSelectOption } from '@/components/shared/acp-session-sel
 
 /**
  * The desktop composer's two consolidated footer buttons: the run-config
- * dropdown (direct provider/model choices, reasoning + Plan / Fast toggles) and the
- * standalone permission-mode button — both on the standard DropdownMenu
- * surface (distinct background + layered float shadow). The full in-context
- * page is `SessionConversationPage.stories` (`DesktopIdle`).
+ * dropdown (Agent / Model / Reasoning value rows, each opening a submenu, plus
+ * Plan / Fast switch rows) and the standalone permission-mode button — both on
+ * the standard DropdownMenu surface (distinct background + layered float
+ * shadow). The full in-context page is `SessionConversationPage.stories`
+ * (`DesktopIdle`).
  */
 const machineId = 'machine-storybook' as MachineId;
 const codexId = 'agent-codex' as AgentConfigId;
@@ -212,6 +213,7 @@ function StoryShell({
     return s;
   }, []);
 
+  const [agentId, setAgentId] = useState(codexId);
   const [model, setModel] = useState<string | null>(modelOptions[0]?.value ?? null);
   const [mode, setMode] = useState<string | null>(modeOptions[0]?.value ?? null);
   const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>(() =>
@@ -224,7 +226,9 @@ function StoryShell({
         {/* Mimic the composer footer row the buttons live in. */}
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
-            agentSelection={machineSelected ? { agentId: codexId, machineId } : null}
+            agentSelection={machineSelected ? { agentId, machineId } : null}
+            availableAgentConfigs={agents}
+            onAgentChange={(selection) => setAgentId(selection.agentId as typeof codexId)}
             disabledReason={machineSelected ? undefined : 'Select a machine first'}
             agentLocked={!isEmptyConversation}
             modelOptions={modelOptions}

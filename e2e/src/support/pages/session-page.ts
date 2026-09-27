@@ -3,7 +3,7 @@ import { type ScriptedRuntimeEvent, WorkSessionFixture } from '../fixtures/work-
 
 const CONNECTION_NAME = 'Deterministic E2E Model';
 const MODEL_NAME = 'E2E Deterministic';
-const MODEL_OPTION_NAME = `${CONNECTION_NAME} · ${MODEL_NAME}`;
+const MODEL_OPTION_NAME = `${MODEL_NAME} (${CONNECTION_NAME})`;
 const HELD_RESPONSE = 'Synthetic response started.';
 
 export class SessionPage {
@@ -61,8 +61,7 @@ export class SessionPage {
       .getByRole('button', { name: /^(Provider and model|模型与服务商)$/u })
       .first()
       .click();
-    // The option's accessible name appends the raw model id on a second line.
-    const option = this.page.getByRole('menuitemradio').filter({ hasText: MODEL_OPTION_NAME });
+    const option = this.page.getByRole('menuitemradio', { name: MODEL_OPTION_NAME, exact: true });
     await expect(option).toBeVisible({ timeout: 60_000 });
     await option.click();
     await expect(option).toHaveAttribute('aria-checked', 'true');

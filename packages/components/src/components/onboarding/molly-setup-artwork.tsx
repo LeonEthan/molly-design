@@ -2,7 +2,7 @@ import editorial from '@/assets/molly-editorial-v3.png';
 
 export function MollySetupArtwork() {
   return (
-    <div aria-hidden className="relative aspect-[4/5] w-full max-w-[390px]">
+    <div aria-hidden className="relative aspect-[4/5] w-full">
       <img
         src={editorial}
         alt=""

@@ -49,6 +49,8 @@ function fixture() {
   };
 }
 
+const toolFailure = (text: string) => new Error(`harness_mcp_tool_failed: ${text}`);
+
 describe('frozen MCP tools', () => {
   it('routes protected HTTP headers only to the bound server using injected fetch, with no host environment mutation', async () => {
     const servers = ['first', 'second'].map((name) => {
@@ -155,7 +157,7 @@ describe('frozen MCP tools', () => {
     }
   );
 
-  it('preserves supported content but refuses local file links and raw server diagnostics', async () => {
+  it('preserves supported content and server tool errors but refuses local file links and transport diagnostics', async () => {
     const f = fixture();
     const [tool] = await defineMcpTools(f.input);
     expect((await tool!.execute('call1', {}, undefined)).content).toEqual([
@@ -167,9 +169,9 @@ describe('frozen MCP tools', () => {
     await expect(tool!.execute('call2', {}, undefined)).rejects.toThrow(
       'harness_mcp_result_unsupported'
     );
-    f.result({ isError: true, content: [{ type: 'text', text: 'SYNTHETIC_ECHOED_KEY' }] });
+    f.result({ isError: true, content: [{ type: 'text', text: 'Synthetic server refusal' }] });
     await expect(tool!.execute('call3', {}, undefined)).rejects.toThrow(
-      /^harness_mcp_tool_failed$/
+      toolFailure('Synthetic server refusal')
     );
     f.input.client.callTool = async () => {
       throw new Error('SYNTHETIC_TRANSPORT_KEY');
@@ -216,13 +218,15 @@ describe('frozen MCP tools', () => {
     await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(code);
   });
 
-  it('does not forward arbitrary browser error text to the Agent', async () => {
+  it('returns other browser error text as an unclassified tool failure', async () => {
     const f = fixture();
     f.input.serverName = 'molly';
     f.change([{ ...descriptor, name: 'molly_browser' }]);
-    f.result({ isError: true, content: [{ type: 'text', text: 'SYNTHETIC_SECRET' }] });
+    f.result({ isError: true, content: [{ type: 'text', text: 'Synthetic browser refusal' }] });
     const [tool] = await defineMcpTools(f.input);
-    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+      toolFailure('Synthetic browser refusal')
+    );
   });
 
   it.each([
@@ -234,32 +238,29 @@ describe('frozen MCP tools', () => {
     f.change([{ ...descriptor, name }]);
     f.result({ isError: true, content: [{ type: 'text', text: 'Font failed to load' }] });
     const [tool] = await defineMcpTools(f.input);
-    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+      toolFailure('Font failed to load')
+    );
   });
 
-  it('redacts preview diagnostics without treating a transport error as a native failure', async () => {
+  it('does not classify inexact preview text or a transport error as a native failure', async () => {
     const f = fixture();
     f.input.serverName = 'molly';
     f.change([{ ...descriptor, name: 'molly_render_preview' }]);
     const [tool] = await defineMcpTools(f.input);
-    for (const content of [
-      [{ type: 'text', text: 'Font failed to load: SYNTHETIC_SECRET' }],
-      [{ type: 'text', text: 'harness_render_font_failed' }],
+    for (const [content, text] of [
+      [[{ type: 'text', text: 'Font failed to load: detail' }], 'Font failed to load: detail'],
+      [[{ type: 'text', text: 'harness_render_font_failed' }], 'harness_render_font_failed'],
       [
-        {
-          type: 'text',
-          text: JSON.stringify({ error: 'Font failed to load', key: 'SYNTHETIC_SECRET' }),
-        },
+        [
+          { type: 'text', text: 'Font failed to load' },
+          { type: 'text', text: 'detail' },
+        ],
+        'Font failed to load\ndetail',
       ],
-      [
-        { type: 'text', text: 'Font failed to load' },
-        { type: 'text', text: 'SYNTHETIC_SECRET' },
-      ],
-    ]) {
+    ] as const) {
       f.result({ isError: true, content });
-      await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
-        /^harness_mcp_tool_failed$/
-      );
+      await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(toolFailure(text));
     }
     f.input.client.callTool = async () => {
       throw new Error('harness_render_font_failed');
@@ -276,14 +277,14 @@ describe('frozen MCP tools', () => {
     'media/%2e%2e%2fSYNTHETIC_SECRET.ttf',
     'https://example.invalid/SYNTHETIC_SECRET.ttf',
   ])(
-    'redacts asset failure paths outside the bounded media filename contract: %s',
+    'does not classify asset failure paths outside the bounded media filename contract: %s',
     async (path) => {
       const f = fixture();
       f.input.serverName = 'molly';
       f.change([{ ...descriptor, name: 'molly_render_preview' }]);
       f.result({
         isError: true,
-        content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+        content: [{ type: 'text', text: 'Synthetic asset refusal' }],
         _meta: {
           mollyDesignAssetFailure: {
             code: 'asset_too_large',
@@ -295,7 +296,7 @@ describe('frozen MCP tools', () => {
       });
       const [tool] = await defineMcpTools(f.input);
       await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
-        /^harness_mcp_tool_failed$/
+        toolFailure('Synthetic asset refusal')
       );
     }
   );
@@ -307,13 +308,13 @@ describe('frozen MCP tools', () => {
     { limitBytes: 100 },
     { code: 'SYNTHETIC_SECRET' },
     { secret: 'SYNTHETIC_SECRET' },
-  ])('redacts malformed or expanded asset metadata: %j', async (overrides) => {
+  ])('does not classify malformed or expanded asset metadata: %j', async (overrides) => {
     const f = fixture();
     f.input.serverName = 'molly';
     f.change([{ ...descriptor, name: 'molly_render_preview' }]);
     f.result({
       isError: true,
-      content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+      content: [{ type: 'text', text: 'Synthetic asset refusal' }],
       _meta: {
         mollyDesignAssetFailure: {
           code: 'asset_too_large',
@@ -325,7 +326,9 @@ describe('frozen MCP tools', () => {
       },
     });
     const [tool] = await defineMcpTools(f.input);
-    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+      toolFailure('Synthetic asset refusal')
+    );
   });
 
   it.each([
@@ -337,7 +340,7 @@ describe('frozen MCP tools', () => {
     f.change([{ ...descriptor, name }]);
     f.result({
       isError: true,
-      content: [{ type: 'text', text: 'SYNTHETIC_PRIVATE_DIAGNOSTIC' }],
+      content: [{ type: 'text', text: 'Synthetic asset refusal' }],
       _meta: {
         mollyDesignAssetFailure: {
           code: 'asset_format_unsupported',
@@ -347,7 +350,9 @@ describe('frozen MCP tools', () => {
       },
     });
     const [tool] = await defineMcpTools(f.input);
-    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    await expect(tool!.execute('call', {}, undefined)).rejects.toThrow(
+      toolFailure('Synthetic asset refusal')
+    );
   });
 
   it('does not infer asset authority from error text or a transport exception', async () => {
@@ -361,17 +366,19 @@ describe('frozen MCP tools', () => {
     };
     const [tool] = await defineMcpTools(f.input);
     f.result({ isError: true, content: [{ type: 'text', text: JSON.stringify(failure) }] });
-    await expect(tool!.execute('text', {}, undefined)).rejects.toThrow(/^harness_mcp_tool_failed$/);
+    await expect(tool!.execute('text', {}, undefined)).rejects.toThrow(
+      toolFailure(JSON.stringify(failure))
+    );
     f.result({
       isError: true,
       content: [
         { type: 'text', text: 'Asset failed' },
-        { type: 'text', text: 'SYNTHETIC_SECRET' },
+        { type: 'text', text: 'detail' },
       ],
       _meta: { mollyDesignAssetFailure: failure },
     });
     await expect(tool!.execute('expanded', {}, undefined)).rejects.toThrow(
-      /^harness_mcp_tool_failed$/
+      toolFailure('Asset failed\ndetail')
     );
     f.input.client.callTool = async () => {
       throw Object.assign(

@@ -86,6 +86,24 @@ export class ImageGenerationError extends Error {
   }
 }
 
+/**
+ * The Agent-facing text for a failed paid image call. It states whether the
+ * request left Molly, because the Agent's sensible next step differs (#38):
+ * adjust and call again, adjust using the service's reason, or ask the user.
+ */
+export function describeImageFailure(
+  message: string,
+  outcome: { dispatched: boolean; rejected: boolean }
+): string {
+  if (!outcome.dispatched)
+    return /No image request was sent/.test(message)
+      ? `${message} Nothing was billed; adjust the request before calling again.`
+      : `${message} No image request was sent and nothing was billed; adjust the request before calling again.`;
+  if (outcome.rejected)
+    return `The image service rejected the request; Molly did not retry it. ${message}`;
+  return `Image outcome unknown: the request reached the image service and may have been billed. Tell the user before calling again. ${message}`;
+}
+
 export interface GenerateImageOptions {
   settings: ImageConnectionSettings;
   prompt: string;

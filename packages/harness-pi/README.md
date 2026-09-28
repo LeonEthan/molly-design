@@ -203,16 +203,23 @@ duplicate links share one read. Output has aggregate byte/block limits and canon
 base64 checks; the call and its reads share a 210-second execution deadline, with each
 resource read capped at 30 seconds. Ordinary resources deliver model context only;
 declared image results additionally pass the owning-host import gate described below.
+A server-returned tool execution error (MCP `isError`) reaches the Agent as a native
+tool error `harness_mcp_tool_failed: <text>`, as the MCP specification asks clients to
+do (#38): only its text parts, without control/bidi characters, capped at
+`MCP_TOOL_ERROR_MAX_CHARS` with a truncation note, and no resource-link reads. An error
+with no text keeps the bare code. Thrown transport/SDK exceptions carry client-side
+diagnostics (connection URLs, headers, credentials) and still become the bare
+`harness_mcp_tool_failed` or another fixed code. Servers own the redaction of their
+error text; the built-in image producer redacts credentials and bounds upstream text.
 Only built-in `molly_render_preview` maps exact Molly-owned font failures to
 `harness_render_font_failed` and known native capture/layout failures to
-`harness_render_failed`. Unknown server text and transport diagnostics remain
-`harness_mcp_tool_failed`; an external tool with the same name gains no exception.
-The built-in preview's validated asset-admission metadata maps to
-`harness_render_asset_too_large` or `harness_render_asset_format_unsupported`, with
-the bounded `media/<filename>` path and actual/allowed bytes or declared asset kind.
-The producer builds its text from the same validated fields. Invalid paths, unknown
-fields, forged error text and transport exceptions retain the generic failure;
-raw diagnostics never become asset metadata.
+`harness_render_failed`; other preview text is an ordinary tool error, and an external
+tool with the same name gains no exception. The built-in preview's validated
+asset-admission metadata maps to `harness_render_asset_too_large` or
+`harness_render_asset_format_unsupported`, with the bounded `media/<filename>` path and
+actual/allowed bytes or declared asset kind. The producer builds its text from the same
+validated fields. Invalid paths, unknown fields and forged error text confer no
+classification, and raw diagnostics never become asset metadata.
 These signals add no retry, repair or completion gate.
 The built-in MCP producer supplies its public contract revision. Image dispatch instead
 records the image connection revision frozen at run start; later configuration changes

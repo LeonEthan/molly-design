@@ -321,8 +321,8 @@ describe('molly_render_preview call', () => {
   it.each([
     ['Font failed to load', 'harness_render_font_failed'],
     ['Canvas capture did not settle on the saved artwork', 'harness_render_failed'],
-    ['SYNTHETIC_RENDER_SECRET', 'harness_mcp_tool_failed'],
-  ])('delivers only a safe Agent failure for the native refusal %s', async (error, code) => {
+    ['Synthetic native refusal', 'harness_mcp_tool_failed: Synthetic native refusal'],
+  ])('classifies only exact native refusals for the Agent: %s', async (error, code) => {
     await withAnsweringSocket(renderAnswer({ ok: false, error }), async (socketPath) => {
       await withServer({ renderHost: true, localControlSocketPath: socketPath }, async (client) => {
         const tools = await defineMcpTools({

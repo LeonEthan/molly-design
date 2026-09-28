@@ -49,6 +49,32 @@ const ContentSchema = z
   .max(64);
 type ModelContent = z.infer<typeof TextSchema> | z.infer<typeof ImageSchema>;
 
+export const MCP_TOOL_ERROR_MAX_CHARS = 8_000;
+const UNPRINTABLE = /(?![\n\t])[\p{Cc}\p{Cf}]/gu;
+
+/**
+ * A server-authored tool execution error (MCP `isError`), which the MCP spec
+ * asks clients to give the model. Thrown transport/SDK exceptions never become one.
+ */
+export class McpToolFailure extends Error {}
+
+function toolFailure(content: z.infer<typeof ContentSchema>): McpToolFailure {
+  const text = content
+    .flatMap((part) => (part.type === 'text' ? [part.text] : []))
+    .join('\n')
+    .replace(UNPRINTABLE, '')
+    .trim();
+  if (text.length === 0) return new McpToolFailure('harness_mcp_tool_failed');
+  if (text.length <= MCP_TOOL_ERROR_MAX_CHARS)
+    return new McpToolFailure(`harness_mcp_tool_failed: ${text}`);
+  const last = text.charCodeAt(MCP_TOOL_ERROR_MAX_CHARS - 1);
+  const cut =
+    last >= 0xd800 && last <= 0xdbff ? MCP_TOOL_ERROR_MAX_CHARS - 1 : MCP_TOOL_ERROR_MAX_CHARS;
+  return new McpToolFailure(
+    `harness_mcp_tool_failed: ${text.slice(0, cut)}\n[truncated after ${cut} of ${text.length} characters]`
+  );
+}
+
 /** Resource URIs are opaque MCP identities, never host filesystem or fetch targets. */
 export async function resolveMcpContent(
   result: unknown,
@@ -58,7 +84,7 @@ export async function resolveMcpContent(
     .object({ content: ContentSchema, isError: z.boolean().optional() })
     .safeParse(result);
   if (!parsed.success) throw new Error('harness_mcp_result_unsupported');
-  if (parsed.data.isError) throw new Error('harness_mcp_tool_failed');
+  if (parsed.data.isError) throw toolFailure(parsed.data.content);
   const output: ModelContent[] = [];
   let totalBytes = 0;
   const append = (part: ModelContent) => {

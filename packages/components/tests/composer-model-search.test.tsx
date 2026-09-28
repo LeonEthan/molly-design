@@ -88,7 +88,7 @@ describe('composer model picker search', () => {
     container = undefined;
   });
 
-  /* ── Desktop: value-row menu (Agent / Model / Reasoning) ── */
+  /* ── Desktop: value-row menu (Provider / Model / Reasoning) ── */
 
   type MenuProps = ComponentProps<typeof DesktopRunConfigMenu>;
   const desktopProps: MenuProps = {
@@ -152,32 +152,90 @@ describe('composer model picker search', () => {
     expect(rows()).toHaveLength(manyModels.length);
   });
 
-  it('selects the exact connection when two connections expose the same model', async () => {
+  /* Two connections exposing the same model name — the case the Provider row
+     and the connection group exist for. */
+  const studio = encodeMollyModelOption('studio', 'aurora/1');
+  const review = encodeMollyModelOption('review', 'aurora/1');
+  const nimbus = encodeMollyModelOption('review', 'nimbus/2');
+  const twoProviderModels = [
+    { value: studio, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+    { value: review, label: 'Aurora 1', description: 'aurora/1', group: 'Review' },
+    { value: nimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Review' },
+  ];
+  const mollyConfig: AgentConfigMeta = { ...agentConfig, name: 'Molly', agentType: 'molly' };
+  const mollyProps: Partial<MenuProps> = {
+    availableAgentConfigs: [mollyConfig],
+    agentSelection: { agentId: mollyConfig.id, machineId },
+  };
+
+  const clickRow = async (row: HTMLElement | undefined) => {
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  };
+  const radioRows = (content: Element | null) => [
+    ...(content?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []),
+  ];
+
+  it('scopes the Model row to the provider picked on the Provider row', async () => {
     const onModelChange = vi.fn();
-    const studio = encodeMollyModelOption('studio', 'aurora/1');
-    const review = encodeMollyModelOption('review', 'aurora/1');
-    await openModelMenu({
-      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
-      modelOptions: [
-        { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
-        { value: studio, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
-        { value: review, label: 'Aurora 1', description: 'aurora/1', group: 'Review' },
-      ],
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
       selectedModelId: studio,
       onModelChange,
     });
-    const submenu = submenuContent();
-    const rows = [...(submenu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
-    expect(rows.map((row) => row.textContent)).toEqual(['Aurora 1', 'Aurora 1']);
-    expect(submenu?.textContent).toContain('Studio');
-    expect(submenu?.textContent).toContain('Review');
-    expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
-    expect(submenu?.querySelector('[role="menuitem"]')).toBeNull();
-    await act(async () => {
-      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    /* The scope follows the selected model's provider. */
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    expect(providerRows.map((row) => row.textContent)).toEqual([
+      'All providers',
+      'Studio',
+      'Review',
+    ]);
+    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+
+    await clickRow(providerRows[2]);
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows.map((row) => row.textContent)).toEqual(['Aurora 1', 'Nimbus 2']);
+    /* Same label as the Studio model, but the exact Review value is picked. */
+    await clickRow(modelRows[0]);
     expect(onModelChange).toHaveBeenCalledWith(review);
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('restores the full grouped catalog from All providers', async () => {
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    await clickRow(providerRows[0]);
+    const submenu = await openSubmenu('Model');
+    expect(radioRows(submenu).map((row) => row.textContent)).toEqual([
+      'Aurora 1',
+      'Aurora 1',
+      'Nimbus 2',
+    ]);
+    expect(submenu?.textContent).toContain('Studio');
+    expect(submenu?.textContent).toContain('Review');
+    expect(submenu?.querySelector('[role="menuitem"]')).toBeNull();
+  });
+
+  it('hides the Provider row when every model comes from one provider', async () => {
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [twoProviderModels[0]!, twoProviderModels[2]!].map((option) => ({
+        ...option,
+        group: 'Studio',
+      })),
+      selectedModelId: studio,
+    });
+    const rootMenu = menuContents()[0];
+    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
+      el.textContent?.startsWith('Provider')
+    );
+    expect(providerRow).toBeUndefined();
   });
 
   it('shows an actionable empty state instead of offering the unselected sentinel', async () => {
@@ -206,7 +264,7 @@ describe('composer model picker search', () => {
     ],
   };
 
-  it('steps the reasoning level on the Reasoning row track', async () => {
+  it('lists reasoning levels as options on the Reasoning row', async () => {
     const onConfigOptionChange = vi.fn();
     await openRunConfigMenu({
       modelOptions: fewModels,
@@ -218,18 +276,12 @@ describe('composer model picker search', () => {
     expect(trigger?.textContent).toContain('Opus 5');
     expect(trigger?.textContent).toContain('Medium');
     expect(document.querySelector('[role="slider"]')).toBeNull();
-    await openSubmenu('Reasoning');
-    const slider = document.querySelector<HTMLElement>('[role="slider"]');
-    expect(slider?.getAttribute('aria-label')).toBe('Reasoning');
-    expect(slider?.getAttribute('aria-valuetext')).toBe('Medium');
-    await act(async () => {
-      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
-    });
+    const rows = radioRows(await openSubmenu('Reasoning'));
+    expect(rows.map((row) => row.textContent)).toEqual(['Low', 'Medium', 'High']);
+    expect(rows[1]?.getAttribute('aria-checked')).toBe('true');
+    await clickRow(rows[2]);
     expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
-    await act(async () => {
-      slider?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
-    });
-    expect(onConfigOptionChange).toHaveBeenLastCalledWith('reasoning_effort', 'low');
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
   it('picks a model from the Model row list, keeping the menu open', async () => {
@@ -249,42 +301,6 @@ describe('composer model picker search', () => {
     });
     expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
-  });
-
-  it('switches the whole agent from the Agent row when the caller offers it', async () => {
-    const onAgentChange = vi.fn();
-    const mollyConfig: AgentConfigMeta = {
-      ...agentConfig,
-      id: 'config-molly' as AgentConfigId,
-      name: 'Molly',
-      agentType: 'molly',
-    };
-    await openRunConfigMenu({
-      availableAgentConfigs: [agentConfig, mollyConfig],
-      onAgentChange,
-    });
-    const submenu = await openSubmenu('Agent');
-    const rows = [...(submenu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
-    expect(rows.map((row) => row.textContent)).toEqual(['Codex', 'Molly']);
-    expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
-    await act(async () => {
-      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onAgentChange).toHaveBeenCalledWith({ agentId: 'config-molly', machineId });
-  });
-
-  it('hides the Agent row when the surface cannot switch agents', async () => {
-    await openRunConfigMenu({
-      availableAgentConfigs: [
-        agentConfig,
-        { ...agentConfig, id: 'config-2' as AgentConfigId, name: 'Molly', agentType: 'molly' },
-      ],
-    });
-    const rootMenu = menuContents()[0];
-    const agentRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
-      el.textContent?.startsWith('Agent')
-    );
-    expect(agentRow).toBeUndefined();
   });
 
   it('narrows the list to fuzzy matches as the user types', async () => {
@@ -312,7 +328,8 @@ describe('composer model picker search', () => {
     const { search, rows } = await openModelMenu({
       availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
       modelOptions: connectionModels,
-      selectedModelId: connectionModels[0]?.value ?? null,
+      /* No selection yet: the Model row shows the whole catalog, grouped. */
+      selectedModelId: null,
     });
     const groupLabels = () =>
       [...(submenuContent()?.querySelectorAll('div') ?? [])]

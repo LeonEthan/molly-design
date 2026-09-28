@@ -72,11 +72,12 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Desktop run config is one flat menu of value rows: Recently used, Agent (only
-  where the caller offers switching — the landing; a session's agent is fixed),
-  Model (submenu list grouped by connection), Reasoning (submenu stepped effort
-  track), then Plan/Fast switches. Preserve opaque model ids and
-  model-specific reasoning capabilities. Roles are retired: no
+- Desktop run config is one flat menu of value rows: Recently used, Provider
+  (only with multiple user-configured connections; picking one scopes the
+  Model submenu), Model (submenu catalog with search), Reasoning (submenu
+  option list) — Plan/Fast/interaction/extra selectors no longer render here.
+  Preserve opaque model ids and model-specific reasoning capabilities. Roles
+  are retired: no
   selection, creation, prompt prefix, draft restoration or recent-Role replay.
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.

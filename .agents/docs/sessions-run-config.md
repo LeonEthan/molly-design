@@ -17,24 +17,26 @@ this page is the full text of the rules summarised there.
   reasoning muted) and `DesktopPermissionModeButton` (permission icon + full
   name; flat permission list). The run-config menu itself is one flat list of
   value rows, each opening a submenu: Recently-used whole configurations on top
-  when the caller has them, then Agent (only where the caller offers switching
-  — the chat landing passes `onAgentChange` plus the machine-scoped configs; a
-  session's agent is fixed, so the row stays hidden there), Model, and
-  Reasoning (only when the model offers more than one level). Provider
-  interaction modes and extra selects keep their own rows; Plan/Fast are
-  switch rows at the bottom. Explicit `_permission` config options take
-  precedence over legacy ACP modes; provider interaction modes stay inside the
-  run-config dropdown. Both buttons are also used by the desktop chat landing;
-  `DesktopRunConfigMenu` receives an explicit runtime metadata rather than
-  reading `SessionMeta`. Connection and model identities come from the
+  when the caller has them, then Provider (only when the user has configured
+  more than one model connection — picking one scopes the Model submenu to it,
+  and "All providers" restores the full grouped catalog; the builtin agent
+  ships no models of its own, so providers are exactly the user's connections),
+  Model (plain model names), and Reasoning (an option list, only when the model
+  offers more than one level). Plan, Fast, provider interaction modes and extra
+  selects no longer render in this menu. Explicit `_permission` config options
+  take precedence over legacy ACP modes in the separate permission button. Both
+  buttons are also used by the desktop chat landing; `DesktopRunConfigMenu`
+  receives an explicit runtime metadata rather than reading `SessionMeta`.
+  Connection and model identities come from the
   existing published catalog: display its labels and pass opaque option ids
   unchanged through the existing selection controller. Never reconstruct ids
   from display names or fetch a parallel catalog. The catalog names each Molly
   option by its model, carries the raw provider model id as its description and
-  the connection's display name as its ACP select `group` (#12). The Model row
-  names the selection `connection · model`, and its submenu lists one line per
-  model under a label per connection (only when two or more connections
-  exist); search also matches the id and the connection, neither of which a row
+  the connection's display name as its ACP select `group` (#12). The Provider
+  row is that grouping surfaced as a scope; the Model row and the pill name
+  just the model. When nothing is selected the Model submenu shows the whole
+  catalog grouped by connection (only when two or more connections exist);
+  search also matches the id and the connection, neither of which a row
   repeats. The catalog has no product default model, so the list offers no
   "Default" row and no reset. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
@@ -46,12 +48,9 @@ this page is the full text of the rules summarised there.
   creation-time DeepSeek-V4-Pro seed rather than the parent's visible model.
   Keep the warning tied to that agent/model combination and its upstream
   discussion rather than turning it into a global banner.
-  Model/Reasoning choices and Plan/Fast toggles keep the menu open so users
+  Model/Reasoning choices keep the menu open so users
   can adjust several values; Escape or outside interaction dismisses it through
-  the shared composer focus policy. The Reasoning submenu holds a stepped
-  effort track as plain submenu content, not a menu item: it owns its arrow,
-  Home and End keys so the menu's roving focus does not take them (ArrowLeft
-  would otherwise close the submenu).
+  the shared composer focus policy.
   Once the model list reaches `OPTION_SEARCH_MIN_OPTIONS`
   (`lib/fuzzy-option-filter.ts` — the same threshold and matcher the mobile
   sheet uses) the model list gains a fuzzy search row over

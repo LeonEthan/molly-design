@@ -2231,7 +2231,6 @@ function WorkspaceChatLanding({
         <DesktopRunConfigMenu
           agentSelection={selectedAgent}
           availableAgentConfigs={recentRunConfigAgentConfigs}
-          onAgentChange={setSelectedAgent}
           disabledReason={
             scopedMachineId
               ? undefined

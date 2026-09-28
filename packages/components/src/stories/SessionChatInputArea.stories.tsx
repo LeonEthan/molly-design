@@ -119,10 +119,8 @@ function StoryShell({
               claimNavigationFocus={claimNavigationFocus}
               sessionLocalProjectRootPath={null}
               isMachineRemoved={false}
-              isAgentBusy={isAgentBusy}
               canStopAgent={isAgentBusy}
               isDark
-              isEmptyConversation={false}
               selectedModeId={null}
               selectedModelId={null}
               modeOptions={[]}

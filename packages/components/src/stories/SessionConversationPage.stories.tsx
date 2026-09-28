@@ -892,12 +892,10 @@ function StoryInfoBar({ session }: { session: SessionMeta }) {
 
 function StoryComposer({
   session,
-  isAgentBusy,
   onSendMessage,
   initialInputText = 'Tighten the mobile spacing after the permission flow is stable.',
 }: {
   session: SessionMeta;
-  isAgentBusy: boolean;
   onSendMessage?: ComponentProps<typeof SessionChatInputArea>['onSendMessage'];
   initialInputText?: string;
 }) {
@@ -917,9 +915,7 @@ function StoryComposer({
       session={session}
       sessionLocalProjectRootPath="/Users/developer/Code/lody"
       isMachineRemoved={false}
-      isAgentBusy={isAgentBusy}
       isDark
-      isEmptyConversation={false}
       selectedModeId={mode}
       selectedModelId={model}
       modeOptions={selectorOptions.modeOptions}
@@ -1134,7 +1130,6 @@ function StoryShell({
                               <StoryInfoBar session={session} />
                               <StoryComposer
                                 session={session}
-                                isAgentBusy={isWorking}
                                 initialInputText={
                                   shareImage
                                     ? 'Can we compare the profiler results next?'

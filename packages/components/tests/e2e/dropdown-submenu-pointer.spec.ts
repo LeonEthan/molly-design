@@ -10,10 +10,10 @@ test('left-opening run-config submenu remains hit-testable and selects with a po
   );
 
   await page.getByRole('button', { name: 'Provider and model' }).click();
-  const trigger = page.getByRole('menuitem', { name: /^Interaction Mode(?:\s|$)/ });
+  const trigger = page.getByRole('menuitem', { name: /^Reasoning(?:\s|$)/ });
   await trigger.hover();
 
-  const option = page.getByRole('menuitemradio', { name: 'Plan', exact: true });
+  const option = page.getByRole('menuitemradio', { name: 'High', exact: true });
   await expect(option).toHaveAttribute('aria-checked', 'false');
   const submenu = option.locator('xpath=ancestor::*[@role="menu"][1]');
   await expect(submenu).toHaveAttribute('data-side', 'left');

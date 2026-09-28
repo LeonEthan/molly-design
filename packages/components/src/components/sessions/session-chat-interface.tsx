@@ -4888,12 +4888,10 @@ export const SessionChatInterface = memo(
                         session={session}
                         sessionLocalProjectRootPath={resolvedLocalProjectMeta?.rootPath ?? null}
                         isMachineRemoved={isMachineRemoved}
-                        isAgentBusy={isAgentBusy}
                         canStopAgent={canStopAgent}
                         isExternalHistoryRefreshing={isExternalHistoryRefreshing}
                         externalHistorySyncLabel={externalHistorySyncLabel}
                         isDark={isDark}
-                        isEmptyConversation={isEmptyConversation}
                         selectedModeId={selectedModeId}
                         selectedModelId={selectedModelId}
                         sessionConfigReady={sessionDocReady}
@@ -4941,9 +4939,6 @@ export const SessionChatInterface = memo(
                           session.design
                             ? selectDesignAgentConfigsForMachine(agentConfigs, session.machineId)
                             : undefined
-                        }
-                        allowDesignAgentSwitch={
-                          !!session.design && !isSessionWorking && activeAssistantTurnId == null
                         }
                         onNavigateToComment={onNavigateToComment}
                         onCommentReferencesChange={onCommentReferencesChange}

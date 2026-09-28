@@ -325,6 +325,122 @@ describe('DropdownMenu', () => {
     expect(document.activeElement).not.toBe(permission);
   });
 
+  it('withholds an ambiguous leave and resolves it against the next pointer input', async () => {
+    /* A background re-render can shift the open menu under a stationary
+       pointer; the browser then fires a leave whose coordinates may be stale
+       (observed: a point beyond the viewport, or inside the just-opened
+       submenu the pointer never reached). The leave is indistinguishable from
+       a genuine teleport-leave at fire time, so it is withheld from Radix and
+       resolved by the NEXT real input: back over the row or into the submenu
+       keeps it open; outside the menu envelope closes it. */
+    const originalElementFromPoint = document.elementFromPoint;
+    let hitResult: Element | null = null;
+    document.elementFromPoint = () => hitResult;
+    try {
+      await act(async () => {
+        root?.render(
+          <DropdownMenu>
+            <DropdownMenuTrigger>Shift menu</DropdownMenuTrigger>
+            <DropdownMenuContent data-testid="shift-root">
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Hover submenu</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem>Hover nested item</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+              <DropdownMenuItem>Sibling row</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        );
+      });
+
+      const trigger = getButton('Shift menu');
+      await act(async () => {
+        trigger.dispatchEvent(
+          new TestPointerEvent('pointerdown', {
+            bubbles: true,
+            button: 0,
+            pointerType: 'mouse',
+          })
+        );
+      });
+
+      const subTrigger = getMenuItem('Hover submenu');
+      hitResult = subTrigger;
+      await act(async () => {
+        subTrigger.dispatchEvent(
+          new TestPointerEvent('pointerover', {
+            bubbles: true,
+            pointerType: 'mouse',
+            clientX: 200,
+            clientY: 70,
+          })
+        );
+        subTrigger.focus();
+      });
+      expect(document.body.textContent).toContain('Hover nested item');
+
+      // Stale leave: coordinates far away, but the last observed position
+      // still hit-tests the row. The submenu must stay open.
+      await act(async () => {
+        subTrigger.dispatchEvent(
+          new TestPointerEvent('pointerout', {
+            bubbles: true,
+            pointerType: 'mouse',
+            clientX: 1200,
+            clientY: 690,
+          })
+        );
+      });
+      expect(document.body.textContent).toContain('Hover nested item');
+
+      // The next real input lands inside the submenu: the departure is
+      // discarded and the submenu stays open.
+      const nestedItem = getMenuItem('Hover nested item');
+      hitResult = nestedItem;
+      await act(async () => {
+        document.dispatchEvent(
+          new TestPointerEvent('pointermove', {
+            bubbles: true,
+            pointerType: 'mouse',
+            clientX: 400,
+            clientY: 70,
+          })
+        );
+      });
+      expect(document.body.textContent).toContain('Hover nested item');
+
+      // A second stale leave, then a move outside the menu envelope: a
+      // genuine exit closes the submenu.
+      hitResult = subTrigger;
+      await act(async () => {
+        subTrigger.dispatchEvent(
+          new TestPointerEvent('pointerout', {
+            bubbles: true,
+            pointerType: 'mouse',
+            clientX: 1200,
+            clientY: 690,
+          })
+        );
+      });
+      expect(document.body.textContent).toContain('Hover nested item');
+      hitResult = document.body;
+      await act(async () => {
+        document.dispatchEvent(
+          new TestPointerEvent('pointermove', {
+            bubbles: true,
+            pointerType: 'mouse',
+            clientX: 20,
+            clientY: 20,
+          })
+        );
+      });
+      expect(document.body.textContent).not.toContain('Hover nested item');
+    } finally {
+      document.elementFromPoint = originalElementFromPoint;
+    }
+  });
+
   it('touch tap opens the menu without leaking the synthetic pointerdown to ancestors', async () => {
     // Simulates a vaul Drawer.Content ancestor: it grabs the pointer in
     // onPointerDown via setPointerCapture, which throws NotFoundError for a

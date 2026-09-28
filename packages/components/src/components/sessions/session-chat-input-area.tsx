@@ -363,13 +363,10 @@ export interface SessionChatInputAreaProps {
   session: SessionMeta;
   sessionLocalProjectRootPath: string | null;
   isMachineRemoved: boolean;
-  isAgentBusy: boolean;
   canStopAgent?: boolean;
   isExternalHistoryRefreshing?: boolean;
   externalHistorySyncLabel?: string;
   isDark: boolean;
-  isEmptyConversation: boolean;
-  allowDesignAgentSwitch?: boolean;
   designAgentConfigs?: readonly AgentConfigMeta[];
   selectedModeId: string | null;
   selectedModelId: string | null;
@@ -460,13 +457,10 @@ export const SessionChatInputArea = memo(
       claimNavigationFocus,
       sessionLocalProjectRootPath,
       isMachineRemoved,
-      isAgentBusy,
       canStopAgent = false,
       isExternalHistoryRefreshing = false,
       externalHistorySyncLabel,
       isDark,
-      isEmptyConversation,
-      allowDesignAgentSwitch = false,
       designAgentConfigs,
       selectedModeId,
       selectedModelId,
@@ -1982,8 +1976,8 @@ export const SessionChatInputArea = memo(
       [pendingFiles]
     );
     /* Desktop mirrors the mobile consolidation with TWO buttons: one
-       run-config dropdown (direct model choices, reasoning + Plan/Fast
-       toggles) and a standalone permission-mode button showing the full
+       run-config dropdown (Provider/Model/Reasoning value rows) and a
+       standalone permission-mode button showing the full
        mode name. The old bottom bar (machine chip + workdir + mode
        selectors) is gone — machine/workdir identity moved to the header
        "…" menu, so the composer is a single footer row. */
@@ -1996,9 +1990,6 @@ export const SessionChatInputArea = memo(
               : null
           }
           availableAgentConfigs={designAgentConfigs}
-          agentLocked={
-            !(isEmptyConversation || allowDesignAgentSwitch) || submissionPending || isAgentBusy
-          }
           fallbackAgent={{ cliType: session.cliType, agentType: session.agentType }}
           modelOptions={modelOptions}
           selectedModelId={selectedModelId}

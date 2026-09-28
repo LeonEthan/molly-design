@@ -26,8 +26,8 @@ import type { AcpSessionSelectOption } from '@/components/shared/acp-session-sel
 
 /**
  * The desktop composer's two consolidated footer buttons: the run-config
- * dropdown (Agent / Model / Reasoning value rows, each opening a submenu, plus
- * Plan / Fast switch rows) and the standalone permission-mode button — both on
+ * dropdown (Provider / Model / Reasoning value rows, each opening a submenu)
+ * and the standalone permission-mode button — both on
  * the standard DropdownMenu surface (distinct background + layered float
  * shadow). The full in-context page is `SessionConversationPage.stories`
  * (`DesktopIdle`).
@@ -197,13 +197,7 @@ const grokSelectors: AcpConfigOptionSelector[] = [
   },
 ];
 
-function StoryShell({
-  isEmptyConversation,
-  machineSelected = true,
-}: {
-  isEmptyConversation: boolean;
-  machineSelected?: boolean;
-}) {
+function StoryShell({ machineSelected = true }: { machineSelected?: boolean }) {
   const store = useMemo(() => {
     const s = createStore();
     s.set(
@@ -213,7 +207,6 @@ function StoryShell({
     return s;
   }, []);
 
-  const [agentId, setAgentId] = useState(codexId);
   const [model, setModel] = useState<string | null>(modelOptions[0]?.value ?? null);
   const [mode, setMode] = useState<string | null>(modeOptions[0]?.value ?? null);
   const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>(() =>
@@ -226,11 +219,9 @@ function StoryShell({
         {/* Mimic the composer footer row the buttons live in. */}
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
-            agentSelection={machineSelected ? { agentId, machineId } : null}
+            agentSelection={machineSelected ? { agentId: codexId, machineId } : null}
             availableAgentConfigs={agents}
-            onAgentChange={(selection) => setAgentId(selection.agentId as typeof codexId)}
             disabledReason={machineSelected ? undefined : 'Select a machine first'}
-            agentLocked={!isEmptyConversation}
             modelOptions={modelOptions}
             selectedModelId={model}
             onModelChange={setModel}
@@ -296,7 +287,6 @@ function GrokConfigShell() {
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
             agentSelection={{ agentId: grokId, machineId }}
-            agentLocked
             modelOptions={[]}
             selectedModelId={null}
             configOptionSelectors={grokSelectors}
@@ -334,7 +324,6 @@ function DeepSeekWarningShell() {
           <DesktopRunConfigMenu
             agentSelection={{ agentId: deepseekId, machineId }}
             availableAgentConfigs={agents}
-            agentLocked
             modelOptions={[
               {
                 value: 'deepseek-v4-flash',
@@ -455,37 +444,29 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LockedAgent: Story = { args: { isEmptyConversation: false } };
-export const EmptyConversationAgentPickable: Story = { args: { isEmptyConversation: true } };
+export const CodexAgent: Story = {};
 export const MachineRequired: Story = {
-  args: { isEmptyConversation: true, machineSelected: false },
+  args: { machineSelected: false },
 };
-export const GrokInteractionAndPermission: Story = {
-  args: { isEmptyConversation: false },
+export const GrokConfig: Story = {
   render: () => <GrokConfigShell />,
 };
 export const DeepSeekDelegationWarning: Story = {
-  args: { isEmptyConversation: false },
   render: () => <DeepSeekWarningShell />,
 };
 export const MachineScope: Story = {
-  args: { isEmptyConversation: true },
   render: () => <MachineScopeShell />,
 };
 export const MachineScopeEmpty: Story = {
-  args: { isEmptyConversation: true },
   render: () => <EmptyMachineScopeShell />,
 };
 export const LeftOpeningSubmenu: Story = {
-  args: { isEmptyConversation: true },
   render: () => <LeftOpeningSubmenuShell />,
 };
 
 export const ProviderAndModel: Story = {
-  args: { isEmptyConversation: true },
   render: () => <ProviderModelShell />,
 };
 export const NoModelConnections: Story = {
-  args: { isEmptyConversation: true },
   render: () => <ProviderModelShell empty />,
 };

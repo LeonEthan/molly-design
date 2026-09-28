@@ -3,9 +3,10 @@
  *
  * Three separable pieces, kept in one module because they share one contract:
  *
- * 1. **Build** the upstream Images request from the resolved connection.
+ * 1. **Build** the upstream request from the resolved connection, in the wire
+ *    protocol the user chose: OpenAI Images or DashScope (#33).
  * 2. **Read** the upstream answer into image bytes — `b64_json` in the response
- *    body, or a `url` we fetch once. Neither path retries: a paid call that
+ *    body, or a URL we fetch once. Neither path retries: a paid call that
  *    failed is a failure the user decides what to do about.
  * 3. **Land** those bytes in the session workdir as a content-addressed asset
  *    the agent can reference from its YAML artwork.
@@ -28,8 +29,10 @@
  */
 
 import {
+  IMAGE_CONNECTION_DASHSCOPE_GENERATION_PATH,
   IMAGE_CONNECTION_GENERATIONS_PATH,
   IMAGE_CONNECTION_EDITS_PATH,
+  imageConnectionProtocol,
   isImageConnectionReady,
   imageConnectionUrl,
   type ImageConnectionSettings,
@@ -59,6 +62,15 @@ export const IMAGE_GENERATION_MAX_PIXELS = 64_000_000;
 const UPSTREAM_ERROR_CHARS = 300;
 const MAX_SIZE_SPEC_CHARS = 32;
 
+/**
+ * Alibaba Model Studio's documented Qwen Image input limits (#33): at most three
+ * input images of at most 10 MB each. Output sizes and pixel bounds vary by
+ * model, so the upstream judges those.
+ */
+export const DASHSCOPE_EDIT_MAX_INPUTS = 3;
+export const DASHSCOPE_MAX_INPUT_BYTES = 10 * 1024 * 1024;
+const DASHSCOPE_SIZE_PATTERN = /^([1-9]\d{0,4})[x*]([1-9]\d{0,4})$/;
+
 /** The asset directory a YAML artwork references as `media/...`. */
 export const DESIGN_MEDIA_DIRNAME = 'media';
 
@@ -77,7 +89,10 @@ export class ImageGenerationError extends Error {
 export interface GenerateImageOptions {
   settings: ImageConnectionSettings;
   prompt: string;
-  /** Optional upstream `size` (e.g. `1024x1024`). Passed through verbatim. */
+  /**
+   * Optional upstream `size` (e.g. `1024x1024`). OpenAI Images receives it
+   * verbatim; DashScope receives the same dimensions as `1024*1024`.
+   */
   size?: string;
   /** Optional upstream `background`; `transparent` needs an alpha-capable output format. */
   background?: ImageBackground;
@@ -139,6 +154,12 @@ async function requestImageBytes(
         response.bytes,
         options.settings.apiKey
       )}`
+    );
+  }
+  if (imageConnectionProtocol(options.settings) === 'dashscope') {
+    return await downloadGeneratedImage(
+      options,
+      parseDashScopeBody(response.bytes, options.settings.apiKey)
     );
   }
   const payload = parseGenerationBody(response.bytes, options.settings.apiKey);
@@ -227,16 +248,19 @@ export function buildImageGenerationRequest(
     'settings' | 'prompt' | 'size' | 'background' | 'outputFormat' | 'signal'
   >
 ): ImageHttpRequest {
+  if (imageConnectionProtocol(options.settings) === 'dashscope') {
+    return dashScopeRequest(options, []);
+  }
   return imageJsonRequest(options, IMAGE_CONNECTION_GENERATIONS_PATH, imageRequestFields(options));
 }
 
+type ImageRequestOptions = Pick<
+  GenerateImageOptions,
+  'settings' | 'prompt' | 'size' | 'background' | 'outputFormat'
+>;
+
 /** Shared configuration/prompt/option validation for both paid endpoints. */
-function imageRequestFields(
-  options: Pick<
-    GenerateImageOptions,
-    'settings' | 'prompt' | 'size' | 'background' | 'outputFormat'
-  >
-): Record<string, unknown> {
+function imageRequestFields(options: ImageRequestOptions): Record<string, unknown> {
   if (!isImageConnectionReady(options.settings)) {
     throw new ImageGenerationError(
       'Image connection is incomplete or disabled: configure URL, API key and an explicit model in Molly settings.'
@@ -267,6 +291,56 @@ function imageRequestFields(
     ...(options.background === undefined ? {} : { background: options.background }),
     ...(options.outputFormat === undefined ? {} : { output_format: options.outputFormat }),
   };
+}
+
+/**
+ * DashScope's native request (#33). The protocol has no background or output
+ * format fields and returns a PNG, so only choices a PNG with the provider's
+ * default background already satisfies are accepted. The prompt is sent as
+ * written: `prompt_extend` defaults to on upstream and would otherwise rewrite it.
+ */
+function dashScopeRequest(
+  options: ImageRequestOptions & Pick<GenerateImageOptions, 'signal'>,
+  images: string[]
+): ImageHttpRequest {
+  const fields = imageRequestFields(options);
+  if (options.background !== undefined && options.background !== 'auto') {
+    throw new ImageGenerationError(
+      `background "${options.background}" is not supported over DashScope; omit it. No image request was sent.`
+    );
+  }
+  if (options.outputFormat !== undefined && options.outputFormat !== 'png') {
+    throw new ImageGenerationError(
+      'DashScope returns PNG only; omit output_format or use png. No image request was sent.'
+    );
+  }
+  let size: string | undefined;
+  if (typeof fields.size === 'string') {
+    const match = DASHSCOPE_SIZE_PATTERN.exec(fields.size);
+    if (match === null) {
+      throw new ImageGenerationError(
+        'size must be WIDTHxHEIGHT or WIDTH*HEIGHT in pixels, for example 1024x1024. No image request was sent.'
+      );
+    }
+    size = `${match[1]}*${match[2]}`;
+  }
+  return imageJsonRequest(options, IMAGE_CONNECTION_DASHSCOPE_GENERATION_PATH, {
+    model: options.settings.model,
+    input: {
+      messages: [
+        {
+          role: 'user',
+          content: [...images.map((image) => ({ image })), { text: options.prompt }],
+        },
+      ],
+    },
+    parameters: {
+      n: 1,
+      prompt_extend: false,
+      watermark: false,
+      ...(size === undefined ? {} : { size }),
+    },
+  });
 }
 
 function imageJsonRequest(
@@ -316,9 +390,15 @@ export async function editImageBytes(options: EditImageOptions): Promise<Uint8Ar
 export async function buildImageEditRequest(options: EditImageOptions): Promise<ImageHttpRequest> {
   options.signal?.throwIfAborted();
   const fields = imageRequestFields(options);
-  if (options.images.length < 1 || options.images.length > IMAGE_EDIT_MAX_INPUTS) {
+  const dashScope = imageConnectionProtocol(options.settings) === 'dashscope';
+  const maxInputs = dashScope ? DASHSCOPE_EDIT_MAX_INPUTS : IMAGE_EDIT_MAX_INPUTS;
+  const maxInputBytes = dashScope ? DASHSCOPE_MAX_INPUT_BYTES : IMAGE_GENERATION_MAX_IMAGE_BYTES;
+  if (options.images.length < 1 || options.images.length > maxInputs) {
+    throw new ImageGenerationError(`edit requires 1 to ${maxInputs} source/reference images`);
+  }
+  if (dashScope && options.mask !== undefined) {
     throw new ImageGenerationError(
-      `edit requires 1 to ${IMAGE_EDIT_MAX_INPUTS} source/reference images`
+      'masks are not supported over DashScope; describe the region in the prompt instead. No image request was sent.'
     );
   }
   const root = path.resolve(options.workdir);
@@ -351,9 +431,9 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
     try {
       const stat = await handle.stat();
       options.signal?.throwIfAborted();
-      if (!stat.isFile() || stat.size === 0 || stat.size > IMAGE_GENERATION_MAX_IMAGE_BYTES) {
+      if (!stat.isFile() || stat.size === 0 || stat.size > maxInputBytes) {
         throw new ImageGenerationError(
-          `image input must be a nonempty regular file no larger than ${IMAGE_GENERATION_MAX_IMAGE_BYTES} bytes`
+          `image input must be a nonempty regular file no larger than ${maxInputBytes} bytes`
         );
       }
       total += stat.size;
@@ -408,6 +488,7 @@ export async function buildImageEditRequest(options: EditImageOptions): Promise<
       throw new ImageGenerationError('mask dimensions must match the first source image');
     }
   }
+  if (dashScope) return dashScopeRequest(options, dataUrls);
   // specs/generative-layered-design-workflow.md: relays dropped multipart fields; JSON is verified.
   const [mask] = options.mask === undefined ? [] : dataUrls.splice(-1);
   return imageJsonRequest(options, IMAGE_CONNECTION_EDITS_PATH, {
@@ -437,6 +518,34 @@ function parseGenerationBody(bytes: Uint8Array, credential: string): GenerationP
   const base64 = typeof first.b64_json === 'string' ? first.b64_json : undefined;
   const url = typeof first.url === 'string' && first.url.length > 0 ? first.url : undefined;
   return { ...(base64 === undefined ? {} : { base64 }), ...(url === undefined ? {} : { url }) };
+}
+
+/** The first image URL of a DashScope `output.choices[0].message.content` answer. */
+function parseDashScopeBody(bytes: Uint8Array, credential: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new ImageGenerationError('image generation failed: the response was not valid JSON');
+  }
+  const output = (parsed as { output?: { choices?: unknown } } | null)?.output;
+  const choice = Array.isArray(output?.choices)
+    ? (output.choices[0] as { message?: { content?: unknown } } | undefined)
+    : undefined;
+  const content = choice?.message?.content;
+  const image = Array.isArray(content)
+    ? content.find(
+        (item): item is { image: string } =>
+          typeof (item as { image?: unknown } | null)?.image === 'string' &&
+          (item as { image: string }).image.length > 0
+      )
+    : undefined;
+  if (image === undefined) {
+    throw new ImageGenerationError(
+      `image generation failed: the response carried no image${describeBody(bytes, credential)}`
+    );
+  }
+  return image.image;
 }
 
 function decodeBase64Payload(base64: string): Uint8Array {
@@ -470,14 +579,26 @@ function describeBody(bytes: Uint8Array, credential: string): string {
   const text = new TextDecoder().decode(bytes.slice(0, UPSTREAM_ERROR_CHARS * 4));
   let message = text.trim();
   try {
-    const parsed = JSON.parse(text) as { error?: { message?: unknown } };
-    const upstream = parsed?.error?.message;
+    const parsed = JSON.parse(text) as {
+      error?: { message?: unknown };
+      code?: unknown;
+      message?: unknown;
+    };
+    const upstream = parsed?.error?.message ?? dashScopeError(parsed);
     if (typeof upstream === 'string' && upstream.trim().length > 0) message = upstream.trim();
   } catch {
     // Not JSON; the raw snippet is the honest answer.
   }
   if (message.length === 0) return '';
   return `: ${redactCredential(message, credential).slice(0, UPSTREAM_ERROR_CHARS)}`;
+}
+
+/** DashScope reports failures as top-level `{ request_id, code, message }`. */
+function dashScopeError(parsed: { code?: unknown; message?: unknown } | null): string | undefined {
+  if (typeof parsed?.message !== 'string') return undefined;
+  return typeof parsed.code === 'string' && parsed.code.length > 0
+    ? `${parsed.code}: ${parsed.message}`
+    : parsed.message;
 }
 
 const EXTENSION_BY_MIME: Record<StaticV1ImageMimeType, string> = {

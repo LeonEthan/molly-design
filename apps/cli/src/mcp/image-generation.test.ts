@@ -773,3 +773,161 @@ it('rejects malformed base64 rather than silently normalizing provider output', 
     await expect(readdir(workdir)).resolves.toEqual([]);
   }
 });
+
+describe('DashScope protocol', () => {
+  const dashScope: ImageConnectionSettings = {
+    ...settings,
+    protocol: 'dashscope',
+    baseUrl: 'https://dashscope.example.com/api/v1',
+    model: 'qwen-image-2.0',
+  };
+  const endpoint =
+    'https://dashscope.example.com/api/v1/services/aigc/multimodal-generation/generation';
+  const resultUrl = 'https://results.example.com/ds_1.png?Expires=1&Signature=synthetic';
+  const imageAnswer = jsonResponse(200, {
+    output: {
+      choices: [
+        {
+          finish_reason: 'stop',
+          message: { role: 'assistant', content: [{ image: resultUrl }] },
+        },
+      ],
+    },
+    usage: { width: 2, height: 3, image_count: 1 },
+    request_id: 'synthetic-request',
+  });
+  const refuseDispatch: ImageHttpTransport = async () => {
+    throw new Error('unexpected paid dispatch');
+  };
+
+  it('sends the native request with the prompt unextended and size as WIDTH*HEIGHT', () => {
+    const request = buildImageGenerationRequest({
+      settings: dashScope,
+      prompt: 'a red kite',
+      size: '1536x1024',
+    });
+    expect(request.url).toBe(endpoint);
+    expect(request.headers.authorization).toBe(`Bearer ${SECRET_KEY}`);
+    expect(JSON.parse(request.body ?? '{}')).toEqual({
+      model: 'qwen-image-2.0',
+      input: { messages: [{ role: 'user', content: [{ text: 'a red kite' }] }] },
+      parameters: { n: 1, prompt_extend: false, watermark: false, size: '1536*1024' },
+    });
+    const native = buildImageGenerationRequest({
+      settings: dashScope,
+      prompt: 'p',
+      size: '1024*1024',
+    });
+    expect(JSON.parse(native.body ?? '{}').parameters.size).toBe('1024*1024');
+  });
+
+  it.each([
+    [{ size: '1024 by 1024' }, /WIDTHxHEIGHT/],
+    [{ background: 'transparent' as const }, /background "transparent"/],
+    [{ outputFormat: 'jpeg' as const }, /PNG only/],
+  ])('refuses %o before any paid request', (option, message) => {
+    expect(() =>
+      buildImageGenerationRequest({ settings: dashScope, prompt: 'p', ...option })
+    ).toThrow(message);
+  });
+
+  it('downloads the returned URL without the credential and lands the image', async () => {
+    const png = pngFixture(2, 3);
+    const headersByUrl = new Map<string, Record<string, string>>();
+    const workdir = await makeWorkdir();
+    const asset = await generateImageAsset({
+      settings: dashScope,
+      prompt: 'p',
+      workdir,
+      transport: async (request) => {
+        headersByUrl.set(request.url, request.headers);
+        return request.url === endpoint ? imageAnswer : bytesResponse(200, png);
+      },
+    });
+    expect(asset).toMatchObject({ width: 2, height: 3, sha256: sha256Of(png) });
+    expect(headersByUrl.get(resultUrl)).not.toHaveProperty('authorization');
+  });
+
+  it('sends ordered source images before the instruction and refuses unsupported edits', async () => {
+    const workdir = await makeWorkdir();
+    const first = pngFixture(2, 3);
+    const second = pngFixture(3, 2);
+    await writeFile(path.join(workdir, 'first.png'), first);
+    await writeFile(path.join(workdir, 'second.png'), second);
+    const edit = { settings: dashScope, prompt: 'merge them', workdir };
+    await expect(
+      editImageAsset({
+        ...edit,
+        images: ['first.png'],
+        mask: 'first.png',
+        transport: refuseDispatch,
+      })
+    ).rejects.toThrow(/masks are not supported/);
+    await expect(
+      editImageAsset({
+        ...edit,
+        images: ['first.png', 'second.png', 'first.png', 'second.png'],
+        transport: refuseDispatch,
+      })
+    ).rejects.toThrow('edit requires 1 to 3');
+    const asset = await editImageAsset({
+      ...edit,
+      images: ['first.png', 'second.png'],
+      transport: async (request) => {
+        if (request.url !== endpoint) return bytesResponse(200, first);
+        expect(JSON.parse(request.body ?? '{}').input.messages[0].content).toEqual([
+          { image: dataUrl('image/png', first) },
+          { image: dataUrl('image/png', second) },
+          { text: 'merge them' },
+        ]);
+        return imageAnswer;
+      },
+    });
+    expect(asset).toMatchObject({ width: 2, height: 3 });
+  });
+
+  it('refuses a source over the documented 10 MB input limit before dispatch', async () => {
+    const workdir = await makeWorkdir();
+    await writeFile(path.join(workdir, 'large.png'), Buffer.alloc(10 * 1024 * 1024 + 1));
+    await expect(
+      editImageAsset({
+        settings: dashScope,
+        prompt: 'p',
+        workdir,
+        images: ['large.png'],
+        transport: refuseDispatch,
+      })
+    ).rejects.toThrow(`no larger than ${10 * 1024 * 1024} bytes`);
+  });
+
+  it('reports the upstream code and message without the credential', async () => {
+    const workdir = await makeWorkdir();
+    const failure = generateImageAsset({
+      settings: dashScope,
+      prompt: 'p',
+      workdir,
+      transport: async () =>
+        jsonResponse(400, {
+          request_id: 'synthetic',
+          code: 'InvalidParameter',
+          message: `Model not exist; key ${SECRET_KEY}`,
+        }),
+    });
+    await expect(failure).rejects.toThrow(
+      'image generation failed: HTTP 400: InvalidParameter: Model not exist; key [redacted]'
+    );
+  });
+
+  it('refuses a successful answer that carries no image', async () => {
+    const workdir = await makeWorkdir();
+    await expect(
+      generateImageAsset({
+        settings: dashScope,
+        prompt: 'p',
+        workdir,
+        transport: async () =>
+          jsonResponse(200, { output: { choices: [{ message: { content: [{ text: 'no' }] } }] } }),
+      })
+    ).rejects.toThrow('the response carried no image');
+  });
+});

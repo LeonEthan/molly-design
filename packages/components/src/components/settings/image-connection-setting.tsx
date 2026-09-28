@@ -4,12 +4,19 @@ import {
   type ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
-import { KeyRound, Link2, Loader2, Plug, Sparkles, Trash2 } from 'lucide-react';
-import { IMAGE_CONNECTION_MAX_MODEL_LENGTH, normalizeImageConnectionBaseUrl } from '@molly/shared';
+import { Cable, KeyRound, Link2, Loader2, Plug, Sparkles, Trash2 } from 'lucide-react';
+import {
+  IMAGE_CONNECTION_MAX_MODEL_LENGTH,
+  IMAGE_CONNECTION_PROTOCOLS,
+  imageConnectionProtocol,
+  normalizeImageConnectionBaseUrl,
+  type ImageConnectionProtocol,
+} from '@molly/shared';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Switch } from '@/ui/switch';
 import { Field, Section } from './form-primitives';
 
@@ -17,11 +24,28 @@ import { Field, Section } from './form-primitives';
 
 type ImageConnectionView = Pick<
   ProtectedImageConnection,
-  'enabled' | 'baseUrl' | 'model' | 'hasApiKey'
+  'enabled' | 'protocol' | 'baseUrl' | 'model' | 'hasApiKey'
 >;
+
+const PROTOCOL_COPY: Record<
+  ImageConnectionProtocol,
+  { label: string; baseUrlHint: string; placeholder: string }
+> = {
+  'openai-images': {
+    label: 'settings.imageConnection.protocols.openaiImages',
+    baseUrlHint: 'settings.imageConnection.baseUrlHint',
+    placeholder: 'https://api.openai.com/v1',
+  },
+  dashscope: {
+    label: 'settings.imageConnection.protocols.dashscope',
+    baseUrlHint: 'settings.imageConnection.baseUrlHintDashscope',
+    placeholder: 'https://dashscope.aliyuncs.com/api/v1',
+  },
+};
 
 export type ImageConnectionFormDraft = {
   enabled: boolean;
+  protocol: ImageConnectionProtocol;
   baseUrl: string;
   /**
    * What the user typed. Empty means "keep whatever is stored" — the stored key
@@ -40,10 +64,11 @@ export type ImageConnectionTestState =
   | { phase: 'error'; message: string };
 
 export function createImageConnectionFormDraft(
-  stored: Pick<ImageConnectionView, 'enabled' | 'baseUrl' | 'model'> | undefined
+  stored: Pick<ImageConnectionView, 'enabled' | 'protocol' | 'baseUrl' | 'model'> | undefined
 ): ImageConnectionFormDraft {
   return {
     enabled: stored?.enabled ?? true,
+    protocol: imageConnectionProtocol(stored ?? {}),
     baseUrl: stored?.baseUrl ?? '',
     apiKey: '',
     clearApiKey: false,
@@ -59,6 +84,7 @@ export function buildImageConnectionSave(
   const parsed = SaveProtectedImageConnectionSchema.safeParse({
     expectedRevision: stored?.revision,
     enabled: draft.enabled,
+    protocol: draft.protocol,
     baseUrl: draft.baseUrl.trim(),
     model: draft.model.trim(),
     apiKey: draft.apiKey.trim() || undefined,
@@ -87,6 +113,7 @@ const isDirty = (
   const initial = createImageConnectionFormDraft(stored);
   return (
     draft.enabled !== initial.enabled ||
+    draft.protocol !== initial.protocol ||
     draft.model.trim() !== initial.model ||
     draft.baseUrl.trim() !== initial.baseUrl ||
     draft.clearApiKey ||
@@ -137,13 +164,16 @@ export function ImageConnectionForm({
     stored && stored.baseUrl !== draft.baseUrl.trim() && !draft.clearApiKey && !draft.apiKey.trim()
   );
   const testing = testState.phase === 'testing';
+  const protocolCopy = PROTOCOL_COPY[draft.protocol];
   const testBlockedReason = !stored
     ? t('settings.imageConnection.testNeedsSaved')
     : dirty
       ? t('settings.imageConnection.testNeedsSave')
       : !ready
         ? t('settings.imageConnection.testNeedsComplete')
-        : null;
+        : draft.protocol === 'dashscope'
+          ? t('settings.imageConnection.testUnsupportedDashscope')
+          : null;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -177,13 +207,42 @@ export function ImageConnectionForm({
           </div>
 
           <Field
+            htmlFor={`${fieldId}-protocol`}
+            label={t('settings.imageConnection.protocol')}
+            icon={<Cable className="h-3.5 w-3.5" aria-hidden="true" />}
+            hint={t('settings.imageConnection.protocolHint')}
+          >
+            <Select
+              value={draft.protocol}
+              disabled={saving}
+              onValueChange={(protocol) =>
+                setDraft((current) => ({
+                  ...current,
+                  protocol: protocol as ImageConnectionProtocol,
+                }))
+              }
+            >
+              <SelectTrigger id={`${fieldId}-protocol`} className="text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {IMAGE_CONNECTION_PROTOCOLS.map((protocol) => (
+                  <SelectItem key={protocol} value={protocol} className="text-xs">
+                    {t(PROTOCOL_COPY[protocol].label)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+
+          <Field
             htmlFor={`${fieldId}-base-url`}
             label={t('settings.imageConnection.baseUrl')}
             icon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
             hint={
               issues.baseUrl && draft.baseUrl.trim().length > 0
                 ? t('settings.imageConnection.invalidBaseUrl')
-                : t('settings.imageConnection.baseUrlHint')
+                : t(protocolCopy.baseUrlHint)
             }
           >
             <Input
@@ -192,7 +251,7 @@ export function ImageConnectionForm({
               autoComplete="off"
               spellCheck={false}
               className="font-mono text-xs"
-              placeholder="https://api.openai.com/v1"
+              placeholder={protocolCopy.placeholder}
               value={draft.baseUrl}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, baseUrl: event.target.value, apiKey: '' }))

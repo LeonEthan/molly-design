@@ -10,6 +10,9 @@ export async function probeProtectedImageConnection(
     const { connection } = await store.imageSnapshot()
     if (!connection || connection.revision !== expectedRevision)
       return { ok: false, error: 'image_connection_revision_conflict' }
+    // #33: DashScope has no free discovery endpoint; every image request there is billed.
+    if (connection.protocol === 'dashscope')
+      return { ok: false, error: 'image_connection_probe_unsupported' }
     const { apiKey } = await store.acquireImageForRun(connection.id, connection.revision)
     const response = await transport(`${connection.baseUrl.replace(/\/+$/, '')}/models`, {
       headers: { authorization: `Bearer ${apiKey}`, accept: 'application/json' },

@@ -7,6 +7,7 @@
   "imports": {
     "#mcp-image-binding": "./src/mcp-image-binding.ts",
     "#harness-image-import": "./src/harness-image-import.ts",
+    "#image-connection": "./src/image-connection.ts",
     "#session-paths": "./src/session-paths.ts"
   },
   "main": "./src/index.ts",

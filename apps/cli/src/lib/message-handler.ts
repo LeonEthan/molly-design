@@ -6684,6 +6684,7 @@ export class MessageHandler {
           connection: selected
             ? {
                 enabled: selected.enabled,
+                ...(selected.protocol === undefined ? {} : { protocol: selected.protocol }),
                 baseUrl: selected.baseUrl,
                 model: selected.model,
                 hasApiKey: selected.hasApiKey,

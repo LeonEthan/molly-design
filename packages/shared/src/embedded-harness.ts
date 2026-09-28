@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ImageConnectionProtocolSchema } from '#image-connection';
 export { McpImageBindingSchema, type McpImageBinding } from '#mcp-image-binding';
 export * from '#harness-image-import';
 // The workspace-relative attachment root is a harness boundary contract too:
@@ -409,6 +410,7 @@ export const ProtectedImageConnectionSchema = z
     id: z.string().uuid(),
     revision,
     enabled: z.boolean(),
+    protocol: ImageConnectionProtocolSchema.optional(),
     baseUrl: ModelEndpointSchema,
     model: z.string().trim().min(1).max(200),
     hasApiKey: z.boolean(),

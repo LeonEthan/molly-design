@@ -139,9 +139,11 @@ describe('composer model picker search', () => {
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
     return {
       search,
+      /* The row's first line is the label; a raw-id description may follow
+         when labels collide. */
       rows: () =>
-        [...(submenuContent()?.querySelectorAll('[role="menuitemradio"]') ?? [])].map((node) =>
-          node.textContent?.trim()
+        [...(submenuContent()?.querySelectorAll('[role="menuitemradio"]') ?? [])].map(
+          (node) => node.querySelector('.truncate')?.textContent?.trim() ?? node.textContent?.trim()
         ),
     };
   };
@@ -212,23 +214,62 @@ describe('composer model picker search', () => {
     const providerRows = radioRows(await openSubmenu('Provider'));
     await clickRow(providerRows[0]);
     const submenu = await openSubmenu('Model');
-    expect(radioRows(submenu).map((row) => row.textContent)).toEqual([
-      'Aurora 1',
-      'Aurora 1',
-      'Nimbus 2',
-    ]);
+    const rows = radioRows(submenu);
+    const labelOf = (row: HTMLElement) =>
+      row.querySelector('.truncate')?.textContent ?? row.textContent;
+    expect(rows.map(labelOf)).toEqual(['Aurora 1', 'Aurora 1', 'Nimbus 2']);
+    /* Both Aurora rows carry the same label, so each shows its raw provider
+       model id as the disambiguating description. */
+    expect(rows[0]?.textContent).toContain('aurora/1');
+    expect(rows[1]?.textContent).toContain('aurora/1');
+    expect(rows[2]?.textContent).not.toContain('nimbus/2');
     expect(submenu?.textContent).toContain('Studio');
     expect(submenu?.textContent).toContain('Review');
     expect(submenu?.querySelector('[role="menuitem"]')).toBeNull();
   });
 
-  it('hides the Provider row when every model comes from one provider', async () => {
+  it('keeps same-named connections as separate provider scopes', async () => {
+    /* Two connections may share a display name; scoping keys on the stable
+       connection id decoded from the catalog value, never on the name. */
+    const first = encodeMollyModelOption('conn-a', 'aurora/1');
+    const second = encodeMollyModelOption('conn-b', 'aurora/1');
+    const onModelChange = vi.fn();
     await openRunConfigMenu({
       ...mollyProps,
-      modelOptions: [twoProviderModels[0]!, twoProviderModels[2]!].map((option) => ({
-        ...option,
-        group: 'Studio',
-      })),
+      modelOptions: [
+        { value: first, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+        { value: second, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+        twoProviderModels[2]!,
+      ],
+      selectedModelId: first,
+      onModelChange,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    expect(providerRows.map((row) => row.textContent)).toEqual([
+      'All providers',
+      'Studioconn-a',
+      'Studioconn-b',
+      'Review',
+    ]);
+    /* The scope follows the selected model's CONNECTION, not its name. */
+    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+
+    await clickRow(providerRows[2]);
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows).toHaveLength(1);
+    await clickRow(modelRows[0]);
+    expect(onModelChange).toHaveBeenCalledWith(second);
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('hides the Provider row when every model comes from one provider', async () => {
+    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [
+        twoProviderModels[0]!,
+        { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
+      ],
       selectedModelId: studio,
     });
     const rootMenu = menuContents()[0];
@@ -316,7 +357,7 @@ describe('composer model picker search', () => {
     expect(rows()).toEqual(['Haiku 4.5']);
   });
 
-  it('groups connection models and finds them by raw id or connection without showing the id', async () => {
+  it('groups connection models and finds them by raw id or connection', async () => {
     const connectionModels = ['Studio', 'Review', 'Archive'].flatMap((connection) =>
       ['aurora/1', 'nimbus/2'].map((modelId) => ({
         value: encodeMollyModelOption(connection.toLowerCase(), modelId),

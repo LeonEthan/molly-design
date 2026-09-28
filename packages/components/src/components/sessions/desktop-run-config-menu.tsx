@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useAtomValue } from 'jotai';
 import { Check, ChevronDown, Monitor, ShieldAlert, Sparkles } from '@/ui/icons';
-import { MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
+import { MOLLY_UNSELECTED_MODEL, decodeMollyModelOption } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
 import {
   classifyPermissionModeFace,
@@ -369,26 +369,47 @@ export function DesktopRunConfigMenu({
     ? modelPickerOptions.find((opt) => opt.value === modelValue)
     : undefined;
 
-  /* Providers are the user-configured model connections, carried as the ACP
-     select `group`; the builtin agent ships no models of its own. Picking a
-     provider scopes the Model submenu to it. */
+  /* Providers are the user-configured model connections. Scoping keys on the
+     stable connection id decoded from Molly's own catalog values
+     (`molly-model:<connection>/<model>`); catalogs from other agents fall back
+     to the ACP select `group` name. Two connections may share a display name,
+     so the name alone is never the key — it is only the visible label. */
   const providers = useMemo(() => {
+    const list: Array<{ id: string; name: string }> = [];
     const seen = new Set<string>();
-    const list: string[] = [];
     for (const option of modelPickerOptions) {
-      if (option.group && !seen.has(option.group)) {
-        seen.add(option.group);
-        list.push(option.group);
-      }
+      const id = decodeMollyModelOption(option.value)?.connectionId ?? option.group;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      list.push({ id, name: option.group ?? id });
     }
     return list;
   }, [modelPickerOptions]);
-  const scopedProvider =
-    providerChoice !== undefined ? providerChoice : (selectedModelOption?.group ?? null);
+  const providerIdOf = (option: AcpSessionSelectOption): string | undefined =>
+    decodeMollyModelOption(option.value)?.connectionId ?? option.group ?? undefined;
+  const scopedProviderId =
+    providerChoice !== undefined
+      ? providerChoice
+      : (selectedModelOption ? providerIdOf(selectedModelOption) : undefined) ?? null;
   const showProviderRow = providers.length > 1;
-  const scopedModelOptions = scopedProvider
-    ? modelPickerOptions.filter((option) => option.group === scopedProvider)
+  const scopedProviderName = scopedProviderId
+    ? (providers.find((provider) => provider.id === scopedProviderId)?.name ?? allProvidersLabel)
+    : null;
+  /* Identical labels must not hide which entry is which: on a collision the
+     row shows its stable id (providers) or raw provider model id (models). */
+  const duplicateProviderNames = new Set(
+    providers
+      .map((provider) => provider.name)
+      .filter((name, index, names) => names.indexOf(name) !== index)
+  );
+  const scopedModelOptions = scopedProviderId
+    ? modelPickerOptions.filter((option) => providerIdOf(option) === scopedProviderId)
     : modelPickerOptions;
+  const duplicateModelLabels = new Set(
+    scopedModelOptions
+      .map((option) => option.label)
+      .filter((label, index, labels) => labels.indexOf(label) !== index)
+  );
 
   const reasoningSelector =
     thinkingSelector && thinkingSelector.options.length > 1 ? thinkingSelector : null;
@@ -458,19 +479,25 @@ export function DesktopRunConfigMenu({
         ) : null}
         {showProviderRow ? (
           <DropdownMenuSub>
-            <ValueSubTrigger label={providerRowLabel} value={scopedProvider ?? allProvidersLabel} />
+            <ValueSubTrigger
+              label={providerRowLabel}
+              value={scopedProviderName ?? allProvidersLabel}
+            />
             <DropdownMenuSubContent className="w-64">
               <OptionItem
                 label={allProvidersLabel}
-                selected={scopedProvider === null}
+                selected={scopedProviderId === null}
                 onSelect={() => setProviderChoice(null)}
               />
               {providers.map((provider) => (
                 <OptionItem
-                  key={provider}
-                  label={provider}
-                  selected={scopedProvider === provider}
-                  onSelect={() => setProviderChoice(provider)}
+                  key={provider.id}
+                  label={provider.name}
+                  description={
+                    duplicateProviderNames.has(provider.name) ? provider.id : undefined
+                  }
+                  selected={scopedProviderId === provider.id}
+                  onSelect={() => setProviderChoice(provider.id)}
                 />
               ))}
             </DropdownMenuSubContent>
@@ -495,6 +522,9 @@ export function DesktopRunConfigMenu({
                 <OptionItem
                   key={opt.value}
                   label={opt.label}
+                  description={
+                    duplicateModelLabels.has(opt.label) ? opt.description : undefined
+                  }
                   selected={opt.value === modelValue}
                   disabled={opt.disabled}
                   onSelect={select}

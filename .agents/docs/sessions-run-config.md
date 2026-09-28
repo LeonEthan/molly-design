@@ -35,11 +35,16 @@ this page is the full text of the rules summarised there.
   from display names or fetch a parallel catalog. The catalog names each Molly
   option by its model, carries the raw provider model id as its description and
   the connection's display name as its ACP select `group` (#12). The Provider
-  row is that grouping surfaced as a scope; the Model row and the pill name
+  row is that grouping surfaced as a scope, keyed on the stable connection id
+  decoded from the catalog's own `molly-model:<connection>/<model>` values
+  (group name is only a fallback for other agents' catalogs) — two connections
+  may share a display name, so the name alone is never the key, and colliding
+  labels get a disambiguating description (connection id on Provider rows, raw
+  model id on Model rows). The Model row and the pill name
   just the model. When nothing is selected the Model submenu shows the whole
   catalog grouped by connection (only when two or more connections exist);
-  search also matches the id and the connection, neither of which a row
-  repeats. The catalog has no product default model, so the list offers no
+  search also matches the id and the connection. The catalog has no product
+  default model, so the list offers no
   "Default" row and no reset. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
   catalog directs the user to add a model connection in Settings. Reasoning

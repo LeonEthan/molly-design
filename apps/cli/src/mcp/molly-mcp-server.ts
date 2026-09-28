@@ -138,6 +138,7 @@ import {
   editImageAsset,
   generateImageBytes,
   editImageBytes,
+  describeImageFailure,
   IMAGE_EDIT_MAX_INPUTS,
   DASHSCOPE_EDIT_MAX_INPUTS,
   IMAGE_BACKGROUNDS,
@@ -4077,7 +4078,10 @@ export function buildMollyMcpServer(
       // The upstream's own message, or our refusal; never the request header.
       return receipt(
         textResult(
-          error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
+          describeImageFailure(
+            error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
+            { dispatched, rejected }
+          ),
           true
         ),
         dispatched && !rejected ? 'outcome_unknown' : 'failed'

@@ -74,8 +74,9 @@ Read [README](README.md) before changing session construction or packaged resour
 - Only built-in `molly_render_preview` may classify exact Molly-owned font and
   native-render failures, or strictly validated asset-admission metadata. Asset
   errors expose fixed categories, a bounded single-file `media/` path, and validated
-  size/kind fields; never infer them from raw error text. Keep unknown server text
-  and transport diagnostics redacted; errors never authorize retries or artwork repair.
+  size/kind fields; never infer them from raw error text. Server `isError` text reaches
+  the Agent bounded (#38); transport/SDK diagnostics stay fixed codes. Errors never
+  authorize retries or artwork repair.
 - Image mappings use the selected catalog revision and explicit image model. Approve
   the mapped native arguments; validate before dispatch. External private receipts
   confer no asset authority. Unsupported paid results settle as failed, without assets.

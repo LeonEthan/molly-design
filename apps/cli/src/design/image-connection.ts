@@ -84,15 +84,18 @@ const decodeBodyText = (bytes: Uint8Array): string =>
  * trust: a gateway that echoes request headers in its error body (or in a
  * redirect notice) would otherwise put the key into a message that the settings
  * panel shows, the MCP tool hands to the agent, and the daemon logs. Redacting
- * the exact credential we sent costs nothing and closes that echo.
+ * the exact credential we sent costs nothing and closes that echo. Other
+ * bearer/basic tokens and `sk-` keys (a gateway's own or a masked echo) are
+ * removed too, because MCP tool errors reach the model (#38).
  */
 export function redactCredential(text: string, credential: string): string {
-  if (credential.length === 0) return text;
   let out = text;
-  for (const form of [credential, encodeURIComponent(credential)]) {
+  for (const form of credential.length === 0 ? [] : [credential, encodeURIComponent(credential)]) {
     if (form.length > 0 && out.includes(form)) out = out.split(form).join('[redacted]');
   }
-  return out;
+  return out
+    .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 [redacted]')
+    .replace(/\bsk-[A-Za-z0-9_*-]{8,}/g, 'sk-[redacted]');
 }
 
 /** The upstream's own explanation when it has one, else the raw body, else nothing. */

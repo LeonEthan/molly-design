@@ -18,7 +18,7 @@ import { createToolEnvironment } from './environment';
 import { createBoundModelFetch } from './model-transport';
 import { waitForApproval, type BrowserTaskApproval, type ToolApproval } from './approved-tools';
 import { CancellationDeliveryTransport } from './mcp-cancellation';
-import { resolveMcpContent } from './mcp-content';
+import { McpToolFailure, resolveMcpContent } from './mcp-content';
 import { bindMcpImageTool } from './mcp-image-binding';
 import type { OperationResourceRead } from './tool-operation-journal';
 import {
@@ -360,10 +360,12 @@ export async function defineMcpTools(input: {
             'harness_browser_user_takeover',
             'harness_browser_destination_denied',
           ]);
-          // Native history must not retain raw transport/server diagnostics or echoed credentials.
+          // Native history keeps server-authored `isError` text (MCP spec, #38) but never
+          // transport/SDK diagnostics, which can carry connection URLs, headers or credentials.
           // eslint-disable-next-line preserve-caught-error -- Deliberately discard secret-bearing causes.
           throw new Error(
-            error instanceof MollyRenderFailure ||
+            error instanceof McpToolFailure ||
+              error instanceof MollyRenderFailure ||
               (error instanceof Error && safeCodes.has(error.message))
               ? error.message
               : 'harness_mcp_tool_failed'

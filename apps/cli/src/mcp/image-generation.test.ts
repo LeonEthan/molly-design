@@ -541,6 +541,29 @@ describe('generateImageAsset', () => {
     expect(thrown.message).toContain('upstream rejected authorization');
     expect(thrown.message).not.toContain(SECRET_KEY);
   });
+
+  it('redacts other bearer tokens and sk- keys a gateway writes into its error', async () => {
+    const workdir = await makeWorkdir();
+    const { transport } = scriptedTransport(() =>
+      jsonResponse(401, {
+        error: {
+          message:
+            'Incorrect API key provided: sk-proj-****************abcd; upstream Authorization: Bearer gateway-token-123456',
+        },
+      })
+    );
+
+    const thrown = (await generateImageAsset({
+      settings,
+      prompt: 'p',
+      workdir,
+      transport,
+    }).catch((error: unknown) => error)) as Error;
+
+    expect(thrown.message).toBe(
+      'image generation failed: HTTP 401: Incorrect API key provided: sk-[redacted]; upstream Authorization: Bearer [redacted]'
+    );
+  });
 });
 
 describe('writeGeneratedImageAsset', () => {

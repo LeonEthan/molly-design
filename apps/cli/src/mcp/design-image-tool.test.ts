@@ -587,7 +587,9 @@ describe('molly_generate_image call', () => {
     });
 
     expect(result.isError).toBe(true);
-    expect(textOf(result)).toContain('prompt violates content policy');
+    expect(textOf(result)).toBe(
+      'The image service rejected the request; Molly did not retry it. image generation failed: HTTP 400: prompt violates content policy'
+    );
     expect(result._meta?.mollyImageOperation).toEqual({
       version: 1,
       state: 'failed',
@@ -605,6 +607,9 @@ describe('molly_generate_image call', () => {
       },
     });
     expect(result.isError).toBe(true);
+    expect(textOf(result)).toBe(
+      'Image outcome unknown: the request reached the image service and may have been billed. Tell the user before calling again. image generation failed: synthetic connection lost'
+    );
     expect(result._meta?.mollyImageOperation).toEqual({
       version: 1,
       state: 'outcome_unknown',
@@ -779,6 +784,10 @@ describe('molly_generate_image call', () => {
       output_format: 'jpeg',
     });
     expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toBe(
+      'a transparent background needs output_format png; JPEG has no alpha channel. No image request was sent. Nothing was billed; adjust the request before calling again.'
+    );
+    expect(calls).toHaveLength(1);
     expect(refused._meta?.mollyImageOperation).toMatchObject({
       state: 'failed',
       dispatched: false,

@@ -9,6 +9,10 @@ Planning/review does not authorize runtime implementation or publication.
 Explicit tasks allow five image generate/edit calls total across runs; ask before
 exceeding five unless a larger budget is already authorized.
 Preserve unrelated changes. Report outcomes, evidence and limits.
+For a complex tradeoff, an independent review, or a stubborn bug, escalate to a
+Codex CLI second opinion (`gpt-6-astra`, high reasoning) per
+[codex-second-opinion](.agents/agent-skills/codex-second-opinion.md); the
+opinion is advisory, read-only, and never silently applied.
 
 ## Design principles and migration scope
 

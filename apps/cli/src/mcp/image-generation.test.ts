@@ -848,6 +848,32 @@ describe('DashScope protocol', () => {
     expect(headersByUrl.get(resultUrl)).not.toHaveProperty('authorization');
   });
 
+  it.each([
+    ['another host', 'https://dashscope.example.com/api/v1', resultUrl, true],
+    [
+      'the endpoint host',
+      'https://192.168.0.2:8443/api/v1',
+      'http://192.168.0.2:8787/f.png',
+      false,
+    ],
+  ])('restricts a result URL on %s to public destinations', async (_, baseUrl, url, expected) => {
+    const answer = jsonResponse(200, {
+      output: { choices: [{ message: { content: [{ image: url }] } }] },
+    });
+    const downloads: ImageHttpRequest[] = [];
+    await generateImageAsset({
+      settings: { ...dashScope, baseUrl },
+      prompt: 'p',
+      workdir: await makeWorkdir(),
+      transport: async (request) => {
+        if (request.method === 'POST') return answer;
+        downloads.push(request);
+        return bytesResponse(200, pngFixture(2, 2));
+      },
+    });
+    expect(downloads.map((request) => request.publicDestinationOnly === true)).toEqual([expected]);
+  });
+
   it('sends ordered source images before the instruction and refuses unsupported edits', async () => {
     const workdir = await makeWorkdir();
     const first = pngFixture(2, 3);

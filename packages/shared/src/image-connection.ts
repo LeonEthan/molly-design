@@ -252,6 +252,11 @@ export type ImageHttpRequest = {
   signal?: AbortSignal;
   /** Hard cap on the response body; exceeding it is an error, never a truncation. */
   maxBytes: number;
+  /**
+   * Refuse loopback, private-LAN and reserved destinations, checked on the address the
+   * connection actually uses. Set for URLs an upstream returns on a host other than its own.
+   */
+  publicDestinationOnly?: boolean;
 };
 
 export type ImageHttpResponse = {

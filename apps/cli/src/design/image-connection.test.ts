@@ -16,10 +16,13 @@ import {
   IMAGE_CONNECTION_PROBE_MAX_BYTES,
   IMAGE_CONNECTION_PROBE_TIMEOUT_MS,
   buildImageModelsRequest,
+  NonPublicDestinationError,
   fetchImageHttpTransport,
   probeImageConnection,
+  publicDestinationLookup,
   readMachineImageConnection,
 } from './image-connection';
+import type { LookupAddress } from 'node:dns';
 
 const workspaceId = 'workspace-1' as WorkspaceId;
 const machineId = 'machine-1' as MachineId;
@@ -353,6 +356,60 @@ describe('fetchImageHttpTransport', () => {
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();
+    }
+  });
+});
+
+describe('public destination guard', () => {
+  const lookUp = (
+    addresses: LookupAddress[],
+    options: { all?: boolean; family?: number } = {}
+  ): Promise<unknown> =>
+    new Promise((resolve) =>
+      publicDestinationLookup((_host, callback) => callback(null, addresses))(
+        'results.example.com',
+        options,
+        (error, address, family) => resolve(error ?? { address, family })
+      )
+    );
+
+  it('connects only when every resolved address is public', async () => {
+    const publicV4 = { address: '93.184.216.34', family: 4 };
+    await expect(lookUp([publicV4])).resolves.toEqual({ address: '93.184.216.34', family: 4 });
+    await expect(lookUp([publicV4], { all: true })).resolves.toEqual({
+      address: [publicV4],
+      family: undefined,
+    });
+    for (const address of ['127.0.0.1', '192.168.3.4', '169.254.169.254', '::1', 'fd00::1']) {
+      await expect(
+        lookUp([publicV4, { address, family: address.includes(':') ? 6 : 4 }])
+      ).resolves.toBeInstanceOf(NonPublicDestinationError);
+    }
+  });
+
+  it('refuses a literal non-public address without opening a connection', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('unexpected connection');
+    });
+    try {
+      for (const url of [
+        'http://127.0.0.1:8787/f.png',
+        'http://[::1]/f.png',
+        'http://10.0.0.2/f.png',
+      ]) {
+        await expect(
+          fetchImageHttpTransport({
+            url,
+            method: 'GET',
+            headers: {},
+            timeoutMs: 1_000,
+            maxBytes: 8,
+            publicDestinationOnly: true,
+          })
+        ).rejects.toBeInstanceOf(NonPublicDestinationError);
+      }
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 });

@@ -211,7 +211,10 @@ async function downloadGeneratedImage(
   }
   // The URL comes from the configured upstream; this is a plain GET of the bytes
   // it already produced, not a second generation. Bounded and non-redirecting
-  // for the same reasons the API call is.
+  // for the same reasons the API call is. The user chose the endpoint's own host,
+  // which may be a LAN bridge; any other host must be public, so an upstream
+  // cannot point Molly at local or private-network resources.
+  const onEndpointHost = parsedUrl.hostname === new URL(options.settings.baseUrl).hostname;
   const response = await callUpstream(
     options.transport,
     {
@@ -221,6 +224,7 @@ async function downloadGeneratedImage(
       timeoutMs: IMAGE_GENERATION_TIMEOUT_MS,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
       maxBytes: IMAGE_GENERATION_MAX_IMAGE_BYTES,
+      ...(onEndpointHost ? {} : { publicDestinationOnly: true }),
     },
     options.settings.apiKey
   );

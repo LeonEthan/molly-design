@@ -91,7 +91,7 @@ Parent instructions apply.
 - Image generate/edit use the user-selected model with no product default. Edits send
   bounded workspace files as ordered JSON data URLs; optional `background`/`output_format`
   pass through, refusing transparent JPEG before dispatch; DashScope tools omit and
-  requests refuse unsupported options. Results are assets only, never artwork commits. Preserve upstream failures without automatic paid retries.
+  requests refuse unsupported options. Result URLs off the endpoint host download only from checked public addresses. Results are assets only, never artwork commits. Preserve upstream failures without automatic paid retries.
   Return the private image receipt with dispatch/outcome facts and successful asset
   digests; transport loss or post-response import failure is not proof of non-dispatch.
   Decode admitted image bytes before upload/publication, with edge, total-frame pixel

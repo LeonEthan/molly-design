@@ -149,6 +149,10 @@
     "./ui-icons": {
       "types": "./src/ui-icons/index.ts",
       "import": "./src/ui-icons/index.ts"
+    },
+    "./personal-memory": {
+      "types": "./src/personal-memory.ts",
+      "import": "./src/personal-memory.ts"
     }
   },
   "scripts": {

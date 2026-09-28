@@ -89,3 +89,9 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   chunks, error/warning payloads, and internal-instruction tails are never candidates.
   Each isolated run owns and removes a unique temp directory; concurrent session-title and
   branch-name work reuses one in-flight result. Cleanup cancels and drains title runs.
+
+## Personal preferences
+
+One daemon owns the mem0 store. Private memory callbacks require the live design
+run/epoch and cancellation signal; workers never open that store. Human mutations
+invalidate pending extraction revisions. Recall is bounded context, never authority.

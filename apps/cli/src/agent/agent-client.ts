@@ -1,3 +1,10 @@
+import {
+  HARNESS_MEMORY_METHOD,
+  HarnessMemoryRequestSchema,
+  PersonalMemorySnapshotSchema,
+  type PersonalMemorySnapshot,
+  type HarnessMemoryRequest,
+} from '@molly/shared/personal-memory';
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -632,6 +639,7 @@ export interface AgentClientOptions {
   onMcpCatalogInvalidated?(): void;
   onMcpServersResolved?(servers: readonly acp.McpServer[]): void;
   onHarnessImageImport?(request: HarnessImageImportRequest): Promise<HarnessImageImportResult>;
+  onPersonalMemory?(request: HarnessMemoryRequest): Promise<PersonalMemorySnapshot>;
   onHarnessImageRecovery?(
     request: HarnessImageRecoveryRequest
   ): Promise<HarnessImageRecoveryResult>;
@@ -1642,6 +1650,20 @@ export class AgentClient implements acp.Client {
     method: string,
     params: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
+    if (method === HARNESS_MEMORY_METHOD) {
+      this.ensureSessionMatch(z.string().parse(params.sessionId) as ACPSessionId);
+      if (
+        this.options.agentConfig?.cliType !== 'builtin' ||
+        this.options.agentConfig.agentType !== 'molly' ||
+        !this.options.onPersonalMemory ||
+        this.connectionClosed ||
+        (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
+      )
+        throw new Error('harness_memory_refused');
+      return PersonalMemorySnapshotSchema.parse(
+        await this.options.onPersonalMemory(HarnessMemoryRequestSchema.parse(params.request))
+      );
+    }
     if (method === HARNESS_QUESTION_DISMISS_METHOD) {
       const { sessionId, request } = HarnessQuestionDismissRequestSchema.parse(params);
       this.ensureSessionMatch(sessionId as ACPSessionId);
@@ -2904,6 +2926,18 @@ export class AgentClient implements acp.Client {
         trackedPromptCompletion = { sessionId, promise: completion };
         this.activePromptCompletion = trackedPromptCompletion;
         const result = await completion;
+        if (
+          result._meta?.mollyPersonalMemory === 'capture_failed' ||
+          result._meta?.mollyPersonalMemory === 'recall_failed'
+        ) {
+          this.options.onAgentWarning?.({
+            source: 'personalMemory',
+            message:
+              result._meta.mollyPersonalMemory === 'capture_failed'
+                ? 'The response completed, but personal preferences could not be saved.'
+                : 'Personal preferences could not be recalled for this response.',
+          });
+        }
         span.end({ outcome: 'returned' });
         this.logger.debug(`[${this.options.sessionId}] connection.prompt returned`);
         return result;

@@ -1,3 +1,9 @@
+import {
+  HarnessMemoryRequestSchema,
+  type HarnessMemoryRequest,
+  type PersonalMemorySnapshot,
+} from '@molly/shared/personal-memory';
+import { getPersonalMemory } from './personal-memory';
 import { createHash } from 'node:crypto';
 import type { Writable } from 'node:stream';
 import type { McpServer, PromptResponse } from '@agentclientprotocol/sdk';
@@ -99,6 +105,37 @@ export class EmbeddedHarnessControl {
         throw new Error('harness_mcp_binding_mismatch');
       return [binding];
     });
+  }
+
+  async personalMemory(raw: HarnessMemoryRequest): Promise<PersonalMemorySnapshot> {
+    const request = HarnessMemoryRequestSchema.parse(raw);
+    const run = this.activeRun;
+    const controller = this.activeController;
+    if (
+      !this.config.personalMemory ||
+      this.retired ||
+      !this.busy ||
+      !run ||
+      !controller ||
+      controller.signal.aborted ||
+      request.runId !== run.runId ||
+      request.turnId !== run.turnId ||
+      request.runtimeEpoch !== this.config.runtimeEpoch ||
+      request.productSessionId !== this.config.productSessionId
+    )
+      throw new Error('harness_memory_not_owned');
+    const memory = await getPersonalMemory();
+    controller.signal.throwIfAborted();
+    if (request.operation.action === 'capture')
+      await memory.capture(
+        request.operation.revision,
+        request.operation.changes,
+        controller.signal
+      );
+    const result = await memory.read();
+    controller.signal.throwIfAborted();
+    if (this.retired || this.activeRun !== run) throw new Error('harness_memory_not_owned');
+    return result;
   }
 
   async importImages(

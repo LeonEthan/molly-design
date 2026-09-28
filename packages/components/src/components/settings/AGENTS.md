@@ -72,3 +72,7 @@ preloaded by the settings root. IDE launcher settings and probes are retired.
 
 Title defaults do not persist an inferred model. Existing title model overrides,
 including values equal to the displayed current model, remain explicit on save.
+
+Personal memory controls negotiate the daemon's `personalPreferences` capability.
+Edits carry the viewed revision; stale failures require refresh, never implicit
+retry. Explain local storage, selected-model processing and conversation retention.

@@ -44,6 +44,7 @@ export type CreateMollySessionInput = {
   systemPrompt: string;
   readBeforeEditReminder?: string;
   hostTime?: HostTimeSource;
+  personalMemoryContext?: () => string;
   skills?: Skill[];
   /** Host-owned dialog UI; absent until the transport can cancel and retire its requests. */
   questionUI?: ExtensionUIContext;
@@ -65,6 +66,7 @@ export async function createMollySession(input: CreateMollySessionInput) {
     skills: input.skills,
     readBeforeEditReminder: input.readBeforeEditReminder,
     hostTime: input.hostTime,
+    personalMemoryContext: input.personalMemoryContext,
     hostToolNames: input.tools.map((tool) => tool.name),
     extensions: input.questionUI ? createQuestionExtensions() : undefined,
   });

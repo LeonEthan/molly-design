@@ -184,3 +184,13 @@ Grok's explicit Stop uses public `session/close` and requires the native `closed
 failed residents reject prompts until the explicit restoration path loads them. This is owned
 by the [Session lifecycle](../session/README.md#grok-stop-and-explicit-restoration), including
 failed-close recovery and canvas release; ordinary ACP cancel remains a separate operation.
+
+## Personal memory
+
+Design workers use the private run-bound memory callback. The daemon's single
+`PersonalMemoryService` owns `memory/preferences.sqlite` under Molly's data root.
+It uses mem0ai 3.3.1's public SQLite store with telemetry disabled before import.
+Recall lists the complete bounded preference set; sentinel vectors are not semantic
+embeddings. Settings uses `memory/preferences` RPC with snapshot revisions. Serialized
+mutations reject stale state; automatic capture checks the active run's cancellation
+immediately before the atomic batch. See [personal memory](../../../../specs/personal-memory.md).

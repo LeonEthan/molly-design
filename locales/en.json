@@ -4222,5 +4222,15 @@
   "onboarding.intro.creation.callout": "Make the headline bolder.",
   "onboarding.intro.creation.example": "Design example",
   "onboarding.intro.expression.title": "Make your mark.",
-  "onboarding.intro.expression.description": "Your ideas. Your signature."
+  "onboarding.intro.expression.description": "Your ideas. Your signature.",
+  "settings.memory.title": "Personal memory",
+  "settings.memory.automatic": "Remember preferences automatically",
+  "settings.memory.description": "Shared across design sessions. Up to 32 personal preferences are stored locally. Your messages and remembered preferences may be sent to your selected model for extraction and use.",
+  "settings.memory.scope": "Project and brand facts are excluded. Disabling stops recall and capture. Deleting a memory removes it from future recall, but does not erase existing conversations.",
+  "settings.memory.failed": "Memory could not be updated or loaded. Refresh and try again; another session may have changed it.",
+  "settings.memory.refresh": "Refresh memories",
+  "settings.memory.empty": "No remembered preferences yet.",
+  "settings.memory.preference": "Remembered preference",
+  "settings.memory.save": "Save",
+  "settings.memory.delete": "Delete"
 }

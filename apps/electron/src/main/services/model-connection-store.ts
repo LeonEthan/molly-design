@@ -265,6 +265,7 @@ export class ModelConnectionStore {
         id: previous?.connection.id ?? randomUUID(),
         revision: (previous?.connection.revision ?? 0) + 1,
         enabled: data.enabled,
+        ...(data.protocol === undefined ? {} : { protocol: data.protocol }),
         baseUrl: data.baseUrl,
         model: data.model,
         hasApiKey: apiKey.length > 0,

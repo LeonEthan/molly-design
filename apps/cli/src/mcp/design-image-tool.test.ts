@@ -347,6 +347,46 @@ describe('molly_generate_image gate', () => {
     expect(JSON.stringify(gate)).not.toContain(SECRET_KEY);
   });
 
+  it('publishes only the options a DashScope connection accepts', async () => {
+    const gate = designGateFromRpcResult({
+      type: 'design/image-connection',
+      available: true,
+      ready: false,
+      connection: {
+        enabled: true,
+        baseUrl: 'https://images.example.com/api/v1',
+        model: 'qwen-image-2.1',
+        protocol: 'dashscope',
+        hasApiKey: true,
+        updatedAt: 0,
+      },
+      credential: null,
+      artworkWorkdir: '/tmp/workspace',
+      workspaceRoot: '/tmp/workspace',
+    });
+    expect(gate.imageProtocol).toBe('dashscope');
+    const schemas = async (designGate: McpDesignGate) => {
+      let tools: Awaited<ReturnType<Client['listTools']>>['tools'] = [];
+      await withServer({ designGate }, async (client) => {
+        tools = (await client.listTools()).tools;
+      });
+      const schemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
+      return { generate: schemaOf(TOOL_NAME), edit: schemaOf('molly_edit_image') };
+    };
+    const dashScope = await schemas(gate);
+    expect(Object.keys(dashScope.generate?.properties ?? {}).sort()).toEqual(['prompt', 'size']);
+    expect(Object.keys(dashScope.edit?.properties ?? {}).sort()).toEqual([
+      'images',
+      'prompt',
+      'size',
+    ]);
+    expect(dashScope.edit?.properties?.images).toMatchObject({ maxItems: 3 });
+    const openAi = await schemas(readyGate);
+    expect(Object.keys(openAi.edit?.properties ?? {})).toEqual(
+      expect.arrayContaining(['background', 'output_format', 'mask'])
+    );
+  });
+
   it('is not callable while it is absent from the list', async () => {
     let result: CallToolResult | undefined;
     await withServer({ designGate: EMPTY_DESIGN_GATE }, async (client) => {

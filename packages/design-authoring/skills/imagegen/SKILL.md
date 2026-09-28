@@ -9,8 +9,8 @@ metadata:
 
 Generates and edits images for the current design work (product shots, concept art, covers,
 website heroes, illustrations, infographic art). Calls `molly_generate_image` or
-`molly_edit_image`, which talk to the user's configured OpenAI-Images-compatible connection
-using the model explicitly selected by the user; Molly has no default model.
+`molly_edit_image`, which talk to the user's configured connection (OpenAI Images
+or DashScope) using the model explicitly selected by the user; Molly has no default model.
 
 ## Availability
 
@@ -49,7 +49,7 @@ they do not replace the design workflow or its research requirement.
   `output_format`.
 - `molly_edit_image`: `prompt`, `images` (1–16 workspace source/reference paths in
   prompt order), optional `mask`, `size`, `background` and `output_format`. Files
-  are sent as data URLs in a JSON request to `/images/edits`; copy outside
+  are sent as data URLs in a JSON request; copy outside
   references into the workspace first. Each file is limited to 16 MiB and the
   combined inputs to 64 MiB by Molly. Relative image and mask paths use the
   design authoring directory; use absolute paths for ordinary attachments
@@ -68,12 +68,34 @@ they do not replace the design workflow or its research requirement.
 - Both tools save a new asset. They do not replace or commit the current artwork;
   decide whether and how to use the result in the YAML artwork.
 
+### DashScope (Qwen Image) connections
+
+When the user's connection uses DashScope, Molly sends Alibaba Model Studio's
+native request. The image tools then offer no `mask`, `background` or
+`output_format` option; Molly refuses these before sending anything, so the
+refusal is not billed:
+
+- `mask`, `background` other than `auto`, and `output_format` other than `png`.
+  DashScope returns PNG with the model's own background. For a standalone layer,
+  choose another route in the design workflow, such as a plain background you
+  can cut out or shapes drawn in YAML. Do not paint a fake transparency
+  checkerboard.
+- More than 3 images for `molly_edit_image`, or any input image over 10 MB.
+- A `size` not written as width and height in pixels. Molly sends `1024x1024`
+  as `1024*1024`. The model decides the allowed range; for example,
+  `qwen-image-2.0` accepts 512×512 to 2048×2048 total pixels.
+
+Molly sends your prompt unchanged (`prompt_extend: false`) and asks for one
+image without a watermark. The service returns a link, which Molly downloads
+into `media/`.
+
 Provider/model support for editing, multiple images, masks, sizes, transparency and
 input formats varies. Failures come back to you as ordinary tool errors; read
 them and decide the next step. An error that reports an unknown outcome means the
 request may have run and been billed. Molly never changes models, substitutes a
 generation call for an edit, or retries paid requests on its own. Successful
-`/models` discovery in Settings does not establish image endpoint support.
+`/models` discovery in Settings does not establish image endpoint support;
+DashScope connections have no test in Settings.
 Returned assets currently must be PNG, JPEG or GIF for Bento intake. Inspect the
 actual result and report relevant service limitations.
 

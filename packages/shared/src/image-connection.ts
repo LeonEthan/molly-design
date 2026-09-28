@@ -1,10 +1,16 @@
 /**
  * The machine-scoped image connection (P2.4).
  *
- * One OpenAI-Images-compatible endpoint the owning machine may call to generate or edit
- * images for design work: base URL, API key, model, and an enable switch. It is
+ * One endpoint the owning machine may call to generate or edit images for design
+ * work: wire protocol, base URL, API key, model, and an enable switch. It is
  * deliberately the minimum that makes the built-in image tools usable — no
  * per-request knobs, no advanced options.
+ *
+ * The protocol is an explicit user choice (#33), never inferred from the URL or
+ * model: `openai-images` is the OpenAI Images generations/edits shape, and
+ * `dashscope` is Alibaba Model Studio's native multimodal-generation shape for
+ * Qwen Image. Rows saved before the choice existed carry no protocol and remain
+ * OpenAI Images, which is what they were saved as.
  *
  * ## Where it lives
  *
@@ -35,6 +41,14 @@ export const IMAGE_CONNECTION_MAX_URL_LENGTH = 2048;
 export const IMAGE_CONNECTION_MAX_API_KEY_LENGTH = 8192;
 export const IMAGE_CONNECTION_MAX_MODEL_LENGTH = 200;
 
+export const IMAGE_CONNECTION_PROTOCOLS = ['openai-images', 'dashscope'] as const;
+export const ImageConnectionProtocolSchema = z.enum(IMAGE_CONNECTION_PROTOCOLS);
+export type ImageConnectionProtocol = z.infer<typeof ImageConnectionProtocolSchema>;
+
+export const imageConnectionProtocol = (settings: {
+  protocol?: ImageConnectionProtocol | undefined;
+}): ImageConnectionProtocol => settings.protocol ?? 'openai-images';
+
 /**
  * Legacy durable row / private transport input. `v` is the schema generation, so a future shape can be
  * recognized and refused instead of misread as this one.
@@ -42,7 +56,12 @@ export const IMAGE_CONNECTION_MAX_MODEL_LENGTH = 200;
 export type ImageConnectionSettings = {
   v: typeof IMAGE_CONNECTION_VERSION;
   enabled: boolean;
-  /** OpenAI-Images-compatible API root, e.g. `https://api.openai.com/v1`. */
+  /** Absent on rows saved before the protocol choice; see `imageConnectionProtocol`. */
+  protocol?: ImageConnectionProtocol;
+  /**
+   * API root for the protocol: e.g. `https://api.openai.com/v1` for OpenAI Images,
+   * `https://dashscope.aliyuncs.com/api/v1` for DashScope.
+   */
   baseUrl: string;
   /** Secret. Never rendered, echoed, or logged. */
   apiKey: string;
@@ -72,6 +91,7 @@ export type ImageConnectionDraft = {
 export const PublicImageConnectionSchema = z
   .object({
     enabled: z.boolean(),
+    protocol: ImageConnectionProtocolSchema.optional(),
     baseUrl: z.string().min(1),
     model: z.string().min(1),
     hasApiKey: z.boolean(),
@@ -125,6 +145,8 @@ export function normalizeImageConnectionSettings(
   if (!isRecord(value)) return undefined;
   if (value.v !== IMAGE_CONNECTION_VERSION) return undefined;
   if (typeof value.enabled !== 'boolean') return undefined;
+  const protocol = ImageConnectionProtocolSchema.optional().safeParse(value.protocol);
+  if (!protocol.success) return undefined;
   const baseUrl = normalizeImageConnectionBaseUrl(value.baseUrl);
   if (baseUrl === undefined) return undefined;
   const model = boundedString(value.model, IMAGE_CONNECTION_MAX_MODEL_LENGTH);
@@ -143,6 +165,7 @@ export function normalizeImageConnectionSettings(
   return {
     v: IMAGE_CONNECTION_VERSION,
     enabled: value.enabled,
+    ...(protocol.data === undefined ? {} : { protocol: protocol.data }),
     baseUrl,
     apiKey,
     model,
@@ -175,6 +198,7 @@ export function toPublicImageConnection(
   if (!settings) return null;
   return {
     enabled: settings.enabled,
+    ...(settings.protocol === undefined ? {} : { protocol: settings.protocol }),
     baseUrl: settings.baseUrl,
     model: settings.model,
     hasApiKey: settings.apiKey.length > 0,
@@ -192,12 +216,15 @@ export function toPublicImageConnection(
 export const imageConnectionUrl = (settings: ImageConnectionSettings, apiPath: string): string =>
   `${settings.baseUrl}${apiPath.startsWith('/') ? apiPath : `/${apiPath}`}`;
 
-/** The non-billable discovery endpoint the settings "test connection" action uses. */
+/** The non-billable OpenAI discovery endpoint the settings "test connection" action uses. */
 export const IMAGE_CONNECTION_MODELS_PATH = '/models';
 
 /** The generation endpoint. Paid; only `molly_generate_image` calls it. */
 export const IMAGE_CONNECTION_GENERATIONS_PATH = '/images/generations';
 export const IMAGE_CONNECTION_EDITS_PATH = '/images/edits';
+/** DashScope's synchronous generate/edit endpoint, relative to its `/api/v1` root. Paid. */
+export const IMAGE_CONNECTION_DASHSCOPE_GENERATION_PATH =
+  '/services/aigc/multimodal-generation/generation';
 
 /**
  * The one network seam both callers use.
@@ -225,6 +252,11 @@ export type ImageHttpRequest = {
   signal?: AbortSignal;
   /** Hard cap on the response body; exceeding it is an error, never a truncation. */
   maxBytes: number;
+  /**
+   * Refuse loopback, private-LAN and reserved destinations, checked on the address the
+   * connection actually uses. Set for URLs an upstream returns on a host other than its own.
+   */
+  publicDestinationOnly?: boolean;
 };
 
 export type ImageHttpResponse = {

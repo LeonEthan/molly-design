@@ -33,7 +33,11 @@ import {
   readMachineFlockRowsFromFlock,
 } from '@molly/shared';
 import type { MachineId, WorkspaceId } from '@molly/shared';
+import { classifyBrowserHostname } from '@molly/shared/browser-url';
 import type { LoroRepo } from 'loro-repo';
+import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
+import type { LookupFunction } from 'node:net';
+import { Agent, type Dispatcher } from 'undici';
 
 /** The subset of the repo this module needs, so a test can hand over a stand-in. */
 export type ImageConnectionReader = Pick<LoroRepo, 'openFlockDoc'>;
@@ -175,6 +179,7 @@ function countModels(bytes: Uint8Array): number {
  */
 export const fetchImageHttpTransport: ImageHttpTransport = async (request) => {
   request.signal?.throwIfAborted();
+  if (request.publicDestinationOnly) assertPublicHostname(new URL(request.url).hostname);
   const deadline = new AbortController();
   let timedOut = false;
   const timer = setTimeout(() => {
@@ -188,13 +193,15 @@ export const fetchImageHttpTransport: ImageHttpTransport = async (request) => {
     : deadline.signal;
   try {
     const body = request.body;
-    const response = await fetch(request.url, {
+    const init: RequestInit & { dispatcher?: Dispatcher } = {
       method: request.method,
       headers: request.headers,
       ...(body === undefined ? {} : { body }),
       signal,
       redirect: 'error',
-    });
+      ...(request.publicDestinationOnly ? { dispatcher: publicDestinationDispatcher() } : {}),
+    };
+    const response = await fetch(request.url, init);
     const bytes = await readBoundedBody(response, request.maxBytes);
     return { status: response.status, bytes };
   } catch (error) {
@@ -204,12 +211,74 @@ export const fetchImageHttpTransport: ImageHttpTransport = async (request) => {
       throw new Error(`request timed out after ${request.timeoutMs}ms`, { cause: error });
     }
     request.signal?.throwIfAborted();
+    const refused = error instanceof Error ? error.cause : undefined;
+    if (refused instanceof NonPublicDestinationError) throw refused;
     throw new Error(errorText(error), { cause: error });
   } finally {
     clearTimeout(timer);
     request.signal?.removeEventListener('abort', cancelDeadline);
   }
 };
+
+export class NonPublicDestinationError extends Error {
+  constructor(hostname: string) {
+    super(`${hostname} is not a public address, so the returned image was not fetched`);
+    this.name = 'NonPublicDestinationError';
+  }
+}
+
+function assertPublicHostname(hostname: string): void {
+  if (classifyBrowserHostname(hostname) !== 'public') throw new NonPublicDestinationError(hostname);
+}
+
+export type ResolveAllAddresses = (
+  hostname: string,
+  callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void
+) => void;
+
+const resolveAllAddresses: ResolveAllAddresses = (hostname, callback) =>
+  dnsLookup(hostname, { all: true }, callback);
+
+/**
+ * A socket lookup that connects only when every resolved address is public. The
+ * check runs on the addresses the socket then uses, so a name that resolves
+ * differently between a check and the connection cannot slip through. Literal
+ * IPs skip lookup; `assertPublicHostname` covers them.
+ */
+export function publicDestinationLookup(
+  resolve: ResolveAllAddresses = resolveAllAddresses
+): LookupFunction {
+  return (hostname, options, callback) => {
+    resolve(hostname, (error, addresses) => {
+      const usable =
+        options.family === 4 || options.family === 6
+          ? addresses.filter((entry) => entry.family === options.family)
+          : addresses;
+      const first = usable[0];
+      if (error || first === undefined) {
+        callback(error ?? new Error(`${hostname} did not resolve to an address`), '', 0);
+        return;
+      }
+      if (usable.some((entry) => classifyBrowserHostname(entry.address) !== 'public')) {
+        callback(new NonPublicDestinationError(hostname), '', 0);
+        return;
+      }
+      if (options.all) callback(null, usable);
+      else callback(null, first.address, first.family);
+    });
+  };
+}
+
+let publicDispatcher: Agent | undefined;
+
+/**
+ * A direct connection rather than the configured proxy: a proxy resolves names
+ * where Molly cannot check the address.
+ */
+function publicDestinationDispatcher(): Agent {
+  publicDispatcher ??= new Agent({ connect: { lookup: publicDestinationLookup() } });
+  return publicDispatcher;
+}
 
 async function readBoundedBody(response: Response, maxBytes: number): Promise<Uint8Array> {
   if (!response.body) {

@@ -42,7 +42,9 @@ import {
   DesignRenderRpcResultSchema,
   ImageConnectionRpcResultSchema,
   normalizeImageConnectionSettings,
+  imageConnectionProtocol,
   isImageConnectionReady,
+  type ImageConnectionProtocol,
   type ImageConnectionSettings,
   type SessionId,
 } from '@molly/shared';
@@ -82,6 +84,8 @@ export type McpDesignGate = {
   imageConnection: ImageConnectionSettings | null;
   /** Public discovery snapshot; never sufficient to execute a paid request. */
   imageAvailable?: boolean;
+  /** Wire protocol of the published connection; selects which tool options exist (#33). */
+  imageProtocol?: ImageConnectionProtocol;
   /** Resolved by the daemon from the live Session; never a caller-selected root. */
   artworkWorkdir?: string;
   workspaceRoot?: string;
@@ -127,6 +131,7 @@ export function designGateFromRpcResult(result: unknown): McpDesignGate {
     return {
       imageConnection: null,
       imageAvailable: true,
+      imageProtocol: imageConnectionProtocol(connection),
       artworkWorkdir: parsed.data.artworkWorkdir,
       workspaceRoot: parsed.data.workspaceRoot,
     };
@@ -148,6 +153,7 @@ export function designGateFromRpcResult(result: unknown): McpDesignGate {
   return isImageConnectionReady(settings)
     ? {
         imageConnection: settings,
+        imageProtocol: imageConnectionProtocol(settings),
         ...(parsed.data.artworkWorkdir ? { artworkWorkdir: parsed.data.artworkWorkdir } : {}),
         ...(parsed.data.workspaceRoot ? { workspaceRoot: parsed.data.workspaceRoot } : {}),
       }

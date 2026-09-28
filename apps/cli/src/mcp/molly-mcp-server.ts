@@ -139,6 +139,7 @@ import {
   generateImageBytes,
   editImageBytes,
   IMAGE_EDIT_MAX_INPUTS,
+  DASHSCOPE_EDIT_MAX_INPUTS,
   IMAGE_BACKGROUNDS,
   IMAGE_OUTPUT_FORMATS,
 } from '@/mcp/image-generation';
@@ -295,19 +296,19 @@ const GenerateImageToolInputSchema = z
       .max(DESIGN_IMAGE_SIZE_SPEC_MAX_CHARS)
       .optional()
       .describe(
-        'Optional output size passed through to the configured provider, for example "1024x1024". Omit to use the provider default.'
+        'Optional output size as WIDTHxHEIGHT pixels, for example "1024x1024"; supported sizes depend on the configured service and model. Omit to use the provider default.'
       ),
     background: z
       .enum(IMAGE_BACKGROUNDS)
       .optional()
       .describe(
-        'Optional provider background. Use "transparent" for a standalone layer with real alpha (requires PNG output); omit to use the provider default.'
+        'Optional provider background. Use "transparent" for a standalone layer with real alpha (requires PNG output); omit to use the provider default. Services without this option refuse it before any request is sent.'
       ),
     output_format: z
       .enum(IMAGE_OUTPUT_FORMATS)
       .optional()
       .describe(
-        'Optional provider output format: "png" (supports transparency) or "jpeg". Omit to use the provider default.'
+        'Optional provider output format: "png" (supports transparency) or "jpeg". Omit to use the provider default. Services without this option refuse it before any request is sent.'
       ),
   })
   .strict();
@@ -327,10 +328,23 @@ const EditImageToolInputSchema = GenerateImageToolInputSchema.extend({
     .max(4096)
     .optional()
     .describe(
-      'Optional workspace PNG mask for the first image; transparent areas indicate edits. Match the first image dimensions and provider requirements.'
+      'Optional workspace PNG mask for the first image; transparent areas indicate edits. Match the first image dimensions and provider requirements. Services without masks refuse it before any request is sent.'
     ),
 }).strict();
 type EditImageToolInput = z.infer<typeof EditImageToolInputSchema>;
+// #33: DashScope has no background, output-format or mask parameter, so those options are
+// absent from its tools rather than advertised and then refused.
+const DashScopeGenerateImageToolInputSchema = GenerateImageToolInputSchema.omit({
+  background: true,
+  output_format: true,
+}).strict();
+const DashScopeEditImageToolInputSchema = EditImageToolInputSchema.omit({
+  background: true,
+  output_format: true,
+  mask: true,
+})
+  .extend({ images: EditImageToolInputSchema.shape.images.max(DASHSCOPE_EDIT_MAX_INPUTS) })
+  .strict();
 
 const ImageUploadToolInputSchema = z
   .object({
@@ -4070,13 +4084,16 @@ export function buildMollyMcpServer(
       );
     }
   };
+  const dashScopeTools = config.designGate?.imageProtocol === 'dashscope';
   const generateImageTool = server.registerTool(
     GENERATE_IMAGE_TOOL_NAME,
     {
       title: 'Generate an image through Molly image connection',
       description:
         "Generate one image with the image connection configured in Molly settings and write it into the current session workspace as a design asset. Use this for product shots, concept art, covers, illustrations, and other raster assets for the design you are building; it is available in design sessions only, and only when the user has configured and enabled an image connection. Returns an artwork-relative asset path (under media/ in the design authoring directory), its absolute path, sha256 and pixel dimensions. Reference that relative path from design.yaml in the authoring directory. Each call is a paid generation on the user's own account and is never retried automatically. Use an actual image-reading tool to judge outputs and choose further work according to the task. If this tool is absent, only this generation tool is unavailable; assess other Agent capabilities from the tools actually available. Never ask the user to paste an API key in chat.",
-      inputSchema: GenerateImageToolInputSchema,
+      inputSchema: dashScopeTools
+        ? DashScopeGenerateImageToolInputSchema
+        : GenerateImageToolInputSchema,
     },
     runImageTool
   );
@@ -4085,8 +4102,8 @@ export function buildMollyMcpServer(
     {
       title: 'Edit images through Molly image connection',
       description:
-        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Sends the actual files as data URLs in a JSON request to the user's configured OpenAI Images-compatible /images/edits endpoint using their explicitly selected model. Supported input formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
-      inputSchema: EditImageToolInputSchema,
+        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Sends the actual files as data URLs in a JSON request to the user's configured image service (OpenAI Images /images/edits with a JSON body, or DashScope) using their explicitly selected model. Supported input counts, formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
+      inputSchema: dashScopeTools ? DashScopeEditImageToolInputSchema : EditImageToolInputSchema,
     },
     runImageTool
   );

@@ -50,6 +50,7 @@ const storedConnection = (
 
 const draftOf = (overrides: Partial<ImageConnectionFormDraft> = {}): ImageConnectionFormDraft => ({
   enabled: true,
+  protocol: 'openai-images',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
   clearApiKey: false,
@@ -61,6 +62,7 @@ describe('image connection form values', () => {
   it('requires an explicit model and never seeds a credential', () => {
     expect(createImageConnectionFormDraft(undefined)).toEqual({
       enabled: true,
+      protocol: 'openai-images',
       baseUrl: '',
       apiKey: '',
       clearApiKey: false,
@@ -90,6 +92,18 @@ describe('image connection form values', () => {
     expect(
       buildImageConnectionSave(draftOf({ clearApiKey: true, apiKey: 'synthetic' }))
     ).toBeUndefined();
+  });
+  it('saves the chosen protocol and reads a stored row without one as OpenAI Images', () => {
+    expect(createImageConnectionFormDraft(storedConnection()).protocol).toBe('openai-images');
+    expect(
+      createImageConnectionFormDraft(storedConnection({ protocol: 'dashscope' })).protocol
+    ).toBe('dashscope');
+    expect(
+      buildImageConnectionSave(
+        draftOf({ protocol: 'dashscope', baseUrl: 'https://dashscope.aliyuncs.com/api/v1' }),
+        storedConnection()
+      )?.protocol
+    ).toBe('dashscope');
   });
   it('rejects missing or oversized model values', () => {
     expect(imageConnectionDraftIssues(draftOf({ model: ' ' })).model).toBe(true);
@@ -207,6 +221,7 @@ describe('ImageConnectionForm', () => {
       {
         expectedRevision: 3,
         enabled: true,
+        protocol: 'openai-images',
         baseUrl: 'https://api.openai.com/v1',
         model: 'explicit-new-model',
         clearApiKey: false,

@@ -4,6 +4,7 @@ import {
   IMAGE_CONNECTION_MAX_API_KEY_LENGTH,
   IMAGE_CONNECTION_MODELS_PATH,
   IMAGE_CONNECTION_VERSION,
+  imageConnectionProtocol,
   imageConnectionUrl,
   isImageConnectionReady,
   normalizeImageConnectionBaseUrl,
@@ -73,6 +74,16 @@ describe('normalizeImageConnectionSettings', () => {
     expect(normalizeImageConnectionSettings(null)).toBeUndefined();
     expect(normalizeImageConnectionSettings([])).toBeUndefined();
     expect(normalizeImageConnectionSettings('stored')).toBeUndefined();
+  });
+
+  it('keeps an explicit protocol and treats a row without one as OpenAI Images', () => {
+    const dashScope = normalizeImageConnectionSettings(stored({ protocol: 'dashscope' }));
+    expect(dashScope?.protocol).toBe('dashscope');
+    expect(toPublicImageConnection(dashScope)?.protocol).toBe('dashscope');
+    const legacy = normalizeImageConnectionSettings(stored());
+    expect(legacy).not.toHaveProperty('protocol');
+    expect(imageConnectionProtocol(legacy ?? {})).toBe('openai-images');
+    expect(normalizeImageConnectionSettings({ ...stored(), protocol: 'qwen' })).toBeUndefined();
   });
 
   it('keeps an empty key as a stored-but-unready state', () => {

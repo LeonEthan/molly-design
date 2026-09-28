@@ -53,6 +53,7 @@ dispatch owns runtime availability; schema presence does not enable execution.
   vault IPC; the legacy daemon probe refuses. `artworkWorkdir` and `workspaceRoot`
   come from the live Session and frozen context, never MCP caller paths.
 - Image models are user-required: preserve explicit stored models, never fill empty ones.
+  The wire `protocol` is explicit too; absent means OpenAI Images, never inferred (#33).
   Generate/edit share readiness; image-reading, attachments and rendering remain independent.
 
 ## Machine RPC: render bridge

@@ -256,6 +256,26 @@ void test('image discovery is explicit, destination-bound and does not expose up
     { ok: false, error: 'image_connection_http_401' }
   )
 })
+
+void test('a DashScope connection keeps its protocol and is never probed over the paid endpoint', async (t) => {
+  const { store } = await fixture(t)
+  await store.importLegacyImage(legacyImage)
+  const saved = await store.saveImage({
+    enabled: true,
+    protocol: 'dashscope',
+    baseUrl: legacyImage.baseUrl,
+    model: 'qwen-image-2.0',
+    clearApiKey: false,
+    expectedRevision: 1
+  })
+  assert.equal((await store.imageSnapshot()).connection?.protocol, 'dashscope')
+  assert.deepEqual(
+    await probeProtectedImageConnection(store, saved.revision, async () => {
+      throw Error('unexpected network request')
+    }),
+    { ok: false, error: 'image_connection_probe_unsupported' }
+  )
+})
 async function fixture(t, customCipher = cipher, platform = 'darwin') {
   const directory = await mkdtemp(join(tmpdir(), 'molly-vault-test-'))
   t.after(() => rm(directory, { recursive: true, force: true }))

@@ -65,6 +65,15 @@ additional rectangle refresh. This prevents queued old-target state from resetti
 a new drag. The builder applies this correction to the assembled copy and retires
 the deferred handoff there. See the [native first-drag regression](../../e2e/CANVAS-FIRST-DRAG-REGRESSION.md).
 
+The kernel keeps every element wholly inside the canvas, while Moveable previews
+any drag, resize or rotation. When the kernel refuses a finished frame gesture,
+the assembled canvas re-renders from the unchanged document so the preview snaps
+back, then shows a bilingual toast. The toast names the canvas boundary when a
+frame left the canvas and otherwise reports a generic refusal. The Molly overlay
+raises the toast above the dock. Whether elements may leave the artboard is
+[issue #18](https://github.com/LeonEthan/molly-design/issues/18), which awaits a
+product decision.
+
 The desktop controls generic `molly.setReadonly`, `molly.flush`, `molly.state`
 and `molly.applyCommands`.
 Bento does not observe Agent status: the bridge rejects semantic mutations while

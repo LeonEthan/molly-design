@@ -35,6 +35,13 @@ bypass the desktop overlay to inject mouse input into a locked native view.
 Unlocking must restore dragging. A full isolated app restart must reopen the exact
 saved canonical document. Uncaught canvas errors fail the probe.
 
+A final gesture drags a text element past the canvas's left edge. The preview
+must leave the canvas during the gesture. On release, the kernel refuses it:
+every element must return to its exact prior rectangle, the canonical snapshot
+must be unchanged, and the toast must name the canvas boundary
+([issue #18](https://github.com/LeonEthan/molly-design/issues/18)). Without the
+assembly fix, the probe fails with a stale preview frame.
+
 ## Failure and repair evidence
 
 On source checkout `97356691fab65d59d6c28c21b9f9fab752824d73`, the original

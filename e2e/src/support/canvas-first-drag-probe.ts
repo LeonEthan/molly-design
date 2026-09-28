@@ -23,6 +23,7 @@ interface ProbeResult {
   saved: { ok: boolean };
   settledSave: { ok: boolean };
   finalSave: { ok: boolean };
+  outsideDrag: { outside: boolean; restored: boolean; documentUnchanged: boolean; toast: string };
   snapshot: unknown;
   history: { beforeUndo: unknown; afterUndoable: unknown; undone: unknown; redone: unknown };
   readonly: {
@@ -114,6 +115,14 @@ try {
   assert.equal(result.saved.ok, true, 'Overlapping save failed');
   assert.equal(result.settledSave.ok, true, 'Save after the overlapping gesture failed');
   assert.equal(result.finalSave.ok, true, 'Final save failed');
+  assert.equal(result.outsideDrag.outside, true, 'Out-of-canvas gesture never left the canvas');
+  assert.equal(result.outsideDrag.restored, true, 'Refused drag left a stale preview frame');
+  assert.equal(result.outsideDrag.documentUnchanged, true, 'Refused drag changed the document');
+  assert.match(
+    result.outsideDrag.toast,
+    /Elements must stay inside the canvas/,
+    'Refused drag gave no explanation'
+  );
   assert.deepEqual(
     result.history.undone,
     result.history.beforeUndo,

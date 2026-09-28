@@ -206,20 +206,54 @@ try {
 
 ` + viewportAnchor
   );
+  // The kernel keeps every element inside the canvas (issue #18). A refused
+  // gesture must not leave the DOM showing a frame the document never took.
+  const frameDispatch = '    if (commands.length > 0) this.bridge.dispatch(commands)\n';
+  if (interactions.split(frameDispatch).length !== 2)
+    throw Error('Pinned frame gesture commit changed');
+  interactions = interactions.replace(
+    frameDispatch,
+    `    if (commands.length > 0 && !this.bridge.dispatch(commands).ok) {
+      const { width, height } = this.store.doc.size
+      const outside = frames.some((f) => f.x < 0 || f.y < 0 || f.x + f.w > width || f.y + f.h > height)
+      this.render()
+      this.onFrameRejected?.(outside)
+    }
+`
+  );
+  const slideNavField = '  onSlideNav: ((dir: 1 | -1) => void) | null = null\n';
+  if (interactions.split(slideNavField).length !== 2)
+    throw Error('Pinned canvas callback fields changed');
+  interactions = interactions.replace(
+    slideNavField,
+    slideNavField + '  onFrameRejected: ((outside: boolean) => void) | null = null\n'
+  );
   const editorFile = join(tree, 'slides/src/editor/editor.ts');
   const editor = readFileSync(editorFile, 'utf8');
   const editorAnchor = 'export class Editor {';
   if (!editor.includes(editorAnchor)) throw Error('Pinned editor API changed');
+  const slideNavWiring =
+    '    this.canvas.onSlideNav = (dir) => this.store.goToLinear(dir)\n';
+  if (editor.split(slideNavWiring).length !== 2) throw Error('Pinned canvas wiring changed');
   writeFileSync(
     editorFile,
-    editor.replace(
-      editorAnchor,
-      editorAnchor +
-        `
+    editor
+      .replace(
+        editorAnchor,
+        editorAnchor +
+          `
   fit() { this.canvas.zoomReset(); return this.canvas.viewport() }
   viewport(value?: { scale: number; x: number; y: number }) { return this.canvas.viewport(value) }
 `
-    )
+      )
+      .replace(
+        slideNavWiring,
+        slideNavWiring +
+          `    this.canvas.onFrameRejected = (outside) => this.toast(outside
+      ? '元素需完整保留在画布内 / Elements must stay inside the canvas'
+      : '无法应用此修改 / Couldn’t apply this change')
+`
+      )
   );
   const mainFile = join(tree, 'slides/src/main.ts');
   const main = readFileSync(mainFile, 'utf8');

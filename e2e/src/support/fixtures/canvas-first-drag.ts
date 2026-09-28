@@ -116,8 +116,34 @@ return (async () => {
   const afterReadonly=await snapshot();
   await canvas.executeJavaScript('window.molly.setReadonly(false)');
   await drag(second,'unlock restores first drag');
+  async function dragOutside(id) {
+    const beforeSnapshot=await snapshot();
+    const before=await read();
+    const element=before.find(e=>e.id===id);
+    const slide=await canvas.executeJavaScript('(() => {' +
+      'const r=document.querySelector(".ed-stage .bento-slide").getBoundingClientRect();' +
+      'return {x:r.x,y:r.y};})()');
+    const x=Math.round(element.x+element.width/2), y=Math.round(element.y+element.height/2);
+    const dx=Math.round(slide.x-element.x-40);
+    canvas.sendInputEvent({type:'mouseMove',x,y});
+    canvas.sendInputEvent({type:'mouseDown',button:'left',clickCount:1,x,y});
+    for (let step=1; step<=12; step++) {
+      canvas.sendInputEvent({type:'mouseMove',button:'left',modifiers:['leftButtonDown'],x:x+Math.round(dx*step/12),y});
+      await frame();
+    }
+    const during=(await read()).find(e=>e.id===id);
+    canvas.sendInputEvent({type:'mouseUp',button:'left',clickCount:1,x:x+dx,y});
+    await frame();
+    const after=await read();
+    return {before,during,after,slide,
+      outside:during.x<slide.x,
+      restored:JSON.stringify(after)===JSON.stringify(before),
+      documentUnchanged:JSON.stringify(await snapshot())===JSON.stringify(beforeSnapshot),
+      toast:await canvas.executeJavaScript('document.querySelector(".ed-toast")?.textContent ?? ""')};
+  }
+  const outsideDrag=await dragOutside(first);
   const finalSave=await canvas.executeJavaScript('window.molly.save()');
-  return {cases,saved,settledSave,finalSave,snapshot:await snapshot(),
+  return {cases,saved,settledSave,finalSave,outsideDrag,snapshot:await snapshot(),
     history:{beforeUndo,afterUndoable,undone,redone},readonly:{beforeReadonly,afterReadonly,readonlyCommand,readonlyButtons},
     errors:await canvas.executeJavaScript('window.__firstDrag.errors')};
 })();

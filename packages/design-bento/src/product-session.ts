@@ -102,13 +102,14 @@ export function createProductSession(options: {
 .molly-dock button:disabled{opacity:.35;pointer-events:none}
 .molly-shape-popup{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:2147483001;display:none;flex-direction:column;background:Canvas;color:CanvasText;border-radius:16px;padding:6px;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);min-width:170px;max-height:50vh;overflow:auto}
 .molly-shape-popup.open{display:flex}
+.ed-toast{bottom:84px;z-index:2147483002;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box}
 .molly-shape-popup button{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:12.5px system-ui;text-align:left}
 .molly-shape-popup button:hover{background:#8882}
 .molly-shape-popup svg{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 /* Keep zoom and save feedback reachable when all three bottom surfaces cannot
    fit on one row. Extremely narrow docks scroll without shrinking the targets. */
 /* With the dock raised, reserve 140px for zoom plus edge insets and a gap. */
-@media(max-width:640px){.molly-dock{bottom:64px}.molly-shape-popup{bottom:130px}#autosave-status{max-width:calc(100vw - 180px)}}
+@media(max-width:640px){.molly-dock{bottom:64px}.molly-shape-popup,.ed-toast{bottom:130px}#autosave-status{max-width:calc(100vw - 180px)}}
 `;
   document.head.append(style);
   const dock = document.createElement('div');

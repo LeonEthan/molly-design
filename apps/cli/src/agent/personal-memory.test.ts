@@ -11,10 +11,10 @@ afterEach(async () => {
   );
 });
 
-it('recalls automatically saved personal preferences after reopening the store', async () => {
+it('creates a missing memory directory and recalls preferences after reopening the store', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'molly-preferences-'));
   directories.push(directory);
-  const dbPath = path.join(directory, 'memory.sqlite');
+  const dbPath = path.join(directory, 'memory', 'preferences.sqlite');
   const memory = await PersonalMemoryService.open(dbPath);
   const snapshot = await memory.read();
   await memory.capture(

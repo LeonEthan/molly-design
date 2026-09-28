@@ -136,3 +136,13 @@ published-import validation, and insert/recall/delete through the production mem
 chunk with both Node and Electron on macOS arm64. The staged Electron probe used
 Molly's existing SQLite N-API binary. Typechecks and public-boundary checks pass.
 No Windows/Intel native execution or live-model quality evaluation is claimed.
+
+### PR review: fresh-install directory creation
+
+The [PR #43 directory-creation finding](https://github.com/LeonEthan/molly-design/pull/43#discussion_r4123403026)
+was not reproducible with pinned mem0ai 3.3.1. Its exported `MemoryVectorStore`
+constructor invokes `ensureSQLiteDirectory(dbPath)`, which recursively creates the
+parent before constructing SQLite. The existing public-service persistence test
+now opens `memory/preferences.sqlite` beneath a fresh temporary root without
+creating `memory/`, then saves and recalls a preference after reopening. All seven
+service tests pass. No duplicate directory-creation code is needed in Molly.

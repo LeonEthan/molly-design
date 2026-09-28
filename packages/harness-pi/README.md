@@ -398,3 +398,14 @@ commit; native UI verified V1/V2 saving, manual geometry editing, version switch
 PNG export and restart persistence. The initial and first repair runs failed and
 remain recorded. This is not acceptance for other providers,
 full native installers, the complete design journey or human visual quality.
+
+## Personal preference memory
+
+When the design host provides memory, the adapter recalls bounded preferences into
+`before_agent_start` system context. After successful native settlement it asks the
+selected journaled ModelRuntime for a strict preference change plan, then requests
+a revision-checked host save before retiring the run credential. Extraction uses
+only current user text and existing preferences, excludes project/brand facts, has
+a 30-second bound and never retries. Cancellation suppresses late saves. Memory
+failures are reported separately from native completion. See
+[personal memory](../../specs/personal-memory.md).

@@ -1,3 +1,4 @@
+import { PersonalMemorySetting } from './personal-memory-setting';
 import { useMemo, useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type {
@@ -337,6 +338,7 @@ export function GeneralSettingsComponent() {
   return (
     <>
       <div className={settingContainerClass}>
+        <PersonalMemorySetting />
         <CompactSection>
           <CompactRow
             label={t(

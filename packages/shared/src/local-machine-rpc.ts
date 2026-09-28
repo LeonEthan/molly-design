@@ -1,3 +1,4 @@
+import { PersonalMemoryOperationSchema, PersonalMemorySnapshotSchema } from './personal-memory';
 import { LocalFileResolutionSchema } from './local-file-preview';
 import {
   AgentBrowserCommandSchema,
@@ -371,6 +372,10 @@ export const DesignToolHookResultSchema = z
 
 export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('memory/preferences'),
+    params: PersonalMemoryOperationSchema,
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('browser/execute'),
     ownerSessionId: SessionIdSchema,
     params: z
@@ -638,6 +643,9 @@ export type LocalMachineRpcRequest = z.infer<typeof LocalMachineRpcRequestSchema
 export type LocalMachineRpcRequestValidated = LocalMachineRpcRequest;
 
 export const LocalMachineRpcResultSchema = z.union([
+  z
+    .object({ type: z.literal('memory/preferences'), snapshot: PersonalMemorySnapshotSchema })
+    .strict(),
   AgentBrowserRpcResultSchema,
   HarnessHostResultSchema,
   DesignSourcePathResultSchema,

@@ -584,6 +584,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         readBeforeEditReminder: callbacks.designHooks
           ? DESIGN_READ_BEFORE_EDIT_REMINDER
           : undefined,
+        personalMemory: Boolean(callbacks.designHooks),
         designImageImport: callbacks.importHarnessImages !== undefined,
         designImageRecovery: callbacks.recoverHarnessImages !== undefined,
         selection: ModelSelectionSchema.parse(this.config.modelSelection),
@@ -771,6 +772,9 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           loadExternalMcpServers: callbacks.loadExternalMcpServers,
           onMcpServersResolved: embeddedControl
             ? (servers) => embeddedControl.configureMcp(servers)
+            : undefined,
+          onPersonalMemory: embeddedControl
+            ? (request) => embeddedControl.personalMemory(request)
             : undefined,
           onHarnessImageImport:
             embeddedControl && importHarnessImages

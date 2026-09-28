@@ -4221,5 +4221,15 @@
   "onboarding.intro.creation.callout": "让标题再大胆一点。",
   "onboarding.intro.creation.example": "创作示意",
   "onboarding.intro.expression.title": "Make your mark.",
-  "onboarding.intro.expression.description": "做出你的样子。"
+  "onboarding.intro.expression.description": "做出你的样子。",
+  "settings.memory.title": "个人记忆",
+  "settings.memory.automatic": "自动记住偏好",
+  "settings.memory.description": "在设计会话间共享，最多在本地保存 32 条个人偏好。为提取和使用记忆，你的消息和已记住的偏好可能会发送给你选择的模型。",
+  "settings.memory.scope": "不记忆项目或品牌信息。关闭后停止回忆和提取。删除记忆会将其移出后续回忆，但不会清除已有对话。",
+  "settings.memory.failed": "无法更新或读取记忆。请刷新后重试；其他会话可能已修改记忆。",
+  "settings.memory.refresh": "刷新记忆",
+  "settings.memory.empty": "尚未记住任何偏好。",
+  "settings.memory.preference": "已记住的偏好",
+  "settings.memory.save": "保存",
+  "settings.memory.delete": "删除"
 }

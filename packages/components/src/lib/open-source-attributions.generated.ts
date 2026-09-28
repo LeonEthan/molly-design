@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-26T09:40:07.365Z",
+  "generatedAt": "2026-09-28T13:58:41.563Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -254,6 +254,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Install package programmatically.",
       "versions": [
         "1.1.0"
+      ]
+    },
+    {
+      "id": "pkg-anthropic-ai-sandbox-runtime-apache-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@anthropic-ai/sandbox-runtime",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/anthropics/sandbox-runtime#readme",
+      "author": "Anthropic PBC",
+      "description": "Anthropic Sandbox Runtime (ASRT) - A general-purpose tool for wrapping security boundaries around arbitrary processes",
+      "versions": [
+        "0.0.77"
       ]
     },
     {
@@ -2775,6 +2788,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-pondwader-socks5-server-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@pondwader/socks5-server",
+      "license": "MIT",
+      "homepage": "https://github.com/PondWader/node-socks5-server#readme",
+      "author": "PondWader",
+      "description": "A Node.js socks5 server implementation enabling fine-grained connection control.",
+      "versions": [
+        "1.0.10"
+      ]
+    },
+    {
       "id": "pkg-posthog-core-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -5050,9 +5076,22 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node",
       "description": "TypeScript definitions for node",
       "versions": [
+        "18.19.130",
         "22.19.10",
         "24.10.12",
         "26.2.0"
+      ]
+    },
+    {
+      "id": "pkg-types-node-fetch-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@types/node-fetch",
+      "license": "MIT",
+      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node-fetch",
+      "description": "TypeScript definitions for node-fetch",
+      "versions": [
+        "2.6.13"
       ]
     },
     {
@@ -5605,6 +5644,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-abort-controller-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "abort-controller",
+      "license": "MIT",
+      "homepage": "https://github.com/mysticatea/abort-controller#readme",
+      "author": "Toru Nagashima",
+      "description": "An implementation of WHATWG AbortController interface.",
+      "versions": [
+        "3.0.0"
+      ]
+    },
+    {
       "id": "pkg-accepts-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -5638,7 +5690,21 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Nathan Rajlich",
       "description": "Turn a function into an `http.Agent` instance",
       "versions": [
+        "6.0.2",
         "7.1.4"
+      ]
+    },
+    {
+      "id": "pkg-agentkeepalive-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "agentkeepalive",
+      "license": "MIT",
+      "homepage": "https://github.com/node-modules/agentkeepalive#readme",
+      "author": "fengmk2",
+      "description": "Missing keepalive http.Agent",
+      "versions": [
+        "4.6.0"
       ]
     },
     {
@@ -5812,6 +5878,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-asynckit-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "asynckit",
+      "license": "MIT",
+      "homepage": "https://github.com/alexindigo/asynckit#readme",
+      "author": "Alex Indigo",
+      "description": "Minimal async jobs utility library, with streams support",
+      "versions": [
+        "0.4.0"
+      ]
+    },
+    {
       "id": "pkg-atomically-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -5834,6 +5913,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "AWS RDS SSL certificates bundles.",
       "versions": [
         "1.1.2"
+      ]
+    },
+    {
+      "id": "pkg-axios-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "axios",
+      "license": "MIT",
+      "homepage": "https://axios-http.com",
+      "author": "Matt Zabriskie",
+      "description": "Promise based HTTP client for the browser and node.js",
+      "versions": [
+        "1.20.0"
       ]
     },
     {
@@ -6553,6 +6645,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-combined-stream-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "combined-stream",
+      "license": "MIT",
+      "homepage": "https://github.com/felixge/node-combined-stream",
+      "author": "Felix Geisendörfer",
+      "description": "A stream that emits multiple other streams one after another.",
+      "versions": [
+        "1.0.8"
+      ]
+    },
+    {
       "id": "pkg-comma-separated-tokens-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -6579,6 +6684,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
         "7.2.0",
         "8.3.0",
         "12.1.0"
+      ]
+    },
+    {
+      "id": "pkg-compromise-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "compromise",
+      "license": "MIT",
+      "homepage": "https://github.com/spencermountain/compromise",
+      "author": "Spencer Kelly",
+      "description": "modest natural language processing",
+      "versions": [
+        "14.17.0"
       ]
     },
     {
@@ -7584,6 +7702,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-delayed-stream-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "delayed-stream",
+      "license": "MIT",
+      "homepage": "https://github.com/felixge/node-delayed-stream",
+      "author": "Felix Geisendörfer",
+      "description": "Buffers events from a stream until you are ready to handle them.",
+      "versions": [
+        "1.0.0"
+      ]
+    },
+    {
       "id": "pkg-denque-apache-2-0",
       "kind": "package",
       "scope": "production-dependency",
@@ -7854,6 +7985,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-efrt-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "efrt",
+      "license": "MIT",
+      "homepage": "https://github.com/spencermountain/efrt#readme",
+      "author": "Spencer Kelly",
+      "description": "neato compression of key-value data",
+      "versions": [
+        "2.7.0"
+      ]
+    },
+    {
       "id": "pkg-electron-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -8088,6 +8232,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-es-set-tostringtag-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "es-set-tostringtag",
+      "license": "MIT",
+      "homepage": "https://github.com/es-shims/es-set-tostringtag#readme",
+      "author": "Jordan Harband",
+      "description": "A helper to optimistically set Symbol.toStringTag, when possible.",
+      "versions": [
+        "2.1.0"
+      ]
+    },
+    {
       "id": "pkg-es-toolkit-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -8215,6 +8372,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Create simple HTTP ETags",
       "versions": [
         "1.8.1"
+      ]
+    },
+    {
+      "id": "pkg-event-target-shim-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "event-target-shim",
+      "license": "MIT",
+      "homepage": "https://github.com/mysticatea/event-target-shim",
+      "author": "Toru Nagashima",
+      "description": "An implementation of WHATWG EventTarget interface.",
+      "versions": [
+        "5.0.1"
       ]
     },
     {
@@ -8540,6 +8710,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-follow-redirects-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "follow-redirects",
+      "license": "MIT",
+      "homepage": "https://github.com/follow-redirects/follow-redirects",
+      "author": "Ruben Verborgh",
+      "description": "HTTP and HTTPS modules that follow redirects.",
+      "versions": [
+        "1.16.0"
+      ]
+    },
+    {
       "id": "pkg-foreground-child-isc",
       "kind": "package",
       "scope": "production-dependency",
@@ -8553,6 +8736,33 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-form-data-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "form-data",
+      "license": "MIT",
+      "homepage": "https://github.com/form-data/form-data#readme",
+      "author": "Felix Geisendörfer",
+      "description": "A library to create readable \"multipart/form-data\" streams. Can be used to submit forms and file uploads to other web applications.",
+      "versions": [
+        "4.0.5",
+        "4.0.6"
+      ]
+    },
+    {
+      "id": "pkg-form-data-encoder-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "form-data-encoder",
+      "license": "MIT",
+      "homepage": "https://github.com/octet-stream/form-data-encoder#readme",
+      "author": "Nick K.",
+      "description": "Encode FormData content into the multipart/form-data format",
+      "versions": [
+        "1.7.2"
+      ]
+    },
+    {
       "id": "pkg-format-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -8563,6 +8773,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "printf, sprintf, and vsprintf for JavaScript",
       "versions": [
         "0.2.2"
+      ]
+    },
+    {
+      "id": "pkg-formdata-node-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "formdata-node",
+      "license": "MIT",
+      "homepage": "https://github.com/octet-stream/form-data#readme",
+      "author": "Nick K.",
+      "description": "Spec-compliant FormData implementation for Node.js",
+      "versions": [
+        "4.4.1"
       ]
     },
     {
@@ -8976,6 +9199,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-grad-school-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "grad-school",
+      "license": "MIT",
+      "homepage": "https://github.com/spencermountain/grounder#readme",
+      "author": "Spencer Kelly",
+      "description": "graph logic and traversal",
+      "versions": [
+        "0.0.5"
+      ]
+    },
+    {
       "id": "pkg-grammex-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -9064,6 +9300,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-has-tostringtag-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "has-tostringtag",
+      "license": "MIT",
+      "homepage": "https://github.com/inspect-js/has-tostringtag#readme",
+      "author": "Jordan Harband",
+      "description": "Determine if the JS environment has `Symbol.toStringTag` support. Supports spec, or shams.",
+      "versions": [
+        "1.0.2"
+      ]
+    },
+    {
       "id": "pkg-hasown-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -9073,7 +9322,9 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Jordan Harband",
       "description": "A robust, ES3 compatible, \"has own property\" predicate.",
       "versions": [
-        "2.0.3"
+        "2.0.2",
+        "2.0.3",
+        "2.0.4"
       ]
     },
     {
@@ -9504,6 +9755,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Nathan Rajlich",
       "description": "An HTTP(s) proxy `http.Agent` implementation for HTTPS",
       "versions": [
+        "5.0.1",
         "7.0.6"
       ]
     },
@@ -9518,6 +9770,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Human-friendly process signals",
       "versions": [
         "2.1.0"
+      ]
+    },
+    {
+      "id": "pkg-humanize-ms-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "humanize-ms",
+      "license": "MIT",
+      "homepage": "https://github.com/node-modules/humanize-ms#readme",
+      "author": "dead-horse",
+      "description": "transform humanize time to ms",
+      "versions": [
+        "1.2.1"
       ]
     },
     {
@@ -10861,6 +11126,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-mem0ai-apache-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "mem0ai",
+      "license": "Apache-2.0",
+      "homepage": "https://github.com/mem0ai/mem0#readme",
+      "author": "Deshraj Yadav",
+      "description": "The Memory Layer For Your AI Apps",
+      "versions": [
+        "3.3.1"
+      ]
+    },
+    {
       "id": "pkg-memory-pager-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -11297,6 +11575,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/jshttp/mime-db#readme",
       "description": "Media Type Database",
       "versions": [
+        "1.52.0",
         "1.54.0"
       ]
     },
@@ -11309,6 +11588,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/jshttp/mime-types#readme",
       "description": "The ultimate javascript content-type utility.",
       "versions": [
+        "2.1.35",
         "3.0.2"
       ]
     },
@@ -11655,6 +11935,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "David Frank",
       "description": "A light-weight module that brings Fetch API to node.js",
       "versions": [
+        "2.7.0",
         "3.3.2"
       ]
     },
@@ -11668,6 +11949,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "better fetch for Node.js. Works on any JavaScript runtime!",
       "versions": [
         "1.6.7"
+      ]
+    },
+    {
+      "id": "pkg-node-forge-bsd-3-clause-or-gpl-2-0",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "node-forge",
+      "license": "(BSD-3-Clause OR GPL-2.0)",
+      "homepage": "https://github.com/digitalbazaar/forge",
+      "author": "Digital Bazaar, Inc.",
+      "description": "JavaScript implementations of network transports, cryptography, ciphers, PKI, message digests, and various utilities.",
+      "versions": [
+        "1.4.0"
       ]
     },
     {
@@ -11913,6 +12207,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "OpenAI",
       "description": "The official TypeScript library for the OpenAI API",
       "versions": [
+        "4.104.0",
         "6.40.0"
       ]
     },
@@ -12826,6 +13121,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Determine address of proxied request",
       "versions": [
         "2.0.7"
+      ]
+    },
+    {
+      "id": "pkg-proxy-from-env-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "proxy-from-env",
+      "license": "MIT",
+      "homepage": "https://github.com/Rob--W/proxy-from-env#readme",
+      "author": "Rob Wu",
+      "description": "Offers getProxyForUrl to get the proxy URL for a URL, respecting the *_PROXY (e.g. HTTP_PROXY) and NO_PROXY environment variables.",
+      "versions": [
+        "2.1.0"
       ]
     },
     {
@@ -14599,6 +14907,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-suffix-thumb-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "suffix-thumb",
+      "license": "MIT",
+      "homepage": "https://github.com/spencermountain/suffix-thumb#readme",
+      "author": "Spencer Kelly",
+      "description": "learn transformations between two sets of words",
+      "versions": [
+        "5.0.3"
+      ]
+    },
+    {
       "id": "pkg-sumchecker-apache-2-0",
       "kind": "package",
       "scope": "production-dependency",
@@ -14929,6 +15250,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Sebastian Mayr",
       "description": "An implementation of the Unicode UTS #46: Unicode IDNA Compatibility Processing",
       "versions": [
+        "0.0.3",
         "5.1.1"
       ]
     },
@@ -15136,6 +15458,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://undici.nodejs.org",
       "description": "A stand-alone types package for Undici",
       "versions": [
+        "5.26.5",
         "6.21.0",
         "7.16.0",
         "8.3.0"
@@ -15434,6 +15757,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "10.0.0",
         "11.1.0",
+        "11.1.1",
         "13.0.0"
       ]
     },
@@ -15681,7 +16005,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mattias Buelens",
       "description": "Web Streams, based on the WHATWG spec reference implementation",
       "versions": [
-        "3.3.3"
+        "3.3.3",
+        "4.0.0-beta.3"
       ]
     },
     {
@@ -15707,6 +16032,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Domenic Denicola",
       "description": "Implements the WebIDL algorithms for converting to and from JavaScript values",
       "versions": [
+        "3.0.1",
         "7.0.0"
       ]
     },
@@ -15759,6 +16085,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Sebastian Mayr",
       "description": "An implementation of the WHATWG URL Standard's URL API and parsing machinery",
       "versions": [
+        "5.0.0",
         "14.2.0"
       ]
     },

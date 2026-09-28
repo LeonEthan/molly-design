@@ -22,6 +22,7 @@ export const WorkerConfigSchema = z
     selection: ModelSelectionSchema,
     systemPrompt: z.string().min(1).max(500_000),
     readBeforeEditReminder: z.string().min(1).max(16_384).optional(),
+    personalMemory: z.boolean().optional(),
     designImageImport: z.boolean().optional(),
     designImageRecovery: z.boolean().optional(),
     permissionProfileId: z.string().min(1),

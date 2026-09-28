@@ -1,3 +1,4 @@
+import type { PersonalMemoryProvider } from '@molly/shared/personal-memory';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -55,7 +56,9 @@ async function fixture(
   mcpCredentials?: McpCredentialProvider,
   importImages?: ImageImportProvider,
   recoverImages?: ImageRecoveryProvider,
-  questionPeer?: Pick<AgentSideConnection, 'unstable_createElicitation' | 'extMethod'>
+  questionPeer?: Pick<AgentSideConnection, 'unstable_createElicitation' | 'extMethod'>,
+  personalMemory?: PersonalMemoryProvider,
+  beforeResponse?: (systemPrompt: string | undefined) => Promise<void>
 ) {
   const privateRoot = await mkdtemp(join(tmpdir(), 'molly-acp-test-'));
   roots.push(privateRoot);
@@ -95,6 +98,7 @@ async function fixture(
   };
   const updates: SessionNotification[] = [];
   const messages: unknown[] = [];
+  const systemPrompts: Array<string | undefined> = [];
   const sessionInputs: CreateMollySessionInput[] = [];
   const adapter = new MollyAcpAdapter(
     {
@@ -111,15 +115,20 @@ async function fixture(
         api: owned.session.model!.api,
         streamSimple: (_model, context) => {
           messages.push(context.messages);
+          systemPrompts.push(context.systemPrompt);
           const result: AssistantMessage =
             responses.shift() ??
             fauxAssistantMessage('Unexpected dispatch', { stopReason: 'error', timestamp: 1 });
           const stream = createAssistantMessageEventStream();
-          if (result.stopReason === 'error' || result.stopReason === 'aborted') {
-            stream.push({ type: 'error', reason: result.stopReason, error: result });
-          } else if (result.stopReason !== 'pending')
-            stream.push({ type: 'done', reason: result.stopReason, message: result });
-          stream.end();
+          const emit = () => {
+            if (result.stopReason === 'error' || result.stopReason === 'aborted') {
+              stream.push({ type: 'error', reason: result.stopReason, error: result });
+            } else if (result.stopReason !== 'pending')
+              stream.push({ type: 'done', reason: result.stopReason, message: result });
+            stream.end();
+          };
+          if (beforeResponse) void beforeResponse(context.systemPrompt).then(emit);
+          else emit();
           return stream;
         },
       });
@@ -129,7 +138,8 @@ async function fixture(
     approve,
     mcpCredentials,
     importImages,
-    recoverImages
+    recoverImages,
+    personalMemory
   );
   if (questionPeer)
     await adapter.initialize({
@@ -172,6 +182,7 @@ async function fixture(
     updates,
     sessionInputs,
     messages,
+    systemPrompts,
     journal: new RunJournal(join(privateRoot, 'runs')),
   };
 }
@@ -1351,4 +1362,143 @@ describe('owned ACP boundary', () => {
       await f.adapter.dispose();
     }
   });
+});
+
+it('captures preferences after native completion through the selected model', async () => {
+  const captured: unknown[] = [];
+  const f = await fixture(
+    [
+      fauxAssistantMessage('Done', { timestamp: 1 }),
+      fauxAssistantMessage('{"changes":[{"text":"Prefers concise explanations."}]}', {
+        timestamp: 2,
+      }),
+    ],
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async (request) => {
+      if (request.operation.action === 'capture') captured.push(request.operation.changes);
+      return { enabled: true, revision: 'initial', entries: [] };
+    }
+  );
+  const result = await f.adapter.prompt(f.request);
+  expect(result.stopReason).toBe('end_turn');
+  expect(captured).toEqual([[{ text: 'Prefers concise explanations.' }]]);
+  await f.adapter.dispose();
+});
+
+it('recalls preferences in transient system context rather than persisted user history', async () => {
+  const f = await fixture(
+    [
+      fauxAssistantMessage('Done', { timestamp: 1 }),
+      fauxAssistantMessage('{"changes":[]}', { timestamp: 2 }),
+    ],
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => ({
+      enabled: true,
+      revision: 'first',
+      entries: [{ id: 'preference', text: 'Prefers concise explanations.' }],
+    })
+  );
+  await f.adapter.prompt(f.request);
+  expect(f.systemPrompts[0]).toContain('Prefers concise explanations.');
+  expect(JSON.stringify(f.messages[0])).not.toContain('Prefers concise explanations.');
+  await f.adapter.dispose();
+});
+
+it('cancels extraction before a late result can save preferences', async () => {
+  let announce: () => void = () => undefined;
+  let release: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const saved: unknown[] = [];
+  const f = await fixture(
+    [
+      fauxAssistantMessage('Done', { timestamp: 1 }),
+      fauxAssistantMessage('{"changes":[{"text":"Prefers blue."}]}', { timestamp: 2 }),
+    ],
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async (request) => {
+      if (request.operation.action === 'capture') saved.push(request.operation.changes);
+      return { enabled: true, revision: 'initial', entries: [] };
+    },
+    async (systemPrompt) => {
+      if (systemPrompt?.startsWith('Extract only')) {
+        announce();
+        await held;
+      }
+    }
+  );
+  const completion = f.adapter.prompt(f.request);
+  await started;
+  await f.adapter.cancel({ sessionId: f.request.sessionId });
+  release();
+  expect((await completion).stopReason).toBe('cancelled');
+  expect(saved).toEqual([]);
+  await f.adapter.dispose();
+});
+
+it('keeps native completion when memory extraction fails and reports the failure separately', async () => {
+  const f = await fixture(
+    [
+      fauxAssistantMessage('Done', { timestamp: 1 }),
+      fauxAssistantMessage('invalid JSON', { timestamp: 2 }),
+    ],
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => ({ enabled: true, revision: 'initial', entries: [] })
+  );
+  const result = await f.adapter.prompt(f.request);
+  expect(result.stopReason).toBe('end_turn');
+  expect(result._meta?.mollyPersonalMemory).toBe('capture_failed');
+  await f.adapter.dispose();
+});
+
+it('omits a deleted preference from recall on the next turn in the same session', async () => {
+  let entries = [{ id: 'preference', text: 'Prefers concise explanations.' }];
+  const f = await fixture(
+    [
+      fauxAssistantMessage('Done', { timestamp: 1 }),
+      fauxAssistantMessage('{"changes":[]}', { timestamp: 2 }),
+      fauxAssistantMessage('Done again', { timestamp: 3 }),
+      fauxAssistantMessage('{"changes":[]}', { timestamp: 4 }),
+    ],
+    undefined,
+    [],
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    async () => ({ enabled: true, revision: 'snapshot', entries })
+  );
+  await f.adapter.prompt(f.request);
+  entries = [];
+  await f.adapter.prompt({
+    ...f.request,
+    _meta: { mollyRunSnapshot: { ...f.snapshot, runId: randomUUID(), turnId: 'turn2' } },
+  });
+  expect(f.systemPrompts[0]).toContain('Prefers concise explanations.');
+  expect(f.systemPrompts[2]).not.toContain('Prefers concise explanations.');
+  await f.adapter.dispose();
 });

@@ -387,10 +387,18 @@ export function DesktopRunConfigMenu({
   }, [modelPickerOptions]);
   const providerIdOf = (option: AcpSessionSelectOption): string | undefined =>
     decodeMollyModelOption(option.value)?.connectionId ?? option.group ?? undefined;
+  const selectedProviderId = selectedModelOption
+    ? (providerIdOf(selectedModelOption) ?? null)
+    : null;
+  /* A catalog swap (machine/agent switch) can strand a stored pick on a
+     connection the new catalog no longer has: with one provider left the
+     Provider row hides and the stale scope would empty the Model submenu with
+     no way to clear it. Honor the pick only while its connection remains. */
   const scopedProviderId =
-    providerChoice !== undefined
+    providerChoice === null ||
+    (providerChoice !== undefined && providers.some((provider) => provider.id === providerChoice))
       ? providerChoice
-      : (selectedModelOption ? providerIdOf(selectedModelOption) : undefined) ?? null;
+      : selectedProviderId;
   const showProviderRow = providers.length > 1;
   const scopedProviderName = scopedProviderId
     ? (providers.find((provider) => provider.id === scopedProviderId)?.name ?? allProvidersLabel)

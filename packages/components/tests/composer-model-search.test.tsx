@@ -262,6 +262,46 @@ describe('composer model picker search', () => {
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
+  it('drops a stored provider pick when the catalog loses that connection', async () => {
+    /* A catalog swap (machine/agent switch) must not leave the Model submenu
+       scoped to a connection that no longer exists — with one provider left
+       the Provider row hides and the stale scope would be unfixable. */
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    await clickRow(providerRows[2]); // Review
+    /* Swap the catalog: the Review connection is gone. */
+    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
+    await act(async () => {
+      root?.render(
+        createElement(DesktopRunConfigMenu, {
+          ...desktopProps,
+          ...mollyProps,
+          modelOptions: [
+            twoProviderModels[0]!,
+            { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
+          ],
+          selectedModelId: studio,
+        })
+      );
+    });
+    const rootMenu = menuContents()[0];
+    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
+      el.textContent?.startsWith('Provider')
+    );
+    expect(providerRow).toBeUndefined();
+    /* The scope falls back to the selected model's provider, so the Model
+       submenu still lists its connection's models. */
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows.map((row) => row.querySelector('.truncate')?.textContent)).toEqual([
+      'Aurora 1',
+      'Nimbus 2',
+    ]);
+  });
+
   it('hides the Provider row when every model comes from one provider', async () => {
     const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
     await openRunConfigMenu({

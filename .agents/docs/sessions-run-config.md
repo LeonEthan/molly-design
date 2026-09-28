@@ -40,7 +40,10 @@ this page is the full text of the rules summarised there.
   (group name is only a fallback for other agents' catalogs) — two connections
   may share a display name, so the name alone is never the key, and colliding
   labels get a disambiguating description (connection id on Provider rows, raw
-  model id on Model rows). The Model row and the pill name
+  model id on Model rows). A stored provider pick is honored only while its
+  connection remains in the catalog; a catalog swap (machine/agent switch)
+  falls the scope back to the selected model's provider instead of stranding
+  the Model submenu empty behind a hidden Provider row. The Model row and the pill name
   just the model. When nothing is selected the Model submenu shows the whole
   catalog grouped by connection (only when two or more connections exist);
   search also matches the id and the connection. The catalog has no product

@@ -26,6 +26,7 @@ import {
   recordRecentRunConfig,
   resolveApplicableConfigOptionValues,
   sanitizeConfigOptionValues,
+  sanitizeRecentConfigOptionValues,
   type RecentRunConfigRecord,
 } from '../src/lib/recent-run-configs';
 
@@ -48,7 +49,6 @@ const record = (overrides: Partial<RecentRunConfigRecord> = {}): RecentRunConfig
   modelLabel: 'Opus 5',
   reasoningLabel: 'High',
   planOn: false,
-  fastOn: false,
   configOptionValues: { reasoning_effort: 'high' },
   usedAt: 1,
   ...overrides,
@@ -81,6 +81,44 @@ describe('recent run config identity', () => {
       a: 'x',
       c: false,
     });
+  });
+
+  it('drops Fast values so a record never carries them', () => {
+    const reasoning: AcpConfigOptionSelector = {
+      configId: 'reasoning_effort',
+      label: 'Reasoning',
+      category: 'thought_level',
+      type: 'select',
+      currentValue: 'medium',
+      options: [{ value: 'high', label: 'High' }],
+    };
+    const fast: AcpConfigOptionSelector = {
+      configId: 'fast-mode',
+      label: 'Fast',
+      type: 'boolean',
+      options: [],
+      currentValue: false,
+    };
+    expect(
+      sanitizeRecentConfigOptionValues({ reasoning_effort: 'high', 'fast-mode': true }, [
+        reasoning,
+        fast,
+      ])
+    ).toEqual({ reasoning_effort: 'high' });
+    // Two runs that differ only in Fast are one combination.
+    expect(
+      getRecentRunConfigKey(
+        record({
+          configOptionValues: sanitizeRecentConfigOptionValues({ 'fast-mode': true }, [fast]),
+        })
+      )
+    ).toBe(
+      getRecentRunConfigKey(
+        record({
+          configOptionValues: sanitizeRecentConfigOptionValues({ 'fast-mode': false }, [fast]),
+        })
+      )
+    );
   });
 });
 
@@ -168,6 +206,14 @@ describe('applying a record to the current selectors', () => {
       { value: 'high', label: 'High' },
     ],
   };
+  const fast: AcpConfigOptionSelector = {
+    configId: 'fast-mode',
+    label: 'Fast',
+    category: 'boolean',
+    type: 'boolean',
+    options: [],
+    currentValue: false,
+  };
 
   it('skips values the provider no longer offers', () => {
     expect(
@@ -195,6 +241,16 @@ describe('applying a record to the current selectors', () => {
     ).toEqual([{ configId: 'reasoning_effort', value: 'xhigh' }]);
   });
 
+  it('never replays a stored Fast value', () => {
+    // Records written before Fast was retired from recents still carry it.
+    expect(
+      resolveApplicableConfigOptionValues(
+        { configOptionValues: { reasoning_effort: 'high', 'fast-mode': true } },
+        [reasoning, fast]
+      )
+    ).toEqual([{ configId: 'reasoning_effort', value: 'high' }]);
+  });
+
   it('describes the selection the way the run-config trigger reads it', () => {
     const face = describeRunConfigSelection({
       modelOptions: [{ value: 'opus', label: 'Opus 5' }],
@@ -207,7 +263,6 @@ describe('applying a record to the current selectors', () => {
       modelLabel: 'Opus 5',
       reasoningLabel: 'High',
       planOn: false,
-      fastOn: false,
     });
   });
 

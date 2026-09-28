@@ -1,4 +1,4 @@
-import { ListChecks, Zap } from 'lucide-react';
+import { ListChecks } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { AgentConfigMeta } from '@molly/shared';
 
@@ -10,11 +10,12 @@ import { DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator } from '@/ui
  * `DesktopRunConfigMenu`.
  *
  * A recent entry is one whole combination the user actually started a chat
- * with — agent + model + reasoning + plan/fast, or an Agent Role, which IS one
+ * with — agent + model + reasoning + plan (Fast is retired and neither
+ * displays nor replays), or an Agent Role, which IS one
  * of those combinations — so picking one is a single click instead of walking
  * three submenus. The row therefore reads like the
- * run-config trigger face (icon · model · reasoning · glyphs) and, unlike the
- * Agent/Model/Reasoning option rows, CLOSES the menu: it is a terminal
+ * run-config trigger face (icon · model · reasoning · plan glyph) and, unlike the
+ * Provider/Model/Reasoning option rows, CLOSES the menu: it is a terminal
  * "run it like this" action, not one knob among several.
  *
  * Presentation only. The caller decides which entries exist, drops the one
@@ -36,7 +37,6 @@ export type RecentRunConfigItem = {
   modelLabel: string | null;
   reasoningLabel: string | null;
   planOn: boolean;
-  fastOn: boolean;
 };
 
 function RowDot() {
@@ -48,14 +48,8 @@ function RowDot() {
 }
 
 /** Flat, comma-free reading of a row for assistive tech and the row tooltip. */
-function describeItem(item: RecentRunConfigItem, planLabel: string, fastLabel: string): string {
-  return [
-    item.role?.name ?? item.agent.name,
-    item.modelLabel,
-    item.reasoningLabel,
-    item.planOn ? planLabel : null,
-    item.fastOn ? fastLabel : null,
-  ]
+function describeItem(item: RecentRunConfigItem, planLabel: string): string {
+  return [item.role?.name ?? item.agent.name, item.modelLabel, item.reasoningLabel, item.planOn ? planLabel : null]
     .filter(Boolean)
     .join(' · ');
 }
@@ -71,7 +65,6 @@ export function RecentRunConfigMenuGroup({
   if (items.length === 0) return null;
 
   const planLabel = t('chat.mobileNewChat.planModeLabel', 'Plan');
-  const fastLabel = t('chat.runConfig.fastLabel', 'Fast');
 
   return (
     <>
@@ -83,8 +76,8 @@ export function RecentRunConfigMenuGroup({
           key={item.id}
           // The row is assembled from several spans, so give Radix an explicit
           // string for typeahead and screen readers instead of the DOM soup.
-          textValue={describeItem(item, planLabel, fastLabel)}
-          title={describeItem(item, planLabel, fastLabel)}
+          textValue={describeItem(item, planLabel)}
+          title={describeItem(item, planLabel)}
           onSelect={() => onSelect(item.id)}
           // A recent entry must never set the menu's width: a long agent name
           // would otherwise stretch the whole dropdown and drag the Agent /
@@ -132,7 +125,7 @@ export function RecentRunConfigMenuGroup({
               </>
             ) : null}
           </span>
-          {/* Glyphs park in a right-hand column so plan/fast can be scanned
+          {/* The plan glyph parks in a right-hand column so it can be scanned
               down the list instead of hunted at the end of each phrase. */}
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-2">
             {item.planOn ? (
@@ -141,9 +134,6 @@ export function RecentRunConfigMenuGroup({
                 strokeWidth={1.8}
                 aria-hidden="true"
               />
-            ) : null}
-            {item.fastOn ? (
-              <Zap className="h-3.5 w-3.5 text-primary" strokeWidth={1.8} aria-hidden="true" />
             ) : null}
           </span>
         </DropdownMenuItem>

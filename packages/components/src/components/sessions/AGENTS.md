@@ -76,6 +76,8 @@ Files: [README.md](README.md). Scopes:
   (only with multiple user-configured connections; picking one scopes the
   Model submenu), Model (submenu catalog with search), Reasoning (submenu
   option list) — Plan/Fast/interaction/extra selectors no longer render here.
+  Fast is also retired from recents: records neither display nor replay it,
+  and runs differing only in Fast dedupe.
   Preserve opaque model ids and model-specific reasoning capabilities. Roles
   are retired: no
   selection, creation, prompt prefix, draft restoration or recent-Role replay.

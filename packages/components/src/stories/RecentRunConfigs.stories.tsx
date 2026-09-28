@@ -123,7 +123,6 @@ const threeRecents: RecentRunConfigItem[] = [
     modelLabel: '5.5',
     reasoningLabel: 'High',
     planOn: false,
-    fastOn: false,
   },
   {
     id: 'recent-claude-opus-high',
@@ -131,7 +130,6 @@ const threeRecents: RecentRunConfigItem[] = [
     modelLabel: 'Opus 5',
     reasoningLabel: 'High',
     planOn: false,
-    fastOn: true,
   },
   {
     id: 'recent-codex-55-xhigh',
@@ -139,7 +137,6 @@ const threeRecents: RecentRunConfigItem[] = [
     modelLabel: '5.5',
     reasoningLabel: 'XHigh',
     planOn: true,
-    fastOn: false,
   },
   {
     id: 'recent-grok-build',
@@ -147,7 +144,6 @@ const threeRecents: RecentRunConfigItem[] = [
     modelLabel: 'Grok Build',
     reasoningLabel: null,
     planOn: false,
-    fastOn: false,
   },
 ];
 
@@ -259,7 +255,6 @@ export const LongLabels: Story = {
         modelLabel: 'claude-opus-5-20260514-preview',
         reasoningLabel: 'XHigh',
         planOn: true,
-        fastOn: true,
       },
       threeRecents[2]!,
     ],

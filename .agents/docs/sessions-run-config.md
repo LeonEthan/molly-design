@@ -23,7 +23,9 @@ this page is the full text of the rules summarised there.
   ships no models of its own, so providers are exactly the user's connections),
   Model (plain model names), and Reasoning (an option list, only when the model
   offers more than one level). Plan, Fast, provider interaction modes and extra
-  selects no longer render in this menu. Explicit `_permission` config options
+  selects no longer render in this menu, and Fast is retired from recents too:
+  a recently-used record neither displays nor replays a Fast value, and runs
+  differing only in Fast dedupe to one entry. Explicit `_permission` config options
   take precedence over legacy ACP modes in the separate permission button. Both
   buttons are also used by the desktop chat landing; `DesktopRunConfigMenu`
   receives an explicit runtime metadata rather than reading `SessionMeta`.

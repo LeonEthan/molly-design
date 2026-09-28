@@ -94,7 +94,7 @@ import {
   readRecentRunConfigs,
   recordRecentRunConfig,
   resolveApplicableConfigOptionValues,
-  sanitizeConfigOptionValues,
+  sanitizeRecentConfigOptionValues,
   type RecentRunConfigRecord,
 } from '@/lib/recent-run-configs';
 import { useAcpSelectorOptions } from '@/hooks/use-acp-selector-options';
@@ -928,11 +928,14 @@ function WorkspaceChatLanding({
             agentId: selectedAgent.agentId,
             machineId: selectedAgent.machineId,
             modelId: currentRunConfigFace.modelId,
-            configOptionValues: sanitizeConfigOptionValues(dispatchConfigOptionValues),
+            configOptionValues: sanitizeRecentConfigOptionValues(
+              dispatchConfigOptionValues,
+              configOptionSelectors
+            ),
             agentRoleId: null,
           })
         : null,
-    [currentRunConfigFace.modelId, dispatchConfigOptionValues, selectedAgent]
+    [currentRunConfigFace.modelId, configOptionSelectors, dispatchConfigOptionValues, selectedAgent]
   );
   /* Picking an entry switches the agent first; its model and options can only
      be applied after that agent's own reconcile pass has seeded the selection
@@ -1905,8 +1908,7 @@ function WorkspaceChatLanding({
             modelLabel: currentRunConfigFace.modelLabel,
             reasoningLabel: currentRunConfigFace.reasoningLabel,
             planOn: currentRunConfigFace.planOn,
-            fastOn: currentRunConfigFace.fastOn,
-            configOptionValues: sanitizeConfigOptionValues(dispatchConfigOptionValues),
+            configOptionValues: sanitizeRecentConfigOptionValues(dispatchConfigOptionValues, configOptionSelectors),
             agentRoleId: null,
           },
           Date.now()
@@ -2230,6 +2232,7 @@ function WorkspaceChatLanding({
         ) : null}
         <DesktopRunConfigMenu
           agentSelection={selectedAgent}
+          availableAgentConfigs={recentRunConfigAgentConfigs}
           disabledReason={
             scopedMachineId
               ? undefined

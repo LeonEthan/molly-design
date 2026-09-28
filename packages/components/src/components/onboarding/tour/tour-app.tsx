@@ -624,9 +624,7 @@ function TourWindow({
                           session={session}
                           sessionLocalProjectRootPath={`/Users/you/Code/${identity.projectName}`}
                           isMachineRemoved={false}
-                          isAgentBusy={configurationState?.conversationStatus === 'starting'}
                           isDark
-                          isEmptyConversation={false}
                           selectedModeId={modeId}
                           selectedModelId={modelId}
                           modeOptions={selectorOptions.modeOptions}

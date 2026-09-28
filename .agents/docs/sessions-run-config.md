@@ -13,18 +13,42 @@ this page is the full text of the rules summarised there.
   `child-tab-empty-state.tsx`; it uses the same `px-3` + `ConversationColumn` as
   the composer, so its right edge and max width must stay aligned automatically.
   Desktop run knobs are TWO footer buttons from `desktop-run-config-menu.tsx`:
-  `DesktopRunConfigMenu` (thin SVG, pill-shaped `[model icon] connection · model · reasoning ⌄`
-  face; opens the connection/model list directly, with Reasoning and other
-  supported select submenus + Plan/Fast toggle rows below) and
-  `DesktopPermissionModeButton` (permission icon + full name; flat permission
-  list). Explicit `_permission` config options take precedence over legacy ACP
-  modes; provider interaction modes stay inside the run-config dropdown. Both
-  are also used by the desktop chat landing; `DesktopRunConfigMenu` receives an
-  explicit runtime metadata rather than reading `SessionMeta`. The single Molly
-  harness has no Agent switcher. Connection and model identities come from the
+  `DesktopRunConfigMenu` (pill face `agent icon · model · reasoning ⌄`,
+  reasoning muted) and `DesktopPermissionModeButton` (permission icon + full
+  name; flat permission list). The run-config menu itself is one flat list of
+  value rows, each opening a submenu: Recently-used whole configurations on top
+  when the caller has them, then Provider (only when the user has configured
+  more than one model connection — picking one scopes the Model submenu to it,
+  and "All providers" restores the full grouped catalog; the builtin agent
+  ships no models of its own, so providers are exactly the user's connections),
+  Model (plain model names), and Reasoning (an option list, only when the model
+  offers more than one level). Plan, Fast, provider interaction modes and extra
+  selects no longer render in this menu, and Fast is retired from recents too:
+  a recently-used record neither displays nor replays a Fast value, and runs
+  differing only in Fast dedupe to one entry. Explicit `_permission` config options
+  take precedence over legacy ACP modes in the separate permission button. Both
+  buttons are also used by the desktop chat landing; `DesktopRunConfigMenu`
+  receives an explicit runtime metadata rather than reading `SessionMeta`.
+  Connection and model identities come from the
   existing published catalog: display its labels and pass opaque option ids
   unchanged through the existing selection controller. Never reconstruct ids
-  from display names or fetch a parallel catalog. The unselected sentinel is
+  from display names or fetch a parallel catalog. The catalog names each Molly
+  option by its model, carries the raw provider model id as its description and
+  the connection's display name as its ACP select `group` (#12). The Provider
+  row is that grouping surfaced as a scope, keyed on the stable connection id
+  decoded from the catalog's own `molly-model:<connection>/<model>` values
+  (group name is only a fallback for other agents' catalogs) — two connections
+  may share a display name, so the name alone is never the key, and colliding
+  labels get a disambiguating description (connection id on Provider rows, raw
+  model id on Model rows). A stored provider pick is honored only while its
+  connection remains in the catalog; a catalog swap (machine/agent switch)
+  falls the scope back to the selected model's provider instead of stranding
+  the Model submenu empty behind a hidden Provider row. The Model row and the pill name
+  just the model. When nothing is selected the Model submenu shows the whole
+  catalog grouped by connection (only when two or more connections exist);
+  search also matches the id and the connection. The catalog has no product
+  default model, so the list offers no
+  "Default" row and no reset. The unselected sentinel is
   displayed as “Select model” on the button, never offered as a model. An empty
   catalog directs the user to add a model connection in Settings. Reasoning
   continues to use the controller’s model-specific capabilities.
@@ -34,12 +58,12 @@ this page is the full text of the rules summarised there.
   creation-time DeepSeek-V4-Pro seed rather than the parent's visible model.
   Keep the warning tied to that agent/model combination and its upstream
   discussion rather than turning it into a global banner.
-  Model/Reasoning choices and Plan/Fast toggle rows keep the menu open so users
+  Model/Reasoning choices keep the menu open so users
   can adjust several values; Escape or outside interaction dismisses it through
   the shared composer focus policy.
   Once the model list reaches `OPTION_SEARCH_MIN_OPTIONS`
   (`lib/fuzzy-option-filter.ts` — the same threshold and matcher the mobile
-  sheet uses) the direct model list gains a fuzzy search row over
+  sheet uses) the model list gains a fuzzy search row over
   `MenuOptionSearchList`: a provider may publish dozens of models, and scrolling
   is not a way to find one. A search field inside a Radix menu must be
   `DropdownMenuSearchInput`, which owns the fight with the menu's typeahead and

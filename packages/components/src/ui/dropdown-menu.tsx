@@ -242,6 +242,25 @@ const DropdownMenuSubTrigger = React.forwardRef<
   }
 >(({ className, inset, icon, children, onPointerEnter, disabled, ...props }, ref) => {
   const setSubmenuOpen = React.useContext(DropdownMenuSubOpenContext);
+  /* The last pointer position observed ON this row, plus the cleanup for a
+     withheld departure. A background re-render can shift the open menu under
+     a STATIONARY pointer; the browser then fires a leave whose coordinates
+     may be stale — off the row entirely (observed: a point beyond the
+     viewport, or inside the just-opened submenu the stationary pointer never
+     reached). A genuine teleport-style leave and this stale leave are
+     indistinguishable at the moment they fire, so the ambiguous leave is
+     withheld from Radix (whose onItemLeave would focus the parent menu
+     container and close the submenu) and resolved against the NEXT real
+     pointer input instead. */
+  const lastPointerRef = React.useRef<{ x: number; y: number } | null>(null);
+  const pendingDepartureRef = React.useRef<(() => void) | null>(null);
+
+  const clearPendingDeparture = React.useCallback(() => {
+    pendingDepartureRef.current?.();
+    pendingDepartureRef.current = null;
+  }, []);
+
+  React.useEffect(() => clearPendingDeparture, [clearPendingDeparture]);
 
   return (
     <DropdownMenuPrimitive.SubTrigger
@@ -250,18 +269,26 @@ const DropdownMenuSubTrigger = React.forwardRef<
       disabled={disabled}
       {...props}
       onPointerEnter={(event) => {
+        lastPointerRef.current = { x: event.clientX, y: event.clientY };
+        clearPendingDeparture();
         onPointerEnter?.(event);
         if (!event.defaultPrevented && event.pointerType === 'mouse' && !disabled) {
           setSubmenuOpen?.(true);
         }
       }}
+      onPointerMove={(event) => {
+        props.onPointerMove?.(event);
+        if (event.pointerType === 'mouse') {
+          lastPointerRef.current = { x: event.clientX, y: event.clientY };
+        }
+      }}
       onPointerLeave={(event) => {
         props.onPointerLeave?.(event);
         if (event.defaultPrevented || event.pointerType !== 'mouse') return;
-        const contentId = event.currentTarget.getAttribute('aria-controls');
-        const content = contentId
-          ? event.currentTarget.ownerDocument.getElementById(contentId)
-          : null;
+        const trigger = event.currentTarget;
+        const doc = trigger.ownerDocument;
+        const contentId = trigger.getAttribute('aria-controls');
+        const content = contentId ? doc.getElementById(contentId) : null;
         // A sparse pointer move can jump directly from the trigger to its
         // left-opening content before Radix observes the new direction. Its
         // grace check then focuses the parent menu and closes the submenu.
@@ -273,7 +300,61 @@ const DropdownMenuSubTrigger = React.forwardRef<
           content.contains(event.relatedTarget)
         ) {
           event.preventDefault();
+          return;
         }
+        if (!content) return;
+        const last = lastPointerRef.current;
+        if (!last) return;
+        const hit = doc.elementFromPoint(last.x, last.y);
+        if (hit !== trigger && !(hit instanceof Node && trigger.contains(hit))) return;
+        /* Ambiguous: the browser claims a leave, but the pointer's last
+           observed position still hit-tests this row. Withhold the leave from
+           Radix and resolve on the next real input: still over the row or
+           inside this submenu means it never left; over the parent menu or
+           the envelope bridging to the submenu means transit, keep waiting;
+           anywhere else confirms the exit and closes the submenu. Our wrapper
+           runs before Radix's composed leave handlers, so preventDefault
+           keeps grace state and parent focus untouched meanwhile. */
+        event.preventDefault();
+        clearPendingDeparture();
+        const rootContent = trigger.closest('[data-radix-menu-content]');
+        const rootRect = rootContent?.getBoundingClientRect();
+        const contentRect = content.getBoundingClientRect();
+        const envelope = rootRect
+          ? {
+              left: Math.min(rootRect.left, contentRect.left),
+              right: Math.max(rootRect.right, contentRect.right),
+              top: Math.min(rootRect.top, contentRect.top),
+              bottom: Math.max(rootRect.bottom, contentRect.bottom),
+            }
+          : contentRect;
+        const resolveDeparture = (input: PointerEvent) => {
+          if (!contentId || !doc.getElementById(contentId)) {
+            clearPendingDeparture();
+            return;
+          }
+          const target = doc.elementFromPoint(input.clientX, input.clientY);
+          if (target && (trigger.contains(target) || content.contains(target))) {
+            clearPendingDeparture();
+            return;
+          }
+          const insideEnvelope =
+            input.clientX >= envelope.left &&
+            input.clientX <= envelope.right &&
+            input.clientY >= envelope.top &&
+            input.clientY <= envelope.bottom;
+          if (insideEnvelope) return;
+          clearPendingDeparture();
+          setSubmenuOpen?.(false);
+        };
+        const onMove = (next: Event) => resolveDeparture(next as PointerEvent);
+        const onDown = (next: Event) => resolveDeparture(next as PointerEvent);
+        doc.addEventListener('pointermove', onMove, true);
+        doc.addEventListener('pointerdown', onDown, true);
+        pendingDepartureRef.current = () => {
+          doc.removeEventListener('pointermove', onMove, true);
+          doc.removeEventListener('pointerdown', onDown, true);
+        };
       }}
     >
       {icon ? <span className={menuItemIconClassName}>{icon}</span> : null}

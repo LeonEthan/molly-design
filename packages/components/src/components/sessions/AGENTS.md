@@ -72,8 +72,15 @@ Files: [README.md](README.md). Scopes:
 
 ## Run config
 
-- Desktop opens the published connection/model catalog directly; preserve opaque
-  model ids and model-specific reasoning capabilities. Roles are retired: no
+- Desktop run config is one flat menu of value rows: Recently used, Provider
+  (only with multiple user-configured connections; picking one scopes the
+  Model submenu; scopes key on the decoded connection id, never the display
+  name), Model (submenu catalog with search), Reasoning (submenu
+  option list) — Plan/Fast/interaction/extra selectors no longer render here.
+  Fast is also retired from recents: records neither display nor replay it,
+  and runs differing only in Fast dedupe.
+  Preserve opaque model ids and model-specific reasoning capabilities. Roles
+  are retired: no
   selection, creation, prompt prefix, draft restoration or recent-Role replay.
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.

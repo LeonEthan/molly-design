@@ -4,9 +4,9 @@ import { getAgentRoleEmoji, type AgentConfigMeta, type AgentRole } from '@molly/
 import type { RecentRunConfigItem } from '@/components/sessions/recent-run-config-menu-group';
 import {
   isConfigOptionValueValid,
+  isFastModeSelector,
   isThoughtLevelSelector,
   resolveConfigOptionValue,
-  resolveOnOffConfigOptionEnabled,
   resolvePlanModeSelectorEnabled,
   type AcpConfigOptionSelector,
   type AcpConfigOptionValue,
@@ -19,10 +19,12 @@ import { orderAcpConfigOptionSelectors } from '@/lib/acp-selector-order';
  * "Recently used" run configurations behind `RecentRunConfigMenuGroup`.
  *
  * A record is one whole combination the user actually STARTED a chat with —
- * agent + model + every config option (reasoning, plan, fast, provider
- * selects). It is device-local by design: this is "what I ran on this machine
- * lately", not shared workspace state, so it lives in localStorage next to
- * `chat-landing-defaults.ts` and is keyed per workspace.
+ * agent + model + the config options the run-config menu still owns
+ * (reasoning, plan, provider selects). Fast is retired from recents: its
+ * selector values are neither recorded nor replayed, and records carry no
+ * fast flag. The list is device-local by design: this is "what I ran on this
+ * machine lately", not shared workspace state, so it lives in localStorage
+ * next to `chat-landing-defaults.ts` and is keyed per workspace.
  *
  * Records carry BOTH the raw values needed to re-apply the combination and the
  * labels needed to render it. The labels are a snapshot: a recent entry may
@@ -56,7 +58,9 @@ const recentRunConfigRecordSchema = z.object({
   modelLabel: z.string().nullable(),
   reasoningLabel: z.string().nullable(),
   planOn: z.boolean(),
-  fastOn: z.boolean(),
+  /* No fastOn: Fast is retired from recents. Records written before the
+     retirement still parse — zod strips the unknown key — but their stored
+     fast value is filtered out again at replay time. */
   configOptionValues: z.record(z.string(), configOptionValueSchema),
   /**
    * The Agent Role this run was started as, when it was started as one.
@@ -85,6 +89,25 @@ export const sanitizeConfigOptionValues = (
     }
   }
   return next;
+};
+
+/**
+ * Fast is retired from recents: values belonging to fast-mode selectors never
+ * enter a record, so a stored combination neither displays nor replays Fast,
+ * and two runs that differ only in Fast are one combination.
+ */
+export const sanitizeRecentConfigOptionValues = (
+  values: Record<string, AcpConfigOptionValue | undefined> | undefined,
+  configOptionSelectors: ReadonlyArray<AcpConfigOptionSelector>
+): Record<string, AcpConfigOptionValue> => {
+  const fastConfigIds = new Set(
+    configOptionSelectors.filter(isFastModeSelector).map((selector) => selector.configId)
+  );
+  const sanitized = sanitizeConfigOptionValues(values);
+  if (fastConfigIds.size === 0) return sanitized;
+  return Object.fromEntries(
+    Object.entries(sanitized).filter(([configId]) => !fastConfigIds.has(configId))
+  );
 };
 
 const configOptionSignature = (values: Record<string, AcpConfigOptionValue>): string =>
@@ -116,7 +139,6 @@ export type RunConfigFace = {
   modelLabel: string | null;
   reasoningLabel: string | null;
   planOn: boolean;
-  fastOn: boolean;
 };
 
 /**
@@ -135,7 +157,7 @@ export function describeRunConfigSelection({
   configOptionSelectors: ReadonlyArray<AcpConfigOptionSelector>;
   configOptionValues: Record<string, AcpConfigOptionValue | undefined> | undefined;
 }): RunConfigFace {
-  const { modelSelectors, thoughtLevelSelectors, planModeSelectors, fastModeSelectors } =
+  const { modelSelectors, thoughtLevelSelectors, planModeSelectors } =
     orderAcpConfigOptionSelectors([...configOptionSelectors]);
   const modelConfigSelector = modelSelectors[0];
   const pickerOptions =
@@ -159,7 +181,6 @@ export function describeRunConfigSelection({
       ) as string) ?? null)
     : null;
   const planSelector = planModeSelectors[0];
-  const fastSelector = fastModeSelectors[0];
   return {
     modelId: modelOptions.length > 0 ? selectedModelId : null,
     modelLabel:
@@ -170,9 +191,6 @@ export function describeRunConfigSelection({
       thinkingValue,
     planOn: planSelector
       ? resolvePlanModeSelectorEnabled(planSelector, configOptionValues?.[planSelector.configId])
-      : false,
-    fastOn: fastSelector
-      ? resolveOnOffConfigOptionEnabled(fastSelector, configOptionValues?.[fastSelector.configId])
       : false,
   };
 }
@@ -286,7 +304,6 @@ export function buildRecentRunConfigItems({
       modelLabel: record.modelLabel,
       reasoningLabel: record.reasoningLabel,
       planOn: record.planOn,
-      fastOn: record.fastOn,
     });
   }
   return items;
@@ -311,6 +328,9 @@ export function resolveApplicableConfigOptionValues(
 ): Array<{ configId: string; value: AcpConfigOptionValue }> {
   const applicable: Array<{ configId: string; value: AcpConfigOptionValue }> = [];
   for (const selector of configOptionSelectors) {
+    // Records written before Fast was retired still carry its value; never
+    // replay it.
+    if (isFastModeSelector(selector)) continue;
     const value = record.configOptionValues[selector.configId];
     if (value === undefined) continue;
     const modelDependent = options.switchesModel === true && isThoughtLevelSelector(selector);

@@ -45,5 +45,12 @@ strings on i18n rather than the registry's inline English.
 - A sparse pointer move that lands inside an open dropdown submenu must not refocus
   the parent menu. Preserve Radix's pointer grace and the related-target guard in the
   shared `DropdownMenuSubTrigger`, including for left-opening submenus.
+- A background re-render can shift an open menu under a stationary pointer, and the
+  browser then fires a leave with stale coordinates (observed: points beyond the
+  viewport or inside the just-opened submenu). Preserve the withhold-and-resolve
+  gate in `DropdownMenuSubTrigger`: such a leave is indistinguishable from a genuine
+  teleport-leave at fire time, so it is withheld from Radix and resolved against the
+  next real pointer input (over the row/submenu = never left; outside the menu
+  envelope = close). Never classify by time windows or raw coordinates alone.
 - `DiffViewer` uses the shared `@pierre/diffs` worker pools for syntax work regardless
   of file size. Do not create or terminate a worker pool per viewer.

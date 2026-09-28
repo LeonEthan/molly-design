@@ -88,7 +88,7 @@ describe('composer model picker search', () => {
     container = undefined;
   });
 
-  /* ── Desktop: direct provider/model choices ── */
+  /* ── Desktop: value-row menu (Provider / Model / Reasoning) ── */
 
   type MenuProps = ComponentProps<typeof DesktopRunConfigMenu>;
   const desktopProps: MenuProps = {
@@ -102,7 +102,12 @@ describe('composer model picker search', () => {
     onConfigOptionChange: () => undefined,
   };
 
-  const openModelMenu = async (props: Partial<MenuProps> = {}) => {
+  const menuContents = () => [...document.querySelectorAll('[data-radix-menu-content]')];
+  /** The root menu holds the value rows; the most recently opened content is
+     the submenu under test. */
+  const submenuContent = () => menuContents().at(-1) ?? null;
+
+  const openRunConfigMenu = async (props: Partial<MenuProps> = {}) => {
     await act(async () => {
       root?.render(createElement(DesktopRunConfigMenu, { ...desktopProps, ...props }));
     });
@@ -112,18 +117,34 @@ describe('composer model picker search', () => {
         ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
+  };
+
+  /* Value rows open their submenu on ArrowRight, like any submenu. */
+  const openSubmenu = async (label: string) => {
+    const rootMenu = menuContents()[0];
+    const row = [...(rootMenu?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].find(
+      (el) => el.textContent?.startsWith(label)
+    );
+    if (!row) throw new Error(`run-config menu has no "${label}" row`);
+    await act(async () => {
+      row.focus();
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    return submenuContent();
+  };
+
+  const openModelMenu = async (props: Partial<MenuProps> = {}) => {
+    await openRunConfigMenu(props);
+    await openSubmenu('Model');
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
     return {
       search,
-      // The first menu exposes the model choices directly.
-      rows: () => {
-        const submenu = search
-          ? search.closest('[data-radix-menu-content]')
-          : [...document.querySelectorAll('[data-radix-menu-content]')].at(-1);
-        return [...(submenu?.querySelectorAll('[role="menuitemradio"]') ?? [])].map((node) =>
-          node.textContent?.trim()
-        );
-      },
+      /* The row's first line is the label; a raw-id description may follow
+         when labels collide. */
+      rows: () =>
+        [...(submenuContent()?.querySelectorAll('[role="menuitemradio"]') ?? [])].map(
+          (node) => node.querySelector('.truncate')?.textContent?.trim() ?? node.textContent?.trim()
+        ),
     };
   };
 
@@ -133,30 +154,169 @@ describe('composer model picker search', () => {
     expect(rows()).toHaveLength(manyModels.length);
   });
 
-  it('selects the exact connection when two connections expose the same model', async () => {
+  /* Two connections exposing the same model name — the case the Provider row
+     and the connection group exist for. */
+  const studio = encodeMollyModelOption('studio', 'aurora/1');
+  const review = encodeMollyModelOption('review', 'aurora/1');
+  const nimbus = encodeMollyModelOption('review', 'nimbus/2');
+  const twoProviderModels = [
+    { value: studio, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+    { value: review, label: 'Aurora 1', description: 'aurora/1', group: 'Review' },
+    { value: nimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Review' },
+  ];
+  const mollyConfig: AgentConfigMeta = { ...agentConfig, name: 'Molly', agentType: 'molly' };
+  const mollyProps: Partial<MenuProps> = {
+    availableAgentConfigs: [mollyConfig],
+    agentSelection: { agentId: mollyConfig.id, machineId },
+  };
+
+  const clickRow = async (row: HTMLElement | undefined) => {
+    await act(async () => {
+      row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  };
+  const radioRows = (content: Element | null) => [
+    ...(content?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []),
+  ];
+
+  it('scopes the Model row to the provider picked on the Provider row', async () => {
     const onModelChange = vi.fn();
-    const studio = encodeMollyModelOption('studio', 'aurora/1');
-    const review = encodeMollyModelOption('review', 'aurora/1');
-    await openModelMenu({
-      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
-      modelOptions: [
-        { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
-        { value: studio, label: 'Studio · Aurora 1' },
-        { value: review, label: 'Review · Aurora 1' },
-      ],
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
       selectedModelId: studio,
       onModelChange,
     });
-    const menu = document.querySelector('[role="menu"]');
-    const rows = [...(menu?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? [])];
-    expect(rows.map((row) => row.textContent)).toEqual(['Studio · Aurora 1', 'Review · Aurora 1']);
-    expect(rows[0]?.getAttribute('aria-checked')).toBe('true');
-    expect(menu?.querySelector('[role="menuitem"]')).toBeNull();
-    await act(async () => {
-      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    /* The scope follows the selected model's provider. */
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    expect(providerRows.map((row) => row.textContent)).toEqual([
+      'All providers',
+      'Studio',
+      'Review',
+    ]);
+    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+
+    await clickRow(providerRows[2]);
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows.map((row) => row.textContent)).toEqual(['Aurora 1', 'Nimbus 2']);
+    /* Same label as the Studio model, but the exact Review value is picked. */
+    await clickRow(modelRows[0]);
     expect(onModelChange).toHaveBeenCalledWith(review);
     expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('restores the full grouped catalog from All providers', async () => {
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    await clickRow(providerRows[0]);
+    const submenu = await openSubmenu('Model');
+    const rows = radioRows(submenu);
+    const labelOf = (row: HTMLElement) =>
+      row.querySelector('.truncate')?.textContent ?? row.textContent;
+    expect(rows.map(labelOf)).toEqual(['Aurora 1', 'Aurora 1', 'Nimbus 2']);
+    /* Both Aurora rows carry the same label, so each shows its raw provider
+       model id as the disambiguating description. */
+    expect(rows[0]?.textContent).toContain('aurora/1');
+    expect(rows[1]?.textContent).toContain('aurora/1');
+    expect(rows[2]?.textContent).not.toContain('nimbus/2');
+    expect(submenu?.textContent).toContain('Studio');
+    expect(submenu?.textContent).toContain('Review');
+    expect(submenu?.querySelector('[role="menuitem"]')).toBeNull();
+  });
+
+  it('keeps same-named connections as separate provider scopes', async () => {
+    /* Two connections may share a display name; scoping keys on the stable
+       connection id decoded from the catalog value, never on the name. */
+    const first = encodeMollyModelOption('conn-a', 'aurora/1');
+    const second = encodeMollyModelOption('conn-b', 'aurora/1');
+    const onModelChange = vi.fn();
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [
+        { value: first, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+        { value: second, label: 'Aurora 1', description: 'aurora/1', group: 'Studio' },
+        twoProviderModels[2]!,
+      ],
+      selectedModelId: first,
+      onModelChange,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    expect(providerRows.map((row) => row.textContent)).toEqual([
+      'All providers',
+      'Studioconn-a',
+      'Studioconn-b',
+      'Review',
+    ]);
+    /* The scope follows the selected model's CONNECTION, not its name. */
+    expect(providerRows[1]?.getAttribute('aria-checked')).toBe('true');
+
+    await clickRow(providerRows[2]);
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows).toHaveLength(1);
+    await clickRow(modelRows[0]);
+    expect(onModelChange).toHaveBeenCalledWith(second);
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('drops a stored provider pick when the catalog loses that connection', async () => {
+    /* A catalog swap (machine/agent switch) must not leave the Model submenu
+       scoped to a connection that no longer exists — with one provider left
+       the Provider row hides and the stale scope would be unfixable. */
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+    });
+    const providerRows = radioRows(await openSubmenu('Provider'));
+    await clickRow(providerRows[2]); // Review
+    /* Swap the catalog: the Review connection is gone. */
+    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
+    await act(async () => {
+      root?.render(
+        createElement(DesktopRunConfigMenu, {
+          ...desktopProps,
+          ...mollyProps,
+          modelOptions: [
+            twoProviderModels[0]!,
+            { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
+          ],
+          selectedModelId: studio,
+        })
+      );
+    });
+    const rootMenu = menuContents()[0];
+    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
+      el.textContent?.startsWith('Provider')
+    );
+    expect(providerRow).toBeUndefined();
+    /* The scope falls back to the selected model's provider, so the Model
+       submenu still lists its connection's models. */
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows.map((row) => row.querySelector('.truncate')?.textContent)).toEqual([
+      'Aurora 1',
+      'Nimbus 2',
+    ]);
+  });
+
+  it('hides the Provider row when every model comes from one provider', async () => {
+    const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: [
+        twoProviderModels[0]!,
+        { value: studioNimbus, label: 'Nimbus 2', description: 'nimbus/2', group: 'Studio' },
+      ],
+      selectedModelId: studio,
+    });
+    const rootMenu = menuContents()[0];
+    const providerRow = [...(rootMenu?.querySelectorAll('[role="menuitem"]') ?? [])].find((el) =>
+      el.textContent?.startsWith('Provider')
+    );
+    expect(providerRow).toBeUndefined();
   });
 
   it('shows an actionable empty state instead of offering the unselected sentinel', async () => {
@@ -167,45 +327,61 @@ describe('composer model picker search', () => {
     });
     expect(container?.textContent).toContain('Select model');
     expect(rows()).toEqual([]);
-    expect(document.querySelector('[role="menu"]')?.textContent).toContain(
+    expect(submenuContent()?.textContent).toContain(
       'Add a model connection in Settings to get started.'
     );
   });
 
-  it('retains reasoning as a separately selectable configuration', async () => {
+  const reasoningSelector = {
+    type: 'select' as const,
+    configId: 'reasoning_effort',
+    category: 'thought_level',
+    label: 'Reasoning',
+    currentValue: 'medium',
+    options: [
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ],
+  };
+
+  it('lists reasoning levels as options on the Reasoning row', async () => {
     const onConfigOptionChange = vi.fn();
+    await openRunConfigMenu({
+      modelOptions: fewModels,
+      selectedModelId: 'claude-opus-5',
+      onConfigOptionChange,
+      configOptionSelectors: [reasoningSelector],
+    });
+    const trigger = container?.querySelector('button[aria-label="Provider and model"]');
+    expect(trigger?.textContent).toContain('Opus 5');
+    expect(trigger?.textContent).toContain('Medium');
+    expect(document.querySelector('[role="slider"]')).toBeNull();
+    const rows = radioRows(await openSubmenu('Reasoning'));
+    expect(rows.map((row) => row.textContent)).toEqual(['Low', 'Medium', 'High']);
+    expect(rows[1]?.getAttribute('aria-checked')).toBe('true');
+    await clickRow(rows[2]);
+    expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  });
+
+  it('picks a model from the Model row list, keeping the menu open', async () => {
+    const onModelChange = vi.fn();
     await openModelMenu({
       modelOptions: fewModels,
-      onConfigOptionChange,
-      configOptionSelectors: [
-        {
-          type: 'select',
-          configId: 'reasoning_effort',
-          category: 'thought_level',
-          label: 'Reasoning',
-          currentValue: 'medium',
-          options: [
-            { value: 'medium', label: 'Medium' },
-            { value: 'high', label: 'High' },
-          ],
-        },
-      ],
+      selectedModelId: 'claude-opus-5',
+      onModelChange,
+      configOptionSelectors: [reasoningSelector],
     });
-    const reasoning = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((row) =>
-      row.textContent?.startsWith('Reasoning')
-    );
-    expect(container?.textContent).toContain('Medium');
+    const rows = [
+      ...(submenuContent()?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []),
+    ];
+    expect(rows.map((row) => row.textContent)).toEqual(['Opus 5', 'Sonnet 5']);
     await act(async () => {
-      reasoning?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      rows[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    const high = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
-      (row) => row.textContent === 'High'
-    );
-    expect(high).toBeDefined();
-    await act(async () => {
-      high?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
+    expect(onModelChange).toHaveBeenCalledWith('claude-sonnet-5');
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
   it('narrows the list to fuzzy matches as the user types', async () => {
@@ -221,12 +397,39 @@ describe('composer model picker search', () => {
     expect(rows()).toEqual(['Haiku 4.5']);
   });
 
+  it('groups connection models and finds them by raw id or connection', async () => {
+    const connectionModels = ['Studio', 'Review', 'Archive'].flatMap((connection) =>
+      ['aurora/1', 'nimbus/2'].map((modelId) => ({
+        value: encodeMollyModelOption(connection.toLowerCase(), modelId),
+        label: modelId === 'aurora/1' ? 'Aurora 1' : 'Nimbus 2',
+        description: modelId,
+        group: connection,
+      }))
+    );
+    const { search, rows } = await openModelMenu({
+      availableAgentConfigs: [{ ...agentConfig, name: 'Molly', agentType: 'molly' }],
+      modelOptions: connectionModels,
+      /* No selection yet: the Model row shows the whole catalog, grouped. */
+      selectedModelId: null,
+    });
+    const groupLabels = () =>
+      [...(submenuContent()?.querySelectorAll('div') ?? [])]
+        .map((node) => node.textContent?.trim())
+        .filter((text) => text === 'Studio' || text === 'Review' || text === 'Archive');
+    expect(rows()).toEqual(connectionModels.map((option) => option.label));
+    expect(groupLabels()).toEqual(['Studio', 'Review', 'Archive']);
+    await typeInto(search as HTMLInputElement, 'nimbus/2');
+    expect(rows()).toEqual(['Nimbus 2', 'Nimbus 2', 'Nimbus 2']);
+    await typeInto(search as HTMLInputElement, 'archive');
+    expect(rows()).toEqual(['Aurora 1', 'Nimbus 2']);
+    expect(groupLabels()).toEqual(['Archive']);
+  });
+
   it('says so when nothing matches instead of showing an empty menu', async () => {
     const { search, rows } = await openModelMenu();
     await typeInto(search as HTMLInputElement, 'zzz');
     expect(rows()).toEqual([]);
-    const submenu = (search as HTMLInputElement).closest('[data-radix-menu-content]');
-    expect(submenu?.textContent).toContain('No models match');
+    expect(submenuContent()?.textContent).toContain('No models match');
   });
 
   it('takes the top match on Enter, so a search never needs the mouse', async () => {
@@ -248,8 +451,7 @@ describe('composer model picker search', () => {
         new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })
       );
     });
-    const submenu = (search as HTMLInputElement).closest('[data-radix-menu-content]');
-    expect(document.activeElement).toBe(submenu?.querySelector('[role="menuitemradio"]'));
+    expect(document.activeElement).toBe(submenuContent()?.querySelector('[role="menuitemradio"]'));
   });
 
   /* The pointer moving over the list takes focus off the field (Radix focuses
@@ -257,8 +459,7 @@ describe('composer model picker search', () => {
      drives the menu's own typeahead and the search box looks broken. */
   it('keeps typing in the search field when focus has moved onto a row', async () => {
     const { search, rows } = await openModelMenu();
-    const submenu = (search as HTMLInputElement).closest('[data-radix-menu-content]');
-    const firstRow = submenu?.querySelector<HTMLElement>('[role="menuitemradio"]');
+    const firstRow = submenuContent()?.querySelector<HTMLElement>('[role="menuitemradio"]');
     await act(async () => {
       firstRow?.focus();
       firstRow?.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', bubbles: true }));
@@ -279,21 +480,11 @@ describe('composer model picker search', () => {
   });
 
   it('links the upstream delegation warning for a builtin DeepSeek non-Pro model', async () => {
-    await act(async () => {
-      root?.render(
-        createElement(DesktopRunConfigMenu, {
-          ...desktopProps,
-          agentSelection: { agentId: deepseekAgentConfig.id, machineId },
-          availableAgentConfigs: [deepseekAgentConfig],
-          modelOptions: deepseekModels,
-          selectedModelId: 'deepseek-v4-flash',
-        })
-      );
-    });
-    await act(async () => {
-      container
-        ?.querySelector('button[aria-label="Provider and model"]')
-        ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    await openRunConfigMenu({
+      agentSelection: { agentId: deepseekAgentConfig.id, machineId },
+      availableAgentConfigs: [deepseekAgentConfig],
+      modelOptions: deepseekModels,
+      selectedModelId: 'deepseek-v4-flash',
     });
 
     const warning = document.querySelector<HTMLAnchorElement>(
@@ -304,21 +495,11 @@ describe('composer model picker search', () => {
   });
 
   it('does not warn when the builtin DeepSeek session already uses Pro', async () => {
-    await act(async () => {
-      root?.render(
-        createElement(DesktopRunConfigMenu, {
-          ...desktopProps,
-          agentSelection: { agentId: deepseekAgentConfig.id, machineId },
-          availableAgentConfigs: [deepseekAgentConfig],
-          modelOptions: deepseekModels,
-          selectedModelId: 'deepseek-v4-pro',
-        })
-      );
-    });
-    await act(async () => {
-      container
-        ?.querySelector('button[aria-label="Provider and model"]')
-        ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    await openRunConfigMenu({
+      agentSelection: { agentId: deepseekAgentConfig.id, machineId },
+      availableAgentConfigs: [deepseekAgentConfig],
+      modelOptions: deepseekModels,
+      selectedModelId: 'deepseek-v4-pro',
     });
 
     expect(
@@ -347,6 +528,7 @@ describe('composer model picker search', () => {
         ?.querySelector('button[aria-label="Provider and model"]')
         ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
     });
+    await openSubmenu('Model');
     const search = document.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
     expect(search).not.toBeNull();
 

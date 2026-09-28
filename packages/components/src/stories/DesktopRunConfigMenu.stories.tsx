@@ -26,10 +26,11 @@ import type { AcpSessionSelectOption } from '@/components/shared/acp-session-sel
 
 /**
  * The desktop composer's two consolidated footer buttons: the run-config
- * dropdown (direct provider/model choices, reasoning + Plan / Fast toggles) and the
- * standalone permission-mode button — both on the standard DropdownMenu
- * surface (distinct background + layered float shadow). The full in-context
- * page is `SessionConversationPage.stories` (`DesktopIdle`).
+ * dropdown (Provider / Model / Reasoning value rows, each opening a submenu)
+ * and the standalone permission-mode button — both on
+ * the standard DropdownMenu surface (distinct background + layered float
+ * shadow). The full in-context page is `SessionConversationPage.stories`
+ * (`DesktopIdle`).
  */
 const machineId = 'machine-storybook' as MachineId;
 const codexId = 'agent-codex' as AgentConfigId;
@@ -196,13 +197,7 @@ const grokSelectors: AcpConfigOptionSelector[] = [
   },
 ];
 
-function StoryShell({
-  isEmptyConversation,
-  machineSelected = true,
-}: {
-  isEmptyConversation: boolean;
-  machineSelected?: boolean;
-}) {
+function StoryShell({ machineSelected = true }: { machineSelected?: boolean }) {
   const store = useMemo(() => {
     const s = createStore();
     s.set(
@@ -225,8 +220,8 @@ function StoryShell({
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
             agentSelection={machineSelected ? { agentId: codexId, machineId } : null}
+            availableAgentConfigs={agents}
             disabledReason={machineSelected ? undefined : 'Select a machine first'}
-            agentLocked={!isEmptyConversation}
             modelOptions={modelOptions}
             selectedModelId={model}
             onModelChange={setModel}
@@ -292,7 +287,6 @@ function GrokConfigShell() {
         <div className="mb-6 flex w-full max-w-3xl items-center gap-2 rounded-xl bg-input/90 px-4 py-3">
           <DesktopRunConfigMenu
             agentSelection={{ agentId: grokId, machineId }}
-            agentLocked
             modelOptions={[]}
             selectedModelId={null}
             configOptionSelectors={grokSelectors}
@@ -330,7 +324,6 @@ function DeepSeekWarningShell() {
           <DesktopRunConfigMenu
             agentSelection={{ agentId: deepseekId, machineId }}
             availableAgentConfigs={agents}
-            agentLocked
             modelOptions={[
               {
                 value: 'deepseek-v4-flash',
@@ -353,7 +346,9 @@ function DeepSeekWarningShell() {
 }
 
 function ProviderModelShell({ empty = false }: { empty?: boolean }) {
-  const [model, setModel] = useState(MOLLY_UNSELECTED_MODEL);
+  const [model, setModel] = useState(
+    empty ? MOLLY_UNSELECTED_MODEL : encodeMollyModelOption('studio', 'aurora-2')
+  );
   const [values, setValues] = useState<Record<string, AcpConfigOptionValue>>({
     reasoning_effort: 'medium',
   });
@@ -363,8 +358,9 @@ function ProviderModelShell({ empty = false }: { empty?: boolean }) {
     : ['Studio', 'Review'].flatMap((connection) =>
         [1, 2, 3, 4].map((index) => ({
           value: encodeMollyModelOption(connection.toLowerCase(), `aurora-${index}`),
-          label: `${connection} · Aurora ${index}`,
+          label: `Aurora ${index}`,
           description: `aurora-${index}`,
+          group: connection,
         }))
       );
   return (
@@ -398,7 +394,7 @@ function EmptyMachineScopeShell() {
   );
 }
 
-function LeftOpeningReasoningMenuShell() {
+function LeftOpeningSubmenuShell() {
   const store = useMemo(() => {
     const next = createStore();
     next.set(
@@ -448,37 +444,29 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-export const LockedAgent: Story = { args: { isEmptyConversation: false } };
-export const EmptyConversationAgentPickable: Story = { args: { isEmptyConversation: true } };
+export const CodexAgent: Story = {};
 export const MachineRequired: Story = {
-  args: { isEmptyConversation: true, machineSelected: false },
+  args: { machineSelected: false },
 };
-export const GrokInteractionAndPermission: Story = {
-  args: { isEmptyConversation: false },
+export const GrokConfig: Story = {
   render: () => <GrokConfigShell />,
 };
 export const DeepSeekDelegationWarning: Story = {
-  args: { isEmptyConversation: false },
   render: () => <DeepSeekWarningShell />,
 };
 export const MachineScope: Story = {
-  args: { isEmptyConversation: true },
   render: () => <MachineScopeShell />,
 };
 export const MachineScopeEmpty: Story = {
-  args: { isEmptyConversation: true },
   render: () => <EmptyMachineScopeShell />,
 };
-export const LeftOpeningReasoningMenu: Story = {
-  args: { isEmptyConversation: true },
-  render: () => <LeftOpeningReasoningMenuShell />,
+export const LeftOpeningSubmenu: Story = {
+  render: () => <LeftOpeningSubmenuShell />,
 };
 
 export const ProviderAndModel: Story = {
-  args: { isEmptyConversation: true },
   render: () => <ProviderModelShell />,
 };
 export const NoModelConnections: Story = {
-  args: { isEmptyConversation: true },
   render: () => <ProviderModelShell empty />,
 };

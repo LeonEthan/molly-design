@@ -1,16 +1,7 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { useAtomValue } from 'jotai';
-import {
-  Brain,
-  Check,
-  ChevronDown,
-  ListChecks,
-  Monitor,
-  ShieldAlert,
-  Sparkles,
-  Zap,
-} from '@/ui/icons';
-import { MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
+import { Check, ChevronDown, Monitor, ShieldAlert, Sparkles } from '@/ui/icons';
+import { MOLLY_UNSELECTED_MODEL, decodeMollyModelOption } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
 import {
   classifyPermissionModeFace,
@@ -21,16 +12,13 @@ import {
 
 import { getAllAgentConfigAtom } from '@/atoms';
 import { getModeIcon as getPermissionModeIcon } from '@/components/chat/chat-landing-selectors';
+import { AgentIcon } from '@/components/icons/agent-icon';
 import {
   RecentRunConfigMenuGroup,
   type RecentRunConfigItem,
 } from '@/components/sessions/recent-run-config-menu-group';
 import {
   resolveConfigOptionValue,
-  resolveOnOffConfigOptionEnabled,
-  resolvePlanModeSelectorEnabled,
-  toggleOnOffConfigOptionValue,
-  togglePlanModeSelectorValue,
   type AcpConfigOptionSelector,
   type AcpConfigOptionValue,
   type AcpSelectConfigOptionSelector,
@@ -49,14 +37,12 @@ import { resolvePermissionModeFace } from '@/lib/permission-mode-face';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { Badge } from '@/ui/badge';
-import { Switch } from '@/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -66,21 +52,26 @@ import {
 /**
  * Desktop composer run-config controls. Two buttons on the composer footer:
  *
- *   [ model icon + connection/model · reasoning ⌄ ]  [ permission icon + name ⌄ ]
+ *   [ agent icon + model · reasoning ⌄ ]  [ permission icon + name ⌄ ]
  *
- * `DesktopRunConfigMenu` opens the connection/model catalog directly;
- * Reasoning and other supported run options remain beside that list.
- * `DesktopPermissionModeButton` stays a separate button because permission is
- * the knob users flip most — its face shows the full permission name and opens
- * a flat permission list.
+ * `DesktopRunConfigMenu` is one flat menu of value rows, each opening a
+ * submenu: Provider (the user-configured model connections, only when more
+ * than one exists; picking one scopes the Model row to it), Model (the
+ * catalog with search, just model names), and Reasoning (an option list,
+ * only when the model offers more than one level). Recently-used whole
+ * configurations sit on top when the caller has them. The builtin agent
+ * brings no models of its own — every model belongs to a user connection.
+ * `DesktopPermissionModeButton` stays a separate button because permission
+ * is the knob users flip most — its face shows the full permission name and
+ * opens a flat permission list.
  *
  * Both menus use the app-wide DropdownMenu surface.
  */
 
 /* Option row with a trailing check for the selected value; description under
-   the label when present. Selecting keeps the menu (and submenu) OPEN — same
-   as the Plan/Fast toggle rows — so several run knobs can be adjusted in one
-   visit; the check mark moving is the feedback. Dismiss via Esc/outside. */
+   the label when present. Selecting keeps the menu (and submenu) OPEN so
+   several run knobs can be adjusted in one visit; the check mark moving is
+   the feedback. Dismiss via Esc/outside. */
 function OptionItem({
   icon,
   label,
@@ -150,47 +141,6 @@ function ValueSubTrigger({
         <span className="min-w-0 truncate">{value}</span>
       </span>
     </DropdownMenuSubTrigger>
-  );
-}
-
-/* Switch row that keeps the menu open on click. The whole row is the control;
-   the Switch is a purely visual state indicator (clicks land on the item). */
-function ToggleItem({
-  icon,
-  label,
-  checked,
-  onToggle,
-}: {
-  icon: ReactNode;
-  label: string;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <DropdownMenuItem
-      role="menuitemcheckbox"
-      aria-checked={checked}
-      onSelect={(event) => {
-        event.preventDefault();
-        onToggle();
-      }}
-    >
-      <span
-        className={cn(
-          'flex h-4 w-4 shrink-0 items-center justify-center',
-          checked ? 'text-foreground' : 'text-muted-foreground'
-        )}
-      >
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <Switch
-        checked={checked}
-        aria-hidden="true"
-        tabIndex={-1}
-        className="pointer-events-none ml-4 shrink-0"
-      />
-    </DropdownMenuItem>
   );
 }
 
@@ -300,7 +250,6 @@ export type DesktopRunConfigMenuProps = {
   availableAgentConfigs?: ReadonlyArray<AgentConfigMeta>;
   /** Keep the whole run-config menu inert and explain why on hover/focus. */
   disabledReason?: string;
-  agentLocked?: boolean;
   fallbackAgent?: {
     cliType?: AgentConfigCliType | null;
     agentType?: string | null;
@@ -324,7 +273,6 @@ export function DesktopRunConfigMenu({
   agentSelection,
   availableAgentConfigs,
   disabledReason,
-  agentLocked = false,
   fallbackAgent,
   modelOptions,
   selectedModelId,
@@ -338,20 +286,11 @@ export function DesktopRunConfigMenu({
   const { t } = useTranslation();
   const executorConfigs = useAtomValue(getAllAgentConfigAtom);
   const selectableAgentConfigs = availableAgentConfigs ?? executorConfigs;
-  const {
-    modelSelectors,
-    interactionModeSelectors,
-    thoughtLevelSelectors,
-    planModeSelectors,
-    fastModeSelectors,
-    otherSelectors,
-  } = useMemo(() => orderAcpConfigOptionSelectors(configOptionSelectors), [configOptionSelectors]);
-  const extraSelectSelectors = useMemo(
-    () =>
-      otherSelectors.filter(
-        (selector): selector is AcpSelectConfigOptionSelector => selector.type === 'select'
-      ),
-    [otherSelectors]
+  /* undefined = follow the selected model's provider; null = All providers. */
+  const [providerChoice, setProviderChoice] = useState<string | null | undefined>(undefined);
+  const { modelSelectors, thoughtLevelSelectors } = useMemo(
+    () => orderAcpConfigOptionSelectors(configOptionSelectors),
+    [configOptionSelectors]
   );
 
   const selectedAgentConfig = useMemo(
@@ -392,24 +331,14 @@ export function DesktopRunConfigMenu({
     modelId: modelValue,
   });
   const handleModelSelect = (value: string) => {
+    /* A model pick re-anchors the Provider scope on that model's provider. */
+    setProviderChoice(undefined);
     if (modelOptions.length > 0) {
       onModelChange?.(value);
     } else if (modelConfigSelector) {
       onConfigOptionChange?.(modelConfigSelector.configId, value as AcpConfigOptionValue);
     }
   };
-
-  /* Provider-specific interaction mode (for example Grok Agent / Plan / Ask). */
-  const interactionSelector = interactionModeSelectors[0];
-  const interactionValue = interactionSelector
-    ? ((resolveConfigOptionValue(
-        interactionSelector,
-        configOptionValues?.[interactionSelector.configId]
-      ) as string) ?? null)
-    : null;
-  const interactionLabel =
-    interactionSelector?.options.find((opt) => opt.value === interactionValue)?.label ??
-    interactionValue;
 
   /* Reasoning (first thought-level select selector). */
   const thinkingSelector = useMemo(
@@ -428,86 +357,116 @@ export function DesktopRunConfigMenu({
   const thinkingLabel =
     thinkingSelector?.options.find((opt) => opt.value === thinkingValue)?.label ?? thinkingValue;
 
-  /* Plan / Fast. */
-  const planSelector = planModeSelectors[0];
-  const planOn = planSelector
-    ? resolvePlanModeSelectorEnabled(planSelector, configOptionValues?.[planSelector.configId])
-    : false;
-  const fastSelector = fastModeSelectors[0];
-  const fastOn = fastSelector
-    ? resolveOnOffConfigOptionEnabled(fastSelector, configOptionValues?.[fastSelector.configId])
-    : false;
-
-  const configFaceParts: ReactNode[] = [];
-  if (modelLabel) {
-    configFaceParts.push(
-      <span key="model" className="block min-w-0 max-w-64 truncate text-left" title={modelLabel}>
-        {modelLabel}
-      </span>
-    );
-  }
-  if (thinkingLabel) {
-    configFaceParts.push(
-      <span
-        key="thinking"
-        className="shrink-0 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] leading-4"
-      >
-        {thinkingLabel}
-      </span>
-    );
-  }
-  if (planOn) {
-    configFaceParts.push(
-      <ListChecks key="plan" className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-    );
-  }
-  if (fastOn) {
-    configFaceParts.push(
-      <Zap key="fast" className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
-    );
-  }
-  const withFaceDots = (parts: ReactNode[], leadingDot: boolean): ReactNode[] =>
-    parts.flatMap((part, index) =>
-      index === 0 && !leadingDot ? [part] : [<FaceDot key={`dot-${index}`} />, part]
-    );
-
-  const modelRowLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
+  const modelPickerLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
+  const providerRowLabel = t('chat.runConfig.providerLabel', 'Provider');
+  const allProvidersLabel = t('chat.runConfig.allProviders', 'All providers');
+  const modelRowLabel = t('chat.runConfig.modelLabel', 'Model');
   const modelSearchPlaceholder = t('chat.runConfig.modelSearchPlaceholder', 'Search models');
   const modelSearchEmptyLabel = t('chat.runConfig.modelSearchEmpty', 'No models match');
   const reasoningLabel = t('chat.runConfig.reasoningLabel', 'Reasoning');
-  const planRowLabel = t('chat.mobileNewChat.planModeLabel', 'Plan');
-  const fastRowLabel = t('chat.runConfig.fastLabel', 'Fast');
 
+  const selectedModelOption = modelValue
+    ? modelPickerOptions.find((opt) => opt.value === modelValue)
+    : undefined;
+
+  /* Providers are the user-configured model connections. Scoping keys on the
+     stable connection id decoded from Molly's own catalog values
+     (`molly-model:<connection>/<model>`); catalogs from other agents fall back
+     to the ACP select `group` name. Two connections may share a display name,
+     so the name alone is never the key — it is only the visible label. */
+  const providers = useMemo(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+    for (const option of modelPickerOptions) {
+      const id = decodeMollyModelOption(option.value)?.connectionId ?? option.group;
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      list.push({ id, name: option.group ?? id });
+    }
+    return list;
+  }, [modelPickerOptions]);
+  const providerIdOf = (option: AcpSessionSelectOption): string | undefined =>
+    decodeMollyModelOption(option.value)?.connectionId ?? option.group ?? undefined;
+  const selectedProviderId = selectedModelOption
+    ? (providerIdOf(selectedModelOption) ?? null)
+    : null;
+  /* A catalog swap (machine/agent switch) can strand a stored pick on a
+     connection the new catalog no longer has: with one provider left the
+     Provider row hides and the stale scope would empty the Model submenu with
+     no way to clear it. Honor the pick only while its connection remains. */
+  const scopedProviderId =
+    providerChoice === null ||
+    (providerChoice !== undefined && providers.some((provider) => provider.id === providerChoice))
+      ? providerChoice
+      : selectedProviderId;
+  const showProviderRow = providers.length > 1;
+  const scopedProviderName = scopedProviderId
+    ? (providers.find((provider) => provider.id === scopedProviderId)?.name ?? allProvidersLabel)
+    : null;
+  /* Identical labels must not hide which entry is which: on a collision the
+     row shows its stable id (providers) or raw provider model id (models). */
+  const duplicateProviderNames = new Set(
+    providers
+      .map((provider) => provider.name)
+      .filter((name, index, names) => names.indexOf(name) !== index)
+  );
+  const scopedModelOptions = scopedProviderId
+    ? modelPickerOptions.filter((option) => providerIdOf(option) === scopedProviderId)
+    : modelPickerOptions;
+  const duplicateModelLabels = new Set(
+    scopedModelOptions
+      .map((option) => option.label)
+      .filter((label, index, labels) => labels.indexOf(label) !== index)
+  );
+
+  const reasoningSelector =
+    thinkingSelector && thinkingSelector.options.length > 1 ? thinkingSelector : null;
+
+  /* A resolved runtime alone suffices: the Model row is then the empty-catalog
+     hint that sends the user to Settings. */
   const hasAnyRow =
+    onRecentRunConfigSelect != null ||
     selectedAgentConfig != null ||
+    showProviderRow ||
     modelPickerOptions.length > 0 ||
-    extraSelectSelectors.length > 0 ||
-    interactionSelector != null ||
-    thinkingSelector != null ||
-    planSelector != null ||
-    fastSelector != null;
+    modelConfigSelector != null ||
+    reasoningSelector != null ||
+    showDeepSeekDelegationWarning;
   if (!hasAnyRow) return null;
 
-  const runConfigButtonAriaLabel = modelRowLabel;
   const triggerButton = (
     <Button
       type="button"
       variant="ghost"
       className={cn(
-        'h-7 min-w-0 select-none gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 text-xs font-normal text-muted-foreground hover:text-foreground data-[state=open]:bg-hover data-[state=open]:text-foreground',
-        disabledReason &&
-          'cursor-default opacity-70 hover:bg-transparent hover:text-muted-foreground'
+        'h-7 min-w-0 select-none gap-1.5 rounded-full bg-foreground/[0.04] px-3 text-xs font-normal text-foreground hover:bg-foreground/[0.07] data-[state=open]:bg-foreground/[0.07]',
+        disabledReason && 'cursor-default opacity-70 hover:bg-foreground/[0.04]'
       )}
-      aria-label={runConfigButtonAriaLabel}
+      aria-label={modelPickerLabel}
       aria-disabled={disabledReason ? true : undefined}
     >
-      <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
-      {withFaceDots(configFaceParts, false)}
-      <ChevronDown aria-hidden="true" className="size-3 shrink-0 opacity-60" />
+      {selectedAgentConfig ? (
+        <AgentIcon
+          cliType={selectedAgentConfig.cliType}
+          agentType={selectedAgentConfig.agentType}
+          brandId={selectedAgentConfig.brandId}
+          env={selectedAgentConfig.env}
+          className="size-3.5 shrink-0"
+        />
+      ) : (
+        <Sparkles className="size-3.5 shrink-0" aria-hidden="true" />
+      )}
+      <span className="block min-w-0 max-w-64 truncate text-left" title={modelLabel}>
+        {modelLabel}
+      </span>
+      {thinkingLabel ? (
+        <span className="shrink-0 text-muted-foreground">· {thinkingLabel}</span>
+      ) : null}
+      <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
     </Button>
   );
 
-  const menu = (
+  return (
     <DropdownMenu>
       {disabledReason ? (
         <Tooltip delayDuration={300}>
@@ -519,47 +478,74 @@ export function DesktopRunConfigMenu({
       ) : (
         <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
       )}
-      <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-24px)] rounded-xl p-1.5">
-        <DropdownMenuLabel className="px-3 pb-1 pt-2 text-[11px] font-normal normal-case tracking-normal">
-          {modelRowLabel}
-        </DropdownMenuLabel>
-        <div className="flex max-h-72 min-h-0 flex-col overflow-hidden">
-          <MenuOptionSearchList
-            options={modelPickerOptions}
-            onSelect={(opt) => handleModelSelect(opt.value)}
-            searchPlaceholder={modelSearchPlaceholder}
-            emptyText={
-              modelPickerOptions.length
-                ? modelSearchEmptyLabel
-                : t('chat.runConfig.noModels', 'Add a model connection in Settings to get started.')
-            }
-            renderOption={(opt, select) => (
-              <OptionItem
-                key={opt.value}
-                label={opt.label}
-                description={opt.description}
-                selected={opt.value === modelValue}
-                disabled={opt.disabled}
-                onSelect={select}
-              />
-            )}
+      <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-24px)] rounded-2xl p-1.5">
+        {onRecentRunConfigSelect ? (
+          <RecentRunConfigMenuGroup
+            items={recentRunConfigs ?? []}
+            onSelect={onRecentRunConfigSelect}
           />
-        </div>
-        {thinkingSelector ||
-        extraSelectSelectors.length > 0 ||
-        interactionSelector ||
-        showDeepSeekDelegationWarning ? (
-          <DropdownMenuSeparator />
         ) : null}
-        {thinkingSelector ? (
+        {showProviderRow ? (
           <DropdownMenuSub>
             <ValueSubTrigger
-              label={reasoningLabel}
-              value={thinkingLabel}
-              leadingIcon={<Brain aria-hidden="true" className="size-4" />}
+              label={providerRowLabel}
+              value={scopedProviderName ?? allProvidersLabel}
             />
-            <DropdownMenuSubContent>
-              {thinkingSelector.options.map((opt) => (
+            <DropdownMenuSubContent className="w-64">
+              <OptionItem
+                label={allProvidersLabel}
+                selected={scopedProviderId === null}
+                onSelect={() => setProviderChoice(null)}
+              />
+              {providers.map((provider) => (
+                <OptionItem
+                  key={provider.id}
+                  label={provider.name}
+                  description={
+                    duplicateProviderNames.has(provider.name) ? provider.id : undefined
+                  }
+                  selected={scopedProviderId === provider.id}
+                  onSelect={() => setProviderChoice(provider.id)}
+                />
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        ) : null}
+        <DropdownMenuSub>
+          <ValueSubTrigger label={modelRowLabel} value={modelLabel} />
+          <DropdownMenuSubContent className="flex w-72 flex-col overflow-hidden p-0">
+            <MenuOptionSearchList
+              options={scopedModelOptions}
+              onSelect={(opt) => handleModelSelect(opt.value)}
+              searchPlaceholder={modelSearchPlaceholder}
+              emptyText={
+                modelPickerOptions.length
+                  ? modelSearchEmptyLabel
+                  : t(
+                      'chat.runConfig.noModels',
+                      'Add a model connection in Settings to get started.'
+                    )
+              }
+              renderOption={(opt, select) => (
+                <OptionItem
+                  key={opt.value}
+                  label={opt.label}
+                  description={
+                    duplicateModelLabels.has(opt.label) ? opt.description : undefined
+                  }
+                  selected={opt.value === modelValue}
+                  disabled={opt.disabled}
+                  onSelect={select}
+                />
+              )}
+            />
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        {reasoningSelector ? (
+          <DropdownMenuSub>
+            <ValueSubTrigger label={reasoningLabel} value={thinkingLabel} />
+            <DropdownMenuSubContent className="w-56">
+              {reasoningSelector.options.map((opt) => (
                 <OptionItem
                   key={opt.value}
                   label={opt.label}
@@ -568,7 +554,7 @@ export function DesktopRunConfigMenu({
                   disabled={opt.disabled}
                   onSelect={() =>
                     onConfigOptionChange?.(
-                      thinkingSelector.configId,
+                      reasoningSelector.configId,
                       opt.value as AcpConfigOptionValue
                     )
                   }
@@ -577,46 +563,6 @@ export function DesktopRunConfigMenu({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         ) : null}
-
-        {onRecentRunConfigSelect ? (
-          <RecentRunConfigMenuGroup
-            items={recentRunConfigs ?? []}
-            onSelect={onRecentRunConfigSelect}
-          />
-        ) : null}
-        {extraSelectSelectors.map((selector) => {
-          const selectedValue =
-            (resolveConfigOptionValue(
-              selector,
-              configOptionValues?.[selector.configId]
-            ) as string) ?? null;
-          const selectedLabel =
-            selector.options.find((option) => option.value === selectedValue)?.label ??
-            selectedValue;
-          const locked = selector.configId === 'agent_preset' && agentLocked;
-          return (
-            <DropdownMenuSub key={selector.configId}>
-              <ValueSubTrigger label={selector.label} value={selectedLabel} disabled={locked} />
-              <DropdownMenuSubContent>
-                {selector.options.map((option) => (
-                  <OptionItem
-                    key={option.value}
-                    label={option.label}
-                    description={option.description}
-                    selected={option.value === selectedValue}
-                    disabled={option.disabled || locked}
-                    onSelect={() =>
-                      onConfigOptionChange?.(
-                        selector.configId,
-                        option.value as AcpConfigOptionValue
-                      )
-                    }
-                  />
-                ))}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          );
-        })}
 
         {showDeepSeekDelegationWarning ? (
           <DropdownMenuItem
@@ -636,75 +582,8 @@ export function DesktopRunConfigMenu({
             </a>
           </DropdownMenuItem>
         ) : null}
-
-        {interactionSelector ? (
-          <DropdownMenuSub>
-            <ValueSubTrigger label={interactionSelector.label} value={interactionLabel} />
-            <DropdownMenuSubContent>
-              {interactionSelector.options.map((opt) => (
-                <OptionItem
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  selected={opt.value === interactionValue}
-                  disabled={opt.disabled}
-                  onSelect={() =>
-                    onConfigOptionChange?.(
-                      interactionSelector.configId,
-                      opt.value as AcpConfigOptionValue
-                    )
-                  }
-                />
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
-
-        {planSelector || fastSelector ? <DropdownMenuSeparator /> : null}
-        {planSelector ? (
-          <ToggleItem
-            icon={<ListChecks className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />}
-            label={planRowLabel}
-            checked={planOn}
-            onToggle={() =>
-              onConfigOptionChange?.(
-                planSelector.configId,
-                togglePlanModeSelectorValue(
-                  planSelector,
-                  configOptionValues?.[planSelector.configId]
-                )
-              )
-            }
-          />
-        ) : null}
-        {fastSelector ? (
-          <ToggleItem
-            icon={<Zap className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />}
-            label={fastRowLabel}
-            checked={fastOn}
-            onToggle={() =>
-              onConfigOptionChange?.(
-                fastSelector.configId,
-                toggleOnOffConfigOptionValue(
-                  fastSelector,
-                  configOptionValues?.[fastSelector.configId]
-                )
-              )
-            }
-          />
-        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-
-  return menu;
-}
-
-function FaceDot() {
-  return (
-    <span aria-hidden="true" className="shrink-0 select-none text-muted-foreground/60">
-      ·
-    </span>
   );
 }
 

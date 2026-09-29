@@ -44,6 +44,7 @@ Read [README](README.md) before changing session construction or packaged resour
   reopen through public APIs. Existing missing/corrupt native history stays untouched.
 - Journal every provider HTTP attempt before transport, compaction included.
   Restore cumulative Core accounting by request identity; unknown cost stays unknown.
+  A malformed or foreign run record never fails accounting or settlement; it stays untouched.
 - MCP errors return through the adapter's ordinary results. The Agent chooses
   subsequent actions. Add no host replay, exactly-once claim or automatic paid
   retry; cancellation does not establish that a remote request was unbilled.

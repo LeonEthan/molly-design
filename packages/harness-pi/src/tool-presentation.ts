@@ -1,6 +1,12 @@
 import { isAbsolute, resolve } from 'node:path';
 import type { ToolCall } from '@agentclientprotocol/sdk';
 
+const SDK_REWRITTEN_PATH = /^[~@]|^[a-z][a-z0-9+.-]*:|[\u00A0\u2000-\u200A\u202F\u205F\u3000]/i;
+
+function isPlainPath(path: string): boolean {
+  return !path.includes('\0') && !SDK_REWRITTEN_PATH.test(path);
+}
+
 /** ACP display metadata only; this never grants access or rewrites native arguments. */
 export function describeToolCall(
   name: string,
@@ -13,10 +19,10 @@ export function describeToolCall(
     return {
       title: path ? `${name} ${path}` : name,
       kind: name === 'read' ? 'read' : 'edit',
-      // Tilde expansion belongs to the SDK. Show it verbatim rather than inventing
-      // a local file target with potentially different home-directory semantics.
+      // The SDK rewrites `~`, `@`, `file:` URLs and Unicode spaces itself. Show those
+      // verbatim rather than inventing a local file target that may differ.
       locations:
-        path && !path.startsWith('~')
+        path && isPlainPath(path)
           ? [{ path: isAbsolute(path) ? path : resolve(cwd, path) }]
           : undefined,
       rawInput: args,

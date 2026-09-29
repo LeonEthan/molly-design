@@ -109,6 +109,7 @@ export function sandboxFailureContext(blocked: string): string {
  */
 export class WorkerSandbox {
   private ready?: Promise<{ temporaryDirectory: string }>;
+  private startedTemporaryDirectory?: string;
   constructor(
     private readonly input: {
       cwd: string;
@@ -124,6 +125,10 @@ export class WorkerSandbox {
       SandboxManager.isSupportedPlatform() &&
       SandboxManager.checkDependencies().errors.length === 0
     );
+  }
+
+  get temporaryDirectory(): string | undefined {
+    return this.startedTemporaryDirectory;
   }
 
   private start(): Promise<{ temporaryDirectory: string }> {
@@ -142,6 +147,7 @@ export class WorkerSandbox {
         (target) => this.input.reviewNetwork(target),
         process.platform === 'darwin'
       );
+      this.startedTemporaryDirectory = temporaryDirectory;
       return { temporaryDirectory };
     })();
     return this.ready;

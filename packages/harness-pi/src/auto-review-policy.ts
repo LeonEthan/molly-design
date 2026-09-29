@@ -61,13 +61,18 @@ export function decideAutoReview(
   }
   if (['read', 'write', 'edit'].includes(request.name)) {
     const raw = typeof args.path === 'string' ? args.path : undefined;
-    const target = raw === undefined ? undefined : resolvePlainPath(raw, boundary.cwd);
+    const targets =
+      raw === undefined
+        ? undefined
+        : resolvePlainTargets(raw, boundary.cwd, request.name === 'read');
     const inBoundary =
-      target !== undefined &&
-      (request.name === 'read'
-        ? boundary.writableRoots.some((root) => isWithinOrEqual(root, target)) ||
-          !boundary.deniedReadRoots.some((root) => isWithinOrEqual(root, target))
-        : boundary.writableRoots.some((root) => isWithinOrEqual(root, target)));
+      targets !== undefined &&
+      targets.every((target) =>
+        request.name === 'read'
+          ? boundary.writableRoots.some((root) => isWithinOrEqual(root, target)) ||
+            !boundary.deniedReadRoots.some((root) => isWithinOrEqual(root, target))
+          : boundary.writableRoots.some((root) => isWithinOrEqual(root, target))
+      );
     if (inBoundary) return { kind: 'allow', source: 'workspace' };
     return {
       kind: 'review',
@@ -85,14 +90,42 @@ export function decideAutoReview(
   return { kind: 'ask' };
 }
 
+const PI_UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/;
+const URL_LIKE_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
 /**
- * Only plain relative or absolute paths are classified. Pi expands `~` and `@` itself;
- * those forms are reviewed rather than guessed.
+ * Only plain relative or absolute paths are classified. The pinned SDK's path resolver
+ * is not public, so every input its `normalizePath` would rewrite (`file:` URLs, `~`,
+ * `@`, Unicode spaces) is reviewed instead of guessed. `read` also probes filename
+ * variants (pi-coding-agent 0.85.1 `resolveReadPath`) that may rewrite any path segment,
+ * so every variant must stay inside the boundary too.
  */
-function resolvePlainPath(path: string, cwd: string): string | undefined {
-  if (!path || path.startsWith('~') || path.startsWith('@') || path.includes('\0'))
+function resolvePlainTargets(
+  path: string,
+  cwd: string,
+  probesVariants: boolean
+): string[] | undefined {
+  if (
+    !path ||
+    path.startsWith('~') ||
+    path.startsWith('@') ||
+    path.includes('\0') ||
+    URL_LIKE_SCHEME.test(path) ||
+    PI_UNICODE_SPACES.test(path)
+  )
     return undefined;
-  return resolveThroughExistingAncestor(isAbsolute(path) ? path : resolve(cwd, path));
+  const resolved = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
+  const candidates = probesVariants ? [resolved, ...readPathVariants(resolved)] : [resolved];
+  return candidates.map(resolveThroughExistingAncestor);
+}
+
+function readPathVariants(path: string): string[] {
+  const screenshot = path.replace(/ (AM|PM)\./gi, '\u202F$1.');
+  const decomposed = path.normalize('NFD');
+  const curly = (value: string) => value.replace(/'/g, '\u2019');
+  return [screenshot, decomposed, curly(path), curly(decomposed)].filter(
+    (variant) => variant !== path
+  );
 }
 
 function resolveThroughExistingAncestor(path: string): string {

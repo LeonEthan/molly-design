@@ -146,10 +146,8 @@ export class RunJournal {
     }
     const results: Array<{ id: string; model: string; usage: ModelUsage }> = [];
     for (const file of files.filter((name) => /^[a-f0-9]{64}\.json$/.test(name))) {
-      const record = RecordSchema.parse(
-        JSON.parse(await readFile(join(this.directory, file), 'utf8'))
-      );
-      if (record.snapshot.sessionId !== sessionId) continue;
+      const record = await this.readAccountable(file, sessionId);
+      if (!record) continue;
       for (const request of record.modelRequests ?? [])
         results.push({
           id: request.id,
@@ -162,6 +160,18 @@ export class RunJournal {
         });
     }
     return results;
+  }
+  private async readAccountable(file: string, sessionId: string): Promise<RunRecord | undefined> {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await readFile(join(this.directory, file), 'utf8'));
+    } catch {
+      return undefined;
+    }
+    const owner = z.object({ snapshot: z.object({ sessionId: z.string() }) }).safeParse(raw);
+    if (owner.success && owner.data.snapshot.sessionId !== sessionId) return undefined;
+    const record = RecordSchema.safeParse(raw);
+    return record.success && record.data.snapshot.sessionId === sessionId ? record.data : undefined;
   }
   async settle(runId: string, runtimeEpoch: string, input: HarnessRunOutcome): Promise<void> {
     return this.serial(runId, async () => {

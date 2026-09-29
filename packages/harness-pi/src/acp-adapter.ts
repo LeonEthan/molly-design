@@ -577,7 +577,7 @@ export class MollyAcpAdapter implements acp.Agent {
         if (tracker.isCancelled) outcome = tracker.finish(owned.manager.getLeafId());
       }
       await this.journal.settle(snapshot.runId, snapshot.runtimeEpoch, outcome);
-      await this.publishUsage(params.sessionId);
+      await this.publishUsage(params.sessionId).catch(() => undefined);
       if (outcome.status === 'failed' || outcome.status === 'interrupted')
         throw new Error(`harness_${outcome.status}`);
       return {

@@ -101,7 +101,7 @@ export async function runWorker(
           return choice === 'allow-once' || choice === 'allow-browse-task' ? choice : 'deny';
         },
       });
-      sandbox = new WorkerSandbox({
+      const workerSandbox = new WorkerSandbox({
         cwd: config.cwd,
         shellPath: config.shellPath,
         deniedReadRoots: deniedRoots,
@@ -113,13 +113,16 @@ export async function runWorker(
           askUser,
         }),
       });
-      const sandboxAvailable = sandbox.available;
+      sandbox = workerSandbox;
+      const sandboxAvailable = workerSandbox.available;
       const approve = createAutoReviewApproval({
         mode: () => adapter.currentRunScope?.permissionMode,
         decide: (request) =>
           decideAutoReview(request, {
             cwd: config.cwd,
-            writableRoots: [config.cwd, '/tmp', '/private/tmp'],
+            writableRoots: workerSandbox.temporaryDirectory
+              ? [config.cwd, workerSandbox.temporaryDirectory]
+              : [config.cwd],
             deniedReadRoots: deniedRoots,
             sandboxAvailable,
           }),
@@ -131,7 +134,7 @@ export async function runWorker(
         cwd: config.cwd,
         shellPath: config.shellPath,
         approve,
-        ...(sandboxAvailable ? { sandboxOperations: sandbox.operations() } : {}),
+        ...(sandboxAvailable ? { sandboxOperations: workerSandbox.operations() } : {}),
       });
       adapter = new MollyAcpAdapter(
         peer,

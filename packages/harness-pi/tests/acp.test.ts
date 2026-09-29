@@ -44,7 +44,8 @@ async function fixture(
   mcpCredentials?: McpCredentialProvider,
   questionPeer?: Pick<AgentSideConnection, 'unstable_createElicitation' | 'extMethod'>,
   personalMemory?: PersonalMemoryProvider,
-  beforeResponse?: (systemPrompt: string | undefined) => Promise<void>
+  beforeResponse?: (systemPrompt: string | undefined) => Promise<void>,
+  usagePeer?: Pick<AgentSideConnection, 'extNotification'>
 ) {
   const privateRoot = await mkdtemp(join(tmpdir(), 'molly-acp-test-'));
   roots.push(privateRoot);
@@ -90,6 +91,7 @@ async function fixture(
   const adapter = new MollyAcpAdapter(
     {
       ...questionPeer,
+      ...usagePeer,
       sessionUpdate: async (update) => {
         updates.push(update);
       },
@@ -513,6 +515,143 @@ describe('owned ACP boundary', () => {
           state: 'outcome_unknown',
         })
       ).rejects.toThrow('harness_stale_request');
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
+  it('accounts one session past truncated and schema-invalid records and leaves them untouched', async () => {
+    const f = await fixture();
+    try {
+      await f.journal.begin(f.snapshot);
+      const id = randomUUID();
+      await f.journal.modelRequest(f.snapshot.runId, f.snapshot.runtimeEpoch, {
+        id,
+        state: 'dispatched',
+      });
+      await f.journal.modelRequest(f.snapshot.runId, f.snapshot.runtimeEpoch, {
+        id,
+        state: 'succeeded',
+        usage: {
+          inputTokens: 5,
+          outputTokens: 2,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+        },
+      });
+      const other = { ...f.snapshot, runId: randomUUID(), sessionId: 'other-session' };
+      await f.journal.begin(other);
+      await f.journal.modelRequest(other.runId, other.runtimeEpoch, {
+        id: randomUUID(),
+        state: 'dispatched',
+      });
+      const directory = join(f.input.privateRoot, 'runs');
+      const bad = {
+        truncated: `${'a'.repeat(64)}.json`,
+        invalid: `${'b'.repeat(64)}.json`,
+        ownedInvalid: `${'c'.repeat(64)}.json`,
+        empty: `${'d'.repeat(64)}.json`,
+      };
+      const contents = {
+        [bad.truncated]: '{"schemaVersion":1,"snapshot":{"runId":',
+        [bad.invalid]: JSON.stringify({
+          schemaVersion: 2,
+          snapshot: { sessionId: 'other-session' },
+        }),
+        [bad.ownedInvalid]: JSON.stringify({
+          schemaVersion: 1,
+          snapshot: { ...f.snapshot, runId: randomUUID() },
+          state: 'settled',
+        }),
+        [bad.empty]: '',
+      };
+      for (const [name, text] of Object.entries(contents))
+        await writeFile(join(directory, name), text);
+      const rows = await f.journal.modelUsage(f.input.productSessionId);
+      expect(rows.map((row) => row.id)).toEqual([id]);
+      expect(rows[0]?.usage.inputTokens).toBe(5);
+      expect((await f.journal.modelUsage('other-session')).length).toBe(1);
+      for (const [name, text] of Object.entries(contents))
+        expect(await readFile(join(directory, name), 'utf8')).toBe(text);
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
+
+  it('keeps a partial record as an exclusive-open dispatch fence', async () => {
+    const f = await fixture();
+    try {
+      const directory = join(f.input.privateRoot, 'runs');
+      await mkdir(directory, { recursive: true });
+      const { createHash } = await import('node:crypto');
+      const path = join(
+        directory,
+        `${createHash('sha256').update(f.snapshot.runId).digest('hex')}.json`
+      );
+      await writeFile(path, '{"schemaVersion":1,');
+      await expect(f.journal.begin(f.snapshot)).rejects.toMatchObject({ code: 'EEXIST' });
+      expect(await readFile(path, 'utf8')).toBe('{"schemaVersion":1,');
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
+
+  it('completes and settles a run whose runs directory holds a corrupt record', async () => {
+    const notifications: string[] = [];
+    const f = await fixture(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        extNotification: async (method) => {
+          notifications.push(method);
+        },
+      }
+    );
+    try {
+      const directory = join(f.input.privateRoot, 'runs');
+      await mkdir(directory, { recursive: true });
+      const corrupt = join(directory, `${'e'.repeat(64)}.json`);
+      await writeFile(corrupt, '{"schemaVersion":1,"snapshot":');
+      const result = await f.adapter.prompt(f.request);
+      expect(result.stopReason).toBe('end_turn');
+      expect(result._meta).toMatchObject({ mollyNativeOutcome: { status: 'completed' } });
+      expect((await f.journal.read(f.snapshot.runId)).outcome?.status).toBe('completed');
+      expect(await readFile(corrupt, 'utf8')).toBe('{"schemaVersion":1,"snapshot":');
+    } finally {
+      await f.adapter.dispose();
+    }
+  });
+
+  it('does not fail a settled run when usage delivery fails', async () => {
+    const f = await fixture(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      {
+        extNotification: async () => {
+          throw new Error('synthetic delivery failure');
+        },
+      }
+    );
+    try {
+      const prior = { ...f.snapshot, runId: randomUUID(), turnId: 'prior-turn' };
+      await f.journal.begin(prior);
+      await f.journal.modelRequest(prior.runId, prior.runtimeEpoch, {
+        id: randomUUID(),
+        state: 'dispatched',
+      });
+      const result = await f.adapter.prompt(f.request);
+      expect(result.stopReason).toBe('end_turn');
+      expect(result._meta).toMatchObject({ mollyNativeOutcome: { status: 'completed' } });
+      expect((await f.journal.read(f.snapshot.runId)).outcome?.status).toBe('completed');
     } finally {
       await f.adapter.dispose();
     }

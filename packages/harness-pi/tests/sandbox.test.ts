@@ -3,6 +3,7 @@ import {
   createSandboxConfig,
   resolveNativeTemporaryDirectory,
   sandboxFailureContext,
+  WorkerSandbox,
 } from '../src/sandbox';
 
 describe('sandbox failure evidence', () => {
@@ -79,5 +80,17 @@ describe('native temporary files', () => {
     ]);
     expect(filesystem.allowRead).toEqual([input.cwd, input.temporaryDirectory]);
     expect(filesystem.denyRead).toEqual(input.deniedReadRoots);
+  });
+});
+
+describe('worker-owned temporary directory', () => {
+  it('is absent until the sandbox starts', () => {
+    const sandbox = new WorkerSandbox({
+      cwd: '/synthetic/work',
+      shellPath: '/bin/sh',
+      deniedReadRoots: [],
+      reviewNetwork: async () => false,
+    });
+    expect(sandbox.temporaryDirectory).toBeUndefined();
   });
 });

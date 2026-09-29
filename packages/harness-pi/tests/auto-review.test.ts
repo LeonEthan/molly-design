@@ -68,6 +68,49 @@ describe('auto-review policy', () => {
     expect(decide('read', '~/.ssh/id_ed25519')).toBe('review');
   });
 
+  it('reviews path forms the SDK resolves differently from plain paths', async () => {
+    const b = await boundary();
+    const outside = join(b.home, 'elsewhere.txt');
+    const decide = (name: string, path: string) =>
+      decideAutoReview({ name, arguments: { path } }, b).kind;
+    for (const name of ['read', 'write', 'edit']) {
+      expect(decide(name, `file://${outside}`)).toBe('review');
+      expect(decide(name, `file://${join(b.cwd, 'media', 'layer.png')}`)).toBe('review');
+      expect(decide(name, 'file:relative.txt')).toBe('review');
+      expect(decide(name, 'https://example.test/x.txt')).toBe('review');
+      expect(decide(name, `@${outside}`)).toBe('review');
+      expect(decide(name, '~')).toBe('review');
+      expect(decide(name, 'media\u202Flayer.png')).toBe('review');
+      expect(decide(name, 'media\u00A0/../../../elsewhere.txt')).toBe('review');
+      expect(decide(name, 'media\0layer.png')).toBe('review');
+    }
+    expect(decide('write', 'media/layer.png')).toBe('allow');
+  });
+
+  it('reviews a read whose filename variant would leave the boundary', async () => {
+    const b = await boundary();
+    const { symlink } = await import('node:fs/promises');
+    await symlink(join(b.home, '.ssh'), join(b.cwd, 'shot\u202FAM.'));
+    await writeFile(join(b.home, '.ssh', 'id_ed25519'), 'synthetic');
+    const decide = (path: string) =>
+      decideAutoReview({ name: 'read', arguments: { path } }, b).kind;
+    expect(decide('shot AM./id_ed25519')).toBe('review');
+    expect(decide("it's fine.png")).toBe('allow');
+    expect(decide('caf\u00E9.png')).toBe('allow');
+  });
+
+  it('limits native writes to the workspace and the worker-owned temp directory', async () => {
+    const b = await boundary();
+    const temp = await root();
+    const stray = join(await root(), 'stray.txt');
+    const decide = (path: string, writableRoots: readonly string[]) =>
+      decideAutoReview({ name: 'write', arguments: { path } }, { ...b, writableRoots }).kind;
+    expect(decide(stray, [b.cwd])).toBe('review');
+    expect(decide(join(temp, 'scratch.txt'), [b.cwd])).toBe('review');
+    expect(decide(join(temp, 'scratch.txt'), [b.cwd, temp])).toBe('allow');
+    expect(decide(stray, [b.cwd, temp])).toBe('review');
+  });
+
   it('resolves symlinks before judging the boundary', async () => {
     const b = await boundary();
     const { symlink } = await import('node:fs/promises');

@@ -52,7 +52,9 @@ allows that exact canonical directory from `getconf DARWIN_USER_TEMP_DIR`; resol
 failure grants no extra path. Its ancestors stay protected, and shutdown removes only
 the worker-owned temp. Tool caches should use the workspace or `$TMPDIR`.
 `auto-review-policy.ts` decides by effect:
-sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run; a bash
+sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run
+(native writes reach only the workspace and the started worker temp directory; `file:`/URL, `~`, `@`
+and Unicode-space paths, and reads whose filename variants leave the boundary, are reviewed); a bash
 `outside_sandbox` request, a protected read, a write outside the workspace and a
 sandbox connection to another domain are escalations. `browser-approval.ts` reviews
 the first public browser site grant through the same classifier and reuses it only

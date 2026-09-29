@@ -35,6 +35,12 @@ describe('native tool ACP presentation', () => {
       locations: undefined,
     });
   });
+  it.each(['file:///synthetic/outside/file', '@file', 'a\u00A0b', 'https://example.test/x'])(
+    'claims no location for the SDK-rewritten path %j',
+    (path) => {
+      expect(describeToolCall('write', { path }, '/synthetic/work').locations).toBeUndefined();
+    }
+  );
   it('does not interpret MCP tool path arguments as local file capabilities', () => {
     const args = { path: '/synthetic/remote' };
     expect(describeToolCall('mcp_server_read', args, '/synthetic/work')).toEqual({

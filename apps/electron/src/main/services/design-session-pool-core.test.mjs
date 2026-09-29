@@ -20,6 +20,9 @@ function fixture() {
       const isolated = {
         state,
         protocol: {
+          handle: (_scheme, handler) => {
+            state.protocol = handler
+          },
           unhandle: () => {
             state.protocol = null
           }
@@ -220,4 +223,58 @@ void test('failed native construction retires an unused lease; retired leases ca
       }),
     /Retired canvas/
   )
+})
+
+void test('a retained native protocol callback cannot read a retired artwork or its recycled successor', async () => {
+  const { pool } = fixture()
+  const first = await pool.acquire()
+  first.handle(() => new Response('first artwork'))
+  const retained = first.session.state.protocol
+  const request = new Request('https://canvas.invalid/editor.html')
+  assert.equal(await (await retained(request)).text(), 'first artwork')
+  first.dispose()
+  await assert.rejects(retained(request), /Retired canvas/)
+  const second = await pool.acquire()
+  assert.equal(second.session, first.session)
+  second.handle(() => new Response('second artwork'))
+  await assert.rejects(retained(request), /Retired canvas/)
+  assert.equal(await (await second.session.state.protocol(request)).text(), 'second artwork')
+  assert.throws(() => first.handle(() => new Response('stale artwork')), /Retired canvas/)
+  assert.equal(await (await second.session.state.protocol(request)).text(), 'second artwork')
+})
+
+void test('a native unhandle failure still revokes its retained callback and quarantines the session', async () => {
+  const { pool, failures } = fixture()
+  const first = await pool.acquire()
+  first.handle(() => new Response('private artwork'))
+  const retained = first.session.state.protocol
+  first.session.protocol.unhandle = () => {
+    throw Error('Native protocol removal failed')
+  }
+  first.dispose()
+  assert.equal(first.session.state.protocol, retained)
+  await assert.rejects(
+    retained(new Request('https://canvas.invalid/editor.html')),
+    /Retired canvas/
+  )
+  assert.match(failures[0].message, /Native protocol removal failed/)
+  assert.notEqual((await pool.acquire()).session, first.session)
+})
+
+void test('accepted protocol requests retain their lifetime until drain but cannot publish after retirement', async () => {
+  const { pool } = fixture()
+  const first = await pool.acquire()
+  const completed = deferred()
+  first.handle(async () => {
+    await completed.promise
+    return new Response('late artwork response')
+  })
+  const retained = first.session.state.protocol
+  const response = retained(new Request('https://canvas.invalid/editor.html'))
+  const rejected = assert.rejects(response, /Retired canvas/)
+  first.dispose()
+  assert.notEqual((await pool.acquire()).session, first.session)
+  completed.resolve()
+  await rejected
+  assert.equal((await pool.acquire()).session, first.session)
 })

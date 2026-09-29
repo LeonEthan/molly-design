@@ -7,14 +7,14 @@ transactions; Pi owns its native conversation state and model loop.
 The package is not an installed-user CLI and does not discover a global Pi command.
 Production and development launch the same compiled sibling entry in the CLI bundle.
 The old external Pi launcher and separate design/MCP extensions are no longer
-emitted. Their shared cancellation delivery transport remains here. The public
+emitted. The public
 reminder, native outcome and MCP tests cover the retained responsibilities;
 removing the shim does not modify user Pi installations or old native histories.
 
 ## Ownership and execution
 
 `resource-loader.ts` validates approved extension registrations before SDK construction.
-It rejects native/host name collisions, Molly/MCP namespace claims, duplicate extension
+It rejects native/host name collisions, duplicate extension
 tools and differing registration/definition names. Duplicate host definitions fail
 before private state is created; one host-guarded native definition remains valid.
 The loader snapshots approved extension order and appends its public
@@ -73,8 +73,8 @@ its response carries a local machine identity without a download URL.
 
 `extension-ui.ts` adapts select/input/confirm/notify to an owning host using existing
 Core question metadata. It binds run/caller/lifetime cancellation, clears timers,
-retires each pending request before releasing its answer and rejects terminal UI.
-SDK shallow-copying requires an opaque theme object whose operations fail explicitly.
+retires each pending request before releasing its answer. Other UI operations use
+the SDK's headless defaults.
 Synthetic SDK tests cover question execution, native-history restore without replay,
 session isolation, multi/custom answers and timeout/cancellation. Production ACP enables
 the tool only when the host advertises form elicitation and `mollyQuestionUI` version 1.
@@ -82,19 +82,16 @@ The existing permission history/UI owns each question, bound to its active run a
 epoch. The private `_molly/dismiss_question` handshake waits for host cancellation
 persistence; its five-second deadline fails closed. Late answers cannot resume a stopped
 run. Native question errors stop inference and report `extension_question_failed`.
-Frozen tool/plugin hashes include the actual registration and curated source identity.
+Host tool/plugin hashes bind native registration and curated question/reminder identity;
+MCP discovery and tool updates belong to the standard adapter.
 Synthetic ACP tests exercise these paths; native desktop UI acceptance remains open.
 Slash-command dispatch is not implemented by selecting a plugin without commands.
 T10/A14 remain open.
 
-Until command mappings exist, resource loading rejects native command registrations
-with `harness_extension_command_unmapped`. ACP separately refuses a registered command
-before the run journal or credential request, and invokes model prompts with implicit
-SDK command/template expansion disabled. Ordinary slash-prefixed text stays model input.
-Approved skills remain system resources; there are currently no prompt templates.
-This closes an implicit execution path, not the remaining command-discovery/dispatch
-requirement. Read-only, configuration-changing and execution-triggering commands still
-need explicit host-owned mappings and acceptance before they can be offered.
+Approved extensions register their native commands normally. ACP refuses implicit
+command dispatch before inference; command completion is not model completion.
+Model prompts keep template expansion disabled. Explicit command UI remains a
+separate host capability.
 
 SDK hook errors use a separate `bindExtensions.onError` callback, including when no
 question UI is enabled. The factory latches failure per native context, requests
@@ -153,15 +150,20 @@ history restore without HTTP and ACP accounting. Vault and UI tests cover persis
 revision invalidation, editing, missing/duplicate models and translated limitations.
 They do not establish native desktop or real compatible-service acceptance.
 
-The fixed worker accepts a public bootstrap and run-bound credential grants on inherited
+The fixed worker accepts a public bootstrap and scoped credential grants on inherited
 fd 3. ACP carries only public snapshots. The host broker binds each grant to an active
-run/epoch and retires it when the main host disappears or the connection is revoked.
-Model fetch is origin-bound and refuses redirects. Provider/MCP error diagnostics are
-replaced before native persistence; successful content is not rewritten.
+model run/epoch or selected MCP session/epoch and retires it when the main host
+disappears or the connection is revoked.
+Model fetch is origin-bound and refuses redirects. Provider errors remain bounded; MCP schemas/results/errors use the adapter's
+standard behavior and the producing server owns credential redaction.
 
 `acp-adapter.ts` owns one native session. It durably fences a run before inference and
 requires settled native evidence before returning success. A repeated run is refused,
-including after restart.
+including after restart. Only an exclusive-open collision becomes the structured
+`harness_run_already_dispatched` ACP diagnostic. The existing record is untouched and
+the adapter requests neither a credential nor inference for the repeated run. Other
+storage failures retain their original error. The host finalizes the failed recovery
+and pauses queued dispatch until explicit Continue; a fresh run identity remains usable.
 Each actual provider HTTP attempt also receives a durable run-journal request ID before
 transport, including compaction. Missing settlement remains uncertain and consumes an
 attempt; errors never become zero-cost invoices. Measured successful token buckets are
@@ -173,72 +175,44 @@ cwd; arguments and native execution semantics remain unchanged. MCP path argumen
 are not treated as local file locations.
 Native bash titles include the exact command because the pending-permission card
 does not display raw tool arguments.
-`tool-operation-journal.ts` records minimal dispatch receipts,
-not a second transcript: MCP can make paid or irreversible calls outside the product's
-existing subagent Operation workflow, so it needs a pre-call replay fence of its own.
-Unknown outcomes stay recorded as unknown across worker reloads, and a dispatched
-tool-call ID is never replayed. Dispatches within one run settle in order; an unknown
-MCP result or dispatched image failure returns to the model as an ordinary tool
-result or error, and the Agent decides whether to call again
-([generative layered design](../../specs/generative-layered-design-workflow.md)).
-The harness adds no run stop or retry of its own. The built-in image receipt distinguishes
-pre-dispatch refusal, upstream rejection and uncertain delivery/import. Successful image
-digests are retained for recovery; receipts themselves do not import or commit a canvas.
-When a dispatched call throws, its existing receipt may also retain a fixed `failureStage`:
-`dispatch` covers invocation and linked resource delivery, `receipt` covers built-in receipt
-validation, `import` covers the owning-host import boundary, and `persistence` covers
-settlement writes. These labels never contain the original error, response or credentials.
-They identify the failing boundary, not the upstream cause. A provider-reported unknown
-result, an interrupted worker or a failed diagnostic write can still have no stage;
-absence does not establish where the failure occurred or authorize another paid request.
+`mcp-extension.ts` converts the selected ACP servers to the public
+`createMcpAdapter({ config })` configuration and loads **pi-mcp-adapter 3.2.0**
+through Pi's `DefaultResourceLoader.extensionFactories`. The dependency is unmodified.
+It owns tool discovery/naming, catalog updates, schemas/results, proxy/direct/script
+execution, connections, cancellation and session shutdown. Molly uses its public
+approval event to call the existing host permission policy. The public timeout
+setting is 210 seconds. Resource discovery from approved factories uses the SDK loader;
+ambient packages, project extensions, settings and skills remain disabled.
 
-MCP tools use the existing ACP server list, frozen schemas and the host permission UI.
-They revalidate availability/schema after approval and deliver cancellation before closing
-the transport. `mcp-content.ts` maps bounded text/image and embedded-resource results.
-Resource links use only the producing MCP client's `resources/read`, after separate
-approval and a durable dispatch receipt; capability absence is explicit. The returned
-URI must match exactly. Local-file/data/credential-bearing URIs and unsupported binary
-resources are refused, with no host filesystem or direct URL fetch fallback. Same-result
-duplicate links share one read. Output has aggregate byte/block limits and canonical
-base64 checks; the call and its reads share a 210-second execution deadline, with each
-resource read capped at 30 seconds. Ordinary resources deliver model context only;
-declared image results additionally pass the owning-host import gate described below.
-A server-returned tool execution error (MCP `isError`) reaches the Agent as a native
-tool error `harness_mcp_tool_failed: <text>`, as the MCP specification asks clients to
-do (#38): only its text parts, without control/bidi characters, capped at
-`MCP_TOOL_ERROR_MAX_CHARS` with a truncation note, and no resource-link reads. An error
-with no text keeps the bare code. Thrown transport/SDK exceptions carry client-side
-diagnostics (connection URLs, headers, credentials) and still become the bare
-`harness_mcp_tool_failed` or another fixed code. Servers own the redaction of their
-error text; the built-in image producer redacts credentials and bounds upstream text.
-Only built-in `molly_render_preview` maps exact Molly-owned font failures to
-`harness_render_font_failed` and known native capture/layout failures to
-`harness_render_failed`; other preview text is an ordinary tool error, and an external
-tool with the same name gains no exception. The built-in preview's validated
-asset-admission metadata maps to `harness_render_asset_too_large` or
-`harness_render_asset_format_unsupported`, with the bounded `media/<filename>` path and
-actual/allowed bytes or declared asset kind. The producer builds its text from the same
-validated fields. Invalid paths, unknown fields and forged error text confer no
-classification, and raw diagnostics never become asset metadata.
-These signals add no retry, repair or completion gate.
-The built-in MCP producer supplies its public contract revision. Image dispatch instead
-records the image connection revision frozen at run start; later configuration changes
-revoke the owning lease. Workspace MCP writes establish a local monotonic revision; historical
-rows must be explicitly saved before embedded execution. Selected catalog edits/deletion
-retire the owning worker, including same-revision legacy writes and changes during approval.
-No-auth external connections carry their catalog identity. Raw headers/env and ambient-variable
-interpolation are excluded from embedded startup, as are HTTP URL credentials/query/fragment.
-Settings store explicit MCP values in the main vault and only their reference in the catalog.
-The host acquires a run/epoch-bound grant before authenticated discovery, matching workspace,
-server, destination and revision. Values travel on fd 3; the private ACP preparation method
-carries public metadata only. Discovery rebuilds the SDK session through public APIs over
-the same native history, freezes the final toolset, and only then permits model credentials
-and inference. Protected clients close and are dropped at settlement; the next turn requires
-a new grant. Preparation is bounded and cancellation/revocation retires its worker.
-Legacy agents refuse protected references. Saving still does not test a connection.
-Explicit settings saves move current literal fields into the vault, but there is no
-background migration or erasure of old plaintext history/backups. Draft resubmission uses existing launch ownership
-and design CAS; Molly cannot attest completion through legacy Pi hook messages.
+Protected MCP credentials are acquired once for the selected session/worker epoch,
+matched to workspace/server/destination/revision, and sent only over inherited fd 3.
+They become normal config headers or stdio environment values. Subsequent turns
+reuse the same adapter and native session. Rotation, deletion, selected-catalog
+changes or host loss retire the worker. The model credential remains run-scoped.
+The old ACP preparation method and per-turn connection/session rebuilding are removed.
+Header values beginning with `!` use the adapter's documented literal escape; values
+containing adapter environment interpolation syntax are refused because they cannot
+be represented literally by this release. Child environments use `inheritEnv: false`
+and `literalEnv: true`. Their explicit environment starts with the existing
+`createToolEnvironment` allowlist, then applies server values and selected MCP
+credentials. This preserves PATH, HOME, locale and platform launch variables
+(including `ELECTRON_RUN_AS_NODE`) without inheriting model credentials, proxy
+settings or runtime injection variables. There is no implicit OAuth discovery for
+host-configured HTTP.
+
+Molly image generate/edit tools save validated files and return ordinary paths.
+The Agent reads and uses those files with standard tools; final design collection
+retains schema/replay/asset/version/CAS validation. External MCP schemas and results
+remain native. The custom bridge, resource dispatcher, paid-operation journal,
+image bindings/import callbacks/recovery tool and cancellation transport are retired.
+Existing native history, assets, drafts and old operation files are not migrated or deleted.
+No cancellation or tool result establishes exactly-once execution or absence of billing;
+Molly adds no automatic paid retry.
+
+The build compiles the published adapter entry to JavaScript and stages its unchanged
+resources and dependency closure, including the scripting worker/WASM and native keyring.
+The generated package entry points to that JavaScript; no runtime TypeScript loader,
+source patch, fork or upstream PR is needed. The sealed manifest covers these files.
 
 ## Verification and remaining gates
 
@@ -272,56 +246,6 @@ fallback is an acceptable workaround. These fixtures also do not establish regio
 endpoint compatibility, every model's capabilities or real-service support; the
 partial live Kimi evidence below remains a separate evidence class.
 
-Workspace MCP settings optionally declare a version-1 `imageBinding` on the existing
-catalog row. The embedded resolver forwards it only for selected, revision-guarded
-servers. It names separate generate/edit tools and maps top-level prompt/model/size,
-plus ordered string images and optional mask for edit. No scripts, nested paths,
-arbitrary constants, secret values or implicit model selection are introduced.
-The bridge replaces a compatible tool's input with normalized fields, injects the
-configured image model, validates the exact native schema without coercion, then
-shows those mapped arguments for approval. Catalog changes retire the worker;
-schema changes still fail the post-approval check. Incompatible mappings retain
-ordinary tool behavior with an explicit unavailable description, not image readiness.
-
-In design sessions, compatible mappings import PNG/JPEG/GIF inline/resource results through
-the owning host's private ACP callback. The host matches the native allow-once
-title/argument digest, active run/epoch/turn/session and selected catalog revision;
-the design service resolves the draft from live Session metadata and frozen inputs.
-The operation stays dispatched until import settles. Only host receipts supply
-asset digests; the model receives those paths instead of server-authored receipts,
-and can inspect the files through native reads. Import never commits artwork.
-Other sessions keep inline model-context delivery without design import.
-Image references are forwarded unchanged, never interpreted as host files or uploaded.
-Bound image resource links resolve within the original dispatch before host import.
-Each child read requires separate native approval and receives a durable receipt
-linked to its parent. Its scoped callback fixes the run/server/revision and only
-permits `resources/read`; it expires at parent settlement. The journal drains reads
-before settling the parent and serializes unrelated calls outside this fence, avoiding
-a nested queue deadlock or premature success. Ordinary tools retain their separately
-approved read path. Denied, cancelled, mismatched or lost linked results leave the
-paid parent unknown and return a tool error, without regenerating. A declared image
-tool's returned failure is recorded as failed and returned to the model. External `_meta` image receipts
-are ignored. Host import, edit inputs and recovery use bounded full-pixel decoding,
-preserving original bytes; native decoder resources ship with the CLI. Arbitrary URL
-text is not downloaded; MCP URIs never become host fetch/filesystem authority. Remote
-recovery of a prior provider operation remains open. Saving a
-mapping is not a connection/schema probe or evidence of live vendor support.
-
-Design workers also receive `molly_recover_images`: a native read-only tool backed by
-the owning host, not the external MCP connection. It lists local import intents and
-verifies one operation's retained files after single-use approval. Current run/epoch
-and exact query are bound over the private callback; source Session/artwork and frozen
-turn paths are checked by design services. It never calls a provider, writes assets,
-changes paid state or commits artwork. Missing/corrupt files stay unavailable.
-Managed built-in generate/edit now defer publication through private MCP metadata:
-the producer returns bytes, and the same owning-host import service validates them,
-persists an intent before publication and supplies the asset digests. This binds the
-frozen image connection, not the built-in MCP contract revision. The worker settles
-success only after host import and presents host paths rather than raw image bytes.
-These new built-in results are locally recoverable through the same tool. Earlier
-built-in assets without intents and results never received by the host remain
-unrecoverable through it; no history is fabricated or paid request repeated.
-
 Run package `test` and `typecheck` scripts for synthetic SDK/ACP, isolation, recovery,
 credential-pipe and MCP boundary tests. After a CLI bundle build,
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output-directory> <runtime-executable>`
@@ -333,7 +257,7 @@ Add `--compatible-model` to construct an explicit synthetic Chat Completions mod
 through the bundled worker; it also composes with those two flags without inference.
 Add `--measure=10` to repeat that same probe and emit raw samples plus nearest-rank
 p50/p95 summaries for process spawn, ACP initialization, session readiness, optional
-protected-MCP preparation, idle shutdown and point-in-time worker RSS. Each sample
+protected-MCP session startup, idle shutdown and point-in-time worker RSS. Each sample
 uses a fresh process/private directory; OS caches are not cleared. Manifest checks
 and fixture setup precede the startup clock. The report identifies the exact build,
 machine and separately probed child Node/Electron versions. RSS observation currently
@@ -348,10 +272,11 @@ delivery, then one explicit successful continuation. The bounded helper
 `packaged-turn-benchmark.mjs` listens only on an ephemeral loopback address and checks
 the exact synthetic model/credential; it never contacts a model vendor. It verifies
 native outcomes, per-request journal settlement, no additional HTTP dispatch, secret
-absence and cancellation socket closure. Optional protected MCP preparation is renewed
-for every run through the real private grants and native session rebuild path.
+absence and cancellation socket closure. Protected MCP configuration is reused
+across turns; the probe executes the stock proxy and scripting tools against the
+protected synthetic server, with one startup grant and no native session rebuild.
 Raw per-turn measurements distinguish first/warm/cancelled/after-cancel phases;
-separate distributions cover prompt settlement, preparation and cancellation/HTTP closure.
+separate distributions cover prompt settlement and cancellation/HTTP closure.
 macOS additionally observes numeric file-descriptor counts with field-only `lsof`,
 without collecting paths or contents. Linux reports RSS without that descriptor metric.
 These observations are not performance pass/fail thresholds. The recorded 52-turn
@@ -388,6 +313,9 @@ The protected host exchange registers one available Molly Agent and projects the
 checksummed offline SDK model catalog into existing ACP capability storage. The existing
 composer selects an explicit connection/model/thinking combination; its placeholder is
 not executable. Registration does not change the default or migrate existing sessions.
+Historical acceptance below predates the standard adapter migration and is not
+evidence for the new MCP implementation.
+
 The bundled macOS build has exercised protected local stdio MCP credentials through
 native settings, per-turn approval, settlement and a new explicit turn after restart.
 Both turns used the same native history; restarting itself made no model request.
@@ -416,3 +344,9 @@ only current user text and existing preferences, excludes project/brand facts, h
 a 30-second bound and never retries. Cancellation suppresses late saves. Memory
 failures are reported separately from native completion. See
 [personal memory](../../specs/personal-memory.md).
+
+Personal memory reuses this run lifecycle independently of the session-lived MCP
+adapter. Recall follows the durable duplicate-run fence; extraction and capture
+finish before the model credential is retired. The host retains the active run
+identity solely for callback ownership checks, clearing it on settlement. No
+per-turn MCP preparation or private image callbacks are restored.

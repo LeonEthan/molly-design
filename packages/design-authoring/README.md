@@ -101,6 +101,10 @@ Skill prose and the bundled example teach `design.yaml` (`format: molly-canvas/1
 references, an optional mask and optional transparency/output format. Both use the user’s required model without a
 product default and return assets without committing artwork.
 
+The browser research reference distinguishes inline observation screenshots from
+saved image assets. Replies cite observed source pages or confirmed local file
+paths; a screenshot response alone does not establish a saved reference file.
+
 The CLI staging/materialization integration test reads the delivered files, runs
 the bundled intake helper without finalize, and preserves user-edited materials
 on repeated sync.

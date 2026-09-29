@@ -22,8 +22,7 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 
 - Queue-to-history promotion preserves every frozen Turn field, `agentRoleId` and
   `agentRoleRevision` included.
-- Absent session meta is unknown: hold bounded RPC offers until it lands; drop
-  only on a definitive verdict.
+- Missing meta is unknown: retain bounded RPC offers until a definitive verdict.
 - Subscribe to RPC offers before Doc Room join/sync; never dispatch from the RPC
   handler. History sync is the durable fallback.
 - Missing-history recovery never advances `lastHandledUserMsgId`: set the permanent one-shot
@@ -58,9 +57,9 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
   teardown never writes `finished=false`.
 - Keep JSON-RPC/transport matching in `acp-error-classification.ts`: disposed/stale `-32603` is
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
-- Legacy: retry once before ACP output. Embedded Molly: exact native restore/settlement;
-  never replay prompts or history. Design runs use `browse-task-v1`, others
-  `ask-every-tool-v1`; new run snapshots freeze `auto-review`.
+- Molly restores native state, never replays prompts/history; a duplicate-run fence
+  fails the turn and pauses queued inputs until Continue. Legacy retries once before
+  ACP output. Profiles: design `browse-task-v1`, others `ask-every-tool-v1`; freeze `auto-review`.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

@@ -78,19 +78,3 @@ export const SaveFailedLocally: Story = {
       'MCP settings were not saved. Check local encrypted storage and re-enter credentials before retrying.',
   },
 };
-export const ImageToolMapping: Story = {
-  args: {
-    initialEntry: {
-      ...httpEntry,
-      imageBinding: {
-        version: 1,
-        model: 'synthetic-image',
-        generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
-        edit: {
-          tool: 'edit',
-          fields: { prompt: 'text', model: 'model_id', images: 'refs', mask: 'mask_ref' },
-        },
-      },
-    },
-  },
-};

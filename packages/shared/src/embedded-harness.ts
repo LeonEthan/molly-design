@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { ImageConnectionProtocolSchema } from '#image-connection';
 export { McpImageBindingSchema, type McpImageBinding } from '#mcp-image-binding';
-export * from '#harness-image-import';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
 // containment against the same value (issue #49: a stale copy broke prompts).
@@ -558,16 +557,12 @@ export const HarnessSessionBindingSchema = z
   .strict();
 export type HarnessSessionBinding = z.infer<typeof HarnessSessionBindingSchema>;
 
-/** Run-owned discovery precedes the final schema/toolset hash; it grants no inference. */
-export const HarnessMcpPreparationSchema = z
+export const HarnessMcpSessionSchema = z
   .object({
     version: z.literal(1),
-    runId: identifier,
     runtimeEpoch: identifier,
     sessionId: identifier,
-    turnId: identifier,
     workspaceId: identifier,
-    connection: ModelConnectionSchema,
     mcpConnections: z.array(McpCredentialBindingSchema).min(1).max(32),
   })
   .strict()
@@ -577,8 +572,7 @@ export const HarnessMcpPreparationSchema = z
       new Set(value.mcpConnections.map((binding) => binding.serverId)).size ===
         value.mcpConnections.length
   );
-export type HarnessMcpPreparation = z.infer<typeof HarnessMcpPreparationSchema>;
-export const MOLLY_PREPARE_MCP_METHOD = '_molly/prepare_mcp_run';
+export type HarnessMcpSession = z.infer<typeof HarnessMcpSessionSchema>;
 
 export const HarnessRunSnapshotSchema = z
   .object({
@@ -641,12 +635,12 @@ export type HarnessCredentialReport = z.infer<typeof HarnessCredentialReportSche
 export const HarnessMcpCredentialRequestSchema = z
   .object({
     requestId: z.string().uuid(),
-    preparation: HarnessMcpPreparationSchema,
+    session: HarnessMcpSessionSchema,
     connection: McpCredentialBindingSchema,
   })
   .strict()
   .refine((value) =>
-    value.preparation.mcpConnections.some(
+    value.session.mcpConnections.some(
       (binding) => JSON.stringify(binding) === JSON.stringify(value.connection)
     )
   );
@@ -654,7 +648,7 @@ export type HarnessMcpCredentialRequest = z.infer<typeof HarnessMcpCredentialReq
 export const HarnessMcpCredentialReportSchema = z
   .object({
     requestId: z.string().uuid(),
-    runId: identifier,
+    sessionId: identifier,
     runtimeEpoch: identifier,
     credentialRef: z.string().uuid(),
     credentialRevision: revision,
@@ -709,37 +703,3 @@ export const ManagedMcpConnectionSchema = z.discriminatedUnion('transport', [
     .object({ ...mcpBase, transport: z.literal('streamable-http'), endpoint: ModelEndpointSchema })
     .strict(),
 ]);
-
-export const PaidOperationSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    operationId: identifier,
-    runId: identifier,
-    connectionId: identifier,
-    connectionRevision: revision,
-    toolName: z.string().min(1).max(128),
-    state: z.enum(['prepared', 'dispatched', 'succeeded', 'failed', 'outcome_unknown']),
-    providerRequestId: z.string().min(1).max(512).optional(),
-    assetDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(32),
-  })
-  .strict();
-export type PaidOperation = z.infer<typeof PaidOperationSchema>;
-
-/** Private built-in image receipt, not authority supplied by an arbitrary MCP server. */
-export const ImageOperationResultSchema = z
-  .object({
-    version: z.literal(1),
-    state: z.enum(['succeeded', 'failed', 'outcome_unknown']),
-    dispatched: z.boolean(),
-    assetDigests: PaidOperationSchema.shape.assetDigests,
-  })
-  .strict();
-
-/** A disconnected dispatch is never evidence that the provider did not receive it. */
-export function canDispatchPaidOperation(operation: PaidOperation): boolean {
-  return operation.state === 'prepared';
-}
-
-export function recoverPaidOperation(operation: PaidOperation): PaidOperation {
-  return operation.state === 'dispatched' ? { ...operation, state: 'outcome_unknown' } : operation;
-}

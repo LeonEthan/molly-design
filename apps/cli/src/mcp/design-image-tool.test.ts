@@ -22,132 +22,8 @@ import {
   type McpDesignGate,
 } from './design-tools';
 import { buildMollyMcpServer, runWithMcpSessionContext } from './molly-mcp-server';
-import {
-  HARNESS_INLINE_IMAGE_RESULT_META,
-  HarnessImageImportRequestSchema,
-} from '@molly/shared/embedded-harness';
-import { importHarnessImages } from '@/design/harness-image-import';
-import { recoverHarnessImages } from '@/design/harness-image-recovery';
-import { resolveDesignWorkspace } from '@/design/workspace';
-import { createHash, randomUUID } from 'node:crypto';
-
 const TOOL_NAME = 'molly_generate_image';
 
-it.each(['molly_generate_image', 'molly_edit_image'] as const)(
-  'defers %s publication to the owning import service and recovers it by operation identity',
-  async (name) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'molly-managed-image-'));
-    const sessionId = randomUUID();
-    const artworkId = randomUUID();
-    const workspace = resolveDesignWorkspace({
-      workspaceRoot: root,
-      sessionId,
-      artworkId,
-      legacyWorkdir: path.join(root, 'input'),
-    });
-    await mkdir(workspace.artifactWorkdir, { recursive: true });
-    const png = pngFixture(2, 3);
-    const source = path.join(root, 'source.png');
-    await writeFile(source, png);
-    const args = {
-      prompt: 'synthetic image',
-      ...(name === 'molly_edit_image' ? { images: [source] } : {}),
-    };
-    try {
-      await withServer(
-        {
-          workdir: root,
-          designGate: {
-            ...readyGate,
-            artworkWorkdir: workspace.artifactWorkdir,
-            workspaceRoot: root,
-          },
-          imageTransport: async (request) => {
-            if (name === 'molly_edit_image')
-              expect(JSON.parse(request.body ?? '').images).toEqual([
-                { image_url: `data:image/png;base64,${png.toString('base64')}` },
-              ]);
-            return jsonResponse(200, { data: [{ b64_json: png.toString('base64') }] });
-          },
-        },
-        async (client) => {
-          const result = (await client.callTool({
-            name,
-            arguments: args,
-            _meta: { [HARNESS_INLINE_IMAGE_RESULT_META]: 1 },
-          })) as CallToolResult;
-          expect(result.isError).not.toBe(true);
-          expect(result._meta?.mollyImageOperation).toEqual({
-            version: 1,
-            state: 'succeeded',
-            dispatched: true,
-            assetDigests: [],
-          });
-          expect(await readdir(workspace.artifactWorkdir)).toEqual([]);
-          const image = result.content.find((content) => content.type === 'image');
-          if (!image || image.type !== 'image') throw new Error('expected inline image');
-          const request = HarnessImageImportRequestSchema.parse({
-            version: 1,
-            runId: 'a'.repeat(64),
-            runtimeEpoch: randomUUID(),
-            productSessionId: sessionId,
-            turnId: 'source-turn',
-            toolCallId: 'paid-call',
-            requestDigest: createHash('sha256').update(JSON.stringify(args)).digest('hex'),
-            connectionId: 'image-connection',
-            connectionRevision: 7,
-            serverName: 'molly',
-            toolName: name,
-            images: [{ mimeType: image.mimeType, data: image.data }],
-          });
-          const operationDirectory = path.join(root, 'operations');
-          const imported = await importHarnessImages({
-            request,
-            workspace,
-            artworkId,
-            operationDirectory,
-            signal: new AbortController().signal,
-          });
-          const recovery = {
-            sessionId,
-            artworkId,
-            operationDirectory,
-            signal: new AbortController().signal,
-            resolveWorkspace: async (turnId: string) => {
-              expect(turnId).toBe('source-turn');
-              return workspace;
-            },
-          };
-          const listed = await recoverHarnessImages({ ...recovery, query: {} });
-          if (listed.kind !== 'listed') throw new Error('expected recovery list');
-          expect(listed.operations).toEqual([
-            expect.objectContaining({
-              connectionId: 'image-connection',
-              connectionRevision: 7,
-              toolName: name,
-              expectedAssets: 1,
-            }),
-          ]);
-          const verified = await recoverHarnessImages({
-            ...recovery,
-            query: { operationId: listed.operations[0].operationId },
-          });
-          expect(verified).toMatchObject({
-            kind: 'verified',
-            unavailable: [],
-            assets: [
-              expect.objectContaining({ sha256: imported.assets[0].sha256, width: 2, height: 3 }),
-            ],
-          });
-          await expect(readFile(imported.assets[0].absolutePath)).resolves.toEqual(png);
-          expect(await readdir(workspace.artifactWorkdir)).toEqual(['media']);
-        }
-      );
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  }
-);
 const SECRET_KEY = 'sk-live-super-secret-value';
 
 /** Synthetic PNG header for transport/metadata tests, not pixel-decoding evidence. */
@@ -553,12 +429,7 @@ describe('molly_generate_image call', () => {
     expect(payload.path).toMatch(/^media\/[a-f0-9]{64}\.png$/);
     expect(payload.width).toBe(64);
     expect(payload.height).toBe(48);
-    expect(result._meta?.mollyImageOperation).toEqual({
-      version: 1,
-      state: 'succeeded',
-      dispatched: true,
-      assetDigests: [payload.sha256],
-    });
+    expect(result._meta).toBeUndefined();
     expect(textOf(result)).not.toContain(SECRET_KEY);
 
     // The request went to the configured endpoint under the configured model,
@@ -590,12 +461,7 @@ describe('molly_generate_image call', () => {
     expect(textOf(result)).toBe(
       'The image service rejected the request; Molly did not retry it. image generation failed: HTTP 400: prompt violates content policy'
     );
-    expect(result._meta?.mollyImageOperation).toEqual({
-      version: 1,
-      state: 'failed',
-      dispatched: true,
-      assetDigests: [],
-    });
+    expect(result._meta).toBeUndefined();
     expect(textOf(result)).not.toContain(SECRET_KEY);
   });
 
@@ -610,12 +476,7 @@ describe('molly_generate_image call', () => {
     expect(textOf(result)).toBe(
       'Image outcome unknown: the request reached the image service and may have been billed. Tell the user before calling again. image generation failed: synthetic connection lost'
     );
-    expect(result._meta?.mollyImageOperation).toEqual({
-      version: 1,
-      state: 'outcome_unknown',
-      dispatched: true,
-      assetDigests: [],
-    });
+    expect(result._meta).toBeUndefined();
     expect(JSON.stringify(result)).not.toContain(SECRET_KEY);
   });
 
@@ -634,12 +495,7 @@ describe('molly_generate_image call', () => {
         },
       });
       expect(result.isError).toBe(true);
-      expect(result._meta?.mollyImageOperation).toEqual({
-        version: 1,
-        state: 'outcome_unknown',
-        dispatched: true,
-        assetDigests: [],
-      });
+      expect(result._meta).toBeUndefined();
       expect(requests).toEqual(['POST https://images.example.com/v1/images/generations']);
       expect(await readdir(workdir)).toEqual([]);
       expect(JSON.stringify(result)).not.toContain(SECRET_KEY);
@@ -666,12 +522,7 @@ describe('molly_generate_image call', () => {
         },
       });
       expect(result.isError).toBe(true);
-      expect(result._meta?.mollyImageOperation).toEqual({
-        version: 1,
-        state: 'outcome_unknown',
-        dispatched: true,
-        assetDigests: [],
-      });
+      expect(result._meta).toBeUndefined();
       expect(requests).toEqual(['POST https://images.example.com/v1/images/generations']);
       await expect(readdir(outside)).resolves.toEqual([]);
     } finally {
@@ -788,10 +639,7 @@ describe('molly_generate_image call', () => {
       'a transparent background needs output_format png; JPEG has no alpha channel. No image request was sent. Nothing was billed; adjust the request before calling again.'
     );
     expect(calls).toHaveLength(1);
-    expect(refused._meta?.mollyImageOperation).toMatchObject({
-      state: 'failed',
-      dispatched: false,
-    });
+    expect(refused._meta).toBeUndefined();
   });
 
   it('refuses an empty prompt and unknown arguments', async () => {

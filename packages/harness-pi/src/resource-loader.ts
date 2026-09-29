@@ -50,12 +50,9 @@ function validateTools(extensions: Extension[], hostToolNames: readonly string[]
   }
   const names = new Set([...nativeToolNames, ...hostToolNames]);
   for (const extension of extensions) {
-    // Native commands may start inference or mutate session configuration outside
-    // prompt execution. None has an approved host-state mapping yet.
-    if (extension.commands.size > 0) throw new Error('harness_extension_command_unmapped');
     for (const [name, tool] of extension.tools) {
       if (name !== tool.definition.name) throw new Error('harness_extension_tool_identity');
-      if (names.has(name) || name.startsWith('mcp_') || name.startsWith('molly_')) {
+      if (names.has(name)) {
         throw new Error('harness_extension_tool_collision');
       }
       names.add(name);
@@ -69,6 +66,7 @@ export class MollyResourceLoader implements ResourceLoader {
 
   constructor(
     private readonly input: {
+      resources?: ResourceLoader;
       systemPrompt?: string;
       skills?: Skill[];
       contextFiles?: Array<{ path: string; content: string }>;
@@ -124,13 +122,17 @@ export class MollyResourceLoader implements ResourceLoader {
     return this.extensions;
   }
   getSkills() {
-    return { skills: this.input.skills ?? [], diagnostics: [] };
+    const resources = this.input.resources?.getSkills();
+    return {
+      skills: [...(this.input.skills ?? []), ...(resources?.skills ?? [])],
+      diagnostics: resources?.diagnostics ?? [],
+    };
   }
   getPrompts() {
-    return { prompts: [], diagnostics: [] };
+    return this.input.resources?.getPrompts() ?? { prompts: [], diagnostics: [] };
   }
   getThemes() {
-    return { themes: [], diagnostics: [] };
+    return this.input.resources?.getThemes() ?? { themes: [], diagnostics: [] };
   }
   getAgentsFiles() {
     return { agentsFiles: this.input.contextFiles ?? [] };
@@ -147,8 +149,10 @@ export class MollyResourceLoader implements ResourceLoader {
   getAppendSystemPromptSources() {
     return [];
   }
-  extendResources(): void {
-    throw new Error('harness_resource_set_is_frozen');
+  extendResources(paths: Parameters<ResourceLoader['extendResources']>[0]): void {
+    if (this.input.resources) this.input.resources.extendResources(paths);
+    else if (Object.values(paths).some((entries) => entries?.length))
+      throw new Error('harness_resource_set_is_frozen');
   }
   async reload(): Promise<void> {
     /* Resource changes require a new owned worker. */

@@ -11,6 +11,8 @@ import {
   useLayoutEffect,
   useRef,
   memo,
+  createContext,
+  useContext,
 } from 'react';
 import { createMathPlugin } from '@streamdown/math';
 import rehypeRaw from 'rehype-raw';
@@ -51,6 +53,7 @@ import { MonochromeFileIcon } from '@/components/icons/file-icons';
 import {
   isMarkdownAgentFileHref,
   parseMarkdownAgentFileHref,
+  parseMarkdownAgentImageHref,
 } from '@/lib/markdown-agent-file-link';
 import { matchWholeFilePath, splitTextIntoFilePathSegments } from '@/lib/linkify-file-paths';
 import {
@@ -1062,12 +1065,71 @@ const createMarkdownComponents = ({
       </MarkdownExternalLink>
     );
   },
-  img: TaskMarkdownImage,
+  img: (props: MarkdownImageProps) => {
+    const path = parseMarkdownAgentImageHref(props.src);
+    return path ? <LocalMarkdownImage {...props} path={path} /> : <TaskMarkdownImage {...props} />;
+  },
   // <picture> just passes through its children (the <img> fallback);
   // <source> is suppressed since it's only meaningful inside a real browser <picture>.
   source: () => null,
   picture: (props: MarkdownPictureProps) => <>{props.children}</>,
 });
+
+const MarkdownAgentImageResolverContext = createContext<
+  ((path: string) => Promise<string>) | undefined
+>(undefined);
+
+function LocalMarkdownImage({
+  node: _node,
+  src: _src,
+  path,
+  alt,
+  ...rest
+}: MarkdownImageProps & { path: string }) {
+  const { t } = useTranslation();
+  const resolveUrl = useContext(MarkdownAgentImageResolverContext);
+  const request = useMemo(() => ({ path, resolveUrl }), [path, resolveUrl]);
+  const [result, setResult] = useState<{
+    request: typeof request;
+    url?: string;
+    error?: string;
+  }>();
+  const unavailable = t('sessions.imageLoadUnavailable', 'Unable to load image');
+  useEffect(() => {
+    let active = true;
+    if (!request.resolveUrl) return undefined;
+    void request
+      .resolveUrl(request.path)
+      .then((url) => {
+        if (active) setResult({ request, url });
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setResult({ request, error: error instanceof Error ? error.message : unavailable });
+      });
+    return () => {
+      active = false;
+    };
+  }, [request, unavailable]);
+  const current = result?.request === request ? result : undefined;
+  if (!current?.url) {
+    const error = resolveUrl ? current?.error : unavailable;
+    return (
+      <span role="img" aria-label={alt ?? ''} className="my-2 block text-sm text-muted-foreground">
+        {error ? `${alt ? `${alt}: ` : ''}${error}` : alt || t('common.loading', 'Loading...')}
+      </span>
+    );
+  }
+  return (
+    <img
+      {...rest}
+      src={current.url}
+      alt={alt ?? ''}
+      className={cn('my-2 max-h-[32rem] max-w-full rounded-md object-contain', rest.className)}
+      onError={() => setResult({ request, error: unavailable })}
+    />
+  );
+}
 
 function TaskMarkdownImage(props: MarkdownImageProps) {
   const { node: _node, src, alt, ...rest } = props;
@@ -1119,6 +1181,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   allowHtml = false,
   isStreaming = false,
   onAgentFileLinkClick,
+  resolveAgentImageUrl,
   searchBlockId,
 }: {
   text: string;
@@ -1129,6 +1192,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   /** Enables Streamdown's incremental animation while a turn is still streaming. */
   isStreaming?: boolean;
   onAgentFileLinkClick?: (href: string) => void;
+  resolveAgentImageUrl?: (path: string) => Promise<string>;
   searchBlockId?: string;
 }) {
   const { t } = useTranslation();
@@ -1440,27 +1504,29 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
         onClick={handleMarkdownClick}
         onKeyDown={handleMarkdownKeyDown}
       >
-        <Streamdown
-          // Streamdown's memo comparator does not include every rendering prop;
-          // remount when raw-HTML mode or Mermaid theme changes so sanitized
-          // rendering and diagram colors update correctly.
-          key={streamdownKey}
-          mode="streaming"
-          className="space-y-0"
-          controls={STREAMDOWN_CONTROLS}
-          icons={STREAMDOWN_ICONS}
-          isAnimating={isStreaming}
-          lineNumbers={false}
-          mermaid={mermaidOptions}
-          plugins={STREAMDOWN_PLUGINS}
-          remarkPlugins={MARKDOWN_REMARK_PLUGINS}
-          rehypePlugins={rehypePlugins}
-          components={components}
-          translations={streamdownTranslations}
-          urlTransform={markdownUrlTransform}
-        >
-          {normalizedText}
-        </Streamdown>
+        <MarkdownAgentImageResolverContext.Provider value={resolveAgentImageUrl}>
+          <Streamdown
+            // Streamdown's memo comparator does not include every rendering prop;
+            // remount when raw-HTML mode or Mermaid theme changes so sanitized
+            // rendering and diagram colors update correctly.
+            key={streamdownKey}
+            mode="streaming"
+            className="space-y-0"
+            controls={STREAMDOWN_CONTROLS}
+            icons={STREAMDOWN_ICONS}
+            isAnimating={isStreaming}
+            lineNumbers={false}
+            mermaid={mermaidOptions}
+            plugins={STREAMDOWN_PLUGINS}
+            remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+            rehypePlugins={rehypePlugins}
+            components={components}
+            translations={streamdownTranslations}
+            urlTransform={markdownUrlTransform}
+          >
+            {normalizedText}
+          </Streamdown>
+        </MarkdownAgentImageResolverContext.Provider>
       </div>
       {/* A sibling of the markdown, not a child: a portal's events bubble
           through the React tree, and inside the container the viewer's own

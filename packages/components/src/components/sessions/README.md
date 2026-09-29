@@ -35,7 +35,7 @@ tracked `.agents/docs/` directory.
 | `session-message-submit-route.ts`                               | Send vs. queue vs. steer routing decision                                                                                                           |
 | `desktop-run-config-menu.tsx`                                   | Desktop provider/model picker with reasoning + permission-mode button                                                                               |
 | `recent-run-config-menu-group.tsx`                              | "Recently used" run-config entries                                                                                                                  |
-| `composer-agent-role-panel.tsx`, `agent-role-detail-pane.tsx`   | Legacy, unmounted Role selection and detail components                                                                                                |
+| `composer-agent-role-panel.tsx`, `agent-role-detail-pane.tsx`   | Legacy, unmounted Role selection and detail components                                                                                              |
 | `floating-permission-request.tsx`, `ask-user-question-card.tsx` | Floating permission requests and agent questions                                                                                                    |
 | `design-file-receipt.tsx`                                       | Durable save receipts and diagnostics; original files open through the ordinary file viewer                                                         |
 | `notification-permission-prompt.tsx`                            | Notification permission ask                                                                                                                         |
@@ -118,6 +118,10 @@ editor is ready; component phase cleanup does not dispose that handoff surface.
 Turn-bound display never saves, flushes, changes version base or ends execution.
 The main-process canvas-host state keeps edit/reference/export/version actions locked
 through artifact processing; conversation presence or file appearance cannot release it.
+Attachment failures have separate UI state from save and synchronization errors.
+A successful current-generation attach and toolbar presentation clears its attachment
+diagnostic. Superseded attachment outcomes cannot clear a newer failure or reintroduce
+an old one, and successful attachment cannot hide an unrelated operation failure.
 
 Current-artwork selection controls and their popups render inside Bento's native
 view near the selection. The shell passes labels/theme and receives validated

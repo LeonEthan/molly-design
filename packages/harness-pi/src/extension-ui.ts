@@ -11,10 +11,6 @@ export type ExtensionDialogHost = {
 };
 
 const MAX_DIALOG_MS = 300_000;
-const unsupported = (): never => {
-  throw new Error('harness_extension_ui_unsupported');
-};
-
 /** Native UI adapter over the existing Core question shape, not a new wire protocol. */
 export function createExtensionUI(host: ExtensionDialogHost) {
   const lifetime = new AbortController();
@@ -102,42 +98,18 @@ export function createExtensionUI(host: ExtensionDialogHost) {
     if (failure !== undefined) throw failure;
     return signal.aborted ? undefined : value;
   }
-  const ui: ExtensionUIContext = {
+  const ui: Pick<ExtensionUIContext, 'select' | 'input' | 'confirm' | 'notify'> = {
     select: (title, options, opts) => ask(title, options, undefined, opts),
     input: (title, placeholder, opts) => ask(title, undefined, placeholder, opts),
     confirm: async (title, message, opts) =>
       (await ask(`${title}\n\n${message}`, ['Confirm', 'Cancel'], undefined, opts)) === 'Confirm',
     notify: (message, type = 'info') => {
-      if (lifetime.signal.aborted || host.currentSignal()?.aborted !== false)
+      if (lifetime.signal.aborted || host.currentSignal()?.aborted === true)
         throw new Error('harness_extension_ui_outside_run');
+      if (!host.currentSignal()) return;
       if (message.length > 8192) throw new Error('harness_extension_ui_invalid_request');
       host.notify(message, type);
     },
-    onTerminalInput: unsupported,
-    setStatus: unsupported,
-    setWorkingMessage: unsupported,
-    setWorkingVisible: unsupported,
-    setWorkingIndicator: unsupported,
-    setHiddenThinkingLabel: unsupported,
-    setWidget: unsupported,
-    setFooter: unsupported,
-    setHeader: unsupported,
-    setTitle: unsupported,
-    custom: unsupported,
-    pasteToEditor: unsupported,
-    setEditorText: unsupported,
-    getEditorText: unsupported,
-    editor: unsupported,
-    addAutocompleteProvider: unsupported,
-    setEditorComponent: unsupported,
-    getEditorComponent: unsupported,
-    // The SDK shallow-copies UI bindings. Defer rejection until terminal theme use.
-    theme: new Proxy({} as ExtensionUIContext['theme'], { get: unsupported }),
-    getAllThemes: unsupported,
-    getTheme: unsupported,
-    setTheme: unsupported,
-    getToolsExpanded: unsupported,
-    setToolsExpanded: unsupported,
   };
   return { ui, dispose: () => lifetime.abort() };
 }

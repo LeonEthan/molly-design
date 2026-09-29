@@ -124,3 +124,5 @@ File-by-file ownership and coverage pointers: [README.md](README.md).
   dispatch or revive the old turn.
 - Attachment and mobile image-preview invariants live in
   [session-files-rendering.md](session-files-rendering.md).
+- Agent Markdown images use the owning Session's file preview; never load raw
+  local paths or retain images across resolver changes.

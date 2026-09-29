@@ -2,8 +2,8 @@ import type { PersonalMemoryProvider } from '@molly/shared/personal-memory';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createAssistantMessageEventStream,
@@ -21,26 +21,14 @@ import type {
 import { createMollySession, type CreateMollySessionInput } from '../src/session-factory';
 import { MollyResourceLoader } from '../src/resource-loader';
 import { failingExtension } from './fixtures/failing-extension';
-import {
-  MollyAcpAdapter,
-  type McpCredentialProvider,
-  type ImageImportProvider,
-} from '../src/acp-adapter';
-import { mcpToolName } from '../src/mcp-bridge';
+import { MollyAcpAdapter, type McpCredentialProvider } from '../src/acp-adapter';
 import { createApprovedTools, hashToolset } from '../src/approved-tools';
-import type { ImageRecoveryProvider } from '../src/image-recovery-tool';
 import { RunJournal } from '../src/run-journal';
 import { createAutoReviewApproval } from '../src/auto-review';
 import { decideAutoReview } from '../src/auto-review-policy';
-import { ToolOperationJournal } from '../src/tool-operation-journal';
 import {
-  MOLLY_BUILTIN_MCP_CONNECTION,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
-  MOLLY_PREPARE_MCP_METHOD,
-  McpCredentialBindingSchema,
-  HarnessSessionBindingSchema,
-  type HarnessMcpPreparation,
   type HarnessRunSnapshot,
 } from '@molly/shared/embedded-harness';
 
@@ -54,8 +42,6 @@ async function fixture(
   approve: Parameters<typeof createApprovedTools>[0]['approve'] = async () => false,
   mcpServers: McpServer[] = [],
   mcpCredentials?: McpCredentialProvider,
-  importImages?: ImageImportProvider,
-  recoverImages?: ImageRecoveryProvider,
   questionPeer?: Pick<AgentSideConnection, 'unstable_createElicitation' | 'extMethod'>,
   personalMemory?: PersonalMemoryProvider,
   beforeResponse?: (systemPrompt: string | undefined) => Promise<void>
@@ -98,6 +84,7 @@ async function fixture(
   };
   const updates: SessionNotification[] = [];
   const messages: unknown[] = [];
+  const credentialRequests: string[] = [];
   const systemPrompts: Array<string | undefined> = [];
   const sessionInputs: CreateMollySessionInput[] = [];
   const adapter = new MollyAcpAdapter(
@@ -134,11 +121,12 @@ async function fixture(
       });
       return owned;
     },
-    undefined,
+    async (snapshot) => {
+      credentialRequests.push(snapshot.runId);
+      return input.apiKey;
+    },
     approve,
     mcpCredentials,
-    importImages,
-    recoverImages,
     personalMemory
   );
   if (questionPeer)
@@ -182,6 +170,7 @@ async function fixture(
     updates,
     sessionInputs,
     messages,
+    credentialRequests,
     systemPrompts,
     journal: new RunJournal(join(privateRoot, 'runs')),
   };
@@ -200,7 +189,6 @@ describe('owned ACP boundary', () => {
         effects.push('executed');
       },
     });
-    // Bypass loader validation to exercise the separate production dispatch guard.
     vi.spyOn(MollyResourceLoader.prototype, 'getExtensions').mockReturnValue(resources);
     const f = await fixture();
     try {
@@ -327,7 +315,7 @@ describe('owned ACP boundary', () => {
         ),
         continuation,
       ];
-      const f = await fixture(outputs, undefined, [], undefined, undefined, undefined, {
+      const f = await fixture(outputs, undefined, [], undefined, {
         unstable_createElicitation: async (request) => {
           questions.push(request);
           if (mode === 'host-error') throw new Error('PRIVATE_UI_DIAGNOSTIC');
@@ -392,7 +380,7 @@ describe('owned ACP boundary', () => {
       ),
       continuation,
     ];
-    const f = await fixture(outputs, undefined, [], undefined, undefined, undefined, {
+    const f = await fixture(outputs, undefined, [], undefined, {
       unstable_createElicitation: (request) =>
         new Promise((resolve) => {
           question = request;
@@ -416,263 +404,6 @@ describe('owned ACP boundary', () => {
       release({ action: 'accept', content: { [identity.questionId]: 'Yes' } });
       expect((await pending).stopReason).toBe('cancelled');
       expect(outputs).toEqual([continuation]);
-    } finally {
-      await f.adapter.dispose();
-    }
-  });
-  it.each(['allowed', 'denied', 'host-error'] as const)(
-    'runs native local recovery without an MCP or image request (%s)',
-    async (mode) => {
-      const approvals: unknown[] = [];
-      const received: unknown[] = [];
-      const operationId = 'c'.repeat(64);
-      const f = await fixture(
-        [
-          fauxAssistantMessage(
-            fauxToolCall('molly_recover_images', { operationId }, { id: 'recovery' }),
-            { stopReason: 'toolUse', timestamp: 1 }
-          ),
-          fauxAssistantMessage('Recovery inspected', { timestamp: 2 }),
-        ],
-        async (request) => {
-          approvals.push({ name: request.name, arguments: request.arguments });
-          return mode !== 'denied';
-        },
-        [],
-        undefined,
-        undefined,
-        async (request) => {
-          received.push(request);
-          if (mode === 'host-error') throw new Error('PRIVATE_HOST_DIAGNOSTIC');
-          return {
-            kind: 'verified',
-            operationId,
-            sourceTurnId: 'previous-turn',
-            assets: [],
-            unavailable: [],
-          };
-        }
-      );
-      f.snapshot.runId = 'b'.repeat(64);
-      try {
-        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-        expect(approvals).toEqual([{ name: 'molly/recover_images', arguments: { operationId } }]);
-        expect(received).toEqual(
-          mode === 'denied'
-            ? []
-            : [
-                expect.objectContaining({
-                  runId: f.snapshot.runId,
-                  runtimeEpoch: f.snapshot.runtimeEpoch,
-                  productSessionId: f.snapshot.sessionId,
-                  turnId: f.snapshot.turnId,
-                  toolCallId: 'recovery',
-                  query: { operationId },
-                }),
-              ]
-        );
-        if (mode === 'allowed') expect(JSON.stringify(f.messages)).toContain('previous-turn');
-        else expect(JSON.stringify(f.messages)).toContain('harness_image_recovery_failed');
-        expect(JSON.stringify(f.messages)).not.toContain('PRIVATE_HOST_DIAGNOSTIC');
-        await expect(
-          readFile(join(f.input.privateRoot, 'operations', `${operationId}.json`))
-        ).rejects.toMatchObject({ code: 'ENOENT' });
-      } finally {
-        await f.adapter.dispose();
-      }
-    }
-  );
-  it.each(['wrong-server', 'wrong-fields', 'cancelled'] as const)(
-    'refuses %s MCP grants before discovery or inference',
-    async (reason) => {
-      const destination = {
-        transport: 'stdio' as const,
-        command: process.execPath,
-        args: [fileURLToPath(new URL('./fixtures/protected-mcp.mjs', import.meta.url)), 'first'],
-      };
-      const binding = McpCredentialBindingSchema.parse({
-        workspaceId: 'synthetic-workspace',
-        serverId: 'first',
-        credentialRef: randomUUID(),
-        revision: 1,
-        destination,
-        fieldNames: ['TEST_MCP_TOKEN'],
-      });
-      let notifyEntered!: () => void;
-      const entered = new Promise<void>((resolve) => {
-        notifyEntered = resolve;
-      });
-      const f = await fixture(
-        undefined,
-        undefined,
-        [
-          {
-            name: 'first',
-            command: destination.command,
-            args: destination.args,
-            env: [],
-            _meta: { mollyConnection: { id: 'first', revision: 1 }, mollyMcpCredential: binding },
-          },
-        ],
-        async (_preparation, signal) => {
-          notifyEntered();
-          if (reason === 'cancelled')
-            await new Promise<never>((_, reject) =>
-              signal.addEventListener('abort', () => reject(new Error('SYNTHETIC_SECRET')), {
-                once: true,
-              })
-            );
-          const values: Record<string, string> =
-            reason === 'wrong-fields'
-              ? { WRONG_FIELD: 'SYNTHETIC_SECRET' }
-              : { TEST_MCP_TOKEN: 'SYNTHETIC_FIRST' };
-          return [
-            {
-              connection: reason === 'wrong-server' ? { ...binding, serverId: 'second' } : binding,
-              values,
-            },
-          ];
-        }
-      );
-      try {
-        const result = f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
-          sessionId: f.request.sessionId,
-          preparation: {
-            version: 1,
-            runId: f.snapshot.runId,
-            runtimeEpoch: f.input.runtimeEpoch,
-            sessionId: f.input.productSessionId,
-            turnId: f.snapshot.turnId,
-            workspaceId: f.input.workspaceId,
-            connection: f.input.connection,
-            mcpConnections: [binding],
-          },
-        });
-        const rejected = expect(result).rejects.toThrow(/^harness_mcp_preparation_failed$/);
-        await entered;
-        if (reason === 'cancelled') await f.adapter.cancel({ sessionId: f.request.sessionId });
-        await rejected;
-        expect(f.messages).toEqual([]);
-        expect(f.updates).toEqual([]);
-        await expect(f.journal.read(f.snapshot.runId)).rejects.toMatchObject({ code: 'ENOENT' });
-      } finally {
-        await f.adapter.dispose();
-      }
-    }
-  );
-  it('acquires protected tools only for the prepared run, preserves native history and drops them after settlement', async () => {
-    const servers = ['first', 'second'].map((name) => {
-      const destination = {
-        transport: 'stdio' as const,
-        command: process.execPath,
-        args: [fileURLToPath(new URL('./fixtures/protected-mcp.mjs', import.meta.url)), name],
-      };
-      const binding = McpCredentialBindingSchema.parse({
-        workspaceId: 'synthetic-workspace',
-        serverId: name,
-        credentialRef: randomUUID(),
-        revision: 1,
-        destination,
-        fieldNames: ['TEST_MCP_TOKEN'],
-      });
-      return {
-        name,
-        command: destination.command,
-        args: destination.args,
-        env: [],
-        _meta: { mollyConnection: { id: name, revision: 1 }, mollyMcpCredential: binding },
-      };
-    });
-    const acquisitions: string[] = [];
-    const f = await fixture(
-      [
-        fauxAssistantMessage(
-          servers.map((server) =>
-            fauxToolCall(mcpToolName(server.name, 'inspect'), {}, { id: server.name })
-          ),
-          { stopReason: 'toolUse', timestamp: 1 }
-        ),
-        fauxAssistantMessage('Both isolated', { timestamp: 2 }),
-        fauxAssistantMessage('Second turn', { timestamp: 3 }),
-      ],
-      async () => true,
-      servers,
-      async (preparation) => {
-        acquisitions.push(preparation.runId);
-        return preparation.mcpConnections.map((connection, index) => ({
-          connection,
-          values: { TEST_MCP_TOKEN: index === 0 ? 'SYNTHETIC_FIRST' : 'SYNTHETIC_SECOND' },
-        }));
-      }
-    );
-    const preparation: HarnessMcpPreparation = {
-      version: 1,
-      runId: f.snapshot.runId,
-      runtimeEpoch: f.input.runtimeEpoch,
-      sessionId: f.input.productSessionId,
-      turnId: f.snapshot.turnId,
-      workspaceId: f.input.workspaceId,
-      connection: f.input.connection,
-      mcpConnections: servers.map((server) => server._meta.mollyMcpCredential),
-    };
-    try {
-      expect(acquisitions).toEqual([]);
-      await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
-      const prepared = HarnessSessionBindingSchema.parse(
-        await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
-          sessionId: f.request.sessionId,
-          preparation,
-        })
-      );
-      expect(f.adapter.currentSessionId).toBe(f.request.sessionId);
-      expect(prepared.toolsetHash).not.toBe(f.snapshot.toolsetHash);
-      f.snapshot.toolsetHash = prepared.toolsetHash;
-      f.snapshot.mcpConnections = preparation.mcpConnections;
-      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-      expect(
-        f.updates
-          .filter(({ update }) => update.sessionUpdate === 'tool_call_update')
-          .map(({ update }) => update)
-      ).toMatchObject([
-        { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
-        { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
-      ]);
-      const history = await readFile(prepared.nativeSessionFile, 'utf8');
-      expect(history).toContain('Both isolated');
-      for (const canary of ['SYNTHETIC_FIRST', 'SYNTHETIC_SECOND']) {
-        expect(
-          JSON.stringify({
-            updates: f.updates,
-            messages: f.messages,
-            journal: await f.journal.read(f.snapshot.runId),
-          })
-        ).not.toContain(canary);
-        expect(history).not.toContain(canary);
-      }
-      await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
-      const next = { ...preparation, runId: randomUUID(), turnId: 'turn2' };
-      const rebound = HarnessSessionBindingSchema.parse(
-        await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
-          sessionId: f.request.sessionId,
-          preparation: next,
-        })
-      );
-      expect(rebound.nativeSessionFile).toBe(prepared.nativeSessionFile);
-      Object.assign(f.snapshot, {
-        runId: next.runId,
-        turnId: next.turnId,
-        toolsetHash: rebound.toolsetHash,
-      });
-      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-      expect(JSON.stringify(f.messages.at(-1))).toContain('Both isolated');
-      expect(acquisitions).toEqual([preparation.runId, next.runId]);
-      await expect(
-        f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
-          sessionId: f.request.sessionId,
-          preparation: next,
-        })
-      ).rejects.toThrow('harness_mcp_preparation_failed');
-      expect(acquisitions).toEqual([preparation.runId, next.runId]);
     } finally {
       await f.adapter.dispose();
     }
@@ -786,332 +517,6 @@ describe('owned ACP boundary', () => {
       await f.adapter.dispose();
     }
   });
-  it.each([
-    { mode: '--lose-response', state: 'outcome_unknown' },
-    { mode: '--reject-image', state: 'failed' },
-  ])(
-    'returns $mode to the model as a tool result and continues native inference',
-    async ({ mode, state }) => {
-      const responses = [
-        fauxAssistantMessage(
-          fauxToolCall('molly_generate_image', { prompt: 'Synthetic' }, { id: 'unknown-image' }),
-          { stopReason: 'toolUse', timestamp: 1 }
-        ),
-        fauxAssistantMessage('Agent decides after the tool error', { timestamp: 2 }),
-      ];
-      const f = await fixture(responses, async () => true, [
-        {
-          name: 'molly',
-          command: process.execPath,
-          args: [fileURLToPath(new URL('./fixtures/image-mcp.mjs', import.meta.url)), mode],
-          env: [],
-          _meta: { mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION },
-        },
-      ]);
-      f.snapshot.imageConnection = {
-        id: randomUUID(),
-        revision: 1,
-        enabled: true,
-        baseUrl: 'https://image.example/v1',
-        model: 'synthetic-image',
-        hasApiKey: true,
-        legacyHistoryMayContainKey: false,
-      };
-      try {
-        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-        expect(responses).toEqual([]);
-        expect(f.messages.at(-1)).toContainEqual(
-          expect.objectContaining({ role: 'toolResult', toolCallId: 'unknown-image' })
-        );
-        const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
-        expect(
-          (await operations.read(operations.operationId(f.snapshot.runId, 'unknown-image'))).state
-        ).toBe(state);
-      } finally {
-        await f.adapter.dispose();
-      }
-    }
-  );
-  it('journals built-in image dispatch against the frozen image connection, not the MCP catalog', async () => {
-    const toolCallId = 'synthetic-image-call';
-    const f = await fixture(
-      [
-        fauxAssistantMessage(
-          fauxToolCall('molly_generate_image', { prompt: 'Synthetic' }, { id: toolCallId }),
-          { stopReason: 'toolUse', timestamp: 1 }
-        ),
-        fauxAssistantMessage('Done', { timestamp: 2 }),
-      ],
-      async () => true,
-      [
-        {
-          name: 'molly',
-          command: process.execPath,
-          args: [fileURLToPath(new URL('./fixtures/image-mcp.mjs', import.meta.url))],
-          env: [],
-          _meta: { mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION },
-        },
-      ]
-    );
-    f.snapshot.imageConnection = {
-      id: randomUUID(),
-      revision: 7,
-      enabled: true,
-      baseUrl: 'https://image.example/v1',
-      model: 'synthetic-image',
-      hasApiKey: true,
-      legacyHistoryMayContainKey: false,
-    };
-    try {
-      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-      const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
-      expect(
-        await operations.read(operations.operationId(f.snapshot.runId, toolCallId))
-      ).toMatchObject({
-        state: 'succeeded',
-        connectionId: f.snapshot.imageConnection.id,
-        connectionRevision: 7,
-        toolName: 'molly_generate_image',
-      });
-    } finally {
-      await f.adapter.dispose();
-    }
-  });
-  it.each([
-    { mode: '--reject-image', state: 'failed' },
-    { mode: '--bad-image', state: 'outcome_unknown' },
-    { mode: '--resource-mismatch', state: 'outcome_unknown' },
-    { mode: '--resource-lost', state: 'outcome_unknown' },
-  ])(
-    'returns external paid $mode to the model as a tool error without an automatic retry',
-    async ({ mode, state }) => {
-      const callId = 'external-paid-call';
-      const responses = [
-        fauxAssistantMessage(
-          fauxToolCall(
-            mcpToolName('external-images', 'molly_generate_image'),
-            { prompt: 'Synthetic' },
-            { id: callId }
-          ),
-          { stopReason: 'toolUse', timestamp: 1 }
-        ),
-        fauxAssistantMessage('Agent decides after the tool error', { timestamp: 2 }),
-      ];
-      const f = await fixture(responses, async () => true, [
-        {
-          name: 'external-images',
-          command: process.execPath,
-          args: [fileURLToPath(new URL('./fixtures/image-mcp.mjs', import.meta.url)), mode],
-          env: [],
-          _meta: {
-            mollyConnection: { id: 'external-images', revision: 4 },
-            mollyImageBinding: {
-              version: 1,
-              model: 'synthetic-image',
-              generate: {
-                tool: 'molly_generate_image',
-                fields: { prompt: 'prompt', model: 'model' },
-              },
-            },
-          },
-        },
-      ]);
-      try {
-        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-        expect(responses).toEqual([]);
-        const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
-        expect(
-          await operations.read(operations.operationId(f.snapshot.runId, callId))
-        ).toMatchObject({
-          state,
-          connectionId: 'external-images',
-          connectionRevision: 4,
-          assetDigests: [],
-        });
-      } finally {
-        await f.adapter.dispose();
-      }
-    }
-  );
-  it.each(
-    ([false, true] as const).flatMap((builtin) =>
-      (
-        [
-          'imported',
-          'host-refused',
-          'no-image',
-          ...(!builtin ? (['linked', 'linked-denied', 'linked-host-refused'] as const) : []),
-        ] as const
-      ).map((outcome) => ({ builtin, outcome }))
-    )
-  )(
-    'settles image import through the owning host before the Agent continues (builtin=$builtin, $outcome)',
-    async ({ builtin, outcome }) => {
-      const serverName = builtin ? 'molly' : 'external-images';
-      const connectionId = builtin ? '00000000-0000-4000-8000-000000000001' : 'external-images';
-      const responses = [
-        fauxAssistantMessage(
-          fauxToolCall(
-            mcpToolName(serverName, 'molly_generate_image'),
-            { prompt: 'Synthetic' },
-            { id: 'import-call' }
-          ),
-          { stopReason: 'toolUse', timestamp: 1 }
-        ),
-        fauxAssistantMessage('Imported', { timestamp: 2 }),
-      ];
-      const received: unknown[] = [];
-      const approvals: string[] = [];
-      const linked = outcome.startsWith('linked');
-      const succeeded = outcome === 'imported' || outcome === 'linked';
-      const sha256 = 'a'.repeat(64);
-      const asset = {
-        path: `media/${sha256}.png`,
-        absolutePath: `/synthetic/media/${sha256}.png`,
-        sha256,
-        mimeType: 'image/png' as const,
-        width: 1,
-        height: 1,
-        bytes: 68,
-      };
-      const f = await fixture(
-        responses,
-        async ({ name }) => {
-          approvals.push(name);
-          return !(outcome === 'linked-denied' && name.endsWith('/resources/read'));
-        },
-        [
-          {
-            name: serverName,
-            command: process.execPath,
-            args: [
-              fileURLToPath(new URL('./fixtures/image-mcp.mjs', import.meta.url)),
-              ...(outcome === 'no-image' ? [] : [linked ? '--resource' : '--inline-image']),
-              ...(builtin ? ['--managed-inline'] : []),
-            ],
-            env: [],
-            _meta: {
-              mollyConnection: builtin
-                ? MOLLY_BUILTIN_MCP_CONNECTION
-                : { id: 'external-images', revision: 4 },
-              ...(builtin
-                ? {}
-                : {
-                    mollyImageBinding: {
-                      version: 1,
-                      model: 'synthetic-image',
-                      generate: {
-                        tool: 'molly_generate_image',
-                        fields: { prompt: 'prompt', model: 'model' },
-                      },
-                    },
-                  }),
-            },
-          },
-        ],
-        undefined,
-        async (request, signal) => {
-          signal.throwIfAborted();
-          received.push(request);
-          if (outcome === 'host-refused' || outcome === 'linked-host-refused')
-            throw new Error('SYNTHETIC_SECRET_MUST_NOT_PERSIST');
-          return { assets: [asset] };
-        }
-      );
-      f.snapshot.runId = 'b'.repeat(64);
-      if (builtin)
-        f.snapshot.imageConnection = {
-          id: connectionId,
-          revision: 4,
-          enabled: true,
-          baseUrl: 'https://images.invalid/v1',
-          model: 'synthetic-image',
-          hasApiKey: true,
-          legacyHistoryMayContainKey: false,
-        };
-      try {
-        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
-        if (succeeded) expect(JSON.stringify(f.messages)).toContain(asset.absolutePath);
-        expect(received).toEqual(
-          outcome === 'no-image' || outcome === 'linked-denied'
-            ? []
-            : [
-                expect.objectContaining({
-                  runId: f.snapshot.runId,
-                  runtimeEpoch: f.input.runtimeEpoch,
-                  productSessionId: f.input.productSessionId,
-                  turnId: f.snapshot.turnId,
-                  connectionId,
-                  connectionRevision: 4,
-                  serverName,
-                  toolName: 'molly_generate_image',
-                  toolCallId: 'import-call',
-                  requestDigest: createHash('sha256')
-                    .update(
-                      JSON.stringify({
-                        prompt: 'Synthetic',
-                        ...(builtin ? {} : { model: 'synthetic-image' }),
-                      })
-                    )
-                    .digest('hex'),
-                  images: [
-                    {
-                      mimeType: 'image/png',
-                      data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
-                    },
-                  ],
-                }),
-              ]
-        );
-        const operations = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
-        expect(
-          await operations.read(operations.operationId(f.snapshot.runId, 'import-call'))
-        ).toMatchObject({
-          state: succeeded ? 'succeeded' : 'outcome_unknown',
-          ...(!succeeded
-            ? { failureStage: outcome === 'linked-denied' ? 'dispatch' : 'import' }
-            : {}),
-          connectionId,
-          connectionRevision: 4,
-          assetDigests: succeeded ? [sha256] : [],
-        });
-        expect(responses).toEqual([]);
-        expect(
-          await readFile(
-            join(
-              f.input.privateRoot,
-              'operations',
-              `${operations.operationId(f.snapshot.runId, 'import-call')}.json`
-            ),
-            'utf8'
-          )
-        ).not.toContain('SYNTHETIC_SECRET_MUST_NOT_PERSIST');
-        expect(approvals).toEqual([
-          `${serverName}/molly_generate_image`,
-          ...(linked ? [`${serverName}/resources/read`] : []),
-        ]);
-        if (linked) {
-          const resourceCallId = createHash('sha256')
-            .update(JSON.stringify(['resource', 'import-call', 0]))
-            .digest('hex');
-          const resourceId = operations.operationId(f.snapshot.runId, resourceCallId);
-          if (outcome === 'linked-denied')
-            await expect(operations.read(resourceId)).rejects.toMatchObject({ code: 'ENOENT' });
-          else
-            expect(await operations.read(resourceId)).toMatchObject({
-              parentOperationId: operations.operationId(f.snapshot.runId, 'import-call'),
-              connectionId,
-              connectionRevision: 4,
-              toolName: 'resources/read',
-              state: 'succeeded',
-            });
-        }
-        expect(JSON.stringify(f.messages)).not.toContain('SYNTHETIC_SECRET_MUST_NOT_PERSIST');
-      } finally {
-        await f.adapter.dispose();
-      }
-    }
-  );
   it('reviews an auto-review escalation with the session model before running it', async () => {
     const responses = [
       fauxAssistantMessage(
@@ -1181,7 +586,10 @@ describe('owned ACP boundary', () => {
         true
       );
       expect((await f.journal.read(f.snapshot.runId)).outcome?.status).toBe('completed');
-      await expect(f.adapter.prompt(f.request)).rejects.toMatchObject({ code: 'EEXIST' });
+      await expect(f.adapter.prompt(f.request)).rejects.toMatchObject({
+        code: -32603,
+        data: { code: 'harness_run_already_dispatched' },
+      });
     } finally {
       await f.adapter.dispose();
     }
@@ -1230,97 +638,43 @@ describe('owned ACP boundary', () => {
     const f = await fixture();
     try {
       await f.journal.begin(f.snapshot);
-      await expect(f.adapter.prompt(f.request)).rejects.toMatchObject({ code: 'EEXIST' });
+      const prior = await f.journal.read(f.snapshot.runId);
+      await expect(f.adapter.prompt(f.request)).rejects.toMatchObject({
+        code: -32603,
+        data: { code: 'harness_run_already_dispatched' },
+      });
       expect(f.messages).toEqual([]);
+      expect(f.credentialRequests).toEqual([]);
       expect(
-        (await new RunJournal(join(f.input.privateRoot, 'runs')).read(f.snapshot.runId)).state
-      ).toBe('dispatched');
+        await new RunJournal(join(f.input.privateRoot, 'runs')).read(f.snapshot.runId)
+      ).toEqual(prior);
       await expect(
         f.journal.settle(f.snapshot.runId, 'retired-epoch', { status: 'cancelled' })
       ).rejects.toThrow('harness_stale_settlement');
+      const next = { ...f.snapshot, runId: randomUUID(), turnId: 'explicit-new-turn' };
+      await expect(
+        f.adapter.prompt({ ...f.request, _meta: { mollyRunSnapshot: next } })
+      ).resolves.toMatchObject({ stopReason: 'end_turn' });
+      expect(f.credentialRequests).toEqual([next.runId]);
+      expect((await f.journal.read(next.runId)).outcome?.status).toBe('completed');
     } finally {
       await f.adapter.dispose();
     }
   });
 
-  it('cancels an image resource approval without reading, importing or continuing inference', async () => {
-    let notifyRequested!: () => void;
-    const requested = new Promise<void>((resolve) => {
-      notifyRequested = resolve;
-    });
-    let allowResource!: (allowed: boolean) => void;
-    const permission = new Promise<boolean>((resolve) => {
-      allowResource = resolve;
-    });
-    const responses = [
-      fauxAssistantMessage(
-        fauxToolCall(
-          mcpToolName('images', 'molly_generate_image'),
-          { prompt: 'Synthetic' },
-          { id: 'image-call' }
-        ),
-        { stopReason: 'toolUse', timestamp: 1 }
-      ),
-      fauxAssistantMessage('Must remain unconsumed', { timestamp: 2 }),
-    ];
-    const imports: unknown[] = [];
-    const f = await fixture(
-      responses,
-      async ({ name }) => {
-        if (name.endsWith('/resources/read')) {
-          notifyRequested();
-          return permission;
-        }
-        return true;
-      },
-      [
-        {
-          name: 'images',
-          command: process.execPath,
-          env: [],
-          args: [fileURLToPath(new URL('./fixtures/image-mcp.mjs', import.meta.url)), '--resource'],
-          _meta: {
-            mollyConnection: { id: 'images', revision: 1 },
-            mollyImageBinding: {
-              version: 1,
-              model: 'synthetic-image',
-              generate: {
-                tool: 'molly_generate_image',
-                fields: { prompt: 'prompt', model: 'model' },
-              },
-            },
-          },
-        },
-      ],
-      undefined,
-      async (request) => {
-        imports.push(request);
-        throw new Error('must not import');
-      }
-    );
+  it('keeps a journal directory collision as a storage failure instead of an existing run', async () => {
+    const f = await fixture();
+    const directory = join(f.input.privateRoot, 'runs');
     try {
-      const pending = expect(f.adapter.prompt(f.request)).resolves.toMatchObject({
-        stopReason: 'cancelled',
+      await writeFile(directory, 'existing unrelated file');
+      await expect(f.adapter.prompt(f.request)).rejects.toMatchObject({
+        code: 'EEXIST',
+        syscall: 'mkdir',
       });
-      await requested;
-      await f.adapter.cancel({ sessionId: f.request.sessionId });
-      await pending;
-      allowResource(true);
-      const journal = new ToolOperationJournal(join(f.input.privateRoot, 'operations'));
-      const parent = journal.operationId(f.snapshot.runId, 'image-call');
-      expect((await journal.read(parent)).state).toBe('outcome_unknown');
-      const childCall = createHash('sha256')
-        .update(JSON.stringify(['resource', 'image-call', 0]))
-        .digest('hex');
-      await expect(
-        journal.read(journal.operationId(f.snapshot.runId, childCall))
-      ).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(imports).toEqual([]);
-      expect(responses.map((r) => r.content)).toEqual([
-        [{ type: 'text', text: 'Must remain unconsumed' }],
-      ]);
+      expect(await readFile(directory, 'utf8')).toBe('existing unrelated file');
+      expect(f.credentialRequests).toEqual([]);
+      expect(f.messages).toEqual([]);
     } finally {
-      allowResource(false);
       await f.adapter.dispose();
     }
   });
@@ -1377,8 +731,6 @@ it('captures preferences after native completion through the selected model', as
     [],
     undefined,
     undefined,
-    undefined,
-    undefined,
     async (request) => {
       if (request.operation.action === 'capture') captured.push(request.operation.changes);
       return { enabled: true, revision: 'initial', entries: [] };
@@ -1398,8 +750,6 @@ it('recalls preferences in transient system context rather than persisted user h
     ],
     undefined,
     [],
-    undefined,
-    undefined,
     undefined,
     undefined,
     async () => ({
@@ -1433,8 +783,6 @@ it('cancels extraction before a late result can save preferences', async () => {
     [],
     undefined,
     undefined,
-    undefined,
-    undefined,
     async (request) => {
       if (request.operation.action === 'capture') saved.push(request.operation.changes);
       return { enabled: true, revision: 'initial', entries: [] };
@@ -1465,8 +813,6 @@ it('keeps native completion when memory extraction fails and reports the failure
     [],
     undefined,
     undefined,
-    undefined,
-    undefined,
     async () => ({ enabled: true, revision: 'initial', entries: [] })
   );
   const result = await f.adapter.prompt(f.request);
@@ -1486,8 +832,6 @@ it('omits a deleted preference from recall on the next turn in the same session'
     ],
     undefined,
     [],
-    undefined,
-    undefined,
     undefined,
     undefined,
     async () => ({ enabled: true, revision: 'snapshot', entries })

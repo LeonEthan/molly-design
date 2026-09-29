@@ -710,7 +710,16 @@ describe('owned Pi session', () => {
     ]);
     expect(loader.getSkills().skills).toEqual([]);
     expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
-    expect(() => loader.extendResources()).toThrow('harness_resource_set_is_frozen');
+    expect(() =>
+      loader.extendResources({
+        skillPaths: [
+          {
+            path: '/unapproved',
+            metadata: { source: 'synthetic', scope: 'temporary', origin: 'top-level' },
+          },
+        ],
+      })
+    ).toThrow('harness_resource_set_is_frozen');
   });
 
   it('removes inherited auth, runtime injection and proxy variables before SDK/tool execution', () => {

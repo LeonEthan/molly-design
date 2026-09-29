@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { classifyBrowserHostname } from '@molly/shared/browser-url'
 import {
   agentBrowserDocumentKey,
   assertAgentBrowserDestination,
@@ -7,18 +8,110 @@ import {
   isVerifiedAgentBrowserResponsePeer
 } from './public-browser-agent-policy.ts'
 
-const blockedAddresses = new Set([
-  '127.0.0.1',
-  '10.0.0.9',
-  '[::1]',
-  '[::ffff:7f00:1]',
-  '198.18.1.4',
-  '192.168.1.2'
-])
 const checks = (addresses, proxy = 'DIRECT') => ({
-  classifyHost: (host) => (blockedAddresses.has(host) ? 'private-lan' : 'public'),
+  classifyHost: classifyBrowserHostname,
   resolveAddresses: async () => addresses,
   resolveProxy: async () => proxy
+})
+
+void test('DNS and response peers accept canonical public IPv4 and IPv6 literals', async () => {
+  for (const address of [
+    '8.8.8.8',
+    '2606:4700:4700::1111',
+    '[2606:4700:4700::1111]',
+    '[2606:4700:4700:0:0:0:0:AAAA]',
+    '::ffff:8.8.8.8',
+    '[::ffff:8.8.8.8]'
+  ]) {
+    assert.equal(
+      isVerifiedAgentBrowserResponsePeer({ remoteIPAddress: address }, classifyBrowserHostname),
+      true,
+      address
+    )
+    assert.equal(
+      await assertAgentBrowserDestination({ url: 'https://example.com/' }, checks([address])),
+      'https://example.com/',
+      address
+    )
+  }
+})
+
+void test('DNS and response peers reject nonpublic addresses in every supported form', async () => {
+  for (const address of [
+    '127.0.0.1',
+    '10.0.0.9',
+    '172.16.0.1',
+    '192.168.1.2',
+    '100.64.0.1',
+    '169.254.0.1',
+    '198.18.1.4',
+    '224.0.0.1',
+    '::ffff:127.0.0.1',
+    '[::ffff:192.168.1.2]',
+    '[::ffff:c0a8:102]',
+    '[::ffff:198.18.1.4]',
+    '::',
+    '[::]',
+    '::1',
+    '[::1]',
+    '[fc00::1]',
+    '[fe80::1]',
+    '[ff02::1]'
+  ]) {
+    assert.equal(
+      isVerifiedAgentBrowserResponsePeer({ remoteIPAddress: address }, classifyBrowserHostname),
+      false,
+      address
+    )
+    await assert.rejects(
+      assertAgentBrowserDestination({ url: 'https://example.com/' }, checks([address])),
+      /local, private, or reserved address/,
+      address
+    )
+  }
+})
+
+void test('malformed or missing response peers remain unverifiable', async () => {
+  assert.equal(isVerifiedAgentBrowserResponsePeer({}, classifyBrowserHostname), false)
+  for (const address of [
+    '',
+    'example.com',
+    '[8.8.8.8]',
+    '8.8.8.8:443',
+    '[2606:4700:4700::1111]:443',
+    '[2606:4700:4700::1111',
+    '2606:4700:4700::1111]',
+    '[[2606:4700:4700::1111]]',
+    'fe80::1%en0',
+    '127.1',
+    '0x7f000001'
+  ]) {
+    assert.equal(
+      isVerifiedAgentBrowserResponsePeer({ remoteIPAddress: address }, classifyBrowserHostname),
+      false,
+      address
+    )
+    await assert.rejects(
+      assertAgentBrowserDestination({ url: 'https://example.com/' }, checks([address])),
+      /address could not be verified/,
+      address
+    )
+  }
+})
+
+void test('IP normalization cannot authorize cache or service-worker response peers', () => {
+  for (const remoteIPAddress of ['8.8.8.8', '2606:4700:4700::1111', '[2606:4700:4700::1111]']) {
+    for (const flag of ['fromDiskCache', 'fromServiceWorker']) {
+      assert.equal(
+        isVerifiedAgentBrowserResponsePeer(
+          { remoteIPAddress, [flag]: true },
+          classifyBrowserHostname
+        ),
+        false,
+        `${remoteIPAddress}: ${flag}`
+      )
+    }
+  }
 })
 
 void test('redirect URL encoding still identifies the verified main document', () => {

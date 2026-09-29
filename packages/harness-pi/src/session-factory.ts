@@ -10,6 +10,10 @@ import {
 } from '@earendil-works/pi-ai';
 import {
   createAgentSession,
+  DefaultResourceLoader,
+  createEventBus,
+  initTheme,
+  type ExtensionFactory,
   ModelRuntime,
   SessionManager,
   SettingsManager,
@@ -41,13 +45,14 @@ export type CreateMollySessionInput = {
   /** Absent during non-inferencing ACP startup; the adapter requires a run-bound grant. */
   apiKey?: string;
   tools: ToolDefinition[];
+  extensions?: ExtensionFactory[];
   systemPrompt: string;
   readBeforeEditReminder?: string;
   hostTime?: HostTimeSource;
   personalMemoryContext?: () => string;
   skills?: Skill[];
   /** Host-owned dialog UI; absent until the transport can cancel and retire its requests. */
-  questionUI?: ExtensionUIContext;
+  questionUI?: Pick<ExtensionUIContext, 'select' | 'input' | 'confirm' | 'notify'>;
   /** Static failure signal only; native extension diagnostics may contain secrets. */
   onExtensionError?: (owner: symbol) => void;
   nativeSessionFile?: string;
@@ -59,16 +64,49 @@ export type CreateMollySessionInput = {
 };
 
 export async function createMollySession(input: CreateMollySessionInput) {
+  initTheme('dark', false);
   let extensionFailed = false;
   const extensionOwner = Symbol('molly-extension-context');
+  const settings = SettingsManager.inMemory({
+    retry: { enabled: false, provider: { maxRetries: 0, timeoutMs: 120_000 } },
+    compaction: { enabled: true },
+    enableAnalytics: false,
+    enableInstallTelemetry: false,
+    packages: [],
+    extensions: [],
+    skills: [],
+    prompts: [],
+    themes: [],
+    enableSkillCommands: false,
+  });
+  const extensionLoader = new DefaultResourceLoader({
+    cwd: input.cwd,
+    agentDir: join(input.privateRoot, 'config'),
+    settingsManager: settings,
+    eventBus: createEventBus(),
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    noContextFiles: true,
+    extensionFactories: input.extensions ?? [],
+  });
+  await extensionLoader.reload();
   const resourceLoader = new MollyResourceLoader({
+    resources: extensionLoader,
     systemPrompt: input.systemPrompt,
     skills: input.skills,
     readBeforeEditReminder: input.readBeforeEditReminder,
     hostTime: input.hostTime,
     personalMemoryContext: input.personalMemoryContext,
     hostToolNames: input.tools.map((tool) => tool.name),
-    extensions: input.questionUI ? createQuestionExtensions() : undefined,
+    extensions: {
+      ...extensionLoader.getExtensions(),
+      extensions: [
+        ...extensionLoader.getExtensions().extensions,
+        ...(input.questionUI ? createQuestionExtensions().extensions : []),
+      ],
+    },
   });
   const connection = ModelConnectionSchema.parse(input.connection);
   const issue = getModelConnectionConfigurationIssue(connection);
@@ -260,18 +298,6 @@ export async function createMollySession(input: CreateMollySessionInput) {
     }
     manager = SessionManager.open(file, sessionDir, input.cwd);
   }
-  const settings = SettingsManager.inMemory({
-    retry: { enabled: false, provider: { maxRetries: 0, timeoutMs: 120_000 } },
-    compaction: { enabled: true },
-    enableAnalytics: false,
-    enableInstallTelemetry: false,
-    packages: [],
-    extensions: [],
-    skills: [],
-    prompts: [],
-    themes: [],
-    enableSkillCommands: false,
-  });
   const result = await createAgentSession({
     cwd: input.cwd,
     agentDir: join(input.privateRoot, 'config'),
@@ -299,7 +325,9 @@ export async function createMollySession(input: CreateMollySessionInput) {
   }
   try {
     await result.session.bindExtensions({
-      uiContext: input.questionUI,
+      uiContext: input.questionUI
+        ? { ...result.session.extensionRunner.getUIContext(), ...input.questionUI }
+        : undefined,
       mode: 'rpc',
       onError: () => {
         extensionFailed = true;
@@ -310,6 +338,7 @@ export async function createMollySession(input: CreateMollySessionInput) {
     });
     if (extensionFailed) throw new Error('harness_extension_failed');
   } catch {
+    await result.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' });
     result.session.dispose();
     throw new Error('harness_extension_bind_failed');
   }

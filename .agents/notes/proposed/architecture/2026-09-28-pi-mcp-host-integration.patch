@@ -1,0 +1,910 @@
+diff --git a/README.md b/README.md
+index fe06998..6b652f3 100644
+--- a/README.md
++++ b/README.md
+@@ -292,7 +292,7 @@ const { session } = await createAgentSession({ resourceLoader: loader });
+ await adapter.close(); // after the session settles
+ ```
+ 
+-Nothing connects until `ready()`, which calls each `createTransport` once. It rejects and closes the adapter if a server fails to start, a requested tool is missing, or two tools map to the same Pi name (`<server>_<tool>`). `extensionFactory` registers only the selected tools and throws before `ready()` resolves or after `close()`. `close()` refuses new calls, aborts in-flight ones, and closes every transport within five seconds. A dropped connection is never reopened.
++Nothing connects until `ready()`, which calls each `createTransport` once. It rejects and closes the adapter if a server fails to start, a requested tool is missing, or two tools map to the same Pi name (`<server>_<tool>`). `extensionFactory` registers only the selected tools and throws before `ready()` resolves or after `close()`. `close()` refuses new calls synchronously, aborts in-flight ones, and waits up to five seconds for host work, transport factories and transport cleanup. It rejects with fixed text if cleanup fails or is still pending; a timeout does not prove that host work stopped. Late host results are not presented. A later `ready()` rejects even if startup previously succeeded. A dropped connection is never reopened.
+ 
+ Every call goes through the approval broker (`pi-mcp-adapter:tool-approval-request` on `pi.events`, origin `direct`). Only `allow_once` or `allow_for_session` lets it run. A denial, an `abstain`, or no handler at all refuses the call before `onToolCall` sees it. `onToolCall` receives the frozen arguments and input schema, the Pi tool-call id, an opaque `connectionId`, and a `dispatch()` that sends `tools/call` at most once. The result it returns goes through the normal output guard, whether raw or changed (for example after importing images). An `isError: true` result reaches the model as a tool error. `dispatch()` rejects with `HostManagedMcpError`. The raw error is kept only as its `cause`, and the model sees fixed text.
+ 
+@@ -303,7 +303,18 @@ Every call goes through the approval broker (`pi-mcp-adapter:tool-approval-reque
+ | `server_error` | The server answered with a JSON-RPC error (`protocolCode`). |
+ | `invalid_result` | The server answered, but the result failed validation, including the tool's `outputSchema`. The tool may have run. |
+ 
+-On `notifications/tools/list_changed` the adapter lists the server's tools again. A selected tool that changed or disappeared is retired for the life of the adapter; if the re-list fails, every selected tool on that server is retired. Calls wait for a running re-list and are refused as `not_sent` both before `onToolCall` and inside `dispatch()`. The model is told to start a new session.
++On `notifications/tools/list_changed` the adapter lists the server's tools again. A selected tool that changed or disappeared is retired for the life of the adapter; if the re-list fails, every selected tool on that server is retired. Calls wait for a running re-list and are refused as `not_sent` both before `onToolCall` and inside `dispatch()`. The model is told to start a new session. Hosts that require verification without notifications may set `revalidateCatalog: true`; this adds a complete catalog read before approval, before `onToolCall`, and before dispatch. Input schemas retain all server-provided fields. Catalog discovery rejects duplicate tool names and repeated pagination cursors rather than accepting an incomplete or ambiguous catalog.
++
++Embedding hosts may supply `toolName(server, tool)` to retain stable tool identities;
++the callback receives the complete deep-frozen descriptor during readiness. Custom names
++must be 1–64 ASCII letters, digits, underscores or hyphens and remain unique. Hosts can
++bound a complete catalog with `catalogToolLimit` and `catalogTimeoutMs`; the latter also
++bounds the connection handshake. `resourceTimeoutMs` controls linked reads independently
++of the general request timeout. `call.resourceReadAvailable` reflects the producing
++server's advertised resource capability. A host that already validates and bounds all
++presentation content may set `outputGuard: false` to disable adapter truncation/spilling;
++the explicit setting takes precedence over the environment. Ordinary extension policy
++and the default host-managed behavior retain their existing output guard.
+ 
+ After `dispatch()` resolves, `call.linkedResource(uri)` prepares a read of a `resource_link` from that result. The read needs its own broker approval (origin `resource`, args `{ uri }`) and uses the same connection. It returns a `readId` and a single-use `dispatch()`, so you can record the read before it happens. A URI that is not linked throws, and a read is refused as `not_sent` once the parent call has settled.
+ 
+diff --git a/__tests__/host-managed.test.ts b/__tests__/host-managed.test.ts
+index a9a1e7c..bf09dc4 100644
+--- a/__tests__/host-managed.test.ts
++++ b/__tests__/host-managed.test.ts
+@@ -109,7 +109,7 @@ function installPi(adapter: HostManagedMcpAdapter, decision: Decide = "allow_onc
+ const text = (result: { content: Array<{ text?: string }> }) => result.content.map((block) => block.text ?? "").join("\n");
+ 
+ afterEach(async () => {
+-  await Promise.all(adapters.splice(0).map((adapter) => adapter.close()));
++  await Promise.allSettled(adapters.splice(0).map((adapter) => adapter.close()));
+   vi.restoreAllMocks();
+ });
+ 
+@@ -153,10 +153,16 @@ describe("host-managed MCP adapter", () => {
+     });
+     adapters.push(adapter);
+ 
+-    const ready = adapter.ready();
+-    await adapter.close();
+-
+-    await expect(ready).rejects.toThrow(/failed to start/);
++    vi.useFakeTimers();
++    try {
++      const readiness = adapter.ready().then(() => undefined, (error) => error);
++      const closing = adapter.close().then(() => undefined, (error) => error);
++      await vi.advanceTimersByTimeAsync(5_000);
++      expect(await closing).toEqual(new Error("Host-managed MCP cleanup incomplete"));
++      expect(await readiness).toBeInstanceOf(Error);
++    } finally {
++      vi.useRealTimers();
++    }
+   });
+ 
+   it("never dispatches denied, unclaimed, or closed calls", async () => {
+@@ -202,7 +208,7 @@ describe("host-managed MCP adapter", () => {
+     expect(fixture.calls).toEqual([]);
+   });
+ 
+-  it("finishes close() within its deadline when host work and transport close never settle", async () => {
++  it("reports incomplete cleanup at its deadline when host work and transport close never settle", async () => {
+     const fixture = createFixture(async () => ({ content: [] }), (transport) => {
+       transport.close = () => new Promise<void>(() => {});
+       return transport;
+@@ -221,11 +227,11 @@ describe("host-managed MCP adapter", () => {
+     vi.useFakeTimers();
+     try {
+       let closed = false;
+-      const closing = adapter.close().then(() => { closed = true; });
++      const closing = adapter.close().then(() => { closed = true; return undefined; }, (error) => { closed = true; return error; });
+       await vi.advanceTimersByTimeAsync(4_999);
+       expect(closed).toBe(false);
+       await vi.advanceTimersByTimeAsync(1);
+-      await closing;
++      expect(await closing).toEqual(new Error("Host-managed MCP cleanup incomplete"));
+     } finally {
+       vi.useRealTimers();
+     }
+diff --git a/host-managed.ts b/host-managed.ts
+index 6a15c37..ae76b92 100644
+--- a/host-managed.ts
++++ b/host-managed.ts
+@@ -26,7 +26,7 @@ import { requestBrokerApproval } from "./tool-approval.ts";
+ import { toToolParameters } from "./tool-parameters.ts";
+ import { cleanupMaterializedBinaryResources, resolveMcpResultContent } from "./tool-registrar.ts";
+ import { formatToolName } from "./types.ts";
+-import { normalizeDirectToolInputSchema, normalizeToolArguments, stableStringify, truncateAtWord, withToolCallIdMeta } from "./utils.ts";
++import { normalizeToolArguments, stableStringify, truncateAtWord, withToolCallIdMeta } from "./utils.ts";
+ 
+ const CLOSE_TIMEOUT_MS = 5_000;
+ 
+@@ -50,6 +50,8 @@ export interface HostManagedMcpToolCall {
+   readonly toolCallId: string;
+   /** Opaque identity of the connection this call is bound to. */
+   readonly connectionId: string;
++  /** Whether the producing server advertised resources/read at connection setup. */
++  readonly resourceReadAvailable: boolean;
+   /** Deep-frozen arguments; exactly what dispatch() sends. */
+   readonly arguments: Readonly<Record<string, unknown>>;
+   /** Deep-frozen input schema that was registered with Pi. */
+@@ -92,12 +94,24 @@ export interface HostManagedMcpAdapterOptions {
+   onToolCall(call: HostManagedMcpToolCall): Promise<CallToolResult>;
+   /** Per-request timeout in milliseconds. The MCP SDK default applies when omitted. */
+   requestTimeoutMs?: number;
++  /** Re-list before approval, host execution, and dispatch to detect unannounced catalog changes. */
++  revalidateCatalog?: boolean;
++  /** Final Pi name for a selected, deep-frozen server descriptor. Defaults to <server>_<tool>. */
++  toolName?(server: string, tool: Tool): string;
++  /** Maximum number of tools in one complete server catalog. */
++  catalogToolLimit?: number;
++  /** Whole catalog read and connection handshake timeout. Falls back to requestTimeoutMs. */
++  catalogTimeoutMs?: number;
++  /** Linked-resource request timeout. Falls back to requestTimeoutMs. */
++  resourceTimeoutMs?: number;
++  /** Disable spilling/truncation when the host already owns bounded result presentation. */
++  outputGuard?: boolean;
+ }
+ 
+ export interface HostManagedMcpAdapter {
+   /** Connect every server and freeze the tool catalog. Memoized; rejects and closes the adapter on any failure. */
+   ready(): Promise<void>;
+-  /** Refuse new calls, abort in-flight calls, and close every transport, all within 5 s. Idempotent. */
++  /** Refuse new calls and abort in-flight work. Reject within 5 s if cleanup fails or remains pending. Idempotent. */
+   close(): Promise<void>;
+   /** Pi extension factory. Throws before ready() resolves or after close(). */
+   extensionFactory(pi: ExtensionAPI): void;
+@@ -214,7 +228,7 @@ function dispatchFailureResult(tool: CatalogTool, error: HostManagedMcpError, ca
+ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOptions): HostManagedMcpAdapter {
+   const servers = Object.entries(options.servers);
+   const timeout = options.requestTimeoutMs !== undefined && options.requestTimeoutMs > 0 ? options.requestTimeoutMs : undefined;
+-  const guardOptions = resolveMcpOutputGuardOptions(undefined);
++  const guardOptions = { ...resolveMcpOutputGuardOptions(undefined), ...(options.outputGuard !== undefined ? { enabled: options.outputGuard } : {}) };
+   const lifetime = new AbortController();
+   const connections = new Map<string, Connection>();
+   const inFlight = new Set<Promise<ToolResult>>();
+@@ -222,6 +236,50 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+   let readyPromise: Promise<void> | undefined;
+   let closePromise: Promise<void> | undefined;
+   let closed = false;
++  let cleanupFailed = false;
++  const pendingFactories = new Set<Promise<void>>();
++  const transportClosures = new WeakMap<Transport, Promise<void>>();
++
++  function closeTransport(transport: Transport): Promise<void> {
++    const previous = transportClosures.get(transport);
++    if (previous) return previous;
++    const closing = Promise.resolve().then(() => transport.close()).catch(() => {
++      cleanupFailed = true;
++      throw new Error("Host-managed MCP transport cleanup failed");
++    });
++    transportClosures.set(transport, closing);
++    return closing;
++  }
++
++  async function listCatalog(client: Client, signal: AbortSignal): Promise<Tool[]> {
++    const catalogTimeout = options.catalogTimeoutMs ?? timeout;
++    const deadline = new AbortController();
++    const timer = catalogTimeout !== undefined ? setTimeout(() => deadline.abort(), catalogTimeout) : undefined;
++    signal = combineAbortSignals(signal, deadline.signal) ?? signal;
++    try {
++      const tools: Tool[] = [];
++      const cursors = new Set<string>();
++      const names = new Set<string>();
++      let cursor: string | undefined;
++      do {
++        const page = await client.request({ method: "tools/list", ...(cursor !== undefined ? { params: { cursor } } : {}) }, requestOptions(signal));
++        for (const tool of page.tools) {
++          if (names.has(tool.name)) throw new Error("Host-managed MCP catalog contains duplicate tools");
++          names.add(tool.name);
++          tools.push(tool);
++          if (options.catalogToolLimit !== undefined && tools.length > options.catalogToolLimit) throw new Error("Host-managed MCP catalog limit exceeded");
++        }
++        cursor = page.nextCursor;
++        if (cursor !== undefined) {
++          if (cursors.has(cursor) || cursors.size >= 63) throw new Error("Host-managed MCP catalog pagination failed");
++          cursors.add(cursor);
++        }
++      } while (cursor !== undefined);
++      return tools;
++    } finally {
++      clearTimeout(timer);
++    }
++  }
+ 
+   const requestOptions = (signal: AbortSignal) => (timeout !== undefined ? { signal, timeout } : { signal });
+ 
+@@ -236,7 +294,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       while (connection.refreshRequested) {
+         connection.refreshRequested = false;
+         try {
+-          const { tools } = await connection.client.listTools(undefined, { ...requestOptions(lifetime.signal), cacheMode: "refresh" });
++          const tools = await listCatalog(connection.client, lifetime.signal);
+           const current = new Map(tools.map((tool) => [tool.name, stableStringify(tool)]));
+           for (const tool of selected) {
+             if (current.get(tool.definition.name) !== tool.fingerprint) connection.retired.add(tool.definition.name);
+@@ -250,6 +308,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+   }
+ 
+   async function isRetired(connection: Connection, name: string): Promise<boolean> {
++    if (options.revalidateCatalog && !closed && connection.open) requestCatalogRefresh(connection);
+     while (connection.refresh) await connection.refresh;
+     return connection.retired.has(name);
+   }
+@@ -265,7 +324,9 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       const pending = Promise.resolve().then(() => definition.createTransport({ server, signal: lifetime.signal }));
+       // A factory that ignores the abort must not hold ready() open after
+       // close(); a transport it delivers late is closed, never adopted.
+-      void pending.then((late) => { if (closed) void late.close().catch(() => {}); }, () => {});
++      const disposal = pending.then(async (late) => { if (closed) await closeTransport(late); }, () => {});
++      pendingFactories.add(disposal);
++      void disposal.finally(() => pendingFactories.delete(disposal)).catch(() => {});
+       const transport = await abortable(pending, lifetime.signal);
+       const client = new Client(
+         { name: `pi-mcp-${server}`, version: "1.0.0" },
+@@ -288,11 +349,11 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       connections.set(server, created);
+       if (closed) {
+         // close() already swept the connections it could see.
+-        await transport.close().catch(() => {});
++        await closeTransport(transport).catch(() => {});
+         throw new HostManagedMcpError("not_sent", server);
+       }
+-      await client.connect(transport, requestOptions(lifetime.signal));
+-      listed = (await client.listTools(undefined, requestOptions(lifetime.signal))).tools;
++      await client.connect(transport, { ...requestOptions(lifetime.signal), ...(options.catalogTimeoutMs !== undefined ? { timeout: options.catalogTimeoutMs } : {}) });
++      listed = await listCatalog(client, lifetime.signal);
+     } catch (cause) {
+       throw new Error(`Host-managed MCP server "${server}" failed to start`, { cause });
+     }
+@@ -314,7 +375,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       }
+       return {
+         server,
+-        toolName: formatToolName(name, server, "server"),
++        toolName: options.toolName?.(server, frozen) ?? formatToolName(name, server, "server"),
+         definition: frozen,
+         fingerprint: stableStringify(frozen),
+         // The SDK reports its own output-schema failures as ProtocolError,
+@@ -336,6 +397,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       const tools = perServer.flat();
+       const owners = new Map<string, CatalogTool>();
+       for (const tool of tools) {
++        if (options.toolName && !/^[a-zA-Z0-9_-]{1,64}$/.test(tool.toolName)) throw new Error("Host-managed MCP host tool name is invalid");
+         const owner = owners.get(tool.toolName);
+         if (owner) {
+           throw new Error(`Host-managed MCP tools "${owner.server}/${owner.definition.name}" and "${tool.server}/${tool.definition.name}" both map to Pi tool "${tool.toolName}"`);
+@@ -371,6 +433,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+     const signal = combineAbortSignals(lifetime.signal, piSignal) ?? lifetime.signal;
+     let decision: string;
+     try {
++      if (await isRetired(connection, name)) return dispatchFailureResult(tool, new HostManagedMcpError("not_sent", tool.server), true);
+       decision = await requestBrokerApproval(pi.events, tool.server, { name: tool.toolName, originalName: name }, args, "direct", signal);
+     } catch {
+       return dispatchFailureResult(tool, new HostManagedMcpError("not_sent", tool.server));
+@@ -424,11 +487,12 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+         decision = "abstain";
+       }
+       if (!isAllowed(decision) || unavailable()) throw new HostManagedMcpError("not_sent", tool.server);
++      if (await isRetired(connection, name)) throw new HostManagedMcpError("not_sent", tool.server);
+       let readDispatched = false;
+       const sendRead = async (): Promise<ReadResourceResult> => {
+-        if (unavailable()) throw new HostManagedMcpError("not_sent", tool.server);
++        if (unavailable() || await isRetired(connection, name)) throw new HostManagedMcpError("not_sent", tool.server);
+         try {
+-          return await connection.client.readResource({ uri }, { ...requestOptions(signal), cacheMode: "bypass" });
++          return await connection.client.readResource({ uri }, { ...requestOptions(signal), ...(options.resourceTimeoutMs !== undefined ? { timeout: options.resourceTimeoutMs } : {}), cacheMode: "bypass" });
+         } catch (cause) {
+           throw classifyDispatchError(tool.server, cause);
+         }
+@@ -451,6 +515,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       toolName: tool.toolName,
+       toolCallId,
+       connectionId: connection.id,
++      resourceReadAvailable: !!connection.client.getServerCapabilities()?.resources,
+       arguments: args,
+       inputSchema: tool.definition.inputSchema,
+       signal,
+@@ -483,6 +548,9 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+       settled = true;
+     }
+ 
++    if (closed || !connection.open || signal.aborted) {
++      return dispatchFailureResult(tool, new HostManagedMcpError(sent ? "may_have_run" : "not_sent", tool.server));
++    }
+     const content = resolveMcpResultContent(result as unknown as Record<string, unknown>, lifetime.signal);
+     const outputContent = content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }];
+     if (result.isError) {
+@@ -504,16 +572,18 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+     lifetime.abort();
+     // One deadline bounds both the drain and the host's transport.close() calls.
+     let timer: ReturnType<typeof setTimeout> | undefined;
+-    const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, CLOSE_TIMEOUT_MS); });
+-    await Promise.race([Promise.allSettled([...inFlight]), deadline]);
++    let expired = false;
++    const deadline = new Promise<void>((resolve) => { timer = setTimeout(() => { expired = true; resolve(); }, CLOSE_TIMEOUT_MS); });
++    await Promise.race([Promise.allSettled([...inFlight, ...pendingFactories]), deadline]);
+     const closing = Promise.allSettled([...connections.values()].map(async (connection) => {
+       connection.open = false;
+-      await connection.transport.close();
++      await closeTransport(connection.transport);
+     }));
+     await Promise.race([closing, deadline]);
+     clearTimeout(timer);
+     connections.clear();
+     cleanupMaterializedBinaryResources(lifetime.signal);
++    if (expired || cleanupFailed) throw new Error("Host-managed MCP cleanup incomplete");
+   }
+ 
+   function close(): Promise<void> {
+@@ -523,7 +593,8 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+ 
+   return {
+     ready() {
+-      readyPromise ??= closed ? Promise.reject(new Error("Host-managed MCP adapter is closed")) : start();
++      if (closed) return Promise.reject(new Error("Host-managed MCP adapter is closed"));
++      readyPromise ??= start();
+       return readyPromise;
+     },
+     close,
+@@ -537,7 +608,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
+           label: `MCP: ${tool.definition.name}`,
+           description: description || "(no description)",
+           promptSnippet: truncateAtWord(description, 100) || `MCP tool from ${tool.server}`,
+-          parameters: toToolParameters(normalizeDirectToolInputSchema(structuredClone(tool.definition.inputSchema))),
++          parameters: toToolParameters(structuredClone(tool.definition.inputSchema)),
+           execute: (toolCallId: string, params: unknown, signal: AbortSignal | undefined) =>
+             track(executeTool(pi, tool, toolCallId, params, signal)),
+         });
+diff --git a/__tests__/host-managed-molly.test.ts b/__tests__/host-managed-molly.test.ts
+new file mode 100644
+index 0000000..8aa48f8
+--- /dev/null
++++ b/__tests__/host-managed-molly.test.ts
+@@ -0,0 +1,564 @@
++import { describe, expect, it, vi } from "vitest";
++import { EventEmitter } from "node:events";
++import {
++  StreamableHTTPClientTransport,
++  type Tool,
++  type Transport,
++} from "@modelcontextprotocol/client";
++import type {
++  ExtensionAPI,
++  ToolDefinition,
++} from "@earendil-works/pi-coding-agent";
++import {
++  createHostManagedMcpAdapter,
++  type HostManagedMcpToolCall,
++  type HostManagedMcpAdapterOptions,
++} from "../host-managed.ts";
++
++function deferred<T = void>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((done) => {
++    resolve = done;
++  });
++  return { promise, resolve };
++}
++const descriptor: Tool = {
++  name: "charge",
++  description: "Synthetic operation",
++  inputSchema: {
++    type: "object",
++    properties: { text: { type: "string" } },
++    additionalProperties: false,
++  },
++};
++async function fixture(
++  options: {
++    tools?: Tool[];
++    secondPage?: Tool[];
++    repeatedCursor?: boolean;
++    approve?: () => Promise<"allow_once" | "deny">;
++    host?: (call: HostManagedMcpToolCall) => Promise<any>;
++    result?: unknown;
++    adapterOptions?: Partial<HostManagedMcpAdapterOptions>;
++    list?: (cursor: unknown) => Promise<unknown>;
++  } = {},
++) {
++  let catalog = structuredClone(options.tools ?? [descriptor]);
++  const requests: Array<{ method: string; params?: any }> = [];
++  const registrations: ToolDefinition[] = [];
++  const bus = new EventEmitter();
++  bus.on("pi-mcp-adapter:tool-approval-request", (request) => {
++    request.claim(options.approve ?? (async () => "allow_once"));
++  });
++  let transport!: StreamableHTTPClientTransport;
++  const adapter = createHostManagedMcpAdapter({
++    revalidateCatalog: true,
++    servers: {
++      synthetic: {
++        createTransport: () => {
++          transport = new StreamableHTTPClientTransport(
++            new URL("https://synthetic.invalid/mcp"),
++            {
++              reconnectionOptions: {
++                maxRetries: 0,
++                initialReconnectionDelay: 1,
++                maxReconnectionDelay: 1,
++                reconnectionDelayGrowFactor: 1,
++              },
++              fetch: async (input, init) => {
++                const request = new Request(input, init);
++                if (request.method === "GET")
++                  return new Response(null, { status: 405 });
++                if (request.method === "DELETE")
++                  return new Response(null, { status: 202 });
++                const message = JSON.parse(await request.text());
++                requests.push(message);
++                let result: unknown;
++                if (message.method === "initialize")
++                  result = {
++                    protocolVersion: "2025-06-18",
++                    capabilities: { tools: { listChanged: true } },
++                    serverInfo: { name: "synthetic", version: "1" },
++                  };
++                else if (message.method === "tools/list")
++                  result = options.list ? await options.list(message.params?.cursor) : message.params?.cursor
++                    ? {
++                        tools: options.secondPage ?? [],
++                        ...(options.repeatedCursor
++                          ? { nextCursor: "next" }
++                          : {}),
++                      }
++                    : {
++                        tools: catalog,
++                        ...(options.secondPage ? { nextCursor: "next" } : {}),
++                      };
++                else if (message.method === "tools/call")
++                  result = options.result ?? {
++                    content: [{ type: "text", text: "synthetic success" }],
++                    structuredContent: { value: 1 },
++                  };
++                else if (message.method.startsWith("notifications/"))
++                  return new Response(null, { status: 202 });
++                else throw new Error("unexpected_synthetic_method");
++                return new Response(
++                  JSON.stringify({ jsonrpc: "2.0", id: message.id, result }),
++                  {
++                    headers: {
++                      "content-type": "application/json",
++                      ...(message.method === "initialize"
++                        ? { "mcp-session-id": "synthetic-session" }
++                        : {}),
++                    },
++                  },
++                );
++              },
++            },
++          );
++          return transport;
++        },
++      },
++    },
++    onToolCall: options.host ?? ((call) => call.dispatch()),
++    ...options.adapterOptions,
++  });
++  const pi = new Proxy(
++    {
++      registerTool: (tool: ToolDefinition) => registrations.push(tool),
++      events: bus,
++    },
++    {
++      get(target, key) {
++        if (!(key in target))
++          throw new Error(`unexpected_registration:${String(key)}`);
++        return Reflect.get(target, key);
++      },
++    },
++  ) as unknown as ExtensionAPI;
++  return {
++    adapter,
++    registrations,
++    requests,
++    async ready() {
++      await adapter.ready();
++      adapter.extensionFactory(pi);
++    },
++    mutate(next: Tool[]) {
++      catalog = structuredClone(next);
++    },
++    notify() {
++      transport.onmessage?.({
++        jsonrpc: "2.0",
++        method: "notifications/tools/list_changed",
++      });
++    },
++    invoke() {
++      return registrations[0]!.execute(
++        "synthetic-call",
++        { text: "fixture" },
++        undefined,
++        undefined,
++        undefined as never,
++      );
++    },
++  };
++}
++
++describe("Molly contract against published host-managed entry", () => {
++  it("aggregates all catalog pages through the real SDK", async () => {
++    const f = await fixture({
++      secondPage: [{ ...descriptor, name: "second" }],
++    });
++    try {
++      await f.ready();
++      expect(f.registrations.map((x) => x.name)).toEqual([
++        "synthetic_charge",
++        "synthetic_second",
++      ]);
++      expect(
++        f.requests
++          .filter((x) => x.method === "tools/list")
++          .map((x) => x.params?.cursor),
++      ).toEqual([undefined, "next"]);
++    } finally {
++      await f.adapter.close();
++    }
++  });
++  it("preserves the complete input schema exposed to the model", async () => {
++    const inputSchema = {
++      ...descriptor.inputSchema,
++      $schema: "https://json-schema.org/draft/2020-12/schema",
++    };
++    const f = await fixture({ tools: [{ ...descriptor, inputSchema }] });
++    try {
++      await f.ready();
++      expect(f.registrations[0]!.parameters).toEqual(inputSchema);
++    } finally {
++      await f.adapter.close();
++    }
++  });
++  it("rejects duplicate server tool names instead of overwriting a descriptor", async () => {
++    const f = await fixture({
++      tools: [
++        descriptor,
++        { ...descriptor, description: "Conflicting descriptor" },
++      ],
++    });
++    try {
++      await expect(f.ready()).rejects.toThrow();
++    } finally {
++      await f.adapter.close();
++    }
++  });
++  it("refuses a cursor cycle", async () => {
++    const f = await fixture({
++      secondPage: [{ ...descriptor, name: "second" }],
++      repeatedCursor: true,
++    });
++    try {
++      await expect(f.ready()).rejects.toThrow();
++    } finally {
++      await f.adapter.close();
++    }
++  });
++  it.each([
++    "description",
++    "inputSchema",
++    "outputSchema",
++    "annotations",
++    "title",
++  ] as const)("rechecks %s changed silently during approval", async (field) => {
++    const approvalEntered = deferred();
++    const approval = deferred<"allow_once">();
++    const f = await fixture({
++      approve: async () => {
++        approvalEntered.resolve();
++        return await approval.promise;
++      },
++    });
++    try {
++      await f.ready();
++      const work = f.invoke();
++      await approvalEntered.promise;
++      const changes = {
++        description: "Changed",
++        inputSchema: {
++          type: "object" as const,
++          properties: { changed: { type: "number" } },
++        },
++        outputSchema: {
++          type: "object" as const,
++          properties: { value: { type: "number" } },
++        },
++        annotations: { readOnlyHint: true },
++        title: "Changed",
++      };
++      f.mutate([{ ...descriptor, [field]: changes[field] }]);
++      approval.resolve("allow_once");
++      await work;
++      expect(f.requests.filter((x) => x.method === "tools/call")).toEqual([]);
++    } finally {
++      approval.resolve("allow_once");
++      await f.adapter.close();
++    }
++  });
++  it("retires a notified descriptor change before host dispatch", async () => {
++    const entered = deferred();
++    const send = deferred();
++    const f = await fixture({
++      host: async (call) => {
++        entered.resolve();
++        await send.promise;
++        return await call.dispatch();
++      },
++    });
++    try {
++      await f.ready();
++      const work = f.invoke();
++      await entered.promise;
++      f.mutate([{ ...descriptor, description: "Changed" }]);
++      f.notify();
++      send.resolve();
++      await work;
++      expect(f.requests.filter((x) => x.method === "tools/call")).toEqual([]);
++    } finally {
++      send.resolve();
++      await f.adapter.close();
++    }
++  });
++  it("classifies output validation failure after exactly one dispatch", async () => {
++    const f = await fixture({
++      tools: [
++        {
++          ...descriptor,
++          outputSchema: { type: "object", required: ["missing"] },
++        },
++      ],
++    });
++    try {
++      await f.ready();
++      const result = await f.invoke();
++      expect(result.details).toMatchObject({ error: "invalid_result" });
++      expect(
++        f.requests
++          .filter((x) => x.method === "tools/call")
++          .map((x) => x.params.name),
++      ).toEqual(["charge"]);
++    } finally {
++      await f.adapter.close();
++    }
++  });
++  it("refuses readiness after close", async () => {
++    const f = await fixture();
++    await f.ready();
++    await f.adapter.close();
++    await expect(f.adapter.ready()).rejects.toThrow();
++  });
++  it("does not present a host result completed after close", async () => {
++    const entered = deferred();
++    const finish = deferred();
++    const f = await fixture({
++      host: async (call) => {
++        await call.dispatch();
++        entered.resolve();
++        await finish.promise;
++        return { content: [{ type: "text", text: "LATE_HOST_RESULT" }] };
++      },
++    });
++    try {
++      await f.ready();
++      const work = f.invoke();
++      await entered.promise;
++      const closing = f.adapter.close();
++      finish.resolve();
++      const result = await work;
++      await closing;
++      expect(JSON.stringify(result)).not.toContain("LATE_HOST_RESULT");
++    } finally {
++      finish.resolve();
++      await f.adapter.close();
++    }
++  });
++  it("reports incomplete close when a host callback remains live at its deadline", async () => {
++    vi.useFakeTimers();
++    const entered = deferred();
++    const finish = deferred();
++    const f = await fixture({
++      host: async (call) => {
++        await call.dispatch();
++        entered.resolve();
++        await finish.promise;
++        return { content: [] };
++      },
++    });
++    try {
++      await f.ready();
++      const work = f.invoke();
++      await entered.promise;
++      const closing = f.adapter.close();
++      const outcome = closing.then(
++        () => ({ error: undefined }),
++        (error) => ({ error }),
++      );
++      await vi.advanceTimersByTimeAsync(5000);
++      expect((await outcome).error).toBeInstanceOf(Error);
++      finish.resolve();
++      await work;
++    } finally {
++      finish.resolve();
++      await f.adapter.close().catch(() => {});
++      vi.useRealTimers();
++    }
++  });
++});
++
++describe("Host-managed cleanup evidence", () => {
++  it("waits for a late factory and disposes its transport without connecting", async () => {
++    const started = deferred();
++    const produced = deferred<Transport>();
++    const disposed = deferred();
++    const releaseDisposal = deferred();
++    const traffic: string[] = [];
++    const adapter = createHostManagedMcpAdapter({
++      servers: {
++        synthetic: {
++          createTransport: async () => {
++            started.resolve();
++            return await produced.promise;
++          },
++        },
++      },
++      onToolCall: (call) => call.dispatch(),
++    });
++    const readiness = adapter.ready().then(
++      () => undefined,
++      (error) => error,
++    );
++    await started.promise;
++    let settled = false;
++    const closing = adapter.close().then(() => {
++      settled = true;
++    });
++    produced.resolve({
++      start: async () => {
++        traffic.push("start");
++      },
++      send: async () => {
++        traffic.push("send");
++      },
++      close: async () => {
++        disposed.resolve();
++        await releaseDisposal.promise;
++      },
++    });
++    await disposed.promise;
++    expect(settled).toBe(false);
++    releaseDisposal.resolve();
++    await closing;
++    expect(await readiness).toBeInstanceOf(Error);
++    expect(traffic).toEqual([]);
++  });
++
++  it("reports failure when disposal of a late factory transport fails", async () => {
++    const started = deferred();
++    const produced = deferred<Transport>();
++    const adapter = createHostManagedMcpAdapter({
++      servers: {
++        synthetic: {
++          createTransport: async () => {
++            started.resolve();
++            return await produced.promise;
++          },
++        },
++      },
++      onToolCall: (call) => call.dispatch(),
++    });
++    const readiness = adapter.ready().then(
++      () => undefined,
++      (error) => error,
++    );
++    await started.promise;
++    const closing = adapter.close().then(
++      () => undefined,
++      (error) => error,
++    );
++    produced.resolve({
++      start: async () => {
++        throw new Error("unexpected_start");
++      },
++      send: async () => {
++        throw new Error("unexpected_send");
++      },
++      close: async () => {
++        throw new Error("SYNTHETIC_CLEANUP_SECRET");
++      },
++    });
++    expect(await closing).toEqual(
++      new Error("Host-managed MCP cleanup incomplete"),
++    );
++    expect(await readiness).toBeInstanceOf(Error);
++    await expect(adapter.close()).rejects.toThrow(
++      "Host-managed MCP cleanup incomplete",
++    );
++  });
++
++  it("reports an unresolved factory at the close deadline and disposes its eventual result", async () => {
++    vi.useFakeTimers();
++    const started = deferred();
++    const produced = deferred<Transport>();
++    const disposed = deferred();
++    const adapter = createHostManagedMcpAdapter({
++      servers: {
++        synthetic: {
++          createTransport: async () => {
++            started.resolve();
++            return await produced.promise;
++          },
++        },
++      },
++      onToolCall: (call) => call.dispatch(),
++    });
++    try {
++      const readiness = adapter.ready().then(
++        () => undefined,
++        (error) => error,
++      );
++      await started.promise;
++      const closing = adapter.close().then(
++        () => undefined,
++        (error) => error,
++      );
++      await vi.advanceTimersByTimeAsync(5_000);
++      expect(await closing).toEqual(
++        new Error("Host-managed MCP cleanup incomplete"),
++      );
++      expect(await readiness).toBeInstanceOf(Error);
++      produced.resolve({
++        start: async () => {},
++        send: async () => {},
++        close: async () => {
++          disposed.resolve();
++        },
++      });
++      await disposed.promise;
++    } finally {
++      vi.useRealTimers();
++    }
++  });
++});
++
++
++describe("Embedding policy options", () => {
++  it("lets the host derive stable names from complete frozen descriptors", async () => {
++    const seen: unknown[] = [];
++    const f = await fixture({ tools: [{ ...descriptor, name: "a-b" }, { ...descriptor, name: "a_b" }], adapterOptions: {
++      toolName(server, tool) { seen.push({ server, name: tool.name, frozen: Object.isFrozen(tool) && Object.isFrozen(tool.inputSchema) }); return `host_${Buffer.from(tool.name).toString("hex")}`; },
++    } });
++    try {
++      await f.ready();
++      expect(f.registrations.map(tool => tool.name)).toEqual(["host_612d62", "host_615f62"]);
++      expect(seen).toEqual([{ server: "synthetic", name: "a-b", frozen: true }, { server: "synthetic", name: "a_b", frozen: true }]);
++    } finally { await f.adapter.close(); }
++  });
++  it.each(["", "contains spaces", "x".repeat(65)])("rejects an invalid host tool name %s", async name => {
++    const f = await fixture({ adapterOptions: { toolName: () => name } });
++    await expect(f.ready()).rejects.toThrow("host tool name is invalid");
++    await f.adapter.close();
++  });
++  it("rejects a catalog exceeding its host limit across pages", async () => {
++    const f = await fixture({ secondPage: [{ ...descriptor, name: "second" }], adapterOptions: { catalogToolLimit: 1 } });
++    await expect(f.ready()).rejects.toThrow("failed to start");
++    expect(f.registrations).toEqual([]);
++    await f.adapter.close();
++  });
++  it("preserves explicitly host-bounded output even when ambient output guarding is enabled", async () => {
++    vi.stubEnv("MCP_OUTPUT_GUARD", "1");
++    const text = "S".repeat(100_000);
++    const f = await fixture({ result: { content: [{ type: "text", text }] }, adapterOptions: { outputGuard: false } });
++    try {
++      await f.ready();
++      const result = await f.invoke();
++      expect(result.content).toEqual([{ type: "text", text }]);
++      expect(result.details).not.toHaveProperty("outputGuard");
++    } finally { await f.adapter.close(); vi.unstubAllEnvs(); }
++  });
++  it("bounds a complete catalog read rather than granting a new budget per page", async () => {
++    vi.useFakeTimers();
++    const firstEntered = deferred(); const first = deferred();
++    const secondEntered = deferred(); const second = deferred();
++    const f = await fixture({ adapterOptions: { catalogTimeoutMs: 30_000, requestTimeoutMs: 210_000 },
++      list: async cursor => {
++        if (cursor === undefined) { firstEntered.resolve(); await first.promise; return { tools: [descriptor], nextCursor: "next" }; }
++        secondEntered.resolve(); await second.promise; return { tools: [] };
++      },
++    });
++    try {
++      const ready = f.ready().then(() => undefined, error => error);
++      await firstEntered.promise;
++      await vi.advanceTimersByTimeAsync(20_000);
++      first.resolve(); await secondEntered.promise;
++      await vi.advanceTimersByTimeAsync(10_000);
++      expect(await ready).toBeInstanceOf(Error);
++      expect(f.registrations).toEqual([]);
++    } finally { first.resolve(); second.resolve(); await f.adapter.close(); vi.useRealTimers(); }
++  });
++});

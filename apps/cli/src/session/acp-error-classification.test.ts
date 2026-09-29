@@ -8,6 +8,7 @@ import {
   isAgentDisconnectedError,
   isAcpSessionNotFoundError,
   isProviderOverloadedACPError,
+  isHarnessRunAlreadyDispatchedError,
   mapACPErrorToFailureReason,
   parseACPError,
   shouldRecoverStaleACPConnectionPrompt,
@@ -15,6 +16,27 @@ import {
 } from './acp-error-classification';
 
 describe('ACP error classification', () => {
+  it('recognizes only the structured harness dispatch fence as a restore failure', () => {
+    const error = new RequestError(-32603, 'Previous task execution could not be resumed.', {
+      code: 'harness_run_already_dispatched',
+      details: 'The previous task will not be run again automatically.',
+    });
+    expect(isHarnessRunAlreadyDispatchedError(error)).toBe(true);
+    expect(mapACPErrorToFailureReason(error)).toBe('session_restore_failed');
+    expect(getACPErrorUserMessage(error)).toContain('will not be run again automatically');
+    expect(
+      shouldRecoverStaleACPConnectionPrompt({
+        error,
+        alreadyAttempted: false,
+        hasPromptOutput: false,
+      })
+    ).toBe(false);
+    expect(isHarnessRunAlreadyDispatchedError(new Error('harness_run_already_dispatched'))).toBe(
+      false
+    );
+    expect(isHarnessRunAlreadyDispatchedError(new RequestError(-32603, 'EEXIST'))).toBe(false);
+  });
+
   it('parses JSON-RPC ACP errors', () => {
     expect(
       parseACPError({

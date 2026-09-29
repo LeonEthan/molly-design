@@ -78,7 +78,7 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 
 以下描述实施前的代码，不能用作当前行为说明。
 
-- 已发出的图片调用失败或工具报错时，harness 会终止运行（[acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)）；MCP 交付结果未知时同样终止（[tool-operation-journal.ts](../../../../packages/harness-pi/src/tool-operation-journal.ts)）。
+- 已发出的图片调用失败或工具报错时，harness 会终止运行（[acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)）；MCP 交付结果未知时同样终止（[tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)）。
 - 设计运行中，除已授权站点上的浏览器调用外，每次工具调用都会提示（[worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)）；Molly 用宿主审批包装自有工具（[approved-tools.ts](../../../../packages/harness-pi/src/approved-tools.ts)）。
 - 锁定的 Pi SDK 0.85.1 在 `createBashToolDefinition` 上提供 `BashOperations`，正是 Pi 官方[沙箱示例](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/sandbox/index.ts)使用的钩子。
 - 导入只收录被引用的图片、图片填充和字体素材（[intake.ts](../../../../packages/design-authoring/src/intake.ts)），因此 `media/` 中未使用的草稿不会进入提交的作品，但仍留在磁盘上。
@@ -201,7 +201,7 @@ Skill 物化测试通过 13 项，包含实际资源构建和暂存；辅助脚�
 
 以下修正与检查已完成：
 
-- **安全渲染错误。** 仅内置 `molly_render_preview` 返回的精确已知字体错误映射为 `harness_render_font_failed`；其他已识别渲染错误映射为 `harness_render_failed`。未知、外部及传输错误仍保持通用错误。单元测试和端到端 MCP 链路验证了这一边界，不暴露原始诊断载荷，也不重放调用。见 [MCP bridge](../../../../packages/harness-pi/src/mcp-bridge.ts) 及其[测试](../../../../packages/harness-pi/tests/mcp-bridge.test.ts)。
+- **安全渲染错误。** 仅内置 `molly_render_preview` 返回的精确已知字体错误映射为 `harness_render_font_failed`；其他已识别渲染错误映射为 `harness_render_failed`。未知、外部及传输错误仍保持通用错误。单元测试和端到端 MCP 链路验证了这一边界，不暴露原始诊断载荷，也不重放调用。见 [MCP bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) 及其[测试](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/tests/mcp-bridge.test.ts)。
 - **原生复现。** 独立调用真实 `renderSavedDesign` 渲染原稿时，确实报出 `Font failed to load`；兼容副本成功渲染出完整的 1024 × 1536 PNG。
 - **显式字体修复。** 用临时 FontTools 工具重建 Kai 表目录，并补入明确标为推断的 `OS/2` 元数据。23 个原始表中，22 个逐字节相同；剩下的 `head` 表仅 `checksumAdjustment` 改变。字形、`cmap` 和度量表保持不变。这证明字体数据的保留，不代表所有渲染像素都相同。字体没有加入源码仓库。
 - **作品保留。** 正常退出应用后，经现有 `history-create` 操作把原稿存为 v1，通过比较并交换保存登记修正字体的新哈希，再存为 v2。原始 `Kai.ttf` 与历史回执不变；可变 YAML 只把 Kai 注册的 `src` 改为新文件。没有运行时字体自动转换、回退或创作门槛。

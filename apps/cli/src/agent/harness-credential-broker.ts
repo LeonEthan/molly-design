@@ -6,9 +6,9 @@ import {
   type ModelConnection,
   type HarnessCredentialRequest,
   type ProtectedImageConnection,
-  HarnessMcpPreparationSchema,
+  HarnessMcpSessionSchema,
   StoredMcpCredentialSchema,
-  type HarnessMcpPreparation,
+  type HarnessMcpSession,
   type HarnessMcpCredentialRequest,
   type McpCredentialBinding,
 } from '@molly/shared/embedded-harness';
@@ -82,18 +82,13 @@ export class HarnessCredentialBroker {
   }
 
   acquireMcp(
-    input: HarnessMcpPreparation,
+    input: HarnessMcpSession,
     options: { signal: AbortSignal; active: () => boolean; revoke: () => void }
   ) {
-    const preparation = HarnessMcpPreparationSchema.parse(input);
+    const session = HarnessMcpSessionSchema.parse(input);
     if (options.signal.aborted || !options.active()) throw new Error('harness_run_retired');
-    const current = this.connections.find(
-      (connection) => connection.id === preparation.connection.id
-    );
     if (
-      !current?.enabled ||
-      JSON.stringify(current) !== JSON.stringify(preparation.connection) ||
-      preparation.mcpConnections.some(
+      session.mcpConnections.some(
         (binding) =>
           !this.mcpConnections.some(
             (candidate) => JSON.stringify(candidate) === JSON.stringify(binding)
@@ -101,12 +96,12 @@ export class HarnessCredentialBroker {
       )
     )
       throw new Error('harness_mcp_credential_unavailable');
-    if (this.mcpLeases.size + preparation.mcpConnections.length > 64)
+    if (this.mcpLeases.size + session.mcpConnections.length > 64)
       throw new Error('harness_credential_queue_full');
     const ids: string[] = [];
     const credentials = Promise.all(
-      preparation.mcpConnections.map((connection) => {
-        const request = { requestId: randomUUID(), preparation, connection };
+      session.mcpConnections.map((connection) => {
+        const request = { requestId: randomUUID(), session, connection };
         ids.push(request.requestId);
         return new Promise<ReturnType<typeof StoredMcpCredentialSchema.parse>>(
           (resolve, reject) => {
@@ -246,15 +241,9 @@ export class HarnessCredentialBroker {
     this.imageConnection = parsed.data.imageConnection ?? null;
     this.mcpConnections = parsed.data.mcpConnections ?? [];
     for (const lease of [...this.mcpLeases.values()]) {
-      const preparation = lease.request.preparation;
       if (
         !lease.active() ||
         lease.signal.aborted ||
-        !this.connections.some(
-          (connection) =>
-            connection.enabled &&
-            JSON.stringify(connection) === JSON.stringify(preparation.connection)
-        ) ||
         !this.mcpConnections.some(
           (connection) => JSON.stringify(connection) === JSON.stringify(lease.request.connection)
         )
@@ -268,8 +257,8 @@ export class HarnessCredentialBroker {
       const lease = this.mcpLeases.get(report.requestId);
       if (!lease || lease.acquired || !lease.active() || lease.signal.aborted) continue;
       if (
-        report.runId !== lease.request.preparation.runId ||
-        report.runtimeEpoch !== lease.request.preparation.runtimeEpoch ||
+        report.sessionId !== lease.request.session.sessionId ||
+        report.runtimeEpoch !== lease.request.session.runtimeEpoch ||
         report.credentialRef !== lease.request.connection.credentialRef ||
         report.credentialRevision !== lease.request.connection.revision
       )

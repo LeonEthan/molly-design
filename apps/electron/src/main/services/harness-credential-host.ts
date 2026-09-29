@@ -60,7 +60,7 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
         if (stopped) return
         const binding = request.connection
         const credentialResult = await (
-          request.preparation.workspaceId === platform.workspace.workspaceId &&
+          request.session.workspaceId === platform.workspace.workspaceId &&
           binding.workspaceId === platform.workspace.workspaceId
             ? store.acquireMcpForRun(binding)
             : Promise.reject(new Error('credential_unavailable'))
@@ -69,8 +69,8 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
           .catch(() => ({ ok: false as const, error: 'credential_unavailable' as const }))
         mcpReports.push({
           requestId: request.requestId,
-          runId: request.preparation.runId,
-          runtimeEpoch: request.preparation.runtimeEpoch,
+          sessionId: request.session.sessionId,
+          runtimeEpoch: request.session.runtimeEpoch,
           credentialRef: binding.credentialRef,
           credentialRevision: binding.revision,
           result: credentialResult

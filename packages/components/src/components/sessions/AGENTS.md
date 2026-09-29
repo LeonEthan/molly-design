@@ -29,6 +29,8 @@ Files: [README.md](README.md). Scopes:
   for previously accepted worktree forks.
 - Keep one canvas, with Save version and direct history switching. Active Agent
   drafts replace its display only when valid; execution/processing owns readonly.
+- Attachment recovery clears only attachment errors from the current view generation;
+  preserve save/sync errors and ignore superseded attachment results.
 - A Side Chat is a durable child Session (`childSessionPlacement: 'side-panel'`):
   no top tab/sidebar row; rolls up into its parent. Mount lazily; only tab `X` deletes it.
 - `SessionMeta.openedBySessionId` is presentation-only provenance: never

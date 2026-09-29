@@ -4,6 +4,14 @@ Binding rules for this directory live in [AGENTS.md](AGENTS.md); this file keeps
 the reasoning behind them so the rules can stay short. It explains only the hooks
 that carry an invariant — the directory itself is the list of hooks.
 
+## `use-session-markdown-image.ts`
+
+Assistant Markdown binds image reads to the message's Session, owning machine,
+and parent Session where applicable. The resolver reuses `requestFilePreview` and
+the existing Markdown path normalization; it does not initialize a file index or
+create a second transport. Only binary resource responses become image URLs.
+Missing routes and read failures remain explicit, without a raw local-path fallback.
+
 ## Conversation scrolling (`use-sticky-scroll.ts`)
 
 `virtua` owns mounted rows, measurement, and index navigation. `use-stick-to-bottom`

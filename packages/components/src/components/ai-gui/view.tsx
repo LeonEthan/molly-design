@@ -127,6 +127,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { MarkdownRenderer } from './markdown-renderer';
+import { useSessionMarkdownImageResolver } from '@/hooks/use-session-markdown-image';
 import { CarbonInProgress } from '@/components/icons/carbon-in-progress';
 import { getGoalStatusPresentation } from '@/lib/session-goal-status';
 import { FileIcon } from '@/components/icons/file-icons';
@@ -4458,6 +4459,7 @@ const renderAssistantContent = (
       return (
         <MarkdownBlock
           text={content.text}
+          sessionId={sessionId}
           size={conversationFontSize}
           isStreaming={options?.isStreaming}
           onFilePathClick={options?.onFilePathClick}
@@ -5244,17 +5246,20 @@ const ToolTitleWithHighlight = ({ title, className }: { title: string; className
 // stability (via `useStableCallback`) and non-reaction to unrelated state.
 export const MarkdownBlock = memo(function MarkdownBlock({
   text,
+  sessionId,
   size = DEFAULT_CONVERSATION_FONT_SIZE,
   isStreaming = false,
   onFilePathClick,
   searchBlockId,
 }: {
   text: string;
+  sessionId?: SessionId;
   size?: ConversationFontSize;
   isStreaming?: boolean;
   onFilePathClick?: (filePath: string) => void;
   searchBlockId?: string;
 }) {
+  const resolveAgentImageUrl = useSessionMarkdownImageResolver(sessionId);
   const handleAgentFileLinkClick = useStableCallback((href: string) => {
     onFilePathClick?.(href);
   });
@@ -5268,6 +5273,7 @@ export const MarkdownBlock = memo(function MarkdownBlock({
       size={size}
       isStreaming={isStreaming}
       onAgentFileLinkClick={onFilePathClick ? handleAgentFileLinkClick : undefined}
+      resolveAgentImageUrl={resolveAgentImageUrl}
       searchBlockId={searchBlockId}
     />
   );

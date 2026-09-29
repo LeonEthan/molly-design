@@ -22,7 +22,7 @@ acquisition requires an active run, except the explicit main-only settings probe
 MCP values share this vault. Bind them to workspace, server, destination and revision;
 changed HTTP URLs or stdio command/args require renewed input. Settings IPC derives
 the local workspace and exposes only write/delete/public metadata. Acquisition stays
-internal and is not enabled by saving. Header framing and isolated-process environment
+internal, scoped to the selected Session and worker epoch, and is not enabled by saving. Header framing and isolated-process environment
 fields cannot be supplied as credentials. Reject writes exceeding the vault read limit.
 
 ## Design canvas contracts
@@ -32,7 +32,8 @@ permissions or external network.
 Bind saves to Session/host; CLI owns bytes, Electron renders and shows dialogs.
 Retain hidden editors; explicit close saves before disposal.
 Canvas leases are exclusive, even for same-artwork siblings, with fresh origins.
-Disposal revokes callbacks and closes owned contents. Reuse follows destruction,
+Disposal clears owned payload callbacks before unregistering native handlers and
+closing contents. Reuse follows destruction,
 request drainage and successful storage/cache cleanup; failures stay denied.
 Recheck lease liveness after awaits before mutations; Session identity is reusable.
 Hidden editors retain their lease. Run native `canvas:resources` for lifetime changes.
@@ -63,8 +64,8 @@ it receives generic readonly/flush plus zod-validated selection property and
 element-creation commands (`window.molly.applyCommands`, one kernel batch per
 command) and reports
 zod-validated selection summaries; every element semantic lives in
-`@molly/shared/design-selection-commands`, never in Electron. A canonical attach
-completes only after Bento publishes its generic
+`@molly/shared/design-selection-commands`, never in Electron. All canonical attaches
+share the pending opening and wait until Bento publishes its generic
 state/snapshot/flush/readonly/commands API and reports the real ready state; a navigation or
 DOM load event alone is not canvas readiness. Before changing these boundaries, read
 [design resources](../../../../../packages/design-bento/README.md).
@@ -115,3 +116,7 @@ never forward arbitrary tool names, code or filenames. Only the granted page and
 its descendants enter the CDP adapter. Revoke detaches before returning results.
 Input gating opens only for synchronous CDP dispatch, never across an await.
 Reuse the pinned adapter via its generator; do not edit generated upstream code.
+Response-peer rejection must deny Agent reads synchronously; defer native navigation
+stops beyond the debugger callback, rechecking the same live lease and denial.
+Canonicalize DNS and response IPs before classification, including bracketed and
+IPv4-mapped IPv6; malformed addresses and unverifiable cache responses stay denied.

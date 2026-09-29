@@ -8,7 +8,7 @@ import path from 'node:path';
 const key = 'SYNTHETIC_BENCHMARK_KEY';
 const holdText = 'SYNTHETIC_ACTIVE_STREAM';
 
-export async function createSyntheticTurnBenchmark(count) {
+export async function createSyntheticTurnBenchmark(count, exerciseMcp = false) {
   assert.ok(Number.isInteger(count) && count >= 1 && count <= 50);
   const requests = [];
   const failures = [];
@@ -30,8 +30,22 @@ export async function createSyntheticTurnBenchmark(count) {
       assert.equal(parsed.stream, true);
       const marker = JSON.stringify(parsed.messages.at(-1));
       const hold = marker.includes('SYNTHETIC_CANCEL');
+      const callMcp = exerciseMcp && !hold && parsed.messages.at(-1)?.role === 'user';
+      if (exerciseMcp && parsed.messages.at(-1)?.role === 'tool')
+        assert.ok(
+          marker.includes('credential-isolation-ok'),
+          'MCP execution did not return the protected server result'
+        );
       requests.push({ marker, hold });
-      assert.ok(requests.length <= count + 2, 'unexpected model dispatch');
+      assert.ok(requests.length <= (count + 2) * 2, 'unexpected model dispatch');
+      if (callMcp) {
+        const script = requests.length === 1;
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(
+          `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', tool_calls: [{ index: 0, id: `synthetic-mcp-${requests.length}`, type: 'function', function: { name: script ? 'mcpScript' : 'mcp', arguments: JSON.stringify(script ? { code: 'emit(await tools.call("synthetic_protected_inspect", {}));' } : { tool: 'synthetic_protected_inspect', args: {} }) } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: 8, completion_tokens: 3, total_tokens: 11 } })}\n\ndata: [DONE]\n\n`
+        );
+        return;
+      }
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       response.write(
         `data: ${JSON.stringify({ choices: [{ index: 0, delta: { role: 'assistant', content: hold ? holdText : 'Synthetic completion' }, finish_reason: null }] })}\n\n`
@@ -68,7 +82,7 @@ export async function createSyntheticTurnBenchmark(count) {
       )
         visible?.resolve();
     },
-    async exercise({ peer, child, config, session, initialBinding, prepareMcp, readResources }) {
+    async exercise({ peer, child, config, session, initialBinding, readResources }) {
       const turns = [];
       // Follow cancellation with an explicit new run: retirement must not poison reuse.
       const kinds = [
@@ -79,9 +93,7 @@ export async function createSyntheticTurnBenchmark(count) {
       for (const [index, kind] of kinds.entries()) {
         const runId = index === 0 ? 'synthetic-run' : `synthetic-run-${index}`;
         const turnId = index === 0 ? 'synthetic-turn' : `synthetic-turn-${index}`;
-        const prepareStartedAt = performance.now();
-        const runtime = index === 0 ? initialBinding : await prepareMcp(runId, turnId);
-        const prepareMs = index === 0 ? undefined : performance.now() - prepareStartedAt;
+        const runtime = initialBinding;
         const snapshot = {
           schemaVersion: 1,
           runId,
@@ -145,11 +157,15 @@ export async function createSyntheticTurnBenchmark(count) {
         assert.equal(journal.state, 'settled');
         assert.deepEqual(
           journal.modelRequests.map((entry) => entry.state),
-          [kind === 'cancelled' ? 'outcome_unknown' : 'succeeded']
+          kind === 'cancelled' ? ['outcome_unknown'] : Array(exerciseMcp ? 2 : 1).fill('succeeded')
         );
         assert.equal(journal.outcome.status, result._meta.mollyNativeOutcome.status);
         assert.ok(!journalText.includes(key));
-        assert.equal(requests.length, index + 1, 'additional automatic HTTP dispatch');
+        assert.equal(
+          requests.length,
+          exerciseMcp ? (index + 1) * 2 - (index >= count ? 1 : 0) : index + 1,
+          'additional automatic HTTP dispatch'
+        );
         assert.deepEqual(failures, []);
         const nativeHistory = await readFile(initialBinding.nativeSessionFile);
         turns.push({
@@ -157,7 +173,6 @@ export async function createSyntheticTurnBenchmark(count) {
           kind,
           phase: index === 0 ? 'first' : kind === 'completed' ? 'warm' : kind,
           nativeHistoryBytes: nativeHistory.byteLength,
-          prepareMs,
           promptMs: settledAt - promptStartedAt,
           ...(cancelStartedAt === undefined
             ? {}
@@ -171,6 +186,7 @@ export async function createSyntheticTurnBenchmark(count) {
       const history = await readFile(initialBinding.nativeSessionFile, 'utf8');
       assert.ok(!history.includes(key));
       assert.ok(history.includes('Synthetic completion'));
+      if (exerciseMcp) assert.ok(history.includes('credential-isolation-ok'));
       visible = undefined;
       heldClosed = undefined;
       return turns;

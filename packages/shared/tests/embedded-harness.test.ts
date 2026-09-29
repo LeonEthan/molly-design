@@ -6,15 +6,10 @@ import {
   ModelEndpointSchema,
   ModelSelectionSchema,
   ManagedMcpConnectionSchema,
-  PaidOperationSchema,
-  recoverPaidOperation,
-  canDispatchPaidOperation,
   encodeMollyModelOption,
   decodeMollyModelOption,
   validateMollyRunConfigProjection,
   MOLLY_UNSELECTED_MODEL,
-  HarnessImageImportRequestSchema,
-  HARNESS_IMAGE_MAX_ENCODED_BYTES,
 } from '../src/embedded-harness';
 import { buildSessionTurnInputConfig } from '../src/session-input';
 
@@ -72,31 +67,6 @@ describe('embedded harness boundaries', () => {
         credentialRef: 'ref',
       }).success
     ).toBe(true);
-  });
-  it('admits the full raw image limit while bounding aggregate encoded import bytes', () => {
-    const data = Buffer.alloc(16 * 1024 * 1024).toString('base64');
-    expect(data.length).toBe(HARNESS_IMAGE_MAX_ENCODED_BYTES);
-    const request = {
-      version: 1,
-      runId: 'a'.repeat(64),
-      runtimeEpoch: '00000000-0000-4000-8000-000000000001',
-      productSessionId: 'synthetic',
-      turnId: 'turn',
-      toolCallId: 'call',
-      requestDigest: 'b'.repeat(64),
-      connectionId: 'images',
-      connectionRevision: 1,
-      serverName: 'molly',
-      toolName: 'molly_generate_image',
-      images: [{ mimeType: 'image/png', data }],
-    };
-    expect(HarnessImageImportRequestSchema.safeParse(request).success).toBe(true);
-    expect(
-      HarnessImageImportRequestSchema.safeParse({
-        ...request,
-        images: [...request.images, { mimeType: 'image/png', data: 'AAAA' }],
-      }).success
-    ).toBe(false);
   });
   it('freezes explicit connection/model/thinking from the existing picker without a default', () => {
     const encoded = encodeMollyModelOption('connection-a', 'vendor/model:latest');
@@ -246,24 +216,5 @@ describe('embedded harness boundaries', () => {
         command: 'sh',
       }).success
     ).toBe(false);
-  });
-  it('recovers dispatched paid work as unknown, never as permission to resend', () => {
-    const operation = PaidOperationSchema.parse({
-      schemaVersion: 1,
-      operationId: 'op1',
-      runId: 'run1',
-      connectionId: 'a',
-      connectionRevision: 1,
-      toolName: 'generate',
-      state: 'dispatched',
-      assetDigests: [],
-    });
-    const recovered = recoverPaidOperation(operation);
-    expect(recovered.state).toBe('outcome_unknown');
-    expect(recoverPaidOperation(recovered)).toEqual(recovered);
-    expect(canDispatchPaidOperation(recovered)).toBe(false);
-    expect(canDispatchPaidOperation({ ...operation, operationId: 'op2', state: 'prepared' })).toBe(
-      true
-    );
   });
 });

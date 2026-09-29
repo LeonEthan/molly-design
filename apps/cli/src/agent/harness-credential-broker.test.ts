@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type {
   HarnessRunSnapshot,
   ProtectedImageConnection,
-  HarnessMcpPreparation,
+  HarnessMcpSession,
   McpCredentialBinding,
   HarnessMcpCredentialReport,
 } from '@molly/shared/embedded-harness';
@@ -79,14 +79,11 @@ describe('main to owned-worker credential handoff', () => {
       destination: { transport: 'http', url: `https://mcp${index}.invalid/mcp` },
       fieldNames: ['Authorization'],
     }));
-    const preparation: HarnessMcpPreparation = {
+    const session: HarnessMcpSession = {
       version: 1,
-      runId: 'run',
       runtimeEpoch: 'epoch',
       sessionId: 'session',
-      turnId: 'turn',
       workspaceId: 'workspace',
-      connection,
       mcpConnections: bindings,
     };
     const controller = new AbortController();
@@ -108,19 +105,19 @@ describe('main to owned-worker credential handoff', () => {
         controller.abort();
       },
     };
-    const lease = broker.acquireMcp(preparation, options);
+    const lease = broker.acquireMcp(session, options);
     const requests = broker.pendingMcpRequests();
     const reports: HarnessMcpCredentialReport[] = requests.map((request, index) => ({
       requestId: request.requestId,
-      runId: preparation.runId,
-      runtimeEpoch: preparation.runtimeEpoch,
+      sessionId: session.sessionId,
+      runtimeEpoch: session.runtimeEpoch,
       credentialRef: request.connection.credentialRef,
       credentialRevision: request.connection.revision,
       result: { ok: true, values: { Authorization: `SYNTHETIC_${index}` } },
     }));
     return {
       broker,
-      preparation,
+      session,
       options,
       bindings,
       controller,
@@ -139,7 +136,7 @@ describe('main to owned-worker credential handoff', () => {
         { credentialRef: f.bindings[1]!.credentialRef },
         { credentialRevision: 2 },
         { runtimeEpoch: 'stale' },
-        { runId: 'other' },
+        { sessionId: 'other' },
       ]) {
         f.exchange([{ ...f.reports[0]!, ...changed }]);
         expect(f.broker.pendingMcpRequests()).toEqual(f.requests);
@@ -195,7 +192,7 @@ describe('main to owned-worker credential handoff', () => {
     }
   );
 
-  it('revokes an already delivered MCP grant on rotation and refuses unauthorized preparation bindings', async () => {
+  it('revokes an already delivered MCP grant on rotation and refuses unauthorized session bindings', async () => {
     const f = mcpFixture();
     try {
       for (const patch of [
@@ -205,13 +202,13 @@ describe('main to owned-worker credential handoff', () => {
       ])
         expect(() =>
           f.broker.acquireMcp(
-            { ...f.preparation, mcpConnections: [{ ...f.bindings[0]!, ...patch }] },
+            { ...f.session, mcpConnections: [{ ...f.bindings[0]!, ...patch }] },
             f.options
           )
         ).toThrow('harness_mcp_credential_unavailable');
-      expect(() =>
-        f.broker.acquireMcp(f.preparation, { ...f.options, active: () => false })
-      ).toThrow('harness_run_retired');
+      expect(() => f.broker.acquireMcp(f.session, { ...f.options, active: () => false })).toThrow(
+        'harness_run_retired'
+      );
       f.exchange(f.reports);
       await f.lease.credentials;
       f.exchange(

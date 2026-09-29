@@ -3,7 +3,34 @@ import {
   isMarkdownAgentFileHref,
   normalizeMarkdownAgentFilePath,
   parseMarkdownAgentFileHref,
+  parseMarkdownAgentImageHref,
 } from '../src/lib/markdown-agent-file-link';
+
+describe('parseMarkdownAgentImageHref', () => {
+  it.each([
+    ['sandbox:/workspace/media/draft%20one.png', '/workspace/media/draft%20one.png'],
+    ['/workspace/media/draft.png', '/workspace/media/draft.png'],
+    ['./media/draft.png', './media/draft.png'],
+    ['draft.png', 'draft.png'],
+    ['C:\\work\\draft.png', 'C:/work/draft.png'],
+  ])('recognizes %s without decoding its path twice', (src, expected) => {
+    expect(parseMarkdownAgentImageHref(src)).toBe(expected);
+  });
+
+  it.each([
+    undefined,
+    '',
+    'https://example.com/a.png',
+    '//example.com/a.png',
+    'sandbox://example.com/a.png',
+    'sandbox:relative.png',
+    'data:image/png;base64,AA==',
+    'javascript:example/a.png',
+    'molly-resource://file/opaque',
+  ])('does not treat %s as an agent filesystem path', (src) => {
+    expect(parseMarkdownAgentImageHref(src)).toBeNull();
+  });
+});
 
 describe('isMarkdownAgentFileHref', () => {
   it('treats slash-prefixed markdown hrefs as agent file references', () => {

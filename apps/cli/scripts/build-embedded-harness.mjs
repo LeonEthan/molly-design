@@ -13,6 +13,7 @@ const pinnedRuntimePackages = {
   '@modelcontextprotocol/sdk': '1.29.0',
   '@anthropic-ai/sandbox-runtime': '0.0.77',
   typebox: '1.3.7',
+  'pi-mcp-adapter': '3.2.0',
 };
 const curatedExtensions = [
   { name: 'pi-ask-question', entry: 'ask-question.ts' },
@@ -169,6 +170,32 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     if (pinned?.version !== pinnedRuntimePackages[name])
       throw new Error(`Unreviewed runtime dependency version: ${name}`);
   }
+  const adapterSource = resolvePackage('pi-mcp-adapter', harnessRoot);
+  const adapterOutput = path.join(directory, 'node_modules/pi-mcp-adapter');
+  const adapterMetadata = JSON.parse(
+    fs.readFileSync(path.join(adapterSource, 'package.json'), 'utf8')
+  );
+  await build({
+    entryPoints: [path.join(adapterSource, 'index.ts')],
+    outfile: path.join(adapterOutput, 'index.js'),
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    target: 'node22.19',
+    external: [
+      ...external,
+      ...Object.keys(adapterMetadata.dependencies),
+      ...Object.keys(adapterMetadata.peerDependencies),
+    ],
+    sourcemap: false,
+  });
+  fs.writeFileSync(
+    path.join(adapterOutput, 'package.json'),
+    JSON.stringify({
+      ...adapterMetadata,
+      exports: { '.': './index.js', './types': './dist/types.js' },
+    })
+  );
   const { createBundledModelCatalog } = await import(
     pathToFileURL(path.join(directory, 'model-catalog.js')).href
   );

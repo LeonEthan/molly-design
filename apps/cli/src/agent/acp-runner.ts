@@ -78,10 +78,7 @@ export type CreateAcpClientOptions = {
   loadExternalMcpServers?: AgentClientOptions['loadExternalMcpServers'];
   onMcpCatalogInvalidated?: AgentClientOptions['onMcpCatalogInvalidated'];
   onMcpServersResolved?: AgentClientOptions['onMcpServersResolved'];
-  onHarnessImageImport?: AgentClientOptions['onHarnessImageImport'];
   onPersonalMemory?: AgentClientOptions['onPersonalMemory'];
-  onHarnessImageRecovery?: AgentClientOptions['onHarnessImageRecovery'];
-  isAutoReviewRun?: AgentClientOptions['isAutoReviewRun'];
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
   onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
@@ -119,10 +116,7 @@ export const createAcpClient = async (options: CreateAcpClientOptions) => {
     loadExternalMcpServers: options.loadExternalMcpServers,
     onMcpCatalogInvalidated: options.onMcpCatalogInvalidated,
     onMcpServersResolved: options.onMcpServersResolved,
-    onHarnessImageImport: options.onHarnessImageImport,
-    onHarnessImageRecovery: options.onHarnessImageRecovery,
     onPersonalMemory: options.onPersonalMemory,
-    isAutoReviewRun: options.isAutoReviewRun,
     onImageGenerationBegin: options.onImageGenerationBegin,
     onImageGenerationEnd: options.onImageGenerationEnd,
     onWriteTextFile: options.onWriteTextFile,

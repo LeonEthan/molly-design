@@ -71,7 +71,7 @@ describe('loadSessionMcpCatalog', () => {
     const legacy = await load(false);
     expect(legacy({ http: true }).servers[0]?._meta).toBeUndefined();
     const guarded = await load(true);
-    expect(guarded({ http: true }).servers[0]?._meta?.mollyImageBinding).toEqual(imageBinding);
+    expect(guarded({ http: true }).servers[0]?._meta?.mollyImageBinding).toBeUndefined();
     rows[0]!.value = { ...rows[0]!.value, imageBinding: { ...imageBinding, model: 'changed' } };
     expect(guarded.guard?.isCurrent()).toBe(false);
     expect(() => guarded({ http: true })).toThrow('harness_mcp_catalog_changed');

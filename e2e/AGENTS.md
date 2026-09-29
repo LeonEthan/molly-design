@@ -20,6 +20,8 @@ also applies.
   random TCP port on POSIX or unique named pipe on Windows must travel together
   to Electron and all CLI descendants. Never kill or attach to a user's
   existing Lody process.
+- On macOS, disable window restoration for the test process with
+  `-ApplePersistenceIgnoreState YES`; preserve user saved state and global preferences.
 - Harness restart reuses only its own durable directories after verified process
   and endpoint teardown. It pins the original executable/source target and reserves
   a fresh endpoint; any teardown failure stops restart and retains failed evidence.

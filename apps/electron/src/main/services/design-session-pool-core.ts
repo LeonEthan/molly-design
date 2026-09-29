@@ -19,6 +19,7 @@ type Contents<S> = {
   close(options: { waitForBeforeUnload: boolean }): void
   once(event: 'destroyed', listener: () => void): unknown
 }
+type ProtocolHandler = Parameters<Session['protocol']['handle']>[1]
 
 /** Electron keeps partitions for the process lifetime. Reuse only fully drained,
  * cleaned canvas partitions, never sessions still owned by a view or request. */
@@ -67,6 +68,7 @@ class DesignSessionLease<S extends RecyclableSession> {
   private reusable = true
   private requests = 0
   private readonly contents = new Set<Contents<S>>()
+  private protocolHandler: ProtocolHandler | undefined
   private readonly recycle: (session: S) => void
   private readonly report: (error: unknown) => void
 
@@ -79,6 +81,25 @@ class DesignSessionLease<S extends RecyclableSession> {
   readonly assertActive = (): void => {
     if (!this.active) throw Error('Retired canvas')
   }
+
+  handle(handler: ProtocolHandler): void {
+    this.assertActive()
+    if (this.protocolHandler) throw Error('Canvas protocol handler already registered')
+    this.protocolHandler = handler
+    try {
+      this.session.protocol.handle('molly-design', this.dispatchRequest)
+    } catch (error) {
+      this.protocolHandler = undefined
+      throw error
+    }
+  }
+
+  private readonly dispatchRequest: ProtocolHandler = (request) =>
+    this.run(() => {
+      const handler = this.protocolHandler
+      if (!handler) throw Error('Retired canvas')
+      return handler(request)
+    })
 
   /** Register native destruction before any asynchronous loading can be cancelled. */
   readonly own = <T extends { webContents: Contents<S> }>(create: () => T): T => {
@@ -118,6 +139,7 @@ class DesignSessionLease<S extends RecyclableSession> {
   readonly dispose = (): void => {
     if (!this.active) return
     this.active = false
+    this.protocolHandler = undefined
     try {
       retireDesignSession(this.session)
     } catch (error) {

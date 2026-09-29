@@ -245,7 +245,7 @@ VS Code 编译时共读取 21 个源码文件，包含 Event/Disposable 等基�
 
 - [PublicBrowserService](../../../../apps/electron/src/main/services/public-browser-service.ts) 已使用 `WebContentsView`，关闭 Node 集成并启用 context isolation 与 sandbox。当前 partition 名没有 `persist:`，下载全部拒绝，弹窗被改为当前页导航；这些是现状，不是完整登录浏览器能力。
 - [Session Browser 说明](../../../docs/sessions-browser.md) 明确当前公共浏览器只有人类读取者，因此没有网络读取 guard；增加 Agent 截图、DOM 或脚本读取后，需要在 Agent 路径恢复对应隔离，不能直接沿用 human-only 安全结论。该文也记录了旧 DNS guard 对 fake-IP 代理的误拦问题。
-- [AgentClient](../../../../apps/cli/src/agent/agent-client.ts) 已有 `buildBuiltinMcpServers` 与内置 Molly MCP 传递会话身份；[Pi MCP bridge](../../../../packages/harness-pi/src/mcp-bridge.ts) 已实现工具发现、转换、授权与结果处理。Electron 到 daemon 已有 owner-only 本地控制通道，但当前公共浏览器只有 renderer UI IPC，浏览器专用的 run/page 合同和控制桥尚未实现。
+- [AgentClient](../../../../apps/cli/src/agent/agent-client.ts) 已有 `buildBuiltinMcpServers` 与内置 Molly MCP 传递会话身份；[Pi MCP bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) 已实现工具发现、转换、授权与结果处理。Electron 到 daemon 已有 owner-only 本地控制通道，但当前公共浏览器只有 renderer UI IPC，浏览器专用的 run/page 合同和控制桥尚未实现。
 - 平台能力与工具合同继续遵守 [platform](../../../../packages/platform/AGENTS.md) 和 [shared](../../../../packages/shared/AGENTS.md) 边界。浏览器账户数据不进入 Flock、workspace、Git 或设计 YAML。
 
 ## 已核实的产品与技术事实
@@ -325,12 +325,12 @@ macOS 原生路线必须通过系统与用户允许的访问方式完成。Chrom
 
 | 入口               | 源码证据与职责                                                                                                                                                                                                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP                | [mcp-bridge](../../../../packages/harness-pi/src/mcp-bridge.ts) 将服务端工具转换为模型可调用工具，支持 HTTP/stdio；[ACP adapter](../../../../packages/harness-pi/src/acp-adapter.ts) 合并工具并管理连接。复用现有内置服务，新增浏览器处理器即可接入模型工具循环，但 Electron 控制桥仍需实现。 |
+| MCP                | [mcp-bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) 将服务端工具转换为模型可调用工具，支持 HTTP/stdio；[ACP adapter](../../../../packages/harness-pi/src/acp-adapter.ts) 合并工具并管理连接。复用现有内置服务，新增浏览器处理器即可接入模型工具循环，但 Electron 控制桥仍需实现。 |
 | Skill              | [资源加载器](../../../../packages/harness-pi/src/resource-loader.ts) 接收宿主提供的 skill；生产设计 skill 经 [message handler](../../../../apps/cli/src/lib/message-handler.ts) 物化并提供读取指针。skill 提供网站操作知识，本身不授予 WebContents 控制能力。                                 |
 | CLI                | [原生工具](../../../../packages/harness-pi/src/approved-tools.ts) 已包含 bash，可在确有消费者时增加调用同一浏览器服务的薄命令入口；不让 CLI 启动另一个浏览器或自行选择外部 Chrome。                                                                                                           |
 | Native custom tool | [session factory](../../../../packages/harness-pi/src/session-factory.ts) 支持 `customTools: input.tools`，技术上可行；首期优先已有 MCP 接入，避免双份工具实现。                                                                                                                              |
 
-页面结构可作为文本返回，截图可作为普通 MCP `image` 结果。[内容转换器](../../../../packages/harness-pi/src/mcp-content.ts) 已接受 PNG/JPEG/GIF/WebP，MCP bridge 将其交给模型上下文；仍需所选模型支持图片输入。截图不应标记成付费 generate/edit 的 image binding，观察页面与保存作品素材分别处理。
+页面结构可作为文本返回，截图可作为普通 MCP `image` 结果。[内容转换器](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-content.ts) 已接受 PNG/JPEG/GIF/WebP，MCP bridge 将其交给模型上下文；仍需所选模型支持图片输入。截图不应标记成付费 generate/edit 的 image binding，观察页面与保存作品素材分别处理。
 
 建议调用链为：bundled harness → 现有 Molly MCP → 带当前 run 与页面身份的本地请求 → Electron browser service → 指定 `WebContentsView`。复用既有本地控制通道与身份检查模式，浏览请求使用独立合同，不塞进 `design/render-*`。工具名在本方案中仅作语义示意；现有 MCP 名称映射只为三种设计图片/预览工具保留原名，其他工具使用含哈希的命名，skill 应引用实际暴露的名称。
 
@@ -404,7 +404,7 @@ MCP host 重启会丢失连接内存，Electron 可以按产品规则保留网�
 
 授权锚定既有 `worker-main` 宿主审批管线和 Session run，不另建通用权限引擎、角色模型或长期 grant 存储。设计运行在[启动配置](../../../../apps/cli/src/session/session.ts)采用 `browse-task-v1` 标识本策略；[worker-config](../../../../packages/harness-pi/src/worker-config.ts) 的 `permissionProfileId` 仍只是快照身份字段。真正的逐站任务授权由 `worker-main` 的用户批准结果产生，并绑定 run/epoch；一个 profile 字符串本身不授予站点权限。
 
-现有批准请求/结果已表达本任务范围，宿主逐调用复核，[工具 journal](../../../../packages/harness-pi/src/tool-operation-journal.ts) 将 `browse_task` 与 `allow_once` 区分，不能把任务内自动放行伪写成用户逐次批准。范围绑定当前 run/epoch、站点和浏览工具，随结束/取消/接管失效，历史记录不恢复活授权；其他工具保持原权限语义。账号导入同意不自动批准浏览任务。
+现有批准请求/结果已表达本任务范围，宿主逐调用复核，[工具 journal](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts) 将 `browse_task` 与 `allow_once` 区分，不能把任务内自动放行伪写成用户逐次批准。范围绑定当前 run/epoch、站点和浏览工具，随结束/取消/接管失效，历史记录不恢复活授权；其他工具保持原权限语义。账号导入同意不自动批准浏览任务。
 
 不复用 `session/set_mode`：[AgentClient](../../../../apps/cli/src/agent/agent-client.ts) 将它留给会话级 permission/sandbox mode，粒度与本次短期浏览授权不同。这里是在既有管线上新增有范围的审批行为合同，Spec 修订仍需批准。
 
@@ -414,7 +414,7 @@ MCP host 重启会丢失连接内存，Electron 可以按产品规则保留网�
 
 首期沿用每个会话一个主浏览页和既有侧栏，不新建多标签浏览器 UI、页池、后台调度或页面恢复数据库。搜索与详情优先在该页完成；只有真实站点证明确需 popup 时补受控子页处理，不能因有上游标签工具就扩大产品范围。保留活动页、关闭后明确失败及用户接管属于当前任务必需能力，不能随简化一起删除。
 
-**明确的失败与可见结果。** 页面需要登录、元素失效、页面已关闭等已知结果应返回有界的业务状态和恢复建议，而非声称点击成功。当前内容桥会把 MCP `isError` 统一为工具失败，工具适配应让允许模型处理的具体状态可见。已有 [工具操作 journal](../../../../packages/harness-pi/src/tool-operation-journal.ts) 串行记录调用；传输结果未知会结束当前 run，不自动换调用 ID 重试。这与页面正常加载失败不同，浏览器工具不能通过捕获全部错误掩盖未知外部副作用。
+**明确的失败与可见结果。** 页面需要登录、元素失效、页面已关闭等已知结果应返回有界的业务状态和恢复建议，而非声称点击成功。当前内容桥会把 MCP `isError` 统一为工具失败，工具适配应让允许模型处理的具体状态可见。已有 [工具操作 journal](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts) 串行记录调用；传输结果未知会结束当前 run，不自动换调用 ID 重试。这与页面正常加载失败不同，浏览器工具不能通过捕获全部错误掩盖未知外部副作用。
 
 **模型与观察成本。** Pinterest 的选图需要当前所选模型真实具备图像输入能力；普通结构读取和文字调研可以单独成立。复用现有模型能力声明和 MCP image 桥，不增加视觉模型的隐式 fallback。结构快照限定范围与体积，截图按需截取视口或目标，不每次操作无条件回传整页大图；具体策略通过一次真实连续搜索判断，当前没有需要新建性能平台的证据。必要网页内容会随工具结果进入用户选择的模型服务；本地 profile 不意味着模型推理离线。
 

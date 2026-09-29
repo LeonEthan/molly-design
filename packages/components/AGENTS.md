@@ -45,10 +45,11 @@ mobile surfaces.
   into an unlayered `:root,:host` block, and unlayered declarations beat every layer.
   When changing the ladder, keep both rebinds in sync and verify the computed value in
   the shipping host, not only in source order.
-- `src/lib/molly-brand.ts` and `MollyWordmark` are the wordmark source. The standalone
-  outlined `src/assets/molly-wordmark{,-dark}.svg` files are generated from them and
-  bundled Inter Bold; rerun `python3 scripts/generate-molly-wordmark-svg.py` after
-  changing the M path, font or wordmark spacing.
+- `src/assets/molly-wordmark-source.svg` and `molly-mark.svg` own the signature
+  outlines. `scripts/generate-molly-wordmark-svg.py` derives `src/lib/molly-brand.ts`
+  and the light/dark standalone wordmarks; run it after editing these masters.
+  `MollyWordmark` renders the complete outlined Molly Design signature with currentColor.
+  No font substitution or runtime reference to ignored `output/` assets is allowed.
 
 ## Rules shared by callers
 

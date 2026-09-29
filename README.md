@@ -1,5 +1,10 @@
 # Molly
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="packages/components/src/assets/molly-wordmark-dark.svg">
+  <img src="packages/components/src/assets/molly-wordmark.svg" width="320" alt="Molly Design">
+</picture>
+
 [简体中文](README.zh-CN.md)
 
 Molly is an independent, local desktop workspace for graphic design with an Agent

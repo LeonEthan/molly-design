@@ -161,3 +161,20 @@ versions while retaining artwork, assets, settings and native history. Existing
 local ad-hoc package evidence does not satisfy these distribution/upgrade checks.
 See [current acceptance evidence](../../USER_GUIDE.md#release-status-and-support-limits)
 and the [release specification](../../specs/molly-design-independent-release.zh.md).
+
+## Brand resources
+
+The app uses the outlined Molly Design signature from the components package and
+its matching M icon on a paper tile. `build/icon-source.svg` owns the large icon;
+`icon-source-small.svg` (48–64px) and `icon-source-micro.svg` (16–32px) carry optical
+stroke corrections. All three use a strengthened M contour for Dock legibility;
+the full wordmark retains its lighter signature strokes. Keep the 1024px PNG copies in build/, resources/icon.png and
+components/src/assets/molly-icon.png aligned with the large master.
+
+`build/icon.icns` and `icon.ico` embed size-specific renders. Do not regenerate
+these by downscaling only the large master or running pad-mac-icon.py: that loses
+the optical variants and adds padding to an already inset tile. The existing
+`icon-mac.padded.png` consumer now uses the same 48px-margin master; its filename
+is retained for compatibility. This asset change does not alter app identity,
+update configuration or signing. Installed Dock appearance still needs a native
+visual check after packaging.

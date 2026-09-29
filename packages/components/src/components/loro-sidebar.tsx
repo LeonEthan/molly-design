@@ -927,10 +927,10 @@ export const LoroSidebar = memo(function LoroSidebar({
           ) : (
             <div className="min-w-0 flex-1">
               <div
-                className={cn(workspaceIdentityClassName, 'flex text-[15px]')}
+                className={cn(workspaceIdentityClassName, 'flex h-8 py-0 text-[15px]')}
                 data-workspace-identity
               >
-                <MollyWordmark />
+                <MollyWordmark className="h-8 text-sidebar-foreground" />
                 {workspaceIdentityStatus ? (
                   <ConnectionPill state={workspaceIdentityStatus} labels={mergedLabels} />
                 ) : null}
@@ -975,7 +975,9 @@ export const LoroSidebar = memo(function LoroSidebar({
             'flex flex-col gap-px',
             isMobile
               ? 'mt-2 pl-[calc(12px+var(--safe-area-left))] pr-[calc(12px+var(--safe-area-right))]'
-              : '-mt-1 px-1.5'
+              : workspaceSwitcherEnabled
+                ? '-mt-1 px-1.5'
+                : 'mt-1 px-1.5'
           )}
         >
           <NavButton

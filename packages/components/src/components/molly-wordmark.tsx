@@ -1,34 +1,26 @@
-import { MOLLY_M_PATH, MOLLY_M_VIEW_BOX, MOLLY_WORDMARK_FONT_FAMILY } from '@/lib/molly-brand';
+import {
+  MOLLY_WORDMARK_PATHS,
+  MOLLY_WORDMARK_TRANSFORM,
+  MOLLY_WORDMARK_VIEW_BOX,
+} from '@/lib/molly-brand';
 import { cn } from '@/lib/utils';
-
-function MollyMGlyph({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox={MOLLY_M_VIEW_BOX}
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-      className={cn('h-[1.16em] w-auto shrink-0 translate-y-[0.15em] overflow-visible', className)}
-    >
-      <path d={MOLLY_M_PATH} />
-    </svg>
-  );
-}
 
 export function MollyWordmark({ className }: { className?: string }) {
   return (
-    <span
+    <svg
       role="img"
-      aria-label="Molly"
+      aria-label="Molly Design"
       data-molly-wordmark
-      style={{ fontFamily: MOLLY_WORDMARK_FONT_FAMILY }}
-      className={cn(
-        'inline-flex items-baseline whitespace-nowrap font-bold leading-none tracking-[-0.01em]',
-        className
-      )}
+      viewBox={MOLLY_WORDMARK_VIEW_BOX}
+      fill="currentColor"
+      focusable="false"
+      className={cn('inline-block h-[2em] w-auto max-w-full shrink-0 align-middle', className)}
     >
-      <MollyMGlyph className="-mr-[0.02em]" />
-      <span aria-hidden="true">olly</span>
-    </span>
+      <g transform={MOLLY_WORDMARK_TRANSFORM}>
+        {MOLLY_WORDMARK_PATHS.map((d, index) => (
+          <path key={index} d={d} />
+        ))}
+      </g>
+    </svg>
   );
 }

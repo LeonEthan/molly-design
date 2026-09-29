@@ -12,6 +12,7 @@ import { flushSync } from 'react-dom';
 import { FileDiff, type FileDiffProps } from '@pierre/diffs/react';
 import {
   MOLLY_M_PATH,
+  MOLLY_M_TRANSFORM,
   MOLLY_M_VIEW_BOX,
   MOLLY_WORDMARK_FONT_FAMILY,
 } from '@molly/components/lib/molly-brand';
@@ -168,7 +169,6 @@ interface AnnotationMeta {
   readonly comments: readonly ReviewUserComment[];
   readonly findingRefs: readonly FindingLineMarker[];
 }
-
 
 export interface ReviewRendererProps {
   readonly bundle: ReviewBundleInput;
@@ -1093,7 +1093,7 @@ export function ReviewRenderer({
               focusable="false"
               className="h-[1.16em] w-auto shrink-0 translate-y-[0.15em] -mr-[0.02em] overflow-visible"
             >
-              <path d={MOLLY_M_PATH} />
+              <path d={MOLLY_M_PATH} transform={MOLLY_M_TRANSFORM} />
             </svg>
             <span className="sr-only">Molly Review</span>
             <span aria-hidden="true" className="truncate">

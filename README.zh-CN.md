@@ -1,5 +1,10 @@
 # Molly
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="packages/components/src/assets/molly-wordmark-dark.svg">
+  <img src="packages/components/src/assets/molly-wordmark.svg" width="320" alt="Molly Design">
+</picture>
+
 [English](README.md)
 
 Molly 是独立的本地桌面平面设计工作台，结合 Agent 与可直接编辑的画布。

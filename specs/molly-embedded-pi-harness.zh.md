@@ -37,7 +37,7 @@ Translation: current
 15. As a designer, I want to save, export, reopen and continue the same artwork, so that the design remains usable beyond one session.
 16. As a user, I want to cancel execution and see an accurate result, so that a stopped or failed run is not presented as completed work.
 17. As a user, I want to answer the preinstalled community extension's questions in Molly, so that I do not need a terminal interface.
-18. As a user, I want unknown paid-operation results to remain identifiable without automatic resubmission, so that reconnection does not silently charge me again.
+18. As a user, I want uncertain image-service outcomes reported honestly, so that I can decide whether another potentially paid attempt is appropriate.
 19. As a returning user, I want old artworks, assets and conversation history preserved, so that migration does not discard my work.
 20. As a returning user, I want an explicit action to continue an old design with the built-in engine, so that historical runtime identities are not silently reused.
 21. As a returning user, I want Role selection and execution retired while its historical records remain readable, so that new work uses explicit model and reasoning choices.
@@ -48,7 +48,7 @@ Translation: current
 
 ### 剩余工作与完成条件
 
-已有内置 worker、ACP、连接与凭据、MCP、图片导入与恢复、设计事务、迁移门禁及社区问答实现继续复用，不为本次收尾重写。只修复阻断下列完成条件的实际缺陷。
+已有内置 worker、ACP、连接与凭据、设计事务、迁移门禁及社区问答实现继续复用。MCP 接入按下文标准链路修订，复用图片 server 已有普通调用路径；其余范围只修复阻断下列完成条件的实际缺陷。
 
 | 顺序 | 剩余工作           | 完成条件                                                                                                                                                                    |
 | ---- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -62,16 +62,17 @@ R1 → R2 是关键路径；R3 嵌入 R2，随后完成 R4 和 R5。新增真实
 
 ### 职责与状态权威
 
-| 责任方             | 权威状态与职责                                                                              |
-| ------------------ | ------------------------------------------------------------------------------------------- |
-| Molly Session 服务 | 用户任务、队列、权限、运行配置快照、执行结果和恢复策略；唯一派发者。                        |
-| 内置 Pi worker     | 模型循环、工具调度、压缩和原生模型上下文；使用 Molly 私有 SessionManager 存储。             |
-| Molly ACP adapter  | 沿用现有 ACP 消费边界，将原生结果、事件和取消映射到宿主；只补必要的共享扩展。               |
-| 设计服务与 Bento   | BentoDoc 为唯一可编辑真相；设计服务拥有投影、草稿采集、素材校验、CAS、回执及既有 Git 历史。 |
-| Electron main      | 保护凭据、验证调用者与秘密接收目标；向受管 worker/MCP 提供必要的短期取用能力。              |
-| 独立 MCP host      | 工具连接、发现、授权执行、取消与结果导入；不在 daemon 主线程执行工具。                      |
+| 责任方                | 权威状态与职责                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------- |
+| Molly Session 服务    | 用户任务、队列、权限、运行配置快照、执行结果和恢复策略；唯一派发者。                        |
+| 内置 Pi worker        | 模型循环、工具调度、压缩和原生模型上下文；使用 Molly 私有 SessionManager 存储。             |
+| Molly ACP adapter     | 沿用现有 ACP 消费边界，将原生结果、事件和取消映射到宿主；只补必要的共享扩展。               |
+| 设计服务与 Bento      | BentoDoc 为唯一可编辑真相；设计服务拥有投影、草稿采集、素材校验、CAS、回执及既有 Git 历史。 |
+| Electron main         | 保护凭据、验证调用者与秘密接收目标；向受管 worker/MCP 提供必要的短期取用能力。              |
+| pi-mcp-adapter        | 在 Pi worker 内按公开扩展方式提供标准 MCP 连接和工具调用。                                  |
+| Molly 图片 MCP server | 图片服务调用、参数及素材校验、文件保存和标准 MCP 结果；不在 daemon 主线程执行工具。         |
 
-产品 Session、一次用户任务、Pi 内部 turn、原生 session、worker 实例分别标识。运行快照冻结连接 ID/revision、模型与思考配置、harness 构建、插件和工具集合、权限配置及相关设计基线，不包含秘密。UI 消息是产品读模型，不用于复制并重建另一份完整原生模型历史。
+产品 Session、一次用户任务、Pi 内部 turn、原生 session、worker 实例分别标识。运行快照冻结连接 ID/revision、模型与思考配置、harness 构建、插件与 MCP 配置、权限配置及相关设计基线，不包含秘密。UI 消息是产品读模型，不用于复制并重建另一份完整原生模型历史。
 
 每次用户提示开始前，worker 将宿主时钟的当前日期、时间、UTC 和宿主时区作为模型可见的环境上下文提供。复用原生会话时，后续提示仍刷新该上下文；需要更新时刻的工作主动查询时钟。宿主时间说明任务何时运行，不代表作品中活动的日期。地理位置仅依据用户明确信息；未提供时保持未知，不从时区、语言或文件修改时间推断。复用现有公开上下文 hook，不增加定位服务或另一套状态存储。
 
@@ -95,19 +96,21 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 授权关联实际 run、worker epoch、请求和连接 revision。工作区外读写、任意 shell、stdio 命令变更和秘密接收域变更有明确授权边界；Molly 设计工具以外的付费工具默认逐次授权，可使用用户明确授予的有限次数。授权检查落实到执行路径；公开先读提醒不构成读证明或写授权。每次运行都使用自动审批（见[生成式分层设计](generative-layered-design-workflow.zh.md)），以这些边界代替逐次提示：shell 在操作系统沙箱内运行，Molly 设计工具和工作区内的文件访问直接执行，越出边界由使用会话模型的分类器判断，其拒绝或失败时回退为询问用户。没有操作系统沙箱时，shell 命令保留逐条提示。所有自动批准与用户决定都记录为授权来源。
 
-模型请求、压缩及插件子请求都归属明确连接和使用量记录；首版标题由用户首句本地生成。有限传输重试不得变成整个任务或工具副作用的重放。费用无可靠依据时显示未知或估算。
+模型请求、压缩及插件子请求都归属明确连接和使用量记录；首版标题由用户首句本地生成。Molly 不因传输失败自动重启整个用户任务；MCP 内部连接恢复遵循下文原版组件的语义。费用无可靠依据时显示未知或估算。
 
 ### MCP 与付费图片
 
-复用 workspace MCP catalog 和每轮选择，保留显式空选择的语义。支持经验证的 stdio/Streamable HTTP 子集；工具有稳定命名空间、来源和 schema 版本。接受任务时冻结工具集合，撤销立即阻止执行，执行中 schema 变更明确失败，新工具在安全边界生效。未实现的 sampling、elicitation、OAuth 等能力不宣称支持。
+2026-09-28 方向修订：采用普通 coding agent 的标准链路：`Pi Agent → 原版 pi-mcp-adapter → Molly 图片 MCP server → 图片服务`。这是新的目标，现有专用 bridge 和已完成的兼容性原型不代表此目标已经实施。该修订保持 draft；决策及历史证据见[迁移记录](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md)。
 
-保留 `molly_generate_image`、`molly_edit_image` 和 `molly_render_preview` 的会话/宿主能力门控。外部图片能力通过预置适配或声明式字段映射绑定；无法绑定时仍可作为普通工具，如实显示图片能力未就绪。图片模型必须由用户明确配置，不使用 LLM 模型名或产品默认值。
+使用锁定版本的公开 `createMcpAdapter({ config })` 入口和 Pi 的标准扩展机制。Molly 只提供已选择的 MCP 配置，以及公开接口需要的常规宿主接入；工具发现、命名、schema、调用、结果处理、目录更新、连接恢复和关闭沿用原版行为。不修改 Pi 或 adapter，不维护依赖补丁、fork、定制 host-managed profile、传输拦截器或第二套 MCP 客户端，不等待上游接受 Molly 专用接口。普通配置不等于开启全部可选功能。
 
-内置预览失败应指出可修复的素材或字体问题，同时避免暴露任意服务端诊断。素材准入经现有本地 RPC/MCP 边界提供验证后的类别、安全相对路径及大小/类型事实，只有内置预览结果具有该分类依据。服务端返回的其他工具执行错误（MCP `isError`）按 MCP 规范以有界文本交给 Agent，使其能调整下一次调用；传输与客户端诊断可能携带连接信息或凭据，继续脱敏。各服务端负责让自身错误文本不含凭据；Molly 内置图像工具会说明失败请求是发送前被拒绝、被服务拒绝，还是结果未知且可能已计费。这些诊断不构成重试、修复或作品提交成功的授权，见[获批设计工作流](generative-layered-design-workflow.zh.md)。
+Molly 图片 MCP server 像普通图片工具一样接收参数、使用用户明确配置的图片服务与模型、校验并保存图片文件，再通过标准 MCP 结果返回可使用的路径、图片或错误。复用已有普通调用路径；私有图片字节 `_meta` 协议和宿主二次导入回调不作为必要步骤。Agent 通过普通工具读取图片并修改画稿。外部 MCP 工具同样按其原生 schema 和结果使用，不要求先经过 Molly 图片字段映射或私有回执转换。
 
-URL、base64、MCP image/resource 经来源、路径、MIME、大小、尺寸和下载边界检查后进入既有素材存储。远程 file URI 不授权读取本机；重定向重新校验目标，不将秘密转发到新域。素材结果本身不提交或替换画布。
+不为复刻旧 bridge 的行为增加特殊工具名称、每次调用前的额外目录重读、每轮重建连接、资源子调用审批/收据、MCP 付费调用状态机或独立的取消清理协议，也不把这些机制整体搬到图片 server。确属图片工具本身的参数、凭据、文件路径和素材校验留在 server；标准工具授权沿用已有公开扩展机制。设计文档的校验和提交仍由设计服务负责，生成图片不直接提交画布。
 
-每次受管付费操作在发送前持久化身份与授权事实，状态区分 prepared、dispatched、succeeded、failed、outcome_unknown。协议重放和重连只恢复同一操作；应用从不自动重新提交未知结果。失败或结果未知的调用作为普通工具错误返回 Agent，此后的任何调用都是 Agent 选择的新操作（见[生成式分层设计](generative-layered-design-workflow.zh.md)）。取消信号不证明远端停止或免计费；迟到结果只登记可恢复素材，不重启已结束的任务。
+工具错误、取消和连接恢复遵循所选原版组件的实际语义。不把断线或取消解释为远端没有执行、没有收费，也不额外承诺每个 MCP 调用恰好执行一次。Molly 不因未知结果自动重启已结束的用户任务；Agent 根据标准工具结果决定后续行为。此前为保留 Molly 专用 MCP 语义而建立的验收条件不再作为迁移门槛。
+
+验收沿标准链路验证工具发现、生成/编辑、图片落盘后可读取、Agent 使用素材、普通错误、取消及实际安装包加载。旧补丁原型的通过结果只证明旧方案，不能转记为原版接入已通过。既有会话、作品和历史文件保留，不为架构简化删除用户数据。
 
 ### 执行、设计提交与恢复
 

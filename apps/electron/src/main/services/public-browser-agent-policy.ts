@@ -19,9 +19,13 @@ export type AgentBrowserDestination = {
 
 const normalizedIp = (value: string): string => {
   const ip = value.trim()
-  if (isIP(ip) === 0) throw new Error('Browser network address could not be verified.')
+  const bracketed = ip.startsWith('[') && ip.endsWith(']')
+  const address = bracketed ? ip.slice(1, -1) : ip
+  const version = isIP(address)
+  if (version === 0 || (bracketed && version !== 6))
+    throw new Error('Browser network address could not be verified.')
   try {
-    return new URL(ip.includes(':') ? `http://[${ip}]/` : `http://${ip}/`).hostname
+    return new URL(version === 6 ? `http://[${address}]/` : `http://${address}/`).hostname
   } catch {
     throw new Error('Browser network address could not be verified.')
   }
@@ -51,13 +55,12 @@ export const isVerifiedAgentBrowserResponsePeer = (
   classifyHost: AgentBrowserNetworkChecks['classifyHost']
 ): boolean => {
   const peer = response.remoteIPAddress
-  return Boolean(
-    peer &&
-    isIP(peer) > 0 &&
-    !response.fromDiskCache &&
-    !response.fromServiceWorker &&
-    classifyHost(peer) === 'public'
-  )
+  if (!peer || response.fromDiskCache || response.fromServiceWorker) return false
+  try {
+    return classifyHost(normalizedIp(peer)) === 'public'
+  } catch {
+    return false
+  }
 }
 
 export async function assertAgentBrowserDestination(

@@ -110,6 +110,7 @@ import {
   getACPErrorUserMessage,
   isAgentDisconnectedError,
   isAuthenticationRequiredACPError,
+  isHarnessRunAlreadyDispatchedError,
   mapACPErrorToFailureReason,
   parseACPError,
   shouldRecoverStaleACPConnectionPrompt,
@@ -2567,6 +2568,15 @@ export class SessionExecutionService {
     }
 
     this.deps.logger.error(options.describe(options.error), options.error);
+    if (
+      options.runtime.session?.isEmbeddedHarness?.() &&
+      isHarnessRunAlreadyDispatchedError(options.error)
+    ) {
+      this.stopRequestedBySession.set(options.sessionId, options.runtime.turnId);
+      await this.upsertSessionMeta(options.sessionId, {
+        dispatchPause: { turnId: options.runtime.turnId, state: 'paused' },
+      });
+    }
     if (options.userTurnId) {
       await this.markTurnFailed(options.sessionId, options.sessionDoc, options.userTurnId);
     }

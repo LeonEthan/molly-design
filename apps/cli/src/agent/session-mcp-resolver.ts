@@ -165,7 +165,6 @@ export const loadSessionMcpCatalog = async (
           _meta: {
             ...server._meta,
             mollyConnection: { id: entry.id, revision: entry.revision },
-            ...(entry.imageBinding ? { mollyImageBinding: entry.imageBinding } : {}),
           },
         });
       }

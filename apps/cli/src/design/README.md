@@ -67,38 +67,13 @@ removes its temporary file when the directory identity is unchanged. A failure a
 the paid request remains dispatched/unknown; asset-write idempotency is not permission
 to repeat generation. Decoder acceptance does not establish visual quality; late-result recovery remains open.
 
-`harness-image-import.ts` imports managed built-in and external MCP image results into the same draft.
-The private worker callback is restricted to an active Molly design run, selected
-revision-guarded MCP and a matching single-use native approval. SessionManager owns
-the live artwork/cwd lookup and frozen-turn resolution; requests have no destination
-field. The entire batch is preflighted before any publication, preserving image order.
-A byte-free `<operationId>.images.json` intent beside the existing operation journal
-records origin identity and expected hashes/dimensions. This minimal crash bridge is
-needed because filesystem publication and worker settlement are not atomic; it is
-neither an asset store nor proof that publication succeeded. Existing conflicting
-intents/files are preserved. Cancellation or import failure leaves the paid dispatch
-unknown and cannot authorize regeneration or a canvas commit.
-Managed built-in generation/editing requests inline bytes through private MCP metadata,
-deferring file publication until this service records its intent. It binds the frozen
-image connection revision separately from the built-in MCP contract revision. Legacy
-callers retain the earlier direct-publication path until their launchers are retired.
-External resource links are resolved by the producing MCP connection, under separate
-approval and child dispatch receipts within the original image operation. Only the
-resolved, validated bytes enter this importer; resource URIs never authorize host reads.
-
-`harness-image-recovery.ts` provides read-only local recovery through the design-only
-native `molly_recover_images` tool. Empty arguments list this Session/artwork's import
-intents; an opaque cursor continues the bounded page. Listing reads at most 100 small
-receipts and returns at most 20 entries, without resolving asset paths or claiming
-availability. An explicit operation ID resolves the original frozen turn directory
-and verifies regular no-follow files, exact bytes/digest/MIME/decoded dimensions, and
-media-directory identity. The result distinguishes verified assets from missing,
-changed or unsafe files. Recovery performs no filesystem writes, provider calls or
-paid-state settlement. Invalid/foreign receipts remain untouched and unlisted.
-Each request requires an exact single-use native approval and active run/epoch.
-It does not require the old MCP connection or credential, and cannot retrieve bytes
-never received locally. Earlier built-in assets without intents, remote/late retrieval and a dedicated
-human recovery UI remain open; a verified file is still not visual or canvas approval.
+All clients use the image MCP server's ordinary generate/edit path: validated bytes
+are saved in the owning draft's `media/` directory and the result contains paths,
+digest and dimensions. Pi reaches this server through unmodified `pi-mcp-adapter`.
+There is no image-specific adapter mapping, private inline-byte request, import
+callback, paid-operation journal or recovery tool. Existing files and historical
+operation records remain untouched; ordinary file tools can inspect saved assets.
+Design collection still independently validates assets and canonical CAS.
 
 Historical design readback uses the same context with the persisted Session's
 project/worktree metadata when no runtime Session is loaded. Read-only source and
@@ -213,27 +188,12 @@ source. Formal collection and exports remain independent.
 
 ## Pi image and rendering tools
 
-Embedded MCP tool calls allow 210 seconds to cover the existing 180-second image
-service deadline and delivery; cancellation remains active and paid calls are never
-retried automatically. Pi gives the SDK cancellation notification the
-same 30-second MCP delivery allowance before closing the isolated call client; a stalled send
-therefore cannot block Stop indefinitely. The MCP server propagates that native request signal
-through edit uploads and returned-image downloads, combines it with the HTTP deadline, and checks
-it before publishing the content-addressed asset. Molly no longer reads Kimi CLI
-configuration or sets its global MCP timeout. The independently configured embedded
-Kimi provider uses the same protected model and MCP paths as other embedded providers.
-Historical CLI timeout behavior is recorded in the
-deadline correction
-and server cancellation correction.
-
-Embedded MCP tools use the frozen, selected catalog and host approval through
-[`harness-pi`](../../../../packages/harness-pi/README.md). This replaces the retired
-`pi-mcp-extension`, including image/render tools, cancellation delivery and client
-cleanup. The shared cancellation transport remains in the harness package, with
-native SDK in-memory delivery and bounded-timeout tests. Image configuration/model
-and render-host availability remain daemon gates. The older
-implementation record
-is historical, not the current launch contract.
+The adapter's public `requestTimeoutMs` setting is 210 seconds, covering the
+image service's 180-second deadline and delivery. MCP cancellation and cleanup
+belong to the stock adapter. The server propagates its request signal through
+uploads/downloads and checks it before writing assets. A cancelled request can
+still have reached the provider; Molly never automatically repeats a paid request.
+Image configuration/model and render-host availability remain daemon gates.
 
 ## Design history
 

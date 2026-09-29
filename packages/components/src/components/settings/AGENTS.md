@@ -13,6 +13,8 @@ never roll the vault back over a possible concurrent rotation. New values replac
 the complete credential set. Clearing requires an explicit action; submission clears
 input fields and a failed save requires re-entry, not an implicit no-auth retry.
 Legacy history may retain plaintext. Saving does not attest authenticated execution.
+MCP tools use their native schemas; do not expose image-specific field mappings.
+Preserve historical catalog fields when editing unrelated values.
 
 ## Layout and components
 

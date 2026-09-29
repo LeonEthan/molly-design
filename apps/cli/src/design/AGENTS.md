@@ -32,11 +32,9 @@ Root and CLI instructions apply. `CLAUDE.md` links to this file.
 - Conflicts preserve drafts and durable diagnostics for explicit continuation.
   Never produce candidates, restart the Agent or require a finalize tool. Retain
   historical candidate readback and the independent manual save-copy escape.
-- Image import requires the owning active Molly run, selected MCP identity,
-  frozen image/catalog revision and single-use native approval. Resolve the draft from Session/frozen context;
-  import intents are recovery identity, not publication or canvas-commit evidence.
-- Local image recovery is read-only: verify owned receipts and original-turn files;
-  preserve unavailable results and paid state. Never regenerate or commit on recovery.
+- Image MCP tools save validated assets directly in the owning Session draft
+  and return paths. Standard file reads provide later access; assets do not
+  authorize canvas commits. Preserve historical assets and import records.
 - Flush human edits before execution and keep every instance read-only through
   artifact processing. Preparation must verify the saved current projection after
   flush, including recovery/re-dispatch; frozen input itself remains immutable.
@@ -52,13 +50,12 @@ See [runtime and files](README.md), the
 replacement decision,
 and the YAML turn/projection entry.
 
-Embedded Pi uses its host-approved reminder and frozen Molly MCP catalog; preserve
-native settlement, approval, cancellation and owned-client cleanup in `harness-pi`.
+Embedded Pi uses its host-approved reminder and selected MCP configuration; preserve
+native settlement and approval while unmodified `pi-mcp-adapter` owns MCP lifecycle.
 Keep external Agent shims, hooks and native config overlays retired; preserve user
 CLI installations, hook trust, configuration and history. Never implement image providers in the adapter.
 Image MCP client deadlines must cover the existing image-service deadline plus delivery;
-give SDK cancellation delivery its 30-second allowance before
-owned call-client cleanup; a stalled delivery then yields to transport close. Server
+use the adapter's public timeout setting and normal cancellation/cleanup. Server
 cancellation must reach image upload/download and guard the final asset write while remaining
 distinct from that deadline. Native CLI timeout settings are not embedded model settings.
 Do not retry paid requests automatically.

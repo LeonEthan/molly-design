@@ -125,6 +125,12 @@ the agent's advertised `http` capability at `newSession`. Awaiting the load betw
 `initialize` and `newSession` would put a remote sync — up to its 5s budget — on the
 critical path of every session establishment while the agent process sits idle.
 
+For embedded Molly, resolved server configuration is awaited before `newSession`.
+The private host pipe supplies selected MCP credentials once per Session/worker epoch;
+configuration failure fails startup. `pi-mcp-adapter` owns the resulting ordinary
+connections across turns. Catalog/credential revocation retires the worker. The
+per-turn MCP preparation RPC and image import/recovery callbacks are removed.
+
 ### Steer delivery classification
 
 The applied-waiter must wait for the steer request's own answer before giving up on the

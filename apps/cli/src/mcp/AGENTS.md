@@ -92,12 +92,11 @@ Parent instructions apply.
   bounded workspace files as ordered JSON data URLs; optional `background`/`output_format`
   pass through, refusing transparent JPEG before dispatch; DashScope tools omit and
   requests refuse unsupported options. Result URLs off the endpoint host download only from checked public addresses. Results are assets only, never artwork commits. Preserve upstream failures without automatic paid retries.
-  Return the private image receipt with dispatch/outcome facts and successful asset
-  digests; transport loss or post-response import failure is not proof of non-dispatch.
+  Return ordinary asset paths and metadata; transport loss or post-response publication
+  failure is not proof of non-dispatch.
   Decode admitted image bytes before upload/publication, with edge, total-frame pixel
   and time limits; preserve original encoding, never repair or resize. Publication uses
   a real media directory and exclusive writes, preserving colliding files. Import refusal
   after dispatch remains unknown, never retryable. Stage the pinned decoder per target.
-  Managed inline-result metadata defers publication to the owning host's image import
-  service; it grants no permission or destination authority. Legacy asset calls keep
-  their existing publication path until those launchers are retired.
+  Use this same file publication path for every MCP client; no private image-byte
+  metadata or second owning-host import callback.

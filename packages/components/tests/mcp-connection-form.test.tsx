@@ -77,33 +77,19 @@ async function change(field: HTMLInputElement, value: string) {
 }
 
 describe('protected MCP credential form', () => {
-  it('preserves, validates and explicitly removes public image bindings', async () => {
-    const imageBinding: WorkspaceMcpServerMeta['imageBinding'] = {
-      version: 1,
-      model: 'synthetic-image',
-      generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
-    };
-    const writes = await render({ ...stored, imageBinding });
+  it('edits a legacy mapped server using the ordinary connection fields', async () => {
+    const writes = await render({
+      ...stored,
+      imageBinding: {
+        version: 1,
+        model: 'synthetic-image',
+        generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
+      },
+    });
+    expect(host.querySelector('textarea[id$="-image-binding"]')).toBeNull();
     await submit();
-    expect(writes[0].imageBinding).toEqual(imageBinding);
-    const editor = host.querySelector<HTMLTextAreaElement>('textarea[id$="-image-binding"]')!;
-    const changeBinding = async (value: string) =>
-      act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
-          editor,
-          value
-        );
-        editor.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-    await changeBinding(JSON.stringify({ ...imageBinding, model: '' }));
-    expect(host.querySelector('button[type=submit]')).toHaveProperty('disabled', true);
-    await submit();
-    expect(writes).toHaveLength(1);
-    expect(host.textContent).toContain(en['settings.mcp.imageBinding.invalid']);
-    await changeBinding('');
-    await submit();
-    expect(writes[1]).not.toHaveProperty('imageBinding');
-    expect(writes[1].connection).toEqual(stored.connection);
+    expect(writes[0].connection).toEqual(stored.connection);
+    expect(writes[0]).not.toHaveProperty('imageBinding');
   });
   it('renders stored credentials empty and preserves only their reference on save', async () => {
     const writes = await render();

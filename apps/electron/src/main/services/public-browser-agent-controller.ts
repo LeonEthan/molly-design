@@ -160,7 +160,17 @@ export class PublicBrowserAgentController {
       if (!value?.url || !isWebUrl(value.url)) return false
       if (!isVerifiedAgentBrowserResponsePeer(value, classifyBrowserHostname)) {
         lease.networkError = 'The browser could not verify a public response peer.'
-        lease.contents.stop()
+        lease.ready = false
+        lease.verifiedDocuments.clear()
+        setImmediate(() => {
+          if (
+            !lease.disposed &&
+            !lease.contents.isDestroyed() &&
+            this.leases.get(lease.contents.id) === lease &&
+            lease.networkError
+          )
+            lease.contents.stop()
+        })
         return false
       }
       return true
@@ -362,7 +372,11 @@ export class PublicBrowserAgentController {
       await this.waitForVerifiedDocument(lease)
     }
     if (!lease.driver) throw new Error('Molly browser driver is unavailable.')
-    const response = await lease.driver.execute(command)
+    const response = await lease.driver.execute(command).catch((error: unknown) => {
+      this.assertSameLease(lease)
+      if (lease.networkError) this.assertReadable(lease)
+      throw error
+    })
     this.assertSameLease(lease)
     await this.waitForVerifiedDocument(lease)
     if (command.kind === 'save_image') {

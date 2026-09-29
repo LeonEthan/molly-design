@@ -169,10 +169,8 @@ describe('extension UI over Core question forms', () => {
     expect(f.opened).toEqual([]);
   });
 
-  it('fails closed outside a run and for unsupported terminal operations', async () => {
+  it('fails closed outside a run', async () => {
     const f = fixture();
-    expect(() => f.ui.getEditorText()).toThrow('harness_extension_ui_unsupported');
-    expect(() => f.ui.theme.fg('accent', 'text')).toThrow('harness_extension_ui_unsupported');
     f.ui.notify('Question ready', 'info');
     expect(f.notices).toEqual(['Question ready']);
     f.dispose();

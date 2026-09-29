@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type * as acp from '@agentclientprotocol/sdk';
-import { PROTOCOL_VERSION } from '@agentclientprotocol/sdk';
+import { PROTOCOL_VERSION, RequestError } from '@agentclientprotocol/sdk';
 import type { AgentSessionEvent } from '@earendil-works/pi-coding-agent';
 import { LODY_EXTENSION_METHODS, SessionUsageAccumulator } from 'acp-extension-core';
 import {
@@ -13,35 +13,25 @@ import {
   ModelSelectionSchema,
   type HarnessRunSnapshot,
   PI_ENGINE_VERSION,
-  MOLLY_BUILTIN_MCP_CONNECTION,
   MOLLY_PROVIDER_IDS,
-  MOLLY_PREPARE_MCP_METHOD,
-  HarnessMcpPreparationSchema,
+  HarnessMcpSessionSchema,
   McpCredentialBindingSchema,
-  McpImageBindingSchema,
   StoredMcpCredentialSchema,
   mcpCredentialMatchesServer,
-  type HarnessMcpPreparation,
-  HarnessImageImportRequestSchema,
-  HARNESS_INLINE_IMAGE_RESULT_META,
-  type HarnessImageImportRequest,
-  type HarnessImageImportResult,
+  type HarnessMcpSession,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
   SESSION_ATTACHMENTS_DIR_RELATIVE,
 } from '@molly/shared/embedded-harness';
+import { createMcpConfig, createMollyMcpExtension } from './mcp-extension';
 import { createMollySession, type CreateMollySessionInput } from './session-factory';
 import { NativeRunOutcome } from './run-outcome';
 import { RunJournal, type ApprovalRecord } from './run-journal';
 import { hashToolset, type ToolApproval } from './approved-tools';
 import { describeToolCall } from './tool-presentation';
-import { connectMcpBridge } from './mcp-bridge';
 import { classifyEscalation } from './auto-review-classifier';
 import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
-import { ToolOperationJournal } from './tool-operation-journal';
 import { z } from 'zod';
-import { resolveMcpContent } from './mcp-content';
-import { createImageRecoveryTool, type ImageRecoveryProvider } from './image-recovery-tool';
 import { createExtensionUI } from './extension-ui';
 import { QUESTION_EXTENSION_IDENTITY } from './question-extension';
 
@@ -55,14 +45,9 @@ export type RunCredentialProvider = (
   signal: AbortSignal
 ) => Promise<string>;
 export type McpCredentialProvider = (
-  preparation: HarnessMcpPreparation,
+  session: HarnessMcpSession,
   signal: AbortSignal
 ) => Promise<Array<ReturnType<typeof StoredMcpCredentialSchema.parse>>>;
-export type ImageImportProvider = (
-  request: HarnessImageImportRequest,
-  signal: AbortSignal
-) => Promise<HarnessImageImportResult>;
-
 /** One owned native context per worker. The daemon remains the only task dispatcher. */
 export class MollyAcpAdapter implements acp.Agent {
   private owned?: OwnedSession;
@@ -78,16 +63,11 @@ export class MollyAcpAdapter implements acp.Agent {
   private streamedText = false;
   private readonly journal: RunJournal;
   private readonly usage = new SessionUsageAccumulator();
-  private bridge?: Awaited<ReturnType<typeof connectMcpBridge>>;
   private toolsetHash: string;
   private pluginSetHash: string;
   private questionUI?: ReturnType<typeof createExtensionUI>;
-  private protectedServers: acp.McpServer[] = [];
-  private protectedBridge?: Awaited<ReturnType<typeof connectMcpBridge>>;
-  private bridgeOptions?: Parameters<typeof connectMcpBridge>[1];
-  private sessionInput?: CreateMollySessionInput;
-  private preparing?: AbortController;
-  private prepared?: HarnessMcpPreparation;
+  private readonly lifetime = new AbortController();
+  private mcpConnections: HarnessMcpSession['mcpConnections'] = [];
 
   constructor(
     private readonly peer: AcpPeer,
@@ -108,28 +88,8 @@ export class MollyAcpAdapter implements acp.Agent {
     private readonly approveMcp: ToolApproval = async () => false,
     private readonly mcpCredentialProvider: McpCredentialProvider = async () => {
       throw new Error('harness_mcp_credential_required');
-    },
-    private readonly importImages?: ImageImportProvider,
-    recoverImages?: ImageRecoveryProvider
-  ) {
-    if (recoverImages) {
-      if (input.tools.some((tool) => tool.name === 'molly_recover_images'))
-        throw new Error('harness_duplicate_tool');
-      this.input = {
-        ...input,
-        tools: [
-          ...input.tools,
-          createImageRecoveryTool({
-            approve: approveMcp,
-            recover: recoverImages,
-            current: () =>
-              this.running
-                ? { snapshot: this.running.snapshot, signal: this.running.controller.signal }
-                : undefined,
-          }),
-        ],
-      };
     }
+  ) {
     this.journal = new RunJournal(join(input.privateRoot, 'runs'));
     this.toolsetHash = input.toolsetHash;
     this.pluginSetHash = input.pluginSetHash;
@@ -315,179 +275,95 @@ export class MollyAcpAdapter implements acp.Agent {
     if (params.additionalDirectories?.length) throw new Error('harness_unbound_resources');
     if ((await realpath(params.cwd)) !== (await realpath(this.input.cwd)))
       throw new Error('harness_cwd_mismatch');
-    const operations = new ToolOperationJournal(join(this.input.privateRoot, 'operations'));
     if (
       params.mcpServers.length > 32 ||
       new Set(params.mcpServers.map((server) => server.name)).size !== params.mcpServers.length
     )
       throw new Error('harness_mcp_server_limit');
-    this.protectedServers = params.mcpServers.filter(
-      (server) => server._meta?.mollyMcpCredential !== undefined
-    );
-    for (const server of this.protectedServers) {
-      const binding = McpCredentialBindingSchema.parse(server._meta?.mollyMcpCredential);
-      const catalog = z
-        .object({ id: z.string() })
-        .passthrough()
-        .safeParse(server._meta?.mollyConnection);
+    this.mcpConnections = params.mcpServers.flatMap((server) => {
+      if (server._meta?.mollyMcpCredential === undefined) return [];
+      const binding = McpCredentialBindingSchema.parse(server._meta.mollyMcpCredential);
       if (
         binding.workspaceId !== this.input.workspaceId ||
-        !mcpCredentialMatchesServer(binding, server) ||
-        !catalog.success ||
-        catalog.data.id !== binding.serverId
+        !mcpCredentialMatchesServer(binding, server)
       )
         throw new Error('harness_mcp_binding_mismatch');
-    }
-    this.bridgeOptions = {
-      cwd: this.input.cwd,
-      approve: this.approveMcp,
-      imageImportAvailable: this.importImages !== undefined,
-      dispatch: async (
-        serverName,
-        toolCallId,
-        toolName,
-        args,
-        invoke,
-        boundImage,
-        authorization
-      ) => {
+      return [binding];
+    });
+    const credentials = this.mcpConnections.length
+      ? await this.mcpCredentialProvider(
+          HarnessMcpSessionSchema.parse({
+            version: 1,
+            runtimeEpoch: this.input.runtimeEpoch,
+            sessionId: this.input.productSessionId,
+            workspaceId: this.input.workspaceId,
+            mcpConnections: this.mcpConnections,
+          }),
+          this.lifetime.signal
+        )
+      : [];
+    this.lifetime.signal.throwIfAborted();
+    const extensions = params.mcpServers.length
+      ? [
+          createMollyMcpExtension(
+            createMcpConfig(params.mcpServers, this.input.cwd, credentials),
+            this.approveMcp
+          ),
+        ]
+      : [];
+    const sessionInput: CreateMollySessionInput = {
+      ...this.input,
+      extensions,
+      questionUI: this.questionUI?.ui,
+      onExtensionError: (owner) => {
+        if (this.owned?.extensionOwner !== owner) return;
+        const run = this.running;
+        if (run) {
+          run.extensionFailed = true;
+          run.controller.abort();
+        }
+      },
+      observeModelRequest: async (model) => {
         const run = this.running;
         if (!run || run.controller.signal.aborted) throw new Error('harness_run_retired');
-        const server = params.mcpServers.find((entry) => entry.name === serverName);
-        const binding = z
-          .object({ id: z.string().min(1), revision: z.number().int().positive() })
-          .strict()
-          .safeParse(server?._meta?.mollyConnection);
-        if (!binding.success) throw new Error('harness_mcp_connection_revision_required');
-        const isBuiltinImage =
-          binding.data.id === MOLLY_BUILTIN_MCP_CONNECTION.id &&
-          ['molly_generate_image', 'molly_edit_image'].includes(toolName);
-        const imageBinding = McpImageBindingSchema.safeParse(server?._meta?.mollyImageBinding);
-        const isExternalImage =
-          !isBuiltinImage &&
-          imageBinding.success &&
-          [imageBinding.data.generate?.tool, imageBinding.data.edit?.tool].includes(toolName);
-        const image = run.snapshot.imageConnection;
-        if (isBuiltinImage && !image) throw new Error('harness_image_connection_unavailable');
-        const importImages = this.importImages;
-        return await operations.dispatch(
-          {
-            snapshot: run.snapshot,
-            connectionId: isBuiltinImage ? image!.id : binding.data.id,
-            connectionRevision: isBuiltinImage ? image!.revision : binding.data.revision,
-            toolCallId,
-            toolName,
-            arguments: args,
-            ...(authorization ? { authorization } : {}),
-            builtinImage: isBuiltinImage,
-            externalImage: isExternalImage,
-            importImages:
-              ((isExternalImage && boundImage) || isBuiltinImage) && importImages
-                ? async (reply) => {
-                    run.controller.signal.throwIfAborted();
-                    const content = await resolveMcpContent(reply, async () => {
-                      throw new Error('harness_mcp_image_resource_import_unavailable');
-                    });
-                    const request = HarnessImageImportRequestSchema.parse({
-                      version: 1,
-                      runId: run.snapshot.runId,
-                      runtimeEpoch: run.snapshot.runtimeEpoch,
-                      productSessionId: run.snapshot.sessionId,
-                      turnId: run.snapshot.turnId,
-                      connectionId: isBuiltinImage ? image!.id : binding.data.id,
-                      connectionRevision: isBuiltinImage ? image!.revision : binding.data.revision,
-                      serverName,
-                      toolName,
-                      toolCallId,
-                      requestDigest: createHash('sha256')
-                        .update(JSON.stringify(args))
-                        .digest('hex'),
-                      images: content
-                        .filter((part) => part.type === 'image')
-                        .map((part) => ({ mimeType: part.mimeType, data: part.data })),
-                    });
-                    const imported = await importImages(request, run.controller.signal);
-                    run.controller.signal.throwIfAborted();
-                    return imported;
-                  }
-                : undefined,
-          },
-          async (context) => {
-            run.controller.signal.throwIfAborted();
-            return invoke({
-              ...context,
-              ...(isBuiltinImage && importImages
-                ? { metadata: { [HARNESS_INLINE_IMAGE_RESULT_META]: 1 } }
-                : {}),
-            });
-          }
-        );
+        if (
+          model.id !== run.snapshot.selection.modelId ||
+          model.provider !== MOLLY_PROVIDER_IDS[run.snapshot.connection.providerPresetId]
+        )
+          throw new Error('harness_model_dispatch_mismatch');
+        const id = randomUUID();
+        const { runId, runtimeEpoch } = run.snapshot;
+        await this.journal.modelRequest(runId, runtimeEpoch, { id, state: 'dispatched' });
+        return async (message) => {
+          const succeeded =
+            message && !['error', 'aborted', 'pending'].includes(message.stopReason);
+          await this.journal.modelRequest(runId, runtimeEpoch, {
+            id,
+            state: succeeded ? 'succeeded' : 'outcome_unknown',
+            // Error placeholders contain zeroes, not measured free requests.
+            ...(succeeded &&
+            (run.snapshot.connection.providerPresetId !== 'openai-compatible' ||
+              (run.snapshot.connection.customModels?.find((entry) => entry.modelId === model.id)
+                ?.usageInStreaming === true &&
+                message.usage.totalTokens > 0))
+              ? {
+                  usage: {
+                    inputTokens: message.usage.input,
+                    outputTokens: message.usage.output,
+                    cacheReadInputTokens: message.usage.cacheRead,
+                    cacheCreationInputTokens: message.usage.cacheWrite,
+                  },
+                }
+              : {}),
+          });
+        };
       },
     };
-    this.bridge = await connectMcpBridge(
-      params.mcpServers.filter((server) => !this.protectedServers.includes(server)),
-      this.bridgeOptions
-    );
-    const tools = [...this.input.tools, ...this.bridge.tools];
-    this.toolsetHash = hashToolset(tools);
-    try {
-      this.sessionInput = {
-        ...this.input,
-        tools,
-        questionUI: this.questionUI?.ui,
-        onExtensionError: (owner) => {
-          if (this.owned?.extensionOwner !== owner) return;
-          const run = this.running;
-          if (run) {
-            run.extensionFailed = true;
-            run.controller.abort();
-          }
-        },
-        observeModelRequest: async (model) => {
-          const run = this.running;
-          if (!run || run.controller.signal.aborted) throw new Error('harness_run_retired');
-          if (
-            model.id !== run.snapshot.selection.modelId ||
-            model.provider !== MOLLY_PROVIDER_IDS[run.snapshot.connection.providerPresetId]
-          )
-            throw new Error('harness_model_dispatch_mismatch');
-          const id = randomUUID();
-          const { runId, runtimeEpoch } = run.snapshot;
-          await this.journal.modelRequest(runId, runtimeEpoch, { id, state: 'dispatched' });
-          return async (message) => {
-            const succeeded =
-              message && !['error', 'aborted', 'pending'].includes(message.stopReason);
-            await this.journal.modelRequest(runId, runtimeEpoch, {
-              id,
-              state: succeeded ? 'succeeded' : 'outcome_unknown',
-              // Error placeholders contain zeroes, not measured free requests.
-              ...(succeeded &&
-              (run.snapshot.connection.providerPresetId !== 'openai-compatible' ||
-                (run.snapshot.connection.customModels?.find((entry) => entry.modelId === model.id)
-                  ?.usageInStreaming === true &&
-                  message.usage.totalTokens > 0))
-                ? {
-                    usage: {
-                      inputTokens: message.usage.input,
-                      outputTokens: message.usage.output,
-                      cacheReadInputTokens: message.usage.cacheRead,
-                      cacheCreationInputTokens: message.usage.cacheWrite,
-                    },
-                  }
-                : {}),
-            });
-          };
-        },
-      };
-      this.owned = await this.createSession(this.sessionInput);
-      this.toolsetHash = hashToolset(this.owned.tools);
-    } catch (error) {
-      await this.bridge.close();
-      throw error;
-    }
+    this.owned = await this.createSession(sessionInput);
+    this.toolsetHash = hashToolset(this.owned.tools);
     if (this.closed) {
+      await this.owned.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' });
       this.owned.session.dispose();
-      await this.bridge.close();
       throw new Error('harness_worker_closed');
     }
     return {
@@ -511,119 +387,10 @@ export class MollyAcpAdapter implements acp.Agent {
     return this.owned;
   }
 
-  private async replaceTools(tools: CreateMollySessionInput['tools']): Promise<void> {
-    if (!this.owned || !this.sessionInput) throw new Error('harness_session_unavailable');
-    const nativeSessionId = this.owned.manager.getSessionId();
-    const nativeSessionFile = this.owned.manager.getSessionFile();
-    this.owned.session.dispose();
-    this.owned = await this.createSession({
-      ...this.sessionInput,
-      tools,
-      nativeSessionId,
-      nativeSessionFile,
-    });
-    this.toolsetHash = hashToolset(this.owned.tools);
-  }
-
-  async extMethod(
-    method: string,
-    params: Record<string, unknown>
-  ): Promise<Record<string, unknown>> {
-    if (method !== MOLLY_PREPARE_MCP_METHOD) throw new Error('harness_method_unsupported');
-    const request = z
-      .object({ sessionId: z.string(), preparation: HarnessMcpPreparationSchema })
-      .strict()
-      .safeParse(params);
-    if (!request.success) throw new Error('harness_mcp_preparation_invalid');
-    const { preparation } = request.data;
-    this.assertSession(request.data.sessionId);
-    if (
-      this.running ||
-      this.preparing ||
-      this.prepared ||
-      !this.bridge ||
-      !this.bridgeOptions ||
-      !this.protectedServers.length
-    )
-      throw new Error('harness_mcp_preparation_unavailable');
-    if (
-      preparation.runtimeEpoch !== this.input.runtimeEpoch ||
-      preparation.sessionId !== this.input.productSessionId ||
-      preparation.workspaceId !== this.input.workspaceId ||
-      JSON.stringify(preparation.connection) !==
-        JSON.stringify(ModelConnectionSchema.parse(this.input.connection)) ||
-      JSON.stringify(preparation.mcpConnections) !==
-        JSON.stringify(
-          this.protectedServers.map((server) =>
-            McpCredentialBindingSchema.parse(server._meta?.mollyMcpCredential)
-          )
-        )
-    )
-      throw new Error('harness_mcp_preparation_mismatch');
-    const controller = new AbortController();
-    this.preparing = controller;
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(55_000)]);
-    try {
-      // Existing, corrupt or inaccessible dispatch receipts must not permit another attempt.
-      let dispatched = true;
-      try {
-        await this.journal.read(preparation.runId);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') dispatched = false;
-        else throw error;
-      }
-      if (dispatched) throw new Error('harness_run_replayed');
-      const credentials = await this.mcpCredentialProvider(preparation, signal);
-      signal.throwIfAborted();
-      const parsed = z.array(StoredMcpCredentialSchema).safeParse(credentials);
-      if (
-        !parsed.success ||
-        JSON.stringify(parsed.data.map((entry) => entry.connection)) !==
-          JSON.stringify(preparation.mcpConnections)
-      )
-        throw new Error('harness_mcp_credential_mismatch');
-      this.protectedBridge = await connectMcpBridge(this.protectedServers, {
-        ...this.bridgeOptions,
-        credentials: parsed.data,
-        signal,
-      });
-      signal.throwIfAborted();
-      await this.replaceTools([
-        ...this.input.tools,
-        ...this.bridge.tools,
-        ...this.protectedBridge.tools,
-      ]);
-      signal.throwIfAborted();
-      this.prepared = preparation;
-      return {
-        version: 1,
-        runtimeEpoch: this.input.runtimeEpoch,
-        harness: this.input.harness,
-        toolsetHash: this.toolsetHash,
-        pluginSetHash: this.pluginSetHash,
-        nativeSessionFile: await realpath(this.owned!.manager.getSessionFile()!),
-      };
-    } catch {
-      await this.protectedBridge?.close();
-      this.protectedBridge = undefined;
-      this.closed = true;
-      this.owned?.session.dispose();
-      throw new Error('harness_mcp_preparation_failed');
-    } finally {
-      this.preparing = undefined;
-    }
-  }
-
   private validateSnapshot(input: unknown): HarnessRunSnapshot {
     const snapshot = HarnessRunSnapshotSchema.parse(input);
     if (
-      this.preparing ||
-      (this.protectedServers.length > 0 &&
-        (!this.prepared ||
-          snapshot.runId !== this.prepared.runId ||
-          snapshot.turnId !== this.prepared.turnId)) ||
-      JSON.stringify(snapshot.mcpConnections ?? []) !==
-        JSON.stringify(this.prepared?.mcpConnections ?? []) ||
+      JSON.stringify(snapshot.mcpConnections ?? []) !== JSON.stringify(this.mcpConnections) ||
       snapshot.runtimeEpoch !== this.input.runtimeEpoch ||
       JSON.stringify(snapshot.harness) !==
         JSON.stringify(HarnessIdentitySchema.parse(this.input.harness)) ||
@@ -703,7 +470,23 @@ export class MollyAcpAdapter implements acp.Agent {
           });
     });
     try {
-      await this.journal.begin(snapshot);
+      try {
+        await this.journal.begin(snapshot);
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !('code' in error) ||
+          error.code !== 'EEXIST' ||
+          !('syscall' in error) ||
+          error.syscall !== 'open'
+        )
+          throw error;
+        throw new RequestError(-32603, 'Previous task execution could not be resumed.', {
+          code: 'harness_run_already_dispatched',
+          details:
+            'The previous task was already dispatched and will not be run again automatically. Its conversation and files are preserved. Queued inputs remain paused until you choose Continue.',
+        });
+      }
       // After the durable fence, even an empty/failed response must never replay this run.
       try {
         if (!tracker.isCancelled) {
@@ -745,13 +528,6 @@ export class MollyAcpAdapter implements acp.Agent {
       unsubscribe();
       await owned.runtime.removeRuntimeApiKey(owned.providerId).catch(() => undefined);
       this.running = undefined;
-      if (this.protectedBridge) {
-        await this.protectedBridge.close();
-        this.protectedBridge = undefined;
-        this.prepared = undefined;
-        if (!this.closed)
-          await this.replaceTools([...this.input.tools, ...(this.bridge?.tools ?? [])]);
-      }
     }
   }
 
@@ -810,7 +586,6 @@ export class MollyAcpAdapter implements acp.Agent {
 
   async cancel(params: acp.CancelNotification): Promise<void> {
     const owned = this.assertSession(params.sessionId);
-    this.preparing?.abort();
     this.running?.tracker.cancel();
     this.running?.controller.abort();
     await owned.session.abort();
@@ -818,13 +593,12 @@ export class MollyAcpAdapter implements acp.Agent {
 
   async dispose(): Promise<void> {
     this.closed = true;
-    this.preparing?.abort();
+    this.lifetime.abort();
     this.running?.tracker.cancel();
     this.running?.controller.abort();
     this.questionUI?.dispose();
     await this.owned?.session.abort();
+    await this.owned?.session.extensionRunner.emit({ type: 'session_shutdown', reason: 'quit' });
     this.owned?.session.dispose();
-    await this.bridge?.close();
-    await this.protectedBridge?.close();
   }
 }

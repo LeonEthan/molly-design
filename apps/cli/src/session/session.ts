@@ -161,8 +161,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
     return this.embeddedControl.prompt({
       turnId,
       signal,
-      prepareMcp: (preparation, preparationSignal) =>
-        client.prepareEmbeddedMcp(sessionId, preparation, preparationSignal),
       prompt: async (snapshot) => {
         const response = await client.prompt(sessionId, prompt, {
           signal,
@@ -584,8 +582,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         readBeforeEditReminder: callbacks.designHooks
           ? DESIGN_READ_BEFORE_EDIT_REMINDER
           : undefined,
-        designImageImport: callbacks.importHarnessImages !== undefined,
-        designImageRecovery: callbacks.recoverHarnessImages !== undefined,
         selection: ModelSelectionSchema.parse(this.config.modelSelection),
         permissionProfileId: callbacks.designHooks ? 'browse-task-v1' : 'ask-every-tool-v1',
         privateDataRoots: [getMollyDataDir()],
@@ -737,8 +733,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       let acpSessionId: ACPSessionId;
       let acpCapabilities: AcpCapabilitiesResult;
       const embeddedControl = embeddedConfig ? this.embeddedControl : undefined;
-      const importHarnessImages = callbacks.importHarnessImages;
-      const recoverHarnessImages = callbacks.recoverHarnessImages;
       try {
         const started = await createAcpClient({
           designHookLaunchId: this.designHookLaunchId,
@@ -772,15 +766,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           onMcpServersResolved: embeddedControl
             ? (servers) => embeddedControl.configureMcp(servers)
             : undefined,
-          onHarnessImageImport:
-            embeddedControl && importHarnessImages
-              ? (request) => embeddedControl.importImages(request, importHarnessImages)
-              : undefined,
-          isAutoReviewRun: embeddedControl ? () => embeddedControl.autoReviewActive() : undefined,
-          onHarnessImageRecovery:
-            embeddedControl && recoverHarnessImages
-              ? (request) => embeddedControl.recoverImages(request, recoverHarnessImages)
-              : undefined,
           onMcpCatalogInvalidated: embeddedControl
             ? () => {
                 void embeddedControl.invalidate().catch(() => {

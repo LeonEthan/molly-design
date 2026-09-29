@@ -139,7 +139,7 @@ current behavior.
 - The harness ends a run on a dispatched image failure or tool error
   ([acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)); unknown MCP
   delivery also ends it
-  ([tool-operation-journal.ts](../../../../packages/harness-pi/src/tool-operation-journal.ts)).
+  ([tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)).
 - Design runs prompt for every tool call except browser calls on granted sites
   ([worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)); Molly wraps
   its own tools with host approval
@@ -383,8 +383,8 @@ The following corrections and checks are complete:
   render failures map to `harness_render_failed`. Unknown, external and transport
   errors retain the generic error. Unit tests and an end-to-end MCP chain verify
   this boundary; it exposes no raw diagnostic payload and does not replay calls.
-  See [MCP bridge](../../../../packages/harness-pi/src/mcp-bridge.ts) and its
-  [tests](../../../../packages/harness-pi/tests/mcp-bridge.test.ts).
+  See [MCP bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) and its
+  [tests](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/tests/mcp-bridge.test.ts).
 - **Native reproduction.** A separate real `renderSavedDesign` call on the
   original artwork failed with `Font failed to load`; the compatible copy
   rendered a complete 1024 × 1536 PNG successfully.

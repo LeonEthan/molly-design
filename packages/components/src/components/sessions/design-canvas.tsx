@@ -158,6 +158,7 @@ export function DesignCanvas({
   // the main process and reuse the same key without collision.
   const hostId = sessionId;
   const [error, setError] = useState('');
+  const [attachmentError, setAttachmentError] = useState('');
   const [busy, setBusy] = useState(false);
   const create = useDesignCreation(workspaceSlug);
   const [focused, setFocused] = useState(false);
@@ -338,6 +339,7 @@ export function DesignCanvas({
               await service.attachPreview(hostId, { x, y, width, height });
             } else {
               await service.attach(artworkId, { x, y, width, height }, hostId);
+              if (disposed || !ownsAttachment()) return;
               await service.presentToolbar(artworkId, hostId, {
                 dark: document.documentElement.classList.contains('dark'),
                 actionsEnabled: !!onReferenceSelection,
@@ -386,10 +388,11 @@ export function DesignCanvas({
                 ),
               });
             }
+            if (!disposed && ownsAttachment()) setAttachmentError('');
           }
         })
         .catch((e) => {
-          if (!disposed) setError(String(e));
+          if (!disposed && ownsAttachment()) setAttachmentError(String(e));
         });
     };
     const resize = new ResizeObserver(update);
@@ -807,12 +810,12 @@ export function DesignCanvas({
           {automaticError}
         </p>
       )}
-      {error && (
+      {(error || attachmentError) && (
         <p
           role="alert"
           className="mx-3 mt-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm leading-relaxed text-destructive"
         >
-          {error}
+          {error || attachmentError}
         </p>
       )}
       <div ref={host} className="min-h-0 flex-1" aria-label={t('design.canvas', 'Design canvas')} />

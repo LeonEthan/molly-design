@@ -70,10 +70,19 @@ partitions live for the process lifetime, so clean partitions are reused through
 exclusive leases with fresh origins, after native destruction and request drainage.
 Cleanup failure quarantines the partition; simultaneous editors/previews/exports
 never share a lease. Hidden editors retain their original contents and lease.
+Each lease clears its document protocol callback during disposal, so a native
+callback retained after unregistering cannot keep the editor or artwork alive.
 The focused regression is `pnpm --filter @molly/e2e canvas:resources`.
 Remaining process-memory trends need allocation and lifetime evidence: Chromium
 also retains bounded storage caches and delayed frame resources; a post-GC
 private-memory increase alone does not establish another canvas leak.
+
+Canvas attachments share the pending document and product-API readiness promise,
+including attachments arriving after the native view record is published.
+Overlapping viewport fits follow the newest dimensions and release obsolete
+layout waiters. Current attachment success clears only its own UI error; save
+and synchronization errors remain independent. See the
+[attachment regression](../../.agents/notes/implemented/bug-fix/2026-09-28-canvas-attachment-readiness.md).
 
 For installed-package verification, copy the application from its DMG into a
 private test location. Set both `MOLLY_DATA_DIR` and
@@ -123,7 +132,28 @@ reads back Electron's encrypted-cookie fuse before signing. See the
 [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
 for the current setup and support limits.
 
+DNS results and response peers use the same IP normalization before public-address
+classification. This accepts Chromium's bracketed IPv6 representation while still
+rejecting malformed addresses and IPv4-mapped local/private addresses. Cache and
+service-worker responses remain unverifiable.
+If a browser operation fails after a known network denial, the controller reports
+that denial instead of the driver's generic loading or transport error. Revoked
+leases still report lost control, and ordinary navigation timeouts retain their
+loading message.
+
+An unverified browser response immediately blocks Agent reads and invalidates the
+verified document. Native loading is stopped on the next event-loop turn, only
+while the same lease still owns the live page and remains blocked. Calling
+`webContents.stop()` inside a debugger response callback can re-enter Chromium's
+navigation stack and crash Electron 39.5.1.
+
 ## Browser driver compatibility probe
+
+`node apps/electron/scripts/browser-response-guard-probe.mjs` runs the native
+response-rejection regression against the product controller using an isolated
+profile and a held loopback response. It checks immediate read denial, navigation
+cancellation, and deferred-stop ownership after revocation, replacement, page
+destruction or a new navigation. No model or public website is contacted.
 
 `node apps/electron/scripts/browser-mcp-probe.mjs [output-directory]` (from the
 repository root) runs the isolated Playwright MCP / VS Code adapter probe.

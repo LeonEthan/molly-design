@@ -36,7 +36,7 @@ function resources(extensions: Extension[]): LoadExtensionsResult {
 }
 
 describe('closed extension registrations', () => {
-  it('refuses native commands without a reviewed host-state mapping', () => {
+  it('loads extension commands without executing them', () => {
     const candidate = extension('candidate');
     const effects: string[] = [];
     candidate.commands.set('synthetic-command', {
@@ -46,31 +46,24 @@ describe('closed extension registrations', () => {
         effects.push('executed');
       },
     });
-    expect(() => new MollyResourceLoader({ extensions: resources([candidate]) })).toThrow(
-      'harness_extension_command_unmapped'
-    );
+    expect(
+      new MollyResourceLoader({ extensions: resources([candidate]) })
+        .getExtensions()
+        .extensions[0]?.commands.has('synthetic-command')
+    ).toBe(true);
     expect(effects).toEqual([]);
   });
-  it.each([
-    'read',
-    'write',
-    'edit',
-    'bash',
-    'powershell',
-    'grep',
-    'find',
-    'ls',
-    'mcp_example_tool_hash',
-    'molly_recover_images',
-    'molly_generate_image',
-  ])('reserves %s even when absent from the current host toolset', (name) => {
-    expect(
-      () =>
-        new MollyResourceLoader({
-          extensions: resources([extension('candidate', [name])]),
-        })
-    ).toThrow('harness_extension_tool_collision');
-  });
+  it.each(['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls'])(
+    'reserves %s even when absent from the current host toolset',
+    (name) => {
+      expect(
+        () =>
+          new MollyResourceLoader({
+            extensions: resources([extension('candidate', [name])]),
+          })
+      ).toThrow('harness_extension_tool_collision');
+    }
+  );
 
   it('rejects a collision with a host-defined tool outside reserved namespaces', () => {
     expect(

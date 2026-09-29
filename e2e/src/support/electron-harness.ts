@@ -269,6 +269,7 @@ export class ElectronHarness {
         ...(installedExecutable ? [] : [ELECTRON_DIR]),
         `--user-data-dir=${electronUserDataDir}`,
         '--lang=en-US',
+        ...(process.platform === 'darwin' ? ['-ApplePersistenceIgnoreState', 'YES'] : []),
       ],
       cwd: installedExecutable ? dirname(resolve(installedExecutable)) : ELECTRON_DIR,
       env,

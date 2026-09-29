@@ -21,7 +21,13 @@ public site, take a snapshot, and use the snapshot's current element references
 for clicks, typing, and selected-image saves (for example, `ref: "e5"`).
 References come from Playwright MCP, not CSS selectors. Observe again after
 navigation or a page change; if a reference is stale, take a new snapshot. Use screenshots
-when layout or image appearance matters.
+when layout or image appearance matters. Browser screenshots are inline tool
+images for your inspection; they do not supply saved workspace files. When the
+user asks to see a reference, share its inspected source-page URL or save the
+selected image with `save_image` and use its returned file path. Include a local
+image in your reply only after a successful save or file read confirms that exact
+path exists. If only the screenshot was inspected, report that observation and
+link the page instead of presenting a guessed screenshot filename.
 If the page is still loading, observe again after it settles. If the document
 cannot be verified, navigate to its current approved URL again; do not keep
 repeating snapshots. A blocked network response cannot be bypassed.

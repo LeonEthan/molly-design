@@ -2,7 +2,6 @@ import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { McpConnectionSpec, McpTransport, WorkspaceMcpServerMeta } from '@molly/shared';
-import { McpImageBindingSchema, type McpImageBinding } from '@molly/shared';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import {
   MCP_TRANSPORT_SHORT_LABELS,
@@ -32,7 +31,6 @@ type McpConnectionFormDraft = {
   bearerToken: string;
   headers: KeyValueDraft[];
   protectedCredentials?: McpConnectionSpec['protectedCredentials'];
-  imageBindingJson: string;
 };
 
 export type McpConnectionFormValue = {
@@ -41,7 +39,6 @@ export type McpConnectionFormValue = {
   transport: McpTransport;
   enabledByDefault: boolean;
   connection?: McpConnectionSpec;
-  imageBinding?: McpImageBinding;
 };
 
 const emptyConnectionFields = (transport: McpTransport) => ({
@@ -64,7 +61,6 @@ const createMcpConnectionFormDraft = (entry?: WorkspaceMcpServerMeta): McpConnec
     enabledByDefault: entry?.enabledByDefault ?? false,
     ...emptyConnectionFields(transport),
     protectedCredentials: connection?.protectedCredentials,
-    imageBindingJson: entry?.imageBinding ? JSON.stringify(entry.imageBinding, null, 2) : '',
     ...(connection?.transport === 'stdio'
       ? {
           command: connection.command,
@@ -159,16 +155,6 @@ export function McpConnectionForm({
   const fieldId = useId();
   const [draft, setDraft] = useState(() => createMcpConnectionFormDraft(initialEntry));
   const [needsCredentialReentry, setNeedsCredentialReentry] = useState(false);
-  let imageBinding: McpImageBinding | undefined;
-  let imageBindingInvalid = false;
-  if (draft.imageBindingJson.trim()) {
-    try {
-      if (draft.imageBindingJson.length > 8192) throw new Error();
-      imageBinding = McpImageBindingSchema.parse(JSON.parse(draft.imageBindingJson));
-    } catch {
-      imageBindingInvalid = true;
-    }
-  }
   const hasCredentialInput = Boolean(
     draft.bearerToken ||
     draft.headers.some((row) => row.key.trim()) ||
@@ -182,16 +168,13 @@ export function McpConnectionForm({
       transport,
       ...emptyConnectionFields(transport),
       protectedCredentials: current.protectedCredentials,
-      imageBindingJson: current.imageBindingJson,
     }));
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (submitting || imageBindingInvalid || (needsCredentialReentry && !hasCredentialInput))
-      return;
+    if (submitting || (needsCredentialReentry && !hasCredentialInput)) return;
     void onSubmit({
       ...buildMcpConnectionFormValue(draft),
-      ...(imageBinding ? { imageBinding } : {}),
     });
     setNeedsCredentialReentry(hasCredentialInput);
     setDraft((current) => ({ ...current, bearerToken: '', headers: [], env: [] }));
@@ -353,33 +336,6 @@ export function McpConnectionForm({
           )}
         </Section>
 
-        <Section
-          title={t('settings.mcp.imageBinding.title')}
-          hint={t('settings.mcp.imageBinding.hint')}
-        >
-          <Field htmlFor={`${fieldId}-image-binding`} label={t('settings.mcp.imageBinding.fields')}>
-            <Textarea
-              id={`${fieldId}-image-binding`}
-              rows={6}
-              maxLength={8192}
-              spellCheck={false}
-              className="font-mono text-xs"
-              value={draft.imageBindingJson}
-              placeholder={
-                '{"version":1,"model":"your-image-model","generate":{"tool":"generate","fields":{"prompt":"prompt","model":"model"}}}'
-              }
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, imageBindingJson: event.target.value }))
-              }
-            />
-          </Field>
-          {imageBindingInvalid ? (
-            <p role="alert" className="text-xs text-destructive">
-              {t('settings.mcp.imageBinding.invalid')}
-            </p>
-          ) : null}
-        </Section>
-
         <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-4">
           <div className="min-w-0">
             <Label htmlFor={`${fieldId}-default`} className="text-sm">
@@ -422,7 +378,6 @@ export function McpConnectionForm({
           size="sm"
           disabled={
             submitting ||
-            imageBindingInvalid ||
             draft.name.trim().length === 0 ||
             (needsCredentialReentry && !hasCredentialInput)
           }

@@ -8,20 +8,10 @@ import {
   ModelSelectionSchema,
   type HarnessSessionBinding,
   McpCredentialBindingSchema,
-  HarnessMcpPreparationSchema,
+  HarnessMcpSessionSchema,
   mcpCredentialMatchesServer,
   type McpCredentialBinding,
-  type HarnessMcpPreparation,
-  HarnessImageImportRequestSchema,
-  McpImageBindingSchema,
-  MOLLY_BUILTIN_MCP_CONNECTION,
-  type HarnessImageImportRequest,
-  type HarnessImageImportResult,
-  HarnessImageRecoveryRequestSchema,
-  type HarnessImageRecoveryRequest,
-  type HarnessImageRecoveryResult,
   MOLLY_RUN_PERMISSION_MODE,
-  type MollyPermissionMode,
 } from '@molly/shared/embedded-harness';
 import {
   WorkerConfigSchema,
@@ -33,13 +23,13 @@ import type { HarnessCredentialBroker } from './harness-credential-broker';
 
 /** Host half of the inherited private pipe. Never forwards grants over ACP or logs them. */
 export class EmbeddedHarnessControl {
+  private readonly lifetime = new AbortController();
+  private mcpLease?: ReturnType<HarnessCredentialBroker['acquireMcp']>;
   private binding?: HarnessSessionBinding;
   private retired = false;
   private busy = false;
   private mcpConnections: McpCredentialBinding[] = [];
   private activeController?: AbortController;
-  private activeRun?: { runId: string; turnId: string; permissionMode?: MollyPermissionMode };
-  private selectedMcp: readonly McpServer[] = [];
   private stopPromise?: Promise<void>;
   private stopOnce(): Promise<void> {
     return (this.stopPromise ??= this.stop());
@@ -56,9 +46,17 @@ export class EmbeddedHarnessControl {
     // A rejected/closed child pipe must be handled without logging its payload.
     pipe.on('error', () => {
       this.retired = true;
+      this.lifetime.abort();
+      this.mcpLease?.release();
+      this.activeController?.abort();
+      void this.stopOnce().catch(() => undefined);
     });
     pipe.on('close', () => {
       this.retired = true;
+      this.lifetime.abort();
+      this.mcpLease?.release();
+      this.activeController?.abort();
+      void this.stopOnce().catch(() => undefined);
     });
   }
 
@@ -80,9 +78,8 @@ export class EmbeddedHarnessControl {
     return this.write(this.config);
   }
 
-  configureMcp(servers: readonly McpServer[]): void {
+  async configureMcp(servers: readonly McpServer[]): Promise<void> {
     if (this.busy || this.binding) throw new Error('harness_mcp_already_bound');
-    this.selectedMcp = structuredClone(servers);
     this.mcpConnections = servers.flatMap((server) => {
       const metadata = server._meta?.mollyMcpCredential;
       if (metadata === undefined) return [];
@@ -99,99 +96,43 @@ export class EmbeddedHarnessControl {
         throw new Error('harness_mcp_binding_mismatch');
       return [binding];
     });
-  }
-
-  async importImages(
-    raw: HarnessImageImportRequest,
-    receive: (
-      request: HarnessImageImportRequest,
-      signal: AbortSignal
-    ) => Promise<HarnessImageImportResult>
-  ): Promise<HarnessImageImportResult> {
-    const request = HarnessImageImportRequestSchema.parse(raw);
-    const run = this.activeRun;
-    const controller = this.activeController;
-    const server = this.selectedMcp.find((entry) => entry.name === request.serverName);
-    const image = McpImageBindingSchema.safeParse(server?._meta?.mollyImageBinding);
-    const catalog = server?._meta?.mollyConnection;
-    const builtin =
-      catalog &&
-      typeof catalog === 'object' &&
-      'id' in catalog &&
-      'revision' in catalog &&
-      catalog.id === MOLLY_BUILTIN_MCP_CONNECTION.id &&
-      catalog.revision === MOLLY_BUILTIN_MCP_CONNECTION.revision;
-    const ownsImage = builtin
-      ? this.imageConnection?.id === request.connectionId &&
-        this.imageConnection.revision === request.connectionRevision &&
-        JSON.stringify(this.imageConnection) === JSON.stringify(this.broker.imageCatalog()) &&
-        ['molly_generate_image', 'molly_edit_image'].includes(request.toolName)
-      : catalog &&
-        typeof catalog === 'object' &&
-        'id' in catalog &&
-        'revision' in catalog &&
-        catalog.id === request.connectionId &&
-        catalog.revision === request.connectionRevision &&
-        image.success &&
-        [image.data.generate?.tool, image.data.edit?.tool].includes(request.toolName);
-    if (
-      !this.config.designImageImport ||
-      this.retired ||
-      !this.busy ||
-      !run ||
-      !controller ||
-      controller.signal.aborted ||
-      request.runId !== run.runId ||
-      request.turnId !== run.turnId ||
-      request.runtimeEpoch !== this.config.runtimeEpoch ||
-      request.productSessionId !== this.config.productSessionId ||
-      !ownsImage
-    )
-      throw new Error('harness_image_import_not_owned');
-    const result = await receive(request, controller.signal);
-    controller.signal.throwIfAborted();
-    if (this.retired || this.activeRun !== run) throw new Error('harness_image_import_not_owned');
-    return result;
-  }
-
-  async recoverImages(
-    raw: HarnessImageRecoveryRequest,
-    receive: (
-      request: HarnessImageRecoveryRequest,
-      signal: AbortSignal
-    ) => Promise<HarnessImageRecoveryResult>
-  ): Promise<HarnessImageRecoveryResult> {
-    const request = HarnessImageRecoveryRequestSchema.parse(raw);
-    const run = this.activeRun;
-    const controller = this.activeController;
-    if (
-      !this.config.designImageRecovery ||
-      this.retired ||
-      !this.busy ||
-      !run ||
-      !controller ||
-      controller.signal.aborted ||
-      request.runId !== run.runId ||
-      request.turnId !== run.turnId ||
-      request.runtimeEpoch !== this.config.runtimeEpoch ||
-      request.productSessionId !== this.config.productSessionId
-    )
-      throw new Error('harness_image_recovery_not_owned');
-    const result = await receive(request, controller.signal);
-    controller.signal.throwIfAborted();
-    if (this.retired || this.activeRun !== run) throw new Error('harness_image_recovery_not_owned');
-    return result;
-  }
-
-  /** Auto-review runs approve image and recovery calls in the worker, without a host prompt. */
-  autoReviewActive(): boolean {
-    return !this.retired && this.busy && this.activeRun?.permissionMode === 'auto-review';
+    if (!this.mcpConnections.length) return;
+    const session = HarnessMcpSessionSchema.parse({
+      version: 1,
+      runtimeEpoch: this.config.runtimeEpoch,
+      sessionId: this.config.productSessionId,
+      workspaceId: this.config.workspaceId,
+      mcpConnections: this.mcpConnections,
+    });
+    this.mcpLease = this.broker.acquireMcp(session, {
+      signal: this.lifetime.signal,
+      active: () => !this.retired,
+      revoke: () => {
+        void this.invalidate();
+      },
+    });
+    try {
+      const credentials = await this.mcpLease.credentials;
+      await this.write(
+        WorkerMcpCredentialGrantSchema.parse({
+          type: 'mcp-credentials',
+          runtimeEpoch: session.runtimeEpoch,
+          sessionId: session.sessionId,
+          credentials,
+        })
+      );
+    } catch (error) {
+      await this.invalidate();
+      throw error;
+    }
   }
 
   /** Catalog ownership can revoke an idle or active worker, never retarget it. */
   async invalidate(): Promise<void> {
     this.retired = true;
     this.activeController?.abort();
+    this.lifetime.abort();
+    this.mcpLease?.release();
     await this.stopOnce();
   }
 
@@ -231,7 +172,6 @@ export class EmbeddedHarnessControl {
   async prompt(input: {
     turnId: string;
     signal: AbortSignal;
-    prepareMcp?: (preparation: HarnessMcpPreparation, signal: AbortSignal) => Promise<unknown>;
     prompt: (
       snapshot: ReturnType<typeof HarnessRunSnapshotSchema.parse>
     ) => Promise<PromptResponse>;
@@ -239,7 +179,7 @@ export class EmbeddedHarnessControl {
     if (this.retired || this.busy || !this.binding) throw new Error('harness_worker_unavailable');
     input.signal.throwIfAborted();
     this.busy = true;
-    let snapshot = HarnessRunSnapshotSchema.parse({
+    const snapshot = HarnessRunSnapshotSchema.parse({
       schemaVersion: 1,
       // Turn identity, not process identity: a restart may not replay a dispatched user task.
       runId: createHash('sha256')
@@ -274,52 +214,7 @@ export class EmbeddedHarnessControl {
       void stopWorker();
     };
     let lease: ReturnType<HarnessCredentialBroker['acquire']> | undefined;
-    let mcpLease: ReturnType<HarnessCredentialBroker['acquireMcp']> | undefined;
     try {
-      if (this.mcpConnections.length) {
-        if (!input.prepareMcp) throw new Error('harness_mcp_preparation_required');
-        const preparation = HarnessMcpPreparationSchema.parse({
-          version: 1,
-          runId: snapshot.runId,
-          runtimeEpoch: snapshot.runtimeEpoch,
-          sessionId: snapshot.sessionId,
-          turnId: snapshot.turnId,
-          workspaceId: this.config.workspaceId,
-          connection: this.config.connection,
-          mcpConnections: this.mcpConnections,
-        });
-        mcpLease = this.broker.acquireMcp(preparation, {
-          signal: controller.signal,
-          active: () => !this.retired && this.busy && !controller.signal.aborted,
-          revoke: retire,
-        });
-        const credentials = await mcpLease.credentials;
-        controller.signal.throwIfAborted();
-        const grant = WorkerMcpCredentialGrantSchema.safeParse({
-          type: 'mcp-credentials',
-          runId: preparation.runId,
-          runtimeEpoch: preparation.runtimeEpoch,
-          credentials,
-        });
-        if (!grant.success) throw new Error('harness_mcp_credential_limit');
-        await this.write(grant.data);
-        const prepared = HarnessSessionBindingSchema.parse(
-          await input.prepareMcp(preparation, controller.signal)
-        );
-        controller.signal.throwIfAborted();
-        if (
-          prepared.runtimeEpoch !== this.binding.runtimeEpoch ||
-          JSON.stringify(prepared.harness) !== JSON.stringify(this.binding.harness) ||
-          prepared.pluginSetHash !== this.binding.pluginSetHash ||
-          prepared.nativeSessionFile !== this.binding.nativeSessionFile
-        )
-          throw new Error('harness_mcp_preparation_mismatch');
-        this.binding = prepared;
-        snapshot = HarnessRunSnapshotSchema.parse({
-          ...snapshot,
-          toolsetHash: prepared.toolsetHash,
-        });
-      }
       lease = this.broker.acquire(snapshot, {
         signal: controller.signal,
         active: () => !this.retired && this.busy && !controller.signal.aborted,
@@ -336,11 +231,6 @@ export class EmbeddedHarnessControl {
         })
       );
       controller.signal.throwIfAborted();
-      this.activeRun = {
-        runId: snapshot.runId,
-        turnId: snapshot.turnId,
-        ...(snapshot.permissionMode ? { permissionMode: snapshot.permissionMode } : {}),
-      };
       const response = await input.prompt(snapshot);
       controller.signal.throwIfAborted();
       const outcome = HarnessRunOutcomeSchema.safeParse(response._meta?.mollyNativeOutcome);
@@ -364,10 +254,8 @@ export class EmbeddedHarnessControl {
     } finally {
       input.signal.removeEventListener('abort', abort);
       lease?.release();
-      mcpLease?.release();
       this.busy = false;
       this.activeController = undefined;
-      this.activeRun = undefined;
     }
   }
 }

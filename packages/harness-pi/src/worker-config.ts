@@ -22,8 +22,6 @@ export const WorkerConfigSchema = z
     selection: ModelSelectionSchema,
     systemPrompt: z.string().min(1).max(500_000),
     readBeforeEditReminder: z.string().min(1).max(16_384).optional(),
-    designImageImport: z.boolean().optional(),
-    designImageRecovery: z.boolean().optional(),
     permissionProfileId: z.string().min(1),
     /** Molly private data the auto-review sandbox denies, apart from the session cwd. */
     privateDataRoots: z.array(absolutePath).max(8).optional(),
@@ -45,7 +43,7 @@ export const WorkerMcpCredentialGrantSchema = z
   .object({
     type: z.literal('mcp-credentials'),
     runtimeEpoch: z.string().uuid(),
-    runId: z.string().min(1).max(200),
+    sessionId: z.string().min(1).max(200),
     credentials: z.array(StoredMcpCredentialSchema).min(1).max(32),
   })
   .strict()

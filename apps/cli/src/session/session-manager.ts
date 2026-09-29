@@ -94,10 +94,6 @@ import type { AcpCapabilitiesResult } from '@/agent/acp-capability-normalization
 import { resolveWorkspaceLocalProjectRootPathWithRetry } from '@/lib/local-project-meta';
 import { readTimeoutEnv } from '@/lib/loro/timeout-utils';
 import { loadSessionMcpCatalog } from '@/agent/session-mcp-resolver';
-import { importHarnessImages } from '@/design/harness-image-import';
-import { recoverHarnessImages } from '@/design/harness-image-recovery';
-import { resolveDesignContext } from '@/design/workspace';
-import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import path from 'node:path';
 import { SessionUserResolver } from './session-user-resolver';
 import {
@@ -316,14 +312,6 @@ export type SessionMonitorRuntimeInfo = {
 };
 
 export interface CreateAgentConfig {
-  recoverHarnessImages?: (
-    request: import('@molly/shared/embedded-harness').HarnessImageRecoveryRequest,
-    signal: AbortSignal
-  ) => Promise<import('@molly/shared/embedded-harness').HarnessImageRecoveryResult>;
-  importHarnessImages?: (
-    request: import('@molly/shared/embedded-harness').HarnessImageImportRequest,
-    signal: AbortSignal
-  ) => Promise<import('@molly/shared/embedded-harness').HarnessImageImportResult>;
   embeddedHarness?: {
     connection: ModelConnection;
     credentials: HarnessCredentialBroker;
@@ -1289,62 +1277,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       deliverEvent(() => {
         if (!this.replacedDesignRuntimes.has(session)) event();
       });
-    const resolveImageWorkspace = async (turnId: string, signal: AbortSignal) => {
-      signal.throwIfAborted();
-      if (this.replacedDesignRuntimes.has(session) || this.sessions.get(sessionId) !== session)
-        throw new Error('harness_image_session_retired');
-      const record = await this.workspaceDocument.repo.getDocMeta(getSessionRoomId(sessionId));
-      if (!record?.meta || isLoroRepoDocDeleted(record))
-        throw new Error('harness_image_design_unavailable');
-      const meta = record.meta as SessionMeta;
-      if (!meta.design) throw new Error('harness_image_design_unavailable');
-      const workspace = await resolveDesignContext({
-        workspaceRoot: session.getWorkdir(),
-        sessionId,
-        artworkId: meta.design.artworkId,
-        legacyWorkdir: getDefaultSessionWorkdir(sessionId),
-        turnId,
-        requireTurnManifest: true,
-      });
-      signal.throwIfAborted();
-      if (this.replacedDesignRuntimes.has(session) || this.sessions.get(sessionId) !== session)
-        throw new Error('harness_image_session_retired');
-      return { workspace, artworkId: meta.design.artworkId };
-    };
     return {
       embeddedHarness,
-      recoverHarnessImages:
-        embeddedHarness && options?.designHooks
-          ? async (request, signal) => {
-              const current = await resolveImageWorkspace(request.turnId, signal);
-              return recoverHarnessImages({
-                sessionId,
-                artworkId: current.artworkId,
-                query: request.query,
-                signal,
-                operationDirectory: path.join(getMollyDataDir(), 'harness', 'pi', 'operations'),
-                resolveWorkspace: async (sourceTurnId) => {
-                  const source = await resolveImageWorkspace(sourceTurnId, signal);
-                  if (source.artworkId !== current.artworkId)
-                    throw new Error('harness_image_recovery_not_owned');
-                  return source.workspace;
-                },
-              });
-            }
-          : undefined,
-      importHarnessImages:
-        embeddedHarness && options?.designHooks
-          ? async (request, signal) => {
-              const { workspace, artworkId } = await resolveImageWorkspace(request.turnId, signal);
-              return importHarnessImages({
-                request,
-                workspace,
-                artworkId,
-                signal,
-                operationDirectory: path.join(getMollyDataDir(), 'harness', 'pi', 'operations'),
-              });
-            }
-          : undefined,
       cliType: config.agentCliType,
       agentType: config.agentType,
       designHooks: options?.designHooks,

@@ -249,6 +249,172 @@ const createBaseDeps = (
 };
 
 describe('SessionExecutionService', () => {
+  it('settles a fenced recovered Molly turn and preserves queued input until explicit Continue', async () => {
+    const sessionId = 'session-interrupted-molly' as SessionId;
+    const nativeId = '00000000-0000-4000-8000-000000000002' as ACPSessionId;
+    const assistantId = 'assistant-interrupted-molly';
+    let meta: Partial<SessionMeta> = {
+      id: sessionId,
+      agentConfigId: capabilityConfigId,
+      agentType: 'molly',
+      cliType: 'builtin',
+      acpSessionId: nativeId,
+      processingUserMsgId: 'previous-turn',
+      latestUserMsgId: 'previous-turn',
+    };
+    let history: SessionHistoryInput[] = [
+      {
+        id: 'previous-turn',
+        role: 'user',
+        status: 'processing',
+        items: [{ type: 'text', text: 'Earlier request' }],
+      },
+      {
+        id: assistantId,
+        role: 'assistant',
+        userTurnId: 'previous-turn',
+        items: [{ type: 'text', text: 'Partial response' }],
+      },
+      {
+        id: 'next-turn',
+        role: 'user',
+        status: 'pending',
+        items: [{ type: 'text', text: 'Later request' }],
+      },
+    ];
+    const queued = structuredClone(history[2]);
+    const events: string[] = [];
+    const failures: Array<{ reason: ChatFailedReason; message?: string }> = [];
+    const sessionDoc = withHistoryPort({
+      roomId: `session-${sessionId}`,
+      getMetaState: async () => meta,
+      getHistory: () => history,
+      updateHistory: async (update: (value: SessionHistoryInput[]) => SessionHistoryInput[]) => {
+        history = update(history);
+      },
+      setStatus: async (status: SessionMeta['status']) => {
+        meta = { ...meta, status };
+      },
+      setBaseBranch: async () => {},
+    });
+    const session = {
+      sessionId,
+      acpSessionId: nativeId,
+      terminalManager: {},
+      agentClient: {
+        isCreated: () => true,
+        cancel: async () => {},
+        prompt: async () => {
+          throw new Error('legacy_prompt_forbidden');
+        },
+      },
+      isEmbeddedHarness: () => true,
+      promptEmbeddedHarness: async (turnId: string) => {
+        events.push(`harness:${turnId}`);
+        if (turnId === 'previous-turn')
+          throw new RequestError(-32603, 'Previous task execution was interrupted.', {
+            code: 'harness_run_already_dispatched',
+            details:
+              'The previous task was already dispatched and will not be run again automatically. Its conversation and files are preserved. Queued inputs remain paused until you choose Continue.',
+          });
+        return { stopReason: 'end_turn' };
+      },
+      getWorkdir: () => '/tmp',
+      getHostWorkdir: () => '/tmp',
+      getParentSessionId: () => undefined,
+      exec: async () => '',
+      terminate: async () => {},
+      updateGitIdentity: () => {},
+      createAgent: async () => nativeId,
+      applyExecutionPlaneLimits: async () => {},
+    };
+    const deps = createBaseDeps({
+      beginConversationTurn: () => assistantId,
+      sessionManager: {
+        getSession: () => session,
+        getPendingSession: () => null,
+        terminateSession: async () => {
+          events.push('retired');
+        },
+        setSessionError: async () => {},
+        refreshGhTokenForSession: async () => {},
+      } as unknown as SessionManager,
+      workspaceDocument: {
+        repo: {
+          upsertDocMeta: async (_roomId: string, patch: Partial<SessionMeta>) => {
+            meta = { ...meta, ...patch };
+          },
+          getDocMeta: async () => ({ meta }),
+          flush: async () => {},
+        },
+        getOrCreateSessionDoc: async () => sessionDoc,
+        getAgentConfigById: async () =>
+          createLaunchConfig({ cliType: 'builtin', agentType: 'molly' }),
+      } as unknown as LoroDocumentManager,
+      recordChatFailure: async (_doc, reason, message) => {
+        failures.push({ reason, message });
+      },
+      processMessageQueue: async () => {
+        events.push('queue-resumed');
+      },
+    });
+    deps.turnFinalization.finalizeACPState = async (_id, turnId) => {
+      await sessionDoc.sessionData.commands.applyHistoryAction({
+        kind: 'finish-assistant',
+        turnId: turnId ?? assistantId,
+        endedAt: 1,
+        force: true,
+      });
+    };
+    const service = new SessionExecutionService(deps);
+    const request = {
+      type: 'session/chat' as const,
+      sessionId,
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      project: { kind: 'github' as const, repoFullName: 'owner/repo', branch: 'main' },
+      acpSessionConfig: {
+        prompt: 'Earlier request',
+        cliType: 'builtin' as const,
+        agentType: 'molly',
+        agentConfigId: capabilityConfigId,
+      },
+      userTurnId: 'previous-turn',
+      userId: 'user-1',
+      userName: 'User',
+      userEmail: 'user@example.com',
+    };
+    await service.continueSession(request);
+    expect(meta.dispatchPause).toEqual({ turnId: assistantId, state: 'paused' });
+    expect(meta.processingUserMsgId).toBeUndefined();
+    expect(meta.lastHandledUserMsgId).toBe('previous-turn');
+    expect(history[0]?.status).toBe('failed');
+    expect(history[1]).toMatchObject({ finished: true, endedAt: 1 });
+    expect(history[2]).toEqual(queued);
+    expect(failures).toEqual([
+      {
+        reason: 'session_restore_failed',
+        message: expect.stringContaining('will not be run again automatically'),
+      },
+    ]);
+    expect(events).toEqual(['harness:previous-turn', 'retired']);
+    await service.continueSession({ ...request, userTurnId: 'next-turn' });
+    expect(events).toEqual(['harness:previous-turn', 'retired']);
+    expect(history[2]).toEqual(queued);
+    await expect(
+      service.cancelSession({
+        type: 'session/cancel',
+        sessionId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        turnId: assistantId,
+        action: 'resume',
+      })
+    ).resolves.toEqual({ success: true });
+    expect(meta.dispatchPause).toEqual({ turnId: assistantId, state: 'resumed' });
+    expect(events).toEqual(['harness:previous-turn', 'retired', 'queue-resumed']);
+  });
+
   it.each(['native', 'catalog'] as const)(
     'retires an embedded epoch and restores native context for a changed %s selection',
     async (source) => {

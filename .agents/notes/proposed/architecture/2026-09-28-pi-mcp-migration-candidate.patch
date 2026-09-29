@@ -1,0 +1,3302 @@
+diff --git a/apps/cli/scripts/build-embedded-harness.mjs b/apps/cli/scripts/build-embedded-harness.mjs
+index 137a8523..76c649a6 100644
+--- a/apps/cli/scripts/build-embedded-harness.mjs
++++ b/apps/cli/scripts/build-embedded-harness.mjs
+@@ -11,6 +11,7 @@ const pinnedRuntimePackages = {
+   '@earendil-works/pi-coding-agent': '0.85.1',
+   '@earendil-works/pi-ai': '0.85.1',
+   '@modelcontextprotocol/sdk': '1.29.0',
++  '@modelcontextprotocol/client': '2.0.0',
+   '@anthropic-ai/sandbox-runtime': '0.0.77',
+   typebox: '1.3.7',
+ };
+@@ -144,7 +145,8 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
+   const directory = path.join(output, 'harness');
+   fs.rmSync(directory, { recursive: true, force: true });
+   fs.mkdirSync(directory, { recursive: true });
+-  await build({
++  const bundle = await build({
++    metafile: true,
+     entryPoints: [
+       path.join(harnessRoot, 'src/worker-entry.ts'),
+       path.join(harnessRoot, 'src/model-catalog.ts'),
+@@ -186,6 +188,60 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
+       );
+     }
+   }
++  const bundled = new Map();
++  for (const name of Object.keys(bundle.metafile.inputs)) {
++    const input = path.resolve(name);
++    if (!input.includes(`${path.sep}node_modules${path.sep}`)) continue;
++    let owner = path.dirname(input);
++    let metadata;
++    while (owner !== path.dirname(owner)) {
++      const manifest = path.join(owner, 'package.json');
++      if (fs.existsSync(manifest)) {
++        const candidate = JSON.parse(fs.readFileSync(manifest, 'utf8'));
++        if (candidate.name && candidate.version) {
++          metadata = candidate;
++          break;
++        }
++      }
++      owner = path.dirname(owner);
++    }
++    if (!metadata) throw new Error('Bundled dependency has no package owner');
++    const identity = `${metadata.name}@${metadata.version}`;
++    if (!bundled.has(identity)) {
++      const target = path.join('bundled-licenses', identity.replaceAll('/', '__'));
++      const licenses = fs
++        .readdirSync(owner)
++        .filter(
++          (file) =>
++            /^(license|licence|copying|notice)(\..*)?$/i.test(file) &&
++            fs.statSync(path.join(owner, file)).isFile()
++        );
++      if (!licenses.length) throw new Error(`Missing bundled dependency license: ${identity}`);
++      fs.mkdirSync(path.join(directory, target), { recursive: true });
++      for (const file of licenses)
++        fs.copyFileSync(path.join(owner, file), path.join(directory, target, file));
++      bundled.set(identity, {
++        name: metadata.name,
++        version: metadata.version,
++        license: metadata.license,
++        licenses: licenses.map((file) => path.join(target, file).split(path.sep).join('/')),
++        files: [],
++      });
++    }
++    bundled.get(identity).files.push({
++      path: path.relative(owner, input).split(path.sep).join('/'),
++      sha256: createHash('sha256').update(fs.readFileSync(input)).digest('hex'),
++    });
++  }
++  const bundledDependencies = [...bundled.values()].sort((a, b) => a.name.localeCompare(b.name));
++  for (const dependency of bundledDependencies)
++    dependency.files.sort((a, b) => a.path.localeCompare(b.path));
++  const adapter = bundledDependencies.find((dependency) => dependency.name === 'pi-mcp-adapter');
++  if (adapter?.version !== '3.2.0') throw new Error('Unreviewed bundled MCP adapter version');
++  fs.writeFileSync(
++    path.join(directory, 'bundled-dependencies.json'),
++    `${JSON.stringify(bundledDependencies, null, 2)}\n`
++  );
+   const files = fileDigests(directory);
+   const manifest = {
+     schemaVersion: 1,
+diff --git a/apps/cli/scripts/verify-embedded-harness.mjs b/apps/cli/scripts/verify-embedded-harness.mjs
+index 4aa18d22..2ca6b1c3 100644
+--- a/apps/cli/scripts/verify-embedded-harness.mjs
++++ b/apps/cli/scripts/verify-embedded-harness.mjs
+@@ -92,6 +92,24 @@ export function verifyEmbeddedHarness(directory) {
+     )
+   );
+   if (mcp.version !== '1.29.0') throw new Error('Unreviewed MCP SDK');
++  const client = JSON.parse(
++    fs.readFileSync(
++      path.join(root, 'node_modules', '@modelcontextprotocol/client', 'package.json'),
++      'utf8'
++    )
++  );
++  if (client.version !== '2.0.0') throw new Error('Unreviewed host-managed MCP SDK');
++  const bundled = JSON.parse(fs.readFileSync(path.join(root, 'bundled-dependencies.json'), 'utf8'));
++  const adapter = bundled.find((dependency) => dependency.name === 'pi-mcp-adapter');
++  if (
++    adapter?.version !== '3.2.0' ||
++    !adapter.files.some((file) => file.path === 'host-managed.ts')
++  )
++    throw new Error('Unreviewed bundled MCP adapter');
++  for (const dependency of bundled) {
++    if (!dependency.licenses?.length || dependency.licenses.some((file) => !listed.has(file)))
++      throw new Error('Missing bundled dependency license');
++  }
+   return manifest;
+ }
+ 
+diff --git a/apps/cli/tsconfig.json b/apps/cli/tsconfig.json
+index 59d30a47..50520b53 100644
+--- a/apps/cli/tsconfig.json
++++ b/apps/cli/tsconfig.json
+@@ -4,7 +4,7 @@
+     "noEmit": true,
+     "target": "ES2022",
+     "module": "ESNext",
+-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
++    "lib": ["ES2022", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+     "types": ["node"],
+     "outDir": "./dist",
+     "moduleResolution": "bundler",
+@@ -39,9 +39,9 @@
+     "paths": {
+       "*": ["./*"],
+       "@/*": ["./src/*"],
+-      "@/pkg": ["./package.json"],
+-    },
++      "@/pkg": ["./package.json"]
++    }
+   },
+   "include": ["src/**/*"],
+-  "exclude": ["node_modules", "**/*.test.ts", "**/*.spec.ts", "**/*.test-support.ts"],
++  "exclude": ["node_modules", "**/*.test.ts", "**/*.spec.ts", "**/*.test-support.ts"]
+ }
+diff --git a/packages/harness-pi/AGENTS.md b/packages/harness-pi/AGENTS.md
+index 6e95c959..b8d81250 100644
+--- a/packages/harness-pi/AGENTS.md
++++ b/packages/harness-pi/AGENTS.md
+@@ -31,6 +31,12 @@ Read [README](README.md) before changing session construction or packaged resour
+   workspace, server, destination and revision before injecting headers or child env;
+   freeze the resulting toolset before inference. Close and drop protected clients
+   at settlement; another turn needs a new grant over the same native history.
++- External adapter adoption requires an upstream-supported host-managed contract;
++  an experimental dependency patch is compatibility evidence, not production approval.
++  Keep exact raw tool identity, full frozen descriptors, host-owned approval/dispatch
++  and bounded result processing; adapter output must not create ambient spill files.
++- Failed protected cleanup retires its native context. Disposal attempts every owned
++  bridge; timeout or failed disposal never establishes successful cleanup.
+ - A native execution boundary, complete assistant result and settled tools must
+   agree before success. Cancellation, missing evidence and transport resolution
+   cannot manufacture completion or authorize replay.
+diff --git a/packages/harness-pi/README.md b/packages/harness-pi/README.md
+index 19efabcd..12e9a9ec 100644
+--- a/packages/harness-pi/README.md
++++ b/packages/harness-pi/README.md
+@@ -192,6 +192,35 @@ They identify the failing boundary, not the upstream cause. A provider-reported
+ result, an interrupted worker or a failed diagnostic write can still have no stage;
+ absence does not establish where the failure occurred or authorize another paid request.
+ 
++The issue #41 compatibility candidate routes external MCP servers through the pinned
++`pi-mcp-adapter/host-managed` entry; built-in `molly` servers retain the existing bridge.
++The candidate uses a local pnpm patch for missing host contracts and correctness fixes.
++It is not a production adoption: an upstream-supported release of those contracts is
++still required. `mcp-adapter.ts` captures only tool registrations and the approval event
++bus; unsupported registration calls fail. Molly still owns exact credential binding,
++original call IDs, mapped argument approval, durable dispatch and result/import policy.
++Raw server/tool names retain their existing hashed public names, including names that
++would collide under the adapter's default sanitization. Catalog revalidation compares
++complete descriptors, preserves input schemas and enforces 256 tools and a 30-second
++whole-catalog deadline. The supported 2024/2025 protocol revisions are exercised;
++modern-only 2026 negotiation is refused rather than silently enabled.
++
++The host processes results before upstream presentation and disables the adapter's
++spill/truncation policy explicitly. Bounded server-authored errors remain visible;
++transport diagnostics stay fixed codes. Linked resources retain separate approvals and
++receipts, declared capability checks and exact URI identity. Image reads stay in the
++parent journal fence through owning-host import. The actual AgentClient approval check,
++EmbeddedHarnessControl run/epoch ownership check, decoder and draft writer are covered
++together with the adapter; synthetic fixtures establish no live provider acceptance.
++
++Close fences new execution and aborts active calls before retaining the existing
++30-second cancellation-delivery allowance. The adapter then has five seconds to drain
++and dispose; pending work or failed disposal remains an explicit incomplete outcome.
++Protected cleanup failure retires the native context and refuses new preparation.
++Worker disposal attempts both protected and ordinary cleanup even if one fails.
++`mcp-cancellation.ts` forwards transport capabilities and assigned callback identity for
++both SDK generations without substituting another transport protocol.
++
+ MCP tools use the existing ACP server list, frozen schemas and the host permission UI.
+ They revalidate availability/schema after approval and deliver cancellation before closing
+ the transport. `mcp-content.ts` maps bounded text/image and embedded-resource results.
+@@ -322,6 +351,18 @@ These new built-in results are locally recoverable through the same tool. Earlie
+ built-in assets without intents and results never received by the host remain
+ unrecoverable through it; no history is fabricated or paid request repeated.
+ 
++The candidate sealed worker bundles the adapter's TypeScript entry into JavaScript and
++stages MCP SDK 2.0.0 as a pinned external package alongside SDK 1.29.0 for built-ins.
++Bundling SDK 2's stdio CommonJS dependency initially broke ESM worker loading; external
++staging fixes that concrete failure without adding a source-loader fallback.
++`bundled-dependencies.json` records included source-file hashes and copied licenses;
++these resources are covered by the normal sealed manifest. No adapter keyring, QuickJS
++runtime or whole adapter package is staged. The isolated candidate passed the repository
++macOS arm64 packaging wrapper with publication disabled, including the real packaged
++Helper, SQLite and image-decoder probes. Protected MCP, synthetic turns, cancellation
++and continuation also passed using that Helper. This is unsigned local package evidence;
++it does not establish signed installer, live-service or application-UI acceptance.
++
+ Run package `test` and `typecheck` scripts for synthetic SDK/ACP, isolation, recovery,
+ credential-pipe and MCP boundary tests. After a CLI bundle build,
+ `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output-directory> <runtime-executable>`
+diff --git a/packages/harness-pi/package.json b/packages/harness-pi/package.json
+index 9e5acd89..ad83a210 100644
+--- a/packages/harness-pi/package.json
++++ b/packages/harness-pi/package.json
+@@ -21,9 +21,11 @@
+     "@anthropic-ai/sandbox-runtime": "0.0.77",
+     "@earendil-works/pi-ai": "0.85.1",
+     "@earendil-works/pi-coding-agent": "0.85.1",
++    "@modelcontextprotocol/client": "2.0.0",
+     "@modelcontextprotocol/sdk": "1.29.0",
+     "@molly/shared": "workspace:*",
+     "acp-extension-core": "workspace:*",
++    "pi-mcp-adapter": "3.2.0",
+     "typebox": "1.3.7",
+     "zod": "catalog:"
+   },
+diff --git a/packages/harness-pi/src/acp-adapter.ts b/packages/harness-pi/src/acp-adapter.ts
+index 6e6ae9d2..021fb64a 100644
+--- a/packages/harness-pi/src/acp-adapter.ts
++++ b/packages/harness-pi/src/acp-adapter.ts
+@@ -745,14 +745,23 @@ export class MollyAcpAdapter implements acp.Agent {
+       unsubscribe();
+       await owned.runtime.removeRuntimeApiKey(owned.providerId).catch(() => undefined);
+       this.running = undefined;
+-      if (this.protectedBridge) {
+-        await this.protectedBridge.close();
+-        this.protectedBridge = undefined;
+-        this.prepared = undefined;
+-        if (!this.closed)
+-          await this.replaceTools([...this.input.tools, ...(this.bridge?.tools ?? [])]);
+-      }
++      await this.closeProtectedBridge(owned);
++    }
++  }
++
++  private async closeProtectedBridge(owned: OwnedSession): Promise<void> {
++    if (!this.protectedBridge) return;
++    const bridge = this.protectedBridge;
++    this.protectedBridge = undefined;
++    this.prepared = undefined;
++    try {
++      await bridge.close();
++    } catch {
++      this.closed = true;
++      owned.session.dispose();
++      throw new Error('harness_mcp_cleanup_incomplete');
+     }
++    if (!this.closed) await this.replaceTools([...this.input.tools, ...(this.bridge?.tools ?? [])]);
+   }
+ 
+   private async publishUsage(sessionId: string): Promise<void> {
+@@ -824,7 +833,11 @@ export class MollyAcpAdapter implements acp.Agent {
+     this.questionUI?.dispose();
+     await this.owned?.session.abort();
+     this.owned?.session.dispose();
+-    await this.bridge?.close();
+-    await this.protectedBridge?.close();
++    const cleanup = await Promise.allSettled([this.bridge?.close(), this.protectedBridge?.close()]);
++    this.bridge = undefined;
++    this.protectedBridge = undefined;
++    this.prepared = undefined;
++    if (cleanup.some((result) => result.status === 'rejected'))
++      throw new Error('harness_mcp_cleanup_incomplete');
+   }
+ }
+diff --git a/packages/harness-pi/src/mcp-bridge.ts b/packages/harness-pi/src/mcp-bridge.ts
+index 10f5efb5..2148a8a8 100644
+--- a/packages/harness-pi/src/mcp-bridge.ts
++++ b/packages/harness-pi/src/mcp-bridge.ts
+@@ -1,4 +1,11 @@
+ import { createHash } from 'node:crypto';
++import {
++  StreamableHTTPClientTransport as HostHTTPTransport,
++  type Transport as HostTransport,
++} from '@modelcontextprotocol/client';
++import { StdioClientTransport as HostStdioTransport } from '@modelcontextprotocol/client/stdio';
++import { connectAdapterMcpServers } from './mcp-adapter';
++import { mcpToolName, imageBindingDescription } from './mcp-tool-definition';
+ import type { McpServer } from '@agentclientprotocol/sdk';
+ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+@@ -17,7 +24,7 @@ import {
+ import { createToolEnvironment } from './environment';
+ import { createBoundModelFetch } from './model-transport';
+ import { waitForApproval, type BrowserTaskApproval, type ToolApproval } from './approved-tools';
+-import { CancellationDeliveryTransport } from './mcp-cancellation';
++import { createCancellationDeliveryTransport } from './mcp-cancellation';
+ import { McpToolFailure, resolveMcpContent } from './mcp-content';
+ import { bindMcpImageTool } from './mcp-image-binding';
+ import type { OperationResourceRead } from './tool-operation-journal';
+@@ -125,20 +132,7 @@ function renderFailure(result: unknown): MollyRenderFailure | null {
+   return null;
+ }
+ 
+-export function mcpToolName(server: string, tool: string): string {
+-  if (
+-    server === 'molly' &&
+-    ['molly_generate_image', 'molly_edit_image', 'molly_render_preview', 'molly_browser'].includes(
+-      tool
+-    )
+-  )
+-    return tool;
+-  const identity = createHash('sha256')
+-    .update(JSON.stringify([server, tool]))
+-    .digest('hex')
+-    .slice(0, 12);
+-  return `mcp_${server.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 16)}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 24)}_${identity}`;
+-}
++export { mcpToolName } from './mcp-tool-definition';
+ 
+ async function listTools(client: ClientPort, signal?: AbortSignal): Promise<Tool[]> {
+   const tools: Tool[] = [];
+@@ -188,12 +182,7 @@ export async function defineMcpTools(input: {
+     const tool = structuredClone(descriptor);
+     const frozen = schemaHash(tool);
+     const image = bindMcpImageTool(tool, structuredClone(input.imageBinding));
+-    const bindingDescription =
+-      image.status === 'bound'
+-        ? ` Image ${image.operation} mapping; fixed model: ${image.model}. Image references are forwarded unchanged to this server; no local-file read or upload is implied. Inline MCP images and resource links are supported; linked results require separate approval and this server's resources/read capability, with no host URL fetch fallback. ${input.imageImportAvailable ? 'Returned PNG/JPEG/GIF images are imported into the current design draft; host asset receipts replace server content. Read those assets to inspect them. Import does not commit artwork.' : 'Artwork asset import is not ready.'}`
+-        : image.status === 'unavailable'
+-          ? ' Image binding unavailable: configured fields/model do not match this schema. This remains an ordinary MCP tool; image asset import is not ready.'
+-          : '';
++    const bindingDescription = imageBindingDescription(image, input.imageImportAvailable);
+     return {
+       name: mcpToolName(input.serverName, tool.name),
+       label: tool.title ?? tool.name,
+@@ -376,6 +365,29 @@ export async function defineMcpTools(input: {
+   });
+ }
+ 
++function credentialValues(
++  server: McpServer,
++  credentials: Array<ReturnType<typeof StoredMcpCredentialSchema.parse>> | undefined
++): Record<string, string> {
++  let values: Record<string, string> = {};
++  if (server._meta?.mollyMcpCredential !== undefined) {
++    const binding = McpCredentialBindingSchema.parse(server._meta.mollyMcpCredential);
++    const credential = credentials?.find(
++      (entry) => JSON.stringify(entry.connection) === JSON.stringify(binding)
++    );
++    if (
++      !credential ||
++      !mcpCredentialMatchesServer(binding, server) ||
++      ('type' in server
++        ? server.type !== 'http' || server.headers.length > 0
++        : server.env.length > 0)
++    )
++      throw new Error('harness_mcp_credential_mismatch');
++    values = StoredMcpCredentialSchema.parse(credential).values;
++  }
++  return values;
++}
++
+ export async function connectMcpBridge(
+   servers: McpServer[],
+   options: {
+@@ -390,33 +402,75 @@ export async function connectMcpBridge(
+   if (servers.length > 32 || new Set(servers.map((server) => server.name)).size !== servers.length)
+     throw new Error('harness_mcp_server_limit');
+   const clients: Client[] = [];
+-  const transports: CancellationDeliveryTransport[] = [];
++  const transports: Array<ReturnType<typeof createCancellationDeliveryTransport>> = [];
+   let closed = false;
++  let external: Awaited<ReturnType<typeof connectAdapterMcpServers>> | undefined;
+   const close = async () => {
+     closed = true;
+     await Promise.all(transports.map((transport) => transport.waitForCancellationDelivery()));
+-    await Promise.allSettled(clients.map((client) => client.close()));
++    await Promise.all([
++      Promise.allSettled(clients.map((client) => client.close())),
++      external?.close(),
++    ]);
+   };
+-  const tools: Awaited<ReturnType<typeof defineMcpTools>> = [];
++  const tools: ToolDefinition[] = [];
+   try {
+-    for (const server of servers) {
++    external = await connectAdapterMcpServers(
++      Object.fromEntries(
++        servers
++          .filter((server) => server.name !== 'molly')
++          .map((server) => {
++            const values = credentialValues(server, options.credentials);
++            const imageBinding =
++              server._meta?.mollyImageBinding !== undefined
++                ? McpImageBindingSchema.parse(server._meta.mollyImageBinding)
++                : undefined;
++            let createTransport: () => HostTransport;
++            if ('type' in server) {
++              if (server.type !== 'http') throw new Error('harness_mcp_transport_unsupported');
++              const endpoint = ModelEndpointSchema.parse(server.url);
++              createTransport = () =>
++                new HostHTTPTransport(new URL(endpoint), {
++                  fetch: createBoundModelFetch(endpoint),
++                  reconnectionOptions: {
++                    maxRetries: 0,
++                    initialReconnectionDelay: 1,
++                    maxReconnectionDelay: 1,
++                    reconnectionDelayGrowFactor: 1,
++                  },
++                  requestInit: {
++                    headers: {
++                      ...Object.fromEntries(server.headers.map(({ name, value }) => [name, value])),
++                      ...values,
++                    },
++                  },
++                });
++            } else {
++              createTransport = () => {
++                const transport = new HostStdioTransport({
++                  command: server.command,
++                  args: server.args,
++                  cwd: options.cwd,
++                  env: {
++                    ...createToolEnvironment(process.env),
++                    ...Object.fromEntries(server.env.map(({ name, value }) => [name, value])),
++                    ...values,
++                  },
++                  stderr: 'pipe',
++                });
++                transport.stderr?.on('data', () => undefined);
++                return transport;
++              };
++            }
++            return [server.name, { createTransport, imageBinding }];
++          })
++      ),
++      options
++    );
++    tools.push(...external.tools);
++    for (const server of servers.filter((candidate) => candidate.name === 'molly')) {
+       options.signal?.throwIfAborted();
+-      let values: Record<string, string> = {};
+-      if (server._meta?.mollyMcpCredential !== undefined) {
+-        const binding = McpCredentialBindingSchema.parse(server._meta.mollyMcpCredential);
+-        const credential = options.credentials?.find(
+-          (entry) => JSON.stringify(entry.connection) === JSON.stringify(binding)
+-        );
+-        if (
+-          !credential ||
+-          !mcpCredentialMatchesServer(binding, server) ||
+-          ('type' in server
+-            ? server.type !== 'http' || server.headers.length > 0
+-            : server.env.length > 0)
+-        )
+-          throw new Error('harness_mcp_credential_mismatch');
+-        values = StoredMcpCredentialSchema.parse(credential).values;
+-      }
++      const values = credentialValues(server, options.credentials);
+       const client = new Client({ name: 'molly-embedded-pi', version: '1.0.0' });
+       clients.push(client);
+       let available = true;
+@@ -429,7 +483,7 @@ export async function connectMcpBridge(
+       if ('type' in server) {
+         if (server.type !== 'http') throw new Error('harness_mcp_transport_unsupported');
+         const endpoint = ModelEndpointSchema.parse(server.url);
+-        const transport = new CancellationDeliveryTransport(
++        const transport = createCancellationDeliveryTransport(
+           new StreamableHTTPClientTransport(new URL(endpoint), {
+             fetch: createBoundModelFetch(endpoint),
+             requestInit: {
+@@ -455,7 +509,7 @@ export async function connectMcpBridge(
+           stderr: 'pipe',
+         });
+         transport.stderr?.on('data', () => undefined);
+-        const guarded = new CancellationDeliveryTransport(transport);
++        const guarded = createCancellationDeliveryTransport(transport);
+         transports.push(guarded);
+         await client.connect(guarded, { signal: options.signal, timeout: 30_000 });
+       }
+diff --git a/packages/harness-pi/src/mcp-cancellation.ts b/packages/harness-pi/src/mcp-cancellation.ts
+index e2b0c787..f74e4a74 100644
+--- a/packages/harness-pi/src/mcp-cancellation.ts
++++ b/packages/harness-pi/src/mcp-cancellation.ts
+@@ -1,63 +1,17 @@
+-import type {
+-  Transport,
+-  TransportSendOptions,
+-} from '@modelcontextprotocol/sdk/shared/transport.js';
+-import type { JSONRPCMessage, MessageExtraInfo } from '@modelcontextprotocol/sdk/types.js';
+-
+ const CANCELLATION_DELIVERY_TIMEOUT_MS = 30_000;
+ 
+-/** Give SDK cancellation delivery its existing allowance before per-call transport cleanup. */
+-export class CancellationDeliveryTransport implements Transport {
+-  onclose?: () => void;
+-  onerror?: (error: Error) => void;
+-  onmessage?: <T extends JSONRPCMessage>(message: T, extra?: MessageExtraInfo) => void;
+-  private readonly cancellationDeliveries = new Set<Promise<'delivered' | 'failed'>>();
+-  private cancellationFailed = false;
+-  private cancellationRequested = false;
+-
+-  constructor(private readonly inner: Transport) {}
+-
+-  get sessionId(): string | undefined {
+-    return this.inner.sessionId;
+-  }
+-
+-  setProtocolVersion(version: string): void {
+-    this.inner.setProtocolVersion?.(version);
+-  }
+-
+-  async start(): Promise<void> {
+-    this.inner.onclose = () => this.onclose?.();
+-    this.inner.onerror = (error) => this.onerror?.(error);
+-    this.inner.onmessage = (message, extra) => this.onmessage?.(message, extra);
+-    await this.inner.start();
+-  }
++type CancellationDelivery = 'not-requested' | 'delivered' | 'failed' | 'timed-out';
++type SendingTransport = { send(...args: never[]): Promise<void> };
+ 
+-  send(message: JSONRPCMessage, options?: TransportSendOptions): Promise<void> {
+-    const delivery = this.inner.send(message, options);
+-    if ('method' in message && message.method === 'notifications/cancelled') {
+-      this.cancellationRequested = true;
+-      const settled = delivery.then(
+-        () => 'delivered',
+-        () => 'failed'
+-      ) as Promise<'delivered' | 'failed'>;
+-      this.cancellationDeliveries.add(settled);
+-      void settled.then((result) => {
+-        if (result === 'failed') this.cancellationFailed = true;
+-        this.cancellationDeliveries.delete(settled);
+-      });
+-    }
+-    return delivery;
+-  }
+-
+-  async waitForCancellationDelivery(): Promise<
+-    'not-requested' | 'delivered' | 'failed' | 'timed-out'
+-  > {
+-    if (!this.cancellationRequested) return 'not-requested';
++export function createCancellationDeliveryTransport<T extends SendingTransport>(inner: T) {
++  const deliveries = new Set<Promise<'delivered' | 'failed'>>();
++  let failed = false;
++  let requested = false;
++  const waitForCancellationDelivery = async (): Promise<CancellationDelivery> => {
++    if (!requested) return 'not-requested';
+     const delivery = (async () => {
+-      while (this.cancellationDeliveries.size) {
+-        await Promise.all([...this.cancellationDeliveries]);
+-      }
+-      return this.cancellationFailed ? ('failed' as const) : ('delivered' as const);
++      while (deliveries.size) await Promise.all([...deliveries]);
++      return failed ? ('failed' as const) : ('delivered' as const);
+     })();
+     let deadline: ReturnType<typeof setTimeout> | undefined;
+     try {
+@@ -70,9 +24,48 @@ export class CancellationDeliveryTransport implements Transport {
+     } finally {
+       if (deadline) clearTimeout(deadline);
+     }
+-  }
+-
+-  async close(): Promise<void> {
+-    await this.inner.close();
+-  }
++  };
++  const overrides = new Map<PropertyKey, unknown>();
++  const methods = new Map<PropertyKey, { source: unknown; bound: unknown }>();
++  return new Proxy(inner, {
++    set(target, property, value) {
++      overrides.set(property, value);
++      methods.delete(property);
++      return Reflect.set(target, property, value, target);
++    },
++    get(target, property) {
++      if (property === 'waitForCancellationDelivery') return waitForCancellationDelivery;
++      if (property === 'send') {
++        return (...args: Parameters<T['send']>) => {
++          const delivery: Promise<void> = Reflect.apply(target.send, target, args);
++          const message: unknown = args[0];
++          if (
++            message &&
++            typeof message === 'object' &&
++            'method' in message &&
++            message.method === 'notifications/cancelled'
++          ) {
++            requested = true;
++            const settled = delivery.then(
++              () => 'delivered' as const,
++              () => 'failed' as const
++            );
++            deliveries.add(settled);
++            void settled.then((result) => {
++              if (result === 'failed') failed = true;
++              deliveries.delete(settled);
++            });
++          }
++          return delivery;
++        };
++      }
++      const value: unknown = Reflect.get(target, property, target);
++      if (typeof value !== 'function' || overrides.get(property) === value) return value;
++      const previous = methods.get(property);
++      if (previous?.source === value) return previous.bound;
++      const bound: unknown = value.bind(target);
++      methods.set(property, { source: value, bound });
++      return bound;
++    },
++  }) as T & { waitForCancellationDelivery(): Promise<CancellationDelivery> };
+ }
+diff --git a/packages/harness-pi/src/mcp-image-binding.ts b/packages/harness-pi/src/mcp-image-binding.ts
+index e324af52..f0cd732b 100644
+--- a/packages/harness-pi/src/mcp-image-binding.ts
++++ b/packages/harness-pi/src/mcp-image-binding.ts
+@@ -1,10 +1,20 @@
+ import { Type, validateToolArguments } from '@earendil-works/pi-ai';
+-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+ import type { McpImageBinding } from '@molly/shared/embedded-harness';
+ import { z } from 'zod';
+ 
+ /** A deliberately small adapter: top-level string fields and ordered string image references. */
+-export function bindMcpImageTool(tool: Tool, binding: McpImageBinding | undefined) {
++export function bindMcpImageTool(
++  tool: {
++    name: string;
++    inputSchema: {
++      type: 'object';
++      properties?: Record<string, unknown>;
++      required?: string[];
++      [key: string]: unknown;
++    };
++  },
++  binding: McpImageBinding | undefined
++) {
+   const operation =
+     binding?.generate?.tool === tool.name
+       ? 'generate'
+diff --git a/packages/harness-pi/tests/acp.test.ts b/packages/harness-pi/tests/acp.test.ts
+index b4cd8804..dfe951f2 100644
+--- a/packages/harness-pi/tests/acp.test.ts
++++ b/packages/harness-pi/tests/acp.test.ts
+@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
+ import { join } from 'node:path';
+ import { createHash, randomUUID } from 'node:crypto';
+ import { fileURLToPath, pathToFileURL } from 'node:url';
++import { StdioClientTransport as HostStdioTransport } from '@modelcontextprotocol/client/stdio';
+ import { afterEach, describe, expect, it, vi } from 'vitest';
+ import {
+   createAssistantMessageEventStream,
+@@ -549,123 +550,150 @@ describe('owned ACP boundary', () => {
+       }
+     }
+   );
+-  it('acquires protected tools only for the prepared run, preserves native history and drops them after settlement', async () => {
+-    const servers = ['first', 'second'].map((name) => {
+-      const destination = {
+-        transport: 'stdio' as const,
+-        command: process.execPath,
+-        args: [fileURLToPath(new URL('./fixtures/protected-mcp.mjs', import.meta.url)), name],
+-      };
+-      const binding = McpCredentialBindingSchema.parse({
+-        workspaceId: 'synthetic-workspace',
+-        serverId: name,
+-        credentialRef: randomUUID(),
+-        revision: 1,
+-        destination,
+-        fieldNames: ['TEST_MCP_TOKEN'],
++  it.each([false, true])(
++    'acquires protected tools only for the prepared run and retires on cleanup failure (%s)',
++    async (cleanupFails) => {
++      const servers = ['first', 'second'].map((name) => {
++        const destination = {
++          transport: 'stdio' as const,
++          command: process.execPath,
++          args: [fileURLToPath(new URL('./fixtures/protected-mcp.mjs', import.meta.url)), name],
++        };
++        const binding = McpCredentialBindingSchema.parse({
++          workspaceId: 'synthetic-workspace',
++          serverId: name,
++          credentialRef: randomUUID(),
++          revision: 1,
++          destination,
++          fieldNames: ['TEST_MCP_TOKEN'],
++        });
++        return {
++          name,
++          command: destination.command,
++          args: destination.args,
++          env: [],
++          _meta: { mollyConnection: { id: name, revision: 1 }, mollyMcpCredential: binding },
++        };
+       });
+-      return {
+-        name,
+-        command: destination.command,
+-        args: destination.args,
+-        env: [],
+-        _meta: { mollyConnection: { id: name, revision: 1 }, mollyMcpCredential: binding },
+-      };
+-    });
+-    const acquisitions: string[] = [];
+-    const f = await fixture(
+-      [
+-        fauxAssistantMessage(
+-          servers.map((server) =>
+-            fauxToolCall(mcpToolName(server.name, 'inspect'), {}, { id: server.name })
++      const acquisitions: string[] = [];
++      const f = await fixture(
++        [
++          fauxAssistantMessage(
++            servers.map((server) =>
++              fauxToolCall(mcpToolName(server.name, 'inspect'), {}, { id: server.name })
++            ),
++            { stopReason: 'toolUse', timestamp: 1 }
+           ),
+-          { stopReason: 'toolUse', timestamp: 1 }
+-        ),
+-        fauxAssistantMessage('Both isolated', { timestamp: 2 }),
+-        fauxAssistantMessage('Second turn', { timestamp: 3 }),
+-      ],
+-      async () => true,
+-      servers,
+-      async (preparation) => {
+-        acquisitions.push(preparation.runId);
+-        return preparation.mcpConnections.map((connection, index) => ({
+-          connection,
+-          values: { TEST_MCP_TOKEN: index === 0 ? 'SYNTHETIC_FIRST' : 'SYNTHETIC_SECOND' },
+-        }));
+-      }
+-    );
+-    const preparation: HarnessMcpPreparation = {
+-      version: 1,
+-      runId: f.snapshot.runId,
+-      runtimeEpoch: f.input.runtimeEpoch,
+-      sessionId: f.input.productSessionId,
+-      turnId: f.snapshot.turnId,
+-      workspaceId: f.input.workspaceId,
+-      connection: f.input.connection,
+-      mcpConnections: servers.map((server) => server._meta.mollyMcpCredential),
+-    };
+-    try {
+-      expect(acquisitions).toEqual([]);
+-      await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
+-      const prepared = HarnessSessionBindingSchema.parse(
+-        await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
+-          sessionId: f.request.sessionId,
+-          preparation,
+-        })
++          fauxAssistantMessage('Both isolated', { timestamp: 2 }),
++          fauxAssistantMessage('Second turn', { timestamp: 3 }),
++        ],
++        async () => true,
++        servers,
++        async (preparation) => {
++          acquisitions.push(preparation.runId);
++          return preparation.mcpConnections.map((connection, index) => ({
++            connection,
++            values: { TEST_MCP_TOKEN: index === 0 ? 'SYNTHETIC_FIRST' : 'SYNTHETIC_SECOND' },
++          }));
++        }
+       );
+-      expect(f.adapter.currentSessionId).toBe(f.request.sessionId);
+-      expect(prepared.toolsetHash).not.toBe(f.snapshot.toolsetHash);
+-      f.snapshot.toolsetHash = prepared.toolsetHash;
+-      f.snapshot.mcpConnections = preparation.mcpConnections;
+-      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+-      expect(
+-        f.updates
+-          .filter(({ update }) => update.sessionUpdate === 'tool_call_update')
+-          .map(({ update }) => update)
+-      ).toMatchObject([
+-        { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
+-        { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
+-      ]);
+-      const history = await readFile(prepared.nativeSessionFile, 'utf8');
+-      expect(history).toContain('Both isolated');
+-      for (const canary of ['SYNTHETIC_FIRST', 'SYNTHETIC_SECOND']) {
++      const preparation: HarnessMcpPreparation = {
++        version: 1,
++        runId: f.snapshot.runId,
++        runtimeEpoch: f.input.runtimeEpoch,
++        sessionId: f.input.productSessionId,
++        turnId: f.snapshot.turnId,
++        workspaceId: f.input.workspaceId,
++        connection: f.input.connection,
++        mcpConnections: servers.map((server) => server._meta.mollyMcpCredential),
++      };
++      try {
++        expect(acquisitions).toEqual([]);
++        await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
++        const prepared = HarnessSessionBindingSchema.parse(
++          await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
++            sessionId: f.request.sessionId,
++            preparation,
++          })
++        );
++        expect(f.adapter.currentSessionId).toBe(f.request.sessionId);
++        expect(prepared.toolsetHash).not.toBe(f.snapshot.toolsetHash);
++        f.snapshot.toolsetHash = prepared.toolsetHash;
++        f.snapshot.mcpConnections = preparation.mcpConnections;
++        if (cleanupFails) {
++          const originalClose = HostStdioTransport.prototype.close;
++          const cleanup = vi
++            .spyOn(HostStdioTransport.prototype, 'close')
++            .mockImplementation(async function (this: HostStdioTransport) {
++              await originalClose.call(this);
++              throw new Error('SYNTHETIC_CLEANUP_SECRET');
++            });
++          await expect(f.adapter.prompt(f.request)).rejects.toThrow(
++            'harness_mcp_cleanup_incomplete'
++          );
++          cleanup.mockRestore();
++          await expect(
++            f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
++              sessionId: f.request.sessionId,
++              preparation: { ...preparation, runId: randomUUID(), turnId: 'late' },
++            })
++          ).rejects.toThrow('harness_session_unavailable');
++          expect(await readFile(prepared.nativeSessionFile, 'utf8')).not.toContain(
++            'SYNTHETIC_CLEANUP_SECRET'
++          );
++          expect(acquisitions).toEqual([preparation.runId]);
++          return;
++        }
++        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+         expect(
+-          JSON.stringify({
+-            updates: f.updates,
+-            messages: f.messages,
+-            journal: await f.journal.read(f.snapshot.runId),
++          f.updates
++            .filter(({ update }) => update.sessionUpdate === 'tool_call_update')
++            .map(({ update }) => update)
++        ).toMatchObject([
++          { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
++          { status: 'completed', rawOutput: { content: [{ text: 'credential-isolation-ok' }] } },
++        ]);
++        const history = await readFile(prepared.nativeSessionFile, 'utf8');
++        expect(history).toContain('Both isolated');
++        for (const canary of ['SYNTHETIC_FIRST', 'SYNTHETIC_SECOND']) {
++          expect(
++            JSON.stringify({
++              updates: f.updates,
++              messages: f.messages,
++              journal: await f.journal.read(f.snapshot.runId),
++            })
++          ).not.toContain(canary);
++          expect(history).not.toContain(canary);
++        }
++        await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
++        const next = { ...preparation, runId: randomUUID(), turnId: 'turn2' };
++        const rebound = HarnessSessionBindingSchema.parse(
++          await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
++            sessionId: f.request.sessionId,
++            preparation: next,
++          })
++        );
++        expect(rebound.nativeSessionFile).toBe(prepared.nativeSessionFile);
++        Object.assign(f.snapshot, {
++          runId: next.runId,
++          turnId: next.turnId,
++          toolsetHash: rebound.toolsetHash,
++        });
++        expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
++        expect(JSON.stringify(f.messages.at(-1))).toContain('Both isolated');
++        expect(acquisitions).toEqual([preparation.runId, next.runId]);
++        await expect(
++          f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
++            sessionId: f.request.sessionId,
++            preparation: next,
+           })
+-        ).not.toContain(canary);
+-        expect(history).not.toContain(canary);
++        ).rejects.toThrow('harness_mcp_preparation_failed');
++        expect(acquisitions).toEqual([preparation.runId, next.runId]);
++      } finally {
++        await f.adapter.dispose();
+       }
+-      await expect(f.adapter.prompt(f.request)).rejects.toThrow('harness_snapshot_mismatch');
+-      const next = { ...preparation, runId: randomUUID(), turnId: 'turn2' };
+-      const rebound = HarnessSessionBindingSchema.parse(
+-        await f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
+-          sessionId: f.request.sessionId,
+-          preparation: next,
+-        })
+-      );
+-      expect(rebound.nativeSessionFile).toBe(prepared.nativeSessionFile);
+-      Object.assign(f.snapshot, {
+-        runId: next.runId,
+-        turnId: next.turnId,
+-        toolsetHash: rebound.toolsetHash,
+-      });
+-      expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
+-      expect(JSON.stringify(f.messages.at(-1))).toContain('Both isolated');
+-      expect(acquisitions).toEqual([preparation.runId, next.runId]);
+-      await expect(
+-        f.adapter.extMethod(MOLLY_PREPARE_MCP_METHOD, {
+-          sessionId: f.request.sessionId,
+-          preparation: next,
+-        })
+-      ).rejects.toThrow('harness_mcp_preparation_failed');
+-      expect(acquisitions).toEqual([preparation.runId, next.runId]);
+-    } finally {
+-      await f.adapter.dispose();
+     }
+-  });
++  );
+   it('publishes the complete native bash command before permission is answered', async () => {
+     const command = 'printf "synthetic\\n"\nls .scratch';
+     const f = await fixture([
+diff --git a/packages/harness-pi/tests/control-and-dispatch.test.ts b/packages/harness-pi/tests/control-and-dispatch.test.ts
+index aff7b34d..58293bc2 100644
+--- a/packages/harness-pi/tests/control-and-dispatch.test.ts
++++ b/packages/harness-pi/tests/control-and-dispatch.test.ts
+@@ -9,7 +9,7 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+ import { PrivateControlPipe } from '../src/private-control-pipe';
+-import { CancellationDeliveryTransport } from '../src/mcp-cancellation';
++import { createCancellationDeliveryTransport } from '../src/mcp-cancellation';
+ import { ToolOperationJournal, type OperationResourceRead } from '../src/tool-operation-journal';
+ 
+ vi.mock('node:fs/promises', async (importOriginal) => {
+@@ -109,7 +109,7 @@ describe('MCP cancellation delivery', () => {
+       }
+       await send(message, options);
+     };
+-    const transport = new CancellationDeliveryTransport(inner);
++    const transport = createCancellationDeliveryTransport(inner);
+     await server.connect(peer);
+     await client.connect(transport);
+     try {
+@@ -149,7 +149,7 @@ describe('MCP cancellation delivery', () => {
+       close: async () => undefined,
+       send: () => deliveries.shift()!.promise,
+     };
+-    const transport = new CancellationDeliveryTransport(inner);
++    const transport = createCancellationDeliveryTransport(inner);
+     void transport.send({
+       jsonrpc: '2.0',
+       method: 'notifications/cancelled',
+@@ -175,7 +175,7 @@ describe('MCP cancellation delivery', () => {
+   it('bounds an undeliverable cancellation using an injected clock', async () => {
+     vi.useFakeTimers();
+     const pending = deferred();
+-    const transport = new CancellationDeliveryTransport({
++    const transport = createCancellationDeliveryTransport<Transport>({
+       start: async () => undefined,
+       close: async () => undefined,
+       send: () => pending.promise,
+diff --git a/packages/harness-pi/tests/mcp-bridge.test.ts b/packages/harness-pi/tests/mcp-bridge.test.ts
+index 779981e8..611d4a42 100644
+--- a/packages/harness-pi/tests/mcp-bridge.test.ts
++++ b/packages/harness-pi/tests/mcp-bridge.test.ts
+@@ -105,12 +105,14 @@ describe('frozen MCP tools', () => {
+           values: { Authorization: `Bearer SYNTHETIC_${server.name}` },
+         })),
+       });
+-      expect((await bridge.tools[0]!.execute('first-call', {}, undefined)).content).toEqual([
+-        { type: 'text', text: 'ok' },
+-      ]);
+-      expect((await bridge.tools[1]!.execute('second-call', {}, undefined)).content).toEqual([
+-        { type: 'text', text: 'ok' },
+-      ]);
++      expect(
++        (await bridge.tools[0]!.execute('first-call', {}, undefined, undefined, {} as never))
++          .content
++      ).toEqual([{ type: 'text', text: 'ok' }]);
++      expect(
++        (await bridge.tools[1]!.execute('second-call', {}, undefined, undefined, {} as never))
++          .content
++      ).toEqual([{ type: 'text', text: 'ok' }]);
+       expect(observed).toContain('first:tools/call');
+       expect(observed).toContain('second:tools/call');
+       expect(process.env).toEqual(environment);
+@@ -520,7 +522,13 @@ describe('frozen MCP tools', () => {
+           },
+         }
+       );
+-      const result = await bridge.tools[0]!.execute('synthetic-call', {}, undefined);
++      const result = await bridge.tools[0]!.execute(
++        'synthetic-call',
++        {},
++        undefined,
++        undefined,
++        {} as never
++      );
+       expect(result.content).toEqual([
+         {
+           type: 'text',
+diff --git a/packages/harness-pi/tsconfig.json b/packages/harness-pi/tsconfig.json
+index 914cfbd2..8c89fefa 100644
+--- a/packages/harness-pi/tsconfig.json
++++ b/packages/harness-pi/tsconfig.json
+@@ -3,7 +3,7 @@
+     "target": "ES2022",
+     "module": "ESNext",
+     "moduleResolution": "bundler",
+-    "lib": ["ES2022", "DOM"],
++    "lib": ["ES2022", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+     "types": ["node"],
+     "strict": true,
+     "noUncheckedIndexedAccess": true,
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index f52f4f39..2b870e5d 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -137,6 +137,9 @@ patchedDependencies:
+   mdast-util-gfm-autolink-literal@2.0.1:
+     hash: b03e2c531618296b99e716d479b68761f6ebc6c81dcd1e9359e80b71e6b5ee8e
+     path: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
++  pi-mcp-adapter@3.2.0:
++    hash: f4b5b049cdb5380a7f0c644a5e5bb558f44bd0da10cc1a9d96e26628599d03e3
++    path: patches/pi-mcp-adapter@3.2.0.patch
+   react-photo-view@1.2.7:
+     hash: 4ce33a84c4b7ec187b3cdd636a84064e6f7621f214bdbcf51946074d24322f59
+     path: patches/react-photo-view@1.2.7.patch
+@@ -1069,7 +1072,7 @@ importers:
+         version: 1.159.4
+       '@tanstack/router-plugin':
+         specifier: 'catalog:'
+-        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(esbuild@0.24.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))
++        version: 1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(esbuild@0.28.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))
+       '@types/debug':
+         specifier: ^4.1.12
+         version: 4.1.12
+@@ -1188,6 +1191,9 @@ importers:
+       '@earendil-works/pi-coding-agent':
+         specifier: 0.85.1
+         version: 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.19.0)(zod@4.3.6)
++      '@modelcontextprotocol/client':
++        specifier: 2.0.0
++        version: 2.0.0
+       '@modelcontextprotocol/sdk':
+         specifier: 1.29.0
+         version: 1.29.0(zod@4.3.6)
+@@ -1197,6 +1203,9 @@ importers:
+       acp-extension-core:
+         specifier: workspace:*
+         version: link:../acp-extension-core
++      pi-mcp-adapter:
++        specifier: 3.2.0
++        version: 3.2.0(patch_hash=f4b5b049cdb5380a7f0c644a5e5bb558f44bd0da10cc1a9d96e26628599d03e3)(@earendil-works/pi-ai@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.19.0)(zod@4.3.6))(@earendil-works/pi-tui@0.85.1)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typebox@1.3.7)(zod@4.3.6)
+       typebox:
+         specifier: 1.3.7
+         version: 1.3.7
+@@ -3507,6 +3516,36 @@ packages:
+   '@microsoft/tsdoc@0.16.0':
+     resolution: {integrity: sha512-xgAyonlVVS+q7Vc7qLW0UrJU7rSFcETRWsqdXZtjzRU8dF+6CkozTK4V4y1LwOX7j8r/vHphjDeMeGI4tNGeGA==}
+ 
++  '@modelcontextprotocol/client@2.0.0':
++    resolution: {integrity: sha512-8f1OghQ2rjzIOfqgUCP+8GiUWqRs89njoWLNqAe8kWmDePv3s1fZXseej+QXemssEuuOvLLmLO/kqM3IQHtISw==}
++    engines: {node: '>=20'}
++
++  '@modelcontextprotocol/core@2.0.0':
++    resolution: {integrity: sha512-pJCEwGG7Lfr/+PQp9ZTwKXNeO5wzbfKL7H3MYpCorM4oFBoQrdjnBgEoqG+RjhsvS1FKrDbKux+M1HhlnGWqcA==}
++    engines: {node: '>=20'}
++
++  '@modelcontextprotocol/ext-apps@1.7.5':
++    resolution: {integrity: sha512-TjPH2S2y5UEGKhmI6+XGFuqfqOV4ppe1x6DA3txnUaEWkgtA4G5vo14jGKFZmegdkZ1H4QMLyujLvoU1BEdnAg==}
++    engines: {node: '>=20'}
++    peerDependencies:
++      '@modelcontextprotocol/sdk': ^1.29.0
++      react: ^17.0.0 || ^18.0.0 || ^19.0.0
++      react-dom: ^17.0.0 || ^18.0.0 || ^19.0.0
++      zod: 4.3.6
++    peerDependenciesMeta:
++      react:
++        optional: true
++      react-dom:
++        optional: true
++
++  '@modelcontextprotocol/ext-tasks@0.1.0':
++    resolution: {integrity: sha512-N6kQdDoR8bQcXFvoB0qsPh2k5/hr+aQDKngiJH8P2u3L68bdX0yMuPRMAZ6JHBGTA51rRFc3ajhiosEaeW9U1A==}
++    peerDependencies:
++      '@modelcontextprotocol/client': ^2.0.0
++    peerDependenciesMeta:
++      '@modelcontextprotocol/client':
++        optional: true
++
+   '@modelcontextprotocol/sdk@1.29.0':
+     resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
+     engines: {node: '>=18'}
+@@ -3524,6 +3563,87 @@ packages:
+     resolution: {integrity: sha512-XyroGQXcHrZdvmrGJvsA9KNeOOgGMg1Vg9OlheUsBOSKznLMDl+YChxbkboRHvtFYJEMRYmlV3uoo/njCw05iw==}
+     engines: {node: '>=16'}
+ 
++  '@napi-rs/keyring-darwin-arm64@2.1.0':
++    resolution: {integrity: sha512-j6ATTOhmPW+N5EKwi8Yzn6P4Bz/uqnxzyYvqOL73/dgzDSYG5pS5eprqpVmOLse68WUTf79ZMqz97HnfvirJ9g==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [darwin]
++
++  '@napi-rs/keyring-darwin-x64@2.1.0':
++    resolution: {integrity: sha512-54Q803nguiOaQzBG2h4uIkacI0eLGAlzzdpxPNi6IZtXbjqbPI4AQ86GrQy25tw3czBqRPBoGu0lHP2U+/f5iA==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [darwin]
++
++  '@napi-rs/keyring-freebsd-x64@2.1.0':
++    resolution: {integrity: sha512-BL7ngJAYQBrUp1PTF8enOXOIVfxN51RbwVOEQ+8eAjWypF/5Ipqs8oQoMqkuc0wAbk+vatnNVjdKCIFa/HPglg==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [freebsd]
++
++  '@napi-rs/keyring-linux-arm-gnueabihf@2.1.0':
++    resolution: {integrity: sha512-JYgbCDk+giss7lKla8NTXhM/fLj+Hrfgr3xwKQ8jKn8qMD6vXLwYcfK8HJ9VoAcjIeYEUpCL6dRszJC5M4zFNg==}
++    engines: {node: '>= 10'}
++    cpu: [arm]
++    os: [linux]
++
++  '@napi-rs/keyring-linux-arm64-gnu@2.1.0':
++    resolution: {integrity: sha512-+PMONFQ+2GkBXG7vRG2spgR73bNCMeVpNopHoSmhj2E+5Gu6zJooRBjoaIZKj6hCyrOU8pXAhoZ22EEFQ/4YeQ==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [glibc]
++
++  '@napi-rs/keyring-linux-arm64-musl@2.1.0':
++    resolution: {integrity: sha512-dKjiXKTHQjAS57hL0HVzLpW9XYNGFpfYkr/51FzIIvbZR08PAnzIDYKwShoNYGvjQP6+rDFf1a5Utl0aWwcFrA==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [linux]
++    libc: [musl]
++
++  '@napi-rs/keyring-linux-riscv64-gnu@2.1.0':
++    resolution: {integrity: sha512-tqhb0ofhtEJ2+ZfmlKTDHbmIoNSz+SSTPWRgMfSVCgI4JVkqDdfcmIOcThZfRffJ3QI9C3Tng+rZL24acmD+GA==}
++    engines: {node: '>= 10'}
++    cpu: [riscv64]
++    os: [linux]
++    libc: [glibc]
++
++  '@napi-rs/keyring-linux-x64-gnu@2.1.0':
++    resolution: {integrity: sha512-7ZA0ssxfpuGXV8S5Ct1ZJoEL3sKg/8u7mIL4SK9/PwKBhxIq7K+FVcjnggNsuFnEhHTX+HYl9hHDrlX0odZnHg==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [linux]
++    libc: [glibc]
++
++  '@napi-rs/keyring-linux-x64-musl@2.1.0':
++    resolution: {integrity: sha512-dI74Fzl03CrN2TEP7YVBtUBFgyRTRPyK1LMcIgAUfgW3o6f5SD1a8EsfT82+brpFOltjOhacIlFiYOkYtSI5Fg==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [linux]
++    libc: [musl]
++
++  '@napi-rs/keyring-win32-arm64-msvc@2.1.0':
++    resolution: {integrity: sha512-SltrXXkEe9a+Jv8ConDkZW2Mdr0srpWurS7oYkYP1Mp07DNBpFyqawRnyo4p7ZvQU3e+R6irj/Fq0epCCvVUXA==}
++    engines: {node: '>= 10'}
++    cpu: [arm64]
++    os: [win32]
++
++  '@napi-rs/keyring-win32-ia32-msvc@2.1.0':
++    resolution: {integrity: sha512-l5wJQhqXkAfQ4FGxoRh0wMpL9VxVmfiYI5TTeOGNupuVsQvbHmysh8gfDQBBWVhyMENHJS2OqOSYIuqVjumAtA==}
++    engines: {node: '>= 10'}
++    cpu: [ia32]
++    os: [win32]
++
++  '@napi-rs/keyring-win32-x64-msvc@2.1.0':
++    resolution: {integrity: sha512-3zYwO7dhJiUNyv2te81ujXm2vGxHwgx+z2eBm0dTYe3aWpvKQVzpfxCp/7cViJs8duVYE04wVOgXiRhRCMEq2w==}
++    engines: {node: '>= 10'}
++    cpu: [x64]
++    os: [win32]
++
++  '@napi-rs/keyring@2.1.0':
++    resolution: {integrity: sha512-km9J3fomkGSLpImpelq0cMvLBrJ5eVlTzuWdG3Iy0laP6gU90MmHYjqhUhG32aYq0/0++r2TLuAA9xlnh4XU1g==}
++    engines: {node: '>= 10'}
++
+   '@napi-rs/wasm-runtime@1.2.1':
+     resolution: {integrity: sha512-KjZdi8Q1wh89gsVmghvbrMgWl6ZWmRmHV6wjB7/g4Zf0dyO+hH3neZUtuDNPO00qq5YE5RITVWvrIZKRaAmzGQ==}
+     engines: {node: ^20.19.0 || ^22.13.0 || >=23.5.0}
+@@ -6001,6 +6121,10 @@ packages:
+   '@types/yauzl@2.10.3':
+     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
+ 
++  '@typesafe-ai/sdk@0.6.0':
++    resolution: {integrity: sha512-IddX+Q0XM+VagOUZFeP7wZjaO4SHMdvnh2zEBdrZZnXedWI3BNK1lKhMx3ayrkFWvVLbVcUHJy6AVZlY+e6Jaw==}
++    engines: {node: '>=20'}
++
+   '@typescript-eslint/eslint-plugin@8.55.0':
+     resolution: {integrity: sha512-1y/MVSz0NglV1ijHC8OT49mPJ4qhPYjiK08YUQVbIOyu+5k862LKUHFkpKHWu//zmr7hDR2rhwUm6gnCGNmGBQ==}
+     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+@@ -6668,6 +6792,10 @@ packages:
+     resolution: {integrity: sha512-q2hn7Mbo2nFNkVekPiHFx6Nfo3hURmES3tfBn+k5Pqxl2RkmP3QGqZUhH/q9Pch/4G05NRhPjDlVj1O8q4Txvw==}
+     engines: {node: '>=14.0.0'}
+ 
++  bundle-name@4.1.1:
++    resolution: {integrity: sha512-DdH81/zPLVS11EUgWq3tEu/xn+EzljlMYooDNdzWEnFha3R3NBMpMV1UqYIpjYHV/SgpFKMIX1Oh7o06SjM/oA==}
++    engines: {node: '>=18'}
++
+   bytes@3.1.2:
+     resolution: {integrity: sha512-/Nf7TyzTx6S3yRJObOAV7956r8cr2+Oj8AC5dt8wSP3BQAoeX58NoHyCU8P8zGkNXStjTSi6fzO6F0pBdcYbEg==}
+     engines: {node: '>= 0.8'}
+@@ -7233,6 +7361,14 @@ packages:
+     resolution: {integrity: sha512-HOJkrhaYsweh+W+e74Yn7YStZOilkoPb6fycpwNLKzSPtruFs48nYis0zy5yJz1+ktUhHxoRDJ27RQAWLIJVJw==}
+     engines: {node: '>=16.0.0'}
+ 
++  default-browser-id@5.0.1:
++    resolution: {integrity: sha512-x1VCxdX4t+8wVfd1so/9w+vQ4vx7lKd2Qp5tDRutErwmR85OgmfX7RlLRMWafRMY7hbEiXIbudNrjOAPa/hL8Q==}
++    engines: {node: '>=18'}
++
++  default-browser@5.5.1:
++    resolution: {integrity: sha512-m1pAzaJgZ/gssEqlOhJkPJp8Xly7QyW6xcrkUa2KKcDeDSEMP7X8xipU3snUcfisTQx0w1AGae+9UtJSfVnXGw==}
++    engines: {node: '>=18'}
++
+   default-shell@2.2.0:
+     resolution: {integrity: sha512-sPpMZcVhRQ0nEMDtuMJ+RtCxt7iHPAMBU+I4tAlo5dU1sjRpNax0crj6nR3qKpvVnckaQ9U38enXcwW9nZJeCw==}
+     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
+@@ -7249,6 +7385,10 @@ packages:
+     resolution: {integrity: sha512-Ds09qNh8yw3khSjiJjiUInaGX9xlqZDY7JVryGxdxV7NPeuqQfplOpQ66yJFZut3jLa5zOwkXw1g9EI2uKh4Og==}
+     engines: {node: '>=8'}
+ 
++  define-lazy-prop@3.0.0:
++    resolution: {integrity: sha512-N+MeXYoqr3pOgn8xfyRPREN7gHakLYjhsHhWGT3fWAiL4IkAt0iDw14QiiEm2bE30c5XX5q0FtAA3CK5f9/BUg==}
++    engines: {node: '>=12'}
++
+   define-properties@1.2.1:
+     resolution: {integrity: sha512-8QmQKqEASLd5nx0U1B1okLElbUuuttJ/AnYmRXbbbGDWh6uS208EjD4Xqq/I9wK7u0v6O08XhTWnt5XtEbR6Dg==}
+     engines: {node: '>= 0.4'}
+@@ -8540,6 +8680,11 @@ packages:
+     engines: {node: '>=8'}
+     hasBin: true
+ 
++  is-docker@3.0.0:
++    resolution: {integrity: sha512-eljcgEDlEns/7AXFosB5K/2nCM4P7FQPkGc/DWLy5rmFEWvZayGrik1d9/QIY5nJ4f9YsVvBkA6kJpHn9rISdQ==}
++    engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
++    hasBin: true
++
+   is-extglob@2.1.1:
+     resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
+     engines: {node: '>=0.10.0'}
+@@ -8563,6 +8708,11 @@ packages:
+   is-hexadecimal@2.0.1:
+     resolution: {integrity: sha512-DgZQp241c8oO6cA1SbTEWiXeoxV42vlcJxgH+B3hi1AiqqKruZR3ZGF8In3fj4+/y/7rHvlOZLZtgJ/4ttYGZg==}
+ 
++  is-inside-container@1.0.0:
++    resolution: {integrity: sha512-KIYLCCJghfHZxqjYBE7rEy0OBuTd5xCHS7tHVgvCLkx7StIoaxwNW3hCALgEUjFfeRk+MG/Qxmp/vtETEF3tRA==}
++    engines: {node: '>=14.16'}
++    hasBin: true
++
+   is-installed-globally@1.0.0:
+     resolution: {integrity: sha512-K55T22lfpQ63N4KEN57jZUAaAYqYHEe8veb/TycJRk9DdSCLLcovXz/mL6mOnhQaZsQGwPhuFopdQIlqGSEjiQ==}
+     engines: {node: '>=18'}
+@@ -8656,6 +8806,10 @@ packages:
+     resolution: {integrity: sha512-fKzAra0rGJUUBwGBgNkHZuToZcn+TtXHpeCgmkMJMMYx1sQDYaCSyjJBSCa2nH1DGm7s3n1oBnohoVTBaN7Lww==}
+     engines: {node: '>=8'}
+ 
++  is-wsl@3.1.1:
++    resolution: {integrity: sha512-e6rvdUCiQCAuumZslxRJWR/Doq4VpPR82kqclvcS0efgt430SlGIk05vdCN58+VrzgtIcfNODjozVielycD4Sw==}
++    engines: {node: '>=16'}
++
+   isarray@1.0.0:
+     resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
+ 
+@@ -9697,6 +9851,10 @@ packages:
+   oniguruma-to-es@4.3.6:
+     resolution: {integrity: sha512-csuQ9x3Yr0cEIs/Zgx/OEt9iBw9vqIunAPQkx19R/fiMq2oGVTgcMqO/V3Ybqefr1TBvosI6jU539ksaBULJyA==}
+ 
++  open@10.2.0:
++    resolution: {integrity: sha512-YgBpdJHPyQ2UE5x+hlSXcnejzAvD0b22U2OuAP+8OnlJT+PjWPxtgmGqKKc+RgTM63U9gN0YzrYc71R2WT/hTA==}
++    engines: {node: '>=18'}
++
+   open@8.4.2:
+     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
+     engines: {node: '>=12'}
+@@ -9888,6 +10046,23 @@ packages:
+     resolution: {integrity: sha512-qTAAlrEsl8s4OiEQY69wDvcMIdQN6wdz5ojQiOy6YRMuynxenON0O5oCpJI6lshc6scgAY8qvJ2On/p+CXY0GA==}
+     engines: {node: '>=4'}
+ 
++  pi-mcp-adapter@3.2.0:
++    resolution: {integrity: sha512-FzGepoyY7+fmQS3Y2PMnbu+mxbR7nrtXryfw5pKCGc9Nn8i7+zSuDjT9NOna3jatyqciIQbX2KBtTgzOE8FLDg==}
++    engines: {node: '>=20'}
++    hasBin: true
++    peerDependencies:
++      '@earendil-works/pi-ai': ^0.84.1 || ^0.85.0 || ^0.86.0 || ^0.87.0
++      '@earendil-works/pi-tui': '*'
++      typebox: '*'
++      zod: 4.3.6
++    peerDependenciesMeta:
++      '@earendil-works/pi-ai':
++        optional: true
++      '@earendil-works/pi-tui':
++        optional: true
++      typebox:
++        optional: true
++
+   picocolors@1.1.1:
+     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
+ 
+@@ -10233,6 +10408,9 @@ packages:
+     resolution: {integrity: sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==}
+     engines: {node: '>=10'}
+ 
++  quickjs-wasi@3.6.2:
++    resolution: {integrity: sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==}
++
+   range-parser@1.2.1:
+     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
+     engines: {node: '>= 0.6'}
+@@ -10463,6 +10641,38 @@ packages:
+       react: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+       react-dom: ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+ 
++  recheck-jar@4.6.0-beta.3:
++    resolution: {integrity: sha512-CwADkL99b8QlGcg7vRzuhkzfQebIPO8+IfIOi1HIlzBRUC8k6/zAylmzcavI9rjZD4jVStRR+Px+TnkCOCoXbQ==}
++
++  recheck-linux-arm64@4.6.0-beta.3:
++    resolution: {integrity: sha512-ym3//7ygvClNCPezhvGhvD/phqQPlEcQpUWbkZVczoOwMjFaJn+7/Gtnt2RXzOMGW1fy2pVGtWAK7B871JTlJA==}
++    cpu: [arm64]
++    os: [linux]
++
++  recheck-linux-x64@4.6.0-beta.3:
++    resolution: {integrity: sha512-QBzszyfVO7jZqOh6yjNlulD45BYS0QVReHrPzN2rDWSTs8NnDbWcrXMGo5zSlCsS/hMmuuExbs/jYIZQfqyIsQ==}
++    cpu: [x64]
++    os: [linux]
++
++  recheck-macos-arm64@4.6.0-beta.3:
++    resolution: {integrity: sha512-28hiCHhgXyA2ZsYxK2L9uzFfcgo1yQ4x9cVqH2HbDRSD9c+B3P5GpxsYWSKk0VFCvMuPjWrqWtGgRQJgIv9dew==}
++    cpu: [arm64]
++    os: [darwin]
++
++  recheck-macos-x64@4.6.0-beta.3:
++    resolution: {integrity: sha512-sGb55OMrMC2cygjGktQctgXyWm8p7M+LiyppTvB044yIGbAusShFE6AJaroaeB2rSAivLDRhAfnclZZiRBnyfA==}
++    cpu: [x64]
++    os: [darwin]
++
++  recheck-windows-x64@4.6.0-beta.3:
++    resolution: {integrity: sha512-kLASRM4KvltHHY2APe3eDrOdPrZs9bbUEFCiVpCJxxnWMpxqmO465DmU71jIZUIRCf+1y4iyyvMxCYbw8Kw3tQ==}
++    cpu: [x64]
++    os: [win32]
++
++  recheck@4.6.0-beta.3:
++    resolution: {integrity: sha512-vFGnR2AF6o8O5/gyLoIx5Kcnqdf/e3RLeMbZYgTJAiTIkKFPEFAWKxHiGWOhZDg5ibt46oqN7h+yJE6Gx2HqYw==}
++    engines: {node: '>=20'}
++
+   redent@3.0.0:
+     resolution: {integrity: sha512-6tDA8g98We0zd0GvVeMT9arEOnTw9qM03L9cJXaCjrip1OO764RDBLBfrB4cwzNGDj5OA5ioymC9GkizgWJDUg==}
+     engines: {node: '>=8'}
+@@ -10681,6 +10891,10 @@ packages:
+   rrweb-cssom@0.8.0:
+     resolution: {integrity: sha512-guoltQEx+9aMf2gDZ0s62EcV8lsXR+0w8915TC3ITdn2YueuNjdAYh/levpU9nFaoChh9RUS5ZdQMrKfVEN9tw==}
+ 
++  run-applescript@7.1.0:
++    resolution: {integrity: sha512-DPe5pVFaAsinSaV6QjQ6gdiedWDcRCbUuiQfQa2wmWV7+xC9bGulGI8+TdRmoFkAPaBXk8CrAbnlY2ISniJ47Q==}
++    engines: {node: '>=18'}
++
+   run-async@3.0.0:
+     resolution: {integrity: sha512-540WwVDOMxA6dN6We19EcT9sc3hkXPw5mzRNGM3FkdN/vtE9NFvj5lFAPNwUDmJjXidm3v7TC1cTE7t17Ulm1Q==}
+     engines: {node: '>=0.12.0'}
+@@ -10915,6 +11129,10 @@ packages:
+     resolution: {integrity: sha512-dWUG8F5sIIARXih1DTaQAX4SsiTXhInKf1buxdY9DIg4ZYPZK5nGM1VRIYmEbDbsHt7USo99xSLFu5Q1IqTmsg==}
+     engines: {node: '>= 18'}
+ 
++  smol-toml@1.9.0:
++    resolution: {integrity: sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==}
++    engines: {node: '>= 18'}
++
+   socks@2.8.7:
+     resolution: {integrity: sha512-HLpt+uLy/pxB+bum/9DzAgiKS8CX1EvbWxI4zlmgGCExImLdiad2iCwXT5Z4c9c3Eq8rP2318mPW2c+QbtjK8A==}
+     engines: {node: '>= 10.0.0', npm: '>= 3.0.0'}
+@@ -11102,6 +11320,10 @@ packages:
+     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
+     engines: {node: '>=8'}
+ 
++  strip-json-comments@5.0.3:
++    resolution: {integrity: sha512-1tB5mhVo7U+ETBKNf92xT4hrQa3pm0MZ0PQvuDnWgAAGHDsfp4lPSpiS6psrSiet87wyGPh9ft6wmhOMQ0hDiw==}
++    engines: {node: '>=14.16'}
++
+   strip-literal@3.1.0:
+     resolution: {integrity: sha512-8r3mkIM/2+PpjHoOtiAW8Rg3jJLHaV7xPwG+YRGrv6FP0wwk/toTpATxWYOW0BKdWwl82VT2tFYi5DlROa0Mxg==}
+ 
+@@ -11151,6 +11373,10 @@ packages:
+   symbol-tree@3.2.4:
+     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
+ 
++  synckit@0.11.11:
++    resolution: {integrity: sha512-MeQTA1r0litLUf0Rp/iisCaL8761lKAZHaimlbGK4j0HysC4PLfqygQj9srcs0m2RdtDYnF8UuYyKpbjHYp7Jw==}
++    engines: {node: ^14.18.0 || >=16.0.0}
++
+   synckit@0.11.12:
+     resolution: {integrity: sha512-Bh7QjT8/SuKUIfObSXNHNSK6WHo6J1tHCqJsuaFDP7gP0fkzSfTxI8y85JrppZ0h8l0maIgc2tfuZQ6/t3GtnQ==}
+     engines: {node: ^14.18.0 || >=16.0.0}
+@@ -11450,6 +11676,10 @@ packages:
+     resolution: {integrity: sha512-4yqz8a3n5HmGTlsbADNtr/dJlhkh/55Rq798G6ibiULcXbDtaLpTl1pvdqcbFfeoj3iSi52lePFM7h9H21cw/A==}
+     engines: {node: '>=18.17'}
+ 
++  undici@6.29.0:
++    resolution: {integrity: sha512-R+RODBqp6i2pPflGdq+xIOUkl+RNfGgHwoinecKu/JCuf2uO06cOKoDbI2P7Dn6KcswdKwrczbU6IYJ6K8X+wg==}
++    engines: {node: '>=18.17'}
++
+   undici@8.10.0:
+     resolution: {integrity: sha512-HvltHd7avK13QIw/oLe4qoOLyoVSoafqJ2jYOrtMRBkbYT31eiBQ8O0ehRKZiEZCMEyLFQNIADpgCWC5fALvYQ==}
+     engines: {node: '>=22.19.0'}
+@@ -12053,6 +12283,10 @@ packages:
+       utf-8-validate:
+         optional: true
+ 
++  wsl-utils@0.1.0:
++    resolution: {integrity: sha512-h3Fbisa2nKGPxCpm89Hk33lBLsnaGBvctQopaBSOW/uIs6FTe1ATyAnKFJrzVs9vpGdsTe73WF3V4lIsk4Gacw==}
++    engines: {node: '>=18'}
++
+   xml-name-validator@5.0.0:
+     resolution: {integrity: sha512-EvGK8EJ3DhaHfbRlETOWAS5pO9MZITeauHKJyb8wyajUfQUenkIg2MvLDTZ4T/TgIcm3HU0TFBgWWboAZ30UHg==}
+     engines: {node: '>=18'}
+@@ -14524,6 +14758,35 @@ snapshots:
+ 
+   '@microsoft/tsdoc@0.16.0': {}
+ 
++  '@modelcontextprotocol/client@2.0.0':
++    dependencies:
++      '@modelcontextprotocol/core': 2.0.0
++      cross-spawn: 7.0.6
++      eventsource: 3.0.7
++      eventsource-parser: 3.0.7
++      jose: 6.2.2
++      pkce-challenge: 5.0.1
++      zod: 4.3.6
++
++  '@modelcontextprotocol/core@2.0.0':
++    dependencies:
++      zod: 4.3.6
++
++  '@modelcontextprotocol/ext-apps@1.7.5(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@4.3.6)':
++    dependencies:
++      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
++      '@standard-schema/spec': 1.1.0
++      zod: 4.3.6
++    optionalDependencies:
++      react: 19.2.0
++      react-dom: 19.2.0(react@19.2.0)
++
++  '@modelcontextprotocol/ext-tasks@0.1.0(@modelcontextprotocol/client@2.0.0)':
++    dependencies:
++      zod: 4.3.6
++    optionalDependencies:
++      '@modelcontextprotocol/client': 2.0.0
++
+   '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
+     dependencies:
+       '@hono/node-server': 1.19.14(hono@4.12.14)
+@@ -14556,6 +14819,57 @@ snapshots:
+       lilconfig: 2.1.0
+     optional: true
+ 
++  '@napi-rs/keyring-darwin-arm64@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-darwin-x64@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-freebsd-x64@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-arm-gnueabihf@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-arm64-gnu@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-arm64-musl@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-riscv64-gnu@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-x64-gnu@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-linux-x64-musl@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-win32-arm64-msvc@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-win32-ia32-msvc@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring-win32-x64-msvc@2.1.0':
++    optional: true
++
++  '@napi-rs/keyring@2.1.0':
++    optionalDependencies:
++      '@napi-rs/keyring-darwin-arm64': 2.1.0
++      '@napi-rs/keyring-darwin-x64': 2.1.0
++      '@napi-rs/keyring-freebsd-x64': 2.1.0
++      '@napi-rs/keyring-linux-arm-gnueabihf': 2.1.0
++      '@napi-rs/keyring-linux-arm64-gnu': 2.1.0
++      '@napi-rs/keyring-linux-arm64-musl': 2.1.0
++      '@napi-rs/keyring-linux-riscv64-gnu': 2.1.0
++      '@napi-rs/keyring-linux-x64-gnu': 2.1.0
++      '@napi-rs/keyring-linux-x64-musl': 2.1.0
++      '@napi-rs/keyring-win32-arm64-msvc': 2.1.0
++      '@napi-rs/keyring-win32-ia32-msvc': 2.1.0
++      '@napi-rs/keyring-win32-x64-msvc': 2.1.0
++
+   '@napi-rs/wasm-runtime@1.2.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
+     dependencies:
+       '@emnapi/core': 1.11.1
+@@ -16666,7 +16980,7 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
+-  '@tanstack/router-plugin@1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(esbuild@0.24.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))':
++  '@tanstack/router-plugin@1.168.23(@tanstack/react-router@1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(esbuild@0.28.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))':
+     dependencies:
+       '@babel/core': 7.29.0
+       '@babel/template': 7.28.6
+@@ -16675,7 +16989,7 @@ snapshots:
+       '@tanstack/router-generator': 1.167.21
+       '@tanstack/router-utils': 1.162.2
+       chokidar: 5.0.0
+-      unplugin: 3.3.0(esbuild@0.24.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))
++      unplugin: 3.3.0(esbuild@0.28.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0))
+       zod: 4.3.6
+     optionalDependencies:
+       '@tanstack/react-router': 1.170.18(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+@@ -17190,6 +17504,8 @@ snapshots:
+       '@types/node': 26.2.0
+     optional: true
+ 
++  '@typesafe-ai/sdk@0.6.0': {}
++
+   '@typescript-eslint/eslint-plugin@8.55.0(@typescript-eslint/parser@8.55.0(eslint@9.39.2(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.2(jiti@2.7.0))(typescript@5.9.3)':
+     dependencies:
+       '@eslint-community/regexpp': 4.12.2
+@@ -18099,6 +18415,10 @@ snapshots:
+     transitivePeerDependencies:
+       - supports-color
+ 
++  bundle-name@4.1.1:
++    dependencies:
++      run-applescript: 7.1.0
++
+   bytes@3.1.2: {}
+ 
+   bytestreamjs@2.0.1: {}
+@@ -18674,6 +18994,13 @@ snapshots:
+   deepmerge-ts@7.1.5:
+     optional: true
+ 
++  default-browser-id@5.0.1: {}
++
++  default-browser@5.5.1:
++    dependencies:
++      bundle-name: 4.1.1
++      default-browser-id: 5.0.1
++
+   default-shell@2.2.0: {}
+ 
+   defer-to-connect@2.0.1: {}
+@@ -18686,6 +19013,8 @@ snapshots:
+ 
+   define-lazy-prop@2.0.0: {}
+ 
++  define-lazy-prop@3.0.0: {}
++
+   define-properties@1.2.1:
+     dependencies:
+       define-data-property: 1.1.4
+@@ -20308,6 +20637,8 @@ snapshots:
+ 
+   is-docker@2.2.1: {}
+ 
++  is-docker@3.0.0: {}
++
+   is-extglob@2.1.1: {}
+ 
+   is-finalizationregistry@1.1.1:
+@@ -20330,6 +20661,10 @@ snapshots:
+ 
+   is-hexadecimal@2.0.1: {}
+ 
++  is-inside-container@1.0.0:
++    dependencies:
++      is-docker: 3.0.0
++
+   is-installed-globally@1.0.0:
+     dependencies:
+       global-directory: 4.0.1
+@@ -20408,6 +20743,10 @@ snapshots:
+     dependencies:
+       is-docker: 2.2.1
+ 
++  is-wsl@3.1.1:
++    dependencies:
++      is-inside-container: 1.0.0
++
+   isarray@1.0.0: {}
+ 
+   isarray@2.0.5: {}
+@@ -21617,6 +21956,13 @@ snapshots:
+       regex: 6.1.0
+       regex-recursion: 6.0.2
+ 
++  open@10.2.0:
++    dependencies:
++      default-browser: 5.5.1
++      define-lazy-prop: 3.0.0
++      is-inside-container: 1.0.0
++      wsl-utils: 0.1.0
++
+   open@8.4.2:
+     dependencies:
+       define-lazy-prop: 2.0.0
+@@ -21823,6 +22169,33 @@ snapshots:
+       postgres-interval: 1.2.0
+     optional: true
+ 
++  pi-mcp-adapter@3.2.0(patch_hash=f4b5b049cdb5380a7f0c644a5e5bb558f44bd0da10cc1a9d96e26628599d03e3)(@earendil-works/pi-ai@0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.19.0)(zod@4.3.6))(@earendil-works/pi-tui@0.85.1)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(typebox@1.3.7)(zod@4.3.6):
++    dependencies:
++      '@modelcontextprotocol/client': 2.0.0
++      '@modelcontextprotocol/core': 2.0.0
++      '@modelcontextprotocol/ext-apps': 1.7.5(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)(zod@4.3.6)
++      '@modelcontextprotocol/ext-tasks': 0.1.0(@modelcontextprotocol/client@2.0.0)
++      '@napi-rs/keyring': 2.1.0
++      '@typesafe-ai/sdk': 0.6.0
++      ajv: 8.18.0
++      ajv-formats: 3.0.1(ajv@8.18.0)
++      cross-spawn: 7.0.6
++      open: 10.2.0
++      quickjs-wasi: 3.6.2
++      recheck: 4.6.0-beta.3
++      smol-toml: 1.9.0
++      strip-json-comments: 5.0.3
++      undici: 6.29.0
++      zod: 4.3.6
++    optionalDependencies:
++      '@earendil-works/pi-ai': 0.85.1(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(ws@8.19.0)(zod@4.3.6)
++      '@earendil-works/pi-tui': 0.85.1
++      typebox: 1.3.7
++    transitivePeerDependencies:
++      - '@modelcontextprotocol/sdk'
++      - react
++      - react-dom
++
+   picocolors@1.1.1: {}
+ 
+   picomatch@2.3.1: {}
+@@ -22206,6 +22579,8 @@ snapshots:
+ 
+   quick-lru@5.1.1: {}
+ 
++  quickjs-wasi@3.6.2: {}
++
+   range-parser@1.2.1: {}
+ 
+   raw-body@3.0.2:
+@@ -22472,6 +22847,35 @@ snapshots:
+       tiny-invariant: 1.3.3
+       victory-vendor: 36.9.2
+ 
++  recheck-jar@4.6.0-beta.3:
++    optional: true
++
++  recheck-linux-arm64@4.6.0-beta.3:
++    optional: true
++
++  recheck-linux-x64@4.6.0-beta.3:
++    optional: true
++
++  recheck-macos-arm64@4.6.0-beta.3:
++    optional: true
++
++  recheck-macos-x64@4.6.0-beta.3:
++    optional: true
++
++  recheck-windows-x64@4.6.0-beta.3:
++    optional: true
++
++  recheck@4.6.0-beta.3:
++    dependencies:
++      synckit: 0.11.11
++    optionalDependencies:
++      recheck-jar: 4.6.0-beta.3
++      recheck-linux-arm64: 4.6.0-beta.3
++      recheck-linux-x64: 4.6.0-beta.3
++      recheck-macos-arm64: 4.6.0-beta.3
++      recheck-macos-x64: 4.6.0-beta.3
++      recheck-windows-x64: 4.6.0-beta.3
++
+   redent@3.0.0:
+     dependencies:
+       indent-string: 4.0.0
+@@ -22785,6 +23189,8 @@ snapshots:
+ 
+   rrweb-cssom@0.8.0: {}
+ 
++  run-applescript@7.1.0: {}
++
+   run-async@3.0.0: {}
+ 
+   run-parallel@1.2.0:
+@@ -23069,6 +23475,8 @@ snapshots:
+ 
+   smol-toml@1.6.1: {}
+ 
++  smol-toml@1.9.0: {}
++
+   socks@2.8.7:
+     dependencies:
+       ip-address: 10.1.0
+@@ -23327,6 +23735,8 @@ snapshots:
+ 
+   strip-json-comments@3.1.1: {}
+ 
++  strip-json-comments@5.0.3: {}
++
+   strip-literal@3.1.0:
+     dependencies:
+       js-tokens: 9.0.1
+@@ -23373,6 +23783,10 @@ snapshots:
+ 
+   symbol-tree@3.2.4: {}
+ 
++  synckit@0.11.11:
++    dependencies:
++      '@pkgr/core': 0.2.9
++
+   synckit@0.11.12:
+     dependencies:
+       '@pkgr/core': 0.2.9
+@@ -23657,6 +24071,8 @@ snapshots:
+ 
+   undici@6.26.0: {}
+ 
++  undici@6.29.0: {}
++
+   undici@8.10.0: {}
+ 
+   undici@8.9.0: {}
+@@ -23723,13 +24139,13 @@ snapshots:
+       acorn: 8.16.0
+       webpack-virtual-modules: 0.6.2
+ 
+-  unplugin@3.3.0(esbuild@0.24.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0)):
++  unplugin@3.3.0(esbuild@0.28.2)(rolldown@1.1.5)(rollup@4.57.1)(vite@6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0)):
+     dependencies:
+       '@jridgewell/remapping': 2.3.5
+       picomatch: 4.0.5
+       webpack-virtual-modules: 0.6.2
+     optionalDependencies:
+-      esbuild: 0.24.2
++      esbuild: 0.28.2
+       rolldown: 1.1.5
+       rollup: 4.57.1
+       vite: 6.4.1(@types/node@24.10.12)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.23.13)(yaml@2.9.0)
+@@ -24596,6 +25012,10 @@ snapshots:
+ 
+   ws@8.19.0: {}
+ 
++  wsl-utils@0.1.0:
++    dependencies:
++      is-wsl: 3.1.1
++
+   xml-name-validator@5.0.0: {}
+ 
+   xmlbuilder2@4.0.3:
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index bc2b12c1..238e15cf 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -109,3 +109,4 @@ patchedDependencies:
+   mdast-util-gfm-autolink-literal@2.0.1: patches/mdast-util-gfm-autolink-literal@2.0.1.patch
+   react-photo-view@1.2.7: patches/react-photo-view@1.2.7.patch
+   remend@1.3.0: patches/remend@1.3.0.patch
++  'pi-mcp-adapter@3.2.0': patches/pi-mcp-adapter@3.2.0.patch
+diff --git a/apps/cli/tests/mcp-adapter-image-import.test.ts b/apps/cli/tests/mcp-adapter-image-import.test.ts
+new file mode 100644
+index 00000000..054d0253
+--- /dev/null
++++ b/apps/cli/tests/mcp-adapter-image-import.test.ts
+@@ -0,0 +1,450 @@
++import { createHash, randomUUID } from 'node:crypto';
++import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { PassThrough } from 'node:stream';
++import { afterEach, expect, it } from 'vitest';
++import { Server } from '@modelcontextprotocol/sdk/server/index.js';
++import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
++import {
++  CallToolRequestSchema,
++  ListToolsRequestSchema,
++  ReadResourceRequestSchema,
++} from '@modelcontextprotocol/sdk/types.js';
++import type { SessionId } from '@molly/shared';
++import {
++  HARNESS_IMAGE_IMPORT_METHOD,
++  HarnessImageImportRequestSchema,
++  HarnessImageImportResultSchema,
++  McpImageBindingSchema,
++  type HarnessRunSnapshot,
++} from '@molly/shared/embedded-harness';
++import type { WorkerConfig } from '@molly/harness-pi/worker-config';
++import { connectAdapterMcpServers } from '../../../packages/harness-pi/src/mcp-adapter';
++import { ToolOperationJournal } from '../../../packages/harness-pi/src/tool-operation-journal';
++import { resolveMcpContent } from '../../../packages/harness-pi/src/mcp-content';
++import { AgentClient } from '../src/agent/agent-client';
++import { EmbeddedHarnessControl } from '../src/agent/embedded-harness-control';
++import { HarnessCredentialBroker } from '../src/agent/harness-credential-broker';
++import { importHarnessImages } from '../src/design/harness-image-import';
++import { resolveDesignWorkspace } from '../src/design/workspace';
++import type { Logger } from '../src/utils/logger';
++
++const roots: string[] = [];
++afterEach(async () => {
++  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
++});
++const png =
++  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
++function deferred<T = void>() {
++  let resolve: (value: T) => void = () => {
++    throw new Error('deferred_not_initialized');
++  };
++  const promise = new Promise<T>((done) => {
++    resolve = done;
++  });
++  return { promise, resolve };
++}
++const logger: Logger = {
++  info: () => {},
++  warn: () => {},
++  error: () => {},
++  success: () => {},
++  debug: () => {},
++  setLevel: () => {},
++  child: () => logger,
++  close: async () => {},
++};
++
++it.each([
++  'imported',
++  'cancelled',
++  'wrong-epoch',
++  'wrong-session',
++  'resource-denied',
++  'resource-unavailable',
++  'wrong-uri',
++] as const)(
++  'keeps linked image import inside actual host approval, run ownership and durable parent dispatch (%s)',
++  async (mode) => {
++    const root = await mkdtemp(join(tmpdir(), 'molly-adapter-import-'));
++    roots.push(root);
++    const sessionId = randomUUID() as SessionId;
++    const artworkId = randomUUID();
++    const workspace = resolveDesignWorkspace({
++      workspaceRoot: root,
++      sessionId,
++      artworkId,
++      legacyWorkdir: join(root, 'input'),
++    });
++    await mkdir(workspace.artifactWorkdir, { recursive: true });
++    const imageBinding = McpImageBindingSchema.parse({
++      version: 1,
++      model: 'synthetic-image',
++      generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
++    });
++    const config: WorkerConfig = {
++      schemaVersion: 1,
++      runtimeEpoch: randomUUID(),
++      productSessionId: sessionId,
++      workspaceId: 'synthetic-workspace',
++      privateRoot: join(root, 'private'),
++      designImageImport: true,
++      cwd: root,
++      shellPath: '/bin/sh',
++      connection: {
++        schemaVersion: 1,
++        id: 'synthetic-model',
++        revision: 1,
++        providerPresetId: 'openai',
++        displayName: 'Synthetic',
++        baseUrl: 'https://synthetic.invalid/v1',
++        credentialRef: 'synthetic-ref',
++        enabled: true,
++      },
++      selection: { connectionId: 'synthetic-model', modelId: 'synthetic', thinking: 'off' },
++      systemPrompt: 'Synthetic',
++      permissionProfileId: 'ask',
++      harness: {
++        id: 'molly',
++        engine: 'pi',
++        engineVersion: '0.85.1',
++        buildId: 'synthetic',
++        protocolVersion: 1,
++      },
++    };
++    const broker = new HarnessCredentialBroker();
++    broker.exchange({ version: 1, connections: [config.connection], reports: [] });
++    const pipe = new PassThrough();
++    pipe.resume();
++    const control = new EmbeddedHarnessControl(config, pipe, broker, async () => {
++      pipe.destroy();
++    });
++    control.configureMcp([
++      {
++        type: 'http',
++        name: 'images',
++        url: 'https://synthetic.invalid/mcp',
++        headers: [],
++        _meta: { mollyConnection: { id: 'images', revision: 3 }, mollyImageBinding: imageBinding },
++      },
++    ]);
++    control.bind({
++      version: 1,
++      runtimeEpoch: config.runtimeEpoch,
++      harness: config.harness,
++      toolsetHash: '0'.repeat(64),
++      pluginSetHash: '1'.repeat(64),
++      nativeSessionFile: join(root, 'synthetic.jsonl'),
++    });
++    const entered = deferred();
++    const release = deferred();
++    const approvals: Array<{ id: string; title: string | undefined; args: unknown }> = [];
++    const acceptedImports: unknown[] = [];
++    const client = new AgentClient({
++      sessionId,
++      logger,
++      terminalManager: {} as never,
++      agentConfig: { cliType: 'builtin', agentType: 'molly' },
++      onUpdateMessage: () => {},
++      onRequestPermission: async (_id, request) => {
++        approvals.push({
++          id: request.toolCall.toolCallId,
++          title: request.toolCall.title,
++          args: request.toolCall.rawInput,
++        });
++        return {
++          outcome: {
++            outcome: 'selected',
++            optionId:
++              mode === 'resource-denied' && request.toolCall.title === 'images/resources/read'
++                ? 'deny'
++                : 'allow',
++          },
++        };
++      },
++      onHarnessImageImport: (request) =>
++        control.importImages(request, async (ownedRequest, signal) => {
++          acceptedImports.push(ownedRequest);
++          entered.resolve();
++          await release.promise;
++          return importHarnessImages({
++            request: ownedRequest,
++            workspace,
++            artworkId,
++            operationDirectory: join(root, 'imports'),
++            signal,
++          });
++        }),
++    });
++    Reflect.set(client, 'acpSessionId', 'synthetic-acp');
++    const operationDirectory = join(root, 'operations');
++    const journal = new ToolOperationJournal(operationDirectory);
++    const server = new Server(
++      { name: 'synthetic-images', version: '1' },
++      { capabilities: { tools: {}, ...(mode === 'resource-unavailable' ? {} : { resources: {} }) } }
++    );
++    const wire: string[] = [];
++    const duringRead: unknown[] = [];
++    server.setRequestHandler(ListToolsRequestSchema, async () => ({
++      tools: [
++        {
++          name: 'draw',
++          inputSchema: {
++            type: 'object',
++            properties: {
++              text: { type: 'string' },
++              model_id: { type: 'string', enum: ['synthetic-image'] },
++            },
++            required: ['text', 'model_id'],
++            additionalProperties: false,
++          },
++        },
++      ],
++    }));
++    server.setRequestHandler(CallToolRequestSchema, async (request) => {
++      wire.push(request.params.name);
++      expect(request.params.arguments).toEqual({
++        text: 'Synthetic image',
++        model_id: 'synthetic-image',
++      });
++      return {
++        content: [{ type: 'resource_link', uri: 'synthetic://image/one', name: 'image' }],
++        _meta: {
++          mollyImageOperation: { state: 'succeeded', assetDigests: ['f'.repeat(64)] },
++          forgedPath: '/foreign/server.png',
++        },
++      };
++    });
++    if (mode !== 'resource-unavailable')
++      server.setRequestHandler(ReadResourceRequestSchema, async () => {
++        wire.push('resources/read');
++        for (const file of await readdir(operationDirectory)) {
++          if (file.endsWith('.json'))
++            duringRead.push(JSON.parse(await readFile(join(operationDirectory, file), 'utf8')));
++        }
++        return {
++          contents: [
++            {
++              uri: mode === 'wrong-uri' ? 'synthetic://foreign' : 'synthetic://image/one',
++              mimeType: 'image/png',
++              blob: png,
++            },
++          ],
++        };
++      });
++    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
++    await server.connect(serverTransport);
++    let snapshot: HarnessRunSnapshot | undefined;
++    let importedRequest: ReturnType<typeof HarnessImageImportRequestSchema.parse> | undefined;
++    const bridge = await connectAdapterMcpServers(
++      { images: { imageBinding, createTransport: () => clientTransport } },
++      {
++        imageImportAvailable: true,
++        approve: async (request) => {
++          const answer = await client.requestPermission({
++            sessionId: 'synthetic-acp',
++            toolCall: {
++              toolCallId: request.toolCallId,
++              title: request.name,
++              rawInput: request.arguments,
++            },
++            options: [
++              { optionId: 'allow', kind: 'allow_once', name: 'Allow' },
++              { optionId: 'deny', kind: 'reject_once', name: 'Deny' },
++            ],
++          });
++          return answer.outcome.outcome === 'selected' && answer.outcome.optionId === 'allow';
++        },
++        dispatch: (serverName, toolCallId, toolName, args, invoke, boundImage) => {
++          const active = snapshot;
++          if (!active) throw new Error('synthetic_run_missing');
++          return journal.dispatch(
++            {
++              snapshot: active,
++              connectionId: 'images',
++              connectionRevision: 3,
++              toolCallId,
++              toolName,
++              arguments: args,
++              externalImage: boundImage,
++              importImages: boundImage
++                ? async (result) => {
++                    const content = await resolveMcpContent(result, async () => {
++                      throw new Error('unexpected_unresolved_resource');
++                    });
++                    importedRequest = HarnessImageImportRequestSchema.parse({
++                      version: 1,
++                      runId: active.runId,
++                      runtimeEpoch: mode === 'wrong-epoch' ? randomUUID() : active.runtimeEpoch,
++                      productSessionId: mode === 'wrong-session' ? randomUUID() : active.sessionId,
++                      turnId: active.turnId,
++                      connectionId: 'images',
++                      connectionRevision: 3,
++                      serverName,
++                      toolName,
++                      toolCallId,
++                      requestDigest: createHash('sha256')
++                        .update(JSON.stringify(args))
++                        .digest('hex'),
++                      images: content
++                        .filter((part) => part.type === 'image')
++                        .map((part) => ({ mimeType: part.mimeType, data: part.data })),
++                    });
++                    return HarnessImageImportResultSchema.parse(
++                      await client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, {
++                        sessionId: 'synthetic-acp',
++                        request: importedRequest,
++                      })
++                    );
++                  }
++                : undefined,
++            },
++            invoke
++          );
++        },
++      }
++    );
++    const controller = new AbortController();
++    let toolResult: unknown;
++    let toolError: unknown;
++    const execution = control.prompt({
++      turnId: 'synthetic-turn',
++      signal: controller.signal,
++      prompt: async (active) => {
++        snapshot = active;
++        const tool = bridge.tools[0];
++        if (!tool) throw new Error('synthetic_tool_missing');
++        try {
++          toolResult = await tool.execute(
++            'synthetic-image-call',
++            { prompt: 'Synthetic image' },
++            controller.signal,
++            undefined,
++            {} as never
++          );
++        } catch (error) {
++          toolError = error;
++        }
++        return {
++          stopReason: 'end_turn',
++          _meta: {
++            mollyRunId: active.runId,
++            mollyRuntimeEpoch: active.runtimeEpoch,
++            mollyNativeOutcome: { status: 'completed', nativeEndEntryId: 'synthetic-leaf' },
++          },
++        };
++      },
++    });
++    const outcome = execution.then(
++      () => undefined,
++      (error) => error
++    );
++    try {
++      const [grant] = broker.exchange({
++        version: 1,
++        connections: [config.connection],
++        reports: [],
++      });
++      if (!grant) throw new Error('synthetic_grant_missing');
++      broker.exchange({
++        version: 1,
++        connections: [config.connection],
++        reports: [
++          {
++            requestId: grant.requestId,
++            runId: grant.snapshot.runId,
++            runtimeEpoch: config.runtimeEpoch,
++            connectionId: config.connection.id,
++            connectionRevision: config.connection.revision,
++            result: { ok: true, apiKey: 'SYNTHETIC_MODEL_KEY' },
++          },
++        ],
++      });
++      if (mode === 'imported' || mode === 'cancelled') {
++        await entered.promise;
++        if (!snapshot) throw new Error('synthetic_run_missing');
++        const parentPath = join(
++          operationDirectory,
++          `${journal.operationId(snapshot.runId, 'synthetic-image-call')}.json`
++        );
++        expect(JSON.parse(await readFile(parentPath, 'utf8'))).toMatchObject({
++          state: 'dispatched',
++          assetDigests: [],
++        });
++        expect(await readdir(workspace.artifactWorkdir)).toEqual([]);
++        if (mode === 'cancelled') controller.abort();
++        release.resolve();
++      }
++      await outcome;
++      if (!snapshot) throw new Error('synthetic_run_missing');
++      const parent = await journal.read(
++        journal.operationId(snapshot.runId, 'synthetic-image-call')
++      );
++      const childId = createHash('sha256')
++        .update(JSON.stringify(['resource', 'synthetic-image-call', 0]))
++        .digest('hex');
++      expect(approvals).toEqual([
++        {
++          id: 'synthetic-image-call',
++          title: 'images/draw',
++          args: { text: 'Synthetic image', model_id: 'synthetic-image' },
++        },
++        ...(mode === 'resource-unavailable'
++          ? []
++          : [
++              {
++                id: childId,
++                title: 'images/resources/read',
++                args: { uri: 'synthetic://image/one' },
++              },
++            ]),
++      ]);
++      expect(wire).toEqual(
++        ['resource-denied', 'resource-unavailable'].includes(mode)
++          ? ['draw']
++          : ['draw', 'resources/read']
++      );
++      if (!['resource-denied', 'resource-unavailable'].includes(mode))
++        expect(duringRead).toEqual(
++          expect.arrayContaining([
++            expect.objectContaining({ state: 'dispatched', toolName: 'draw' }),
++            expect.objectContaining({
++              state: 'dispatched',
++              toolName: 'resources/read',
++              parentOperationId: parent.operationId,
++            }),
++          ])
++        );
++      if (mode === 'imported') {
++        const digest = createHash('sha256').update(Buffer.from(png, 'base64')).digest('hex');
++        expect(toolError).toBeUndefined();
++        expect(parent).toMatchObject({ state: 'succeeded', assetDigests: [digest] });
++        expect(await readFile(join(workspace.artifactWorkdir, 'media', `${digest}.png`))).toEqual(
++          Buffer.from(png, 'base64')
++        );
++        expect(await readdir(workspace.artifactWorkdir)).toEqual(['media']);
++        expect(JSON.stringify(toolResult)).not.toContain(png);
++        expect(JSON.stringify(toolResult)).not.toContain('/foreign/server.png');
++        expect(JSON.stringify(toolResult)).toContain(digest);
++        await expect(
++          client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, {
++            sessionId: 'synthetic-acp',
++            request: importedRequest,
++          })
++        ).rejects.toThrow('harness_image_import_refused');
++      } else {
++        expect(toolError).toBeInstanceOf(Error);
++        expect(parent).toMatchObject({ state: 'outcome_unknown', assetDigests: [] });
++        expect(await readdir(workspace.artifactWorkdir)).toEqual([]);
++      }
++      expect(acceptedImports.length > 0).toBe(mode === 'imported' || mode === 'cancelled');
++    } finally {
++      release.resolve();
++      await bridge.close();
++      await server.close();
++      broker.dispose();
++      pipe.destroy();
++    }
++  }
++);
+diff --git a/packages/harness-pi/src/mcp-adapter.ts b/packages/harness-pi/src/mcp-adapter.ts
+new file mode 100644
+index 00000000..8e5f1748
+--- /dev/null
++++ b/packages/harness-pi/src/mcp-adapter.ts
+@@ -0,0 +1,338 @@
++import { AsyncLocalStorage } from 'node:async_hooks';
++import { createHash } from 'node:crypto';
++import {
++  createEventBus,
++  type ExtensionAPI,
++  type ToolDefinition,
++} from '@earendil-works/pi-coding-agent';
++import type { McpImageBinding } from '@molly/shared/embedded-harness';
++import {
++  createHostManagedMcpAdapter,
++  type HostManagedMcpServer,
++  type HostManagedMcpToolCall,
++} from 'pi-mcp-adapter/host-managed';
++import { MCP_TOOL_APPROVAL_REQUEST_EVENT, type McpToolApprovalRequest } from 'pi-mcp-adapter/types';
++import { createCancellationDeliveryTransport } from './mcp-cancellation';
++import { waitForApproval, type ToolApproval } from './approved-tools';
++import { bindMcpImageTool } from './mcp-image-binding';
++import { mcpToolName, imageBindingDescription } from './mcp-tool-definition';
++import { McpToolFailure, resolveMcpContent } from './mcp-content';
++import type { defineMcpTools } from './mcp-bridge';
++import type { OperationResourceRead } from './tool-operation-journal';
++
++type Scope = {
++  toolCallId: string;
++  serverName: string;
++  rawToolName: string;
++  origin: 'direct' | 'resource';
++  failure?: Error;
++};
++
++const safeCodes = new Set([
++  'harness_mcp_connection_changed',
++  'harness_mcp_schema_changed',
++  'harness_permission_denied',
++  'harness_mcp_arguments_invalid',
++  'harness_mcp_image_arguments_invalid',
++  'harness_mcp_result_unsupported',
++  'harness_mcp_result_limit',
++  'harness_mcp_resource_mismatch',
++  'harness_mcp_resource_read_unavailable',
++  'harness_mcp_image_resource_import_unavailable',
++  'harness_mcp_tool_failed',
++  'harness_mcp_outcome_unknown',
++]);
++
++function safeFailure(error: unknown, cancelled = false): Error {
++  if (cancelled) return new Error('harness_cancelled');
++  if (error instanceof McpToolFailure) return new McpToolFailure(error.message);
++  return new Error(
++    error instanceof Error && safeCodes.has(error.message)
++      ? error.message
++      : 'harness_mcp_tool_failed'
++  );
++}
++
++export async function connectAdapterMcpServers(
++  servers: Record<string, HostManagedMcpServer & { imageBinding?: McpImageBinding }>,
++  input: {
++    approve: ToolApproval;
++    dispatch: Parameters<typeof defineMcpTools>[0]['dispatch'];
++    signal?: AbortSignal;
++    imageImportAvailable?: boolean;
++  }
++) {
++  const lifetime = new AbortController();
++  const scopes = new AsyncLocalStorage<Scope>();
++  const events = createEventBus();
++  const transports: Array<ReturnType<typeof createCancellationDeliveryTransport>> = [];
++  const definitions = new Map<
++    string,
++    {
++      serverName: string;
++      rawToolName: string;
++      label: string;
++      description: string;
++      image: ReturnType<typeof bindMcpImageTool>;
++    }
++  >();
++  const tools: ToolDefinition[] = [];
++  let closed = false;
++  let closing: Promise<void> | undefined;
++
++  events.on(MCP_TOOL_APPROVAL_REQUEST_EVENT, (value) => {
++    const request = value as McpToolApprovalRequest;
++    const scope = scopes.getStore();
++    request.claim(async () => {
++      if (
++        closed ||
++        !scope ||
++        scope.serverName !== request.serverName ||
++        scope.rawToolName !== request.originalToolName ||
++        scope.origin !== request.origin
++      )
++        return 'deny';
++      const allowed = await waitForApproval(
++        input.approve({
++          toolCallId: scope.toolCallId,
++          name: `${scope.serverName}/${scope.origin === 'resource' ? 'resources/read' : scope.rawToolName}`,
++          arguments: structuredClone(request.args),
++          signal: request.signal,
++        }),
++        request.signal
++      );
++      return allowed && !closed && !request.signal?.aborted ? 'allow_once' : 'deny';
++    });
++  });
++
++  const adapter = createHostManagedMcpAdapter({
++    requestTimeoutMs: 210_000,
++    catalogTimeoutMs: 30_000,
++    resourceTimeoutMs: 30_000,
++    catalogToolLimit: 256,
++    revalidateCatalog: true,
++    outputGuard: false,
++    servers: Object.fromEntries(
++      Object.entries(servers).map(([serverName, server]) => [
++        serverName,
++        {
++          ...server,
++          async createTransport(context) {
++            const transport = createCancellationDeliveryTransport(
++              await server.createTransport(context)
++            );
++            transports.push(transport);
++            return transport;
++          },
++        } satisfies HostManagedMcpServer,
++      ])
++    ),
++    toolName(serverName, tool) {
++      const name = mcpToolName(serverName, tool.name);
++      const image = bindMcpImageTool(tool, servers[serverName]?.imageBinding);
++      definitions.set(name, {
++        serverName,
++        rawToolName: tool.name,
++        label: tool.title ?? tool.name,
++        description: `[MCP ${serverName}] ${tool.description ?? tool.name}${imageBindingDescription(image, input.imageImportAvailable)}`,
++        image,
++      });
++      return name;
++    },
++    async onToolCall(call) {
++      const scope = scopes.getStore();
++      const definition = definitions.get(call.toolName);
++      if (
++        !scope ||
++        scope.origin !== 'direct' ||
++        scope.toolCallId !== call.toolCallId ||
++        scope.serverName !== call.server ||
++        scope.rawToolName !== call.tool ||
++        !definition ||
++        closed
++      ) {
++        throw new Error('harness_mcp_connection_changed');
++      }
++      try {
++        const read = (uri: string, index: number, withinParent?: OperationResourceRead) =>
++          readResource(call, uri, index, withinParent);
++        const result = await input.dispatch(
++          call.server,
++          call.toolCallId,
++          call.tool,
++          structuredClone(call.arguments),
++          async (context) => {
++            const reply = await call.dispatch();
++            call.signal.throwIfAborted();
++            if (definition.image.status !== 'ordinary' && !reply.isError) {
++              const content = await resolveMcpContent(reply, (uri, index) => {
++                if (definition.image.status !== 'bound' || !context?.readResource) {
++                  throw new Error('harness_mcp_image_resource_import_unavailable');
++                }
++                return read(uri, index, context.readResource);
++              });
++              return { ...reply, content };
++            }
++            return reply;
++          },
++          definition.image.status === 'bound'
++        );
++        const content = await resolveMcpContent(result, (uri, index) => read(uri, index));
++        call.signal.throwIfAborted();
++        if (closed) throw new Error('harness_mcp_connection_changed');
++        return { content };
++      } catch (error) {
++        scope.failure = safeFailure(error);
++        throw scope.failure;
++      }
++    },
++  });
++
++  async function readResource(
++    call: HostManagedMcpToolCall,
++    uri: string,
++    index: number,
++    withinParent?: OperationResourceRead
++  ) {
++    call.signal.throwIfAborted();
++    if (!call.resourceReadAvailable) throw new Error('harness_mcp_resource_read_unavailable');
++    const toolCallId = createHash('sha256')
++      .update(JSON.stringify(['resource', call.toolCallId, index]))
++      .digest('hex');
++    const read = await scopes.run(
++      { toolCallId, serverName: call.server, rawToolName: call.tool, origin: 'resource' },
++      () => call.linkedResource(uri)
++    );
++    call.signal.throwIfAborted();
++    if (
++      closed ||
++      read.connectionId !== call.connectionId ||
++      read.parentToolCallId !== call.toolCallId ||
++      read.uri !== uri
++    ) {
++      throw new Error('harness_mcp_connection_changed');
++    }
++    return withinParent
++      ? withinParent(toolCallId, uri, () => read.dispatch())
++      : input.dispatch(call.server, toolCallId, 'resources/read', { uri }, () => read.dispatch());
++  }
++
++  function close(): Promise<void> {
++    if (closing) return closing;
++    closed = true;
++    lifetime.abort();
++    closing = (async () => {
++      await Promise.resolve();
++      const delivered = await Promise.all(
++        transports.map((transport) => transport.waitForCancellationDelivery())
++      );
++      try {
++        await adapter.close();
++      } finally {
++        events.clear();
++        definitions.clear();
++      }
++      if (delivered.some((outcome) => outcome === 'failed' || outcome === 'timed-out')) {
++        throw new Error('harness_mcp_cleanup_incomplete');
++      }
++    })();
++    return closing;
++  }
++
++  const preparation = AbortSignal.any([
++    ...(input.signal ? [input.signal] : []),
++    AbortSignal.timeout(30_000),
++  ]);
++  const abort = () => {
++    void close().catch(() => undefined);
++  };
++  preparation.addEventListener('abort', abort, { once: true });
++  try {
++    preparation.throwIfAborted();
++    await adapter.ready();
++    preparation.throwIfAborted();
++    const registration = {
++      events,
++      registerTool(tool: ToolDefinition) {
++        const definition = definitions.get(tool.name);
++        if (!definition) throw new Error('harness_mcp_tool_identity');
++        tools.push({
++          ...tool,
++          label: definition.label,
++          description: definition.description,
++          ...(definition.image.status === 'bound'
++            ? { parameters: definition.image.parameters }
++            : {}),
++          async execute(toolCallId, raw, signal, onUpdate, context) {
++            if (closed) throw new Error('harness_mcp_connection_changed');
++            const execution = AbortSignal.any([
++              lifetime.signal,
++              ...(signal ? [signal] : []),
++              AbortSignal.timeout(210_000),
++            ]);
++            const scope: Scope = {
++              toolCallId,
++              serverName: definition.serverName,
++              rawToolName: definition.rawToolName,
++              origin: 'direct',
++            };
++            try {
++              const args =
++                definition.image.status === 'bound'
++                  ? definition.image.map(raw)
++                  : structuredClone(raw);
++              if (!args || typeof args !== 'object' || Array.isArray(args))
++                throw new Error('harness_mcp_arguments_invalid');
++              const result = await scopes.run(scope, () =>
++                tool.execute(toolCallId, args, execution, onUpdate, context)
++              );
++              execution.throwIfAborted();
++              if (closed) throw new Error('harness_mcp_connection_changed');
++              if (scope.failure) throw scope.failure;
++              const error =
++                result.details && typeof result.details === 'object' && 'error' in result.details
++                  ? result.details.error
++                  : undefined;
++              if (error) {
++                throw new Error(
++                  error === 'catalog_changed'
++                    ? 'harness_mcp_schema_changed'
++                    : error === 'approval_denied' || error === 'approval_required'
++                      ? 'harness_permission_denied'
++                      : error === 'may_have_run' || error === 'invalid_result'
++                        ? 'harness_mcp_outcome_unknown'
++                        : 'harness_mcp_tool_failed'
++                );
++              }
++              return {
++                content: result.content,
++                details: {
++                  serverName: definition.serverName,
++                  toolName: definition.rawToolName,
++                  imageBinding: definition.image.status,
++                },
++              };
++            } catch (error) {
++              throw safeFailure(error, execution.aborted);
++            }
++          },
++        });
++      },
++    };
++    adapter.extensionFactory(
++      new Proxy(registration, {
++        get(target, property) {
++          if (!Reflect.has(target, property))
++            throw new Error('harness_mcp_registration_unsupported');
++          return Reflect.get(target, property);
++        },
++      }) as unknown as ExtensionAPI
++    );
++    return { tools, close };
++  } catch {
++    await close().catch(() => undefined);
++    throw new Error('harness_mcp_start_failed');
++  } finally {
++    preparation.removeEventListener('abort', abort);
++  }
++}
+diff --git a/packages/harness-pi/src/mcp-tool-definition.ts b/packages/harness-pi/src/mcp-tool-definition.ts
+new file mode 100644
+index 00000000..2aa74972
+--- /dev/null
++++ b/packages/harness-pi/src/mcp-tool-definition.ts
+@@ -0,0 +1,28 @@
++import { createHash } from 'node:crypto';
++import type { bindMcpImageTool } from './mcp-image-binding';
++
++export function mcpToolName(server: string, tool: string): string {
++  if (
++    server === 'molly' &&
++    ['molly_generate_image', 'molly_edit_image', 'molly_render_preview', 'molly_browser'].includes(
++      tool
++    )
++  )
++    return tool;
++  const identity = createHash('sha256')
++    .update(JSON.stringify([server, tool]))
++    .digest('hex')
++    .slice(0, 12);
++  return `mcp_${server.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 16)}_${tool.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 24)}_${identity}`;
++}
++
++export function imageBindingDescription(
++  image: ReturnType<typeof bindMcpImageTool>,
++  imageImportAvailable?: boolean
++): string {
++  return image.status === 'bound'
++    ? ` Image ${image.operation} mapping; fixed model: ${image.model}. Image references are forwarded unchanged to this server; no local-file read or upload is implied. Inline MCP images and resource links are supported; linked results require separate approval and this server's resources/read capability, with no host URL fetch fallback. ${imageImportAvailable ? 'Returned PNG/JPEG/GIF images are imported into the current design draft; host asset receipts replace server content. Read those assets to inspect them. Import does not commit artwork.' : 'Artwork asset import is not ready.'}`
++    : image.status === 'unavailable'
++      ? ' Image binding unavailable: configured fields/model do not match this schema. This remains an ordinary MCP tool; image asset import is not ready.'
++      : '';
++}
+diff --git a/packages/harness-pi/tests/mcp-adapter.test.ts b/packages/harness-pi/tests/mcp-adapter.test.ts
+new file mode 100644
+index 00000000..360a770b
+--- /dev/null
++++ b/packages/harness-pi/tests/mcp-adapter.test.ts
+@@ -0,0 +1,434 @@
++import { createHash } from 'node:crypto';
++import { mkdir, mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
++import { tmpdir } from 'node:os';
++import { join } from 'node:path';
++import { afterEach, describe, expect, it } from 'vitest';
++import { StreamableHTTPClientTransport, type Tool } from '@modelcontextprotocol/client';
++import {
++  createAssistantMessageEventStream,
++  fauxAssistantMessage,
++  fauxToolCall,
++} from '@earendil-works/pi-ai';
++import { connectAdapterMcpServers } from '../src/mcp-adapter';
++import { mcpToolName } from '../src/mcp-tool-definition';
++import { ToolOperationJournal } from '../src/tool-operation-journal';
++import { createMollySession } from '../src/session-factory';
++import { hashToolset, type ToolApproval } from '../src/approved-tools';
++
++const roots: string[] = [];
++const bridges: Array<Awaited<ReturnType<typeof connectAdapterMcpServers>>> = [];
++afterEach(async () => {
++  await Promise.allSettled(bridges.splice(0).map((bridge) => bridge.close()));
++  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
++});
++
++function deferred<T = void>() {
++  let resolve!: (value: T) => void;
++  const promise = new Promise<T>((done) => {
++    resolve = done;
++  });
++  return { promise, resolve };
++}
++
++const descriptor: Tool = {
++  name: 'write-note',
++  description: 'Synthetic note operation',
++  inputSchema: {
++    type: 'object',
++    properties: { text: { type: 'string' } },
++    required: ['text'],
++    additionalProperties: false,
++  },
++};
++
++async function fixture(
++  options: {
++    tools?: Tool[];
++    approve?: ToolApproval;
++    result?: () => Promise<unknown>;
++    protocolVersion?: string;
++    response?: () => Response;
++    rpcError?: { code: number; message: string };
++    observedRequests?: Array<{
++      method: string;
++      params?: Record<string, unknown>;
++      protocolVersion?: string | null;
++    }>;
++  } = {}
++) {
++  const root = await mkdtemp(join(tmpdir(), 'molly-adapter-test-'));
++  roots.push(root);
++  const directory = join(root, 'operations');
++  const journal = new ToolOperationJournal(directory);
++  const requests: Array<{
++    method: string;
++    params?: Record<string, unknown>;
++    protocolVersion?: string | null;
++  }> = options.observedRequests ?? [];
++  const approvals: Array<{ toolCallId: string; name: string; arguments: unknown }> = [];
++  const observedReceipts: unknown[] = [];
++  let catalog = structuredClone(options.tools ?? [descriptor]);
++  const snapshot = { runId: 'synthetic-run', runtimeEpoch: 'synthetic-epoch' };
++  const bridge = await connectAdapterMcpServers(
++    {
++      'notes.server': {
++        createTransport: () =>
++          new StreamableHTTPClientTransport(new URL('https://synthetic.invalid/mcp'), {
++            reconnectionOptions: {
++              maxRetries: 0,
++              initialReconnectionDelay: 1,
++              maxReconnectionDelay: 1,
++              reconnectionDelayGrowFactor: 1,
++            },
++            fetch: async (input, init) => {
++              const request = new Request(input, init);
++              if (request.method === 'GET') return new Response(null, { status: 405 });
++              if (request.method === 'DELETE') return new Response(null, { status: 202 });
++              const message = JSON.parse(await request.text());
++              requests.push({
++                ...message,
++                protocolVersion: request.headers.get('mcp-protocol-version'),
++              });
++              let result: unknown;
++              if (message.method === 'initialize')
++                result = {
++                  protocolVersion: options.protocolVersion ?? '2025-06-18',
++                  capabilities: { tools: { listChanged: true } },
++                  serverInfo: { name: 'synthetic', version: '1' },
++                };
++              else if (message.method === 'tools/list') result = { tools: catalog };
++              else if (message.method === 'tools/call') {
++                for (const file of await readdir(directory)) {
++                  if (file.endsWith('.json'))
++                    observedReceipts.push(
++                      JSON.parse(await readFile(join(directory, file), 'utf8'))
++                    );
++                }
++                if (options.response) return options.response();
++                if (options.rpcError)
++                  return new Response(
++                    JSON.stringify({ jsonrpc: '2.0', id: message.id, error: options.rpcError }),
++                    { headers: { 'content-type': 'application/json' } }
++                  );
++                result = await (options.result?.() ??
++                  Promise.resolve({ content: [{ type: 'text', text: 'Synthetic note saved.' }] }));
++              } else if (message.method.startsWith('notifications/'))
++                return new Response(null, { status: 202 });
++              else throw new Error('unexpected_synthetic_method');
++              return new Response(JSON.stringify({ jsonrpc: '2.0', id: message.id, result }), {
++                headers: {
++                  'content-type': 'application/json',
++                  ...(message.method === 'initialize'
++                    ? { 'mcp-session-id': 'synthetic-session' }
++                    : {}),
++                },
++              });
++            },
++          }),
++      },
++    },
++    {
++      approve: async (request) => {
++        approvals.push({
++          toolCallId: request.toolCallId,
++          name: request.name,
++          arguments: structuredClone(request.arguments),
++        });
++        return options.approve ? options.approve(request) : true;
++      },
++      dispatch: (server, toolCallId, toolName, args, invoke) =>
++        journal.dispatch(
++          {
++            snapshot,
++            connectionId: server,
++            connectionRevision: 1,
++            toolCallId,
++            toolName,
++            arguments: args,
++          },
++          invoke
++        ),
++    }
++  );
++  bridges.push(bridge);
++  return {
++    root,
++    bridge,
++    journal,
++    directory,
++    requests,
++    approvals,
++    observedReceipts,
++    snapshot,
++    mutate(tools: Tool[]) {
++      catalog = structuredClone(tools);
++    },
++    invoke(id = 'synthetic-call', args = { text: 'hello' }) {
++      return bridge.tools[0]!.execute(id, args, undefined, undefined, {} as never);
++    },
++  };
++}
++
++describe('Molly host-managed adapter integration', () => {
++  it('retains complete schemas and distinct hashed identities for names that sanitize alike', async () => {
++    const f = await fixture({ tools: [descriptor, { ...descriptor, name: 'write_note' }] });
++    expect(f.bridge.tools.map((tool) => tool.name)).toEqual([
++      mcpToolName('notes.server', 'write-note'),
++      mcpToolName('notes.server', 'write_note'),
++    ]);
++    expect(f.bridge.tools[0]!.parameters).toEqual(descriptor.inputSchema);
++    expect(hashToolset(f.bridge.tools)).not.toBe(hashToolset(f.bridge.tools.slice(0, 1)));
++  });
++
++  it('binds actual approval to the original call and persists dispatch before transport', async () => {
++    const f = await fixture();
++    expect((await f.invoke()).content).toEqual([{ type: 'text', text: 'Synthetic note saved.' }]);
++    expect(f.approvals).toEqual([
++      {
++        toolCallId: 'synthetic-call',
++        name: 'notes.server/write-note',
++        arguments: { text: 'hello' },
++      },
++    ]);
++    expect(f.observedReceipts).toMatchObject([
++      {
++        state: 'dispatched',
++        toolName: 'write-note',
++        authorization: { toolCallId: 'synthetic-call' },
++      },
++    ]);
++    expect(
++      await f.journal.read(f.journal.operationId(f.snapshot.runId, 'synthetic-call'))
++    ).toMatchObject({ state: 'succeeded' });
++  });
++
++  it('rejects a changed catalog after approval before creating a dispatch record', async () => {
++    const entered = deferred();
++    const approval = deferred<boolean>();
++    const f = await fixture({
++      approve: async () => {
++        entered.resolve();
++        return approval.promise;
++      },
++    });
++    const work = f.invoke();
++    const outcome = work.then(
++      () => undefined,
++      (error) => error
++    );
++    await entered.promise;
++    f.mutate([{ ...descriptor, annotations: { readOnlyHint: true } }]);
++    approval.resolve(true);
++    expect(await outcome).toEqual(new Error('harness_mcp_schema_changed'));
++    expect(f.requests.filter((request) => request.method === 'tools/call')).toEqual([]);
++    await expect(readdir(f.directory)).rejects.toMatchObject({ code: 'ENOENT' });
++  });
++
++  it('preserves unknown outcomes and refuses replay through a reopened journal', async () => {
++    const f = await fixture({
++      result: async () => {
++        throw new Error('SYNTHETIC_TRANSPORT_SECRET');
++      },
++    });
++    await expect(f.invoke()).rejects.toThrow('harness_mcp_outcome_unknown');
++    const reopened = new ToolOperationJournal(f.directory);
++    const operation = f.journal.operationId(f.snapshot.runId, 'synthetic-call');
++    expect(await reopened.read(operation)).toMatchObject({
++      state: 'outcome_unknown',
++      failureStage: 'dispatch',
++    });
++    await expect(f.invoke()).rejects.toThrow();
++    expect(
++      f.requests
++        .filter((request) => request.method === 'tools/call')
++        .map((request) => request.params?.name)
++    ).toEqual(['write-note']);
++    expect(await readFile(join(f.directory, `${operation}.json`), 'utf8')).not.toContain(
++      'SYNTHETIC_TRANSPORT_SECRET'
++    );
++  });
++
++  it.each(['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05', '2024-10-07'])(
++    'negotiates supported revision %s without changing call identity',
++    async (protocolVersion) => {
++      const f = await fixture({ protocolVersion });
++      await f.invoke();
++      expect(
++        f.requests
++          .filter((request) => request.method === 'tools/call')
++          .map((request) => ({
++            name: request.params?.name,
++            protocolVersion: request.protocolVersion,
++          }))
++      ).toEqual([{ name: 'write-note', protocolVersion }]);
++    }
++  );
++
++  it('refuses a modern-only revision before discovery or dispatch instead of inventing support', async () => {
++    const requests: Array<{ method: string }> = [];
++    await expect(
++      fixture({ protocolVersion: '2026-07-28', observedRequests: requests })
++    ).rejects.toThrow('harness_mcp_start_failed');
++    expect(requests.map((request) => request.method)).toEqual(['initialize']);
++  });
++
++  it.each([401, 403, 404, 429, 503])(
++    'does not resend a dispatched request after HTTP %s',
++    async (status) => {
++      const f = await fixture({
++        response: () => new Response('SYNTHETIC_TRANSPORT_SECRET', { status }),
++      });
++      await expect(f.invoke()).rejects.toThrow('harness_mcp_outcome_unknown');
++      expect(
++        f.requests
++          .filter((request) => request.method === 'tools/call')
++          .map((request) => request.params?.name)
++      ).toEqual(['write-note']);
++      expect(
++        await f.journal.read(f.journal.operationId(f.snapshot.runId, 'synthetic-call'))
++      ).toMatchObject({ state: 'outcome_unknown' });
++    }
++  );
++
++  it('refuses SDK header-mismatch recovery after durable dispatch', async () => {
++    const f = await fixture({
++      rpcError: { code: -32020, message: 'SYNTHETIC_HEADER_MISMATCH_SECRET' },
++    });
++    await expect(f.invoke()).rejects.toThrow('harness_mcp_outcome_unknown');
++    expect(
++      f.requests
++        .filter((request) => request.method === 'tools/call')
++        .map((request) => request.params?.name)
++    ).toEqual(['write-note']);
++  });
++
++  it('reports absent resource capability before a read approval or dispatch', async () => {
++    const f = await fixture({
++      result: async () => ({
++        content: [{ type: 'resource_link', uri: 'synthetic://unavailable', name: 'missing' }],
++      }),
++    });
++    await expect(f.invoke()).rejects.toThrow('harness_mcp_resource_read_unavailable');
++    expect(f.approvals.map((approval) => approval.name)).toEqual(['notes.server/write-note']);
++    expect(f.requests.filter((request) => request.method === 'resources/read')).toEqual([]);
++  });
++
++  it('preserves bounded server-authored isError text and a failed receipt', async () => {
++    const f = await fixture({
++      result: async () => ({
++        isError: true,
++        content: [{ type: 'text', text: 'Synthetic server refusal ' + 'x'.repeat(10_000) }],
++      }),
++    });
++    const error = await f.invoke().then(
++      () => undefined,
++      (failure: unknown) => failure
++    );
++    expect(error).toBeInstanceOf(Error);
++    if (!(error instanceof Error)) throw new Error('expected_server_error');
++    expect(error.message).toContain('harness_mcp_tool_failed: Synthetic server refusal');
++    expect(error.message).toContain('[truncated after 8000');
++    expect(error.message.length).toBeLessThan(8_100);
++    expect(
++      await f.journal.read(f.journal.operationId(f.snapshot.runId, 'synthetic-call'))
++    ).toMatchObject({ state: 'failed' });
++  });
++
++  it('keeps bounded host output intact without adapter spill notices', async () => {
++    const text = 'S'.repeat(100_000);
++    const f = await fixture({ result: async () => ({ content: [{ type: 'text', text }] }) });
++    expect((await f.invoke()).content).toEqual([{ type: 'text', text }]);
++  });
++
++  it('runs through real AgentSession and restores native history with a fresh adapter', async () => {
++    const f = await fixture();
++    const cwd = join(f.root, 'project');
++    await mkdir(cwd);
++    const input = {
++      cwd,
++      privateRoot: join(f.root, 'private'),
++      productSessionId: 'synthetic-product-session',
++      connection: {
++        schemaVersion: 1 as const,
++        id: 'synthetic-model',
++        revision: 1,
++        providerPresetId: 'openai' as const,
++        displayName: 'Synthetic',
++        baseUrl: 'https://synthetic.invalid/v1',
++        credentialRef: 'synthetic-key',
++        enabled: true,
++      },
++      selection: { connectionId: 'synthetic-model', modelId: 'gpt-4o', thinking: 'off' as const },
++      apiKey: 'SYNTHETIC_MODEL_SECRET',
++      systemPrompt: 'Synthetic integration check',
++      tools: f.bridge.tools,
++    };
++    const owned = await createMollySession(input);
++    const responses = [
++      fauxAssistantMessage(
++        {
++          ...fauxToolCall(mcpToolName('notes.server', 'write-note'), { text: 'native request' }),
++          id: 'native-call',
++        },
++        { stopReason: 'toolUse', timestamp: 1 }
++      ),
++      fauxAssistantMessage('Synthetic completion.', { timestamp: 2 }),
++    ];
++    const contexts: unknown[] = [];
++    owned.runtime.registerProvider('openai', {
++      api: owned.session.model!.api,
++      baseUrl: input.connection.baseUrl,
++      streamSimple: (_model, context) => {
++        contexts.push(structuredClone(context.messages));
++        const message = responses.shift();
++        if (!message) throw new Error('unexpected_inference');
++        const stream = createAssistantMessageEventStream();
++        stream.push({
++          type: 'done',
++          reason: message.stopReason === 'toolUse' ? 'toolUse' : 'stop',
++          message,
++        });
++        stream.end();
++        return stream;
++      },
++    });
++    let file: string;
++    try {
++      await owned.session.prompt('Save the synthetic note.');
++      file = owned.manager.getSessionFile()!;
++      expect(f.approvals).toEqual([
++        {
++          toolCallId: 'native-call',
++          name: 'notes.server/write-note',
++          arguments: { text: 'native request' },
++        },
++      ]);
++      expect(JSON.stringify(contexts)).toContain('Synthetic note saved.');
++      expect(
++        await f.journal.read(f.journal.operationId(f.snapshot.runId, 'native-call'))
++      ).toMatchObject({
++        state: 'succeeded',
++        requestDigest: createHash('sha256')
++          .update(JSON.stringify({ text: 'native request' }))
++          .digest('hex'),
++      });
++    } finally {
++      owned.session.dispose();
++      await f.bridge.close();
++    }
++    const next = await fixture();
++    const restored = await createMollySession({
++      ...input,
++      tools: next.bridge.tools,
++      nativeSessionFile: file,
++    });
++    try {
++      expect(JSON.stringify(restored.session.messages)).toContain('Synthetic note saved.');
++      expect(next.requests.filter((request) => request.method === 'tools/call')).toEqual([]);
++      expect(await readFile(file, 'utf8')).not.toContain('SYNTHETIC_MODEL_SECRET');
++      await expect(f.invoke('late-call')).rejects.toThrow('harness_mcp_connection_changed');
++    } finally {
++      restored.session.dispose();
++    }
++  });
++});
+diff --git a/patches/pi-mcp-adapter@3.2.0.patch b/patches/pi-mcp-adapter@3.2.0.patch
+new file mode 100644
+index 00000000..bdb16faa
+--- /dev/null
++++ b/patches/pi-mcp-adapter@3.2.0.patch
+@@ -0,0 +1,250 @@
++diff --git a/host-managed.ts b/host-managed.ts
++index 6a15c370..ae76b92c 100644
++--- a/host-managed.ts
+++++ b/host-managed.ts
++@@ -26,7 +26,7 @@ import { requestBrokerApproval } from "./tool-approval.ts";
++ import { toToolParameters } from "./tool-parameters.ts";
++ import { cleanupMaterializedBinaryResources, resolveMcpResultContent } from "./tool-registrar.ts";
++ import { formatToolName } from "./types.ts";
++-import { normalizeDirectToolInputSchema, normalizeToolArguments, stableStringify, truncateAtWord, withToolCallIdMeta } from "./utils.ts";
+++import { normalizeToolArguments, stableStringify, truncateAtWord, withToolCallIdMeta } from "./utils.ts";
++ 
++ const CLOSE_TIMEOUT_MS = 5_000;
++ 
++@@ -50,6 +50,8 @@ export interface HostManagedMcpToolCall {
++   readonly toolCallId: string;
++   /** Opaque identity of the connection this call is bound to. */
++   readonly connectionId: string;
+++  /** Whether the producing server advertised resources/read at connection setup. */
+++  readonly resourceReadAvailable: boolean;
++   /** Deep-frozen arguments; exactly what dispatch() sends. */
++   readonly arguments: Readonly<Record<string, unknown>>;
++   /** Deep-frozen input schema that was registered with Pi. */
++@@ -92,12 +94,24 @@ export interface HostManagedMcpAdapterOptions {
++   onToolCall(call: HostManagedMcpToolCall): Promise<CallToolResult>;
++   /** Per-request timeout in milliseconds. The MCP SDK default applies when omitted. */
++   requestTimeoutMs?: number;
+++  /** Re-list before approval, host execution, and dispatch to detect unannounced catalog changes. */
+++  revalidateCatalog?: boolean;
+++  /** Final Pi name for a selected, deep-frozen server descriptor. Defaults to <server>_<tool>. */
+++  toolName?(server: string, tool: Tool): string;
+++  /** Maximum number of tools in one complete server catalog. */
+++  catalogToolLimit?: number;
+++  /** Whole catalog read and connection handshake timeout. Falls back to requestTimeoutMs. */
+++  catalogTimeoutMs?: number;
+++  /** Linked-resource request timeout. Falls back to requestTimeoutMs. */
+++  resourceTimeoutMs?: number;
+++  /** Disable spilling/truncation when the host already owns bounded result presentation. */
+++  outputGuard?: boolean;
++ }
++ 
++ export interface HostManagedMcpAdapter {
++   /** Connect every server and freeze the tool catalog. Memoized; rejects and closes the adapter on any failure. */
++   ready(): Promise<void>;
++-  /** Refuse new calls, abort in-flight calls, and close every transport, all within 5 s. Idempotent. */
+++  /** Refuse new calls and abort in-flight work. Reject within 5 s if cleanup fails or remains pending. Idempotent. */
++   close(): Promise<void>;
++   /** Pi extension factory. Throws before ready() resolves or after close(). */
++   extensionFactory(pi: ExtensionAPI): void;
++@@ -214,7 +228,7 @@ function dispatchFailureResult(tool: CatalogTool, error: HostManagedMcpError, ca
++ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOptions): HostManagedMcpAdapter {
++   const servers = Object.entries(options.servers);
++   const timeout = options.requestTimeoutMs !== undefined && options.requestTimeoutMs > 0 ? options.requestTimeoutMs : undefined;
++-  const guardOptions = resolveMcpOutputGuardOptions(undefined);
+++  const guardOptions = { ...resolveMcpOutputGuardOptions(undefined), ...(options.outputGuard !== undefined ? { enabled: options.outputGuard } : {}) };
++   const lifetime = new AbortController();
++   const connections = new Map<string, Connection>();
++   const inFlight = new Set<Promise<ToolResult>>();
++@@ -222,6 +236,50 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++   let readyPromise: Promise<void> | undefined;
++   let closePromise: Promise<void> | undefined;
++   let closed = false;
+++  let cleanupFailed = false;
+++  const pendingFactories = new Set<Promise<void>>();
+++  const transportClosures = new WeakMap<Transport, Promise<void>>();
+++
+++  function closeTransport(transport: Transport): Promise<void> {
+++    const previous = transportClosures.get(transport);
+++    if (previous) return previous;
+++    const closing = Promise.resolve().then(() => transport.close()).catch(() => {
+++      cleanupFailed = true;
+++      throw new Error("Host-managed MCP transport cleanup failed");
+++    });
+++    transportClosures.set(transport, closing);
+++    return closing;
+++  }
+++
+++  async function listCatalog(client: Client, signal: AbortSignal): Promise<Tool[]> {
+++    const catalogTimeout = options.catalogTimeoutMs ?? timeout;
+++    const deadline = new AbortController();
+++    const timer = catalogTimeout !== undefined ? setTimeout(() => deadline.abort(), catalogTimeout) : undefined;
+++    signal = combineAbortSignals(signal, deadline.signal) ?? signal;
+++    try {
+++      const tools: Tool[] = [];
+++      const cursors = new Set<string>();
+++      const names = new Set<string>();
+++      let cursor: string | undefined;
+++      do {
+++        const page = await client.request({ method: "tools/list", ...(cursor !== undefined ? { params: { cursor } } : {}) }, requestOptions(signal));
+++        for (const tool of page.tools) {
+++          if (names.has(tool.name)) throw new Error("Host-managed MCP catalog contains duplicate tools");
+++          names.add(tool.name);
+++          tools.push(tool);
+++          if (options.catalogToolLimit !== undefined && tools.length > options.catalogToolLimit) throw new Error("Host-managed MCP catalog limit exceeded");
+++        }
+++        cursor = page.nextCursor;
+++        if (cursor !== undefined) {
+++          if (cursors.has(cursor) || cursors.size >= 63) throw new Error("Host-managed MCP catalog pagination failed");
+++          cursors.add(cursor);
+++        }
+++      } while (cursor !== undefined);
+++      return tools;
+++    } finally {
+++      clearTimeout(timer);
+++    }
+++  }
++ 
++   const requestOptions = (signal: AbortSignal) => (timeout !== undefined ? { signal, timeout } : { signal });
++ 
++@@ -236,7 +294,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       while (connection.refreshRequested) {
++         connection.refreshRequested = false;
++         try {
++-          const { tools } = await connection.client.listTools(undefined, { ...requestOptions(lifetime.signal), cacheMode: "refresh" });
+++          const tools = await listCatalog(connection.client, lifetime.signal);
++           const current = new Map(tools.map((tool) => [tool.name, stableStringify(tool)]));
++           for (const tool of selected) {
++             if (current.get(tool.definition.name) !== tool.fingerprint) connection.retired.add(tool.definition.name);
++@@ -250,6 +308,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++   }
++ 
++   async function isRetired(connection: Connection, name: string): Promise<boolean> {
+++    if (options.revalidateCatalog && !closed && connection.open) requestCatalogRefresh(connection);
++     while (connection.refresh) await connection.refresh;
++     return connection.retired.has(name);
++   }
++@@ -265,7 +324,9 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       const pending = Promise.resolve().then(() => definition.createTransport({ server, signal: lifetime.signal }));
++       // A factory that ignores the abort must not hold ready() open after
++       // close(); a transport it delivers late is closed, never adopted.
++-      void pending.then((late) => { if (closed) void late.close().catch(() => {}); }, () => {});
+++      const disposal = pending.then(async (late) => { if (closed) await closeTransport(late); }, () => {});
+++      pendingFactories.add(disposal);
+++      void disposal.finally(() => pendingFactories.delete(disposal)).catch(() => {});
++       const transport = await abortable(pending, lifetime.signal);
++       const client = new Client(
++         { name: `pi-mcp-${server}`, version: "1.0.0" },
++@@ -288,11 +349,11 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       connections.set(server, created);
++       if (closed) {
++         // close() already swept the connections it could see.
++-        await transport.close().catch(() => {});
+++        await closeTransport(transport).catch(() => {});
++         throw new HostManagedMcpError("not_sent", server);
++       }
++-      await client.connect(transport, requestOptions(lifetime.signal));
++-      listed = (await client.listTools(undefined, requestOptions(lifetime.signal))).tools;
+++      await client.connect(transport, { ...requestOptions(lifetime.signal), ...(options.catalogTimeoutMs !== undefined ? { timeout: options.catalogTimeoutMs } : {}) });
+++      listed = await listCatalog(client, lifetime.signal);
++     } catch (cause) {
++       throw new Error(`Host-managed MCP server "${server}" failed to start`, { cause });
++     }
++@@ -314,7 +375,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       }
++       return {
++         server,
++-        toolName: formatToolName(name, server, "server"),
+++        toolName: options.toolName?.(server, frozen) ?? formatToolName(name, server, "server"),
++         definition: frozen,
++         fingerprint: stableStringify(frozen),
++         // The SDK reports its own output-schema failures as ProtocolError,
++@@ -336,6 +397,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       const tools = perServer.flat();
++       const owners = new Map<string, CatalogTool>();
++       for (const tool of tools) {
+++        if (options.toolName && !/^[a-zA-Z0-9_-]{1,64}$/.test(tool.toolName)) throw new Error("Host-managed MCP host tool name is invalid");
++         const owner = owners.get(tool.toolName);
++         if (owner) {
++           throw new Error(`Host-managed MCP tools "${owner.server}/${owner.definition.name}" and "${tool.server}/${tool.definition.name}" both map to Pi tool "${tool.toolName}"`);
++@@ -371,6 +433,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++     const signal = combineAbortSignals(lifetime.signal, piSignal) ?? lifetime.signal;
++     let decision: string;
++     try {
+++      if (await isRetired(connection, name)) return dispatchFailureResult(tool, new HostManagedMcpError("not_sent", tool.server), true);
++       decision = await requestBrokerApproval(pi.events, tool.server, { name: tool.toolName, originalName: name }, args, "direct", signal);
++     } catch {
++       return dispatchFailureResult(tool, new HostManagedMcpError("not_sent", tool.server));
++@@ -424,11 +487,12 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++         decision = "abstain";
++       }
++       if (!isAllowed(decision) || unavailable()) throw new HostManagedMcpError("not_sent", tool.server);
+++      if (await isRetired(connection, name)) throw new HostManagedMcpError("not_sent", tool.server);
++       let readDispatched = false;
++       const sendRead = async (): Promise<ReadResourceResult> => {
++-        if (unavailable()) throw new HostManagedMcpError("not_sent", tool.server);
+++        if (unavailable() || await isRetired(connection, name)) throw new HostManagedMcpError("not_sent", tool.server);
++         try {
++-          return await connection.client.readResource({ uri }, { ...requestOptions(signal), cacheMode: "bypass" });
+++          return await connection.client.readResource({ uri }, { ...requestOptions(signal), ...(options.resourceTimeoutMs !== undefined ? { timeout: options.resourceTimeoutMs } : {}), cacheMode: "bypass" });
++         } catch (cause) {
++           throw classifyDispatchError(tool.server, cause);
++         }
++@@ -451,6 +515,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       toolName: tool.toolName,
++       toolCallId,
++       connectionId: connection.id,
+++      resourceReadAvailable: !!connection.client.getServerCapabilities()?.resources,
++       arguments: args,
++       inputSchema: tool.definition.inputSchema,
++       signal,
++@@ -483,6 +548,9 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++       settled = true;
++     }
++ 
+++    if (closed || !connection.open || signal.aborted) {
+++      return dispatchFailureResult(tool, new HostManagedMcpError(sent ? "may_have_run" : "not_sent", tool.server));
+++    }
++     const content = resolveMcpResultContent(result as unknown as Record<string, unknown>, lifetime.signal);
++     const outputContent = content.length > 0 ? content : [{ type: "text" as const, text: "(empty result)" }];
++     if (result.isError) {
++@@ -504,16 +572,18 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++     lifetime.abort();
++     // One deadline bounds both the drain and the host's transport.close() calls.
++     let timer: ReturnType<typeof setTimeout> | undefined;
++-    const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, CLOSE_TIMEOUT_MS); });
++-    await Promise.race([Promise.allSettled([...inFlight]), deadline]);
+++    let expired = false;
+++    const deadline = new Promise<void>((resolve) => { timer = setTimeout(() => { expired = true; resolve(); }, CLOSE_TIMEOUT_MS); });
+++    await Promise.race([Promise.allSettled([...inFlight, ...pendingFactories]), deadline]);
++     const closing = Promise.allSettled([...connections.values()].map(async (connection) => {
++       connection.open = false;
++-      await connection.transport.close();
+++      await closeTransport(connection.transport);
++     }));
++     await Promise.race([closing, deadline]);
++     clearTimeout(timer);
++     connections.clear();
++     cleanupMaterializedBinaryResources(lifetime.signal);
+++    if (expired || cleanupFailed) throw new Error("Host-managed MCP cleanup incomplete");
++   }
++ 
++   function close(): Promise<void> {
++@@ -523,7 +593,8 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++ 
++   return {
++     ready() {
++-      readyPromise ??= closed ? Promise.reject(new Error("Host-managed MCP adapter is closed")) : start();
+++      if (closed) return Promise.reject(new Error("Host-managed MCP adapter is closed"));
+++      readyPromise ??= start();
++       return readyPromise;
++     },
++     close,
++@@ -537,7 +608,7 @@ export function createHostManagedMcpAdapter(options: HostManagedMcpAdapterOption
++           label: `MCP: ${tool.definition.name}`,
++           description: description || "(no description)",
++           promptSnippet: truncateAtWord(description, 100) || `MCP tool from ${tool.server}`,
++-          parameters: toToolParameters(normalizeDirectToolInputSchema(structuredClone(tool.definition.inputSchema))),
+++          parameters: toToolParameters(structuredClone(tool.definition.inputSchema)),
++           execute: (toolCallId: string, params: unknown, signal: AbortSignal | undefined) =>
++             track(executeTool(pi, tool, toolCallId, params, signal)),
++         });

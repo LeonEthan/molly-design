@@ -1,13 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import {
-  PI_ENGINE_VERSION,
-  HARNESS_IMAGE_IMPORT_METHOD,
-  HarnessImageImportResultSchema,
-  HARNESS_IMAGE_RECOVERY_METHOD,
-  HarnessImageRecoveryResultSchema,
-} from '@molly/shared/embedded-harness';
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import {
@@ -157,33 +151,7 @@ export async function runWorker(
         createMollySession,
         credentialProvider,
         approve,
-        mcpCredentialProvider,
-        config.designImageImport
-          ? async (request, signal) => {
-              signal.throwIfAborted();
-              const sessionId = adapter.currentSessionId;
-              if (!sessionId) throw new Error('harness_session_unavailable');
-              const result = await peer.extMethod(HARNESS_IMAGE_IMPORT_METHOD, {
-                sessionId,
-                request,
-              });
-              signal.throwIfAborted();
-              return HarnessImageImportResultSchema.parse(result);
-            }
-          : undefined,
-        config.designImageRecovery
-          ? async (request, signal) => {
-              signal.throwIfAborted();
-              const sessionId = adapter.currentSessionId;
-              if (!sessionId) throw new Error('harness_session_unavailable');
-              const result = await peer.extMethod(HARNESS_IMAGE_RECOVERY_METHOD, {
-                sessionId,
-                request,
-              });
-              signal.throwIfAborted();
-              return HarnessImageRecoveryResultSchema.parse(result);
-            }
-          : undefined
+        mcpCredentialProvider
       );
       return adapter;
       // Node and DOM declare different ReadableStreamReadDoneResult shapes for the same Web stream.

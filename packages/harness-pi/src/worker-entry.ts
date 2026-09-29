@@ -31,7 +31,6 @@ async function main(): Promise<void> {
     }
     return;
   }
-  // The parent writes public bootstrap, then run-bound grants over an extra FD.
   // Secrets are never part of startup args/env, ACP messages or config files.
   const control = new PrivateControlPipe(createReadStream('', { fd: 3, autoClose: true }));
   try {
@@ -62,14 +61,14 @@ async function main(): Promise<void> {
         }
         return grant.data.apiKey;
       },
-      async (preparation, signal) => {
+      async (session, signal) => {
         const grant = WorkerMcpCredentialGrantSchema.safeParse(await control.read(signal));
         if (
           !grant.success ||
-          grant.data.runId !== preparation.runId ||
-          grant.data.runtimeEpoch !== preparation.runtimeEpoch ||
+          grant.data.sessionId !== session.sessionId ||
+          grant.data.runtimeEpoch !== session.runtimeEpoch ||
           JSON.stringify(grant.data.credentials.map((entry) => entry.connection)) !==
-            JSON.stringify(preparation.mcpConnections)
+            JSON.stringify(session.mcpConnections)
         )
           throw new Error('harness_mcp_credential_grant_mismatch');
         return grant.data.credentials;

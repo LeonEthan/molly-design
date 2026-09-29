@@ -133,7 +133,7 @@ twice their size. Stated coordinates in prompts do not preserve layout.
 - The harness ends a run on a dispatched image failure or tool error
   ([acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)); unknown MCP
   delivery also ends it
-  ([tool-operation-journal.ts](../../../../packages/harness-pi/src/tool-operation-journal.ts)).
+  ([tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)).
 - Design runs prompt for every tool call except browser calls on granted sites
   ([worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)); Molly wraps
   its own tools with host approval

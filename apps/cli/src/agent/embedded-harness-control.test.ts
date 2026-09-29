@@ -4,13 +4,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { McpServer, PromptResponse } from '@agentclientprotocol/sdk';
 import type { WorkerConfig } from '@molly/harness-pi/worker-config';
 import {
-  HarnessImageImportRequestSchema,
-  HarnessImageRecoveryRequestSchema,
-  type HarnessImageImportResult,
   type HarnessRunSnapshot,
   type McpCredentialBinding,
   type ProtectedImageConnection,
-  MOLLY_BUILTIN_MCP_CONNECTION,
 } from '@molly/shared/embedded-harness';
 import { HarnessCredentialBroker } from './harness-credential-broker';
 import { EmbeddedHarnessControl } from './embedded-harness-control';
@@ -22,8 +18,6 @@ afterEach(() => {
 function fixture(
   stopFails = false,
   mcpConnections: McpCredentialBinding[] = [],
-  imageServers: McpServer[] = [],
-  recoveryEnabled = false,
   imageConnection?: ProtectedImageConnection
 ) {
   const broker = new HarnessCredentialBroker();
@@ -34,8 +28,6 @@ function fixture(
     productSessionId: 'synthetic-session',
     workspaceId: 'workspace',
     privateRoot: '/private/molly-test',
-    designImageImport: imageServers.length > 0,
-    designImageRecovery: recoveryEnabled,
     cwd: '/private/molly-test/work',
     shellPath: '/bin/sh',
     connection: {
@@ -75,8 +67,7 @@ function fixture(
     stops.push('stopped');
     pipe.destroy();
   });
-  control.configureMcp([
-    ...imageServers,
+  const configured = control.configureMcp([
     ...mcpConnections.map((binding): McpServer => {
       if (binding.destination.transport !== 'http') throw new Error('fixture_http_required');
       return {
@@ -136,231 +127,11 @@ function fixture(
       },
     };
   }
-  return { broker, config, control, pipe, packets, stops, grant, complete, binding };
+  return { broker, config, control, pipe, packets, stops, grant, complete, binding, configured };
 }
 
 describe('owned worker host control', () => {
-  it.each([
-    'owned',
-    'wrong-run',
-    'wrong-turn',
-    'wrong-epoch',
-    'wrong-session',
-    'disabled',
-    'revoked',
-  ] as const)(
-    'keeps local recovery inside its active design owner without the old MCP connection (%s)',
-    async (mode) => {
-      const f = fixture(false, [], [], mode !== 'disabled');
-      const received: unknown[] = [];
-      let previous: ReturnType<typeof HarnessImageRecoveryRequestSchema.parse> | undefined;
-      const receive = async (request: unknown, signal: AbortSignal) => {
-        received.push(request);
-        if (mode === 'revoked') await f.control.invalidate();
-        if (mode === 'revoked') expect(signal.aborted).toBe(true);
-        return { kind: 'listed' as const, operations: [] };
-      };
-      const result = f.control.prompt({
-        turnId: 'turn',
-        signal: new AbortController().signal,
-        prompt: async (snapshot) => {
-          const request = HarnessImageRecoveryRequestSchema.parse({
-            version: 1,
-            runId: mode === 'wrong-run' ? 'b'.repeat(64) : snapshot.runId,
-            turnId: mode === 'wrong-turn' ? 'foreign' : snapshot.turnId,
-            runtimeEpoch: mode === 'wrong-epoch' ? randomUUID() : snapshot.runtimeEpoch,
-            productSessionId: mode === 'wrong-session' ? 'foreign' : snapshot.sessionId,
-            toolCallId: 'recover',
-            requestDigest: 'a'.repeat(64),
-            query: {},
-          });
-          previous = request;
-          if (mode === 'owned')
-            await expect(f.control.recoverImages(request, receive)).resolves.toEqual({
-              kind: 'listed',
-              operations: [],
-            });
-          else await expect(f.control.recoverImages(request, receive)).rejects.toThrow();
-          return f.complete(snapshot);
-        },
-      });
-      f.grant();
-      if (mode === 'revoked') await expect(result).rejects.toThrow();
-      else await result;
-      if (!previous) throw new Error('missing request');
-      await expect(f.control.recoverImages(previous, receive)).rejects.toThrow(
-        'harness_image_recovery_not_owned'
-      );
-      expect(received).toEqual(['owned', 'revoked'].includes(mode) ? [previous] : []);
-    }
-  );
-  it.each([
-    'owned',
-    'wrong-run',
-    'wrong-turn',
-    'wrong-epoch',
-    'wrong-session',
-    'wrong-connection',
-    'wrong-revision',
-    'wrong-tool',
-    'revoked',
-  ] as const)(
-    'imports only within the active design run and selected catalog (%s)',
-    async (mode) => {
-      const f = fixture(
-        false,
-        [],
-        [
-          {
-            type: 'http',
-            name: 'images',
-            url: 'https://images.invalid/mcp',
-            headers: [],
-            _meta: {
-              mollyConnection: { id: 'images', revision: 2 },
-              mollyImageBinding: {
-                version: 1,
-                model: 'synthetic-image',
-                generate: { tool: 'generate', fields: { prompt: 'prompt', model: 'model' } },
-              },
-            },
-          },
-        ]
-      );
-      const controller = new AbortController();
-      const received: unknown[] = [];
-      const sha256 = 'a'.repeat(64);
-      const assets: HarnessImageImportResult = {
-        assets: [
-          {
-            path: `media/${sha256}.png`,
-            absolutePath: `/synthetic/media/${sha256}.png`,
-            sha256,
-            mimeType: 'image/png',
-            width: 1,
-            height: 1,
-            bytes: 68,
-          },
-        ],
-      };
-      const result = f.control.prompt({
-        turnId: 'turn',
-        signal: controller.signal,
-        prompt: async (snapshot) => {
-          const request = HarnessImageImportRequestSchema.parse({
-            version: 1,
-            runId: mode === 'wrong-run' ? 'c'.repeat(64) : snapshot.runId,
-            runtimeEpoch: mode === 'wrong-epoch' ? randomUUID() : snapshot.runtimeEpoch,
-            productSessionId: mode === 'wrong-session' ? 'foreign' : snapshot.sessionId,
-            turnId: mode === 'wrong-turn' ? 'foreign' : snapshot.turnId,
-            connectionId: mode === 'wrong-connection' ? 'foreign' : 'images',
-            connectionRevision: mode === 'wrong-revision' ? 3 : 2,
-            serverName: 'images',
-            toolName: mode === 'wrong-tool' ? 'edit' : 'generate',
-            toolCallId: 'call',
-            requestDigest: 'b'.repeat(64),
-            images: [{ mimeType: 'image/png', data: 'AAAA' }],
-          });
-          const receive = async (_request: unknown, signal: AbortSignal) => {
-            received.push(_request);
-            if (mode === 'revoked') await f.control.invalidate();
-            if (mode === 'revoked') expect(signal.aborted).toBe(true);
-            return assets;
-          };
-          if (mode === 'owned')
-            await expect(f.control.importImages(request, receive)).resolves.toEqual(assets);
-          else await expect(f.control.importImages(request, receive)).rejects.toThrow();
-          return f.complete(snapshot);
-        },
-      });
-      f.grant();
-      if (mode === 'revoked') await expect(result).rejects.toThrow();
-      else await result;
-      expect(received).toEqual(
-        ['owned', 'revoked'].includes(mode)
-          ? [expect.objectContaining({ connectionRevision: 2 })]
-          : []
-      );
-    }
-  );
-  it.each(['owned', 'wrong-id', 'wrong-revision', 'wrong-tool', 'unselected', 'revoked'] as const)(
-    'binds built-in image import to the frozen image connection, not MCP contract revision (%s)',
-    async (mode) => {
-      const imageConnection: ProtectedImageConnection = {
-        id: '00000000-0000-4000-8000-000000000001',
-        revision: 7,
-        enabled: true,
-        baseUrl: 'https://images.invalid/v1',
-        model: 'synthetic-image',
-        hasApiKey: true,
-        legacyHistoryMayContainKey: false,
-      };
-      const f = fixture(
-        false,
-        [],
-        [
-          {
-            type: 'http',
-            name: mode === 'unselected' ? 'other-server' : 'molly',
-            url: 'http://127.0.0.1:1234/mcp',
-            headers: [],
-            _meta: { mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION },
-          },
-        ],
-        false,
-        imageConnection
-      );
-      const received: unknown[] = [];
-      const execution = f.control.prompt({
-        turnId: 'turn',
-        signal: new AbortController().signal,
-        prompt: async (snapshot) => {
-          const request = HarnessImageImportRequestSchema.parse({
-            version: 1,
-            runId: snapshot.runId,
-            runtimeEpoch: snapshot.runtimeEpoch,
-            productSessionId: snapshot.sessionId,
-            turnId: snapshot.turnId,
-            serverName: 'molly',
-            connectionId:
-              mode === 'wrong-id' ? MOLLY_BUILTIN_MCP_CONNECTION.id : imageConnection.id,
-            connectionRevision: mode === 'wrong-revision' ? 8 : 7,
-            toolName: mode === 'wrong-tool' ? 'molly_render_preview' : 'molly_generate_image',
-            toolCallId: 'builtin-call',
-            requestDigest: 'b'.repeat(64),
-            images: [{ mimeType: 'image/png', data: 'AAAA' }],
-          });
-          if (mode === 'revoked')
-            f.broker.exchange({
-              version: 1,
-              connections: [f.config.connection],
-              reports: [],
-              imageConnection: { ...imageConnection, revision: 8 },
-            });
-          const receive = async (value: unknown) => {
-            received.push(value);
-            return { assets: [] };
-          };
-          if (mode === 'owned')
-            await expect(f.control.importImages(request, receive)).resolves.toEqual({ assets: [] });
-          else
-            await expect(f.control.importImages(request, receive)).rejects.toThrow(
-              'harness_image_import_not_owned'
-            );
-          return f.complete(snapshot);
-        },
-      });
-      f.grant();
-      if (mode === 'revoked') await expect(execution).rejects.toThrow();
-      else await execution;
-      expect(received).toEqual(
-        mode === 'owned'
-          ? [expect.objectContaining({ connectionId: imageConnection.id, connectionRevision: 7 })]
-          : []
-      );
-    }
-  );
-  it('prepares authenticated MCP over the private pipe before granting inference with the final frozen toolset', async () => {
+  it('configures MCP once for the session and revokes its idle worker after credential rotation', async () => {
     const binding: McpCredentialBinding = {
       workspaceId: 'workspace',
       serverId: 'protected',
@@ -370,64 +141,64 @@ describe('owned worker host control', () => {
       fieldNames: ['Authorization'],
     };
     const f = fixture(false, [binding]);
-    const prepared = Promise.withResolvers<void>();
-    const modelRequested = Promise.withResolvers<void>();
-    const acquire = f.broker.acquire.bind(f.broker);
-    f.broker.acquire = (...args) => {
-      const lease = acquire(...args);
-      modelRequested.resolve();
-      return lease;
-    };
-    const snapshots: HarnessRunSnapshot[] = [];
-    const result = f.control.prompt({
-      turnId: 'protected-turn',
-      signal: new AbortController().signal,
-      prepareMcp: async (preparation) => {
-        expect(JSON.stringify(preparation)).not.toContain('SYNTHETIC_MCP');
-        expect(f.packets).toMatchObject([
-          {
-            type: 'mcp-credentials',
-            credentials: [{ connection: binding, values: { Authorization: 'SYNTHETIC_MCP' } }],
-          },
-        ]);
-        prepared.resolve();
-        return { ...f.binding, toolsetHash: '2'.repeat(64) };
-      },
-      prompt: async (snapshot) => {
-        snapshots.push(snapshot);
-        return f.complete(snapshot);
-      },
-    });
-    expect(f.packets).toEqual([]);
     const [request] = f.broker.pendingMcpRequests();
-    expect(request).toBeDefined();
-    expect(
-      f.broker.exchange({
-        version: 1,
-        connections: [f.config.connection],
-        mcpConnections: [binding],
-        reports: [],
-        mcpReports: [
-          {
-            requestId: request!.requestId,
-            runId: request!.preparation.runId,
-            runtimeEpoch: f.config.runtimeEpoch,
-            credentialRef: binding.credentialRef,
-            credentialRevision: 1,
-            result: { ok: true, values: { Authorization: 'SYNTHETIC_MCP' } },
-          },
-        ],
-      })
-    ).toEqual([]);
-    await prepared.promise;
-    await modelRequested.promise;
-    f.grant();
-    expect((await result).stopReason).toBe('end_turn');
-    expect(snapshots).toMatchObject([{ toolsetHash: '2'.repeat(64), mcpConnections: [binding] }]);
+    expect(request?.session.sessionId).toBe(f.config.productSessionId);
+    f.broker.exchange({
+      version: 1,
+      connections: [f.config.connection],
+      mcpConnections: [binding],
+      reports: [],
+      mcpReports: [
+        {
+          requestId: request!.requestId,
+          sessionId: f.config.productSessionId,
+          runtimeEpoch: f.config.runtimeEpoch,
+          credentialRef: binding.credentialRef,
+          credentialRevision: 1,
+          result: { ok: true, values: { Authorization: 'SYNTHETIC_MCP' } },
+        },
+      ],
+    });
+    await f.configured;
+    expect(f.packets).toMatchObject([
+      {
+        type: 'mcp-credentials',
+        credentials: [{ connection: binding, values: { Authorization: 'SYNTHETIC_MCP' } }],
+      },
+    ]);
+    const snapshots: HarnessRunSnapshot[] = [];
+    for (const turnId of ['first', 'second']) {
+      const result = f.control.prompt({
+        turnId,
+        signal: new AbortController().signal,
+        prompt: async (snapshot) => {
+          snapshots.push(snapshot);
+          return f.complete(snapshot);
+        },
+      });
+      f.grant();
+      expect((await result).stopReason).toBe('end_turn');
+    }
+    expect(f.packets).toHaveLength(3);
+    expect(snapshots.map((snapshot) => snapshot.toolsetHash)).toEqual([
+      f.binding.toolsetHash,
+      f.binding.toolsetHash,
+    ]);
     expect(JSON.stringify(snapshots)).not.toContain('SYNTHETIC_MCP');
-    expect(f.broker.pendingMcpRequests()).toEqual([]);
-    expect(f.stops).toEqual([]);
-    f.pipe.destroy();
+    f.broker.exchange({
+      version: 1,
+      connections: [f.config.connection],
+      mcpConnections: [{ ...binding, revision: 2 }],
+      reports: [],
+    });
+    expect(f.stops).toEqual(['stopped']);
+    await expect(
+      f.control.prompt({
+        turnId: 'third',
+        signal: new AbortController().signal,
+        prompt: async (snapshot) => f.complete(snapshot),
+      })
+    ).rejects.toThrow('harness_worker_unavailable');
   });
   it('refuses late native success after a live MCP catalog invalidation', async () => {
     const f = fixture();
@@ -545,20 +316,17 @@ describe('owned worker host control', () => {
     const f = fixture();
     await f.control.bootstrap();
     const snapshots: HarnessRunSnapshot[] = [];
-    const active: boolean[] = [];
     const result = f.control.prompt({
       turnId: 'turn-auto',
       signal: new AbortController().signal,
       prompt: async (snapshot) => {
         snapshots.push(snapshot);
-        active.push(f.control.autoReviewActive());
         return f.complete(snapshot);
       },
     });
     f.grant();
     await result;
     expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual(['auto-review']);
-    expect([...active, f.control.autoReviewActive()]).toEqual([true, false]);
     f.pipe.destroy();
   });
 

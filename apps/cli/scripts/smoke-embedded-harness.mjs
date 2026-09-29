@@ -110,7 +110,7 @@ export async function runPackagedSmoke({
   const timings = {};
   const memory = {};
   try {
-    if (exerciseTurns) benchmark = await createSyntheticTurnBenchmark(exerciseTurns);
+    if (exerciseTurns) benchmark = await createSyntheticTurnBenchmark(exerciseTurns, protectedMcp);
     const cwd = path.join(root, 'workspace');
     await mkdir(path.join(cwd, '.pi'), { recursive: true });
     const pollution = '{invalid project Pi config: must not be read}';
@@ -210,7 +210,12 @@ export async function runPackagedSmoke({
     );
     const peer = new ClientSideConnection(
       () => ({
-        requestPermission: async () => ({ outcome: { outcome: 'cancelled' } }),
+        requestPermission: async (request) => {
+          const allow = request.options.find((option) => option.kind === 'allow_once');
+          return protectedMcp && request.toolCall.title === 'synthetic-protected/inspect' && allow
+            ? { outcome: { outcome: 'selected', optionId: allow.optionId } }
+            : { outcome: { outcome: 'cancelled' } };
+        },
         sessionUpdate: async (params) => {
           benchmark?.update(params);
         },
@@ -257,6 +262,18 @@ export async function runPackagedSmoke({
         },
         fieldNames: ['TEST_MCP_TOKEN'],
       };
+      if (protectedMcp)
+        await new Promise((resolve, reject) =>
+          child.stdio[3].write(
+            `${JSON.stringify({
+              type: 'mcp-credentials',
+              runtimeEpoch: config.runtimeEpoch,
+              sessionId: config.productSessionId,
+              credentials: [{ connection: binding, values: { TEST_MCP_TOKEN: 'SYNTHETIC_FIRST' } }],
+            })}\n`,
+            (error) => (error ? reject(error) : resolve())
+          )
+        );
       const sessionStartedAt = performance.now();
       const session = await peer.newSession({
         cwd,
@@ -266,7 +283,7 @@ export async function runPackagedSmoke({
                 name: 'synthetic-protected',
                 command: binding.destination.command,
                 args: binding.destination.args,
-                env: [],
+                env: [{ name: 'ELECTRON_RUN_AS_NODE', value: '1' }],
                 _meta: {
                   mollyConnection: { id: binding.serverId, revision: 1 },
                   mollyMcpCredential: binding,
@@ -312,50 +329,13 @@ export async function runPackagedSmoke({
         )
       );
       assert.equal(await readFile(path.join(cwd, '.pi', 'settings.json'), 'utf8'), pollution);
-      let lastPreparationMs;
-      const prepareMcp = async (runId, turnId) => {
-        if (!protectedMcp) return session._meta.mollyRuntime;
-        const preparationStartedAt = performance.now();
-        const preparation = {
-          version: 1,
-          runId,
-          runtimeEpoch: config.runtimeEpoch,
-          sessionId: config.productSessionId,
-          turnId,
-          workspaceId: config.workspaceId,
-          connection: config.connection,
-          mcpConnections: [binding],
-        };
-        await new Promise((resolve, reject) =>
-          child.stdio[3].write(
-            `${JSON.stringify({
-              type: 'mcp-credentials',
-              runId: preparation.runId,
-              runtimeEpoch: preparation.runtimeEpoch,
-              credentials: [{ connection: binding, values: { TEST_MCP_TOKEN: 'SYNTHETIC_FIRST' } }],
-            })}\n`,
-            (error) => (error ? reject(error) : resolve())
-          )
-        );
-        const prepared = await peer.extMethod('_molly/prepare_mcp_run', {
-          sessionId: session.sessionId,
-          preparation,
-        });
-        lastPreparationMs = performance.now() - preparationStartedAt;
-        assert.equal(prepared.nativeSessionFile, session._meta.mollyRuntime.nativeSessionFile);
-        assert.notEqual(prepared.toolsetHash, session._meta.mollyRuntime.toolsetHash);
-        assert.equal(prepared.runtimeEpoch, config.runtimeEpoch);
-        assert.equal(prepared.pluginSetHash, session._meta.mollyRuntime.pluginSetHash);
-        const history = await readFile(prepared.nativeSessionFile, 'utf8');
-        assert.ok(!history.includes('SYNTHETIC_FIRST'));
-        assert.ok(!JSON.stringify({ prepared, session }).includes('SYNTHETIC_FIRST'));
-        return { ...prepared, mcpConnections: [binding] };
+      const initialBinding = {
+        ...session._meta.mollyRuntime,
+        ...(protectedMcp ? { mcpConnections: [binding] } : {}),
       };
-      const initialBinding = await prepareMcp('synthetic-run', 'synthetic-turn');
-      if (protectedMcp) {
-        timings.protectedMcpPreparationMs = lastPreparationMs;
-        if (measure) memory.mcpPreparedRssKiB = await workerRssKiB(child);
-      }
+      const history = await readFile(initialBinding.nativeSessionFile, 'utf8');
+      assert.ok(!history.includes('SYNTHETIC_FIRST'));
+      assert.ok(!JSON.stringify(session).includes('SYNTHETIC_FIRST'));
       if (benchmark) {
         turns = await benchmark.exercise({
           peer,
@@ -363,7 +343,6 @@ export async function runPackagedSmoke({
           config,
           session,
           initialBinding,
-          prepareMcp,
           readResources: async ({ index, kind }) => ({
             ...(await workerResources(child)),
             ...(diagnoseGc
@@ -491,7 +470,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
                 Object.fromEntries(
                   [
                     'promptMs',
-                    'prepareMs',
                     'cancelToSettledMs',
                     'cancelToSocketCloseMs',
                     'rssKiB',
@@ -552,7 +530,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     );
   } else {
     console.log(
-      `PASS offline packaged ACP ${options.protectedMcp ? 'protected MCP preparation' : 'startup'}${options.questionUI ? ' with question UI negotiation' : ''}${options.compatibleModel ? ' and explicit compatible model' : ''}: Pi ${first.engineVersion}, ${first.buildPlatform}/${first.buildArch}, build ${first.buildId}`
+      `PASS offline packaged ACP ${options.protectedMcp ? 'protected MCP session' : 'startup'}${options.questionUI ? ' with question UI negotiation' : ''}${options.compatibleModel ? ' and explicit compatible model' : ''}: Pi ${first.engineVersion}, ${first.buildPlatform}/${first.buildArch}, build ${first.buildId}`
     );
   }
 }

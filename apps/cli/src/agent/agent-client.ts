@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'crypto';
+import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { performance } from 'perf_hooks';
@@ -7,19 +7,6 @@ import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
   MOLLY_BUILTIN_MCP_CONNECTION,
-  MOLLY_PREPARE_MCP_METHOD,
-  type HarnessMcpPreparation,
-  HARNESS_IMAGE_IMPORT_METHOD,
-  HARNESS_IMAGE_RECOVERY_METHOD,
-  HARNESS_IMAGE_RECOVERY_PERMISSION,
-  HarnessImageRecoveryRequestSchema,
-  HarnessImageRecoveryResultSchema,
-  type HarnessImageRecoveryRequest,
-  type HarnessImageRecoveryResult,
-  HarnessImageImportRequestSchema,
-  HarnessImageImportResultSchema,
-  type HarnessImageImportRequest,
-  type HarnessImageImportResult,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
   HarnessQuestionDismissRequestSchema,
@@ -630,13 +617,7 @@ export interface AgentClientOptions {
    */
   loadExternalMcpServers?(): Promise<SessionMcpCatalogSelector>;
   onMcpCatalogInvalidated?(): void;
-  onMcpServersResolved?(servers: readonly acp.McpServer[]): void;
-  onHarnessImageImport?(request: HarnessImageImportRequest): Promise<HarnessImageImportResult>;
-  onHarnessImageRecovery?(
-    request: HarnessImageRecoveryRequest
-  ): Promise<HarnessImageRecoveryResult>;
-  /** True while the active run's frozen permission mode lets the worker approve image calls. */
-  isAutoReviewRun?(): boolean;
+  onMcpServersResolved?(servers: readonly acp.McpServer[]): Promise<void> | void;
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
   onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
@@ -649,7 +630,6 @@ export type AcpWriteTextFileEvidence = {
 };
 
 export class AgentClient implements acp.Client {
-  private readonly imageImportApprovals = new Map<string, { title: string; digest: string }>();
   private mcpCatalogGuard?: NonNullable<SessionMcpCatalogSelector['guard']>;
   private releaseMcpCatalog?: () => void;
   private connection: acp.ClientSideConnection | null = null;
@@ -973,10 +953,12 @@ export class AgentClient implements acp.Client {
         : server
     );
     if (!externalLoad) {
+      await this.options.onMcpServersResolved?.(builtin);
       return builtin;
     }
 
     const owner = this.connection;
+    let servers = builtin;
     try {
       const selector = await externalLoad;
       if (owner && (this.connection !== owner || this.connectionClosed)) return builtin;
@@ -994,24 +976,22 @@ export class AgentClient implements acp.Client {
           source: 'configWarning',
         });
       }
-      const servers = [...builtin, ...(external.servers as acp.McpServer[])];
-      this.options.onMcpServersResolved?.(servers);
-      return servers;
+      servers = [...builtin, ...(external.servers as acp.McpServer[])];
     } catch (error) {
       const message = `Workspace MCP servers could not be loaded (${formatErrorMessage(
         error
       )}). The agent started with only the built-in Molly server.`;
       this.logger.debug(`[${this.options.sessionId}] ${message}`);
       this.options.onAgentWarning?.({ message, source: 'configWarning' });
-      return builtin;
     }
+    await this.options.onMcpServersResolved?.(servers);
+    return servers;
   }
 
   async requestPermission(
     params: acp.RequestPermissionRequest
   ): Promise<acp.RequestPermissionResponse> {
     this.ensureSessionMatch(params.sessionId as ACPSessionId);
-    this.imageImportApprovals.delete(params.toolCall.toolCallId);
     const requestId = randomUUID();
     this.logger.debug(
       `[${this.options.sessionId}] Requesting permission for tool call ${params.toolCall.toolCallId}`
@@ -1021,24 +1001,6 @@ export class AgentClient implements acp.Client {
     const response = await this.options.onRequestPermission(requestId, params);
     if (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
       return { outcome: { outcome: 'cancelled' } };
-    if (
-      this.options.agentConfig?.agentType === 'molly' &&
-      (this.options.onHarnessImageImport || this.options.onHarnessImageRecovery) &&
-      response.outcome.outcome === 'selected' &&
-      params.options.find(
-        (option) =>
-          response.outcome.outcome === 'selected' && option.optionId === response.outcome.optionId
-      )?.kind === 'allow_once' &&
-      this.imageImportApprovals.size < 1024 &&
-      typeof params.toolCall.title === 'string'
-    ) {
-      this.imageImportApprovals.set(params.toolCall.toolCallId, {
-        title: params.toolCall.title,
-        digest: createHash('sha256')
-          .update(JSON.stringify(params.toolCall.rawInput) ?? 'null')
-          .digest('hex'),
-      });
-    }
     return response;
   }
 
@@ -1658,61 +1620,6 @@ export class AgentClient implements acp.Client {
         await question.done;
       }
       return { version: 1, dismissed: true };
-    }
-    if (method === HARNESS_IMAGE_RECOVERY_METHOD) {
-      try {
-        this.ensureSessionMatch(z.string().parse(params.sessionId) as ACPSessionId);
-        const request = HarnessImageRecoveryRequestSchema.parse(params.request);
-        const approval = this.imageImportApprovals.get(request.toolCallId);
-        if (
-          this.options.agentConfig?.cliType !== 'builtin' ||
-          this.options.agentConfig.agentType !== 'molly' ||
-          !this.options.onHarnessImageRecovery ||
-          this.connectionClosed ||
-          (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
-          !(
-            this.options.isAutoReviewRun?.() ||
-            (approval?.title === HARNESS_IMAGE_RECOVERY_PERMISSION &&
-              approval.digest === request.requestDigest)
-          ) ||
-          request.requestDigest !==
-            createHash('sha256').update(JSON.stringify(request.query)).digest('hex')
-        )
-          throw new Error('harness_image_recovery_not_authorized');
-        this.imageImportApprovals.delete(request.toolCallId);
-        return HarnessImageRecoveryResultSchema.parse(
-          await this.options.onHarnessImageRecovery(request)
-        );
-      } catch {
-        throw new Error('harness_image_recovery_refused');
-      }
-    }
-    if (method === HARNESS_IMAGE_IMPORT_METHOD) {
-      try {
-        this.ensureSessionMatch(z.string().parse(params.sessionId) as ACPSessionId);
-        const request = HarnessImageImportRequestSchema.parse(params.request);
-        const approval = this.imageImportApprovals.get(request.toolCallId);
-        if (
-          this.options.agentConfig?.cliType !== 'builtin' ||
-          this.options.agentConfig.agentType !== 'molly' ||
-          !this.options.onHarnessImageImport ||
-          this.connectionClosed ||
-          (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()) ||
-          !(
-            this.options.isAutoReviewRun?.() ||
-            (approval?.title === `${request.serverName}/${request.toolName}` &&
-              approval.digest === request.requestDigest)
-          )
-        )
-          throw new Error('harness_image_import_not_authorized');
-        this.imageImportApprovals.delete(request.toolCallId);
-        return HarnessImageImportResultSchema.parse(
-          await this.options.onHarnessImageImport(request)
-        );
-      } catch {
-        // Never log image payloads or foreign validation inputs.
-        throw new Error('harness_image_import_refused');
-      }
     }
     try {
       await this.handleExtensionMessage(method, params);
@@ -2694,43 +2601,6 @@ export class AgentClient implements acp.Client {
     return { completion, outcome };
   }
 
-  async prepareEmbeddedMcp(
-    sessionId: ACPSessionId,
-    preparation: HarnessMcpPreparation,
-    signal: AbortSignal
-  ): Promise<unknown> {
-    this.ensureSessionMatch(sessionId);
-    if (
-      this.options.agentConfig?.cliType !== 'builtin' ||
-      this.options.agentConfig.agentType !== 'molly' ||
-      !this.connection ||
-      this.connectionClosed ||
-      (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent())
-    )
-      throw new Error('harness_mcp_preparation_unavailable');
-    signal.throwIfAborted();
-    const bounded = AbortSignal.any([signal, AbortSignal.timeout(60_000)]);
-    let abortListener: (() => void) | undefined;
-    const aborted = new Promise<never>((_, reject) => {
-      abortListener = () => reject(new Error('harness_mcp_preparation_cancelled'));
-      bounded.addEventListener('abort', abortListener, { once: true });
-    });
-    try {
-      const request = this.connection.extMethod(MOLLY_PREPARE_MCP_METHOD, {
-        sessionId,
-        preparation,
-      });
-      this.trackPendingExecution(request);
-      const result = await withAbort(request, aborted);
-      bounded.throwIfAborted();
-      if (this.connectionClosed || (this.mcpCatalogGuard && !this.mcpCatalogGuard.isCurrent()))
-        throw new Error('harness_mcp_preparation_unavailable');
-      return result;
-    } finally {
-      if (abortListener) bounded.removeEventListener('abort', abortListener);
-    }
-  }
-
   private async requestSteeringExtension(
     method: string,
     sessionId: ACPSessionId,
@@ -2821,7 +2691,6 @@ export class AgentClient implements acp.Client {
     prompt: acp.ContentBlock[],
     options?: { signal?: AbortSignal; _meta?: acp.PromptRequest['_meta'] }
   ) {
-    this.imageImportApprovals.clear();
     const span = startTraceSpan(this.logger, 'agent_client.prompt', {
       sessionId: this.options.sessionId,
       acpSessionId: sessionId,

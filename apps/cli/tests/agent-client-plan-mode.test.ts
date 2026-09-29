@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type {
   ACPSessionId,
   AgentConfigCliType,
@@ -8,19 +8,7 @@ import type {
   WorkspaceId,
 } from '@molly/shared';
 import { parseAskUserQuestionPermissionMeta } from '@molly/shared';
-import {
-  HarnessMcpPreparationSchema,
-  MOLLY_PREPARE_MCP_METHOD,
-  HARNESS_IMAGE_IMPORT_METHOD,
-  HarnessImageImportRequestSchema,
-  type HarnessImageImportRequest,
-  type HarnessImageImportResult,
-  HARNESS_IMAGE_RECOVERY_METHOD,
-  HarnessImageRecoveryRequestSchema,
-  type HarnessImageRecoveryRequest,
-  type HarnessImageRecoveryResult,
-  HARNESS_QUESTION_DISMISS_METHOD,
-} from '@molly/shared/embedded-harness';
+import { HARNESS_QUESTION_DISMISS_METHOD } from '@molly/shared/embedded-harness';
 import type {
   CreateElicitationRequest,
   PromptRequest,
@@ -55,11 +43,6 @@ function createTestClient(options?: {
   agentType?: string;
   workspaceId?: WorkspaceId;
   machineId?: MachineId;
-  onHarnessImageImport?: (request: HarnessImageImportRequest) => Promise<HarnessImageImportResult>;
-  onHarnessImageRecovery?: (
-    request: HarnessImageRecoveryRequest
-  ) => Promise<HarnessImageRecoveryResult>;
-  isAutoReviewRun?: () => boolean;
 }) {
   const logger = createSilentLogger();
   const onUpdateMessage = vi.fn();
@@ -93,9 +76,6 @@ function createTestClient(options?: {
     onImageGenerationBegin,
     onImageGenerationEnd,
     onRequestPermission,
-    onHarnessImageImport: options?.onHarnessImageImport,
-    onHarnessImageRecovery: options?.onHarnessImageRecovery,
-    isAutoReviewRun: options?.isAutoReviewRun,
   });
 
   // Simulate session startup by setting internal fields directly
@@ -131,204 +111,6 @@ function makePermissionRequest(kind?: string): RequestPermissionRequest {
   } as RequestPermissionRequest;
 }
 
-it.each([
-  'owned',
-  'no-approval',
-  'changed-query',
-  'wrong-title',
-  'wrong-session',
-  'host-error',
-] as const)(
-  'guards the local recovery callback and consumes its exact query once (%s)',
-  async (mode) => {
-    const received: unknown[] = [];
-    const { client, onRequestPermission } = createTestClient({
-      agentType: 'molly',
-      onHarnessImageRecovery: async (request) => {
-        received.push(request);
-        if (mode === 'host-error') throw new Error('PRIVATE_HOST_DIAGNOSTIC');
-        return { kind: 'listed', operations: [] };
-      },
-    });
-    const query = {};
-    const permission = makePermissionRequest();
-    permission.toolCall.title = mode === 'wrong-title' ? 'images/generate' : 'molly/recover_images';
-    permission.toolCall.rawInput = query;
-    onRequestPermission.mockResolvedValue({
-      outcome: { outcome: 'selected', optionId: 'opt-allow' },
-    });
-    if (mode !== 'no-approval') await client.requestPermission(permission);
-    const request = HarnessImageRecoveryRequestSchema.parse({
-      version: 1,
-      runId: 'a'.repeat(64),
-      runtimeEpoch: randomUUID(),
-      productSessionId: 'test-session',
-      turnId: 'current-turn',
-      toolCallId: 'tc-1',
-      requestDigest: createHash('sha256').update(JSON.stringify(query)).digest('hex'),
-      query: mode === 'changed-query' ? { operationId: 'b'.repeat(64) } : query,
-    });
-    const params = { sessionId: mode === 'wrong-session' ? 'foreign' : 'acp-test', request };
-    if (mode === 'owned') {
-      await expect(client.extMethod(HARNESS_IMAGE_RECOVERY_METHOD, params)).resolves.toEqual({
-        kind: 'listed',
-        operations: [],
-      });
-      await expect(client.extMethod(HARNESS_IMAGE_RECOVERY_METHOD, params)).rejects.toThrow(
-        'harness_image_recovery_refused'
-      );
-    } else
-      await expect(client.extMethod(HARNESS_IMAGE_RECOVERY_METHOD, params)).rejects.toThrow(
-        /^harness_image_recovery_refused$/
-      );
-    expect(received).toEqual(['owned', 'host-error'].includes(mode) ? [request] : []);
-  }
-);
-
-it.each([
-  'allowed',
-  'no-approval',
-  'denied-again',
-  'wrong-session',
-  'wrong-digest',
-  'wrong-tool',
-  'revoked',
-  'legacy',
-  'host-error',
-] as const)('binds the private image import to a single native approval (%s)', async (mode) => {
-  const accepted: unknown[] = [];
-  const sha256 = 'a'.repeat(64);
-  const assets: HarnessImageImportResult = {
-    assets: [
-      {
-        path: `media/${sha256}.png`,
-        absolutePath: `/synthetic/media/${sha256}.png`,
-        sha256,
-        mimeType: 'image/png',
-        width: 1,
-        height: 1,
-        bytes: 68,
-      },
-    ],
-  };
-  const { client, onRequestPermission } = createTestClient({
-    agentType: mode === 'legacy' ? 'codex' : 'molly',
-    onHarnessImageImport: async (request) => {
-      accepted.push(request);
-      if (mode === 'host-error') throw new Error('SYNTHETIC_PRIVATE_DIAGNOSTIC');
-      return assets;
-    },
-  });
-  let current = true;
-  const selector: SessionMcpCatalogSelector = () => ({ servers: [], problems: [] });
-  selector.guard = { isCurrent: () => current, subscribe: () => () => {} };
-  // @ts-expect-error - production catalog wiring without a child process.
-  await client.buildMcpServers('/tmp/synthetic', Promise.resolve(selector));
-  const args = { prompt: 'Synthetic', model: 'synthetic-image' };
-  const permission = makePermissionRequest();
-  permission.toolCall.title = 'images/generate';
-  permission.toolCall.rawInput = args;
-  onRequestPermission.mockResolvedValue({
-    outcome: { outcome: 'selected', optionId: 'opt-allow' },
-  });
-  if (mode !== 'no-approval') await client.requestPermission(permission);
-  if (mode === 'denied-again') {
-    onRequestPermission.mockResolvedValue({
-      outcome: { outcome: 'selected', optionId: 'opt-deny' },
-    });
-    await client.requestPermission(permission);
-  }
-  if (mode === 'revoked') current = false;
-  const request = HarnessImageImportRequestSchema.parse({
-    version: 1,
-    runId: 'b'.repeat(64),
-    runtimeEpoch: randomUUID(),
-    productSessionId: 'test-session',
-    turnId: 'turn',
-    connectionId: 'images',
-    connectionRevision: 1,
-    serverName: 'images',
-    toolName: mode === 'wrong-tool' ? 'edit' : 'generate',
-    toolCallId: 'tc-1',
-    requestDigest:
-      mode === 'wrong-digest'
-        ? 'c'.repeat(64)
-        : createHash('sha256').update(JSON.stringify(args)).digest('hex'),
-    images: [{ mimeType: 'image/png', data: 'AAAA' }],
-  });
-  const params = { sessionId: mode === 'wrong-session' ? 'foreign-session' : 'acp-test', request };
-  if (mode === 'allowed') {
-    await expect(client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, params)).resolves.toEqual(assets);
-    await expect(client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, params)).rejects.toThrow(
-      'harness_image_import_refused'
-    );
-    expect(accepted).toEqual([request]);
-  } else {
-    await expect(client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, params)).rejects.toThrow(
-      /^harness_image_import_refused$/
-    );
-    expect(accepted).toEqual(mode === 'host-error' ? [request] : []);
-  }
-});
-
-it.each([true, false])(
-  'accepts an image import without a host prompt only in an auto-review run (%s)',
-  async (autoReview) => {
-    const accepted: unknown[] = [];
-    const sha256 = 'a'.repeat(64);
-    const assets: HarnessImageImportResult = {
-      assets: [
-        {
-          path: `media/${sha256}.png`,
-          absolutePath: `/synthetic/media/${sha256}.png`,
-          sha256,
-          mimeType: 'image/png',
-          width: 1,
-          height: 1,
-          bytes: 68,
-        },
-      ],
-    };
-    const { client } = createTestClient({
-      agentType: 'molly',
-      isAutoReviewRun: () => autoReview,
-      onHarnessImageImport: async (request) => {
-        accepted.push(request);
-        return assets;
-      },
-    });
-    const selector: SessionMcpCatalogSelector = () => ({ servers: [], problems: [] });
-    selector.guard = { isCurrent: () => true, subscribe: () => () => {} };
-    // @ts-expect-error - production catalog wiring without a child process.
-    await client.buildMcpServers('/tmp/synthetic', Promise.resolve(selector));
-    const request = HarnessImageImportRequestSchema.parse({
-      version: 1,
-      runId: 'b'.repeat(64),
-      runtimeEpoch: randomUUID(),
-      productSessionId: 'test-session',
-      turnId: 'turn',
-      connectionId: 'images',
-      connectionRevision: 1,
-      serverName: 'molly',
-      toolName: 'molly_generate_image',
-      toolCallId: 'tc-auto',
-      requestDigest: 'c'.repeat(64),
-      images: [{ mimeType: 'image/png', data: 'AAAA' }],
-    });
-    const result = client.extMethod(HARNESS_IMAGE_IMPORT_METHOD, {
-      sessionId: 'acp-test',
-      request,
-    });
-    if (autoReview) {
-      await expect(result).resolves.toEqual(assets);
-      expect(accepted).toEqual([request]);
-    } else {
-      await expect(result).rejects.toThrow(/^harness_image_import_refused$/);
-      expect(accepted).toEqual([]);
-    }
-  }
-);
-
 it('rejects a permission approved after the bound MCP catalog was revoked', async () => {
   const { client, onRequestPermission } = createTestClient({ agentType: 'molly' });
   let current = true;
@@ -344,78 +126,6 @@ it('rejects a permission approved after the bound MCP catalog was revoked', asyn
     outcome: { outcome: 'cancelled' },
   });
 });
-
-it.each(['ready', 'cancelled', 'revoked'] as const)(
-  'owns public MCP preparation until its actual RPC settles (%s)',
-  async (outcome) => {
-    const { client } = createTestClient({ agentType: 'molly' });
-    let current = true;
-    const selector: SessionMcpCatalogSelector = () => ({ servers: [], problems: [] });
-    selector.guard = { isCurrent: () => current, subscribe: () => () => {} };
-    // @ts-expect-error - use the production catalog wiring without starting a provider.
-    await client.buildMcpServers('/tmp/synthetic', Promise.resolve(selector));
-    const pending = Promise.withResolvers<Record<string, unknown>>();
-    const controller = new AbortController();
-    const preparation = HarnessMcpPreparationSchema.parse({
-      version: 1,
-      runId: 'run',
-      runtimeEpoch: 'epoch',
-      sessionId: 'test-session',
-      turnId: 'turn',
-      workspaceId: 'workspace',
-      connection: {
-        schemaVersion: 1,
-        id: 'model',
-        revision: 1,
-        providerPresetId: 'openai',
-        displayName: 'Synthetic',
-        baseUrl: 'https://model.invalid',
-        credentialRef: 'model-ref',
-        enabled: true,
-      },
-      mcpConnections: [
-        {
-          workspaceId: 'workspace',
-          serverId: 'server',
-          credentialRef: '00000000-0000-4000-8000-000000000001',
-          revision: 1,
-          destination: { transport: 'http', url: 'https://mcp.invalid' },
-          fieldNames: ['Authorization'],
-        },
-      ],
-    });
-    const submitted: unknown[] = [];
-    // @ts-expect-error - inject only the public outbound RPC seam used by this method.
-    client.connection = {
-      extMethod: (method: string, params: unknown) => {
-        submitted.push({ method, params });
-        return pending.promise;
-      },
-    };
-    const response = client.prepareEmbeddedMcp(
-      'acp-test' as ACPSessionId,
-      preparation,
-      controller.signal
-    );
-    expect(submitted).toEqual([
-      { method: MOLLY_PREPARE_MCP_METHOD, params: { sessionId: 'acp-test', preparation } },
-    ]);
-    const settled = client.pendingPromptCompletion;
-    expect(settled).not.toBeNull();
-    if (outcome === 'cancelled') {
-      controller.abort();
-      await expect(response).rejects.toThrow('harness_mcp_preparation_cancelled');
-      expect(client.pendingPromptCompletion).not.toBeNull();
-    }
-    if (outcome === 'revoked') current = false;
-    pending.resolve({ public: 'ready' });
-    if (outcome === 'ready') expect(await response).toEqual({ public: 'ready' });
-    if (outcome === 'revoked')
-      await expect(response).rejects.toThrow('harness_mcp_preparation_unavailable');
-    await settled;
-    expect(client.pendingPromptCompletion).toBeNull();
-  }
-);
 
 function makeCurrentModeUpdateNotification(modeId: string): SessionNotification {
   return {

@@ -11,6 +11,10 @@ const state = vi.hoisted(() => ({
   previewVisible: false,
   processing: false,
   sync: vi.fn<() => Promise<void>>(),
+  attach: vi.fn<() => Promise<void>>(),
+  saveVersion: vi.fn<() => Promise<unknown>>(),
+  resizeCallbacks: new Set<() => void>(),
+  translate: (_key: string, fallback: string) => fallback,
   /** Records [method, firstArg] for artwork-scoped design service calls. */
   calls: [] as [string, string][],
   /** The session id handed to useSessionDoc (conversation ownership). */
@@ -26,7 +30,7 @@ vi.mock('jotai', async (original) => ({
 }));
 vi.mock('@tanstack/react-router', () => ({ useBlocker: () => {}, useNavigate: () => () => {} }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (_: string, fallback: string) => fallback }),
+  useTranslation: () => ({ t: state.translate }),
 }));
 vi.mock('../src/lib/session-draft-tabs', () => ({ writeStoredLastActiveTabState: () => {} }));
 vi.mock('../src/hooks/use-session-doc', () => ({
@@ -73,7 +77,9 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       },
       attach: async (id: string) => {
         state.calls.push(['attach', id]);
+        await state.attach();
       },
+      saveVersion: () => state.saveVersion(),
       attachPreview: async () => {
         state.previewVisible = true;
       },
@@ -89,7 +95,12 @@ import { DesignCanvas } from '../src/components/sessions/design-canvas';
 ).IS_REACT_ACT_ENVIRONMENT = true;
 let container: HTMLDivElement;
 let root: Root;
-const receipt = (turnId: string, revisionId = 'a'.repeat(64), status = 'committed', artworkId = 'artwork') => ({
+const receipt = (
+  turnId: string,
+  revisionId = 'a'.repeat(64),
+  status = 'committed',
+  artworkId = 'artwork'
+) => ({
   designOutcome: {
     version: 1,
     artworkId,
@@ -115,6 +126,18 @@ beforeEach(() => {
   vi.stubGlobal(
     'ResizeObserver',
     class {
+      constructor(private callback: () => void) {
+        state.resizeCallbacks.add(callback);
+      }
+      observe() {}
+      disconnect() {
+        state.resizeCallbacks.delete(this.callback);
+      }
+    }
+  );
+  vi.stubGlobal(
+    'MutationObserver',
+    class {
       observe() {}
       disconnect() {}
     }
@@ -126,6 +149,9 @@ beforeEach(() => {
   state.calls = [];
   state.docSessionId = '';
   state.sync.mockReset().mockResolvedValue(undefined);
+  state.attach.mockReset().mockResolvedValue(undefined);
+  state.saveVersion.mockReset();
+  state.resizeCallbacks.clear();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -134,6 +160,83 @@ afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const visibleCanvas = () =>
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+    x: 0,
+    y: 0,
+    width: 800,
+    height: 600,
+    top: 0,
+    left: 0,
+    bottom: 600,
+    right: 800,
+    toJSON: () => ({}),
+  });
+const resizeCanvas = () =>
+  act(async () => {
+    for (const callback of state.resizeCallbacks) callback();
+  });
+const deferredAttachment = () => {
+  let resolve!: () => void;
+  let reject!: (cause: Error) => void;
+  const promise = new Promise<void>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+};
+
+it('clears a recovered attachment error after the current canvas attaches successfully', async () => {
+  visibleCanvas();
+  state.attach.mockRejectedValueOnce(Error('Attachment failed'));
+  await render();
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Attachment failed');
+  await resizeCanvas();
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
+it('preserves a save error when a pending attachment succeeds', async () => {
+  visibleCanvas();
+  await render();
+  const pending = deferredAttachment();
+  state.attach.mockImplementationOnce(() => pending.promise);
+  await resizeCanvas();
+  state.saveVersion.mockRejectedValueOnce(Error('Save failed'));
+  const save = container.querySelector<HTMLButtonElement>('[aria-label="Save version"]');
+  expect(save?.disabled).toBe(false);
+  await act(async () => save?.click());
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Save failed');
+  await act(async () => pending.resolve());
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Save failed');
+});
+
+it('retains a current attachment failure when a superseded attachment succeeds', async () => {
+  visibleCanvas();
+  const previous = deferredAttachment();
+  state.attach.mockImplementationOnce(() => previous.promise);
+  await render();
+  state.attach.mockRejectedValueOnce(Error('Current attachment failed'));
+  await render({ artworkId: 'next-artwork' });
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'Current attachment failed'
+  );
+  await act(async () => previous.resolve());
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    'Current attachment failed'
+  );
+});
+
+it('ignores a superseded attachment failure after the current canvas succeeds', async () => {
+  visibleCanvas();
+  const previous = deferredAttachment();
+  state.attach.mockImplementationOnce(() => previous.promise);
+  await render();
+  await render({ artworkId: 'next-artwork' });
+  await act(async () => previous.reject(Error('Old attachment failed')));
+  expect(container.querySelector('[role="alert"]')).toBeNull();
 });
 
 it('reconciles hydrated committed receipts only after history synchronization', async () => {

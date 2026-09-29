@@ -37,6 +37,12 @@ its bundled CLI cannot attach to the normal local daemon. Teardown first asks
 Electron to quit through its production shutdown barrier, then verifies the
 port can be rebound before deleting temporary state.
 
+On macOS, the harness passes `-ApplePersistenceIgnoreState YES` for its own
+process. The OS can otherwise block `app.whenReady` behind a post-crash window
+restoration dialog despite an isolated Electron profile. This does not erase saved
+user state or change a global preference; see the
+[native startup evidence](../.agents/notes/implemented/bug-fix/2026-09-28-browser-response-navigation-crash.md#verification-and-limits).
+
 ## Commands
 
 ```bash

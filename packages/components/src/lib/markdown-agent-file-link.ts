@@ -71,6 +71,15 @@ const parseLineNumber = (value: string | undefined): number | undefined => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 };
 
+export function parseMarkdownAgentImageHref(src: string | undefined): string | null {
+  if (!src) return null;
+  const path = src.trim().replace(/^sandbox:(?=\/(?!\/))/iu, '');
+  if (/^[a-z][a-z\d+.-]*:/iu.test(path) && !WINDOWS_ABSOLUTE_PATH_PATTERN.test(path)) {
+    return null;
+  }
+  return parseMarkdownAgentFileHref(path)?.filePath ?? null;
+}
+
 export function parseMarkdownAgentFileHref(
   href: string | undefined
 ): MarkdownAgentFileLinkTarget | null {

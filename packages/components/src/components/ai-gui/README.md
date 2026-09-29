@@ -111,3 +111,11 @@ reads the persisted session/file/hash identity, and displays read failures inste
 of perpetual cloud-upload progress. The landing and session composers retain their
 existing image drafts, picker, paste/drop and retry behavior; local uploads need no
 product authentication or configured image-generation MCP.
+
+Assistant Markdown images accept ordinary local paths and `sandbox:/` path references.
+`MarkdownBlock` supplies `useSessionMarkdownImageResolver`, which uses the existing
+owning-session file preview RPC and Electron resource URL. `markdown-renderer.tsx`
+keeps the image inline, reports read errors, and discards results from an old path
+or resolver. Its resolver context reaches images through Streamdown's memoized
+blocks even when the Markdown text stays unchanged. An inline tool image does not
+establish a local file at a path later named by the Agent.

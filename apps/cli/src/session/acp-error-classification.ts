@@ -99,6 +99,14 @@ export const isUpstreamApiACPError = (error: ParsedACPError): boolean =>
 export const isProviderOverloadedACPError = (error: ParsedACPError): boolean =>
   getStringField(error.data, 'codexErrorInfo') === 'serverOverloaded';
 
+export const isHarnessRunAlreadyDispatchedError = (error: unknown): boolean => {
+  const parsed = parseACPError(error);
+  return (
+    parsed?.code === ACP_ERROR_CODES.INTERNAL_ERROR &&
+    getStringField(parsed.data, 'code') === 'harness_run_already_dispatched'
+  );
+};
+
 export const isAcpSessionStorageIncompatibleError = (error: unknown): boolean => {
   const diagnosticText = getACPDiagnosticText(error);
   return (
@@ -200,6 +208,9 @@ export const mapACPErrorToFailureReason = (error: ParsedACPError): ChatFailedRea
   }
   switch (error.code) {
     case ACP_ERROR_CODES.INTERNAL_ERROR:
+      if (isHarnessRunAlreadyDispatchedError(error)) {
+        return 'session_restore_failed';
+      }
       // Some ACP adapters wrap a stale JSON-RPC transport as "-32603 Internal error".
       // Treat known transport-disposal text as a recoverable agent disconnect instead
       // of surfacing a generic "Agent internal error" to users.

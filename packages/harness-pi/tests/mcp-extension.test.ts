@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,11 +30,25 @@ afterEach(async () => {
 const toolMessage = (name: string, args: Record<string, unknown>) =>
   fauxAssistantMessage(fauxToolCall(name, args), { stopReason: 'toolUse', timestamp: 1 });
 const done = () => fauxAssistantMessage('Done', { timestamp: 2 });
-async function fixture(approve: ToolApproval = async () => true) {
+async function fixture(approve: ToolApproval = async () => true, launchFromPath = false) {
   const root = await mkdtemp(join(tmpdir(), 'molly-standard-mcp-'));
   roots.push(root);
   const cwd = join(root, 'workspace');
   await mkdir(cwd);
+  let command = process.execPath;
+  if (launchFromPath) {
+    const bin = join(root, 'bin');
+    await mkdir(bin);
+    command = process.platform === 'win32' ? 'molly-mcp-test.exe' : 'molly-mcp-test';
+    if (process.platform === 'win32') await copyFile(process.execPath, join(bin, command));
+    else await symlink(process.execPath, join(bin, command));
+    vi.stubEnv('PATH', bin);
+    vi.stubEnv('HOME', root);
+    vi.stubEnv('LANG', 'en_US.UTF-8');
+    vi.stubEnv('ELECTRON_RUN_AS_NODE', '1');
+    vi.stubEnv('OPENAI_API_KEY', 'synthetic-parent-model-secret');
+    vi.stubEnv('MOLLY_CONTROL_TOKEN', 'synthetic-parent-control-secret');
+  }
   vi.stubEnv('PI_CODING_AGENT_DIR', join(root, 'agent'));
   const ui = createExtensionUI({
     currentSignal: () => undefined,
@@ -69,8 +83,12 @@ async function fixture(approve: ToolApproval = async () => true) {
           [
             {
               name: 'images',
-              command: process.execPath,
-              args: [fileURLToPath(new URL('./fixtures/standard-mcp.mjs', import.meta.url)), cwd],
+              command,
+              args: [
+                fileURLToPath(new URL('./fixtures/standard-mcp.mjs', import.meta.url)),
+                cwd,
+                ...(launchFromPath ? ['probe-environment'] : []),
+              ],
               env: [],
             },
           ],
@@ -223,4 +241,67 @@ it('uses the stock scripting worker and its per-call approval event', async () =
   } finally {
     await owned.close();
   }
+});
+
+it('launches a bare stdio command using the sanitized environment without parent secrets', async () => {
+  const f = await fixture(undefined, true);
+  const owned = await session(f.input, [
+    toolMessage('mcp', { tool: 'images_generate', args: { prompt: 'synthetic PATH' } }),
+    done(),
+  ]);
+  try {
+    await owned.session.prompt('Generate using the PATH-only server');
+    expect((await readFile(join(f.cwd, 'image.png'))).subarray(1, 4).toString()).toBe('PNG');
+    expect(JSON.parse(await readFile(join(f.cwd, 'environment.json'), 'utf8'))).toEqual({
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      LANG: 'en_US.UTF-8',
+      ELECTRON_RUN_AS_NODE: '1',
+    });
+  } finally {
+    await owned.close();
+  }
+});
+
+it('overlays server settings and selected credentials without inheriting runtime injection', () => {
+  vi.stubEnv('PATH', '/synthetic/bin');
+  vi.stubEnv('HOME', '/synthetic/home');
+  vi.stubEnv('NODE_OPTIONS', '--import=synthetic-unapproved');
+  vi.stubEnv('HTTP_PROXY', 'http://synthetic.invalid');
+  vi.stubEnv('OPENAI_API_KEY', 'synthetic-model-secret');
+  const connection = {
+    workspaceId: 'synthetic-workspace',
+    serverId: 'protected',
+    credentialRef: 'bcd3f6ea-fc62-410a-8b26-c914009fd4cf',
+    revision: 1,
+    destination: { transport: 'stdio' as const, command: 'npx', args: ['synthetic-server'] },
+    fieldNames: ['MCP_API_KEY'],
+  };
+  const config = createMcpConfig(
+    [
+      {
+        name: 'protected',
+        command: 'npx',
+        args: ['synthetic-server'],
+        env: [
+          { name: 'HOME', value: '/synthetic/server-home' },
+          { name: 'MCP_API_KEY', value: 'overridden-server-value' },
+          { name: 'LITERAL_VALUE', value: '${HOME}' },
+        ],
+        _meta: { mollyMcpCredential: connection },
+      },
+    ],
+    '/synthetic/workspace',
+    [{ connection, values: { MCP_API_KEY: 'synthetic-selected-secret' } }]
+  );
+  const server = config.mcpServers.protected!;
+  expect(server).toMatchObject({ inheritEnv: false, literalEnv: true });
+  expect(server.env).toMatchObject({
+    PATH: '/synthetic/bin',
+    HOME: '/synthetic/server-home',
+    MCP_API_KEY: 'synthetic-selected-secret',
+    LITERAL_VALUE: '${HOME}',
+  });
+  for (const key of ['NODE_OPTIONS', 'HTTP_PROXY', 'OPENAI_API_KEY', 'PI_CODING_AGENT_DIR'])
+    expect(server.env).not.toHaveProperty(key);
 });

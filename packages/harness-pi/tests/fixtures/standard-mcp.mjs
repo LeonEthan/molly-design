@@ -2,6 +2,19 @@ import { createInterface } from 'node:readline';
 import { appendFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 const directory = process.argv[2];
+if (process.argv[3] === 'probe-environment')
+  await writeFile(
+    join(directory, 'environment.json'),
+    JSON.stringify({
+      PATH: process.env.PATH,
+      HOME: process.env.HOME,
+      LANG: process.env.LANG,
+      ELECTRON_RUN_AS_NODE: process.env.ELECTRON_RUN_AS_NODE,
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+      MOLLY_CONTROL_TOKEN: process.env.MOLLY_CONTROL_TOKEN,
+      PI_CODING_AGENT_DIR: process.env.PI_CODING_AGENT_DIR,
+    })
+  );
 for await (const line of createInterface({ input: process.stdin })) {
   const request = JSON.parse(line);
   await appendFile(join(directory, 'protocol.jsonl'), `${JSON.stringify(request)}\n`);

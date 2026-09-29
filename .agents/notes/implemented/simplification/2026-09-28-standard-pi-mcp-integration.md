@@ -58,3 +58,22 @@ would discard memory or restore the retired bridge, so the resolution preserves 
 independent responsibilities. Regression coverage checks memory during its owning
 run and refusal after cancellation or settlement, alongside the existing adapter
 and extraction tests. No live provider request is needed for this merge validation.
+
+## Stdio environment review follow-up
+
+Codex's [PR #48 review](https://github.com/LeonEthan/molly-design/pull/48#discussion_r4130731223)
+identified missing sanitized launch variables in the explicit stdio environment.
+The pinned MCP SDK supplies PATH and HOME itself, so the bare-command failure
+claimed in the review did not reproduce. The real adapter probe did reproduce
+missing LANG and ELECTRON_RUN_AS_NODE, which are allowed by Molly's existing tool
+environment policy. Configuration now reuses `createToolEnvironment(process.env)`
+before applying server settings and protected credentials. Unrestricted inheritance
+is unnecessary; the adapter and transport remain unmodified.
+
+Before the fix, the actual child omitted those two approved variables and the
+configuration omitted PATH. After the fix, the same synthetic stdio probe launches
+a command available only in a temporary PATH, generates a file, and observes the
+approved environment without parent model credentials or private control values.
+A separate test verifies override precedence and exclusion of runtime injection
+and proxy variables. This is synthetic process evidence, not acceptance for every
+user-installed MCP package or native platform.

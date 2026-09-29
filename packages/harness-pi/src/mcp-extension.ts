@@ -14,6 +14,7 @@ import {
   mcpCredentialMatchesServer,
 } from '@molly/shared/embedded-harness';
 import { waitForApproval, type ToolApproval } from './approved-tools';
+import { createToolEnvironment } from './environment';
 
 export function createMcpConfig(
   servers: readonly McpServer[],
@@ -66,6 +67,7 @@ export function createMcpConfig(
         inheritEnv: false,
         literalEnv: true,
         env: {
+          ...createToolEnvironment(process.env),
           ...Object.fromEntries(server.env.map(({ name, value }) => [name, value])),
           ...values,
         },

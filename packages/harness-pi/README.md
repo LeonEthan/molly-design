@@ -193,7 +193,12 @@ The old ACP preparation method and per-turn connection/session rebuilding are re
 Header values beginning with `!` use the adapter's documented literal escape; values
 containing adapter environment interpolation syntax are refused because they cannot
 be represented literally by this release. Child environments use `inheritEnv: false`
-and `literalEnv: true`. There is no implicit OAuth discovery for host-configured HTTP.
+and `literalEnv: true`. Their explicit environment starts with the existing
+`createToolEnvironment` allowlist, then applies server values and selected MCP
+credentials. This preserves PATH, HOME, locale and platform launch variables
+(including `ELECTRON_RUN_AS_NODE`) without inheriting model credentials, proxy
+settings or runtime injection variables. There is no implicit OAuth discovery for
+host-configured HTTP.
 
 Molly image generate/edit tools save validated files and return ordinary paths.
 The Agent reads and uses those files with standard tools; final design collection

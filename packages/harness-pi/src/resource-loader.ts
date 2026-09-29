@@ -74,6 +74,7 @@ export class MollyResourceLoader implements ResourceLoader {
       hostToolNames?: readonly string[];
       readBeforeEditReminder?: string;
       hostTime?: HostTimeSource;
+      personalMemoryContext?: () => string;
     }
   ) {
     this.extensions = input.extensions ?? {
@@ -97,6 +98,7 @@ export class MollyResourceLoader implements ResourceLoader {
                 z.object({ systemPrompt: z.string() }).parse(event).systemPrompt,
                 hostTimeContext(input.hostTime),
                 input.readBeforeEditReminder,
+                input.personalMemoryContext?.(),
               ]
                 .filter(Boolean)
                 .join('\n\n'),

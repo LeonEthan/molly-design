@@ -76,3 +76,7 @@ Read [README](README.md) before changing session construction or packaged resour
   fixtures inside owned temporary directories and preserve failed native history.
 
 `CLAUDE.md` is a symlink to this file.
+
+Personal preference extraction stays inside the owning run's selected, journaled
+ModelRuntime and credential lifetime. It never restarts native inference, retries,
+or changes a completed native outcome on memory failure. Cancellation fences saves.

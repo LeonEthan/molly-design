@@ -1,3 +1,4 @@
+import { HARNESS_MEMORY_METHOD, PersonalMemorySnapshotSchema } from '@molly/shared/personal-memory';
 import { createHash } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
@@ -151,7 +152,17 @@ export async function runWorker(
         createMollySession,
         credentialProvider,
         approve,
-        mcpCredentialProvider
+        mcpCredentialProvider,
+        config.personalMemory
+          ? async (request, signal) => {
+              signal.throwIfAborted();
+              const sessionId = adapter.currentSessionId;
+              if (!sessionId) throw new Error('harness_session_unavailable');
+              const result = await peer.extMethod(HARNESS_MEMORY_METHOD, { sessionId, request });
+              signal.throwIfAborted();
+              return PersonalMemorySnapshotSchema.parse(result);
+            }
+          : undefined
       );
       return adapter;
       // Node and DOM declare different ReadableStreamReadDoneResult shapes for the same Web stream.

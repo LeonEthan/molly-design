@@ -44,3 +44,17 @@ verified in the existing conversation using already-saved images, without a new
 Agent turn. These are scoped acceptance observations, not evidence that every
 provider, image-edit operation, interrupted-run recovery, or release journey has
 passed manual testing.
+
+## Integration with personal memory
+
+[PR #48](https://github.com/LeonEthan/molly-design/pull/48) merges the personal-memory
+feature from main without changing either lifecycle. The existing daemon memory
+service and run-bound callback are reused; their constructor/configuration wiring
+is adapted to the standard adapter. The host retains active run identity for memory
+authorization, while removed image callbacks and per-turn MCP preparation remain
+retired. Recall follows the duplicate-run fence, and extraction uses the owning
+run's model credential before retirement. Choosing either conflicting file wholesale
+would discard memory or restore the retired bridge, so the resolution preserves the
+independent responsibilities. Regression coverage checks memory during its owning
+run and refusal after cancellation or settlement, alongside the existing adapter
+and extraction tests. No live provider request is needed for this merge validation.

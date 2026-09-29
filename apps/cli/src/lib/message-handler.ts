@@ -1,3 +1,4 @@
+import { getPersonalMemory } from '../agent/personal-memory';
 import {
   resolveDesignContext,
   ensureDesignDirectory,
@@ -6817,6 +6818,16 @@ export class MessageHandler {
           machine: { protocolCapabilities: CURRENT_MACHINE_PROTOCOL_CAPABILITIES },
           active: this.designCanvasHost.exchange(request.params.reports),
         };
+      }
+      case 'memory/preferences': {
+        const memory = await getPersonalMemory();
+        const operation = request.params;
+        if (operation.action === 'configure')
+          await memory.setEnabled(operation.enabled, operation.revision);
+        if (operation.action === 'edit')
+          await memory.edit(operation.id, operation.text, operation.revision);
+        if (operation.action === 'delete') await memory.remove(operation.id, operation.revision);
+        return { type: 'memory/preferences' as const, snapshot: await memory.read() };
       }
       case 'design/render-host-status': {
         return {

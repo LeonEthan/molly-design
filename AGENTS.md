@@ -19,9 +19,13 @@ opinion is advisory, read-only, and never silently applied.
 From first principles: question requirements, delete unnecessary mechanisms, then simplify and
 optimize. Build only what is needed now; completed code and concept images do not establish necessity.
 
-- Reuse Lody's architecture, UI and agent lifecycle with Bento. Migration only
-  reduces scope; additions need explicit confirmation. Reuse modules before adding
-  protocols/storage.
+- Modular, decoupled design. Before proposing any solution, climb the
+  **reuse ladder**: reuse an existing component, then reuse with adaptation,
+  then borrow the pattern, custom-build last. Name the existing options
+  checked and why each higher rung was rejected, in the reply or PR body.
+  Reuse Lody's architecture, UI and agent lifecycle with Bento. Migration
+  only reduces scope; additions need explicit confirmation. Reuse modules
+  before adding protocols/storage.
 - Keep one editable truth: BentoDoc. YAML projections and Agent drafts serve
   different purposes. Recompute derived views where feasible; justify persistence
   by current use. Keep exposed Bento edits lossless in YAML with minimal adaptation.

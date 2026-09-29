@@ -1,6 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { randomUUID } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { McpServer, PromptResponse } from '@agentclientprotocol/sdk';
 import type { WorkerConfig } from '@molly/harness-pi/worker-config';
 import {
@@ -11,6 +11,12 @@ import {
 import { HarnessCredentialBroker } from './harness-credential-broker';
 import { EmbeddedHarnessControl } from './embedded-harness-control';
 
+vi.mock('./personal-memory', () => ({
+  getPersonalMemory: async () => ({
+    read: async () => ({ enabled: true, revision: 'synthetic', entries: [] }),
+  }),
+}));
+
 const brokers: HarnessCredentialBroker[] = [];
 afterEach(() => {
   for (const broker of brokers.splice(0)) broker.dispose();
@@ -18,7 +24,8 @@ afterEach(() => {
 function fixture(
   stopFails = false,
   mcpConnections: McpCredentialBinding[] = [],
-  imageConnection?: ProtectedImageConnection
+  imageConnection?: ProtectedImageConnection,
+  personalMemory = false
 ) {
   const broker = new HarnessCredentialBroker();
   brokers.push(broker);
@@ -42,6 +49,7 @@ function fixture(
     },
     selection: { connectionId: 'connection', modelId: 'explicit', thinking: 'off' },
     systemPrompt: 'Synthetic',
+    personalMemory,
     permissionProfileId: 'ask',
     harness: {
       id: 'molly',
@@ -131,6 +139,51 @@ function fixture(
 }
 
 describe('owned worker host control', () => {
+  it('allows memory only inside its owning run and rejects cancelled or settled access', async () => {
+    const f = fixture(false, [], undefined, true);
+    const controller = new AbortController();
+    const request = {
+      productSessionId: f.config.productSessionId,
+      runtimeEpoch: f.config.runtimeEpoch,
+      runId: 'not-started',
+      turnId: 'memory-turn',
+      operation: { action: 'read' as const },
+    };
+    await expect(f.control.personalMemory(request)).rejects.toThrow('harness_memory_not_owned');
+    const result = f.control.prompt({
+      turnId: request.turnId,
+      signal: controller.signal,
+      prompt: async (snapshot) => {
+        request.runId = snapshot.runId;
+        await expect(f.control.personalMemory(request)).resolves.toEqual({
+          enabled: true,
+          revision: 'synthetic',
+          entries: [],
+        });
+        await expect(
+          f.control.personalMemory({ ...request, turnId: 'other-turn' })
+        ).rejects.toThrow('harness_memory_not_owned');
+        return f.complete(snapshot);
+      },
+    });
+    f.grant();
+    expect((await result).stopReason).toBe('end_turn');
+    await expect(f.control.personalMemory(request)).rejects.toThrow('harness_memory_not_owned');
+    const cancelled = f.control.prompt({
+      turnId: 'cancelled-memory-turn',
+      signal: controller.signal,
+      prompt: async (snapshot) => {
+        request.runId = snapshot.runId;
+        request.turnId = snapshot.turnId;
+        controller.abort();
+        await expect(f.control.personalMemory(request)).rejects.toThrow('harness_memory_not_owned');
+        return f.complete(snapshot);
+      },
+    });
+    f.grant();
+    await expect(cancelled).rejects.toThrow();
+  });
+
   it('configures MCP once for the session and revokes its idle worker after credential rotation', async () => {
     const binding: McpCredentialBinding = {
       workspaceId: 'workspace',

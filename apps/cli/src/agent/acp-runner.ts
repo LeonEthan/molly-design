@@ -78,6 +78,7 @@ export type CreateAcpClientOptions = {
   loadExternalMcpServers?: AgentClientOptions['loadExternalMcpServers'];
   onMcpCatalogInvalidated?: AgentClientOptions['onMcpCatalogInvalidated'];
   onMcpServersResolved?: AgentClientOptions['onMcpServersResolved'];
+  onPersonalMemory?: AgentClientOptions['onPersonalMemory'];
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
   onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
@@ -115,6 +116,7 @@ export const createAcpClient = async (options: CreateAcpClientOptions) => {
     loadExternalMcpServers: options.loadExternalMcpServers,
     onMcpCatalogInvalidated: options.onMcpCatalogInvalidated,
     onMcpServersResolved: options.onMcpServersResolved,
+    onPersonalMemory: options.onPersonalMemory,
     onImageGenerationBegin: options.onImageGenerationBegin,
     onImageGenerationEnd: options.onImageGenerationEnd,
     onWriteTextFile: options.onWriteTextFile,

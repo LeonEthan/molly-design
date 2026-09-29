@@ -582,6 +582,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
         readBeforeEditReminder: callbacks.designHooks
           ? DESIGN_READ_BEFORE_EDIT_REMINDER
           : undefined,
+        personalMemory: Boolean(callbacks.designHooks),
         selection: ModelSelectionSchema.parse(this.config.modelSelection),
         permissionProfileId: callbacks.designHooks ? 'browse-task-v1' : 'ask-every-tool-v1',
         privateDataRoots: [getMollyDataDir()],
@@ -765,6 +766,9 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           loadExternalMcpServers: callbacks.loadExternalMcpServers,
           onMcpServersResolved: embeddedControl
             ? (servers) => embeddedControl.configureMcp(servers)
+            : undefined,
+          onPersonalMemory: embeddedControl
+            ? (request) => embeddedControl.personalMemory(request)
             : undefined,
           onMcpCatalogInvalidated: embeddedControl
             ? () => {

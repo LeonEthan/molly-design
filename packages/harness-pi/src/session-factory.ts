@@ -10,8 +10,6 @@ import {
 } from '@earendil-works/pi-ai';
 import {
   createAgentSession,
-  DefaultResourceLoader,
-  createEventBus,
   initTheme,
   type ExtensionFactory,
   ModelRuntime,
@@ -34,7 +32,7 @@ import { MollyResourceLoader, type HostTimeSource } from './resource-loader';
 import { createBoundModelFetch } from './model-transport';
 import { resolveProductNativeSession, validateNativeSession } from './native-session';
 import { guardedProviderStream } from './provider-stream';
-import { createQuestionExtensions } from './question-extension';
+import { questionExtension } from './question-extension';
 
 export type CreateMollySessionInput = {
   cwd: string;
@@ -79,35 +77,22 @@ export async function createMollySession(input: CreateMollySessionInput) {
     themes: [],
     enableSkillCommands: false,
   });
-  const extensionLoader = new DefaultResourceLoader({
-    cwd: input.cwd,
-    agentDir: join(input.privateRoot, 'config'),
-    settingsManager: settings,
-    eventBus: createEventBus(),
-    noExtensions: true,
-    noSkills: true,
-    noPromptTemplates: true,
-    noThemes: true,
-    noContextFiles: true,
-    extensionFactories: input.extensions ?? [],
-  });
-  await extensionLoader.reload();
   const resourceLoader = new MollyResourceLoader({
-    resources: extensionLoader,
+    cwd: input.cwd,
+    privateRoot: input.privateRoot,
+    settings,
     systemPrompt: input.systemPrompt,
     skills: input.skills,
     readBeforeEditReminder: input.readBeforeEditReminder,
     hostTime: input.hostTime,
     personalMemoryContext: input.personalMemoryContext,
     hostToolNames: input.tools.map((tool) => tool.name),
-    extensions: {
-      ...extensionLoader.getExtensions(),
-      extensions: [
-        ...extensionLoader.getExtensions().extensions,
-        ...(input.questionUI ? createQuestionExtensions().extensions : []),
-      ],
-    },
+    extensionFactories: [
+      ...(input.extensions ?? []),
+      ...(input.questionUI ? [questionExtension] : []),
+    ],
   });
+  await resourceLoader.reload();
   const connection = ModelConnectionSchema.parse(input.connection);
   const issue = getModelConnectionConfigurationIssue(connection);
   if (issue) throw new Error(`harness_${issue}`);

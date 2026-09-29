@@ -1,3 +1,4 @@
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import { copyFile, mkdtemp, mkdir, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,12 +23,13 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+registerSyntheticModels();
 const roots: string[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
 });
-const toolMessage = (name: string, args: Record<string, unknown>) =>
+const toolMessage = (name: string, args: Parameters<typeof fauxToolCall>[1]) =>
   fauxAssistantMessage(fauxToolCall(name, args), { stopReason: 'toolUse', timestamp: 1 });
 const done = () => fauxAssistantMessage('Done', { timestamp: 2 });
 async function fixture(approve: ToolApproval = async () => true, launchFromPath = false) {

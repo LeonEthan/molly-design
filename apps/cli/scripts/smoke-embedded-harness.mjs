@@ -299,22 +299,11 @@ export async function runPackagedSmoke({
       assert.deepEqual(session._meta.mollyRuntime.harness, config.harness);
       const basePluginHash = createHash('sha256').update('[]').digest('hex');
       if (questionUI) {
-        const provenance = JSON.parse(
-          await readFile(
-            path.join(output, 'harness/extensions/pi-ask-question/manifest.json'),
-            'utf8'
-          )
-        );
         const pluginSetHash = createHash('sha256')
           .update(
             JSON.stringify({
               base: basePluginHash,
-              question: {
-                name: provenance.name,
-                version: provenance.version,
-                commit: provenance.commit,
-                sha256: provenance.adaptedSha256,
-              },
+              question: { name: 'molly-question', version: '1' },
             })
           )
           .digest('hex');

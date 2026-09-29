@@ -3,7 +3,7 @@ import { classifyBrowserHostname } from '@molly/shared/browser-url';
 import type { MollyPermissionMode } from '@molly/shared/embedded-harness';
 import type { ToolApproval } from './approved-tools';
 import { reviewApproval, type RecordApproval } from './auto-review';
-import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
+import type { ReviewDecision, ReviewSubject } from './review-context';
 
 type BrowserRun = { runId: string; runtimeEpoch: string; permissionMode?: MollyPermissionMode };
 type BrowserChoice = 'allow-once' | 'allow-browse-task' | 'deny' | undefined;

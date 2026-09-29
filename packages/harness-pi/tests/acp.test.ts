@@ -1,3 +1,5 @@
+import { systemPromptText } from './fixtures/model-context';
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import type { PersonalMemoryProvider } from '@molly/shared/personal-memory';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,6 +34,7 @@ import {
   type HarnessRunSnapshot,
 } from '@molly/shared/embedded-harness';
 
+registerSyntheticModels();
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -103,8 +106,8 @@ async function fixture(
       owned.runtime.registerProvider('openai', {
         api: owned.session.model!.api,
         streamSimple: (_model, context) => {
-          messages.push(context.messages);
-          systemPrompts.push(context.systemPrompt);
+          messages.push(context.messages.filter((message) => message.role !== 'system'));
+          systemPrompts.push(systemPromptText(context));
           const result: AssistantMessage =
             responses.shift() ??
             fauxAssistantMessage('Unexpected dispatch', { stopReason: 'error', timestamp: 1 });
@@ -116,7 +119,7 @@ async function fixture(
               stream.push({ type: 'done', reason: result.stopReason, message: result });
             stream.end();
           };
-          if (beforeResponse) void beforeResponse(context.systemPrompt).then(emit);
+          if (beforeResponse) void beforeResponse(systemPromptText(context)).then(emit);
           else emit();
           return stream;
         },
@@ -346,7 +349,7 @@ describe('owned ACP boundary', () => {
         } else {
           expect((await f.adapter.prompt(f.request)).stopReason).toBe('end_turn');
           expect(JSON.stringify(f.messages)).toContain(
-            mode === 'answered' ? 'User answered: Wide' : 'User cancelled'
+            mode === 'answered' ? 'question_1: Wide' : 'No answer was provided'
           );
         }
         const identity = HarnessQuestionIdentitySchema.parse(questions[0]?._meta?.mollyQuestion);
@@ -667,7 +670,8 @@ describe('owned ACP boundary', () => {
         { stopReason: 'toolUse', timestamp: 1 }
       ),
       fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 2 }),
-      fauxAssistantMessage('Done', { timestamp: 3 }),
+      fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 3 }),
+      fauxAssistantMessage('Done', { timestamp: 4 }),
     ];
     const asked: string[] = [];
     let adapter: MollyAcpAdapter | undefined;
@@ -709,6 +713,7 @@ describe('owned ACP boundary', () => {
         readFile(join(f.input.cwd, '..', 'outside-workspace.txt'), 'utf8')
       ).resolves.toBe('synthetic');
       expect((await f.journal.read(f.snapshot.runId)).approvals).toEqual([
+        { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
         { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
       ]);
     } finally {

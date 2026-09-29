@@ -40,7 +40,8 @@ owner-only local control socket, never Loro. Only a dispatcher-owned active
 model run/epoch lease or selected MCP session/epoch lease can consume a matching report. RPC results contain pending work,
 not secrets. Never log exchange bodies or return validation inputs in errors.
 `embedded-harness` schemas separate connection references from model selection;
-no empty-model fallback, snapshot secrets or dispatched-work replay. Session
+no empty-model fallback, snapshot secrets or dispatched-work replay. Engine versions
+are validated SemVer metadata; startup binds them to the sealed runtime manifest. Session
 dispatch owns runtime availability; schema presence does not enable execution.
 
 ## Image connection RPC

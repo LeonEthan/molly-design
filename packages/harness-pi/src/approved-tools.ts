@@ -1,6 +1,10 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { constants } from 'node:fs';
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {
   createReadToolDefinition,
+  detectSupportedImageMimeTypeFromFile,
   createWriteToolDefinition,
   createEditToolDefinition,
   createBashToolDefinition,
@@ -9,7 +13,7 @@ import {
   type ToolDefinition,
 } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { OUTSIDE_SANDBOX_ARGUMENT } from './auto-review-policy';
+import { OUTSIDE_SANDBOX_ARGUMENT, resolveThroughExistingAncestor } from './auto-review-policy';
 import { createToolEnvironment } from './environment';
 
 export type BrowserTaskApproval = { kind: 'browse_task'; sites: string[] };
@@ -45,6 +49,38 @@ export function createApprovedTools(input: {
   /** OS-sandboxed shell execution, used only when an approval says `sandboxed`. */
   sandboxOperations?: BashOperations;
 }): ToolDefinition[] {
+  const execution = new AsyncLocalStorage<{
+    toolCallId: string;
+    name: string;
+    arguments: unknown;
+    approvedPaths: Set<string>;
+    signal?: AbortSignal;
+  }>();
+  async function authorizePath(path: string) {
+    const request = execution.getStore();
+    if (!request) throw new Error('harness_file_execution_required');
+    request.signal?.throwIfAborted();
+    const canonical = resolveThroughExistingAncestor(path);
+    if (request.approvedPaths.has(canonical)) return;
+    const allowed = await waitForApproval(
+      input.approve({
+        ...request,
+        arguments: { ...(request.arguments as Record<string, unknown>), path },
+      }),
+      request.signal
+    );
+    request.signal?.throwIfAborted();
+    if (allowed !== true) throw new Error('harness_permission_denied');
+    request.approvedPaths.add(canonical);
+  }
+  const fileRead = async (path: string) => {
+    await authorizePath(path);
+    return readFile(path);
+  };
+  const fileWrite = async (path: string, content: string) => {
+    await authorizePath(path);
+    await writeFile(path, content, 'utf8');
+  };
   const bash = (operations?: BashOperations) =>
     defineTool(
       createBashToolDefinition(input.cwd, {
@@ -57,9 +93,44 @@ export function createApprovedTools(input: {
   const localBash = bash();
   const sandboxedBash = input.sandboxOperations ? bash(input.sandboxOperations) : undefined;
   const definitions: ToolDefinition[] = [
-    defineTool(createReadToolDefinition(input.cwd)),
-    defineTool(createWriteToolDefinition(input.cwd)),
-    defineTool(createEditToolDefinition(input.cwd)),
+    defineTool(
+      createReadToolDefinition(input.cwd, {
+        operations: {
+          readFile: fileRead,
+          access: async (path) => {
+            await authorizePath(path);
+            await access(path, constants.R_OK);
+          },
+          detectImageMimeType: async (path) => {
+            await authorizePath(path);
+            return detectSupportedImageMimeTypeFromFile(path);
+          },
+        },
+      })
+    ),
+    defineTool(
+      createWriteToolDefinition(input.cwd, {
+        operations: {
+          writeFile: fileWrite,
+          mkdir: async (path) => {
+            await authorizePath(path);
+            await mkdir(path, { recursive: true });
+          },
+        },
+      })
+    ),
+    defineTool(
+      createEditToolDefinition(input.cwd, {
+        operations: {
+          readFile: fileRead,
+          writeFile: fileWrite,
+          access: async (path) => {
+            await authorizePath(path);
+            await access(path, constants.R_OK | constants.W_OK);
+          },
+        },
+      })
+    ),
     {
       ...localBash,
       parameters: Type.Object(
@@ -80,13 +151,18 @@ export function createApprovedTools(input: {
     ...tool,
     async execute(toolCallId, args, signal, onUpdate, context) {
       signal?.throwIfAborted();
+      if (tool.name !== 'bash') {
+        return execution.run(
+          { toolCallId, name: tool.name, arguments: args, signal, approvedPaths: new Set() },
+          () => tool.execute(toolCallId, args, signal, onUpdate, context)
+        );
+      }
       const allowed = await waitForApproval(
         input.approve({ toolCallId, name: tool.name, arguments: args, signal }),
         signal
       );
       signal?.throwIfAborted();
       if (!allowed) throw new Error('harness_permission_denied');
-      if (tool.name !== 'bash') return tool.execute(toolCallId, args, signal, onUpdate, context);
       const native: Record<string, unknown> = { ...(args as Record<string, unknown>) };
       delete native[OUTSIDE_SANDBOX_ARGUMENT];
       if (typeof allowed === 'object' && allowed.kind === 'sandboxed') {

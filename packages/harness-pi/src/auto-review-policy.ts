@@ -1,6 +1,6 @@
-import { existsSync, realpathSync } from 'node:fs';
+import { lstatSync, readlinkSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from 'node:path';
-import type { ReviewSubject } from '../vendor/pi-auto-approval/review';
+import type { ReviewSubject } from './review-context';
 import type { ApprovalRecord } from './run-journal';
 
 /** Molly-owned design tools that auto-review approves without a prompt. */
@@ -64,7 +64,9 @@ export function decideAutoReview(
     const targets =
       raw === undefined
         ? undefined
-        : resolvePlainTargets(raw, boundary.cwd, request.name === 'read');
+        : isAbsolute(raw) && !raw.includes('\0')
+          ? [resolveThroughExistingAncestor(raw)]
+          : undefined;
     const inBoundary =
       targets !== undefined &&
       targets.every((target) =>
@@ -90,49 +92,23 @@ export function decideAutoReview(
   return { kind: 'ask' };
 }
 
-const PI_UNICODE_SPACES = /[\u00A0\u2000-\u200A\u202F\u205F\u3000]/;
-const URL_LIKE_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
-
-/**
- * Only plain relative or absolute paths are classified. The pinned SDK's path resolver
- * is not public, so every input its `normalizePath` would rewrite (`file:` URLs, `~`,
- * `@`, Unicode spaces) is reviewed instead of guessed. `read` also probes filename
- * variants (pi-coding-agent 0.85.1 `resolveReadPath`) that may rewrite any path segment,
- * so every variant must stay inside the boundary too.
- */
-function resolvePlainTargets(
-  path: string,
-  cwd: string,
-  probesVariants: boolean
-): string[] | undefined {
-  if (
-    !path ||
-    path.startsWith('~') ||
-    path.startsWith('@') ||
-    path.includes('\0') ||
-    URL_LIKE_SCHEME.test(path) ||
-    PI_UNICODE_SPACES.test(path)
-  )
-    return undefined;
-  const resolved = isAbsolute(path) ? resolve(path) : resolve(cwd, path);
-  const candidates = probesVariants ? [resolved, ...readPathVariants(resolved)] : [resolved];
-  return candidates.map(resolveThroughExistingAncestor);
-}
-
-function readPathVariants(path: string): string[] {
-  const screenshot = path.replace(/ (AM|PM)\./gi, '\u202F$1.');
-  const decomposed = path.normalize('NFD');
-  const curly = (value: string) => value.replace(/'/g, '\u2019');
-  return [screenshot, decomposed, curly(path), curly(decomposed)].filter(
-    (variant) => variant !== path
-  );
-}
-
-function resolveThroughExistingAncestor(path: string): string {
+export function resolveThroughExistingAncestor(path: string, depth = 0): string {
+  if (depth > 40) throw new Error('harness_path_symlink_cycle');
   const tail: string[] = [];
   let current = normalize(path);
   for (;;) {
-    if (existsSync(current)) return join(realpathSync(current), ...tail.reverse());
+    try {
+      const stat = lstatSync(current);
+      if (stat.isSymbolicLink()) {
+        return resolveThroughExistingAncestor(
+          join(resolve(dirname(current), readlinkSync(current)), ...tail.reverse()),
+          depth + 1
+        );
+      }
+      return join(realpathSync(current), ...tail.reverse());
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
     const parent = dirname(current);
     if (parent === current) return normalize(path);
     tail.push(current.slice(parent.length).replace(/^[/\\]/, ''));

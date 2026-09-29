@@ -1,6 +1,7 @@
 name: Desktop E2E Daily
 
 on:
+  workflow_call:
   schedule:
     - cron: '0 2 * * *'
   workflow_dispatch:
@@ -16,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-e2e-daily
+  group: desktop-e2e-daily-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 env:

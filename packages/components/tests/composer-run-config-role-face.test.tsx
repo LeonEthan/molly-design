@@ -79,6 +79,14 @@ describe('Desktop model picker without Roles', () => {
     expect(trigger?.textContent).toContain('5.5');
   });
 
+  it('explains a removed model without choosing a replacement', async () => {
+    const changes: string[] = [];
+    const view = await render({ selectedModelId: 'removed-model', onModelChange: (model) => changes.push(model) });
+    expect(view.textContent).toContain('Model unavailable');
+    expect(changes).toEqual([]);
+    expect(view.querySelector('button[aria-label="Provider and model"]')?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
   it('keeps the menu closed and explains when a machine must be selected first', async () => {
     const disabledReason = 'Select a machine first';
     const view = await render({ disabledReason });

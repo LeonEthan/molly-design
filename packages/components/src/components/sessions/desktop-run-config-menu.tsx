@@ -323,7 +323,8 @@ export function DesktopRunConfigMenu({
         : null;
   const modelLabel =
     modelValue && modelValue !== MOLLY_UNSELECTED_MODEL
-      ? (modelPickerOptions.find((opt) => opt.value === modelValue)?.label ?? modelValue)
+      ? (modelPickerOptions.find((opt) => opt.value === modelValue)?.label ??
+          t('chat.runConfig.modelUnavailable', 'Model unavailable — choose another to continue this session'))
       : t('chat.runConfig.selectModel', 'Select model');
   const showDeepSeekDelegationWarning = shouldShowDeepSeekDelegationWarning({
     cliType: selectedAgentConfig?.cliType ?? fallbackAgent?.cliType,

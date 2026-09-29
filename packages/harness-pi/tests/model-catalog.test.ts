@@ -1,6 +1,9 @@
+import { VERSION } from '@earendil-works/pi-coding-agent';
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createBundledModelCatalog } from '../src/model-catalog';
 
+registerSyntheticModels();
 afterEach(() => vi.restoreAllMocks());
 
 it('projects the pinned SDK catalog without network, credentials or an implicit model', async () => {
@@ -10,7 +13,7 @@ it('projects the pinned SDK catalog without network, credentials or an implicit 
     throw new Error('catalog_must_be_offline');
   });
   const catalog = await createBundledModelCatalog();
-  expect(catalog.engineVersion).toBe('0.85.1');
+  expect(catalog.engineVersion).toBe(VERSION);
   expect(
     catalog.models.find(
       (model) => model.providerPresetId === 'kimi-coding' && model.modelId === 'k3-256k'

@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 1
+    allow:
+      - dependency-name: '@earendil-works/*'
+      - dependency-name: pi-mcp-adapter
+    groups:
+      pi-ecosystem:
+        patterns:
+          - '@earendil-works/*'
+          - pi-mcp-adapter
+    commit-message:
+      prefix: 'chore'

@@ -7,19 +7,10 @@ import { build } from 'esbuild';
 
 const cliRoot = fileURLToPath(new URL('..', import.meta.url));
 const harnessRoot = path.resolve(cliRoot, '../../packages/harness-pi');
-const pinnedRuntimePackages = {
-  '@earendil-works/pi-coding-agent': '0.85.1',
-  '@earendil-works/pi-ai': '0.85.1',
-  '@modelcontextprotocol/sdk': '1.29.0',
-  '@anthropic-ai/sandbox-runtime': '0.0.77',
-  typebox: '1.3.7',
-  'pi-mcp-adapter': '3.2.0',
-};
-const curatedExtensions = [
-  { name: 'pi-ask-question', entry: 'ask-question.ts' },
-  { name: 'pi-auto-approval', entry: 'review.ts' },
+const external = [
+  '@earendil-works/pi-coding-agent', '@earendil-works/pi-ai',
+  '@modelcontextprotocol/sdk', '@anthropic-ai/sandbox-runtime', 'typebox', 'pi-mcp-adapter',
 ];
-const external = Object.keys(pinnedRuntimePackages);
 
 function resolvePackage(name, parent) {
   const require = createRequire(path.join(parent, 'package.json'));
@@ -125,22 +116,6 @@ function fileDigests(root, directory = root) {
 
 export async function buildEmbeddedHarness(outputName = 'dist') {
   if (!['dist', 'dist-dev'].includes(outputName)) throw new Error('Invalid owned output directory');
-  for (const extension of curatedExtensions) {
-    const extensionRoot = path.join(harnessRoot, 'vendor', extension.name);
-    const extensionManifest = JSON.parse(
-      fs.readFileSync(path.join(extensionRoot, 'manifest.json'), 'utf8')
-    );
-    for (const [file, expected] of [
-      [extension.entry, extensionManifest.adaptedSha256],
-      ['LICENSE', extensionManifest.licenseSha256],
-    ]) {
-      const actual = createHash('sha256')
-        .update(fs.readFileSync(path.join(extensionRoot, file)))
-        .digest('hex');
-      if (actual !== expected)
-        throw new Error(`Unreviewed curated extension content: ${extension.name}/${file}`);
-    }
-  }
   const output = path.join(cliRoot, outputName);
   const directory = path.join(output, 'harness');
   fs.rmSync(directory, { recursive: true, force: true });
@@ -165,37 +140,8 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     JSON.stringify({ private: true, type: 'module' })
   );
   const packages = stageClosure(directory, external);
-  for (const name of external) {
-    const pinned = packages.find((entry) => entry.path === path.join('node_modules', name));
-    if (pinned?.version !== pinnedRuntimePackages[name])
-      throw new Error(`Unreviewed runtime dependency version: ${name}`);
-  }
-  const adapterSource = resolvePackage('pi-mcp-adapter', harnessRoot);
-  const adapterOutput = path.join(directory, 'node_modules/pi-mcp-adapter');
-  const adapterMetadata = JSON.parse(
-    fs.readFileSync(path.join(adapterSource, 'package.json'), 'utf8')
-  );
-  await build({
-    entryPoints: [path.join(adapterSource, 'index.ts')],
-    outfile: path.join(adapterOutput, 'index.js'),
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    target: 'node22.19',
-    external: [
-      ...external,
-      ...Object.keys(adapterMetadata.dependencies),
-      ...Object.keys(adapterMetadata.peerDependencies),
-    ],
-    sourcemap: false,
-  });
-  fs.writeFileSync(
-    path.join(adapterOutput, 'package.json'),
-    JSON.stringify({
-      ...adapterMetadata,
-      exports: { '.': './index.js', './types': './dist/types.js' },
-    })
-  );
+  fs.mkdirSync(path.join(directory, 'extensions'), { recursive: true });
+  fs.copyFileSync(path.join(harnessRoot, 'extensions/mcp-loader.ts'), path.join(directory, 'extensions/mcp-loader.ts'));
   const { createBundledModelCatalog } = await import(
     pathToFileURL(path.join(directory, 'model-catalog.js')).href
   );
@@ -203,21 +149,11 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'model-catalog.json'),
     `${JSON.stringify(await createBundledModelCatalog())}\n`
   );
-  for (const extension of curatedExtensions) {
-    const extensionResources = path.join(directory, 'extensions', extension.name);
-    fs.mkdirSync(extensionResources, { recursive: true });
-    for (const file of ['LICENSE', 'manifest.json']) {
-      fs.copyFileSync(
-        path.join(harnessRoot, 'vendor', extension.name, file),
-        path.join(extensionResources, file)
-      );
-    }
-  }
   const files = fileDigests(directory);
   const manifest = {
     schemaVersion: 1,
     engine: 'pi',
-    engineVersion: '0.85.1',
+    engineVersion: packages.find((entry) => entry.path === path.join('node_modules', '@earendil-works/pi-coding-agent')).version,
     protocolVersion: 1,
     minimumNode: '22.19.0',
     buildPlatform: process.platform,

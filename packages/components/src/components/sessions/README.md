@@ -167,3 +167,7 @@ after switching.
 If the Git version was written but the retained native canvas failed to refresh,
 the shell refreshes history and reports both the saved Vn and the reload failure.
 It does not claim the version save failed or create another version automatically.
+
+The Molly model picker preserves a removed model as unavailable until the user selects
+a replacement. Selection derivation never substitutes the first catalog model; the
+next explicit turn continues the same native session with the chosen replacement.

@@ -1,8 +1,8 @@
+import { VERSION as PI_ENGINE_VERSION } from '@earendil-works/pi-coding-agent';
 import { HARNESS_MEMORY_METHOD, PersonalMemorySnapshotSchema } from '@molly/shared/personal-memory';
 import { createHash } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
-import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import {
@@ -46,7 +46,10 @@ export async function runWorker(
 ): Promise<void> {
   let adapter: MollyAcpAdapter;
   let sandbox: WorkerSandbox | undefined;
-  const deniedRoots = deniedReadRoots([config.privateRoot, ...(config.privateDataRoots ?? [])]);
+  const deniedRoots = deniedReadRoots(
+    [config.privateRoot, ...(config.privateDataRoots ?? [])],
+    process.env.MOLLY_TOOL_HOME || undefined
+  );
   const connection = new AgentSideConnection(
     (peer) => {
       const record: RecordApproval = async (request, source, decision, reviewOutcome) =>

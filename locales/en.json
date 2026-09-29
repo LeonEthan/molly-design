@@ -566,6 +566,7 @@
   "chat.runConfig.grok.permission.description": "Controls how protected tool actions are approved",
   "chat.runConfig.grok.permission.label": "Permission Mode",
   "chat.runConfig.modelPickerLabel": "Provider and model",
+  "chat.runConfig.modelUnavailable": "Model unavailable — choose another to continue this session",
   "chat.runConfig.selectModel": "Select model",
   "chat.runConfig.noModels": "Add a model connection in Settings to get started.",
   "chat.runConfig.modelLabel": "Model",

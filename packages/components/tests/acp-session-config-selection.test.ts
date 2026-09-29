@@ -40,6 +40,30 @@ describe('ACP session config derivation', () => {
     ).toBe('gpt-5.6-sol');
   });
 
+  it('preserves a removed Molly model until the user explicitly selects a replacement', () => {
+    const options = {
+      ...baseOptions,
+      capabilityAuthority: 'authoritative' as const,
+      modelOptions: [{ value: 'molly-model:replacement', label: 'Replacement' }],
+    };
+    const target = { cliType: 'builtin' as const, agentType: 'molly' as const };
+    const inputs = { edits: emptyEdits, preferences: { modelId: 'molly-model:removed' } };
+    expect(resolveAcpSessionConfigSelection(inputs, options, target).selectedModelId).toBe(
+      'molly-model:removed'
+    );
+    expect(
+      resolveAcpSessionConfigSelection(
+        { ...inputs, edits: { ...emptyEdits, model: { value: 'molly-model:replacement' } } },
+        options,
+        target
+      ).selectedModelId
+    ).toBe('molly-model:replacement');
+    expect(
+      resolveAcpSessionConfigSelection({ edits: emptyEdits, preferences: {} }, options, target)
+        .selectedModelId
+    ).toBe('molly-model:unselected');
+  });
+
   it('replaces an invalid preference only after authoritative validation', () => {
     const inputs = { edits: emptyEdits, preferences: { modelId: 'removed-model' } };
     expect(resolveAcpSessionConfigSelection(inputs, baseOptions).selectedModelId).toBe(
@@ -344,9 +368,8 @@ describe('ACP session config derivation', () => {
       ).reasoning_effort
     ).toBe('xhigh');
     expect(
-      filterAcpSessionConfigOptionValues(resolved.configOptionValues, [
-        staleGrokReasoningSelector,
-      ]).reasoning_effort
+      filterAcpSessionConfigOptionValues(resolved.configOptionValues, [staleGrokReasoningSelector])
+        .reasoning_effort
     ).toBeUndefined();
   });
 

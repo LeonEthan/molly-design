@@ -1,0 +1,47 @@
+name: Pi ecosystem checks
+on:
+  pull_request:
+    paths:
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - packages/harness-pi/**
+      - apps/cli/scripts/*embedded-harness*
+      - scripts/verify-pi-update*
+      - .github/workflows/pi-*.yml
+      - .github/workflows/e2e-daily.yml
+      - .github/dependabot.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pi-ecosystem-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  harness:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: node apps/cli/scripts/build-embedded-harness.mjs
+      - name: Verify update registry signatures and peer compatibility
+        env:
+          PI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PI_BASE_SHA" ]; then git fetch --no-tags --depth=1 origin "$PI_BASE_SHA"; fi
+          node scripts/verify-pi-update.mjs
+      - name: Offline packaged smoke in Electron Node
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: node apps/cli/scripts/smoke-embedded-harness.mjs apps/cli/dist "$(node -p 'require("./apps/electron/node_modules/electron")')" --question-ui --compatible-model --protected-mcp
+  desktop:
+    uses: ./.github/workflows/e2e-daily.yml

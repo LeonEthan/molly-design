@@ -1,6 +1,7 @@
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import type { BashOperations } from '@earendil-works/pi-coding-agent';
@@ -10,8 +11,9 @@ import { AutoReviewFailure, classifyEscalation } from '../src/auto-review-classi
 import { decideAutoReview, type AutoReviewBoundary } from '../src/auto-review-policy';
 import { RunJournal, type ApprovalRecord } from '../src/run-journal';
 import { createSandboxConfig, PRE_ALLOWED_DOMAINS } from '../src/sandbox';
-import type { ReviewDecision } from '../vendor/pi-auto-approval/review';
+import type { ReviewDecision } from '../src/review-context';
 
+registerSyntheticModels();
 const roots: string[] = [];
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((owned) => rm(owned, { recursive: true, force: true })));
@@ -57,7 +59,7 @@ describe('auto-review policy', () => {
   it('keeps file tools inside the workspace boundary and reviews protected paths', async () => {
     const b = await boundary();
     const decide = (name: string, path: string) =>
-      decideAutoReview({ name, arguments: { path } }, b).kind;
+      decideAutoReview({ name, arguments: { path: resolve(b.cwd, path) } }, b).kind;
     expect(decide('write', 'media/layer.png')).toBe('allow');
     expect(decide('read', 'design.yaml')).toBe('allow');
     expect(decide('read', '/usr/share/dict/words')).toBe('allow');
@@ -65,7 +67,9 @@ describe('auto-review policy', () => {
     expect(decide('read', join(b.home, 'private-data', 'settings.json'))).toBe('review');
     expect(decide('write', join(b.home, 'elsewhere.txt'))).toBe('review');
     expect(decide('write', '../escape.txt')).toBe('review');
-    expect(decide('read', '~/.ssh/id_ed25519')).toBe('review');
+    expect(
+      decideAutoReview({ name: 'read', arguments: { path: '~/.ssh/id_ed25519' } }, b).kind
+    ).toBe('review');
   });
 
   it('reviews path forms the SDK resolves differently from plain paths', async () => {
@@ -84,19 +88,56 @@ describe('auto-review policy', () => {
       expect(decide(name, 'media\u00A0/../../../elsewhere.txt')).toBe('review');
       expect(decide(name, 'media\0layer.png')).toBe('review');
     }
-    expect(decide('write', 'media/layer.png')).toBe('allow');
+    expect(decide('write', 'media/layer.png')).toBe('review');
   });
 
-  it('reviews a read whose filename variant would leave the boundary', async () => {
+  it('reviews the actual path selected by Pi, including read variants and file URLs', async () => {
     const b = await boundary();
-    const { symlink } = await import('node:fs/promises');
+    const { symlink, readFile } = await import('node:fs/promises');
     await symlink(join(b.home, '.ssh'), join(b.cwd, 'shot\u202FAM.'));
     await writeFile(join(b.home, '.ssh', 'id_ed25519'), 'synthetic');
-    const decide = (path: string) =>
-      decideAutoReview({ name: 'read', arguments: { path } }, b).kind;
-    expect(decide('shot AM./id_ed25519')).toBe('review');
-    expect(decide("it's fine.png")).toBe('allow');
-    expect(decide('caf\u00E9.png')).toBe('allow');
+    const reviewed: string[] = [];
+    const tools = createApprovedTools({
+      cwd: b.cwd,
+      shellPath: '/bin/sh',
+      approve: async (request) => {
+        const decision = decideAutoReview(request, b);
+        if (decision.kind === 'review')
+          reviewed.push(String((request.arguments as { path: string }).path));
+        return decision.kind === 'allow';
+      },
+    });
+    const read = tools.find((tool) => tool.name === 'read')!;
+    await expect(
+      read.execute(
+        'read-variant',
+        { path: 'shot AM./id_ed25519' },
+        undefined,
+        undefined,
+        {} as never
+      )
+    ).rejects.toThrow();
+    expect(reviewed[0]).toContain('shot\u202FAM.');
+    const write = tools.find((tool) => tool.name === 'write')!;
+    const outside = join(b.home, 'outside.txt');
+    await expect(
+      write.execute(
+        'outside',
+        { path: `file://${outside}`, content: 'blocked' },
+        undefined,
+        undefined,
+        {} as never
+      )
+    ).rejects.toThrow();
+    await expect(readFile(outside)).rejects.toThrow();
+    await write.execute(
+      'inside',
+      { path: `file://${join(b.cwd, 'inside.txt')}`, content: 'allowed' },
+      undefined,
+      undefined,
+      {} as never
+    );
+    expect(await readFile(join(b.cwd, 'inside.txt'), 'utf8')).toBe('allowed');
   });
 
   it('limits native writes to the workspace and the worker-owned temp directory', async () => {
@@ -119,6 +160,30 @@ describe('auto-review policy', () => {
     expect(decideAutoReview({ name: 'write', arguments: { path: 'keys/new' } }, b).kind).toBe(
       'review'
     );
+  });
+
+  it('reviews a dangling symlink before a write can create its outside target', async () => {
+    const b = await boundary();
+    const { symlink, readFile } = await import('node:fs/promises');
+    const target = join(b.home, 'uncreated.txt');
+    await symlink(target, join(b.cwd, 'link.txt'));
+    const tools = createApprovedTools({
+      cwd: b.cwd,
+      shellPath: '/bin/sh',
+      approve: async (request) => decideAutoReview(request, b).kind === 'allow',
+    });
+    await expect(
+      tools
+        .find((tool) => tool.name === 'write')!
+        .execute(
+          'dangling',
+          { path: 'link.txt', content: 'blocked' },
+          undefined,
+          undefined,
+          {} as never
+        )
+    ).rejects.toThrow('harness_permission_denied');
+    await expect(readFile(target)).rejects.toThrow();
   });
 
   it('approves Molly design tools and leaves other tools to the ordinary prompt', async () => {

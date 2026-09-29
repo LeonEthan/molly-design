@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createExtensionRuntime,
+  SettingsManager,
   createReadToolDefinition,
   defineTool,
   type Extension,
@@ -11,8 +12,8 @@ import { MollyResourceLoader } from '../src/resource-loader';
 function extension(path: string, toolNames: string[] = []): Extension {
   const sourceInfo = { path, source: 'synthetic', scope: 'temporary', origin: 'package' } as const;
   return {
-    path,
-    resolvedPath: path,
+    path: `<inline:${path}>`,
+    resolvedPath: `<inline:${path}>`,
     sourceInfo,
     handlers: new Map(),
     commands: new Map(),
@@ -35,8 +36,15 @@ function resources(extensions: Extension[]): LoadExtensionsResult {
   return { extensions, errors: [], runtime: createExtensionRuntime() };
 }
 
+const defaults = {
+  cwd: '/synthetic',
+  privateRoot: '/synthetic/private',
+  systemPrompt: 'Approved context',
+  settings: SettingsManager.inMemory({ packages: [] }),
+};
+
 describe('closed extension registrations', () => {
-  it('loads extension commands without executing them', () => {
+  it('loads extension commands without executing them', async () => {
     const candidate = extension('candidate');
     const effects: string[] = [];
     candidate.commands.set('synthetic-command', {
@@ -46,11 +54,9 @@ describe('closed extension registrations', () => {
         effects.push('executed');
       },
     });
-    expect(
-      new MollyResourceLoader({ extensions: resources([candidate]) })
-        .getExtensions()
-        .extensions[0]?.commands.has('synthetic-command')
-    ).toBe(true);
+    const loader = new MollyResourceLoader({ ...defaults, extensions: resources([candidate]) });
+    await loader.reload();
+    expect(loader.getExtensions().extensions[0]?.commands.has('synthetic-command')).toBe(true);
     expect(effects).toEqual([]);
   });
   it.each(['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls'])(
@@ -59,6 +65,7 @@ describe('closed extension registrations', () => {
       expect(
         () =>
           new MollyResourceLoader({
+            ...defaults,
             extensions: resources([extension('candidate', [name])]),
           })
       ).toThrow('harness_extension_tool_collision');
@@ -69,6 +76,7 @@ describe('closed extension registrations', () => {
     expect(
       () =>
         new MollyResourceLoader({
+          ...defaults,
           hostToolNames: ['host_capability'],
           extensions: resources([extension('candidate', ['host_capability'])]),
         })
@@ -79,6 +87,7 @@ describe('closed extension registrations', () => {
     expect(
       () =>
         new MollyResourceLoader({
+          ...defaults,
           extensions: resources([
             extension('first', ['question']),
             extension('second', ['question']),
@@ -90,16 +99,18 @@ describe('closed extension registrations', () => {
   it('rejects different registration and execution names', () => {
     const candidate = extension('candidate', ['question']);
     candidate.tools.get('question')!.definition.name = 'read';
-    expect(() => new MollyResourceLoader({ extensions: resources([candidate]) })).toThrow(
-      'harness_extension_tool_identity'
-    );
+    expect(
+      () => new MollyResourceLoader({ ...defaults, extensions: resources([candidate]) })
+    ).toThrow('harness_extension_tool_identity');
   });
 
   it('rejects duplicate host definitions but permits one guarded native replacement', () => {
-    expect(() => new MollyResourceLoader({ hostToolNames: ['read', 'read'] })).toThrow(
+    expect(() => new MollyResourceLoader({ ...defaults, hostToolNames: ['read', 'read'] })).toThrow(
       'harness_duplicate_host_tool'
     );
-    expect(new MollyResourceLoader({ hostToolNames: ['read'] }).getExtensions().errors).toEqual([]);
+    expect(
+      new MollyResourceLoader({ ...defaults, hostToolNames: ['read'] }).getExtensions().errors
+    ).toEqual([]);
   });
 
   it('preserves manifest hook order and appends the public reminder without changing the input', async () => {
@@ -107,6 +118,7 @@ describe('closed extension registrations', () => {
     const second = extension('second', ['lookup']);
     const approved = resources([first, second]);
     const loader = new MollyResourceLoader({
+      ...defaults,
       extensions: approved,
       readBeforeEditReminder: 'Read first.',
       hostTime: {
@@ -114,16 +126,19 @@ describe('closed extension registrations', () => {
         resolveTimeZone: () => 'America/Los_Angeles',
       },
     });
+    await loader.reload();
     approved.extensions.reverse();
     const loaded = loader.getExtensions().extensions;
-    expect(loaded.map((item) => item.path)).toEqual([
-      'first',
-      'second',
-      '<molly-prompt-context-v1>',
+    expect(loaded.slice(0, 2).map((item) => item.path)).toEqual([
+      '<inline:first>',
+      '<inline:second>',
     ]);
     expect(loaded.flatMap((item) => [...item.tools.keys()])).toEqual(['question', 'lookup']);
-    expect(approved.extensions.map((item) => item.path)).toEqual(['second', 'first']);
-    const hook = loaded[2]!.handlers.get('before_agent_start')![0]!;
+    expect(approved.extensions.map((item) => item.path)).toEqual([
+      '<inline:second>',
+      '<inline:first>',
+    ]);
+    const hook = loaded[loaded.length - 1]!.handlers.get('before_agent_start')![0]!;
     const event = { systemPrompt: 'Approved context' };
     const result = await hook(event);
     expect(result).toEqual({
@@ -139,7 +154,7 @@ describe('closed extension registrations', () => {
   it('refuses a partially loaded extension set', () => {
     const approved = resources([extension('valid')]);
     approved.errors.push({ path: 'failed', error: 'synthetic failure' });
-    expect(() => new MollyResourceLoader({ extensions: approved })).toThrow(
+    expect(() => new MollyResourceLoader({ ...defaults, extensions: approved })).toThrow(
       'harness_extension_load_failed'
     );
   });

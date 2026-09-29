@@ -5,7 +5,7 @@ import {
   parseReviewDecision,
   type ReviewDecision,
   type ReviewSubject,
-} from '../vendor/pi-auto-approval/review';
+} from './review-context';
 
 export const AUTO_REVIEW_CLASSIFIER_TIMEOUT_MS = 60_000;
 

@@ -1,0 +1,42 @@
+name: Merge green Pi updates
+on:
+  workflow_run:
+    workflows: [Pi ecosystem checks]
+    types: [completed]
+permissions:
+  contents: read
+jobs:
+  enable:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      statuses: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const repo = context.repo;
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ ...repo, commit_sha: run.head_sha });
+            for (const linked of prs) {
+              const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number: linked.number });
+              if (pr.state !== 'open' || pr.draft || pr.user.login !== 'dependabot[bot]' ||
+                  pr.head.repo?.id !== context.payload.repository.id || pr.base.ref !== 'main' ||
+                  pr.head.sha !== run.head_sha) continue;
+              const files = await github.paginate(github.rest.pulls.listFiles, { ...repo, pull_number: pr.number });
+              const allowed = new Set(['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'packages/harness-pi/package.json']);
+              if (!files.length || files.some(file => !allowed.has(file.filename) || file.status !== 'modified')) continue;
+              const tested = run.pull_requests.find(candidate => candidate.number === pr.number);
+              if (!tested || tested.base.sha !== pr.base.sha || tested.head.sha !== pr.head.sha) continue;
+              const checks = await github.paginate(github.rest.checks.listForRef, { ...repo, ref: pr.head.sha, filter: 'latest' });
+              if (!['Static checks', 'Tests'].every(name => checks.some(check => check.name === name && check.conclusion === 'success'))) continue;
+              if (checks.some(check => check.status !== 'completed' || !['success', 'neutral', 'skipped'].includes(check.conclusion))) continue;
+              const { data: statuses } = await github.rest.repos.getCombinedStatusForRef({ ...repo, ref: pr.head.sha });
+              if (statuses.statuses.length && statuses.state !== 'success') continue;
+              const { data: current } = await github.rest.pulls.get({ ...repo, pull_number: pr.number });
+              if (current.head.sha !== run.head_sha || current.base.sha !== pr.base.sha) continue;
+              await github.rest.pulls.merge({ ...repo, pull_number: pr.number, sha: run.head_sha, merge_method: 'squash' });
+            }

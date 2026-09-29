@@ -1,3 +1,4 @@
+import { MOLLY_UNSELECTED_MODEL } from '@molly/shared/embedded-harness';
 import type { AcpCapabilityAuthority, AcpConfigOptionValue } from '@molly/shared';
 import {
   isConfigOptionValueValid,
@@ -251,14 +252,19 @@ export const resolveAcpSessionConfigSelection = (
     defaultModeId,
     capabilityAuthority
   );
-  const selectedModelId = resolveSelectField(
-    edits.model,
-    runtimePreferences?.modelId,
-    preferences.modelId,
-    modelOptions,
-    defaultModelId,
-    capabilityAuthority
-  );
+  const selectedModelId =
+    target?.cliType === 'builtin' && target.agentType === 'molly'
+      ? edits.model
+        ? edits.model.value
+        : (runtimePreferences?.modelId ?? preferences.modelId ?? MOLLY_UNSELECTED_MODEL)
+      : resolveSelectField(
+          edits.model,
+          runtimePreferences?.modelId,
+          preferences.modelId,
+          modelOptions,
+          defaultModelId,
+          capabilityAuthority
+        );
   let selectors = configOptionSelectors;
   if (target) {
     selectors = normalizeReasoningEffortSelectors(selectors, {

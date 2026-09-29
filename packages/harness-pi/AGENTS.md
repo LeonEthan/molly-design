@@ -2,7 +2,7 @@
 
 Read [README](README.md) before changing session construction or packaged resources.
 
-- Import the pinned public SDK. This package owns model context, resource loading
+- Import only the public SDK; update the Pi catalog daily. This package owns model context, resource loading
   and native outcome mapping; the CLI owns dispatch, permissions and design commits.
 - Construct every SDK dependency explicitly. Load only host-approved resources;
   private settings, credentials, model cache and sessions never use Pi defaults.
@@ -16,8 +16,8 @@ Read [README](README.md) before changing session construction or packaged resour
   Native command dispatch requires explicit host-state mappings.
   Keep implicit SDK command/template dispatch disabled for model prompts. Command
   completion must not be presented as native inference completion.
-- Curated source changes require reviewed provenance/hash updates and packaged license
-  resources. Negotiate question UI explicitly; bind requests to run/epoch and await
+- Add-ons must be published, unmodified, explicitly loaded, GUI-compatible and isolated
+  by configuration; update them with Pi. No vendored adaptations or build-time rewrites. Negotiate question UI explicitly; bind requests to run/epoch and await
   host dismissal before returning answers. UI failures end inference; timeout/cancel/
   late replies confer no answer or approval. Terminal presentation uses the SDK headless defaults.
 - Bind SDK hook failures even without question UI. Latch failure per native context,
@@ -53,7 +53,7 @@ Read [README](README.md) before changing session construction or packaged resour
   in the pinned OS sandbox (workspace/temp writes, credential and Molly private-data
   reads denied, pre-allowed domains); Molly design tools, local attachment sharing
   and in-boundary file tools run. Sharing retains host workspace checks and local
-  storage. Escalations go to the vendored classifier on the journaled session model;
+  storage. Escalations go to the Molly-owned classifier on the journaled session model;
   deny, failure or timeout asks the user. Record every decision in the run journal;
   a failed record denies. Classifier diagnostics use bounded outcome categories,
   never raw rationale, provider errors or arguments. Cancellation does not prompt.
@@ -81,3 +81,7 @@ Read [README](README.md) before changing session construction or packaged resour
 Personal preference extraction stays inside the owning run's selected, journaled
 ModelRuntime and credential lifetime. It never restarts native inference, retries,
 or changes a completed native outcome on memory failure. Cancellation fences saves.
+
+Native file authorization runs in public file operations on Pi-resolved absolute paths;
+never mirror Pi path normalization. Worker HOME is private; credential deny roots and
+tool-child HOME use the explicitly preserved real home. Model changes require user selection.

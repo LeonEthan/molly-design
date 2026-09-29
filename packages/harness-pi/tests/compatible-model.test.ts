@@ -111,7 +111,13 @@ it.each(['max_tokens', 'max_completion_tokens'] as const)(
       expect(owned.runtime.getModel('molly-compatible', 'gpt-4o')).toBeUndefined();
       expect(evidence).toEqual([]);
       await owned.session.prompt('Synthetic request', {
-        images: [{ type: 'image', mimeType: 'image/png', data: 'aW1hZ2U=' }],
+        images: [
+          {
+            type: 'image',
+            mimeType: 'image/png',
+            data: 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGNQSFhAEmIY1TCqYfhqAACc2CAQXseIAgAAAABJRU5ErkJggg==',
+          },
+        ],
       });
       expect(evidence).toEqual(['dispatch', 'http', 'settled:stop']);
       expect(requests.map((request) => request.url)).toEqual([
@@ -130,7 +136,9 @@ it.each(['max_tokens', 'max_completion_tokens'] as const)(
       expect(payload).not.toHaveProperty(
         maxTokensField === 'max_tokens' ? 'max_completion_tokens' : 'max_tokens'
       );
-      expect(JSON.stringify(payload.messages)).toContain('data:image/png;base64,aW1hZ2U=');
+      expect(JSON.stringify(payload.messages)).toContain(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAIAAACQkWg2AAAAFklEQVR4nGNQSFhAEmIY1TCqYfhqAACc2CAQXseIAgAAAABJRU5ErkJggg=='
+      );
       expect(owned.session.messages.at(-1)).toMatchObject({
         role: 'assistant',
         stopReason: 'stop',

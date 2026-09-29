@@ -1,3 +1,4 @@
+import { VERSION as PI_ENGINE_VERSION } from '@earendil-works/pi-coding-agent';
 import {
   type PersonalMemoryProvider,
   type PersonalMemorySnapshot,
@@ -17,7 +18,6 @@ import {
   ModelConnectionSchema,
   ModelSelectionSchema,
   type HarnessRunSnapshot,
-  PI_ENGINE_VERSION,
   MOLLY_PROVIDER_IDS,
   HarnessMcpSessionSchema,
   McpCredentialBindingSchema,
@@ -35,7 +35,7 @@ import { RunJournal, type ApprovalRecord } from './run-journal';
 import { hashToolset, type ToolApproval } from './approved-tools';
 import { describeToolCall } from './tool-presentation';
 import { classifyEscalation } from './auto-review-classifier';
-import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
+import type { ReviewDecision, ReviewSubject } from './review-context';
 import { z } from 'zod';
 import { createExtensionUI } from './extension-ui';
 import { QUESTION_EXTENSION_IDENTITY } from './question-extension';

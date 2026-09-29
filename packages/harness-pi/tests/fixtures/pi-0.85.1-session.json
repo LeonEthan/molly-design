@@ -1,0 +1,42 @@
+{
+  "header": {
+    "type": "session",
+    "version": 3,
+    "id": "01a0edbd-2550-7722-b0b8-ff51237115ea",
+    "timestamp": "2026-09-29T15:16:31.184Z",
+    "cwd": "/synthetic/workspace"
+  },
+  "entries": [
+    {
+      "type": "model_change",
+      "id": "541d4db6",
+      "parentId": null,
+      "timestamp": "2026-09-29T15:16:31.185Z",
+      "provider": "openai",
+      "modelId": "retired-synthetic-model"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "b1521b48",
+      "parentId": "541d4db6",
+      "timestamp": "2026-09-29T15:16:31.185Z",
+      "thinkingLevel": "off"
+    },
+    {
+      "type": "message",
+      "id": "a3ab0c27",
+      "parentId": "b1521b48",
+      "timestamp": "2026-09-29T15:16:31.185Z",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Synthetic previous-release request"
+          }
+        ],
+        "timestamp": 1
+      }
+    }
+  ]
+}

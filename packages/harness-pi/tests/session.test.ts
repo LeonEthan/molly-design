@@ -1,3 +1,5 @@
+import { systemPromptText } from './fixtures/model-context';
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import { mkdtemp, mkdir, readFile, rm, writeFile, appendFile, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,7 +9,11 @@ import {
   fauxAssistantMessage,
   fauxToolCall,
 } from '@earendil-works/pi-ai';
-import { createReadToolDefinition, defineTool } from '@earendil-works/pi-coding-agent';
+import {
+  createReadToolDefinition,
+  defineTool,
+  SettingsManager,
+} from '@earendil-works/pi-coding-agent';
 import { createMollySession } from '../src/session-factory';
 import { NativeRunOutcome } from '../src/run-outcome';
 import { createToolEnvironment, createWorkerEnvironment } from '../src/environment';
@@ -17,6 +23,7 @@ import { guardedProviderStream } from '../src/provider-stream';
 import { createExtensionUI } from '../src/extension-ui';
 import { failingExtension } from './fixtures/failing-extension';
 
+registerSyntheticModels();
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -89,7 +96,7 @@ describe('owned Pi session', () => {
         api: owned.session.model!.api,
         baseUrl: input.connection.baseUrl,
         streamSimple: (_model, context) => {
-          observedContexts.push(context.systemPrompt ?? '');
+          observedContexts.push(systemPromptText(context) ?? '');
           const message = responses.shift();
           if (!message) throw new Error('Unexpected inference');
           instant = new Date('2027-01-01T08:00:02.000Z');
@@ -448,8 +455,7 @@ describe('owned Pi session', () => {
         expect(body).toMatchObject({ model: modelId, stream: true });
         if (thinking === 'high') {
           expect(body).toMatchObject({
-            thinking: { type: 'adaptive' },
-            output_config: { effort: 'high' },
+            thinking: { type: 'enabled', budget_tokens: expect.any(Number) },
           });
         }
         const persisted = await readFile(owned.manager.getSessionFile()!, 'utf8');
@@ -637,7 +643,7 @@ describe('owned Pi session', () => {
         api: owned.session.model!.api,
         baseUrl: input.connection.baseUrl,
         streamSimple: (_model, context) => {
-          observedContexts.push(context.systemPrompt ?? '');
+          observedContexts.push(systemPromptText(context) ?? '');
           const stream = createAssistantMessageEventStream();
           const message = fauxAssistantMessage('Synthetic result', { stopReason, timestamp: 1 });
           if (stopReason === 'error' || stopReason === 'aborted')
@@ -697,29 +703,61 @@ describe('owned Pi session', () => {
     }
   });
 
+  it('opens a Pi 0.85.1 session with a removed model after an explicit replacement, preserving history', async () => {
+    const input = await fixture();
+    const seed = await createMollySession(input);
+    const file = seed.manager.getSessionFile()!;
+    const id = seed.manager.getSessionId();
+    seed.session.dispose();
+    const baseline = JSON.parse(
+      await readFile(new URL('./fixtures/pi-0.85.1-session.json', import.meta.url), 'utf8')
+    );
+    const original =
+      [
+        JSON.stringify({ ...baseline.header, id, cwd: input.cwd }),
+        ...baseline.entries.map((entry: unknown) => JSON.stringify(entry)),
+      ].join('\n') + '\n';
+    await writeFile(file, original);
+    await expect(
+      createMollySession({
+        ...input,
+        nativeSessionId: id,
+        selection: { ...input.selection, modelId: 'retired-synthetic-model' },
+      })
+    ).rejects.toThrow('harness_model_not_in_catalog');
+    expect(await readFile(file, 'utf8')).toBe(original);
+    const restored = await createMollySession({ ...input, nativeSessionId: id });
+    try {
+      expect(restored.manager.getSessionId()).toBe(id);
+      expect(restored.session.model?.id).toBe(input.selection.modelId);
+      expect(JSON.stringify(restored.session.messages)).toContain(
+        'Synthetic previous-release request'
+      );
+      expect(await readFile(file, 'utf8')).toBe(original);
+    } finally {
+      restored.session.dispose();
+    }
+  });
+
   it('rejects unknown models instead of choosing a fallback', async () => {
     const input = await fixture();
     input.selection.modelId = 'not-in-catalog';
     await expect(createMollySession(input)).rejects.toThrow('harness_model_not_in_catalog');
   });
 
-  it('does not discover resources and freezes the approved resource set', () => {
-    const loader = new MollyResourceLoader({ systemPrompt: 'approved' });
-    expect(loader.getExtensions().extensions.map((extension) => extension.path)).toEqual([
-      '<molly-prompt-context-v1>',
-    ]);
+  it('does not discover project prompts or configuration', async () => {
+    const input = await fixture();
+    await writeFile(join(input.cwd, '.pi/SYSTEM.md'), 'UNAPPROVED_SYSTEM');
+    await writeFile(join(input.cwd, '.pi/APPEND_SYSTEM.md'), 'UNAPPROVED_APPEND');
+    const loader = new MollyResourceLoader({
+      ...input,
+      settings: SettingsManager.inMemory({ packages: [] }),
+    });
+    await loader.reload();
+    expect(loader.getSystemPrompt()).toBe(input.systemPrompt);
+    expect(loader.getAppendSystemPrompt()).toEqual([]);
     expect(loader.getSkills().skills).toEqual([]);
     expect(loader.getAgentsFiles().agentsFiles).toEqual([]);
-    expect(() =>
-      loader.extendResources({
-        skillPaths: [
-          {
-            path: '/unapproved',
-            metadata: { source: 'synthetic', scope: 'temporary', origin: 'top-level' },
-          },
-        ],
-      })
-    ).toThrow('harness_resource_set_is_frozen');
   });
 
   it('removes inherited auth, runtime injection and proxy variables before SDK/tool execution', () => {
@@ -734,9 +772,16 @@ describe('owned Pi session', () => {
       MOLLY_CONTROL_TOKEN: 'synthetic',
     };
     const worker = createWorkerEnvironment(polluted, '/private/molly');
+    expect(worker.HOME).toBe('/private/molly/home');
+    expect(createToolEnvironment(worker).HOME).toBe('/home/test');
+    expect(createToolEnvironment(worker)).not.toHaveProperty('MOLLY_TOOL_HOME');
     expect(worker.PI_CODING_AGENT_DIR).toBe('/private/molly/config');
     expect(worker.PI_OFFLINE).toBe('1');
-    expect(createToolEnvironment(worker)).toEqual({ HOME: '/home/test', PATH: '/usr/bin' });
+    expect(createToolEnvironment(worker)).toEqual({
+      HOME: '/home/test',
+      USERPROFILE: '/home/test',
+      PATH: '/usr/bin',
+    });
     for (const key of [
       'OPENAI_API_KEY',
       'ANTHROPIC_API_KEY',

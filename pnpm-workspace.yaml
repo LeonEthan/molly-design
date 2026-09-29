@@ -48,6 +48,13 @@ catalog:
   vite-plugin-wasm: ^3.5.0
   zod: ^4.1.5
 
+catalogs:
+  pi:
+    '@earendil-works/pi-ai': 0.87.1
+    '@earendil-works/pi-coding-agent': 0.87.1
+    '@earendil-works/pi-tui': 0.87.1
+    pi-mcp-adapter: 3.2.0
+
 ignoredBuiltDependencies:
   # >=13.0.2 has no install script; pnpm still offers to build it because the
   # package retains binding.gyp for explicit source builds.
@@ -59,7 +66,8 @@ managePackageManagerVersions: true
 minimumReleaseAge: 10080
 # Reviewed writer/storage fixes pinned to this exact coordinated release.
 minimumReleaseAgeExclude:
-  - pi-mcp-adapter@3.2.0
+  - '@earendil-works/*'
+  - pi-mcp-adapter
   - smol-toml@1.9.0
   - mem0ai@3.3.1
   # Exact upstream combination verified by the embedded-browser MCP probe.

@@ -2,7 +2,7 @@
 
 Status: draft
 Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
-Translation: current
+Translation: stale
 
 [中文](molly-embedded-pi-harness.zh.md)
 
@@ -78,11 +78,17 @@ Before each user prompt, the worker supplies current host-clock date and time, U
 
 ### Embedded delivery and isolation
 
-The engine baseline is Pi v0.85.1, using the public coding-agent SDK, fixed absolute paths and a separate process. The engine, curated plugins and actually needed resources are pinned at build time and shipped with the package; release artifacts carry the version, dependency/resource digests, protocol versions and a platform manifest. Both development and packaged builds must verify the actual Node version satisfies the engine requirement; the host's development Node must not substitute for an in-package probe.
+Pi and admitted add-ons follow daily published, compatible updates through public APIs, configuration and hooks, without vendoring, patches or build-time source rewrites. Passing dependency updates merge to main independently of desktop releases. Each build ships exact lockfile versions, fixed absolute paths and a separate worker process; release artifacts carry the version, dependency/resource digests, protocol versions and a platform manifest. Both development and packaged builds must verify the actual Node version satisfies the engine requirement; the host's development Node must not substitute for an in-package probe.
 
 Molly does not locate, launch or modify a local Pi; it does not automatically read user-level or project-level Pi configuration, parent contexts or global skills, and it does not inherit their authentication. Resource loading comes only from the approved manifest and the host's explicitly prepared inputs for the current run; never run default discovery and filter afterwards. Settings, model catalogs, caches, sessions, plugin state and temporary files all live in Molly's own locations. The worker environment uses a whitelist, keeping the variables the packaged Node needs to start and removing external authentication and code-injection variables. Shutdown cleans up only the processes it owns.
 
-Community native plugins must be reviewed, version-pinned, selectively loaded and verified; this round uses the preinstalled community Q&A plugin, reuses the existing isolation/recovery evidence, and completes one native interaction check. Simple confirm, select, input and notification reuse the existing GUI; unsupported TUI capabilities are explicitly unavailable. The necessary command system is deferred: no slash-command discovery, configuration commands or manual compaction commands are added, and unmapped commands remain non-executable. Timeouts, window closing and cancellation must never default to consent. Plugins get no arbitrary installation, self-updating or a second paid-service configuration entry.
+Published add-ons must be licensed, unmodified, selectively loaded, compatible with the GUI and isolated through configuration alone. Molly owns its small question extension; this round reuses the existing isolation/recovery evidence, and completes one native interaction check. Simple confirm, select, input and notification reuse the existing GUI; unsupported TUI capabilities are explicitly unavailable. The necessary command system is deferred: no slash-command discovery, configuration commands or manual compaction commands are added, and unmapped commands remain non-executable. Timeouts, window closing and cancellation must never default to consent. Plugins get no arbitrary installation, self-updating or a second paid-service configuration entry.
+
+Worker HOME is private. Tool children retain the real home and credential-denial paths
+explicitly reference it. No add-on may read the user's own Pi state. A removed model
+requires explicit replacement in the existing picker, preserving the native session;
+there is no fallback or replay. Previous-release session fixtures gate forward reading,
+while rollback to an older app remains unverified for newer native histories.
 
 These guarantees target the product path and reviewed extensions; they do not promise a hard sandbox against arbitrary native code, shells or third-party stdio MCP under the same OS user.
 
@@ -90,7 +96,7 @@ These guarantees target the product path and reviewed extensions; they do not pr
 
 Provider presets, user connections and model selection are modeled separately. Multiple connections from the same vendor independently own endpoints, credential references and revisions; ModelRuntime is isolated per session/connection. When no model is explicitly selected, credentials are missing or capabilities are incompatible, fail clearly — never fall back to the first model or another account. Configuration changes take effect at the next safe boundary; revocation may terminate current work but must not switch to different credentials.
 
-Keep the existing native presets, advanced OpenAI-compatible and multi-connection architecture; this round's real-service delivery is based on the configured Kimi k3-256k/high, without expanding per-vendor, per-region and per-model acceptance. The Google integration fix and the Pi SDK upgrade are deferred, and the pinned engine baseline is unchanged. The support matrix distinguishes really verified, mock-verified, blocked and not-executed; only really-passing scope may be called officially supported. A catalog entry does not mean the service is usable, and a model without vision capability must not be shown as having completed a native image review.
+Keep the existing native presets, advanced OpenAI-compatible and multi-connection architecture; this round's real-service delivery is based on the configured Kimi k3-256k/high, without expanding per-vendor, per-region and per-model acceptance. The Google integration fix remains deferred; the Pi SDK follows the daily update policy. The support matrix distinguishes really verified, mock-verified, blocked and not-executed; only really-passing scope may be called officially supported. A catalog entry does not mean the service is usable, and a model without vision capability must not be shown as having completed a native image review.
 
 Credentials are protected by SecretStore, and ordinary configuration stores only references; after saving there is no general plaintext-read API. Secrets never enter workspace/Loro configuration, Roles, native sessions, model context, tool arguments, command lines, diagnostics or Git; model keys are not passed to shells, and different MCPs do not share secrets. Migrating old image keys must account for CRDT history and backups; deleting the current field must not be claimed as thorough erasure of historical plaintext. When reliable persistence is impossible, fail clearly or use a visible in-memory mode.
 
@@ -149,7 +155,7 @@ The test entry and the five close-out tasks' split have been confirmed; task con
 
 ## Out of Scope
 
-The following items move out of this round's remaining-delivery gate, without deleting the existing implementations: the Google fix and SDK upgrade; per-vendor/region/model real acceptance; the plugin command system; dedicated acceptance of complex masks, multi-image and all image-format combinations; the complete poster/infographic/long-image permutation matrices; an actual upgrade/uninstall drill against the user's local Pi; new Windows/Linux builds and native dedicated acceptance; long-term performance/stress/GC diagnostics. Existing automated checks remain; deferral is not a claim of support.
+The following items move out of this round's remaining-delivery gate, without deleting the existing implementations: the Google fix; per-vendor/region/model real acceptance; the plugin command system; dedicated acceptance of complex masks, multi-image and all image-format combinations; the complete poster/infographic/long-image permutation matrices; an actual upgrade/uninstall drill against the user's local Pi; new Windows/Linux builds and native dedicated acceptance; long-term performance/stress/GC diagnostics. Existing automated checks remain; deferral is not a claim of support.
 
 Still not included: a plugin marketplace, arbitrary native plugin installation, full TUI compatibility, external harness selection, local subscription-auth import, cloud-proxy billing, new multi-Agent orchestration, Bento/YAML/history rewrites, or an OS-level hard sandbox. Public release, Developer ID signing, notarization and automatic-update publishing are not part of this local-usable-version close-out.
 

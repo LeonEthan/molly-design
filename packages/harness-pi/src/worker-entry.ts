@@ -46,7 +46,11 @@ async function main(): Promise<void> {
     )
       throw new Error('harness_build_mismatch');
     isolate(parsed.data.privateRoot);
-    await mkdir(join(parsed.data.privateRoot, 'tmp'), { recursive: true, mode: 0o700 });
+    await Promise.all(
+      ['tmp', 'home'].map((name) =>
+        mkdir(join(parsed.data.privateRoot, name), { recursive: true, mode: 0o700 })
+      )
+    );
     const { runWorker } = await import('./worker-main');
     await runWorker(
       parsed.data,

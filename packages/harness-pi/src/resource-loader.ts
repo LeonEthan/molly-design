@@ -1,11 +1,13 @@
+import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import {
-  createExtensionRuntime,
+  DefaultResourceLoader,
+  SettingsManager,
   type LoadExtensionsResult,
-  type ResourceLoader,
   type Skill,
   type Extension,
+  type ExtensionFactory,
 } from '@earendil-works/pi-coding-agent';
-import { z } from 'zod';
 
 export type HostTimeSource = {
   now: () => Date;
@@ -41,10 +43,9 @@ function hostTimeContext(source?: HostTimeSource): string {
   ].join('\n');
 }
 
-// Reserve the pinned SDK's native names even when a turn does not expose them.
 const nativeToolNames = ['read', 'write', 'edit', 'bash', 'powershell', 'grep', 'find', 'ls'];
 
-function validateTools(extensions: Extension[], hostToolNames: readonly string[]) {
+export function validateTools(extensions: Extension[], hostToolNames: readonly string[]) {
   if (new Set(hostToolNames).size !== hostToolNames.length) {
     throw new Error('harness_duplicate_host_tool');
   }
@@ -60,101 +61,59 @@ function validateTools(extensions: Extension[], hostToolNames: readonly string[]
   }
 }
 
-/** No default loader is constructed: even discovery can execute package code. */
-export class MollyResourceLoader implements ResourceLoader {
-  private readonly extensions: LoadExtensionsResult;
-
-  constructor(
-    private readonly input: {
-      resources?: ResourceLoader;
-      systemPrompt?: string;
-      skills?: Skill[];
-      contextFiles?: Array<{ path: string; content: string }>;
-      extensions?: LoadExtensionsResult;
-      hostToolNames?: readonly string[];
-      readBeforeEditReminder?: string;
-      hostTime?: HostTimeSource;
-      personalMemoryContext?: () => string;
-    }
-  ) {
-    this.extensions = input.extensions ?? {
-      extensions: [],
-      errors: [],
-      runtime: createExtensionRuntime(),
+export class MollyResourceLoader extends DefaultResourceLoader {
+  constructor(input: {
+    cwd: string;
+    privateRoot: string;
+    systemPrompt: string;
+    skills?: Skill[];
+    extensions?: LoadExtensionsResult;
+    extensionFactories?: ExtensionFactory[];
+    hostToolNames?: readonly string[];
+    readBeforeEditReminder?: string;
+    hostTime?: HostTimeSource;
+    personalMemoryContext?: () => string;
+    settings: SettingsManager;
+  }) {
+    if (input.extensions?.errors.length) throw new Error('harness_extension_load_failed');
+    validateTools(input.extensions?.extensions ?? [], input.hostToolNames ?? []);
+    const promptContext: ExtensionFactory = (pi) => {
+      pi.on('before_agent_start', async (event) => ({
+        systemPrompt: [
+          event.systemPrompt,
+          hostTimeContext(input.hostTime),
+          input.readBeforeEditReminder,
+          input.personalMemoryContext?.(),
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      }));
     };
-    if (this.extensions.errors.length > 0) throw new Error('harness_extension_load_failed');
-    validateTools(this.extensions.extensions, input.hostToolNames ?? []);
-    const path = '<molly-prompt-context-v1>';
-    const promptContext: Extension = {
-      path,
-      resolvedPath: path,
-      sourceInfo: { path, source: 'molly-bundled', scope: 'temporary', origin: 'package' },
-      handlers: new Map([
-        [
-          'before_agent_start',
-          [
-            async (event: unknown) => ({
-              systemPrompt: [
-                z.object({ systemPrompt: z.string() }).parse(event).systemPrompt,
-                hostTimeContext(input.hostTime),
-                input.readBeforeEditReminder,
-                input.personalMemoryContext?.(),
-              ]
-                .filter(Boolean)
-                .join('\n\n'),
-            }),
-          ],
-        ],
-      ]),
-      tools: new Map(),
-      commands: new Map(),
-      flags: new Map(),
-      shortcuts: new Map(),
-      messageRenderers: new Map(),
-    };
-    this.extensions = {
-      ...this.extensions,
-      extensions: [...this.extensions.extensions, promptContext],
-    };
-  }
-
-  getExtensions() {
-    return this.extensions;
-  }
-  getSkills() {
-    const resources = this.input.resources?.getSkills();
-    return {
-      skills: [...(this.input.skills ?? []), ...(resources?.skills ?? [])],
-      diagnostics: resources?.diagnostics ?? [],
-    };
-  }
-  getPrompts() {
-    return this.input.resources?.getPrompts() ?? { prompts: [], diagnostics: [] };
-  }
-  getThemes() {
-    return this.input.resources?.getThemes() ?? { themes: [], diagnostics: [] };
-  }
-  getAgentsFiles() {
-    return { agentsFiles: this.input.contextFiles ?? [] };
-  }
-  getSystemPrompt() {
-    return this.input.systemPrompt;
-  }
-  getSystemPromptSource() {
-    return undefined;
-  }
-  getAppendSystemPrompt() {
-    return [];
-  }
-  getAppendSystemPromptSources() {
-    return [];
-  }
-  extendResources(paths: Parameters<ResourceLoader['extendResources']>[0]): void {
-    if (this.input.resources) this.input.resources.extendResources(paths);
-    else if (Object.values(paths).some((entries) => entries?.length))
-      throw new Error('harness_resource_set_is_frozen');
-  }
-  async reload(): Promise<void> {
-    /* Resource changes require a new owned worker. */
+    super({
+      cwd: input.cwd,
+      agentDir: join(input.privateRoot, 'config'),
+      settingsManager: input.settings,
+      noExtensions: true,
+      additionalExtensionPaths: [
+        fileURLToPath(new URL('../extensions/mcp-loader.ts', import.meta.url)),
+      ],
+      noSkills: true,
+      noPromptTemplates: true,
+      noThemes: true,
+      noContextFiles: true,
+      systemPrompt: input.systemPrompt,
+      appendSystemPrompt: [],
+      systemPromptOverride: () => input.systemPrompt,
+      skillsOverride: () => ({ skills: input.skills ?? [], diagnostics: [] }),
+      extensionFactories: [...(input.extensionFactories ?? []), promptContext],
+      extensionsOverride: (loaded) => {
+        const result = input.extensions
+          ? { ...loaded, extensions: [...input.extensions.extensions, ...loaded.extensions] }
+          : loaded;
+        if (result.errors.length) throw new Error('harness_extension_load_failed');
+        validateTools(result.extensions, input.hostToolNames ?? []);
+        return result;
+      },
+    });
   }
 }

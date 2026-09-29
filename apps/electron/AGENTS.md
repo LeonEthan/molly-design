@@ -42,8 +42,9 @@ contracts, and window/renderer integration rules live in
 
 ## Embedded CLI and native dependencies
 
-- The embedded CLI launches built JavaScript only; there is no source-loader/Jiti
-  fallback. Development and packaged builds must use the same output layout.
+- The embedded CLI launches built JavaScript. Pi alone loads explicitly admitted
+  extension TypeScript through its bundled loader; never recompile add-on sources.
+  Development and packaged builds use the same output layout.
 - `better-sqlite3` and `loro-crdt` remain external and must be
   staged under `resources/cli/node_modules` by `scripts/sync-cli-dist.mjs` and
   `scripts/cli-native-deps.mjs`.

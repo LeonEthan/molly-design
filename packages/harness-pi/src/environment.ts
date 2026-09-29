@@ -1,8 +1,10 @@
+import { homedir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 const INHERITED_KEYS = [
   'PATH',
   'HOME',
+  'USERPROFILE',
   'USER',
   'LOGNAME',
   'LANG',
@@ -28,6 +30,10 @@ export function createWorkerEnvironment(
   }
   return {
     ...environment,
+    MOLLY_TOOL_HOME:
+      inherited.MOLLY_TOOL_HOME ?? inherited.HOME ?? inherited.USERPROFILE ?? homedir(),
+    HOME: join(privateRoot, 'home'),
+    USERPROFILE: join(privateRoot, 'home'),
     PI_CODING_AGENT_DIR: join(privateRoot, 'config'),
     PI_OFFLINE: '1',
     DO_NOT_TRACK: '1',
@@ -43,7 +49,10 @@ export function createWorkerEnvironment(
 export function createToolEnvironment(inherited: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(
     INHERITED_KEYS.flatMap((key) => {
-      const value = inherited[key];
+      const value =
+        key === 'HOME' || key === 'USERPROFILE'
+          ? (inherited.MOLLY_TOOL_HOME ?? inherited[key])
+          : inherited[key];
       return value === undefined ? [] : [[key, value]];
     })
   );

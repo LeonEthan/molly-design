@@ -1,7 +1,7 @@
 # Molly embedded Pi
 
-This package isolates the pinned public Pi SDK dependency closure from the desktop
-renderer and CLI host. The host owns ACP, queueing, permissions, secrets and design
+This package isolates the public Pi SDK and its daily catalog dependency closure
+from the desktop renderer and CLI host. The host owns ACP, queueing, permissions, secrets and design
 transactions; Pi owns its native conversation state and model loop.
 
 The package is not an installed-user CLI and does not discover a global Pi command.
@@ -30,14 +30,10 @@ Injected time sources support deterministic real-SDK tests across a local day/ye
 boundary and timezone changes. No settings, history fields or location lookup are added.
 This is not a security boundary for arbitrary native code.
 
-`question-extension.ts` selectively registers the dialog-backed `ask_question` tool
-from MIT-licensed `pi-ask-question` 0.4.0, pinned to the commit and hashes in
-[`vendor/pi-ask-question/manifest.json`](vendor/pi-ask-question/manifest.json).
-It uses public SDK registrations and no resource discovery. The adaptation omits
-terminal rendering and the optional grill-me mode, bounds input and explicitly makes
-timeout non-consensual. Its only retained answer state is native tool-result history.
-The build verifies adapted-source/license hashes and includes provenance and license
-resources in the sealed closure; TypeBox shares the SDK's pinned version.
+`question-extension.ts` registers Molly's own dialog-backed `ask_question` through a
+public extension factory. It supports multiple questions, custom answers and multi-select;
+timeout/cancellation return no answers. The sealed worker build identifies its code;
+there is no upstream fork, provenance hash or terminal component.
 
 Auto-review ([Spec](../../specs/generative-layered-design-workflow.md)) is the
 permission mode the host freezes into every Molly run; the composer offers no
@@ -53,17 +49,13 @@ failure grants no extra path. Its ancestors stay protected, and shutdown removes
 the worker-owned temp. Tool caches should use the workspace or `$TMPDIR`.
 `auto-review-policy.ts` decides by effect:
 sandboxed shell, Molly design tools, local attachment sharing and file tools inside the boundary run
-(native writes reach only the workspace and the started worker temp directory; `file:`/URL, `~`, `@`
-and Unicode-space paths, and reads whose filename variants leave the boundary, are reviewed); a bash
+(native writes reach only the workspace and the started worker temp directory; authorization runs inside public file operations after Pi resolves paths and read variants); a bash
 `outside_sandbox` request, a protected read, a write outside the workspace and a
 sandbox connection to another domain are escalations. `browser-approval.ts` reviews
 the first public browser site grant through the same classifier and reuses it only
 within the active run/epoch (at most eight sites). External MCP tools
 retain their ordinary approvals; host URL/DNS and dispatch checks remain in force. `auto-review-classifier.ts` judges an escalation with the run's
-session model through the same journaled provider path, using the reviewer prompt,
-decision parser and context projection adapted from Apache-2.0 `pi-auto-approval` 0.1.1
-([`vendor/pi-auto-approval/manifest.json`](vendor/pi-auto-approval/manifest.json)); its
-hook, commands, config files and audit log are not used. A deny, failure or timeout asks
+session model through the same journaled provider path, using Molly-owned `review-context.ts` for its prompt, strict decision parser and context projection. A deny, failure or timeout asks
 the user. The run journal records each approval's tool, source and decision without
 arguments. Classifier records also carry a bounded `reviewOutcome`: allow, deny,
 timeout, invalid_response, failed or cancelled. Older records remain readable;
@@ -84,7 +76,7 @@ The existing permission history/UI owns each question, bound to its active run a
 epoch. The private `_molly/dismiss_question` handshake waits for host cancellation
 persistence; its five-second deadline fails closed. Late answers cannot resume a stopped
 run. Native question errors stop inference and report `extension_question_failed`.
-Host tool/plugin hashes bind native registration and curated question/reminder identity;
+Host tool/plugin hashes bind native registration and Molly question/reminder identity;
 MCP discovery and tool updates belong to the standard adapter.
 Synthetic ACP tests exercise these paths; native desktop UI acceptance remains open.
 Slash-command dispatch is not implemented by selecting a plugin without commands.
@@ -179,7 +171,7 @@ Native bash titles include the exact command because the pending-permission card
 does not display raw tool arguments.
 `mcp-extension.ts` converts the selected ACP servers to the public
 `createMcpAdapter({ config })` configuration and loads **pi-mcp-adapter 3.2.0**
-through Pi's `DefaultResourceLoader.extensionFactories`. The dependency is unmodified.
+through Pi's explicit TypeScript loader entry and public extension factories. The dependency is unmodified.
 It owns tool discovery/naming, catalog updates, schemas/results, proxy/direct/script
 execution, connections, cancellation and session shutdown. Molly uses its public
 approval event to call the existing host permission policy. The public timeout
@@ -211,15 +203,38 @@ Existing native history, assets, drafts and old operation files are not migrated
 No cancellation or tool result establishes exactly-once execution or absence of billing;
 Molly adds no automatic paid retry.
 
-The build compiles the published adapter entry to JavaScript and stages its unchanged
-resources and dependency closure, including the scripting worker/WASM and native keyring.
-The generated package entry points to that JavaScript; no runtime TypeScript loader,
-source patch, fork or upstream PR is needed. The sealed manifest covers these files.
+The build stages the published adapter without recompilation or manifest rewrites.
+Pi loads `extensions/mcp-loader.ts`, which imports the adapter's public factory and
+makes it available through the session-local public event bus. The host supplies
+in-memory config and approval callbacks to that factory; no credentials go to disk.
+The generated runtime manifest seals the ordinary package closure and loader entry.
+`MollyResourceLoader` configures `DefaultResourceLoader`: discovery is disabled,
+SYSTEM/APPEND prompts are explicit, and the host context factory is last.
+Worker HOME is private; shell/MCP children retain the real HOME through the sanitized
+tool environment, and the sandbox receives that real home for credential deny paths.
+
+## Daily updates and restore
+
+The named `pi` catalog in `pnpm-workspace.yaml` is the version source. Dependabot groups
+its daily updates; signature/lock integrity, peer compatibility, full checks, packaged
+Electron-Node smoke and the existing daily E2E gate automatic merge to main. Desktop
+releases remain independent. Incompatible peers keep the last green set and require
+reassessment within three days; essential add-ons are never dropped automatically.
+The seven-day release-age gate remains for unrelated and fresh transitive packages.
+The first 0.87.1 install needed no additional transitive exemption. A future blocked
+install fails visibly rather than silently relaxing that gate.
+
+Native continuation always uses the user's explicit current selection. When a saved
+model disappears, the existing model picker reports it and lets the user choose a
+replacement for the same native session. The synthetic Pi 0.85.1 fixture checks old-to-new
+reading and preservation without inference. This does not establish new-to-old rollback:
+retain the original session files and do not open newer histories with an older app
+without validation. No automatic downgrade, history rewrite or model fallback is added.
 
 ## Verification and remaining gates
 
 `tests/provider-contract-matrix.test.ts` exercises real pinned SDK adapters with
-injected synthetic HTTP responses. Its explicit model IDs are fixtures, not defaults.
+injected synthetic HTTP responses. The tests register synthetic models through ModelRuntime instead of relying on catalog membership.
 For each passing row it covers text completion, a native read-tool loop, 401, 429,
 network failure, truncated streams and unknown-model rejection. Dispatch/settlement
 ordering, selected destination/credential, error sanitization and native outcomes
@@ -238,12 +253,11 @@ are checked; no real provider account is contacted.
 | OpenRouter        | Messages for the selected Anthropic model | Passed                    |
 | Google Gemini API | Google Generative AI                      | Blocked before HTTP       |
 
-Pi 0.85.1's Google adapter explicitly rejects a custom `fetch`. Molly requires that
+The Google adapters in both tested baselines, Pi 0.85.1 and 0.87.1, explicitly reject a custom `fetch`. Molly requires that
 per-request boundary for origin binding and pre-dispatch accounting, so Google
 currently fails before transport even though its models appear in the catalog.
 The characterization test records that failure; it is not Google acceptance.
-Resolving it requires a reviewed native adapter or an explicitly approved SDK
-baseline change. Neither global fetch replacement nor a silent compatible-protocol
+Resolving it requires a public upstream adapter that supports the required request boundary. Neither global fetch replacement nor a silent compatible-protocol
 fallback is an acceptable workaround. These fixtures also do not establish regional
 endpoint compatibility, every model's capabilities or real-service support; the
 partial live Kimi evidence below remains a separate evidence class.

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@agentclientprotocol/sdk';
 import type { ExtensionFactory } from '@earendil-works/pi-coding-agent';
-import { createMcpAdapter } from 'pi-mcp-adapter';
+import type { createMcpAdapter } from 'pi-mcp-adapter';
 import {
   MCP_TOOL_APPROVAL_REQUEST_EVENT,
   type McpToolApprovalRequest,
@@ -97,6 +97,11 @@ export function createMollyMcpExtension(
         return allowed && !request.signal?.aborted ? 'allow_once' : 'deny';
       });
     });
-    await createMcpAdapter({ config })(pi);
+    let factory: typeof createMcpAdapter | undefined;
+    pi.events.emit('molly:mcp-factory', (loaded: typeof createMcpAdapter) => {
+      factory = loaded;
+    });
+    if (!factory) throw new Error('harness_mcp_extension_unavailable');
+    await factory({ config })(pi);
   };
 }

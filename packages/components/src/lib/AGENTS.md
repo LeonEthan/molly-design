@@ -80,6 +80,9 @@ surfaces, or Electron IPC typing. Read the relevant sections before those change
 
 ## ACP dispatch
 
+- Molly preserves an explicitly selected model when it leaves the catalog. Show the
+  unavailable state and require a new user selection; never substitute catalog order.
+
 - Display every provider-supplied rate-limit window name with localized duration via
   `formatAgentRateLimitWindowLabel`, even when duration/utilization/reset match.
 - Before creating top-level or child sessions, call `filterAcpSessionConfigOptionValues()`

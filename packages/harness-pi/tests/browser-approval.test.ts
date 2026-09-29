@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createBrowserTaskApproval } from '../src/browser-approval';
 import type { ApprovalRecord } from '../src/run-journal';
-import type { ReviewSubject } from '../vendor/pi-auto-approval/review';
+import type { ReviewSubject } from '../src/review-context';
 
 function setup(mode: 'auto-review' | 'ask' = 'auto-review') {
   let run = { runId: 'one', runtimeEpoch: 'epoch', permissionMode: mode };

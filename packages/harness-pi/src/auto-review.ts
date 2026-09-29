@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { MollyPermissionMode } from '@molly/shared/embedded-harness';
-import type { ReviewDecision, ReviewSubject } from '../vendor/pi-auto-approval/review';
+import type { ReviewDecision, ReviewSubject } from './review-context';
 import type { ToolApproval, ToolApprovalResult } from './approved-tools';
 import type { AutoReviewDecision } from './auto-review-policy';
 import type { ApprovalRecord } from './run-journal';

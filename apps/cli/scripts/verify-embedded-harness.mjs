@@ -32,7 +32,8 @@ export function verifyEmbeddedHarness(directory) {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.protocolVersion !== 1 ||
-    manifest.engineVersion !== '0.85.1' ||
+    typeof manifest.engineVersion !== 'string' ||
+    manifest.engineVersion !== manifest.packages?.find((entry) => entry.path === 'node_modules/@earendil-works/pi-coding-agent')?.version ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.packages)
   )

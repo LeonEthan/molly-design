@@ -1,3 +1,4 @@
+import { registerSyntheticModels } from './fixtures/synthetic-models';
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,7 +7,6 @@ import { createReadToolDefinition, defineTool } from '@earendil-works/pi-coding-
 import { createMollySession, type CreateMollySessionInput } from '../src/session-factory';
 import { NativeRunOutcome } from '../src/run-outcome';
 
-// Explicit representative IDs from the pinned SDK. These are fixtures, not product defaults.
 const cases = [
   { preset: 'openai', model: 'gpt-4o', api: 'openai-responses' },
   { preset: 'anthropic', model: 'claude-haiku-4-5', api: 'anthropic-messages' },
@@ -19,6 +19,7 @@ const cases = [
   { preset: 'openrouter', model: 'anthropic/claude-haiku-4.5', api: 'anthropic-messages' },
 ] as const;
 type Protocol = (typeof cases)[number]['api'];
+registerSyntheticModels();
 const roots: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();

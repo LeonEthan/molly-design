@@ -566,6 +566,7 @@
   "chat.runConfig.grok.permission.description": "控制如何允许受保护的工具操作",
   "chat.runConfig.grok.permission.label": "权限模式",
   "chat.runConfig.modelPickerLabel": "模型与服务商",
+  "chat.runConfig.modelUnavailable": "模型已不可用，请选择其他模型以继续此会话",
   "chat.runConfig.selectModel": "选择模型",
   "chat.runConfig.noModels": "先在设置中添加模型连接。",
   "chat.runConfig.modelLabel": "模型",

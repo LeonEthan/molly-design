@@ -8,7 +8,7 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
-export const PI_ENGINE_VERSION = '0.85.1' as const;
+const PiEngineVersionSchema = z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
 
 /** Execution eligibility only: historical configs remain readable. */
@@ -314,7 +314,7 @@ export const MOLLY_PROVIDER_IDS: Record<ProviderPresetId, string> = {
 export const HarnessModelCatalogSchema = z
   .object({
     version: z.literal(1),
-    engineVersion: z.literal(PI_ENGINE_VERSION),
+    engineVersion: PiEngineVersionSchema,
     models: z
       .array(
         z
@@ -538,7 +538,7 @@ export const HarnessIdentitySchema = z
   .object({
     id: z.literal(MOLLY_HARNESS_ID),
     engine: z.literal('pi'),
-    engineVersion: z.literal(PI_ENGINE_VERSION),
+    engineVersion: PiEngineVersionSchema,
     buildId: identifier,
     protocolVersion: z.literal(MOLLY_HARNESS_PROTOCOL_VERSION),
   })

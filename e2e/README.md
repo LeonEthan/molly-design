@@ -37,6 +37,16 @@ its bundled CLI cannot attach to the normal local daemon. Teardown first asks
 Electron to quit through its production shutdown barrier, then verifies the
 port can be rebound before deleting temporary state.
 
+The browser-permission journeys send their scripted navigation through the stock
+Pi adapter's `mcp` tool with `tool: "molly_molly_browser"` and nested `args`.
+They exercise the real approval UI and daemon's public-website guard, checking
+the adapter's user-declined result separately from the local-host refusal before
+desktop navigation. The model fixture must follow this public adapter interface; individual
+MCP tools need not appear as direct model tools.
+Background personal-preference extraction receives an empty `changes` response,
+identified by its system instruction before interpreting journey markers in the
+quoted user text. It must not dispatch another browser probe or held response.
+
 On macOS, the harness passes `-ApplePersistenceIgnoreState YES` for its own
 process. The OS can otherwise block `app.whenReady` behind a post-crash window
 restoration dialog despite an isolated Electron profile. This does not erase saved

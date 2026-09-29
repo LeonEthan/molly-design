@@ -93,13 +93,31 @@ async function handleRequest(req, res) {
   }
 
   const text = lastUserText(body);
-  const mode = text.includes('You generate titles for')
-    ? 'title'
-    : text.includes('[E2E:BROWSER:PRIVATE]')
-      ? 'browser-private'
-      : text.includes('[SCOUT:HOLD]')
-        ? 'hold'
-        : 'reply';
+  const extractsPreferences = body?.messages?.some(
+    (message) =>
+      (message?.role === 'system' || message?.role === 'developer') &&
+      typeof message.content === 'string' &&
+      message.content.startsWith(
+        'Extract only explicitly stated durable personal preferences from the current user text.'
+      )
+  );
+  const mode = extractsPreferences
+    ? 'memory'
+    : text.includes('You generate titles for')
+      ? 'title'
+      : text.includes('[E2E:BROWSER:PRIVATE]')
+        ? 'browser-private'
+        : text.includes('[SCOUT:HOLD]')
+          ? 'hold'
+          : 'reply';
+  const replyText =
+    mode === 'memory'
+      ? '{"changes":[]}'
+      : mode === 'title'
+        ? 'Synthetic session title'
+        : mode === 'hold'
+          ? HELD_TEXT
+          : REPLY_TEXT;
   const toolResult = Array.isArray(body?.messages)
     ? body.messages.findLast((message) => message?.role === 'tool')
     : undefined;
@@ -114,7 +132,7 @@ async function handleRequest(req, res) {
   if (body?.stream !== true) {
     record('request-complete', { requestId, mode, transport: 'json' });
     res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify(completion(body?.model, mode === 'hold' ? HELD_TEXT : REPLY_TEXT)));
+    res.end(JSON.stringify(completion(body?.model, replyText)));
     return;
   }
 
@@ -127,11 +145,8 @@ async function handleRequest(req, res) {
 
   if (mode === 'browser-private' && !toolResult) {
     const tools = Array.isArray(body?.tools) ? body.tools : [];
-    const browserTool = tools.find(
-      (tool) =>
-        typeof tool?.function?.name === 'string' && tool.function.name.includes('molly_browser')
-    );
-    if (!browserTool) {
+    const mcpTool = tools.find((tool) => tool?.function?.name === 'mcp');
+    if (!mcpTool) {
       record('browser-tool-missing', { requestId, mode });
       res.write(chunk(body?.model, { content: 'Synthetic browser tool was unavailable.' }));
       res.write(chunk(body?.model, {}, 'stop'));
@@ -147,8 +162,11 @@ async function handleRequest(req, res) {
                 id: 'synthetic-browser-private',
                 type: 'function',
                 function: {
-                  name: browserTool.function.name,
-                  arguments: JSON.stringify({ kind: 'navigate', url: 'http://127.0.0.1:8333/' }),
+                  name: mcpTool.function.name,
+                  arguments: JSON.stringify({
+                    tool: 'molly_molly_browser',
+                    args: { kind: 'navigate', url: 'http://127.0.0.1:8333/' },
+                  }),
                 },
               },
             ],
@@ -167,8 +185,11 @@ async function handleRequest(req, res) {
     record('browser-tool-result', {
       requestId,
       mode,
-      deniedByUser: resultText.includes('harness_permission_denied'),
-      blockedPrivateHost: resultText === 'harness_browser_destination_denied',
+      resultText,
+      deniedByUser: resultText.includes(
+        'The user declined approval to run MCP tool "molly_browser" on server "molly".'
+      ),
+      blockedPrivateHost: resultText === 'Error: Agent browser requires a public website.',
     });
     res.write(chunk(body?.model, { content: 'Synthetic browser probe complete.' }));
     res.write(chunk(body?.model, {}, 'stop'));
@@ -190,8 +211,7 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const text2 = mode === 'title' ? 'Synthetic session title' : REPLY_TEXT;
-  res.write(chunk(body?.model, { content: text2 }));
+  res.write(chunk(body?.model, { content: replyText }));
   res.write(chunk(body?.model, {}, 'stop'));
   res.write('data: [DONE]\n\n');
   res.end(() => record('request-complete', { requestId, mode }));

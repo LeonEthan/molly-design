@@ -3,6 +3,7 @@
 Status: proposed
 Date: 2026-09-29
 Translation: pending
+PR: [#53](https://github.com/LeonEthan/molly-design/pull/53) (draft)
 
 ## Abstract
 

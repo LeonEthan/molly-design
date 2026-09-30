@@ -48,6 +48,10 @@ Published auto-review source inspection additionally found that a denied review 
 - The rebuilt local macOS desktop passed all six existing full E2E scenarios (37 steps). Windows hosted E2E and final signed installers were not run locally.
 - The required advisory Codex CLI opinion was unavailable: the initial read-only call failed app-server startup with `EPERM`, and the later review command rejected the `--sandbox` argument placement. No independent opinion was obtained, and neither failed call was automatically retried.
 
+### Windows CI follow-up
+
+The first hosted run passed static checks, tests, Pi harness checks, macOS full E2E and all design-resource builds. Windows full E2E stopped during CLI build with `Unsupported embedded harness manifest`: package inventory paths used native backslashes while the new engine-version verifier looked up a forward-slash path. File resource paths already used forward slashes. The fix reuses that existing normalization for package inventory paths and the engine lookup, keeping the manifest portable without weakening verification. The optional native-addon install warnings were not the failing build step. Local bundle generation and manifest verification passed normally and with Windows-style relative-path separators injected into the builder. Hosted Windows validation of this correction is pending.
+
 ### Single manual review and validation batch
 
 - [ ] Review the completed diff and draft Specs together: public-only composition, strict peer gating, the Molly-owned fallback, release-age/signature trade-off, and guarded automatic dependency merges. Obtain independent review; none was produced by the failed CLI attempts.

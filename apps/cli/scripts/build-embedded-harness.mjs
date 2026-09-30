@@ -61,7 +61,7 @@ function stageClosure(root, roots) {
       packages.push({
         name: metadata.name,
         version: metadata.version,
-        path: path.relative(root, target),
+        path: path.relative(root, target).split(path.sep).join('/'),
       });
     }
     return target;
@@ -153,7 +153,7 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
   const manifest = {
     schemaVersion: 1,
     engine: 'pi',
-    engineVersion: packages.find((entry) => entry.path === path.join('node_modules', '@earendil-works/pi-coding-agent')).version,
+    engineVersion: packages.find((entry) => entry.path === 'node_modules/@earendil-works/pi-coding-agent').version,
     protocolVersion: 1,
     minimumNode: '22.19.0',
     buildPlatform: process.platform,

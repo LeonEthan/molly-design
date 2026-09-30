@@ -74,7 +74,7 @@ Turn-length, token and cost optimization; automatic denoising or placement; dedi
 ## Open questions
 
 - The tested journey no longer presents the initial temporary-path and attachment-prompt blockers. Record any new domain or cache failures separately; this does not establish compatibility with arbitrary commands or destinations.
-- `@anthropic-ai/sandbox-runtime` remains pinned. The published `@erichll/pi-sandbox` and `@erichll/pi-auto-review` trial has not been run, so Molly keeps its own sandbox integration and classifier, without a vendored add-on, until that trial decides otherwise. Pi and admitted add-ons follow the daily update policy.
+- `@anthropic-ai/sandbox-runtime` remains pinned. The published `@erichll/pi-sandbox` and `@erichll/pi-auto-review` stack loaded under Pi 0.87.1 but failed host admission (it registers reserved `bash` and an extra `subagent`, and denial recovery uses commands rather than Molly's dialogs), so Molly keeps its own sandbox integration and classifier without a vendored add-on. Its behavioral suite was not run after admission failed. Pi and admitted add-ons follow the daily update policy.
 - A classifier can be influenced by untrusted content the Agent reads (web pages, briefs); classifier approvals are limited to escalations. Preserve its verdicts in run evidence; the accepted run had no human prompts, without establishing classifier correctness for arbitrary content.
 - With native tool errors, an uncertain image call may be repeated by the Agent and billed twice. Preserve unknown outcomes and record any subsequent Agent calls; the application adds no automatic paid retry.
 

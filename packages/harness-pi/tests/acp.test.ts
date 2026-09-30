@@ -670,8 +670,7 @@ describe('owned ACP boundary', () => {
         { stopReason: 'toolUse', timestamp: 1 }
       ),
       fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 2 }),
-      fauxAssistantMessage('{"outcome":"allow"}', { timestamp: 3 }),
-      fauxAssistantMessage('Done', { timestamp: 4 }),
+      fauxAssistantMessage('Done', { timestamp: 3 }),
     ];
     const asked: string[] = [];
     let adapter: MollyAcpAdapter | undefined;
@@ -713,7 +712,6 @@ describe('owned ACP boundary', () => {
         readFile(join(f.input.cwd, '..', 'outside-workspace.txt'), 'utf8')
       ).resolves.toBe('synthetic');
       expect((await f.journal.read(f.snapshot.runId)).approvals).toEqual([
-        { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
         { toolCallId: 'escalated-write', tool: 'write', source: 'classifier', decision: 'allow' },
       ]);
     } finally {

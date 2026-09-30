@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { constants } from 'node:fs';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import {
   createReadToolDefinition,
@@ -113,6 +113,7 @@ export function createApprovedTools(input: {
         operations: {
           writeFile: fileWrite,
           mkdir: async (path) => {
+            if ((await stat(path).catch(() => undefined))?.isDirectory()) return;
             await authorizePath(path);
             await mkdir(path, { recursive: true });
           },

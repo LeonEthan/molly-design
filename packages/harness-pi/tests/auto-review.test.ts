@@ -1,5 +1,5 @@
 import { registerSyntheticModels } from './fixtures/synthetic-models';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -93,7 +93,7 @@ describe('auto-review policy', () => {
 
   it('reviews the actual path selected by Pi, including read variants and file URLs', async () => {
     const b = await boundary();
-    const { symlink, readFile } = await import('node:fs/promises');
+    const { symlink } = await import('node:fs/promises');
     await symlink(join(b.home, '.ssh'), join(b.cwd, 'shot\u202FAM.'));
     await writeFile(join(b.home, '.ssh', 'id_ed25519'), 'synthetic');
     const reviewed: string[] = [];
@@ -164,7 +164,7 @@ describe('auto-review policy', () => {
 
   it('reviews a dangling symlink before a write can create its outside target', async () => {
     const b = await boundary();
-    const { symlink, readFile } = await import('node:fs/promises');
+    const { symlink } = await import('node:fs/promises');
     const target = join(b.home, 'uncreated.txt');
     await symlink(target, join(b.cwd, 'link.txt'));
     const tools = createApprovedTools({
@@ -184,6 +184,34 @@ describe('auto-review policy', () => {
         )
     ).rejects.toThrow('harness_permission_denied');
     await expect(readFile(target)).rejects.toThrow();
+  });
+
+  it('asks once per write into an existing directory and for a new directory before creating it', async () => {
+    const b = await boundary();
+    const outside = await root();
+    await mkdir(join(outside, 'existing'));
+    const asked: string[] = [];
+    const tools = createApprovedTools({
+      cwd: b.cwd,
+      shellPath: '/bin/sh',
+      approve: async (request) => {
+        asked.push(String((request.arguments as { path: string }).path));
+        return false;
+      },
+    });
+    const write = tools.find((tool) => tool.name === 'write')!;
+    const attempt = (path: string) =>
+      write.execute('write', { path, content: 'x' }, undefined, undefined, {} as never);
+    await expect(attempt(join(outside, 'existing', 'a.txt'))).rejects.toThrow(
+      'harness_permission_denied'
+    );
+    expect(asked).toEqual([join(outside, 'existing', 'a.txt')]);
+    asked.length = 0;
+    await expect(attempt(join(outside, 'fresh', 'a.txt'))).rejects.toThrow(
+      'harness_permission_denied'
+    );
+    expect(asked).toEqual([join(outside, 'fresh')]);
+    await expect(readFile(join(outside, 'fresh'))).rejects.toThrow();
   });
 
   it('approves Molly design tools and leaves other tools to the ordinary prompt', async () => {

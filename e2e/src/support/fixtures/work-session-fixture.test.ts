@@ -26,10 +26,7 @@ void test('keeps the lifecycle fixture clean for helpers but exposes authored de
       cwd: fixture.projectRoot,
       encoding: 'utf8',
     });
-    assert.deepEqual(
-      status.trimEnd().split('\n'),
-      authoredFiles.map((file) => `?? ${file}`)
-    );
+    assert.deepEqual(status.trimEnd().split('\n'), authoredFiles.map((file) => `?? ${file}`));
   } finally {
     fixture.dispose();
   }

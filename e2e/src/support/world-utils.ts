@@ -16,9 +16,7 @@ export function findStableId(tags: readonly string[]): string {
 
 export function createScenarioArtifacts(tags: readonly string[]): ScenarioArtifacts {
   const stableId = findStableId(tags);
-  const acceptanceRound = (
-    process.env.MOLLY_ACCEPTANCE_ROUND_ID ?? process.env.LODY_ACCEPTANCE_ROUND_ID
-  )?.trim();
+  const acceptanceRound = (process.env.MOLLY_ACCEPTANCE_ROUND_ID ?? process.env.LODY_ACCEPTANCE_ROUND_ID)?.trim();
   const rootDir = acceptanceRound
     ? join(process.cwd(), 'artifacts', 'acceptance', acceptanceRound)
     : join(process.cwd(), 'artifacts');

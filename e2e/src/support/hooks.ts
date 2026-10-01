@@ -75,10 +75,7 @@ After(async function (this: MollyWorld, scenario: ITestCaseHookParameter) {
     } catch (error) {
       evidenceErrors.push(`failure index: ${String(error)}`);
     }
-  } else if (
-    artifactDirectoryReady &&
-    (process.env.MOLLY_ACCEPTANCE_ROUND_ID ?? process.env.LODY_ACCEPTANCE_ROUND_ID)
-  ) {
+  } else if (artifactDirectoryReady && (process.env.MOLLY_ACCEPTANCE_ROUND_ID ?? process.env.LODY_ACCEPTANCE_ROUND_ID)) {
     try {
       await harness.capturePostGcSnapshot();
       await harness.page?.screenshot({

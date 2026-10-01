@@ -15,13 +15,14 @@ import {
   type SessionId,
   type SessionLaunchConfig,
   type SessionMeta,
+  type SessionPreparationSpec,
   type WorkspaceId,
 } from '@molly/shared';
 import { deriveRepoIdFromLocalProjectPath } from '@molly/shared/node/worktree-paths';
 import { normalizeLocalProjectRootPath } from '@molly/shared/node/local-project';
 
 import { Session, getDefaultSessionWorkdir } from './session';
-import { SessionManager, type ISession } from './session-manager';
+import { SessionManager, type CreateAgentConfig, type ISession } from './session-manager';
 import { createNoopSessionSandbox } from './session-sandbox';
 import type { SessionConfig } from './types';
 import type { LoroDocumentManager } from '../lib/loro/doc';
@@ -917,6 +918,166 @@ describe('SessionManager durable create ownership', () => {
     await expect(result).resolves.toBe(session);
     expect(manager.getPendingSession(sessionId)).toBeNull();
   });
+});
+
+describe('SessionManager embedded preparation history', () => {
+  let tempRoot: string;
+
+  beforeEach(() => {
+    tempRoot = mkdtempSync(path.join(os.tmpdir(), 'molly-preparation-history-'));
+    vi.stubEnv('MOLLY_DATA_DIR', tempRoot);
+    vi.stubEnv('MOLLY_LOCKS_DIR', path.join(tempRoot, 'locks'));
+    vi.spyOn(agentSettings, 'resolveACPProcessLaunchAsync').mockResolvedValue({
+      command: 'synthetic-never-spawned',
+      args: [],
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    rmSync(tempRoot, { recursive: true, force: true });
+  });
+
+  it.each([
+    { design: false, action: 'adopt' },
+    { design: true, action: 'adopt' },
+    { design: true, action: 'cancel' },
+    { design: true, action: 'mismatch' },
+  ])(
+    'keeps native history under durable ownership ($action, design=$design)',
+    async ({ design, action }) => {
+      const sessionId = 'prepared-native-history' as SessionId;
+      const agentConfigId = 'molly-config' as AgentConfigId;
+      const doc = Object.assign(
+        createSessionDoc({
+          id: sessionId,
+          machineId: 'machine-1' as MachineId,
+          userId: 'user-1',
+          createdAt: '2026-10-01T00:00:00.000Z',
+          cliType: 'builtin',
+          agentType: 'molly',
+          ...(design ? { design: { artworkId: 'synthetic-artwork', path: 'design.json' } } : {}),
+        }),
+        { setACPSessionId: async (_id: ACPSessionId) => undefined }
+      );
+      const workspace = createWorkspaceDocument(new Map([[sessionId, doc]]));
+      Object.assign(workspace, {
+        getAgentConfigById: async () => ({
+          id: agentConfigId,
+          machineId: 'machine-1',
+          cliType: 'builtin',
+          agentType: 'molly',
+        }),
+      });
+      const manager = new SessionManager(
+        createLogger(),
+        'synthetic-token',
+        'machine-1' as MachineId,
+        'workspace-1' as WorkspaceId,
+        workspace,
+        {
+          sessionSandboxFactory: async () => createNoopSessionSandbox(),
+          cloudPort: createTestCloudPort(),
+        }
+      );
+      const credentials = new HarnessCredentialBroker();
+      credentials.exchange({
+        version: 1,
+        connections: [
+          {
+            schemaVersion: 1,
+            id: 'synthetic-connection',
+            revision: 1,
+            providerPresetId: 'openai',
+            displayName: 'Synthetic',
+            baseUrl: 'https://example.invalid/v1',
+            credentialRef: 'synthetic-unused',
+            enabled: true,
+          },
+        ],
+        reports: [],
+      });
+      manager.setHarnessCredentials(credentials);
+      const nativeHistories: Array<{ id: string; designHooks: boolean }> = [];
+      vi.spyOn(Session.prototype, 'createAgent').mockImplementation(async function (
+        callbacks: CreateAgentConfig
+      ) {
+        const id = `native-${nativeHistories.length + 1}`;
+        nativeHistories.push({ id, designHooks: callbacks.designHooks === true });
+        this.acpSessionId = id as ACPSessionId;
+        return id;
+      });
+      type Prepared = SessionPreparationResource & {
+        session: Session;
+        config: SessionConfig;
+        workspaceReady: Promise<null>;
+        agentResult: Promise<string> | null;
+        adopt(): Promise<void>;
+      };
+      const internal = manager as unknown as {
+        createPreparedSessionRuntime(
+          spec: SessionPreparationSpec,
+          signal: AbortSignal
+        ): Promise<Prepared>;
+        preparationService: SessionPreparationService<Prepared>;
+      };
+      const spec: SessionPreparationSpec = {
+        preparationId: 'synthetic-preparation',
+        sessionId,
+        requestedByUserId: 'user-1',
+        agentConfigId,
+        cliType: 'builtin',
+        agentType: 'molly',
+        runConfig: { modelId: 'molly-model:synthetic-connection/synthetic-model' },
+      };
+      const published = deferred<Prepared>();
+      internal.preparationService.start({
+        preparationId: spec.preparationId,
+        sessionId,
+        requesterUserId: spec.requestedByUserId,
+        requestKey: buildSessionPreparationRequestKey(spec),
+        claimKey: buildSessionPreparationClaimKey(spec),
+        create: async (signal) => {
+          const resource = await internal.createPreparedSessionRuntime(spec, signal);
+          published.resolve(resource);
+          return resource;
+        },
+      });
+      const prepared = await published.promise;
+      await prepared.workspaceReady;
+      try {
+        expect(nativeHistories).toEqual([]);
+        if (action === 'cancel') {
+          expect(
+            manager.cancelSessionPreparation({
+              preparationId: spec.preparationId,
+              sessionId,
+              requestedByUserId: spec.requestedByUserId,
+            }).cancelled
+          ).toBe(true);
+          await prepared.dispose();
+          expect(nativeHistories).toEqual([]);
+          return;
+        }
+        const config = createSessionConfig({ ...prepared.config, sessionId });
+        if (action === 'mismatch') {
+          config.modelSelection = {
+            connectionId: 'synthetic-connection',
+            modelId: 'changed-model',
+            thinking: 'off',
+          };
+        }
+        const session = await manager.createSession(config);
+        expect(session.acpSessionId).toBe('native-1');
+        expect(nativeHistories).toEqual([{ id: 'native-1', designHooks: design }]);
+      } finally {
+        await internal.preparationService.disposeAll();
+        await prepared.dispose();
+        credentials.dispose();
+      }
+    }
+  );
 });
 
 describe('SessionManager preparation compatibility', () => {

@@ -18,29 +18,20 @@ export class BrowserPermissionPage {
       timeout: 60_000,
     });
     await this.fixture.waitForEvent('browser-tool-dispatched');
-    await expect(this.page.getByRole('button', { name: 'Deny', exact: true })).toBeVisible({
-      timeout: 60_000,
-    });
-    // A loopback target must never receive the task-wide website grant option.
-    await expect(
-      this.page.getByRole('button', { name: /^Allow browsing, clicks, input/u })
-    ).toHaveCount(0);
   }
 
-  async decide(option: 'Deny' | 'Allow once'): Promise<void> {
-    await this.page.getByRole('button', { name: option, exact: true }).click();
-  }
-
-  async expectResult(expected: 'denied' | 'blocked'): Promise<void> {
+  /** Embedded Pi asks for no tool approval; the browser policy alone refuses loopback. */
+  async expectBlockedWithoutPrompt(): Promise<void> {
     const events = await this.fixture.waitForEvent('browser-tool-result');
     const result = events.at(-1);
-    expect(result?.deniedByUser).toBe(expected === 'denied');
-    expect(result?.blockedPrivateHost).toBe(expected === 'blocked');
+    expect(result?.blockedPrivateHost).toBe(true);
+    expect(result?.resultText).not.toContain('<html');
     expect(this.fixture.readEvents().some((event) => event.event === 'browser-tool-missing')).toBe(
       false
     );
     await expect(
       this.page.getByText('Synthetic browser probe complete.', { exact: true })
     ).toBeVisible({ timeout: 60_000 });
+    await expect(this.page.getByRole('button', { name: 'Deny', exact: true })).toHaveCount(0);
   }
 }

@@ -25,8 +25,8 @@ export type ScriptedRuntimeEvent = {
   model?: string;
   streaming?: boolean;
   transport?: string;
-  deniedByUser?: boolean;
   blockedPrivateHost?: boolean;
+  resultText?: string;
 };
 
 export class WorkSessionFixture {

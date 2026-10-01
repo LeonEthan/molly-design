@@ -23,63 +23,91 @@ try {
   const page = harness.page!;
   await new OnboardingPage(page).waitForLocalBootstrap();
   const ids = [randomUUID(), randomUUID()];
-  for (const id of ids) await page.evaluate(async (sessionId) => {
-    if (!window.ipc) throw new Error('Desktop IPC unavailable');
-    await window.ipc.invoke('design.create', {
-      association: {
-        sessionId,
-        name: 'Resource probe',
-        userId: 'probe',
-        machineId: 'probe',
-        createdAt: '2026-09-21T00:00:00.000Z',
-      },
-      width: 800,
-      height: 600,
-    });
-  }, id);
-  const attach = async (artworkId: string, canvasHostId = artworkId) =>
-    page.evaluate(async ({ sessionId, hostId }) => {
+  for (const id of ids)
+    await page.evaluate(async (sessionId) => {
       if (!window.ipc) throw new Error('Desktop IPC unavailable');
-      await window.ipc.invoke(
-        'design.attach',
-        sessionId,
-        { x: 0, y: 0, width: 800, height: 600 },
-        hostId
-      );
-    }, { sessionId: artworkId, hostId: canvasHostId });
-  const close = async (sessionId: string) => page.evaluate(async (id) => {
-    if (!(await window.ipc?.invoke('design.close', id))) throw new Error('Canvas close refused');
-  }, sessionId);
-  const inspect = async (artworkId: string, retiredUrl?: string, writeCookie = false, nativeId?: number) =>
-    harness.app!.evaluate(async ({ webContents }, { sessionId, oldUrl, mark, contentsId }) => {
-      const canvas = webContents.getAllWebContents().find((contents) => {
-        const url = contents.getURL();
-        return (contentsId === undefined || contents.id === contentsId) &&
-          url.startsWith('molly-design://') && new URL(url).searchParams.get('ws') === sessionId;
+      await window.ipc.invoke('design.create', {
+        association: {
+          sessionId,
+          name: 'Resource probe',
+          userId: 'probe',
+          machineId: 'probe',
+          createdAt: '2026-09-21T00:00:00.000Z',
+        },
+        width: 800,
+        height: 600,
       });
-      if (!canvas) throw new Error('Attached canvas missing');
-      const state = globalThis as typeof globalThis & { __canvasProbeSessions?: Electron.Session[] };
-      const sessions = state.__canvasProbeSessions ??= [];
-      if (!sessions.includes(canvas.session)) sessions.push(canvas.session);
-      const cookies = await canvas.session.cookies.get({ name: 'canvas-resource-probe' });
-      if (mark) await canvas.session.cookies.set({
-        url: 'https://canvas-probe.invalid', name: 'canvas-resource-probe', value: sessionId,
-      }); // Cookie API only; no network request.
-      const document = await canvas.executeJavaScript(`(async () => {
+    }, id);
+  const attach = async (artworkId: string, canvasHostId = artworkId) =>
+    page.evaluate(
+      async ({ sessionId, hostId }) => {
+        if (!window.ipc) throw new Error('Desktop IPC unavailable');
+        await window.ipc.invoke(
+          'design.attach',
+          sessionId,
+          { x: 0, y: 0, width: 800, height: 600 },
+          hostId
+        );
+      },
+      { sessionId: artworkId, hostId: canvasHostId }
+    );
+  const close = async (sessionId: string) =>
+    page.evaluate(async (id) => {
+      if (!(await window.ipc?.invoke('design.close', id))) throw new Error('Canvas close refused');
+    }, sessionId);
+  const inspect = async (
+    artworkId: string,
+    retiredUrl?: string,
+    writeCookie = false,
+    nativeId?: number
+  ) =>
+    harness.app!.evaluate(
+      async ({ webContents }, { sessionId, oldUrl, mark, contentsId }) => {
+        const canvas = webContents.getAllWebContents().find((contents) => {
+          const url = contents.getURL();
+          return (
+            (contentsId === undefined || contents.id === contentsId) &&
+            url.startsWith('molly-design://') &&
+            new URL(url).searchParams.get('ws') === sessionId
+          );
+        });
+        if (!canvas) throw new Error('Attached canvas missing');
+        const state = globalThis as typeof globalThis & {
+          __canvasProbeSessions?: Electron.Session[];
+        };
+        const sessions = (state.__canvasProbeSessions ??= []);
+        if (!sessions.includes(canvas.session)) sessions.push(canvas.session);
+        const cookies = await canvas.session.cookies.get({ name: 'canvas-resource-probe' });
+        if (mark)
+          await canvas.session.cookies.set({
+            url: 'https://canvas-probe.invalid',
+            name: 'canvas-resource-probe',
+            value: sessionId,
+          }); // Cookie API only; no network request.
+        const document = await canvas.executeJavaScript(`(async () => {
         const payload = await (await fetch(location.origin + '/ws/' + ${JSON.stringify(sessionId)})).json();
         const previous = localStorage.getItem('canvas-resource-probe');
         localStorage.setItem('canvas-resource-probe', ${JSON.stringify(sessionId)});
         return { artworkId: payload.association.sessionId, previous };
       })()`);
-      const oldStatus = oldUrl
-        ? await canvas.session.fetch(oldUrl).then((response) => response.status).catch(() => 0)
-        : undefined;
-      return {
-        partition: sessions.indexOf(canvas.session), contentsId: canvas.id, url: canvas.getURL(),
-        cookies: cookies.map((cookie) => cookie.value), storagePath: canvas.session.storagePath,
-        document, oldStatus,
-      };
-    }, { sessionId: artworkId, oldUrl: retiredUrl, mark: writeCookie, contentsId: nativeId });
+        const oldStatus = oldUrl
+          ? await canvas.session
+              .fetch(oldUrl)
+              .then((response) => response.status)
+              .catch(() => 0)
+          : undefined;
+        return {
+          partition: sessions.indexOf(canvas.session),
+          contentsId: canvas.id,
+          url: canvas.getURL(),
+          cookies: cookies.map((cookie) => cookie.value),
+          storagePath: canvas.session.storagePath,
+          document,
+          oldStatus,
+        };
+      },
+      { sessionId: artworkId, oldUrl: retiredUrl, mark: writeCookie, contentsId: nativeId }
+    );
   const partitions = new Set<number>();
   const origins = new Set<string>();
   let previousUrl: string | undefined;
@@ -109,17 +137,31 @@ try {
   assert.deepEqual(sibling.cookies, []);
   assert.notEqual(sibling.oldStatus, 200);
   await attach(ids[0]!, randomUUID());
-  const simultaneousSessions = await harness.app!.evaluate(({ webContents }) =>
-    new Set(webContents.getAllWebContents()
-      .filter((contents) => contents.getURL().startsWith('molly-design://'))
-      .map((contents) => contents.session)).size
+  const simultaneousSessions = await harness.app!.evaluate(
+    ({ webContents }) =>
+      new Set(
+        webContents
+          .getAllWebContents()
+          .filter((contents) => contents.getURL().startsWith('molly-design://'))
+          .map((contents) => contents.session)
+      ).size
   );
   assert.equal(simultaneousSessions, 3);
-  await page.evaluate(async (id) => { await window.ipc?.invoke('design.hide', id, id); }, ids[0]!);
+  await page.evaluate(async (id) => {
+    await window.ipc?.invoke('design.hide', id, id);
+  }, ids[0]!);
   await attach(ids[0]!);
-  assert.equal((await inspect(ids[0]!, undefined, false, first.contentsId)).contentsId, first.contentsId, 'Hiding must retain the editor');
+  assert.equal(
+    (await inspect(ids[0]!, undefined, false, first.contentsId)).contentsId,
+    first.contentsId,
+    'Hiding must retain the editor'
+  );
   await close(ids[1]!);
-  assert.deepEqual((await inspect(ids[0]!, undefined, false, first.contentsId)).cookies, [ids[0]], 'Sibling cleanup touched a live partition');
+  assert.deepEqual(
+    (await inspect(ids[0]!, undefined, false, first.contentsId)).cookies,
+    [ids[0]],
+    'Sibling cleanup touched a live partition'
+  );
   await close(ids[0]!);
   const paths = await harness.captureHeapSnapshots(join(directory, 'heap'));
   const heap = JSON.parse(readFileSync(paths.main, 'utf8')) as {
@@ -140,7 +182,14 @@ try {
     )
       retainedShellBuffers++;
   }
-  console.log(JSON.stringify({ serialPartitions: partitions.size, simultaneousSessions, retainedShellBuffers, evidence: paths.main }));
+  console.log(
+    JSON.stringify({
+      serialPartitions: partitions.size,
+      simultaneousSessions,
+      retainedShellBuffers,
+      evidence: paths.main,
+    })
+  );
   assert.equal(
     retainedShellBuffers,
     0,

@@ -145,8 +145,9 @@ async function handleRequest(req, res) {
 
   if (mode === 'browser-private' && !toolResult) {
     const tools = Array.isArray(body?.tools) ? body.tools : [];
-    const mcpTool = tools.find((tool) => tool?.function?.name === 'mcp');
-    if (!mcpTool) {
+    // Pi's native MCP exposes servers to the model through its codemode script tool.
+    const codemode = tools.find((tool) => tool?.function?.name === 'codemode');
+    if (!codemode) {
       record('browser-tool-missing', { requestId, mode });
       res.write(chunk(body?.model, { content: 'Synthetic browser tool was unavailable.' }));
       res.write(chunk(body?.model, {}, 'stop'));
@@ -162,10 +163,9 @@ async function handleRequest(req, res) {
                 id: 'synthetic-browser-private',
                 type: 'function',
                 function: {
-                  name: mcpTool.function.name,
+                  name: codemode.function.name,
                   arguments: JSON.stringify({
-                    tool: 'molly_molly_browser',
-                    args: { kind: 'navigate', url: 'http://127.0.0.1:8333/' },
+                    code: "text(JSON.stringify(await tools.mcp__molly__molly_browser({ kind: 'navigate', url: 'http://127.0.0.1:8333/' })));",
                   }),
                 },
               },
@@ -186,10 +186,7 @@ async function handleRequest(req, res) {
       requestId,
       mode,
       resultText,
-      deniedByUser: resultText.includes(
-        'The user declined approval to run MCP tool "molly_browser" on server "molly".'
-      ),
-      blockedPrivateHost: resultText === 'Error: Agent browser requires a public website.',
+      blockedPrivateHost: resultText.includes('Agent browser requires a public website.'),
     });
     res.write(chunk(body?.model, { content: 'Synthetic browser probe complete.' }));
     res.write(chunk(body?.model, {}, 'stop'));

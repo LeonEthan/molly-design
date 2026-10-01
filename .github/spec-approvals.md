@@ -47,3 +47,14 @@ requested the three closeout actions: commit the work, consolidate acceptance
 records, and approve the current English and Chinese layered-design Spec
 revisions. This is approval of the stated workflow and boundaries, not proof
 that every future design run or distribution configuration will succeed.
+
+## 2026-10-01 native Pi packages without permission checks
+
+The owner approved the current English and Chinese revisions of
+`molly-embedded-pi-harness` and `generative-layered-design-workflow` on
+2026-10-01, after reviewing [PR #55](https://github.com/LeonEthan/molly-design/pull/55)
+and its Codex review fixes. The revisions move the embedded Agent to Pi 0.99.2
+with unmodified Pi packages in Molly's own Pi profile, run tools without
+permission checks behind the `cc-safety-net` floor, and store selected model keys
+in that profile for sub-agents. This approves the stated intent, not runtime
+behavior beyond the evidence recorded in the PR.

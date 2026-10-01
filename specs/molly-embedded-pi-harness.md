@@ -1,8 +1,9 @@
 # Molly embedded Pi harness
 
-Status: draft
+Status: approved
+Approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
-Translation: stale
+Translation: current
 
 [中文](molly-embedded-pi-harness.zh.md)
 
@@ -14,7 +15,7 @@ Users need a Molly they can install, configure and keep creating with — not an
 
 After installing Molly, the user only configures a model connection, an API key and an explicit model to start designing — no separate Agent CLI or global Node/npm install. Image generation and editing continue to use the user-configured image MCP/BYOK; without an image connection, text, shapes, manual editing and rendering remain usable. Different sessions may choose different model connections, but all new executions use the same version of the embedded Pi harness.
 
-This draft follows the "Molly embedded Pi harness transformation plan" v1.0 (2026-09-19), and redefines the remaining delivery scope per the 2026-09-20 convergence requirement: the installer, one complete design journey, key interactions, old-data continuation and delivery notes. Items explicitly deferred below are no longer completion conditions for this round; the original plan's historical goals and executed evidence are preserved, and deferral is not recorded as completed implementation. The implementation plan holds the implementation and check evidence. This revision remains draft; task status or automated checks do not replace human approval of this revision.
+This draft follows the "Molly embedded Pi harness transformation plan" v1.0 (2026-09-19), and redefines the remaining delivery scope per the 2026-09-20 convergence requirement: the installer, one complete design journey, key interactions, old-data continuation and delivery notes. Items explicitly deferred below are no longer completion conditions for this round; the original plan's historical goals and executed evidence are preserved, and deferral is not recorded as completed implementation. The implementation plan holds the implementation and check evidence. Task status and automated checks do not replace human approval; this revision's approval is recorded in the header.
 
 This is a follow-up revision proposal to the multi-Agent selection and CLI bootstrap goals in the [design workbench Spec](graphic-design-platform.md), not a description of the current implementation. When implemented, that Spec, the [upstream adoption scope](lody-upstream-adoption.md), the relevant scoped rules and the golden cases are adjusted together: the existing acceptance history is preserved, new embedded-Pi results are recorded independently, and Kimi CLI pass results must not be transcribed as Pi passes. This draft changes neither Bento's editing scope, the design format, the history backend, nor the autonomous-creation principles.
 
@@ -82,7 +83,7 @@ The engine baseline is Pi v0.99.2, using the public coding-agent SDK, fixed abso
 
 Molly does not locate, launch or modify a local Pi, and it never reads or writes the user's own Pi configuration (`~/.pi/agent`) or inherits its authentication. Molly has its own Pi profile (agent directory) under its private data; settings, credentials, model catalogs, caches, sessions, package state and temporary files all live there. Inside that profile Pi's generic agent capability is kept as-is: native resource discovery, skills, prompt templates, context files and extension hooks. Molly's session workdirs are trusted projects, so skills Molly materializes there load natively; shared skills in the user's `~/.agents/skills` are also discovered natively. The worker environment uses a whitelist, keeping the variables the packaged Node needs to start and removing external authentication and code-injection variables. Shutdown cleans up only the processes it owns.
 
-Molly ships unmodified, version-pinned published Pi packages and lists them in its profile, with as little glue as possible: `pi-subagents` (delegation to child agents, foreground and background), `pi-skillful` (skill discovery), `@juicesharp/rpiv-ask-user-question` (questions to the user), `@zigai/pi-mention-skill` (typed `$skill` mentions), `@ff-labs/pi-fff` (fast file search) and `cc-safety-net` (the safety floor below). Pi packages are trusted code. Simple confirm, select, input, editor and notification reuse the existing GUI dialog; terminal-only UI (custom components, widgets, footers, autocomplete, the sub-agent fleet view) is unavailable. The command system is deferred: the composer offers no slash-command discovery. Timeouts, window closing and cancellation never count as an answer. Plugins get no in-app installation, self-updating or a second paid-service configuration entry.
+Molly ships unmodified, version-pinned published Pi packages and lists them in its profile, with as little glue as possible: `pi-subagents` (delegation to child agents, foreground and background), `pi-skillful` (skill discovery), `@juicesharp/rpiv-ask-user-question` (questions to the user), `@zigai/pi-mention-skill` (typed `$skill` mentions), `@ff-labs/pi-fff` (fast file search) and `cc-safety-net` (the safety floor below). Sub-agents that drive another installed CLI and its account are disabled. Pi packages are trusted code. Simple confirm, select, input, editor and notification reuse the existing GUI dialog; terminal-only UI (custom components, widgets, footers, autocomplete, the sub-agent fleet view) is unavailable. The command system is deferred: the composer offers no slash-command discovery. Timeouts, window closing and cancellation never count as an answer. Plugins get no in-app installation, self-updating or a second paid-service configuration entry.
 
 These guarantees target the product path and reviewed extensions; they do not promise a hard sandbox against arbitrary native code, shells or third-party stdio MCP under the same OS user.
 
@@ -100,7 +101,7 @@ Model requests and compaction of the main session are attributed to its explicit
 
 ### MCP and paid images
 
-Direction revised on 2026-09-28 and updated on 2026-10-01 for Pi's built-in MCP: use the ordinary coding-agent chain, `Pi Agent → Pi native MCP → Molly image MCP server → image service`. This is the new target; the existing custom bridge and completed compatibility prototype do not establish its implementation. This revision remains draft; the decision and historical evidence are in the [migration record](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md).
+Direction revised on 2026-09-28 and updated on 2026-10-01 for Pi's built-in MCP: use the ordinary coding-agent chain, `Pi Agent → Pi native MCP → Molly image MCP server → image service`. The chain is implemented on Pi's native MCP ([PR #55](https://github.com/LeonEthan/molly-design/pull/55)); the decision and historical evidence are in the [migration record](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md).
 
 Use the public `createMcpExtension`, codemode and tool-search extensions of the pinned SDK, registering the selected servers through `registerMcpServer`. Molly supplies the selected MCP configuration and ordinary host integration required by public interfaces. Discovery, naming, schemas, calls, result handling, catalog updates, connection recovery and shutdown follow Pi's native MCP. A known upstream defect ([Pi #10249](https://github.com/earendil-works/pi/issues/10249)) can leave a server that is still starting running after shutdown; Molly records it and does not patch around it. Do not modify Pi or its packages, maintain dependency patches or a fork, introduce a custom host-managed profile, intercept transports or retain a second MCP client. Adoption does not wait for upstream acceptance of Molly-specific interfaces. Ordinary configuration does not enable every optional feature.
 
@@ -124,7 +125,7 @@ Design commits continue to independently validate schema, kernel replay, assets,
 
 ### Migration and support boundaries
 
-Role selection, creation, management, migration, `@` expansion and new programmatic-create arguments are retired. New work selects its connection, model and reasoning directly. Stored Role rows and historical provenance remain readable but are not reapplied to new messages. Already accepted Operations recover their frozen configuration. See the Role retirement decision. This scope change returns this Spec to draft; the previous approval does not cover this revision.
+Role selection, creation, management, migration, `@` expansion and new programmatic-create arguments are retired. New work selects its connection, model and reasoning directly. Stored Role rows and historical provenance remain readable but are not reapplied to new messages. Already accepted Operations recover their frozen configuration. See the Role retirement decision. This scope change is covered by the 2026-10-01 approval, not by the earlier 2026-09-21 approval.
 
 Canvases, assets, drafts, chats and history are preserved in place. Old AgentConfig/Role entries keep their provenance and are not executable; when the user explicitly chooses "continue this design with Molly", a new Pi context is created carrying the explicit historical context and trusted assets. Old tool records serve only as historical data — they are not executed, and no cross-harness native identity is forged.
 
@@ -145,7 +146,7 @@ There is exactly one primary test entry: starting from the real macOS arm64 inst
 - Stop adding performance distributions, long-duration stress, GC/object-count diagnostics, all-vendor exception combinations, repeated screenshots, and real calls made just to fill the matrix. Without an actually blocking performance problem, build no new performance gates.
 - Keep valuable existing test code; what this round cuts is extra implementation and duplicate verification requirements, not the batch deletion of regression protection to make checks pass.
 
-The test entry and the five close-out tasks' split have been confirmed; task confirmation does not replace formal approval of this Spec revision, which remains draft.
+The test entry and the five close-out tasks' split have been confirmed; task confirmation does not replace formal approval of this Spec revision.
 
 ## Out of Scope
 

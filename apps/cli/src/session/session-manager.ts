@@ -162,7 +162,7 @@ type PreparedSessionRuntime = SessionPreparationResource & {
   compatibility: ReturnType<typeof buildSessionPreparationCompatibility>;
   readCurrentLaunchConfig?: (sessionMeta: SessionMeta) => SessionLaunchConfigResolution | null;
   workspaceReady: Promise<PreparedWorktree | null>;
-  agentResult: Promise<string>;
+  agentResult: Promise<string> | null;
   adopt(): Promise<void>;
 };
 
@@ -972,14 +972,18 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     const initialized = createDeferred<void>();
     const sessionStart = createDeferred<AcpSessionStartTarget>();
     const workspaceReady = createDeferred<PreparedWorktree | null>();
-    const agentResult = createDeferred<string>();
+    const agentResult =
+      config.agentCliType === 'builtin' && config.agentType === 'molly'
+        ? null
+        : createDeferred<string>();
     const sessionReady = createDeferred<void>();
     const rejectAgentPreparation = (error: unknown): void => {
-      agentResult.reject(error);
+      agentResult?.reject(error);
       initialized.reject(error);
       sessionReady.reject(error);
     };
-    void agentResult.promise.catch(() => undefined);
+    void agentResult?.promise.catch(() => undefined);
+    void sessionStart.promise.catch(() => undefined);
     void workspaceReady.promise.catch(() => undefined);
 
     const cleanup = (): Promise<void> => {
@@ -990,7 +994,9 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         sessionStart.reject(abortError);
         if (!started) {
           workspaceReady.resolve(null);
-          agentResult.reject(abortError);
+        }
+        if (!started || !agentResult) {
+          agentResult?.reject(abortError);
           initialized.reject(abortError);
           sessionReady.reject(abortError);
         }
@@ -1014,7 +1020,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
             });
           }
         } finally {
-          await agentResult.promise.catch(() => undefined);
+          await agentResult?.promise.catch(() => undefined);
           const preparedWorktree = await workspaceReady.promise.catch(() => null);
           if (session && this.preparationSessions.get(sessionId) === session) {
             this.preparationSessions.delete(sessionId);
@@ -1093,9 +1099,11 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
             (error) => {
               workspaceReady.reject(error);
               sessionStart.reject(error);
+              if (!agentResult) rejectAgentPreparation(error);
             }
           );
 
+          if (!agentResult) return;
           const startedAgent = ownedSession.createAgent(
             this.buildCreateAgentConfig(ownedSession, config, launch, {
               abortSignal: signal,
@@ -1134,7 +1142,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         initialized: initialized.promise,
         sessionReady: sessionReady.promise,
         workspaceReady: workspaceReady.promise,
-        agentResult: agentResult.promise,
+        agentResult: agentResult?.promise ?? null,
         adopt: async () => {
           adoptionPromise ??= (async () => {
             const preparedWorktree = await workspaceReady.promise;
@@ -1163,7 +1171,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   ): Promise<ISession> {
     const sessionId = incomingConfig.sessionId!;
     const doc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
-    if ((await doc.getMetaState())?.design) {
+    if (prepared.agentResult !== null && (await doc.getMetaState())?.design) {
       // Speculation predates durable design identity. Recreate through ordinary
       // startup so every design runtime receives the current launch/source context.
       await prepared.dispose();
@@ -1208,6 +1216,11 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         await prepared.dispose();
         return await this.createSessionInnerWithAgent(config, agentStart);
       }
+    }
+
+    if (prepared.agentResult === null) {
+      await prepared.dispose();
+      return await this.createSessionInnerWithAgent(config, agentStart);
     }
 
     try {

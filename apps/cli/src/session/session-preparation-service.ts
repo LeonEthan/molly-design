@@ -118,6 +118,7 @@ export class SessionPreparationService<T extends SessionPreparationResource> {
           void this.scheduleCleanup(record, resource);
           return;
         }
+        this.logger.debug(`[${record.sessionId}] Session preparation resource published`);
         try {
           resource.start?.();
         } catch (error) {

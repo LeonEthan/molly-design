@@ -87,10 +87,9 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 
 ## Sagas
 
-- `session-preparation-service.ts`: peek and claim never delay cold fallback, peek never transfers
-  ownership, and the resource is published BEFORE its `start()` hook. Preparation may create the
-  final marked worktree and complete `newSession`, but must not create a session doc, run setup,
-  append history, or publish events before adoption.
+- `session-preparation-service.ts`: peek never transfers ownership; peek/claim never delay cold fallback.
+  Publish before `start()`. Molly prepares only workspaces; ACP starts after durable adoption.
+  Other preparation may complete `newSession`. Before adoption: no session doc, setup, history or events.
 - Dispatch and claim rescan the current row and reject changed compatibility under canonical
   `buildSessionLaunchConfig` semantics; a published incompatible resource cleans up first.
 - Nested child Sessions are rejected: ownership resolves one parent hop only.

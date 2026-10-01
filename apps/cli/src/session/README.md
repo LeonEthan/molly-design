@@ -261,6 +261,13 @@ config.
 
 ### Speculative preparation
 
+Embedded Molly preparation creates only its workspace resource. It never starts an ACP
+worker or creates native history. After a compatible claim, the manager transfers workspace
+ownership, disposes the unused preparation sandbox, and reuses ordinary durable startup
+with the final cwd and design context. Cancellation and incompatible claims dispose without
+waiting for an ACP result. ACP readiness remains pending until disposal; workspace publication
+alone is sufficient to claim. See the [duplicate-history fix](../../../../.agents/notes/implemented/bug-fix/2026-10-01-duplicate-native-history.md).
+
 Peek and claim are synchronous published-resource snapshots. A prepared resource may reuse its
 open target-machine Flock to synchronously resolve launch config, but dispatch and claim
 rescan the current row. Durable creation claims the marker only when repo, source, and base

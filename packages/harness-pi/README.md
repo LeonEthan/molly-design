@@ -45,8 +45,11 @@ stores it through Pi's native `login` in the profile's `auth.json` and writes th
 connection's provider entry into `models.json`
 ([profile-credentials.ts](src/profile-credentials.ts)). Sub-agents, including detached
 background runners that outlive the turn, read those files. Connections that share a Pi
-provider ID share one entry; the last started worker wins. Deleting a connection does not
-yet remove its profile copy.
+provider ID share one entry; the last update under the profile lock wins. A process lock
+holds native login and the `models.json` read-merge-publish together, so concurrent updates
+retain other providers. The catalog is still replaced atomically, keeping readers from
+seeing a partial file. Lock contention has a bounded retry budget and fails the run rather
+than stealing from a live worker. Deleting a connection does not yet remove its profile copy.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
 including declared OpenAI-compatible models. Model and thinking selection are fixed per
@@ -78,7 +81,18 @@ Native histories keep the previous layout,
 `<private>/sessions/<sha256(connection)>/<sha256(product session)>/`, so sessions created by
 earlier releases restore unchanged ([native-session.ts](src/native-session.ts),
 [profile.ts](src/profile.ts)). An `.acp-lock` beside a history records its owner process and refuses a second writer; a
-lock whose owner has exited (the host stops workers with SIGKILL) is taken over.
+lock whose owner has exited (the host stops workers with SIGKILL) is taken over. Its
+`.acp-lock.guard` stays held through shutdown and marker removal; empty or malformed legacy
+markers remain untouched and refuse acquisition because their owner's exit is unproven.
+
+[process-lock.ts](src/process-lock.ts) provides both locks. It publishes a fully staged,
+nonempty directory containing a unique PID/UUID owner filename. Recovery removes only
+the exited owner's filename, then attempts a nonrecursive `rmdir`. A successor's nonempty
+directory survives a delayed recovery or release; release is idempotent. Only `ESRCH`
+proves exit, so permission errors, unexpected probe failures and reused PIDs keep a lock
+held. Empty abandoned guard directories are recoverable. These guards coordinate workers
+from this revision; already running workers from an earlier build must stop before using
+the repaired protocol. History files and their partition layout are unchanged.
 
 ## Build and verification
 
@@ -95,5 +109,8 @@ Package tests use the real SDK with synthetic providers in owned temporary profi
 [adapter\*.test.ts](tests) cover lifecycle, MCP, trust, usage and the managed host;
 [profile-packages.test.ts](tests/profile-packages.test.ts) loads every package natively,
 checks the safety floor blocks without prompting and answers a question through the GUI.
+[profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker and catalog-update
+races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
+competing reapers, delayed cleanup and real worker death without timed sleeps.
 One desktop design run (DeepSeek, text and shapes) completed without permission prompts;
 background sub-agents, image generation and other providers have not been verified.

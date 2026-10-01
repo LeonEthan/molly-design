@@ -14,7 +14,8 @@ Read [README](README.md) before changing session construction, packages or the b
   answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
 - Model keys arrive on fd 3 per run, are pinned in memory and stored through native
   `login` in the profile for sub-agents. Keys never enter ACP, argv, environment, native
-  history or diagnostics; errors carry static codes only.
+  history or diagnostics; errors carry static codes only. Serialize profile login and
+  provider read-merge-publish under one process lock; retain unrelated provider entries.
 - A run is fenced by exclusive creation of its run record before credentials or
   inference. An existing record means already dispatched: report
   `harness_run_already_dispatched` and never replay.
@@ -22,8 +23,10 @@ Read [README](README.md) before changing session construction, packages or the b
   Cancellation, truncation, handled commands and extension failures never become
   completed inference.
 - Serialize session construction; one managed worker owns one session, connection, model
-  and thinking level. Hold the history writer lock until shutdown completes; take over a
-  lock only when its recorded owner process has exited.
+  and thinking level. Hold the history writer guard through shutdown and legacy-marker
+  removal. Reclaim only an identified owner whose PID probe returns `ESRCH`; preserve
+  unidentified legacy markers. Reclamation and release remove only that owner's token
+  and an empty guard directory, never a successor's nonempty guard.
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.
 - MCP uses Pi's native MCP, codemode and tool search. Protected MCP values stay literal,

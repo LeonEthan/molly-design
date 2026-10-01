@@ -95,3 +95,35 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
   (25) pass. A freshly staged bundle verifies all 20,801 resources and its Settings
   inventory reports the live question package. No interactive desktop acceptance
   or live model inference was run for these fixes.
+
+### Concurrent profile writers
+
+Two subsequent P1 review findings reproduced with deterministic I/O barriers: stale
+history recovery admitted two writers, and atomic catalog replacement lost a different
+provider's simultaneous update. Both paths now use one harness-local process-owned
+directory lock. Publication stages a nonempty directory before rename; reclamation and
+release unlink only the observed owner's unique filename and remove only an empty
+directory. History keeps its existing PID marker behind a lifetime guard; release is
+idempotent. Profile login and catalog read-merge-publish hold the same profile lock,
+preserving unrelated providers while retaining same-provider replacement semantics.
+
+Reuse ladder: native `login`, history layout, hard-linked legacy markers and atomic
+catalog publication remain. The shared file lock repeats the check/unlink race, and
+the design lock uses age-based recovery and an unchecked rename. Adapting either
+would replace its protocol and broaden scope. Pi's file storage backend is private,
+writes in place and uses time-based leases; `proper-lockfile` also cannot guarantee
+that a live history writer keeps its lock. The new primitive supplies only the missing
+process ownership boundary, without a dependency, storage engine or Pi patch.
+
+A read-only Codex second opinion (`gpt-6-astra`, high) independently confirmed both
+races and supported the nonempty-directory algorithm. Its compatibility finding is
+applied explicitly: unidentified legacy markers fail closed, and only `ESRCH` permits
+PID recovery. Empty abandoned guard directories remain recoverable. A reused PID can
+conservatively block recovery. The protocol coordinates current workers; an already
+running pre-fix worker cannot be retroactively fenced and must exit before adoption.
+
+Verification uses real filesystem operations with explicit barriers for both original
+races, competing reapers and delayed release, plus an IPC-signaled worker killed with
+SIGKILL. The focused suite including managed-host coverage passes 45 tests, and harness
+typechecking passes. No live inference or interactive desktop acceptance was run for
+these concurrency fixes.

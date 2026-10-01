@@ -35,14 +35,31 @@ describe('native history writer lock', () => {
     await expect(readFile(`${file}.acp-lock`, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it.each([
-    ['a killed worker', async () => `${await exitedPid()}\n`],
-    ['an earlier lock without an owner', async () => ''],
-  ])('takes over a lock left by %s', async (_name, content) => {
+  it('takes over a lock left by a killed worker', async () => {
     const file = await history();
-    await writeFile(`${file}.acp-lock`, await content());
+    await writeFile(`${file}.acp-lock`, `${await exitedPid()}\n`);
     const release = await acquireSessionWriter(file);
     expect(await readFile(`${file}.acp-lock`, 'utf8')).toBe(`${process.pid}\n`);
     await release();
+  });
+
+  it.each(['', 'invalid', `${process.pid}invalid\n`])(
+    'preserves an unidentifiable legacy owner %j',
+    async (record) => {
+      const file = await history();
+      await writeFile(`${file}.acp-lock`, record);
+      await expect(acquireSessionWriter(file)).rejects.toMatchObject({ code: 'EEXIST' });
+      expect(await readFile(`${file}.acp-lock`, 'utf8')).toBe(record);
+    }
+  );
+
+  it('keeps a successor locked when the previous writer releases twice', async () => {
+    const file = await history();
+    const release = await acquireSessionWriter(file);
+    await release();
+    const successor = await acquireSessionWriter(file);
+    await release();
+    await expect(acquireSessionWriter(file)).rejects.toMatchObject({ code: 'EEXIST' });
+    await successor();
   });
 });

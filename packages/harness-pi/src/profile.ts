@@ -5,6 +5,7 @@ import type { SessionManager } from '@earendil-works/pi-coding-agent';
 import { createHash, randomUUID } from 'node:crypto';
 import { resolveProductNativeSession, validateNativeSession } from './native-session';
 import type { WorkerConfig } from './worker-config';
+import { acquireProcessLock, processExited } from './process-lock';
 
 export async function prepareProfile(agentDir: string): Promise<string> {
   if (!isAbsolute(agentDir)) throw new Error('pi_acp_profile_must_be_absolute');
@@ -57,38 +58,41 @@ export async function persistNativeHeader(manager: SessionManager): Promise<Sess
   return SessionManager.open(file, manager.getSessionDir(), manager.getCwd());
 }
 
-function ownerAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-}
-
-/**
- * Exclusive writer lock recording its owner process. Workers are stopped with SIGKILL, which
- * runs no cleanup, so a lock whose owner process no longer exists is taken over.
- */
 export async function acquireSessionWriter(file: string): Promise<() => Promise<void>> {
   const lock = `${file}.acp-lock`;
   const staged = `${lock}.${process.pid}.${randomUUID()}`;
-  await writeFile(staged, `${process.pid}\n`, { mode: 0o600, flag: 'wx' });
+  const releaseGuard = await acquireProcessLock(`${lock}.guard`);
   try {
+    await writeFile(staged, `${process.pid}\n`, { mode: 0o600, flag: 'wx' });
     try {
-      await link(staged, lock);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      const owner = Number.parseInt(await readFile(lock, 'utf8'), 10);
-      if (Number.isInteger(owner) && owner > 0 && ownerAlive(owner)) throw error;
-      await unlink(lock);
-      await link(staged, lock);
+      try {
+        await link(staged, lock);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        const record = await readFile(lock, 'utf8');
+        const owner = Number(record.trim());
+        if (!/^[1-9]\d*\n$/.test(record) || !Number.isSafeInteger(owner) || !processExited(owner))
+          throw error;
+        await unlink(lock);
+        await link(staged, lock);
+      }
+    } finally {
+      await unlink(staged);
     }
-  } finally {
-    await unlink(staged);
+  } catch (error) {
+    await releaseGuard();
+    throw error;
   }
-  return async () => {
-    await unlink(lock);
+  let release: Promise<void> | undefined;
+  return () => {
+    release ??= (async () => {
+      try {
+        await unlink(lock);
+      } finally {
+        await releaseGuard();
+      }
+    })();
+    return release;
   };
 }
 

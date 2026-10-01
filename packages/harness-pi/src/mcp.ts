@@ -91,8 +91,6 @@ export function acpMcpConfig(
     ];
     if (new Set(headers.map(({ name }) => name.toLowerCase())).size !== headers.length)
       throw new Error('pi_acp_mcp_duplicate_headers');
-    if (credential && !headers.some(({ name }) => name.toLowerCase() === 'authorization'))
-      throw new Error('pi_acp_mcp_protected_oauth_unsupported');
     return {
       name: server.name,
       config: {

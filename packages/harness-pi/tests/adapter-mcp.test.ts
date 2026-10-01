@@ -2,7 +2,9 @@ import { watch } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import type { McpCredentialBinding } from '@molly/shared/embedded-harness';
 import { fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai';
 import type {
   CreateElicitationRequest,
@@ -74,6 +76,99 @@ function fileSignal(directory: string, name: string) {
 }
 
 describe('owned Pi ACP native MCP integration', () => {
+  it('authenticates native HTTP MCP requests with literal protected custom headers', async () => {
+    const connection: McpCredentialBinding = {
+      workspaceId: 'workspace',
+      serverId: 'synthetic',
+      credentialRef: randomUUID(),
+      revision: 1,
+      destination: { transport: 'http', url: 'https://synthetic.invalid/mcp' },
+      fieldNames: ['X-Api-Key'],
+    };
+    const [selected] = acpMcpConfig(
+      [
+        {
+          name: 'synthetic',
+          type: 'http',
+          url: 'https://synthetic.invalid/mcp',
+          headers: [],
+          _meta: { mollyMcpCredential: connection },
+        },
+      ],
+      '/synthetic',
+      [{ connection, values: { 'X-Api-Key': '!SYNTHETIC${HOME}' } }]
+    );
+    if (!selected) throw new Error('Synthetic MCP configuration missing');
+    const requests: { method: string; key: string | null; authorization: string | null }[] = [];
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      expect(request.url).toBe('https://synthetic.invalid/mcp');
+      if (request.method !== 'POST') return new Response(null, { status: 405 });
+      const body = z
+        .object({ id: z.union([z.number(), z.string()]).optional(), method: z.string() })
+        .parse(await request.json());
+      requests.push({
+        method: body.method,
+        key: request.headers.get('x-api-key'),
+        authorization: request.headers.get('authorization'),
+      });
+      if (body.id === undefined) return new Response(null, { status: 202 });
+      const result =
+        body.method === 'initialize'
+          ? {
+              protocolVersion: '2025-03-26',
+              capabilities: { tools: {} },
+              serverInfo: { name: 'synthetic', version: '1' },
+            }
+          : body.method === 'tools/list'
+            ? {
+                tools: [
+                  {
+                    name: 'probe',
+                    description: 'Synthetic probe',
+                    inputSchema: { type: 'object', properties: {} },
+                  },
+                ],
+              }
+            : { content: [{ type: 'text', text: 'CUSTOM_HEADER_ACCEPTED' }] };
+      return Response.json({ jsonrpc: '2.0', id: body.id, result });
+    });
+    const f = await fixture({
+      extensions: [
+        {
+          name: 'synthetic-protected-http',
+          factory: (pi) => {
+            pi.registerMcpServer(selected.name, selected.config);
+          },
+        },
+      ],
+      responses: [tool('probe'), done()],
+    });
+    try {
+      await f.initialize();
+      const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
+      const result = await f.agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'Probe' }],
+      });
+      expect(result.stopReason).toBe('end_turn');
+      expect(f.prompts[1]).toContain('CUSTOM_HEADER_ACCEPTED');
+      expect(requests.map(({ method }) => method)).toContain('tools/call');
+      expect(
+        requests.every(
+          ({ key, authorization }) => key === '!SYNTHETIC${HOME}' && authorization === null
+        )
+      ).toBe(true);
+      expect(await readFile(join(f.agentDir, 'settings.json'), 'utf8')).not.toContain('!SYNTHETIC');
+      await expect(readFile(join(f.agentDir, 'mcp.json'), 'utf8')).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await f.agent.dispose();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('uses native codemode discovery and preserves MCP image/error/resource content', async () => {
     const f = await fixture({
       responses: [

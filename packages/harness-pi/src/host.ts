@@ -183,6 +183,7 @@ export class PiAcpHost {
         }
       });
       pi.on('before_provider_request', validate);
+      pi.on('session_before_compact', (event) => (event.willRetry ? { cancel: true } : undefined));
       pi.on('before_agent_start', (event, ctx) => {
         validate(event, ctx);
         if (!this.run) throw new Error('pi_acp_host_dispatch_missing');
@@ -331,7 +332,8 @@ export class PiAcpHost {
         });
       }
       const outcome = await this.execute(wrapper, params, run);
-      await this.journal.settle(snapshot.runId, snapshot.runtimeEpoch, outcome.native);
+      if (outcome.native.status !== 'completed')
+        await this.journal.settle(snapshot.runId, snapshot.runtimeEpoch, outcome.native);
       return {
         ...outcome.response,
         _meta: {
@@ -403,6 +405,11 @@ export class PiAcpHost {
     const native = NativeCompletionSchema.safeParse(response._meta?.piAcp);
     if (response.stopReason !== 'end_turn' || !native.success)
       throw new Error('pi_acp_host_native_completion_unavailable');
+    const completed: HarnessRunOutcome = {
+      status: 'completed',
+      nativeEndEntryId: native.data.nativeEndEntryId,
+    };
+    await this.journal.settle(snapshot.runId, snapshot.runtimeEpoch, completed);
     if (recalled?.enabled && wrapper.piSession.model) {
       try {
         const changes = await extractPersonalPreferences({
@@ -438,7 +445,7 @@ export class PiAcpHost {
     }
     return {
       response,
-      native: { status: 'completed', nativeEndEntryId: native.data.nativeEndEntryId },
+      native: completed,
       memory,
     };
   }

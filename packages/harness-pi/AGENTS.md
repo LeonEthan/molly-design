@@ -32,10 +32,14 @@ Read [README](README.md) before changing session construction, packages or the b
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.
 - MCP uses Pi's native MCP, codemode and tool search. Protected MCP values stay literal,
-  bind the workspace/server/revision and are never written to config files.
+  bind the workspace/server/revision and are never written to config files. HTTP header
+  credentials do not require an `Authorization` field.
+- Disable native agent/provider retries in the managed profile. The host's public
+  `session_before_compact` hook cancels recovery with `willRetry`; ordinary compaction remains.
 - Refresh host time, the read-before-edit reminder and personal memory through
   `before_agent_start`. Memory extraction never retries, restarts inference or changes a
-  completed outcome; cancellation fences saves. Append measured extraction usage to
+  completed outcome; persist native completion before extraction and let the caller
+  retain its validated receipt after cancellation. Cancellation fences saves. Append measured extraction usage to
   native history before abort/response validation; retain failed publication for the
   next cumulative flush without repeating inference or a usage delta.
 - Tests use the real SDK with synthetic providers in owned temporary profiles. No paid

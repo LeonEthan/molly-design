@@ -35,6 +35,11 @@ package state. Materialized text skills in the workdir's `.agents/skills` load t
 `DefaultResourceLoader.additionalSkillPaths`, independently of executable project trust.
 Tools run without permission checks.
 
+The managed settings disable native agent and provider retries. The main host's public
+`session_before_compact` hook also cancels overflow/truncation recovery when Pi would
+retry inference; ordinary compaction remains available. These settings do not change
+the unmodified sub-agent package's separate lifecycle behavior.
+
 In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form dialog
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
 widgets, footers, autocomplete and the sub-agent fleet view are unavailable.
@@ -74,6 +79,11 @@ reported distinctly. Native usage is projected to Core usage notifications
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.
+Custom HTTP headers such as `X-API-Key` are valid without `Authorization`; the vault
+values replace public headers case-insensitively and reach native requests literally.
+They stay in extension configuration in memory. Pi may use its normal OAuth fallback
+after a 401 when no Authorization header exists; this does not turn the custom header
+into OAuth credentials or persist that header in native OAuth state.
 Known upstream defect: [Pi #10249](https://github.com/earendil-works/pi/issues/10249) — a
 server still starting during shutdown can outlive it. Molly does not patch around it.
 
@@ -82,6 +92,12 @@ fences the run with an exclusive record in `<private>/runs` before reading crede
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
 read-before-edit reminder and recalled personal preferences through `before_agent_start`,
 and extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
+The native completion receipt is durably settled before extraction starts. Caller
+cancellation sends ACP cancel and retains the pending response until native settlement;
+the CLI validates the run, epoch and current catalog before accepting it. Revoked workers
+and invalid receipts still fail. Explicit Stop keeps dispatch paused and cancels artifact
+finalization, independently of the completed native response; existing Stop escalation
+still applies if the worker cannot settle.
 The extraction result's measured provider/model usage is appended through native
 `SessionManager.appendUsage` before cancellation, stop-reason or JSON validation, then
 projected through the same Core notification path. Extracted text stays transient.
@@ -123,6 +139,10 @@ Package tests use the real SDK with synthetic providers in owned temporary profi
 [adapter\*.test.ts](tests) cover lifecycle, MCP, trust, usage and the managed host;
 [profile-packages.test.ts](tests/profile-packages.test.ts) loads every package natively,
 checks the safety floor blocks without prompting and answers a question through the GUI.
+[CLI cancellation integration](../../apps/cli/tests/embedded-harness-cancellation.test.ts)
+reuses the managed synthetic worker through real ACP and the production Session/client/control
+path. MCP tests exercise custom header requests through an in-memory fetch transport;
+profile/host tests cover transient failures and refused overflow/truncation recovery.
 [profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker and catalog-update
 races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
 competing reapers, delayed cleanup and real worker death without timed sleeps.

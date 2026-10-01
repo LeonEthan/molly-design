@@ -182,3 +182,60 @@ The 63 focused harness tests and 20 Node guard tests pass. Full `pnpm check`,
 changes leave the regenerated lockfile unchanged. A fresh sealed bundle verifies
 20,801 resources and passes its loopback synthetic turn. Injected bundled-worker
 version probes reject 22.18/23.5 and accept 22.19/23.6; the actual local Node is 22.22.0.
+
+### Caller cancellation, native retries and custom MCP headers
+
+[The next review](https://github.com/LeonEthan/molly-design/pull/55#discussion_r4157000690)
+identified that the earlier worker-only cancellation test did not establish receipt
+delivery through the CLI. `AgentClient` rejected immediately on abort, and the control
+layer independently rejected after receipt delivery. The managed caller now sends ACP
+cancel and retains raw settlement; the worker persists native completion before memory
+extraction. Control accepts only matching run/epoch/native outcomes from a live worker
+whose frozen connection and image catalog are still current. This final catalog check
+matters because a user abort removes the model lease and its revocation subscription.
+Pre-dispatch cancellation, invalid receipts and catalog revocation still fail closed.
+
+Reuse ladder: reuse raw ACP completion, the existing cancellation drain/escalation,
+run journal, catalog comparison and memory-save cancellation fences. Returning before
+extraction was rejected because it would require independent ownership for credentials,
+usage, history writing and shutdown. No auxiliary protocol or new outcome ledger is
+introduced. A read-only Codex second opinion (`gpt-6-astra`, high) supported this option
+and identified the post-abort catalog gap; its advice was reviewed and applied explicitly.
+The trade-off remains that extraction delays ACP settlement and can reach the existing
+Stop escalation. A native completed receipt does not override explicit Stop's durable
+dispatch pause or cancelled artifact finalization. No stopped design task is promoted
+to successful completion, and no task is automatically replayed.
+
+The managed profile restores `retry.enabled: false`, `retry.maxRetries: 0` and explicit
+provider `maxRetries: 0`. The second opinion found that native overflow/length compaction
+recovery bypasses that setting. The existing host extension now cancels the public
+`session_before_compact` event only when `willRetry` is true, preserving ordinary
+compaction instead of disabling it globally. Native omission edits can precede that
+hook; raw history is retained, while no summary or continuation inference is issued.
+The unmodified sub-agent package's separate recovery and lifecycle policies are not
+changed by this main-host hook; the existing sub-agent discussion remains open.
+
+Protected HTTP credentials now accept custom fields such as `X-API-Key` without an
+Authorization field. The existing schema, fd-3 binding, case-insensitive replacement,
+duplicate rejection and literal escaping remain authoritative. The old guard inferred
+OAuth intent from the header name and rejected valid catalog entries. No replacement
+MCP transport or synthetic Authorization header is needed. Pi can still follow its
+native OAuth fallback after a 401 and read/write its own OAuth state; the protected
+custom header is neither forwarded as OAuth credentials nor written into that state.
+
+Verification reuses the managed real-SDK fixture across harness and CLI tests. The new
+integration traverses `Session.promptEmbeddedHarness`, the real ACP client/connection,
+control and worker, cancels at an explicit extraction-usage barrier, and checks durable
+native completion, no memory capture and a reusable worker. Control tests cover
+post-cancel catalog mutation and existing revoked/invalid receipts. Production-profile
+tests exercise a transient provider error, and both overflow and truncated-response
+recovery with a summarizable synthetic history. A second read-only opinion confirmed
+why the initial fixture missed compaction: the retained whole message left no prefix
+to summarize. Native HTTP tests use in-memory fetch responses and confirm the literal
+custom header on actual MCP initialization/tool requests without network or paid calls.
+No interactive desktop or real-provider acceptance is claimed for these fixes.
+
+Full `pnpm check` passes, including 135 harness tests, 3,054 CLI tests, typechecking,
+lint and platform/public-boundary checks. `pnpm install`, `pnpm format` and documentation
+checks pass. A fresh Pi 0.99.2 bundle verifies 20,801 resources and passes the loopback
+synthetic smoke turn with 33 commands and native tools available.

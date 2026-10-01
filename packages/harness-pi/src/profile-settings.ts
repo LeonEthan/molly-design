@@ -58,6 +58,7 @@ export function createProfileSettings() {
     defaultProjectTrust: 'never',
     enableAnalytics: false,
     enableInstallTelemetry: false,
+    retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
     subagents: {
       defaultExtensions: SUBAGENT_DEFAULT_PACKAGES.flatMap(packageExtensions),
       agentOverrides: Object.fromEntries(

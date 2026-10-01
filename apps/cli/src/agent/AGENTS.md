@@ -42,6 +42,10 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   termination and connection closure abort their questions; late answers grant nothing.
 - Embedded Molly requests no tool permissions; the embedded control still checks run,
   epoch and connection ownership.
+- Embedded prompt abort sends ACP cancel and awaits native settlement. Accept a valid
+  completed or cancelled receipt only from a live worker with its frozen catalog still
+  current; a user abort does not retire it. Pre-dispatch abort and revocation fail closed.
+  Keep Stop escalation, dispatch pause and cancelled artifact finalization authoritative.
 - Acknowledged steer is inject-or-refuse. `AgentSteerNotDeliveredError` requires local pre-write
   failure or agent JSON-RPC `invalid request`. Await the steer answer before abandoning the
   turn response; never classify uncertain delivery as refusal.

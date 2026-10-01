@@ -26,7 +26,6 @@ async function useProfile(agentDir: string) {
     join(agentDir, 'settings.json'),
     JSON.stringify({
       ...createProfileSettings(),
-      retry: { enabled: false },
       compaction: { enabled: false },
     })
   );
@@ -43,7 +42,11 @@ describe('application Pi profile packages', () => {
     vi.stubEnv('PI_CODING_AGENT_DIR', agentDir);
     await writeProfileSettings(agentDir);
     const settings = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8'));
-    expect(settings).toMatchObject({ defaultProjectTrust: 'never', enableAnalytics: false });
+    expect(settings).toMatchObject({
+      defaultProjectTrust: 'never',
+      enableAnalytics: false,
+      retry: { enabled: false, maxRetries: 0 },
+    });
     expect(settings.subagents.defaultExtensions).toEqual([
       expect.stringMatching(/cc-safety-net[/\\]dist[/\\]pi[/\\]index\.js$/),
     ]);
@@ -79,6 +82,27 @@ describe('application Pi profile packages', () => {
     expect(externalCliSubagents()).toContain('codex-exec');
     expect(names).toContain('worker');
     expect(names.filter((name) => externalCliSubagents().includes(name))).toEqual([]);
+  });
+
+  it('fails a retryable provider response without another inference under production settings', async () => {
+    const unexpectedRetry = fauxAssistantMessage('A retry must not run.');
+    const f = await fixture({
+      responses: [
+        fauxAssistantMessage('', { stopReason: 'error', errorMessage: '503 Service Unavailable' }),
+        unexpectedRetry,
+      ],
+    });
+    await writeProfileSettings(f.agentDir);
+    expect(SettingsManager.create(f.cwd, f.agentDir).getRetrySettings()).toMatchObject({
+      enabled: false,
+      maxRetries: 0,
+    });
+    await f.initialize();
+    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
+    await expect(
+      f.agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Go' }] })
+    ).rejects.toThrow('pi_acp_native_execution_failed');
+    expect(f.responses).toEqual([unexpectedRetry]);
   });
 
   it('blocks a destructive shell command through the safety floor without asking', async () => {

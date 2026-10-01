@@ -97,13 +97,13 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 凭据授予关联实际 run、worker epoch 和连接 revision。工具运行不做权限检查，与 Pi 自身默认一致：Molly 不请求工具审批，不增加自动审批、分类器或操作系统沙箱，也不记录审批来源。唯一底线是 `cc-safety-net`，主 Agent 与每个子 Agent 都会加载：它确定性地拦截已知的破坏性 shell 和文件命令（例如递归删除主目录或根目录、强制 Git reset），并把拦截作为普通工具错误返回给 Agent，不弹出提示。它防范意外，不是沙箱；Agent 仍能读写和运行用户能做的一切。公开先读提醒既不是读证明，也不是写授权。
 
-主会话的模型请求、个人记忆提取和压缩通过原生使用量记录归属其明确连接。提取在取消或响应校验前追加实测的 provider/model 使用量，文本保持临时状态；capture 失败保留已完成的主响应回执和计量。发布失败保留待发状态，以后发送累计快照，不重复推理或增量；子 Agent 请求使用同一连接，但不计入会话使用量；首版标题由用户首句本地生成。Molly 不因传输失败自动重启整个用户任务；MCP 内部连接恢复遵循下文原版组件的语义。费用无可靠依据时显示未知或估算。
+主会话的模型请求、个人记忆提取和压缩通过原生使用量记录归属其明确连接。提取在取消或响应校验前追加实测的 provider/model 使用量，文本保持临时状态；capture 失败保留已完成的主响应回执和计量。原生完成在提取前持久化。调用方取消保留有效的已完成响应，而用户明确 Stop 仍暂停派发并取消产物收尾；回执不将已停止的设计任务变为成功。发布失败保留待发状态，以后发送累计快照，不重复推理或增量；子 Agent 请求使用同一连接，但不计入会话使用量；首版标题由用户首句本地生成。托管配置禁用原生 Agent 和 provider 重试，主会话的上下文溢出或截断恢复不得重复推理。Molly 不因传输失败自动重启整个用户任务；MCP 内部连接恢复遵循下文原版组件的语义。费用无可靠依据时显示未知或估算。
 
 ### MCP 与付费图片
 
 2026-09-28 方向修订，2026-10-01 因 Pi 内置 MCP 更新：采用普通 coding agent 的标准链路：`Pi Agent → Pi 原生 MCP → Molly 图片 MCP server → 图片服务`。该链路已基于 Pi 原生 MCP 实施（[PR #55](https://github.com/LeonEthan/molly-design/pull/55)）；决策及历史证据见[迁移记录](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md)。
 
-使用锁定 SDK 的公开 `createMcpExtension`、codemode 和 tool-search 扩展，通过 `registerMcpServer` 注册已选择的服务器。Molly 只提供已选择的 MCP 配置，以及公开接口需要的常规宿主接入；工具发现、命名、schema、调用、结果处理、目录更新、连接恢复和关闭沿用 Pi 原生 MCP。已知上游缺陷（[Pi #10249](https://github.com/earendil-works/pi/issues/10249)）可能让关闭时仍在启动的服务器继续运行；Molly 记录该问题，不绕过修补。不修改 Pi 或其包，不维护依赖补丁、fork、定制 host-managed profile、传输拦截器或第二套 MCP 客户端，不等待上游接受 Molly 专用接口。普通配置不等于开启全部可选功能。
+使用锁定 SDK 的公开 `createMcpExtension`、codemode 和 tool-search 扩展，通过 `registerMcpServer` 注册已选择的服务器。Molly 只提供已选择的 MCP 配置，以及公开接口需要的常规宿主接入；工具发现、命名、schema、调用、结果处理、目录更新、连接恢复和关闭沿用 Pi 原生 MCP。受保护的 HTTP 凭据可使用不含 Authorization 的自定义 header；值保持字面量，绑定选中的 server，且不写入配置文件。Pi 保留其原生 OAuth 回退语义。已知上游缺陷（[Pi #10249](https://github.com/earendil-works/pi/issues/10249)）可能让关闭时仍在启动的服务器继续运行；Molly 记录该问题，不绕过修补。不修改 Pi 或其包，不维护依赖补丁、fork、定制 host-managed profile、传输拦截器或第二套 MCP 客户端，不等待上游接受 Molly 专用接口。普通配置不等于开启全部可选功能。
 
 Molly 图片 MCP server 像普通图片工具一样接收参数、使用用户明确配置的图片服务与模型、校验并保存图片文件，再通过标准 MCP 结果返回可使用的路径、图片或错误。复用已有普通调用路径；私有图片字节 `_meta` 协议和宿主二次导入回调不作为必要步骤。Agent 通过普通工具读取图片并修改画稿。外部 MCP 工具同样按其原生 schema 和结果使用，不要求先经过 Molly 图片字段映射或私有回执转换。
 

@@ -1,214 +1,68 @@
-import { PassThrough } from 'node:stream';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { ModelRuntime, type InlineExtension } from '@earendil-works/pi-coding-agent';
-import { createAssistantMessageEventStream, fauxAssistantMessage } from '@earendil-works/pi-ai';
+import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { CreateElicitationRequest, CreateElicitationResponse } from '@agentclientprotocol/sdk';
 import { parseAskUserQuestionElicitationRequest } from '@molly/shared';
 import {
-  HarnessSessionBindingSchema,
   HarnessQuestionIdentitySchema,
   MOLLY_PROVIDER_IDS,
-  PI_ENGINE_VERSION,
-  type HarnessRunSnapshot,
   type McpCredentialBinding,
 } from '@molly/shared/embedded-harness';
-import { PiAcpHost } from '../src/host';
-import { PiAcpAgent } from '../src/agent';
 import { acpMcpConfig } from '../src/mcp';
 import type { AdapterPeer } from '../src/session';
-import { PrivateControlPipe } from '../src/private-control-pipe';
-import type { WorkerConfig } from '../src/worker-config';
-import { fixture, deferred } from './fixtures/adapter';
+import { deferred } from './fixtures/adapter';
 import { z } from 'zod';
 import { LODY_EXTENSION_METHODS } from 'acp-extension-core';
 import { HARNESS_MEMORY_METHOD } from '@molly/shared/personal-memory';
-import { createWorkerEnvironment } from '../src/environment';
+
+import { managed } from './fixtures/managed';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
-async function managed(
-  options: {
-    extensions?: InlineExtension[];
-    peer?: Partial<AdapterPeer>;
-    length?: boolean;
-    memoryResponse?: string;
-    config?: Partial<WorkerConfig>;
-  } = {}
-) {
-  const f = await fixture();
-  const config: WorkerConfig = {
-    schemaVersion: 1,
-    runtimeEpoch: randomUUID(),
-    productSessionId: 'product-session',
-    workspaceId: 'workspace',
-    privateRoot: f.root,
-    cwd: f.cwd,
-    shellPath: '/bin/sh',
-    harness: {
-      id: 'molly',
-      engine: 'pi',
-      engineVersion: PI_ENGINE_VERSION,
-      buildId: 'synthetic',
-      protocolVersion: 1,
-    },
-    connection: {
-      schemaVersion: 1,
-      id: 'connection',
-      revision: 1,
-      providerPresetId: 'openai-compatible',
-      displayName: 'Synthetic',
-      baseUrl: 'https://synthetic.invalid/v1',
-      credentialRef: 'protected-reference',
-      enabled: true,
-      customModels: [
-        {
-          modelId: 'model',
-          name: 'Synthetic',
-          input: ['text', 'image'],
-          contextWindow: 200000,
-          maxTokens: 4096,
-          thinking: ['off'],
-          toolCalls: true,
-          usageInStreaming: false,
-          maxTokensField: 'max_tokens',
-        },
-      ],
-    },
-    selection: { connectionId: 'connection', modelId: 'model', thinking: 'off' },
-    systemPrompt: 'Synthetic host context.',
-    permissionProfileId: 'native-profile',
-    ...options.config,
-  };
-  const pipe = new PassThrough();
-  const agentDir = createWorkerEnvironment({}, config).PI_CODING_AGENT_DIR!;
-  await mkdir(agentDir, { recursive: true });
-  await writeFile(
-    join(agentDir, 'settings.json'),
-    await readFile(join(f.agentDir, 'settings.json'))
-  );
-  vi.stubEnv('PI_CODING_AGENT_DIR', agentDir);
-  const peer: AdapterPeer = {
-    sessionUpdate: async (update) => {
-      f.updates.push(update);
-    },
-    ...options.peer,
-  };
-  const host = new PiAcpHost(config, new PrivateControlPipe(pipe), peer);
-  const observed: string[] = [];
-  let selectedRuntime!: ModelRuntime;
-  const create = ModelRuntime.create.bind(ModelRuntime);
-  vi.spyOn(ModelRuntime, 'create').mockImplementation(async (args) => {
-    const runtime = await create(args);
-    selectedRuntime = runtime;
-    runtime.registerProvider(providerId, {
-      baseUrl: config.connection.baseUrl,
-      api: 'openai-completions',
-      streamSimple: (model, context, opts) => {
-        const stream = createAssistantMessageEventStream();
-        void (async () => {
-          try {
-            await opts?.onPayload?.({ synthetic: true }, model);
-            observed.push(JSON.stringify(context));
-            const extraction = JSON.stringify(context).includes('Extract only explicitly stated');
-            const message = {
-              ...fauxAssistantMessage(
-                extraction
-                  ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
-                  : 'Synthetic answer.',
-                {
-                  stopReason: options.length ? 'length' : 'stop',
-                }
-              ),
-              provider: model.provider,
-              model: model.id,
-              api: model.api,
-              usage: {
-                input: extraction ? 3 : 23,
-                output: extraction ? 1 : 5,
-                cacheRead: 0,
-                cacheWrite: 0,
-                totalTokens: extraction ? 4 : 28,
-                cost: {
-                  input: extraction ? 0.015 : 0,
-                  output: 0,
-                  cacheRead: 0,
-                  cacheWrite: 0,
-                  total: extraction ? 0.015 : 0,
-                },
-              },
-            };
-            stream.push({ type: 'done', reason: options.length ? 'length' : 'stop', message });
-            stream.end();
-          } catch {
-            stream.push({
-              type: 'error',
-              reason: 'error',
-              error: fauxAssistantMessage('', { stopReason: 'error' }),
-            });
-            stream.end();
-          }
-        })();
-        return stream;
-      },
-    });
-    return runtime;
-  });
-  const agent = new PiAcpAgent(peer, {
-    agentDir,
-    host,
-    extensions: options.extensions,
-  });
-  f.trackAgent(agent);
-  await agent.initialize({
-    protocolVersion: 1,
-    ...(options.peer?.request ? { clientCapabilities: { elicitation: { form: {} } } } : {}),
-  });
-  function grant(snapshot: HarnessRunSnapshot, key = 'SYNTHETIC_SECRET') {
-    pipe.write(
-      `${JSON.stringify({ type: 'credential', runtimeEpoch: snapshot.runtimeEpoch, runId: snapshot.runId, apiKey: key })}\n`
-    );
-  }
-  async function open() {
-    const response = await agent.newSession({ cwd: f.cwd, mcpServers: [] });
-    const binding = HarnessSessionBindingSchema.parse(response._meta?.mollyRuntime);
-    const snapshot: HarnessRunSnapshot = {
-      schemaVersion: 1,
-      runId: 'run',
-      runtimeEpoch: config.runtimeEpoch,
-      sessionId: config.productSessionId,
-      turnId: 'turn',
-      connection: config.connection,
-      selection: config.selection,
-      harness: config.harness,
-      toolsetHash: binding.toolsetHash,
-      pluginSetHash: binding.pluginSetHash,
-      permissionProfileId: config.permissionProfileId,
-    };
-    const prompt = (text = 'Hello', override = snapshot) =>
-      agent.prompt({
-        sessionId: response.sessionId,
-        prompt: [{ type: 'text', text }],
-        _meta: { mollyRunSnapshot: override },
-      });
-    return { response, binding, snapshot, prompt };
-  }
-  return {
-    ...f,
-    agentDir,
-    agent,
-    host,
-    config,
-    pipe,
-    grant,
-    open,
-    observed,
-    runtime: () => selectedRuntime,
-  };
-}
-
 describe('owned ACP host integration', () => {
+  it.each(['overflow', 'length'] as const)(
+    'refuses automatic %s compaction recovery before another model request',
+    async (failure) => {
+      const compactions: { reason: string; aborted: boolean; willRetry: boolean }[] = [];
+      const f = await managed({
+        productionProfile: true,
+        length: failure === 'length',
+        providerError: failure === 'overflow' ? 'maximum context length exceeded' : undefined,
+        extensions: [
+          {
+            name: 'observe-compaction',
+            factory: (pi) => {
+              pi.on('session_start', () => {
+                pi.sendMessage({
+                  customType: 'synthetic-history',
+                  content: 'x'.repeat(100_000),
+                  display: false,
+                });
+              });
+              pi.on('session_compact_failed', (event) => {
+                compactions.push({
+                  reason: event.reason,
+                  aborted: event.aborted,
+                  willRetry: event.willRetry,
+                });
+              });
+            },
+          },
+        ],
+      });
+      const session = await f.open();
+      f.grant(session.snapshot);
+      await expect(session.prompt('Synthetic request. '.repeat(8_000))).rejects.toThrow(
+        'pi_acp_host_execution_failed'
+      );
+      expect(f.observed).toHaveLength(1);
+      expect(compactions).toEqual([{ reason: 'overflow', aborted: true, willRetry: false }]);
+      const history = await readFile(session.binding.nativeSessionFile, 'utf8');
+      expect(history).not.toContain('"type":"compaction"');
+    }
+  );
+
   it('projects actual native usage through the existing Core notification and ACP context channels', async () => {
     const notifications: { method: string; params: Record<string, unknown> }[] = [];
     const f = await managed({
@@ -840,7 +694,7 @@ describe('owned ACP host integration', () => {
     expect(await readFile(join(f.agentDir, 'settings.json'), 'utf8')).not.toContain('!$VALUE');
   });
 
-  it('rejects custom-header credentials that could silently fall through to native OAuth', () => {
+  it('accepts protected custom HTTP headers and replaces public values case-insensitively', () => {
     const connection: McpCredentialBinding = {
       workspaceId: 'workspace',
       serverId: 'server',
@@ -849,21 +703,33 @@ describe('owned ACP host integration', () => {
       destination: { transport: 'http', url: 'https://synthetic.invalid/mcp' },
       fieldNames: ['X-Api-Key'],
     };
-    expect(() =>
+    expect(
       acpMcpConfig(
         [
           {
             type: 'http',
             name: 'server',
             url: connection.destination.transport === 'http' ? connection.destination.url : '',
-            headers: [],
+            headers: [
+              { name: 'x-api-key', value: 'stale' },
+              { name: 'X-Public', value: 'public' },
+            ],
             _meta: { mollyMcpCredential: connection },
           },
         ],
         '/synthetic',
-        [{ connection, values: { 'X-Api-Key': 'secret' } }]
+        [{ connection, values: { 'X-Api-Key': '!secret${HOME}' } }]
       )
-    ).toThrow('pi_acp_mcp_protected_oauth_unsupported');
+    ).toEqual([
+      {
+        name: 'server',
+        config: {
+          type: 'http',
+          url: 'https://synthetic.invalid/mcp',
+          headers: { 'X-Public': 'public', 'X-Api-Key': '$!secret$${HOME}' },
+        },
+      },
+    ]);
   });
 
   it('restores a previous-release history from any connection partition without rewriting it', async () => {

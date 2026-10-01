@@ -28,6 +28,14 @@ never reads credentials, tests inference or changes the user's existing Agent se
 Embedded Molly title generation uses the first local user sentence without spawning
 a title worker or requesting model inference.
 
+Embedded prompt cancellation sends ACP cancel while retaining the native response.
+`embedded-harness-control.ts` accepts a completed or cancelled receipt only when its
+run/epoch matches and the worker and frozen catalog remain valid. It rechecks the catalog
+after settlement because user cancellation releases the credential lease. Pre-dispatch
+abort, revocation and invalid receipts still retire the worker. A completed response is
+separate from explicit Stop's dispatch pause and cancelled artifact finalization; Stop
+draining and escalation remain owned by Session execution.
+
 `session-mcp-resolver.ts` binds embedded workers to selected catalog snapshots and live
 invalidation guards. Shared catalog writers assign revisions in both CLI and renderer.
 AgentClient rechecks after permission delivery; Session retires only the captured worker.

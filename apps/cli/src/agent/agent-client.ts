@@ -2749,10 +2749,10 @@ export class AgentClient implements acp.Client {
 
       this.trackPendingExecution(promptPromise);
       this.providerPromptCompletion = { sessionId, promise: promptPromise };
-      if (
+      const isEmbeddedHarness =
         this.options.agentConfig?.cliType === 'builtin' &&
-        this.options.agentConfig.agentType === 'molly'
-      ) {
+        this.options.agentConfig.agentType === 'molly';
+      if (isEmbeddedHarness) {
         const run = z
           .object({ runId: z.string(), runtimeEpoch: z.string().uuid() })
           .passthrough()
@@ -2784,9 +2784,10 @@ export class AgentClient implements acp.Client {
                     `[${this.options.sessionId}] Failed to cancel aborted prompt: ${formatErrorMessage(error)}`
                   );
                 });
-                reject(new Error('Agent prompt aborted'));
+                if (!isEmbeddedHarness) reject(new Error('Agent prompt aborted'));
               };
               abortSignal.addEventListener('abort', abortListener, { once: true });
+              if (abortSignal.aborted) abortListener();
             })
           : null;
         const completion = abortPromise

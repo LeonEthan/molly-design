@@ -1,6 +1,6 @@
 # Embedded Pi on native packages, without permission checks
 
-Status: proposed (implemented on branch `feat/pi-native-addons`, desktop run pending)
+Status: proposed (implemented on branch `feat/pi-native-addons`)
 Date: 2026-10-01
 Translation: pending
 
@@ -59,5 +59,8 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
   starting at shutdown can outlive it. Not patched.
 - Evidence: real-SDK package tests (all six load; safety floor blocks without prompting;
   question answered through the GUI dialog), host tests, a bundled smoke with a loopback
-  model, and `pnpm check`. No desktop design run, real provider or background sub-agent
-  run has been verified.
+  model, and `pnpm check`. One desktop design run on the locally built app (DeepSeek V4.1
+  Flash, text-and-shape poster brief) completed natively in 5m41s with zero permission
+  prompts: 69 tool calls including MCP through codemode, three ordinary tool errors the
+  Agent handled, a rendered and autosaved artwork. Human visual review, background
+  sub-agents, image generation and other providers remain unverified.

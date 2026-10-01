@@ -86,4 +86,5 @@ Package tests use the real SDK with synthetic providers in owned temporary profi
 [adapter\*.test.ts](tests) cover lifecycle, MCP, trust, usage and the managed host;
 [profile-packages.test.ts](tests/profile-packages.test.ts) loads every package natively,
 checks the safety floor blocks without prompting and answers a question through the GUI.
-A real desktop design run and background sub-agent runs have not been verified.
+One desktop design run (DeepSeek, text and shapes) completed without permission prompts;
+background sub-agents, image generation and other providers have not been verified.

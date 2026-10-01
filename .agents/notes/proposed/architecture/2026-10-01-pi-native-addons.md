@@ -50,8 +50,10 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
 
 ## Limits and follow-ups
 
-- Profile keys are plaintext (owner-only file) under Molly data. Connections sharing a Pi
-  provider ID share one entry; deleting a connection does not yet remove it.
+- Profile keys are plaintext (owner-only file) under Molly data. Worker epochs now have
+  separate native profiles; deleting a connection does not yet remove those copies or
+  revoke detached children's keys. Trust grants and package state are also scoped to the
+  worker profile and are not inherited by a fresh worker.
 - Background sub-agents can keep editing after a turn ends, outside the canvas read-only
   window; design commits still check versions and CAS. Their usage is not counted.
 - Without permission checks, untrusted content can steer any command the user can run.
@@ -127,3 +129,56 @@ races, competing reapers and delayed release, plus an IPC-signaled worker killed
 SIGKILL. The focused suite including managed-host coverage passes 45 tests, and harness
 typechecking passes. No live inference or interactive desktop acceptance was run for
 these concurrency fixes.
+
+### Connection credentials, Node floor and extraction accounting
+
+[Three later review findings](https://github.com/LeonEthan/molly-design/pull/55#discussion_r4156220458)
+identified a same-provider credential collision, an advertised Node range below Pi's
+requirement, and unaccounted personal-memory inference. A read-only Codex second opinion
+(`gpt-6-astra`, high) confirmed that a foreground child's copied provider configuration
+could use A's endpoint with B's overwritten key; detached children reconstruct both from
+the shared files. The advice was reviewed and the following changes applied explicitly.
+
+Reuse ladder: retain native provider IDs, file-backed `ModelRuntime`, `login`, fd-3 grants
+and the existing epoch binding, deriving an ordinary `PI_CODING_AGENT_DIR` for each epoch
+at CLI launch and before SDK import. Provider aliases were rejected because the public
+registration API does not copy executable built-in provider behavior for detached
+children. A connection/revision directory handles the current Settings save path, but
+cannot distinguish different keys granted against one secret-free snapshot. Epoch
+isolation plus an immutable first key closes that case without another identity or
+credential store. A changed grant retires the worker before either key is replaced;
+rotation needs a fresh worker and no fenced run is automatically replayed.
+
+Old profiles remain untouched and are not imported, so saved native trust grants and
+package state no longer carry across workers. This is an explicit cost of isolation;
+materialized workdir text skills and native shared skills continue to load. Product
+history partitions and native UUID restoration remain independent of profiles. This
+does not reclaim plaintext keys, revoke an old child or settle detached mutations.
+The harness Spec already remains draft; both translations document the changed scope.
+
+The workspace and CLI manifests, preinstall/startup guards and contributor guidance now
+use `>=22.19.0 <23 || >=23.6.0` with Node-API 10. Pi 0.99.2 needs Node 22.19 even though
+22.14 meets SQLite's ABI requirement. The existing guards and boundary-test pattern are
+reused; the independent SQLite backend retains its actual Node-API requirement. The
+upstream-adoption Spec's changed minimum returns both translations to draft, retaining
+the previous approval reference.
+
+Memory extraction reuses the owning `ModelRuntime` and public
+`SessionManager.appendUsage`, then the existing Core usage projector. The result is
+accounted before abort, stop-reason or JSON validation; no extracted text or synthetic
+assistant receipt is stored. Malformed responses, cancellation and capture failures
+preserve measured usage and the completed main receipt. The second opinion also found
+that failed notification delivery advanced the accumulator without a retryable update;
+the projector now retains its cumulative snapshot until a later successful flush,
+without duplicating a native usage entry, delta or paid inference.
+
+Verification uses real native runtimes with two same-preset workers and reconstructed
+foreground/detached child credentials, a changed-grant rejection, Node boundary cases,
+and extraction success, malformed JSON, cancellation, restore and delivery failure.
+No paid inference or interactive desktop acceptance was run for these changes.
+
+The 63 focused harness tests and 20 Node guard tests pass. Full `pnpm check`,
+`pnpm format`, `pnpm run docs check` and `pnpm install` pass; engine-only manifest
+changes leave the regenerated lockfile unchanged. A fresh sealed bundle verifies
+20,801 resources and passes its loopback synthetic turn. Injected bundled-worker
+version probes reject 22.18/23.5 and accept 22.19/23.6; the actual local Node is 22.22.0.

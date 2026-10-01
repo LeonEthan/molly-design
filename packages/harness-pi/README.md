@@ -8,8 +8,9 @@ Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
 
 ## Pi profile
 
-Each worker runs with `PI_CODING_AGENT_DIR=<molly-data>/harness/pi/config`, Molly's own Pi
-agent directory. It never reads or writes the user's `~/.pi/agent`. On startup the worker
+Each worker runs with `PI_CODING_AGENT_DIR=<molly-data>/harness/pi/config/workers/<sha256(runtimeEpoch)>`,
+its own native Pi agent directory. The launch environment and worker bootstrap derive
+the same path before importing the SDK. It never reads or writes the user's `~/.pi/agent`. On startup the worker
 writes the profile's `settings.json` from [profile-settings.ts](src/profile-settings.ts):
 
 | Package                              | Purpose                                        |
@@ -28,8 +29,9 @@ native package discovery; none is patched or forked. `cc-safety-net` is also lis
 disabled through `subagents.agentOverrides`: they would run on another account and skip that
 list.
 `defaultProjectTrust` is `never`: opening a directory does not authorize its `.pi`
-settings, packages or JavaScript extensions. Pi's native saved trust grants remain
-authoritative. Materialized text skills in the workdir's `.agents/skills` load through
+settings, packages or JavaScript extensions. Pi's saved trust grants remain authoritative
+inside that worker profile; a fresh worker does not inherit another profile's grants or
+package state. Materialized text skills in the workdir's `.agents/skills` load through
 `DefaultResourceLoader.additionalSkillPaths`, independently of executable project trust.
 Tools run without permission checks.
 
@@ -40,16 +42,20 @@ widgets, footers, autocomplete and the sub-agent fleet view are unavailable.
 ## Credentials and models
 
 The host grants the selected connection's key over the private fd-3 pipe for each run.
-The worker pins it in memory with `setRuntimeApiKey` and, the first time it sees that key,
+The worker pins its first granted key in memory with `setRuntimeApiKey` and
 stores it through Pi's native `login` in the profile's `auth.json` and writes the
 connection's provider entry into `models.json`
 ([profile-credentials.ts](src/profile-credentials.ts)). Sub-agents, including detached
-background runners that outlive the turn, read those files. Connections that share a Pi
-provider ID share one entry; the last update under the profile lock wins. A process lock
+background runners that outlive the turn, read those files. Workers sharing a Pi provider
+ID have separate files, so one connection cannot replace another's endpoint or key.
+A changed grant retires the worker before replacing either key; rotation needs a fresh
+worker and never automatically replays the fenced run. A process lock
 holds native login and the `models.json` read-merge-publish together, so concurrent updates
 retain other providers. The catalog is still replaced atomically, keeping readers from
 seeing a partial file. Lock contention has a bounded retry budget and fails the run rather
-than stealing from a live worker. Deleting a connection does not yet remove its profile copy.
+than stealing from a live worker. Old shared profiles are neither imported nor deleted;
+product history restores independently. Deleting a connection or retiring a worker does
+not yet remove its plaintext profile copy or revoke a detached child's provider key.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
 including declared OpenAI-compatible models. Model and thinking selection are fixed per
@@ -76,6 +82,12 @@ fences the run with an exclusive record in `<private>/runs` before reading crede
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
 read-before-edit reminder and recalled personal preferences through `before_agent_start`,
 and extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
+The extraction result's measured provider/model usage is appended through native
+`SessionManager.appendUsage` before cancellation, stop-reason or JSON validation, then
+projected through the same Core notification path. Extracted text stays transient.
+Malformed responses, cancellation and capture failures preserve the completed main
+receipt and measured usage. A failed notification remains pending for a later cumulative
+flush; it never retries inference or adds another native usage entry.
 
 Native histories keep the previous layout,
 `<private>/sessions/<sha256(connection)>/<sha256(product session)>/`, so sessions created by
@@ -99,6 +111,8 @@ the repaired protocol. History files and their partition layout are unchanged.
 `apps/cli/scripts/build-embedded-harness.mjs` bundles [entry.ts](src/entry.ts) and stages
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
+The workspace, CLI install/startup checks and bundle require Node `>=22.19.0 <23 || >=23.6.0`
+with Node-API 10, matching Pi 0.99.2 and the SQLite binding.
 The Settings capability reader verifies the staged question package's `package.json`
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker

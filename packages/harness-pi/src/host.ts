@@ -35,6 +35,7 @@ import { acpMcpConfig } from './mcp';
 import { extractPersonalPreferences } from './personal-memory';
 import { hostTimeContext, type HostTimeSource } from './host-time';
 import { RunJournal, isAlreadyDispatched } from './run-journal';
+import { createWorkerEnvironment } from './environment';
 import { z } from 'zod';
 
 const NativeCompletionSchema = z.object({
@@ -134,11 +135,10 @@ export class PiAcpHost {
     }
   }
 
-  /**
-   * Native file-backed runtime of the application profile. The selected connection is also
-   * registered in memory so concurrent workers never share another connection's endpoint.
-   */
   async createRuntime(agentDir: string): Promise<ModelRuntime> {
+    const profile = createWorkerEnvironment({}, this.config).PI_CODING_AGENT_DIR!;
+    if ((await realpath(agentDir)) !== (await realpath(profile)))
+      throw new Error('pi_acp_host_profile_mismatch');
     const runtime = await ModelRuntime.create({
       authPath: join(agentDir, 'auth.json'),
       modelsPath: join(agentDir, 'models.json'),
@@ -365,6 +365,8 @@ export class PiAcpHost {
     if (grant.runId !== snapshot.runId || grant.runtimeEpoch !== this.config.runtimeEpoch)
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
+    if (this.persistedKey !== undefined && this.persistedKey !== grant.apiKey)
+      throw new Error('pi_acp_host_credential_changed');
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
     if (this.persistedKey !== grant.apiKey) {
       await persistConnection(
@@ -412,6 +414,15 @@ export class PiAcpHost {
             .map((part) => part.text)
             .join('\n'),
           signal,
+          recordUsage: async (result) => {
+            wrapper.piSession.sessionManager.appendUsage(
+              'personal_memory_extraction',
+              result.provider,
+              result.model,
+              result.usage
+            );
+            await wrapper.flush();
+          },
         });
         if (changes.length)
           await this.memory(

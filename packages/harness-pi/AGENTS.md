@@ -5,15 +5,17 @@ Read [README](README.md) before changing session construction, packages or the b
 - Use the pinned public SDK and unmodified published Pi packages. Never patch, fork or
   vendor Pi or a package; add a package by pinning it in catalog `pi` and listing it in
   `profile-settings.ts`. Record known upstream defects instead of working around them.
-- The worker profile is Molly's own `PI_CODING_AGENT_DIR`. Never open the user's
-  `~/.pi/agent`. Keep Pi's native discovery, skills, context files and hooks; Molly owns
+- Each runtime epoch has its own Molly `PI_CODING_AGENT_DIR`, derived identically at
+  launch and before SDK import. Never reuse another epoch's auth or model files or open
+  the user's `~/.pi/agent`. Keep native discovery, skills, context files and hooks; Molly owns
   `settings.json`. Project code defaults to untrusted; discover materialized text skills
   through the SDK's explicit skill paths independently of executable project trust.
 - Tools run without permission checks. `cc-safety-net` is the only floor and must stay in
   `subagents.defaultExtensions`; keep external-CLI sub-agents disabled. Never infer an
   answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
 - Model keys arrive on fd 3 per run, are pinned in memory and stored through native
-  `login` in the profile for sub-agents. Keys never enter ACP, argv, environment, native
+  `login` in that epoch's profile for sub-agents. Reject a changed key before either
+  runtime or disk mutation; rotation requires a fresh worker. Keys never enter ACP, argv, environment, native
   history or diagnostics; errors carry static codes only. Serialize profile login and
   provider read-merge-publish under one process lock; retain unrelated provider entries.
 - A run is fenced by exclusive creation of its run record before credentials or
@@ -33,7 +35,9 @@ Read [README](README.md) before changing session construction, packages or the b
   bind the workspace/server/revision and are never written to config files.
 - Refresh host time, the read-before-edit reminder and personal memory through
   `before_agent_start`. Memory extraction never retries, restarts inference or changes a
-  completed outcome; cancellation fences saves.
+  completed outcome; cancellation fences saves. Append measured extraction usage to
+  native history before abort/response validation; retain failed publication for the
+  next cumulative flush without repeating inference or a usage delta.
 - Tests use the real SDK with synthetic providers in owned temporary profiles. No paid
   inference, captured transcripts or machine-local records.
 

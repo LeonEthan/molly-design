@@ -116,6 +116,55 @@ describe('native ACP usage projection', () => {
     expect(f.notifications).toEqual(snapshot);
   });
 
+  it('restores extraction usage without adding it to context or replaying a delta', async () => {
+    const manager = SessionManager.inMemory('/synthetic-project');
+    manager.appendMessage(assistant('provider', 'model', usage(23, 0.1)));
+    manager.appendUsage('personal_memory_extraction', 'provider', 'model', usage(3, 0.015));
+    const f = fixture(manager);
+    await f.projection.flush();
+    expect(f.lastUsage()).toMatchObject({
+      modelUsage: { 'provider/model': { inputTokens: 26, costUSD: 0.115 } },
+    });
+    expect(f.lastUsage()?.delta).toBeUndefined();
+    expect(manager.buildSessionContext().messages).toEqual([
+      assistant('provider', 'model', usage(23, 0.1)),
+    ]);
+    const snapshot = structuredClone(f.notifications);
+    await f.projection.flush();
+    expect(f.notifications).toEqual(snapshot);
+  });
+
+  it('retains cumulative usage after notification failure without duplicating a delta', async () => {
+    const manager = SessionManager.inMemory('/synthetic-project');
+    const received: Record<string, unknown>[] = [];
+    let disconnected = true;
+    const projection = new PiAcpUsage(
+      { sessionManager: manager, getContextUsage: () => undefined },
+      {
+        sessionUpdate: async () => {},
+        extNotification: async (_method, params) => {
+          if (disconnected) throw new Error('synthetic_transport_disconnected');
+          received.push(params);
+        },
+      }
+    );
+    manager.appendUsage('personal_memory_extraction', 'provider', 'model', usage(3, 0.015));
+    await expect(projection.flush()).rejects.toThrow('synthetic_transport_disconnected');
+    disconnected = false;
+    await projection.flush();
+    expect(received).toEqual([
+      expect.objectContaining({
+        modelUsage: {
+          'provider/model': expect.objectContaining({ inputTokens: 3, costUSD: 0.015 }),
+        },
+      }),
+    ]);
+    expect(received[0]?.delta).toBeUndefined();
+    const snapshot = structuredClone(received);
+    await projection.flush();
+    expect(received).toEqual(snapshot);
+  });
+
   it('does not infer summary request identity from virtual selection or branch history', async () => {
     const manager = SessionManager.inMemory('/synthetic-project');
     const first = manager.appendModelChange('virtual', 'router');

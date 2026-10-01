@@ -5,6 +5,14 @@ import { pathToFileURL } from 'node:url';
 
 export const REQUIRED_NODE_API_VERSION = 10;
 
+export function isNodeVersionSupported(nodeVersion) {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(nodeVersion ?? '');
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return (major === 22 && minor >= 19) || (major === 23 && minor >= 6) || major >= 24;
+}
+
 export function isNodeApiVersionSupported(nodeApiVersion) {
   if (typeof nodeApiVersion !== 'string' || nodeApiVersion.trim().length === 0) {
     return false;
@@ -15,13 +23,13 @@ export function isNodeApiVersionSupported(nodeApiVersion) {
 }
 
 export function describeUnsupportedNodeRuntime({ nodeVersion, nodeApiVersion }) {
-  if (isNodeApiVersionSupported(nodeApiVersion)) {
+  if (isNodeVersionSupported(nodeVersion) && isNodeApiVersionSupported(nodeApiVersion)) {
     return undefined;
   }
 
   return (
-    `Molly requires Node-API ${REQUIRED_NODE_API_VERSION} to load its SQLite binding. ` +
-    `Use Node.js v22.14.0 through v22.x, v23.6.0+, or a later major release ` +
+    `Molly requires Node.js v22.19.0 for Pi and Node-API ${REQUIRED_NODE_API_VERSION} for SQLite. ` +
+    `Use Node.js v22.19.0 through v22.x, v23.6.0+, or a later major release ` +
     `(current: ${nodeVersion}, Node-API ${nodeApiVersion ?? 'unknown'}).`
   );
 }

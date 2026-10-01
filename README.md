@@ -46,7 +46,7 @@ This repository does not yet claim an established public download channel.
 
 ## Run locally
 
-Use Node.js `>=22.14.0 <23 || >=23.6.0` and repository-pinned pnpm through Corepack:
+Use Node.js `>=22.19.0 <23 || >=23.6.0` and repository-pinned pnpm through Corepack:
 
 ```sh
 git clone https://github.com/LeonEthan/molly-design.git

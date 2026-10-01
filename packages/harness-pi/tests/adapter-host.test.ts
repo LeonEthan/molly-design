@@ -25,6 +25,7 @@ import { fixture, deferred } from './fixtures/adapter';
 import { z } from 'zod';
 import { LODY_EXTENSION_METHODS } from 'acp-extension-core';
 import { HARNESS_MEMORY_METHOD } from '@molly/shared/personal-memory';
+import { createWorkerEnvironment } from '../src/environment';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 async function managed(
@@ -32,6 +33,7 @@ async function managed(
     extensions?: InlineExtension[];
     peer?: Partial<AdapterPeer>;
     length?: boolean;
+    memoryResponse?: string;
     config?: Partial<WorkerConfig>;
   } = {}
 ) {
@@ -80,6 +82,13 @@ async function managed(
     ...options.config,
   };
   const pipe = new PassThrough();
+  const agentDir = createWorkerEnvironment({}, config).PI_CODING_AGENT_DIR!;
+  await mkdir(agentDir, { recursive: true });
+  await writeFile(
+    join(agentDir, 'settings.json'),
+    await readFile(join(f.agentDir, 'settings.json'))
+  );
+  vi.stubEnv('PI_CODING_AGENT_DIR', agentDir);
   const peer: AdapterPeer = {
     sessionUpdate: async (update) => {
       f.updates.push(update);
@@ -105,7 +114,9 @@ async function managed(
             const extraction = JSON.stringify(context).includes('Extract only explicitly stated');
             const message = {
               ...fauxAssistantMessage(
-                extraction ? '{"changes":[{"text":"Prefers serif type"}]}' : 'Synthetic answer.',
+                extraction
+                  ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
+                  : 'Synthetic answer.',
                 {
                   stopReason: options.length ? 'length' : 'stop',
                 }
@@ -114,12 +125,18 @@ async function managed(
               model: model.id,
               api: model.api,
               usage: {
-                input: 23,
-                output: 5,
+                input: extraction ? 3 : 23,
+                output: extraction ? 1 : 5,
                 cacheRead: 0,
                 cacheWrite: 0,
-                totalTokens: 28,
-                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+                totalTokens: extraction ? 4 : 28,
+                cost: {
+                  input: extraction ? 0.015 : 0,
+                  output: 0,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  total: extraction ? 0.015 : 0,
+                },
               },
             };
             stream.push({ type: 'done', reason: options.length ? 'length' : 'stop', message });
@@ -139,7 +156,7 @@ async function managed(
     return runtime;
   });
   const agent = new PiAcpAgent(peer, {
-    agentDir: f.agentDir,
+    agentDir,
     host,
     extensions: options.extensions,
   });
@@ -177,7 +194,18 @@ async function managed(
       });
     return { response, binding, snapshot, prompt };
   }
-  return { ...f, agent, host, config, pipe, grant, open, observed, runtime: () => selectedRuntime };
+  return {
+    ...f,
+    agentDir,
+    agent,
+    host,
+    config,
+    pipe,
+    grant,
+    open,
+    observed,
+    runtime: () => selectedRuntime,
+  };
 }
 
 describe('owned ACP host integration', () => {
@@ -254,6 +282,79 @@ describe('owned ACP host integration', () => {
       .map((line) => JSON.parse(line))
       .find((item) => item.id === native.mollyNativeOutcome.nativeEndEntryId);
     expect(entry.message.role).toBe('assistant');
+  });
+
+  it('keeps same-preset workers and their native children on their own endpoint and key', async () => {
+    const first = await managed();
+    const firstSession = await first.open();
+    first.grant(firstSession.snapshot, 'FIRST_SYNTHETIC_KEY');
+    await firstSession.prompt();
+    vi.restoreAllMocks();
+    const second = await managed({
+      config: {
+        privateRoot: first.root,
+        productSessionId: 'second-product-session',
+        connection: {
+          ...first.config.connection,
+          id: 'second-connection',
+          baseUrl: 'https://second.invalid/v1',
+        },
+        selection: { ...first.config.selection, connectionId: 'second-connection' },
+      },
+    });
+    const secondSession = await second.open();
+    const secondSnapshot = { ...secondSession.snapshot, runId: 'second-run' };
+    second.grant(secondSnapshot, 'SECOND_SYNTHETIC_KEY');
+    await secondSession.prompt('Hello', secondSnapshot);
+    vi.restoreAllMocks();
+    expect(first.agentDir).not.toBe(second.agentDir);
+    for (const [owner, key] of [
+      [first, 'FIRST_SYNTHETIC_KEY'],
+      [second, 'SECOND_SYNTHETIC_KEY'],
+    ] as const) {
+      vi.stubEnv('PI_CODING_AGENT_DIR', owner.agentDir);
+      const detached = await ModelRuntime.create({
+        refreshOnCreate: false,
+        allowModelNetwork: false,
+      });
+      const foreground = await ModelRuntime.create({
+        refreshOnCreate: false,
+        allowModelNetwork: false,
+      });
+      for (const provider of owner.runtime().getRegisteredProviderIds()) {
+        const config = owner.runtime().getRegisteredProviderConfig(provider);
+        if (config) foreground.registerProvider(provider, config);
+      }
+      for (const child of [foreground, detached]) {
+        const model = child.getModel(providerId, 'model');
+        expect(model?.baseUrl).toBe(owner.config.connection.baseUrl);
+        expect((await child.getAuth(model!))?.auth.apiKey).toBe(key);
+      }
+    }
+    expect(await readFile(join(first.agentDir, 'auth.json'), 'utf8')).not.toContain(
+      'SECOND_SYNTHETIC_KEY'
+    );
+    expect(await readFile(join(second.agentDir, 'auth.json'), 'utf8')).not.toContain(
+      'FIRST_SYNTHETIC_KEY'
+    );
+  });
+
+  it('retires a worker before a changed grant can replace its runtime or persisted key', async () => {
+    const f = await managed();
+    const s = await f.open();
+    f.grant(s.snapshot);
+    await s.prompt();
+    const auth = await readFile(join(f.agentDir, 'auth.json'), 'utf8');
+    const history = await readFile(s.binding.nativeSessionFile, 'utf8');
+    const snapshot = { ...s.snapshot, runId: 'changed-key', turnId: 'changed-key-turn' };
+    f.grant(snapshot, 'CHANGED_SYNTHETIC_KEY');
+    await expect(s.prompt('Must not run', snapshot)).rejects.toThrow(
+      'pi_acp_host_execution_failed'
+    );
+    expect((await f.runtime().getAuth(providerId))?.auth.apiKey).toBe('SYNTHETIC_SECRET');
+    expect(await readFile(join(f.agentDir, 'auth.json'), 'utf8')).toBe(auth);
+    expect(await readFile(s.binding.nativeSessionFile, 'utf8')).toBe(history);
+    expect(f.pipe.destroyed).toBe(true);
   });
 
   it('reserves execution before awaiting a private credential and retires on cancellation', async () => {
@@ -813,9 +914,13 @@ describe('owned ACP host integration', () => {
 
   it('recalls personal preferences into context and captures new ones after completion', async () => {
     const operations: unknown[] = [];
+    const usage: Record<string, unknown>[] = [];
     const f = await managed({
       config: { personalMemory: true },
       peer: {
+        extNotification: async (method, params) => {
+          if (method === LODY_EXTENSION_METHODS.sessionUsageUpdate) usage.push(params);
+        },
         extMethod: async (method, params) => {
           expect(method).toBe(HARNESS_MEMORY_METHOD);
           const request = z.object({ request: z.object({ operation: z.unknown() }) }).parse(params);
@@ -837,5 +942,97 @@ describe('owned ACP host integration', () => {
       { action: 'read' },
       { action: 'capture', revision: 'r1', changes: [{ text: 'Prefers serif type' }] },
     ]);
+    expect(usage.at(-1)).toMatchObject({
+      modelUsage: { [`${providerId}/model`]: { inputTokens: 26, outputTokens: 6 } },
+      usage: { costUSD: 0.015 },
+    });
+    const history = await readFile(s.binding.nativeSessionFile, 'utf8');
+    const entries = history
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(entries).toContainEqual(
+      expect.objectContaining({
+        type: 'usage',
+        kind: 'personal_memory_extraction',
+        provider: providerId,
+        model: 'model',
+      })
+    );
+    expect(history).not.toContain('Prefers serif type');
+  });
+
+  it('accounts measured extraction usage before malformed JSON fails capture', async () => {
+    const usage: Record<string, unknown>[] = [];
+    const f = await managed({
+      config: { personalMemory: true },
+      memoryResponse: 'invalid JSON',
+      peer: {
+        extMethod: async () => ({ revision: 'r1', enabled: true, entries: [] }),
+        extNotification: async (method, params) => {
+          if (method === LODY_EXTENSION_METHODS.sessionUsageUpdate) usage.push(params);
+        },
+      },
+    });
+    const s = await f.open();
+    f.grant(s.snapshot);
+    const result = await s.prompt('I prefer serif type.');
+    expect(result._meta).toMatchObject({
+      mollyPersonalMemory: 'capture_failed',
+      mollyNativeOutcome: { status: 'completed' },
+    });
+    expect(usage.at(-1)).toMatchObject({
+      modelUsage: { [`${providerId}/model`]: { inputTokens: 26, outputTokens: 6 } },
+      usage: { costUSD: 0.015 },
+    });
+  });
+
+  it('accounts an extraction result before cancellation and preserves the completed main receipt', async () => {
+    const received: Record<string, unknown>[] = [];
+    const publishing = deferred<void>();
+    const release = deferred<void>();
+    const f = await managed({
+      config: { personalMemory: true },
+      peer: {
+        extMethod: async () => ({ revision: 'r1', enabled: true, entries: [] }),
+        extNotification: async (method, params) => {
+          if (method !== LODY_EXTENSION_METHODS.sessionUsageUpdate) return;
+          received.push(params);
+          const update = z.object({ usage: z.object({ inputTokens: z.number() }) }).parse(params);
+          if (update.usage.inputTokens === 3) {
+            publishing.resolve();
+            await release.promise;
+          }
+        },
+      },
+    });
+    const s = await f.open();
+    f.grant(s.snapshot);
+    const running = s.prompt('I prefer serif type.');
+    await Promise.race([
+      publishing.promise,
+      running.then(() => {
+        throw new Error('Extraction usage was not published');
+      }),
+    ]);
+    const cancelling = f.agent.cancel({ sessionId: s.response.sessionId });
+    release.resolve();
+    const result = await running;
+    await cancelling;
+    expect(result._meta).toMatchObject({
+      mollyPersonalMemory: 'cancelled',
+      mollyNativeOutcome: { status: 'completed', nativeEndEntryId: expect.any(String) },
+    });
+    expect(received.at(-1)).toMatchObject({
+      modelUsage: { [`${providerId}/model`]: { inputTokens: 26, outputTokens: 6 } },
+      usage: { inputTokens: 3, outputTokens: 1, costUSD: 0.015 },
+    });
+    const entries = (await readFile(s.binding.nativeSessionFile, 'utf8'))
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(entries).toContainEqual(
+      expect.objectContaining({ type: 'usage', kind: 'personal_memory_extraction' })
+    );
   });
 });

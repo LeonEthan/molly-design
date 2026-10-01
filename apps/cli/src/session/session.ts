@@ -589,7 +589,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           'You are Molly, a design assistant. Follow the user task and explicitly supplied skills. Preserve current artwork, assets and drafts. Never retry an operation whose result is unknown.' +
           (designContinuationContext ? `\n\n${designContinuationContext}` : ''),
       };
-      env = createWorkerEnvironment({ ...process.env, ...loginShellEnv }, privateRoot);
+      env = createWorkerEnvironment({ ...process.env, ...loginShellEnv }, embeddedConfig);
     }
     // Trusted design launch identity also serves exact submission; it does not
     // assert that this runtime implements native tool or terminal hooks.

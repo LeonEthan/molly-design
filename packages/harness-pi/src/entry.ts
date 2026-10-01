@@ -32,8 +32,11 @@ async function probe() {
 }
 
 async function main(): Promise<void> {
-  const [major, minor] = process.versions.node.split('.').map(Number);
-  if (!major || major < 22 || (major === 22 && (!minor || minor < 19)))
+  const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
+  if (
+    !((major === 22 && minor >= 19) || (major === 23 && minor >= 6) || major >= 24) ||
+    !(Number(process.versions.napi) >= 10)
+  )
     throw new Error('harness_node_version_unsupported');
   if (process.argv[2] === '--probe') {
     process.stdout.write(`${JSON.stringify(await probe())}\n`);
@@ -54,7 +57,7 @@ async function main(): Promise<void> {
       manifest.protocolVersion !== config.harness.protocolVersion
     )
       throw new Error('harness_build_mismatch');
-    const environment = createWorkerEnvironment(process.env, config.privateRoot);
+    const environment = createWorkerEnvironment(process.env, config);
     for (const key of Object.keys(process.env)) delete process.env[key];
     Object.assign(process.env, environment);
     await mkdir(environment.TMPDIR!, { recursive: true, mode: 0o700 });

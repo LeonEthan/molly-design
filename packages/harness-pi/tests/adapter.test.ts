@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile, symlink, appendFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { fixture, deferred } from './fixtures/adapter';
@@ -523,11 +523,21 @@ describe('owned native Pi ACP adapter', () => {
       PI_CODING_AGENT_DIR: '/cli-profile',
       PI_CODING_AGENT_SESSION_DIR: '/cli-sessions',
     };
-    const environment = createWorkerEnvironment(inherited, '/molly-private');
+    const config = { privateRoot: '/molly-private', runtimeEpoch: 'worker-one' };
+    const environment = createWorkerEnvironment(inherited, config);
     expect(environment).toMatchObject({
       HOME: '/real-home',
-      PI_CODING_AGENT_DIR: '/molly-private/config',
     });
+    expect(dirname(environment.PI_CODING_AGENT_DIR!)).toBe(
+      join(config.privateRoot, 'config', 'workers')
+    );
+    expect(basename(environment.PI_CODING_AGENT_DIR!)).toMatch(/^[a-f0-9]{64}$/);
+    expect(createWorkerEnvironment({}, config).PI_CODING_AGENT_DIR).toBe(
+      environment.PI_CODING_AGENT_DIR
+    );
+    expect(
+      createWorkerEnvironment({}, { ...config, runtimeEpoch: 'worker-two' }).PI_CODING_AGENT_DIR
+    ).not.toBe(environment.PI_CODING_AGENT_DIR);
     expect(environment.OPENAI_API_KEY).toBeUndefined();
     expect(environment.PI_CODING_AGENT_SESSION_DIR).toBeUndefined();
     expect(inherited.PI_CODING_AGENT_DIR).toBe('/cli-profile');

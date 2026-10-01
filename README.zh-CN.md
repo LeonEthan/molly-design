@@ -42,7 +42,7 @@ macOS Intel、Windows 和 Linux 构建为实验性支持。
 
 ## 本地运行
 
-使用 Node.js `>=22.14.0 <23 || >=23.6.0`，通过 Corepack 使用仓库固定的 pnpm：
+使用 Node.js `>=22.19.0 <23 || >=23.6.0`，通过 Corepack 使用仓库固定的 pnpm：
 
 ```sh
 git clone https://github.com/LeonEthan/molly-design.git

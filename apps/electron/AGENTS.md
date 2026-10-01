@@ -58,7 +58,7 @@ contracts, and window/renderer integration rules live in
   them into `app.asar.unpacked`, verify the sealed Pi closure and absence of retired
   adapters/presets, then probe CLI `--help` and a real in-memory SQLite
   database before signing.
-- Keep `better-sqlite3 >= 13.0.2`, CLI `engines.node >= 22.14.0`, the first-import
+- Keep Pi's Node 22.19 floor, `better-sqlite3 >= 13.0.2`, CLI `engines.node`, the first-import
   guard in `sqlite-runtime-support.ts`, and its tests aligned. Older Node versions can
   segfault while loading the N-API 10 binding.
 - `electronLanguages` must include underscore names used by macOS resources and

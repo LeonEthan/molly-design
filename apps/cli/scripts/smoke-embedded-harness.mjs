@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -182,7 +182,16 @@ export async function runPackagedSmoke({ output, executable }) {
         assert.ok(tools.includes(tool), `Pi package tool missing: ${tool}`);
       assert.ok(!JSON.stringify(model.requests).includes('SYNTHETIC_POLLUTION_CANARY'));
       const auth = JSON.parse(
-        await readFile(path.join(config.privateRoot, 'config', 'auth.json'), 'utf8')
+        await readFile(
+          path.join(
+            config.privateRoot,
+            'config',
+            'workers',
+            createHash('sha256').update(config.runtimeEpoch).digest('hex'),
+            'auth.json'
+          ),
+          'utf8'
+        )
       );
       assert.equal(auth['molly-compatible'].key, SECRET);
       await writeFile(path.join(root, 'smoke-ok'), '');

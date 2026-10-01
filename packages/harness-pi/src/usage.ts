@@ -103,7 +103,11 @@ export class PiAcpUsage {
     }
     for (const { entry, rows } of this.rows()) {
       const update = this.accumulator.update(this.sessionId, entry.id, rows);
-      if (update) await this.publish(update);
+      if (update) {
+        this.baseline = update;
+        await this.publish(update);
+        this.baseline = undefined;
+      }
     }
     const context = this.session.getContextUsage();
     if (!context || !nonnegative(context.tokens) || !nonnegative(context.contextWindow)) return;

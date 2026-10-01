@@ -32,7 +32,7 @@ export function verifyEmbeddedHarness(directory) {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.protocolVersion !== 1 ||
-    manifest.engineVersion !== '0.85.1' ||
+    manifest.engineVersion !== '0.99.2' ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.packages)
   )
@@ -85,13 +85,6 @@ export function verifyEmbeddedHarness(directory) {
     );
     if (metadata.version !== manifest.engineVersion) throw new Error(`Unreviewed engine ${name}`);
   }
-  const mcp = JSON.parse(
-    fs.readFileSync(
-      path.join(root, 'node_modules', '@modelcontextprotocol/sdk', 'package.json'),
-      'utf8'
-    )
-  );
-  if (mcp.version !== '1.29.0') throw new Error('Unreviewed MCP SDK');
   return manifest;
 }
 

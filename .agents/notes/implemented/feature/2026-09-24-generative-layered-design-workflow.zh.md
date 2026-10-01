@@ -78,8 +78,8 @@ OpenAI 的 [图片编辑](https://developers.openai.com/api/reference/resources/
 
 以下描述实施前的代码，不能用作当前行为说明。
 
-- 已发出的图片调用失败或工具报错时，harness 会终止运行（[acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)）；MCP 交付结果未知时同样终止（[tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)）。
-- 设计运行中，除已授权站点上的浏览器调用外，每次工具调用都会提示（[worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)）；Molly 用宿主审批包装自有工具（[approved-tools.ts](../../../../packages/harness-pi/src/approved-tools.ts)）。
+- 已发出的图片调用失败或工具报错时，harness 会终止运行（[acp-adapter.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/acp-adapter.ts)）；MCP 交付结果未知时同样终止（[tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)）。
+- 设计运行中，除已授权站点上的浏览器调用外，每次工具调用都会提示（[worker-main.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/worker-main.ts)）；Molly 用宿主审批包装自有工具（[approved-tools.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/approved-tools.ts)）。
 - 锁定的 Pi SDK 0.85.1 在 `createBashToolDefinition` 上提供 `BashOperations`，正是 Pi 官方[沙箱示例](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/sandbox/index.ts)使用的钩子。
 - 导入只收录被引用的图片、图片填充和字体素材（[intake.ts](../../../../packages/design-authoring/src/intake.ts)），因此 `media/` 中未使用的草稿不会进入提交的作品，但仍留在磁盘上。
 - 每回合指针把 Skill 称为"可选辅助"（[skills.ts](../../../../apps/cli/src/design/skills.ts)）。

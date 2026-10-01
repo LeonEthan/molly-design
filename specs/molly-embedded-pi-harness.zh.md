@@ -2,7 +2,7 @@
 
 Status: draft
 Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
-Translation: current
+Translation: stale
 
 [English](molly-embedded-pi-harness.md)
 

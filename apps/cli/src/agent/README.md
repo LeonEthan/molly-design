@@ -127,7 +127,7 @@ critical path of every session establishment while the agent process sits idle.
 
 For embedded Molly, resolved server configuration is awaited before `newSession`.
 The private host pipe supplies selected MCP credentials once per Session/worker epoch;
-configuration failure fails startup. `pi-mcp-adapter` owns the resulting ordinary
+configuration failure fails startup. Pi's native MCP owns the resulting ordinary
 connections across turns. Catalog/credential revocation retires the worker. The
 per-turn MCP preparation RPC and image import/recovery callbacks are removed.
 

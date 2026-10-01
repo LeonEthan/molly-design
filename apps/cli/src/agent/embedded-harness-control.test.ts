@@ -54,7 +54,7 @@ function fixture(
     harness: {
       id: 'molly',
       engine: 'pi',
-      engineVersion: '0.85.1',
+      engineVersion: '0.99.2',
       buildId: 'test-build',
       protocolVersion: 1,
     },
@@ -365,7 +365,7 @@ describe('owned worker host control', () => {
     f.pipe.destroy();
   });
 
-  it('freezes auto-review into every run snapshot', async () => {
+  it('records no permission mode in a run snapshot', async () => {
     const f = fixture();
     await f.control.bootstrap();
     const snapshots: HarnessRunSnapshot[] = [];
@@ -379,7 +379,7 @@ describe('owned worker host control', () => {
     });
     f.grant();
     await result;
-    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual(['auto-review']);
+    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual([undefined]);
     f.pipe.destroy();
   });
 

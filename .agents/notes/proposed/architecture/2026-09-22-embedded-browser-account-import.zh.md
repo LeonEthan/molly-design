@@ -325,10 +325,10 @@ macOS 原生路线必须通过系统与用户允许的访问方式完成。Chrom
 
 | 入口               | 源码证据与职责                                                                                                                                                                                                                                                                                |
 | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| MCP                | [mcp-bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) 将服务端工具转换为模型可调用工具，支持 HTTP/stdio；[ACP adapter](../../../../packages/harness-pi/src/acp-adapter.ts) 合并工具并管理连接。复用现有内置服务，新增浏览器处理器即可接入模型工具循环，但 Electron 控制桥仍需实现。 |
-| Skill              | [资源加载器](../../../../packages/harness-pi/src/resource-loader.ts) 接收宿主提供的 skill；生产设计 skill 经 [message handler](../../../../apps/cli/src/lib/message-handler.ts) 物化并提供读取指针。skill 提供网站操作知识，本身不授予 WebContents 控制能力。                                 |
-| CLI                | [原生工具](../../../../packages/harness-pi/src/approved-tools.ts) 已包含 bash，可在确有消费者时增加调用同一浏览器服务的薄命令入口；不让 CLI 启动另一个浏览器或自行选择外部 Chrome。                                                                                                           |
-| Native custom tool | [session factory](../../../../packages/harness-pi/src/session-factory.ts) 支持 `customTools: input.tools`，技术上可行；首期优先已有 MCP 接入，避免双份工具实现。                                                                                                                              |
+| MCP                | [mcp-bridge](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-bridge.ts) 将服务端工具转换为模型可调用工具，支持 HTTP/stdio；[ACP adapter](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/acp-adapter.ts) 合并工具并管理连接。复用现有内置服务，新增浏览器处理器即可接入模型工具循环，但 Electron 控制桥仍需实现。 |
+| Skill              | [资源加载器](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/resource-loader.ts) 接收宿主提供的 skill；生产设计 skill 经 [message handler](../../../../apps/cli/src/lib/message-handler.ts) 物化并提供读取指针。skill 提供网站操作知识，本身不授予 WebContents 控制能力。                                 |
+| CLI                | [原生工具](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/approved-tools.ts) 已包含 bash，可在确有消费者时增加调用同一浏览器服务的薄命令入口；不让 CLI 启动另一个浏览器或自行选择外部 Chrome。                                                                                                           |
+| Native custom tool | [session factory](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/session-factory.ts) 支持 `customTools: input.tools`，技术上可行；首期优先已有 MCP 接入，避免双份工具实现。                                                                                                                              |
 
 页面结构可作为文本返回，截图可作为普通 MCP `image` 结果。[内容转换器](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/mcp-content.ts) 已接受 PNG/JPEG/GIF/WebP，MCP bridge 将其交给模型上下文；仍需所选模型支持图片输入。截图不应标记成付费 generate/edit 的 image binding，观察页面与保存作品素材分别处理。
 
@@ -400,7 +400,7 @@ MCP host 重启会丢失连接内存，Electron 可以按产品规则保留网�
 
 ### 连续浏览必须补齐的产品合同
 
-**任务授权。** [worker-main](../../../../packages/harness-pi/src/worker-main.ts) 已在既有 allow-once/reject-once 提示中加入当前 run/epoch 的逐站浏览任务选项，站点上限 8，授权事实写入现有工具 journal；重启不恢复活 grant。daemon/主进程另复核 run、页面与站点。已有页面登录不等于所有 Agent 任务永久获准读取。点击/输入仍可能改变网站状态；发布、下单和改账号需要任务之外的单独用户意图，浏览 grant 不能被文案称为语义只读。
+**任务授权。** [worker-main](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/worker-main.ts) 已在既有 allow-once/reject-once 提示中加入当前 run/epoch 的逐站浏览任务选项，站点上限 8，授权事实写入现有工具 journal；重启不恢复活 grant。daemon/主进程另复核 run、页面与站点。已有页面登录不等于所有 Agent 任务永久获准读取。点击/输入仍可能改变网站状态；发布、下单和改账号需要任务之外的单独用户意图，浏览 grant 不能被文案称为语义只读。
 
 授权锚定既有 `worker-main` 宿主审批管线和 Session run，不另建通用权限引擎、角色模型或长期 grant 存储。设计运行在[启动配置](../../../../apps/cli/src/session/session.ts)采用 `browse-task-v1` 标识本策略；[worker-config](../../../../packages/harness-pi/src/worker-config.ts) 的 `permissionProfileId` 仍只是快照身份字段。真正的逐站任务授权由 `worker-main` 的用户批准结果产生，并绑定 run/epoch；一个 profile 字符串本身不授予站点权限。
 
@@ -488,7 +488,7 @@ Agent 的 DOM、截图和素材读取必须受网络和目标范围约束：覆�
 
 现有 human-only 页面可能已经加载了私网子资源；事后仅限制新请求，无法证明当前 DOM/截图可交给 Agent。首期优先由受控路径创建任务页；若支持用户共享既有内置页，必须在开始观察前建立可信加载边界，例如受控重载并处理页面状态变化，不能直接读取历史页面后才补 guard。此处需要验证代理和登录兼容性，不扩成新的通用网络过滤产品。
 
-“仅操作内置浏览器”的保证作用于本方案提供的浏览工具。现有 [approved-tools](../../../../packages/harness-pi/src/approved-tools.ts) 仍有宿主批准的 read/write/edit/bash，macOS [SessionSandbox](../../../../apps/cli/src/session/session-sandbox.ts) 使用 Noop 实现；因此当前不具备“任意 shell/第三方工具都绝不可能访问外部 Chrome”的 OS 级沙箱保证。验收应检查浏览器工具不能选择外部 Chrome、应用 shell 或 Bento 页面；若要求跨全部工具的系统级禁止，则属于另一项执行隔离需求，不能靠 skill 或 CDP target 过滤宣称完成。[Pi Spec 的隔离范围](../../../../specs/molly-embedded-pi-harness.zh.md)
+“仅操作内置浏览器”的保证作用于本方案提供的浏览工具。现有 [approved-tools](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/approved-tools.ts) 仍有宿主批准的 read/write/edit/bash，macOS [SessionSandbox](../../../../apps/cli/src/session/session-sandbox.ts) 使用 Noop 实现；因此当前不具备“任意 shell/第三方工具都绝不可能访问外部 Chrome”的 OS 级沙箱保证。验收应检查浏览器工具不能选择外部 Chrome、应用 shell 或 Bento 页面；若要求跨全部工具的系统级禁止，则属于另一项执行隔离需求，不能靠 skill 或 CDP target 过滤宣称完成。[Pi Spec 的隔离范围](../../../../specs/molly-embedded-pi-harness.zh.md)
 
 Electron 只支持 Chrome 扩展 API 的一部分，明确不保证商店任意扩展兼容，所以导入扩展安装在来源 Chrome，不能承诺把用户原 Chrome 扩展一并搬进 Electron。[Electron Extension Support](https://www.electronjs.org/docs/latest/api/extensions)
 

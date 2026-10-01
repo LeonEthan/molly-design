@@ -137,13 +137,13 @@ The following findings describe the code before the implementation below, not
 current behavior.
 
 - The harness ends a run on a dispatched image failure or tool error
-  ([acp-adapter.ts](../../../../packages/harness-pi/src/acp-adapter.ts)); unknown MCP
+  ([acp-adapter.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/acp-adapter.ts)); unknown MCP
   delivery also ends it
   ([tool-operation-journal.ts](https://github.com/LeonEthan/molly-design/blob/3e91e746b1426e1db8af122e6a833768ec0ba99d/packages/harness-pi/src/tool-operation-journal.ts)).
 - Design runs prompt for every tool call except browser calls on granted sites
-  ([worker-main.ts](../../../../packages/harness-pi/src/worker-main.ts)); Molly wraps
+  ([worker-main.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/worker-main.ts)); Molly wraps
   its own tools with host approval
-  ([approved-tools.ts](../../../../packages/harness-pi/src/approved-tools.ts)).
+  ([approved-tools.ts](https://github.com/LeonEthan/molly-design/blob/1ac4363a815839a98784f0af4902e4ebd252053e/packages/harness-pi/src/approved-tools.ts)).
 - The pinned Pi SDK 0.85.1 exposes `BashOperations` on
   `createBashToolDefinition`, the hook Pi's official
   [sandbox example](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/examples/extensions/sandbox/index.ts)

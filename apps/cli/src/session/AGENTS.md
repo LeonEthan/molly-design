@@ -59,7 +59,7 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
   `agent_disconnected`, Harness compression mismatch is `acp_session_storage_incompatible`.
 - Molly restores native state, never replays prompts/history; a duplicate-run fence
   fails the turn and pauses queued inputs until Continue. Legacy retries once before
-  ACP output. Profiles: design `browse-task-v1`, others `ask-every-tool-v1`; freeze `auto-review`.
+  ACP output. Profiles: design `browse-task-v1`, others `ask-every-tool-v1`; no permission mode.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.

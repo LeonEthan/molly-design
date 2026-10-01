@@ -3,11 +3,11 @@ import {
   PersonalMemoryChangesSchema,
   type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
-import type { ClassifierRuntime } from './auto-review-classifier';
+import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import type { Model, Api } from '@earendil-works/pi-ai';
 
 export async function extractPersonalPreferences(input: {
-  runtime: ClassifierRuntime;
+  runtime: Pick<ModelRuntime, 'completeSimple'>;
   model: Model<Api>;
   snapshot: PersonalMemorySnapshot;
   userText: string;

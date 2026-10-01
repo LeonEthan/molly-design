@@ -22,9 +22,9 @@ marks the recovered input failed, finalizes its assistant entry, and pauses disp
 before releasing ownership. Queued inputs stay intact until explicit Continue; that
 action releases the queue and never retries the old turn. Pending inputs without a
 run fence remain executable. See the [recovery fix](../../../../.agents/notes/implemented/bug-fix/2026-09-28-interrupted-run-recovery.md).
-MCP is configured once at startup through the ordinary `pi-mcp-adapter` extension;
+MCP is configured once at startup through Pi's native MCP extension;
 credentials bind the selected Session/worker epoch and catalog changes retire it.
-Model keys remain run-scoped. Image tools save files directly; Session owns no
+Model keys are granted per run and stored in Molly's Pi profile for sub-agents. Image tools save files directly; Session owns no
 private image-byte import callback. Worker startup is a single attempt inside the existing start gate; failed-process
 cleanup and stderr diagnostics remain. The external npx recovery policy and cache
 mutation are retired, independently of native prompt replay prevention.

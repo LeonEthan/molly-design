@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-28T13:58:41.563Z",
+  "generatedAt": "2026-10-01T10:38:26.332Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -257,19 +257,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-anthropic-ai-sandbox-runtime-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@anthropic-ai/sandbox-runtime",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/anthropics/sandbox-runtime#readme",
-      "author": "Anthropic PBC",
-      "description": "Anthropic Sandbox Runtime (ASRT) - A general-purpose tool for wrapping security boundaries around arbitrary processes",
-      "versions": [
-        "0.0.77"
-      ]
-    },
-    {
       "id": "pkg-anthropic-ai-sdk-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -279,7 +266,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Anthropic",
       "description": "The official TypeScript library for the Anthropic API",
       "versions": [
-        "0.123.0"
+        "0.124.0"
       ]
     },
     {
@@ -358,55 +345,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-aws-crypto-sha256-browser-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@aws-crypto/sha256-browser",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/aws/aws-sdk-js-crypto-helpers/tree/master/packages/sha256-browser",
-      "author": "AWS Crypto Tools Team",
-      "versions": [
-        "5.2.0"
-      ]
-    },
-    {
-      "id": "pkg-aws-crypto-sha256-js-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@aws-crypto/sha256-js",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/aws/aws-sdk-js-crypto-helpers/tree/master/packages/sha256-js",
-      "author": "AWS Crypto Tools Team",
-      "versions": [
-        "5.2.0"
-      ]
-    },
-    {
-      "id": "pkg-aws-crypto-supports-web-crypto-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@aws-crypto/supports-web-crypto",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/aws/aws-sdk-js-crypto-helpers/tree/master/packages/supports-web-crypto",
-      "author": "AWS Crypto Tools Team",
-      "description": "Provides functions for detecting if the host environment supports the WebCrypto API",
-      "versions": [
-        "5.2.0"
-      ]
-    },
-    {
-      "id": "pkg-aws-crypto-util-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@aws-crypto/util",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/aws/aws-sdk-js-crypto-helpers/tree/master/packages/util",
-      "author": "AWS Crypto Tools Team",
-      "versions": [
-        "5.2.0"
-      ]
-    },
-    {
       "id": "pkg-aws-sdk-client-bedrock-runtime-apache-2-0",
       "kind": "package",
       "scope": "production-dependency",
@@ -416,7 +354,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "AWS SDK for JavaScript Team",
       "description": "AWS SDK for JavaScript Bedrock Runtime Client for Node.js, Browser and React Native",
       "versions": [
-        "3.1048.0"
+        "3.1127.0"
       ]
     },
     {
@@ -607,7 +545,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "AWS SDK for JavaScript Team",
       "description": "A collection of token providers",
       "versions": [
-        "3.1048.0",
+        "3.1127.0",
         "3.1129.0"
       ]
     },
@@ -622,18 +560,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Types for the AWS SDK",
       "versions": [
         "3.974.5"
-      ]
-    },
-    {
-      "id": "pkg-aws-sdk-util-locate-window-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@aws-sdk/util-locate-window",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/util-locate-window",
-      "author": "AWS SDK for JavaScript Team",
-      "versions": [
-        "3.965.10"
       ]
     },
     {
@@ -1691,7 +1617,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Application composition runtime for services, replicated state, RPC, and plugins",
       "versions": [
-        "0.85.1"
+        "0.99.2"
       ]
     },
     {
@@ -1704,7 +1630,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "General-purpose agent with transport abstraction, state management, and attachment support",
       "versions": [
-        "0.85.1"
+        "0.99.2"
       ]
     },
     {
@@ -1717,7 +1643,20 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Unified LLM API with automatic model discovery and provider configuration",
       "versions": [
-        "0.85.1"
+        "0.99.2"
+      ]
+    },
+    {
+      "id": "pkg-earendil-works-pi-codemode-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@earendil-works/pi-codemode",
+      "license": "MIT",
+      "homepage": "https://github.com/earendil-works/pi#readme",
+      "author": "Earendil Works",
+      "description": "Sandboxed JavaScript execution where the only capability is calling injected tools",
+      "versions": [
+        "0.99.2"
       ]
     },
     {
@@ -1730,7 +1669,20 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Coding agent CLI with read, bash, edit, write tools and session management",
       "versions": [
-        "0.85.1"
+        "0.99.2"
+      ]
+    },
+    {
+      "id": "pkg-earendil-works-pi-mcp-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@earendil-works/pi-mcp",
+      "license": "MIT",
+      "homepage": "https://github.com/earendil-works/pi#readme",
+      "author": "Earendil Works",
+      "description": "Standalone Model Context Protocol client for pi and other applications",
+      "versions": [
+        "0.99.2"
       ]
     },
     {
@@ -1743,7 +1695,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Vendor-neutral telemetry contracts and typed schema utilities for pi",
       "versions": [
-        "0.85.1"
+        "0.99.2"
       ]
     },
     {
@@ -1756,7 +1708,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Terminal User Interface library with differential rendering for efficient text-based applications",
       "versions": [
-        "0.85.1"
+        "0.99.2"
       ]
     },
     {
@@ -1872,8 +1824,57 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "0.25.12",
         "0.27.0",
-        "0.28.1",
         "0.28.2"
+      ]
+    },
+    {
+      "id": "pkg-ff-labs-fff-bin-darwin-arm64-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@ff-labs/fff-bin-darwin-arm64",
+      "license": "MIT",
+      "homepage": "https://github.com/dmtrKovalenko/fff#readme",
+      "description": "fff native binary for macOS ARM64 (Apple Silicon)",
+      "versions": [
+        "0.11.0"
+      ]
+    },
+    {
+      "id": "pkg-ff-labs-fff-bun-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@ff-labs/fff-bun",
+      "license": "MIT",
+      "homepage": "https://github.com/dmtrKovalenko/fff#readme",
+      "author": "Dmitry Kovalenko",
+      "description": "High-performance fuzzy file finder for Bun - perfect for LLM agent tools",
+      "versions": [
+        "0.11.0"
+      ]
+    },
+    {
+      "id": "pkg-ff-labs-fff-node-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@ff-labs/fff-node",
+      "license": "MIT",
+      "homepage": "https://github.com/dmtrKovalenko/fff#readme",
+      "author": "Dmitry Kovalenko",
+      "description": "High-performance fuzzy file finder for Node.js - perfect for LLM agent tools",
+      "versions": [
+        "0.11.0"
+      ]
+    },
+    {
+      "id": "pkg-ff-labs-pi-fff-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@ff-labs/pi-fff",
+      "license": "MIT",
+      "homepage": "https://github.com/dmtrKovalenko/fff/tree/main/packages/pi-fff",
+      "description": "pi extension: FFF-powered fuzzy file and content search",
+      "versions": [
+        "0.11.0"
       ]
     },
     {
@@ -1992,7 +1993,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "Apache-2.0",
       "homepage": "https://github.com/googleapis/js-genai#readme",
       "versions": [
-        "1.52.0"
+        "1.52.0",
+        "2.21.0"
       ]
     },
     {
@@ -2215,6 +2217,45 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "javascript standard data structure library which benchmark against C++ STL",
       "versions": [
         "4.4.2"
+      ]
+    },
+    {
+      "id": "pkg-juicesharp-rpiv-ask-user-question-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@juicesharp/rpiv-ask-user-question",
+      "license": "MIT",
+      "homepage": "https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-ask-user-question#readme",
+      "author": "juicesharp",
+      "description": "Pi extension. A structured questionnaire the model can put to you when it would otherwise guess, with typed options instead of free-form replies.",
+      "versions": [
+        "2.12.0"
+      ]
+    },
+    {
+      "id": "pkg-juicesharp-rpiv-config-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@juicesharp/rpiv-config",
+      "license": "MIT",
+      "homepage": "https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-config#readme",
+      "author": "juicesharp",
+      "description": "Shared config I/O utilities for rpiv-mono sibling packages",
+      "versions": [
+        "2.12.0"
+      ]
+    },
+    {
+      "id": "pkg-juicesharp-rpiv-i18n-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@juicesharp/rpiv-i18n",
+      "license": "MIT",
+      "homepage": "https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-i18n#readme",
+      "author": "juicesharp",
+      "description": "Pi extension. The localization foundation for rpiv-* skills: locale detection, the /languages command, the --locale flag, and a cross-package locale registry.",
+      "versions": [
+        "2.12.0"
       ]
     },
     {
@@ -2516,39 +2557,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-mariozechner-clipboard-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@mariozechner/clipboard",
-      "license": "MIT",
-      "homepage": "https://github.com/badlogic/clipboard#readme",
-      "versions": [
-        "0.3.9"
-      ]
-    },
-    {
-      "id": "pkg-mariozechner-clipboard-darwin-arm64-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@mariozechner/clipboard-darwin-arm64",
-      "license": "MIT",
-      "homepage": "https://github.com/badlogic/clipboard#readme",
-      "versions": [
-        "0.3.9"
-      ]
-    },
-    {
-      "id": "pkg-mariozechner-clipboard-darwin-universal-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@mariozechner/clipboard-darwin-universal",
-      "license": "MIT",
-      "homepage": "https://github.com/badlogic/clipboard#readme",
-      "versions": [
-        "0.3.9"
-      ]
-    },
-    {
       "id": "pkg-meowdown-core-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -2785,19 +2793,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Playwright Tools for MCP",
       "versions": [
         "0.0.82"
-      ]
-    },
-    {
-      "id": "pkg-pondwader-socks5-server-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@pondwader/socks5-server",
-      "license": "MIT",
-      "homepage": "https://github.com/PondWader/node-socks5-server#readme",
-      "author": "PondWader",
-      "description": "A Node.js socks5 server implementation enabling fine-grained connection control.",
-      "versions": [
-        "1.0.10"
       ]
     },
     {
@@ -3938,6 +3933,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-sinclair-typebox-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@sinclair/typebox",
+      "license": "MIT",
+      "homepage": "https://github.com/sinclairzx81/sinclair-typebox#readme",
+      "author": "sinclairzx81",
+      "description": "Json Schema Type Builder with Static Type Resolution for TypeScript",
+      "versions": [
+        "0.34.52"
+      ]
+    },
+    {
       "id": "pkg-sindresorhus-is-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -3989,19 +3997,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-smithy-is-array-buffer-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@smithy/is-array-buffer",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/awslabs/smithy-typescript/tree/main/packages/is-array-buffer",
-      "author": "AWS SDK for JavaScript Team",
-      "description": "Provides a function for detecting if an argument is an ArrayBuffer",
-      "versions": [
-        "2.2.0"
-      ]
-    },
-    {
       "id": "pkg-smithy-node-http-handler-apache-2-0",
       "kind": "package",
       "scope": "production-dependency",
@@ -4011,7 +4006,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "AWS SDK for JavaScript Team",
       "description": "Provides a way to make requests",
       "versions": [
-        "4.7.3",
         "4.12.1"
       ]
     },
@@ -4038,31 +4032,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "AWS Smithy Team",
       "versions": [
         "4.18.0"
-      ]
-    },
-    {
-      "id": "pkg-smithy-util-buffer-from-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@smithy/util-buffer-from",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/awslabs/smithy-typescript/tree/main/packages/util-buffer-from",
-      "author": "AWS SDK for JavaScript Team",
-      "versions": [
-        "2.2.0"
-      ]
-    },
-    {
-      "id": "pkg-smithy-util-utf8-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@smithy/util-utf8",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/awslabs/smithy-typescript/tree/main/packages/util-utf8",
-      "author": "AWS SDK for JavaScript Team",
-      "description": "A UTF-8 string <-> UInt8Array converter",
-      "versions": [
-        "2.3.0"
       ]
     },
     {
@@ -5555,6 +5524,17 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-yuuang-ffi-rs-darwin-arm64-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@yuuang/ffi-rs-darwin-arm64",
+      "license": "MIT",
+      "homepage": "https://www.npmjs.com/package/@yuuang/ffi-rs-darwin-arm64",
+      "versions": [
+        "1.3.7"
+      ]
+    },
+    {
       "id": "pkg-zag-js-dismissable-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -5618,6 +5598,58 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-zigai-pi-extension-internals-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@zigai/pi-extension-internals",
+      "license": "MIT",
+      "homepage": "https://github.com/zigai/pi-tweaks/tree/main/packages/pi-extension-internals#readme",
+      "author": "zigai",
+      "description": "Shared composition protocols and guarded Pi-internal loading for Pi extensions.",
+      "versions": [
+        "0.1.5"
+      ]
+    },
+    {
+      "id": "pkg-zigai-pi-extension-settings-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@zigai/pi-extension-settings",
+      "license": "MIT",
+      "homepage": "https://github.com/zigai/pi-extension-settings#readme",
+      "author": "zigai",
+      "description": "TypeBox-first configuration runtime and artifact tooling for Pi extensions.",
+      "versions": [
+        "0.5.3"
+      ]
+    },
+    {
+      "id": "pkg-zigai-pi-mention-anything-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@zigai/pi-mention-anything",
+      "license": "MIT",
+      "homepage": "https://github.com/zigai/pi-tweaks/tree/main/packages/pi-mention-anything#readme",
+      "author": "zigai",
+      "description": "Define arbitrary mention sources and triggers for Pi.",
+      "versions": [
+        "0.1.4"
+      ]
+    },
+    {
+      "id": "pkg-zigai-pi-mention-skill-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@zigai/pi-mention-skill",
+      "license": "MIT",
+      "homepage": "https://github.com/zigai/pi-tweaks/tree/main/packages/pi-mention-skill#readme",
+      "author": "zigai",
+      "description": "Pi package that moves skill discovery from slash commands to $ mentions.",
+      "versions": [
+        "0.10.4"
+      ]
+    },
+    {
       "id": "pkg-zumer-snapdom-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -5677,7 +5709,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/acornjs/acorn",
       "description": "ECMAScript parser",
       "versions": [
-        "8.16.0"
+        "8.16.0",
+        "8.18.0"
       ]
     },
     {
@@ -5691,7 +5724,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Turn a function into an `http.Agent` instance",
       "versions": [
         "6.0.2",
-        "7.1.4"
+        "7.1.4",
+        "9.0.0"
       ]
     },
     {
@@ -6137,7 +6171,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/juliangruber/brace-expansion#readme",
       "description": "Brace expansion as known from sh/bash",
       "versions": [
-        "5.0.6"
+        "5.0.12"
       ]
     },
     {
@@ -6372,6 +6406,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-cc-safety-net-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "cc-safety-net",
+      "license": "MIT",
+      "homepage": "https://ccsafetynet.com",
+      "author": "J Liew",
+      "description": "A coding agent CLI hook - block destructive commands and secret file access",
+      "versions": [
+        "2.4.14"
+      ]
+    },
+    {
       "id": "pkg-ccount-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -6406,7 +6453,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/chalk/chalk#readme",
       "description": "Terminal string styling done right",
       "versions": [
-        "5.6.2"
+        "6.0.0"
       ]
     },
     {
@@ -8280,7 +8327,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "0.25.12",
         "0.27.0",
-        "0.28.1",
         "0.28.2"
       ]
     },
@@ -8655,6 +8701,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "A suite of type utilities for building strongly-typed APIs",
       "versions": [
         "0.1.7"
+      ]
+    },
+    {
+      "id": "pkg-ffi-rs-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "ffi-rs",
+      "license": "MIT",
+      "homepage": "https://github.com/zhangyuang/node-ffi-rs#readme",
+      "author": "zhangyuang",
+      "description": "A module written in Rust and N-API provides interface (FFI) features for Node.js",
+      "versions": [
+        "1.3.7"
       ]
     },
     {
@@ -9245,7 +9304,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Alexey Zaytsev",
       "description": "Render Mermaid diagrams as Unicode box-drawing art for terminals",
       "versions": [
-        "0.2.2"
+        "0.2.3"
       ]
     },
     {
@@ -9716,7 +9775,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Nathan Rajlich",
       "description": "An HTTP(s) proxy `http.Agent` implementation for HTTP",
       "versions": [
-        "7.0.2"
+        "7.0.2",
+        "9.1.0"
       ]
     },
     {
@@ -9756,7 +9816,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "An HTTP(s) proxy `http.Agent` implementation for HTTPS",
       "versions": [
         "5.0.1",
-        "7.0.6"
+        "7.0.6",
+        "9.1.0"
       ]
     },
     {
@@ -9835,7 +9896,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "kael",
       "description": "Ignore is a manager and filter for .gitignore rules, the one used by eslint, gitbook and many others.",
       "versions": [
-        "7.0.5"
+        "7.0.8"
       ]
     },
     {
@@ -10875,7 +10936,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
         "14.0.0",
         "16.4.2",
         "17.0.6",
-        "18.0.5"
+        "18.0.11"
       ]
     },
     {
@@ -11642,7 +11703,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Isaac Z. Schlueter",
       "description": "a glob matcher in javascript",
       "versions": [
-        "10.2.5"
+        "10.2.6"
       ]
     },
     {
@@ -11952,19 +12013,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-node-forge-bsd-3-clause-or-gpl-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "node-forge",
-      "license": "(BSD-3-Clause OR GPL-2.0)",
-      "homepage": "https://github.com/digitalbazaar/forge",
-      "author": "Digital Bazaar, Inc.",
-      "description": "JavaScript implementations of network transports, cryptography, ciphers, PKI, message digests, and various utilities.",
-      "versions": [
-        "1.4.0"
-      ]
-    },
-    {
       "id": "pkg-node-gyp-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -12208,7 +12256,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "The official TypeScript library for the OpenAI API",
       "versions": [
         "4.104.0",
-        "6.40.0"
+        "7.19.0"
       ]
     },
     {
@@ -12526,6 +12574,32 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Query result type converters for node-postgres",
       "versions": [
         "2.2.0"
+      ]
+    },
+    {
+      "id": "pkg-pi-skillful-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "pi-skillful",
+      "license": "MIT",
+      "homepage": "https://github.com/jvm/pi-mono/tree/main/packages/pi-skillful#readme",
+      "author": "Jose Mocito",
+      "description": "Pi package with skill invocation and visibility improvements.",
+      "versions": [
+        "0.4.0"
+      ]
+    },
+    {
+      "id": "pkg-pi-subagents-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "pi-subagents",
+      "license": "MIT",
+      "homepage": "https://github.com/nicobailon/pi-subagents#readme",
+      "author": "Nico Bailon",
+      "description": "Pi extension for single-agent delegation and scripted multi-agent workflows",
+      "versions": [
+        "0.74.0"
       ]
     },
     {
@@ -13124,6 +13198,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
+      "id": "pkg-proxy-agent-negotiate-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "proxy-agent-negotiate",
+      "license": "MIT",
+      "homepage": "https://github.com/TooTallNate/proxy-agents#readme",
+      "author": "Nathan Rajlich",
+      "description": "Negotiate/SPNEGO proxy authentication for proxy-agents",
+      "versions": [
+        "1.1.0"
+      ]
+    },
+    {
       "id": "pkg-proxy-from-env-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13224,6 +13311,18 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Simple “Least Recently Used” (LRU) cache",
       "versions": [
         "5.1.1"
+      ]
+    },
+    {
+      "id": "pkg-quickjs-wasi-mit",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "quickjs-wasi",
+      "license": "MIT",
+      "homepage": "https://github.com/vercel-labs/quickjs-wasi#readme",
+      "description": "Snapshotable JavaScript runtime via WebAssembly. QuickJS-NG compiled to WASM with snapshot/restore support.",
+      "versions": [
+        "3.6.2"
       ]
     },
     {
@@ -14164,7 +14263,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "6.3.1",
         "7.7.4",
-        "7.8.0",
         "7.8.5"
       ]
     },
@@ -15395,7 +15493,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "sinclairzx81",
       "description": "Json Schema Type Builder with Static Type Resolution for TypeScript",
       "versions": [
-        "1.3.7"
+        "1.3.27",
+        "1.3.34"
       ]
     },
     {
@@ -15445,8 +15544,8 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://undici.nodejs.org",
       "description": "An HTTP/1.1 client, written from scratch for Node.js",
       "versions": [
-        "8.9.0",
-        "8.10.0"
+        "8.10.0",
+        "8.10.2"
       ]
     },
     {
@@ -16285,6 +16384,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "JavaScript parser and stringifier for YAML",
       "versions": [
         "2.8.2",
+        "2.8.3",
         "2.9.0"
       ]
     },

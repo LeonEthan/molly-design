@@ -51,7 +51,7 @@ replacement decision,
 and the YAML turn/projection entry.
 
 Embedded Pi uses its host-approved reminder and selected MCP configuration; preserve
-native settlement and approval while unmodified `pi-mcp-adapter` owns MCP lifecycle.
+native settlement while Pi's native MCP owns MCP lifecycle.
 Keep external Agent shims, hooks and native config overlays retired; preserve user
 CLI installations, hook trust, configuration and history. Never implement image providers in the adapter.
 Image MCP client deadlines must cover the existing image-service deadline plus delivery;

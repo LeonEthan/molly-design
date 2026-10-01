@@ -17,7 +17,6 @@ import {
   HarnessMcpSessionSchema,
   mcpCredentialMatchesServer,
   type McpCredentialBinding,
-  MOLLY_RUN_PERMISSION_MODE,
 } from '@molly/shared/embedded-harness';
 import {
   WorkerConfigSchema,
@@ -234,7 +233,6 @@ export class EmbeddedHarnessControl {
       toolsetHash: this.binding.toolsetHash,
       pluginSetHash: this.binding.pluginSetHash,
       permissionProfileId: this.config.permissionProfileId,
-      permissionMode: MOLLY_RUN_PERMISSION_MODE,
     });
     const controller = new AbortController();
     this.activeController = controller;

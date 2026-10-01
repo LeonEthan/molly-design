@@ -24,7 +24,7 @@ export const Included: Story = {
       harness: {
         id: 'molly',
         engine: 'pi',
-        engineVersion: '0.85.1',
+        engineVersion: '0.99.2',
         protocolVersion: 1,
         buildId: 'a'.repeat(64),
       },

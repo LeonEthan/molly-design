@@ -8,7 +8,7 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
-export const PI_ENGINE_VERSION = '0.85.1' as const;
+export const PI_ENGINE_VERSION = '0.99.2' as const;
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
 
 /** Execution eligibility only: historical configs remain readable. */
@@ -486,15 +486,13 @@ export function decodeMollyModelOption(
 }
 
 /**
- * Permission modes a run snapshot may record. Molly runs always freeze `auto-review`, which
- * runs shell in an OS sandbox and reviews escalations
- * ([Spec](../../../specs/generative-layered-design-workflow.md)); earlier snapshots and saved
- * selections may still hold the retired `ask`.
+ * Permission modes earlier run snapshots and saved selections may record. New Molly runs record
+ * none: the embedded Pi runs tools without permission checks
+ * ([Spec](../../../specs/molly-embedded-pi-harness.md)).
  */
 export const MOLLY_PERMISSION_MODES = ['ask', 'auto-review'] as const;
 export const MollyPermissionModeSchema = z.enum(MOLLY_PERMISSION_MODES);
 export type MollyPermissionMode = z.infer<typeof MollyPermissionModeSchema>;
-export const MOLLY_RUN_PERMISSION_MODE: MollyPermissionMode = 'auto-review';
 
 /** Saved mode selections no longer choose anything; unknown values stay unsupported controls. */
 function assertRecordedMollyPermissionModes(input: {

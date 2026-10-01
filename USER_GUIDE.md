@@ -143,12 +143,12 @@ persistence. Configured-model turns were verified on earlier installed builds.
 Real image generation/editing in one artwork, including the retry-authorization
 disclosure, and legacy continuation on a hybrid package were verified separately.
 Windows resource builds are not native execution evidence. Linux desktop support
-is retired; Linux CI and resource-integrity checks do not imply product support. The reviewed `pi-ask-question` subset has
-SDK tests, and native question interaction was verified on an installed build;
-restoration across restarts remains open. None of these
+is retired; Linux CI and resource-integrity checks do not imply product support. Questions now use the unmodified
+`rpiv-ask-user-question` package with SDK tests; installed-build question interaction
+and restoration across restarts remain open. None of these
 checks establishes a universal canvas-size or performance limit.
 
-Deferred beyond this delivery: Google and other SDK upgrades, the plugin
+Deferred beyond this delivery: Google acceptance, the plugin
 slash-command system, complex image composition (masks, multiple reference images,
 format matrices), dedicated cross-platform acceptance, long-term performance testing,
 and bundled-Pi upgrade/uninstall drills.

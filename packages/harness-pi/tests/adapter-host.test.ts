@@ -60,7 +60,8 @@ describe('owned ACP host integration', () => {
       expect(compactions).toEqual([{ reason: 'overflow', aborted: true, willRetry: false }]);
       const history = await readFile(session.binding.nativeSessionFile, 'utf8');
       expect(history).not.toContain('"type":"compaction"');
-    }
+    },
+    30_000
   );
 
   it('projects actual native usage through the existing Core notification and ACP context channels', async () => {

@@ -239,3 +239,10 @@ Full `pnpm check` passes, including 135 harness tests, 3,054 CLI tests, typechec
 lint and platform/public-boundary checks. `pnpm install`, `pnpm format` and documentation
 checks pass. A fresh Pi 0.99.2 bundle verifies 20,801 resources and passes the loopback
 synthetic smoke turn with 33 commands and native tools available.
+
+The first CI run hit Vitest's default five-second timeout in the first full-profile
+recovery case; the next case completed in 788 ms and all other harness tests passed.
+A cold-cache local probe spent 644 ms opening the native session and another 52 ms
+settling the prompt. Both recovery cases now use an explicit 30-second integration
+budget for native package loading. Their event, provider-request and history assertions
+remain unchanged; no sleeps, timing-based success criteria or runtime changes were added.

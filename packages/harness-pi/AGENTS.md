@@ -7,7 +7,8 @@ Read [README](README.md) before changing session construction, packages or the b
   `profile-settings.ts`. Record known upstream defects instead of working around them.
 - The worker profile is Molly's own `PI_CODING_AGENT_DIR`. Never open the user's
   `~/.pi/agent`. Keep Pi's native discovery, skills, context files and hooks; Molly owns
-  `settings.json` and trusts its session workdirs.
+  `settings.json`. Project code defaults to untrusted; discover materialized text skills
+  through the SDK's explicit skill paths independently of executable project trust.
 - Tools run without permission checks. `cc-safety-net` is the only floor and must stay in
   `subagents.defaultExtensions`; keep external-CLI sub-agents disabled. Never infer an
   answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.

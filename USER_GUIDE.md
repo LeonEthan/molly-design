@@ -41,7 +41,7 @@ app and automation interfaces unresponsive.
    turn. Saving does not test or automatically select them. A stdio server runs
    local code: configure only commands and servers you trust.
 
-The bundled-capabilities section reports packaged versions and compatibility
+The bundled-capabilities section reports the packaged question extension's version and compatibility
 conditions, not live session activation. The selected question extension requires
 the desktop question interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.

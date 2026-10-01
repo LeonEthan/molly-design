@@ -55,8 +55,7 @@ export function externalCliSubagents(): string[] {
 export function createProfileSettings() {
   return {
     packages: MOLLY_PI_PACKAGES.map(resolvePiPackageRoot),
-    // Molly creates and owns each session workdir, including its `.agents/skills`.
-    defaultProjectTrust: 'always',
+    defaultProjectTrust: 'never',
     enableAnalytics: false,
     enableInstallTelemetry: false,
     subagents: {

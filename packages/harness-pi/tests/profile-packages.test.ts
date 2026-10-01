@@ -43,7 +43,7 @@ describe('application Pi profile packages', () => {
     vi.stubEnv('PI_CODING_AGENT_DIR', agentDir);
     await writeProfileSettings(agentDir);
     const settings = JSON.parse(await readFile(join(agentDir, 'settings.json'), 'utf8'));
-    expect(settings).toMatchObject({ defaultProjectTrust: 'always', enableAnalytics: false });
+    expect(settings).toMatchObject({ defaultProjectTrust: 'never', enableAnalytics: false });
     expect(settings.subagents.defaultExtensions).toEqual([
       expect.stringMatching(/cc-safety-net[/\\]dist[/\\]pi[/\\]index\.js$/),
     ]);

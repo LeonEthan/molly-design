@@ -4,6 +4,7 @@ import { ProjectTrustStore } from '@earendil-works/pi-coding-agent';
 import type { SessionNotification } from '@agentclientprotocol/sdk';
 import { describe, expect, it } from 'vitest';
 import { fixture } from './fixtures/adapter';
+import { createProfileSettings } from '../src/profile-settings';
 
 async function prepareProject(
   f: Awaited<ReturnType<typeof fixture>>,
@@ -55,6 +56,33 @@ function commands(updates: SessionNotification[]) {
 }
 
 describe('owned ACP native project trust', () => {
+  it('discovers text skills without executing project code in the shipped profile', async () => {
+    const f = await fixture();
+    const signalFile = await prepareProject(f, 'never');
+    await writeFile(
+      join(f.agentDir, 'settings.json'),
+      JSON.stringify({
+        ...createProfileSettings(),
+        retry: { enabled: false },
+        compaction: { enabled: false },
+      })
+    );
+    const skillDir = join(f.cwd, '.agents', 'skills', 'project-text-proof');
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      join(skillDir, 'SKILL.md'),
+      '---\nname: project-text-proof\ndescription: Synthetic text skill\n---\nPROJECT_TEXT_PROOF'
+    );
+    await f.initialize();
+    await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
+    await expect(readFile(signalFile)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect(commands(f.updates)).not.toContain('project-trust-proof');
+    expect(commands(f.updates)).toContain('skill:project-text-proof');
+    expect(commands(f.updates)).toContain('skill:trust-global-proof');
+    expect(new ProjectTrustStore(f.agentDir).get(f.cwd)).toBeNull();
+    expect(f.prompts).toEqual([]);
+  });
+
   it.each(['never', 'ask'] as const)(
     'does not execute project code or load project settings with default %s',
     async (defaultProjectTrust) => {

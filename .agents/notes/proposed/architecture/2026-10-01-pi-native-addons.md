@@ -69,3 +69,29 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
   prompts: 69 tool calls including MCP through codemode, three ordinary tool errors the
   Agent handled, a rendered and autosaved artwork. Human visual review, background
   sub-agents, image generation and other providers remain unverified.
+
+## PR #55 review follow-up
+
+- The Settings inventory now verifies the staged `@juicesharp/rpiv-ask-user-question`
+  `package.json` and `LICENSE` through the existing sealed resource manifest. It no
+  longer expects the retired `pi-ask-question` manifest or reports its tool name.
+- Opening arbitrary workdirs no longer grants executable project trust. The managed
+  profile defaults to `never`; native saved explicit grants still apply. The SDK's
+  `additionalSkillPaths` loads materialized `.agents/skills` text independently. This
+  changes the harness Spec's trust intent; both translations return to draft.
+- Reuse: existing capability IPC, resource digests, native trust store and skill
+  loader. No replacement inventory projection, trust protocol or package patch.
+- Codex second opinion (`gpt-6-astra`, high, read-only) recommends removing
+  `pi-subagents` 0.74.0 until it supplies child mutation settlement. Its native
+  `agent_end` drain skips GUI contexts and does not join children on every failure
+  exit; foreground cancellation also has a timed settlement fallback. Defaulting
+  `async` to false or wrapping model tool calls does not close all launch routes.
+  Removing the package would reduce the approved delegation capability; owner
+  direction on that tradeoff is pending.
+- Restoring tool approvals or an OS sandbox conflicts with the explicit owner
+  decision and linked approval above; this review follow-up retains that intent.
+- Verification: `pnpm check`, `pnpm format` and `pnpm run docs check` pass; the
+  focused harness tests (10), capability UI tests (5) and Electron service tests
+  (25) pass. A freshly staged bundle verifies all 20,801 resources and its Settings
+  inventory reports the live question package. No interactive desktop acceptance
+  or live model inference was run for these fixes.

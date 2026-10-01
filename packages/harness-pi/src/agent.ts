@@ -13,6 +13,7 @@ import {
   type InlineExtension,
 } from '@earendil-works/pi-coding-agent';
 import { realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import {
   openNativeSession,
@@ -245,6 +246,9 @@ export class PiAcpAgent implements acp.Agent {
         cwd,
         agentDir,
         settingsManager: settings,
+        additionalSkillPaths: existsSync(join(cwd, '.agents', 'skills'))
+          ? [join(cwd, '.agents', 'skills')]
+          : [],
         extensionFactories: [
           ...(this.options.extensions ?? []),
           ...createAcpMcpExtensions(mcpConfig),

@@ -30,11 +30,10 @@ export const Included: Story = {
       },
       extensions: [
         {
-          name: 'pi-ask-question',
-          version: '0.4.0',
-          commit: 'b'.repeat(40),
-          license: 'MIT',
-          tools: ['ask_question'],
+          name: '@juicesharp/rpiv-ask-user-question',
+          version: '2.12.0',
+              license: 'MIT',
+          tools: ['ask_user_question'],
           activation: 'requires-question-ui-v1',
         },
       ],

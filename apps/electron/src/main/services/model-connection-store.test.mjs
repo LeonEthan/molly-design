@@ -14,30 +14,29 @@ for (const mode of [
   'corrupt',
   'duplicate',
   'platform',
-  'commands',
+  'extension',
   'license'
 ]) {
   void test(`bundled capability inventory verifies fixed public resources: ${mode}`, async (t) => {
     const root = await mkdtemp(join(tmpdir(), 'molly-capabilities-'))
     t.after(() => rm(root, { recursive: true, force: true }))
-    const resources = join(root, 'harness', 'extensions', 'pi-ask-question')
+    const resources = join(root, 'harness', 'node_modules', '@juicesharp', 'rpiv-ask-user-question')
     await mkdir(resources, { recursive: true })
     const hash = (value) => createHash('sha256').update(value).digest('hex')
     const license = 'Synthetic license fixture'
     const extension = JSON.stringify({
-      schemaVersion: 1,
-      name: 'pi-ask-question',
-      version: '0.4.0',
-      commit: 'a'.repeat(40),
+      name: '@juicesharp/rpiv-ask-user-question',
+      version: '2.12.0',
       license: 'MIT',
-      licenseSha256: mode === 'license' ? '0'.repeat(64) : hash(license),
-      selectedTools: ['ask_question'],
-      selectedCommands: mode === 'commands' ? ['unmapped'] : [],
+      pi: { extensions: mode === 'extension' ? ['./unmapped.ts'] : ['./index.ts'] },
       extraPrivateField: 'synthetic-not-for-renderer'
     })
     const files = [
-      { path: 'extensions/pi-ask-question/manifest.json', sha256: hash(extension) },
-      { path: 'extensions/pi-ask-question/LICENSE', sha256: hash(license) }
+      {
+        path: 'node_modules/@juicesharp/rpiv-ask-user-question/package.json',
+        sha256: hash(extension)
+      },
+      { path: 'node_modules/@juicesharp/rpiv-ask-user-question/LICENSE', sha256: hash(license) }
     ]
     if (mode === 'duplicate') files.push(files[0])
     const runtime = {
@@ -51,8 +50,8 @@ for (const mode of [
     }
     await writeFile(join(root, 'harness', 'runtime-manifest.json'), JSON.stringify(runtime))
     if (mode !== 'missing')
-      await writeFile(join(resources, 'manifest.json'), mode === 'corrupt' ? '{}' : extension)
-    await writeFile(join(resources, 'LICENSE'), license)
+      await writeFile(join(resources, 'package.json'), mode === 'corrupt' ? '{}' : extension)
+    await writeFile(join(resources, 'LICENSE'), mode === 'license' ? 'tampered' : license)
     const result = readBundledCapabilities(join(root, 'index.js'))
     if (mode !== 'valid') {
       await assert.rejects(result, { message: 'bundled_capabilities_unavailable' })
@@ -62,11 +61,10 @@ for (const mode of [
     assert.equal(snapshot.harness.buildId, runtime.buildId)
     assert.deepEqual(snapshot.extensions, [
       {
-        name: 'pi-ask-question',
-        version: '0.4.0',
-        commit: 'a'.repeat(40),
+        name: '@juicesharp/rpiv-ask-user-question',
+        version: '2.12.0',
         license: 'MIT',
-        tools: ['ask_question'],
+        tools: ['ask_user_question'],
         activation: 'requires-question-ui-v1'
       }
     ])

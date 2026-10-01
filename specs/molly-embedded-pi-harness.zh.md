@@ -1,7 +1,7 @@
 # Molly 内置 Pi Harness
 
-Status: approved
-Approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
+Status: draft
+Previous approval (before PR #55 trust correction): [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous approval (before Role retirement): [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Translation: current
 
@@ -81,7 +81,7 @@ R1 → R2 是关键路径；R3 嵌入 R2，随后完成 R4 和 R5。新增真实
 
 引擎基线为 Pi v0.99.2，使用公开 coding-agent SDK、固定绝对路径和独立进程。引擎、下列 Pi 包及实际需要的资源在构建时锁定并随包交付；发布产物带版本、依赖/资源摘要、协议版本和平台清单。开发与安装包均需验证实际 Node 版本满足引擎要求，不以宿主开发 Node 代替包内探针。
 
-Molly 不定位、启动或修改本地 Pi，从不读写用户自己的 Pi 配置（`~/.pi/agent`），也不继承其认证。Molly 在其私有数据下拥有自己的 Pi 配置（agent 目录）；settings、凭据、模型目录、缓存、会话、包状态和临时文件均在其中。在该配置内保留 Pi 的通用 Agent 能力：原生资源发现、skills、提示模板、上下文文件和扩展钩子。Molly 的会话工作目录是受信任项目，Molly 在其中生成的 skills 原生加载；用户 `~/.agents/skills` 中的共享 skills 也会被原生发现。worker 环境采用白名单，保留包内 Node 启动所需变量，移除外部认证和代码注入变量。退出只清理自己拥有的进程。
+Molly 不定位、启动或修改本地 Pi，从不读写用户自己的 Pi 配置（`~/.pi/agent`），也不继承其认证。Molly 在其私有数据下拥有自己的 Pi 配置（agent 目录）；settings、凭据、模型目录、缓存、会话、包状态和临时文件均在其中。在该配置内保留 Pi 的通用 Agent 能力：原生资源发现、skills、提示模板、上下文文件和扩展钩子。打开会话目录不会自动信任其中的项目代码：默认不加载项目 `.pi` 配置、包和 JavaScript 扩展；Pi 原生保存的显式信任决定仍然有效。Molly 在工作目录 `.agents/skills` 中生成的文本 skills 通过 SDK 的显式 skill 路径加载，不授予可执行项目资源信任；用户 `~/.agents/skills` 中的共享 skills 也会被原生发现。worker 环境采用白名单，保留包内 Node 启动所需变量，移除外部认证和代码注入变量。退出只清理自己拥有的进程。
 
 Molly 以尽量少的胶水代码交付未修改、锁定版本的已发布 Pi 包，并在其配置中列出：`pi-subagents`（委派给前台和后台子 Agent）、`pi-skillful`（skill 发现）、`@juicesharp/rpiv-ask-user-question`（向用户提问）、`@zigai/pi-mention-skill`（输入 `$skill` 提及）、`@ff-labs/pi-fff`（快速文件搜索）和 `cc-safety-net`（下文的安全底线）。驱动其他已安装 CLI 及其账号的子 Agent 被禁用。Pi 包属于受信任代码。简单确认、选择、输入、编辑器和通知复用现有 GUI 对话框；仅终端可用的 UI（自定义组件、小部件、页脚、自动补全、子 Agent 舰队视图）不可用。命令体系延期：输入框不提供斜杠命令发现。超时、关闭窗口和取消都不算作回答。插件不获应用内安装、自更新或另一套付费服务配置入口。
 

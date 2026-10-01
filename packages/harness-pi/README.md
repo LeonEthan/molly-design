@@ -27,8 +27,11 @@ native package discovery; none is patched or forked. `cc-safety-net` is also lis
 `pi-subagents` built-ins that drive another installed CLI (Codex, Claude Code, Cursor) are
 disabled through `subagents.agentOverrides`: they would run on another account and skip that
 list.
-`defaultProjectTrust` is `always`: Molly owns its session workdirs, and design skills it
-materializes in `.agents/skills` load natively. Tools run without permission checks.
+`defaultProjectTrust` is `never`: opening a directory does not authorize its `.pi`
+settings, packages or JavaScript extensions. Pi's native saved trust grants remain
+authoritative. Materialized text skills in the workdir's `.agents/skills` load through
+`DefaultResourceLoader.additionalSkillPaths`, independently of executable project trust.
+Tools run without permission checks.
 
 In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form dialog
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
@@ -82,6 +85,8 @@ lock whose owner has exited (the host stops workers with SIGKILL) is taken over.
 `apps/cli/scripts/build-embedded-harness.mjs` bundles [entry.ts](src/entry.ts) and stages
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
+The Settings capability reader verifies the staged question package's `package.json`
+and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker
 in a temporary root, checks package commands and tools, runs one turn against a loopback
 synthetic model and checks the profile credential.

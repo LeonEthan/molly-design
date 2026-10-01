@@ -9,8 +9,8 @@ Read [README](README.md) before changing session construction, packages or the b
   `~/.pi/agent`. Keep Pi's native discovery, skills, context files and hooks; Molly owns
   `settings.json` and trusts its session workdirs.
 - Tools run without permission checks. `cc-safety-net` is the only floor and must stay in
-  `subagents.defaultExtensions`. Never infer an answer from timeout, cancellation or a late
-  reply; terminal-only UI stays explicitly unavailable.
+  `subagents.defaultExtensions`; keep external-CLI sub-agents disabled. Never infer an
+  answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
 - Model keys arrive on fd 3 per run, are pinned in memory and stored through native
   `login` in the profile for sub-agents. Keys never enter ACP, argv, environment, native
   history or diagnostics; errors carry static codes only.
@@ -21,7 +21,8 @@ Read [README](README.md) before changing session construction, packages or the b
   Cancellation, truncation, handled commands and extension failures never become
   completed inference.
 - Serialize session construction; one managed worker owns one session, connection, model
-  and thinking level. Hold the history writer lock until shutdown completes.
+  and thinking level. Hold the history writer lock until shutdown completes; take over a
+  lock only when its recorded owner process has exited.
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.
 - MCP uses Pi's native MCP, codemode and tool search. Protected MCP values stay literal,

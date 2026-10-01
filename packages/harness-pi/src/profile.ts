@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
-import { mkdir, open, realpath, readFile, stat, unlink } from 'node:fs/promises';
+import { link, mkdir, open, realpath, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep, dirname, basename } from 'node:path';
 import type { SessionManager } from '@earendil-works/pi-coding-agent';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolveProductNativeSession, validateNativeSession } from './native-session';
 import type { WorkerConfig } from './worker-config';
 
@@ -57,15 +57,38 @@ export async function persistNativeHeader(manager: SessionManager): Promise<Sess
   return SessionManager.open(file, manager.getSessionDir(), manager.getCwd());
 }
 
+function ownerAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM';
+  }
+}
+
+/**
+ * Exclusive writer lock recording its owner process. Workers are stopped with SIGKILL, which
+ * runs no cleanup, so a lock whose owner process no longer exists is taken over.
+ */
 export async function acquireSessionWriter(file: string): Promise<() => Promise<void>> {
   const lock = `${file}.acp-lock`;
-  const handle = await open(lock, 'wx', 0o600);
-  return async () => {
+  const staged = `${lock}.${process.pid}.${randomUUID()}`;
+  await writeFile(staged, `${process.pid}\n`, { mode: 0o600, flag: 'wx' });
+  try {
     try {
+      await link(staged, lock);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      const owner = Number.parseInt(await readFile(lock, 'utf8'), 10);
+      if (Number.isInteger(owner) && owner > 0 && ownerAlive(owner)) throw error;
       await unlink(lock);
-    } finally {
-      await handle.close();
+      await link(staged, lock);
     }
+  } finally {
+    await unlink(staged);
+  }
+  return async () => {
+    await unlink(lock);
   };
 }
 

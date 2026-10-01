@@ -74,6 +74,9 @@ async function main(): Promise<void> {
         Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>
       )
     );
+    process.once('SIGTERM', () => {
+      void Promise.resolve(agent?.dispose()).finally(() => process.exit(0));
+    });
     try {
       await connection.closed;
     } finally {

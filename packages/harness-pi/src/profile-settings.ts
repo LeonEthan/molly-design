@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 
@@ -34,6 +34,21 @@ function packageExtensions(name: string): string[] {
 }
 
 /**
+ * `pi-subagents` built-ins that run another installed CLI with its own account and without
+ * `subagents.defaultExtensions`; only native Pi children use the selected connection.
+ */
+export function externalCliSubagents(): string[] {
+  const directory = join(resolvePiPackageRoot('pi-subagents'), 'agents');
+  return readdirSync(directory)
+    .filter((name) => name.endsWith('.md'))
+    .filter((name) =>
+      /^\s+type:\s*external-cli\s*$/m.test(readFileSync(join(directory, name), 'utf8'))
+    )
+    .map((name) => name.slice(0, -'.md'.length))
+    .sort();
+}
+
+/**
  * Molly owns this agent-directory settings file. Main sessions and every sub-agent child
  * (in-process or detached) read the same native settings, so it is the only package list.
  */
@@ -46,6 +61,9 @@ export function createProfileSettings() {
     enableInstallTelemetry: false,
     subagents: {
       defaultExtensions: SUBAGENT_DEFAULT_PACKAGES.flatMap(packageExtensions),
+      agentOverrides: Object.fromEntries(
+        externalCliSubagents().map((name) => [name, { disabled: true }])
+      ),
     },
   };
 }

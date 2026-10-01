@@ -5,7 +5,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CreateElicitationRequest } from '@agentclientprotocol/sdk';
 import { DefaultResourceLoader, SettingsManager, initTheme } from '@earendil-works/pi-coding-agent';
 import { z } from 'zod';
-import { createProfileSettings, writeProfileSettings } from '../src/profile-settings';
+import {
+  createProfileSettings,
+  externalCliSubagents,
+  resolvePiPackageRoot,
+  writeProfileSettings,
+} from '../src/profile-settings';
+import { pathToFileURL } from 'node:url';
 import type { AdapterPeer } from '../src/session';
 import { fauxAssistantMessage, fauxToolCall, fixture } from './fixtures/adapter';
 
@@ -56,6 +62,23 @@ describe('application Pi profile packages', () => {
     );
     const commands = extensions.flatMap((extension) => [...extension.commands.keys()]);
     expect(commands).toEqual(expect.arrayContaining(['skillful', 'cc-safety-net']));
+  });
+
+  it('offers only native Pi sub-agents, never another installed CLI and account', async () => {
+    const root = await realpath(await mkdtemp(join(tmpdir(), 'molly-profile-')));
+    roots.push(root);
+    vi.stubEnv('PI_CODING_AGENT_DIR', join(root, 'config'));
+    await writeProfileSettings(join(root, 'config'));
+    const discovery = await import(
+      pathToFileURL(join(resolvePiPackageRoot('pi-subagents'), 'src/agents/agents.js')).href
+    );
+    const names = z
+      .object({ agents: z.array(z.object({ name: z.string() })) })
+      .parse(discovery.discoverAgents(root, 'both'))
+      .agents.map((agent) => agent.name);
+    expect(externalCliSubagents()).toContain('codex-exec');
+    expect(names).toContain('worker');
+    expect(names.filter((name) => externalCliSubagents().includes(name))).toEqual([]);
   });
 
   it('blocks a destructive shell command through the safety floor without asking', async () => {

@@ -23,7 +23,10 @@ writes the profile's `settings.json` from [profile-settings.ts](src/profile-sett
 
 Packages are referenced by their absolute paths in the sealed closure and loaded by Pi's
 native package discovery; none is patched or forked. `cc-safety-net` is also listed in
-`subagents.defaultExtensions`, because sub-agent children load only that list.
+`subagents.defaultExtensions`, because sub-agent children load only that list. The
+`pi-subagents` built-ins that drive another installed CLI (Codex, Claude Code, Cursor) are
+disabled through `subagents.agentOverrides`: they would run on another account and skip that
+list.
 `defaultProjectTrust` is `always`: Molly owns its session workdirs, and design skills it
 materializes in `.agents/skills` load natively. Tools run without permission checks.
 
@@ -71,7 +74,8 @@ and extracts new preferences after completion ([personal memory](../../specs/per
 Native histories keep the previous layout,
 `<private>/sessions/<sha256(connection)>/<sha256(product session)>/`, so sessions created by
 earlier releases restore unchanged ([native-session.ts](src/native-session.ts),
-[profile.ts](src/profile.ts)). An `.acp-lock` beside a history refuses a second writer.
+[profile.ts](src/profile.ts)). An `.acp-lock` beside a history records its owner process and refuses a second writer; a
+lock whose owner has exited (the host stops workers with SIGKILL) is taken over.
 
 ## Build and verification
 

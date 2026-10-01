@@ -55,6 +55,11 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
 - Background sub-agents can keep editing after a turn ends, outside the canvas read-only
   window; design commits still check versions and CAS. Their usage is not counted.
 - Without permission checks, untrusted content can steer any command the user can run.
+- Codex review (gpt-6-astra, high, read-only) found two P1s, both fixed: `pi-subagents`
+  built-ins driving installed Codex/Claude/Cursor CLIs ran on other accounts without the
+  safety floor (now disabled), and history locks left by killed workers blocked restore
+  (locks now record their owner process and are taken over once it has exited). A reused
+  process ID can still make a stale lock look held.
 - [Pi #10249](https://github.com/earendil-works/pi/issues/10249): an MCP server still
   starting at shutdown can outlive it. Not patched.
 - Evidence: real-SDK package tests (all six load; safety floor blocks without prompting;

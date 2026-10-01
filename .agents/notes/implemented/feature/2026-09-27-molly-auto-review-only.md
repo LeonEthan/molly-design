@@ -3,6 +3,7 @@
 Status: implemented
 Date: 2026-09-27
 Translation: current
+Superseded: 2026-10-01 by [no permission checks on native Pi packages](../../proposed/architecture/2026-10-01-pi-native-addons.md)
 
 [中文](2026-09-27-molly-auto-review-only.zh.md)
 

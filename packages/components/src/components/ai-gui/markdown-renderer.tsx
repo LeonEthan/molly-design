@@ -992,8 +992,8 @@ const AgentFileLink = ({
       title={href}
       aria-label={`${hasOpenAction ? openAgentFileLabel : copyAgentFileLabel}: ${href}`}
       className={cn(
-        'inline-flex max-w-full items-center gap-1 rounded-sm align-[-0.15em] text-sky-700 dark:text-sky-400 no-underline shadow-none transition-colors',
-        'hover:underline underline-offset-2 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
+        'inline-flex max-w-full items-center gap-1 rounded-sm align-[-0.15em] text-current shadow-none transition-colors',
+        'underline underline-offset-2 decoration-muted-foreground/40 hover:decoration-muted-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2'
       )}
     >
       <MonochromeFileIcon filePath={iconPath} className="h-3.5 w-3.5 shrink-0" />

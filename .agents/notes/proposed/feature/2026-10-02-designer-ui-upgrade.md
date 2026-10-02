@@ -166,6 +166,32 @@ Phase 2 merged as PR #63; the owner then authorised phase 3.
   daemon hook, which changes no Spec intent because the Spec only promises
   auto-naming.
 
+## Phase 4 implementation
+
+Phase 3 merged as PR #64; the owner then authorised phase 4. An audit of the built app
+(2482px window, light and dark, Inter forced in memory because the local profile had
+picked Chalkboard as interface font) found seven text sizes in one session view
+(16, 14, 13, 12.5, 12, 11.9 and 11px), sidebar conversation rows at 14px beside 13px
+project and section rows, and a leftover sky-blue on file links as the only hue.
+
+- **Accent:** the owner compared current blue, monochrome, umber and deep green in the
+  real app and chose monochrome. File links now match web links: ink with a muted
+  underline. Primary, ring and toggles stay near-black, so no colour tokens change.
+- **Type ladder:** sidebar conversation rows move to 13px, matching project rows and
+  chrome. Activity headers and steps (“Worked for…”) move from 12.5px medium to 12px
+  regular, and message timestamps from 11px to 12px, giving one quiet metadata size.
+  The home heading is the only display size in the app; the onboarding heading keeps
+  its responsive size from the earlier onboarding decision, and the composer `title`
+  prop is only used by stories.
+- **Dark mode:** row and footer dimming in dark mode is a deliberate recede, and the
+  owner kept it. No other light/dark mismatch was found on the audited surfaces.
+- **Spacing:** no inconsistency worth a change was found on the audited surfaces, so
+  none was invented.
+
+Remaining 11px text includes the context-usage ring label and many secondary
+surfaces (172 occurrences); they were not swept because they sit outside the audited
+designer path.
+
 ## Verification and limits
 
 - Unit tests cover the machine-menu visibility rule, size-instruction parsing in both

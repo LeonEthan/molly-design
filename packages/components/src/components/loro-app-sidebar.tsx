@@ -651,7 +651,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           openedByTree={openedByTree}
         />
         <div
-          className="min-w-0 flex-1 flex items-center gap-1 truncate text-sm text-current"
+          className="min-w-0 flex-1 flex items-center gap-1 truncate text-[13px] text-current"
           // Double-click to rename is scoped to the title only, so it can't be
           // triggered by double-clicking the Archive confirm button.
           onDoubleClick={(event) => {

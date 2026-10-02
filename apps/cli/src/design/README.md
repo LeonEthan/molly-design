@@ -104,6 +104,10 @@ ordinary image-reading tools; rendering alone does not prove model image input.
 Turn collection writes verdicts/receipts only, with no thumbnail generation,
 reference amendment, or dedicated readback. Legacy optional outcome fields and
 existing image files remain stored; the current read view ignores retired fields.
+A committed `design.yaml` `title` becomes the Session name through the ordinary
+`setTitleIfSourceIn` guard, so draft and generated names follow the artwork while
+a user rename stays. Receipt recovery and uncommitted turns rename nothing; no
+title model request is added.
 
 Molly design sessions use the sealed embedded Pi SDK. The external `pi-acp`
 launcher, temporary command shim and separate design/MCP extensions are retired

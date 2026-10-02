@@ -184,17 +184,40 @@ state remaining fidelity, fact or editability limitations.
 ### 9. Polish and report
 
 Make final refinements within scope and review the resulting current version.
-Keep the complete authoring files in the supplied directory. Summarize the chosen
-direction, useful research or prescribed reference, layer and text decisions,
-actual checks, unresolved deviations and blocked work. Human judgment establishes
-visual quality; Agent review is advisory. Describe your own image inspection as
-Agent review, never human or manual acceptance unless a person actually performed
-and reported that check.
+Keep the complete authoring files in the supplied directory. Name the artwork in
+the `design.yaml` `title`: two to five words in the user's language naming the
+subject and format, such as “Autumn jazz night poster”. Keep an existing title
+unless the subject changed. Molly may show it as the conversation name; a name
+the user set always wins.
+
+Then reply as described in [Reply to the designer](#reply-to-the-designer).
+Human judgment establishes visual quality; Agent review is advisory. Describe
+your own image inspection as Agent review, never human or manual acceptance
+unless a person actually performed and reported that check.
+
+## Reply to the designer
+
+Write the final reply for a designer, not an engineer, in the user's language,
+in a few short paragraphs or bullets:
+
+1. **Direction** — the idea, hierarchy and mood in one or two sentences, and how
+   it answers the brief or the requested change.
+2. **What you can edit** — which copy is live text, which pictures are separate
+   layers, and anything flattened, merged or otherwise limited.
+3. **Next tweaks** — two or three concrete changes the user might ask for next.
+4. **Limits** — unmet requirements, assumptions, blocked steps and concerns from
+   your own review. Omit this part when there are none.
+
+Name research sources briefly. Leave out file paths, YAML fields, element IDs,
+tool and script names, commands and diagnostic codes unless the user asks or a
+limit cannot be explained without them; describe them in plain words instead.
+Do not list every workflow stage or check.
 
 ## Completion reporting
 
 Distinguish prepared authoring files, a natively rendered and inspected current
-draft, and a saved artwork supported by an observed application receipt. Molly's
+draft, and a saved artwork supported by an observed application receipt, in
+plain words such as “I previewed and checked the current version”. Molly's
 final collection runs after your turn ends: do not wait for that same turn's
 save receipt or anticipate its success. End with what you have actually verified.
 A normal turn may still be collected under existing schema, asset and version

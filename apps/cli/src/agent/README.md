@@ -26,7 +26,8 @@ ambiguity; the initial placeholder is not a default model. Public catalog public
 never reads credentials, tests inference or changes the user's existing Agent selection.
 
 Embedded Molly title generation uses the first local user sentence without spawning
-a title worker or requesting model inference.
+a title worker or requesting model inference. A committed artwork title later
+replaces it (see [design collection](../design/README.md)).
 
 Embedded prompt cancellation sends ACP cancel while retaining the native response.
 `embedded-harness-control.ts` accepts a completed or cancelled receipt only when its

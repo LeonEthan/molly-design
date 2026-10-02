@@ -70,3 +70,6 @@ record logical design origin while the managed ref remains linear. Source displa
 may read frozen input provenance but never gains save authority. Freeze its referenced
 source identity separately from the full artifact digest; unused new media cannot
 make an inherited draft live. See [history](README.md#design-history).
+
+Only a just-committed `design.yaml` `title` may rename the Session, and only over
+`draft`/`generated` sources; never override a user rename or request a title model.

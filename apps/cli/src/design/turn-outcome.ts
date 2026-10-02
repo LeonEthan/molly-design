@@ -152,7 +152,12 @@ export type DesignTurnSkipReason =
   | 'entry_missing';
 
 export type DesignTurnAttempt =
-  | { status: 'recorded'; outcome: DesignTurnOutcome }
+  | {
+      status: 'recorded';
+      outcome: DesignTurnOutcome;
+      /** The committed `design.yaml` title, offered as the Session name. */
+      artworkTitle?: string;
+    }
   | { status: 'skipped'; reason: DesignTurnSkipReason };
 
 const outcomeBase = (
@@ -257,7 +262,7 @@ async function recordTurnOutcome(
     dataRoot: string;
     manifestFile: ManifestPresent;
     requiresNativeTerminal: boolean;
-  }) => Promise<{ outcome: DesignTurnOutcome }>
+  }) => Promise<{ outcome: DesignTurnOutcome; artworkTitle?: string }>
 ): Promise<DesignTurnAttempt> {
   const dataRoot = ctx.dataRoot ?? getMollyDataDir();
   const workdir = ctx.workdir ?? path.join(dataRoot, 'chats', ctx.sessionId);
@@ -353,10 +358,7 @@ async function recordTurnOutcome(
     return { status: 'skipped', reason: 'entry_missing' };
   }
 
-  return {
-    status: 'recorded',
-    outcome: collected.outcome,
-  };
+  return { status: 'recorded', ...collected };
 }
 
 /** The imported half of a design store write: the document and its assets. */
@@ -488,7 +490,10 @@ export async function collectDesignTurnOutcome(
           },
           { lock: ctx.lock }
         );
-        return { outcome: { ...base, status: 'committed', revisionId: saved.revisionId } };
+        return {
+          outcome: { ...base, status: 'committed', revisionId: saved.revisionId },
+          artworkTitle: intake.validated.title,
+        };
       } catch (error) {
         const conflict =
           error instanceof Error &&

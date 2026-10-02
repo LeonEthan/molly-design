@@ -106,7 +106,12 @@ Phase 1 merged as PR #62; the owner then authorised phase 2.
   element lent by the side-panel tab bar (`soloPanelContent`), so version, save and
   export state stay in the canvas instead of being lifted into the session shell.
   The add-panel and hide-panel controls stay in the row; opening another panel
-  restores the tab strip.
+  restores the tab strip. Review of PR #63 found that at narrow panels (365px in a
+  900px window, down to the 280px minimum) the non-wrapping merged row pushed canvas
+  actions under the add/hide controls. The merge now needs 440px of row content,
+  which the full English row (about 436px) fits; narrower panels keep the tab strip
+  and the canvas's own wrapping row. A responsive compact row was not built because
+  even icon-only actions plus the panel controls do not fit at 280px.
 - **One artwork indicator:** the conversation header shows “Show artwork” only while
   the canvas is hidden. The canvas status now says “Current artwork” before a first
   version, matching the Spec's wording.

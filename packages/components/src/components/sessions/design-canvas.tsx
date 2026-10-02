@@ -127,6 +127,7 @@ export function useDesignCreation(workspaceSlug: string) {
     });
   };
 }
+export const DESIGN_CANVAS_TOOLBAR_MIN_WIDTH = 440;
 export function DesignCanvas({
   sessionId,
   artworkId: artworkIdProp,
@@ -580,7 +581,7 @@ export function DesignCanvas({
   const toolbarItems = (
     <>
       <span
-        className="max-w-full rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
+        className="min-w-0 max-w-full truncate rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
         role="status"
       >
         {currentVersion

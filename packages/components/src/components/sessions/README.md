@@ -158,7 +158,11 @@ width (22–40% of the window, `design-panel-sizes.ts`) and the split is saved u
 its own layout id. When the canvas is the only side-panel tab, its action row is
 portaled into the side-panel top row in place of the tab strip, so there is one row
 of chrome; opening another panel brings the tab strip back and returns the row to
-the canvas. The conversation header offers “Show artwork” only while the canvas is
+the canvas. The merge also needs `DESIGN_CANVAS_TOOLBAR_MIN_WIDTH` (440px) of row
+content, measured by the tab bar's `ResizeObserver`; a narrower panel keeps the
+tab strip and the canvas's own wrapping row, so every action stays clickable down
+to the 280px panel minimum. The status pill truncates rather than pushing actions
+out of the row. The conversation header offers “Show artwork” only while the canvas is
 hidden.
 
 The canvas action row uses 36px controls and pill-shaped version status, with

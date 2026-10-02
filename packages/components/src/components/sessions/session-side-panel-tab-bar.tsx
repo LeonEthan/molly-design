@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   FileDiff,
   Files,
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
 import { WINDOW_DRAG_EXEMPT_CLASS, useWindowDragRegionClass } from '@/ui/window-drag-region';
 
 export type SessionSidePanelTabItem = {
@@ -133,6 +134,8 @@ type SessionSidePanelTabBarProps = {
   endSlot?: ReactNode;
   /** Replaces the tab strip when the only open panel brings its own toolbar row. */
   soloPanelContent?: ReactNode;
+  /** Row content width below which the tab strip stays and the panel keeps its own toolbar. */
+  soloPanelMinWidth?: number;
   className?: string;
 };
 
@@ -216,18 +219,32 @@ export const SessionSidePanelTabBar = memo(function SessionSidePanelTabBar({
   moreSlot,
   endSlot,
   soloPanelContent,
+  soloPanelMinWidth = 0,
   className,
 }: SessionSidePanelTabBarProps) {
   const windowDragClass = useWindowDragRegionClass();
+  const rootRef = useRef<HTMLDivElement>(null);
   const activeTabRef = useRef<HTMLDivElement>(null);
+  const [soloPanelFits, setSoloPanelFits] = useState(true);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    return observeResizeOnAnimationFrame(root, ([entry]) => {
+      if (entry) setSoloPanelFits(entry.contentRect.width >= soloPanelMinWidth);
+    });
+  }, [soloPanelMinWidth]);
 
   useEffect(() => {
     activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activeTabId]);
 
   return (
-    <div className={cn('flex min-w-0 items-center gap-1 px-2', windowDragClass, className)}>
-      {soloPanelContent ? (
+    <div
+      ref={rootRef}
+      className={cn('flex min-w-0 items-center gap-1 px-2', windowDragClass, className)}
+    >
+      {soloPanelContent && soloPanelFits ? (
         <div className="flex h-11 min-w-0 flex-1 items-center">{soloPanelContent}</div>
       ) : (
         <ScrollArea

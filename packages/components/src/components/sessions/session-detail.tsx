@@ -1,6 +1,6 @@
 import { mollyStorage } from '@/lib/product-storage';
 import { getIpcServices } from '@/lib/electron-ipc-client';
-import { DesignCanvas } from './design-canvas';
+import { DESIGN_CANVAS_TOOLBAR_MIN_WIDTH, DesignCanvas } from './design-canvas';
 import { Loader2, PanelLeft, PanelRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/ui/button';
@@ -4394,6 +4394,7 @@ const SessionDetail = ({
             </>
           ) : undefined
         }
+        soloPanelMinWidth={DESIGN_CANVAS_TOOLBAR_MIN_WIDTH}
         className={cn(
           'border-b border-border/50 bg-background',
           // Right panel sits under the macOS traffic lights (top-left) only

@@ -345,7 +345,7 @@ describe('composer model picker search', () => {
     ],
   };
 
-  it('lists reasoning levels as options on the Reasoning row', async () => {
+  it('confirms a reasoning level and closes the picker', async () => {
     const onConfigOptionChange = vi.fn();
     await openRunConfigMenu({
       modelOptions: fewModels,
@@ -362,7 +362,7 @@ describe('composer model picker search', () => {
     expect(rows[1]?.getAttribute('aria-checked')).toBe('true');
     await clickRow(rows[2]);
     expect(onConfigOptionChange).toHaveBeenCalledWith('reasoning_effort', 'high');
-    expect(document.querySelector('[role="menu"]')).not.toBeNull();
+    expect(document.querySelectorAll('[role="menu"]')).toHaveLength(0);
   });
 
   it('picks a model from the Model row list, keeping the menu open', async () => {

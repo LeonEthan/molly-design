@@ -32,7 +32,7 @@ export function verifyEmbeddedHarness(directory) {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.protocolVersion !== 1 ||
-    manifest.engineVersion !== '0.99.2' ||
+    manifest.engineVersion !== '1.0.0' ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.packages)
   )
@@ -79,7 +79,12 @@ export function verifyEmbeddedHarness(directory) {
   ) {
     throw new Error('Embedded harness build digest mismatch');
   }
-  for (const name of ['@earendil-works/pi-coding-agent', '@earendil-works/pi-ai']) {
+  for (const name of [
+    '@earendil-works/pi-coding-agent',
+    '@earendil-works/pi-ai',
+    '@earendil-works/pi-agent-core',
+    '@earendil-works/pi-tui',
+  ]) {
     const metadata = JSON.parse(
       fs.readFileSync(path.join(root, 'node_modules', name, 'package.json'), 'utf8')
     );

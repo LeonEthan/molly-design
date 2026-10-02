@@ -8,7 +8,7 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
-export const PI_ENGINE_VERSION = '0.99.2' as const;
+export const PI_ENGINE_VERSION = '1.0.0' as const;
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
 
 /** Execution eligibility only: historical configs remain readable. */

@@ -66,6 +66,14 @@ const resolveAcpToolName = (meta: unknown): string | undefined => {
   return getClaudeCodeToolName(meta);
 };
 
+const resolveParentToolCallId = (meta: unknown, toolCallId: string): string | undefined => {
+  const lody = asRecordOrUndefined(asRecordOrUndefined(meta)?.lody);
+  const parent = lody?.parentToolCallId;
+  return typeof parent === 'string' && parent.length > 0 && parent !== toolCallId
+    ? parent
+    : undefined;
+};
+
 /** Narrow an unstructured ACP `rawInput`/`rawOutput` to the plain-object shape history stores. */
 const asRecordOrUndefined = (value: unknown): Record<string, unknown> | undefined =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -932,6 +940,7 @@ const mergeToolCallMessage = (
     // The first-persisted stamp wins; a replayed/retried update must not move it.
     recordedAtMs: prev.recordedAtMs ?? incoming.recordedAtMs,
     toolName: incoming.toolName ?? prev.toolName,
+    parentToolCallId: prev.parentToolCallId ?? incoming.parentToolCallId,
     activityKind: incoming.activityKind !== undefined ? incoming.activityKind : prev.activityKind,
   };
 };
@@ -1211,12 +1220,17 @@ export const buildMessageContentFromNotification = (
       // the created job id. Persist them (small, stable) plus the canonical tool name the
       // deriver switches on; `title` stays whatever the agent chose to show.
       const toolName = resolveAcpToolName((update as ToolCallUpdateWithMeta)._meta);
+      const parentToolCallId = resolveParentToolCallId(
+        (update as ToolCallUpdateWithMeta)._meta,
+        update.toolCallId
+      );
       const activityKind = getToolCallActivityKind((update as ToolCallUpdateWithMeta)._meta);
       const isSchedulingTool = toolName !== undefined && SCHEDULING_TOOL_NAMES.has(toolName);
       return [
         {
           type: 'tool_call',
           toolCallId: update.toolCallId,
+          parentToolCallId,
           title: update.title,
           toolName,
           kind: update.kind || undefined,

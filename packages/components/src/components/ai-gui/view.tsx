@@ -3514,6 +3514,7 @@ const AssistantToolCallVirtualRow = memo(
       <ToolCallCard
         sessionId={sessionId}
         toolCall={entry.content}
+        parentToolTitle={entry.parentToolTitle}
         expanded={expanded}
         onExpandedChange={setExpanded}
         onFilePathClick={onFilePathClick}
@@ -3532,6 +3533,7 @@ const AssistantToolCallVirtualRow = memo(
     prev.messageId === next.messageId &&
     prev.entry.content === next.entry.content &&
     prev.entry.itemIndex === next.entry.itemIndex &&
+    prev.entry.parentToolTitle === next.entry.parentToolTitle &&
     prev.onFilePathClick === next.onFilePathClick &&
     prev.fontSize === next.fontSize
 );
@@ -5795,6 +5797,7 @@ const PlanEntryRow = ({
 // items, so a shallow compare skips completed tool calls entirely.
 const ToolCallCard = memo(function ToolCallCard({
   toolCall,
+  parentToolTitle,
   sessionId,
   fontSize,
   expanded,
@@ -5803,6 +5806,7 @@ const ToolCallCard = memo(function ToolCallCard({
   inlineOutput = false,
 }: {
   toolCall: ToolCallMessage;
+  parentToolTitle?: string;
   sessionId: SessionId;
   fontSize: ConversationFontSize;
   expanded?: boolean;
@@ -6152,6 +6156,18 @@ const ToolCallCard = memo(function ToolCallCard({
               )}
             />
           )}
+          {toolCall.parentToolCallId ? (
+            <span
+              className="max-w-40 shrink-0 truncate text-[10px] text-muted-foreground"
+              title={toolCall.parentToolCallId}
+            >
+              {parentToolTitle
+                ? t('sessions.toolActivity.viaTool', 'via {{tool}}', {
+                    tool: sanitizeToolTitle(parentToolTitle),
+                  })
+                : t('sessions.toolActivity.nestedCall', 'Nested call')}
+            </span>
+          ) : null}
         </div>
       }
     >

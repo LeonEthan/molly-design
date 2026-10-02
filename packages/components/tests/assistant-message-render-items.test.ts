@@ -19,6 +19,30 @@ const buildAssistantMessage = (items: MessageContent[]): SessionHistoryParsed =>
 });
 
 describe('buildAssistantMessageRenderItems', () => {
+  it('associates nested activity rows with the original parent title without reordering calls', () => {
+    const items = [
+      { type: 'tool_call', toolCallId: 'script', title: 'Codemode', status: 'completed' },
+      {
+        type: 'tool_call',
+        toolCallId: 'script/1',
+        parentToolCallId: 'script',
+        title: 'Generate image',
+        status: 'completed',
+      },
+      {
+        type: 'tool_call',
+        toolCallId: 'orphan',
+        parentToolCallId: 'missing',
+        title: 'Other call',
+        status: 'failed',
+      },
+    ] satisfies MessageContent[];
+    const rows = buildAssistantMessageRenderItems(items);
+    expect(rows.map((row) => row.content)).toEqual(items);
+    expect(rows[1]?.parentToolTitle).toBe('Codemode');
+    expect(rows[2]?.parentToolTitle).toBeUndefined();
+    expect(rows[2]?.content).toMatchObject({ parentToolCallId: 'missing' });
+  });
   it('hides completed retry activities but keeps active retries and compaction results', () => {
     const items = [
       {

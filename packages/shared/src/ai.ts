@@ -1511,6 +1511,7 @@ export type MessageContent =
       type: 'tool_call';
       _meta?: { [k: string]: unknown } | null;
       toolCallId: string;
+      parentToolCallId?: string;
       title?: string | null;
       status: ToolCallStatus;
       kind?: ToolKind;

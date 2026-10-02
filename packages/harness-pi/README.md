@@ -1,7 +1,7 @@
 # Molly embedded Pi
 
 This package is Molly's Agent engine: the public Pi SDK (`@earendil-works/pi-coding-agent`
-0.99.2) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
+1.0.0) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
 dispatch, credentials, design transactions and session history policy; Pi owns the model
 loop, tools, resource discovery and native conversation history.
 Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
@@ -34,6 +34,16 @@ inside that worker profile; a fresh worker does not inherit another profile's gr
 package state. Materialized text skills in the workdir's `.agents/skills` load through
 `DefaultResourceLoader.additionalSkillPaths`, independently of executable project trust.
 Tools run without permission checks.
+
+The managed profile enables native Codemode with `defaultTools: ['+codemode']` and
+`codemode.mode: 'on'`, including fresh sessions without MCP. Ordinary tools remain
+directly available; direct `read` returns image content to the model. Pi owns script
+execution, tool discovery and nested calls. The published foreground sub-agent factory
+also loads native Codemode when its tool ceiling permits it.
+Reopen follows the unmodified Pi 1.0 SDK factory: saved messages remain intact, while
+active tools come from the current profile defaults and native MCP activation. A saved
+tool declaration does not override that factory loadout. Loading history performs no
+inference or tool execution.
 
 The managed settings disable native agent and provider retries. The main host's public
 `session_before_compact` hook also cancels overflow/truncation recovery when Pi would
@@ -79,6 +89,12 @@ reported distinctly. Native usage is projected to Core usage notifications
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.
+Only the daemon-identified built-in Molly server in the managed host receives native
+`timeout: 900` (seconds); external and standalone ACP servers retain Pi's default.
+This is Pi's progress-reset request timeout, not an absolute whole-operation deadline.
+Image-service request deadlines and cancellation remain unchanged. Timeout or Stop
+does not prove that an image service stopped or did not bill; uncertain paid calls are
+not automatically replayed.
 Custom HTTP headers such as `X-API-Key` are valid without `Authorization`; the vault
 values replace public headers case-insensitively and reach native requests literally.
 They stay in extension configuration in memory. Pi may use its normal OAuth fallback
@@ -86,6 +102,13 @@ after a 401 when no Authorization header exists; this does not turn the custom h
 into OAuth credentials or persist that header in native OAuth state.
 Known upstream defect: [Pi #10249](https://github.com/earendil-works/pi/issues/10249) — a
 server still starting during shutdown can outlive it. Molly does not patch around it.
+
+Live tool activity preserves native call IDs, canonical names and parent IDs in the
+existing product history and activity rows. On native-only restore, Pi's bounded
+`nestedCalls` summaries supply child names, arguments and recorded statuses, but no
+original child results. Recovered rows say that results are unavailable; incomplete
+records remain unknown. Existing product results survive reopen, and history restore
+does not run scripts, repeat paid calls or commit artwork.
 
 The managed host ([host.ts](src/host.ts)) validates each run snapshot against the worker,
 fences the run with an exclusive record in `<private>/runs` before reading credentials
@@ -128,12 +151,20 @@ the repaired protocol. History files and their partition layout are unchanged.
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
 The workspace, CLI install/startup checks and bundle require Node `>=22.19.0 <23 || >=23.6.0`
-with Node-API 10, matching Pi 0.99.2 and the SQLite binding.
+with Node-API 10, matching Pi 1.0.0 and the SQLite binding.
 The Settings capability reader verifies the staged question package's `package.json`
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker
 in a temporary root, checks package commands and tools, runs one turn against a loopback
-synthetic model and checks the profile credential.
+synthetic model, executes native Codemode and a nested file read, and checks the profile
+credential. This exercises the sealed QuickJS worker/WASM resources rather than only
+checking that files exist.
+
+On macOS, signing changes the sealed native binaries' bytes. The public
+[`mac.sign` hook](../../apps/electron/scripts/sign-embedded-harness.mjs) compares their
+code payloads in temporary copies, updates full resource hashes before the root app's
+signature seals the manifest, and verifies the resulting closure. Non-signature changes
+fail packaging. Final signed-product smoke uses the packaged Helper executable.
 
 Package tests use the real SDK with synthetic providers in owned temporary profiles:
 [adapter\*.test.ts](tests) cover lifecycle, MCP, trust, usage and the managed host;
@@ -143,8 +174,22 @@ checks the safety floor blocks without prompting and answers a question through 
 reuses the managed synthetic worker through real ACP and the production Session/client/control
 path. MCP tests exercise custom header requests through an in-memory fetch transport;
 profile/host tests cover transient failures and refused overflow/truncation recovery.
+[Codemode image/design integration](../../apps/cli/src/mcp/codemode-image-design.test.ts)
+uses native Codemode and the actual Molly image server with synthetic transport. It
+covers generation/editing receipts, direct image reads, live and reopened asset paths,
+YAML authoring, natural completion and the existing canonical CAS commit. Assets and
+draft files alone do not commit the canvas.
 [profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker and catalog-update
 races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
 competing reapers, delayed cleanup and real worker death without timed sleeps.
-One desktop design run (DeepSeek, text and shapes) completed without permission prompts;
-background sub-agents, image generation and other providers have not been verified.
+One desktop design run (DeepSeek, text and shapes) completed without permission prompts.
+An additional macOS arm64 packaged-daemon/worker check on 2026-10-01 made two live image
+tool calls through the configured OpenAI Images proxy: generation took 17.3 seconds and
+editing took 22.7 seconds. Both returned 1254×1254 PNGs despite requesting 1024×1024.
+Receipt hashes matched the saved files and each current native image read. The ordinary
+no-open-view canvas flush, YAML authoring, natural completion and canonical CAS succeeded;
+parent relationships and asset receipts survived opening a fresh local-plane history replica.
+Language inference was controlled loopback, with a source Electron protected-credential host;
+this does not establish autonomous visual judgment, GUI or live daemon-restart acceptance,
+upstream proxy billing, or real latency above 60 seconds. Native deterministic tests cover
+the longer timeout boundary. Background sub-agents and other providers remain unverified.

@@ -12,6 +12,8 @@ import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION } from '@agentclie
 import { verifyEmbeddedHarness } from './verify-embedded-harness.mjs';
 
 const SECRET = 'SYNTHETIC_PACKAGE_SMOKE_KEY';
+const CODEMODE_FILE_CONTENT = 'SYNTHETIC_CODEMODE_FILE_READ';
+const CODEMODE_SCRIPT = 'text(await tools.read({ path: "smoke-codemode.txt" }));';
 
 /** Loopback Chat Completions peer for one synthetic turn; never a model vendor. */
 async function syntheticModel() {
@@ -20,7 +22,8 @@ async function syntheticModel() {
     let body = '';
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {
-      requests.push({ authorization: request.headers.authorization, body: JSON.parse(body) });
+      const input = JSON.parse(body);
+      requests.push({ authorization: request.headers.authorization, body: input });
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       const chunk = (delta, finish) =>
         `data: ${JSON.stringify({
@@ -30,10 +33,31 @@ async function syntheticModel() {
           model: 'synthetic/custom',
           choices: [{ index: 0, delta, finish_reason: finish }],
         })}\n\n`;
+      const result = input.messages.find((message) => message.role === 'tool');
       response.end(
-        chunk({ role: 'assistant', content: 'Synthetic packaged answer.' }, null) +
-          chunk({}, 'stop') +
-          'data: [DONE]\n\n'
+        result
+          ? chunk({ role: 'assistant', content: 'Synthetic packaged answer.' }, null) +
+              chunk({}, 'stop') +
+              'data: [DONE]\n\n'
+          : chunk(
+              {
+                role: 'assistant',
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: 'synthetic-codemode',
+                    type: 'function',
+                    function: {
+                      name: 'codemode',
+                      arguments: JSON.stringify({ code: CODEMODE_SCRIPT }),
+                    },
+                  },
+                ],
+              },
+              null
+            ) +
+              chunk({}, 'tool_calls') +
+              'data: [DONE]\n\n'
       );
     });
   });
@@ -58,6 +82,7 @@ export async function runPackagedSmoke({ output, executable }) {
   try {
     const cwd = path.join(root, 'workspace');
     await mkdir(cwd, { recursive: true });
+    await writeFile(path.join(cwd, 'smoke-codemode.txt'), CODEMODE_FILE_CONTENT);
     child = spawn(executable, [path.join(output, 'molly-pi-agent.js')], {
       cwd,
       env: {
@@ -145,7 +170,10 @@ export async function runPackagedSmoke({ output, executable }) {
     try {
       const initialized = await peer.initialize({
         protocolVersion: PROTOCOL_VERSION,
-        clientCapabilities: { elicitation: { form: {} }, _meta: { mollyQuestionUI: { version: 1 } } },
+        clientCapabilities: {
+          elicitation: { form: {} },
+          _meta: { mollyQuestionUI: { version: 1 } },
+        },
       });
       assert.equal(initialized.agentInfo.version, manifest.engineVersion);
       const session = await peer.newSession({ cwd, mcpServers: [] });
@@ -175,11 +203,29 @@ export async function runPackagedSmoke({ output, executable }) {
         },
       });
       assert.equal(response._meta.mollyNativeOutcome.status, 'completed');
-      assert.equal(model.requests.length, 1);
       assert.equal(model.requests[0].authorization, `Bearer ${SECRET}`);
       const tools = model.requests[0].body.tools.map((tool) => tool.function.name);
-      for (const tool of ['ask_user_question', 'ffgrep', 'fffind'])
+      for (const tool of [
+        'codemode',
+        'read',
+        'bash',
+        'edit',
+        'write',
+        'ask_user_question',
+        'ffgrep',
+        'fffind',
+      ])
         assert.ok(tools.includes(tool), `Pi package tool missing: ${tool}`);
+      assert.ok(
+        model.requests.some(({ body }) =>
+          body.messages.some(
+            (message) =>
+              message.role === 'tool' &&
+              JSON.stringify(message.content).includes(CODEMODE_FILE_CONTENT)
+          )
+        ),
+        'Packaged Codemode did not execute its nested native read'
+      );
       assert.ok(!JSON.stringify(model.requests).includes('SYNTHETIC_POLLUTION_CANARY'));
       const auth = JSON.parse(
         await readFile(
@@ -205,7 +251,12 @@ export async function runPackagedSmoke({ output, executable }) {
       else child.once('exit', resolve);
     });
     assert.equal(code, 0, `Worker exit ${code}: ${stderr}`);
-    return { engineVersion: manifest.engineVersion, commands: commands.length, tools: true };
+    return {
+      engineVersion: manifest.engineVersion,
+      commands: commands.length,
+      tools: true,
+      codemode: true,
+    };
   } finally {
     if (child && child.exitCode === null) child.kill('SIGKILL');
     await model.close();

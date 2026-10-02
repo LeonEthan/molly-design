@@ -5,6 +5,7 @@ import {
   HarnessRunSnapshotSchema,
   HarnessSessionBindingSchema,
   McpCredentialBindingSchema,
+  MOLLY_BUILTIN_MCP_CONNECTION,
   encodeMollyModelOption,
   mcpCredentialMatchesServer,
   type HarnessRunOutcome,
@@ -42,6 +43,13 @@ const NativeCompletionSchema = z.object({
   execution: z.literal('inference'),
   nativeEndEntryId: z.string().min(1),
 });
+
+const ManagedBuiltinMcpIdentitySchema = z
+  .object({
+    id: z.literal(MOLLY_BUILTIN_MCP_CONNECTION.id),
+    revision: z.literal(MOLLY_BUILTIN_MCP_CONNECTION.revision),
+  })
+  .strict();
 
 function hash(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -127,6 +135,10 @@ export class PiAcpHost {
       )
         throw new Error('pi_acp_mcp_grant_mismatch');
       const result = acpMcpConfig(servers, cwd, credentials?.credentials);
+      for (const [index, server] of servers.entries()) {
+        if (ManagedBuiltinMcpIdentitySchema.safeParse(server._meta?.mollyConnection).success)
+          result[index]!.config.timeout = 900;
+      }
       this.mcpConnections = connections;
       return result;
     } catch {

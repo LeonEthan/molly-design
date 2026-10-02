@@ -1732,6 +1732,8 @@
   "sessions.editedFiles.showMore": "Show {{count}} more",
   "sessions.editedFiles.showLess": "Show less",
   "sessions.toolActivity.commands": "Ran {{count}} commands",
+  "sessions.toolActivity.viaTool": "via {{tool}}",
+  "sessions.toolActivity.nestedCall": "Nested call",
   "sessions.toolActivity.commands_one": "Ran {{count}} command",
   "sessions.toolActivity.commands_other": "Ran {{count}} commands",
   "sessions.toolActivity.readFiles": "Read {{count}} files",

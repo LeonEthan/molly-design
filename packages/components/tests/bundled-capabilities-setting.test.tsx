@@ -14,7 +14,7 @@ const snapshot = {
   harness: {
     id: 'molly',
     engine: 'pi',
-    engineVersion: '0.99.2',
+    engineVersion: '1.0.0',
     protocolVersion: 1,
     buildId: 'a'.repeat(64),
   },

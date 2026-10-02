@@ -55,6 +55,8 @@ export function externalCliSubagents(): string[] {
 export function createProfileSettings() {
   return {
     packages: MOLLY_PI_PACKAGES.map(resolvePiPackageRoot),
+    defaultTools: ['+codemode'],
+    codemode: { mode: 'on' },
     defaultProjectTrust: 'never',
     enableAnalytics: false,
     enableInstallTelemetry: false,

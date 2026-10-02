@@ -4593,7 +4593,7 @@ export const SessionChatInterface = memo(
           className="h-6 px-2 text-xs"
           onClick={onRevealDesignPanel}
         >
-          {t('design.files.currentCanvas', 'Current artwork')}
+          {t('design.files.currentCanvas', 'Show artwork')}
         </Button>
       ) : null;
     const headerMenuNode = (

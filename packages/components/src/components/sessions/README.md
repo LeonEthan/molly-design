@@ -149,6 +149,14 @@ scale and canvas-coordinate center survive surface replacement within native bou
 
 ### Design versions
 
+Design sessions open canvas-first: the conversation starts near a 460px reading
+width (22–40% of the window, `design-panel-sizes.ts`) and the split is saved under
+its own layout id. When the canvas is the only side-panel tab, its action row is
+portaled into the side-panel top row in place of the tab strip, so there is one row
+of chrome; opening another panel brings the tab strip back and returns the row to
+the canvas. The conversation header offers “Show artwork” only while the canvas is
+hidden.
+
 The canvas action row uses 36px controls and pill-shaped version status, with
 separate icon-only Save version and history actions, plus labelled Export. Save
 version keeps its translated accessible name and tooltip. History and export

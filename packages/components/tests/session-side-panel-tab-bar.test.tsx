@@ -142,13 +142,14 @@ describe('SessionSidePanelTabBar', () => {
     vi.restoreAllMocks();
   });
 
-  async function renderTabBar() {
+  async function renderTabBar(soloPanelContent?: ReturnType<typeof createElement>) {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => {
       root?.render(
         createElement(SessionSidePanelTabBar, {
+          soloPanelContent,
           tabs: TABS,
           activeTabId: 'files',
           availablePanels: AVAILABLE_PANELS,
@@ -161,6 +162,14 @@ describe('SessionSidePanelTabBar', () => {
       );
     });
   }
+
+  it('lets a solo panel toolbar replace the tab strip while keeping panel controls', async () => {
+    await renderTabBar(createElement('span', { 'data-testid': 'solo' }, 'Canvas toolbar'));
+
+    expect(container?.querySelector('[role="tab"]')).toBeNull();
+    expect(container?.querySelector('[data-testid="solo"]')?.textContent).toBe('Canvas toolbar');
+    expect(container?.querySelector('[aria-label="Add panel"]')).toBeInstanceOf(HTMLButtonElement);
+  });
 
   it('closes both functional and dynamic viewer tabs', async () => {
     await renderTabBar();

@@ -92,6 +92,35 @@ Alternatives considered:
 - A new input-block type for the size instruction was rejected because it would change
   the durable session contract.
 
+## Phase 2 implementation
+
+Phase 1 merged as PR #62; the owner then authorised phase 2.
+
+- **Canvas-first split:** design sessions size the conversation for a 460px reading
+  width, clamped to 22–40% of the window. On the review window (2482px) the canvas
+  gets 78% instead of 60%. The split is saved under a new layout id, so saved splits
+  from the old 40/60 default are reset once. The alternative of keeping the old id
+  would have left every existing user on the old proportion.
+- **One chrome row:** when the canvas is the only side-panel tab, the tab strip is
+  replaced by the canvas action row. `DesignCanvas` portals its toolbar into a host
+  element lent by the side-panel tab bar (`soloPanelContent`), so version, save and
+  export state stay in the canvas instead of being lifted into the session shell.
+  The add-panel and hide-panel controls stay in the row; opening another panel
+  restores the tab strip.
+- **One artwork indicator:** the conversation header shows “Show artwork” only while
+  the canvas is hidden. The canvas status now says “Current artwork” before a first
+  version, matching the Spec's wording.
+
+Verification for phase 2: unit tests cover the size clamp and the solo-panel slot.
+In the real app (2482px window) the canvas attached at 95% zoom (91% before) under one
+row of chrome. Focus mode hid the conversation and re-centred the canvas. Opening Files
+from the + menu brought the tab strip and the “Show artwork” header button back, and
+closing it restored the single row. A first attempt failed to attach the canvas while the
+window was reported fully covered; an unchanged `main` build failed the same way then, so
+that failure was environmental. Live Agent construction in focus mode was not exercised.
+The + menu still offers the code-diff “All Changes” panel; that belongs to a later
+subtraction pass.
+
 ## Verification and limits
 
 - Unit tests cover the machine-menu visibility rule, size-instruction parsing in both

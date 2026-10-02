@@ -1,4 +1,4 @@
-import { CanvasSizeSelector } from './canvas-size-selector';
+import { CanvasFormatTiles, CanvasSizeSelector } from './canvas-size-selector';
 import { buildCanvasSubmission } from './canvas-submission';
 import { usePendingDesignRecovery } from '@/components/sessions/design-canvas';
 import { chatLandingCanvasDraftAtomFamily } from '@/atoms/chat-landing-draft';
@@ -2492,6 +2492,15 @@ function WorkspaceChatLanding({
         onFileRetry={handleRetryFile}
         mcp={mcpSelection.menu}
         topSelector={<div className="w-full min-w-0">{topSelectorNode}</div>}
+        contextSwitch={
+          isElectron ? (
+            <CanvasFormatTiles
+              {...canvasDraft}
+              disabled={submitting || Boolean(canvasDraft.association)}
+              onChange={setCanvasDraft}
+            />
+          ) : null
+        }
         footerSelector={footerSelectorNode}
         bottomBar={bottomBarNode}
         composerStatusMessage={visibleComposerStatus?.message}

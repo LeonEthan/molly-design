@@ -27,6 +27,90 @@ function SizeOutline({ width, height }: { width: number; height: number }) {
   );
 }
 
+function useCanvasSizePresets() {
+  const { t } = useTranslation();
+  return [
+    { label: t('design.sizeSquare', 'Square'), width: 1080, height: 1080 },
+    { label: t('design.sizePortrait', 'Portrait'), width: 1080, height: 1350 },
+    { label: t('design.sizeStory', 'Story'), width: 1080, height: 1920 },
+    { label: t('design.sizeLandscape', 'Landscape'), width: 1920, height: 1080 },
+    { label: t('design.sizeLongImage', 'Long image'), width: 1080, height: 2400 },
+  ];
+}
+
+/** Home-page format choice: the same presets as the composer chip, drawn at true ratio. */
+export function CanvasFormatTiles({
+  mode,
+  width,
+  height,
+  disabled,
+  onChange,
+}: CanvasSize & {
+  disabled: boolean;
+  onChange: (size: CanvasSize) => void;
+}) {
+  const { t } = useTranslation();
+  const presets = useCanvasSizePresets();
+  const tiles = [
+    { label: t('design.autoSize', 'Auto size'), size: { mode: 'auto' as const, width, height } },
+    ...presets.map((preset) => ({
+      label: preset.label,
+      size: { mode: 'custom' as const, width: preset.width, height: preset.height },
+    })),
+  ];
+  return (
+    <div
+      role="group"
+      aria-label={t('design.size', 'Canvas size')}
+      className="flex max-w-full select-none flex-wrap justify-center gap-1"
+    >
+      {tiles.map(({ label, size }) => {
+        const auto = size.mode === 'auto';
+        const selected = auto
+          ? mode === 'auto'
+          : mode === 'custom' && width === size.width && height === size.height;
+        return (
+          <button
+            key={label}
+            type="button"
+            disabled={disabled}
+            aria-pressed={selected}
+            title={auto ? label : `${label} · ${size.width} × ${size.height}`}
+            onClick={() => onChange(size)}
+            className={cn(
+              'group flex w-[76px] flex-col items-center gap-2 rounded-xl px-1 pb-2 pt-3 text-xs transition-colors',
+              'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+              'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40',
+              selected && 'text-foreground'
+            )}
+          >
+            <span aria-hidden className="flex size-11 items-center justify-center">
+              <span
+                className={cn(
+                  'rounded-[3px] border transition-colors',
+                  auto ? 'border-dashed' : 'border-solid',
+                  selected
+                    ? 'border-foreground bg-foreground/[0.06]'
+                    : 'border-muted-foreground/50 group-hover:border-foreground/70'
+                )}
+                style={
+                  auto
+                    ? { width: 34, height: 34 }
+                    : {
+                        width: 40 * Math.min(1, size.width / size.height),
+                        height: 40 * Math.min(1, size.height / size.width),
+                      }
+                }
+              />
+            </span>
+            <span className="max-w-full truncate">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export function CanvasSizeSelector({
   mode,
   width,
@@ -48,13 +132,7 @@ export function CanvasSizeSelector({
   const validWidth = isValidDimension(draftWidth);
   const validHeight = isValidDimension(draftHeight);
   const invalidDraft = (draft.width !== '' && !validWidth) || (draft.height !== '' && !validHeight);
-  const presets = [
-    { label: t('design.sizeSquare', 'Square'), width: 1080, height: 1080 },
-    { label: t('design.sizePortrait', 'Portrait'), width: 1080, height: 1350 },
-    { label: t('design.sizeStory', 'Story'), width: 1080, height: 1920 },
-    { label: t('design.sizeLandscape', 'Landscape'), width: 1920, height: 1080 },
-    { label: t('design.sizeLongImage', 'Long image'), width: 1080, height: 2400 },
-  ];
+  const presets = useCanvasSizePresets();
   const customSelected =
     mode === 'custom' &&
     !presets.some((preset) => preset.width === width && preset.height === height);

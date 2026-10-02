@@ -197,7 +197,8 @@ designer path.
 Phase 4 merged as PR #65. The owner chose sidebar-row thumbnails first (over a
 recent-work grid on the home page), refreshed after each Agent turn and when the person
 leaves the canvas rather than on every autosave. Asked what is wrong with the start page,
-the owner answered that it looks like a chat app; that redesign is proposed separately.
+the owner answered that it looks like a chat app, then chose “start from a format” over a
+recent-work grid or a blank artboard (all three offered in words, not mock-ups).
 
 - **Reuse ladder:** export already renders a saved revision offscreen
   (`renderSavedDesign`); the thumbnail reuses it unchanged and shrinks the PNG to a 48px
@@ -224,6 +225,16 @@ about 5 KB per artwork, an edit left the thumbnail unchanged until the canvas wa
 and undoing the edit restored the original image. Not verified: the Agent-turn trigger
 (it needs a paid live turn). In dark mode, blank artworks show as bright white tiles,
 because they are truthful renders of white canvases.
+
+## Phase 5 implementation: start from a format
+
+Under the home heading, `CanvasFormatTiles` shows Auto and the five existing presets as
+true-ratio outlines with a quiet label; the selected tile is drawn in ink. The tiles and
+the composer's size chip share one preset list and one canvas draft, so either control
+changes the other; custom sizes stay in the chip. They mount in the landing's existing
+`contextSwitch` slot, which Molly had left empty, so no landing layout changed. The Spec's
+home paragraph records the tiles. Verified in the built app: picking Portrait set the chip
+to 1080 × 1350 and back. Visual quality awaits the owner's review.
 
 ## Verification and limits
 

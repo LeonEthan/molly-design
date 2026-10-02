@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CanvasSizeSelector } from './canvas-size-selector';
+import { CanvasFormatTiles, CanvasSizeSelector } from './canvas-size-selector';
 
 const meta = {
   title: 'Chat/Canvas size',
@@ -24,5 +24,17 @@ export const Disabled: Story = { args: { disabled: true } };
 export const PresetsOpen: Story = {
   play: async ({ canvasElement }) => {
     canvasElement.querySelector('button')?.click();
+  },
+};
+export const WithFormatTiles: Story = {
+  args: { mode: 'custom', width: 1080, height: 1350 },
+  render: function FormatTilesStory(args) {
+    const [size, setSize] = useState({ mode: args.mode, width: args.width, height: args.height });
+    return (
+      <div className="flex min-h-[520px] flex-col items-center gap-8 p-8">
+        <CanvasFormatTiles disabled={args.disabled} {...size} onChange={setSize} />
+        <CanvasSizeSelector disabled={args.disabled} {...size} onChange={setSize} />
+      </div>
+    );
   },
 };

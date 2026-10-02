@@ -2,6 +2,7 @@ import { createStore } from 'jotai';
 import { describe, expect, it } from 'vitest';
 
 import {
+  designCanvasFocusAtom,
   getZenAwarePanelToggleState,
   navigationSidebarHiddenAtom,
   showNavigationSidebarAtom,
@@ -54,6 +55,40 @@ describe('Zen layout state', () => {
     expect(store.get(zenLayoutModeAtom)).toBe(false);
     expect(store.get(sidebarCollapsedAtom)).toBe(false);
   });
+});
+
+describe('Design canvas focus layout state', () => {
+  it.each([false, true])(
+    'hides the navigation sidebar without changing collapsed=%s',
+    (collapsed) => {
+      const store = createStore();
+      store.set(sidebarCollapsedAtom, collapsed);
+
+      store.set(designCanvasFocusAtom, true);
+
+      expect(store.get(navigationSidebarHiddenAtom)).toBe(true);
+      expect(store.get(sidebarCollapsedAtom)).toBe(collapsed);
+
+      store.set(designCanvasFocusAtom, false);
+
+      expect(store.get(navigationSidebarHiddenAtom)).toBe(collapsed);
+    }
+  );
+
+  it.each([showNavigationSidebarAtom, toggleNavigationSidebarAtom])(
+    'leaves canvas focus and reveals the navigation sidebar on an explicit request',
+    (request) => {
+      const store = createStore();
+      store.set(sidebarCollapsedAtom, true);
+      store.set(designCanvasFocusAtom, true);
+
+      store.set(request);
+
+      expect(store.get(designCanvasFocusAtom)).toBe(false);
+      expect(store.get(sidebarCollapsedAtom)).toBe(false);
+      expect(store.get(navigationSidebarHiddenAtom)).toBe(false);
+    }
+  );
 });
 
 describe('getZenAwarePanelToggleState', () => {

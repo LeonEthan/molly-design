@@ -8,8 +8,14 @@ import { sidebarCollapsedAtom } from './sidebar-state';
  */
 export const zenLayoutModeAtom = atom(false);
 
+/**
+ * True while the active design canvas is focused. Like Zen it hides the
+ * navigation sidebar without writing the persisted collapse preference.
+ */
+export const designCanvasFocusAtom = atom(false);
+
 export const navigationSidebarHiddenAtom = atom(
-  (get) => get(zenLayoutModeAtom) || get(sidebarCollapsedAtom)
+  (get) => get(zenLayoutModeAtom) || get(designCanvasFocusAtom) || get(sidebarCollapsedAtom)
 );
 
 export type ZenAwarePanelState = {
@@ -34,14 +40,16 @@ export const toggleZenLayoutModeAtom = atom(null, (get, set) => {
 
 export const showNavigationSidebarAtom = atom(null, (_get, set) => {
   set(zenLayoutModeAtom, false);
+  set(designCanvasFocusAtom, false);
   set(sidebarCollapsedAtom, false);
 });
 
 export const toggleNavigationSidebarAtom = atom(null, (get, set) => {
   const next = getZenAwarePanelToggleState({
-    zenMode: get(zenLayoutModeAtom),
+    zenMode: get(zenLayoutModeAtom) || get(designCanvasFocusAtom),
     panelOpen: !get(sidebarCollapsedAtom),
   });
   set(zenLayoutModeAtom, next.zenMode);
+  set(designCanvasFocusAtom, false);
   set(sidebarCollapsedAtom, !next.panelOpen);
 });

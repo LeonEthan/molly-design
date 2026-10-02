@@ -110,6 +110,17 @@ Phase 1 merged as PR #62; the owner then authorised phase 2.
 - **One artwork indicator:** the conversation header shows “Show artwork” only while
   the canvas is hidden. The canvas status now says “Current artwork” before a first
   version, matching the Spec's wording.
+- **Focus canvas hides the sidebar too:** after reviewing the narrower conversation,
+  the owner chose full collapse over an icon-only rail. Session rows are text-only, so
+  an icon rail would show identical icons until phase 5 thumbnails exist. Focus now
+  sets the transient `designCanvasFocusAtom`, which hides the navigation sidebar the way
+  Zen does without writing the saved collapse preference. Leaving focus, switching
+  away from the canvas, or explicitly showing the sidebar (button or shortcut) restores
+  it. While leftmost, the canvas row reserves the macOS traffic-light inset and leads
+  with the existing show-sidebar button. The
+  rejected alternatives were writing `sidebarCollapsedAtom`, which would persist a
+  transient state and override the user's own choice, and reusing Zen, which also
+  hides the side panel that holds the canvas.
 
 Verification for phase 2: unit tests cover the size clamp and the solo-panel slot.
 In the real app (2482px window) the canvas attached at 95% zoom (91% before) under one
@@ -117,7 +128,10 @@ row of chrome. Focus mode hid the conversation and re-centred the canvas. Openin
 from the + menu brought the tab strip and the “Show artwork” header button back, and
 closing it restored the single row. A first attempt failed to attach the canvas while the
 window was reported fully covered; an unchanged `main` build failed the same way then, so
-that failure was environmental. Live Agent construction in focus mode was not exercised.
+that failure was environmental. Live Agent construction in focus mode was not exercised. After the sidebar change, focus
+gave the canvas the full window width with the sidebar collapsed or not, and both the
+minimise button and the show-sidebar button restored the previous layout. The focused
+row sits about 7pt lower than the traffic lights because the canvas card keeps its top margin.
 The + menu still offers the code-diff “All Changes” panel; that belongs to a later
 subtraction pass.
 

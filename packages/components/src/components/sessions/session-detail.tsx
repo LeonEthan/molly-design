@@ -56,6 +56,7 @@ import { selectAtom } from 'jotai/utils';
 import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowsCaptionPadClass } from '@/ui/window-drag-region';
 import {
+  designCanvasFocusAtom,
   getZenAwarePanelToggleState,
   navigationSidebarHiddenAtom,
   showNavigationSidebarAtom,
@@ -621,6 +622,7 @@ const SessionDetail = ({
   const workspaceSlug = routeTargetWorkspaceSlug ?? atomWorkspaceSlug;
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom) as WorkspaceId | null;
   const isLeftSidebarHidden = useAtomValue(navigationSidebarHiddenAtom);
+  const isDesignCanvasFocused = useAtomValue(designCanvasFocusAtom);
   const showNavigationSidebar = useSetAtom(showNavigationSidebarAtom);
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const runtimeInitializing = useAtomValue(runtimeInitializingAtom);
@@ -4386,14 +4388,18 @@ const SessionDetail = ({
         endSlot={sidebarToggleButton}
         soloPanelContent={
           designOwnsSidePanel ? (
-            <div ref={setDesignToolbarHost} className="flex min-w-0 flex-1 items-center gap-2" />
+            <>
+              {isDesignCanvasFocused ? leftSidebarExpandButton : null}
+              <div ref={setDesignToolbarHost} className="flex min-w-0 flex-1 items-center gap-2" />
+            </>
           ) : undefined
         }
         className={cn(
           'border-b border-border/50 bg-background',
-          // Right panel is never under the macOS traffic lights (top-left) —
-          // it must not reserve the titlebar inset the left sidebar needs.
+          // Right panel sits under the macOS traffic lights (top-left) only
+          // while canvas focus hides both the sidebar and the conversation.
           'h-11',
+          isDesignCanvasFocused && hasMacOSTitlebarInset && 'pl-[4.5rem]',
           windowsCaptionPadClass
         )}
       />

@@ -6,12 +6,13 @@ import type {
 } from '@molly/shared/design-selection-commands';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useAtomValue } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getSessionRoomId, type SessionId } from '@molly/shared';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
+import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
@@ -168,7 +169,12 @@ export function DesignCanvas({
   const [attachmentError, setAttachmentError] = useState('');
   const [busy, setBusy] = useState(false);
   const create = useDesignCreation(workspaceSlug);
-  const [focused, setFocused] = useState(false);
+  const [canvasFocus, setFocused] = useAtom(designCanvasFocusAtom);
+  const focused = active && canvasFocus;
+  useEffect(() => {
+    if (!active) return undefined;
+    return () => setFocused(false);
+  }, [active, setFocused]);
   const [selection, setSelection] = useState<DesignSelectionSummary | null>(null);
   const selectionCount = selection?.count ?? 0;
   const [canvasState, setCanvasState] =
@@ -733,7 +739,7 @@ export function DesignCanvas({
                     ? t('design.showChat', 'Show conversation')
                     : t('design.focus', 'Focus canvas')
                 }
-                onClick={() => setFocused((value) => !value)}
+                onClick={() => setFocused(!focused)}
               >
                 {focused ? (
                   <Minimize2 className="size-[18px]" />
@@ -754,7 +760,7 @@ export function DesignCanvas({
   );
   return (
     <div
-      data-design-canvas-focus={active && focused}
+      data-design-canvas-focus={focused}
       className="flex h-full min-h-0 flex-col bg-background"
     >
       <style>

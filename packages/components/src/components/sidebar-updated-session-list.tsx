@@ -24,6 +24,7 @@ import {
 import { SwipeActionRow } from '@/components/shared/swipe-action-row';
 import {
   SessionOpenedByTreeRow,
+  SessionRowArtworkThumbnail,
   SessionRowAuthorAvatar,
   SessionRowLeadingSlot,
   SessionRowWorktreeIndicator,
@@ -68,6 +69,8 @@ export type SidebarUpdatedItem = {
   id: string;
   kind: SidebarUpdatedItemKind;
   title: string;
+  /** Design artwork shown as the row thumbnail; absent for sessions without one. */
+  artworkId?: string;
   /**
    * PRECISE opener: the Session that created/opened this one
    * (`SessionMeta.openedBySessionId`). Presentation-only provenance; see
@@ -766,7 +769,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         />
       ) : null}
 
-      <div className="flex w-full min-w-0 items-center gap-2 text-sm">
+      <div className="flex w-full min-w-0 items-center gap-2 text-[13px]">
         <SessionRowLeadingSlot
           showMenuButton={hasMenuActions}
           menuLabel={contextMenuLabels.moreActions}
@@ -775,6 +778,9 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           restPointerClassName="group-hover/row:pointer-events-none"
           revealClassName="group-hover/row:opacity-100 group-hover/row:pointer-events-auto group-data-[menu-open]/row:opacity-100 group-data-[menu-open]/row:pointer-events-auto"
         />
+        {item.artworkId ? (
+          <SessionRowArtworkThumbnail artworkId={item.artworkId} isWorking={item.isWorking === true} />
+        ) : null}
         <SessionRowAuthorAvatar author={item.owner} />
         {showPinnedIcon && item.isPinned ? (
           <Pin
@@ -783,7 +789,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           />
         ) : null}
         <div
-          className={cn('min-w-0 flex-1 flex items-center truncate text-sm')}
+          className={cn('min-w-0 flex-1 flex items-center truncate text-[13px]')}
           // Double-click to rename is scoped to the title only, so double-clicking
           // elsewhere on the row (e.g. the two-step Archive confirm button) cannot
           // accidentally trigger a rename.

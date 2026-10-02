@@ -43,6 +43,12 @@ import {
   saveDesignForDispatch,
   syncDesignCanvasFromStore
 } from '../../services/design-service'
+import {
+  forgetDesignThumbnail,
+  getDesignThumbnail,
+  refreshDesignThumbnail,
+  refreshDesignThumbnailAfterLeave
+} from '../../services/design-thumbnail'
 
 function owner() {
   const { event } = getIpcContext()
@@ -200,13 +206,24 @@ export class DesignIpc extends IpcService {
   }
   @IpcMethod() async leave(sessionId: string, hostId?: string) {
     owner()
-    return leaveDesign(id.parse(sessionId), hostId === undefined ? undefined : id.parse(hostId))
+    const artworkId = id.parse(sessionId)
+    const left = await leaveDesign(artworkId, hostId === undefined ? undefined : id.parse(hostId))
+    if (left) refreshDesignThumbnailAfterLeave(artworkId)
+    return left
+  }
+  /** Sidebar thumbnail of the last saved revision; `refresh` re-checks the store after a turn. */
+  @IpcMethod() async thumbnail(sessionId: string, refresh = false) {
+    owner()
+    if (typeof refresh !== 'boolean') throw Error('Invalid thumbnail refresh mode')
+    const artworkId = id.parse(sessionId)
+    return refresh ? refreshDesignThumbnail(artworkId) : getDesignThumbnail(artworkId)
   }
   @IpcMethod() async close(sessionId: string) {
     owner()
     const key = id.parse(sessionId)
     if (!(await leaveDesign(key))) return false
     destroyDesign(key)
+    await forgetDesignThumbnail(key)
     return true
   }
   @IpcMethod() async copy(sessionId: string, raw: DesignAssociationInput, hostId?: string) {

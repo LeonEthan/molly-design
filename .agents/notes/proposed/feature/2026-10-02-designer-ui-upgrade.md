@@ -53,13 +53,13 @@ static mock-ups.
 
 ## Phased plan
 
-| Phase                    | Scope                                                                                                                                  | Reuse ladder                                                                                    | Spec impact                       |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------- |
-| 1. Speak designer        | Copy, hiding single-choice and coding-only controls, Advanced section, canvas localisation, size instruction shown as a chip            | Existing locale keys, `githubIntegration` capability, toolbar presentation labels, menu locale | None                              |
-| 2. Canvas-first layout   | Default canvas around 65–70% of the width, remove single-surface tab chrome, merge the two current-artwork indicators                    | Existing split layout, adaptive tab strip, focus mode                                          | Implements the existing intent    |
-| 3. Agent as partner      | Skill-level reply style (direction, editable parts, next tweaks; technical detail folded) and design-aware auto-naming                 | Product skill and the existing auto-naming prompt                                              | Skills only                       |
-| 4. Type and spacing      | One display size, quieter metadata, consistent spacing, a restrained accent; dark-mode audit                                            | Existing radius and size tokens                                                                | None                              |
-| 5. Navigation and home   | Sidebar thumbnails and/or a recent-artworks home; start-page redesign after a dissatisfaction interview                                | Existing session list and the canvas renderer's preview image                                  | Changes intent; Spec back to draft |
+| Phase                  | Scope                                                                                                                        | Reuse ladder                                                                                   | Spec impact                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------- |
+| 1. Speak designer      | Copy, hiding single-choice and coding-only controls, Advanced section, canvas localisation, size instruction shown as a chip | Existing locale keys, `githubIntegration` capability, toolbar presentation labels, menu locale | None                               |
+| 2. Canvas-first layout | Default canvas around 65–70% of the width, remove single-surface tab chrome, merge the two current-artwork indicators        | Existing split layout, adaptive tab strip, focus mode                                          | Implements the existing intent     |
+| 3. Agent as partner    | Skill-level reply style (direction, editable parts, next tweaks; technical detail folded) and design-aware auto-naming       | Product skill and the existing auto-naming prompt                                              | Skills only                        |
+| 4. Type and spacing    | One display size, quieter metadata, consistent spacing, a restrained accent; dark-mode audit                                 | Existing radius and size tokens                                                                | None                               |
+| 5. Navigation and home | Sidebar thumbnails and/or a recent-artworks home; start-page redesign after a dissatisfaction interview                      | Existing session list and the canvas renderer's preview image                                  | Changes intent; Spec back to draft |
 
 ## Phase 1 implementation
 
@@ -191,6 +191,39 @@ project and section rows, and a leftover sky-blue on file links as the only hue.
 Remaining 11px text includes the context-usage ring label and many secondary
 surfaces (172 occurrences); they were not swept because they sit outside the audited
 designer path.
+
+## Phase 5 implementation: sidebar thumbnails
+
+Phase 4 merged as PR #65. The owner chose sidebar-row thumbnails first (over a
+recent-work grid on the home page), refreshed after each Agent turn and when the person
+leaves the canvas rather than on every autosave. Asked what is wrong with the start page,
+the owner answered that it looks like a chat app; that redesign is proposed separately.
+
+- **Reuse ladder:** export already renders a saved revision offscreen
+  (`renderSavedDesign`); the thumbnail reuses it unchanged and shrinks the PNG to a 48px
+  short edge. The retired result-card thumbnails were per-turn records; these are not
+  revived. Rows reuse their existing title slot; no new row layout.
+- **Derived cache:** `design-thumbnail-core.ts` keeps one JSON file per artwork under
+  the app's user-data `design-thumbnails/` folder, holding the revision it was drawn
+  from. Showing a row reads the cache and renders only when none exists; a refresh
+  re-reads the saved revision and renders only when it moved. Renders run one at a
+  time. Deleting the folder costs only re-rendering. Explicit session close removes
+  the file.
+- **Triggers:** the renderer refreshes when a row's working state falls; Electron
+  refreshes after a successful `design.leave` and pushes `design.thumbnail` so rows
+  re-read.
+- **Rows:** a 20px rounded tile with a hairline edge sits before the title in the
+  project, Chats and Updated lists. The Chats and Updated lists still used 14px titles
+  after phase 4 and now use the 13px row size.
+- **Spec and rules:** the Spec no longer excludes sidebar artwork thumbnails and records
+  them as a disposable derived cache; the root and Electron service rules now retire only
+  per-turn thumbnails.
+
+Verified in the built app on local data: all nine visible rows rendered, the cache held
+about 5 KB per artwork, an edit left the thumbnail unchanged until the canvas was left,
+and undoing the edit restored the original image. Not verified: the Agent-turn trigger
+(it needs a paid live turn). In dark mode, blank artworks show as bright white tiles,
+because they are truthful renders of white canvases.
 
 ## Verification and limits
 

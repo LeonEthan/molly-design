@@ -54,8 +54,10 @@ import {
   type AcpConfigOptionValue,
   type BuiltinRuntimeOverrides,
   type CustomAcpLaunchSpec,
+  sanitizeMollyInternalInstructions,
 } from '@molly/shared';
 import type { ContentBlock } from '@agentclientprotocol/sdk';
+import { sanitizeTitle } from '@/agent/title-generator';
 import type { ModelInfo } from '@molly/shared';
 import { Cause, Data, Effect, Exit, Fiber, type Scope } from 'effect';
 import {
@@ -2973,6 +2975,12 @@ export class SessionExecutionService {
               `${attempt.outcome.candidateId ? ` candidate=${attempt.outcome.candidateId.slice(0, 12)}` : ''}` +
               `${attempt.outcome.revisionId ? ` revision=${attempt.outcome.revisionId.slice(0, 12)}` : ''}`
           );
+          const sessionTitle = sanitizeTitle(
+            sanitizeMollyInternalInstructions(attempt.artworkTitle ?? '')
+          );
+          if (sessionTitle) {
+            await sessionDoc.setTitleIfSourceIn(sessionTitle, 'generated', ['draft', 'generated']);
+          }
           return;
         }
         // Silence for the ordinary case; the other skips are worth a debug line.

@@ -140,6 +140,32 @@ row sits about 7pt lower than the traffic lights because the canvas card keeps i
 The + menu still offers the code-diff “All Changes” panel; that belongs to a later
 subtraction pass.
 
+## Phase 3 implementation
+
+Phase 2 merged as PR #63; the owner then authorised phase 3.
+
+- **Reply style:** the graphic-design Skill now ends with “Reply to the designer”:
+  direction first, then what can be edited on the canvas, two or three next tweaks,
+  and limits only when there are any. File paths, YAML fields, element IDs, tool and
+  script names and diagnostic codes stay out of the reply unless the user asks or a
+  limit needs them. The honesty rules are unchanged: previews are Agent review, and
+  the turn does not claim the save that Molly's collection performs afterwards.
+- **Design-aware naming:** built-in Molly names a session after the first sentence of
+  the prompt, which is why sidebar rows such as “Design a modern, minimal…” look alike.
+  The Skill now asks the Agent to name the artwork in the existing `design.yaml`
+  `title` (two to five words, subject and format). When collection commits that
+  artwork, the daemon passes the title through the existing title sanitiser and
+  `setTitleIfSourceIn` guard, so draft and generated names follow the artwork and a
+  user rename always stays.
+- **Reuse ladder:** the existing `title` field, the existing commit result and the
+  existing title guard carry the name; no storage, protocol or tool was added. Running
+  the existing title prompt for Molly was rejected because it adds a second model
+  request per session, which the embedded-harness decision avoided. Having the
+  harness push `session_info_update` was rejected because the Agent would need a new
+  naming tool. The plan table expected skills-only work; the naming needed this small
+  daemon hook, which changes no Spec intent because the Spec only promises
+  auto-naming.
+
 ## Verification and limits
 
 - Unit tests cover the machine-menu visibility rule, size-instruction parsing in both

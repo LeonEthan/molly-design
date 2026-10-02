@@ -394,6 +394,7 @@ describe('collectDesignTurnOutcome', () => {
     expect(stored.doc.canvas).toEqual({ width: 320, height: 200 });
     expect(stored.doc.elements).toHaveLength(3);
     expect(recordedOutcome(harness)).toEqual(attempt.outcome);
+    expect(attempt.artworkTitle).toBe('Turn outcome test');
   });
 
   it.each(['absent', 'rejected'] as const)(

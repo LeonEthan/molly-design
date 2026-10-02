@@ -34,7 +34,8 @@ relative path and asset kind. Correct the asset before repeating the check.
 4096 inclusive. Optional fields are
 `background`, `customFonts`, `diagnostics`, and `title`. Missing background is
 solid white; missing diagnostics is an empty array. `title` is file metadata,
-not a canonical title saved by the editor. Do not write `pages`, `version`, or
+not a canonical title saved by the editor; Molly may show it as the conversation
+name. Do not write `pages`, `version`, or
 `schemaVersion`.
 
 `background` and shape `fill` must be fill objects, never bare color strings.

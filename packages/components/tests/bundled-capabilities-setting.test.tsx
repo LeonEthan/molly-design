@@ -14,17 +14,16 @@ const snapshot = {
   harness: {
     id: 'molly',
     engine: 'pi',
-    engineVersion: '0.85.1',
+    engineVersion: '0.99.2',
     protocolVersion: 1,
     buildId: 'a'.repeat(64),
   },
   extensions: [
     {
-      name: 'pi-ask-question',
-      version: '0.4.0',
-      commit: 'b'.repeat(40),
+      name: '@juicesharp/rpiv-ask-user-question',
+      version: '2.12.0',
       license: 'MIT',
-      tools: ['ask_question'],
+      tools: ['ask_user_question'],
       activation: 'requires-question-ui-v1',
     },
   ],
@@ -54,13 +53,13 @@ it.each(['en', 'zh_CN'] as const)(
         <BundledCapabilitiesView
           snapshot={{
             ...snapshot,
-            extensions: [{ ...snapshot.extensions[0], tools: ['ask_question'] }],
+            extensions: [{ ...snapshot.extensions[0], tools: ['ask_user_question'] }],
           }}
         />
       )
     );
     const copy = lang === 'en' ? en : zh;
-    expect(host.textContent).toContain('pi-ask-question · 0.4.0 · MIT');
+    expect(host.textContent).toContain('@juicesharp/rpiv-ask-user-question · 2.12.0 · MIT');
     expect(host.textContent).toContain(copy['settings.models.capabilitiesQuestionActivation']);
     expect(host.textContent).toContain(copy['settings.models.capabilitiesLimits']);
     expect(host.querySelector('button, input, select, a')).toBeNull();
@@ -74,7 +73,7 @@ it.each([undefined, null])('distinguishes loading and unknown availability: %s',
       ? en['settings.models.capabilitiesLoading']
       : en['settings.models.capabilitiesUnavailable']
   );
-  expect(host.textContent).not.toContain('pi-ask-question');
+  expect(host.textContent).not.toContain('@juicesharp/rpiv-ask-user-question');
 });
 
 it('uses only the public inventory IPC and reports a failed read without raw diagnostics', async () => {

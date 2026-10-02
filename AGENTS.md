@@ -107,7 +107,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 - Identify once: Molly maintainer if the user says so or GitHub login is
   `LeonEthan`; otherwise community. Read [.github/AGENTS.md](.github/AGENTS.md)
   before planning community contributions and before any PR/Issue work.
-- Node `>=22.14.0 <23 || >=23.6.0` (Node-API 10); pnpm from `package.json`. Run `pnpm install` (skip nested checkouts);
+- Node `>=22.19.0 <23 || >=23.6.0` (Node-API 10); pnpm from `package.json`. Run `pnpm install` (skip nested checkouts);
   standalone work uses a separate clone. `pnpm start:local` and root `pnpm build`
   use local desktop composition.
 - Before commit, run `pnpm check` and `pnpm format`. If tests are skipped, report

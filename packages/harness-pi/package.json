@@ -17,16 +17,21 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "catalog:",
-    "@anthropic-ai/sandbox-runtime": "0.0.77",
-    "@earendil-works/pi-ai": "0.85.1",
-    "@earendil-works/pi-coding-agent": "0.85.1",
-    "@modelcontextprotocol/sdk": "1.29.0",
+    "@earendil-works/pi-ai": "catalog:pi",
+    "@earendil-works/pi-agent-core": "catalog:pi",
+    "@earendil-works/pi-coding-agent": "catalog:pi",
+    "@earendil-works/pi-tui": "catalog:pi",
     "@molly/shared": "workspace:*",
     "acp-extension-core": "workspace:*",
-    "typebox": "1.3.7",
+    "typebox": "catalog:pi",
     "zod": "catalog:",
-    "pi-mcp-adapter": "3.2.0",
-    "@earendil-works/pi-tui": "0.85.1"
+    "pi-subagents": "catalog:pi",
+    "pi-skillful": "catalog:pi",
+    "@juicesharp/rpiv-ask-user-question": "catalog:pi",
+    "@juicesharp/rpiv-i18n": "catalog:pi",
+    "@zigai/pi-mention-skill": "catalog:pi",
+    "@ff-labs/pi-fff": "catalog:pi",
+    "cc-safety-net": "catalog:pi"
   },
   "devDependencies": {
     "@types/node": "catalog:",

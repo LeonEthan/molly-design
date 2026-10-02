@@ -24,17 +24,16 @@ export const Included: Story = {
       harness: {
         id: 'molly',
         engine: 'pi',
-        engineVersion: '0.85.1',
+        engineVersion: '0.99.2',
         protocolVersion: 1,
         buildId: 'a'.repeat(64),
       },
       extensions: [
         {
-          name: 'pi-ask-question',
-          version: '0.4.0',
-          commit: 'b'.repeat(40),
-          license: 'MIT',
-          tools: ['ask_question'],
+          name: '@juicesharp/rpiv-ask-user-question',
+          version: '2.12.0',
+              license: 'MIT',
+          tools: ['ask_user_question'],
           activation: 'requires-question-ui-v1',
         },
       ],

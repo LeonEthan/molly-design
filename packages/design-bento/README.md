@@ -8,8 +8,8 @@ are described in [design persistence](../../apps/cli/src/design/README.md).
 
 Run `corepack pnpm --dir packages/design-bento build`. Normal Electron development
 and production builds invoke the same builder. The Bento source is vendored
-in-tree under `bento/`; no submodule step is needed. Node 22.14+
-and npm are required; the upstream npm lockfile pins build dependencies.
+in-tree under `bento/`; no submodule step is needed. Use Node
+`>=22.19.0 <23 || >=23.6.0` and npm; the upstream npm lockfile pins build dependencies.
 
 `source-manifest.json` identifies the source commit, the five Molly patches
 recorded as applied in the vendored tree, and copied files. `vendor/packages` contains only the contracts, kernel and editor

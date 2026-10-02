@@ -28,7 +28,7 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adap
 - Keep `prepare:design-authoring` before `dev-build.mjs` and Vite, and `copy:design-skills` after
   the bundle: design sessions materialize skills from `design-skills/` beside the CLI entry
   (`src/design/skills.ts`), so a stale or missing staging silently downgrades agent capability.
-- `engines.node` is pinned to `>=22.14.0` by better-sqlite3's `NAPI_VERSION=10`, and
+- `engines.node` is `>=22.19.0 <23 || >=23.6.0` for Pi and SQLite's `NAPI_VERSION=10`, and
   `src/utils/sqlite-runtime-support.ts` must stay the FIRST import in `src/index.ts` — older Node
   segfaults on the SQLite binding instead of throwing.
 - Read [apps/electron/AGENTS.md](../electron/AGENTS.md) — embedded packaging, native deps/ABI,

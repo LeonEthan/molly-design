@@ -3,15 +3,16 @@ import {
   PersonalMemoryChangesSchema,
   type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
-import type { ClassifierRuntime } from './auto-review-classifier';
-import type { Model, Api } from '@earendil-works/pi-ai';
+import type { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import type { Model, Api, AssistantMessage } from '@earendil-works/pi-ai';
 
 export async function extractPersonalPreferences(input: {
-  runtime: ClassifierRuntime;
+  runtime: Pick<ModelRuntime, 'completeSimple'>;
   model: Model<Api>;
   snapshot: PersonalMemorySnapshot;
   userText: string;
   signal: AbortSignal;
+  recordUsage: (result: Pick<AssistantMessage, 'provider' | 'model' | 'usage'>) => Promise<void>;
 }) {
   const signal = AbortSignal.any([input.signal, AbortSignal.timeout(30_000)]);
   signal.throwIfAborted();
@@ -40,6 +41,7 @@ export async function extractPersonalPreferences(input: {
     },
     { signal, temperature: 0 }
   );
+  await input.recordUsage(result);
   signal.throwIfAborted();
   if (result.stopReason !== 'stop') throw new Error('memory_extraction_failed');
   const text = result.content.map((part) => (part.type === 'text' ? part.text : '')).join('');

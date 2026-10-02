@@ -69,7 +69,7 @@ to repeat generation. Decoder acceptance does not establish visual quality; late
 
 All clients use the image MCP server's ordinary generate/edit path: validated bytes
 are saved in the owning draft's `media/` directory and the result contains paths,
-digest and dimensions. Pi reaches this server through unmodified `pi-mcp-adapter`.
+digest and dimensions. Pi reaches this server through its native MCP extension.
 There is no image-specific adapter mapping, private inline-byte request, import
 callback, paid-operation journal or recovery tool. Existing files and historical
 operation records remain untouched; ordinary file tools can inspect saved assets.

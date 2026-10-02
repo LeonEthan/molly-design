@@ -24,8 +24,6 @@ export const WorkerConfigSchema = z
     readBeforeEditReminder: z.string().min(1).max(16_384).optional(),
     personalMemory: z.boolean().optional(),
     permissionProfileId: z.string().min(1),
-    /** Molly private data the auto-review sandbox denies, apart from the session cwd. */
-    privateDataRoots: z.array(absolutePath).max(8).optional(),
     nativeSessionFile: absolutePath.optional(),
     nativeSessionId: z.string().uuid().optional(),
   })

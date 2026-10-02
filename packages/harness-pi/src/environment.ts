@@ -1,4 +1,6 @@
 import { isAbsolute, join } from 'node:path';
+import type { WorkerConfig } from './worker-config';
+import { createHash } from 'node:crypto';
 
 const INHERITED_KEYS = [
   'PATH',
@@ -18,9 +20,11 @@ const INHERITED_KEYS = [
 /** Called before importing the SDK in the owned worker. Never changes the parent. */
 export function createWorkerEnvironment(
   inherited: NodeJS.ProcessEnv,
-  privateRoot: string
+  { privateRoot, runtimeEpoch }: Pick<WorkerConfig, 'privateRoot' | 'runtimeEpoch'>
 ): Record<string, string> {
   if (!isAbsolute(privateRoot)) throw new Error('harness_private_root_must_be_absolute');
+  if (!runtimeEpoch) throw new Error('harness_runtime_epoch_required');
+  const profile = createHash('sha256').update(runtimeEpoch).digest('hex');
   const environment: Record<string, string> = {};
   for (const key of INHERITED_KEYS) {
     const value = inherited[key];
@@ -28,7 +32,7 @@ export function createWorkerEnvironment(
   }
   return {
     ...environment,
-    PI_CODING_AGENT_DIR: join(privateRoot, 'config'),
+    PI_CODING_AGENT_DIR: join(privateRoot, 'config', 'workers', profile),
     PI_OFFLINE: '1',
     DO_NOT_TRACK: '1',
     NO_PROXY: 'localhost,127.0.0.1,::1',

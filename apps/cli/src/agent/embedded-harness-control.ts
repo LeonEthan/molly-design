@@ -17,7 +17,6 @@ import {
   HarnessMcpSessionSchema,
   mcpCredentialMatchesServer,
   type McpCredentialBinding,
-  MOLLY_RUN_PERMISSION_MODE,
 } from '@molly/shared/embedded-harness';
 import {
   WorkerConfigSchema,
@@ -184,13 +183,18 @@ export class EmbeddedHarnessControl {
   needsReplacement(selection: unknown): boolean {
     if (this.busy) throw new Error('harness_run_busy');
     const selected = ModelSelectionSchema.parse(selection);
+    const changed = this.catalogRequiresReplacement(selected.connectionId);
+    return (
+      this.retired || JSON.stringify(selected) !== JSON.stringify(this.config.selection) || changed
+    );
+  }
+
+  private catalogRequiresReplacement(connectionId = this.config.connection.id): boolean {
     const connection = this.broker
       .catalog()
-      .find((entry) => entry.id === selected.connectionId && entry.enabled);
+      .find((entry) => entry.id === connectionId && entry.enabled);
     if (!connection) throw new Error('harness_connection_unavailable');
     return (
-      this.retired ||
-      JSON.stringify(selected) !== JSON.stringify(this.config.selection) ||
       JSON.stringify(connection) !== JSON.stringify(this.config.connection) ||
       JSON.stringify(this.imageConnection) !== JSON.stringify(this.broker.imageCatalog())
     );
@@ -234,7 +238,6 @@ export class EmbeddedHarnessControl {
       toolsetHash: this.binding.toolsetHash,
       pluginSetHash: this.binding.pluginSetHash,
       permissionProfileId: this.config.permissionProfileId,
-      permissionMode: MOLLY_RUN_PERMISSION_MODE,
     });
     const controller = new AbortController();
     this.activeController = controller;
@@ -271,7 +274,8 @@ export class EmbeddedHarnessControl {
       controller.signal.throwIfAborted();
       this.activeRun = { runId: snapshot.runId, turnId: snapshot.turnId };
       const response = await input.prompt(snapshot);
-      controller.signal.throwIfAborted();
+      if (this.retired || this.catalogRequiresReplacement())
+        throw new Error('harness_worker_retired');
       const outcome = HarnessRunOutcomeSchema.safeParse(response._meta?.mollyNativeOutcome);
       if (
         !outcome.success ||

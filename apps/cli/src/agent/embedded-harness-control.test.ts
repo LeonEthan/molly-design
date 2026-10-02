@@ -54,7 +54,7 @@ function fixture(
     harness: {
       id: 'molly',
       engine: 'pi',
-      engineVersion: '0.85.1',
+      engineVersion: '0.99.2',
       buildId: 'test-build',
       protocolVersion: 1,
     },
@@ -181,7 +181,9 @@ describe('owned worker host control', () => {
       },
     });
     f.grant();
-    await expect(cancelled).rejects.toThrow();
+    await expect(cancelled).resolves.toMatchObject({ stopReason: 'end_turn' });
+    expect(f.control.needsReplacement(f.config.selection)).toBe(false);
+    f.pipe.destroy();
   });
 
   it('configures MCP once for the session and revokes its idle worker after credential rotation', async () => {
@@ -272,6 +274,27 @@ describe('owned worker host control', () => {
     release.resolve();
     await expect(result).rejects.toThrow();
     expect(f.control.needsReplacement(f.config.selection)).toBe(true);
+    expect(f.stops).toEqual(['stopped']);
+  });
+
+  it('rejects a completed receipt after cancellation removes the lease and the catalog changes', async () => {
+    const f = fixture();
+    const controller = new AbortController();
+    const result = f.control.prompt({
+      turnId: 'cancelled-then-revoked',
+      signal: controller.signal,
+      prompt: async (snapshot) => {
+        controller.abort();
+        f.broker.exchange({
+          version: 1,
+          connections: [{ ...f.config.connection, revision: 2 }],
+          reports: [],
+        });
+        return f.complete(snapshot);
+      },
+    });
+    f.grant();
+    await expect(result).rejects.toThrow();
     expect(f.stops).toEqual(['stopped']);
   });
   it('requires a new worker for changed selection or connection revision, never a silent credential swap', () => {
@@ -365,7 +388,7 @@ describe('owned worker host control', () => {
     f.pipe.destroy();
   });
 
-  it('freezes auto-review into every run snapshot', async () => {
+  it('records no permission mode in a run snapshot', async () => {
     const f = fixture();
     await f.control.bootstrap();
     const snapshots: HarnessRunSnapshot[] = [];
@@ -379,7 +402,7 @@ describe('owned worker host control', () => {
     });
     f.grant();
     await result;
-    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual(['auto-review']);
+    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual([undefined]);
     f.pipe.destroy();
   });
 

@@ -48,6 +48,22 @@ catalog:
   vite-plugin-wasm: ^3.5.0
   zod: ^4.1.5
 
+# Pi SDK and the unmodified Pi packages loaded by the embedded harness profile.
+catalogs:
+  pi:
+    '@earendil-works/pi-ai': 0.99.2
+    '@earendil-works/pi-agent-core': 0.99.2
+    '@earendil-works/pi-coding-agent': 0.99.2
+    '@earendil-works/pi-tui': 0.99.2
+    typebox: 1.3.34
+    pi-subagents: 0.74.0
+    pi-skillful: 0.4.0
+    '@juicesharp/rpiv-ask-user-question': 2.12.0
+    '@juicesharp/rpiv-i18n': 2.12.0
+    '@zigai/pi-mention-skill': 0.10.4
+    '@ff-labs/pi-fff': 0.11.0
+    cc-safety-net: 2.4.14
+
 ignoredBuiltDependencies:
   # >=13.0.2 has no install script; pnpm still offers to build it because the
   # package retains binding.gyp for explicit source builds.
@@ -59,7 +75,14 @@ managePackageManagerVersions: true
 minimumReleaseAge: 10080
 # Reviewed writer/storage fixes pinned to this exact coordinated release.
 minimumReleaseAgeExclude:
-  - pi-mcp-adapter@3.2.0
+  # Pi and its add-ons publish daily; the harness pins exact reviewed versions in catalog `pi`.
+  - '@earendil-works/*'
+  - pi-subagents
+  - pi-skillful
+  - '@juicesharp/*'
+  - '@zigai/*'
+  - '@ff-labs/*'
+  - cc-safety-net
   - smol-toml@1.9.0
   - mem0ai@3.3.1
   # Exact upstream combination verified by the embedded-browser MCP probe.

@@ -61,7 +61,7 @@ Root `pnpm install` does not install Bento's isolated npm dependency tree.
 
 ## Local Development
 
-You need Node.js `>=22.14.0 <23 || >=23.6.0`, Git, npm and the pnpm version
+You need Node.js `>=22.19.0 <23 || >=23.6.0`, Git, npm and the pnpm version
 specified by this project (via Corepack). Native addon builds need the platform's
 compiler toolchain: Xcode Command Line Tools on macOS, Visual Studio C++ build tools
 on Windows, or a C/C++ toolchain on Linux, with Python available to node-gyp.

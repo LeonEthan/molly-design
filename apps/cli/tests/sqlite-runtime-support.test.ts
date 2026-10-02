@@ -21,9 +21,25 @@ import {
 
 const require = createRequire(import.meta.url);
 const sqliteDir = dirname(require.resolve('better-sqlite3/package.json'));
-const supportedNodeEngineRange = '>=22.14.0 <23 || >=23.6.0';
+const supportedNodeEngineRange = '>=22.19.0 <23 || >=23.6.0';
 
 describe('SQLite runtime support guard', () => {
+  it.each(['v22.13.0', 'v22.14.0', 'v22.15.0', 'v22.16.0', 'v22.17.0', 'v22.18.0', 'v23.5.0'])(
+    'rejects %s despite Node-API 10 because the embedded Pi requires 22.19',
+    (nodeVersion) => {
+      expect(describeUnsupportedNodeRuntime({ nodeVersion, nodeApiVersion: '10' })).toContain('v22.19.0');
+      expect(describeUnsupportedRuntime({ nodeVersion, napi: '10', arch: 'x64' })).toContain('v22.19.0');
+    }
+  );
+
+  it.each(['v22.19.0', 'v22.22.0', 'v23.6.0', 'v24.0.0'])(
+    'accepts %s with Node-API 10 at both install and startup boundaries',
+    (nodeVersion) => {
+      expect(describeUnsupportedNodeRuntime({ nodeVersion, nodeApiVersion: '10' })).toBeUndefined();
+      expect(describeUnsupportedRuntime({ nodeVersion, napi: '10', arch: 'arm64' })).toBeUndefined();
+    }
+  );
+
   it('rejects every runtime below the Node-API version the binding is built against', () => {
     // Node-API 9 is Node 22.0-22.13 — supported by better-sqlite3 12, segfaults on 13.
     expect(isNodeApiVersionSupported('9')).toBe(false);
@@ -48,7 +64,7 @@ describe('SQLite runtime support guard', () => {
     expect(message).toContain('arm');
     expect(message).not.toContain('Upgrade Node');
 
-    expect(describeUnsupportedRuntime({ napi: '9', arch: 'x64' })).toContain('v22.14.0');
+    expect(describeUnsupportedRuntime({ napi: '9', arch: 'x64' })).toContain('v22.19.0');
     expect(describeUnsupportedRuntime({ napi: '10', arch: 'x64' })).toBeUndefined();
   });
 
@@ -73,8 +89,6 @@ describe('SQLite runtime support guard', () => {
     const packageJson = JSON.parse(
       readFileSync(new URL('../package.json', import.meta.url), 'utf8')
     ) as { engines?: { node?: string } };
-    // Node-API 10 landed in 22.14.0 and 23.6.0; anything looser lets npm install
-    // onto a runtime that crashes. engines is only a warning, hence the guards.
     expect(packageJson.engines?.node).toBe(supportedNodeEngineRange);
   });
 
@@ -121,7 +135,7 @@ describe('SQLite runtime support guard', () => {
       nodeApiVersion: '9',
     });
     expect(unsupportedDescription).toContain('Node-API 10');
-    expect(unsupportedDescription).toContain('v22.14.0 through v22.x');
+    expect(unsupportedDescription).toContain('v22.19.0 through v22.x');
     expect(
       describeUnsupportedNodeRuntime({ nodeVersion: 'v23.6.0', nodeApiVersion: '10' })
     ).toBeUndefined();
@@ -154,6 +168,15 @@ describe('SQLite runtime support guard', () => {
     });
     expect(unsupported.status).toBe(1);
     expect(unsupported.stderr).toContain('Node-API 10');
+
+    const spoofNode22_18 = `data:text/javascript,${encodeURIComponent(
+      "Object.defineProperty(process, 'version', { value: 'v22.18.0' });"
+    )}`;
+    const belowPi = spawnSync(process.execPath, ['--import', spoofNode22_18, scriptPath], {
+      encoding: 'utf8',
+    });
+    expect(belowPi.status).toBe(1);
+    expect(belowPi.stderr).toContain('v22.19.0');
 
     const importOnly = spawnSync(
       process.execPath,

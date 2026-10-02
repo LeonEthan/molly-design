@@ -29,8 +29,17 @@ export const SUPPORTED_ARCHS = ['x64', 'arm64'] as const;
 
 /** Exported for tests: `undefined`/unparsable napi fails closed. */
 export function isNodeApiVersionSupported(napi: string | undefined): boolean {
-  const parsed = Number.parseInt(napi ?? '', 10);
-  return Number.isFinite(parsed) && parsed >= REQUIRED_NODE_API_VERSION;
+  if (typeof napi !== 'string' || napi.trim().length === 0) return false;
+  const parsed = Number(napi);
+  return Number.isInteger(parsed) && parsed >= REQUIRED_NODE_API_VERSION;
+}
+
+export function isNodeVersionSupported(nodeVersion: string): boolean {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)$/.exec(nodeVersion);
+  if (!match) return false;
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return (major === 22 && minor >= 19) || (major === 23 && minor >= 6) || major >= 24;
 }
 
 export function isArchSupported(arch: string): boolean {
@@ -39,6 +48,7 @@ export function isArchSupported(arch: string): boolean {
 
 /** The reason this runtime cannot load the binding, or `undefined` if it can. */
 export function describeUnsupportedRuntime(runtime: {
+  nodeVersion?: string;
   napi: string | undefined;
   arch: string;
 }): string | undefined {
@@ -49,11 +59,12 @@ export function describeUnsupportedRuntime(runtime: {
       `from source.\nOn 32-bit ARM, a 64-bit OS (arm64) is the supported path.`
     );
   }
-  if (!isNodeApiVersionSupported(runtime.napi)) {
+  const nodeVersion = runtime.nodeVersion ?? process.version;
+  if (!isNodeVersionSupported(nodeVersion) || !isNodeApiVersionSupported(runtime.napi)) {
     return (
-      `Molly needs Node-API ${REQUIRED_NODE_API_VERSION}, which means Node.js v22.14.0 through v22.x or v23.6.0+ ` +
-      ` (you are on ${process.version}, Node-API ${runtime.napi ?? 'unknown'}).\n` +
-      `Its SQLite binding would crash the process instead of failing cleanly here.\n` +
+      `Molly needs Node.js v22.19.0 for Pi and Node-API ${REQUIRED_NODE_API_VERSION} for SQLite. ` +
+      `Use Node.js v22.19.0 through v22.x, v23.6.0+, or a later major release ` +
+      `(you are on ${nodeVersion}, Node-API ${runtime.napi ?? 'unknown'}).\n` +
       `Upgrade the Molly desktop runtime, then restart Molly.`
     );
   }
@@ -62,6 +73,7 @@ export function describeUnsupportedRuntime(runtime: {
 
 export function assertSqliteRuntimeSupported(): void {
   const problem = describeUnsupportedRuntime({
+    nodeVersion: process.version,
     napi: process.versions.napi,
     arch: process.arch,
   });

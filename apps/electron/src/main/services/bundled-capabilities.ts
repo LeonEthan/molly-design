@@ -15,14 +15,10 @@ const runtimeSchema = z.object({
   files: z.array(z.object({ path: z.string().max(4096), sha256: digest })).max(50_000)
 })
 const extensionSchema = z.object({
-  schemaVersion: z.literal(1),
-  name: z.literal('pi-ask-question'),
+  name: z.literal('@juicesharp/rpiv-ask-user-question'),
   version: z.string().min(1).max(100),
-  commit: z.string().regex(/^[a-f0-9]{40}$/),
   license: z.literal('MIT'),
-  licenseSha256: digest,
-  selectedTools: z.tuple([z.literal('ask_question')]),
-  selectedCommands: z.tuple([])
+  pi: z.object({ extensions: z.tuple([z.literal('./index.ts')]) })
 })
 
 /** Display bundled metadata only. Never imports extensions, discovers files or starts a worker. */
@@ -55,21 +51,23 @@ export async function readBundledCapabilities(cliEntry: string | null) {
     }
     const extension = extensionSchema.parse(
       JSON.parse(
-        (await readVerified('extensions/pi-ask-question/manifest.json', 64 * 1024)).toString('utf8')
+        (
+          await readVerified(
+            'node_modules/@juicesharp/rpiv-ask-user-question/package.json',
+            64 * 1024
+          )
+        ).toString('utf8')
       )
     )
-    const license = await readVerified('extensions/pi-ask-question/LICENSE', 64 * 1024)
-    if (createHash('sha256').update(license).digest('hex') !== extension.licenseSha256)
-      throw new Error('invalid_license_digest')
+    await readVerified('node_modules/@juicesharp/rpiv-ask-user-question/LICENSE', 64 * 1024)
     return {
       harness,
       extensions: [
         {
           name: extension.name,
           version: extension.version,
-          commit: extension.commit,
           license: extension.license,
-          tools: extension.selectedTools,
+          tools: ['ask_user_question'] as const,
           activation: 'requires-question-ui-v1' as const
         }
       ]

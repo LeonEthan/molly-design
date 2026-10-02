@@ -6,15 +6,7 @@ import {
 import { app, BrowserWindow, Menu, shell } from 'electron'
 import { closeFocusedTabOrWindow } from './close-focused-tab-or-window'
 import type { AppUpdaterService } from './services/app-updater-service'
-import en from '../../../../locales/en.json'
-import zhCN from '../../../../locales/zh_CN.json'
-
-type SupportedLocale = 'en' | 'zh_CN'
-
-const localeResources: Record<SupportedLocale, Record<string, string>> = {
-  en: en as Record<string, string>,
-  zh_CN: zhCN as Record<string, string>
-}
+import { getUiLocale, localeResources, setUiLocale, type SupportedLocale } from './ui-locale'
 
 function t(locale: SupportedLocale, key: string, vars?: Record<string, string>): string {
   const resources = localeResources[locale] ?? localeResources.en
@@ -33,7 +25,6 @@ type SetupApplicationMenuOptions = {
   openOrFocusMainWindow: () => BrowserWindow
 }
 
-let currentLocale: SupportedLocale = 'en'
 let menuOptions: SetupApplicationMenuOptions | null = null
 
 function sendMenuAction(action: string): void {
@@ -76,7 +67,7 @@ function buildAndSetMenu(): void {
     return
   }
   const { appUpdaterService } = menuOptions
-  const locale = currentLocale
+  const locale = getUiLocale()
   const isMac = process.platform === 'darwin'
   const appName = app.name
 
@@ -280,21 +271,7 @@ export function setupApplicationMenu(options: SetupApplicationMenuOptions): void
   buildAndSetMenu()
 }
 
-/**
- * Translate into the product language the menus are currently drawn in. Exposed
- * so the window context menu (`context-menu.ts`) speaks that same language
- * without owning a second copy of the locale state.
- */
-export function translateMenu(key: string, fallback: string): string {
-  const resources = localeResources[currentLocale] ?? localeResources.en
-  return resources[key] ?? localeResources.en[key] ?? fallback
-}
-
 export function setMenuLanguage(locale: string): void {
-  if (locale === 'en' || locale === 'zh_CN') {
-    currentLocale = locale
-  } else {
-    currentLocale = 'en'
-  }
+  setUiLocale(locale)
   buildAndSetMenu()
 }

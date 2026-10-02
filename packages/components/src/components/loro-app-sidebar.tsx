@@ -1564,13 +1564,17 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       allActiveSessions
     ).map((task) => ({
       ...task,
-      machineName: task.machineId ? machineMetaMap.get(task.machineId)?.name?.trim() || null : null,
+      machineName:
+        task.machineId && task.machineId !== localMachineId
+          ? machineMetaMap.get(task.machineId)?.name?.trim() || null
+          : null,
     }));
   }, [
     activeOrganization?.members,
     allActiveSessions,
     onlineMachineIds,
     liveSessionStatuses,
+    localMachineId,
     machineMetaMap,
     resolveOpenerRowId,
     scope,
@@ -2038,7 +2042,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
             sectionLabel,
             subtitle: project.name,
             repoFullName: resolveProjectGitHubRepo(session.project) ?? null,
-            machineName: section.machineDisplayName,
+            machineName: section.kind === 'remote' ? section.machineDisplayName : null,
             owner: resolveSessionAuthor(session),
             latestMessageAt: activity.latestMessageAt,
             isPinned: Boolean(session.isPinned),
@@ -2203,7 +2207,9 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
                       <LocalProjectItem
                         key={project.id}
                         machineId={machineId}
-                        machineName={section.machineDisplayName}
+                        machineName={
+                          section.kind === 'remote' ? section.machineDisplayName : null
+                        }
                         project={project}
                         canRemoveProject={section.canRemoveProject}
                         canNavigateProject={section.canNavigateProject}

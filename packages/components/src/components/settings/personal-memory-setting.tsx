@@ -111,69 +111,72 @@ export function PersonalMemoryPanel({
           }
         />
       </CompactRow>
-      <p className="text-xs text-muted-foreground">
-        {t(
-          'settings.memory.scope',
-          'Project and brand facts are excluded. Disabling stops recall and capture. Deleting a memory removes it from future recall, but does not erase existing conversations.'
-        )}
-      </p>
-      {failed && (
-        <p role="alert" className="text-sm text-destructive">
+      <div className="flex flex-col gap-3 px-5 py-4">
+        <p className="text-xs text-muted-foreground">
           {t(
-            'settings.memory.failed',
-            'Memory could not be updated or loaded. Refresh and try again; another session may have changed it.'
+            'settings.memory.scope',
+            'Project and brand facts are excluded. Disabling stops recall and capture. Deleting a memory removes it from future recall, but does not erase existing conversations.'
           )}
         </p>
-      )}
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        onClick={() => void run({ action: 'read' })}
-      >
-        {t('settings.memory.refresh', 'Refresh memories')}
-      </Button>
-      {snapshot?.entries.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          {t('settings.memory.empty', 'No remembered preferences yet.')}
-        </p>
-      )}
-      {snapshot?.entries.map((entry) => (
-        <div key={entry.id} className="flex items-center gap-2">
-          <Input
-            aria-label={t('settings.memory.preference', 'Remembered preference')}
-            maxLength={300}
-            value={drafts[entry.id] ?? entry.text}
-            disabled={busy}
-            onChange={(event) => setDrafts({ ...drafts, [entry.id]: event.target.value })}
-          />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={busy || !drafts[entry.id]?.trim() || drafts[entry.id] === entry.text}
-            onClick={() =>
-              void run({
-                action: 'edit',
-                id: entry.id,
-                text: drafts[entry.id],
-                revision: snapshot.revision,
-              })
-            }
-          >
-            {t('settings.memory.save', 'Save')}
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() =>
-              void run({ action: 'delete', id: entry.id, revision: snapshot.revision })
-            }
-          >
-            {t('settings.memory.delete', 'Delete')}
-          </Button>
-        </div>
-      ))}
+        {failed && (
+          <p role="alert" className="text-sm text-destructive">
+            {t(
+              'settings.memory.failed',
+              'Memory could not be updated or loaded. Refresh and try again; another session may have changed it.'
+            )}
+          </p>
+        )}
+        {snapshot?.entries.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            {t('settings.memory.empty', 'No remembered preferences yet.')}
+          </p>
+        )}
+        {snapshot?.entries.map((entry) => (
+          <div key={entry.id} className="flex items-center gap-2">
+            <Input
+              aria-label={t('settings.memory.preference', 'Remembered preference')}
+              maxLength={300}
+              value={drafts[entry.id] ?? entry.text}
+              disabled={busy}
+              onChange={(event) => setDrafts({ ...drafts, [entry.id]: event.target.value })}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || !drafts[entry.id]?.trim() || drafts[entry.id] === entry.text}
+              onClick={() =>
+                void run({
+                  action: 'edit',
+                  id: entry.id,
+                  text: drafts[entry.id],
+                  revision: snapshot.revision,
+                })
+              }
+            >
+              {t('settings.memory.save', 'Save')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void run({ action: 'delete', id: entry.id, revision: snapshot.revision })
+              }
+            >
+              {t('settings.memory.delete', 'Delete')}
+            </Button>
+          </div>
+        ))}
+        <Button
+          variant="outline"
+          className="self-start"
+          size="sm"
+          disabled={busy}
+          onClick={() => void run({ action: 'read' })}
+        >
+          {t('settings.memory.refresh', 'Refresh memories')}
+        </Button>
+      </div>
     </CompactSection>
   );
 }

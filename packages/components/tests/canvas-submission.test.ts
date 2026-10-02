@@ -5,7 +5,12 @@ import {
   historyItemsToInputBlocks,
   type SessionInputBlock,
 } from '@molly/shared';
-import { buildCanvasSubmission } from '../src/components/chat/canvas-submission';
+import {
+  buildCanvasSubmission,
+  parseCanvasSizeInstruction,
+} from '../src/components/chat/canvas-submission';
+import en from '../../../locales/en.json';
+import zhCN from '../../../locales/zh_CN.json';
 
 const instruction = ({ width, height }: { width: number; height: number }) =>
   `Canvas size: ${width} × ${height} px. Design at exactly this width and height.`;
@@ -62,5 +67,25 @@ describe('landing canvas submission through durable turn input', () => {
     expect(() =>
       buildCanvasSubmission(draft, { mode: 'custom', width, height: 600 }, instruction)
     ).toThrow(RangeError);
+  });
+});
+
+describe('recognizing the size instruction for display', () => {
+  const templates = [en['design.requestedSize'], zhCN['design.requestedSize']];
+  const render = (template: string, width: number, height: number) =>
+    template.replace('{{width}}', String(width)).replace('{{height}}', String(height));
+
+  it.each(templates)('reads dimensions back from %s', (template) => {
+    expect(parseCanvasSizeInstruction(render(template, 1080, 1350), templates)).toEqual({
+      width: 1080,
+      height: 1350,
+    });
+  });
+
+  it('leaves ordinary prompts that mention a size as text', () => {
+    expect(
+      parseCanvasSizeInstruction('Canvas size: 1080 × 1350 px. Make it bold.', templates)
+    ).toBeNull();
+    expect(parseCanvasSizeInstruction('Make a 1080 × 1350 poster', templates)).toBeNull();
   });
 });

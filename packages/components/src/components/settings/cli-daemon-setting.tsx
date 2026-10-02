@@ -43,10 +43,10 @@ export function CliDaemonSetting() {
   return (
     <div id="cli-daemon" className="scroll-mt-24">
       <CompactRow
-        label={t('settings.general.cliDaemon.label', 'Daemon')}
+        label={t('settings.general.cliDaemon.label', 'Background service')}
         helper={t(
           'settings.general.cliDaemon.helper',
-          'The background process that runs local agents and terminals.'
+          'Runs the agents that create your designs on this computer. Restart it if Molly stops responding.'
         )}
         alignTop
       >

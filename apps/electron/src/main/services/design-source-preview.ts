@@ -17,6 +17,7 @@ import {
 } from './design-service'
 import type { ObservedPreviewResult } from '../../../../cli/src/design/render-preview'
 import { PreviewRequests } from './design-source-preview-core'
+import { translateUi } from '../ui-locale'
 
 type PreviewStatus = {
   status: 'ready' | 'waiting'
@@ -404,7 +405,7 @@ async function renderSourcePreview(
           if (started || !window.molly || !window.bento?.doc || !document.querySelector('.bento-slide')) return;
           started = true; observer.disconnect();
           try {
-            window.molly.setReadonly(true, ${JSON.stringify('Agent 正在构建 · 只读 / Agent is building · Read-only')});
+            window.molly.setReadonly(true, ${JSON.stringify(translateUi('design.canvasAgentBuilding', 'Molly is building · Read-only'))});
             document.querySelector('.bento-slide').getBoundingClientRect();
             await Promise.all([...document.fonts].filter(font => font.status === 'loading').map(font => font.load()));
             if ([...document.fonts].some(font => font.status === 'error')) throw Error('Preview font failed to load');

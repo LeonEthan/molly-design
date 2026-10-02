@@ -59,9 +59,11 @@ describe('DesktopMachineMenu local machine label', () => {
   async function renderMenu({
     value = localMachineId,
     visibleLocalMachineId = localMachineId,
+    menuOptions = options,
   }: {
     value?: MachineId;
     visibleLocalMachineId?: MachineId | null;
+    menuOptions?: DesktopMachineMenuOption[];
   } = {}) {
     await act(async () => {
       root.render(
@@ -69,7 +71,7 @@ describe('DesktopMachineMenu local machine label', () => {
           <DesktopMachineMenu
             value={value}
             visibleLocalMachineId={visibleLocalMachineId}
-            options={options}
+            options={menuOptions}
             onChange={vi.fn()}
           />
         </TooltipProvider>
@@ -122,5 +124,20 @@ describe('DesktopMachineMenu local machine label', () => {
     await openMenu();
     expect(getMachineItem('Laptop').textContent).not.toContain('Local');
     expect(getMachineItem('Build server').textContent).not.toContain('Local');
+  });
+
+  it('hides the menu when the selected local machine is the only choice', async () => {
+    await renderMenu({ menuOptions: [{ value: localMachineId, label: 'Laptop' }] });
+
+    expect(container.querySelector('button')).toBeNull();
+  });
+
+  it('keeps the menu when the only choice is a remote machine', async () => {
+    await renderMenu({
+      value: remoteMachineId,
+      menuOptions: [{ value: remoteMachineId, label: 'Build server' }],
+    });
+
+    expect(container.querySelector('button')?.textContent).toContain('Build server');
   });
 });

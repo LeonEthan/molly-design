@@ -21,6 +21,42 @@ import {
 } from '@molly/shared/ui-icons';
 import { createSelectionToolbar } from './selection-toolbar';
 
+type Copy = readonly [key: string, fallback: string];
+
+/** Canvas copy is keyed into the shell's `design.*` locale entries, delivered with the toolbar presentation. */
+const COPY = {
+  readonly: ['canvasReadonly', 'Read-only'],
+  loading: ['canvasLoading', 'Loading canvas…'],
+  saved: ['canvasSaved', 'Saved'],
+  unsaved: ['canvasUnsaved', 'Unsaved changes'],
+  saving: ['canvasSaving', 'Saving…'],
+  editing: ['canvasEditing', 'Editing…'],
+  composing: ['canvasComposing', 'Finishing text input…'],
+  saveFailed: ['canvasSaveFailed', 'Couldn’t save'],
+  finishComposingBeforeLeave: [
+    'canvasFinishComposingBeforeLeave',
+    'Finish text input before saving or leaving the canvas',
+  ],
+  finishComposing: ['canvasFinishComposing', 'Finish text input first'],
+  versionConflict: [
+    'canvasVersionConflict',
+    'This artwork changed elsewhere; your edits are kept',
+  ],
+  select: ['toolSelect', 'Select'],
+  undo: ['toolUndo', 'Undo (⌘Z)'],
+  redo: ['toolRedo', 'Redo (⇧⌘Z)'],
+  text: ['toolText', 'Text (T)'],
+  shape: ['toolShape', 'Shape'],
+  image: ['toolImage', 'Image'],
+  rectangle: ['shapeRectangle', 'Rectangle'],
+  ellipse: ['shapeEllipse', 'Ellipse'],
+  triangle: ['shapeTriangle', 'Triangle'],
+  arrow: ['shapeArrow', 'Arrow'],
+  line: ['shapeLine', 'Line'],
+} as const satisfies Record<string, Copy>;
+
+export const PRODUCT_SESSION_COPY_KEYS: readonly string[] = Object.values(COPY).map(([key]) => key);
+
 /** Product editor persistence and its fixed, revision-bound parent bridge. */
 export function createProductSession(options: {
   sessionId: string;
@@ -67,7 +103,10 @@ export function createProductSession(options: {
   let ready = false;
   let error = '';
   let readonly = true;
-  let readonlyMessage = '只读 / Read-only';
+  let labels: Readonly<Record<string, string>> = {};
+  const say = (message: string | Copy) =>
+    typeof message === 'string' ? message : (labels[message[0]] ?? message[1]);
+  let readonlyMessage: string | Copy = COPY.readonly;
   let writePermit: string | undefined;
   options.setReadonly(true);
   document.body.dataset.readonly = 'true';
@@ -119,11 +158,19 @@ export function createProductSession(options: {
     sep.className = 'sep';
     dock.append(sep);
   };
-  const dockButton = (icon: string, label: string, onClick: () => void, extraClass = '') => {
+  const dockLabels: Array<[HTMLButtonElement, Copy]> = [];
+  const labelDock = () => {
+    for (const [button, label] of dockLabels) {
+      button.title = say(label);
+      button.setAttribute('aria-label', say(label));
+    }
+  };
+  const dockButton = (icon: string, label: Copy, onClick: () => void, extraClass = '') => {
     const button = document.createElement('button');
     button.innerHTML = icon;
-    button.title = label;
-    button.setAttribute('aria-label', label);
+    dockLabels.push([button, label]);
+    button.title = say(label);
+    button.setAttribute('aria-label', say(label));
     if (extraClass) button.className = extraClass;
     button.disabled = readonly && (extraClass === 'create' || extraClass === 'history');
     button.onclick = onClick;
@@ -139,23 +186,23 @@ export function createProductSession(options: {
     options.commitPending();
     options.applyCommands({ verb: 'add-element', ...payload });
   };
-  dockButton(renderUiIconSvg(mousePointer2Icon), '选择 / Select', () => {}, 'on');
+  dockButton(renderUiIconSvg(mousePointer2Icon), COPY.select, () => {}, 'on');
   dockButton(
     renderUiIconSvg(undo2Icon),
-    '撤销 / Undo (⌘Z)',
+    COPY.undo,
     clickHidden('.ed-group-history > button:nth-child(1)'),
     'history'
   );
   dockButton(
     renderUiIconSvg(redo2Icon),
-    '重做 / Redo (⇧⌘Z)',
+    COPY.redo,
     clickHidden('.ed-group-history > button:nth-child(2)'),
     'history'
   );
   dockSep();
   dockButton(
     renderUiIconSvg(typeIcon),
-    '文本 / Text (T)',
+    COPY.text,
     () => addElement({ kind: 'text' }),
     'create'
   );
@@ -163,23 +210,23 @@ export function createProductSession(options: {
   shapePopup.className = 'molly-shape-popup';
   // Insert menu mirrors the kernel's modeled presets; each entry carries the
   // exact add-element payload (one command = one undo batch).
-  const shapeItems: Array<[readonly UiIconNode[], string, Record<string, unknown>]> = [
-    [rectangleIcon, '矩形 / Rectangle', { kind: 'shape', shapeName: 'rect' }],
-    [ellipseIcon, '椭圆 / Ellipse', { kind: 'shape', shapeName: 'ellipse' }],
-    [triangleIcon, '三角形 / Triangle', { kind: 'shape', shapeName: 'triangle' }],
-    [arrowShapeIcon, '箭头 / Arrow', { kind: 'shape', shapeName: 'arrow' }],
-    [lineIcon, '直线 / Line', { kind: 'line' }],
+  const shapeItems: Array<[readonly UiIconNode[], Copy, Record<string, unknown>]> = [
+    [rectangleIcon, COPY.rectangle, { kind: 'shape', shapeName: 'rect' }],
+    [ellipseIcon, COPY.ellipse, { kind: 'shape', shapeName: 'ellipse' }],
+    [triangleIcon, COPY.triangle, { kind: 'shape', shapeName: 'triangle' }],
+    [arrowShapeIcon, COPY.arrow, { kind: 'shape', shapeName: 'arrow' }],
+    [lineIcon, COPY.line, { kind: 'line' }],
   ];
   dockButton(
     renderUiIconSvg(rectangleIcon) +
       renderUiIconSvg(chevronDownIcon, { size: 12, className: 'caret' }),
-    '形状 / Shape',
+    COPY.shape,
     () => {
       if (!shapePopup.classList.contains('open')) {
         shapePopup.innerHTML = '';
         for (const [nodes, label, payload] of shapeItems) {
           const item = document.createElement('button');
-          item.innerHTML = `${renderUiIconSvg(nodes, { size: 16 })}<span>${label}</span>`;
+          item.innerHTML = `${renderUiIconSvg(nodes, { size: 16 })}<span>${say(label)}</span>`;
           item.onclick = () => {
             addElement(payload);
             shapePopup.classList.remove('open');
@@ -193,7 +240,7 @@ export function createProductSession(options: {
   );
   dockButton(
     renderUiIconSvg(imageIcon),
-    '图片 / Image',
+    COPY.image,
     () => {
       if (readonly) return;
       options.pickImageFile((assetKey, dataUri) => {
@@ -237,7 +284,10 @@ export function createProductSession(options: {
   statusText.className = 'message';
   status.append(statusDot, statusText);
   document.body.appendChild(status);
-  const setStatusMessage = (message: string) => {
+  let statusSource: string | Copy = '';
+  const setStatusMessage = (source: string | Copy) => {
+    statusSource = source;
+    const message = say(source);
     statusText.textContent = message;
     status.title = message;
     status.setAttribute('aria-label', message);
@@ -267,13 +317,13 @@ export function createProductSession(options: {
       }).catch(() => {});
     }, 150);
   };
-  const mark = (next: string, message: string) => {
+  const mark = (next: string, message: string | Copy) => {
     if (conflict && next !== 'conflict') {
       next = 'conflict';
       message = error || message;
     }
     state = next;
-    error = next === 'error' || next === 'conflict' || next === 'waiting' ? message : '';
+    error = next === 'error' || next === 'conflict' || next === 'waiting' ? say(message) : '';
     status.dataset.state = next;
     setStatusMessage(
       readonly && next !== 'error' && next !== 'conflict' ? readonlyMessage : message
@@ -289,13 +339,13 @@ export function createProductSession(options: {
     if (!pendingTextNode?.isConnected || !pendingTextNode.isContentEditable) pendingText = false;
     editSeq++;
     toolbar.refresh();
-    mark('pending', '修改尚未保存');
+    mark('pending', COPY.unsaved);
     schedule();
   };
   const saveOne = async () => {
     const submittedSeq = editSeq;
     const submittedRevision = revisionId;
-    mark('saving', '正在保存…');
+    mark('saving', COPY.saving);
     try {
       const reply = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/save`, {
         method: 'POST',
@@ -318,29 +368,29 @@ export function createProductSession(options: {
         conflict = reply.status === 409 && result.code !== 'JOB_RUNNING';
         mark(
           conflict ? 'conflict' : result.code === 'JOB_RUNNING' ? 'waiting' : 'error',
-          result.error ?? '保存失败，请重试'
+          result.error ?? COPY.saveFailed
         );
         throw new Error(error);
       }
       revisionId = result.revisionId;
       savedSeq = submittedSeq;
       if (!dirty() && lastSelectionSummary) reportSelection(lastSelectionSummary);
-      mark(dirty() ? 'pending' : 'saved', dirty() ? '修改尚未保存' : '已自动保存');
+      mark(dirty() ? 'pending' : 'saved', dirty() ? COPY.unsaved : COPY.saved);
     } catch (cause) {
       if (!conflict && state !== 'waiting')
-        mark('error', cause instanceof Error ? cause.message : '保存失败，请重试');
+        mark('error', cause instanceof Error ? cause.message : COPY.saveFailed);
       if (!conflict) schedule(2000);
       throw cause;
     }
   };
   const flush = async (commitBuffered = true): Promise<void> => {
     clearTimeout(timer);
-    if (composing && commitBuffered) throw new Error('请先完成输入法输入，再保存或离开画布');
+    if (composing && commitBuffered) throw new Error(say(COPY.finishComposingBeforeLeave));
     if (commitBuffered && !readonly) {
       options.commitPending();
       pendingText = false;
     }
-    if (conflict) throw new Error(error || '画稿版本冲突，当前修改仍保留');
+    if (conflict) throw new Error(error || say(COPY.versionConflict));
     const hasQueuedSave = () => editSeq !== savedSeq || saving !== undefined;
     while (hasQueuedSave()) {
       if (!saving)
@@ -348,16 +398,16 @@ export function createProductSession(options: {
           saving = undefined;
         });
       await saving;
-      if (composing && commitBuffered) throw new Error('请先完成输入法输入');
+      if (composing && commitBuffered) throw new Error(say(COPY.finishComposing));
       if (commitBuffered && !readonly) {
         options.commitPending();
         pendingText = false;
       }
     }
-    mark(dirty() ? 'editing' : 'saved', dirty() ? '正在编辑…' : '已自动保存');
+    mark(dirty() ? 'editing' : 'saved', dirty() ? COPY.editing : COPY.saved);
   };
-  const setReadonly = (value: boolean, message = '只读 / Read-only') => {
-    readonlyMessage = message;
+  const setReadonly = (value: boolean, message?: string) => {
+    readonlyMessage = message ?? COPY.readonly;
     for (const button of dock.querySelectorAll<HTMLButtonElement>('button.create,button.history'))
       button.disabled = value;
     if (value) shapePopup.classList.remove('open');
@@ -380,7 +430,7 @@ export function createProductSession(options: {
       options.setReadonly(value);
     }
     document.body.dataset.readonly = String(value);
-    setStatusMessage(value ? readonlyMessage : dirty() ? '修改尚未保存' : '已自动保存');
+    setStatusMessage(value ? readonlyMessage : dirty() ? COPY.unsaved : COPY.saved);
     if (!value && dirty()) schedule();
   };
   const blockInput = (event: Event) => {
@@ -425,11 +475,11 @@ export function createProductSession(options: {
   });
   document.addEventListener('compositionstart', () => {
     composing = true;
-    mark('editing', '输入法输入中…');
+    mark('editing', COPY.composing);
   });
   document.addEventListener('compositionend', () => {
     composing = false;
-    mark(dirty() ? 'editing' : 'saved', dirty() ? '正在编辑…' : '已自动保存');
+    mark(dirty() ? 'editing' : 'saved', dirty() ? COPY.editing : COPY.saved);
     if (dirty()) schedule();
   });
   document.addEventListener('input', (event) => {
@@ -439,7 +489,7 @@ export function createProductSession(options: {
     if (editable) {
       pendingTextNode = editable;
       pendingText = true;
-      mark('editing', '正在编辑…');
+      mark('editing', COPY.editing);
     }
   });
   document.addEventListener(
@@ -450,7 +500,7 @@ export function createProductSession(options: {
         if (!pendingTextNode?.isConnected || !pendingTextNode.isContentEditable) {
           pendingText = false;
           options.setDirty(dirty());
-          if (!dirty() && !saving) mark('saved', '已自动保存');
+          if (!dirty() && !saving) mark('saved', COPY.saved);
         }
       });
     },
@@ -484,22 +534,25 @@ export function createProductSession(options: {
           requestId: data.requestId,
           requestedRevisionId: data.revisionId,
           ok: false,
-          error: cause instanceof Error ? cause.message : '保存失败',
+          error: cause instanceof Error ? cause.message : say(COPY.saveFailed),
         })
     );
   });
-  mark('loading', '画布载入中…');
+  mark('loading', COPY.loading);
   void document.fonts.ready.then(() => {
     ready = true;
     document.getElementById('bento-splash')?.remove();
-    if (state === 'loading') mark('saved', '已自动保存');
-    else mark(state, statusText.textContent ?? '');
+    if (state === 'loading') mark('saved', COPY.saved);
+    else mark(state, statusSource);
     window.dispatchEvent(new Event('molly:ready'));
   });
   Object.assign(window, {
     molly: {
       setReadonly,
       presentToolbar(value: DesignToolbarPresentation) {
+        labels = value.labels;
+        labelDock();
+        setStatusMessage(statusSource);
         toolbar.present(value);
       },
       selection(expected?: number) {
@@ -571,7 +624,7 @@ export function createProductSession(options: {
         await flush();
         return { ok: true };
       } catch (cause) {
-        return { ok: false, error: cause instanceof Error ? cause.message : '保存失败' };
+        return { ok: false, error: cause instanceof Error ? cause.message : say(COPY.saveFailed) };
       }
     },
     selection(elements: unknown[], summary: unknown) {

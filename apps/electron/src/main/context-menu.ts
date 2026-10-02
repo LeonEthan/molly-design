@@ -1,6 +1,6 @@
 import { Menu, type BrowserWindow } from 'electron'
 import { buildContextMenuTemplate, type ContextMenuLabels } from './context-menu-template'
-import { translateMenu } from './menu'
+import { translateUi } from './ui-locale'
 
 /**
  * Give a product window the context menu Electron does not ship. One handler
@@ -25,11 +25,11 @@ export function installContextMenu(window: BrowserWindow): void {
 
 function resolveLabels(): ContextMenuLabels {
   return {
-    undo: translateMenu('common.undo', 'Undo'),
-    redo: translateMenu('common.redo', 'Redo'),
-    cut: translateMenu('common.cut', 'Cut'),
-    copy: translateMenu('common.copy', 'Copy'),
-    paste: translateMenu('common.paste', 'Paste'),
-    selectAll: translateMenu('common.selectAll', 'Select All')
+    undo: translateUi('common.undo', 'Undo'),
+    redo: translateUi('common.redo', 'Redo'),
+    cut: translateUi('common.cut', 'Cut'),
+    copy: translateUi('common.copy', 'Copy'),
+    paste: translateUi('common.paste', 'Paste'),
+    selectAll: translateUi('common.selectAll', 'Select All')
   }
 }

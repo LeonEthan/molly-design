@@ -1732,6 +1732,8 @@
   "sessions.editedFiles.showMore": "再显示 {{count}} 个",
   "sessions.editedFiles.showLess": "收起",
   "sessions.toolActivity.commands": "调用了 {{count}} 个命令",
+  "sessions.toolActivity.viaTool": "通过 {{tool}}",
+  "sessions.toolActivity.nestedCall": "嵌套调用",
   "sessions.toolActivity.commands_one": "调用了 {{count}} 个命令",
   "sessions.toolActivity.commands_other": "调用了 {{count}} 个命令",
   "sessions.toolActivity.readFiles": "阅读了 {{count}} 个文件",

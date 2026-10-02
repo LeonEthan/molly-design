@@ -3,6 +3,7 @@ import type { MessageContent } from '@molly/shared';
 type AssistantMessageRenderSeed = {
   content: MessageContent;
   itemIndex: number;
+  parentToolTitle?: string;
 };
 
 export type AssistantMessageRenderItem = AssistantMessageRenderSeed & {
@@ -43,10 +44,23 @@ const isPlanExitSeed = (seed: AssistantMessageRenderSeed): boolean =>
 export const buildAssistantMessageRenderItems = (
   items: readonly MessageContent[]
 ): AssistantMessageRenderItem[] => {
+  const toolTitles = new Map(
+    items.flatMap((item) =>
+      item.type === 'tool_call' ? [[item.toolCallId, item.title || item.toolName] as const] : []
+    )
+  );
   const visibleItems = items.flatMap((content, itemIndex) =>
     isSubagentTaskItem(content) || isHiddenCompletedActivity(content)
       ? []
-      : [{ content, itemIndex }]
+      : [
+          {
+            content,
+            itemIndex,
+            ...(content.type === 'tool_call' && content.parentToolCallId
+              ? { parentToolTitle: toolTitles.get(content.parentToolCallId) }
+              : {}),
+          },
+        ]
   );
 
   // No plan, no reordering: a turn's natural order is the right one, and moving

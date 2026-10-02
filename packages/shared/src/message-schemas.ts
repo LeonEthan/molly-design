@@ -3150,6 +3150,7 @@ export const ToolCallMessageSchema = z.object({
   type: z.literal('tool_call'),
   _meta: PermissionMetaSchema.optional(),
   toolCallId: z.string(),
+  parentToolCallId: z.string().min(1).optional(),
   title: z.string().nullable().optional(),
   status: ToolCallStatusSchema,
   kind: ToolKindSchema.optional(),

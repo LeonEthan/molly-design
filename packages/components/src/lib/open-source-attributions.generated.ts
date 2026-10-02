@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-01T10:38:26.332Z",
+  "generatedAt": "2026-10-02T03:21:23.156Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -1617,7 +1617,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Application composition runtime for services, replicated state, RPC, and plugins",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1630,7 +1630,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "General-purpose agent with transport abstraction, state management, and attachment support",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1643,7 +1643,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Unified LLM API with automatic model discovery and provider configuration",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1656,7 +1656,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Sandboxed JavaScript execution where the only capability is calling injected tools",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1669,7 +1669,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Coding agent CLI with read, bash, edit, write tools and session management",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1682,7 +1682,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Standalone Model Context Protocol client for pi and other applications",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1695,7 +1695,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Vendor-neutral telemetry contracts and typed schema utilities for pi",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {
@@ -1708,7 +1708,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Terminal User Interface library with differential rendering for efficient text-based applications",
       "versions": [
-        "0.99.2"
+        "1.0.0"
       ]
     },
     {

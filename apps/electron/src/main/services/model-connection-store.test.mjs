@@ -41,7 +41,7 @@ for (const mode of [
     if (mode === 'duplicate') files.push(files[0])
     const runtime = {
       engine: 'pi',
-      engineVersion: '0.99.2',
+      engineVersion: '1.0.0',
       protocolVersion: 1,
       buildId: 'b'.repeat(64),
       buildPlatform: mode === 'platform' ? 'other' : process.platform,

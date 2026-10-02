@@ -7,6 +7,7 @@ import type {
 } from '@earendil-works/pi-coding-agent';
 import { createExtensionUI } from './extension-ui';
 import { describeToolCall } from './tool-presentation';
+import { toolCallMeta } from './tool-history';
 import { acpPromptToPiMessage } from './translate/prompt';
 import { formatToolContent } from './translate/tool-content';
 import { z } from 'zod';
@@ -266,6 +267,7 @@ export class PiAcpSession {
         toolCallId: event.toolCallId,
         ...describeToolCall(event.toolName, event.args, this.piSession.sessionManager.getCwd()),
         status: 'in_progress',
+        _meta: toolCallMeta(event.toolName, event.parentToolCallId),
       });
     }
     if (event.type === 'tool_execution_update' || event.type === 'tool_execution_end') {
@@ -279,6 +281,7 @@ export class PiAcpSession {
         status: finished ? (isError ? 'failed' : 'completed') : 'in_progress',
         content: formatToolContent(event.toolName, result, isError),
         rawOutput: result,
+        _meta: toolCallMeta(event.toolName, event.parentToolCallId),
       });
     }
   }

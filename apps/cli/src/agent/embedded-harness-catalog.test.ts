@@ -19,7 +19,7 @@ import type { LoroDocumentManager } from '../lib/loro/doc';
 
 const catalog: HarnessModelCatalog = {
   version: 1,
-  engineVersion: '0.99.2',
+  engineVersion: '1.0.0',
   models: [
     {
       providerPresetId: 'kimi-coding',
@@ -122,7 +122,7 @@ it('reads only a platform-matched, hash-verified catalog from the packaged direc
   await mkdir(join(root, 'harness'));
   const bytes = JSON.stringify(catalog);
   const manifest = {
-    engineVersion: '0.99.2',
+    engineVersion: '1.0.0',
     protocolVersion: 1,
     buildId: 'synthetic-build',
     buildPlatform: process.platform,
@@ -184,7 +184,7 @@ it('publishes from the local machine authority without cloud confirmation and re
     documents,
     machineId,
     workspaceId,
-    async () => ({ catalog, sourceVersion: 'molly-pi:0.99.2:synthetic' })
+    async () => ({ catalog, sourceVersion: 'molly-pi:1.0.0:synthetic' })
   );
   await expect(publisher.publish([connection])).rejects.toThrow('synthetic_flush_failure');
   expect(configs.map((config) => config.id)).toEqual([id]);
@@ -205,7 +205,7 @@ it('publishes from the local machine authority without cloud confirmation and re
       projectEmbeddedHarnessCatalog(catalog, [connection]).configOptions,
       [],
       false,
-      'molly-pi:0.99.2:synthetic',
+      'molly-pi:1.0.0:synthetic',
       projectEmbeddedHarnessCatalog(catalog, [connection]).modelReasoningEfforts,
     ],
   ]);

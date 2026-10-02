@@ -76,6 +76,77 @@ function fileSignal(directory: string, name: string) {
 }
 
 describe('owned Pi ACP native MCP integration', () => {
+  it('keeps nested MCP outcomes associated with their script and restores summaries without execution', async () => {
+    const f = await fixture({
+      responses: [
+        codemode(
+          'await tools.mcp__synthetic__image({}); const failure = await tools.mcp__synthetic__fail({}); if (!failure.isError) throw new Error("Expected failure"); text("HANDLED_FAILURE");'
+        ),
+        done(),
+      ],
+    });
+    const metadataSchema = z.object({
+      lody: z.object({ toolName: z.string(), parentToolCallId: z.string().optional() }),
+    });
+    const toolUpdates = () =>
+      f.updates.flatMap(({ update }) =>
+        update.sessionUpdate === 'tool_call' || update.sessionUpdate === 'tool_call_update'
+          ? [{ update, meta: metadataSchema.parse(update._meta).lody }]
+          : []
+      );
+    await f.initialize();
+    const selected = server(f.cwd);
+    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [selected] });
+    const response = await f.agent.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'Synthetic nested calls' }],
+    });
+    expect(response.stopReason).toBe('end_turn');
+    const live = toolUpdates();
+    const parent = live.find(
+      ({ meta, update }) => meta.toolName === 'codemode' && update.sessionUpdate === 'tool_call'
+    );
+    if (!parent) throw new Error('Missing script activity');
+    const children = live.filter(
+      ({ meta, update }) =>
+        meta.parentToolCallId === parent.update.toolCallId && update.sessionUpdate === 'tool_call'
+    );
+    expect(children.map(({ meta }) => meta.toolName)).toEqual([
+      'mcp__synthetic__image',
+      'mcp__synthetic__fail',
+    ]);
+    expect(
+      live
+        .filter(
+          ({ meta, update }) =>
+            meta.parentToolCallId === parent.update.toolCallId &&
+            update.sessionUpdate === 'tool_call_update'
+        )
+        .map(({ update }) => update.status)
+    ).toEqual(['completed', 'failed']);
+    await f.agent.dispose();
+    const requests = await protocol(f.cwd);
+    f.updates.length = 0;
+    const restored = f.makeAgent();
+    await restored.initialize({ protocolVersion: 1 });
+    await restored.loadSession({
+      sessionId: session.sessionId,
+      cwd: f.cwd,
+      mcpServers: [selected],
+    });
+    const recovered = toolUpdates().filter(({ meta }) => meta.parentToolCallId !== undefined);
+    expect(recovered.map(({ update }) => update.toolCallId)).toEqual(
+      children.map(({ update }) => update.toolCallId)
+    );
+    expect(recovered.map(({ update }) => update.status)).toEqual(['completed', 'failed']);
+    expect(JSON.stringify(recovered)).toContain('original result is not recorded');
+    expect(JSON.stringify(recovered)).not.toContain(png);
+    expect((await protocol(f.cwd)).filter((request) => request.method === 'tools/call')).toEqual(
+      requests.filter((request) => request.method === 'tools/call')
+    );
+    expect(f.prompts).toHaveLength(2);
+  });
+
   it('authenticates native HTTP MCP requests with literal protected custom headers', async () => {
     const connection: McpCredentialBinding = {
       workspaceId: 'workspace',

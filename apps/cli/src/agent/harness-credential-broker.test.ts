@@ -29,7 +29,7 @@ const snapshot: HarnessRunSnapshot = {
   harness: {
     id: 'molly',
     engine: 'pi',
-    engineVersion: '0.99.2',
+    engineVersion: '1.0.0',
     buildId: 'test',
     protocolVersion: 1,
   },

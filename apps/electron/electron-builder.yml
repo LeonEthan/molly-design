@@ -94,6 +94,9 @@ nsis:
   createDesktopShortcut: always
 mac:
   icon: build/icon.icns
+  # Inner Mach-O signing changes their bytes; refresh the harness manifest before
+  # the root app seals its resources, then verify both signatures normally.
+  sign: ./scripts/sign-embedded-harness.mjs
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist

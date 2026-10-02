@@ -255,7 +255,7 @@ export default async function afterPack(context) {
     throw new Error('[embedded-pi] packaged runtime probe failed')
   const harnessRuntime = JSON.parse(harnessProbe.stdout.trim())
   if (
-    harnessRuntime.engineVersion !== '0.99.2' ||
+    harnessRuntime.engineVersion !== '1.0.0' ||
     harnessRuntime.protocolVersion !== 1 ||
     harnessRuntime.modelCount < 1
   ) {

@@ -28,7 +28,7 @@ const catalog: AcpCapabilityCacheEntry = {
   cliType: 'builtin',
   agentType: 'molly',
   cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
-  sourceVersion: 'molly-pi:0.99.2:synthetic',
+  sourceVersion: 'molly-pi:1.0.0:synthetic',
   provenance: 'runtime',
   fetchedAt: 1,
   modes: [],

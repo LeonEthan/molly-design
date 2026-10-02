@@ -25,6 +25,7 @@ import {
 } from './profile';
 import { PiAcpSession, type AdapterPeer } from './session';
 import { describeToolCall } from './tool-presentation';
+import { replayNestedToolCalls, toolCallMeta } from './tool-history';
 import { formatToolContent } from './translate/tool-content';
 import { acpMcpConfig, createAcpMcpExtensions, rejectAmbientMcp } from './mcp';
 import type { PiAcpHost } from './host';
@@ -95,6 +96,13 @@ export class PiAcpAgent implements acp.Agent {
 
   private async replay(wrapper: PiAcpSession): Promise<void> {
     const sessionId = wrapper.sessionId;
+    const seen = new Set(
+      wrapper.piSession.messages.flatMap((message) =>
+        message.role === 'assistant'
+          ? message.content.flatMap((block) => (block.type === 'toolCall' ? [block.id] : []))
+          : []
+      )
+    );
     for (const message of wrapper.piSession.messages) {
       if (message.role === 'user') {
         const blocks =
@@ -132,18 +140,29 @@ export class PiAcpAgent implements acp.Agent {
                   wrapper.piSession.sessionManager.getCwd()
                 ),
                 status: 'pending',
+                _meta: toolCallMeta(block.name),
               },
             });
         }
       } else if (message.role === 'toolResult') {
+        const nested = replayNestedToolCalls(
+          message,
+          wrapper.piSession.sessionManager.getCwd(),
+          seen
+        );
+        for (const update of nested.updates) await this.conn.sessionUpdate({ sessionId, update });
         await this.conn.sessionUpdate({
           sessionId,
           update: {
             sessionUpdate: 'tool_call_update',
             toolCallId: message.toolCallId,
             status: message.isError ? 'failed' : 'completed',
-            content: formatToolContent(message.toolName, message, message.isError),
+            content: [
+              ...formatToolContent(message.toolName, message, message.isError),
+              ...nested.notices,
+            ],
             rawOutput: message,
+            _meta: toolCallMeta(message.toolName),
           },
         });
       }

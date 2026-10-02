@@ -182,6 +182,14 @@ draft files alone do not commit the canvas.
 [profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker and catalog-update
 races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
 competing reapers, delayed cleanup and real worker death without timed sleeps.
-One desktop design run (DeepSeek, text and shapes) completed without permission prompts;
-real-service image generation, background sub-agents and other providers have not been
-verified by these upgrade checks.
+One desktop design run (DeepSeek, text and shapes) completed without permission prompts.
+An additional macOS arm64 packaged-daemon/worker check on 2026-10-01 made two live image
+tool calls through the configured OpenAI Images proxy: generation took 17.3 seconds and
+editing took 22.7 seconds. Both returned 1254×1254 PNGs despite requesting 1024×1024.
+Receipt hashes matched the saved files and each current native image read. The ordinary
+no-open-view canvas flush, YAML authoring, natural completion and canonical CAS succeeded;
+parent relationships and asset receipts survived opening a fresh local-plane history replica.
+Language inference was controlled loopback, with a source Electron protected-credential host;
+this does not establish autonomous visual judgment, GUI or live daemon-restart acceptance,
+upstream proxy billing, or real latency above 60 seconds. Native deterministic tests cover
+the longer timeout boundary. Background sub-agents and other providers remain unverified.

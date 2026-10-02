@@ -50,6 +50,9 @@ mobile surfaces.
   and the light/dark standalone wordmarks; run it after editing these masters.
   `MollyWordmark` renders the complete outlined Molly Design signature with currentColor.
   No font substitution or runtime reference to ignored `output/` assets is allowed.
+- Designer surfaces keep one type ladder: 36px display (home heading only), 14px
+  reading, 13px sidebar and chrome rows, 12px regular muted metadata. Chrome has no
+  hue accent; links are ink with a muted underline (owner choice, 2026-10-02).
 
 ## Rules shared by callers
 

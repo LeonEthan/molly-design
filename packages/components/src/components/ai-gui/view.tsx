@@ -531,7 +531,7 @@ const AgentActivityRow = ({
           label={label}
           tone={tone}
           displaySize={14}
-          labelClassName="text-[12.5px] font-medium leading-snug"
+          labelClassName="text-xs leading-snug"
         />
       </div>
     </ConversationColumn>
@@ -2938,7 +2938,7 @@ const UserMessageRowView = ({
           isMobile ? 'max-w-[min(100%,28rem)] gap-1' : 'max-w-[80%] gap-1.5 sm:max-w-[70%]'
         )}
       >
-        <div className="flex flex-row-reverse items-center gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-row-reverse items-center gap-1.5 text-xs text-muted-foreground">
           {timestampLabel ? <span className="tabular-nums">{timestampLabel}</span> : null}
           {isUndelivered || isDeliveryUnknown ? (
             onResendUndelivered && !isDeliveryUnknown ? (
@@ -3314,7 +3314,7 @@ const AssistantTurnConfigInfoButton = ({
 
 /* Shared type/icon for the activity group header AND every tool/thought
    step under it — one size, one color so the stack reads as one list. */
-const ACTIVITY_PROCESS_TEXT_CLASS = 'text-[12.5px] font-medium leading-snug text-muted-foreground';
+const ACTIVITY_PROCESS_TEXT_CLASS = 'text-xs leading-snug text-muted-foreground';
 const ACTIVITY_PROCESS_ICON_CLASS = 'h-3.5 w-3.5 shrink-0 text-muted-foreground';
 /* One tone for every icon in a turn — see `ACTIVITY_PROCESS_ICON_CLASS`. Only
    the optical nudge is local; no per-icon opacity. */
@@ -3328,8 +3328,8 @@ const ACTIVITY_STEP_BUTTON_CLASS = cn(
 );
 const ACTIVITY_STEP_TITLE_CLASS = cn('min-w-0 flex-1', ACTIVITY_PROCESS_TEXT_CLASS);
 const ACTIVITY_STEP_BODY_CLASS =
-  'text-[12.5px] font-normal leading-[1.6] text-muted-foreground ' +
-  '[&_:is(h1,h2,h3,h4,h5,h6)]:!my-1 [&_:is(h1,h2,h3,h4,h5,h6)]:!text-[12.5px] ' +
+  'text-xs font-normal leading-[1.6] text-muted-foreground ' +
+  '[&_:is(h1,h2,h3,h4,h5,h6)]:!my-1 [&_:is(h1,h2,h3,h4,h5,h6)]:!text-xs ' +
   '[&_:is(h1,h2,h3,h4,h5,h6)]:!font-medium [&_:is(h1,h2,h3,h4,h5,h6)]:!text-muted-foreground ' +
   '[&_:is(h1,h2,h3,h4,h5,h6):first-child]:!mt-0 ' +
   '[&_p]:!mb-2 [&_p:last-child]:!mb-0 [&_ul>li:not(:first-child)]:!mt-1 [&_ol>li:not(:first-child)]:!mt-1';
@@ -3449,7 +3449,7 @@ const WorkedGroupHeader = ({
           expanded && 'rotate-90'
         )}
       />
-      <span className="min-w-0 flex-1 text-[12.5px] font-medium leading-tight tracking-tight">
+      <span className="min-w-0 flex-1 text-xs leading-tight">
         {label}
       </span>
     </button>
@@ -3817,7 +3817,7 @@ const AssistantTurnFooter = ({
       {showFinishedMetadata && showActionBar ? (
         <div
           className={cn(
-            'flex flex-wrap items-center justify-start text-[11px] text-muted-foreground',
+            'flex flex-wrap items-center justify-start text-xs text-muted-foreground',
             isMobile ? 'min-h-6 gap-1' : 'min-h-7 gap-2',
             !isMobile && 'opacity-0 transition-opacity duration-150 focus-within:opacity-100',
             !isMobile && isTurnHovered && 'opacity-100'

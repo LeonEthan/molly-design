@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('the Reasoning row lists levels as options that keep the menu open', async ({ page }) => {
-  await page.goto('/iframe.html?id=sessions-desktoprunconfigmenu--provider-and-model&viewMode=story');
+test('confirming a Reasoning option dismisses the picker', async ({ page }) => {
+  await page.goto(
+    '/iframe.html?id=sessions-desktoprunconfigmenu--provider-and-model&viewMode=story'
+  );
 
   const trigger = page.getByRole('button', { name: 'Provider and model' });
   await trigger.click();
@@ -13,11 +15,15 @@ test('the Reasoning row lists levels as options that keep the menu open', async 
 
   const ultra = submenu.getByRole('menuitemradio', { name: 'Ultra', exact: true });
   await ultra.click();
-  // Root menu + Reasoning submenu both stay open after the pick.
-  await expect(page.getByRole('menu')).toHaveCount(2);
+  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(trigger).toContainText('Ultra');
+
+  await trigger.click();
+  await page.getByRole('menuitem', { name: /^Reasoning/ }).hover();
   await expect(ultra).toHaveAttribute('aria-checked', 'true');
 
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
+  await ultra.focus();
+  await ultra.press('Enter');
+  await expect(page.getByRole('menu')).toHaveCount(0);
   await expect(trigger).toContainText('Ultra');
 });

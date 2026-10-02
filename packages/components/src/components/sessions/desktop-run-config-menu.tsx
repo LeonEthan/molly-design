@@ -68,16 +68,13 @@ import {
  * Both menus use the app-wide DropdownMenu surface.
  */
 
-/* Option row with a trailing check for the selected value; description under
-   the label when present. Selecting keeps the menu (and submenu) OPEN so
-   several run knobs can be adjusted in one visit; the check mark moving is
-   the feedback. Dismiss via Esc/outside. */
 function OptionItem({
   icon,
   label,
   description,
   selected,
   disabled,
+  closeOnSelect = false,
   onSelect,
 }: {
   icon?: ReactNode;
@@ -85,6 +82,7 @@ function OptionItem({
   description?: string;
   selected: boolean;
   disabled?: boolean;
+  closeOnSelect?: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -93,7 +91,7 @@ function OptionItem({
       role="menuitemradio"
       aria-checked={selected}
       onSelect={(event) => {
-        event.preventDefault();
+        if (!closeOnSelect) event.preventDefault();
         onSelect();
       }}
       className="min-h-9 items-start gap-2 rounded-lg px-2.5 py-2 aria-checked:bg-foreground/[0.06]"
@@ -478,7 +476,10 @@ export function DesktopRunConfigMenu({
       ) : (
         <DropdownMenuTrigger asChild>{triggerButton}</DropdownMenuTrigger>
       )}
-      <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-24px)] rounded-2xl p-1.5">
+      <DropdownMenuContent
+        align="start"
+        className="w-80 max-w-[calc(100vw-24px)] rounded-2xl p-1.5"
+      >
         {onRecentRunConfigSelect ? (
           <RecentRunConfigMenuGroup
             items={recentRunConfigs ?? []}
@@ -501,9 +502,7 @@ export function DesktopRunConfigMenu({
                 <OptionItem
                   key={provider.id}
                   label={provider.name}
-                  description={
-                    duplicateProviderNames.has(provider.name) ? provider.id : undefined
-                  }
+                  description={duplicateProviderNames.has(provider.name) ? provider.id : undefined}
                   selected={scopedProviderId === provider.id}
                   onSelect={() => setProviderChoice(provider.id)}
                 />
@@ -530,9 +529,7 @@ export function DesktopRunConfigMenu({
                 <OptionItem
                   key={opt.value}
                   label={opt.label}
-                  description={
-                    duplicateModelLabels.has(opt.label) ? opt.description : undefined
-                  }
+                  description={duplicateModelLabels.has(opt.label) ? opt.description : undefined}
                   selected={opt.value === modelValue}
                   disabled={opt.disabled}
                   onSelect={select}
@@ -552,6 +549,7 @@ export function DesktopRunConfigMenu({
                   description={opt.description}
                   selected={opt.value === thinkingValue}
                   disabled={opt.disabled}
+                  closeOnSelect
                   onSelect={() =>
                     onConfigOptionChange?.(
                       reasoningSelector.configId,

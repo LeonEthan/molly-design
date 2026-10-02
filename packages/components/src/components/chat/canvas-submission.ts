@@ -15,3 +15,22 @@ export function buildCanvasSubmission(
     dimensions: { width, height },
   };
 }
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Recognize a durable first-turn size instruction written from any shipped `design.requestedSize` template. */
+export function parseCanvasSizeInstruction(
+  text: string,
+  templates: readonly string[]
+): { width: number; height: number } | null {
+  const trimmed = text.trim();
+  for (const template of templates) {
+    if (!template.includes('{{width}}') || !template.includes('{{height}}')) continue;
+    const pattern = escapeRegExp(template.trim())
+      .replace(escapeRegExp('{{width}}'), '(?<width>\\d+)')
+      .replace(escapeRegExp('{{height}}'), '(?<height>\\d+)');
+    const groups = new RegExp(`^${pattern}$`).exec(trimmed)?.groups;
+    if (groups) return { width: Number(groups.width), height: Number(groups.height) };
+  }
+  return null;
+}

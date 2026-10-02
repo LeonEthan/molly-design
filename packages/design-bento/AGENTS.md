@@ -19,6 +19,9 @@ transform. Geometry stays local; commands and reference actions use the bounded,
 host-bound toolbar endpoint and selection epoch. Keep readonly, hidden-view and
 stale-selection checks on the receiving path. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.
+Canvas copy is never hardcoded in one language: key it into the shell's `design.*`
+locale entries, list the key in `DESIGN_CANVAS_LABEL_KEYS`, and let Electron
+translate main-process copy with `translateUi`.
 
 The generic viewport API reports screen scale and canvas-coordinate center; fit
 reuses native zoomReset. Neither knows Agent or version lifecycle. Electron fits

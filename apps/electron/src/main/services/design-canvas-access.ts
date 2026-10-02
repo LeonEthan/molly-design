@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto'
 import type { DesignCanvasReport, DesignCanvasState } from '@molly/shared/local-machine-rpc'
 
+/** Why a canvas is locked; adapters render the user-facing copy. */
+export type CanvasReadonlyReason = 'checking' | 'processing' | 'locked'
+
 export type CanvasInstance = {
   artworkId: string
-  setReadonly(value: boolean, reason: string): Promise<void>
+  setReadonly(value: boolean, reason: CanvasReadonlyReason): Promise<void>
   flush(permit: string): Promise<void>
 }
 
@@ -35,10 +38,7 @@ export class DesignCanvasAccess {
 
   async register(instance: CanvasInstance): Promise<void> {
     this.instances.add(instance)
-    await instance.setReadonly(
-      true,
-      '执行状态待确认，画布只读 / Checking execution state — read-only'
-    )
+    await instance.setReadonly(true, 'checking')
   }
   unregister(instance: CanvasInstance): void {
     this.instances.delete(instance)
@@ -158,10 +158,8 @@ export class DesignCanvasAccess {
     })
   }
 
-  private reason(): string {
-    return this.known
-      ? '处理中，画布只读 / Processing — read-only'
-      : '执行状态待确认，画布只读 / Checking execution state — read-only'
+  private reason(): CanvasReadonlyReason {
+    return this.known ? 'processing' : 'checking'
   }
 
   private async refresh(): Promise<void> {

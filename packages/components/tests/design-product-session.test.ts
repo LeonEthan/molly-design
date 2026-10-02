@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createProductSession } from '../../design-bento/src/product-session';
+import {
+  createProductSession,
+  PRODUCT_SESSION_COPY_KEYS,
+} from '../../design-bento/src/product-session';
+import { DESIGN_CANVAS_LABEL_KEYS } from '../src/components/sessions/design-canvas-labels';
+import en from '../../../locales/en.json';
+import zhCN from '../../../locales/zh_CN.json';
 
 beforeEach(() => vi.stubGlobal('CSS', { escape: (value: string) => value }));
 
@@ -87,7 +93,7 @@ it('disables dock mutations and closes an open shape menu while readonly, then r
   const dock = document.querySelector('.molly-dock')!;
   const buttons = [...dock.querySelectorAll<HTMLButtonElement>('button')];
   const mutationButtons = buttons.filter((button) => !button.classList.contains('on'));
-  const shape = dock.querySelector<HTMLButtonElement>('[aria-label="形状 / Shape"]')!;
+  const shape = dock.querySelector<HTMLButtonElement>('[aria-label="Shape"]')!;
   const popup = document.querySelector('.molly-shape-popup')!;
   expect(mutationButtons.every((button) => button.disabled)).toBe(true);
   expect(buttons[0].disabled).toBe(false);
@@ -112,9 +118,9 @@ it('disables dock mutations and closes an open shape menu while readonly, then r
   shape.click();
   popup.querySelector<HTMLButtonElement>('button')!.click();
   expect(JSON.parse(content)).toEqual({ verb: 'add-element', kind: 'shape', shapeName: 'rect' });
-  dock.querySelector<HTMLButtonElement>('[aria-label="撤销 / Undo (⌘Z)"]')!.click();
+  dock.querySelector<HTMLButtonElement>('[aria-label="Undo (⌘Z)"]')!.click();
   expect(content).toBe('undone');
-  dock.querySelector<HTMLButtonElement>('[aria-label="重做 / Redo (⇧⌘Z)"]')!.click();
+  dock.querySelector<HTMLButtonElement>('[aria-label="Redo (⇧⌘Z)"]')!.click();
   expect(content).toBe('redone');
   window.dispatchEvent(new Event('pagehide'));
 });
@@ -145,9 +151,56 @@ it('preserves the full status message for accessible and hover text when the pil
   expect(status.title).toBe(message);
   expect(status.getAttribute('aria-label')).toBe(message);
   api.setReadonly(false);
+  expect(status.textContent).toBe('Saved');
+  expect(status.title).toBe('Saved');
+  expect(status.getAttribute('aria-label')).toBe('Saved');
+  window.dispatchEvent(new Event('pagehide'));
+});
+
+it('speaks the shell language once labels arrive with the toolbar presentation', () => {
+  Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: { ready: Promise.resolve() },
+  });
+  createProductSession({
+    sessionId: 'art',
+    revisionId: 'old',
+    snapshot: () => ({}),
+    assets: () => ({}),
+    setDirty: () => {},
+    setReadonly: () => {},
+    commitPending: () => {},
+    applyCommands: () => ({ ok: true }),
+    pickImageFile: () => {},
+  });
+  const api = (
+    window as unknown as {
+      molly: {
+        setReadonly(value: boolean): void;
+        presentToolbar(value: {
+          dark: boolean;
+          actionsEnabled: boolean;
+          labels: Record<string, string>;
+        }): void;
+      };
+    }
+  ).molly;
+  const status = document.getElementById('autosave-status')!;
+  const undo = document.querySelector<HTMLButtonElement>('.molly-dock button.history')!;
+  api.setReadonly(false);
+  expect(status.textContent).toBe('Saved');
+  expect(undo.title).toBe('Undo (⌘Z)');
+
+  api.presentToolbar({
+    dark: false,
+    actionsEnabled: true,
+    labels: { canvasSaved: '已自动保存', canvasReadonly: '只读', toolUndo: '撤销 (⌘Z)' },
+  });
   expect(status.textContent).toBe('已自动保存');
-  expect(status.title).toBe('已自动保存');
-  expect(status.getAttribute('aria-label')).toBe('已自动保存');
+  expect(undo.title).toBe('撤销 (⌘Z)');
+  expect(undo.getAttribute('aria-label')).toBe('撤销 (⌘Z)');
+  api.setReadonly(true);
+  expect(status.textContent).toBe('只读');
   window.dispatchEvent(new Event('pagehide'));
 });
 
@@ -394,4 +447,13 @@ it('reports the saved selection again after autosave so passive mirroring needs 
   await vi.advanceTimersByTimeAsync(500);
   expect(reports.at(-1)).toMatchObject({ dirty: false, revisionId: 'saved' });
   window.dispatchEvent(new Event('pagehide'));
+});
+
+it('receives every canvas copy key from the shell in both languages', () => {
+  const delivered = new Set<string>(DESIGN_CANVAS_LABEL_KEYS);
+  for (const key of PRODUCT_SESSION_COPY_KEYS) {
+    expect(delivered.has(key), key).toBe(true);
+    expect(en, key).toHaveProperty([`design.${key}`]);
+    expect(zhCN, key).toHaveProperty([`design.${key}`]);
+  }
 });

@@ -225,6 +225,7 @@ import { isNativeIOSAppShell } from '@/lib/native-platform';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { UserAvatar } from '../user-avatar';
+import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { SessionPlanBar } from '@/components/sessions/session-plan-bar';
@@ -244,6 +245,8 @@ import {
 } from './conversation-font-size-classes';
 import { useSessionPin } from '@/components/sessions/session-pin-context';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { Rectangle } from '@/ui/icons';
+import { parseCanvasSizeInstruction } from '@/components/chat/canvas-submission';
 import {
   SEARCH_HIGHLIGHT_CONTAINER_ACTIVE_CLASS_NAME,
   SEARCH_HIGHLIGHT_CONTAINER_MATCHED_CLASS_NAME,
@@ -5109,6 +5112,35 @@ const SessionFileBlockCard = ({
   );
 };
 
+const requestedSizeTemplates = (): string[] =>
+  Object.keys(i18next.store?.data ?? {}).flatMap((language) => {
+    const template: unknown = i18next.getResource(language, 'translation', 'design.requestedSize');
+    return typeof template === 'string' ? [template] : [];
+  });
+
+const UserCanvasSizeChip = ({
+  instruction,
+  width,
+  height,
+}: {
+  instruction: string;
+  width: number;
+  height: number;
+}) => {
+  const { t } = useTranslation();
+  return (
+    <div className="flex max-w-full justify-end sm:pl-2">
+      <span
+        title={instruction}
+        className="inline-flex items-center gap-1.5 rounded-full bg-foreground/[0.04] px-2.5 py-1 text-xs text-muted-foreground"
+      >
+        <Rectangle className="size-3.5" aria-hidden="true" />
+        {t('design.requestedSizeChip', 'Canvas {{width}} × {{height}} px', { width, height })}
+      </span>
+    </div>
+  );
+};
+
 const renderUserContent = (
   content: MessageContent,
   sessionId: SessionId,
@@ -5120,7 +5152,9 @@ const renderUserContent = (
   }
 ) => {
   switch (content.type) {
-    case 'text':
+    case 'text': {
+      const requestedSize = parseCanvasSizeInstruction(content.text, requestedSizeTemplates());
+      if (requestedSize) return <UserCanvasSizeChip instruction={content.text} {...requestedSize} />;
       return (
         <UserPlainTextBlock
           text={content.text}
@@ -5129,6 +5163,7 @@ const renderUserContent = (
           searchBlockId={getTextSearchBlockId(options.messageId, options.itemIndex)}
         />
       );
+    }
     case 'image':
       return (
         <div className="flex w-full justify-end px-2 pt-1">

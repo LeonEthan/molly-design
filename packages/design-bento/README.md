@@ -107,7 +107,10 @@ that summary immediately and reads selected stage DOM bounds locally, so its pos
 and fixed pixel size follow zoom, scrolling, resizing and reprojection. Dragging,
 readonly and fully offscreen selections hide it. Popups share the native view and
 stay within its viewport; shell presentation supplies current translated labels
-and light/dark appearance. No geometry or new document state crosses IPC.
+and light/dark appearance. The same labels also cover dock tooltips and the
+save/read-only status; English fallbacks show until the first presentation, and
+read-only reasons are translated by Electron before they reach the page. No
+geometry or new document state crosses IPC.
 
 The native dock and selection toolbar render the same original SVG geometry as
 the React shell through `@molly/shared/ui-icons`, including text, dropdown and

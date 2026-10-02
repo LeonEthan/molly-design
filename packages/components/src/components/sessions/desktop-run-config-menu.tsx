@@ -179,6 +179,9 @@ export function DesktopMachineMenu({
   const label =
     selectedOption?.label ?? selectedLabel ?? t('chat.machineSelector.placeholder', 'Machine');
   const isDisabled = disabled || options.length === 0;
+  const onlyChoiceIsSelectedLocal = selectedIsLocal && options.length === 1;
+
+  if (onlyChoiceIsSelectedLocal) return null;
 
   return (
     <DropdownMenu>

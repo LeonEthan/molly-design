@@ -31,10 +31,23 @@ import { DesignWorker, quitDesignWorker } from './design-worker'
 import type { DesignPayload, DesignRequest } from '../../../../cli/src/design/store'
 import type { DesignHistoryRequest, DesignVersion } from '../../../../cli/src/design/history'
 import { openDesignCanvasNeedsReload, selectCanvasInstance } from './design-canvas-sync-core'
-import { DesignCanvasAccess, type CanvasInstance } from './design-canvas-access'
+import {
+  DesignCanvasAccess,
+  type CanvasInstance,
+  type CanvasReadonlyReason
+} from './design-canvas-access'
 import { drainRelevantLoads } from './design-leave-drain-core'
 import { waitForCanvasReady } from './design-canvas-ready-core'
 import { acquireDesignSession } from './design-session'
+import { translateUi } from '../ui-locale'
+
+function readonlyReasonCopy(reason: CanvasReadonlyReason): string {
+  if (reason === 'processing')
+    return translateUi('design.canvasProcessing', 'Molly is working · Read-only')
+  if (reason === 'checking')
+    return translateUi('design.canvasCheckingState', 'Checking execution state · Read-only')
+  return translateUi('design.canvasReadonly', 'Read-only')
+}
 
 /** Historical candidate files are read back through the existing design worker channel; new candidate production is retired. */
 type DesignCandidateRequest = { sessionId: string; candidateId: string }
@@ -353,7 +366,7 @@ export async function attachDesign(
                 'window.molly.setReadonly(' +
                   JSON.stringify(value) +
                   ',' +
-                  JSON.stringify(reason) +
+                  JSON.stringify(readonlyReasonCopy(reason)) +
                   ')'
               )
             },
@@ -390,8 +403,7 @@ export async function attachDesign(
           await view.webContents.loadURL(source.url)
           await waitForDesignCanvasReady(view.webContents)
           await designCanvasAccess.register(access)
-          if (!reconcile)
-            await access.setReadonly(designCanvasAccess.isReadonly(id), '只读 / Read-only')
+          if (!reconcile) await access.setReadonly(designCanvasAccess.isReadonly(id), 'locked')
           try {
             if (reconcile) await queryCanvasState?.()
           } catch {
@@ -736,12 +748,12 @@ export async function leaveDesign(id: string, hostId?: string): Promise<boolean>
       if (state && !state.dirty && !state.saving && !state.composing) continue
       const answer = await dialog.showMessageBox(record.owner, {
         type: 'warning',
-        message: '此画布尚未保存 / This canvas is not saved',
+        message: translateUi('design.unsavedCanvas.message', 'This canvas is not saved'),
         detail: String(error),
         buttons: [
-          '返回编辑 / Keep editing',
-          '重试 / Retry',
-          '放弃此画布修改 / Discard this canvas edits'
+          translateUi('design.unsavedCanvas.keepEditing', 'Keep editing'),
+          translateUi('design.unsavedCanvas.retry', 'Retry'),
+          translateUi('design.unsavedCanvas.discard', 'Discard canvas edits')
         ],
         defaultId: 0,
         cancelId: 0

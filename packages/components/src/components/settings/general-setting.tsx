@@ -343,11 +343,11 @@ export function GeneralSettingsComponent() {
           <CompactRow
             label={t(
               'settings.general.sessions.queuedMessageBehavior.label',
-              'Queued message behavior'
+              'Messages sent while Molly is working'
             )}
             helper={t(
               'settings.general.sessions.queuedMessageBehavior.helper',
-              'Choose whether messages sent while the agent is working wait in the queue or steer the active response.'
+              'Wait until the current turn finishes, or steer the work in progress.'
             )}
           >
             <QueuedMessageBehaviorControl
@@ -355,22 +355,24 @@ export function GeneralSettingsComponent() {
               onChange={setQueuedMessageBehavior}
             />
           </CompactRow>
-          <CompactRow
-            label={t(
-              'settings.general.sessions.codeOnlyLineChanges.label',
-              'Show code-only line changes'
-            )}
-            helper={t(
-              'settings.general.sessions.codeOnlyLineChanges.helper',
-              'When enabled, session sidebar line counts exclude docs, tests, and dev files.'
-            )}
-          >
-            <Switch
-              id="session-sidebar-code-changes-only-toggle"
-              checked={sessionSidebarCodeChangesOnly}
-              onCheckedChange={setSessionSidebarCodeChangesOnly}
-            />
-          </CompactRow>
+          {githubIntegrationAvailable ? (
+            <CompactRow
+              label={t(
+                'settings.general.sessions.codeOnlyLineChanges.label',
+                'Show code-only line changes'
+              )}
+              helper={t(
+                'settings.general.sessions.codeOnlyLineChanges.helper',
+                'When enabled, session sidebar line counts exclude docs, tests, and dev files.'
+              )}
+            >
+              <Switch
+                id="session-sidebar-code-changes-only-toggle"
+                checked={sessionSidebarCodeChangesOnly}
+                onCheckedChange={setSessionSidebarCodeChangesOnly}
+              />
+            </CompactRow>
+          ) : null}
 
           <CompactRow
             label={t('settings.notifications.enableToggleDesktop')}
@@ -404,7 +406,6 @@ export function GeneralSettingsComponent() {
         </CompactSection>
         {isElectron && (
           <CompactSection title={t('settings.general.autoLaunch.title', 'Startup')}>
-            <CliDaemonSetting />
             <CompactRow
               label={t('settings.general.autoLaunch.label', 'Launch at startup')}
               helper={t(
@@ -446,7 +447,13 @@ export function GeneralSettingsComponent() {
               )}
             </CompactRow>
             <div id="prevent-sleep" className="scroll-mt-24">
-              <CompactRow label={t('settings.general.preventSleep.label', 'Prevent sleep')}>
+              <CompactRow
+                label={t('settings.general.preventSleep.label', 'Prevent sleep')}
+                helper={t(
+                  'settings.general.preventSleep.helper',
+                  'Keep this computer awake while Molly is open so long design runs are not interrupted.'
+                )}
+              >
                 <Switch
                   id="prevent-sleep-toggle"
                   checked={preventSleepEnabled}
@@ -466,6 +473,12 @@ export function GeneralSettingsComponent() {
         )}
 
         {githubIntegrationAvailable ? <AutoArchiveSection /> : null}
+
+        {isElectron && (
+          <CompactSection title={t('settings.general.advanced.title', 'Advanced')}>
+            <CliDaemonSetting />
+          </CompactSection>
+        )}
       </div>
     </>
   );

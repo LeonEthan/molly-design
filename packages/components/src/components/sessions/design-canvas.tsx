@@ -35,6 +35,7 @@ import {
   Save,
 } from 'lucide-react';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
+import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
 
 type Association = {
   sessionId: string;
@@ -344,47 +345,7 @@ export function DesignCanvas({
                 dark: document.documentElement.classList.contains('dark'),
                 actionsEnabled: !!onReferenceSelection,
                 labels: Object.fromEntries(
-                  [
-                    'selectionCount',
-                    'selectedElements',
-                    'referenceSelection',
-                    'generateSelectedImages',
-                    'editSelectedImages',
-                    'adjustSelectedStyle',
-                    'regenerateSelection',
-                    'textColor',
-                    'fontFamily',
-                    'fontSize',
-                    'bold',
-                    'italic',
-                    'alignLeft',
-                    'alignCenter',
-                    'alignRight',
-                    'alignJustify',
-                    'fillColor',
-                    'strokeColor',
-                    'colorNone',
-                    'customColor',
-                    'elementWidth',
-                    'elementHeight',
-                    'imageFit',
-                    'imageFitFill',
-                    'imageFitContain',
-                    'imageFitCover',
-                    'crop',
-                    'cropLeft',
-                    'cropTop',
-                    'cropRight',
-                    'cropBottom',
-                    'applyCrop',
-                    'resetCrop',
-                    'positionX',
-                    'positionY',
-                    'lineArrows',
-                    'arrowsNone',
-                    'arrowsEnd',
-                    'arrowsBoth',
-                  ].map((key) => [key, t(`design.${key}`)])
+                  DESIGN_CANVAS_LABEL_KEYS.map((key) => [key, t(`design.${key}`)])
                 ),
               });
             }

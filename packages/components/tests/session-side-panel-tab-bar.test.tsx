@@ -140,15 +140,21 @@ describe('SessionSidePanelTabBar', () => {
     root = undefined;
     container = undefined;
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  async function renderTabBar() {
+  async function renderTabBar(
+    soloPanelContent?: ReturnType<typeof createElement>,
+    soloPanelMinWidth?: number
+  ) {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     await act(async () => {
       root?.render(
         createElement(SessionSidePanelTabBar, {
+          soloPanelContent,
+          soloPanelMinWidth,
           tabs: TABS,
           activeTabId: 'files',
           availablePanels: AVAILABLE_PANELS,
@@ -161,6 +167,48 @@ describe('SessionSidePanelTabBar', () => {
       );
     });
   }
+
+  it('lets a solo panel toolbar replace the tab strip while keeping panel controls', async () => {
+    await renderTabBar(createElement('span', { 'data-testid': 'solo' }, 'Canvas toolbar'));
+
+    expect(container?.querySelector('[role="tab"]')).toBeNull();
+    expect(container?.querySelector('[data-testid="solo"]')?.textContent).toBe('Canvas toolbar');
+    expect(container?.querySelector('[aria-label="Add panel"]')).toBeInstanceOf(HTMLButtonElement);
+  });
+
+  it('keeps the tab strip when the row is narrower than the solo panel toolbar needs', async () => {
+    let observe: (width: number) => void = () => undefined;
+    const frames: FrameRequestCallback[] = [];
+    const reportWidth = (width: number) => {
+      observe(width);
+      frames.splice(0).forEach((frame) => frame(0));
+    };
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          observe = (width) =>
+            callback(
+              [{ contentRect: { width } } as ResizeObserverEntry],
+              this as unknown as ResizeObserver
+            );
+        }
+        observe() {}
+        disconnect() {}
+      }
+    );
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => frames.push(callback));
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    await renderTabBar(createElement('span', { 'data-testid': 'solo' }, 'Canvas toolbar'), 440);
+
+    await act(async () => reportWidth(300));
+    expect(container?.querySelector('[data-testid="solo"]')).toBeNull();
+    expect(container?.querySelector('[role="tablist"]')).toBeInstanceOf(HTMLElement);
+
+    await act(async () => reportWidth(440));
+    expect(container?.querySelector('[data-testid="solo"]')?.textContent).toBe('Canvas toolbar');
+    expect(container?.querySelector('[role="tablist"]')).toBeNull();
+  });
 
   it('closes both functional and dynamic viewer tabs', async () => {
     await renderTabBar();

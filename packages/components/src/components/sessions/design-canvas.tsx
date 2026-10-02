@@ -5,12 +5,14 @@ import type {
   DesignSelectionSummary,
 } from '@molly/shared/design-selection-commands';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAtomValue } from 'jotai';
+import { createPortal } from 'react-dom';
+import { useAtom, useAtomValue } from 'jotai';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getSessionRoomId, type SessionId } from '@molly/shared';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
+import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
@@ -36,6 +38,8 @@ import {
 } from 'lucide-react';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
+import { WINDOW_DRAG_EXEMPT_CLASS } from '@/ui/window-drag-region';
+import { cn } from '@/lib/utils';
 
 type Association = {
   sessionId: string;
@@ -123,6 +127,7 @@ export function useDesignCreation(workspaceSlug: string) {
     });
   };
 }
+export const DESIGN_CANVAS_TOOLBAR_MIN_WIDTH = 440;
 export function DesignCanvas({
   sessionId,
   artworkId: artworkIdProp,
@@ -131,6 +136,7 @@ export function DesignCanvas({
   name,
   onReferenceSelection,
   onSyncSelection,
+  toolbarHost = null,
 }: {
   sessionId: string;
   /**
@@ -147,6 +153,8 @@ export function DesignCanvas({
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string) => void;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
+  /** Renders the canvas toolbar into the side panel's top row instead of a row of its own. */
+  toolbarHost?: HTMLElement | null;
 }) {
   const artworkId = artworkIdProp ?? sessionId;
   const { t } = useTranslation();
@@ -162,7 +170,12 @@ export function DesignCanvas({
   const [attachmentError, setAttachmentError] = useState('');
   const [busy, setBusy] = useState(false);
   const create = useDesignCreation(workspaceSlug);
-  const [focused, setFocused] = useState(false);
+  const [canvasFocus, setFocused] = useAtom(designCanvasFocusAtom);
+  const focused = active && canvasFocus;
+  useEffect(() => {
+    if (!active) return undefined;
+    return () => setFocused(false);
+  }, [active, setFocused]);
   const [selection, setSelection] = useState<DesignSelectionSummary | null>(null);
   const selectionCount = selection?.count ?? 0;
   const [canvasState, setCanvasState] =
@@ -565,9 +578,190 @@ export function DesignCanvas({
     // same-count selections or editing properties must re-capture so the
     // mirrored chip never keeps stale element ids or a stale revision.
   }, [selection, readonlyView, selectionCount, sessionId, artworkId, hostId, t]);
+  const toolbarItems = (
+    <>
+      <span
+        className="min-w-0 max-w-full truncate rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
+        role="status"
+      >
+        {currentVersion
+          ? canvasState?.changed
+            ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
+                number: currentVersion.number,
+              })
+            : `V${currentVersion.number}`
+          : t('design.currentCanvas', 'Current artwork')}
+      </span>
+      <TooltipProvider>
+        <div className={cn('ml-auto flex shrink-0 items-center gap-1', WINDOW_DRAG_EXEMPT_CLASS)}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-9 rounded-full"
+                  disabled={busy || readonlyView || !canvasState?.changed}
+                  onClick={saveVersion}
+                  aria-label={t('design.saveVersion', 'Save version')}
+                >
+                  <Save className="size-[18px]" aria-hidden="true" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t('design.saveVersion', 'Save version')}</TooltipContent>
+          </Tooltip>
+          <DropdownMenu
+            onOpenChange={(open) => {
+              if (open) void refreshVersions().catch((cause) => setError(String(cause)));
+            }}
+          >
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-full"
+                    disabled={busy}
+                    aria-label={t('design.versions', 'Version history')}
+                  >
+                    <History className="size-[18px]" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t('design.versions', 'Version history')}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              className="max-h-[60vh] w-80 max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl border-border/50 p-1.5"
+            >
+              {[...versions].reverse().map((version) => (
+                <DropdownMenuItem
+                  key={version.commitId}
+                  className="min-h-9 rounded-md px-3 py-2 text-xs leading-relaxed"
+                  disabled={busy || readonlyView}
+                  onClick={() => chooseVersion(version.commitId)}
+                >
+                  V{version.number} · {new Date(version.createdAt).toLocaleString()}
+                  {version.kind === 'before-restore'
+                    ? ` · ${t('design.beforeRestore', 'Before restore')}`
+                    : ''}
+                  {version.baseVersionId &&
+                    versions.find((v) => v.commitId === version.baseVersionId) &&
+                    ` · ${t('design.versionOrigin', 'Based on V{{number}}', {
+                      number: versions.find((v) => v.commitId === version.baseVersionId)?.number,
+                    })}`}
+                  {canvasState?.baseVersionId === version.commitId && (
+                    <Check className="ml-auto size-4" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 rounded-full bg-foreground/[0.08] px-3 font-medium text-foreground hover:bg-foreground/[0.12]"
+                    disabled={busy || readonlyView}
+                    aria-label={t('design.export', 'Export')}
+                  >
+                    <Download className="size-[18px]" />
+                    {t('design.export', 'Export')}
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t('design.export', 'Export')}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-40 rounded-xl border-border/50 p-1.5"
+            >
+              <DropdownMenuItem
+                className="min-h-9 rounded-md px-3"
+                onClick={() => exportArtwork('png')}
+              >
+                PNG
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="min-h-9 rounded-md px-3"
+                onClick={() => exportArtwork('jpeg')}
+              >
+                JPEG
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-9 rounded-full"
+                    aria-label={t('design.more', 'More')}
+                  >
+                    <MoreHorizontal className="size-[18px]" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>{t('design.more', 'More')}</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-40 rounded-xl border-border/50 p-1.5"
+            >
+              <DropdownMenuItem
+                className="min-h-9 rounded-md px-3"
+                disabled={busy || readonlyView}
+                onClick={() =>
+                  run(() =>
+                    create(name + t('design.copySuffix', ' — copy'), 800, 600, artworkId, hostId)
+                  )
+                }
+              >
+                <Copy className="size-4" />
+                {t('design.saveCopy', 'Save as new design')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-9 rounded-full"
+                aria-label={
+                  focused
+                    ? t('design.showChat', 'Show conversation')
+                    : t('design.focus', 'Focus canvas')
+                }
+                onClick={() => setFocused(!focused)}
+              >
+                {focused ? (
+                  <Minimize2 className="size-[18px]" />
+                ) : (
+                  <Maximize2 className="size-[18px]" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {focused
+                ? t('design.showChat', 'Show conversation')
+                : t('design.focus', 'Focus canvas')}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
+    </>
+  );
   return (
     <div
-      data-design-canvas-focus={active && focused}
+      data-design-canvas-focus={focused}
       className="flex h-full min-h-0 flex-col bg-background"
     >
       <style>
@@ -575,185 +769,13 @@ export function DesignCanvas({
           '[data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-id="chat"], [data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-resize-handle-id]{display:none}'
         }
       </style>
-      <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border/40 bg-background px-3 py-2">
-        <span
-          className="max-w-full rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
-          role="status"
-        >
-          {currentVersion
-            ? canvasState?.changed
-              ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
-                  number: currentVersion.number,
-                })
-              : `V${currentVersion.number}`
-            : t('design.currentCanvas', 'Current draft')}
-        </span>
-        <TooltipProvider>
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-9 rounded-full"
-                    disabled={busy || readonlyView || !canvasState?.changed}
-                    onClick={saveVersion}
-                    aria-label={t('design.saveVersion', 'Save version')}
-                  >
-                    <Save className="size-[18px]" aria-hidden="true" />
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{t('design.saveVersion', 'Save version')}</TooltipContent>
-            </Tooltip>
-            <DropdownMenu
-              onOpenChange={(open) => {
-                if (open) void refreshVersions().catch((cause) => setError(String(cause)));
-              }}
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9 rounded-full"
-                      disabled={busy}
-                      aria-label={t('design.versions', 'Version history')}
-                    >
-                      <History className="size-[18px]" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{t('design.versions', 'Version history')}</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent
-                align="end"
-                className="max-h-[60vh] w-80 max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl border-border/50 p-1.5"
-              >
-                {[...versions].reverse().map((version) => (
-                  <DropdownMenuItem
-                    key={version.commitId}
-                    className="min-h-9 rounded-md px-3 py-2 text-xs leading-relaxed"
-                    disabled={busy || readonlyView}
-                    onClick={() => chooseVersion(version.commitId)}
-                  >
-                    V{version.number} · {new Date(version.createdAt).toLocaleString()}
-                    {version.kind === 'before-restore'
-                      ? ` · ${t('design.beforeRestore', 'Before restore')}`
-                      : ''}
-                    {version.baseVersionId &&
-                      versions.find((v) => v.commitId === version.baseVersionId) &&
-                      ` · ${t('design.versionOrigin', 'Based on V{{number}}', {
-                        number: versions.find((v) => v.commitId === version.baseVersionId)?.number,
-                      })}`}
-                    {canvasState?.baseVersionId === version.commitId && (
-                      <Check className="ml-auto size-4" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="h-9 rounded-full bg-foreground/[0.08] px-3 font-medium text-foreground hover:bg-foreground/[0.12]"
-                      disabled={busy || readonlyView}
-                      aria-label={t('design.export', 'Export')}
-                    >
-                      <Download className="size-[18px]" />
-                      {t('design.export', 'Export')}
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{t('design.export', 'Export')}</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent
-                align="end"
-                className="min-w-40 rounded-xl border-border/50 p-1.5"
-              >
-                <DropdownMenuItem
-                  className="min-h-9 rounded-md px-3"
-                  onClick={() => exportArtwork('png')}
-                >
-                  PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="min-h-9 rounded-md px-3"
-                  onClick={() => exportArtwork('jpeg')}
-                >
-                  JPEG
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <DropdownMenu>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-9 rounded-full"
-                      aria-label={t('design.more', 'More')}
-                    >
-                      <MoreHorizontal className="size-[18px]" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{t('design.more', 'More')}</TooltipContent>
-              </Tooltip>
-              <DropdownMenuContent
-                align="end"
-                className="min-w-40 rounded-xl border-border/50 p-1.5"
-              >
-                <DropdownMenuItem
-                  className="min-h-9 rounded-md px-3"
-                  disabled={busy || readonlyView}
-                  onClick={() =>
-                    run(() =>
-                      create(name + t('design.copySuffix', ' — copy'), 800, 600, artworkId, hostId)
-                    )
-                  }
-                >
-                  <Copy className="size-4" />
-                  {t('design.saveCopy', 'Save as new design')}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-9 rounded-full"
-                  aria-label={
-                    focused
-                      ? t('design.showChat', 'Show conversation')
-                      : t('design.focus', 'Focus canvas')
-                  }
-                  onClick={() => setFocused((value) => !value)}
-                >
-                  {focused ? (
-                    <Minimize2 className="size-[18px]" />
-                  ) : (
-                    <Maximize2 className="size-[18px]" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {focused
-                  ? t('design.showChat', 'Show conversation')
-                  : t('design.focus', 'Focus canvas')}
-              </TooltipContent>
-            </Tooltip>
-          </div>
-        </TooltipProvider>
-      </div>
+      {toolbarHost ? (
+        createPortal(toolbarItems, toolbarHost)
+      ) : (
+        <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border/40 bg-background px-3 py-2">
+          {toolbarItems}
+        </div>
+      )}
       {preview && previewError && (
         <details className="mx-3 mt-3 rounded-xl border border-border/40 bg-foreground/[0.03] px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           <summary className="cursor-pointer">

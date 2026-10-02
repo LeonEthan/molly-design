@@ -17,7 +17,7 @@ describe('Molly developer workflow retirement', () => {
     expect(conversation).not.toMatch(/useGitHubPrDetails|useAutoReview|AutoReviewMenuItem/);
     expect(conversation).toContain('FloatingPermissionRequest');
     expect(conversation).toContain('SessionChatInputArea');
-    expect(conversation).toContain("t('design.files.currentCanvas', 'Current artwork')");
+    expect(conversation).toContain("t('design.files.currentCanvas', 'Show artwork')");
     expect(conversation).toContain('onClick={onRevealDesignPanel}');
     const diff = read('components/sessions/session-conversation-diff-panel.tsx');
     expect(diff).not.toMatch(/useGitHubReviewComments|githubCreatePRReviewComment/);
@@ -26,7 +26,7 @@ describe('Molly developer workflow retirement', () => {
     const detail = read('components/sessions/session-detail.tsx');
     expect(detail).not.toContain('PrTabContainer');
     expect(detail).toMatch(
-      /headerVariant="toolbar"\s+onRevealDesignPanel=\{handleRevealDesignPanel\}/
+      /headerVariant="toolbar"\s+onRevealDesignPanel=\{designCanvasVisible \? undefined : handleRevealDesignPanel\}/
     );
   });
 });

@@ -112,6 +112,10 @@ reads (`useSessionDoc`, `ownerSessionId`) stay session-keyed; the native view ke
 an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.
+Focus canvas is the transient `designCanvasFocusAtom`. It hides the conversation and
+the navigation sidebar while that canvas stays active, and the side-panel row then
+reserves the macOS traffic-light inset and leads with the show-sidebar button, which
+also ends focus. Leaving focus restores the saved sidebar state.
 Native replacements prepare decoded pixels under the outgoing view and promote
 before disposal. Turn completion retains the final preview until the canonical
 editor is ready; component phase cleanup does not dispose that handoff surface.
@@ -148,6 +152,18 @@ return to the confirmed current draft. Reload failures preserve unsaved edits. C
 scale and canvas-coordinate center survive surface replacement within native bounds.
 
 ### Design versions
+
+Design sessions open canvas-first: the conversation starts near a 460px reading
+width (22–40% of the window, `design-panel-sizes.ts`) and the split is saved under
+its own layout id. When the canvas is the only side-panel tab, its action row is
+portaled into the side-panel top row in place of the tab strip, so there is one row
+of chrome; opening another panel brings the tab strip back and returns the row to
+the canvas. The merge also needs `DESIGN_CANVAS_TOOLBAR_MIN_WIDTH` (440px) of row
+content, measured by the tab bar's `ResizeObserver`; a narrower panel keeps the
+tab strip and the canvas's own wrapping row, so every action stays clickable down
+to the 280px panel minimum. The status pill truncates rather than pushing actions
+out of the row. The conversation header offers “Show artwork” only while the canvas is
+hidden.
 
 The canvas action row uses 36px controls and pill-shaped version status, with
 separate icon-only Save version and history actions, plus labelled Export. Save

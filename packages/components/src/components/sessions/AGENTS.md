@@ -29,6 +29,8 @@ Files: [README.md](README.md). Scopes:
   for previously accepted worktree forks.
 - Keep one canvas, with Save version and direct history switching. Active Agent
   drafts replace its display only when valid; execution/processing owns readonly.
+- A sole canvas tab gets the top row via `toolbarHost` portal only while the row
+  fits (`soloPanelMinWidth`); its state stays in `DesignCanvas`.
 - Attachment recovery clears only attachment errors from the current view generation;
   preserve save/sync errors and ignore superseded attachment results.
 - A Side Chat is a durable child Session (`childSessionPlacement: 'side-panel'`):

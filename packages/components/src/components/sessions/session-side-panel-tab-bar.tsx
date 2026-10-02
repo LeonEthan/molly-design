@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   FileDiff,
   Files,
@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
 import { WINDOW_DRAG_EXEMPT_CLASS, useWindowDragRegionClass } from '@/ui/window-drag-region';
 
 export type SessionSidePanelTabItem = {
@@ -131,6 +132,10 @@ type SessionSidePanelTabBarProps = {
   /** Sits immediately left of the + button; empty for tabs with no actions. */
   moreSlot?: ReactNode;
   endSlot?: ReactNode;
+  /** Replaces the tab strip when the only open panel brings its own toolbar row. */
+  soloPanelContent?: ReactNode;
+  /** Row content width below which the tab strip stays and the panel keeps its own toolbar. */
+  soloPanelMinWidth?: number;
   className?: string;
 };
 
@@ -213,110 +218,129 @@ export const SessionSidePanelTabBar = memo(function SessionSidePanelTabBar({
   closeTabLabel,
   moreSlot,
   endSlot,
+  soloPanelContent,
+  soloPanelMinWidth = 0,
   className,
 }: SessionSidePanelTabBarProps) {
   const windowDragClass = useWindowDragRegionClass();
+  const rootRef = useRef<HTMLDivElement>(null);
   const activeTabRef = useRef<HTMLDivElement>(null);
+  const [soloPanelFits, setSoloPanelFits] = useState(true);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return undefined;
+    return observeResizeOnAnimationFrame(root, ([entry]) => {
+      if (entry) setSoloPanelFits(entry.contentRect.width >= soloPanelMinWidth);
+    });
+  }, [soloPanelMinWidth]);
 
   useEffect(() => {
     activeTabRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [activeTabId]);
 
   return (
-    <div className={cn('flex min-w-0 items-center gap-1 px-2', windowDragClass, className)}>
-      <ScrollArea
-        scrollableX
-        horizontalOnly
-        className="min-w-0 flex-1"
-        // Compact overlay bar: default horizontal track is too tall in this h-11 strip.
-        horizontalScrollbarClassName="h-1 border-0 p-0"
-        horizontalScrollbarThumbClassName="bg-[hsl(var(--scrollbar-thumb)/0.35)] hover:bg-[hsl(var(--scrollbar-thumb-hover)/0.5)]"
-      >
-        <div role="tablist" className="flex h-11 w-max min-w-full items-center gap-1.5">
-          {tabs.map((tab) => {
-            const active = tab.id === activeTabId;
-            // A tab busy with its own lifecycle work (e.g. a side chat being
-            // closed) is non-interactive until that work settles.
-            const busy = tab.pending || tab.disabled;
-            const saveStateLabel = tab.saving
-              ? 'saving'
-              : tab.conflict
-                ? 'conflict'
-                : tab.dirty
-                  ? 'dirty'
-                  : null;
-            return (
-              <div
-                key={tab.id}
-                ref={active ? activeTabRef : undefined}
-                role="tab"
-                tabIndex={active ? 0 : -1}
-                aria-selected={active}
-                className={cn(
-                  TAB_CLASS,
-                  tab.closeable ? 'px-3' : 'px-2',
-                  active ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS,
-                  busy && 'cursor-wait opacity-70'
-                )}
-                onClick={() => {
-                  if (!busy) onTabSelect(tab.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
+    <div
+      ref={rootRef}
+      className={cn('flex min-w-0 items-center gap-1 px-2', windowDragClass, className)}
+    >
+      {soloPanelContent && soloPanelFits ? (
+        <div className="flex h-11 min-w-0 flex-1 items-center">{soloPanelContent}</div>
+      ) : (
+        <ScrollArea
+          scrollableX
+          horizontalOnly
+          className="min-w-0 flex-1"
+          // Compact overlay bar: default horizontal track is too tall in this h-11 strip.
+          horizontalScrollbarClassName="h-1 border-0 p-0"
+          horizontalScrollbarThumbClassName="bg-[hsl(var(--scrollbar-thumb)/0.35)] hover:bg-[hsl(var(--scrollbar-thumb-hover)/0.5)]"
+        >
+          <div role="tablist" className="flex h-11 w-max min-w-full items-center gap-1.5">
+            {tabs.map((tab) => {
+              const active = tab.id === activeTabId;
+              // A tab busy with its own lifecycle work (e.g. a side chat being
+              // closed) is non-interactive until that work settles.
+              const busy = tab.pending || tab.disabled;
+              const saveStateLabel = tab.saving
+                ? 'saving'
+                : tab.conflict
+                  ? 'conflict'
+                  : tab.dirty
+                    ? 'dirty'
+                    : null;
+              return (
+                <div
+                  key={tab.id}
+                  ref={active ? activeTabRef : undefined}
+                  role="tab"
+                  tabIndex={active ? 0 : -1}
+                  aria-selected={active}
+                  className={cn(
+                    TAB_CLASS,
+                    tab.closeable ? 'px-3' : 'px-2',
+                    active ? ACTIVE_TAB_CLASS : INACTIVE_TAB_CLASS,
+                    busy && 'cursor-wait opacity-70'
+                  )}
+                  onClick={() => {
                     if (!busy) onTabSelect(tab.id);
-                  }
-                }}
-              >
-                <span className="shrink-0">
-                  <SidePanelTabIcon tab={tab} />
-                </span>
-                {saveStateLabel ? (
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      if (!busy) onTabSelect(tab.id);
+                    }
+                  }}
+                >
+                  <span className="shrink-0">
+                    <SidePanelTabIcon tab={tab} />
+                  </span>
+                  {saveStateLabel ? (
+                    <span
+                      className={cn(
+                        'h-1.5 w-1.5 shrink-0 rounded-full',
+                        tab.conflict
+                          ? 'bg-status-danger'
+                          : tab.saving
+                            ? 'animate-pulse bg-status-info'
+                            : 'bg-status-warning'
+                      )}
+                      aria-hidden="true"
+                    />
+                  ) : null}
                   <span
                     className={cn(
-                      'h-1.5 w-1.5 shrink-0 rounded-full',
-                      tab.conflict
-                        ? 'bg-status-danger'
-                        : tab.saving
-                          ? 'animate-pulse bg-status-info'
-                          : 'bg-status-warning'
+                      'truncate',
+                      tab.closeable && (tab.kind === 'file' || tab.kind === 'diff') && 'font-mono'
                     )}
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <span
-                  className={cn(
-                    'truncate',
-                    tab.closeable && (tab.kind === 'file' || tab.kind === 'diff') && 'font-mono'
-                  )}
-                >
-                  {tab.label}
-                </span>
-                {tab.closeable ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className={cn(
-                      'ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring/40',
-                      'hover:bg-foreground/[0.08] hover:text-tab-hover-foreground',
-                      active
-                        ? 'opacity-100'
-                        : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-                    )}
-                    aria-label={closeTabLabel(tab.label)}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!busy) onTabClose(tab.id);
-                    }}
                   >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+                    {tab.label}
+                  </span>
+                  {tab.closeable ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className={cn(
+                        'ml-auto inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-[opacity,background-color,color] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring/40',
+                        'hover:bg-foreground/[0.08] hover:text-tab-hover-foreground',
+                        active
+                          ? 'opacity-100'
+                          : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+                      )}
+                      aria-label={closeTabLabel(tab.label)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!busy) onTabClose(tab.id);
+                      }}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </ScrollArea>
+      )}
       {moreSlot ? (
         <div className={cn('flex shrink-0 items-center', WINDOW_DRAG_EXEMPT_CLASS)}>{moreSlot}</div>
       ) : null}

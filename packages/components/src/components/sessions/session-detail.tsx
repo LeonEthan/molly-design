@@ -1,6 +1,6 @@
 import { mollyStorage } from '@/lib/product-storage';
 import { getIpcServices } from '@/lib/electron-ipc-client';
-import { DesignCanvas } from './design-canvas';
+import { DESIGN_CANVAS_TOOLBAR_MIN_WIDTH, DesignCanvas } from './design-canvas';
 import { Loader2, PanelLeft, PanelRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/ui/button';
@@ -56,6 +56,7 @@ import { selectAtom } from 'jotai/utils';
 import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowsCaptionPadClass } from '@/ui/window-drag-region';
 import {
+  designCanvasFocusAtom,
   getZenAwarePanelToggleState,
   navigationSidebarHiddenAtom,
   showNavigationSidebarAtom,
@@ -197,6 +198,7 @@ import { useCodeCollabRequestedRole } from '@/hooks/use-code-collab-requested-ro
 import { resolveEffectiveCodeCollabWorkspaceId } from '@/lib/code-collab-workspace-id';
 import { LoadingPlaceholder } from '@/components/loading-placeholder';
 import { DesktopSessionDetailLayout } from './desktop-session-detail-layout';
+import { DESIGN_PANEL_LAYOUT_ID, getDesignPanelDefaultSizes } from './design-panel-sizes';
 import {
   resolveSessionDetailPresenceState,
   resolveSessionDetailVisibilityState,
@@ -551,6 +553,7 @@ const SessionDetail = ({
      animating a transition nobody asked for. See
      DesktopSessionDetailLayout.sidebarRestoreSeq. */
   const [sidebarRestoreSeq, setSidebarRestoreSeq] = useState(0);
+  const [designToolbarHost, setDesignToolbarHost] = useState<HTMLDivElement | null>(null);
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab | null>(
     () => initialTabState.sidePanel.tab
   );
@@ -619,6 +622,7 @@ const SessionDetail = ({
   const workspaceSlug = routeTargetWorkspaceSlug ?? atomWorkspaceSlug;
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom) as WorkspaceId | null;
   const isLeftSidebarHidden = useAtomValue(navigationSidebarHiddenAtom);
+  const isDesignCanvasFocused = useAtomValue(designCanvasFocusAtom);
   const showNavigationSidebar = useSetAtom(showNavigationSidebarAtom);
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const runtimeInitializing = useAtomValue(runtimeInitializingAtom);
@@ -3545,6 +3549,12 @@ const SessionDetail = ({
     (effectiveActiveSideSessionId
       ? getSideSessionPanelTabId(effectiveActiveSideSessionId)
       : activeSidebarTab);
+  const designCanvasVisible = isSidebarVisible && activeSidePanelTabId === 'design';
+  const designOwnsSidePanel =
+    Boolean(activeSession?.design) &&
+    sidePanelTabs.length === 1 &&
+    sidePanelTabs[0]?.kind === 'design' &&
+    activeSidePanelTabId === sidePanelTabs[0].id;
   const resolveFocusedTabCloseTarget = useCallback(
     () =>
       getSessionTabCloseTarget({
@@ -4001,6 +4011,7 @@ const SessionDetail = ({
           )}
         >
           <DesignCanvas
+            toolbarHost={designOwnsSidePanel ? designToolbarHost : null}
             onReferenceSelection={(reference, prompt) => {
               const chat = chatRefsMap.current.get(activeTabSessionId);
               if (
@@ -4087,7 +4098,7 @@ const SessionDetail = ({
   const showFixedSidePanelBody =
     effectiveActiveViewerTabId === null && effectiveActiveSideSessionId === null;
   const defaultSizes = activeSession.design
-    ? { main: 40, sidebar: 60 }
+    ? getDesignPanelDefaultSizes(typeof window === 'undefined' ? 0 : window.innerWidth)
     : showFixedSidePanelBody
       ? { main: 75, sidebar: 25 }
       : { main: 60, sidebar: 40 };
@@ -4132,7 +4143,7 @@ const SessionDetail = ({
       workspaceSession={activeSession}
       className="h-full shrink-0"
       headerVariant="toolbar"
-      onRevealDesignPanel={handleRevealDesignPanel}
+      onRevealDesignPanel={designCanvasVisible ? undefined : handleRevealDesignPanel}
       headerEndSlot={<>{!isSidebarVisible ? sidebarToggleButton : null}</>}
       titleSyncing={activeSessionDocIsSyncing}
       hideMessageArea
@@ -4375,11 +4386,21 @@ const SessionDetail = ({
           />
         }
         endSlot={sidebarToggleButton}
+        soloPanelContent={
+          designOwnsSidePanel ? (
+            <>
+              {isDesignCanvasFocused ? leftSidebarExpandButton : null}
+              <div ref={setDesignToolbarHost} className="flex min-w-0 flex-1 items-center gap-2" />
+            </>
+          ) : undefined
+        }
+        soloPanelMinWidth={DESIGN_CANVAS_TOOLBAR_MIN_WIDTH}
         className={cn(
           'border-b border-border/50 bg-background',
-          // Right panel is never under the macOS traffic lights (top-left) —
-          // it must not reserve the titlebar inset the left sidebar needs.
+          // Right panel sits under the macOS traffic lights (top-left) only
+          // while canvas focus hides both the sidebar and the conversation.
           'h-11',
+          isDesignCanvasFocused && hasMacOSTitlebarInset && 'pl-[4.5rem]',
           windowsCaptionPadClass
         )}
       />
@@ -4425,7 +4446,7 @@ const SessionDetail = ({
     >
       <DesktopSessionDetailLayout
         defaultSizes={defaultSizes}
-        layoutId={activeSession.design ? 'session-design-panels' : undefined}
+        layoutId={activeSession.design ? DESIGN_PANEL_LAYOUT_ID : undefined}
         topBar={tabBar}
         chatSurfaces={desktopChatSurfaces}
         secondaryPanel={desktopSecondaryPanel}

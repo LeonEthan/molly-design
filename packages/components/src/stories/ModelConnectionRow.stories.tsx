@@ -14,6 +14,7 @@ const meta = {
   ],
   args: {
     onEdit: () => undefined,
+    onToggle: () => undefined,
     connection: {
       schemaVersion: 1,
       id: '00000000-0000-4000-8000-000000000001',
@@ -37,4 +38,15 @@ export const CustomEndpoint: Story = {
 };
 export const Off: Story = {
   args: { connection: { ...meta.args.connection, enabled: false } },
+};
+export const CannotTurnOn: Story = {
+  args: {
+    connection: {
+      ...meta.args.connection,
+      providerPresetId: 'moonshot',
+      displayName: 'Kimi',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+      enabled: false,
+    },
+  },
 };

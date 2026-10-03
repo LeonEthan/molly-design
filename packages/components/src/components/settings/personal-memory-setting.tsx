@@ -134,42 +134,57 @@ export function PersonalMemoryPanel({
             {t('settings.memory.empty', 'No remembered preferences yet.')}
           </p>
         )}
-        {snapshot?.entries.map((entry) => (
-          <div key={entry.id} className="flex items-center gap-2">
-            <Input
-              aria-label={t('settings.memory.preference', 'Remembered preference')}
-              maxLength={300}
-              value={drafts[entry.id] ?? entry.text}
-              disabled={busy}
-              onChange={(event) => setDrafts({ ...drafts, [entry.id]: event.target.value })}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || !drafts[entry.id]?.trim() || drafts[entry.id] === entry.text}
-              onClick={() =>
-                void run({
-                  action: 'edit',
-                  id: entry.id,
-                  text: drafts[entry.id],
-                  revision: snapshot.revision,
-                })
-              }
-            >
-              {t('settings.memory.save', 'Save')}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                void run({ action: 'delete', id: entry.id, revision: snapshot.revision })
-              }
-            >
-              {t('settings.memory.delete', 'Delete')}
-            </Button>
-          </div>
-        ))}
+        {snapshot?.entries.map((entry) => {
+          const draft = drafts[entry.id];
+          const edited = draft !== undefined && draft !== entry.text;
+          const savable = edited && draft.trim() !== '' && !busy;
+          const save = () =>
+            savable &&
+            void run({ action: 'edit', id: entry.id, text: draft, revision: snapshot.revision });
+          return (
+            <div key={entry.id} className="flex items-center gap-2">
+              <Input
+                aria-label={t('settings.memory.preference', 'Remembered preference')}
+                maxLength={300}
+                value={draft ?? entry.text}
+                disabled={busy}
+                onChange={(event) => setDrafts({ ...drafts, [entry.id]: event.target.value })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') save();
+                }}
+              />
+              {edited ? (
+                <>
+                  <Button variant="outline" size="sm" disabled={!savable} onClick={save}>
+                    {t('settings.memory.save', 'Save')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => {
+                      const { [entry.id]: _discarded, ...rest } = drafts;
+                      setDrafts(rest);
+                    }}
+                  >
+                    {t('common.cancel', 'Cancel')}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    void run({ action: 'delete', id: entry.id, revision: snapshot.revision })
+                  }
+                >
+                  {t('settings.memory.delete', 'Delete')}
+                </Button>
+              )}
+            </div>
+          );
+        })}
         <Button
           variant="outline"
           className="self-start"

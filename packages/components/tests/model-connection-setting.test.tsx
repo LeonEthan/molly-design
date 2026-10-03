@@ -5,12 +5,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ModelConnectionForm,
   ModelConnectionRow,
+  ModelConnectionSetting,
   applyProviderChoice,
 } from '../src/components/settings/model-connection-setting';
 import type { ModelConnection, SaveModelConnection } from '@molly/shared/embedded-harness';
 import { initI18n } from '../src/i18n';
 import en from '../../../locales/en.json';
 import zh from '../../../locales/zh_CN.json';
+
+const { connectionIpc } = vi.hoisted(() => ({
+  connectionIpc: { getSnapshot: vi.fn(), save: vi.fn() },
+}));
+vi.mock('../src/lib/electron-ipc-client', () => ({
+  getIpcServices: () => ({ modelConnections: connectionIpc }),
+}));
 
 const stored: ModelConnection = {
   schemaVersion: 1,
@@ -351,25 +359,80 @@ describe('provider choice', () => {
 });
 
 describe('connection row', () => {
-  async function renderRow(connection: ModelConnection) {
+  async function renderRow(connection: ModelConnection, onToggle = () => undefined) {
     await act(async () =>
-      root.render(createElement(ModelConnectionRow, { connection, onEdit: () => undefined }))
+      root.render(
+        createElement(ModelConnectionRow, { connection, onEdit: () => undefined, onToggle })
+      )
     );
   }
+  const rowSwitch = () => host.querySelector<HTMLButtonElement>('[role="switch"]')!;
 
-  it('names the provider and shows On without repeating a default endpoint', async () => {
+  it('names the provider and shows a switched-on connection without its default endpoint', async () => {
     await renderRow({ ...stored, providerPresetId: 'xai', baseUrl: 'https://api.x.ai/v1/' });
     expect(host.textContent).toContain(en['settings.models.providers.xai']);
-    expect(host.textContent).toContain(en['settings.models.statusOn']);
     expect(host.textContent).not.toContain('api.x.ai');
     expect(host.textContent).not.toContain(stored.credentialRef);
+    expect(rowSwitch().getAttribute('aria-label')).toBe('Use Synthetic');
+    expect(rowSwitch().getAttribute('aria-checked')).toBe('true');
   });
 
-  it('shows a custom endpoint and Off for a disabled connection', async () => {
+  it('shows a custom endpoint and a switched-off connection', async () => {
     await renderRow({ ...stored, enabled: false });
     expect(host.textContent).toContain(
       `${en['settings.models.providers.openai']} · example.invalid/v1`
     );
-    expect(host.textContent).toContain(en['settings.models.statusOff']);
+    expect(rowSwitch().getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('turns a connection off without asking for its key again', async () => {
+    const toggles: SaveModelConnection[] = [];
+    await renderRow(stored, (input: SaveModelConnection) => void toggles.push(input));
+    await act(async () => rowSwitch().click());
+    expect(toggles).toEqual([
+      {
+        id: stored.id,
+        expectedRevision: stored.revision,
+        displayName: stored.displayName,
+        providerPresetId: stored.providerPresetId,
+        baseUrl: stored.baseUrl,
+        enabled: false,
+      },
+    ]);
+  });
+
+  it('cannot turn on a connection whose endpoint needs another provider', async () => {
+    await renderRow({
+      ...stored,
+      providerPresetId: 'moonshot',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+      enabled: false,
+    });
+    expect(rowSwitch().disabled).toBe(true);
+  });
+});
+
+describe('connection list', () => {
+  it('switches a connection in place, keeping the list order', async () => {
+    const second: ModelConnection = {
+      ...stored,
+      id: '00000000-0000-4000-8000-000000000002',
+      displayName: 'Second',
+    };
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored, second] });
+    connectionIpc.save.mockImplementation(async (input: SaveModelConnection) => ({
+      ...stored,
+      revision: stored.revision + 1,
+      enabled: input.enabled,
+    }));
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    const switches = () => [...host.querySelectorAll<HTMLButtonElement>('[role="switch"]')];
+    await act(async () => switches()[0]!.click());
+    expect(switches().map((entry) => entry.getAttribute('aria-label'))).toEqual([
+      'Use Synthetic',
+      'Use Second',
+    ]);
+    expect(switches()[0]!.getAttribute('aria-checked')).toBe('false');
+    expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 });

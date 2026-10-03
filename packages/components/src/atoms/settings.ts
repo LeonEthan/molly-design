@@ -4,10 +4,7 @@ import { atom } from 'jotai';
 
 import type { MachineId, SupportedLanguage } from '@molly/shared';
 import { isSymbolFontFamily } from '@/lib/local-fonts';
-import {
-  SETTINGS_DEFAULT_TAB,
-  type SettingsTabId,
-} from '@/components/settings/settings-tabs';
+import { SETTINGS_DEFAULT_TAB, type SettingsTabId } from '@/components/settings/settings-tabs';
 
 export const languageAtom = atomWithProductStorage<SupportedLanguage>('molly-language', 'en');
 
@@ -16,14 +13,17 @@ export const CONVERSATION_FONT_SIZE_MIN = 9;
 export const CONVERSATION_FONT_SIZE_MAX = 32;
 export type ConversationFontSize = number;
 
-const LEGACY_CONVERSATION_FONT_SIZES: Record<string, ConversationFontSize> = {
+export const CONVERSATION_FONT_SIZE_PRESETS = {
   small: 12,
   default: DEFAULT_CONVERSATION_FONT_SIZE,
   large: 16,
-};
+} as const satisfies Record<string, ConversationFontSize>;
 
 export function normalizeConversationFontSize(value: unknown): ConversationFontSize {
-  const migratedValue = typeof value === 'string' ? LEGACY_CONVERSATION_FONT_SIZES[value] : value;
+  const migratedValue =
+    typeof value === 'string'
+      ? (CONVERSATION_FONT_SIZE_PRESETS as Record<string, ConversationFontSize>)[value]
+      : value;
   if (typeof migratedValue !== 'number' || !Number.isFinite(migratedValue)) {
     return DEFAULT_CONVERSATION_FONT_SIZE;
   }
@@ -53,7 +53,10 @@ export function normalizeInterfaceFontFamily(value: unknown): string {
     : '';
 }
 
-const interfaceFontFamilyStorageAtom = atomWithProductStorage<unknown>('molly-interface-font-family', '');
+const interfaceFontFamilyStorageAtom = atomWithProductStorage<unknown>(
+  'molly-interface-font-family',
+  ''
+);
 
 export const interfaceFontFamilyAtom = atom(
   (get) => normalizeInterfaceFontFamily(get(interfaceFontFamilyStorageAtom)),
@@ -151,9 +154,7 @@ export function readTasksFeatureEnabledFromStorage(): boolean {
     return false;
   }
   try {
-    const developerMode = JSON.parse(
-      mollyStorage.getItem(DEVELOPER_MODE_STORAGE_KEY) ?? 'false'
-    );
+    const developerMode = JSON.parse(mollyStorage.getItem(DEVELOPER_MODE_STORAGE_KEY) ?? 'false');
     const tasksBeta = JSON.parse(mollyStorage.getItem(TASKS_BETA_STORAGE_KEY) ?? 'false');
     return developerMode === true && tasksBeta === true;
   } catch {

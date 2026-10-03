@@ -38,7 +38,9 @@ Preserve historical catalog fields when editing unrelated values.
 - The connection form names every preset by brand. Choosing one prefills
   `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned SDK in harness-pi)
   and a provider-named connection, never overwriting a typed endpoint or name; the
-  destination stays visible. Rows show On/Off and only non-default endpoints.
+  destination stays visible. Rows show only non-default endpoints; a row's switch saves
+  On/Off at once without the key. Switches save instantly; only key and credential
+  forms keep an explicit Save.
 - AI models (`agents` tab) mounts the local encrypted model-connection form, the image
   connection, and the read-only legacy inventory only when this machine has legacy
   rows. Preserve old config/setup rows without mounting provider login,
@@ -55,7 +57,8 @@ Preserve historical catalog fields when editing unrelated values.
   and SSR consumers do not evaluate its renderer graph.
 - Interface and terminal font choices exclude the known symbol families in
   `lib/local-fonts.ts`; persisted selections use the same filter. Font option names
-  use the default interface font so they remain readable.
+  use the default interface font so they remain readable. Conversation font size picks
+  from `CONVERSATION_FONT_SIZE_PRESETS`; an earlier custom size stays listed until replaced.
 - The Codex reset forecast chip in the provider row must not fetch on mount and must
   pass `nestedInDialog` for its dialog: [../codex-reset/AGENTS.md](../codex-reset/AGENTS.md).
 
@@ -87,4 +90,4 @@ including values equal to the displayed current model, remain explicit on save.
 
 Personal memory controls negotiate the daemon's `personalPreferences` capability.
 Edits carry the viewed revision; stale failures require refresh, never implicit
-retry. Explain local storage, selected-model processing and conversation retention.
+retry. A preference row offers Save and Cancel only while it differs from the stored text. Explain local storage, selected-model processing and conversation retention.

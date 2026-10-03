@@ -15,10 +15,16 @@ const systemFontFamilies = [
   ...Array.from({ length: 72 }, (_, index) => `System Font ${String(index + 1).padStart(2, '0')}`),
 ];
 
-function ControlledAppearanceSettings({ isElectron }: { isElectron: boolean }) {
+function ControlledAppearanceSettings({
+  isElectron,
+  initialFontSize = 14,
+}: {
+  isElectron: boolean;
+  initialFontSize?: AppearanceSettingsViewProps['conversationFontSize'];
+}) {
   const [theme, setTheme] = useState<AppearanceSettingsViewProps['theme']>('light');
   const [conversationFontSize, setConversationFontSize] =
-    useState<AppearanceSettingsViewProps['conversationFontSize']>(14);
+    useState<AppearanceSettingsViewProps['conversationFontSize']>(initialFontSize);
   const [interfaceFontFamily, setInterfaceFontFamily] = useState('Inter');
 
   return (
@@ -76,5 +82,12 @@ export const ElectronInDialog: Story = {
 export const Web: Story = {
   args: {
     isElectron: false,
+  },
+};
+
+export const EarlierCustomFontSize: Story = {
+  args: {
+    isElectron: true,
+    initialFontSize: 20,
   },
 };

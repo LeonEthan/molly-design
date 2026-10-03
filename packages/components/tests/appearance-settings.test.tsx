@@ -15,16 +15,16 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../src/ui
 
 const originalScrollIntoView = Element.prototype.scrollIntoView;
 
-function setInputValue(input: HTMLInputElement, value: string): void {
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
-  setter?.call(input, value);
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-}
-
-function AppearanceHarness({ isElectron }: { isElectron: boolean }) {
+function AppearanceHarness({
+  isElectron,
+  initialFontSize = 14,
+}: {
+  isElectron: boolean;
+  initialFontSize?: number;
+}) {
   const [theme, setTheme] = useState<Theme>('light');
   const [interfaceFontFamily, setInterfaceFontFamily] = useState('Atkinson Hyperlegible');
-  const [conversationFontSize, setConversationFontSize] = useState(14);
+  const [conversationFontSize, setConversationFontSize] = useState(initialFontSize);
 
   return (
     <AppearanceSettingsView
@@ -109,19 +109,39 @@ describe('AppearanceSettingsView', () => {
     expect(container?.textContent).not.toContain('Terminal');
   });
 
-  it('lets the user enter a custom conversation font size', async () => {
-    await act(async () => root?.render(<AppearanceHarness isElectron={false} />));
-
-    const sizeInput = container?.querySelector<HTMLInputElement>(
-      'input[aria-label="Conversation font size"]'
+  const fontSizes = () =>
+    Array.from(
+      container?.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Conversation font size"] [role="radio"]'
+      ) ?? []
+    ).map(
+      (node) => `${node.textContent}${node.getAttribute('aria-checked') === 'true' ? '*' : ''}`
     );
-    expect(sizeInput?.value).toBe('14');
 
-    await act(async () => {
-      setInputValue(sizeInput!, '24');
-    });
+  it('picks the conversation font size from Small, Default and Large', async () => {
+    await act(async () => root?.render(<AppearanceHarness isElectron={false} />));
+    expect(fontSizes()).toEqual(['Small', 'Default*', 'Large']);
 
-    expect(sizeInput?.value).toBe('24');
+    const large = container?.querySelector<HTMLButtonElement>(
+      '[aria-label="Conversation font size"] [role="radio"]:last-child'
+    );
+    await act(async () => large?.click());
+
+    expect(fontSizes()).toEqual(['Small', 'Default', 'Large*']);
+  });
+
+  it('keeps an earlier custom font size visible until another size is picked', async () => {
+    await act(async () =>
+      root?.render(<AppearanceHarness isElectron={false} initialFontSize={20} />)
+    );
+    expect(fontSizes()).toEqual(['Small', 'Default', 'Large', '20 px*']);
+
+    const small = container?.querySelector<HTMLButtonElement>(
+      '[aria-label="Conversation font size"] [role="radio"]'
+    );
+    await act(async () => small?.click());
+
+    expect(fontSizes()).toEqual(['Small*', 'Default', 'Large']);
   });
 
   it('renders the interface system font selector in Electron', async () => {

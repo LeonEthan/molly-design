@@ -5,15 +5,13 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 
 import {
   conversationFontSizeAtom,
-  CONVERSATION_FONT_SIZE_MAX,
-  CONVERSATION_FONT_SIZE_MIN,
+  CONVERSATION_FONT_SIZE_PRESETS,
   interfaceFontFamilyAtom,
-  normalizeConversationFontSize,
   type ConversationFontSize,
 } from '@/atoms';
 import { OptionSelector, type OptionSelectorOption } from '@/components/shared/option-selector';
+import { SegmentedControl } from '@/components/shared/segmented-control';
 import { listSystemFontFamilies } from '@/lib/local-fonts';
-import { Input } from '@/ui/input';
 import { LanguageSelector } from '../../i18n';
 import { useTheme, type Theme } from '../../theme-provider';
 import { settingContainerClass } from '.';
@@ -115,6 +113,31 @@ export function AppearanceSettingsView({
     [defaultFontLabel, interfaceFontFamily, systemFontFamilies]
   );
 
+  const fontSizeOptions = [
+    {
+      value: String(CONVERSATION_FONT_SIZE_PRESETS.small),
+      label: t('settings.conversationFontSize.small', 'Small'),
+    },
+    {
+      value: String(CONVERSATION_FONT_SIZE_PRESETS.default),
+      label: t('settings.conversationFontSize.default', 'Default'),
+    },
+    {
+      value: String(CONVERSATION_FONT_SIZE_PRESETS.large),
+      label: t('settings.conversationFontSize.large', 'Large'),
+    },
+  ];
+  const currentFontSize = String(conversationFontSize);
+  if (!fontSizeOptions.some((option) => option.value === currentFontSize)) {
+    fontSizeOptions.push({
+      value: currentFontSize,
+      label: t('settings.conversationFontSize.custom', {
+        size: conversationFontSize,
+        defaultValue: '{{size}} px',
+      }),
+    });
+  }
+
   const fontLoadStatus =
     systemFontLoadState === 'loading' ? (
       <span>{t('settings.fontFamily.loading', 'Loading system fonts...')}</span>
@@ -167,7 +190,10 @@ export function AppearanceSettingsView({
               onSelect={(option) => onInterfaceFontFamilyChange(option.value)}
               placeholder={defaultFontLabel}
               searchable
-              searchPlaceholder={t('settings.fontFamily.searchPlaceholder', 'Search system fonts...')}
+              searchPlaceholder={t(
+                'settings.fontFamily.searchPlaceholder',
+                'Search system fonts...'
+              )}
               emptyText={t('settings.fontFamily.empty', 'No matching fonts')}
               align="end"
               className="w-full rounded-md border-input-border bg-input-field sm:w-[220px] hover:bg-input-field"
@@ -201,25 +227,15 @@ export function AppearanceSettingsView({
             'Adjusts message body text in conversations.'
           )}
         >
-          <Input
-            type="number"
-            min={CONVERSATION_FONT_SIZE_MIN}
-            max={CONVERSATION_FONT_SIZE_MAX}
-            step={1}
-            value={conversationFontSize}
-            aria-label={t('settings.conversationFontSize.label', 'Conversation font size')}
-            className="w-24"
-            onChange={(event) => {
-              if (Number.isFinite(event.target.valueAsNumber)) {
-                onConversationFontSizeChange(
-                  normalizeConversationFontSize(event.target.valueAsNumber)
-                );
-              }
-            }}
+          <SegmentedControl
+            ariaLabel={t('settings.conversationFontSize.label', 'Conversation font size')}
+            size="sm"
+            value={currentFontSize}
+            options={fontSizeOptions}
+            onChange={(value) => onConversationFontSizeChange(Number(value))}
           />
         </CompactRow>
       </CompactSection>
-
     </div>
   );
 }

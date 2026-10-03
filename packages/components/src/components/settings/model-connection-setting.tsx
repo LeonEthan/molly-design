@@ -12,7 +12,6 @@ import {
   type SaveModelConnection,
 } from '@molly/shared/embedded-harness';
 import { getIpcServices } from '@/lib/electron-ipc-client';
-import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
@@ -97,7 +96,7 @@ export function ModelConnectionForm({
   const [endpoint, setEndpoint] = useState(stored?.baseUrl ?? '');
   const [customEndpointOpen, setCustomEndpointOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
-  const [enabled, setEnabled] = useState(stored?.enabled ?? true);
+  const enabled = stored?.enabled ?? true;
   const [customModels, setCustomModels] = useState(
     () =>
       stored?.customModels?.map(compatibleModelDraft) ??
@@ -264,15 +263,6 @@ export function ModelConnectionForm({
           )}
         </>
       )}
-      <div className="flex items-center justify-between gap-3">
-        <Label htmlFor={`${id}-enabled`}>{t('settings.models.enabled')}</Label>
-        <Switch
-          id={`${id}-enabled`}
-          checked={enabled}
-          disabled={busy}
-          onCheckedChange={setEnabled}
-        />
-      </div>
       <p className="text-xs text-muted-foreground">{t('settings.models.storageHint')}</p>
       <div className="flex justify-end gap-2">
         <Button variant="outline" type="button" disabled={busy} onClick={onCancel}>
@@ -314,19 +304,27 @@ export function ModelConnectionSetting() {
       live = false;
     };
   }, [available]);
-  const save = async (input: SaveModelConnection) => {
-    if (!ipc || busy) return;
+  const persist = async (input: SaveModelConnection) => {
+    if (!ipc || busy) return false;
     setBusy(true);
     setError(false);
     try {
       const saved = ModelConnectionSchema.parse(await ipc.modelConnections.save(input));
-      setConnections((current) => [...current.filter((entry) => entry.id !== saved.id), saved]);
-      setEditing(null);
+      setConnections((current) =>
+        current.some((entry) => entry.id === saved.id)
+          ? current.map((entry) => (entry.id === saved.id ? saved : entry))
+          : [...current, saved]
+      );
+      return true;
     } catch {
       setError(true);
+      return false;
     } finally {
       setBusy(false);
     }
+  };
+  const save = async (input: SaveModelConnection) => {
+    if (await persist(input)) setEditing(null);
   };
   return (
     <CompactSection
@@ -352,8 +350,9 @@ export function ModelConnectionSetting() {
             <ModelConnectionRow
               key={connection.id}
               connection={connection}
-              busy={busy}
+              busy={busy || (editing !== 'new' && editing?.id === connection.id)}
               onEdit={() => setEditing(connection)}
+              onToggle={(input) => void persist(input)}
             />
           ))}
           {editing ? (
@@ -385,18 +384,32 @@ export function ModelConnectionSetting() {
   );
 }
 
+const toggledConnection = (connection: ModelConnection) =>
+  SaveModelConnectionSchema.safeParse({
+    id: connection.id,
+    expectedRevision: connection.revision,
+    displayName: connection.displayName,
+    providerPresetId: connection.providerPresetId,
+    baseUrl: connection.baseUrl,
+    enabled: !connection.enabled,
+    ...(connection.customModels ? { customModels: connection.customModels } : {}),
+  });
+
 export function ModelConnectionRow({
   connection,
   busy = false,
   onEdit,
+  onToggle,
 }: {
   connection: ModelConnection;
   busy?: boolean;
   onEdit: () => void;
+  onToggle: (input: SaveModelConnection) => void;
 }) {
   const { t } = useTranslation();
   const issue = getModelConnectionConfigurationIssue(connection);
   const provider = t(providerLabelKeys[connection.providerPresetId]);
+  const toggled = toggledConnection(connection);
   return (
     <div className="flex items-center justify-between gap-4 px-5 py-4">
       <div className="min-w-0">
@@ -409,21 +422,12 @@ export function ModelConnectionRow({
         {issue && <p className="text-xs text-destructive">{t(issueKeys[issue])}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-3">
-        <span
-          className={cn(
-            'inline-flex items-center gap-1.5 text-xs',
-            connection.enabled ? 'text-foreground' : 'text-muted-foreground'
-          )}
-        >
-          <span
-            aria-hidden="true"
-            className={cn(
-              'h-1.5 w-1.5 rounded-full',
-              connection.enabled ? 'bg-foreground' : 'border border-muted-foreground'
-            )}
-          />
-          {connection.enabled ? t('settings.models.statusOn') : t('settings.models.statusOff')}
-        </span>
+        <Switch
+          aria-label={t('settings.models.useConnection', { name: connection.displayName })}
+          checked={connection.enabled}
+          disabled={busy || !toggled.success}
+          onCheckedChange={() => toggled.success && onToggle(toggled.data)}
+        />
         <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
           {t('common.edit')}
         </Button>

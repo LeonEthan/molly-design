@@ -32,7 +32,10 @@ still use the installation profile's sockets under `~/.molly/run` (or
 `MOLLY_DATA_DIR/run`). The host lease must be acquired before the daemon starts;
 an occupied endpoint without a matching lease record leaves Molly reconnecting.
 After updating a checkout that used `17790`, fully quit the old Molly instance
-and run `pnpm start:local` again. Lody can remain running. See the
+and run `pnpm start:local` again. For a detached daemon from the older build,
+the updated embedded CLI's explicit `daemon stop`/`daemon restart` retains
+authenticated control of its legacy endpoint; see [CLI upgrade behavior](../cli/README.md#host-port-upgrades).
+Lody can remain running. See the
 [coexistence fix](../../.agents/notes/implemented/bug-fix/2026-10-02-local-host-port-coexistence.zh.md)
 for the regression and verification limits.
 

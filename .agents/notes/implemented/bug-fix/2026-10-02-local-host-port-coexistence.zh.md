@@ -70,3 +70,41 @@ Components 输出了历史 vendor Claude tsconfig 依赖解析警告，但全部
 额外对所有改动文件运行 Prettier check 时，CJS profile 的既有 `getInstallationProfile` 排版未通过；
 已核对 HEAD 同样未通过，问题与端口修改无关。保留该未改动行，没有夹带全文件格式修复；其他改动文件通过。
 上述修复验证阶段未提交或创建 PR；没有发布、模型调用、清库或 Lody 进程操作。
+
+## PR #70：旧 detached daemon 的显式停止兼容
+
+[P1 评审](https://github.com/LeonEthan/molly-design/pull/70#discussion_r4171857723)
+指出端口迁移后旧 detached daemon 仍持有 17790，而新版 stop 只检查 17792。
+合成 v1 PID/instance/token 与 socket 回归确认：新端口无宿主时返回 `stale_pid_file`；
+新 Electron 已取得新端口时返回 `host_mismatch`，两者都没有停止旧 daemon。
+这是已复现的升级控制回归，不补充原 daemon 初始退出原因的证据。
+
+将既有停止函数提取到
+[`daemon-stop.ts`](../../../../apps/cli/src/commands/daemon-stop.ts)，供 stop/restart 共用并隔离测试。
+默认 local TCP 的显式停止先找当前端点；不匹配时仅检查 loopback 17790。
+只有旧宿主的 daemon mode、PID 和 instance 全部匹配当前安装目录的完整控制记录，
+才复用 `requestLocalCliHostShutdown` 重新校验所有权、发送 token 并等待所选旧端点 drain。
+Cloud、Windows pipe 和 E2E 不查旧端点。旧端点不用于租约 acquisition、运行时 discovery 或自动接管。
+外部宿主、认证拒绝和 drain 超时保持现有安全结果；不发送 PID 信号，不改写或删除数据。
+
+复用阶梯：现有 restart 已复用 stop，只需适配该函数的端点选择与 drain 观察；
+单纯重试新端口或 socket 不会释放旧 daemon，自动停止/接管旧宿主则扩大权限与启动语义。
+因此没有新增协议、supervisor、持久字段或自动迁移机制，也没有改变 Spec intent。
+
+[`daemon-stop.test.ts`](../../../../apps/cli/src/commands/daemon-stop.test.ts)
+使用真实 inspect/shutdown 协议逻辑、合成 socket/控制记录和 fake timers。
+修复前 3 项失败（两种旧 daemon 停止场景及认证拒绝），7 项通过；
+适配后加上 drain、所有权替换及有界超时覆盖，共 13 项通过。
+同批 PID 所有权 6 项和 runner readiness 4 项也通过，无网络、真实 sleep 或 mock 次数断言。
+
+本轮独立只读 `gpt-6-astra/high` 决策意见请求仍在初始化时报 EPERM；未返回 advisory，未自动重试。
+真实旧端口当前由其他产品使用，本轮没有为升级场景启动或停止真实旧 daemon；
+升级控制证据来自上述确定性回归和新版 CLI 构建。前文隔离产品 smoke 属于前一提交，
+不当作这次显式 legacy shutdown 的真实启动证明。用户原窗口和 Lody 均未操作。
+
+新版 CLI 生产构建、完整 `pnpm format`、改动文件 Prettier 和公开边界检查通过。
+首轮类型检查发现提取函数时误删 status 命令仍需的 import，已补回；
+受限环境的完整检查随后遇到既有 socket suites 的 `listen EPERM`，
+改在允许本地 socket 的环境复跑，完整 `pnpm check` 通过。
+CLI 3073 项通过（3 跳过）、Shared 1321、Supervisor 50、Components 3247 项通过；
+历史 vendor Claude tsconfig 告警仍在，未修 unrelated 来源。

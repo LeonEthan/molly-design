@@ -8,6 +8,10 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
 
 ## Process and daemon lifecycle
 
+- Explicit daemon stop/restart may inspect legacy local TCP `17790` outside E2E;
+  match the persisted daemon PID/instance/mode before authenticated shutdown.
+  Never acquire that legacy lease or signal a PID from diagnostics.
+
 - Local one-shot commands use `../lib/command-runtime.ts` (`runOneShotCommand`) for exit codes
   and stream flushing; they must not initialize telemetry or sync time with product cloud.
 - Process entrypoints, command-owned boundaries, global process-error handlers, and generated

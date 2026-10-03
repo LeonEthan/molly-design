@@ -305,6 +305,7 @@ export function mapSessionMetaToSessionListRow(
   return {
     sessionId: session.id,
     title,
+    artworkId: session.design?.artworkId,
     // Presentation-only provenance: the Session that created this one (MCP
     // `molly_session_create` / `molly session create` from inside a session).
     // Deliberately NOT parentSessionId — see `lib/session-opened-by-tree.ts`.

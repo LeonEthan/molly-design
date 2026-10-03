@@ -11,6 +11,7 @@ import {
   setDesignCanvasStateQuery,
   syncDesignCanvasFromStore
 } from './design-service'
+import { refreshDesignThumbnailInBackground } from './design-thumbnail'
 
 /** Same owner-only local control socket as render hosting, independent of slow raster work. */
 export function startDesignCanvasHost(cli: CliService): () => void {
@@ -40,6 +41,7 @@ export function startDesignCanvasHost(cli: CliService): () => void {
         reports = [
           ...reports.slice(100),
           ...(await designCanvasAccess.update(response.active, async (id) => {
+            refreshDesignThumbnailInBackground(id)
             await syncDesignCanvasFromStore(id)
             released = true
           }))

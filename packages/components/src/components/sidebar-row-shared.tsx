@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type { PrStatus, SessionPullRequestCiState } from '@molly/shared';
 import { cn } from '@/lib/utils';
+import { useDesignThumbnail } from '@/hooks/use-design-thumbnail';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { ContextMenuItem, ContextMenuSeparator } from '@/ui/context-menu';
 import { Skeleton } from '@/ui/skeleton';
@@ -275,6 +276,28 @@ export function SessionRowAuthorAvatar({
       className="h-[18px] w-[18px] shrink-0"
       fallbackClassName="text-[9px] font-medium"
     />
+  );
+}
+
+/**
+ * The artwork's last saved revision, so design sessions with similar titles are
+ * told apart by eye. A neutral tile holds the place until the image is ready.
+ */
+export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string }) {
+  const src = useDesignThumbnail(artworkId);
+  return (
+    <span
+      aria-hidden="true"
+      data-session-row-thumbnail=""
+      className={cn(
+        'relative size-5 shrink-0 overflow-hidden rounded-[4px] bg-sidebar-foreground/[0.06]',
+        'after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-inset after:ring-sidebar-foreground/10'
+      )}
+    >
+      {src ? (
+        <img src={src} alt="" draggable={false} className="size-full object-cover" />
+      ) : null}
+    </span>
   );
 }
 

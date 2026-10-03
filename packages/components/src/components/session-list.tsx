@@ -78,6 +78,7 @@ import { formatCompactRelativeTime, type RelativeTimeValue } from '@/lib/format-
 import {
   GitHubOwnerIcon,
   SessionPrIcon,
+  SessionRowArtworkThumbnail,
   SessionRowAuthorAvatar,
   SessionRowLeadingSlot,
   SidebarRowArchiveButton,
@@ -104,6 +105,8 @@ export type SessionListRowOwner = {
 export type SessionListRow = {
   sessionId: string;
   title: string;
+  /** Design artwork shown as the row thumbnail; absent for sessions without one. */
+  artworkId?: string;
   /**
    * PRECISE opener: the Session that created/opened this one
    * (`SessionMeta.openedBySessionId`). Presentation-only provenance; it is NOT
@@ -929,7 +932,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   />
                   <div
                     className={cn(
-                      'min-w-0 flex-1 flex items-center gap-1 truncate text-sm',
+                      'min-w-0 flex-1 flex items-center gap-1 truncate text-[13px]',
                       // See SidebarUpdatedSessionList: the selected row is a 6%
                       // tint, too light for the inverted selection foreground.
                       showSelectedState
@@ -945,6 +948,9 @@ const SessionGroupSection = memo(function SessionGroupSection({
                       beginRename(session.sessionId, session.title);
                     }}
                   >
+                    {session.artworkId ? (
+                      <SessionRowArtworkThumbnail artworkId={session.artworkId} />
+                    ) : null}
                     <SessionRowAuthorAvatar author={session.owner} />
                     {session.isPinned ? (
                       <Pin

@@ -40,7 +40,7 @@ Lody owns execution; Bento owns independent editing/rendering and snapshot/flush
 design services own conversion/storage. The product Agent owns creation,
 review and completion. Expose honest capabilities; tool absence does not imply
 absence of other agent capabilities. Preserve rendering previews and image
-reading and commit receipts; retire per-turn result cards and dedicated thumbnails.
+reading and commit receipts; retire per-turn result cards and thumbnails.
 
 Design saves update YAML from human edits independently of Agent execution. Keep
 public read-before-edit reminder hooks and native tool guards; no runtime patches

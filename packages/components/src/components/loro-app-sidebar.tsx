@@ -162,6 +162,7 @@ import { writePreferredWorkspaceSlug } from '@/lib/workspace';
 import {
   SessionOpenedByTreeRow,
   SessionPrIcon,
+  SessionRowArtworkThumbnail,
   SessionRowAuthorAvatar,
   SessionRowLeadingSlot,
   SessionRowWorktreeIndicator,
@@ -661,6 +662,9 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
             beginRename();
           }}
         >
+          {session.design ? (
+            <SessionRowArtworkThumbnail artworkId={session.design.artworkId} />
+          ) : null}
           <SessionRowAuthorAvatar author={author} />
           {isPinned ? (
             <Pin aria-hidden="true" className="h-3 w-3 shrink-0 text-sidebar-foreground-muted/80" />
@@ -1968,6 +1972,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         id: task.sessionId,
         kind: 'chat',
         title: task.title,
+        artworkId: task.artworkId,
         sectionLabel: chatsLabel,
         subtitle: null,
         machineName: task.machineName ?? null,
@@ -2039,6 +2044,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
             id: session.id,
             kind: 'local',
             title,
+            artworkId: session.design?.artworkId,
             sectionLabel,
             subtitle: project.name,
             repoFullName: resolveProjectGitHubRepo(session.project) ?? null,

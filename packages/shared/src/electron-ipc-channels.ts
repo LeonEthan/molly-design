@@ -16,6 +16,7 @@ import type {
 
 export type IpcPushMap = {
   'design.state': { artworkId?: string };
+  'design.thumbnail': { artworkId: string };
   'design.preview': {
     hostId: string;
     status: 'ready' | 'waiting';
@@ -57,6 +58,7 @@ export type IpcSendMap = {
 
 export const IPC_PUSH_CHANNELS = {
   designState: 'design.state',
+  designThumbnail: 'design.thumbnail',
   designPreview: 'design.preview',
   designSelection: 'design.selection',
   designSelectionAction: 'design.selectionAction',

@@ -17,6 +17,8 @@ Index and rationale: [README.md](README.md).
   Existing worktree Sessions keep their runtime semantics. GitHub projects
   are machine-independent. Machine changes filter local projects/configs and clear
   incompatible local projects without replacement.
+- Desktop landing format tiles under the heading and the footer size chip share one
+  canvas draft and preset list (`canvas-size-selector.tsx`).
 - Desktop landing footer starts with canvas size beside the attachment entry;
   the remaining footer order is run config → permission → usage. Provider interaction mode
   belongs inside run config; the standalone button is explicit permission mode,

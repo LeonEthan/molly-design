@@ -58,8 +58,8 @@ widgets, footers, autocomplete and the sub-agent fleet view are unavailable.
 
 The host grants the selected connection's key over the private fd-3 pipe for each run.
 The worker pins its first granted key in memory with `setRuntimeApiKey` and
-stores it through Pi's native `login` in the profile's `auth.json` and writes the
-connection's provider entry into `models.json`
+stores it through Pi's native `login` in the profile's `auth.json` and writes a custom
+endpoint's provider entry into `models.json`
 ([profile-credentials.ts](src/profile-credentials.ts)). Sub-agents, including detached
 background runners that outlive the turn, read those files. Workers sharing a Pi provider
 ID have separate files, so one connection cannot replace another's endpoint or key.
@@ -73,7 +73,11 @@ product history restores independently. Deleting a connection or retiring a work
 not yet remove its plaintext profile copy or revoke a detached child's provider key.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
-including declared OpenAI-compatible models. Model and thinking selection are fixed per
+including declared OpenAI-compatible models. Pi applies a provider endpoint override to every
+model of that provider, so a connection on its preset's default endpoint
+(`PROVIDER_PRESET_DEFAULT_BASE_URLS`) registers no override and each model keeps its own SDK
+endpoint: OpenRouter serves Anthropic-protocol models at `/api` and the rest at `/api/v1`.
+A custom endpoint still replaces every model's. Model and thinking selection are fixed per
 worker; hooks in [host.ts](src/host.ts) retire the worker if an extension changes them.
 
 ## ACP adapter

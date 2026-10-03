@@ -27,7 +27,9 @@ app and automation interfaces unresponsive.
 
 1. Open Settings → AI models → Models, choose the provider/product and paste its
    API key. Molly suggests the provider's default endpoint and a connection name;
-   change either one, or choose **Use a custom endpoint**. Enter keys only in the
+   change either one, or choose **Use a custom endpoint**. With the default, each
+   model uses its provider's own address (OpenRouter's Claude models included); a
+   custom endpoint receives every model's requests. Enter keys only in the
    local settings field, never in a conversation or artwork file. Saving encrypts
    the connection; it neither tests inference nor changes an existing session's
    selection.

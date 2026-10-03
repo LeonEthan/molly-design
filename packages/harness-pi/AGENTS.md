@@ -18,6 +18,10 @@ Read [README](README.md) before changing session construction, packages or the b
   runtime or disk mutation; rotation requires a fresh worker. Keys never enter ACP, argv, environment, native
   history or diagnostics; errors carry static codes only. Serialize profile login and
   provider read-merge-publish under one process lock; retain unrelated provider entries.
+- Pi applies a provider endpoint override to every model of that provider. A connection on
+  its preset's default endpoint registers none, so each model keeps its SDK endpoint
+  (OpenRouter's Anthropic-protocol models use `/api`); a custom endpoint replaces every
+  model's. The host checks the selected model's resolved endpoint.
 - A run is fenced by exclusive creation of its run record before credentials or
   inference. An existing record means already dispatched: report
   `harness_run_already_dispatched` and never replay.

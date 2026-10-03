@@ -8,6 +8,7 @@ import { parseAskUserQuestionElicitationRequest } from '@molly/shared';
 import {
   HarnessQuestionIdentitySchema,
   MOLLY_PROVIDER_IDS,
+  PROVIDER_PRESET_DEFAULT_BASE_URLS,
   type McpCredentialBinding,
 } from '@molly/shared/embedded-harness';
 import { acpMcpConfig } from '../src/mcp';
@@ -191,6 +192,49 @@ describe('owned ACP host integration', () => {
     );
     expect(await readFile(join(second.agentDir, 'auth.json'), 'utf8')).not.toContain(
       'FIRST_SYNTHETIC_KEY'
+    );
+  });
+
+  it('dispatches a default-endpoint model only to its own SDK endpoint', async () => {
+    const probe = await ModelRuntime.create({
+      modelsPath: null,
+      refreshOnCreate: false,
+      allowModelNetwork: false,
+    });
+    const openrouter = MOLLY_PROVIDER_IDS.openrouter;
+    const defaultEndpoint = PROVIDER_PRESET_DEFAULT_BASE_URLS.openrouter;
+    const claude = probe.getModels(openrouter).find((model) => model.baseUrl !== defaultEndpoint)!;
+    const f = await managed({
+      initialize: false,
+      config: {
+        connection: {
+          schemaVersion: 1,
+          id: 'connection',
+          revision: 1,
+          providerPresetId: 'openrouter',
+          displayName: 'OpenRouter',
+          baseUrl: defaultEndpoint,
+          credentialRef: 'protected-reference',
+          enabled: true,
+        },
+        selection: { connectionId: 'connection', modelId: claude.id, thinking: 'off' },
+      },
+    });
+    const runtime = await f.host.createRuntime(f.agentDir);
+    const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+    const { extension } = f.host;
+    const factory = typeof extension === 'function' ? extension : extension.factory;
+    await factory({
+      on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) =>
+        handlers.set(event, handler),
+      getThinkingLevel: () => 'off',
+    } as never);
+    const validate = handlers.get('before_provider_request')!;
+    const model = runtime.getModel(openrouter, claude.id);
+    expect(model?.baseUrl).toBe(claude.baseUrl);
+    expect(() => validate({}, { model })).not.toThrow();
+    expect(() => validate({}, { model: { ...model, baseUrl: defaultEndpoint } })).toThrow(
+      'pi_acp_host_model_changed'
     );
   });
 

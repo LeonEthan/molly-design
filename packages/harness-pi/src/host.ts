@@ -52,7 +52,9 @@ const ManagedBuiltinMcpIdentitySchema = z
   .strict();
 
 function hash(value: unknown): string {
-  return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  return createHash('sha256')
+    .update(JSON.stringify(value ?? null))
+    .digest('hex');
 }
 
 export class PiAcpHost {
@@ -70,6 +72,7 @@ export class PiAcpHost {
   private runtime?: ModelRuntime;
   private agentDir?: string;
   private providerId?: string;
+  private modelBaseUrl?: string;
   private providerConfig?: ReturnType<ModelRuntime['getRegisteredProviderConfig']>;
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
@@ -158,7 +161,7 @@ export class PiAcpHost {
       allowModelNetwork: false,
       refreshOnCreate: false,
     });
-    const providerId = configureModelConnection(
+    const { providerId, baseUrl } = configureModelConnection(
       runtime,
       this.config.connection,
       this.config.selection
@@ -166,6 +169,7 @@ export class PiAcpHost {
     this.runtime = runtime;
     this.agentDir = agentDir;
     this.providerId = providerId;
+    this.modelBaseUrl = baseUrl;
     this.providerConfig = runtime.getRegisteredProviderConfig(providerId);
     this.providerFingerprint = hash(this.providerConfig);
     this.nativeProvider = runtime.getRegisteredNativeProvider(providerId);
@@ -222,7 +226,7 @@ export class PiAcpHost {
       this.lifetime.signal.aborted ||
       model?.provider !== this.providerId ||
       model?.id !== this.config.selection.modelId ||
-      model?.baseUrl !== this.config.connection.baseUrl ||
+      model?.baseUrl !== this.modelBaseUrl ||
       this.runtime?.getRegisteredProviderConfig(this.providerId!) !== this.providerConfig ||
       hash(this.providerConfig) !== this.providerFingerprint ||
       this.runtime?.getRegisteredNativeProvider(this.providerId!) !== this.nativeProvider ||

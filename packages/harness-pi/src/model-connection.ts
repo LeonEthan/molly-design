@@ -5,6 +5,7 @@ import {
   MOLLY_PROVIDER_IDS,
   ModelThinkingLevelSchema,
   getModelConnectionConfigurationIssue,
+  isProviderPresetDefaultEndpoint,
   type ModelConnection,
   type ModelSelection,
 } from '@molly/shared/embedded-harness';
@@ -13,7 +14,7 @@ export function configureModelConnection(
   runtime: ModelRuntime,
   rawConnection: ModelConnection,
   rawSelection: ModelSelection
-): string {
+): { providerId: string; baseUrl: string } {
   const connection = ModelConnectionSchema.parse(rawConnection);
   const selection = ModelSelectionSchema.parse(rawSelection);
   const issue = getModelConnectionConfigurationIssue(connection);
@@ -26,41 +27,39 @@ export function configureModelConnection(
   if (compatible && !declared?.thinking.includes(selection.thinking))
     throw new Error('harness_thinking_level_unsupported');
   const providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
-  runtime.registerProvider(
-    providerId,
-    compatible
-      ? {
-          baseUrl: connection.baseUrl,
-          api: 'openai-completions',
-          authHeader: true,
-          models: (connection.customModels ?? []).map((model) => ({
-            id: model.modelId,
-            name: model.name,
-            input: model.input,
-            contextWindow: model.contextWindow,
-            maxTokens: model.maxTokens,
-            reasoning: model.thinking.some((level) => level !== 'off'),
-            thinkingLevelMap: Object.fromEntries(
-              ModelThinkingLevelSchema.options.map((level) => [
-                level,
-                model.thinking.includes(level) ? (level === 'off' ? 'none' : level) : null,
-              ])
-            ),
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            compat: {
-              thinkingFormat: 'openai',
-              supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
-              supportsStore: false,
-              supportsDeveloperRole: false,
-              supportsUsageInStreaming: model.usageInStreaming,
-              supportsFinishReason: true,
-              maxTokensField: model.maxTokensField,
-            },
-          })),
-        }
-      : { baseUrl: connection.baseUrl }
-  );
-  if (!runtime.getModel(providerId, selection.modelId))
-    throw new Error('harness_model_not_in_catalog');
-  return providerId;
+  if (compatible)
+    runtime.registerProvider(providerId, {
+      baseUrl: connection.baseUrl,
+      api: 'openai-completions',
+      authHeader: true,
+      models: (connection.customModels ?? []).map((model) => ({
+        id: model.modelId,
+        name: model.name,
+        input: model.input,
+        contextWindow: model.contextWindow,
+        maxTokens: model.maxTokens,
+        reasoning: model.thinking.some((level) => level !== 'off'),
+        thinkingLevelMap: Object.fromEntries(
+          ModelThinkingLevelSchema.options.map((level) => [
+            level,
+            model.thinking.includes(level) ? (level === 'off' ? 'none' : level) : null,
+          ])
+        ),
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        compat: {
+          thinkingFormat: 'openai',
+          supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
+          supportsStore: false,
+          supportsDeveloperRole: false,
+          supportsUsageInStreaming: model.usageInStreaming,
+          supportsFinishReason: true,
+          maxTokensField: model.maxTokensField,
+        },
+      })),
+    });
+  else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
+    runtime.registerProvider(providerId, { baseUrl: connection.baseUrl });
+  const model = runtime.getModel(providerId, selection.modelId);
+  if (!model) throw new Error('harness_model_not_in_catalog');
+  return { providerId, baseUrl: model.baseUrl };
 }

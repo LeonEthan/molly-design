@@ -6,6 +6,7 @@ import {
   ProviderPresetIdSchema,
   SaveModelConnectionSchema,
   getModelConnectionConfigurationIssue,
+  isProviderPresetDefaultEndpoint,
   type ModelConnection,
   type ProviderPresetId,
   type SaveModelConnection,
@@ -41,12 +42,8 @@ const defaultEndpointFor = (preset: ProviderPresetId | ''): string | undefined =
 
 const withoutTrailingSlash = (url: string) => url.trim().replace(/\/+$/, '');
 
-const isDefaultEndpoint = (endpoint: string, preset: ProviderPresetId | ''): boolean => {
-  const fallback = defaultEndpointFor(preset);
-  return (
-    fallback !== undefined && withoutTrailingSlash(endpoint) === withoutTrailingSlash(fallback)
-  );
-};
+const isDefaultEndpoint = (endpoint: string, preset: ProviderPresetId | ''): boolean =>
+  preset !== '' && isProviderPresetDefaultEndpoint(preset, endpoint);
 
 export type ConnectionIdentityDraft = {
   provider: ProviderPresetId | '';

@@ -332,6 +332,18 @@ export const PROVIDER_PRESET_DEFAULT_BASE_URLS: Record<
   openrouter: 'https://openrouter.ai/api/v1',
 };
 
+/**
+ * A connection on its preset's default endpoint keeps each model's own SDK endpoint;
+ * any other endpoint replaces every model's. OpenRouter serves its Anthropic-protocol
+ * models at `/api`, not the default `/api/v1`.
+ */
+export function isProviderPresetDefaultEndpoint(preset: ProviderPresetId, baseUrl: string) {
+  return (
+    preset !== 'openai-compatible' &&
+    baseUrl.trim().replace(/\/+$/, '') === PROVIDER_PRESET_DEFAULT_BASE_URLS[preset]
+  );
+}
+
 export const HarnessModelCatalogSchema = z
   .object({
     version: z.literal(1),

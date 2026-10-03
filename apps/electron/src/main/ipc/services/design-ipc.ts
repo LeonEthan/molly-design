@@ -46,8 +46,7 @@ import {
 import {
   forgetDesignThumbnail,
   getDesignThumbnail,
-  refreshDesignThumbnail,
-  refreshDesignThumbnailAfterLeave
+  refreshDesignThumbnailInBackground
 } from '../../services/design-thumbnail'
 
 function owner() {
@@ -208,15 +207,13 @@ export class DesignIpc extends IpcService {
     owner()
     const artworkId = id.parse(sessionId)
     const left = await leaveDesign(artworkId, hostId === undefined ? undefined : id.parse(hostId))
-    if (left) refreshDesignThumbnailAfterLeave(artworkId)
+    if (left) refreshDesignThumbnailInBackground(artworkId)
     return left
   }
-  /** Sidebar thumbnail of the last saved revision; `refresh` re-checks the store after a turn. */
-  @IpcMethod() async thumbnail(sessionId: string, refresh = false) {
+  /** Sidebar thumbnail of the last saved revision, as last refreshed by leave or turn end. */
+  @IpcMethod() async thumbnail(sessionId: string) {
     owner()
-    if (typeof refresh !== 'boolean') throw Error('Invalid thumbnail refresh mode')
-    const artworkId = id.parse(sessionId)
-    return refresh ? refreshDesignThumbnail(artworkId) : getDesignThumbnail(artworkId)
+    return getDesignThumbnail(id.parse(sessionId))
   }
   @IpcMethod() async close(sessionId: string) {
     owner()

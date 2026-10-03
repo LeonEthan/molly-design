@@ -57,8 +57,12 @@ const thumbnails = new DesignThumbnails({
 
 export const getDesignThumbnail = (artworkId: string) => thumbnails.get(artworkId)
 
-/** Refresh in the background after the person leaves the canvas, then tell rows to re-read. */
-export function refreshDesignThumbnailAfterLeave(artworkId: string) {
+/**
+ * Refresh in the background when the person leaves the canvas or an Agent turn's
+ * processing ends, then tell rows to re-read. Rows that are not mounted mark the
+ * artwork stale and re-read when they mount.
+ */
+export function refreshDesignThumbnailInBackground(artworkId: string) {
   void thumbnails.refresh(artworkId).then(
     () => {
       for (const window of BrowserWindow.getAllWindows())
@@ -67,8 +71,6 @@ export function refreshDesignThumbnailAfterLeave(artworkId: string) {
     () => {}
   )
 }
-
-export const refreshDesignThumbnail = (artworkId: string) => thumbnails.refresh(artworkId)
 
 export const forgetDesignThumbnail = (artworkId: string) =>
   rm(cacheFile(artworkId), { force: true })

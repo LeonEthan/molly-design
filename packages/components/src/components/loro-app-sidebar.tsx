@@ -663,7 +663,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           }}
         >
           {session.design ? (
-            <SessionRowArtworkThumbnail artworkId={session.design.artworkId} isWorking={isWorking} />
+            <SessionRowArtworkThumbnail artworkId={session.design.artworkId} />
           ) : null}
           <SessionRowAuthorAvatar author={author} />
           {isPinned ? (

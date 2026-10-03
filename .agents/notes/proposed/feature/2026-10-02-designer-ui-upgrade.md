@@ -210,9 +210,12 @@ recent-work grid or a blank artboard (all three offered in words, not mock-ups).
   re-reads the saved revision and renders only when it moved. Renders run one at a
   time. Deleting the folder costs only re-rendering. Explicit session close removes
   the file.
-- **Triggers:** the renderer refreshes when a row's working state falls; Electron
-  refreshes after a successful `design.leave` and pushes `design.thumbnail` so rows
-  re-read.
+- **Triggers:** Electron refreshes after a successful `design.leave` and when the
+  canvas host sees an artwork's execution and artifact processing end, then pushes
+  `design.thumbnail`. Mounted rows re-read at once; an artwork with no mounted row is
+  marked stale and re-read on the next mount. Review of PR #66 found the first version,
+  which detected turn ends from row state, lost refreshes while a hidden sidebar had
+  unmounted its rows.
 - **Rows:** a 20px rounded tile with a hairline edge sits before the title in the
   project, Chats and Updated lists. The Chats and Updated lists still used 14px titles
   after phase 4 and now use the 13px row size.
@@ -222,8 +225,9 @@ recent-work grid or a blank artboard (all three offered in words, not mock-ups).
 
 Verified in the built app on local data: all nine visible rows rendered, the cache held
 about 5 KB per artwork, an edit left the thumbnail unchanged until the canvas was left,
-and undoing the edit restored the original image. Not verified: the Agent-turn trigger
-(it needs a paid live turn). In dark mode, blank artworks show as bright white tiles,
+and undoing the edit restored the original image. An edit saved and left while the
+sidebar was collapsed showed on reopening it. Not verified: the turn-end trigger in a
+live Agent turn (it needs a paid model call); it shares the leave path's refresh. In dark mode, blank artworks show as bright white tiles,
 because they are truthful renders of white canvases.
 
 ## Phase 5 implementation: start from a format

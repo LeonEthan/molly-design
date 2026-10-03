@@ -779,7 +779,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           revealClassName="group-hover/row:opacity-100 group-hover/row:pointer-events-auto group-data-[menu-open]/row:opacity-100 group-data-[menu-open]/row:pointer-events-auto"
         />
         {item.artworkId ? (
-          <SessionRowArtworkThumbnail artworkId={item.artworkId} isWorking={item.isWorking === true} />
+          <SessionRowArtworkThumbnail artworkId={item.artworkId} />
         ) : null}
         <SessionRowAuthorAvatar author={item.owner} />
         {showPinnedIcon && item.isPinned ? (

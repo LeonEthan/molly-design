@@ -283,14 +283,8 @@ export function SessionRowAuthorAvatar({
  * The artwork's last saved revision, so design sessions with similar titles are
  * told apart by eye. A neutral tile holds the place until the image is ready.
  */
-export function SessionRowArtworkThumbnail({
-  artworkId,
-  isWorking,
-}: {
-  artworkId: string;
-  isWorking: boolean;
-}) {
-  const src = useDesignThumbnail(artworkId, isWorking);
+export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string }) {
+  const src = useDesignThumbnail(artworkId);
   return (
     <span
       aria-hidden="true"

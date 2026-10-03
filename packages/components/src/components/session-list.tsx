@@ -949,10 +949,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
                     }}
                   >
                     {session.artworkId ? (
-                      <SessionRowArtworkThumbnail
-                        artworkId={session.artworkId}
-                        isWorking={session.isWorking}
-                      />
+                      <SessionRowArtworkThumbnail artworkId={session.artworkId} />
                     ) : null}
                     <SessionRowAuthorAvatar author={session.owner} />
                     {session.isPinned ? (

@@ -2880,12 +2880,13 @@ const SessionDetail = ({
         label: t('sessions.detailTabs.files', 'Files'),
         kind: 'files',
       },
-      {
+    ];
+    if (!activeSession?.design)
+      options.push({
         id: 'changes',
         label: t('sessions.detailTabs.allChanges', 'All Changes'),
         kind: 'changes',
-      },
-    ];
+      });
     if (activeBrowserSession) {
       options.push({
         id: 'browser',
@@ -4366,7 +4367,14 @@ const SessionDetail = ({
   const desktopSecondaryPanel = (
     <div
       data-molly-session-tab-region="side-panel"
-      className="mx-2 mb-2 mt-2 flex h-[calc(100%_-_1rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-[0_1px_3px_-1px_rgba(15,17,21,0.08),0_1px_2px_rgba(15,17,21,0.04)]"
+      className={cn(
+        'mx-2 mb-2 flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-[0_1px_3px_-1px_rgba(15,17,21,0.08),0_1px_2px_rgba(15,17,21,0.04)]',
+        // Focus canvas puts this header beside the traffic lights, so the card
+        // rises to the window edge to centre its row on them.
+        isDesignCanvasFocused && hasMacOSTitlebarInset
+          ? 'mt-0 h-[calc(100%_-_0.5rem)]'
+          : 'mt-2 h-[calc(100%_-_1rem)]'
+      )}
     >
       <SessionSidePanelTabBar
         tabs={sidePanelTabs}

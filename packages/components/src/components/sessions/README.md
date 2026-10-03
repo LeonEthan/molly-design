@@ -115,7 +115,9 @@ files retain the last valid frame. There is no source switch, manual refresh or 
 Focus canvas is the transient `designCanvasFocusAtom`. It hides the conversation and
 the navigation sidebar while that canvas stays active, and the side-panel row then
 reserves the macOS traffic-light inset and leads with the show-sidebar button, which
-also ends focus. Leaving focus restores the saved sidebar state.
+also ends focus, and the card rises to the window edge so that row centres on the
+traffic lights. Leaving focus restores the saved sidebar state. Design sessions do not
+offer the code-diff All Changes panel.
 Native replacements prepare decoded pixels under the outgoing view and promote
 before disposal. Turn completion retains the final preview until the canonical
 editor is ready; component phase cleanup does not dispose that handoff surface.

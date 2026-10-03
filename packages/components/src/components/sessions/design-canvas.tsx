@@ -417,7 +417,6 @@ export function DesignCanvas({
         throw Error(
           t('design.selectionChanged', 'Artwork view changed; select the current elements again')
         );
-      setFocused(false);
       onReferenceSelection?.(reference, prompt);
     });
   const selectionAction = (action: DesignSelectionAction, reference: DesignElementReference) => {
@@ -737,8 +736,8 @@ export function DesignCanvas({
                 className="size-9 rounded-full"
                 aria-label={
                   focused
-                    ? t('design.showChat', 'Show conversation')
-                    : t('design.focus', 'Focus canvas')
+                    ? t('design.showSidebar', 'Show sidebar')
+                    : t('design.hideSidebar', 'Hide sidebar')
                 }
                 onClick={() => setFocused(!focused)}
               >
@@ -751,8 +750,8 @@ export function DesignCanvas({
             </TooltipTrigger>
             <TooltipContent>
               {focused
-                ? t('design.showChat', 'Show conversation')
-                : t('design.focus', 'Focus canvas')}
+                ? t('design.showSidebar', 'Show sidebar')
+                : t('design.hideSidebar', 'Hide sidebar')}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -760,15 +759,7 @@ export function DesignCanvas({
     </>
   );
   return (
-    <div
-      data-design-canvas-focus={focused}
-      className="flex h-full min-h-0 flex-col bg-background"
-    >
-      <style>
-        {
-          '[data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-id="chat"], [data-panel-group]:has([data-design-canvas-focus="true"]) > [data-panel-resize-handle-id]{display:none}'
-        }
-      </style>
+    <div className="flex h-full min-h-0 flex-col bg-background">
       {toolbarHost ? (
         createPortal(toolbarItems, toolbarHost)
       ) : (

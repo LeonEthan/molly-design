@@ -252,3 +252,13 @@ to 1080 × 1350 and back. Visual quality awaits the owner's review.
 - Limits: a canvas opened only as a read-only source preview gets no toolbar
   presentation, so its dock tooltips stay English. Size instructions written by a
   language later removed from the bundle would fall back to a plain bubble.
+
+## Follow-up: focus keeps the conversation (2026-10-02)
+
+The owner expected the canvas expand button to collapse only the left sidebar and keep
+the conversation and canvas columns. Focus had also hidden the conversation (a P1-era
+CSS rule on the chat panel), and no code collapsed the sidebar automatically. The owner
+chose, over auto-hiding when a design opens or when the canvas is widened, that the
+expand button hides the sidebar only. The conversation header already reserves the
+traffic-light inset and the show-sidebar button when the sidebar is hidden, so the
+canvas row's own inset, button and window-edge card offset from #67 were removed.

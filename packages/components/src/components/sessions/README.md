@@ -112,12 +112,12 @@ reads (`useSessionDoc`, `ownerSessionId`) stay session-keyed; the native view ke
 an authoritative active Agent turn displays valid, frozen YAML/asset snapshots.
 Until the first valid changed draft, retain the canonical canvas. Invalid subsequent
 files retain the last valid frame. There is no source switch, manual refresh or import.
-Focus canvas is the transient `designCanvasFocusAtom`. It hides the conversation and
-the navigation sidebar while that canvas stays active, and the side-panel row then
-reserves the macOS traffic-light inset and leads with the show-sidebar button, which
-also ends focus, and the card rises to the window edge so that row centres on the
-traffic lights. Leaving focus restores the saved sidebar state. Design sessions do not
-offer the code-diff All Changes panel.
+Focus canvas is the transient `designCanvasFocusAtom`. It hides only the navigation
+sidebar, so the conversation and canvas remain, and the conversation header then
+reserves the macOS traffic-light inset and leads with the show-sidebar button. The
+canvas toolbar's button toggles it and reads "Hide sidebar" / "Show sidebar"; ending
+focus, deactivating the canvas or an explicit show-sidebar request restores the saved
+sidebar state. Design sessions do not offer the code-diff All Changes panel.
 Native replacements prepare decoded pixels under the outgoing view and promote
 before disposal. Turn completion retains the final preview until the canonical
 editor is ready; component phase cleanup does not dispose that handoff surface.

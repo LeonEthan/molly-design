@@ -39,7 +39,7 @@ Parent `AGENTS.md` files also apply.
   the shared layout-state actions for the navigation sidebar; every Session action
   that opens a viewer, Files, Changes, PR, Browser, or Side Chat must clear Zen.
 - `designCanvasFocusAtom` follows the same rule: focusing the active design canvas
-  hides the navigation sidebar and the conversation without writing either preference.
+  hides only the navigation sidebar, keeping the conversation and canvas, without writing the saved preference.
   Deactivating the canvas or an explicit navigation-sidebar request clears it.
 - Drive hidden-panel work from effective visibility (`open && !zen`), not the stored
   open bit. A Zen-hidden PR, Browser, viewer, or Side Chat must pause exactly like an

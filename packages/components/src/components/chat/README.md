@@ -32,10 +32,18 @@ reasoning behind those rules.
   — landing chrome and host-specific entry points.
 - [`submission/`](submission/AGENTS.md) — the composer submission lifecycle
   (its own scope, with its own rules).
+- `atoms/local-storage-cache.ts` owns the persisted landing prompt, pasted text,
+  and mentions, scoped by user and workspace. New drafts default to empty;
+  startup restores saved text. Clearing writes an explicit empty current value,
+  which also prevents an older Lody key from restoring discarded text.
 - Landing attachment uploads live in two sibling hooks under `src/hooks/`:
   `use-chat-landing-image-draft.ts` (images) and `use-chat-landing-file-draft.ts`
   (non-image files; direct Electron-to-local-CLI handoff,
   mirroring `sessions/session-chat-input-area.tsx`).
+
+The [saved test-draft investigation](../../../../../.agents/notes/implemented/testing/2026-10-02-landing-test-draft-cleanup.zh.md)
+records scoped cleanup and restart verification. The regression covers current and
+legacy saved prompts while preserving a draft in another workspace.
 
 ## Why the rules read the way they do
 

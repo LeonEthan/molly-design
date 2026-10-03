@@ -180,6 +180,40 @@ afterEach(() => {
 });
 
 describe('chat landing draft persistence', () => {
+  it.each(['molly', 'lody'])(
+    'keeps an explicitly cleared %s test draft empty after restarting',
+    (prefix) => {
+      localStorage.setItem(
+        `${prefix}:chatLandingState:${WORKSPACE_A_KEY}`,
+        JSON.stringify({
+          prompt: 'Reply with OK only.',
+          pastedTextDrafts: [],
+          mentionRanges: [],
+        })
+      );
+      localStorage.setItem(
+        `molly:chatLandingState:${WORKSPACE_B_KEY}`,
+        JSON.stringify({ prompt: 'Keep this design draft' })
+      );
+
+      mountLanding(WORKSPACE_A_KEY);
+      expect(readHarness().prompt).toBe('Reply with OK only.');
+      act(() => {
+        readHarness().setPrompt('');
+      });
+      unmountLanding();
+
+      store = createStore();
+      mountLanding(WORKSPACE_A_KEY);
+      expect(readHarness().prompt).toBe('');
+      unmountLanding();
+
+      store = createStore();
+      mountLanding(WORKSPACE_B_KEY);
+      expect(readHarness().prompt).toBe('Keep this design draft');
+    }
+  );
+
   it('persists prompt text separately for each workspace', () => {
     mountLanding(WORKSPACE_A_KEY);
     act(() => {

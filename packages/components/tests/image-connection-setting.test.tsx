@@ -21,7 +21,12 @@ import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection
 import { initI18n } from '../src/i18n';
 
 const { imageIpc } = vi.hoisted(() => ({
-  imageIpc: { getImageSnapshot: vi.fn(), saveImage: vi.fn(), checkImage: vi.fn() },
+  imageIpc: {
+    getImageSnapshot: vi.fn(),
+    saveImage: vi.fn(),
+    checkImage: vi.fn(),
+    deleteImage: vi.fn(),
+  },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   // Production returns a fresh proxy each time; do not mask unstable effect dependencies.
@@ -253,6 +258,23 @@ describe('ImageConnectionForm', () => {
     expect(removeKeyButton(view)).toBeNull();
   });
 
+  it('offers connection removal only when the container provides it', async () => {
+    const removals: string[] = [];
+    const withDelete = await renderForm({
+      stored: storedConnection(),
+      onDelete: () => void removals.push('remove'),
+    });
+    await click(button(withDelete, copy('settings.imageConnection.delete')));
+    expect(removals).toEqual(['remove']);
+
+    const withoutDelete = await renderForm({ stored: storedConnection() });
+    expect(
+      [...withoutDelete.querySelectorAll('button')].find(
+        (node) => node.textContent?.trim() === copy('settings.imageConnection.delete')
+      )
+    ).toBeUndefined();
+  });
+
   it('clears the stored key through its own action and through nothing else', async () => {
     const cleared: string[] = [];
     const saves: ImageConnectionFormDraft[] = [];
@@ -445,5 +467,41 @@ describe('ImageConnectionForm', () => {
     const view = container as HTMLElement;
     expect(view.querySelector<HTMLButtonElement>('button[role="switch"]')!.disabled).toBe(true);
     expect(view.textContent).toContain(copy('settings.readiness.keyMissing'));
+  });
+
+  it('keeps the row actions reachable when the stored key is missing', async () => {
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({
+      connection: storedConnection({ enabled: false, hasApiKey: false }),
+    }));
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
+    });
+    const view = container as HTMLElement;
+    expect(
+      view.querySelector(`button[aria-label="${copy('settings.imageConnection.moreActions')}"]`)
+    ).not.toBeNull();
+  });
+
+  it('removes the saved connection only after confirmation and returns to set-up', async () => {
+    const deleted: unknown[] = [];
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({ connection: storedConnection() }));
+    imageIpc.deleteImage.mockImplementation(async (input: unknown) => void deleted.push(input));
+    let answer = false;
+    vi.stubGlobal('confirm', () => answer);
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
+    });
+    const view = container as HTMLElement;
+    const textButton = (text: string) =>
+      [...view.querySelectorAll<HTMLButtonElement>('button')].find(
+        (node) => node.textContent?.trim() === text
+      )!;
+    await act(async () => textButton(copy('common.edit')).click());
+    await act(async () => textButton(copy('settings.imageConnection.delete')).click());
+    expect(deleted).toEqual([]);
+    answer = true;
+    await act(async () => textButton(copy('settings.imageConnection.delete')).click());
+    expect(deleted).toEqual([{ expectedRevision: 3 }]);
+    expect(view.textContent).toContain(copy('settings.imageConnection.statusNotReady'));
   });
 });

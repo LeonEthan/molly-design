@@ -47,6 +47,7 @@ function StoryWrapper({ stored, saving = false, saveError, checkResult }: StoryP
         onCancel={() => undefined}
         onCheck={checkResult ? async () => checkResult : undefined}
         onClearApiKey={async () => undefined}
+        onDelete={stored ? () => undefined : undefined}
       />
       {lastSaved ? (
         <p className="mt-3 font-mono text-[10px] text-muted-foreground">

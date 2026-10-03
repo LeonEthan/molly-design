@@ -178,6 +178,8 @@
   "settings.imageConnection.modelNotListed": "Your service doesn't list this model. Check the exact name; Molly saves it as typed.",
   "settings.imageConnection.moreSuggestions": "+{{count}} more — type to narrow",
   "settings.imageConnection.moreActions": "More image generation actions",
+  "settings.imageConnection.delete": "Remove connection",
+  "settings.imageConnection.deleteConfirm": "Remove the image connection for {{model}}? Image generation and editing stop working until you set up a new connection. Its key is removed from this Mac.",
   "settings.imageConnection.setUp": "Set up image generation",
   "settings.readiness.label": "Design setup",
   "settings.readiness.notConnected": "Not connected",

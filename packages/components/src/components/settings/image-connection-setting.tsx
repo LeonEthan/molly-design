@@ -29,6 +29,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import {
@@ -227,6 +228,7 @@ export function ImageConnectionForm({
   onCancel,
   onClearApiKey,
   onCheck,
+  onDelete,
   notice,
   className,
 }: {
@@ -237,6 +239,7 @@ export function ImageConnectionForm({
   onCancel?: () => void;
   onClearApiKey: () => void | Promise<void>;
   onCheck?: ImageConnectionCheck;
+  onDelete?: () => void;
   /** Shown at the top of the editor, e.g. a key-rotation reminder. */
   notice?: ReactNode;
   className?: string;
@@ -433,22 +436,42 @@ export function ImageConnectionForm({
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          {onCancel ? (
-            <Button type="button" variant="outline" size="sm" disabled={saving} onClick={onCancel}>
-              {t('common.cancel')}
+        <div className="flex flex-wrap items-center gap-2">
+          {onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              disabled={saving}
+              onClick={onDelete}
+            >
+              {t('settings.imageConnection.delete')}
             </Button>
           ) : null}
-          <Button
-            type="submit"
-            size="sm"
-            disabled={saving || invalid || !dirty || destinationNeedsKey}
-          >
-            {saving ? (
-              <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <div className="ml-auto flex gap-2">
+            {onCancel ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={saving}
+                onClick={onCancel}
+              >
+                {t('common.cancel')}
+              </Button>
             ) : null}
-            {saving ? t('settings.imageConnection.saving') : t('common.save')}
-          </Button>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={saving || invalid || !dirty || destinationNeedsKey}
+            >
+              {saving ? (
+                <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : null}
+              {saving ? t('settings.imageConnection.saving') : t('common.save')}
+            </Button>
+          </div>
         </div>
       </div>
     </form>
@@ -471,6 +494,7 @@ export function ImageConnectionSummary({
   onToggle,
   onEdit,
   onCheck,
+  onDelete,
 }: {
   stored: ImageConnectionView;
   check?: ConnectionCheckState;
@@ -478,10 +502,12 @@ export function ImageConnectionSummary({
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onCheck?: () => void;
+  onDelete?: () => void;
 }) {
   const { t } = useTranslation();
   const protocol = imageConnectionProtocol(stored);
   const canTurnOn = stored.hasApiKey && stored.model.trim().length > 0;
+  const canCheck = Boolean(onCheck) && protocol !== 'dashscope' && stored.hasApiKey;
   return (
     <div className="flex items-center gap-3 px-5 py-3.5">
       <span
@@ -511,7 +537,7 @@ export function ImageConnectionSummary({
       <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
         {t('common.edit')}
       </Button>
-      {onCheck && protocol !== 'dashscope' && stored.hasApiKey ? (
+      {canCheck || onDelete ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
@@ -525,7 +551,15 @@ export function ImageConnectionSummary({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={onCheck}>{t('settings.check.run')}</DropdownMenuItem>
+            {canCheck ? (
+              <DropdownMenuItem onSelect={onCheck}>{t('settings.check.run')}</DropdownMenuItem>
+            ) : null}
+            {canCheck && onDelete ? <DropdownMenuSeparator /> : null}
+            {onDelete ? (
+              <DropdownMenuItem className="text-destructive" onSelect={onDelete}>
+                {t('settings.imageConnection.delete')}
+              </DropdownMenuItem>
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
@@ -574,6 +608,25 @@ export function ImageConnectionSetting({
     },
     [ipc]
   );
+  const remove = async (connection: ProtectedImageConnection) => {
+    if (!ipc || !ready || saving) return;
+    if (
+      !window.confirm(t('settings.imageConnection.deleteConfirm', { model: connection.model }))
+    )
+      return;
+    setSaving(true);
+    setSaveError(undefined);
+    try {
+      await ipc.modelConnections.deleteImage({ expectedRevision: connection.revision });
+      setStored(undefined);
+      setCheck(undefined);
+      setEditing(false);
+    } catch {
+      setSaveError(t('settings.models.error'));
+    } finally {
+      setSaving(false);
+    }
+  };
   const save = async (draft: ImageConnectionFormDraft, checked?: ConnectionCheckState) => {
     if (!ipc || !ready || saving) return false;
     setSaving(true);
@@ -644,6 +697,7 @@ export function ImageConnectionSetting({
             onSave={async (draft, checked) => {
               if (await save(draft, checked)) setEditing(false);
             }}
+            onDelete={stored ? () => void remove(stored) : undefined}
             onClearApiKey={async () => {
               if (stored)
                 await save({ ...createImageConnectionFormDraft(stored), clearApiKey: true });
@@ -658,6 +712,7 @@ export function ImageConnectionSetting({
               busy={saving}
               onEdit={() => setEditing(true)}
               onCheck={() => checkSaved(stored)}
+              onDelete={() => void remove(stored)}
               onToggle={(enabled) =>
                 void save({ ...createImageConnectionFormDraft(stored), enabled })
               }

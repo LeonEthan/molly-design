@@ -22,6 +22,7 @@ const meta = {
     onToggle: () => undefined,
     onEdit: () => undefined,
     onCheck: () => undefined,
+    onDelete: () => undefined,
   },
 } satisfies Meta<typeof ImageConnectionSummary>;
 export default meta;

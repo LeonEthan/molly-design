@@ -176,6 +176,8 @@
   "settings.imageConnection.modelNotListed": "你的服务未列出此模型。请核对准确名称；Molly 会按输入保存。",
   "settings.imageConnection.moreSuggestions": "还有 {{count}} 个，输入以筛选",
   "settings.imageConnection.moreActions": "图像生成的更多操作",
+  "settings.imageConnection.delete": "移除连接",
+  "settings.imageConnection.deleteConfirm": "移除 {{model}} 的图像连接？在重新设置之前，图像生成与编辑将不可用。该密钥会从这台 Mac 上删除。",
   "settings.imageConnection.setUp": "设置图像生成",
   "settings.readiness.label": "设计准备情况",
   "settings.readiness.notConnected": "未连接",

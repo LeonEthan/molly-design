@@ -229,6 +229,27 @@ void test('protected image edits use revision CAS and require renewed destinatio
   await assert.rejects(store.acquireImageForRun(changed.id, changed.revision + 1), /unavailable/)
 })
 
+void test('image connection deletes only the exact revision and keeps legacy backups', async (t) => {
+  const { store } = await fixture(t)
+  await store.importLegacyImage(legacyImage)
+  const stored = (await store.imageSnapshot()).connection
+  await assert.rejects(
+    store.deleteImage({ expectedRevision: stored.revision + 1 }),
+    /revision_conflict/
+  )
+  await assert.rejects(store.deleteImage({ expectedRevision: 'soon' }), /invalid_image_connection/)
+  await store.deleteImage({ expectedRevision: stored.revision })
+  assert.equal((await store.imageSnapshot()).connection, null)
+  assert.equal(await store.imageCredentialForCheck(stored.revision), null)
+  await assert.rejects(store.acquireImageForRun(stored.id, stored.revision), /unavailable/)
+  // The acknowledged legacy backup stays: redelivery errors instead of recreating the slot.
+  await assert.rejects(
+    store.importLegacyImage(legacyImage),
+    /legacy_image_configuration_requires_update/
+  )
+  assert.equal((await store.imageSnapshot()).connection, null)
+})
+
 void test('a migration encryption failure leaves the prior vault unchanged', async (t) => {
   const { directory, store } = await fixture(t)
   await store.save(input)

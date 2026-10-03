@@ -7,6 +7,7 @@ import {
   ModelConnectionSchema,
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
+  DeleteImageConnectionSchema,
   ProtectedImageConnectionSchema,
   SaveProtectedImageConnectionSchema,
   LegacyImageCredentialSchema,
@@ -20,7 +21,8 @@ import {
   type SaveProtectedImageConnection,
   type LegacyImageCredential,
   type ModelConnection,
-  type SaveModelConnection
+  type SaveModelConnection,
+  type DeleteImageConnection
 } from '@molly/shared/embedded-harness'
 
 export interface CredentialCipher {
@@ -275,6 +277,20 @@ export class ModelConnectionStore {
       store.image = { connection, apiKey }
       await this.write(store)
       return connection
+    })
+  }
+
+  /** Removes the single image slot. Legacy backups stay: a late migration must not recreate it. */
+  deleteImage(input: DeleteImageConnection): Promise<void> {
+    const parsed = DeleteImageConnectionSchema.safeParse(input)
+    if (!parsed.success) return Promise.reject(new Error('invalid_image_connection'))
+    return this.serial(async () => {
+      const store = await this.read()
+      const previous = store.image
+      if (!previous || previous.connection.revision !== parsed.data.expectedRevision)
+        throw new Error('image_connection_revision_conflict')
+      delete store.image
+      await this.write(store)
     })
   }
 

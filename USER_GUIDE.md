@@ -49,7 +49,8 @@ app and automation interfaces unresponsive.
    or off. Molly checks the key against the service's free `/models` list and
    offers the models it lists as suggestions; a passing check does not verify
    generation, editing or masks. DashScope is never checked, because every request
-   there is billed.
+   there is billed. The row's menu removes the connection and its key after a
+   confirmation; the section then returns to its set-up state.
 4. For external tools, configure Settings → Advanced → MCP servers and select
    the servers for the turn. Saving does not test or automatically select them.
    A stdio server runs local code: configure only commands and servers you trust.

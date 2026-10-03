@@ -568,6 +568,13 @@ export const DeleteModelConnectionSchema = z
   })
   .strict();
 
+export const DeleteImageConnectionSchema = z
+  .object({
+    expectedRevision: revision,
+  })
+  .strict();
+export type DeleteImageConnection = z.infer<typeof DeleteImageConnectionSchema>;
+
 export const ModelSelectionSchema = z
   .object({
     connectionId: identifier,

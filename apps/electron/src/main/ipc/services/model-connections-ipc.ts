@@ -5,13 +5,15 @@ import {
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
   SaveProtectedImageConnectionSchema,
+  DeleteImageConnectionSchema,
   SaveMcpCredentialSettingsSchema,
   DeleteMcpCredentialSchema,
   type CheckImageConnection,
   type CheckModelConnection,
   type SaveMcpCredential,
   type SaveProtectedImageConnection,
-  type SaveModelConnection
+  type SaveModelConnection,
+  type DeleteImageConnection
 } from '@molly/shared/embedded-harness'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
@@ -80,6 +82,13 @@ export class ModelConnectionsIpc extends IpcService {
     const parsed = SaveProtectedImageConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_image_connection')
     return getModelConnectionStore().saveImage(parsed.data)
+  }
+
+  @IpcMethod()
+  async deleteImage(input: DeleteImageConnection) {
+    const parsed = DeleteImageConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_image_connection')
+    return getModelConnectionStore().deleteImage(parsed.data)
   }
 
   @IpcMethod()

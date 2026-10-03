@@ -56,7 +56,6 @@ import { selectAtom } from 'jotai/utils';
 import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowsCaptionPadClass } from '@/ui/window-drag-region';
 import {
-  designCanvasFocusAtom,
   getZenAwarePanelToggleState,
   navigationSidebarHiddenAtom,
   showNavigationSidebarAtom,
@@ -622,7 +621,6 @@ const SessionDetail = ({
   const workspaceSlug = routeTargetWorkspaceSlug ?? atomWorkspaceSlug;
   const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom) as WorkspaceId | null;
   const isLeftSidebarHidden = useAtomValue(navigationSidebarHiddenAtom);
-  const isDesignCanvasFocused = useAtomValue(designCanvasFocusAtom);
   const showNavigationSidebar = useSetAtom(showNavigationSidebarAtom);
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const runtimeInitializing = useAtomValue(runtimeInitializingAtom);
@@ -4369,11 +4367,7 @@ const SessionDetail = ({
       data-molly-session-tab-region="side-panel"
       className={cn(
         'mx-2 mb-2 flex min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-background shadow-[0_1px_3px_-1px_rgba(15,17,21,0.08),0_1px_2px_rgba(15,17,21,0.04)]',
-        // Focus canvas puts this header beside the traffic lights, so the card
-        // rises to the window edge to centre its row on them.
-        isDesignCanvasFocused && hasMacOSTitlebarInset
-          ? 'mt-0 h-[calc(100%_-_0.5rem)]'
-          : 'mt-2 h-[calc(100%_-_1rem)]'
+        'mt-2 h-[calc(100%_-_1rem)]'
       )}
     >
       <SessionSidePanelTabBar
@@ -4396,19 +4390,13 @@ const SessionDetail = ({
         endSlot={sidebarToggleButton}
         soloPanelContent={
           designOwnsSidePanel ? (
-            <>
-              {isDesignCanvasFocused ? leftSidebarExpandButton : null}
-              <div ref={setDesignToolbarHost} className="flex min-w-0 flex-1 items-center gap-2" />
-            </>
+            <div ref={setDesignToolbarHost} className="flex min-w-0 flex-1 items-center gap-2" />
           ) : undefined
         }
         soloPanelMinWidth={DESIGN_CANVAS_TOOLBAR_MIN_WIDTH}
         className={cn(
           'border-b border-border/50 bg-background',
-          // Right panel sits under the macOS traffic lights (top-left) only
-          // while canvas focus hides both the sidebar and the conversation.
           'h-11',
-          isDesignCanvasFocused && hasMacOSTitlebarInset && 'pl-[4.5rem]',
           windowsCaptionPadClass
         )}
       />

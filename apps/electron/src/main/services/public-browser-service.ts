@@ -57,12 +57,12 @@ type AccountImportReadinessError = {
 }
 
 const accountImportReadinessError = (): AccountImportReadinessError | null => {
-  if (process.platform !== 'darwin' || !app.isPackaged)
+  if (process.platform !== 'darwin')
     return {
-      reason: 'package-required',
-      message: 'Browser account import requires a packaged Molly app on macOS.'
+      reason: 'macos-required',
+      message: 'Browser account import is available only on macOS.'
     }
-  if (!canPersistPublicBrowserSession())
+  if (app.isPackaged && !canPersistPublicBrowserSession())
     return {
       reason: 'signing-required',
       message: 'Browser account import requires a Molly build with a stable macOS signing identity.'

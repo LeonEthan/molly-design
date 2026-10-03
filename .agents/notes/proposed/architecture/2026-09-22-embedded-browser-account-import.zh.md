@@ -185,6 +185,8 @@ VS Code 编译时共读取 21 个源码文件，包含 Event/Disposable 等基�
 
 截图提示访问的是 **Molly Safe Storage**，并非 Chrome Safe Storage。测试包 `codesign --display --verbose=4` 报告 `Signature=adhoc`、`TeamIdentifier=not set`；重启进程采样停在 Keychain 读取。Electron 官方说明没有稳定签名时 `safeStorage` 在更新后可反复请求授权，启用 CookieEncryption fuse 也使用 macOS Keychain。现将 macOS 持久浏览分区及 Chrome 导入限制在具有稳定签名身份的打包应用，ad-hoc/开发版仅用内存分区；账号设置明确报告不可导入。这个门禁不改变既有模型连接凭据的 `safeStorage` 访问，因此不能宣称所有 ad-hoc 启动弹框均消失。导入结果改为报告 Electron flush 后实际保留的站点 Cookie 数，避免把源 Cookie 条数误报为已保存数。[Electron 签名说明](https://www.electronjs.org/docs/latest/tutorial/code-signing)、[Electron fuses](https://www.electronjs.org/docs/latest/tutorial/fuses)、[Apple 钥匙串访问控制](https://support.apple.com/en-lb/guide/mac-help/kychn002/mac)
 
+2026-10-03 用户另行确认开放未打包 macOS 开发版的内存会话导入；该例外只替代本节的开发版导入门禁，不改变持久分区、打包版稳定签名或人工系统授权要求。实现与验证限制见[开发版导入记录](../../implemented/feature/2026-10-03-development-browser-account-import.md)。本节保留 2026-09-23 的历史裁定及原因。
+
 下文保留扩展方案的比较和旧分步计划作为历史取舍；与本节冲突的“扩展优先”“Native Messaging 交付”条款均已由本修订替代。
 
 ## 2026-09-23 既有实施状态（历史路线与证据）

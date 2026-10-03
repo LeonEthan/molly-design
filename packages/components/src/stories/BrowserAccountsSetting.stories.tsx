@@ -19,21 +19,21 @@ const meta = {
       invoke: async (channel: string) => {
         switch (channel) {
           case 'publicBrowser.getAccountSummary':
-            return name === 'Development Build'
-              ? {
-                  persistent: false,
-                  importAvailable: false,
-                  importUnavailableReason: 'package-required',
-                  sites: [{ site: 'pinterest.com', cookieCount: 0 }],
-                }
-              : {
-                  persistent: true,
-                  importAvailable: true,
-                  sites: [
-                    { site: 'pinterest.com', cookieCount: name === 'Cookies Saved' ? 14 : 0 },
-                  ],
-                };
+            return {
+              persistent: ![
+                'Development Build',
+                'Unsigned Package',
+                'Unreadable Profiles',
+              ].includes(name),
+              importAvailable: name !== 'Unsigned Package',
+              ...(name === 'Unsigned Package'
+                ? { importUnavailableReason: 'signing-required' }
+                : {}),
+              sites: [{ site: 'pinterest.com', cookieCount: name === 'Cookies Saved' ? 14 : 0 }],
+            };
           case 'publicBrowser.getImportSources':
+            if (name === 'Unreadable Profiles')
+              return { sources: [], unreadable: ['Google Chrome', 'Microsoft Edge', 'Brave'] };
             return {
               sources: [
                 {
@@ -90,4 +90,6 @@ export const ImportFailed: Story = {
 };
 export const CookiesSaved: Story = {};
 export const DevelopmentBuild: Story = {};
+export const UnsignedPackage: Story = {};
 export const UnreadableBrowser: Story = {};
+export const UnreadableProfiles: Story = {};

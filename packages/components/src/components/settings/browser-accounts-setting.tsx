@@ -262,15 +262,15 @@ export function BrowserAccountsSetting() {
                       )
                     : t('settings.browserAccounts.importUnavailable')}
                 </p>
-              ) : sources && sources.sources.length === 0 ? (
+              ) : sources && sources.sources.length === 0 && sources.unreadable.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.noSources')}
                 </p>
-              ) : (
+              ) : selected ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.sourceHint')}
                 </p>
-              )}
+              ) : null}
               {sources && sources.unreadable.length > 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.unreadableSources', {

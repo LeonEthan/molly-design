@@ -30,11 +30,11 @@ afterEach(async () => {
   vi.resetAllMocks();
 });
 
-it('offers Pinterest import and explains pending authorization and explicit retry', async () => {
+it('enables memory-only development import with pending authorization and explicit retry', async () => {
   let cookieCount = 0;
   let request = Promise.withResolvers<{ imported: number }>();
   bridge.getAccountSummary.mockImplementation(async () => ({
-    persistent: true,
+    persistent: false,
     importAvailable: true,
     sites: ElectronBrowserAccountSiteInputSchema.shape.site.options.map((site) => ({
       site,
@@ -64,6 +64,8 @@ it('offers Pinterest import and explains pending authorization and explicit retr
       zh['settings.browserAccounts.importFrom'].replace('{{browser}}', 'Google Chrome')
   );
   if (!importButton) throw new Error('Missing import action');
+  expect(importButton.disabled).toBe(false);
+  expect(host.textContent).toContain(zh['settings.browserAccounts.developmentMemory']);
   await act(async () => importButton.click());
   expect(importButton.disabled).toBe(true);
   expect(importButton.textContent).toBe(zh['settings.browserAccounts.importing']);
@@ -89,11 +91,11 @@ it('offers Pinterest import and explains pending authorization and explicit retr
   expect(importButton.disabled).toBe(false);
 });
 
-it('keeps a visible import button that explains why this build cannot import', async () => {
+it('keeps a visible disabled import button for unsigned macOS packages', async () => {
   bridge.getAccountSummary.mockResolvedValue({
     persistent: false,
     importAvailable: false,
-    importUnavailableReason: 'package-required',
+    importUnavailableReason: 'signing-required',
     sites: [{ site: 'pinterest.com', cookieCount: 0 }],
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
@@ -102,8 +104,73 @@ it('keeps a visible import button that explains why this build cannot import', a
   );
   expect(importButton?.disabled).toBe(true);
   expect(host.textContent).toContain(
-    zh['settings.browserAccounts.importUnavailableReasons.package-required']
+    zh['settings.browserAccounts.importUnavailableReasons.signing-required']
   );
+});
+
+it('distinguishes unreadable profiles from absent sources and restores import after manual refresh', async () => {
+  let accessible = false;
+  const imports: unknown[][] = [];
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: false,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.getImportSources.mockImplementation(async () => ({
+    sources: accessible
+      ? [
+          {
+            browserId: 'chrome',
+            browserName: 'Google Chrome',
+            profiles: [{ id: 'Default', name: 'Synthetic profile', isDefault: true }],
+          },
+        ]
+      : [],
+    unreadable: accessible ? [] : ['Google Chrome'],
+  }));
+  bridge.importBrowserAccount.mockImplementation(async (...args: unknown[]) => {
+    imports.push(args);
+    return { imported: 1 };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  expect(host.textContent).not.toContain(zh['settings.browserAccounts.noSources']);
+  expect(host.textContent).toContain(
+    zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
+  );
+  expect(
+    Array.from(host.querySelectorAll('button')).find(
+      (button) => button.textContent === zh['settings.browserAccounts.importFromBrowser']
+    )?.disabled
+  ).toBe(true);
+
+  accessible = true;
+  const refresh = host.querySelector<HTMLButtonElement>(
+    `button[aria-label="${zh['settings.browserAccounts.refresh']}"]`
+  );
+  if (!refresh) throw new Error('Missing refresh action');
+  await act(async () => refresh.click());
+  const importButton = Array.from(host.querySelectorAll('button')).find(
+    (button) =>
+      button.textContent ===
+      zh['settings.browserAccounts.importFrom'].replace('{{browser}}', 'Google Chrome')
+  );
+  expect(importButton?.disabled).toBe(false);
+  expect(host.textContent).toContain('Synthetic profile');
+  expect(host.textContent).toContain(zh['settings.browserAccounts.developmentMemory']);
+  expect(host.textContent).not.toContain(zh['settings.browserAccounts.noSources']);
+  expect(imports).toEqual([]);
+});
+
+it('reports absent sources only after a completed readable empty listing', async () => {
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: false,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.getImportSources.mockResolvedValue({ sources: [], unreadable: [] });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  expect(host.textContent).toContain(zh['settings.browserAccounts.noSources']);
+  expect(host.querySelector('[role="combobox"]')).toBeNull();
 });
 
 it('imports from the browser profile Molly found, naming any it could not read', async () => {

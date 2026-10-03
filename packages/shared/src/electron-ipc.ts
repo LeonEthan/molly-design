@@ -121,7 +121,7 @@ export type ElectronBrowserAccountImportInput = z.infer<
 export type ElectronBrowserAccountSummary = {
   persistent: boolean;
   importAvailable: boolean;
-  importUnavailableReason?: 'package-required' | 'signing-required' | 'secure-storage-unavailable';
+  importUnavailableReason?: 'macos-required' | 'signing-required' | 'secure-storage-unavailable';
   sites: Array<{ site: ElectronBrowserAccountSiteInput['site']; cookieCount: number }>;
 };
 export type ElectronBrowserProfileChoice = { id: string; name: string; isDefault: boolean };

@@ -91,11 +91,13 @@ this page is the full text of the rules summarised there.
   panel opens; opening the panel must not navigate it again.
   A packaged Molly with a stable macOS signing identity stores site sessions in a
   separate persistent partition. Development and ad-hoc macOS builds use a
-  memory-only partition and cannot import Chrome accounts; their Keychain trust
-  does not reliably survive rebuilds. On a signed macOS package with secure
-  storage, Settings lists Chrome profile names and
-  imports only Pinterest cookies (the first-release scope) from the selected
-  profile through `rookie-cookies`. The domain-filtered detailed read must match
+  memory-only partition. With OS secure storage, unpackaged macOS development can
+  import Pinterest into that memory session; packaged ad-hoc/unsigned macOS builds
+  remain blocked because their Keychain trust does not reliably survive rebuilds.
+  Settings lists supported Chromium browser profiles and imports only Pinterest
+  cookies (the first-release scope) from the selected profile through `rookie-cookies`.
+  The [development-import decision](../notes/implemented/feature/2026-10-03-development-browser-account-import.md)
+  separates import eligibility from session persistence. The domain-filtered detailed read must match
   the extraction report; CHIPS, unknown contexts, or conflicting identities reject
   the import before writes. A temporary blank view checks destination partition
   metadata via CDP because Electron's flat Cookie API cannot safely back up CHIPS.

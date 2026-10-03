@@ -118,8 +118,10 @@ packages do not enable the inherited Lody updater, including with
 publication.
 
 The built-in browser uses a Molly-only Electron partition, persistent in a
-packaged build with a stable macOS signing identity. Ad-hoc macOS builds use
-memory-only browsing and disable Chrome account import because Keychain trust
+packaged build with a stable macOS signing identity. Unpackaged macOS development
+also supports site-scoped account import when OS secure storage is available, but
+its browser session stays memory-only and loses sign-ins on restart. Packaged
+ad-hoc/unsigned macOS builds still disable account import because Keychain trust
 does not reliably survive rebuilds. Agent
 commands travel through the existing owner-only local control socket and act on
 the same `WebContentsView` shown in the Session sidebar. Page actions now use
@@ -130,13 +132,16 @@ checked-in bundle. Normal builds need no upstream download. The MCP catalog stay
 private to main; Molly exposes its existing restricted action union. No external
 browser or CDP listener is started. Hidden Agent pages stay
 renderable in a hidden host window and reattach when the panel opens. The macOS
-Settings > Website accounts lists local Chrome profiles and uses the pinned
+Settings > Website accounts lists supported local Chromium browser profiles and uses the pinned
 `rookie-cookies` binding in Electron main to import cookies for a user-selected
 Pinterest account (the first-release import scope). The importer checks detailed Cookie identities against
 the extraction report and rejects unsupported partitions before changing Molly
 cookies, including when the destination already contains site CHIPS cookies.
-The user may need to approve macOS Keychain access
-in a signed build. The initial native report allows five minutes for human
+The user may need to approve macOS Keychain access during import. Browser-data
+permission is separate: macOS can attribute terminal-launched development access
+to the terminal. Allow the chosen browser under that app in Files & Folders, then
+refresh Molly; failed listing does not establish absent profiles.
+The initial native report allows five minutes for human
 authorization; Settings shows a pending hint and manual retry guidance. Read
 failures leave existing Molly cookies unchanged. The pinned detailed-reader API
 has no timeout parameter; five minutes is not an overall import deadline.

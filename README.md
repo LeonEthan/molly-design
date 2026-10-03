@@ -35,7 +35,7 @@ See [tested journeys and limits](USER_GUIDE.md#release-status-and-support-limits
 For an available local DMG, follow the [installation guide](USER_GUIDE.md#install-the-macos-package).
 This repository does not yet claim an established public download channel.
 
-1. Open Settings → Agents → Molly model connections and add your provider connection.
+1. Open Settings → AI models → Models and add your provider connection.
 2. Create a canvas and explicitly select the connection, model and thinking level.
 3. Try: “Create an 800 × 600 workshop poster with a dark blue background and an
    editable ‘Make something’ heading.” Then ask for a revision or edit the canvas.

@@ -37,6 +37,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { settingContainerClass } from '.';
 import { McpConnectionForm, type McpConnectionFormValue } from './mcp-connection-form';
 import { protectMcpEntry } from './mcp-credential-save';
+import { WithInfo } from './info-tip';
 
 type EditorState = { mode: 'add' } | { mode: 'edit'; entry: WorkspaceMcpServerMeta };
 
@@ -149,10 +150,10 @@ export function McpSetting() {
   return (
     <div className={settingContainerClass}>
       <p className="text-xs leading-relaxed text-muted-foreground">
-        {t('settings.mcp.description')}
-      </p>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {t('settings.mcp.protectedRuntimeNotice')}
+        <WithInfo
+          text={t('settings.mcp.description')}
+          info={t('settings.mcp.protectedRuntimeNotice')}
+        />
       </p>
       {error && !editor ? (
         <p role="alert" className="text-xs text-destructive">
@@ -335,14 +336,15 @@ export function McpServerRow({
                 {MCP_TRANSPORT_LABELS[server.transport]}
               </Badge>
             </span>
-            <span className="mt-0.5 block truncate font-mono text-[11px] leading-tight text-muted-foreground">
-              {describeMcpConnection(server.connection) ?? '—'}
-            </span>
             {server.description ? (
-              <span className="mt-0.5 block truncate text-[11px] leading-tight text-muted-foreground/80">
+              <span className="mt-0.5 block truncate text-[11px] leading-tight text-muted-foreground">
                 {server.description}
               </span>
-            ) : null}
+            ) : (
+              <span className="mt-0.5 block truncate font-mono text-[11px] leading-tight text-muted-foreground">
+                {describeMcpConnection(server.connection) ?? '—'}
+              </span>
+            )}
           </span>
         </button>
         <div className="flex shrink-0 items-center gap-2 py-2 pl-2 pr-2">

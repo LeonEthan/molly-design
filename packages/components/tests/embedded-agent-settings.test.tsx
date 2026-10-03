@@ -105,7 +105,8 @@ it.each([undefined, 'agents'] as const)(
       )
     );
     expect(host.querySelector('[data-testid=model-connections]')).not.toBeNull();
-    expect(host.textContent).toContain(en['settings.models.capabilitiesTitle']);
+    expect(host.textContent).toContain(en['settings.imageConnection.unavailable']);
+    expect(host.textContent).not.toContain(en['settings.models.capabilitiesTitle']);
     expect(host.textContent).toContain(local.name);
     expect(host.textContent).toContain(`${local.name} setup`);
     expect(host.textContent).not.toContain('Other machine private provider');
@@ -125,6 +126,33 @@ it('keeps connection settings usable before the local machine identity is availa
     )
   );
   expect(host.querySelector('[data-testid=model-connections]')).not.toBeNull();
-  expect(host.textContent).toContain(en['settings.models.engineSelectionHint']);
+  expect(host.textContent).not.toContain(en['settings.models.engineTitle']);
   expect(state.requestedMachines).toEqual([]);
+});
+
+it('omits the legacy inventory card when this machine has no legacy rows', async () => {
+  const machineId = 'local-machine' as MachineId;
+  state.configs = [
+    {
+      id: 'current-molly' as AgentConfigId,
+      machineId,
+      name: 'Current Molly',
+      description: undefined,
+      cliType: 'builtin',
+      agentType: 'molly',
+      env: {},
+    },
+  ];
+  const store = createStore();
+  store.set(localProbeResultAtom, { ok: true, machineId });
+  await act(async () =>
+    root.render(
+      <Provider store={store}>
+        <MachineAgentSettings selectedMachineId={null} onSelectedMachineChange={() => undefined} />
+      </Provider>
+    )
+  );
+  expect(host.querySelector('[data-testid=model-connections]')).not.toBeNull();
+  expect(host.textContent).not.toContain(en['settings.models.engineTitle']);
+  expect(host.textContent).not.toContain('Current Molly');
 });

@@ -101,6 +101,9 @@ export function useOpenSettings() {
         case 'keyboard-shortcuts':
           void router.navigate({ to: '/$workspaceName/settings/keyboard-shortcuts', params });
           return;
+        case 'advanced':
+          void router.navigate({ to: '/$workspaceName/settings/advanced', params });
+          return;
         case 'about':
           void router.navigate({ to: '/$workspaceName/settings/about', params });
           return;

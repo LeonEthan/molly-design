@@ -59,8 +59,10 @@ only tells global dispatch to yield for events originating in its subtree.
 
 - Command palette: `components/commands/command-palette.tsx`,
   `command-palette-view.tsx`, and `fuzzy-match.ts`.
-- Settings: `components/settings/keyboard-shortcuts-setting.tsx` lists every command,
-  records bindings, detects conflicts, unbinds, and resets.
+- Settings: `components/settings/keyboard-shortcuts-setting.tsx` lists every command
+  except its `CODE_WORKFLOW_SHORTCUTS` (git/file/ACP-mode commands hidden from the
+  designer list; they stay bound and in the palette), records bindings, detects
+  conflicts, unbinds, and resets.
 - Electron menu bridge: `components/electron-menu-handler.tsx` converts
   `lody:menu-action` IPC into `commands.execute()`, except window chords.
 - Cmd/Ctrl+W is a native menu accelerator, not a registry command. Do not restore a

@@ -9,7 +9,7 @@ import { RoutedStory, SettingsStoryProviders } from './settings-story-shell';
 
 /**
  * Desktop settings modal — the overlay that replaces the full-page settings route on
- * non-mobile viewports. These stories open it at low-dependency tabs (General / About);
+ * non-mobile viewports. These stories open it at low-dependency tabs (General / Advanced / About);
  * runtime-heavy tabs (Account, Stats, Agent config, GitHub) need a live workspace
  * runtime and are exercised in the app rather than here.
  */
@@ -60,4 +60,8 @@ export const DarkModePreferencesTab: Story = {
       <SettingsModalStory tab="preferences" />
     </div>
   ),
+};
+
+export const AdvancedTab: Story = {
+  render: () => <SettingsModalStory tab="advanced" />,
 };

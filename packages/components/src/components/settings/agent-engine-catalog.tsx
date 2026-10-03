@@ -2,6 +2,9 @@ import { useTranslation } from 'react-i18next';
 import type { AgentConfigMeta, ProviderSetupTask } from '@molly/shared';
 import { CompactSection } from './compact-layout';
 
+export const legacyAgentConfigs = (configs: readonly AgentConfigMeta[]): AgentConfigMeta[] =>
+  configs.filter((config) => config.cliType !== 'builtin' || config.agentType !== 'molly');
+
 /** Read-only migration inventory; never mount retired provider runtime controls. */
 export function AgentEngineCatalog({
   configs,
@@ -11,9 +14,7 @@ export function AgentEngineCatalog({
   setups?: readonly ProviderSetupTask[];
 }) {
   const { t } = useTranslation();
-  const legacy = configs.filter(
-    (config) => config.cliType !== 'builtin' || config.agentType !== 'molly'
-  );
+  const legacy = legacyAgentConfigs(configs);
   return (
     <CompactSection
       title={t('settings.models.engineTitle')}

@@ -25,7 +25,7 @@ app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → Agents → Molly model connections. Add the provider/product,
+1. Open Settings → AI models → Models. Add the provider/product,
    connection name, endpoint and API key. Enter keys only in the local settings
    field, never in a conversation or artwork file. Saving encrypts the connection;
    it neither tests inference nor changes an existing session's selection.
@@ -33,16 +33,16 @@ app and automation interfaces unresponsive.
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid
    selections fail rather than silently switching providers or models.
-3. Optionally configure Settings → Image Connection separately. Supply an
-   OpenAI Images-compatible API root (without `/images/generations` or
+3. Optionally set up Settings → AI models → Image generation separately. Supply
+   an OpenAI Images-compatible API root (without `/images/generations` or
    `/images/edits`), key and exact model, enable it and save. **Test connection**
    checks `/models` only; success does not verify generation, editing or masks.
-4. For external tools, configure Settings → MCP and select the servers for the
-   turn. Saving does not test or automatically select them. A stdio server runs
-   local code: configure only commands and servers you trust.
+4. For external tools, configure Settings → Advanced → MCP servers and select
+   the servers for the turn. Saving does not test or automatically select them.
+   A stdio server runs local code: configure only commands and servers you trust.
 
-The bundled-capabilities section reports the packaged question extension's version and compatibility
-conditions, not live session activation. The selected question extension requires
+Settings → Advanced → System → Engine details reports the packaged question
+extension's version and compatibility conditions, not live session activation. The selected question extension requires
 the desktop question interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
@@ -134,7 +134,7 @@ and remaining limits are summarized here.
 | Kimi Code `k3-256k/high`                              | Real text turns, design creation/revision, cancellation and legacy-session continuation verified on local installed builds; the final package re-verified rendering, edit/save/export and continuation routing without new paid calls. Not complete vendor or journey coverage.         |
 | Configured Images-compatible `gpt-image-2.5-sunburst` | Real generation and edit outputs verified on a local installed build within one artwork; the final package re-verified rendering of those assets. The full mask, multiple-image, JPEG, long-image and human visual matrix remains open. This is a tested user selection, not a default. |
 | Other named model presets                             | Pinned SDK catalog and code/offline checks do not prove real-account, regional or product compatibility.                                                                                                                                                                                |
-| Advanced OpenAI-compatible language models            | Explicit model form, encrypted persistence and standard Chat Completions SDK path have synthetic coverage. Native UI and real-service acceptance remain open; separate from Image Connection.                                                                                           |
+| Advanced OpenAI-compatible language models            | Explicit model form, encrypted persistence and standard Chat Completions SDK path have synthetic coverage. Native UI and real-service acceptance remain open; separate from image generation.                                                                                           |
 
 The macOS arm64 delivery package was verified from a DMG-installed copy: first launch,
 session reopening, artwork rendering (including previously generated images), manual

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ModelConnectionSetting } from './model-connection-setting';
-import { AgentEngineCatalog } from './agent-engine-catalog';
-import { BundledCapabilitiesSetting } from './bundled-capabilities-setting';
+import { AgentEngineCatalog, legacyAgentConfigs } from './agent-engine-catalog';
+import { ImageConnectionSetting } from './image-connection-setting';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -144,14 +144,16 @@ function EmbeddedAgentSettings() {
   useMachineFlockAgentConfigsForMachineIds(machineIds, { syncRemote: false });
   const configs = useAtomValue(getAllAgentConfigAtom);
   const setups = useAtomValue(getAllProviderSetupsAtom);
+  const localConfigs = configs.filter((config) => config.machineId === machineId);
+  const localSetups = setups.filter((setup) => setup.machineId === machineId);
+  const hasLegacyInventory = legacyAgentConfigs(localConfigs).length > 0 || localSetups.length > 0;
   return (
     <div className="space-y-5">
       <ModelConnectionSetting />
-      <BundledCapabilitiesSetting />
-      <AgentEngineCatalog
-        configs={configs.filter((config) => config.machineId === machineId)}
-        setups={setups.filter((setup) => setup.machineId === machineId)}
-      />
+      <ImageConnectionSetting />
+      {hasLegacyInventory ? (
+        <AgentEngineCatalog configs={localConfigs} setups={localSetups} />
+      ) : null}
     </div>
   );
 }

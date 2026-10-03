@@ -432,17 +432,9 @@ function ProjectSettingsDesktop({
   return (
     <div className={cn(settingContainerClass, 'flex h-full min-h-0 flex-col md:max-w-6xl')}>
       <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="text-xl font-medium text-foreground">
-            {t('settings.tabs.projects', 'Projects')}
-          </h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t(
-              'workspace.projects.settingsSubtitle',
-              'Local folders available in this workspace.'
-            )}
-          </p>
-        </div>
+        <p className="min-w-0 text-xs text-muted-foreground">
+          {t('workspace.projects.settingsSubtitle', 'Folders Molly can work in.')}
+        </p>
         {addProjectActions}
       </div>
 
@@ -462,29 +454,31 @@ function ProjectSettingsDesktop({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <MachinePills
-            pills={pills}
-            selectedId={resolvedPillId}
-            onSelect={(id) => {
-              setSelectedPillId(id);
-              setSelectedProjectKey(null);
-            }}
-            trailing={
-              addToSelectedMachine ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  title={addFolderToMachineTitle}
-                  className="h-6 gap-1 rounded-full border border-border/60 px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
-                  onClick={addToSelectedMachine}
-                >
-                  <FolderPlus className="h-3.5 w-3.5" />
-                  {addFolderLabel}
-                </Button>
-              ) : null
-            }
-          />
+          {pills.length > 1 ? (
+            <MachinePills
+              pills={pills}
+              selectedId={resolvedPillId}
+              onSelect={(id) => {
+                setSelectedPillId(id);
+                setSelectedProjectKey(null);
+              }}
+              trailing={
+                addToSelectedMachine ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    title={addFolderToMachineTitle}
+                    className="h-6 gap-1 rounded-full border border-border/60 px-2 text-xs font-normal text-muted-foreground hover:text-foreground"
+                    onClick={addToSelectedMachine}
+                  >
+                    <FolderPlus className="h-3.5 w-3.5" />
+                    {addFolderLabel}
+                  </Button>
+                ) : null
+              }
+            />
+          ) : null}
           <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl border border-border/40 bg-card">
             <div className="scrollbar-pro w-[220px] shrink-0 overflow-y-auto border-r border-border/40 p-3">
               {currentSelections.length === 0 ? (

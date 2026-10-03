@@ -9,6 +9,7 @@ import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Section } from './form-primitives';
+import { WithInfo } from './info-tip';
 
 type Site = ElectronBrowserAccountSiteInput['site'];
 const siteNames: Record<Site, string> = { 'pinterest.com': 'Pinterest' };
@@ -101,7 +102,12 @@ export function BrowserAccountsSetting() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t('settings.browserAccounts.intro')}</p>
+      <p className="text-sm text-muted-foreground">
+        <WithInfo
+          text={t('settings.browserAccounts.intro')}
+          info={t('settings.browserAccounts.introDetail')}
+        />
+      </p>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}

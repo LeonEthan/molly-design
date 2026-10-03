@@ -30,8 +30,14 @@ Preserve historical catalog fields when editing unrelated values.
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
   runtime launch, installation or capability toggle follows opening settings.
 
-- Agents settings mounts the local encrypted model-connection form and a read-only
-  legacy inventory. Preserve old config/setup rows without mounting provider login,
+- Navigation speaks to designers: General, Appearance, AI models, Website accounts,
+  Shortcuts, then Advanced and About. Advanced (`advanced-settings.tsx`) holds the
+  background service and bundled capability inventory (System), MCP and Projects as
+  sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
+  plain sentence; required caveats move behind `InfoTip`, never out of the UI.
+- AI models (`agents` tab) mounts the local encrypted model-connection form, the image
+  connection, and the read-only legacy inventory only when this machine has legacy
+  rows. Preserve old config/setup rows without mounting provider login,
   installation, retry, refresh, editing or automatic config migration. Device
   management retains monitoring independently of this inventory.
 - A settings row (`compact-layout.tsx`) is one grid: the label column takes the
@@ -52,14 +58,14 @@ Preserve historical catalog fields when editing unrelated values.
 ## Retired Agent Roles
 
 Role management and migration are retired. Preserve stored rows and historical
-provenance; the legacy settings route/tab resolves to Preferences. Do not mount
+provenance; the legacy settings route/tab resolves to General. Do not mount
 Role editors or catalog subscriptions. The writer rejects Role mutations; the
 cross-surface contract is in `packages/shared/AGENTS.md`.
 
 ## Design product scope
 
 Hosted account, workspace ownership, member and billing settings are retired. Settings
-navigation starts at Preferences, and legacy hosted tab requests resolve there.
+navigation starts at General (`preferences`), and legacy hosted tab requests resolve there.
 The authenticated workspace route must not preload billing data or mount hosted
 subscriptions. GitHub connection and automatic code-review
 configuration are also retired; existing worktree configuration remains until its

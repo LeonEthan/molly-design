@@ -3,17 +3,17 @@ import {
   Bot,
   FolderOpen,
   Globe2,
-  ImageIcon,
   Info,
   Keyboard,
   Monitor,
   Palette,
   Plug,
   SlidersHorizontal,
+  Wrench,
 } from 'lucide-react';
 import { isElectronRenderer } from '@/lib/electron';
 
-export type SettingsSectionId = 'account' | 'personal' | 'workspace' | 'other';
+export type SettingsSectionId = 'main' | 'other';
 
 export type SettingsTabId =
   | 'account'
@@ -26,9 +26,9 @@ export type SettingsTabId =
   | 'machines'
   | 'agents'
   | 'agent-roles'
-  | 'image-connection'
   | 'mcp'
   | 'projects'
+  | 'advanced'
   | 'ai-usage'
   | 'billing'
   | 'about';
@@ -44,9 +44,9 @@ export type SettingsPath =
   | '/$workspaceName/settings/machines'
   | '/$workspaceName/settings/agents'
   | '/$workspaceName/settings/agent-roles'
-  | '/$workspaceName/settings/image-connection'
   | '/$workspaceName/settings/mcp'
   | '/$workspaceName/settings/projects'
+  | '/$workspaceName/settings/advanced'
   | '/$workspaceName/settings/ai-usage'
   | '/$workspaceName/settings/billing'
   | '/$workspaceName/settings/about';
@@ -57,6 +57,8 @@ export type SettingsTabConfig = {
   labelKey: string;
   descriptionKey: string;
   icon: LucideIcon;
+  /** Rendered as a sub-tab inside this tab instead of its own navigation row. */
+  parent?: 'advanced';
   /** The workspace machine inventory has no useful distinction in a solo workspace. */
   multiMemberOnly?: boolean;
   localDesktopOnly?: boolean;
@@ -68,7 +70,7 @@ export const SETTINGS_DEFAULT_TAB: SettingsTabId = 'preferences';
 export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
   {
     id: 'preferences',
-    section: 'personal',
+    section: 'main',
     labelKey: 'settings.tabs.preferences',
     descriptionKey: 'settings.categories.preferences.description',
     icon: SlidersHorizontal,
@@ -76,15 +78,23 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
   },
   {
     id: 'appearance',
-    section: 'personal',
+    section: 'main',
     labelKey: 'settings.tabs.appearance',
     descriptionKey: 'settings.categories.appearance.description',
     icon: Palette,
     path: '/$workspaceName/settings/appearance',
   },
   {
+    id: 'agents',
+    section: 'main',
+    labelKey: 'settings.tabs.agents',
+    descriptionKey: 'settings.categories.agents.description',
+    icon: Bot,
+    path: '/$workspaceName/settings/agents',
+  },
+  {
     id: 'browser-accounts',
-    section: 'personal',
+    section: 'main',
     labelKey: 'settings.tabs.browserAccounts',
     descriptionKey: 'settings.categories.browserAccounts.description',
     icon: Globe2,
@@ -93,7 +103,7 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
   },
   {
     id: 'keyboard-shortcuts',
-    section: 'personal',
+    section: 'main',
     labelKey: 'settings.tabs.keyboardShortcuts',
     descriptionKey: 'settings.categories.keyboardShortcuts.description',
     icon: Keyboard,
@@ -101,7 +111,7 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
   },
   {
     id: 'machines',
-    section: 'workspace',
+    section: 'main',
     labelKey: 'settings.tabs.machines',
     descriptionKey: 'settings.categories.machines.description',
     icon: Monitor,
@@ -109,27 +119,17 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
     path: '/$workspaceName/settings/machines',
   },
   {
-    id: 'agents',
-    section: 'workspace',
-    labelKey: 'settings.tabs.agents',
-    descriptionKey: 'settings.categories.agents.description',
-    icon: Bot,
-    path: '/$workspaceName/settings/agents',
-  },
-  {
-    // Beside the agent catalog on purpose: the image connection is the other
-    // per-machine, user-typed credential the design surfaces read, and it shares
-    // that boundary (this machine's Flock doc) rather than the workspace catalog.
-    id: 'image-connection',
-    section: 'workspace',
-    labelKey: 'settings.tabs.imageConnection',
-    descriptionKey: 'settings.categories.imageConnection.description',
-    icon: ImageIcon,
-    path: '/$workspaceName/settings/image-connection',
+    id: 'advanced',
+    section: 'other',
+    labelKey: 'settings.tabs.advanced',
+    descriptionKey: 'settings.categories.advanced.description',
+    icon: Wrench,
+    path: '/$workspaceName/settings/advanced',
   },
   {
     id: 'mcp',
-    section: 'workspace',
+    section: 'other',
+    parent: 'advanced',
     labelKey: 'settings.tabs.mcp',
     descriptionKey: 'settings.categories.mcp.description',
     icon: Plug,
@@ -137,7 +137,8 @@ export const SETTINGS_TAB_CONFIGS: SettingsTabConfig[] = [
   },
   {
     id: 'projects',
-    section: 'workspace',
+    section: 'other',
+    parent: 'advanced',
     labelKey: 'settings.tabs.projects',
     descriptionKey: 'settings.categories.projects.description',
     icon: FolderOpen,
@@ -180,9 +181,10 @@ export function getActiveSettingsTabId(pathname: string): SettingsTabId | null {
     ['/settings/agents', 'agents'],
     ['/settings/agent-config', 'agents'],
     ['/settings/agent-roles', 'preferences'],
-    ['/settings/image-connection', 'image-connection'],
+    ['/settings/image-connection', 'agents'],
     ['/settings/mcp', 'mcp'],
     ['/settings/projects', 'projects'],
+    ['/settings/advanced', 'advanced'],
     ['/settings/ai-usage', 'preferences'],
     ['/settings/stats', 'preferences'],
     ['/settings/billing', 'preferences'],

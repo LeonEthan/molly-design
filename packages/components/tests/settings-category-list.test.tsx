@@ -86,7 +86,7 @@ describe('SettingsCategoryList', () => {
     expect(container?.textContent).not.toContain('People');
 
     await act(async () => {
-      getButton('Preferences').click();
+      getButton('General').click();
     });
 
     expect(navigateMock).toHaveBeenCalledWith({
@@ -98,7 +98,12 @@ describe('SettingsCategoryList', () => {
 
   it('omits hosted account, people, and billing entries even with a cloud-shaped test port', async () => {
     await renderList();
-    expect(container?.textContent).not.toContain('General');
+    const tabIds = Array.from(
+      container?.querySelectorAll<HTMLElement>('[data-settings-tab-id]') ?? [],
+      (row) => row.dataset.settingsTabId
+    );
+    expect(tabIds).not.toContain('account');
+    expect(tabIds).not.toContain('workspace');
     expect(container?.textContent).not.toContain('People');
     expect(container?.textContent).not.toContain('Billing');
   });
@@ -119,7 +124,7 @@ describe('SettingsCategoryList', () => {
 
   it('opens the category reached by keyboard navigation', async () => {
     await renderList();
-    const preferences = getButton('Preferences');
+    const preferences = getButton('General');
 
     await act(async () => preferences.focus());
     await act(async () => {

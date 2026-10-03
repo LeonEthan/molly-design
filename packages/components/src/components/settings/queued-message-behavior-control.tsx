@@ -19,7 +19,7 @@ export function QueuedMessageBehaviorControl({
     <SegmentedControl
       ariaLabel={t(
         'settings.general.sessions.queuedMessageBehavior.label',
-        'Queued message behavior'
+        'Messages sent while Molly is designing'
       )}
       size="sm"
       className={className}
@@ -28,11 +28,11 @@ export function QueuedMessageBehaviorControl({
       options={[
         {
           value: 'queue',
-          label: t('settings.general.sessions.queuedMessageBehavior.queue', 'Queue'),
+          label: t('settings.general.sessions.queuedMessageBehavior.queue', 'Wait'),
         },
         {
           value: 'guide',
-          label: t('settings.general.sessions.queuedMessageBehavior.guide', 'Steer'),
+          label: t('settings.general.sessions.queuedMessageBehavior.guide', 'Change course'),
         },
       ]}
     />

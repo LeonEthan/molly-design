@@ -19,7 +19,6 @@ import { settingContainerClass } from '.';
 import { AutoArchiveSection } from './auto-archive-setting';
 
 import { QueuedMessageBehaviorControl } from './queued-message-behavior-control';
-import { CliDaemonSetting } from './cli-daemon-setting';
 import { useAppCapability } from '@/lib/app-platform';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { useElectronAutoLaunch } from '@/hooks/use-electron-auto-launch';
@@ -343,11 +342,11 @@ export function GeneralSettingsComponent() {
           <CompactRow
             label={t(
               'settings.general.sessions.queuedMessageBehavior.label',
-              'Messages sent while Molly is working'
+              'Messages sent while Molly is designing'
             )}
             helper={t(
               'settings.general.sessions.queuedMessageBehavior.helper',
-              'Wait until the current turn finishes, or steer the work in progress.'
+              'Wait for the current step to finish, or change course right away.'
             )}
           >
             <QueuedMessageBehaviorControl
@@ -427,10 +426,10 @@ export function GeneralSettingsComponent() {
               )}
             </CompactRow>
             <CompactRow
-              label={t('settings.general.autoLaunch.hideWindowLabel', 'Hide window on auto-launch')}
+              label={t('settings.general.autoLaunch.hideWindowLabel', 'Start in the background')}
               helper={t(
                 'settings.general.autoLaunch.hideWindowHelper',
-                'Keep the main window hidden when Molly starts automatically after sign-in'
+                'When Molly launches at sign-in, keep its window hidden.'
               )}
             >
               {autoLaunch.hideWindowLoading ? (
@@ -473,12 +472,6 @@ export function GeneralSettingsComponent() {
         )}
 
         {githubIntegrationAvailable ? <AutoArchiveSection /> : null}
-
-        {isElectron && (
-          <CompactSection title={t('settings.general.advanced.title', 'Advanced')}>
-            <CliDaemonSetting />
-          </CompactSection>
-        )}
       </div>
     </>
   );

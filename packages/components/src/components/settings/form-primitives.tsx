@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Label } from '@/ui/label';
+import { WithInfo } from './info-tip';
 
 /**
  * The shared grammar of the settings editors.
@@ -13,17 +14,24 @@ import { Label } from '@/ui/label';
 export function Section({
   title,
   hint,
+  info,
   children,
 }: {
   title: string;
   hint?: string;
+  /** Fine print shown behind an info icon after the hint. */
+  info?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="space-y-5 rounded-2xl border border-border/40 bg-card p-5">
       <header>
         <h3 className="text-sm font-medium text-foreground">{title}</h3>
-        {hint ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{hint}</p> : null}
+        {hint ? (
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            <WithInfo text={hint} info={info} />
+          </p>
+        ) : null}
       </header>
       {children}
     </section>

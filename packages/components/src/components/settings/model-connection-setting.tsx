@@ -235,6 +235,7 @@ export function ModelConnectionSetting() {
     <CompactSection
       title={t('settings.models.title')}
       description={t('settings.models.notVerified')}
+      info={t('settings.models.notVerifiedDetail')}
     >
       {!available ? (
         <p className="p-5 text-xs text-muted-foreground">{t('settings.models.unavailable')}</p>

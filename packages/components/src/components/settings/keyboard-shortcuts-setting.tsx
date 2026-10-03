@@ -18,6 +18,7 @@ import {
   GLOBAL_SHORTCUTS,
   type Command,
   type CommandCategory,
+  type ShortcutCommandId,
 } from '@/lib/commands';
 import type { GlobalShortcutBinding } from '@molly/shared';
 import { useGlobalShortcuts } from '@/hooks/use-global-shortcuts';
@@ -35,6 +36,16 @@ const CATEGORY_ORDER: CommandCategory[] = [
   'Other',
 ];
 
+const CODE_WORKFLOW_SHORTCUTS: ReadonlySet<string> = new Set<ShortcutCommandId>([
+  'session.copyCurrentBranch',
+  'session.copyUrl',
+  'session.saveCurrentFile',
+  'session.toggleExplorerSidebar',
+  'session.cycleMode',
+  'session.cycleProvider',
+  'mention.toggleSessionProjectScope',
+]);
+
 // Fixed widths so the shortcut and trash columns line up across rows. The shortcut slot
 // holds up to ~4 chips comfortably; the trash slot stays present even when the row has
 // nothing to delete so the column doesn't shift when neighbors do.
@@ -48,7 +59,7 @@ export function KeyboardShortcutsSetting() {
   const grouped = useMemo(() => {
     const groups = new Map<CommandCategory, Command[]>();
     for (const cmd of all) {
-      if (cmd.hidden) continue;
+      if (cmd.hidden || CODE_WORKFLOW_SHORTCUTS.has(cmd.id)) continue;
       const cat = cmd.category ?? 'Other';
       const list = groups.get(cat);
       if (list) list.push(cmd);

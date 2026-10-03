@@ -18,13 +18,11 @@ import {
 } from './settings-tabs';
 import { GeneralSettingsComponent } from './general-setting';
 import { AppearanceSettingsComponent } from './appearance-setting';
-import { ProjectSettingsComponent } from './project-settings';
 import { MachineAgentSettings } from './machine-agent-settings';
 import { KeyboardShortcutsSetting } from './keyboard-shortcuts-setting';
 import { AboutSettingsComponent } from './about-setting';
-import { ImageConnectionSetting } from './image-connection-setting';
 import { BrowserAccountsSetting } from './browser-accounts-setting';
-import { McpSetting } from './mcp-setting';
+import { AdvancedSettings } from './advanced-settings';
 import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
 
 /**
@@ -68,10 +66,12 @@ function SettingsModalBody() {
   const setSelectedMachineId = useSetAtom(settingsSelectedMachineIdAtom);
   const setSelectedProjectKey = useSetAtom(settingsSelectedProjectKeyAtom);
   const visibleTabs = useVisibleSettingsTabs({ includeMultiMemberOnly: false });
-  const navigationTabs = visibleTabs;
+  const navigationTabs = visibleTabs.filter((tab) => !tab.parent);
 
   const activeTabConfig = visibleTabs.find((tab) => tab.id === activeTab) ?? visibleTabs[0];
   const resolvedActiveTab = activeTabConfig.id;
+  const navigationTabConfig =
+    navigationTabs.find((tab) => tab.id === activeTabConfig.parent) ?? activeTabConfig;
   const selectTab = useCallback(
     (tabId: SettingsTabId) => {
       setSelectedMachineId(null);
@@ -91,17 +91,8 @@ function SettingsModalBody() {
     onItemFocus: handleNavigationItemFocus,
     scopeId: navigationScopeId,
   });
-  const groupedSections: Array<{
-    id: Exclude<SettingsSectionId, 'account'>;
-    label: string;
-  }> = [
-    { id: 'personal', label: t('settings.sections.personal', 'Personal') },
-    { id: 'workspace', label: t('settings.sections.workspace', 'Workspace') },
-    { id: 'other', label: t('settings.sections.misc', 'Other') },
-  ];
-  // These tabs render their own in-content header (title + per-tab actions like
-  // "add project"), so we drop the chrome title to avoid showing it twice.
-  const selfTitledTab = resolvedActiveTab === 'projects' || resolvedActiveTab === 'machines';
+  const sectionOrder: SettingsSectionId[] = ['main', 'other'];
+  const selfTitledTab = resolvedActiveTab === 'machines';
   const usesInternalScrolling = resolvedActiveTab === 'projects';
 
   return (
@@ -115,15 +106,15 @@ function SettingsModalBody() {
           className="flex w-52 shrink-0 flex-col border-e border-border/40 bg-card/65"
         >
           <nav className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
-            <div className="space-y-6">
-              {groupedSections.map((section) => {
-                const tabs = navigationTabs.filter((tab) => tab.section === section.id);
+            <div className="space-y-3">
+              {sectionOrder.map((sectionId, index) => {
+                const tabs = navigationTabs.filter((tab) => tab.section === sectionId);
                 if (tabs.length === 0) return null;
                 return (
-                  <section key={section.id} aria-label={section.label}>
-                    <h2 className="px-3 pb-2 text-[11px] font-medium text-muted-foreground">
-                      {section.label}
-                    </h2>
+                  <div
+                    key={sectionId}
+                    className={cn(index > 0 && 'border-t border-border/40 pt-3')}
+                  >
                     <div className="space-y-1">
                       {tabs.map((tab) => {
                         const Icon = tab.icon;
@@ -131,13 +122,13 @@ function SettingsModalBody() {
                           <button
                             key={tab.id}
                             type="button"
-                            aria-current={resolvedActiveTab === tab.id ? 'page' : undefined}
+                            aria-current={navigationTabConfig.id === tab.id ? 'page' : undefined}
                             data-id={`settings:${tab.id}`}
                             data-scope-item="row"
                             data-settings-tab-id={tab.id}
                             className={cn(
                               'flex min-h-10 w-full items-center gap-3 rounded-xl px-3 py-2 text-start text-sm font-normal transition-colors',
-                              resolvedActiveTab === tab.id
+                              navigationTabConfig.id === tab.id
                                 ? 'bg-foreground/[0.06] font-medium text-foreground'
                                 : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
                             )}
@@ -149,7 +140,7 @@ function SettingsModalBody() {
                         );
                       })}
                     </div>
-                  </section>
+                  </div>
                 );
               })}
             </div>
@@ -166,13 +157,13 @@ function SettingsModalBody() {
           ) : (
             <header className="flex min-h-20 shrink-0 items-center px-7 pr-14">
               <DialogTitle className="text-xl font-medium leading-tight">
-                {t(activeTabConfig.labelKey)}
+                {t(navigationTabConfig.labelKey)}
               </DialogTitle>
             </header>
           )}
           <div className="min-h-0 flex-1">
             {usesInternalScrolling ? (
-              <div className="h-full px-7 pb-7 pt-7">
+              <div className={cn('h-full px-7 pb-7', selfTitledTab ? 'pt-7' : 'pt-0')}>
                 <div className="mx-auto h-full max-w-5xl">
                   <SettingsTabContent tabId={resolvedActiveTab} />
                 </div>
@@ -210,8 +201,10 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
     case 'billing':
     case 'ai-usage':
       return <GeneralSettingsComponent />;
+    case 'advanced':
+    case 'mcp':
     case 'projects':
-      return <ProjectSettingsComponent />;
+      return <AdvancedSettings />;
     case 'agents':
       return (
         <MachineAgentSettings
@@ -220,12 +213,8 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
           onSelectedMachineChange={setSelectedMachineId}
         />
       );
-    case 'image-connection':
-      return <ImageConnectionSetting />;
     case 'browser-accounts':
       return <BrowserAccountsSetting />;
-    case 'mcp':
-      return <McpSetting />;
     case 'machines':
       return (
         <MachineAgentSettings

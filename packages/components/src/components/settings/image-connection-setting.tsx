@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   SaveProtectedImageConnectionSchema,
   type ProtectedImageConnection,
@@ -19,6 +19,7 @@ import { Label } from '@/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Switch } from '@/ui/switch';
 import { Field, Section } from './form-primitives';
+import { WithInfo } from './info-tip';
 
 /** Image settings use only the main-process vault's public metadata. */
 
@@ -134,6 +135,7 @@ export function ImageConnectionForm({
   onSave,
   onTest,
   onClearApiKey,
+  notice,
   className,
 }: {
   stored: ImageConnectionView | undefined;
@@ -143,6 +145,8 @@ export function ImageConnectionForm({
   onSave: (draft: ImageConnectionFormDraft) => void | Promise<void>;
   onTest: () => void | Promise<void>;
   onClearApiKey: () => void | Promise<void>;
+  /** Shown at the top of the connection section, e.g. a key-rotation reminder. */
+  notice?: ReactNode;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -188,7 +192,9 @@ export function ImageConnectionForm({
         <Section
           title={t('settings.imageConnection.sectionConnection')}
           hint={t('settings.imageConnection.sectionConnectionHint')}
+          info={t('settings.imageConnection.intro')}
         >
+          {notice}
           <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-3">
             <div className="min-w-0">
               <Label htmlFor={`${fieldId}-enabled`} className="text-sm">
@@ -210,7 +216,12 @@ export function ImageConnectionForm({
             htmlFor={`${fieldId}-protocol`}
             label={t('settings.imageConnection.protocol')}
             icon={<Cable className="h-3.5 w-3.5" aria-hidden="true" />}
-            hint={t('settings.imageConnection.protocolHint')}
+            hint={
+              <WithInfo
+                text={t('settings.imageConnection.protocolHint')}
+                info={t('settings.imageConnection.protocolDetail')}
+              />
+            }
           >
             <Select
               value={draft.protocol}
@@ -339,6 +350,7 @@ export function ImageConnectionForm({
         <Section
           title={t('settings.imageConnection.sectionTest')}
           hint={t('settings.imageConnection.sectionTestHint')}
+          info={t('settings.imageConnection.sectionTestDetail')}
         >
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -473,24 +485,26 @@ export function ImageConnectionSetting() {
   };
   if (!ipc) return <p>{t('settings.imageConnection.unavailable')}</p>;
   return (
-    <div className="space-y-5">
-      <p className="text-xs text-muted-foreground">{t('settings.imageConnection.intro')}</p>
-      {stored?.legacyHistoryMayContainKey && (
-        <p role="alert" className="text-xs text-warning-foreground">
-          {t('settings.imageConnection.legacyHistoryWarning')}
-        </p>
-      )}
-      <ImageConnectionForm
-        stored={stored}
-        saving={saving || !ready}
-        saveError={saveError}
-        testState={testState}
-        onSave={save}
-        onTest={test}
-        onClearApiKey={() =>
-          stored && save({ ...createImageConnectionFormDraft(stored), clearApiKey: true })
-        }
-      />
-    </div>
+    <ImageConnectionForm
+      stored={stored}
+      saving={saving || !ready}
+      saveError={saveError}
+      testState={testState}
+      onSave={save}
+      onTest={test}
+      onClearApiKey={() =>
+        stored && save({ ...createImageConnectionFormDraft(stored), clearApiKey: true })
+      }
+      notice={
+        stored?.legacyHistoryMayContainKey ? (
+          <p
+            role="alert"
+            className="rounded-xl border border-border/60 px-4 py-3 text-xs leading-relaxed text-warning-foreground"
+          >
+            {t('settings.imageConnection.legacyHistoryWarning')}
+          </p>
+        ) : undefined
+      }
+    />
   );
 }

@@ -1,9 +1,12 @@
 import React, { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
+import { WithInfo } from './info-tip';
 
 interface CompactSectionProps {
   title?: string;
   description?: string;
+  /** Fine print shown behind an info icon after the description. */
+  info?: ReactNode;
   actions?: ReactNode;
   /** Free-form content on the right of the header (rendered as-is, unlike
    * `actions` which are coerced into icon buttons). */
@@ -24,6 +27,7 @@ interface CompactRowProps {
 export function CompactSection({
   title,
   description,
+  info,
   actions,
   headerRight,
   children,
@@ -42,7 +46,9 @@ export function CompactSection({
           <div className="min-w-0 flex-1">
             {title ? <p className="text-sm font-medium text-foreground">{title}</p> : null}
             {description && (
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                <WithInfo text={description} info={info} />
+              </p>
             )}
           </div>
           {headerRight ? (

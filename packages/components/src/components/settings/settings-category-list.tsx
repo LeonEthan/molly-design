@@ -17,30 +17,18 @@ type SettingsCategoryListProps = {
   workspaceName?: string;
 };
 
-/* iOS-style grouped layout for the mobile settings list. Categories
-   are bucketed into three sections so the surface reads as ordered
-   rather than a single long undifferentiated list, mirroring the
-   home Chat-tab grouping conventions (`MobileChatSectionHeading` +
-   rounded card with inter-row dividers).
-
-   The section grouping isn't load-bearing — re-order or re-bucket
-   freely. The list still works if a tab id is missing from this map
-   (we render whichever ids exist) or unknown to it (those fall into
-   `misc`). */
+/* iOS-style grouped layout for the mobile settings list, mirroring the desktop
+   navigation: the everyday categories first, then Advanced and About. Sub-tabs of
+   Advanced are reached from inside it, so they are not listed here. */
 const SETTINGS_SECTIONS: Array<{
-  id: Exclude<SettingsSectionId, 'account'>;
+  id: SettingsSectionId;
   headingKey: string;
   defaultHeading: string;
 }> = [
   {
-    id: 'personal',
-    headingKey: 'settings.sections.personal',
-    defaultHeading: 'Personal',
-  },
-  {
-    id: 'workspace',
-    headingKey: 'settings.sections.workspace',
-    defaultHeading: 'Workspace',
+    id: 'main',
+    headingKey: 'settings.title',
+    defaultHeading: 'Settings',
   },
   {
     id: 'other',
@@ -84,7 +72,9 @@ export function SettingsCategoryList({ workspaceName }: SettingsCategoryListProp
     <FocusScope id={scopeId} className="flex min-h-full flex-col pb-6 pt-3">
       <div className="flex flex-col gap-5">
         {SETTINGS_SECTIONS.map((section) => {
-          const sectionTabs = visibleTabs.filter((tab) => tab.section === section.id);
+          const sectionTabs = visibleTabs.filter(
+            (tab) => tab.section === section.id && !tab.parent
+          );
           if (sectionTabs.length === 0) return null;
           return (
             <section key={section.id} aria-label={t(section.headingKey, section.defaultHeading)}>

@@ -20,6 +20,7 @@ import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
 import { CompactSection, CompactRow } from './compact-layout';
+import { WithInfo } from './info-tip';
 
 type Operation = z.infer<typeof PersonalMemoryOperationSchema>;
 
@@ -97,10 +98,18 @@ export function PersonalMemoryPanel({
     <CompactSection title={t('settings.memory.title', 'Personal memory')}>
       <CompactRow
         label={t('settings.memory.automatic', 'Remember preferences automatically')}
-        helper={t(
-          'settings.memory.description',
-          'Shared across design sessions. Up to 32 personal preferences are stored locally. Your messages and remembered preferences may be sent to your selected model for extraction and use.'
-        )}
+        helper={
+          <WithInfo
+            text={t(
+              'settings.memory.description',
+              'Learns your taste across designs. Stored on this computer; your messages and preferences may be sent to your chosen model to learn and apply them.'
+            )}
+            info={t(
+              'settings.memory.scope',
+              'Keeps up to 32 preferences. Project and brand facts are excluded. Turning this off stops learning and recall. Deleting a preference removes it from future recall but does not erase past conversations.'
+            )}
+          />
+        }
       >
         <Switch
           aria-label={t('settings.memory.automatic', 'Remember preferences automatically')}
@@ -112,12 +121,6 @@ export function PersonalMemoryPanel({
         />
       </CompactRow>
       <div className="flex flex-col gap-3 px-5 py-4">
-        <p className="text-xs text-muted-foreground">
-          {t(
-            'settings.memory.scope',
-            'Project and brand facts are excluded. Disabling stops recall and capture. Deleting a memory removes it from future recall, but does not erase existing conversations.'
-          )}
-        </p>
         {failed && (
           <p role="alert" className="text-sm text-destructive">
             {t(

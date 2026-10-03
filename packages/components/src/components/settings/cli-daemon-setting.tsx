@@ -1,8 +1,14 @@
-import { Loader2, Play, RotateCcw, Square } from 'lucide-react';
+import { Loader2, MoreHorizontal, Play, RotateCcw, Square } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { ElectronCliState } from '@molly/shared';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/dropdown-menu';
 import { useElectronCliDaemon } from '@/hooks/use-electron-cli-daemon';
 import { CompactRow } from './compact-layout';
 
@@ -18,9 +24,9 @@ const PHASE_TONE: Record<ElectronCliState['phase'], string> = {
 };
 
 /**
- * "Daemon" row for Settings → General → Startup: shows the local CLI daemon
- * status and its restart/terminate controls (relocated here from the terminal
- * dock). Buttons show in-place loading while their action is in flight.
+ * "Background service" row for Settings → Advanced → System: shows the local CLI
+ * daemon status with Restart up front and the rarely needed Terminate in the ⋯ menu.
+ * Controls show in-place loading while their action is in flight.
  */
 export function CliDaemonSetting() {
   const { t } = useTranslation();
@@ -46,7 +52,7 @@ export function CliDaemonSetting() {
         label={t('settings.general.cliDaemon.label', 'Background service')}
         helper={t(
           'settings.general.cliDaemon.helper',
-          'Runs the agents that create your designs on this computer. Restart it if Molly stops responding.'
+          "Powers Molly's design work on this computer. Restart it if Molly stops responding."
         )}
         alignTop
       >
@@ -72,21 +78,33 @@ export function CliDaemonSetting() {
             )}
             {isStopped ? t('sidebar.cli.start', 'Start') : t('sidebar.cli.restart', 'Restart')}
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 border-status-danger/30 px-2 text-xs text-status-danger hover:bg-status-danger/10 hover:text-status-danger disabled:text-muted-foreground/60"
-            disabled={busy || isStopped}
-            onClick={() => void terminate()}
-          >
-            {isTerminating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Square className="h-3.5 w-3.5" />
-            )}
-            {t('sidebar.cli.terminate', 'Terminate')}
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground"
+                aria-label={t('settings.general.cliDaemon.moreActions')}
+                disabled={busy || isStopped}
+              >
+                {isTerminating ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                variant="destructive"
+                icon={<Square className="h-3.5 w-3.5" />}
+                onSelect={() => void terminate()}
+              >
+                {t('sidebar.cli.terminate', 'Terminate')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CompactRow>
     </div>

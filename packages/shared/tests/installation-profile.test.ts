@@ -35,7 +35,7 @@ describe('installation profile', () => {
       namespace: 'molly',
       dataDirectoryName: '.molly',
       desktopProtocol: 'molly-design',
-      localCliHostPort: 17_790,
+      localCliHostPort: 17_792,
     });
     expect(getMollyDataDir('cloud', '/home/alice')).toBe(path.join('/home/alice', '.lody'));
     expect(getMollyDataDir('local', '/home/alice')).toBe(path.join('/home/alice', '.molly'));
@@ -95,7 +95,7 @@ describe('installation profile', () => {
       expect(local).toMatchObject({ kind: 'pipe' });
     } else {
       expect(cloud).toEqual({ kind: 'tcp', host: '127.0.0.1', port: 17_788 });
-      expect(local).toEqual({ kind: 'tcp', host: '127.0.0.1', port: 17_790 });
+      expect(local).toEqual({ kind: 'tcp', host: '127.0.0.1', port: 17_792 });
     }
   });
 
@@ -115,7 +115,7 @@ describe('installation profile', () => {
       expect(getLocalCliHostEndpoint('local')).toEqual({
         kind: 'tcp',
         host: '127.0.0.1',
-        port: 17_790,
+        port: 17_792,
       });
     }
   );

@@ -26,6 +26,16 @@ This is the normal OSS development entrypoint. Fully quit an existing Molly
 desktop process before running it because Electron enforces a single running
 instance.
 
+The Molly local host lease uses `127.0.0.1:17792`, separate from Lody Nightly's
+desktop listener on `17790`. On macOS, the daemon probe, control and Loro data plane
+still use the installation profile's sockets under `~/.molly/run` (or
+`MOLLY_DATA_DIR/run`). The host lease must be acquired before the daemon starts;
+an occupied endpoint without a matching lease record leaves Molly reconnecting.
+After updating a checkout that used `17790`, fully quit the old Molly instance
+and run `pnpm start:local` again. Lody can remain running. See the
+[coexistence fix](../../.agents/notes/implemented/bug-fix/2026-10-02-local-host-port-coexistence.zh.md)
+for the regression and verification limits.
+
 `pnpm --dir apps/electron preview:local` is a lower-level smoke/e2e command for
 an OSS build that has already been prepared. It deliberately skips rebuilding
 and should not be used as the normal development command.

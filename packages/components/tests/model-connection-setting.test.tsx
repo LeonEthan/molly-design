@@ -2,7 +2,11 @@
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ModelConnectionForm } from '../src/components/settings/model-connection-setting';
+import {
+  ModelConnectionForm,
+  ModelConnectionRow,
+  applyProviderChoice,
+} from '../src/components/settings/model-connection-setting';
 import type { ModelConnection, SaveModelConnection } from '@molly/shared/embedded-harness';
 import { initI18n } from '../src/i18n';
 import en from '../../../locales/en.json';
@@ -267,5 +271,105 @@ describe('encrypted model connection form', () => {
     });
     expect(key.value).toBe('');
     expect(host.innerHTML).not.toContain('SYNTHETIC_RENEWED_KEY');
+  });
+
+  it('reveals and restores a provider default endpoint without hiding where requests go', async () => {
+    const writes: SaveModelConnection[] = [];
+    await render(
+      async (input) => {
+        writes.push(input);
+      },
+      { ...stored, providerPresetId: 'deepseek', baseUrl: 'https://api.deepseek.com/' }
+    );
+    const endpointField = () => host.querySelector<HTMLInputElement>('input[id$="-endpoint"]');
+    const button = (label: string) =>
+      [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
+    expect(endpointField()).toBeNull();
+    expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
+    await act(async () => button(en['settings.models.useCustomEndpoint']).click());
+    expect(endpointField()!.value).toBe('https://api.deepseek.com/');
+    await change(endpointField()!, 'https://proxy.invalid/v1');
+    await act(async () => button(en['settings.models.useDefaultEndpoint']).click());
+    expect(endpointField()).toBeNull();
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await act(async () => {
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+    expect(writes[0]).toMatchObject({
+      providerPresetId: 'deepseek',
+      baseUrl: 'https://api.deepseek.com',
+      apiKey: 'SYNTHETIC_KEY',
+    });
+  });
+});
+
+describe('provider choice', () => {
+  const labelOf = (preset: string) => `Label:${preset}`;
+
+  it('fills the default endpoint and names a new connection after the provider', () => {
+    expect(
+      applyProviderChoice({ provider: '', name: '', endpoint: '' }, 'deepseek', labelOf)
+    ).toEqual({
+      provider: 'deepseek',
+      name: 'Label:deepseek',
+      endpoint: 'https://api.deepseek.com',
+    });
+  });
+
+  it('follows the provider while the endpoint and name are still its suggestions', () => {
+    expect(
+      applyProviderChoice(
+        {
+          provider: 'kimi-coding',
+          name: 'Label:kimi-coding',
+          endpoint: 'https://api.kimi.com/coding/',
+        },
+        'openai',
+        labelOf
+      )
+    ).toEqual({ provider: 'openai', name: 'Label:openai', endpoint: 'https://api.openai.com/v1' });
+    expect(
+      applyProviderChoice(
+        { provider: 'openai', name: 'Label:openai', endpoint: 'https://api.openai.com/v1' },
+        'openai-compatible',
+        labelOf
+      )
+    ).toEqual({ provider: 'openai-compatible', name: 'Label:openai-compatible', endpoint: '' });
+  });
+
+  it('never overwrites an endpoint or name the user typed', () => {
+    expect(
+      applyProviderChoice(
+        { provider: 'openai', name: 'Studio key', endpoint: 'https://proxy.invalid/v1' },
+        'anthropic',
+        labelOf
+      )
+    ).toEqual({ provider: 'anthropic', name: 'Studio key', endpoint: 'https://proxy.invalid/v1' });
+  });
+});
+
+describe('connection row', () => {
+  async function renderRow(connection: ModelConnection) {
+    await act(async () =>
+      root.render(createElement(ModelConnectionRow, { connection, onEdit: () => undefined }))
+    );
+  }
+
+  it('names the provider and shows On without repeating a default endpoint', async () => {
+    await renderRow({ ...stored, providerPresetId: 'xai', baseUrl: 'https://api.x.ai/v1/' });
+    expect(host.textContent).toContain(en['settings.models.providers.xai']);
+    expect(host.textContent).toContain(en['settings.models.statusOn']);
+    expect(host.textContent).not.toContain('api.x.ai');
+    expect(host.textContent).not.toContain(stored.credentialRef);
+  });
+
+  it('shows a custom endpoint and Off for a disabled connection', async () => {
+    await renderRow({ ...stored, enabled: false });
+    expect(host.textContent).toContain(
+      `${en['settings.models.providers.openai']} · example.invalid/v1`
+    );
+    expect(host.textContent).toContain(en['settings.models.statusOff']);
   });
 });

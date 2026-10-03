@@ -35,6 +35,10 @@ Preserve historical catalog fields when editing unrelated values.
   background service and bundled capability inventory (System), MCP and Projects as
   sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
   plain sentence; required caveats move behind `InfoTip`, never out of the UI.
+- The connection form names every preset by brand. Choosing one prefills
+  `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned SDK in harness-pi)
+  and a provider-named connection, never overwriting a typed endpoint or name; the
+  destination stays visible. Rows show On/Off and only non-default endpoints.
 - AI models (`agents` tab) mounts the local encrypted model-connection form, the image
   connection, and the read-only legacy inventory only when this machine has legacy
   rows. Preserve old config/setup rows without mounting provider login,

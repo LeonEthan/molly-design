@@ -25,10 +25,12 @@ app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → AI models → Models. Add the provider/product,
-   connection name, endpoint and API key. Enter keys only in the local settings
-   field, never in a conversation or artwork file. Saving encrypts the connection;
-   it neither tests inference nor changes an existing session's selection.
+1. Open Settings → AI models → Models, choose the provider/product and paste its
+   API key. Molly suggests the provider's default endpoint and a connection name;
+   change either one, or choose **Use a custom endpoint**. Enter keys only in the
+   local settings field, never in a conversation or artwork file. Saving encrypts
+   the connection; it neither tests inference nor changes an existing session's
+   selection.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid

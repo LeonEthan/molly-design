@@ -78,3 +78,13 @@ export const CompatibleMissingModels: Story = {
   args: { stored: { ...Compatible.args!.stored!, customModels: undefined } },
 };
 export const CompatibleSaving: Story = { args: { ...Compatible.args, busy: true } };
+export const ProviderDefaultEndpoint: Story = {
+  args: {
+    stored: {
+      ...StoredSecret.args!.stored!,
+      providerPresetId: 'deepseek',
+      displayName: 'DeepSeek',
+      baseUrl: 'https://api.deepseek.com',
+    },
+  },
+};

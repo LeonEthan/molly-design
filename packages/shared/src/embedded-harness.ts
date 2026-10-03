@@ -311,6 +311,27 @@ export const MOLLY_PROVIDER_IDS: Record<ProviderPresetId, string> = {
   'openai-compatible': 'molly-compatible',
 };
 
+/**
+ * The endpoint most of each native preset's pinned SDK models use. Settings prefills
+ * it so a designer only picks a provider and pastes a key; it is a suggestion the user
+ * can replace, never a fallback for a missing saved endpoint.
+ */
+export const PROVIDER_PRESET_DEFAULT_BASE_URLS: Record<
+  Exclude<ProviderPresetId, 'openai-compatible'>,
+  string
+> = {
+  openai: 'https://api.openai.com/v1',
+  anthropic: 'https://api.anthropic.com',
+  google: 'https://generativelanguage.googleapis.com/v1beta',
+  xai: 'https://api.x.ai/v1',
+  deepseek: 'https://api.deepseek.com',
+  moonshot: 'https://api.moonshot.ai/v1',
+  'kimi-coding': 'https://api.kimi.com/coding',
+  zai: 'https://api.z.ai/api/coding/paas/v4',
+  minimax: 'https://api.minimax.io/anthropic',
+  openrouter: 'https://openrouter.ai/api/v1',
+};
+
 export const HarnessModelCatalogSchema = z
   .object({
     version: z.literal(1),

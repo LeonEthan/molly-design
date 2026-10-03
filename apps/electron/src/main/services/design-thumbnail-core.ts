@@ -23,6 +23,7 @@ export type DesignThumbnailPorts<Saved extends { revisionId: string }> = {
 export class DesignThumbnails<Saved extends { revisionId: string }> {
   private renders: Promise<unknown> = Promise.resolve()
   private readonly refreshing = new Map<string, Promise<string>>()
+  private readonly waiting = new Map<string, Promise<string>>()
   private readonly ports: DesignThumbnailPorts<Saved>
 
   constructor(ports: DesignThumbnailPorts<Saved>) {
@@ -34,13 +35,29 @@ export class DesignThumbnails<Saved extends { revisionId: string }> {
     return cached ? cached.dataUrl : this.refresh(artworkId)
   }
 
+  /**
+   * A refresh requested while another is running may follow a newer save than the
+   * running one read, so it waits and reads again; refreshes that have not started
+   * yet share that one follow-up.
+   */
   refresh(artworkId: string): Promise<string> {
+    const waiting = this.waiting.get(artworkId)
+    if (waiting) return waiting
     const running = this.refreshing.get(artworkId)
-    if (running) return running
-    const next = this.refreshOnce(artworkId).finally(() => {
+    const start = running
+      ? () =>
+          running
+            .catch(() => {})
+            .then(() => {
+              this.waiting.delete(artworkId)
+              return this.refreshOnce(artworkId)
+            })
+      : () => this.refreshOnce(artworkId)
+    const next: Promise<string> = start().finally(() => {
       if (this.refreshing.get(artworkId) === next) this.refreshing.delete(artworkId)
     })
     this.refreshing.set(artworkId, next)
+    if (running) this.waiting.set(artworkId, next)
     return next
   }
 

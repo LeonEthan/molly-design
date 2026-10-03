@@ -6,16 +6,22 @@ import type {
 } from 'rookie-cookies'
 import { z } from 'zod'
 import type { BrowserImportCookie } from '@molly/shared/browser-import-cookie'
-import type { ElectronBrowserAccountSiteInput } from '@molly/shared/electron-ipc'
+import type {
+  AccountImportBrowserId,
+  ElectronBrowserAccountSiteInput,
+  ElectronBrowserImportSources,
+  ElectronBrowserProfileChoice
+} from '@molly/shared/electron-ipc'
 import { BrowserImportCookieSchema } from '@molly/shared/browser-import-cookie'
 import { hostMatchesSite } from './public-browser-agent-policy.ts'
 
 type Site = ElectronBrowserAccountSiteInput['site']
 
-const chromeReadTimeoutMessage =
-  'Chrome authorization or cookie reading timed out. Complete any macOS Keychain prompt, then click Import from Chrome again. Existing Molly cookies were not changed.'
+const readTimeoutMessage =
+  'Browser authorization or cookie reading timed out. Complete any macOS Keychain prompt, then click Import again. Existing Molly cookies were not changed.'
 
-export type ChromeProfileChoice = { id: string; name: string; isDefault: boolean }
+export type BrowserProfileChoice = ElectronBrowserProfileChoice
+export type BrowserImportSources = ElectronBrowserImportSources
 
 const sameSite = (value: number): BrowserImportCookie['sameSite'] => {
   switch (value) {
@@ -28,14 +34,14 @@ const sameSite = (value: number): BrowserImportCookie['sameSite'] => {
     case 2:
       return 'strict'
     default:
-      throw new Error('Chrome returned a cookie with an unsupported SameSite value.')
+      throw new Error('The browser returned a cookie with an unsupported SameSite value.')
   }
 }
 
 function convertCookie(cookie: CookieObject, site: Site): BrowserImportCookie {
   const host = cookie.domain.replace(/^\./, '').toLowerCase()
   if (!hostMatchesSite(host, site))
-    throw new Error('Chrome returned a cookie outside the selected website.')
+    throw new Error('The browser returned a cookie outside the selected website.')
   const session = cookie.expires === undefined
   const candidate = {
     name: cookie.name,
@@ -50,7 +56,7 @@ function convertCookie(cookie: CookieObject, site: Site): BrowserImportCookie {
     sameSite: sameSite(cookie.sameSite)
   }
   const checked = BrowserImportCookieSchema.safeParse(candidate)
-  if (!checked.success) throw new Error('Chrome returned an unsupported cookie field.')
+  if (!checked.success) throw new Error('The browser returned an unsupported cookie field.')
   return checked.data
 }
 
@@ -59,20 +65,20 @@ function selectedSources(
   report: ExtractionReportObject,
   profileId: string
 ): SourceExtractionObject[] {
-  if (report.termination === 'timed_out') throw new Error(chromeReadTimeoutMessage)
+  if (report.termination === 'timed_out') throw new Error(readTimeoutMessage)
   if (report.schemaVersion !== 1 || report.termination !== 'completed')
-    throw new Error('Chrome profile import did not finish.')
+    throw new Error('The browser profile import did not finish.')
   const profiles = report.profiles.filter((entry) => entry.profile.profileId === profileId)
-  if (profiles.length !== 1) throw new Error('The selected Chrome profile is no longer available.')
+  if (profiles.length !== 1) throw new Error('The selected browser profile is no longer available.')
   const sources = profiles[0].sources.filter((entry) => entry.selected)
   if (sources.length === 0 || sources.some((entry) => entry.status !== 'succeeded'))
-    throw new Error('Molly could not read this Chrome profile’s cookies.')
+    throw new Error('Molly could not read this browser profile’s cookies.')
   if (
     [...report.issues, ...profiles[0].issues, ...sources.flatMap((entry) => entry.issues)].some(
       (issue) => issue.severity === 'error' || issue.code === 'decrypt_failed'
     )
   )
-    throw new Error('Chrome profile cookies could not be fully decrypted.')
+    throw new Error('This browser profile’s cookies could not be fully decrypted.')
   return sources
 }
 
@@ -90,7 +96,7 @@ const contextSchema = z
   })
   .strict()
 
-export function cookiesFromChromeReport(
+export function cookiesFromBrowserReport(
   report: ExtractionReportObject,
   profileId: string,
   site: Site,
@@ -98,11 +104,11 @@ export function cookiesFromChromeReport(
 ): BrowserImportCookie[] {
   const sources = selectedSources(report, profileId)
   if (sources.length !== detailedSources.length)
-    throw new Error('Chrome cookie details are incomplete. No cookies were imported.')
+    throw new Error('Browser cookie details are incomplete. No cookies were imported.')
   const cookies = detailedSources.flat()
   if (cookies.length === 0)
-    throw new Error('No cookies for this website were found in that Chrome profile.')
-  if (cookies.length > 200) throw new Error('This website has more than 200 Chrome cookies.')
+    throw new Error('No cookies for this website were found in that browser profile.')
+  if (cookies.length > 200) throw new Error('This website has more than 200 browser cookies.')
   // The report preserves extraction diagnostics, but its cookies omit CHIPS.
   // Compare multisets, not just counts: the two reads must describe the same
   // cookies, including duplicate entries. Neither values nor paths leave main.
@@ -114,13 +120,15 @@ export function cookiesFromChromeReport(
       .map(({ cookie }) => JSON.stringify(convertCookie(cookie, site)))
       .sort()
     if (reported.length !== detailed.length || reported.some((value, i) => value !== detailed[i]))
-      throw new Error('Chrome cookies changed or could not be fully read. Retry the import.')
+      throw new Error('The browser’s cookies changed or could not be fully read. Retry the import.')
   }
   const identities = new Set<string>()
   const convertedCookies = cookies.map(({ cookie, context }) => {
     const checked = contextSchema.safeParse(context)
     if (!checked.success)
-      throw new Error('Chrome returned an unsupported cookie context. No cookies were imported.')
+      throw new Error(
+        'The browser returned an unsupported cookie context. No cookies were imported.'
+      )
     const details = checked.data
     if (
       details.topFrameSiteKey ||
@@ -141,26 +149,51 @@ export function cookiesFromChromeReport(
       converted.name
     ])
     if (identities.has(identity))
-      throw new Error('Chrome returned conflicting cookie identities. No cookies were imported.')
+      throw new Error(
+        'The browser returned conflicting cookie identities. No cookies were imported.'
+      )
     identities.add(identity)
     return converted
   })
   if (Buffer.byteLength(JSON.stringify(convertedCookies), 'utf8') > 512 * 1024)
-    throw new Error('This website’s Chrome cookies exceed the import size limit.')
+    throw new Error('This website’s browser cookies exceed the import size limit.')
   return convertedCookies
 }
 
-export async function listChromeProfiles(): Promise<ChromeProfileChoice[]> {
-  const { chromeProfiles } = await import('rookie-cookies')
-  const profiles = await chromeProfiles()
-  return profiles.map(({ profile, isDefault }) => ({
-    id: profile.profileId,
-    name: profile.displayName,
-    isDefault
-  }))
+/** A rejected listing means an installed browser Molly could not enumerate, not an absent one. */
+export async function listImportSources(
+  browserIds: readonly AccountImportBrowserId[],
+  lister?: Pick<typeof import('rookie-cookies'), 'supportedBrowsers' | 'browserProfiles'>
+): Promise<BrowserImportSources> {
+  const { supportedBrowsers, browserProfiles } = lister ?? (await import('rookie-cookies'))
+  const names = new Map(
+    (await supportedBrowsers()).map((browser) => [browser.id, browser.displayName])
+  )
+  const result: BrowserImportSources = { sources: [], unreadable: [] }
+  for (const browserId of browserIds) {
+    const browserName = names.get(browserId)
+    if (!browserName) continue
+    try {
+      const profiles = await browserProfiles(browserId)
+      if (profiles.length > 0)
+        result.sources.push({
+          browserId,
+          browserName,
+          profiles: profiles.map(({ profile, isDefault }) => ({
+            id: profile.profileId,
+            name: profile.displayName,
+            isDefault
+          }))
+        })
+    } catch {
+      result.unreadable.push(browserName)
+    }
+  }
+  return result
 }
 
-export async function readChromeSiteCookies(
+export async function readBrowserSiteCookies(
+  browserId: AccountImportBrowserId,
   profileId: string,
   site: Site,
   reader?: Pick<typeof import('rookie-cookies'), 'browserReport' | 'chromiumBasedDetailed'>
@@ -169,7 +202,7 @@ export async function readChromeSiteCookies(
   let report: ExtractionReportObject
   try {
     report = await browserReport({
-      browserId: 'chrome',
+      browserId,
       profileId,
       domains: [site],
       // This native deadline includes the user's first macOS Keychain approval.
@@ -186,25 +219,25 @@ export async function readChromeSiteCookies(
       error.stopReason === 'timed_out'
     )
       // eslint-disable-next-line preserve-caught-error -- Native causes may contain private paths or cookies.
-      throw new Error(chromeReadTimeoutMessage)
+      throw new Error(readTimeoutMessage)
     // eslint-disable-next-line preserve-caught-error -- Native causes must not cross renderer IPC.
     throw new Error(
-      'Molly could not read the selected Chrome profile. Check macOS access and retry.'
+      'Molly could not read the selected browser profile. Check macOS access and retry.'
     )
   }
   const sources = selectedSources(report, profileId)
   const detailedSources: DetailedCookieObject[][] = []
   for (const { source } of sources) {
     if (source.pathLossy || !source.path)
-      throw new Error('Molly cannot safely read this Chrome cookie source.')
+      throw new Error('Molly cannot safely read this browser cookie source.')
     try {
       // Pinned 0.6.0 compatibility API: unlike read()/fromPath(), this Unix
       // entry point keeps domain filtering AND partition metadata. The path
       // comes only from the validated native profile report, never the UI.
-      detailedSources.push(await chromiumBasedDetailed(source.path, [site], 'chrome'))
+      detailedSources.push(await chromiumBasedDetailed(source.path, [site], browserId))
     } catch {
-      throw new Error('Molly could not read Chrome cookie details. No cookies were imported.')
+      throw new Error('Molly could not read browser cookie details. No cookies were imported.')
     }
   }
-  return cookiesFromChromeReport(report, profileId, site, detailedSources)
+  return cookiesFromBrowserReport(report, profileId, site, detailedSources)
 }

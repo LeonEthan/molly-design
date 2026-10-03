@@ -132,11 +132,12 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async importChromeAccount(raw: ElectronBrowserAccountImportInput) {
+  async importBrowserAccount(raw: ElectronBrowserAccountImportInput) {
     assertTrustedSender()
     const input = ElectronBrowserAccountImportInputSchema.parse(raw)
     return {
-      imported: await getIpcServiceDeps().publicBrowserService.importChromeAccount(
+      imported: await getIpcServiceDeps().publicBrowserService.importBrowserAccount(
+        input.browserId,
         input.profileId,
         input.site,
         input.replaceExisting
@@ -151,9 +152,9 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async getChromeProfiles() {
+  async getImportSources() {
     assertTrustedSender()
-    return await getIpcServiceDeps().publicBrowserService.getChromeProfiles()
+    return await getIpcServiceDeps().publicBrowserService.getImportSources()
   }
 
   @IpcMethod()

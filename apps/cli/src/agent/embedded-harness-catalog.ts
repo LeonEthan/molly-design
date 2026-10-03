@@ -34,8 +34,10 @@ export function projectEmbeddedHarnessCatalog(
             providerPresetId: connection.providerPresetId,
           }))
         : catalog.models;
+    const offered = connection.models ? new Set(connection.models) : undefined;
     for (const model of connectionModels) {
       if (model.providerPresetId !== connection.providerPresetId) continue;
+      if (offered && !offered.has(model.modelId)) continue;
       const modelId = encodeMollyModelOption(connection.id, model.modelId);
       models.push({
         modelId,

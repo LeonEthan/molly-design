@@ -8,13 +8,19 @@ import {
   ModelConnectionSetting,
   applyProviderChoice,
 } from '../src/components/settings/model-connection-setting';
-import type { ModelConnection, SaveModelConnection } from '@molly/shared/embedded-harness';
+import type {
+  CheckModelConnection,
+  HarnessModelCatalog,
+  ModelConnection,
+  SaveModelConnection,
+} from '@molly/shared/embedded-harness';
+import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
 import { initI18n } from '../src/i18n';
 import en from '../../../locales/en.json';
 import zh from '../../../locales/zh_CN.json';
 
 const { connectionIpc } = vi.hoisted(() => ({
-  connectionIpc: { getSnapshot: vi.fn(), save: vi.fn() },
+  connectionIpc: { getSnapshot: vi.fn(), save: vi.fn(), delete: vi.fn() },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({ modelConnections: connectionIpc }),
@@ -228,9 +234,23 @@ describe('encrypted model connection form', () => {
   it('does not infer a provider or expose credential references', async () => {
     await render(async () => undefined);
     expect(host.textContent).toContain(en['settings.models.chooseProvider']);
-    expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+    expect(host.querySelector('[role="radio"][aria-checked="true"]')).toBeNull();
+    expect(host.querySelector('input[type=password]')).toBeNull();
     expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
     expect(host.textContent).not.toContain('PRIVATE_REFERENCE_NOT_A_SECRET');
+  });
+
+  it('asks for the key once a provider tile is picked and suggests its address', async () => {
+    await render(async () => undefined);
+    const tile = [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+      node.textContent?.endsWith(en['settings.models.providers.deepseek'])
+    )!;
+    await act(async () => tile.click());
+    expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
+    expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
+    expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
+      en['settings.models.providers.deepseek']
+    );
   });
 
   it('retains the key by omission and sends the exact CAS revision', async () => {
@@ -434,5 +454,173 @@ describe('connection list', () => {
     ]);
     expect(switches()[0]!.getAttribute('aria-checked')).toBe('false');
     expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+const catalog: HarnessModelCatalog['models'] = [
+  {
+    providerPresetId: 'openai',
+    modelId: 'gpt-x',
+    name: 'GPT X',
+    input: ['text', 'image'],
+    contextWindow: 400_000,
+    thinking: ['off', 'high'],
+  },
+  {
+    providerPresetId: 'openai',
+    modelId: 'gpt-x-mini',
+    name: 'GPT X Mini',
+    input: ['text'],
+    contextWindow: 128_000,
+    thinking: ['off'],
+  },
+  {
+    providerPresetId: 'anthropic',
+    modelId: 'claude-x',
+    name: 'Claude X',
+    input: ['text', 'image'],
+    contextWindow: 200_000,
+    thinking: ['off', 'high'],
+  },
+];
+
+describe('free key check and model choice', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+  const settle = () =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(CONNECTION_CHECK_DELAY_MS);
+    });
+  const submit = () =>
+    act(async () => {
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    });
+  const radio = (label: string) =>
+    [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+      node.textContent?.startsWith(label)
+    )!;
+
+  it('checks a typed key once it settles, then offers the chosen models only', async () => {
+    const requests: CheckModelConnection[] = [];
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai',
+          catalog,
+          onSave: async (input) => void writes.push(input),
+          onCancel: () => undefined,
+          onCheck: async (input) => {
+            requests.push(input);
+            return { ok: true, models: ['gpt-x'] };
+          },
+        })
+      )
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    expect(requests).toEqual([]);
+    await settle();
+    expect(requests).toEqual([
+      { providerPresetId: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'SYNTHETIC_KEY' },
+    ]);
+    expect(host.textContent).toContain('Key works · 1 model on this account');
+    expect(radio('All 2').getAttribute('aria-checked')).toBe('true');
+    await act(async () => radio(en['settings.models.picker.choose']).click());
+    expect(host.textContent).toContain(en['settings.models.picker.notListed']);
+    const boxes = [...host.querySelectorAll<HTMLButtonElement>('button[role="checkbox"]')];
+    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+    await submit();
+    expect(writes[0]).toMatchObject({ providerPresetId: 'openai', models: ['gpt-x'] });
+    expect(host.innerHTML).not.toContain('SYNTHETIC_KEY');
+  });
+
+  it('checks a saved key only against the provider and address it was saved for', async () => {
+    const requests: CheckModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: { ...stored, models: ['gpt-x-mini'] },
+          catalog,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onCheck: async (input) => {
+            requests.push(input);
+            return { ok: false, reason: 'key_rejected', status: 401 };
+          },
+        })
+      )
+    );
+    expect(radio(en['settings.models.picker.choose']).getAttribute('aria-checked')).toBe('true');
+    await settle();
+    expect(requests).toEqual([
+      {
+        providerPresetId: 'openai',
+        baseUrl: stored.baseUrl,
+        stored: { id: stored.id, revision: stored.revision },
+      },
+    ]);
+    expect(host.textContent).toContain('The provider rejected this key (401).');
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://x.invalid/v1'
+    );
+    await settle();
+    expect(requests).toHaveLength(1);
+  });
+
+  it('offers every model again when the choice goes back to All', async () => {
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: { ...stored, models: ['gpt-x-mini'] },
+          catalog,
+          onSave: async (input) => void writes.push(input),
+          onCancel: () => undefined,
+        })
+      )
+    );
+    await act(async () => radio('All 2').click());
+    await submit();
+    expect(writes[0]).not.toHaveProperty('models');
+    expect(writes[0]).toMatchObject({ id: stored.id, expectedRevision: stored.revision });
+  });
+});
+
+describe('connection management', () => {
+  it('deletes a connection only after confirmation and removes its row', async () => {
+    const deleted: unknown[] = [];
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [stored] });
+    connectionIpc.delete.mockImplementation(async (input: unknown) => void deleted.push(input));
+    let answer = false;
+    vi.stubGlobal('confirm', () => answer);
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    const button = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+        (node) => node.textContent === label
+      )!;
+    await act(async () => button(en['common.edit']).click());
+    await act(async () => button(en['settings.models.delete']).click());
+    expect(deleted).toEqual([]);
+    answer = true;
+    await act(async () => button(en['settings.models.delete']).click());
+    expect(deleted).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
+    expect(host.textContent).not.toContain('Synthetic');
+    expect(host.textContent).toContain(en['settings.models.empty']);
+  });
+
+  it('starts a new connection from a provider shortcut when none exist', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    const shortcut = [...host.querySelectorAll<HTMLButtonElement>('button')].find((node) =>
+      node.textContent?.endsWith(en['settings.models.providers.anthropic'])
+    )!;
+    await act(async () => shortcut.click());
+    expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
+      en['settings.models.providers.anthropic']
+    );
+    expect(host.textContent).toContain('Sends requests to https://api.anthropic.com');
   });
 });

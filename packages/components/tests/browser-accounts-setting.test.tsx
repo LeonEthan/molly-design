@@ -9,8 +9,8 @@ import zh from '../../../locales/zh_CN.json';
 
 const bridge = vi.hoisted(() => ({
   getAccountSummary: vi.fn(),
-  getChromeProfiles: vi.fn(),
-  importChromeAccount: vi.fn(),
+  getImportSources: vi.fn(),
+  importBrowserAccount: vi.fn(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
 
@@ -41,10 +41,17 @@ it('offers Pinterest import and explains pending authorization and explicit retr
       cookieCount,
     })),
   }));
-  bridge.getChromeProfiles.mockResolvedValue([
-    { id: 'synthetic', name: 'Test profile', isDefault: true },
-  ]);
-  bridge.importChromeAccount.mockImplementation(() => request.promise);
+  bridge.getImportSources.mockResolvedValue({
+    sources: [
+      {
+        browserId: 'chrome',
+        browserName: 'Google Chrome',
+        profiles: [{ id: 'synthetic', name: 'Test profile', isDefault: true }],
+      },
+    ],
+    unreadable: [],
+  });
+  bridge.importBrowserAccount.mockImplementation(() => request.promise);
   await act(async () => root.render(<BrowserAccountsSetting />));
   expect(host.textContent).toContain('Pinterest');
   expect(host.textContent).not.toContain('Amazon');
@@ -52,7 +59,9 @@ it('offers Pinterest import and explains pending authorization and explicit retr
     false
   );
   const importButton = Array.from(host.querySelectorAll('button')).find(
-    (button) => button.textContent === zh['settings.browserAccounts.importSite']
+    (button) =>
+      button.textContent ===
+      zh['settings.browserAccounts.importFrom'].replace('{{browser}}', 'Google Chrome')
   );
   if (!importButton) throw new Error('Missing import action');
   await act(async () => importButton.click());
@@ -78,4 +87,54 @@ it('offers Pinterest import and explains pending authorization and explicit retr
     zh['settings.browserAccounts.imported'].replace('{{total}}', '5')
   );
   expect(importButton.disabled).toBe(false);
+});
+
+it('keeps a visible import button that explains why this build cannot import', async () => {
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: false,
+    importAvailable: false,
+    importUnavailableReason: 'package-required',
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  const importButton = Array.from(host.querySelectorAll('button')).find(
+    (button) => button.textContent === zh['settings.browserAccounts.importFromBrowser']
+  );
+  expect(importButton?.disabled).toBe(true);
+  expect(host.textContent).toContain(
+    zh['settings.browserAccounts.importUnavailableReasons.package-required']
+  );
+});
+
+it('imports from the browser profile Molly found, naming any it could not read', async () => {
+  const requests: unknown[][] = [];
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: true,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.getImportSources.mockResolvedValue({
+    sources: [
+      {
+        browserId: 'arc',
+        browserName: 'Arc',
+        profiles: [{ id: 'Default', name: 'Studio', isDefault: true }],
+      },
+    ],
+    unreadable: ['Microsoft Edge'],
+  });
+  bridge.importBrowserAccount.mockImplementation(async (...args: unknown[]) => {
+    requests.push(args);
+    return { imported: 3 };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  expect(host.textContent).toContain(
+    zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Microsoft Edge')
+  );
+  const importButton = Array.from(host.querySelectorAll('button')).find(
+    (button) =>
+      button.textContent === zh['settings.browserAccounts.importFrom'].replace('{{browser}}', 'Arc')
+  );
+  await act(async () => importButton?.click());
+  expect(requests).toEqual([['arc', 'Default', 'pinterest.com', false]]);
 });

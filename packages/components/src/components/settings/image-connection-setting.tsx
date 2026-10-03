@@ -1,10 +1,20 @@
-import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import {
+  ModelEndpointSchema,
   SaveProtectedImageConnectionSchema,
+  type CheckImageConnection,
+  type ConnectionCheckResult,
   type ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
-import { Cable, KeyRound, Link2, Loader2, Plug, Sparkles, Trash2 } from 'lucide-react';
 import {
   IMAGE_CONNECTION_MAX_MODEL_LENGTH,
   IMAGE_CONNECTION_PROTOCOLS,
@@ -12,13 +22,36 @@ import {
   normalizeImageConnectionBaseUrl,
   type ImageConnectionProtocol,
 } from '@molly/shared';
+import { SegmentedControl } from '@/components/shared/segmented-control';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/dropdown-menu';
+import {
+  CircleCheck,
+  CircleDashed,
+  Ellipsis,
+  Image as ImageIcon,
+  KeyRound,
+  Link2,
+  LoaderCircle,
+  Sparkles,
+  Trash2,
+} from '@/ui/icons';
 import { Input } from '@/ui/input';
-import { Label } from '@/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Switch } from '@/ui/switch';
-import { Field, Section } from './form-primitives';
+import { CompactSection } from './compact-layout';
+import {
+  ConnectionCheckBadge,
+  ConnectionCheckLine,
+  useConnectionCheck,
+  type ConnectionCheckState,
+} from './connection-check';
+import { Field } from './form-primitives';
 import { WithInfo } from './info-tip';
 
 /** Image settings use only the main-process vault's public metadata. */
@@ -58,11 +91,7 @@ export type ImageConnectionFormDraft = {
   model: string;
 };
 
-export type ImageConnectionTestState =
-  | { phase: 'idle' }
-  | { phase: 'testing' }
-  | { phase: 'ok'; modelCount: number }
-  | { phase: 'error'; message: string };
+export type ImageConnectionCheck = (input: CheckImageConnection) => Promise<ConnectionCheckResult>;
 
 export function createImageConnectionFormDraft(
   stored: Pick<ImageConnectionView, 'enabled' | 'protocol' | 'baseUrl' | 'model'> | undefined
@@ -122,6 +151,69 @@ const isDirty = (
   );
 };
 
+const SUGGESTION_LIMIT = 12;
+
+/** Model IDs the service listed, narrowed by what is typed; picking one fills the field. */
+function ModelSuggestions({
+  models,
+  value,
+  disabled,
+  onPick,
+}: {
+  models: readonly string[];
+  value: string;
+  disabled: boolean;
+  onPick: (model: string) => void;
+}) {
+  const { t } = useTranslation();
+  const typed = value.trim();
+  const needle = typed.toLowerCase();
+  const matches = needle
+    ? models.filter((model) => model.toLowerCase().includes(needle) && model !== typed)
+    : models;
+  if (models.length === 0) return null;
+  if (models.includes(typed) && matches.length === 0)
+    return (
+      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <CircleCheck aria-hidden className="h-3 w-3 shrink-0" />
+        {t('settings.imageConnection.modelListed', { count: models.length })}
+      </p>
+    );
+  if (matches.length === 0)
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        {t('settings.imageConnection.modelNotListed', { count: models.length })}
+      </p>
+    );
+  return (
+    <div className="space-y-1.5">
+      <p className="text-[11px] text-muted-foreground">
+        {t('settings.imageConnection.suggestions', { count: models.length })}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {matches.slice(0, SUGGESTION_LIMIT).map((model) => (
+          <button
+            key={model}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(model)}
+            className="max-w-full truncate rounded-full border border-border/60 px-2 py-0.5 font-mono text-[11px] text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+          >
+            {model}
+          </button>
+        ))}
+        {matches.length > SUGGESTION_LIMIT ? (
+          <span className="px-1 py-0.5 text-[11px] text-muted-foreground">
+            {t('settings.imageConnection.moreSuggestions', {
+              count: matches.length - SUGGESTION_LIMIT,
+            })}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The editor itself. Presentational: it owns the draft and its validation and
  * hands complete values to `onSave`, so the Storybook story and the container
@@ -131,21 +223,21 @@ export function ImageConnectionForm({
   stored,
   saving = false,
   saveError,
-  testState,
   onSave,
-  onTest,
+  onCancel,
   onClearApiKey,
+  onCheck,
   notice,
   className,
 }: {
-  stored: ImageConnectionView | undefined;
+  stored: (ImageConnectionView & { revision?: number }) | undefined;
   saving?: boolean;
   saveError?: string;
-  testState: ImageConnectionTestState;
-  onSave: (draft: ImageConnectionFormDraft) => void | Promise<void>;
-  onTest: () => void | Promise<void>;
+  onSave: (draft: ImageConnectionFormDraft, check?: ConnectionCheckState) => void | Promise<void>;
+  onCancel?: () => void;
   onClearApiKey: () => void | Promise<void>;
-  /** Shown at the top of the connection section, e.g. a key-rotation reminder. */
+  onCheck?: ImageConnectionCheck;
+  /** Shown at the top of the editor, e.g. a key-rotation reminder. */
   notice?: ReactNode;
   className?: string;
 }) {
@@ -162,126 +254,95 @@ export function ImageConnectionForm({
   const issues = useMemo(() => imageConnectionDraftIssues(draft), [draft]);
   const dirty = isDirty(draft, stored);
   const invalid = issues.baseUrl || issues.model;
-  const ready = Boolean(stored?.enabled && stored.hasApiKey && stored.baseUrl && stored.model);
   const hasStoredKey = Boolean(stored?.hasApiKey);
+  const baseUrl = draft.baseUrl.trim();
+  const typedKey = draft.apiKey.trim();
   const destinationNeedsKey = Boolean(
-    stored && stored.baseUrl !== draft.baseUrl.trim() && !draft.clearApiKey && !draft.apiKey.trim()
+    stored && stored.baseUrl !== baseUrl && !draft.clearApiKey && !typedKey
   );
-  const testing = testState.phase === 'testing';
   const protocolCopy = PROTOCOL_COPY[draft.protocol];
-  const testBlockedReason = !stored
-    ? t('settings.imageConnection.testNeedsSaved')
-    : dirty
-      ? t('settings.imageConnection.testNeedsSave')
-      : !ready
-        ? t('settings.imageConnection.testNeedsComplete')
-        : draft.protocol === 'dashscope'
-          ? t('settings.imageConnection.testUnsupportedDashscope')
-          : null;
+  const checkRequest = useMemo<CheckImageConnection | null>(() => {
+    if (draft.protocol === 'dashscope' || !ModelEndpointSchema.safeParse(baseUrl).success)
+      return null;
+    if (typedKey) return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
+    if (stored?.revision && hasStoredKey && !draft.clearApiKey && stored.baseUrl === baseUrl)
+      return { protocol: draft.protocol, baseUrl, expectedRevision: stored.revision };
+    return null;
+  }, [baseUrl, draft.clearApiKey, draft.protocol, hasStoredKey, stored, typedKey]);
+  const { state: check, recheck } = useConnectionCheck(checkRequest, onCheck);
+  const listed = check.phase === 'done' && check.result.ok ? (check.result.models ?? []) : [];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (invalid || destinationNeedsKey || saving) return;
     setDraft((current) => ({ ...current, apiKey: '' }));
-    void onSave(draft);
+    void onSave(draft, check);
   };
 
   return (
     <form className={className} onSubmit={submit}>
       <div className="space-y-5">
-        <Section
-          title={t('settings.imageConnection.sectionConnection')}
-          hint={t('settings.imageConnection.sectionConnectionHint')}
-          info={t('settings.imageConnection.intro')}
+        {notice}
+        <Field
+          htmlFor={`${fieldId}-protocol`}
+          label={t('settings.imageConnection.protocol')}
+          hint={
+            <WithInfo
+              text={t('settings.imageConnection.protocolHint')}
+              info={t('settings.imageConnection.protocolDetail')}
+            />
+          }
         >
-          {notice}
-          <div className="flex items-center justify-between gap-4 rounded-xl bg-foreground/[0.04] px-4 py-3">
-            <div className="min-w-0">
-              <Label htmlFor={`${fieldId}-enabled`} className="text-sm">
-                {t('settings.imageConnection.enabled')}
-              </Label>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                {t('settings.imageConnection.enabledHint')}
-              </p>
-            </div>
-            <Switch
-              id={`${fieldId}-enabled`}
-              checked={draft.enabled}
-              disabled={saving}
-              onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))}
-            />
-          </div>
+          <SegmentedControl
+            ariaLabel={t('settings.imageConnection.protocol')}
+            size="sm"
+            value={draft.protocol}
+            disabled={saving}
+            options={IMAGE_CONNECTION_PROTOCOLS.map((protocol) => ({
+              value: protocol,
+              label: t(PROTOCOL_COPY[protocol].label),
+            }))}
+            onChange={(protocol) => setDraft((current) => ({ ...current, protocol }))}
+          />
+        </Field>
 
-          <Field
-            htmlFor={`${fieldId}-protocol`}
-            label={t('settings.imageConnection.protocol')}
-            icon={<Cable className="h-3.5 w-3.5" aria-hidden="true" />}
-            hint={
-              <WithInfo
-                text={t('settings.imageConnection.protocolHint')}
-                info={t('settings.imageConnection.protocolDetail')}
-              />
+        <Field
+          htmlFor={`${fieldId}-base-url`}
+          label={t('settings.imageConnection.baseUrl')}
+          icon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          hint={
+            issues.baseUrl && baseUrl.length > 0
+              ? t('settings.imageConnection.invalidBaseUrl')
+              : t(protocolCopy.baseUrlHint)
+          }
+        >
+          <Input
+            id={`${fieldId}-base-url`}
+            disabled={saving}
+            autoComplete="off"
+            spellCheck={false}
+            className="font-mono text-xs"
+            placeholder={protocolCopy.placeholder}
+            value={draft.baseUrl}
+            onChange={(event) =>
+              setDraft((current) => ({ ...current, baseUrl: event.target.value, apiKey: '' }))
             }
-          >
-            <Select
-              value={draft.protocol}
-              disabled={saving}
-              onValueChange={(protocol) =>
-                setDraft((current) => ({
-                  ...current,
-                  protocol: protocol as ImageConnectionProtocol,
-                }))
-              }
-            >
-              <SelectTrigger id={`${fieldId}-protocol`} className="text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {IMAGE_CONNECTION_PROTOCOLS.map((protocol) => (
-                  <SelectItem key={protocol} value={protocol} className="text-xs">
-                    {t(PROTOCOL_COPY[protocol].label)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+          />
+        </Field>
 
-          <Field
-            htmlFor={`${fieldId}-base-url`}
-            label={t('settings.imageConnection.baseUrl')}
-            icon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
-            hint={
-              issues.baseUrl && draft.baseUrl.trim().length > 0
-                ? t('settings.imageConnection.invalidBaseUrl')
-                : t(protocolCopy.baseUrlHint)
-            }
-          >
-            <Input
-              id={`${fieldId}-base-url`}
-              disabled={saving}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-xs"
-              placeholder={protocolCopy.placeholder}
-              value={draft.baseUrl}
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, baseUrl: event.target.value, apiKey: '' }))
-              }
-            />
-          </Field>
-
-          <Field
-            htmlFor={`${fieldId}-api-key`}
-            label={t('settings.imageConnection.apiKey')}
-            icon={<KeyRound className="h-3.5 w-3.5" aria-hidden="true" />}
-            hint={
-              destinationNeedsKey
-                ? t('settings.models.keyRequired')
-                : hasStoredKey
-                  ? t('settings.imageConnection.apiKeyHintStored')
-                  : t('settings.imageConnection.apiKeyHintNew')
-            }
-          >
+        <Field
+          htmlFor={`${fieldId}-api-key`}
+          label={t('settings.imageConnection.apiKey')}
+          icon={<KeyRound className="h-3.5 w-3.5" aria-hidden="true" />}
+          hint={
+            destinationNeedsKey
+              ? t('settings.models.keyRequired')
+              : hasStoredKey
+                ? t('settings.imageConnection.apiKeyHintStored')
+                : t('settings.imageConnection.apiKeyHintNew')
+          }
+        >
+          <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
               <Input
                 id={`${fieldId}-api-key`}
@@ -320,18 +381,28 @@ export function ImageConnectionForm({
                 </Button>
               ) : null}
             </div>
-          </Field>
+            {draft.protocol === 'dashscope' ? (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <CircleDashed aria-hidden className="h-3.5 w-3.5 shrink-0" />
+                {t('settings.imageConnection.testUnsupportedDashscope')}
+              </p>
+            ) : (
+              <ConnectionCheckLine state={check} baseUrl={baseUrl} onRecheck={recheck} />
+            )}
+          </div>
+        </Field>
 
-          <Field
-            htmlFor={`${fieldId}-model`}
-            label={t('settings.imageConnection.model')}
-            icon={<Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
-            hint={
-              issues.model
-                ? t('settings.imageConnection.invalidModel')
-                : t('settings.imageConnection.modelHint')
-            }
-          >
+        <Field
+          htmlFor={`${fieldId}-model`}
+          label={t('settings.imageConnection.model')}
+          icon={<Sparkles className="h-3.5 w-3.5" aria-hidden="true" />}
+          hint={
+            issues.model
+              ? t('settings.imageConnection.invalidModel')
+              : t('settings.imageConnection.modelHint')
+          }
+        >
+          <div className="space-y-2">
             <Input
               id={`${fieldId}-model`}
               disabled={saving}
@@ -344,36 +415,14 @@ export function ImageConnectionForm({
                 setDraft((current) => ({ ...current, model: event.target.value }))
               }
             />
-          </Field>
-        </Section>
-
-        <Section
-          title={t('settings.imageConnection.sectionTest')}
-          hint={t('settings.imageConnection.sectionTestHint')}
-          info={t('settings.imageConnection.sectionTestDetail')}
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={saving || testing || testBlockedReason !== null}
-              title={testBlockedReason ?? undefined}
-              onClick={() => void onTest()}
-            >
-              {testing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-              ) : (
-                <Plug className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              {testing ? t('settings.imageConnection.testing') : t('settings.imageConnection.test')}
-            </Button>
-            {testBlockedReason ? (
-              <p className="text-xs leading-relaxed text-muted-foreground">{testBlockedReason}</p>
-            ) : null}
+            <ModelSuggestions
+              models={listed}
+              value={draft.model}
+              disabled={saving}
+              onPick={(model) => setDraft((current) => ({ ...current, model }))}
+            />
           </div>
-          <ImageConnectionTestSummary state={testState} />
-        </Section>
+        </Field>
 
         {saveError ? (
           <p
@@ -384,18 +433,20 @@ export function ImageConnectionForm({
           </p>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {ready
-              ? t('settings.imageConnection.statusReady')
-              : t('settings.imageConnection.statusNotReady')}
-          </p>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {onCancel ? (
+            <Button type="button" variant="outline" size="sm" disabled={saving} onClick={onCancel}>
+              {t('common.cancel')}
+            </Button>
+          ) : null}
           <Button
             type="submit"
             size="sm"
             disabled={saving || invalid || !dirty || destinationNeedsKey}
           >
-            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+            {saving ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : null}
             {saving ? t('settings.imageConnection.saving') : t('common.save')}
           </Button>
         </div>
@@ -404,26 +455,81 @@ export function ImageConnectionForm({
   );
 }
 
-function ImageConnectionTestSummary({ state }: { state: ImageConnectionTestState }) {
-  const { t } = useTranslation();
-  if (state.phase === 'idle' || state.phase === 'testing') return null;
-  if (state.phase === 'ok') {
-    return (
-      <p
-        role="status"
-        className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs leading-snug text-emerald-700 dark:text-emerald-400"
-      >
-        {t('settings.imageConnection.testOk', { modelCount: state.modelCount })}
-      </p>
-    );
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
   }
+};
+
+/** The saved image connection at a glance, switched on or off in place. */
+export function ImageConnectionSummary({
+  stored,
+  check,
+  busy = false,
+  onToggle,
+  onEdit,
+  onCheck,
+}: {
+  stored: ImageConnectionView;
+  check?: ConnectionCheckState;
+  busy?: boolean;
+  onToggle: (enabled: boolean) => void;
+  onEdit: () => void;
+  onCheck?: () => void;
+}) {
+  const { t } = useTranslation();
+  const protocol = imageConnectionProtocol(stored);
+  const canTurnOn = stored.hasApiKey && stored.model.trim().length > 0;
   return (
-    <p
-      role="alert"
-      className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs leading-snug text-destructive"
-    >
-      {t('settings.imageConnection.testFailed', { message: state.message })}
-    </p>
+    <div className="flex items-center gap-3 px-5 py-3.5">
+      <span
+        aria-hidden
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06]"
+      >
+        <ImageIcon className="h-4 w-4 text-foreground" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-sm">
+            {t(PROTOCOL_COPY[protocol].label)} · <span className="font-mono">{stored.model}</span>
+          </p>
+          <ConnectionCheckBadge state={check} />
+        </div>
+        <p className="truncate text-xs text-muted-foreground">
+          {hostOf(stored.baseUrl)}
+          {stored.hasApiKey ? '' : ` · ${t('settings.readiness.keyMissing')}`}
+        </p>
+      </div>
+      <Switch
+        aria-label={t('settings.imageConnection.enabled')}
+        checked={stored.enabled}
+        disabled={busy || (!stored.enabled && !canTurnOn)}
+        onCheckedChange={onToggle}
+      />
+      <Button variant="outline" size="sm" disabled={busy} onClick={onEdit}>
+        {t('common.edit')}
+      </Button>
+      {onCheck && protocol !== 'dashscope' && stored.hasApiKey ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 rounded-full"
+              disabled={busy}
+              aria-label={t('settings.imageConnection.moreActions')}
+            >
+              <Ellipsis aria-hidden className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={onCheck}>{t('settings.check.run')}</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+    </div>
   );
 }
 
@@ -436,12 +542,13 @@ export function ImageConnectionSetting({
   const ipc = useMemo(() => getIpcServices(), []);
   const [stored, setStored] = useState<ProtectedImageConnection>();
   const [ready, setReady] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string>();
+  const [editing, setEditing] = useState(false);
+  const [check, setCheck] = useState<{ revision: number; state: ConnectionCheckState }>();
   useEffect(() => {
     if (ready) onConnectionChange?.(stored ?? null);
   }, [onConnectionChange, ready, stored]);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string>();
-  const [testState, setTestState] = useState<ImageConnectionTestState>({ phase: 'idle' });
   useEffect(() => {
     if (!ipc) return undefined;
     let live = true;
@@ -460,8 +567,15 @@ export function ImageConnectionSetting({
       live = false;
     };
   }, [ipc, t]);
-  const save = async (draft: ImageConnectionFormDraft) => {
-    if (!ipc || !ready || saving) return;
+  const onCheck = useCallback<ImageConnectionCheck>(
+    async (input) => {
+      if (!ipc) return { ok: false, reason: 'unreachable' };
+      return ipc.modelConnections.checkImage(input);
+    },
+    [ipc]
+  );
+  const save = async (draft: ImageConnectionFormDraft, checked?: ConnectionCheckState) => {
+    if (!ipc || !ready || saving) return false;
     setSaving(true);
     setSaveError(undefined);
     try {
@@ -469,49 +583,102 @@ export function ImageConnectionSetting({
       if (!input) throw new Error('invalid_image_connection');
       const connection = await ipc.modelConnections.saveImage(input);
       setStored(connection);
-      setTestState({ phase: 'idle' });
+      setCheck(
+        checked?.phase === 'done' ? { revision: connection.revision, state: checked } : undefined
+      );
+      return true;
     } catch {
       setSaveError(t('settings.models.error'));
+      return false;
     } finally {
       setSaving(false);
     }
   };
-  const test = async () => {
-    if (!ipc || !stored) return;
-    setTestState({ phase: 'testing' });
-    try {
-      const result = await ipc.modelConnections.testImage({ expectedRevision: stored.revision });
-      setTestState(
-        result.ok
-          ? { phase: 'ok', modelCount: result.modelCount }
-          : { phase: 'error', message: result.error }
-      );
-    } catch {
-      setTestState({ phase: 'error', message: t('settings.imageConnection.errors.unexpected') });
-    }
+  const checkSaved = (connection: ProtectedImageConnection) => {
+    setCheck({ revision: connection.revision, state: { phase: 'checking' } });
+    void onCheck({
+      protocol: connection.protocol,
+      baseUrl: connection.baseUrl,
+      expectedRevision: connection.revision,
+    }).then(
+      (result) => setCheck({ revision: connection.revision, state: { phase: 'done', result } }),
+      () =>
+        setCheck({
+          revision: connection.revision,
+          state: { phase: 'done', result: { ok: false, reason: 'unreachable' } },
+        })
+    );
   };
   if (!ipc) return <p>{t('settings.imageConnection.unavailable')}</p>;
+  const notice = stored?.legacyHistoryMayContainKey ? (
+    <p
+      role="alert"
+      className="rounded-xl border border-border/60 px-4 py-3 text-xs leading-relaxed text-warning-foreground"
+    >
+      {t('settings.imageConnection.legacyHistoryWarning')}
+    </p>
+  ) : undefined;
   return (
-    <ImageConnectionForm
-      stored={stored}
-      saving={saving || !ready}
-      saveError={saveError}
-      testState={testState}
-      onSave={save}
-      onTest={test}
-      onClearApiKey={() =>
-        stored && save({ ...createImageConnectionFormDraft(stored), clearApiKey: true })
-      }
-      notice={
-        stored?.legacyHistoryMayContainKey ? (
-          <p
-            role="alert"
-            className="rounded-xl border border-border/60 px-4 py-3 text-xs leading-relaxed text-warning-foreground"
-          >
-            {t('settings.imageConnection.legacyHistoryWarning')}
+    <CompactSection
+      title={t('settings.imageConnection.sectionConnection')}
+      description={t('settings.imageConnection.sectionConnectionHint')}
+      info={t('settings.imageConnection.intro')}
+    >
+      <div className="border-t border-border/40">
+        {!ready ? (
+          <p role="status" className="px-5 py-4 text-xs text-muted-foreground">
+            {saveError ?? t('settings.models.loading')}
           </p>
-        ) : undefined
-      }
-    />
+        ) : editing ? (
+          <ImageConnectionForm
+            className="bg-foreground/[0.015] p-5"
+            stored={stored}
+            saving={saving}
+            saveError={saveError}
+            notice={notice}
+            onCheck={onCheck}
+            onCancel={() => {
+              setSaveError(undefined);
+              setEditing(false);
+            }}
+            onSave={async (draft, checked) => {
+              if (await save(draft, checked)) setEditing(false);
+            }}
+            onClearApiKey={async () => {
+              if (stored)
+                await save({ ...createImageConnectionFormDraft(stored), clearApiKey: true });
+            }}
+          />
+        ) : stored ? (
+          <>
+            {notice ? <div className="px-5 pt-4">{notice}</div> : null}
+            <ImageConnectionSummary
+              stored={stored}
+              check={check?.revision === stored.revision ? check.state : undefined}
+              busy={saving}
+              onEdit={() => setEditing(true)}
+              onCheck={() => checkSaved(stored)}
+              onToggle={(enabled) =>
+                void save({ ...createImageConnectionFormDraft(stored), enabled })
+              }
+            />
+            {saveError ? (
+              <p role="alert" className="px-5 pb-4 text-xs text-destructive">
+                {saveError}
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+            <p className="min-w-0 flex-1 text-xs leading-relaxed text-muted-foreground">
+              {t('settings.imageConnection.statusNotReady')}
+            </p>
+            <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+              {t('settings.imageConnection.setUp')}
+            </Button>
+          </div>
+        )}
+      </div>
+    </CompactSection>
   );
 }

@@ -11,7 +11,8 @@ Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
 Each worker runs with `PI_CODING_AGENT_DIR=<molly-data>/harness/pi/config/workers/<sha256(runtimeEpoch)>`,
 its own native Pi agent directory. The launch environment and worker bootstrap derive
 the same path before importing the SDK. It never reads or writes the user's `~/.pi/agent`. On startup the worker
-writes the profile's `settings.json` from [profile-settings.ts](src/profile-settings.ts):
+writes the profile's `settings.json` from [profile-settings.ts](src/profile-settings.ts), listing
+shared `MOLLY_PI_PACKAGES` (Settings › Advanced › System › Engine details reports the same set):
 
 | Package                              | Purpose                                        |
 | ------------------------------------ | ---------------------------------------------- |
@@ -77,7 +78,11 @@ including declared OpenAI-compatible models. Pi applies a provider endpoint over
 model of that provider, so a connection on its preset's default endpoint
 (`PROVIDER_PRESET_DEFAULT_BASE_URLS`) registers no override and each model keeps its own SDK
 endpoint: OpenRouter serves Anthropic-protocol models at `/api` and the rest at `/api/v1`.
-A custom endpoint still replaces every model's. Model and thinking selection are fixed per
+A custom endpoint still replaces every model's. When a connection lists `models`, the
+conversation picker offers only those catalog models and the worker refuses any other with
+`harness_model_not_in_catalog`; without the list it offers the whole preset catalog. Settings'
+free key check follows `PROVIDER_PRESET_CHECKS`, which a test keeps in step with each preset's
+SDK protocol. Model and thinking selection are fixed per
 worker; hooks in [host.ts](src/host.ts) retire the worker if an extension changes them.
 
 ## ACP adapter

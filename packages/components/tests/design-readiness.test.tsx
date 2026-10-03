@@ -216,7 +216,7 @@ describe('AI models page', () => {
         (entry) => entry.textContent?.startsWith(label)
       )!;
     await act(async () => chip('Image generation').click());
-    expect(document.activeElement?.textContent).toContain('Generate and edit images');
+    expect(document.activeElement?.textContent).toContain('Set up image generation');
     expect(document.activeElement?.textContent).not.toContain('Add model connection');
     await act(async () => chip('Pinterest').click());
     expect(fakes.openedTab).toBe('browser-accounts');

@@ -3,6 +3,7 @@ import { InMemoryCredentialStore, InMemoryModelsStore } from '@earendil-works/pi
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import {
   MOLLY_PROVIDER_IDS,
+  PROVIDER_PRESET_CHECKS,
   PROVIDER_PRESET_DEFAULT_BASE_URLS,
   ProviderPresetIdSchema,
   type ModelConnection,
@@ -97,4 +98,41 @@ it('sends every model of a connection with a custom endpoint to that endpoint', 
     new Set([endpoint])
   );
   expect(runtime.getRegisteredProviderConfig(providerId)).toEqual({ baseUrl: endpoint });
+});
+
+it('checks each native preset through the protocol all of its SDK models use', async () => {
+  const runtime = await offlineRuntime();
+  const protocolOf = (api: string) =>
+    api.startsWith('openai-')
+      ? 'openai'
+      : api === 'anthropic-messages'
+        ? 'anthropic'
+        : api === 'google-generative-ai'
+          ? 'google'
+          : api;
+  for (const preset of nativePresets) {
+    const protocols = new Set(
+      runtime.getModels(MOLLY_PROVIDER_IDS[preset]).map((model) => protocolOf(model.api))
+    );
+    expect({ preset, check: PROVIDER_PRESET_CHECKS[preset] }).toEqual({
+      preset,
+      check: preset === 'openrouter' ? 'openrouter' : [...protocols].join(),
+    });
+  }
+  expect(PROVIDER_PRESET_CHECKS['openai-compatible']).toBe('openai');
+});
+
+it('refuses a model the connection no longer offers in the conversation picker', async () => {
+  const runtime = await offlineRuntime();
+  const [first, second] = runtime.getModels(MOLLY_PROVIDER_IDS.anthropic);
+  const narrowed = {
+    ...connection('anthropic', PROVIDER_PRESET_DEFAULT_BASE_URLS.anthropic),
+    models: [first!.id],
+  };
+  expect(configureModelConnection(runtime, narrowed, selecting(first!.id)).providerId).toBe(
+    MOLLY_PROVIDER_IDS.anthropic
+  );
+  expect(() => configureModelConnection(runtime, narrowed, selecting(second!.id))).toThrow(
+    'harness_model_not_in_catalog'
+  );
 });

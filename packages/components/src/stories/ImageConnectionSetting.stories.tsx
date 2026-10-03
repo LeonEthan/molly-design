@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
-import type { ProtectedImageConnection } from '@molly/shared/embedded-harness';
+import type {
+  ConnectionCheckResult,
+  ProtectedImageConnection,
+} from '@molly/shared/embedded-harness';
 import {
   ImageConnectionForm,
   type ImageConnectionFormDraft,
-  type ImageConnectionTestState,
 } from '@/components/settings/image-connection-setting';
 
 /* The stored row is a machine credential, so the form is exercised the way the
@@ -29,15 +31,11 @@ type StoryProps = {
   stored?: ProtectedImageConnection;
   saving?: boolean;
   saveError?: string;
-  testState?: ImageConnectionTestState;
+  /** What the free model-list check answers; omitted means no check runs. */
+  checkResult?: ConnectionCheckResult;
 };
 
-function StoryWrapper({
-  stored,
-  saving = false,
-  saveError,
-  testState = { phase: 'idle' },
-}: StoryProps) {
+function StoryWrapper({ stored, saving = false, saveError, checkResult }: StoryProps) {
   const [lastSaved, setLastSaved] = useState<ImageConnectionFormDraft | null>(null);
   return (
     <div className="w-[560px]">
@@ -45,9 +43,9 @@ function StoryWrapper({
         stored={stored}
         saving={saving}
         saveError={saveError}
-        testState={testState}
         onSave={(draft) => setLastSaved(draft)}
-        onTest={async () => undefined}
+        onCancel={() => undefined}
+        onCheck={checkResult ? async () => checkResult : undefined}
         onClearApiKey={async () => undefined}
       />
       {lastSaved ? (
@@ -89,19 +87,33 @@ export const Disabled: Story = {
   args: { stored: storedConnection({ enabled: false }) },
 };
 
-/** The non-billable probe answered. */
-export const TestSucceeded: Story = {
+/** The free check answered with the service's models, offered as suggestions. */
+export const CheckListedModels: Story = {
   args: {
-    stored: storedConnection(),
-    testState: { phase: 'ok', modelCount: 12 },
+    stored: storedConnection({ model: '' }),
+    checkResult: {
+      ok: true,
+      models: ['gpt-image-2', 'gpt-image-1', 'dall-e-3', 'gpt-4.1', 'gpt-4.1-mini'],
+    },
   },
 };
 
 /** The upstream refused the credential. */
-export const TestFailed: Story = {
+export const CheckRejected: Story = {
   args: {
     stored: storedConnection(),
-    testState: { phase: 'error', message: 'HTTP 401: invalid API key provided' },
+    checkResult: { ok: false, reason: 'key_rejected', status: 401 },
+  },
+};
+
+/** DashScope has no free check, so the form says so instead of probing. */
+export const DashScope: Story = {
+  args: {
+    stored: storedConnection({
+      protocol: 'dashscope',
+      baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+      model: 'qwen-image-2.0',
+    }),
   },
 };
 

@@ -9,6 +9,16 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
 export const PI_ENGINE_VERSION = '1.0.0' as const;
+/** Unmodified published Pi packages every worker profile lists; settings reports the same set. */
+export const MOLLY_PI_PACKAGES = [
+  'pi-subagents',
+  'pi-skillful',
+  '@juicesharp/rpiv-ask-user-question',
+  '@zigai/pi-mention-skill',
+  '@ff-labs/pi-fff',
+  'cc-safety-net',
+] as const;
+export type MollyPiPackage = (typeof MOLLY_PI_PACKAGES)[number];
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
 
 /** Execution eligibility only: historical configs remain readable. */
@@ -344,6 +354,67 @@ export function isProviderPresetDefaultEndpoint(preset: ProviderPresetId, baseUr
   );
 }
 
+/**
+ * How settings checks a key for free, by the protocol each native preset's pinned SDK
+ * models use (guarded in harness-pi): list models (`openai`, `anthropic`, `google`) or
+ * validate the key without listing (`openrouter`). A check never sends a model request.
+ */
+export const PROVIDER_PRESET_CHECKS: Record<
+  ProviderPresetId,
+  'openai' | 'anthropic' | 'google' | 'openrouter'
+> = {
+  openai: 'openai',
+  anthropic: 'anthropic',
+  google: 'google',
+  xai: 'openai',
+  deepseek: 'openai',
+  moonshot: 'openai',
+  'kimi-coding': 'anthropic',
+  zai: 'openai',
+  minimax: 'anthropic',
+  openrouter: 'openrouter',
+  'openai-compatible': 'openai',
+};
+
+export const ConnectionCheckFailureSchema = z.enum([
+  'key_rejected',
+  'unsupported',
+  'unreachable',
+  'rate_limited',
+  'http_error',
+  'invalid_response',
+  'changed',
+  'needs_key',
+]);
+export type ConnectionCheckFailure = z.infer<typeof ConnectionCheckFailureSchema>;
+/** `models` lists the IDs the service reported; it is absent when the check only validates the key. */
+export type ConnectionCheckResult =
+  | { ok: true; models?: string[] }
+  | { ok: false; reason: ConnectionCheckFailure; status?: number };
+
+/** A typed key goes only to the destination being checked; a saved key only to its own. */
+export const CheckModelConnectionSchema = z
+  .object({
+    providerPresetId: ProviderPresetIdSchema,
+    baseUrl: ModelEndpointSchema,
+    apiKey: z.string().trim().min(1).max(16_384).optional(),
+    stored: z.object({ id: identifier, revision }).strict().optional(),
+  })
+  .strict()
+  .refine((value) => value.apiKey !== undefined || value.stored !== undefined);
+export type CheckModelConnection = z.infer<typeof CheckModelConnectionSchema>;
+
+export const CheckImageConnectionSchema = z
+  .object({
+    protocol: ImageConnectionProtocolSchema.optional(),
+    baseUrl: ModelEndpointSchema,
+    apiKey: z.string().trim().min(1).max(16_384).optional(),
+    expectedRevision: revision.optional(),
+  })
+  .strict()
+  .refine((value) => value.apiKey !== undefined || value.expectedRevision !== undefined);
+export type CheckImageConnection = z.infer<typeof CheckImageConnectionSchema>;
+
 export const HarnessModelCatalogSchema = z
   .object({
     version: z.literal(1),
@@ -402,11 +473,21 @@ const ModelConnectionFieldsSchema = z
     credentialRef: identifier,
     enabled: z.boolean(),
     customModels: CompatibleModelsSchema.optional(),
+    /** Native catalog models offered in the conversation picker; absent offers all of them. */
+    models: z
+      .array(z.string().trim().min(1).max(200))
+      .min(1)
+      .max(1_000)
+      .refine((ids) => new Set(ids).size === ids.length)
+      .optional(),
   })
   .strict();
 export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
   (value) => value.customModels === undefined || value.providerPresetId === 'openai-compatible',
   'Custom models require an OpenAI-compatible connection'
+).refine(
+  (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
+  'OpenAI-compatible connections offer exactly their declared models'
 );
 export type ModelConnection = z.infer<typeof ModelConnectionSchema>;
 
@@ -433,6 +514,10 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   .refine(
     (value) => !value.enabled || getModelConnectionConfigurationIssue(value) === undefined,
     'Provider protocol does not match the Kimi Code endpoint'
+  )
+  .refine(
+    (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
+    'OpenAI-compatible connections offer exactly their declared models'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
 

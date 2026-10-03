@@ -7,9 +7,13 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import {
   assertStoredCookiesUnpartitioned,
-  importChromeAccountCookies
+  importBrowserAccountCookies
 } from './browser-account-import.ts'
-import { cookiesFromChromeReport, readChromeSiteCookies } from './browser-account-source.ts'
+import {
+  cookiesFromBrowserReport,
+  listImportSources,
+  readBrowserSiteCookies
+} from './browser-account-source.ts'
 
 const cookie = {
   domain: '.pinterest.com',
@@ -35,7 +39,7 @@ const context = {
 const details = (cookies = [cookie]) =>
   cookies.map((entry) => ({ cookie: entry, context: { ...context } }))
 const convert = (input = report(), detailed = [details()]) =>
-  cookiesFromChromeReport(input, 'synthetic-profile', 'pinterest.com', detailed)
+  cookiesFromBrowserReport(input, 'synthetic-profile', 'pinterest.com', detailed)
 const report = (overrides = {}) => ({
   schemaVersion: 1,
   status: 'succeeded',
@@ -69,7 +73,7 @@ void test('selected Chrome profile imports only the requested website', () => {
     }
   ])
   assert.throws(
-    () => cookiesFromChromeReport(report(), 'another-profile', 'pinterest.com', [details()]),
+    () => cookiesFromBrowserReport(report(), 'another-profile', 'pinterest.com', [details()]),
     /profile is no longer available/
   )
 })
@@ -285,11 +289,12 @@ void test('first Keychain authorization can take two minutes without losing exis
       }),
     chromiumBasedDetailed: async () => details()
   }
-  const importing = importChromeAccountCookies({
+  const importing = importBrowserAccountCookies({
     store,
     site: 'pinterest.com',
     replaceExisting: true,
-    readSource: () => readChromeSiteCookies('synthetic-profile', 'pinterest.com', reader),
+    readSource: () =>
+      readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', reader),
     beforeWrite: async () => {}
   })
   await started.promise
@@ -310,12 +315,12 @@ void test('native authorization timeouts give a safe manual retry and preserve t
     const store = cookieStore()
     const before = structuredClone(store.state)
     await assert.rejects(
-      importChromeAccountCookies({
+      importBrowserAccountCookies({
         store,
         site: 'pinterest.com',
         replaceExisting: true,
         readSource: () =>
-          readChromeSiteCookies('synthetic-profile', 'pinterest.com', {
+          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
             browserReport,
             chromiumBasedDetailed: async () => {
               throw new Error('A timed out read must stop here.')
@@ -326,7 +331,7 @@ void test('native authorization timeouts give a safe manual retry and preserve t
         }
       }),
       (error) => {
-        assert.match(error.message, /timed out.*Keychain.*Import from Chrome again/)
+        assert.match(error.message, /timed out.*Keychain.*Import again/)
         assert.doesNotMatch(error.message, /private|secret|synthetic-only/)
         return true
       }
@@ -346,7 +351,7 @@ void test('rejected source or existing CHIPS leaves destination cookies unchange
     const store = cookieStore()
     const before = structuredClone(store.state)
     await assert.rejects(
-      importChromeAccountCookies({
+      importBrowserAccountCookies({
         store,
         site: 'pinterest.com',
         replaceExisting: true,
@@ -405,7 +410,7 @@ void test('ordinary import succeeds and rollback restores prior ordinary cookies
         'pinterest.com'
       )
   }
-  assert.equal(await importChromeAccountCookies(input), 1)
+  assert.equal(await importBrowserAccountCookies(input), 1)
   assert.equal(store.state[0].value, cookie.value)
   const before = structuredClone(store.state)
   const originalSet = store.set.bind(store)
@@ -414,11 +419,62 @@ void test('ordinary import succeeds and rollback restores prior ordinary cookies
     return originalSet(incoming)
   }
   await assert.rejects(
-    importChromeAccountCookies({
+    importBrowserAccountCookies({
       ...input,
       readSource: async () => [{ ...convert()[0], value: 'failed-import-value' }]
     }),
     /restored its previous/
   )
   assert.deepEqual(store.state, before)
+})
+
+void test('import sources list installed Chromium browsers and name the unreadable ones', async () => {
+  const listed = await listImportSources(['chrome', 'edge', 'arc', 'brave'], {
+    supportedBrowsers: async () => [
+      { id: 'chrome', displayName: 'Google Chrome' },
+      { id: 'edge', displayName: 'Microsoft Edge' },
+      { id: 'brave', displayName: 'Brave' },
+      { id: 'safari', displayName: 'Safari' }
+    ],
+    browserProfiles: async (browserId) => {
+      if (browserId === 'edge') throw new Error('/private/profile/path')
+      if (browserId === 'brave') return []
+      return [
+        { profile: { profileId: 'Default', displayName: 'Personal' }, isDefault: true },
+        { profile: { profileId: 'Profile 1', displayName: 'Work' }, isDefault: false }
+      ]
+    }
+  })
+  assert.deepEqual(listed, {
+    sources: [
+      {
+        browserId: 'chrome',
+        browserName: 'Google Chrome',
+        profiles: [
+          { id: 'Default', name: 'Personal', isDefault: true },
+          { id: 'Profile 1', name: 'Work', isDefault: false }
+        ]
+      }
+    ],
+    unreadable: ['Microsoft Edge']
+  })
+  assert.equal(JSON.stringify(listed).includes('/private'), false)
+})
+
+void test('the chosen browser reads its own report and cookie database', async () => {
+  const browsers = []
+  const input = report()
+  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
+  const cookies = await readBrowserSiteCookies('arc', 'synthetic-profile', 'pinterest.com', {
+    browserReport: async ({ browserId }) => {
+      browsers.push(browserId)
+      return input
+    },
+    chromiumBasedDetailed: async (_path, _domains, browserId) => {
+      browsers.push(browserId)
+      return details()
+    }
+  })
+  assert.equal(cookies.length, 1)
+  assert.deepEqual(browsers, ['arc', 'arc'])
 })

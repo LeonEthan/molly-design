@@ -4,10 +4,14 @@ import {
   type ElectronPublicBrowserBounds,
   type ElectronPublicBrowserResult,
   type ElectronPublicBrowserState,
+  type AccountImportBrowserId,
   type ElectronBrowserAccountSummary
 } from '@molly/shared/electron-ipc'
 import { parseBrowserAddress } from '@molly/shared/browser-url'
-import { ElectronBrowserAccountSiteInputSchema } from '@molly/shared/electron-ipc'
+import {
+  ACCOUNT_IMPORT_BROWSERS,
+  ElectronBrowserAccountSiteInputSchema
+} from '@molly/shared/electron-ipc'
 import { formatUnknownError } from '../utils'
 import { isNavigationAbortError, mergePublicBrowserState } from './public-browser-state'
 import type {
@@ -22,13 +26,13 @@ import {
 } from './public-browser-agent-controller'
 import { hostMatchesSite } from './public-browser-agent-policy'
 import {
-  listChromeProfiles,
-  readChromeSiteCookies,
-  type ChromeProfileChoice
+  listImportSources,
+  readBrowserSiteCookies,
+  type BrowserImportSources
 } from './browser-account-source'
 import {
   assertStoredCookiesUnpartitioned,
-  importChromeAccountCookies
+  importBrowserAccountCookies
 } from './browser-account-import'
 
 type PublicBrowserRecord = {
@@ -56,17 +60,17 @@ const accountImportReadinessError = (): AccountImportReadinessError | null => {
   if (process.platform !== 'darwin' || !app.isPackaged)
     return {
       reason: 'package-required',
-      message: 'Chrome account import requires a packaged Molly app on macOS.'
+      message: 'Browser account import requires a packaged Molly app on macOS.'
     }
   if (!canPersistPublicBrowserSession())
     return {
       reason: 'signing-required',
-      message: 'Chrome account import requires a Molly build with a stable macOS signing identity.'
+      message: 'Browser account import requires a Molly build with a stable macOS signing identity.'
     }
   if (!safeStorage.isEncryptionAvailable())
     return {
       reason: 'secure-storage-unavailable',
-      message: 'macOS secure storage is unavailable; Chrome account import was stopped.'
+      message: 'macOS secure storage is unavailable; browser account import was stopped.'
     }
   return null
 }
@@ -476,13 +480,13 @@ export class PublicBrowserService {
     for (const record of this.records.values()) this.revokeAgentCommand(record.browserId)
   }
 
-  async getChromeProfiles(): Promise<ChromeProfileChoice[]> {
+  async getImportSources(): Promise<BrowserImportSources> {
     const readinessError = accountImportReadinessError()
     if (readinessError) throw new Error(readinessError.message)
     try {
-      return await listChromeProfiles()
+      return await listImportSources(ACCOUNT_IMPORT_BROWSERS)
     } catch {
-      throw new Error('Molly could not list Chrome profiles on this Mac.')
+      throw new Error('Molly could not list browser profiles on this Mac.')
     }
   }
 
@@ -509,7 +513,8 @@ export class PublicBrowserService {
     }
   }
 
-  async importChromeAccount(
+  async importBrowserAccount(
+    browserId: AccountImportBrowserId,
     profileId: string,
     site: AccountImportSite,
     replaceExisting: boolean
@@ -518,11 +523,11 @@ export class PublicBrowserService {
     if (readinessError) throw new Error(readinessError.message)
     return await this.runAccountMutation(async () => {
       const browserSession = session.fromPartition(publicBrowserPartition())
-      const imported = await importChromeAccountCookies({
+      const imported = await importBrowserAccountCookies({
         store: browserSession.cookies,
         site,
         replaceExisting,
-        readSource: () => readChromeSiteCookies(profileId, site),
+        readSource: () => readBrowserSiteCookies(browserId, profileId, site),
         beforeWrite: async () => {
           this.pauseAgentsForAccountChange()
           // Read partition metadata in the destination session. Electron's

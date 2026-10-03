@@ -1,4 +1,5 @@
 import type {
+  AccountImportBrowserId,
   ElectronBrowserAccountSiteInput,
   ElectronPublicBrowserBounds,
   ElectronPublicBrowserState,
@@ -102,12 +103,13 @@ export function getPublicBrowserBridge() {
     setVisible: (browserId: string, visible: boolean) => pub.setVisible({ browserId, visible }),
     destroy: (browserId: string) => pub.destroy({ browserId }),
     getAccountSummary: () => pub.getAccountSummary(),
-    getChromeProfiles: () => pub.getChromeProfiles(),
-    importChromeAccount: (
+    getImportSources: () => pub.getImportSources(),
+    importBrowserAccount: (
+      browserId: AccountImportBrowserId,
       profileId: string,
       site: ElectronBrowserAccountSiteInput['site'],
       replaceExisting: boolean
-    ) => pub.importChromeAccount({ profileId, site, replaceExisting }),
+    ) => pub.importBrowserAccount({ browserId, profileId, site, replaceExisting }),
     clearAccountCookies: (site: ElectronBrowserAccountSiteInput['site']) =>
       pub.clearAccountCookies({ site }),
     takeAgentControl: (browserId: string) => pub.takeAgentControl({ browserId }),

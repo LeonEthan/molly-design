@@ -6,6 +6,7 @@ import {
   BundledCapabilitiesSetting,
   BundledCapabilitiesView,
 } from '../src/components/settings/bundled-capabilities-setting';
+import { MOLLY_PI_PACKAGES } from '@molly/shared/embedded-harness';
 import { initI18n } from '../src/i18n';
 import en from '../../../locales/en.json';
 import zh from '../../../locales/zh_CN.json';
@@ -18,16 +19,9 @@ const snapshot = {
     protocolVersion: 1,
     buildId: 'a'.repeat(64),
   },
-  extensions: [
-    {
-      name: '@juicesharp/rpiv-ask-user-question',
-      version: '2.12.0',
-      license: 'MIT',
-      tools: ['ask_user_question'],
-      activation: 'requires-question-ui-v1',
-    },
-  ],
-} as const;
+  engine: { name: '@earendil-works/pi-coding-agent', version: '1.0.0', license: 'MIT' },
+  addons: MOLLY_PI_PACKAGES.map((name) => ({ name, version: '1.2.3', license: 'MIT' })),
+};
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(async () => {
@@ -45,24 +39,23 @@ afterEach(async () => {
 });
 
 it.each(['en', 'zh_CN'] as const)(
-  'shows version and conditional activation without installation controls: %s',
+  'lists Pi and every shipped add-on in plain words without installation controls: %s',
   async (lang) => {
     await initI18n(lang);
-    await act(async () =>
-      root.render(
-        <BundledCapabilitiesView
-          snapshot={{
-            ...snapshot,
-            extensions: [{ ...snapshot.extensions[0], tools: ['ask_user_question'] }],
-          }}
-        />
-      )
-    );
+    await act(async () => root.render(<BundledCapabilitiesView snapshot={snapshot} />));
     const copy = lang === 'en' ? en : zh;
-    expect(host.textContent).toContain('@juicesharp/rpiv-ask-user-question · 2.12.0 · MIT');
-    expect(host.textContent).toContain(copy['settings.models.capabilitiesQuestionActivation']);
-    expect(host.textContent).toContain(copy['settings.models.capabilitiesLimits']);
-    expect(host.querySelector('button, input, select, a')).toBeNull();
+    expect(host.textContent).toContain('@earendil-works/pi-coding-agent · 1.0.0 · MIT');
+    for (const name of MOLLY_PI_PACKAGES)
+      expect(host.textContent).toContain(`${name} · 1.2.3 · MIT`);
+    for (const slug of ['subagents', 'skills', 'questions', 'mentions', 'fileSearch', 'safetyNet'])
+      expect(host.textContent).toContain(
+        copy[`settings.engine.addons.${slug}.title` as keyof typeof copy]
+      );
+    expect(host.querySelector('input, select, a')).toBeNull();
+    expect([...host.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+      '',
+      '',
+    ]);
   }
 );
 

@@ -50,3 +50,20 @@ export const CannotTurnOn: Story = {
     },
   },
 };
+export const KeyWorks: Story = {
+  args: {
+    check: { phase: 'done', result: { ok: true, models: ['deepseek-flash'] } },
+    onCheck: () => undefined,
+    onDelete: () => undefined,
+  },
+};
+export const KeyRejected: Story = {
+  args: {
+    check: { phase: 'done', result: { ok: false, reason: 'key_rejected', status: 401 } },
+    onCheck: () => undefined,
+    onDelete: () => undefined,
+  },
+};
+export const ChosenModels: Story = {
+  args: { connection: { ...meta.args.connection, models: ['deepseek-flash'] } },
+};

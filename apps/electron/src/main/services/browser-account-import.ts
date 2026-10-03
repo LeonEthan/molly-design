@@ -34,7 +34,7 @@ export function assertStoredCookiesUnpartitioned(snapshot: unknown, site: Site):
 }
 
 /** Main-only transaction; the complete source is validated before any mutation. */
-export async function importChromeAccountCookies({
+export async function importBrowserAccountCookies({
   store,
   site,
   replaceExisting,
@@ -61,7 +61,9 @@ export async function importChromeAccountCookies({
       ['\r', '\n', '\0'].some((character) => cookie.name.includes(character)) ||
       ['\r', '\n', '\0'].some((character) => cookie.value.includes(character))
     ) {
-      throw new Error('Chrome returned a cookie outside the selected site or with invalid fields.')
+      throw new Error(
+        'The browser returned a cookie outside the selected site or with invalid fields.'
+      )
     }
   }
   await beforeWrite()
@@ -136,8 +138,8 @@ export async function importChromeAccountCookies({
     }
     throw new Error(
       restored
-        ? 'Chrome import failed; Molly restored its previous website cookies.'
-        : 'Chrome import failed and Molly could not fully restore its previous website cookies. Sign in again in Molly.'
+        ? 'Browser import failed; Molly restored its previous website cookies.'
+        : 'Browser import failed and Molly could not fully restore its previous website cookies. Sign in again in Molly.'
     )
   }
   return imported

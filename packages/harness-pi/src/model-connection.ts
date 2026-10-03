@@ -21,6 +21,8 @@ export function configureModelConnection(
   if (issue) throw new Error(`harness_${issue}`);
   if (!connection.enabled || connection.id !== selection.connectionId)
     throw new Error('harness_connection_unavailable');
+  if (connection.models && !connection.models.includes(selection.modelId))
+    throw new Error('harness_model_not_in_catalog');
   const compatible = connection.providerPresetId === 'openai-compatible';
   const declared = connection.customModels?.find((model) => model.modelId === selection.modelId);
   if (compatible && !declared) throw new Error('harness_model_not_in_catalog');

@@ -1,5 +1,21 @@
 import type { Meta, StoryObj } from '@storybook/react';
+import type { HarnessModelCatalog } from '@molly/shared/embedded-harness';
 import { ModelConnectionForm } from '@/components/settings/model-connection-setting';
+
+const catalog: HarnessModelCatalog['models'] = [
+  ['gpt-5.5', 'GPT-5.5', true, 400_000, true],
+  ['gpt-5.5-mini', 'GPT-5.5 mini', true, 400_000, true],
+  ['gpt-5.5-nano', 'GPT-5.5 nano', false, 400_000, false],
+  ['gpt-4.1', 'GPT-4.1', true, 1_047_576, false],
+  ['o4-mini', 'o4-mini', true, 200_000, true],
+].map(([modelId, name, image, contextWindow, thinks]) => ({
+  providerPresetId: 'openai' as const,
+  modelId: modelId as string,
+  name: name as string,
+  input: image ? ['text' as const, 'image' as const] : ['text' as const],
+  contextWindow: contextWindow as number,
+  thinking: thinks ? ['off' as const, 'low' as const, 'high' as const] : ['off' as const],
+}));
 
 const meta = {
   title: 'Settings/ModelConnectionForm',
@@ -7,7 +23,7 @@ const meta = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="w-[420px]">
+      <div className="w-[560px] rounded-2xl border border-border/40 bg-card">
         <Story />
       </div>
     ),
@@ -86,5 +102,36 @@ export const ProviderDefaultEndpoint: Story = {
       displayName: 'DeepSeek',
       baseUrl: 'https://api.deepseek.com',
     },
+  },
+};
+export const ProviderShortcut: Story = {
+  args: { initialProvider: 'deepseek' },
+};
+export const KeyWorksAllModels: Story = {
+  args: {
+    ...StoredSecret.args,
+    catalog,
+    onCheck: async () => ({ ok: true, models: ['gpt-5.5', 'gpt-5.5-mini', 'gpt-4.1'] }),
+  },
+};
+export const ChosenModels: Story = {
+  args: {
+    stored: { ...StoredSecret.args!.stored!, models: ['gpt-5.5', 'o4-mini'] },
+    catalog,
+    onCheck: async () => ({ ok: true, models: ['gpt-5.5', 'gpt-5.5-mini', 'gpt-4.1'] }),
+    onDelete: () => undefined,
+  },
+};
+export const KeyRejected: Story = {
+  args: {
+    ...StoredSecret.args,
+    catalog,
+    onCheck: async () => ({ ok: false, reason: 'key_rejected', status: 401 }),
+  },
+};
+export const CannotCheckForFree: Story = {
+  args: {
+    ...KimiCode.args,
+    onCheck: async () => ({ ok: false, reason: 'unsupported', status: 404 }),
   },
 };

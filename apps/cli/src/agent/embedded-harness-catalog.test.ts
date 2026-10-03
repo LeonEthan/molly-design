@@ -116,6 +116,27 @@ it('keeps duplicate model IDs separated by connection and leaves first use unsel
   expect(projectEmbeddedHarnessCatalog(catalog, []).models).toEqual([result.models[0]]);
 });
 
+it("offers only a native connection's chosen models, and every model when none were chosen", () => {
+  const wide: HarnessModelCatalog = {
+    ...catalog,
+    models: [
+      ...catalog.models,
+      { ...catalog.models[0]!, modelId: 'k3-mini', name: 'K3 Mini' },
+      { ...catalog.models[0]!, modelId: 'k3-pro', name: 'K3 Pro' },
+    ],
+  };
+  const result = projectEmbeddedHarnessCatalog(wide, [
+    { ...connection, models: ['k3-pro', 'retired-model'] },
+    { ...connection, id: 'everything', displayName: 'Everything' },
+  ]);
+  expect(
+    result.models.slice(1).map((model) => {
+      const decoded = decodeMollyModelOption(model.modelId);
+      return `${decoded?.connectionId}/${decoded?.modelId}`;
+    })
+  ).toEqual(['first/k3-pro', 'everything/k3-256k', 'everything/k3-mini', 'everything/k3-pro']);
+});
+
 it('reads only a platform-matched, hash-verified catalog from the packaged directory', async () => {
   const root = await mkdtemp(join(tmpdir(), 'molly-catalog-'));
   roots.push(root);

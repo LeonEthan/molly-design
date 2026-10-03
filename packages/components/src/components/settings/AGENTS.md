@@ -20,7 +20,9 @@ Preserve historical catalog fields when editing unrelated values.
 
 - Website-account import shows its pending authorization state and manual retry
   guidance; passwords belong only in the macOS system dialog. Use the shared site
-  contract for supported imports; cookie counts do not attest website sign-in.
+  contract for supported imports; cookie counts do not attest website sign-in. Import
+  offers every installed browser profile from `ACCOUNT_IMPORT_BROWSERS`, names browsers
+  it could not list, and keeps the button visible with the reason when a build cannot import.
 
 - Advanced compatible models use explicit bounded metadata on the connection row.
   Explain protocol/declared capabilities and missing tool support; saving is not a
@@ -28,19 +30,25 @@ Preserve historical catalog fields when editing unrelated values.
 
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
-  runtime launch, installation or capability toggle follows opening settings.
+  runtime launch, installation or capability toggle follows opening settings. It lists Pi
+  and every `MOLLY_PI_PACKAGES` add-on in plain words with package, version and licence.
 
 - Navigation speaks to designers: General, Appearance, AI models, Website accounts,
   Shortcuts, then Advanced and About. Advanced (`advanced-settings.tsx`) holds the
   background service and bundled capability inventory (System), MCP and Projects as
   sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
   plain sentence; required caveats move behind `InfoTip`, never out of the UI.
-- The connection form names every preset by brand. Choosing one prefills
-  `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned SDK in harness-pi)
+- The connection form picks a provider from brand tiles (or an empty-state shortcut) and
+  prefills `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned SDK in harness-pi)
   and a provider-named connection, never overwriting a typed endpoint or name; the
   destination stays visible. Rows show only non-default endpoints; a row's switch saves
   On/Off at once without the key. Switches save instantly; only key and credential
-  forms keep an explicit Save.
+  forms keep an explicit Save. Deleting asks first.
+- A key is checked for free once it settles (`connection-check.tsx`): a typed key only
+  against the shown destination, a saved key only against its own provider and endpoint.
+  Checks list models or validate the key, never send a model request or DashScope call, and
+  report unsupported services as uncheckable. Native connections offer All or a chosen
+  `models` list; listed IDs inform the choice and suggest image models, never select them.
 - AI models (`agents` tab) mounts the design setup strip (`design-readiness.tsx`), the
   local encrypted model-connection form, the image connection, and the read-only legacy
   inventory only when this machine has legacy rows. The strip derives each chip from what

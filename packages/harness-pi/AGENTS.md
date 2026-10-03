@@ -3,8 +3,9 @@
 Read [README](README.md) before changing session construction, packages or the build.
 
 - Use the pinned public SDK and unmodified published Pi packages. Never patch, fork or
-  vendor Pi or a package; add a package by pinning it in catalog `pi` and listing it in
-  `profile-settings.ts`. Record known upstream defects instead of working around them.
+  vendor Pi or a package; add a package by pinning it in catalog `pi`, listing it in
+  shared `MOLLY_PI_PACKAGES` and giving it settings copy. Record known upstream defects
+  instead of working around them.
 - Each runtime epoch has its own Molly `PI_CODING_AGENT_DIR`, derived identically at
   launch and before SDK import. Never reuse another epoch's auth or model files or open
   the user's `~/.pi/agent`. Keep native discovery, skills, context files and hooks; Molly owns
@@ -21,7 +22,9 @@ Read [README](README.md) before changing session construction, packages or the b
 - Pi applies a provider endpoint override to every model of that provider. A connection on
   its preset's default endpoint registers none, so each model keeps its SDK endpoint
   (OpenRouter's Anthropic-protocol models use `/api`); a custom endpoint replaces every
-  model's. The host checks the selected model's resolved endpoint.
+  model's. The host checks the selected model's resolved endpoint. A connection's
+  `models`, when present, is the only native catalog it offers; refuse any other model.
+  `PROVIDER_PRESET_CHECKS` must match each preset's SDK protocol (tested).
 - A run is fenced by exclusive creation of its run record before credentials or
   inference. An existing record means already dispatched: report
   `harness_run_already_dispatched` and never replay.

@@ -367,10 +367,12 @@ export class ModelConnectionStore {
         providerPresetId: data.providerPresetId,
         baseUrl: data.baseUrl,
         enabled: data.enabled,
-        ...(data.customModels ? { customModels: data.customModels } : {})
+        ...(data.customModels ? { customModels: data.customModels } : {}),
+        ...(data.models ? { models: data.models } : {})
       })
-      store.entries = store.entries.filter((entry) => entry.connection.id !== connection.id)
-      store.entries.push({ connection, apiKey })
+      store.entries = previous
+        ? store.entries.map((entry) => (entry === previous ? { connection, apiKey } : entry))
+        : [...store.entries, { connection, apiKey }]
       await this.write(store)
       return connection
     })
@@ -387,6 +389,27 @@ export class ModelConnectionStore {
       }
       store.entries = store.entries.filter((entry) => entry !== current)
       await this.write(store)
+    })
+  }
+
+  /** Main-only explicit settings check: the saved key of this exact revision, on or off. */
+  credentialForCheck(
+    connectionId: string,
+    revision: number
+  ): Promise<{ connection: ModelConnection; apiKey: string } | null> {
+    return this.serial(async () => {
+      const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
+      return entry && entry.connection.revision === revision ? entry : null
+    })
+  }
+
+  /** Main-only explicit settings check for the image connection, on or off. */
+  imageCredentialForCheck(
+    revision: number | undefined
+  ): Promise<{ connection: ProtectedImageConnection; apiKey: string } | null> {
+    return this.serial(async () => {
+      const image = (await this.read()).image
+      return image && image.connection.revision === revision ? image : null
     })
   }
 

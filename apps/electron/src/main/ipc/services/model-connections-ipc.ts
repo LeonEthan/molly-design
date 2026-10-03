@@ -1,20 +1,26 @@
 import { IpcMethod, IpcService } from 'electron-ipc-decorator'
 import {
+  CheckImageConnectionSchema,
+  CheckModelConnectionSchema,
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
   SaveProtectedImageConnectionSchema,
   SaveMcpCredentialSettingsSchema,
   DeleteMcpCredentialSchema,
+  type CheckImageConnection,
+  type CheckModelConnection,
   type SaveMcpCredential,
   type SaveProtectedImageConnection,
   type SaveModelConnection
 } from '@molly/shared/embedded-harness'
 import { getModelConnectionStore } from '../../services/model-connections'
-import { probeProtectedImageConnection } from '../../services/image-connection-probe'
-import { z } from 'zod'
+import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { readLocalPlatformSnapshot } from '../../platform'
 import { resolveBundledCliEntry } from '../../services/cli-service'
-import { readBundledCapabilities } from '../../services/bundled-capabilities'
+import {
+  readBundledCapabilities,
+  readBundledModelCatalog
+} from '../../services/bundled-capabilities'
 
 async function localWorkspaceId(): Promise<string> {
   const platform = await readLocalPlatformSnapshot()
@@ -77,13 +83,22 @@ export class ModelConnectionsIpc extends IpcService {
   }
 
   @IpcMethod()
-  async testImage(input: { expectedRevision: number }) {
-    const parsed = z
-      .object({ expectedRevision: z.number().int().positive() })
-      .strict()
-      .safeParse(input)
-    if (!parsed.success) throw new Error('invalid_image_connection_probe')
-    return probeProtectedImageConnection(getModelConnectionStore(), parsed.data.expectedRevision)
+  async checkImage(input: CheckImageConnection) {
+    const parsed = CheckImageConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_image_connection_check')
+    return checkImageConnection(getModelConnectionStore(), parsed.data)
+  }
+
+  @IpcMethod()
+  async check(input: CheckModelConnection) {
+    const parsed = CheckModelConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_model_connection_check')
+    return checkModelConnection(getModelConnectionStore(), parsed.data)
+  }
+
+  @IpcMethod()
+  async getModelCatalog() {
+    return readBundledModelCatalog(resolveBundledCliEntry())
   }
 
   @IpcMethod()

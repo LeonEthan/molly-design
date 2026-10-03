@@ -79,8 +79,8 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   `save_image` publishes selected, decoded image bytes to design assets.
 - A packaged, stably signed Molly shares a persistent browser partition across
   its Session pages; development and ad-hoc macOS builds use memory only. Cookie
-  import requires a stable macOS signing identity, secure storage and an explicit source Chrome
-  profile and site selection. Electron main uses the pinned native reader for only
+  import requires a stable macOS signing identity, secure storage and an explicit source
+  Chromium-browser profile and site selection. Electron main uses the pinned native reader for only
   that site's cookies, keeps values out of renderer and Agent responses, and pauses
   Agent page access before writing. No extension or daemon import RPC participates.
   The packaged binary must verify the `EnableCookieEncryption` fuse before signing.

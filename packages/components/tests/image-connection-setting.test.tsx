@@ -3,7 +3,10 @@
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProtectedImageConnection } from '@molly/shared/embedded-harness';
+import type {
+  CheckImageConnection,
+  ProtectedImageConnection,
+} from '@molly/shared/embedded-harness';
 
 import en from '../../../locales/en.json';
 import {
@@ -14,10 +17,11 @@ import {
   imageConnectionDraftIssues,
   type ImageConnectionFormDraft,
 } from '../src/components/settings/image-connection-setting';
+import { CONNECTION_CHECK_DELAY_MS } from '../src/components/settings/connection-check';
 import { initI18n } from '../src/i18n';
 
 const { imageIpc } = vi.hoisted(() => ({
-  imageIpc: { getImageSnapshot: vi.fn(), saveImage: vi.fn(), testImage: vi.fn() },
+  imageIpc: { getImageSnapshot: vi.fn(), saveImage: vi.fn(), checkImage: vi.fn() },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   // Production returns a fresh proxy each time; do not mask unstable effect dependencies.
@@ -151,9 +155,7 @@ describe('ImageConnectionForm', () => {
       root?.render(
         createElement(ImageConnectionForm, {
           stored: undefined,
-          testState: { phase: 'idle' },
           onSave: () => undefined,
-          onTest: () => undefined,
           onClearApiKey: () => undefined,
           ...props,
         })
@@ -210,6 +212,7 @@ describe('ImageConnectionForm', () => {
     });
     const view = container as HTMLElement;
     expect(view.textContent).toContain(copy('settings.imageConnection.legacyHistoryWarning'));
+    await click(button(view, copy('common.edit')));
     const model = view.querySelector<HTMLInputElement>('input[id$="-model"]')!;
     await typeInto(model, 'explicit-new-model');
     await act(async () => {
@@ -227,7 +230,8 @@ describe('ImageConnectionForm', () => {
         clearApiKey: false,
       },
     ]);
-    expect(apiKeyInput(view).value).toBe('');
+    expect(view.querySelector('input[type="password"]')).toBeNull();
+    expect(view.textContent).toContain('explicit-new-model');
   });
 
   it('renders a stored key as stored without ever showing it', async () => {
@@ -250,24 +254,31 @@ describe('ImageConnectionForm', () => {
   });
 
   it('clears the stored key through its own action and through nothing else', async () => {
-    const onClearApiKey = vi.fn();
-    const onSave = vi.fn();
-    const view = await renderForm({ stored: storedConnection(), onClearApiKey, onSave });
+    const cleared: string[] = [];
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({
+      stored: storedConnection(),
+      onClearApiKey: () => void cleared.push('cleared'),
+      onSave: (draft) => void saves.push(draft),
+    });
 
     await click(removeKeyButton(view) as HTMLElement);
-    expect(onClearApiKey).toHaveBeenCalledTimes(1);
+    expect(cleared).toEqual(['cleared']);
     expect(apiKeyInput(view).value).toBe('');
     // Clearing alone writes nothing: the user still has to save, and that save
     // carries the removal rather than the stored key.
-    expect(onSave).not.toHaveBeenCalled();
+    expect(saves).toEqual([]);
 
     await click(button(view, copy('common.save')));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ clearApiKey: true, apiKey: '' }));
+    expect(saves[0]).toMatchObject({ clearApiKey: true, apiKey: '' });
   });
 
   it('disables Save until the draft is valid and changed', async () => {
-    const onSave = vi.fn();
-    const view = await renderForm({ stored: storedConnection(), onSave });
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({
+      stored: storedConnection(),
+      onSave: (draft) => void saves.push(draft),
+    });
     expect(button(view, copy('common.save')).disabled).toBe(true);
 
     const urlInput = view.querySelector<HTMLInputElement>('input[id$="-base-url"]') as HTMLElement;
@@ -281,61 +292,92 @@ describe('ImageConnectionForm', () => {
     expect(button(view, copy('common.save')).disabled).toBe(false);
 
     await click(button(view, copy('common.save')));
-    expect(onSave).toHaveBeenCalledWith(
-      expect.objectContaining({
-        baseUrl: 'https://images.example.com/v1',
-        apiKey: 'synthetic-renewed-key',
-      })
-    );
+    expect(saves[0]).toMatchObject({
+      baseUrl: 'https://images.example.com/v1',
+      apiKey: 'synthetic-renewed-key',
+    });
   });
 
-  it('blocks the paid-path test until the saved connection is ready and clean', async () => {
-    const onTest = vi.fn();
-    const nothingStored = await renderForm({ onTest });
-    expect(button(nothingStored, copy('settings.imageConnection.test')).disabled).toBe(true);
-    expect(nothingStored.textContent).toContain(copy('settings.imageConnection.testNeedsSaved'));
+  describe('free check', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+    const settle = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(CONNECTION_CHECK_DELAY_MS);
+      });
 
-    await act(async () => {
-      root?.render(
-        createElement(ImageConnectionForm, {
-          stored: storedConnection({ enabled: false }),
-          testState: { phase: 'idle' },
-          onSave: () => undefined,
-          onTest,
-          onClearApiKey: () => undefined,
-        })
+    it('checks a typed key once it settles and offers the listed models', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true, models: ['gpt-image-2', 'dall-e-3', 'gpt-4.1'] };
+        },
+      });
+      await typeInto(
+        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
+        'https://images.example.com/v1'
       );
-    });
-    expect(button(container as HTMLElement, copy('settings.imageConnection.test')).disabled).toBe(
-      true
-    );
-    expect((container as HTMLElement).textContent).toContain(
-      copy('settings.imageConnection.testNeedsComplete')
-    );
-
-    await act(async () => {
-      root?.render(
-        createElement(ImageConnectionForm, {
-          stored: storedConnection(),
-          testState: { phase: 'idle' },
-          onSave: () => undefined,
-          onTest,
-          onClearApiKey: () => undefined,
-        })
+      await typeInto(apiKeyInput(view), 'synthetic-typed-key');
+      expect(requests).toEqual([]);
+      await settle();
+      expect(requests).toEqual([
+        {
+          protocol: 'openai-images',
+          baseUrl: 'https://images.example.com/v1',
+          apiKey: 'synthetic-typed-key',
+        },
+      ]);
+      expect(view.textContent).toContain('Key works · 3 models on this account');
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'image');
+      await click(button(view, 'gpt-image-2'));
+      expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')!.value).toBe(
+        'gpt-image-2'
       );
+      expect(view.textContent).toContain('Your service lists this model · 3 models available');
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'my-own-model');
+      expect(view.textContent).toContain("Your service doesn't list this model.");
     });
-    const clean = container as HTMLElement;
-    expect(button(clean, copy('settings.imageConnection.test')).disabled).toBe(false);
-    await click(button(clean, copy('settings.imageConnection.test')));
-    expect(onTest).toHaveBeenCalledTimes(1);
-  });
 
-  it('holds the test back while the draft has unsaved changes', async () => {
-    const view = await renderForm({ stored: storedConnection() });
-    const modelInput = view.querySelector<HTMLInputElement>('input[id$="-model"]')!;
-    await typeInto(modelInput, 'gpt-image-3');
-    expect(button(view, copy('settings.imageConnection.test')).disabled).toBe(true);
-    expect(view.textContent).toContain(copy('settings.imageConnection.testNeedsSave'));
+    it('checks a saved key only against the address it was saved for', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        stored: storedConnection(),
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: false, reason: 'key_rejected', status: 401 };
+        },
+      });
+      await settle();
+      expect(requests).toEqual([
+        { protocol: 'openai-images', baseUrl: 'https://api.openai.com/v1', expectedRevision: 3 },
+      ]);
+      expect(view.textContent).toContain('The provider rejected this key (401).');
+      await typeInto(
+        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
+        'https://elsewhere.example.com/v1'
+      );
+      await settle();
+      expect(requests).toHaveLength(1);
+      expect(view.textContent).not.toContain('rejected');
+    });
+
+    it('never checks DashScope, whose every request is billed', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        stored: storedConnection({
+          protocol: 'dashscope',
+          baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+        }),
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await settle();
+      expect(requests).toEqual([]);
+      expect(view.textContent).toContain(copy('settings.imageConnection.testUnsupportedDashscope'));
+    });
   });
 
   it('locks every control while saving and reports the failure it got', async () => {
@@ -345,13 +387,14 @@ describe('ImageConnectionForm', () => {
       saveError: 'local machine RPC is not available',
     });
     expect(button(view, copy('settings.imageConnection.saving')).disabled).toBe(true);
-    expect(button(view, copy('settings.imageConnection.test')).disabled).toBe(true);
     // Every editable control locks, so an in-flight save cannot race an edit
     // that the read-back would then reset.
     for (const input of view.querySelectorAll('input')) {
       expect((input as HTMLInputElement).disabled).toBe(true);
     }
-    expect(view.querySelector('button[role="switch"]')?.hasAttribute('disabled')).toBe(true);
+    for (const radio of view.querySelectorAll('button[role="radio"]')) {
+      expect(radio.hasAttribute('disabled')).toBe(true);
+    }
     expect(removeKeyButton(view)?.disabled).toBe(true);
     expect(view.querySelector('[role="alert"]')?.textContent).toBe(
       copy('settings.imageConnection.saveFailed').replace(
@@ -361,26 +404,46 @@ describe('ImageConnectionForm', () => {
     );
   });
 
-  it('reports the probe outcome and the readiness the tool gate follows', async () => {
-    const view = await renderForm({
-      stored: storedConnection(),
-      testState: { phase: 'ok', modelCount: 12 },
+  it('switches the saved connection off and on in place without its key', async () => {
+    let current = storedConnection();
+    const writes: unknown[] = [];
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({ connection: current }));
+    imageIpc.saveImage.mockImplementation(async (input: { enabled: boolean }) => {
+      writes.push(input);
+      current = { ...current, revision: current.revision + 1, enabled: input.enabled };
+      return current;
     });
-    expect(view.querySelector('[role="status"]')?.textContent).toBe(
-      copy('settings.imageConnection.testOk').replace('{{modelCount}}', '12')
-    );
-    expect(view.textContent).toContain(copy('settings.imageConnection.statusReady'));
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
+    });
+    const view = container as HTMLElement;
+    const toggle = () =>
+      view.querySelector<HTMLButtonElement>(
+        `button[role="switch"][aria-label="${copy('settings.imageConnection.enabled')}"]`
+      )!;
+    await click(toggle());
+    expect(writes).toEqual([
+      {
+        expectedRevision: 3,
+        enabled: false,
+        protocol: 'openai-images',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'saved-custom-model',
+        clearApiKey: false,
+      },
+    ]);
+    expect(toggle().getAttribute('aria-checked')).toBe('false');
+  });
 
-    const failed = await renderForm({
-      stored: storedConnection({ hasApiKey: false }),
-      testState: { phase: 'error', message: 'HTTP 401: invalid API key provided' },
+  it('cannot switch on a saved connection that has no key', async () => {
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({
+      connection: storedConnection({ enabled: false, hasApiKey: false }),
+    }));
+    await act(async () => {
+      root?.render(createElement(ImageConnectionSetting));
     });
-    expect(failed.querySelector('[role="alert"]')?.textContent).toBe(
-      copy('settings.imageConnection.testFailed').replace(
-        '{{message}}',
-        'HTTP 401: invalid API key provided'
-      )
-    );
-    expect(failed.textContent).toContain(copy('settings.imageConnection.statusNotReady'));
+    const view = container as HTMLElement;
+    expect(view.querySelector<HTMLButtonElement>('button[role="switch"]')!.disabled).toBe(true);
+    expect(view.textContent).toContain(copy('settings.readiness.keyMissing'));
   });
 });

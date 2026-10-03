@@ -5,8 +5,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto'
 import { ModelConnectionStore } from './model-connection-store.ts'
-import { probeProtectedImageConnection } from './image-connection-probe.ts'
+import {
+  checkImageConnection,
+  checkModelConnection,
+  runConnectionCheck
+} from './connection-check.ts'
 import { readBundledCapabilities } from './bundled-capabilities.ts'
+
+const shippedPackages = [
+  ['@earendil-works/pi-coding-agent', '1.0.0'],
+  ['pi-subagents', '0.74.0'],
+  ['pi-skillful', '0.4.0'],
+  ['@juicesharp/rpiv-ask-user-question', '2.12.0'],
+  ['@zigai/pi-mention-skill', '0.10.4'],
+  ['@ff-labs/pi-fff', '0.11.0'],
+  ['cc-safety-net', '2.4.14']
+]
 
 for (const mode of [
   'valid',
@@ -14,31 +28,34 @@ for (const mode of [
   'corrupt',
   'duplicate',
   'platform',
-  'extension',
-  'license'
+  'version',
+  'tampered'
 ]) {
   void test(`bundled capability inventory verifies fixed public resources: ${mode}`, async (t) => {
     const root = await mkdtemp(join(tmpdir(), 'molly-capabilities-'))
     t.after(() => rm(root, { recursive: true, force: true }))
-    const resources = join(root, 'harness', 'node_modules', '@juicesharp', 'rpiv-ask-user-question')
-    await mkdir(resources, { recursive: true })
     const hash = (value) => createHash('sha256').update(value).digest('hex')
-    const license = 'Synthetic license fixture'
-    const extension = JSON.stringify({
-      name: '@juicesharp/rpiv-ask-user-question',
-      version: '2.12.0',
-      license: 'MIT',
-      pi: { extensions: mode === 'extension' ? ['./unmapped.ts'] : ['./index.ts'] },
-      extraPrivateField: 'synthetic-not-for-renderer'
-    })
-    const files = [
-      {
-        path: 'node_modules/@juicesharp/rpiv-ask-user-question/package.json',
-        sha256: hash(extension)
-      },
-      { path: 'node_modules/@juicesharp/rpiv-ask-user-question/LICENSE', sha256: hash(license) }
-    ]
-    if (mode === 'duplicate') files.push(files[0])
+    const files = []
+    for (const [name, version] of shippedPackages) {
+      const directory = join(root, 'harness', 'node_modules', name)
+      await mkdir(directory, { recursive: true })
+      const manifest = JSON.stringify({
+        name,
+        version: mode === 'version' && name.endsWith('pi-coding-agent') ? '0.9.0' : version,
+        license: 'MIT',
+        extraPrivateField: 'synthetic-not-for-renderer'
+      })
+      files.push({ path: `node_modules/${name}/package.json`, sha256: hash(manifest) })
+      if (mode === 'missing' && name === 'cc-safety-net') continue
+      const written =
+        mode === 'corrupt' && name === 'pi-skillful'
+          ? '{}'
+          : mode === 'tampered' && name === '@ff-labs/pi-fff'
+            ? manifest.replace('MIT', 'GPL')
+            : manifest
+      await writeFile(join(directory, 'package.json'), written)
+    }
+    if (mode === 'duplicate') files.push(files[1])
     const runtime = {
       engine: 'pi',
       engineVersion: '1.0.0',
@@ -49,9 +66,6 @@ for (const mode of [
       files
     }
     await writeFile(join(root, 'harness', 'runtime-manifest.json'), JSON.stringify(runtime))
-    if (mode !== 'missing')
-      await writeFile(join(resources, 'package.json'), mode === 'corrupt' ? '{}' : extension)
-    await writeFile(join(resources, 'LICENSE'), mode === 'license' ? 'tampered' : license)
     const result = readBundledCapabilities(join(root, 'index.js'))
     if (mode !== 'valid') {
       await assert.rejects(result, { message: 'bundled_capabilities_unavailable' })
@@ -59,15 +73,15 @@ for (const mode of [
     }
     const snapshot = await result
     assert.equal(snapshot.harness.buildId, runtime.buildId)
-    assert.deepEqual(snapshot.extensions, [
-      {
-        name: '@juicesharp/rpiv-ask-user-question',
-        version: '2.12.0',
-        license: 'MIT',
-        tools: ['ask_user_question'],
-        activation: 'requires-question-ui-v1'
-      }
-    ])
+    assert.deepEqual(snapshot.engine, {
+      name: '@earendil-works/pi-coding-agent',
+      version: '1.0.0',
+      license: 'MIT'
+    })
+    assert.deepEqual(
+      snapshot.addons,
+      shippedPackages.slice(1).map(([name, version]) => ({ name, version, license: 'MIT' }))
+    )
     assert.equal(JSON.stringify(snapshot).includes('synthetic-not-for-renderer'), false)
     assert.equal(JSON.stringify(snapshot).includes(root), false)
     await assert.rejects(readBundledCapabilities(null), {
@@ -229,15 +243,23 @@ void test('a migration encryption failure leaves the prior vault unchanged', asy
   assert.deepEqual(await readFile(join(directory, 'model-connections.enc')), previous)
 })
 
-void test('image discovery is explicit, destination-bound and does not expose upstream diagnostics', async (t) => {
+void test('image checks are explicit, destination-bound and never expose upstream diagnostics', async (t) => {
   const { store } = await fixture(t)
   await store.importLegacyImage(legacyImage)
   const requests = []
-  const result = await probeProtectedImageConnection(store, 1, async (url, options) => {
-    requests.push({ url, redirect: options.redirect, authorization: options.headers.authorization })
-    return new Response(JSON.stringify({ data: [{ id: 'synthetic' }] }))
-  })
-  assert.deepEqual(result, { ok: true, modelCount: 1 })
+  const result = await checkImageConnection(
+    store,
+    { baseUrl: legacyImage.baseUrl, expectedRevision: 1 },
+    async (url, options) => {
+      requests.push({
+        url,
+        redirect: options.redirect,
+        authorization: options.headers.authorization
+      })
+      return new Response(JSON.stringify({ data: [{ id: 'synthetic-image' }, { id: 'other' }] }))
+    }
+  )
+  assert.deepEqual(result, { ok: true, models: ['synthetic-image', 'other'] })
   assert.deepEqual(requests, [
     {
       url: 'https://images.invalid/v1/models',
@@ -246,16 +268,35 @@ void test('image discovery is explicit, destination-bound and does not expose up
     }
   ])
   assert.deepEqual(
-    await probeProtectedImageConnection(
+    await checkImageConnection(
       store,
-      1,
+      { baseUrl: legacyImage.baseUrl, expectedRevision: 1 },
       async () => new Response(legacyImage.apiKey, { status: 401 })
     ),
-    { ok: false, error: 'image_connection_http_401' }
+    { ok: false, reason: 'key_rejected', status: 401 }
+  )
+  const offline = async () => {
+    throw Error('unexpected network request')
+  }
+  assert.deepEqual(
+    await checkImageConnection(
+      store,
+      { baseUrl: 'https://elsewhere.invalid/v1', expectedRevision: 1 },
+      offline
+    ),
+    { ok: false, reason: 'needs_key' }
+  )
+  assert.deepEqual(
+    await checkImageConnection(
+      store,
+      { baseUrl: legacyImage.baseUrl, expectedRevision: 9 },
+      offline
+    ),
+    { ok: false, reason: 'changed' }
   )
 })
 
-void test('a DashScope connection keeps its protocol and is never probed over the paid endpoint', async (t) => {
+void test('a DashScope connection keeps its protocol and is never checked over the paid endpoint', async (t) => {
   const { store } = await fixture(t)
   await store.importLegacyImage(legacyImage)
   const saved = await store.saveImage({
@@ -268,12 +309,185 @@ void test('a DashScope connection keeps its protocol and is never probed over th
   })
   assert.equal((await store.imageSnapshot()).connection?.protocol, 'dashscope')
   assert.deepEqual(
-    await probeProtectedImageConnection(store, saved.revision, async () => {
-      throw Error('unexpected network request')
-    }),
-    { ok: false, error: 'image_connection_probe_unsupported' }
+    await checkImageConnection(
+      store,
+      { protocol: 'dashscope', baseUrl: legacyImage.baseUrl, expectedRevision: saved.revision },
+      async () => {
+        throw Error('unexpected network request')
+      }
+    ),
+    { ok: false, reason: 'unsupported' }
   )
 })
+
+void test('each provider style sends one free request and reads its own model list', async () => {
+  const cases = [
+    [
+      'openai',
+      'https://api.example.invalid/v1/',
+      { data: [{ id: 'gpt-x' }] },
+      'https://api.example.invalid/v1/models',
+      { authorization: 'Bearer synthetic-key' },
+      ['gpt-x']
+    ],
+    [
+      'anthropic',
+      'https://api.example.invalid/coding',
+      { data: [{ id: 'claude-x' }] },
+      'https://api.example.invalid/coding/v1/models?limit=1000',
+      { 'x-api-key': 'synthetic-key', 'anthropic-version': '2023-06-01' },
+      ['claude-x']
+    ],
+    [
+      'google',
+      'https://api.example.invalid/v1beta',
+      { models: [{ name: 'models/gemini-x' }] },
+      'https://api.example.invalid/v1beta/models?pageSize=1000',
+      { 'x-goog-api-key': 'synthetic-key' },
+      ['gemini-x']
+    ],
+    [
+      'openrouter',
+      'https://api.example.invalid/api/v1',
+      { data: { label: 'synthetic' } },
+      'https://api.example.invalid/api/v1/key',
+      { authorization: 'Bearer synthetic-key' },
+      undefined
+    ]
+  ]
+  for (const [style, baseUrl, body, url, headers, models] of cases) {
+    const requests = []
+    const result = await runConnectionCheck(
+      style,
+      baseUrl,
+      'synthetic-key',
+      async (target, options) => {
+        requests.push({ target, options })
+        return new Response(JSON.stringify(body))
+      }
+    )
+    assert.deepEqual(result, models ? { ok: true, models } : { ok: true })
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].target, url)
+    assert.equal(requests[0].options.redirect, 'error')
+    assert.equal(requests[0].options.method, undefined)
+    for (const [name, value] of Object.entries(headers))
+      assert.equal(requests[0].options.headers[name], value)
+  }
+})
+
+void test('check failures name a fixed reason and status, never the upstream body', async () => {
+  for (const [status, expected] of [
+    [401, { ok: false, reason: 'key_rejected', status: 401 }],
+    [403, { ok: false, reason: 'key_rejected', status: 403 }],
+    [404, { ok: false, reason: 'unsupported', status: 404 }],
+    [429, { ok: false, reason: 'rate_limited', status: 429 }],
+    [500, { ok: false, reason: 'http_error', status: 500 }]
+  ]) {
+    const result = await runConnectionCheck(
+      'openai',
+      'https://api.example.invalid/v1',
+      'synthetic-key',
+      async () => new Response('synthetic-key leaked upstream detail', { status })
+    )
+    assert.deepEqual(result, expected)
+  }
+  assert.deepEqual(
+    await runConnectionCheck('openai', 'https://api.example.invalid/v1', 'k', async () => {
+      throw new Error('getaddrinfo ENOTFOUND private.host')
+    }),
+    { ok: false, reason: 'unreachable' }
+  )
+  assert.deepEqual(
+    await runConnectionCheck(
+      'openai',
+      'https://api.example.invalid/v1',
+      'k',
+      async () => new Response('<html>not json</html>')
+    ),
+    { ok: false, reason: 'invalid_response' }
+  )
+})
+
+void test('a saved model key is checked only against its own provider and endpoint', async (t) => {
+  const { store } = await fixture(t)
+  const saved = await store.save({ ...input, enabled: false })
+  const requests = []
+  const transport = async (url, options) => {
+    requests.push({ url, authorization: options.headers.authorization })
+    return new Response(JSON.stringify({ data: [{ id: 'gpt-x' }] }))
+  }
+  const stored = { id: saved.id, revision: saved.revision }
+  assert.deepEqual(
+    await checkModelConnection(
+      store,
+      { providerPresetId: 'openai', baseUrl: input.baseUrl, stored },
+      transport
+    ),
+    { ok: true, models: ['gpt-x'] }
+  )
+  assert.deepEqual(requests, [
+    { url: 'https://example.invalid/v1/models', authorization: `Bearer ${input.apiKey}` }
+  ])
+  assert.deepEqual(
+    await checkModelConnection(
+      store,
+      { providerPresetId: 'openai', baseUrl: 'https://elsewhere.invalid/v1', stored },
+      transport
+    ),
+    { ok: false, reason: 'needs_key' }
+  )
+  assert.deepEqual(
+    await checkModelConnection(
+      store,
+      { providerPresetId: 'deepseek', baseUrl: input.baseUrl, stored },
+      transport
+    ),
+    { ok: false, reason: 'needs_key' }
+  )
+  assert.deepEqual(
+    await checkModelConnection(
+      store,
+      { providerPresetId: 'openai', baseUrl: input.baseUrl, stored: { ...stored, revision: 9 } },
+      transport
+    ),
+    { ok: false, reason: 'changed' }
+  )
+  assert.equal(requests.length, 1)
+})
+
+void test('a chosen model list round-trips with the connection revision', async (t) => {
+  const { store } = await fixture(t)
+  const saved = await store.save({ ...input, models: ['gpt-x', 'gpt-y'] })
+  assert.deepEqual(saved.models, ['gpt-x', 'gpt-y'])
+  const update = { ...input, id: saved.id, expectedRevision: 1, models: undefined }
+  delete update.apiKey
+  delete update.models
+  const cleared = await store.save(update)
+  assert.equal('models' in cleared, false)
+  await assert.rejects(
+    store.save({
+      ...input,
+      providerPresetId: 'openai-compatible',
+      customModels: [
+        {
+          modelId: 'x',
+          name: 'X',
+          input: ['text'],
+          contextWindow: 8192,
+          maxTokens: 1024,
+          thinking: ['off'],
+          toolCalls: true,
+          usageInStreaming: true,
+          maxTokensField: 'max_tokens'
+        }
+      ],
+      models: ['x']
+    }),
+    /invalid_model_connection/
+  )
+})
+
 async function fixture(t, customCipher = cipher, platform = 'darwin') {
   const directory = await mkdtemp(join(tmpdir(), 'molly-vault-test-'))
   t.after(() => rm(directory, { recursive: true, force: true }))
@@ -544,4 +758,18 @@ void test('the vault cannot commit ciphertext that exceeds its own read limit', 
   })
   await assert.rejects(oversized.saveMcp(mcpInput), { message: 'credential_storage_write_failed' })
   assert.deepEqual(await readFile(join(directory, 'model-connections.enc')), before)
+})
+
+void test('saving a connection keeps its place in the list', async (t) => {
+  const { store } = await fixture(t)
+  const first = await store.save({ ...input, displayName: 'First' })
+  const second = await store.save({ ...input, displayName: 'Second' })
+  const update = { ...input, id: first.id, expectedRevision: 1, displayName: 'First renamed' }
+  delete update.apiKey
+  await store.save(update)
+  assert.deepEqual(
+    (await store.snapshot()).connections.map((connection) => connection.displayName),
+    ['First renamed', 'Second']
+  )
+  assert.equal((await store.acquireForRun(second.id, 1)).apiKey, input.apiKey)
 })

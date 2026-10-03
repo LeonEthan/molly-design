@@ -97,8 +97,20 @@ export const ElectronBrowserAccountSiteInputSchema = z
   })
   .strict();
 export type ElectronBrowserAccountSiteInput = z.infer<typeof ElectronBrowserAccountSiteInputSchema>;
+/** Chromium browsers share one site-scoped, partition-checked cookie reader. */
+export const ACCOUNT_IMPORT_BROWSERS = [
+  'chrome',
+  'edge',
+  'brave',
+  'arc',
+  'vivaldi',
+  'opera',
+  'chromium',
+] as const;
+export type AccountImportBrowserId = (typeof ACCOUNT_IMPORT_BROWSERS)[number];
 export const ElectronBrowserAccountImportInputSchema = ElectronBrowserAccountSiteInputSchema.extend(
   {
+    browserId: z.enum(ACCOUNT_IMPORT_BROWSERS),
     profileId: z.string().min(1).max(512),
     replaceExisting: z.boolean(),
   }
@@ -112,7 +124,16 @@ export type ElectronBrowserAccountSummary = {
   importUnavailableReason?: 'package-required' | 'signing-required' | 'secure-storage-unavailable';
   sites: Array<{ site: ElectronBrowserAccountSiteInput['site']; cookieCount: number }>;
 };
-export type ElectronChromeProfileChoice = { id: string; name: string; isDefault: boolean };
+export type ElectronBrowserProfileChoice = { id: string; name: string; isDefault: boolean };
+export type ElectronBrowserImportSources = {
+  sources: Array<{
+    browserId: AccountImportBrowserId;
+    browserName: string;
+    profiles: ElectronBrowserProfileChoice[];
+  }>;
+  /** Installed browsers whose profiles could not be listed. */
+  unreadable: string[];
+};
 
 export type ElectronPublicBrowserCreateInput = z.infer<
   typeof ElectronPublicBrowserCreateInputSchema

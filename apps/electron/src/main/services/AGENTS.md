@@ -5,7 +5,7 @@
 ## Model credentials
 
 Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, validates
-resource/license digests, and returns public fields only. It neither imports the SDK
+package and catalog digests, and returns public fields only. It neither imports the SDK
 nor opens the credential store; missing or incompatible resources mean unavailable.
 
 `model-connection-store` is main-only. Renderer IPC exposes save/delete/public
@@ -17,8 +17,8 @@ Compatible model definitions share that encrypted row and revision; they are pub
 capability declarations, never credential/header/script or per-model destination fields.
 Image credentials use the same vault. Acknowledge legacy removal only after encrypted
 backup durability; compare the exact current row before removal. History/backup
-residue remains disclosed, never claimed erased. Image discovery is secret-free;
-acquisition requires an active run, except the explicit main-only settings probe.
+residue remains disclosed, never claimed erased. Acquisition requires an active run, except
+explicit main-only settings checks of the saved destination.
 MCP values share this vault. Bind them to workspace, server, destination and revision;
 changed HTTP URLs or stdio command/args require renewed input. Settings IPC derives
 the local workspace and exposes only write/delete/public metadata. Acquisition stays
@@ -105,7 +105,7 @@ end worker input and await child exit before quitting. A closed worker never res
 
 Reject unsupported source or destination Cookie partitions before import mutations;
 never flatten identities for writes or rollback. Native reads stay site-scoped and
-Cookie values stay in main. The first release imports Pinterest only. The native
+Cookie values stay in main. Imports cover Pinterest from Chromium browsers. The native
 report deadline includes human Keychain approval; retries require a fresh user
 action, and read failures preserve destination cookies.
 

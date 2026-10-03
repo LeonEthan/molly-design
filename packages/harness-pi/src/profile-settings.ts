@@ -2,16 +2,9 @@ import { createRequire } from 'node:module';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
+import { MOLLY_PI_PACKAGES } from '@molly/shared/embedded-harness';
 
-/** Unmodified published Pi packages, loaded from the harness's own installed closure. */
-export const MOLLY_PI_PACKAGES = [
-  'pi-subagents',
-  'pi-skillful',
-  '@juicesharp/rpiv-ask-user-question',
-  '@zigai/pi-mention-skill',
-  '@ff-labs/pi-fff',
-  'cc-safety-net',
-] as const;
+export { MOLLY_PI_PACKAGES };
 
 /** Sub-agent children load only `subagents.defaultExtensions`, so the safety floor is listed there. */
 export const SUBAGENT_DEFAULT_PACKAGES = ['cc-safety-net'] as const;

@@ -19,28 +19,37 @@ preserved and macOS asks again on the next launch.
 Ad-hoc local builds do not share a stable signing identity. macOS can ask again
 after a rebuild and even repeatedly for subsequent accesses if **Allow** grants
 only one access. Repeated prompts are not the intended account-import experience.
-Ad-hoc builds keep browser sessions in memory and disable Chrome account import;
+Ad-hoc builds keep browser sessions in memory and disable browser account import;
 use a consistently signed build for that test. A pending prompt can leave the
 app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → AI models → Models, choose the provider/product and paste its
-   API key. Molly suggests the provider's default endpoint and a connection name;
-   change either one, or choose **Use a custom endpoint**. With the default, each
-   model uses its provider's own address (OpenRouter's Claude models included); a
-   custom endpoint receives every model's requests. Enter keys only in the
-   local settings field, never in a conversation or artwork file. Saving encrypts
-   the connection; it neither tests inference nor changes an existing session's
-   selection.
+1. Open Settings → AI models → Models, pick the provider/product tile and paste
+   its API key. Molly suggests the provider's default endpoint and a connection
+   name; change either one, or choose **Use a custom endpoint**. With the default,
+   each model uses its provider's own address (OpenRouter's Claude models
+   included); a custom endpoint receives every model's requests. Once the key
+   settles, Molly checks it for free against the provider's model list (OpenRouter:
+   its key endpoint) and shows the result; it sends no model request, so billing
+   and access to a particular model stay unverified, and some services can't be
+   checked this way. Under **Models in the conversation picker** keep **All** or
+   **Choose** the models you want to pick from; models the provider didn't list
+   for your key are marked. Enter keys only in the local settings field, never in
+   a conversation or artwork file. Saving encrypts the connection and doesn't
+   change an existing session's selection; **Delete** removes a connection after
+   you confirm.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid
    selections fail rather than silently switching providers or models.
 3. Optionally set up Settings → AI models → Image generation separately. Supply
    an OpenAI Images-compatible API root (without `/images/generations` or
-   `/images/edits`), key and exact model, enable it and save. **Test connection**
-   checks `/models` only; success does not verify generation, editing or masks.
+   `/images/edits`), key and exact model, and save; the row's switch turns it on
+   or off. Molly checks the key against the service's free `/models` list and
+   offers the models it lists as suggestions; a passing check does not verify
+   generation, editing or masks. DashScope is never checked, because every request
+   there is billed.
 4. For external tools, configure Settings → Advanced → MCP servers and select
    the servers for the turn. Saving does not test or automatically select them.
    A stdio server runs local code: configure only commands and servers you trust.
@@ -50,9 +59,11 @@ Pinterest; click an item to reach its setting. A tick means a saved, switched-on
 setup, not a tested one. Pinterest never shows a tick, because stored cookies do
 not prove you are signed in.
 
-Settings → Advanced → System → Engine details reports the packaged question
-extension's version and compatibility conditions, not live session activation. The selected question extension requires
-the desktop question interface; necessary Slash-command mapping remains unfinished.
+Settings → Advanced → System → Engine details lists the Pi engine and every bundled
+add-on (helper agents, skills, questions for you, skill mentions, fast file search
+and the safety net) with package, version and licence. It reports what ships, not
+live session activation. The question add-on requires the desktop question
+interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
 For **OpenAI-compatible (advanced)**, add explicit model definitions in the connection
@@ -80,9 +91,9 @@ images are optional; text and shape design does not require an image service.
 
 In a design session, `molly_browser` controls only the page in Molly's Browser sidebar through the existing tool permission flow. Browsing has no per-site authorization scope. Navigation and selected-image fetching follow your normal network, including proxies and TUN, without a DNS setup step. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover. If an operation returns an uncertain result, the Agent must observe before deciding what to do next; Molly does not automatically repeat the action or block browsing for the rest of the task.
 
-In a stably signed macOS package with secure storage, open **Settings → Website accounts**, choose the Chrome profile that is signed in, then select **Import from Chrome** for Pinterest. macOS may ask you to allow access to Chrome Safe Storage; enter your Mac login password only in that system dialog and keep Molly open. The initial read allows up to five minutes for authorization. If it times out, finish any pending system prompt and retry manually; existing Molly cookies stay unchanged. Molly reads only the selected site's cookies and reloads that site if it is open. If the selected source or Molly site cookies contain unsupported partitions, Molly stops the whole import before changing its cookies; sign in directly in Molly instead. Verify the account on the website itself; Cookie counts are not proof of sign-in. **Clear Molly cookies** does not clear Chrome, other site storage, or guarantee server-side logout. This flow does not install a Chrome extension or give the Agent access to Chrome tabs.
+In a stably signed macOS package with secure storage, open **Settings → Website accounts**, choose a signed-in browser profile (Chrome, Edge, Brave, Arc, Vivaldi, Opera or Chromium), then select **Import from** that browser for Pinterest. macOS may ask you to allow access to that browser's Safe Storage; enter your Mac login password only in that system dialog and keep Molly open. The initial read allows up to five minutes for authorization. If it times out, finish any pending system prompt and retry manually; existing Molly cookies stay unchanged. Molly reads only the selected site's cookies and reloads that site if it is open. If the selected source or Molly site cookies contain unsupported partitions, Molly stops the whole import before changing its cookies; sign in directly in Molly instead. Verify the account on the website itself; Cookie counts are not proof of sign-in. **Clear Molly cookies** does not clear the source browser, other site storage, or guarantee server-side logout. This flow does not install a browser extension or give the Agent access to your browser's tabs.
 
-Pinterest is the first-release scope. A local Apple Development-signed package verified Chrome account import, signed-in search and detail browsing, a JPEG save, sign-in persistence after restarting the same app, and clearing. The Agent can save a selected PNG/JPEG/GIF image into the current design's `media/` and use the returned path in YAML. WebP/AVIF remain unsupported by this design asset path. Native page downloads are available separately and do not automatically become design assets. Amazon account import and shopping Q&A, and account import from other browsers or operating systems, are deferred. Websites can still request sign-in or verification. This local acceptance does not establish Developer ID distribution, notarization or upgrade behavior.
+Pinterest is the first-release scope. A local Apple Development-signed package verified Chrome account import, signed-in search and detail browsing, a JPEG save, sign-in persistence after restarting the same app, and clearing. The Agent can save a selected PNG/JPEG/GIF image into the current design's `media/` and use the returned path in YAML. WebP/AVIF remain unsupported by this design asset path. Native page downloads are available separately and do not automatically become design assets. Amazon account import and shopping Q&A, and import from Safari, Firefox or other operating systems, are deferred; the other Chromium browsers share Chrome's reader but have not been verified with a real profile. Websites can still request sign-in or verification. This local acceptance does not establish Developer ID distribution, notarization or upgrade behavior.
 
 ## Continue, preview and recover
 

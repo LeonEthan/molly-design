@@ -40,7 +40,8 @@ owner-only local control socket, never Loro. Only a dispatcher-owned active
 model run/epoch lease or selected MCP session/epoch lease can consume a matching report. RPC results contain pending work,
 not secrets. Never log exchange bodies or return validation inputs in errors.
 `embedded-harness` schemas separate connection references from model selection;
-no empty-model fallback, snapshot secrets or dispatched-work replay. Session
+no empty-model fallback, snapshot secrets or dispatched-work replay. A native
+connection's optional `models` narrows its picker; it never selects a model. Session
 dispatch owns runtime availability; schema presence does not enable execution.
 
 ## Image connection RPC
@@ -78,7 +79,7 @@ dispatch owns runtime availability; schema presence does not enable execution.
 
 `browser/execute` uses the owner-only socket and binds run/launch/page.
 Recheck results; reject uncertain output without replaying actions or freezing
-the current run. Browser RPC carries no per-site authorization scope. Import Chrome accounts in
+the current run. Browser RPC carries no per-site authorization scope. Import browser accounts in
 Electron main only. Models see flat `AgentBrowserToolInputSchema`; validate
   with `AgentBrowserCommandSchema` before execution.
 

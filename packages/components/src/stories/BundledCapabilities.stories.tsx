@@ -7,7 +7,7 @@ const meta = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="w-[360px]">
+      <div className="w-[560px]">
         <Story />
       </div>
     ),
@@ -28,14 +28,14 @@ export const Included: Story = {
         protocolVersion: 1,
         buildId: 'a'.repeat(64),
       },
-      extensions: [
-        {
-          name: '@juicesharp/rpiv-ask-user-question',
-          version: '2.12.0',
-              license: 'MIT',
-          tools: ['ask_user_question'],
-          activation: 'requires-question-ui-v1',
-        },
+      engine: { name: '@earendil-works/pi-coding-agent', version: '1.0.0', license: 'MIT' },
+      addons: [
+        { name: 'pi-subagents', version: '0.74.0', license: 'MIT' },
+        { name: 'pi-skillful', version: '0.4.0', license: 'MIT' },
+        { name: '@juicesharp/rpiv-ask-user-question', version: '2.12.0', license: 'MIT' },
+        { name: '@zigai/pi-mention-skill', version: '0.10.4', license: 'MIT' },
+        { name: '@ff-labs/pi-fff', version: '0.11.0', license: 'MIT' },
+        { name: 'cc-safety-net', version: '2.4.14', license: 'MIT' },
       ],
     },
   },

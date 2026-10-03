@@ -64,17 +64,19 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   keyed by request id. The renderer subscribes before `invoke`, removes the
   listener after settlement, and treats only the final response as completion.
 - The public browser retains hostname-based engine routing for manual browsing;
-  `will-navigate` and `will-redirect` both enforce it. The Agent reader has a
+  `will-navigate` and `will-redirect` enforce it while the page is human-controlled.
+  Agent navigation stays on its native browser page, including loopback URLs.
+  The Agent reader has a
   separate lease in `public-browser-agent-controller.ts`: bind one Session page
-  and active run, check site/URL/DNS/proxy before requests, verify response peers
-  before exposing DOM or screenshots, and revoke on takeover, cancellation or
-  host loss. While leased, block human mouse/keyboard input at the WebContents
+  and active run, and revoke on takeover, cancellation or host loss. Browser
+  navigation and asset transport reuse Chromium's session and the user's
+  network, proxy and TUN configuration; there is no site scope or Molly
+  destination/DNS/response-peer policy. While leased, block human mouse/keyboard input at the WebContents
   event boundary; manual toolbar actions take over before navigating, and
   closing a leased page blocks that run from silently recreating it. The Agent
   receives finite operations, never arbitrary script/CDP,
-  cookies, or a target id. Keep `will-download` denied. Selected image bytes use
-  `public-browser-asset-fetch.ts` with a pinned public socket and per-redirect
-  validation; do not turn page downloads into an asset path.
+  cookies, or a target id. Native page downloads remain available; only
+  `save_image` publishes selected, decoded image bytes to design assets.
 - A packaged, stably signed Molly shares a persistent browser partition across
   its Session pages; development and ad-hoc macOS builds use memory only. Cookie
   import requires a stable macOS signing identity, secure storage and an explicit source Chrome

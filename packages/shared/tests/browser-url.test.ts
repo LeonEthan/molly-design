@@ -29,9 +29,6 @@ describe('parseBrowserAddress', () => {
     expect(parseBrowserAddress(input)).toEqual({ engine: 'public-web', targetClass, logicalUrl });
   });
 
-  // A LAN address is the user's own local browser reaching the user's own network.
-  // Sending it through the agent machine would make that machine a pivot into its
-  // LAN, so it must never route to managed preview — only loopback does.
   it.each([
     ['10.12.0.9:8080', 'http://10.12.0.9:8080/'],
     ['172.31.0.1', 'http://172.31.0.1/'],
@@ -51,17 +48,21 @@ describe('parseBrowserAddress', () => {
   );
 
   it.each([
-    'file:///tmp/a',
-    'javascript:alert(1)',
-    'data:123',
-    '//example.com',
-    'http://user:secret@example.com',
-    'http://0.0.0.0:3000',
-    'http://169.254.169.254/latest/meta-data',
-    'http://[fe80::1]/',
-    'http://example.com\\@127.0.0.1',
-    'https://example.com\n',
-  ])('rejects %s', (input) => {
+    ['file:///tmp/a', 'file:///tmp/a'],
+    ['about:blank', 'about:blank'],
+    ['data:text/html,hello', 'data:text/html,hello'],
+    ['//example.com', 'https://example.com/'],
+    ['http://user:secret@example.com', 'http://user:secret@example.com/'],
+    ['http://0.0.0.0:3000', 'http://0.0.0.0:3000/'],
+    ['http://169.254.169.254/latest/meta-data', 'http://169.254.169.254/latest/meta-data'],
+    ['http://[fe80::1]/', 'http://[fe80::1]/'],
+    ['http://example.com\\@127.0.0.1', 'http://example.com/@127.0.0.1'],
+    ['https://example.com\n', 'https://example.com/'],
+  ])('passes native URL %s to the local browser', (input, logicalUrl) => {
+    expect(parseBrowserAddress(input)).toMatchObject({ engine: 'public-web', logicalUrl });
+  });
+
+  it.each(['', 'http://[invalid]/'])('rejects unparseable address %s', (input) => {
     expect(() => parseBrowserAddress(input)).toThrow(BrowserAddressError);
   });
 
@@ -85,10 +86,13 @@ describe('classifyBrowserHostname', () => {
     expect(classifyBrowserHostname('host.docker.internal')).toBe('private-lan');
   });
 
-  it('prohibits literal RFC 2544 benchmarking addresses', () => {
+  it('routes benchmarking addresses to the local browser without changing classification', () => {
     expect(classifyBrowserHostname('198.18.3.75')).toBe('prohibited');
     expect(classifyBrowserHostname('198.19.255.1')).toBe('prohibited');
-    expect(() => parseBrowserAddress('http://198.18.3.75/')).toThrow(BrowserAddressError);
+    expect(parseBrowserAddress('http://198.18.3.75/')).toMatchObject({
+      engine: 'public-web',
+      logicalUrl: 'http://198.18.3.75/',
+    });
   });
 });
 

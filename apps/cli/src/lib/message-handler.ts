@@ -9,7 +9,6 @@ import { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
 import { EmbeddedHarnessCatalogPublisher } from '@/agent/embedded-harness-catalog';
 import { LegacyImageMigration } from '@/design/legacy-image-migration';
 import { BrowserHost } from '@/browser/browser-host';
-import { parseBrowserAddress } from '@molly/shared/browser-url';
 import { writeGeneratedImageAsset } from '@/mcp/image-generation';
 import type { AgentBrowserScope } from '@molly/shared/browser-agent-rpc';
 import { DesignAssetFailureSchema } from '@molly/shared/local-machine-rpc';
@@ -823,10 +822,7 @@ export class MessageHandler {
    */
   private readonly designRenderHost = new DesignRenderHost();
   private readonly browserHost = new BrowserHost();
-  private readonly browserScopes = new Map<
-    SessionId,
-    { runId: string; launchId: string; sites: string[] }
-  >();
+  private readonly browserRuns = new Map<SessionId, { runId: string; launchId: string }>();
   private readonly browserTakeovers = new Map<SessionId, string>();
   private readonly harnessCredentials = new HarnessCredentialBroker();
   private readonly embeddedHarnessCatalog: EmbeddedHarnessCatalogPublisher;
@@ -6417,14 +6413,14 @@ export class MessageHandler {
       }
       case 'browser/host': {
         for (const takeover of request.params.takeovers) {
-          const current = this.browserScopes.get(takeover.sessionId as SessionId);
+          const current = this.browserRuns.get(takeover.sessionId as SessionId);
           if (current?.runId === takeover.runId) {
             this.browserTakeovers.set(takeover.sessionId as SessionId, takeover.runId);
           }
         }
         const isActive = (scope: AgentBrowserScope): boolean => {
           const sessionId = scope.sessionId as SessionId;
-          const current = this.browserScopes.get(sessionId);
+          const current = this.browserRuns.get(sessionId);
           const session = this.sessionManager.getSession(sessionId);
           return Boolean(
             current &&
@@ -6440,7 +6436,7 @@ export class MessageHandler {
           ...this.browserHost
             .takeRevocations()
             .map(({ sessionId, browserId, runId }) => ({ sessionId, browserId, runId })),
-          ...request.params.leases.filter((lease) => !isActive({ ...lease, sites: [] })),
+          ...request.params.leases.filter((lease) => !isActive(lease)),
         ].slice(0, 8);
         return {
           type: 'browser/host' as const,
@@ -6450,20 +6446,19 @@ export class MessageHandler {
       }
       case 'browser/cancel': {
         const sessionId = request.ownerSessionId as SessionId;
-        const saved = this.browserScopes.get(sessionId);
+        const saved = this.browserRuns.get(sessionId);
         if (saved?.launchId === request.params.launchId) {
           this.browserHost.cancel(request.params.requestId, {
             sessionId,
             browserId: `session-browser-${sessionId}`,
             runId: saved.runId,
-            sites: saved.sites,
           });
         }
         return { type: 'browser/cancel' as const, ok: true as const };
       }
       case 'browser/takeover': {
         const sessionId = request.ownerSessionId as SessionId;
-        if (this.browserScopes.get(sessionId)?.runId === request.params.runId) {
+        if (this.browserRuns.get(sessionId)?.runId === request.params.runId) {
           this.browserTakeovers.set(sessionId, request.params.runId);
         }
         return { type: 'browser/control' as const, ok: true };
@@ -6510,41 +6505,14 @@ export class MessageHandler {
         ) {
           this.browserTakeovers.delete(sessionId);
         }
-        let saved = this.browserScopes.get(sessionId);
+        const saved = this.browserRuns.get(sessionId);
         if (!saved || saved.runId !== runId || saved.launchId !== launchId) {
-          saved = { runId, launchId, sites: [] };
-          this.browserScopes.set(sessionId, saved);
-        }
-        if (request.params.command.kind === 'navigate') {
-          try {
-            const address = parseBrowserAddress(request.params.command.url);
-            if (address.engine !== 'public-web' || address.targetClass !== 'public')
-              throw new Error('Agent browser requires a public website.');
-            const host = new URL(address.logicalUrl).hostname.toLowerCase();
-            const site = host.startsWith('www.') ? host.slice(4) : host;
-            // One active top-level site per page. A past one-shot navigation
-            // cannot silently authorize a later cross-site click.
-            saved.sites = [site];
-          } catch (error) {
-            return {
-              type: 'browser/execute' as const,
-              ok: false as const,
-              error: formatErrorMessage(error).slice(0, 1_000),
-            };
-          }
-        }
-        if (saved.sites.length === 0) {
-          return {
-            type: 'browser/execute' as const,
-            ok: false as const,
-            error: 'Open an approved website before observing the browser.',
-          };
+          this.browserRuns.set(sessionId, { runId, launchId });
         }
         const scope: AgentBrowserScope = {
           sessionId,
           browserId: `session-browser-${sessionId}`,
           runId,
-          sites: [...saved.sites],
         };
         const outcome = await this.browserHost.enqueue({
           requestId: request.params.requestId,

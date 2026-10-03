@@ -19,9 +19,7 @@ app.on('window-all-closed', () => {})
 async function main() {
   await app.whenReady()
   const isolated = session.fromPartition('molly-driver-probe-memory')
-  await isolated.setProxy({ mode: 'direct' })
   isolated.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
-  isolated.on('will-download', (event) => event.preventDefault())
   const pageUrl = 'https://design-probe.test/search'
   const imageUrl =
     'https://raw.githubusercontent.com/github/explore/main/topics/typescript/typescript.png'
@@ -61,10 +59,6 @@ async function main() {
     assertActive: () => {
       if (!active) throw new Error('Agent browser control was revoked.')
     },
-    beforeNavigate: async (url) => {
-      assert.equal(url, pageUrl)
-    },
-    observeNetwork: () => {},
     detached: () => {
       active = false
     },
@@ -108,7 +102,6 @@ async function main() {
     await writeFile(join(PROBE_OUTPUT, 'screenshot.jpg'), Buffer.from(part.data, 'base64'))
   }
   record('Official MCP screenshot returns JPEG bytes')
-  // An explicit fixture load signal, not a sleep or relaxed production guard.
   await view.webContents.executeJavaScript('document.querySelector("img").decode()')
   const selected = await driver.execute({ kind: 'save_image', ref: ref(await snapshot(), 'img') })
   assert.equal(selected.kind, 'image')
@@ -117,7 +110,6 @@ async function main() {
     browserSession: isolated,
     pageUrl: selected.image.pageUrl,
     imageUrl: selected.image.imageUrl,
-    sites: ['design-probe.test'],
     signal: new AbortController().signal
   })
   assert.equal(Buffer.from(saved.bytes).subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
@@ -126,8 +118,6 @@ async function main() {
     'Production driver resolves an upstream image ref for the existing controlled asset reader'
   )
 
-  // Remove only the fixture protocol. Subsequent controller navigation uses real
-  // DNS, Chromium traffic and response peers; no policy or driver substitution.
   isolated.protocol.unhandle('https')
   active = false
   await driver.dispose()
@@ -140,7 +130,6 @@ async function main() {
   const scope = {
     runId: 'native-probe-run',
     browserId: 'session-browser-native-probe',
-    sites: ['example.com'],
     sessionId: 'native-probe-session'
   }
   await controller.execute(view.webContents, scope, {
@@ -149,17 +138,21 @@ async function main() {
   })
   const observed = await controller.execute(view.webContents, scope, { kind: 'snapshot' })
   assert.equal(observed.kind, 'text')
-  if (observed.kind === 'text') assert.match(observed.text, /Example Domain/)
-  record(
-    'Production controller navigates and reads a real public response through its unchanged network guard'
-  )
-  await assert.rejects(
-    controller.execute(view.webContents, scope, { kind: 'navigate', url: 'http://127.0.0.1/' }),
-    /public|local|private/
-  )
+  if (observed.kind === 'text') {
+    assert.match(observed.text, /Page: https:\/\/example\.com\//)
+    assert.match(observed.text, /paragraph|heading|link/)
+  }
+  record('Production controller navigates and reads a real page through the system network')
+  await controller.execute(view.webContents, scope, {
+    kind: 'navigate',
+    url: 'data:text/html,<h1>Native browser destination</h1>'
+  })
+  const native = await controller.execute(view.webContents, scope, { kind: 'snapshot' })
+  assert.equal(native.kind, 'text')
+  if (native.kind === 'text') assert.match(native.text, /Native browser destination/)
   controller.revokeAll()
   assert.equal(controller.hasLease(view.webContents), false)
-  record('Production controller rejects private navigation and revokes its lease')
+  record('Native navigation has no network scope and revocation still ends control')
   await writeFile(
     join(PROBE_OUTPUT, 'result.json'),
     JSON.stringify({ ok: true, checks, versions: process.versions }, null, 2)

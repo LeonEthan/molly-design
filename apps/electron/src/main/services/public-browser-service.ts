@@ -79,7 +79,7 @@ const toState = (
   return mergePublicBrowserState(
     record.state,
     {
-      committedUrl: /^https?:\/\//i.test(committedUrl) ? committedUrl : undefined,
+      committedUrl: committedUrl || undefined,
       committedTitle: record.view.webContents.getTitle() || undefined,
       canGoBack: record.view.webContents.navigationHistory.canGoBack(),
       canGoForward: record.view.webContents.navigationHistory.canGoForward()
@@ -88,12 +88,10 @@ const toState = (
   )
 }
 
-/** Manual navigation keeps the original hostname-based engine routing. Agent
- * navigation additionally uses the guarded lease in PublicBrowserAgentController. */
 const assertPublicUrl = (rawUrl: string): string => {
   const parsed = parseBrowserAddress(rawUrl)
   if (parsed.engine !== 'public-web') {
-    throw new Error('Public browser only accepts public HTTP(S) destinations.')
+    throw new Error('Loopback addresses use Managed Preview from the address bar.')
   }
   return parsed.logicalUrl
 }
@@ -173,7 +171,6 @@ export class PublicBrowserService {
           sandbox: true,
           webSecurity: true,
           allowRunningInsecureContent: false,
-          disableBlinkFeatures: 'WebRTC',
           spellcheck: false
         }
       })
@@ -602,7 +599,6 @@ export class PublicBrowserService {
     browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
       callback(false)
     })
-    browserSession.on('will-download', (event) => event.preventDefault())
   }
 
   private configureWebContents(record: PublicBrowserRecord): void {
@@ -617,12 +613,9 @@ export class PublicBrowserService {
     // would otherwise commit here — the engine split has to hold for the hop the
     // server chose, not only the one the page did.
     const enforceEngineRouting = (details: { url: string; preventDefault: () => void }): void => {
+      if (this.agent.hasLease(contents)) return
       try {
-        if (
-          parseBrowserAddress(details.url).engine === 'public-web' &&
-          this.agent.permitsTopLevelNavigation(contents, details.url)
-        )
-          return
+        if (parseBrowserAddress(details.url).engine === 'public-web') return
       } catch {
         // The structured error is published below.
       }
@@ -642,7 +635,7 @@ export class PublicBrowserService {
       this.publish(record, { phase: 'loading', error: undefined, blockedUrl: undefined })
     })
     contents.on('dom-ready', () => {
-      if (record.state.phase === 'loading' && /^https?:\/\//i.test(contents.getURL())) {
+      if (record.state.phase === 'loading' && contents.getURL()) {
         this.publish(record, { phase: 'ready' })
       }
     })
@@ -653,7 +646,7 @@ export class PublicBrowserService {
       )
     })
     contents.on('did-navigate', (_event, url) => {
-      if (/^https?:\/\//i.test(url)) this.publish(record, { url })
+      this.publish(record, { url })
     })
     contents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
       if (isMainFrame) this.publish(record, { url })

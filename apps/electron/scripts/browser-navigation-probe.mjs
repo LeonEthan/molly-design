@@ -6,20 +6,27 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const work = await mkdtemp(join(tmpdir(), 'molly-browser-response-guard-'))
+const work = await mkdtemp(join(tmpdir(), 'molly-browser-navigation-'))
 const requireElectron = createRequire(join(root, 'apps/electron/package.json'))
 const { build } = createRequire(join(root, 'apps/cli/package.json'))('esbuild')
 
 await symlink(join(root, 'apps/electron/node_modules'), join(work, 'node_modules'), 'dir')
 await build({
-  entryPoints: [join(root, 'apps/electron/scripts/browser-response-guard-probe-main.ts')],
+  entryPoints: [join(root, 'apps/electron/scripts/browser-navigation-probe-main.ts')],
   outfile: join(work, 'main.cjs'),
   bundle: true,
   platform: 'node',
   format: 'cjs',
   target: 'node22',
   packages: 'external',
-  alias: { '@molly/shared/browser-url': join(root, 'packages/shared/src/browser-url.ts') },
+  alias: {
+    '@molly/shared/browser-url': join(root, 'packages/shared/src/browser-url.ts'),
+    '@molly/shared/browser-import-cookie': join(
+      root,
+      'packages/shared/src/browser-import-cookie.ts'
+    ),
+    '@molly/shared/electron-ipc': join(root, 'packages/shared/src/electron-ipc.ts')
+  },
   define: { PROBE_OUTPUT: JSON.stringify(work) }
 })
 
@@ -62,10 +69,10 @@ await writeFile(join(work, 'electron.log'), outcome.output)
 await writeFile(join(work, 'process.json'), JSON.stringify(outcome, null, 2))
 console.log(`Evidence: ${work}`)
 if (outcome.code !== 0 || outcome.signal || outcome.timedOut) {
-  console.error(`Native browser response guard failed: ${JSON.stringify(outcome)}`)
+  console.error(`Native browser navigation failed: ${JSON.stringify(outcome)}`)
   process.exitCode = 1
 } else {
   const result = JSON.parse(await readFile(join(work, 'result.json'), 'utf8'))
-  if (!result.ok) throw new Error('Native browser response guard did not complete')
+  if (!result.ok) throw new Error('Native browser navigation did not complete')
   await rm(join(work, 'profile'), { recursive: true, force: true })
 }

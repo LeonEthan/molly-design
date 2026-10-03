@@ -24,7 +24,7 @@ this page is the full text of the rules summarised there.
   self-contained/no-network rule as a hard browser guarantee. The rendered frame exists only while
   its viewer tab and containing sidebar are visible. Key the file viewer by session + tab so switching
   session targets always returns HTML to code mode before the new file can execute.
-- Session Browser has strict dual engines, split on exactly one question: is the address the
+- Manual Session Browser address entry has strict dual engines, split on exactly one question: is the address the
   agent machine's own LOOPBACK? Only that uses Managed Preview, where the machine opens one
   approved port on itself; those are the only pages eligible for Visual Annotation. Everything
   else — public sites AND private LAN / `.local` / `host.docker.internal` — uses the declared
@@ -36,15 +36,15 @@ this page is the full text of the rules summarised there.
   themselves, and the approver sits on the OTHER side of the tunnel, so approval cannot make it
   safe. `parseBrowserAddress` never routes LAN there and `PreviewTargetApproval.targetClass` is
   the literal `'loopback'`, but the CLI's `normalizeTarget` is the authoritative rejection.
-  Manual public browsing remains hostname-routed and does not impose the Agent's DNS
-  restrictions, preserving existing fake-IP proxy behavior for the person. Agent access
-  uses the same visible `WebContentsView` with a separate run-bound guard: public
-  destinations and DNS, direct proxy, verified response peer, approved top-level site,
-  and no page read until the guarded main document reaches DOM-ready. A denied
-  subrequest is cancelled without poisoning an otherwise verified page; an unsafe
-  main-frame request or response peer still blocks Agent reading. Saving an image
-  requires a current upstream ref resolving to a loaded IMG in the main document. Fake-IP or unverifiable proxy
-  sessions fail closed for Agent access. The engine split alone is by hostname TEXT;
+  Public browsing uses native URL parsing and the user's Chromium session transport,
+  including system proxies and TUN. Agent access uses the same visible
+  `WebContentsView` with a separate run-bound ownership lease. There is no Molly
+  protocol/credential-in-URL filter, site scope, public-address DNS or response-peer
+  verification, proxy restriction, or forced cache/Service Worker bypass. Native
+  document readiness and finite operation timeouts remain. Agent navigation stays
+  on its native page, including loopback; it does not switch to Managed Preview.
+  Saving an image requires
+  a current upstream ref resolving to a loaded IMG in the main document. The engine split alone is by hostname TEXT;
   a public name that resolves to loopback still opens for manual use, so never describe
   manual routing as resolution-accurate. A non-human NAVIGATOR also exists and is handled here, not in
   Electron: a Managed Preview page is served by the agent machine, so the navigation requests
@@ -67,17 +67,26 @@ this page is the full text of the rules summarised there.
   only bounded snapshot text or image bytes leave main, never upstream file links.
   screenshots are bounded JPEG MCP images and need a model with image input;
   the Agent gets no arbitrary JavaScript, CDP target list, cookie values, external
-  Chrome control, or download API. The selected image path validates every redirect
-  and pins public socket addresses before writing supported PNG/JPEG/GIF bytes to the
-  design media directory. Normal page downloads remain denied. The MCP catalog
+  Chrome control, or Agent download-management API. The selected image path uses
+  Electron `net.request` bound to the same Chromium session, with bounded redirects and bodies,
+  before writing supported PNG/JPEG/GIF bytes to the design media directory.
+  Existing Cookie and origin-only Referer rules remain: the image Cookie site
+  context survives main-document navigation into its descendants and resets on a
+  real cross-site document; each image hop includes Cookies only for HTTPS inside
+  that context, without limiting network destinations. Native page downloads are
+  available separately and never publish design assets automatically. WebRTC uses
+  Chromium's normal behavior; webpage permission requests remain denied. The MCP catalog
   advertises a flat, required-`kind` object because the OpenAI-compatible
   adapter erases top-level JSON Schema unions; the MCP handler revalidates every
-  request against the strict action union before dispatch. The Pi permission request
-  may grant a run-scoped site; takeover revokes Agent observation and action
+  request against the strict action union before dispatch. Browser tools use the
+  existing permission flow without per-site scopes; takeover revokes Agent observation and action
   until the user explicitly resumes. While Agent control is active, Electron blocks
   human mouse/keyboard events on that page. Only synchronous `Input.*` dispatch
   opens that gate; it is closed again before any Playwright wait. Toolbar navigation
   takes over first. Detachment revokes pending output and preserves the human page.
+  A dispatched operation whose result is unknown is never replayed automatically.
+  Cancellation, timeout or disconnect rejects that operation's late result without
+  freezing browser access for the rest of the run; the Agent can observe again.
   A hidden Agent page reattaches when the Browser
   panel opens; opening the panel must not navigate it again.
   A packaged Molly with a stable macOS signing identity stores site sessions in a
@@ -102,12 +111,10 @@ this page is the full text of the rules summarised there.
   cookies or guarantee server-side logout. The Browser sidebar links to Settings
   and leaves manual sign-in in the visible page. Image labels and refs follow the
   upstream accessibility snapshot; use screenshots for visual selection.
-  Pi converts only known Molly browser failures (denied destination, unsupported image,
-  stale image reference, unavailable image, unverified document, blocked network
-  response and user takeover) into fixed safe codes; raw website or transport
-  error text remains hidden from the Agent. CDP and WebContents may encode the
-  same verified document query differently, so comparison normalizes query
-  encoding without skipping the response-peer check.
+  Pi converts known Molly browser failures into fixed safe codes; raw website or
+  transport error text remains hidden from the Agent. Destination and network-proof
+  failure states are no longer part of the browser contract. Page ownership and
+  cancellation checks remain independent of native loading success.
   The composer info-bar Browser action is an explicit candidate-navigation request, not merely a
   panel-open action. It opens the reported candidate even when another page is already visible.
   That click IS the approval for that exact target: a remote route creates (or replaces) its tunnel

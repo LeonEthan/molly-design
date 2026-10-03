@@ -12,6 +12,11 @@ Translation: pending
 
 **2026-09-23 Cookie 合同复核与修复：** 原 [browser-account-source](../../../../apps/electron/src/main/services/browser-account-source.ts) 从 `browserReport` 读取不含 CHIPS 上下文的扁平 Cookie，可能把分区 Cookie 写成普通 Cookie。现保留报告的完整解密检查，另用已锁定 rookie-cookies 0.6.0 的 `chromiumBasedDetailed(source.path, [site], 'chrome')` 读取同一选中来源的详细记录；逐来源比较普通字段及重复条目数量，不一致即拒绝。单条 CHIPS、同名分区、未知上下文和普通身份冲突全部拒绝整次导入。目标分区也在写入前经只读 CDP 检查，已有 CHIPS 时不执行覆盖或扁平备份。这里只修导入边界，不支持 CHIPS 迁移。
 
+**2026-10-03 网络合同替代：** [原生浏览器传输简化](../../implemented/simplification/2026-10-03-native-browser-transport.zh.md)
+替代本文的公网／DNS／响应连接验证、站点范围、下载拒绝和未知结果冻结规则。
+现有页面归属、接管、Cookie 导入及有限工具继续复用。本文保留旧实施计划和
+已执行证据，不再作为网络限制的当前依据；更新后的 Spec 保持 draft。
+
 ## 当前后续实施计划：先复用驱动，再验收核心任务
 
 本节保留 A–E 的执行过程，取代旧 0–9 步骤；最新范围及完成条件以[首期收尾记录](../../implemented/feature/2026-09-23-pinterest-browser-release.zh.md)为准。步骤 A–C 已完成，D、E 已取得匿名和本机开发签名 Pinterest 核心证据。Developer ID 分发、升级及 Amazon 验收、公开发布不在当前首期收尾范围。

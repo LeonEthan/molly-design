@@ -48,7 +48,11 @@ export const AgentBrowserToolInputSchema = z
     kind: z
       .enum(['navigate', 'snapshot', 'screenshot', 'click', 'type', 'save_image', 'scroll'])
       .describe('Browser action. Supply only the fields required by that action.'),
-    url: z.string().max(2_048).optional().describe('Required for navigate: public HTTP(S) URL.'),
+    url: z
+      .string()
+      .max(2_048)
+      .optional()
+      .describe('Required for navigate: browser destination URL.'),
     ref: BrowserElementRefSchema.optional().describe(
       'Required for click, type, and save_image: upstream ref such as e5 from the current snapshot.'
     ),
@@ -68,7 +72,6 @@ export const AgentBrowserScopeSchema = z
     sessionId: SessionIdSchema,
     browserId: z.string().regex(/^session-browser-[a-zA-Z0-9_-]{1,128}$/),
     runId: z.string().min(1).max(200),
-    sites: z.array(z.string().min(1).max(253)).min(1).max(8),
   })
   .strict();
 export type AgentBrowserScope = z.infer<typeof AgentBrowserScopeSchema>;

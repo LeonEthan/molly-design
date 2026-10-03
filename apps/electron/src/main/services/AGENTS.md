@@ -116,7 +116,7 @@ never forward arbitrary tool names, code or filenames. Only the granted page and
 its descendants enter the CDP adapter. Revoke detaches before returning results.
 Input gating opens only for synchronous CDP dispatch, never across an await.
 Reuse the pinned adapter via its generator; do not edit generated upstream code.
-Response-peer rejection must deny Agent reads synchronously; defer native navigation
-stops beyond the debugger callback, rechecking the same live lease and denial.
-Canonicalize DNS and response IPs before classification, including bracketed and
-IPv4-mapped IPv6; malformed addresses and unverifiable cache responses stay denied.
+Navigation and image fetches use Chromium's session and user network, including
+proxy/TUN; retain readiness/timeouts without destination proofs or site scopes.
+Uncertain operations reject output without replay or run-wide freeze. Keep image
+body/redirect/Cookie bounds; native downloads never publish design assets.

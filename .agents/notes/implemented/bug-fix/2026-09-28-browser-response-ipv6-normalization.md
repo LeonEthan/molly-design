@@ -9,6 +9,11 @@ Design research can fail even when a public website returns a successful documen
 
 ## Findings
 
+The [2026-10-03 native transport simplification](../../implemented/simplification/2026-10-03-native-browser-transport.md)
+retires DNS and response-peer verification. The diagnosis and checks below
+describe the earlier implementation and remain historical evidence, not current
+browser restrictions.
+
 Both recent manual research runs reported the existing public-response-peer
 verification error after browser navigation. Historical logs did not retain the
 peer address or response flags, so they cannot independently prove which specific
@@ -24,7 +29,7 @@ direct evidence of a Molly compatibility defect, not evidence of a site login or
 general connectivity failure. No account cookies, model or image service were used.
 
 The mismatch is in
-[public-browser-agent-policy.ts](../../../../apps/electron/src/main/services/public-browser-agent-policy.ts):
+[public-browser-agent-policy.ts at the inspected revision](https://github.com/LeonEthan/molly-design/blob/1809a324b9448c9c3a6d36bff4a18bfc155c633c/apps/electron/src/main/services/public-browser-agent-policy.ts):
 DNS preflight normalized IPs, whereas `isVerifiedAgentBrowserResponsePeer` called
 `isIP` directly on the CDP representation. The hostname classifier itself removes
 IPv6 brackets, but the earlier validation had already failed.

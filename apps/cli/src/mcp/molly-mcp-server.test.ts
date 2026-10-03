@@ -1,5 +1,8 @@
 import path from 'path';
-import { AgentBrowserCommandSchema } from '@molly/shared/browser-agent-rpc';
+import {
+  AgentBrowserCommandSchema,
+  AgentBrowserScopeSchema,
+} from '@molly/shared/browser-agent-rpc';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -147,6 +150,21 @@ describe('embedded browser MCP catalog', () => {
 });
 
 describe('embedded browser command boundary', () => {
+  it('binds page ownership without a website allowlist', () => {
+    expect(
+      AgentBrowserScopeSchema.safeParse({
+        sessionId: 'session-1',
+        browserId: 'session-browser-session-1',
+        runId: 'run-1',
+      }).success
+    ).toBe(true);
+  });
+
+  it('accepts browser destinations without applying public-network policy in the tool schema', () => {
+    for (const url of ['http://localhost:3000', 'http://192.168.0.1', 'file:///tmp/reference.html'])
+      expect(AgentBrowserCommandSchema.safeParse({ kind: 'navigate', url }).success).toBe(true);
+  });
+
   it('accepts upstream references but rejects selectors, scripts and file output', () => {
     expect(AgentBrowserCommandSchema.safeParse({ kind: 'click', ref: 'e5' }).success).toBe(true);
     expect(AgentBrowserCommandSchema.safeParse({ kind: 'save_image', ref: 'f1e9' }).success).toBe(

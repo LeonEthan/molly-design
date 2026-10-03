@@ -77,7 +77,8 @@ dispatch owns runtime availability; schema presence does not enable execution.
 ## Browser RPC
 
 `browser/execute` uses the owner-only socket and binds run/launch/page.
-Recheck results; never replay uncertain actions. Import Chrome accounts in
+Recheck results; reject uncertain output without replaying actions or freezing
+the current run. Browser RPC carries no per-site authorization scope. Import Chrome accounts in
 Electron main only. Models see flat `AgentBrowserToolInputSchema`; validate
   with `AgentBrowserCommandSchema` before execution.
 

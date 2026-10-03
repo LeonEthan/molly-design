@@ -145,28 +145,36 @@ reads back Electron's encrypted-cookie fuse before signing. See the
 [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
 for the current setup and support limits.
 
-DNS results and response peers use the same IP normalization before public-address
-classification. This accepts Chromium's bracketed IPv6 representation while still
-rejecting malformed addresses and IPv4-mapped local/private addresses. Cache and
-service-worker responses remain unverifiable.
-If a browser operation fails after a known network denial, the controller reports
-that denial instead of the driver's generic loading or transport error. Revoked
-leases still report lost control, and ordinary navigation timeouts retain their
-loading message.
+Navigation uses Chromium's native URL and network handling. Selected images use
+Electron `net.request` bound to the owning browser session with the existing body, redirect,
+Cookie and Referer bounds, then the design asset decoder. Both paths follow the
+user's network, including proxies and TUN, without Molly public-DNS, `DIRECT`,
+response-peer, per-site, cache or Service Worker restrictions. WebRTC is enabled
+by native behavior. Native page downloads remain available and do not publish
+design assets automatically.
 
-An unverified browser response immediately blocks Agent reads and invalidates the
-verified document. Native loading is stopped on the next event-loop turn, only
-while the same lease still owns the live page and remains blocked. Calling
-`webContents.stop()` inside a debugger response callback can re-enter Chromium's
-navigation stack and crash Electron 39.5.1.
+Ownership checks, native document readiness, human takeover and finite operation
+timeouts remain. Cancellation or an uncertain outcome rejects only that operation's
+late result, without freezing browser access for the current run or automatically
+replaying the action. Manual addresses retain loopback Managed Preview routing;
+Agent navigation remains on its native page, including loopback.
+
+Image Cookie context retains the initial site across native navigation into its
+descendants, resetting on a cross-site document. Each image redirect decides
+Cookie inclusion from HTTPS and that context; it does not limit destinations.
+
+The higher-level `Session.fetch` API was checked first. In pinned Electron 39.5.1,
+`redirect: 'manual'` rejects a redirect as `Redirect was cancelled` instead of
+returning its response. Native request redirect events preserve the existing
+per-hop Cookie policy and five-redirect bound without Node HTTP/DNS or socket
+address verification.
 
 ## Browser driver compatibility probe
 
-`node apps/electron/scripts/browser-response-guard-probe.mjs` runs the native
-response-rejection regression against the product controller using an isolated
-profile and a held loopback response. It checks immediate read denial, navigation
-cancellation, and deferred-stop ownership after revocation, replacement, page
-destruction or a new navigation. No model or public website is contacted.
+`node apps/electron/scripts/browser-navigation-probe.mjs` runs the native
+navigation-readiness and revocation regression against the product controller
+using an isolated profile and loopback fixture. It replaces the retired
+response-rejection probe. No model or public website is contacted.
 
 `node apps/electron/scripts/browser-mcp-probe.mjs [output-directory]` (from the
 repository root) runs the isolated Playwright MCP / VS Code adapter probe.
@@ -184,7 +192,7 @@ Pi/Session/permissions integration or real-site acceptance.
 Add `--product` and a fresh output directory to run the current product driver
 and controller against a synthetic search page and public pages. This mode uses
 workspace production dependencies and the checked-in adapter. It verifies the
-actual input guard, revoke, response-peer checks and selected-image byte path;
+actual input guard, revoke, native navigation and selected-image byte path;
 it is a native integration probe, not a real-model Pinterest acceptance.
 The after-pack hook also loads the collected MCP/Playwright modules in the packaged
 Electron executable. Exact dependency-age exceptions apply only to the three

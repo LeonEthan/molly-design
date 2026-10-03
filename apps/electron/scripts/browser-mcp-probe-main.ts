@@ -43,9 +43,7 @@ app.on('window-all-closed', () => {})
 async function main() {
   await app.whenReady()
   const isolated = session.fromPartition('molly-mcp-probe-memory')
-  await isolated.setProxy({ mode: 'direct' })
   isolated.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
-  isolated.on('will-download', (event) => event.preventDefault())
   const fixture = `<!doctype html><title>Design search probe</title><style>body{font:20px system-ui;padding:40px;background:#f5f2eb}input,button{font:inherit;padding:10px}img{width:220px}article{padding:20px;background:white;margin-top:24px;width:300px}</style>
     <h1>Design search</h1><form><label>Search designs <input name="q"></label><button>Search</button></form><main></main>
     <script>
@@ -277,7 +275,6 @@ async function main() {
     browserSession: isolated,
     imageUrl: metadata.imageUrl,
     pageUrl: metadata.pageUrl,
-    sites: ['design-probe.test'],
     signal: new AbortController().signal
   })
   assert.ok(Buffer.from(asset.bytes).subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')))

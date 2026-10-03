@@ -12,8 +12,6 @@ import {
 
 export type BrowserCdpGuards = {
   assertActive(): void
-  beforeNavigate(url: string): Promise<void>
-  observeNetwork(method: string, params: unknown): void
   detached(): void
   dispatchInput(send: () => Promise<unknown>): Promise<unknown>
 }
@@ -26,9 +24,6 @@ export class BrowserCdpConnection {
   private debugger: BrowserViewDebugger | undefined
   private proxy: CDPBrowserProxy | undefined
   private closed = false
-  private readonly onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
-    this.guards.observeNetwork(method, params)
-  }
   private readonly onDetach = (): void => {
     if (!this.closed) this.guards.detached()
   }
@@ -111,37 +106,15 @@ export class BrowserCdpConnection {
       ),
       debuggerTransport.registerCommandInterceptor((method, params, session) => {
         this.guards.assertActive()
-        if (method === 'Page.navigate') {
-          const url = (params as { url?: unknown } | undefined)?.url
-          if (typeof url !== 'string')
-            return Promise.reject(new Error('Browser navigation needs a URL.'))
-          return this.guards.beforeNavigate(url).then(() => {
-            this.guards.assertActive()
-            return debuggerTransport.sendCommandRaw(method, params, session?.sessionId)
-          })
-        }
         if (method.startsWith('Input.'))
           return this.guards.dispatchInput(() =>
             debuggerTransport.sendCommandRaw(method, params, session?.sessionId)
           )
-        // Playwright cannot re-enable caches or SW responses behind the peer guard.
-        if (method === 'Network.setCacheDisabled')
-          return debuggerTransport.sendCommandRaw(
-            method,
-            { cacheDisabled: true },
-            session?.sessionId
-          )
-        if (method === 'Network.setBypassServiceWorker')
-          return debuggerTransport.sendCommandRaw(method, { bypass: true }, session?.sessionId)
         return undefined
       })
     )
     register(targetInfo)
-    this.contents.debugger.on('message', this.onMessage)
     this.contents.debugger.on('detach', this.onDetach)
-    await debuggerTransport.sendCommand('Network.enable')
-    await debuggerTransport.sendCommand('Network.setCacheDisabled', { cacheDisabled: true })
-    await debuggerTransport.sendCommand('Network.setBypassServiceWorker', { bypass: true })
     const transport: ConnectOverCDPTransport = {
       send: (message) => {
         this.guards.assertActive()
@@ -166,7 +139,6 @@ export class BrowserCdpConnection {
   dispose(): void {
     if (this.closed) return
     this.closed = true
-    this.contents.debugger.off('message', this.onMessage)
     this.contents.debugger.off('detach', this.onDetach)
     for (const target of this.targets) target.dispose()
     this.targets.clear()

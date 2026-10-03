@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
@@ -33,106 +34,189 @@ compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require'])(
   (name) => (name === 'electron' ? { app: { isPackaged: false } } : require(name))
 )
 const { PublicBrowserAgentController, BrowserMcpDriver } = module.exports
+const fixtures = new Map()
+let nextContentsId = 0
 
-const timeoutMessage = 'Browser page is still loading; observe again after it settles.'
-const blockedMessage =
-  'Agent browser network blocked: The browser could not verify a public response peer.'
-const scope = {
-  sessionId: 'session',
-  browserId: 'browser',
-  runId: 'run',
-  sites: ['8.8.8.8']
-}
-const command = { kind: 'navigate', url: 'https://8.8.8.8/' }
-
-class NavigationFixture {
-  constructor(perform) {
-    const controller = new PublicBrowserAgentController()
-    const contents = {
-      id: 1,
-      session: { resolveProxy: async () => 'DIRECT' },
-      isDestroyed: () => false,
-      stop: () => {},
-      getURL: () => command.url
-    }
-    const lease = {
-      scope,
-      contents,
-      disposed: false,
-      networkError: null,
-      verifiedDocuments: new Set(),
-      ready: false
-    }
-    const leases = Reflect.get(controller, 'leases')
-    leases.set(contents.id, lease)
-    const driver = new BrowserMcpDriver(contents, {
-      assertActive: () => Reflect.get(controller, 'assertSameLease').call(controller, lease)
-    })
-    const events = {
-      rejectPeer: () =>
-        Reflect.get(controller, 'observeNetwork').call(
-          controller,
-          lease,
-          'Network.responseReceived',
-          {
-            requestId: 'document',
-            type: 'Document',
-            response: { url: command.url, remoteIPAddress: '127.0.0.1' }
-          }
-        )
-    }
-    Reflect.set(driver, 'client', {
-      callTool: async () => {
-        await perform({ lease, leases, ...events })
-        return {
-          isError: true,
-          content: [{ type: 'text', text: 'Timeout 15000ms exceeded during navigation.' }]
-        }
-      }
-    })
-    lease.driver = driver
-    this.lease = lease
-    this.run = () => controller.execute(contents, scope, command)
-  }
-}
-
-void test('navigation reports the known response-policy denial instead of the driver timeout', async () => {
-  const { run } = new NavigationFixture(({ rejectPeer }) => rejectPeer())
-  await assert.rejects(run(), { message: blockedMessage })
-})
-
-void test('navigation retains the known response-policy denial after a driver transport failure', async () => {
-  const { run } = new NavigationFixture(({ rejectPeer }) => {
-    rejectPeer()
-    throw new Error('Synthetic MCP transport failure')
+const deferred = () => {
+  let resolve
+  const promise = new Promise((accept) => {
+    resolve = accept
   })
-  await assert.rejects(run(), { message: blockedMessage })
-})
+  return { promise, resolve }
+}
 
-void test('navigation keeps the ordinary timeout when no response was blocked', async () => {
-  const { run } = new NavigationFixture(() => {})
-  await assert.rejects(run(), { message: timeoutMessage })
-})
+BrowserMcpDriver.prototype.connect = async function () {
+  const contents = Reflect.get(Reflect.get(this, 'connection'), 'contents')
+  const fixture = fixtures.get(contents.id)
+  Reflect.set(this, 'client', {
+    callTool: (command) => fixture.perform(command),
+    close: async () => {}
+  })
+  fixture.connected.resolve()
+}
 
-void test('a new navigation clears the previous network denial before reporting its own timeout', async () => {
-  const { run, lease } = new NavigationFixture(() => {})
-  lease.networkError = 'Previous navigation was blocked.'
-  await assert.rejects(run(), { message: timeoutMessage })
-})
-
-void test('revocation and replacement retain ownership errors even with a recorded policy denial', async () => {
-  for (const retire of [
-    ({ lease }) => {
-      lease.disposed = true
-    },
-    ({ lease, leases }) => leases.set(lease.contents.id, { ...lease })
-  ]) {
-    const { run } = new NavigationFixture((state) => {
-      state.rejectPeer()
-      retire(state)
+class BrowserFixture {
+  constructor({ url = 'http://192.168.1.10/design', loading = false } = {}) {
+    this.controller = new PublicBrowserAgentController()
+    this.scope = { sessionId: 'session', browserId: 'browser', runId: 'run' }
+    this.connected = deferred()
+    this.url = url
+    this.loading = loading
+    this.contents = Object.assign(new EventEmitter(), {
+      id: ++nextContentsId,
+      session: {
+        resolveProxy: async () => {
+          throw new Error('Native proxy preflight was requested')
+        }
+      },
+      debugger: Object.assign(new EventEmitter(), { isAttached: () => false }),
+      isDestroyed: () => false,
+      isLoadingMainFrame: () => this.loading,
+      getURL: () => this.url,
+      loadURL: async (nextUrl) => this.navigate(nextUrl)
     })
-    await assert.rejects(run(), {
-      message: 'Agent browser control was revoked before the result was returned.'
-    })
+    fixtures.set(this.contents.id, this)
+    this.perform = async ({ name, arguments: args }) => {
+      if (name === 'browser_navigate') this.navigate(args.url)
+      return {
+        content: [{ type: 'text', text: '### Snapshot\n```yaml\n- heading "Native page"\n```' }]
+      }
+    }
   }
+
+  navigate(url) {
+    this.loading = true
+    this.contents.emit('did-start-navigation', {}, url, false, true)
+    this.url = url
+    this.ready()
+  }
+
+  ready() {
+    this.loading = false
+    this.contents.emit('dom-ready')
+  }
+
+  execute(command) {
+    return this.controller.execute(this.contents, this.scope, command)
+  }
+}
+
+void test('Agent can observe an existing native page without approved sites or response proofs', async () => {
+  const fixture = new BrowserFixture()
+  const result = await fixture.execute({ kind: 'snapshot' })
+  assert.equal(result.kind, 'text')
+  assert.match(result.text, /Native page/)
+  fixture.controller.revoke(fixture.contents)
+})
+
+void test('native navigation accepts private, fake-IP, cross-site and non-HTTP browser destinations', async () => {
+  const fixture = new BrowserFixture()
+  for (const url of [
+    'http://127.0.0.1:8080/',
+    'https://198.18.0.119/',
+    'http://192.168.1.10/',
+    'https://another-site.example/',
+    'data:text/html,Native page'
+  ]) {
+    const result = await fixture.execute({ kind: 'navigate', url })
+    assert.match(result.text, /navigate completed/)
+    assert.equal(fixture.contents.getURL(), url)
+    assert.match((await fixture.execute({ kind: 'snapshot' })).text, /Native page/)
+  }
+  fixture.controller.revoke(fixture.contents)
+})
+
+void test('snapshot waits for native document readiness without a response-peer event', async () => {
+  const fixture = new BrowserFixture({ loading: true })
+  const result = fixture.execute({ kind: 'snapshot' })
+  await fixture.connected.promise
+  fixture.ready()
+  assert.match((await result).text, /Native page/)
+  fixture.controller.revoke(fixture.contents)
+})
+
+void test('revocation rejects a late operation result and keeps the human page', async () => {
+  const fixture = new BrowserFixture()
+  const started = deferred()
+  const release = deferred()
+  fixture.perform = async () => {
+    started.resolve()
+    await release.promise
+    return {
+      content: [{ type: 'text', text: '### Snapshot\n```yaml\n- heading "Late page"\n```' }]
+    }
+  }
+  const result = fixture.execute({ kind: 'snapshot' })
+  await started.promise
+  fixture.controller.revoke(fixture.contents)
+  release.resolve()
+  await assert.rejects(result, /control was revoked/)
+  assert.equal(fixture.contents.getURL(), 'http://192.168.1.10/design')
+})
+
+void test('revocation during initial native loading prevents late attachment and preserves a replacement lease', async () => {
+  const fixture = new BrowserFixture({ url: '' })
+  const started = deferred()
+  const release = deferred()
+  fixture.contents.loadURL = async (url) => {
+    started.resolve()
+    await release.promise
+    fixture.navigate(url)
+  }
+  const result = fixture.execute({ kind: 'snapshot' })
+  await started.promise
+  fixture.controller.revoke(fixture.contents)
+  fixture.navigate('http://192.168.1.10/replacement')
+  const replacement = { ...fixture.scope, runId: 'replacement-run' }
+  assert.match(
+    (await fixture.controller.execute(fixture.contents, replacement, { kind: 'snapshot' })).text,
+    /Native page/
+  )
+  release.resolve()
+  await assert.rejects(result, /control was revoked/)
+  assert.deepEqual(fixture.controller.activeScopes(), [replacement])
+  fixture.controller.revoke(fixture.contents)
+})
+
+void test('human input remains blocked across asynchronous Agent waits and resumes on takeover', async () => {
+  const fixture = new BrowserFixture()
+  await fixture.execute({ kind: 'snapshot' })
+  const lease = Reflect.get(fixture.controller, 'leases').get(fixture.contents.id)
+  const guards = Reflect.get(lease.driver, 'guards')
+  const release = deferred()
+  const input = () => {
+    const event = {
+      prevented: false,
+      preventDefault() {
+        this.prevented = true
+      }
+    }
+    fixture.contents.emit('before-input-event', event)
+    return event.prevented
+  }
+  assert.equal(input(), true)
+  const dispatch = guards.dispatchInput(() => {
+    assert.equal(input(), false)
+    return release.promise
+  })
+  assert.equal(input(), true)
+  release.resolve()
+  await dispatch
+  fixture.controller.revoke(fixture.contents)
+  assert.equal(input(), false)
+})
+
+void test('navigation failure retains its loading error and permits another observation', async () => {
+  const fixture = new BrowserFixture()
+  const snapshot = fixture.perform
+  fixture.perform = async () => ({
+    isError: true,
+    content: [{ type: 'text', text: 'Timeout 15000ms exceeded during navigation.' }]
+  })
+  await assert.rejects(fixture.execute({ kind: 'navigate', url: 'https://198.18.0.119/' }), {
+    message: 'Browser page is still loading; observe again after it settles.'
+  })
+  fixture.perform = snapshot
+  assert.match((await fixture.execute({ kind: 'snapshot' })).text, /Native page/)
+  fixture.controller.revoke(fixture.contents)
 })

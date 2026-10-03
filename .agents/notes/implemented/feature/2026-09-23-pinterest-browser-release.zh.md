@@ -10,6 +10,10 @@ Translation: pending
 
 ## 范围和决策
 
+2026-10-03 的[原生浏览器传输简化](../../implemented/simplification/2026-10-03-native-browser-transport.zh.md)
+替代旧网络验证、站点范围、下载拒绝和未知结果后冻结规则。下文账号导入与
+真实 Pinterest 验收保留其历史范围，不证明新网络合同或通用下载行为已验收。
+
 - 首期：设置中选择 Chrome profile → 导入 Pinterest → 内置 Agent 搜索/观察/详情/保存支持的图片；同包重启保留登录态、清理及控制权归还。共享 IPC 站点合同只接受 `pinterest.com`，主进程站点列表由该合同派生，设置不再提供 Amazon 导入。
 - Amazon 搜索/PDP/问答及账号迁移转为后续范围，不限制通用内置浏览器访问获准的公共网站，也不宣称这些站点已验收。WebP/AVIF、CHIPS 迁移、多来源浏览器和其他系统账号导入保持原有限制。
 - [原方案及 A–E 记录](../../proposed/architecture/2026-09-22-embedded-browser-account-import.zh.md)保留历史取舍和失败证据；其中更宽的首期门槛由本次明确指令收窄。设计 Spec 中英文已同步范围，仍为 draft；本次授权不等于整份 Spec 或公开发布获批。

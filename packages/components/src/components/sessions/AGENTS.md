@@ -45,7 +45,7 @@ Files: [README.md](README.md). Scopes:
 
 ## Browser and Managed Preview
 
-- The engine split is the agent machine's own LOOPBACK (Managed Preview) vs.
+- Manual address entry splits the agent machine's own LOOPBACK (Managed Preview) vs.
   everything else, LAN included (public browser capability). Never fall back from
   a missing public engine to iframe, system browser, CLI, or gateway.
 - INVARIANT: a managed preview is never a pivot; approval cannot make a LAN
@@ -56,6 +56,7 @@ Files: [README.md](README.md). Scopes:
 - Preview comment writes use `runtime.writer.mutatePreviewVisualComments`, never store `setState`.
 - Reattach hidden Agent pages without navigation; use takeover state. Keep the native
   surface bridge stable across renders; same-page state must preserve address drafts.
+  Agent navigation stays native, including loopback, without site/public-IP scopes.
 
 - Keep Stop reachable during permissions/questions. Gate paused Retry Stop/Continue
   on `sessionStopControl: 1`; unknown steer has no resend. Only execution/artifact

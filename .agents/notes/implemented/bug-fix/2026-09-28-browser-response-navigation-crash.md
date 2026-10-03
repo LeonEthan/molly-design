@@ -9,6 +9,11 @@ Rejecting an unverified response in Molly's built-in browser could crash Electro
 
 ## Evidence and cause
 
+The [2026-10-03 native transport simplification](../../implemented/simplification/2026-10-03-native-browser-transport.md)
+retires the response-verification layer and its stop callback. The reproduction
+and completed checks below describe the earlier implementation and remain
+historical evidence, not current browser restrictions.
+
 Two native reports shared their initial 51 frames and an invalid-address access at
 `0x24`. The official Electron 39.5.1 arm64 symbols matched the report's framework
 UUID and resolved the fault to `GURL::SchemeIs`, called by

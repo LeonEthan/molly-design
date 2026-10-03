@@ -88,6 +88,7 @@ export class BrowserMcpDriver {
     this.server = await createConnection(
       {
         browser: { browserName: 'chromium' },
+        allowUnrestrictedFileAccess: true,
         webmcp: false,
         saveSession: false,
         outputDir: this.output,

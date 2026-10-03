@@ -3,15 +3,15 @@ import { BrowserHost } from './browser-host';
 import {
   BROWSER_HOST_OPERATION_TIMEOUT_MS,
   BROWSER_HOST_TTL_MS,
+  AgentBrowserScopeSchema,
   type AgentBrowserHostWork,
 } from '@molly/shared/browser-agent-rpc';
 
-const scope = {
-  sessionId: 'session-1' as AgentBrowserHostWork['scope']['sessionId'],
+const scope = AgentBrowserScopeSchema.parse({
+  sessionId: 'session-1',
   browserId: 'session-browser-session-1',
   runId: 'run-1',
-  sites: ['pinterest.com'],
-};
+});
 const work = (requestId: string): AgentBrowserHostWork => ({
   requestId,
   scope,
@@ -70,11 +70,19 @@ describe('BrowserHost', () => {
     });
     expect(host.takeRevocations().map((item) => item.browserId)).toEqual([scope.browserId]);
     expect(host.exchange([], () => true)).toEqual([]);
-    await expect(host.enqueue(work('next'))).resolves.toMatchObject({
-      ok: false,
-      error: expect.stringContaining('new run'),
+    const next = host.enqueue(work('next'));
+    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
+    host.exchange(
+      [
+        { requestId: 'first', ok: true, reply: { kind: 'text', text: 'late old result' } },
+        { requestId: 'next', ok: true, reply: { kind: 'text', text: 'fresh observation' } },
+      ],
+      () => true
+    );
+    await expect(next).resolves.toEqual({
+      ok: true,
+      reply: { kind: 'text', text: 'fresh observation' },
     });
-    expect(host.exchange([], () => true)).toEqual([]);
   });
 
   it('revokes a dispatched page when the desktop host disconnects', async () => {
@@ -89,5 +97,36 @@ describe('BrowserHost', () => {
       error: expect.stringContaining('outcome is unknown'),
     });
     expect(host.takeRevocations()).toEqual([scope]);
+    const next = host.enqueue(work('next'));
+    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
+    host.exchange(
+      [{ requestId: 'next', ok: true, reply: { kind: 'text', text: 'reconnected page' } }],
+      () => true
+    );
+    await expect(next).resolves.toEqual({
+      ok: true,
+      reply: { kind: 'text', text: 'reconnected page' },
+    });
+  });
+
+  it('allows a new same-run action after cancellation without replaying the cancelled work', async () => {
+    const host = new BrowserHost(() => Date.now());
+    host.exchange([], () => true);
+    const cancelled = host.enqueue(work('cancelled'));
+    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['cancelled']);
+    host.cancel('cancelled', scope);
+    await expect(cancelled).resolves.toMatchObject({ ok: false });
+    expect(host.takeRevocations()).toEqual([scope]);
+    const followup = host.enqueue(work('followup'));
+    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['followup']);
+    expect(host.exchange([], () => true)).toEqual([]);
+    host.exchange(
+      [{ requestId: 'followup', ok: true, reply: { kind: 'text', text: 'observed page' } }],
+      () => true
+    );
+    await expect(followup).resolves.toEqual({
+      ok: true,
+      reply: { kind: 'text', text: 'observed page' },
+    });
   });
 });

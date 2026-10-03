@@ -29,7 +29,6 @@ export type BrowserHostOutcome =
 export class BrowserHost {
   private readonly entries = new Map<string, Entry>();
   private readonly revokedPages = new Map<string, AgentBrowserScope>();
-  private readonly uncertainPages = new Map<string, AgentBrowserScope>();
   private lastSeenAt: number | undefined;
 
   constructor(
@@ -55,19 +54,10 @@ export class BrowserHost {
     if (this.entries.size >= MAX_PENDING) {
       return Promise.resolve({ ok: false, error: 'Too many browser operations are in progress.' });
     }
-    const uncertainRun = this.uncertainPages.get(work.scope.browserId);
-    if (uncertainRun?.runId === work.scope.runId) {
-      return Promise.resolve({
-        ok: false,
-        error:
-          'A prior browser action has an unknown outcome. Continue in a new run after checking the page.',
-      });
-    }
-    if (uncertainRun) this.uncertainPages.delete(work.scope.browserId);
     return new Promise((resolve) => {
       const timer = this.setTimer(() => {
         const entry = this.entries.get(work.requestId);
-        if (entry?.handedOut) this.blockUncertain(entry.work.scope);
+        if (entry?.handedOut) this.markForRevocation(entry.work.scope);
         this.settle(work.requestId, {
           ok: false,
           error:
@@ -86,7 +76,7 @@ export class BrowserHost {
       entry.work.scope.browserId !== scope.browserId
     )
       return;
-    if (entry.handedOut) this.blockUncertain(scope);
+    if (entry.handedOut) this.markForRevocation(scope);
     this.settle(requestId, {
       ok: false,
       error: 'Browser operation was cancelled; any dispatched action has an unknown outcome.',
@@ -103,9 +93,6 @@ export class BrowserHost {
     reports: readonly AgentBrowserHostReport[],
     isActive: (scope: AgentBrowserScope) => boolean
   ): AgentBrowserHostWork[] {
-    for (const [browserId, scope] of this.uncertainPages) {
-      if (!isActive(scope)) this.uncertainPages.delete(browserId);
-    }
     const wasConnected = this.isConnected();
     this.lastSeenAt = this.now();
     for (const report of reports) {
@@ -133,7 +120,7 @@ export class BrowserHost {
           error: 'Browser run ended before dispatch.',
         });
       } else if (entry.handedOut && !wasConnected) {
-        this.blockUncertain(entry.work.scope);
+        this.markForRevocation(entry.work.scope);
         this.settle(entry.work.requestId, {
           ok: false,
           error: 'Browser host disconnected; operation outcome is unknown.',
@@ -155,8 +142,7 @@ export class BrowserHost {
     entry.resolve(outcome);
   }
 
-  private blockUncertain(scope: AgentBrowserScope): void {
-    this.uncertainPages.set(scope.browserId, scope);
+  private markForRevocation(scope: AgentBrowserScope): void {
     this.revokedPages.set(scope.browserId, scope);
   }
 }

@@ -6,16 +6,11 @@ export type BrowserTargetClass = 'public' | 'loopback' | 'private-lan' | 'prohib
 export type BrowserAddress = {
   logicalUrl: string;
   engine: BrowserEngineKind;
-  targetClass: Exclude<BrowserTargetClass, 'prohibited'>;
+  targetClass: BrowserTargetClass;
   target?: PreviewTarget;
 };
 
-export type BrowserAddressErrorCode =
-  | 'empty_address'
-  | 'invalid_address'
-  | 'invalid_scheme'
-  | 'credentials_not_allowed'
-  | 'prohibited_target';
+export type BrowserAddressErrorCode = 'empty_address' | 'invalid_address';
 
 export class BrowserAddressError extends Error {
   constructor(
@@ -27,16 +22,6 @@ export class BrowserAddressError extends Error {
   }
 }
 
-const containsControlCharacter = (value: string): boolean => {
-  for (const character of value) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if (codePoint <= 0x1f || codePoint === 0x7f) {
-      return true;
-    }
-  }
-  return false;
-};
-const EXPLICIT_SCHEME_PATTERN = /^([a-z][a-z0-9+.-]*):\/\//i;
 const HOST_WITH_PORT_PATTERN =
   /^(?:localhost|(?:[^/?#:.]+\.)+[^/?#:.]+|\d+(?:\.\d+){0,3}|\[[0-9a-f:.]+\]):\d+(?:[/?#]|$)/i;
 const OTHER_SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
@@ -140,18 +125,9 @@ export const classifyBrowserHostname = (hostname: string): BrowserTargetClass =>
 };
 
 const parseWithDefaultScheme = (input: string): URL => {
-  const explicitScheme = input.match(EXPLICIT_SCHEME_PATTERN)?.[1]?.toLowerCase();
-  if (explicitScheme && explicitScheme !== 'http' && explicitScheme !== 'https') {
-    throw new BrowserAddressError(
-      'invalid_scheme',
-      `Browser only supports HTTP(S) URLs, got ${explicitScheme}.`
-    );
-  }
-  if (!explicitScheme && OTHER_SCHEME_PATTERN.test(input) && !HOST_WITH_PORT_PATTERN.test(input)) {
-    throw new BrowserAddressError('invalid_scheme', 'Browser only supports HTTP(S) URLs.');
-  }
-
-  if (explicitScheme) return new URL(input);
+  if (input.startsWith('//')) return new URL(`https:${input}`);
+  if (OTHER_SCHEME_PATTERN.test(input) && !HOST_WITH_PORT_PATTERN.test(input))
+    return new URL(input);
 
   const provisional = new URL(`http://${input}`);
   const targetClass = classifyBrowserHostname(provisional.hostname);
@@ -160,15 +136,9 @@ const parseWithDefaultScheme = (input: string): URL => {
 };
 
 export const parseBrowserAddress = (rawInput: string): BrowserAddress => {
-  if (containsControlCharacter(rawInput)) {
-    throw new BrowserAddressError('invalid_address', 'The URL contains unsupported characters.');
-  }
   const input = rawInput.trim();
   if (!input) {
     throw new BrowserAddressError('empty_address', 'Enter a URL.');
-  }
-  if (input.includes('\\') || input.startsWith('//')) {
-    throw new BrowserAddressError('invalid_address', 'The URL contains unsupported characters.');
   }
 
   let url: URL;
@@ -176,36 +146,13 @@ export const parseBrowserAddress = (rawInput: string): BrowserAddress => {
     url = parseWithDefaultScheme(input);
   } catch (error) {
     if (error instanceof BrowserAddressError) throw error;
-    throw new BrowserAddressError('invalid_address', 'Enter a valid HTTP(S) URL.');
-  }
-
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new BrowserAddressError('invalid_scheme', 'Browser only supports HTTP(S) URLs.');
-  }
-  if (url.username || url.password) {
-    throw new BrowserAddressError(
-      'credentials_not_allowed',
-      'Credentials are not allowed in the Browser address bar.'
-    );
+    throw new BrowserAddressError('invalid_address', 'Enter a valid URL.');
   }
 
   const targetClass = classifyBrowserHostname(url.hostname);
-  if (targetClass === 'prohibited') {
-    throw new BrowserAddressError(
-      'prohibited_target',
-      'This address is reserved or unsafe and cannot be opened.'
-    );
-  }
 
   const logicalUrl = url.toString();
-  // Two engines, split on exactly one question: is this the agent machine's own
-  // loopback? Only that goes through Managed Preview, where the machine opens a
-  // single approved port on itself. Everything else — public sites AND private
-  // LAN / mDNS / docker hosts — is the user's own local browser reaching the
-  // user's own network, which is the user's business. Routing a LAN address
-  // through the machine would make that machine a pivot into its LAN; see
-  // `apps/cli/src/preview/preview-service.ts` for the authoritative rejection.
-  if (targetClass !== 'loopback') {
+  if (targetClass !== 'loopback' || !['http:', 'https:'].includes(url.protocol)) {
     return { logicalUrl, engine: 'public-web', targetClass };
   }
 

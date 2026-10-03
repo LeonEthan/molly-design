@@ -295,7 +295,7 @@ export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string })
       )}
     >
       {src ? (
-        <img src={src} alt="" draggable={false} className="size-full object-cover" />
+        <img src={src} alt="" draggable={false} className="size-full object-cover dark:brightness-[0.8]" />
       ) : null}
     </span>
   );

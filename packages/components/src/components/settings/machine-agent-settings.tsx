@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { ModelConnectionSetting } from './model-connection-setting';
 import { AgentEngineCatalog, legacyAgentConfigs } from './agent-engine-catalog';
 import { ImageConnectionSetting } from './image-connection-setting';
+import { DesignReadiness } from './design-readiness';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useNavigate } from '@tanstack/react-router';
 import {
@@ -14,6 +15,7 @@ import {
   type SessionId,
   type WorkspaceId,
 } from '@molly/shared';
+import type { ModelConnection, ProtectedImageConnection } from '@molly/shared/embedded-harness';
 import { Loader2 } from 'lucide-react';
 import { activeWorkspaceRuntimeAtom, authTokenAtom, type WorkspaceRuntime } from '@/atoms/runtime';
 import { developerModeEnabledAtom } from '@/atoms/settings';
@@ -138,6 +140,8 @@ export function MachineAgentSettings(props: MachineAgentSettingsProps) {
   return <EmbeddedAgentSettings />;
 }
 
+const revealTargetClass = 'scroll-mt-4 rounded-2xl focus-visible:ring-1 focus-visible:ring-ring/60';
+
 function EmbeddedAgentSettings() {
   const machineId = useAtomValue(localMachineIdAtom);
   const machineIds = useMemo(() => (machineId ? [machineId] : []), [machineId]);
@@ -147,10 +151,28 @@ function EmbeddedAgentSettings() {
   const localConfigs = configs.filter((config) => config.machineId === machineId);
   const localSetups = setups.filter((setup) => setup.machineId === machineId);
   const hasLegacyInventory = legacyAgentConfigs(localConfigs).length > 0 || localSetups.length > 0;
+  const [connections, setConnections] = useState<readonly ModelConnection[]>();
+  const [imageConnection, setImageConnection] = useState<ProtectedImageConnection | null>();
+  const modelsRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+  const reveal = (target: 'models' | 'image') => {
+    const section = (target === 'models' ? modelsRef : imageRef).current;
+    section?.scrollIntoView({ block: 'start' });
+    section?.focus({ preventScroll: true });
+  };
   return (
     <div className="space-y-5">
-      <ModelConnectionSetting />
-      <ImageConnectionSetting />
+      <DesignReadiness
+        connections={connections}
+        imageConnection={imageConnection}
+        onReveal={reveal}
+      />
+      <div ref={modelsRef} tabIndex={-1} className={revealTargetClass}>
+        <ModelConnectionSetting onConnectionsChange={setConnections} />
+      </div>
+      <div ref={imageRef} tabIndex={-1} className={revealTargetClass}>
+        <ImageConnectionSetting onConnectionChange={setImageConnection} />
+      </div>
       {hasLegacyInventory ? (
         <AgentEngineCatalog configs={localConfigs} setups={localSetups} />
       ) : null}

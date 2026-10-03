@@ -427,11 +427,18 @@ function ImageConnectionTestSummary({ state }: { state: ImageConnectionTestState
   );
 }
 
-export function ImageConnectionSetting() {
+export function ImageConnectionSetting({
+  onConnectionChange,
+}: {
+  onConnectionChange?: (connection: ProtectedImageConnection | null) => void;
+} = {}) {
   const { t } = useTranslation();
   const ipc = useMemo(() => getIpcServices(), []);
   const [stored, setStored] = useState<ProtectedImageConnection>();
   const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (ready) onConnectionChange?.(stored ?? null);
+  }, [onConnectionChange, ready, stored]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
   const [testState, setTestState] = useState<ImageConnectionTestState>({ phase: 'idle' });

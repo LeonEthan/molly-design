@@ -276,7 +276,11 @@ export function ModelConnectionForm({
   );
 }
 
-export function ModelConnectionSetting() {
+export function ModelConnectionSetting({
+  onConnectionsChange,
+}: {
+  onConnectionsChange?: (connections: readonly ModelConnection[]) => void;
+} = {}) {
   const { t } = useTranslation();
   const [connections, setConnections] = useState<ModelConnection[]>([]);
   const [editing, setEditing] = useState<ModelConnection | 'new' | null>(null);
@@ -285,6 +289,9 @@ export function ModelConnectionSetting() {
   const [ready, setReady] = useState(false);
   const ipc = getIpcServices();
   const available = ipc !== null;
+  useEffect(() => {
+    if (ready) onConnectionsChange?.(connections);
+  }, [connections, onConnectionsChange, ready]);
   useEffect(() => {
     if (!available) return undefined;
     let live = true;

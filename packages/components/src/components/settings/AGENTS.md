@@ -41,9 +41,12 @@ Preserve historical catalog fields when editing unrelated values.
   destination stays visible. Rows show only non-default endpoints; a row's switch saves
   On/Off at once without the key. Switches save instantly; only key and credential
   forms keep an explicit Save.
-- AI models (`agents` tab) mounts the local encrypted model-connection form, the image
-  connection, and the read-only legacy inventory only when this machine has legacy
-  rows. Preserve old config/setup rows without mounting provider login,
+- AI models (`agents` tab) mounts the design setup strip (`design-readiness.tsx`), the
+  local encrypted model-connection form, the image connection, and the read-only legacy
+  inventory only when this machine has legacy rows. The strip derives each chip from what
+  the sections below report and the Pinterest cookie count; it stores and tests nothing,
+  ticks only saved model/image setups, never ticks Pinterest, and leaves unread items
+  without a value. Preserve old config/setup rows without mounting provider login,
   installation, retry, refresh, editing or automatic config migration. Device
   management retains monitoring independently of this inventory.
 - A settings row (`compact-layout.tsx`) is one grid: the label column takes the

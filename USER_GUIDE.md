@@ -45,6 +45,11 @@ app and automation interfaces unresponsive.
    the servers for the turn. Saving does not test or automatically select them.
    A stdio server runs local code: configure only commands and servers you trust.
 
+The row at the top of Settings → AI models summarises Models, Image generation and
+Pinterest; click an item to reach its setting. A tick means a saved, switched-on
+setup, not a tested one. Pinterest never shows a tick, because stored cookies do
+not prove you are signed in.
+
 Settings → Advanced → System → Engine details reports the packaged question
 extension's version and compatibility conditions, not live session activation. The selected question extension requires
 the desktop question interface; necessary Slash-command mapping remains unfinished.

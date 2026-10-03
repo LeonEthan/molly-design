@@ -1,7 +1,13 @@
 import { EventEmitter } from 'node:events';
+import net from 'node:net';
 import type { ChildProcess } from 'node:child_process';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CliRuntimeState } from '@molly/shared/electron-ipc';
+import {
+  acquireLocalCliHostLease,
+  getLocalCliHostEndpoint,
+  type LocalCliHostLease,
+} from '@molly/shared/node/local-cli-host-lease';
 import { CliSupervisor } from './supervisor';
 import type { CliRunResult, LaunchHandle, PreparedLaunch, SupervisorOptions } from './types';
 
@@ -99,8 +105,88 @@ describe('CliSupervisor lifecycle actor', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
   });
+
+  it.runIf(process.platform !== 'win32')(
+    'reaches ready while Lody occupies its desktop port without a host lease record',
+    async () => {
+      vi.stubEnv('MOLLY_E2E', '0');
+      vi.spyOn(net, 'createConnection').mockImplementation(() => {
+        const socket = Object.assign(new EventEmitter(), {
+          setTimeout: () => socket,
+          destroy: () => socket,
+        }) as unknown as net.Socket;
+        void Promise.resolve().then(() => socket.emit('end'));
+        return socket;
+      });
+      vi.spyOn(net, 'createServer').mockImplementation(() => {
+        const server = Object.assign(new EventEmitter(), {
+          listen: (port: number) => {
+            void Promise.resolve().then(() => {
+              if (port === 17_790) {
+                server.emit('error', Object.assign(new Error('occupied'), { code: 'EADDRINUSE' }));
+              } else {
+                server.emit('listening');
+              }
+            });
+            return server;
+          },
+          close: (callback: (error?: Error) => void) => callback(),
+        }) as unknown as net.Server;
+        return server;
+      });
+      const run = createRun(99);
+      let runtime: CliRuntimeState | null = null;
+      let lease: LocalCliHostLease | null = null;
+      const supervisor = createSupervisor(
+        async () => ({
+          spawn: () => {
+            runtime = {
+              schemaVersion: 1,
+              pid: 99,
+              phase: 'running',
+              startupStage: 'ready',
+              updatedAtMs: 1,
+              issues: [],
+            };
+            return run.handle;
+          },
+        }),
+        {
+          existingRuntimePolicy: 'attach',
+          fetchRuntimeState: async () => runtime,
+          ownership: {
+            acquire: async (signal) => {
+              const result = await acquireLocalCliHostLease({
+                endpoint: getLocalCliHostEndpoint('local'),
+                instanceId: 'molly-coexistence',
+                mode: 'electron',
+                signal,
+              });
+              if (result.status === 'occupied') return { status: 'occupied' };
+              lease = result.lease;
+              return { status: 'acquired' };
+            },
+            release: async () => await lease?.close(),
+          },
+        }
+      );
+
+      await supervisor.start();
+      await vi.advanceTimersByTimeAsync(60_000);
+      const state = supervisor.getState();
+      run.exit({ code: 0, stdout: '', stderr: '' });
+      await supervisor.stop();
+      expect(state).toMatchObject({
+        phase: 'running',
+        runtimeOwnership: 'owned',
+        runtime: { pid: 99, startupStage: 'ready' },
+      });
+    }
+  );
 
   it('observes an external runtime without acquiring ownership or launching', async () => {
     const externalRuntime: CliRuntimeState = {

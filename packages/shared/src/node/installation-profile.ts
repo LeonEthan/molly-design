@@ -10,7 +10,7 @@ export type InstallationProfile = {
   desktopProtocol: 'lody' | 'molly-design';
   desktopProductName: 'Lody' | 'Molly';
   desktopAppId: 'ai.lody.desktop' | 'dev.molly-design.app';
-  localCliHostPort: 17_788 | 17_790;
+  localCliHostPort: 17_788 | 17_792;
 };
 
 const CLOUD_PROFILE: InstallationProfile = {
@@ -30,7 +30,7 @@ const LOCAL_PROFILE: InstallationProfile = {
   desktopProtocol: 'molly-design',
   desktopProductName: 'Molly',
   desktopAppId: 'dev.molly-design.app',
-  localCliHostPort: 17_790,
+  localCliHostPort: 17_792,
 };
 
 /**

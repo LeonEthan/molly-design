@@ -18,7 +18,7 @@ const LOCAL_PROFILE = Object.freeze({
   desktopProtocol: 'molly-design',
   desktopProductName: 'Molly',
   desktopAppId: 'dev.molly-design.app',
-  localCliHostPort: 17790,
+  localCliHostPort: 17792,
 });
 
 function resolvePlatformKind(raw) {

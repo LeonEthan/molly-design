@@ -7,6 +7,19 @@ process arguments and the workspace package name remain implementation interface
 The embedded service uses only the local installation identity. An explicit cloud
 platform launch is refused; no product-cloud login or remote host is started.
 
+## Host port upgrades
+
+The local host lease now uses loopback port `17792`. Explicit internal commands
+`daemon stop` and `daemon restart` can also stop a detached Molly daemon from an
+older build on `17790`, including while a new Electron host waits on `17792`.
+The legacy lookup applies only to the default local TCP endpoint, outside E2E.
+The live daemon's mode, PID and instance must match the active installation's
+complete PID record before the existing token-authenticated shutdown is sent;
+the request revalidates that identity and waits on the selected endpoint.
+Foreign hosts never receive the token. No PID signals, data migration, legacy
+lease acquisition or automatic desktop shutdown are added. Windows pipes,
+cloud endpoints and isolated E2E endpoints retain their own scope.
+
 ## Design turn collection
 
 `src/design/turn-outcome.ts` compares the collected PPTD project with the content

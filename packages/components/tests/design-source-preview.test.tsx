@@ -37,6 +37,9 @@ vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }
 vi.mock('../src/atoms/local-probe', () => ({ localProbeResultAtom: 'machine' }));
 vi.mock('../src/atoms/presence', () => ({ sessionLiveStatusAtomFamily: () => 'live' }));
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => () => {}, useBlocker: () => {} }));
+vi.mock('../src/components/chat/submission/use-composer-navigation-focus', () => ({
+  useDesignCanvasNavigationFocus: () => () => false,
+}));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }),
 }));

@@ -2038,7 +2038,11 @@ function WorkspaceChatLanding({
         width: canvasDraft.width,
         height: canvasDraft.height,
       });
-      await navigate(getSessionCreationNavigation(workspaceSlug, sessionId, false));
+      await navigate(
+        getSessionCreationNavigation(workspaceSlug, sessionId, false, {
+          focusDesignCanvas: Boolean(designService),
+        })
+      );
     } catch (error) {
       capturePostHogEvent(postHog, 'session/start_failed', {
         user_id: userId ?? null,

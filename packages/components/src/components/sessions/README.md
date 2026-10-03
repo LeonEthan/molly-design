@@ -117,7 +117,11 @@ sidebar, so the conversation and canvas remain, and the conversation header then
 reserves the macOS traffic-light inset and leads with the show-sidebar button. The
 canvas toolbar's button toggles it and reads "Hide sidebar" / "Show sidebar"; ending
 focus, deactivating the canvas or an explicit show-sidebar request restores the saved
-sidebar state. Design sessions do not offer the code-diff All Changes panel.
+sidebar state. A new design's accepted first message from the landing page also
+requests focus once through navigation history state. Its active target canvas
+consumes the request after navigation, preserving the conversation; failed submissions,
+later messages and ordinary history visits leave the layout alone. No focus preference
+is persisted. Design sessions do not offer the code-diff All Changes panel.
 Native replacements prepare decoded pixels under the outgoing view and promote
 before disposal. Turn completion retains the final preview until the canonical
 editor is ready; component phase cleanup does not dispose that handoff surface.

@@ -41,6 +41,9 @@ Parent `AGENTS.md` files also apply.
 - `designCanvasFocusAtom` follows the same rule: focusing the active design canvas
   hides only the navigation sidebar, keeping the conversation and canvas, without writing the saved preference.
   Deactivating the canvas or an explicit navigation-sidebar request clears it.
+  Accepted first-design landing navigation carries one history-state focus request;
+  only its active target canvas consumes it. Later sends, ordinary history visits and
+  failed submissions preserve layout; the request adds no persisted preference.
 - Drive hidden-panel work from effective visibility (`open && !zen`), not the stored
   open bit. A Zen-hidden PR, Browser, viewer, or Side Chat must pause exactly like an
   ordinarily collapsed right panel.

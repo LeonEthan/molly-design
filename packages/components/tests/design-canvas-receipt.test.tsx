@@ -29,6 +29,9 @@ vi.mock('jotai', async (original) => ({
     atom === 'machine' ? { machineId: 'machine' } : atom === 'workspace' ? 'workspace' : null,
 }));
 vi.mock('@tanstack/react-router', () => ({ useBlocker: () => {}, useNavigate: () => () => {} }));
+vi.mock('../src/components/chat/submission/use-composer-navigation-focus', () => ({
+  useDesignCanvasNavigationFocus: () => () => false,
+}));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: state.translate }),
 }));

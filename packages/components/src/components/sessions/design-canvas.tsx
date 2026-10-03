@@ -40,6 +40,7 @@ import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
 import { WINDOW_DRAG_EXEMPT_CLASS } from '@/ui/window-drag-region';
 import { cn } from '@/lib/utils';
+import { useDesignCanvasNavigationFocus } from '../chat/submission/use-composer-navigation-focus';
 
 type Association = {
   sessionId: string;
@@ -172,6 +173,10 @@ export function DesignCanvas({
   const create = useDesignCreation(workspaceSlug);
   const [canvasFocus, setFocused] = useAtom(designCanvasFocusAtom);
   const focused = active && canvasFocus;
+  const claimNavigationFocus = useDesignCanvasNavigationFocus(sessionId);
+  useEffect(() => {
+    if (active && claimNavigationFocus()) setFocused(true);
+  }, [active, claimNavigationFocus, setFocused]);
   useEffect(() => {
     if (!active) return undefined;
     return () => setFocused(false);

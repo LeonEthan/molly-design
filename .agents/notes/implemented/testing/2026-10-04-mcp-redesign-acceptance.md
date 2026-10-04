@@ -55,3 +55,9 @@ comparison or provider/network latency. Import time was 429/444 ms respectively.
 These are acceptance measurements, not deterministic CI regression; raw artifacts
 remain outside Git. Windows outcome is pending this branch's dispatched run; a
 build or a fake Windows platform value does not prove process-tree cleanup.
+
+The first Windows run (`37197302117`) built the CLI successfully, then the probe
+aborted because `events.once(socket, 'close')` rejects on the TCP reset caused by
+forced process termination. That is a probe failure, not product cleanup
+evidence. The corrected probe observes close directly and permits `ECONNRESET`
+on its owned readiness channel while retaining failures for other socket errors.

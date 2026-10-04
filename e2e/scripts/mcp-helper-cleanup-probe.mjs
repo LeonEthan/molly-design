@@ -66,9 +66,16 @@ try {
     const controller = new AbortController();
     const commands = [];
     const children = [];
+    const socketErrors = [];
     const server = createServer((socket) => {
       let buffer = '';
-      const closed = once(socket, 'close');
+      const closed = new Promise((resolveClosed) => socket.once('close', resolveClosed));
+      socket.on('error', (error) => {
+        if (error.code !== 'ECONNRESET') {
+          socketErrors.push(error);
+          ready.reject(error);
+        }
+      });
       socket.on('data', (bytes) => {
         buffer += bytes.toString('utf8');
         if (!buffer.includes('\n')) return;
@@ -154,6 +161,7 @@ try {
         'MCP descendants survived helper cleanup',
         5_000
       );
+      assert.deepEqual(socketErrors, []);
     } catch (cause) {
       error = String(cause);
     } finally {

@@ -76,6 +76,113 @@ async function change(field: HTMLInputElement, value: string) {
   });
 }
 
+async function changeText(field: HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+      field,
+      value
+    );
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+async function click(label: string) {
+  const button = [...host.querySelectorAll('button')].find(
+    (candidate) => candidate.textContent === label
+  )!;
+  await act(async () => button.click());
+}
+
+describe('Pi presentation fields', () => {
+  it('keeps exposure rules in order on edit', async () => {
+    const writes = await render({
+      ...stored,
+      exposure: 'hidden',
+      toolExposure: [
+        { pattern: 'read_*', exposure: 'deferred' },
+        { pattern: '*', exposure: 'direct' },
+      ],
+    });
+    await submit();
+    expect(writes[0]).toMatchObject({
+      exposure: 'hidden',
+      toolExposure: [
+        { pattern: 'read_*', exposure: 'deferred' },
+        { pattern: '*', exposure: 'direct' },
+      ],
+    });
+  });
+
+  it('omits the codemode default and empty rules', async () => {
+    const writes = await render();
+    await submit();
+    expect(writes[0]).not.toHaveProperty('exposure');
+    expect(writes[0]).not.toHaveProperty('toolExposure');
+  });
+
+  it('fills a new server from one mcp.json entry and reports what it could not keep', async () => {
+    const writes: McpConnectionFormValue[] = [];
+    await act(async () =>
+      root.render(
+        createElement(McpConnectionForm, {
+          onCancel() {},
+          onSubmit(value) {
+            writes.push(value);
+          },
+        })
+      )
+    );
+    await click(en['settings.mcp.import.action']);
+    await changeText(
+      host.querySelector<HTMLTextAreaElement>('textarea[aria-label]')!,
+      JSON.stringify({
+        mcpServers: {
+          github: {
+            command: 'npx',
+            args: ['-y', 'synthetic-server'],
+            env: { GITHUB_TOKEN: '${GITHUB_TOKEN}' },
+            description: 'Synthetic issues',
+            exposure: 'deferred',
+            toolExposure: { delete_issue: 'hidden' },
+            timeout: 30,
+          },
+        },
+      })
+    );
+    await click(en['settings.mcp.import.fill']);
+    expect(host.textContent).toContain('timeout');
+    expect(host.textContent).toContain('GITHUB_TOKEN');
+    await submit();
+    expect(writes[0]).toEqual({
+      name: 'github',
+      description: 'Synthetic issues',
+      exposure: 'deferred',
+      toolExposure: [{ pattern: 'delete_issue', exposure: 'hidden' }],
+      transport: 'stdio',
+      enabledByDefault: false,
+      connection: {
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', 'synthetic-server'],
+        env: { GITHUB_TOKEN: '${GITHUB_TOKEN}' },
+      },
+    });
+  });
+
+  it('refuses several servers at once instead of guessing', async () => {
+    await act(async () =>
+      root.render(createElement(McpConnectionForm, { onCancel() {}, onSubmit() {} }))
+    );
+    await click(en['settings.mcp.import.action']);
+    await changeText(
+      host.querySelector<HTMLTextAreaElement>('textarea[aria-label]')!,
+      JSON.stringify({ mcpServers: { a: { url: 'https://a.invalid' }, b: { url: 'https://b.invalid' } } })
+    );
+    await click(en['settings.mcp.import.fill']);
+    expect(host.querySelector('[role=alert]')?.textContent).toContain('a, b');
+    expect(host.querySelector<HTMLInputElement>('input[required]')!.value).toBe('');
+  });
+});
+
 describe('protected MCP credential form', () => {
   it('edits a legacy mapped server using the ordinary connection fields', async () => {
     const writes = await render({

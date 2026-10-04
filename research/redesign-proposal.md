@@ -273,6 +273,12 @@ Per-request gating (`disable()` when unavailable) is unchanged.
 Pure reductions that need no new capability: forward `description`, delete `imageBinding`, and suppress Pi's
 built-in image models (after the probe).
 
+**Progress (2026-10-03):** Phase 1 is in draft PR #71. Phase 2a (catalog `exposure`/`toolExposure`, the
+Settings control and _Import from mcp.json_) is implemented on `feat/pi-mcp-phase2a`, stacked on #71. The
+Settings tool list with annotation hints (A step 5) needs live tool discovery from Settings and is deferred.
+Divergence found in review: the catalog stores `toolExposure` as ordered `{ pattern, exposure }` rules,
+not Pi's object, because Flock reorders object keys and Pi applies the first matching pattern.
+
 **Owner decision (2026-10-03):** additions 1–3 approved, and the Q1/Q2 probe approved. Sequencing follows this
 proposal (namespace split and browser split as planned), not the smaller Codex sequence in §7. Addition 4
 (B2) stays gated on Q4 and a Spec revision. Approval covers the design; each implementation phase still ships as

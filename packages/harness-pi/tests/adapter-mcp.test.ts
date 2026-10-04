@@ -453,6 +453,47 @@ describe('owned Pi ACP native MCP integration', () => {
     expect(outputs.join('\n')).toMatch(/undefined[\s\S]*object/);
   });
 
+  it('applies catalog exposure natively: direct tools are declared, hidden tools are unreachable', async () => {
+    const f = await fixture({
+      responses: [
+        fauxAssistantMessage(fauxToolCall('mcp__synthetic__image', {}), { stopReason: 'toolUse' }),
+        done(),
+        tool('fail'),
+        done(),
+      ],
+    });
+    await f.initialize();
+    const session = await f.agent.newSession({
+      cwd: f.cwd,
+      mcpServers: [
+        {
+          ...server(f.cwd),
+          _meta: {
+            mollyMcpExposure: 'direct',
+            mollyMcpToolExposure: [{ pattern: 'fail', exposure: 'hidden' }],
+          },
+        },
+      ],
+    });
+    for (const text of ['Direct call', 'Hidden call'])
+      await f.agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text }] });
+    await f.agent.dispose();
+    const settled = f.updates.flatMap(({ update }) =>
+      update.sessionUpdate === 'tool_call_update' && update.status !== 'in_progress' ? [update] : []
+    );
+    expect(settled[0]).toMatchObject({
+      status: 'completed',
+      content: expect.arrayContaining([
+        { type: 'content', content: { type: 'image', data: png, mimeType: 'image/png' } },
+      ]),
+    });
+    expect(settled[1]?.status).toBe('failed');
+    const called = (await protocol(f.cwd)).flatMap(({ method, params }) =>
+      method === 'tools/call' ? [z.object({ name: z.string() }).parse(params).name] : []
+    );
+    expect(called).toEqual(['image']);
+  });
+
   it('rejects a discovered duplicate adapter package before executing its extension', async () => {
     const f = await fixture();
     const pkg = join(f.root, 'duplicate');
@@ -566,7 +607,14 @@ describe('owned Pi ACP native MCP integration', () => {
             { name: 'Authorization', value: '!literal$' },
             { name: 'X-Literal', value: '${HOME}' },
           ],
-          _meta: { mollyMcpDescription: '  Synthetic catalog summary  ' },
+          _meta: {
+            mollyMcpDescription: '  Synthetic catalog summary  ',
+            mollyMcpExposure: 'deferred',
+            mollyMcpToolExposure: [
+              { pattern: 'delete_*', exposure: 'hidden' },
+              { pattern: '*', exposure: 'direct' },
+            ],
+          },
         },
       ],
       '/synthetic/project'
@@ -587,6 +635,8 @@ describe('owned Pi ACP native MCP integration', () => {
         name: 'http',
         config: {
           description: 'Synthetic catalog summary',
+          exposure: 'deferred',
+          toolExposure: { 'delete_*': 'hidden', '*': 'direct' },
           type: 'http',
           url: 'https://synthetic.invalid/${HOME}',
           headers: { Authorization: '$!literal$$', 'X-Literal': '$${HOME}' },
@@ -602,6 +652,21 @@ describe('owned Pi ACP native MCP integration', () => {
     expect(() =>
       acpMcpConfig([{ ...server('/synthetic'), _meta: { mollyMcpDescription: 1 } }], '/synthetic')
     ).toThrow('pi_acp_mcp_description_invalid');
+    for (const _meta of [
+      { mollyMcpExposure: 'codemode-deferred' },
+      { mollyMcpToolExposure: [{ pattern: 'search', exposure: 'visible' }] },
+      { mollyMcpToolExposure: [{ pattern: ' padded', exposure: 'direct' }] },
+      { mollyMcpToolExposure: { search: 'direct' } },
+      {
+        mollyMcpToolExposure: [
+          { pattern: 'search', exposure: 'direct' },
+          { pattern: 'search', exposure: 'hidden' },
+        ],
+      },
+    ])
+      expect(() => acpMcpConfig([{ ...server('/synthetic'), _meta }], '/synthetic')).toThrow(
+        'pi_acp_mcp_exposure_invalid'
+      );
     expect(() =>
       acpMcpConfig(
         [{ name: 'sse', type: 'sse', url: 'https://synthetic.invalid/sse', headers: [] }],

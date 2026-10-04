@@ -12,9 +12,12 @@ import {
 import { readFile, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
+  isMcpExposure,
+  isMcpToolExposureRules,
   McpCredentialBindingSchema,
   StoredMcpCredentialSchema,
   mcpCredentialMatchesServer,
+  toPiToolExposure,
 } from '@molly/shared/embedded-harness';
 
 type NativeMcpServerConfig = Parameters<ExtensionAPI['registerMcpServer']>[1];
@@ -63,7 +66,16 @@ export function acpMcpConfig(
     const rawDescription = server._meta?.mollyMcpDescription;
     if (rawDescription !== undefined && typeof rawDescription !== 'string')
       throw new Error('pi_acp_mcp_description_invalid');
-    const summary = rawDescription?.trim() ? { description: rawDescription.trim() } : {};
+    const { mollyMcpExposure: exposure, mollyMcpToolExposure: toolExposure } = server._meta ?? {};
+    if (exposure !== undefined && !isMcpExposure(exposure))
+      throw new Error('pi_acp_mcp_exposure_invalid');
+    if (toolExposure !== undefined && !isMcpToolExposureRules(toolExposure))
+      throw new Error('pi_acp_mcp_exposure_invalid');
+    const presentation = {
+      ...(rawDescription?.trim() ? { description: rawDescription.trim() } : {}),
+      ...(exposure !== undefined ? { exposure } : {}),
+      ...(toolExposure !== undefined ? { toolExposure: toPiToolExposure(toolExposure) } : {}),
+    };
     names.add(server.name);
     if ('command' in server) {
       for (const value of [server.command, ...server.args]) assertLiteralPath(value);
@@ -75,7 +87,7 @@ export function acpMcpConfig(
       return {
         name: server.name,
         config: {
-          ...summary,
+          ...presentation,
           command: server.command,
           args: [...server.args],
           cwd,
@@ -99,7 +111,7 @@ export function acpMcpConfig(
     return {
       name: server.name,
       config: {
-        ...summary,
+        ...presentation,
         type: 'http',
         url: server.url,
         headers: Object.fromEntries(

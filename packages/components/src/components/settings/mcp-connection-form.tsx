@@ -1,7 +1,15 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
-import { KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
+import { FileJson, KeyRound, Loader2, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { McpConnectionSpec, McpTransport, WorkspaceMcpServerMeta } from '@molly/shared';
+import {
+  MCP_EXPOSURES,
+  parseMcpJsonImport,
+  type McpConnectionSpec,
+  type McpExposure,
+  type McpToolExposureRule,
+  type McpTransport,
+  type WorkspaceMcpServerMeta,
+} from '@molly/shared';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import {
   MCP_TRANSPORT_SHORT_LABELS,
@@ -12,15 +20,19 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Switch } from '@/ui/switch';
 import { Textarea } from '@/ui/textarea';
 import { Field, Section } from './form-primitives';
 
 type KeyValueDraft = { key: string; value: string };
+type ToolExposureDraft = McpToolExposureRule;
 
 type McpConnectionFormDraft = {
   name: string;
   description: string;
+  exposure: McpExposure;
+  toolExposure: ToolExposureDraft[];
   transport: McpTransport;
   enabledByDefault: boolean;
   command: string;
@@ -36,10 +48,25 @@ type McpConnectionFormDraft = {
 export type McpConnectionFormValue = {
   name: string;
   description?: string;
+  exposure?: McpExposure;
+  toolExposure?: McpToolExposureRule[];
   transport: McpTransport;
   enabledByDefault: boolean;
   connection?: McpConnectionSpec;
 };
+
+type McpConnectionFormSource = Partial<
+  Pick<
+    WorkspaceMcpServerMeta,
+    | 'name'
+    | 'description'
+    | 'exposure'
+    | 'toolExposure'
+    | 'transport'
+    | 'enabledByDefault'
+    | 'connection'
+  >
+>;
 
 const emptyConnectionFields = (transport: McpTransport) => ({
   command: '',
@@ -51,12 +78,14 @@ const emptyConnectionFields = (transport: McpTransport) => ({
   headers: [] as KeyValueDraft[],
 });
 
-const createMcpConnectionFormDraft = (entry?: WorkspaceMcpServerMeta): McpConnectionFormDraft => {
+const createMcpConnectionFormDraft = (entry?: McpConnectionFormSource): McpConnectionFormDraft => {
   const transport = entry?.transport ?? 'stdio';
   const connection = entry?.connection;
   return {
     name: entry?.name ?? '',
     description: entry?.description ?? '',
+    exposure: entry?.exposure ?? 'codemode',
+    toolExposure: (entry?.toolExposure ?? []).map((rule) => ({ ...rule })),
     transport,
     enabledByDefault: entry?.enabledByDefault ?? false,
     ...emptyConnectionFields(transport),
@@ -120,13 +149,26 @@ const buildHttpConnection = (draft: McpConnectionFormDraft): McpConnectionSpec |
   };
 };
 
+const buildToolExposure = (
+  rows: readonly ToolExposureDraft[]
+): McpToolExposureRule[] | undefined => {
+  const seen = new Set<string>();
+  const rules = rows
+    .map(({ pattern, exposure }) => ({ pattern: pattern.trim(), exposure }))
+    .filter(({ pattern }) => pattern.length > 0 && !seen.has(pattern) && seen.add(pattern));
+  return rules.length > 0 ? rules : undefined;
+};
+
 const buildMcpConnectionFormValue = (draft: McpConnectionFormDraft): McpConnectionFormValue => {
   const description = draft.description.trim() || undefined;
+  const toolExposure = buildToolExposure(draft.toolExposure);
   const connection =
     draft.transport === 'stdio' ? buildStdioConnection(draft) : buildHttpConnection(draft);
   return {
     name: draft.name.trim(),
     ...(description ? { description } : {}),
+    ...(draft.exposure !== 'codemode' ? { exposure: draft.exposure } : {}),
+    ...(toolExposure ? { toolExposure } : {}),
     transport: draft.transport,
     enabledByDefault: draft.enabledByDefault,
     ...(connection ? { connection } : {}),
@@ -164,6 +206,8 @@ export function McpConnectionForm({
     setDraft((current) => ({
       name: current.name,
       description: current.description,
+      exposure: current.exposure,
+      toolExposure: current.toolExposure,
       enabledByDefault: current.enabledByDefault,
       transport,
       ...emptyConnectionFields(transport),
@@ -184,6 +228,15 @@ export function McpConnectionForm({
   return (
     <form className={cn('flex min-h-0 flex-col', className)} onSubmit={submit}>
       <div className="scrollbar-pro min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+        {initialEntry ? null : (
+          <McpJsonImport
+            disabled={submitting}
+            onImport={(source) => {
+              setNeedsCredentialReentry(false);
+              setDraft(createMcpConnectionFormDraft(source));
+            }}
+          />
+        )}
         <Section title={t('settings.mcp.form.sectionIdentity')}>
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <Field htmlFor={`${fieldId}-name`} label={t('settings.mcp.form.name')}>
@@ -217,6 +270,74 @@ export function McpConnectionForm({
               }
             />
           </Field>
+        </Section>
+
+        <Section
+          title={t('settings.mcp.form.sectionAgentAccess')}
+          hint={t('settings.mcp.form.sectionAgentAccessHint')}
+        >
+          <Field
+            htmlFor={`${fieldId}-exposure`}
+            label={t('settings.mcp.form.exposure')}
+            hint={t(`settings.mcp.exposure.${draft.exposure}Hint`)}
+          >
+            <ExposureSelect
+              id={`${fieldId}-exposure`}
+              value={draft.exposure}
+              onChange={(exposure) => setDraft((current) => ({ ...current, exposure }))}
+            />
+          </Field>
+          <ListEditor
+            label={t('settings.mcp.form.toolExposure')}
+            hint={t('settings.mcp.form.toolExposureHint')}
+            addLabel={t('settings.mcp.form.addToolRule')}
+            onAdd={() =>
+              setDraft((current) => ({
+                ...current,
+                toolExposure: [...current.toolExposure, { pattern: '', exposure: 'direct' }],
+              }))
+            }
+          >
+            {draft.toolExposure.map((rule, index) => {
+              const update = (next: Partial<ToolExposureDraft>) =>
+                setDraft((current) => ({
+                  ...current,
+                  toolExposure: current.toolExposure.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, ...next } : item
+                  ),
+                }));
+              return (
+                <div
+                  key={index}
+                  className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_auto] items-center gap-1.5"
+                >
+                  <Input
+                    aria-label={t('settings.mcp.form.toolPattern')}
+                    placeholder={t('settings.mcp.form.toolPattern')}
+                    value={rule.pattern}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="font-mono text-xs"
+                    onChange={(event) => update({ pattern: event.target.value })}
+                  />
+                  <ExposureSelect
+                    value={rule.exposure}
+                    onChange={(exposure) => update({ exposure })}
+                  />
+                  <RemoveRowButton
+                    onClick={() =>
+                      setDraft((current) => ({
+                        ...current,
+                        toolExposure: current.toolExposure.filter(
+                          (_, itemIndex) => itemIndex !== index
+                        ),
+                      }))
+                    }
+                  />
+                </div>
+              );
+            })}
+          </ListEditor>
         </Section>
 
         <Section
@@ -387,6 +508,124 @@ export function McpConnectionForm({
         </Button>
       </footer>
     </form>
+  );
+}
+
+function ExposureSelect({
+  id,
+  value,
+  onChange,
+}: {
+  id?: string;
+  value: McpExposure;
+  onChange: (exposure: McpExposure) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <Select value={value} onValueChange={(next) => onChange(next as McpExposure)}>
+      <SelectTrigger id={id} aria-label={t('settings.mcp.form.exposure')} className="h-9 text-sm">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {MCP_EXPOSURES.map((exposure) => (
+          <SelectItem key={exposure} value={exposure}>
+            {t(`settings.mcp.exposure.${exposure}`)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Paste one `mcpServers` entry to prefill the form; saving still goes through the vault. */
+function McpJsonImport({
+  disabled,
+  onImport,
+}: {
+  disabled: boolean;
+  onImport: (source: McpConnectionFormSource) => void;
+}) {
+  const { t } = useTranslation();
+  const fieldId = useId();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [messages, setMessages] = useState<{ error?: string; notes: string[] }>({ notes: [] });
+  if (!open)
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        disabled={disabled}
+        onClick={() => setOpen(true)}
+      >
+        <FileJson className="h-3.5 w-3.5" aria-hidden="true" />
+        {t('settings.mcp.import.action')}
+      </Button>
+    );
+  const fill = () => {
+    const result = parseMcpJsonImport(text);
+    if (!result.ok) {
+      setMessages({
+        error: t(`settings.mcp.import.errors.${result.reason}`, {
+          names: result.reason === 'multiple_servers' ? result.names?.join(', ') : undefined,
+          field: result.reason === 'invalid_field' ? result.field : undefined,
+        }),
+        notes: [],
+      });
+      return;
+    }
+    const { server, ignoredFields, referenceFields } = result;
+    onImport({ ...server, transport: server.connection.transport });
+    setText('');
+    setMessages({
+      notes: [
+        ...(ignoredFields.length
+          ? [t('settings.mcp.import.ignored', { fields: ignoredFields.join(', ') })]
+          : []),
+        ...(referenceFields.length
+          ? [t('settings.mcp.import.references', { fields: referenceFields.join(', ') })]
+          : []),
+      ],
+    });
+  };
+  return (
+    <Section title={t('settings.mcp.import.action')} hint={t('settings.mcp.import.hint')}>
+      <Textarea
+        id={`${fieldId}-json`}
+        aria-label={t('settings.mcp.import.action')}
+        rows={5}
+        spellCheck={false}
+        className="resize-y font-mono text-xs"
+        placeholder={'{ "mcpServers": { "name": { "command": "…" } } }'}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      {messages.error ? (
+        <p role="alert" className="text-xs text-destructive">
+          {messages.error}
+        </p>
+      ) : null}
+      {messages.notes.map((note) => (
+        <p key={note} role="status" className="text-xs text-muted-foreground">
+          {note}
+        </p>
+      ))}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          {t('common.cancel')}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={disabled || text.trim().length === 0}
+          onClick={fill}
+        >
+          {t('settings.mcp.import.fill')}
+        </Button>
+      </div>
+    </Section>
   );
 }
 

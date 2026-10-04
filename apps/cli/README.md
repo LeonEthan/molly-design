@@ -7,6 +7,19 @@ process arguments and the workspace package name remain implementation interface
 The embedded service uses only the local installation identity. An explicit cloud
 platform launch is refused; no product-cloud login or remote host is started.
 
+## Settings MCP tool discovery
+
+Settings lists a saved server's tools through the private `__internal mcp-list-tools`
+helper. Electron supplies its explicit local platform and resolved data directory;
+shell environment values cannot select another profile. Endpoint or credential edits,
+including staged removal, disable listing until saved. The helper redacts saved values
+of at least four characters, their authorization payloads of that size, and every
+nonempty decoded Basic-auth username, password and combined value. Matching tool names
+are omitted; titles and descriptions are redacted. This covers known credential echoes,
+not arbitrary transformations of a secret. See the
+[discovery fix record](../../.agents/notes/implemented/bug-fix/2026-10-04-mcp-settings-discovery.md)
+for regression evidence and limits.
+
 ## Host port upgrades
 
 The local host lease now uses loopback port `17792`. Explicit internal commands

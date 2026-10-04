@@ -41,6 +41,7 @@ export class MachineRpcIpc extends IpcService {
   async send(message: LocalMachineRpcRequest) {
     if (
       message.method === 'harness/host' ||
+      message.method === 'mcp/catalog-entry' ||
       message.method === 'design/image-connection' ||
       message.method.startsWith('browser/')
     )

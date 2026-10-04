@@ -19,11 +19,13 @@ Image credentials use the same vault. Acknowledge legacy removal only after encr
 backup durability; compare the exact current row before removal. History/backup
 residue remains disclosed, never claimed erased. Acquisition requires an active run, except
 explicit main-only settings checks of the saved destination.
-MCP values share this vault. Bind them to workspace, server, destination and revision;
-changed HTTP URLs or stdio command/args require renewed input. Settings IPC derives
-the local workspace and exposes only write/delete/public metadata. Acquisition stays
-internal, scoped to the selected Session and worker epoch, and is not enabled by saving. Header framing and isolated-process environment
-fields cannot be supplied as credentials. Reject writes exceeding the vault read limit.
+MCP values share this vault, bound to workspace, server, destination and revision;
+a changed URL or stdio command/args needs renewed input. Settings IPC derives
+the local workspace, returning no values. Acquisition needs the selected Session and
+worker epoch, except explicit Settings tool listing of the catalog row's exact binding,
+values going only to the CLI helper's stdin. Saving enables nothing. Header framing
+and isolated-process env fields cannot be credentials. Reject writes past the
+vault read limit.
 
 ## Design canvas contracts
 

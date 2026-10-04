@@ -1,11 +1,15 @@
 import type { McpConnectionSpec, WorkspaceMcpServerMeta } from '@molly/shared';
 import {
+  hasUnprotectedMcpValues,
+  mcpConnectionDestination,
   McpCredentialBindingSchema,
   type McpCredentialDestination,
+  type McpToolDiscoveryResult,
 } from '@molly/shared/embedded-harness';
 import type { IpcServices } from '@/lib/electron-ipc-client';
 
 type CredentialWriter = Pick<IpcServices['modelConnections'], 'saveMcp' | 'deleteMcp'>;
+type ToolLister = Pick<IpcServices['modelConnections'], 'listMcpTools'>;
 
 function destination(connection: McpConnectionSpec): McpCredentialDestination {
   return connection.transport === 'http'
@@ -81,4 +85,25 @@ export async function protectMcpEntry(
     await writer.deleteMcp({ serverId: entry.id, expectedRevision: prior.revision });
   }
   return { ...entry, connection: publicConnection };
+}
+
+/**
+ * Lists the saved entry's tools exactly as stored. Rows still holding values outside protected
+ * storage (legacy `${VAR}` references or passthrough) are refused rather than resolved here.
+ */
+export async function listSavedMcpTools(
+  entry: WorkspaceMcpServerMeta,
+  lister: ToolLister | null
+): Promise<McpToolDiscoveryResult> {
+  const connection = entry.connection;
+  if (!lister) return { ok: false, reason: 'unavailable' };
+  if (!connection || hasUnprotectedMcpValues(connection))
+    return { ok: false, reason: 'unsupported' };
+  return lister.listMcpTools({
+    serverId: entry.id,
+    destination: mcpConnectionDestination(connection),
+    ...(connection.protectedCredentials
+      ? { protectedCredentials: connection.protectedCredentials }
+      : {}),
+  });
 }

@@ -284,6 +284,11 @@ Phases 1, 2a and 2b merged (#71, #73, #74). Phase 2c (`molly_browser` with seven
 the daemon/Electron wire, mechanics in server instructions) is on `feat/pi-mcp-phase2c`. Two details beyond §C:
 `click`/`type`/`scroll` also return `{ url, title }`, and the desktop reply union replaces `text` in place with no
 capability key, because the browser RPC never had one and the daemon is the desktop's own child process.
+Phase 2c merged (#75). B2 is still blocked: Pi 1.0.2 Codemode `models.generateImages` forwards only `{ signal }`.
+The deferred Settings tool list (A step 5) is on `feat/pi-mcp-settings-tools`. Discovery runs in a one-shot bundled
+CLI helper (`__internal mcp-list-tools`) rather than Electron main, after a Codex second opinion: the SDK's stdio
+reader is unbounded and `listTools()` compiles output schemas, so a hostile server could stall main. Owner decision
+(2026-10-04): Settings listing may read the exact saved credential binding, a documented exception to run-only acquisition.
 
 Divergence found in review: the catalog stores `toolExposure` as ordered `{ pattern, exposure }` rules,
 not Pi's object, because Flock reorders object keys and Pi applies the first matching pattern.

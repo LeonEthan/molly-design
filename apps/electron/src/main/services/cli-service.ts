@@ -92,6 +92,43 @@ const CLI_CREDENTIALS_PATH = join(MOLLY_DATA_DIR, 'credentials.json')
 const ELECTRON_SETTINGS_PATH = join(MOLLY_DATA_DIR, 'electron-settings.json')
 const BUNDLED_CLI_ENTRY_FILE = 'index.js'
 
+export type PrivateHelperResult =
+  | { kind: 'exited'; stdout: string }
+  | { kind: 'timed_out' | 'limit_exceeded' | 'cancelled' | 'unavailable' }
+
+async function bundledCliEnvironment(
+  options: Pick<CliRunOptions, 'envOverrides'>
+): Promise<NodeJS.ProcessEnv> {
+  const shellEnv = await getUserShellEnvCached()
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    ...(shellEnv ?? {}),
+    ...(options.envOverrides ?? {}),
+    ELECTRON_RUN_AS_NODE: '1'
+  }
+  delete env.MOLLY_DAEMON_SUPERVISED
+  delete env.LODY_DAEMON_SUPERVISED
+  applyProxyEnvFallback(env, await resolveSystemProxyEnv(buildSystemProxyProbeUrls()))
+  return env
+}
+
+function killProcessTree(child: ChildProcess): void {
+  const pid = child.pid
+  if (pid === undefined) return
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/PID', String(pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true
+    }).once('error', () => undefined)
+    return
+  }
+  try {
+    process.kill(-pid, 'SIGKILL')
+  } catch {
+    child.kill('SIGKILL')
+  }
+}
+
 type CliRunOptions = {
   envOverrides?: NodeJS.ProcessEnv
   maxOldSpaceMiB?: number
@@ -896,6 +933,57 @@ export class CliService {
     }
   }
 
+  /**
+   * A one-shot bundled CLI helper whose output never reaches logs or the renderer. Input goes
+   * only through stdin; main owns the deadline, the stdout bound and cleanup of the whole
+   * process tree, including children the helper started.
+   */
+  async runPrivateHelper(
+    args: string[],
+    input: string,
+    limits: { timeoutMs: number; maxOutputBytes: number; signal?: AbortSignal }
+  ): Promise<PrivateHelperResult> {
+    const entry = resolveBundledCliEntry()
+    if (!entry || limits.signal?.aborted) return { kind: 'unavailable' }
+    const env = await bundledCliEnvironment({ envOverrides: buildCliRuntimeEnvOverrides() })
+    if (limits.signal?.aborted) return { kind: 'cancelled' }
+    const child = spawn(resolveBundledCliRuntime(), ['--max-old-space-size=256', entry, ...args], {
+      env,
+      stdio: ['pipe', 'pipe', 'ignore'],
+      windowsHide: true,
+      detached: process.platform !== 'win32'
+    })
+    this.trackedCliChildren.add(child)
+    child.once('close', () => this.trackedCliChildren.delete(child))
+    return await new Promise<PrivateHelperResult>((resolvePromise) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      let settled = false
+      const finish = (result: PrivateHelperResult) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        limits.signal?.removeEventListener('abort', onAbort)
+        killProcessTree(child)
+        resolvePromise(result)
+      }
+      const timer = setTimeout(() => finish({ kind: 'timed_out' }), limits.timeoutMs)
+      const onAbort = () => finish({ kind: 'cancelled' })
+      limits.signal?.addEventListener('abort', onAbort, { once: true })
+      child.stdout?.on('data', (chunk: Buffer) => {
+        size += chunk.byteLength
+        if (size > limits.maxOutputBytes) finish({ kind: 'limit_exceeded' })
+        else chunks.push(chunk)
+      })
+      child.once('error', () => finish({ kind: 'unavailable' }))
+      child.once('close', () =>
+        finish({ kind: 'exited', stdout: Buffer.concat(chunks).toString('utf8') })
+      )
+      child.stdin?.on('error', () => undefined)
+      child.stdin?.end(input)
+    })
+  }
+
   private async prepareBundledCli(
     args: string[],
     sender: WebContents | undefined,
@@ -909,17 +997,7 @@ export class CliService {
       )
     }
 
-    const shellEnv = await getUserShellEnvCached()
-    throwIfAborted(options?.signal)
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...(shellEnv ?? {}),
-      ...(options?.envOverrides ?? {}),
-      ELECTRON_RUN_AS_NODE: '1'
-    }
-    delete env.MOLLY_DAEMON_SUPERVISED
-    delete env.LODY_DAEMON_SUPERVISED
-    applyProxyEnvFallback(env, await resolveSystemProxyEnv(buildSystemProxyProbeUrls()))
+    const env = await bundledCliEnvironment(options ?? {})
     throwIfAborted(options?.signal)
 
     return {

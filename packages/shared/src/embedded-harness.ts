@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { McpConnectionSpec } from './workspace-mcp';
 import { ImageConnectionProtocolSchema } from '#image-connection';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
@@ -303,6 +304,97 @@ export const StoredMcpCredentialSchema = z
       JSON.stringify([...value.connection.fieldNames].sort()) ===
       JSON.stringify(Object.keys(value.values).sort())
   );
+
+/** The public destination a protected credential is bound to. */
+export const mcpConnectionDestination = (
+  connection: McpConnectionSpec
+): McpCredentialDestination =>
+  connection.transport === 'http'
+    ? { transport: 'http', url: connection.url }
+    : { transport: 'stdio', command: connection.command, args: connection.args ?? [] };
+
+export const sameMcpDestination = (
+  left: McpCredentialDestination,
+  right: McpCredentialDestination
+): boolean => {
+  if (left.transport === 'http') return right.transport === 'http' && left.url === right.url;
+  if (right.transport === 'http') return false;
+  return (
+    left.command === right.command &&
+    left.args.length === right.args.length &&
+    left.args.every((arg, index) => arg === right.args[index])
+  );
+};
+
+/** Legacy rows may hold values outside protected storage (`${VAR}`, passthrough, plaintext). */
+export const hasUnprotectedMcpValues = (connection: McpConnectionSpec): boolean =>
+  connection.transport === 'stdio'
+    ? Object.keys(connection.env ?? {}).length > 0 || (connection.envPassthrough?.length ?? 0) > 0
+    : Object.keys(connection.headers ?? {}).length > 0 || connection.bearerToken !== undefined;
+
+/** Settings-only tool listing: one saved server, initialize and `tools/list` only (A5). */
+export const MCP_TOOL_DISCOVERY_LIMITS = {
+  tools: 256,
+  pages: 16,
+  name: 128,
+  title: 200,
+  description: 1_000,
+} as const;
+
+export const ListMcpToolsSchema = z
+  .object({
+    serverId: identifier,
+    destination: McpCredentialDestinationSchema,
+    protectedCredentials: z.object({ credentialRef: z.string().uuid(), revision }).strict().optional(),
+  })
+  .strict();
+export type ListMcpTools = z.infer<typeof ListMcpToolsSchema>;
+
+/** What main sends the one-shot CLI helper on stdin; values were checked against their binding. */
+export const McpToolDiscoveryRequestSchema = z
+  .object({
+    destination: McpCredentialDestinationSchema,
+    values: McpCredentialValuesSchema.optional(),
+  })
+  .strict();
+export type McpToolDiscoveryRequest = z.infer<typeof McpToolDiscoveryRequestSchema>;
+
+export const McpDiscoveredToolSchema = z
+  .object({
+    name: z.string().min(1).max(MCP_TOOL_DISCOVERY_LIMITS.name),
+    title: z.string().max(MCP_TOOL_DISCOVERY_LIMITS.title).optional(),
+    description: z.string().max(MCP_TOOL_DISCOVERY_LIMITS.description).optional(),
+    readOnlyHint: z.boolean().optional(),
+    destructiveHint: z.boolean().optional(),
+    idempotentHint: z.boolean().optional(),
+    openWorldHint: z.boolean().optional(),
+  })
+  .strict();
+export type McpDiscoveredTool = z.infer<typeof McpDiscoveredToolSchema>;
+
+export const MCP_TOOL_DISCOVERY_FAILURES = [
+  'changed',
+  'unsupported',
+  'needs_credentials',
+  'unreachable',
+  'timed_out',
+  'invalid_response',
+  'limit_exceeded',
+  'unavailable',
+] as const;
+export type McpToolDiscoveryFailure = (typeof MCP_TOOL_DISCOVERY_FAILURES)[number];
+
+export const McpToolDiscoveryResultSchema = z.discriminatedUnion('ok', [
+  z
+    .object({
+      ok: z.literal(true),
+      tools: z.array(McpDiscoveredToolSchema).max(MCP_TOOL_DISCOVERY_LIMITS.tools),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  z.object({ ok: z.literal(false), reason: z.enum(MCP_TOOL_DISCOVERY_FAILURES) }).strict(),
+]);
+export type McpToolDiscoveryResult = z.infer<typeof McpToolDiscoveryResultSchema>;
 
 export const ProviderPresetIdSchema = z.enum([
   'openai',

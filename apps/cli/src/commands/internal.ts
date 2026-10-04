@@ -3,6 +3,7 @@ import { runMollyMcpServer } from '@/mcp/molly-mcp-server';
 import { runMollyImageMcpServer } from '@/mcp/molly-image-mcp-server';
 import { runMollyBrowserMcpServer } from '@/mcp/molly-browser-mcp-server';
 import { runMollyMcpHttpHost } from '@/mcp/molly-mcp-http-host';
+import { runMcpToolDiscovery } from '@/mcp/mcp-tool-discovery';
 
 export const internalCommand = new Command('__internal')
   .description('(internal) Molly helper commands')
@@ -25,6 +26,13 @@ export const internalCommand = new Command('__internal')
       .description('(internal) stdio MCP server for the Molly browser page')
       .action(async () => {
         await runMollyBrowserMcpServer();
+      })
+  )
+  .addCommand(
+    new Command('mcp-list-tools')
+      .description("(internal) list one MCP server's tools for Settings")
+      .action(async () => {
+        await runMcpToolDiscovery();
       })
   )
   .addCommand(

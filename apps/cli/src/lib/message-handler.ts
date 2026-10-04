@@ -136,6 +136,9 @@ import {
   machineDeleteCommandToQueueItem,
   parseMachineFlockKey,
   readMachineFlockRowsFromFlock,
+  getWorkspaceFlockDocId,
+  getWorkspaceMcpCatalog,
+  readWorkspaceFlockRowsFromFlock,
   serializeMachineFlockKey,
   writeMachineFlockRowToFlock,
   type MachineDeleteLocalProjectCommand,
@@ -6408,6 +6411,16 @@ export class MessageHandler {
     };
 
     switch (request.method) {
+      case 'mcp/catalog-entry': {
+        // Main's Settings tool listing runs only what the saved catalog row names.
+        const handle = await this.workspaceDocument.repo.openFlockDoc(
+          getWorkspaceFlockDocId(this.workspaceId)
+        );
+        const entry = Object.values(
+          getWorkspaceMcpCatalog(readWorkspaceFlockRowsFromFlock(handle.flock))
+        ).find((candidate) => candidate.id === request.params.serverId);
+        return { type: 'mcp/catalog-entry' as const, connection: entry?.connection ?? null };
+      }
       case 'browser/host-status': {
         return { type: 'browser/host-status' as const, connected: this.browserHost.isConnected() };
       }

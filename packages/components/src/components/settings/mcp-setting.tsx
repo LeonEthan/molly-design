@@ -36,7 +36,7 @@ import { Switch } from '@/ui/switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { settingContainerClass } from '.';
 import { McpConnectionForm, type McpConnectionFormValue } from './mcp-connection-form';
-import { protectMcpEntry } from './mcp-credential-save';
+import { listSavedMcpTools, protectMcpEntry } from './mcp-credential-save';
 import { WithInfo } from './info-tip';
 
 type EditorState = { mode: 'add' } | { mode: 'edit'; entry: WorkspaceMcpServerMeta };
@@ -263,6 +263,12 @@ export function McpSetting() {
                 setError(undefined);
                 setEditor(null);
               }}
+              {...(editor.mode === 'edit'
+                ? {
+                    listTools: () =>
+                      listSavedMcpTools(editor.entry, getIpcServices()?.modelConnections ?? null),
+                  }
+                : {})}
             />
           ) : null}
         </DialogContent>

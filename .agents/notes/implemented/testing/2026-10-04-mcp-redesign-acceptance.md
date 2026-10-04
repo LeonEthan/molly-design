@@ -53,11 +53,22 @@ These single samples establish lazy startup, not a statistical performance
 comparison or provider/network latency. Import time was 429/444 ms respectively.
 
 These are acceptance measurements, not deterministic CI regression; raw artifacts
-remain outside Git. Windows outcome is pending this branch's dispatched run; a
-build or a fake Windows platform value does not prove process-tree cleanup.
+remain outside Git. A build or a fake Windows platform value does not prove
+process-tree cleanup.
 
 The first Windows run (`37197302117`) built the CLI successfully, then the probe
 aborted because `events.once(socket, 'close')` rejects on the TCP reset caused by
 forced process termination. That is a probe failure, not product cleanup
 evidence. The corrected probe observes close directly and permits `ECONNRESET`
 on its owned readiness channel while retaining failures for other socket errors.
+
+The corrected native Windows run
+([37197871231](https://github.com/LeonEthan/molly-design/actions/runs/37197871231/job/111423370066))
+passed all four paths on `win32`, Node 22.23.3. Each path observed actual
+`taskkill /PID ... /T /F` completion, helper exit and closure of both the MCP server
+and descendant readiness sockets. The `windows-mcp-helper-cleanup` artifact
+contains the synthetic PID/outcome records. Both runs' Linux static checks
+and full regression suites passed, as did local `pnpm check`, formatting, docs
+checks and the rebuilt Electron bundle. The independent Codex review reported no
+P0/P1 findings in the verification patch; its attempted nested review was denied
+by the read-only sandbox and supplied no additional opinion.

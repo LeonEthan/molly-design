@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from '@/utils/logger';
 import { createMcpHttpServer } from './molly-mcp-http-host';
 import {
+  MCP_HTTP_BROWSER_PATH,
   MCP_HTTP_IMAGE_PATH,
   MCP_HTTP_MACHINE_ID_HEADER,
   MCP_HTTP_SESSION_ID_HEADER,
@@ -107,7 +108,7 @@ describe('MCP HTTP host wire behavior', () => {
     expect(payload.result?.serverInfo?.name).toBe('molly');
   });
 
-  it('serves the molly_image namespace on its own path and refuses unknown paths', async () => {
+  it('serves the molly_image and molly_browser namespaces on their own paths and refuses unknown paths', async () => {
     const post = (pathname: string) =>
       fetch(`${baseUrl}${pathname}`, {
         method: 'POST',
@@ -126,6 +127,13 @@ describe('MCP HTTP host wire behavior', () => {
     };
     expect(payload.result?.serverInfo?.name).toBe('molly_image');
     expect(payload.result?.instructions).toContain('unavailable in this session');
+    const browser = await post(MCP_HTTP_BROWSER_PATH);
+    expect(browser.status).toBe(200);
+    const browserPayload = (await browser.json()) as {
+      result?: { serverInfo?: { name?: string }; instructions?: string };
+    };
+    expect(browserPayload.result?.serverInfo?.name).toBe('molly_browser');
+    expect(browserPayload.result?.instructions).toContain('unavailable in this session');
     const unknown = await post('/mcp/molly_unknown');
     expect(unknown.status).toBe(404);
     await unknown.arrayBuffer();

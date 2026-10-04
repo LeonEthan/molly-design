@@ -53,9 +53,12 @@ this page is the full text of the rules summarised there.
   public is an ordinary external link and loopback still needs its own approval in the managed
   branch, but a LAN address would open silently on the USER's network at a page's request.
   Only the address bar may reach one.
-  The built-in `molly_browser` tool is available to active local design runs while
-  Electron polls the owner-only control socket. It exposes navigation, bounded accessibility
-  snapshot/screenshot, current-reference input/click/scroll, and selected-image save;
+  The built-in `molly_browser` MCP server is available to active local design runs while
+  Electron polls the owner-only control socket. It has one tool per action: `navigate`,
+  bounded accessibility `snapshot`, `screenshot`, current-reference `type`/`click`/`scroll`,
+  and selected-image `save_image`. Results are structured (`{ url, title }`, the snapshot
+  with a `truncated` flag, the saved asset); screenshots stay inline MCP images. Usage
+  mechanics live in the server instructions, read through Pi's `describeNamespace()`;
   Official `@playwright/mcp` 0.0.82 owns snapshots, string refs (`e5` / `f1e5`),
   actionability and input through its locked Playwright dependency. An attributed,
   unchanged VS Code adapter connects only the granted WebContents and its worker/frame
@@ -75,10 +78,10 @@ this page is the full text of the rules summarised there.
   real cross-site document; each image hop includes Cookies only for HTTPS inside
   that context, without limiting network destinations. Native page downloads are
   available separately and never publish design assets automatically. WebRTC uses
-  Chromium's normal behavior; webpage permission requests remain denied. The MCP catalog
-  advertises a flat, required-`kind` object because the OpenAI-compatible
-  adapter erases top-level JSON Schema unions; the MCP handler revalidates every
-  request against the strict action union before dispatch. Browser tools use the
+  Chromium's normal behavior; webpage permission requests remain denied. Each tool
+  advertises a strict non-union object, which OpenAI-compatible adapters keep intact;
+  the MCP handler revalidates every request against the strict action union before
+  dispatch. Browser tools use the
   existing permission flow without per-site scopes; takeover revokes Agent observation and action
   until the user explicitly resumes. While Agent control is active, Electron blocks
   human mouse/keyboard events on that page. Only synchronous `Input.*` dispatch

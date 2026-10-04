@@ -73,6 +73,7 @@ class BrowserFixture {
       isDestroyed: () => false,
       isLoadingMainFrame: () => this.loading,
       getURL: () => this.url,
+      getTitle: () => 'Native title',
       loadURL: async (nextUrl) => this.navigate(nextUrl)
     })
     fixtures.set(this.contents.id, this)
@@ -103,9 +104,13 @@ class BrowserFixture {
 
 void test('Agent can observe an existing native page without approved sites or response proofs', async () => {
   const fixture = new BrowserFixture()
-  const result = await fixture.execute({ kind: 'snapshot' })
-  assert.equal(result.kind, 'text')
-  assert.match(result.text, /Native page/)
+  assert.deepEqual(await fixture.execute({ kind: 'snapshot' }), {
+    kind: 'snapshot',
+    url: 'http://192.168.1.10/design',
+    title: 'Native title',
+    snapshot: '- heading "Native page"',
+    truncated: false
+  })
   fixture.controller.revoke(fixture.contents)
 })
 
@@ -119,9 +124,9 @@ void test('native navigation accepts private, fake-IP, cross-site and non-HTTP b
     'data:text/html,Native page'
   ]) {
     const result = await fixture.execute({ kind: 'navigate', url })
-    assert.match(result.text, /navigate completed/)
+    assert.deepEqual(result, { kind: 'page', url, title: 'Native title' })
     assert.equal(fixture.contents.getURL(), url)
-    assert.match((await fixture.execute({ kind: 'snapshot' })).text, /Native page/)
+    assert.match((await fixture.execute({ kind: 'snapshot' })).snapshot, /Native page/)
   }
   fixture.controller.revoke(fixture.contents)
 })
@@ -131,7 +136,7 @@ void test('snapshot waits for native document readiness without a response-peer 
   const result = fixture.execute({ kind: 'snapshot' })
   await fixture.connected.promise
   fixture.ready()
-  assert.match((await result).text, /Native page/)
+  assert.match((await result).snapshot, /Native page/)
   fixture.controller.revoke(fixture.contents)
 })
 
@@ -169,7 +174,8 @@ void test('revocation during initial native loading prevents late attachment and
   fixture.navigate('http://192.168.1.10/replacement')
   const replacement = { ...fixture.scope, runId: 'replacement-run' }
   assert.match(
-    (await fixture.controller.execute(fixture.contents, replacement, { kind: 'snapshot' })).text,
+    (await fixture.controller.execute(fixture.contents, replacement, { kind: 'snapshot' }))
+      .snapshot,
     /Native page/
   )
   release.resolve()
@@ -217,6 +223,18 @@ void test('navigation failure retains its loading error and permits another obse
     message: 'Browser page is still loading; observe again after it settles.'
   })
   fixture.perform = snapshot
-  assert.match((await fixture.execute({ kind: 'snapshot' })).text, /Native page/)
+  assert.match((await fixture.execute({ kind: 'snapshot' })).snapshot, /Native page/)
+  fixture.controller.revoke(fixture.contents)
+})
+
+void test('long snapshots are cut to a bounded body and flagged as truncated', async () => {
+  const fixture = new BrowserFixture()
+  const body = '- text "x"\n'.repeat(2_000)
+  fixture.perform = async () => ({
+    content: [{ type: 'text', text: `### Snapshot\n\`\`\`yaml\n${body}\n\`\`\`` }]
+  })
+  const result = await fixture.execute({ kind: 'snapshot' })
+  assert.equal(result.truncated, true)
+  assert.equal(result.snapshot, body.slice(0, 16_000))
   fixture.controller.revoke(fixture.contents)
 })

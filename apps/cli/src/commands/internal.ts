@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { runMollyMcpServer } from '@/mcp/molly-mcp-server';
 import { runMollyImageMcpServer } from '@/mcp/molly-image-mcp-server';
+import { runMollyBrowserMcpServer } from '@/mcp/molly-browser-mcp-server';
 import { runMollyMcpHttpHost } from '@/mcp/molly-mcp-http-host';
 
 export const internalCommand = new Command('__internal')
@@ -17,6 +18,13 @@ export const internalCommand = new Command('__internal')
       .description('(internal) stdio MCP server for Molly image generation')
       .action(async () => {
         await runMollyImageMcpServer();
+      })
+  )
+  .addCommand(
+    new Command('molly-browser-mcp-server')
+      .description('(internal) stdio MCP server for the Molly browser page')
+      .action(async () => {
+        await runMollyBrowserMcpServer();
       })
   )
   .addCommand(

@@ -12,12 +12,14 @@ import {
   type McpSessionContext,
 } from './molly-mcp-server';
 import { buildMollyImageMcpServer } from './molly-image-mcp-server';
+import { buildMollyBrowserMcpServer } from './molly-browser-mcp-server';
 import { resolveDesignResubmit, resolveDesignGate, resolveRenderHost } from './design-tools';
 import { resolveBrowserHost } from './browser-tools';
 import { canReadProcNetTcp, lookupLoopbackPeerUid } from './loopback-peer-uid';
 import {
   MCP_HTTP_MACHINE_ID_HEADER,
   MCP_HTTP_DESIGN_LAUNCH_ID_HEADER,
+  MCP_HTTP_BROWSER_PATH,
   MCP_HTTP_IMAGE_PATH,
   MCP_HTTP_PREFERRED_PORT_ENV,
   MCP_HTTP_SESSION_ID_HEADER,
@@ -256,7 +258,11 @@ async function handleRequest(
   logger: Logger
 ): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  if (url.pathname !== '/mcp' && url.pathname !== MCP_HTTP_IMAGE_PATH) {
+  if (
+    url.pathname !== '/mcp' &&
+    url.pathname !== MCP_HTTP_IMAGE_PATH &&
+    url.pathname !== MCP_HTTP_BROWSER_PATH
+  ) {
     reject(res, 404, 'Not found');
     return;
   }
@@ -324,14 +330,17 @@ async function handleRequest(
           designGate: await resolveDesignGate(context, logger),
           resolveGate: async () => await resolveDesignGate(context, logger, true),
         })
-      : buildMollyMcpServer({
-          taskToolsEnabled: context.taskToolsEnabled,
-          designResubmit: await resolveDesignResubmit(context),
-          renderHost: await resolveRenderHost(context, logger),
-          browserHost: await resolveBrowserHost(context),
-          resolveRenderHost: async () => await resolveRenderHost(context, logger),
-          resolveBrowserHost: async () => await resolveBrowserHost(context),
-        });
+      : url.pathname === MCP_HTTP_BROWSER_PATH
+        ? buildMollyBrowserMcpServer({
+            browserHost: await resolveBrowserHost(context),
+            resolveBrowserHost: async () => await resolveBrowserHost(context),
+          })
+        : buildMollyMcpServer({
+            taskToolsEnabled: context.taskToolsEnabled,
+            designResubmit: await resolveDesignResubmit(context),
+            renderHost: await resolveRenderHost(context, logger),
+            resolveRenderHost: async () => await resolveRenderHost(context, logger),
+          });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

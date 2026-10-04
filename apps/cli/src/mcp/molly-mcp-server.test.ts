@@ -1,8 +1,4 @@
 import path from 'path';
-import {
-  AgentBrowserCommandSchema,
-  AgentBrowserScopeSchema,
-} from '@molly/shared/browser-agent-rpc';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -117,8 +113,8 @@ describe('shared Operation store path', () => {
   });
 });
 
-const listPublishedTools = async (taskToolsEnabled: boolean, browserHost = false) => {
-  const server = buildMollyMcpServer({ taskToolsEnabled, browserHost });
+const listPublishedTools = async (taskToolsEnabled: boolean) => {
+  const server = buildMollyMcpServer({ taskToolsEnabled });
   const client = new Client({ name: 'task-gate-test-client', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -131,56 +127,6 @@ const listPublishedTools = async (taskToolsEnabled: boolean, browserHost = false
 
 const listPublishedToolNames = async (taskToolsEnabled: boolean): Promise<string[]> =>
   (await listPublishedTools(taskToolsEnabled)).map((tool) => tool.name);
-
-describe('embedded browser MCP catalog', () => {
-  it('advertises action fields as a top-level object for OpenAI-compatible tool calls', async () => {
-    const browser = (await listPublishedTools(false, true)).find(
-      (tool) => tool.name === 'molly_browser'
-    );
-    expect(browser?.inputSchema.type).toBe('object');
-    expect(browser?.inputSchema.properties).toHaveProperty('kind');
-    expect(browser?.inputSchema.properties).toHaveProperty('url');
-    expect(browser?.inputSchema.required).toContain('kind');
-    expect(browser?.inputSchema.properties).toHaveProperty('ref.type', 'string');
-    expect(browser?.inputSchema.properties).not.toHaveProperty('snapshotId');
-    expect(
-      (await listPublishedTools(false, true)).some((tool) => tool.name.startsWith('browser_'))
-    ).toBe(false);
-  });
-});
-
-describe('embedded browser command boundary', () => {
-  it('binds page ownership without a website allowlist', () => {
-    expect(
-      AgentBrowserScopeSchema.safeParse({
-        sessionId: 'session-1',
-        browserId: 'session-browser-session-1',
-        runId: 'run-1',
-      }).success
-    ).toBe(true);
-  });
-
-  it('accepts browser destinations without applying public-network policy in the tool schema', () => {
-    for (const url of ['http://localhost:3000', 'http://192.168.0.1', 'file:///tmp/reference.html'])
-      expect(AgentBrowserCommandSchema.safeParse({ kind: 'navigate', url }).success).toBe(true);
-  });
-
-  it('accepts upstream references but rejects selectors, scripts and file output', () => {
-    expect(AgentBrowserCommandSchema.safeParse({ kind: 'click', ref: 'e5' }).success).toBe(true);
-    expect(AgentBrowserCommandSchema.safeParse({ kind: 'save_image', ref: 'f1e9' }).success).toBe(
-      true
-    );
-    for (const command of [
-      { kind: 'click', ref: 'button' },
-      { kind: 'click', ref: 1, snapshotId: 'old' },
-      { kind: 'click', ref: 'e5', function: 'arbitrary()' },
-      { kind: 'screenshot', filename: '/tmp/output.png' },
-      { kind: 'browser_run_code_unsafe', code: 'arbitrary()' },
-      { kind: 'scroll', deltaY: '0); arbitrary()' },
-    ])
-      expect(AgentBrowserCommandSchema.safeParse(command).success).toBe(false);
-  });
-});
 
 describe('Molly developer workflow retirement', () => {
   it('publishes generic session tools without the retired review submission tool', async () => {

@@ -21,6 +21,14 @@ export const MCP_HTTP_IMAGE_PATH = '/mcp/molly_image';
 export const mollyImageMcpHttpUrl = (endpoint: MollyMcpHttpEndpoint): string =>
   new URL(MCP_HTTP_IMAGE_PATH, endpoint.url).toString();
 
+export const MOLLY_BROWSER_MCP_SERVER_NAME = 'molly_browser';
+
+/** The `molly_browser` server's path on the same host. */
+export const MCP_HTTP_BROWSER_PATH = '/mcp/molly_browser';
+
+export const mollyBrowserMcpHttpUrl = (endpoint: MollyMcpHttpEndpoint): string =>
+  new URL(MCP_HTTP_BROWSER_PATH, endpoint.url).toString();
+
 export const MCP_HTTP_DESIGN_LAUNCH_ID_HEADER = 'x-molly-design-launch-id';
 export const MCP_HTTP_SESSION_ID_HEADER = 'x-lody-mcp-session-id';
 export const MCP_HTTP_WORKSPACE_ID_HEADER = 'x-lody-mcp-workspace-id';

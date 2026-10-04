@@ -280,6 +280,10 @@ Phase 2b (`molly_image` with neutral `generate`/`edit`, typed results, annotatio
 `molly_render_preview` direct) is on `feat/pi-mcp-phase2b`. Two deliberate differences from §D: the
 browser tool stays on `molly` until 2c creates `molly_browser` (one rename, not two), and `molly` keeps the
 900 s timeout because `molly_render_preview` can wait 75 s, beyond Pi's 60 s default.
+Phases 1, 2a and 2b merged (#71, #73, #74). Phase 2c (`molly_browser` with seven tools, typed replies across
+the daemon/Electron wire, mechanics in server instructions) is on `feat/pi-mcp-phase2c`. Two details beyond §C:
+`click`/`type`/`scroll` also return `{ url, title }`, and the desktop reply union replaces `text` in place with no
+capability key, because the browser RPC never had one and the daemon is the desktop's own child process.
 
 Divergence found in review: the catalog stores `toolExposure` as ordered `{ pattern, exposure }` rules,
 not Pi's object, because Flock reorders object keys and Pi applies the first matching pattern.

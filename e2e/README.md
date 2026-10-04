@@ -37,8 +37,8 @@ its bundled CLI cannot attach to the normal local daemon. Teardown first asks
 Electron to quit through its production shutdown barrier, then verifies the
 port can be rebound before deleting temporary state.
 
-The browser-permission journeys send their scripted navigation through the stock
-Pi adapter's `mcp` tool with `tool: "molly_molly_browser"` and nested `args`.
+The browser-permission journeys send their scripted navigation through Pi's
+`codemode` tool as `tools.mcp__molly_browser__navigate({ url })`.
 They exercise the real approval UI and daemon's public-website guard, checking
 the adapter's user-declined result separately from the local-host refusal before
 desktop navigation. The model fixture must follow this public adapter interface; individual

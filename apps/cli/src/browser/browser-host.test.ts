@@ -31,7 +31,13 @@ describe('BrowserHost', () => {
     expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['first']);
     expect(host.exchange([], () => true)).toEqual([]);
     host.exchange(
-      [{ requestId: 'first', ok: true, reply: { kind: 'text', text: 'private page' } }],
+      [
+        {
+          requestId: 'first',
+          ok: true,
+          reply: { kind: 'page', url: 'https://example.com/', title: 'private page' },
+        },
+      ],
       () => false
     );
     await expect(first).resolves.toEqual({
@@ -74,14 +80,22 @@ describe('BrowserHost', () => {
     expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
     host.exchange(
       [
-        { requestId: 'first', ok: true, reply: { kind: 'text', text: 'late old result' } },
-        { requestId: 'next', ok: true, reply: { kind: 'text', text: 'fresh observation' } },
+        {
+          requestId: 'first',
+          ok: true,
+          reply: { kind: 'page', url: 'https://example.com/', title: 'late old result' },
+        },
+        {
+          requestId: 'next',
+          ok: true,
+          reply: { kind: 'page', url: 'https://example.com/', title: 'fresh observation' },
+        },
       ],
       () => true
     );
     await expect(next).resolves.toEqual({
       ok: true,
-      reply: { kind: 'text', text: 'fresh observation' },
+      reply: { kind: 'page', url: 'https://example.com/', title: 'fresh observation' },
     });
   });
 
@@ -100,12 +114,18 @@ describe('BrowserHost', () => {
     const next = host.enqueue(work('next'));
     expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
     host.exchange(
-      [{ requestId: 'next', ok: true, reply: { kind: 'text', text: 'reconnected page' } }],
+      [
+        {
+          requestId: 'next',
+          ok: true,
+          reply: { kind: 'page', url: 'https://example.com/', title: 'reconnected page' },
+        },
+      ],
       () => true
     );
     await expect(next).resolves.toEqual({
       ok: true,
-      reply: { kind: 'text', text: 'reconnected page' },
+      reply: { kind: 'page', url: 'https://example.com/', title: 'reconnected page' },
     });
   });
 
@@ -121,12 +141,18 @@ describe('BrowserHost', () => {
     expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['followup']);
     expect(host.exchange([], () => true)).toEqual([]);
     host.exchange(
-      [{ requestId: 'followup', ok: true, reply: { kind: 'text', text: 'observed page' } }],
+      [
+        {
+          requestId: 'followup',
+          ok: true,
+          reply: { kind: 'page', url: 'https://example.com/', title: 'observed page' },
+        },
+      ],
       () => true
     );
     await expect(followup).resolves.toEqual({
       ok: true,
-      reply: { kind: 'text', text: 'observed page' },
+      reply: { kind: 'page', url: 'https://example.com/', title: 'observed page' },
     });
   });
 });

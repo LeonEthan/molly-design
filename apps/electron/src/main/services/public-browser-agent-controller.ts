@@ -248,7 +248,7 @@ export class PublicBrowserAgentController {
     if (response.kind !== 'tool') throw new Error('Browser driver returned an unexpected result.')
     const result = response.result
     if (command.kind === 'snapshot') {
-      return { kind: 'text', text: `Page: ${contents.getURL()}\n${browserMcpSnapshot(result)}` }
+      return { kind: 'snapshot', ...pageState(contents), ...browserMcpSnapshot(result) }
     }
     if (command.kind === 'screenshot') {
       const capture = result.content.find((part) => part.type === 'image')
@@ -273,9 +273,11 @@ export class PublicBrowserAgentController {
         pageUrl: contents.getURL()
       }
     }
-    return {
-      kind: 'text',
-      text: `${command.kind} completed on ${contents.getURL()}. Take a snapshot to observe the result.`
-    }
+    return { kind: 'page', ...pageState(contents) }
   }
 }
+
+const pageState = (contents: WebContents): { url: string; title: string } => ({
+  url: contents.getURL(),
+  title: contents.getTitle().slice(0, 500)
+})

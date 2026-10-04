@@ -165,7 +165,7 @@ async function handleRequest(req, res) {
                 function: {
                   name: codemode.function.name,
                   arguments: JSON.stringify({
-                    code: "text(JSON.stringify(await tools.mcp__molly__molly_browser({ kind: 'navigate', url: 'http://127.0.0.1:8333/' })));",
+                    code: "text(JSON.stringify(await tools.mcp__molly_browser__navigate({ url: 'http://127.0.0.1:8333/' })));",
                   }),
                 },
               },

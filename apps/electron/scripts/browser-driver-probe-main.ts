@@ -76,7 +76,7 @@ async function main() {
     const response = await driver.execute({ kind: 'snapshot' })
     assert.equal(response.kind, 'tool')
     if (response.kind !== 'tool') throw new Error('Missing snapshot')
-    const text = browserMcpSnapshot(response.result)
+    const { snapshot: text } = browserMcpSnapshot(response.result)
     assert.doesNotMatch(text, /PRIVATE_APP_SENTINEL/)
     return text
   }
@@ -137,10 +137,10 @@ async function main() {
     url: 'https://example.com/'
   })
   const observed = await controller.execute(view.webContents, scope, { kind: 'snapshot' })
-  assert.equal(observed.kind, 'text')
-  if (observed.kind === 'text') {
-    assert.match(observed.text, /Page: https:\/\/example\.com\//)
-    assert.match(observed.text, /paragraph|heading|link/)
+  assert.equal(observed.kind, 'snapshot')
+  if (observed.kind === 'snapshot') {
+    assert.equal(observed.url, 'https://example.com/')
+    assert.match(observed.snapshot, /paragraph|heading|link/)
   }
   record('Production controller navigates and reads a real page through the system network')
   await controller.execute(view.webContents, scope, {
@@ -148,8 +148,8 @@ async function main() {
     url: 'data:text/html,<h1>Native browser destination</h1>'
   })
   const native = await controller.execute(view.webContents, scope, { kind: 'snapshot' })
-  assert.equal(native.kind, 'text')
-  if (native.kind === 'text') assert.match(native.text, /Native browser destination/)
+  assert.equal(native.kind, 'snapshot')
+  if (native.kind === 'snapshot') assert.match(native.snapshot, /Native browser destination/)
   controller.revokeAll()
   assert.equal(controller.hasLease(view.webContents), false)
   record('Native navigation has no network scope and revocation still ends control')

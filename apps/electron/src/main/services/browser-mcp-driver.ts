@@ -38,15 +38,21 @@ export function browserMcpText(result: CallToolResult): string {
     .join('\n')
 }
 
+const SNAPSHOT_MAX_CHARS = 16_000
+
 /** Discard code, console output and host file links; expose only the requested snapshot. */
-export function browserMcpSnapshot(result: CallToolResult): string {
+export function browserMcpSnapshot(result: CallToolResult): {
+  snapshot: string
+  truncated: boolean
+} {
   const text = browserMcpText(result)
   const snapshot = text.match(/### Snapshot\n```(?:yaml)?\n([\s\S]*?)\n```/)
   if (!snapshot) throw new Error('Browser snapshot was unavailable; take a new snapshot.')
   const body = snapshot[1]
-  return body.length <= 16_000
-    ? body
-    : `${body.slice(0, 16_000)}\n[Snapshot truncated; scroll and observe again.]`
+  return {
+    snapshot: body.slice(0, SNAPSHOT_MAX_CHARS),
+    truncated: body.length > SNAPSHOT_MAX_CHARS
+  }
 }
 
 function fixedResult(result: CallToolResult): unknown {

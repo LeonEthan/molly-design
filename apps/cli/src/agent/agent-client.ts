@@ -13,6 +13,7 @@ import { Logger } from '@/utils/logger';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
+  MOLLY_BUILTIN_BROWSER_MCP_DESCRIPTION,
   MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION,
   MOLLY_BUILTIN_MCP_CONNECTION,
   MOLLY_BUILTIN_MCP_DESCRIPTION,
@@ -57,9 +58,12 @@ import {
 import { getLocalControlSocketPath } from '@molly/shared/node/local-ipc';
 import { getMollyMcpHttpEndpoint } from '@/mcp/molly-mcp-http-server';
 import {
+  MOLLY_BROWSER_MCP_SERVER_NAME,
   MOLLY_IMAGE_MCP_SERVER_NAME,
   buildMollyMcpHttpHeaders,
+  mollyBrowserMcpHttpUrl,
   mollyImageMcpHttpUrl,
+  type MollyMcpHttpEndpoint,
 } from '@/mcp/molly-mcp-http-protocol';
 import { TerminalManager } from '@/session/terminal-manager';
 import { reportError } from 'src/utils/telemetry';
@@ -490,6 +494,27 @@ export type ImageGenerationEndEvent = {
 
 const IMAGE_GENERATION_REVISED_PROMPT_PREFIX = 'Revised prompt: ';
 
+/** Built-in servers that exist only in design sessions, beside the always-present `molly`. */
+const DESIGN_MCP_SERVERS = [
+  {
+    name: MOLLY_IMAGE_MCP_SERVER_NAME,
+    httpUrl: mollyImageMcpHttpUrl,
+    stdioCommand: 'molly-image-mcp-server',
+    presentation: { mollyMcpDescription: MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION },
+  },
+  {
+    name: MOLLY_BROWSER_MCP_SERVER_NAME,
+    httpUrl: mollyBrowserMcpHttpUrl,
+    stdioCommand: 'molly-browser-mcp-server',
+    presentation: { mollyMcpDescription: MOLLY_BUILTIN_BROWSER_MCP_DESCRIPTION },
+  },
+] as const satisfies ReadonlyArray<{
+  name: string;
+  httpUrl: (endpoint: MollyMcpHttpEndpoint) => string;
+  stdioCommand: string;
+  presentation: { mollyMcpDescription: string };
+}>;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -901,14 +926,12 @@ export class AgentClient implements acp.Client {
         return [
           { type: 'http', name: 'molly', url: endpoint.url, headers },
           ...(designSession
-            ? [
-                {
-                  type: 'http' as const,
-                  name: MOLLY_IMAGE_MCP_SERVER_NAME,
-                  url: mollyImageMcpHttpUrl(endpoint),
-                  headers,
-                },
-              ]
+            ? DESIGN_MCP_SERVERS.map(({ name, httpUrl }) => ({
+                type: 'http' as const,
+                name,
+                url: httpUrl(endpoint),
+                headers,
+              }))
             : []),
         ];
       }
@@ -962,14 +985,12 @@ export class AgentClient implements acp.Client {
         env,
       },
       ...(designSession
-        ? [
-            {
-              name: MOLLY_IMAGE_MCP_SERVER_NAME,
-              command: process.execPath,
-              args: [cliEntrypoint, '__internal', 'molly-image-mcp-server'],
-              env,
-            },
-          ]
+        ? DESIGN_MCP_SERVERS.map(({ name, stdioCommand }) => ({
+            name,
+            command: process.execPath,
+            args: [cliEntrypoint, '__internal', stdioCommand],
+            env,
+          }))
         : []),
     ];
   }
@@ -986,14 +1007,12 @@ export class AgentClient implements acp.Client {
             _meta: {
               ...server._meta,
               mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION,
-              ...(server.name === MOLLY_IMAGE_MCP_SERVER_NAME
-                ? { mollyMcpDescription: MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION }
-                : {
-                    mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
-                    mollyMcpToolExposure: MOLLY_BUILTIN_MCP_TOOL_EXPOSURE.map((rule) => ({
-                      ...rule,
-                    })),
-                  }),
+              ...(DESIGN_MCP_SERVERS.find(({ name }) => name === server.name)?.presentation ?? {
+                mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
+                mollyMcpToolExposure: MOLLY_BUILTIN_MCP_TOOL_EXPOSURE.map((rule) => ({
+                  ...rule,
+                })),
+              }),
             },
           }
         : server

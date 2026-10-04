@@ -68,10 +68,10 @@ async function main(): Promise<void> {
   const execute = (command: AgentBrowserCommand) => browser.executeAgentCommand(scope, command)
   const snapshot = async (): Promise<string> => {
     const reply = await execute({ kind: 'snapshot' })
-    assert.equal(reply.kind, 'text')
-    if (reply.kind !== 'text') throw new Error('Missing native snapshot')
-    assert.doesNotMatch(reply.text, /PRIVATE_APP_SENTINEL/)
-    return reply.text
+    assert.equal(reply.kind, 'snapshot')
+    if (reply.kind !== 'snapshot') throw new Error('Missing native snapshot')
+    assert.doesNotMatch(reply.snapshot, /PRIVATE_APP_SENTINEL/)
+    return reply.snapshot
   }
   const ref = (text: string, label: string): string => {
     const line = text

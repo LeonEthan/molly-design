@@ -6548,18 +6548,15 @@ export class MessageHandler {
               type: 'browser/execute' as const,
               ok: true as const,
               reply: {
-                kind: 'text' as const,
-                text: JSON.stringify({
-                  pageUrl: outcome.reply.pageUrl,
-                  imageUrl: outcome.reply.imageUrl,
-                  path: asset.path,
-                  sha256: asset.sha256,
-                  mimeType: asset.mimeType,
-                  width: asset.width,
-                  height: asset.height,
-                  bytes: asset.bytes,
-                  note: 'Saved image bytes in the current design media directory. This does not modify or commit the canvas.',
-                }),
+                kind: 'saved_image' as const,
+                pageUrl: outcome.reply.pageUrl,
+                imageUrl: outcome.reply.imageUrl,
+                path: asset.path,
+                sha256: asset.sha256,
+                mimeType: asset.mimeType,
+                width: asset.width,
+                height: asset.height,
+                bytes: asset.bytes,
               },
             };
           } catch (error) {

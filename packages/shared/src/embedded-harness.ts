@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { McpConnectionSpec } from './workspace-mcp';
 import { ImageConnectionProtocolSchema } from '#image-connection';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
@@ -303,6 +304,33 @@ export const StoredMcpCredentialSchema = z
       JSON.stringify([...value.connection.fieldNames].sort()) ===
       JSON.stringify(Object.keys(value.values).sort())
   );
+
+/** The public destination a protected credential is bound to. */
+export const mcpConnectionDestination = (
+  connection: McpConnectionSpec
+): McpCredentialDestination =>
+  connection.transport === 'http'
+    ? { transport: 'http', url: connection.url }
+    : { transport: 'stdio', command: connection.command, args: connection.args ?? [] };
+
+export const sameMcpDestination = (
+  left: McpCredentialDestination,
+  right: McpCredentialDestination
+): boolean => {
+  if (left.transport === 'http') return right.transport === 'http' && left.url === right.url;
+  if (right.transport === 'http') return false;
+  return (
+    left.command === right.command &&
+    left.args.length === right.args.length &&
+    left.args.every((arg, index) => arg === right.args[index])
+  );
+};
+
+/** Legacy rows may hold values outside protected storage (`${VAR}`, passthrough, plaintext). */
+export const hasUnprotectedMcpValues = (connection: McpConnectionSpec): boolean =>
+  connection.transport === 'stdio'
+    ? Object.keys(connection.env ?? {}).length > 0 || (connection.envPassthrough?.length ?? 0) > 0
+    : Object.keys(connection.headers ?? {}).length > 0 || connection.bearerToken !== undefined;
 
 /** Settings-only tool listing: one saved server, initialize and `tools/list` only (A5). */
 export const MCP_TOOL_DISCOVERY_LIMITS = {

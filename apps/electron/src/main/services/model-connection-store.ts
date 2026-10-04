@@ -15,6 +15,7 @@ import {
   SaveMcpCredentialSchema,
   DeleteMcpCredentialSchema,
   StoredMcpCredentialSchema,
+  sameMcpDestination,
   type McpCredentialBinding,
   type SaveMcpCredential,
   type ProtectedImageConnection,
@@ -467,17 +468,4 @@ export class ModelConnectionStore {
       return entry
     })
   }
-}
-
-function sameMcpDestination(
-  left: McpCredentialBinding['destination'],
-  right: McpCredentialBinding['destination']
-): boolean {
-  if (left.transport === 'http') return right.transport === 'http' && left.url === right.url
-  if (right.transport === 'http') return false
-  return (
-    left.command === right.command &&
-    left.args.length === right.args.length &&
-    left.args.every((arg, index) => arg === right.args[index])
-  )
 }

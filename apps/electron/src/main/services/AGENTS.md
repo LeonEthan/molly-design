@@ -22,8 +22,8 @@ explicit main-only settings checks of the saved destination.
 MCP values share this vault, bound to workspace, server, destination and revision;
 a changed URL or stdio command/args needs renewed input. Settings IPC derives
 the local workspace, returning no values. Acquisition needs the selected Session and
-worker epoch, except explicit Settings tool listing of the exact saved binding, its
-values going only to the private CLI helper's stdin. Saving enables nothing. Header framing
+worker epoch, except explicit Settings tool listing of the catalog row's exact binding,
+values going only to the CLI helper's stdin. Saving enables nothing. Header framing
 and isolated-process env fields cannot be credentials. Reject writes past the
 vault read limit.
 

@@ -18,6 +18,7 @@ import {
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
+import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import { readLocalPlatformSnapshot } from '../../platform'
 import { resolveBundledCliEntry } from '../../services/cli-service'
@@ -88,10 +89,24 @@ export class ModelConnectionsIpc extends IpcService {
     const abort = () => closed.abort()
     sender.once('destroyed', abort)
     try {
+      const workspaceId = await localWorkspaceId()
       return await listMcpTools(input, {
-        workspaceId: await localWorkspaceId(),
+        workspaceId,
         store: getModelConnectionStore(),
         signal: closed.signal,
+        readCatalogEntry: async (serverId) => {
+          const machineId = await cliService.getLocalMachineId()
+          if (!machineId) return undefined
+          const answer = await cliService.sendLocalMachineRpc({
+            machineId,
+            workspaceId,
+            method: 'mcp/catalog-entry',
+            params: { serverId }
+          })
+          if (!answer.ok) return undefined
+          const parsed = McpCatalogEntryResultSchema.safeParse(answer.result)
+          return parsed.success ? parsed.data.connection : undefined
+        },
         runHelper: (request, limits) =>
           cliService.runPrivateHelper(['__internal', 'mcp-list-tools'], request, limits)
       })

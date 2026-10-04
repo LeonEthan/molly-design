@@ -1,5 +1,7 @@
 import type { McpConnectionSpec, WorkspaceMcpServerMeta } from '@molly/shared';
 import {
+  hasUnprotectedMcpValues,
+  mcpConnectionDestination,
   McpCredentialBindingSchema,
   type McpCredentialDestination,
   type McpToolDiscoveryResult,
@@ -95,18 +97,11 @@ export async function listSavedMcpTools(
 ): Promise<McpToolDiscoveryResult> {
   const connection = entry.connection;
   if (!lister) return { ok: false, reason: 'unavailable' };
-  if (
-    !connection ||
-    (connection.transport === 'stdio' &&
-      (Object.keys(connection.env ?? {}).length > 0 ||
-        (connection.envPassthrough?.length ?? 0) > 0)) ||
-    (connection.transport === 'http' &&
-      (Object.keys(connection.headers ?? {}).length > 0 || connection.bearerToken !== undefined))
-  )
+  if (!connection || hasUnprotectedMcpValues(connection))
     return { ok: false, reason: 'unsupported' };
   return lister.listMcpTools({
     serverId: entry.id,
-    destination: destination(connection),
+    destination: mcpConnectionDestination(connection),
     ...(connection.protectedCredentials
       ? { protectedCredentials: connection.protectedCredentials }
       : {}),

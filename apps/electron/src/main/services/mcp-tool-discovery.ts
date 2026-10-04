@@ -1,4 +1,8 @@
+import type { McpConnectionSpec } from '@molly/shared'
 import {
+  hasUnprotectedMcpValues,
+  mcpConnectionDestination,
+  sameMcpDestination,
   ListMcpToolsSchema,
   McpToolDiscoveryResultSchema,
   type McpToolDiscoveryRequest,
@@ -24,26 +28,42 @@ const HELPER_FAILURES = {
 
 /**
  * Settings-only and explicit: list one saved MCP server's tools through the bundled CLI helper.
- * Vault values go only to the exact binding the renderer named; the reply is secret-free.
+ * The daemon's catalog row, not the caller, names what runs; vault values go only to that exact
+ * binding, and the reply is secret-free.
  */
 export async function listMcpTools(
   input: unknown,
   deps: {
     workspaceId: string
     store: Pick<ModelConnectionStore, 'mcpValuesForDiscovery'>
+    /** The saved catalog row's connection; null when absent, undefined when unreadable. */
+    readCatalogEntry: (serverId: string) => Promise<McpConnectionSpec | null | undefined>
     runHelper: DiscoveryHelper
     signal?: AbortSignal
   }
 ): Promise<McpToolDiscoveryResult> {
   const parsed = ListMcpToolsSchema.safeParse(input)
   if (!parsed.success) return { ok: false, reason: 'unsupported' }
-  const { serverId, destination, protectedCredentials } = parsed.data
+  const { serverId, destination: requested, protectedCredentials: expected } = parsed.data
+  const saved = await deps.readCatalogEntry(serverId)
+  if (saved === undefined) return { ok: false, reason: 'unavailable' }
+  if (saved === null) return { ok: false, reason: 'changed' }
+  if (hasUnprotectedMcpValues(saved)) return { ok: false, reason: 'unsupported' }
+  const destination = mcpConnectionDestination(saved)
+  const protectedCredentials = saved.protectedCredentials
+  if (
+    !sameMcpDestination(destination, requested) ||
+    protectedCredentials?.credentialRef !== expected?.credentialRef ||
+    protectedCredentials?.revision !== expected?.revision
+  )
+    return { ok: false, reason: 'changed' }
   let request: McpToolDiscoveryRequest = { destination }
   if (protectedCredentials) {
     const values = await deps.store.mcpValuesForDiscovery({
       workspaceId: deps.workspaceId,
       serverId,
-      ...protectedCredentials,
+      credentialRef: protectedCredentials.credentialRef,
+      revision: protectedCredentials.revision,
       destination
     })
     if (!values) return { ok: false, reason: 'changed' }

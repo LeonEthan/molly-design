@@ -662,9 +662,30 @@ void test('Settings tool listing sends saved values only for the exact binding a
   })
   const sent = []
   const tools = { ok: true, truncated: false, tools: [{ name: 'search', readOnlyHint: true }] }
+  const catalog = new Map([
+    [
+      saved.serverId,
+      {
+        transport: 'http',
+        url: mcpInput.destination.url,
+        protectedCredentials: { credentialRef: saved.credentialRef, revision: saved.revision }
+      }
+    ],
+    [
+      other.serverId,
+      {
+        transport: 'stdio',
+        command: '/synthetic/mcp',
+        args: ['--stdio'],
+        protectedCredentials: { credentialRef: other.credentialRef, revision: other.revision }
+      }
+    ],
+    ['synthetic-plain', { transport: 'stdio', command: 'x' }]
+  ])
   const deps = {
     workspaceId: mcpInput.workspaceId,
     store,
+    readCatalogEntry: async (serverId) => catalog.get(serverId) ?? null,
     runHelper: async (request) => {
       sent.push(JSON.parse(request))
       return { kind: 'exited', stdout: `${JSON.stringify(tools)}\n` }
@@ -703,6 +724,43 @@ void test('Settings tool listing sends saved values only for the exact binding a
   assert.deepEqual(sent.at(-1), { destination: plain.destination })
 })
 
+void test('Settings tool listing runs only what the saved catalog row names', async () => {
+  const request = {
+    serverId: 'synthetic',
+    destination: { transport: 'stdio', command: '/bin/sh', args: ['-c', 'arbitrary'] }
+  }
+  const deps = (connection) => ({
+    workspaceId: 'synthetic-workspace',
+    store: { mcpValuesForDiscovery: async () => null },
+    readCatalogEntry: async () => connection,
+    runHelper: async () => assert.fail('the helper must not start')
+  })
+  const saved = { transport: 'stdio', command: '/bin/sh', args: ['-c', 'arbitrary'] }
+  assert.deepEqual(await listMcpTools(request, deps(null)), { ok: false, reason: 'changed' })
+  assert.deepEqual(
+    await listMcpTools(request, deps({ transport: 'stdio', command: '/synthetic/saved' })),
+    { ok: false, reason: 'changed' }
+  )
+  assert.deepEqual(await listMcpTools(request, deps({ ...saved, env: { A: 'b' } })), {
+    ok: false,
+    reason: 'unsupported'
+  })
+  assert.deepEqual(await listMcpTools(request, deps(undefined)), {
+    ok: false,
+    reason: 'unavailable'
+  })
+  assert.deepEqual(
+    await listMcpTools(
+      {
+        ...request,
+        protectedCredentials: { credentialRef: '00000000-0000-4000-8000-000000000001', revision: 1 }
+      },
+      deps(saved)
+    ),
+    { ok: false, reason: 'changed' }
+  )
+})
+
 void test('Settings tool listing maps helper failures to fixed reasons, never to an empty list', async () => {
   const request = {
     serverId: 'synthetic',
@@ -712,6 +770,7 @@ void test('Settings tool listing maps helper failures to fixed reasons, never to
     listMcpTools(request, {
       workspaceId: 'synthetic-workspace',
       store: { mcpValuesForDiscovery: async () => null },
+      readCatalogEntry: async () => ({ transport: 'http', url: 'https://mcp.invalid/mcp' }),
       runHelper: async () => outcome
     })
   assert.deepEqual(await answer({ kind: 'timed_out' }), { ok: false, reason: 'timed_out' })
@@ -737,6 +796,7 @@ void test('Settings tool listing maps helper failures to fixed reasons, never to
       {
         workspaceId: 'synthetic-workspace',
         store: { mcpValuesForDiscovery: async () => null },
+        readCatalogEntry: async () => assert.fail('an invalid request must not read the catalog'),
         runHelper: async () => assert.fail('an invalid request must not start the helper')
       }
     ),

@@ -23,7 +23,19 @@ import {
  */
 const MAX_REQUEST_BYTES = 128 * 1024;
 const HELPER_DEADLINE_MS = 20_000;
-const MIN_SECRET_ECHO_CHARS = 6;
+const MIN_SECRET_ECHO_CHARS = 4;
+const AUTH_SCHEME = /^(?:bearer|basic|token)\s+(.+)$/i;
+
+/** Every saved value, plus the bare token inside an `Authorization`-style header value. */
+export function secretFragments(values: Readonly<Record<string, string>>): string[] {
+  const fragments = Object.values(values).flatMap((value) => {
+    const token = AUTH_SCHEME.exec(value.trim())?.[1]?.trim();
+    return token ? [value, token] : [value];
+  });
+  return [
+    ...new Set(fragments.filter((fragment) => fragment.length >= MIN_SECRET_ECHO_CHARS)),
+  ].sort((left, right) => right.length - left.length);
+}
 
 export function buildDiscoveryTransport(request: McpToolDiscoveryRequest): Transport {
   const { destination, values = {} } = request;
@@ -146,7 +158,7 @@ export async function runMcpToolDiscovery(): Promise<void> {
   const request = await readRequest();
   const result: McpToolDiscoveryResult = request
     ? await Promise.race([
-        discoverMcpTools(buildDiscoveryTransport(request), Object.values(request.values ?? {})),
+        discoverMcpTools(buildDiscoveryTransport(request), secretFragments(request.values ?? {})),
         new Promise<McpToolDiscoveryResult>((resolve) =>
           setTimeout(() => resolve({ ok: false, reason: 'timed_out' }), HELPER_DEADLINE_MS).unref()
         ),

@@ -7,6 +7,7 @@ import {
   AgentBrowserRpcResultSchema,
 } from './browser-agent-rpc';
 import { PublicImageConnectionSchema } from './image-connection';
+import { isMcpConnectionSpec, type McpConnectionSpec } from './workspace-mcp';
 import { z } from 'zod';
 import { HarnessHostExchangeSchema, HarnessHostResultSchema } from './embedded-harness';
 import {
@@ -462,6 +463,12 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
       .strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('mcp/catalog-entry'),
+    params: z
+      .object({ serverId: z.string().min(1).max(200) })
+      .strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('harness/host'),
     params: HarnessHostExchangeSchema,
   }).strict(),
@@ -642,7 +649,16 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
 export type LocalMachineRpcRequest = z.infer<typeof LocalMachineRpcRequestSchema>;
 export type LocalMachineRpcRequestValidated = LocalMachineRpcRequest;
 
+/** Main-only: the saved catalog row's public connection, the sole source for Settings listing. */
+export const McpCatalogEntryResultSchema = z
+  .object({
+    type: z.literal('mcp/catalog-entry'),
+    connection: z.custom<McpConnectionSpec>(isMcpConnectionSpec).nullable(),
+  })
+  .strict();
+
 export const LocalMachineRpcResultSchema = z.union([
+  McpCatalogEntryResultSchema,
   z
     .object({ type: z.literal('memory/preferences'), snapshot: PersonalMemorySnapshotSchema })
     .strict(),

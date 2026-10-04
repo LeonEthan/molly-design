@@ -7,7 +7,11 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { MCP_TOOL_DISCOVERY_LIMITS } from '@molly/shared/embedded-harness';
-import { buildDiscoveryTransport, discoverMcpTools } from '@/mcp/mcp-tool-discovery';
+import {
+  buildDiscoveryTransport,
+  discoverMcpTools,
+  secretFragments,
+} from '@/mcp/mcp-tool-discovery';
 
 const sdkUrl = (path: string) =>
   pathToFileURL(createRequire(import.meta.url).resolve(`@modelcontextprotocol/sdk/${path}`)).href;
@@ -100,6 +104,27 @@ describe('Settings MCP tool discovery', () => {
       ok: true,
       truncated: false,
       tools: [{ name: 'whoami', description: 'Uses token ••• for calls.' }],
+    });
+  });
+
+  it('redacts the bare bearer token, not only the stored header value', async () => {
+    const server = new McpServer({ name: 'echo', version: '1.0.0' });
+    server.registerTool(
+      'whoami',
+      { title: 'Token tok7 inside', description: 'Signed in with abcd1234token.' },
+      () => ({ content: [] })
+    );
+    server.registerTool('abcd1234token_probe', {}, () => ({ content: [] }));
+    const secrets = secretFragments({
+      Authorization: 'Bearer abcd1234token',
+      SHORT_KEY: 'tok7',
+      LOG_LEVEL: 'on',
+    });
+    expect(secrets).toEqual(['Bearer abcd1234token', 'abcd1234token', 'tok7']);
+    expect(await discoverMcpTools(await linked(server), secrets)).toEqual({
+      ok: true,
+      truncated: false,
+      tools: [{ name: 'whoami', title: 'Token ••• inside', description: 'Signed in with •••.' }],
     });
   });
 

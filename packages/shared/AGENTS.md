@@ -34,7 +34,7 @@ selection, or Role dispatch. These contracts bind producers and consumers.
 
 ## Embedded harness credentials
 
-`harness/host` v1 is main-process-only; renderer generic Machine RPC rejects it.
+`harness/host` v1 and `mcp/catalog-entry` are main-process-only; renderer Machine RPC rejects them.
 It carries ciphertext-store metadata and in-memory credential reports over the
 owner-only local control socket, never Loro. Only a dispatcher-owned active
 model run/epoch lease or selected MCP session/epoch lease can consume a matching report

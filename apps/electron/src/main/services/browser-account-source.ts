@@ -73,8 +73,16 @@ function selectedSources(
   const sources = profiles[0].sources.filter((entry) => entry.selected)
   if (sources.length === 0 || sources.some((entry) => entry.status !== 'succeeded'))
     throw new Error('Molly could not read this browser profile’s cookies.')
+  const requestIssues = report.issues.filter(
+    (issue) =>
+      !(
+        issue.code === 'profile_excluded_service_directory' &&
+        issue.stage === 'discovery' &&
+        issue.profileId === null
+      )
+  )
   if (
-    [...report.issues, ...profiles[0].issues, ...sources.flatMap((entry) => entry.issues)].some(
+    [...requestIssues, ...profiles[0].issues, ...sources.flatMap((entry) => entry.issues)].some(
       (issue) => issue.severity === 'error' || issue.code === 'decrypt_failed'
     )
   )

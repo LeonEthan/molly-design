@@ -1,7 +1,5 @@
 import type { McpServerId } from './ids';
 import { mcpCredentialMatchesServer, type McpCredentialBinding } from './embedded-harness';
-import { McpImageBindingSchema, type McpImageBinding } from './mcp-image-binding';
-export { McpImageBindingSchema, type McpImageBinding } from './mcp-image-binding';
 
 /**
  * Molly supports stdio and Streamable HTTP MCP servers. SSE is intentionally
@@ -45,8 +43,6 @@ export type WorkspaceMcpServerMeta = {
   transport: McpTransport;
   description?: string;
   connection?: McpConnectionSpec;
-  /** Explicit image-tool mapping; does not attest asset import or service support. */
-  imageBinding?: McpImageBinding;
   enabledByDefault?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -57,7 +53,8 @@ export type ResolvedStdioMcpServer = {
   _meta?: {
     mollyConnection: { id: string; revision: number };
     mollyMcpCredential?: McpCredentialBinding;
-    mollyImageBinding?: McpImageBinding;
+    /** Catalog `description`, forwarded as Pi's one-line server summary. */
+    mollyMcpDescription?: string;
   };
   name: string;
   command: string;
@@ -69,7 +66,8 @@ export type ResolvedHttpMcpServer = {
   _meta?: {
     mollyConnection: { id: string; revision: number };
     mollyMcpCredential?: McpCredentialBinding;
-    mollyImageBinding?: McpImageBinding;
+    /** Catalog `description`, forwarded as Pi's one-line server summary. */
+    mollyMcpDescription?: string;
   };
   type: 'http';
   name: string;
@@ -192,8 +190,6 @@ export const isWorkspaceMcpServerMeta = (value: unknown): value is WorkspaceMcpS
     (value.revision !== undefined &&
       (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1)) ||
     (value.description !== undefined && typeof value.description !== 'string') ||
-    (value.imageBinding !== undefined &&
-      !McpImageBindingSchema.safeParse(value.imageBinding).success) ||
     (value.enabledByDefault !== undefined && typeof value.enabledByDefault !== 'boolean') ||
     (value.createdBy !== undefined && typeof value.createdBy !== 'string')
   ) {

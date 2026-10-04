@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Molly × Pi 1.0 — MCP, image models and browser redesign</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --paper: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #d6d6d0;
+    --band: #f1f1ec; --band-ink: #8a8a84;
+    --match: #1a7f5a; --adapt: #2f6fdb; --new: #7a4fd6; --diverge: #c2410c; --defer: #8a8a8e; --pain: #d70015;
+    --match-bg: #e7f4ee; --adapt-bg: #e8effc; --new-bg: #f1ebfc; --diverge-bg: #fbeee6; --defer-bg: #efeff0; --pain-bg: #fde8ea;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --paper: #1c1c1e; --ink: #ececec; --muted: #a0a0a5; --line: #3a3a3c;
+      --band: #232325; --band-ink: #8e8e93;
+      --match: #4cc38a; --adapt: #6b9cff; --new: #b394ff; --diverge: #ff8a4c; --defer: #9a9aa0; --pain: #ff5b6b;
+      --match-bg: #16301f; --adapt-bg: #172440; --new-bg: #261b40; --diverge-bg: #3a2014; --defer-bg: #2a2a2d; --pain-bg: #3d1419;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); }
+  main { max-width: 1240px; margin: 0 auto; padding: 40px 28px 80px; }
+  header.hero { padding: 8px 0 28px; border-bottom: 1px solid var(--line); margin-bottom: 32px; }
+  .eyebrow { font: 600 12px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-size: 34px; line-height: 1.15; margin: 10px 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 24px; margin: 56px 0 6px; letter-spacing: -.005em; }
+  h3 { font-size: 17px; margin: 22px 0 8px; }
+  p.lede { font-size: 17px; color: var(--muted); max-width: 860px; margin: 0; }
+  .meta { margin-top: 14px; font-size: 13px; color: var(--muted); }
+  .meta a { color: inherit; }
+  code, .mono { font-family: var(--mono); font-size: .88em; }
+  a { color: var(--adapt); }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+  nav.toc a { text-decoration: none; color: var(--ink); border: 1px solid var(--line); background: var(--paper);
+    padding: 5px 11px; border-radius: 999px; font-size: 13px; }
+  nav.toc a:hover { border-color: var(--ink); }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14px; }
+  .card .shift { margin-top: 10px; font-size: 13.5px; color: var(--ink); }
+  .section-intro { color: var(--muted); max-width: 900px; margin: 0 0 18px; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  figure { margin: 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 14px 10px; }
+  figcaption { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 4px 8px; }
+  figcaption b { font-size: 14px; letter-spacing: .02em; }
+  figcaption span { font-size: 12.5px; color: var(--muted); }
+  svg.dia { width: 100%; height: auto; display: block; }
+  .notes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 14px; }
+  .notes ul { margin: 0; padding-left: 18px; }
+  .notes li { margin: 4px 0; font-size: 14px; }
+  .box { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .box h4 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .chip { display: inline-block; font: 600 11px/1 var(--sans); padding: 4px 7px; border-radius: 999px; letter-spacing: .02em; white-space: nowrap; }
+  .c-match { color: var(--match); background: var(--match-bg); }
+  .c-adapt { color: var(--adapt); background: var(--adapt-bg); }
+  .c-new { color: var(--new); background: var(--new-bg); }
+  .c-diverge { color: var(--diverge); background: var(--diverge-bg); }
+  .c-defer { color: var(--defer); background: var(--defer-bg); }
+  .c-pain { color: var(--pain); background: var(--pain-bg); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin: 8px 0 14px; align-items: center; }
+  .legend .sw { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); background: var(--band); }
+  tr:last-child td { border-bottom: none; }
+  .align-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .align { background: var(--paper); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .align.match { border-left-color: var(--match); }
+  .align.partial { border-left-color: var(--adapt); }
+  .align.diverge { border-left-color: var(--diverge); }
+  .align.defer { border-left-color: var(--defer); }
+  .align .hd { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+  .align .hd b { font-size: 14.5px; }
+  .align p { margin: 6px 0 0; font-size: 13.5px; color: var(--muted); }
+  .phases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .phase { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .phase h4 { margin: 0 0 6px; font-size: 15px; }
+  .phase ul { margin: 0; padding-left: 18px; font-size: 13.5px; }
+  .sources { font-size: 13px; color: var(--muted); columns: 2; column-gap: 32px; }
+  .sources li { margin: 3px 0; break-inside: avoid; }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+
+  /* SVG vocabulary */
+  .dia text { font-family: var(--sans); fill: var(--ink); }
+  .dia .band { fill: var(--band); }
+  .dia .bandlbl { font: 700 9.5px var(--sans); letter-spacing: .12em; fill: var(--band-ink); }
+  .dia .n rect { fill: var(--paper); stroke: var(--line); stroke-width: 1.2; }
+  .dia .n .t { font-size: 12px; font-weight: 600; }
+  .dia .n .s { font-size: 10.2px; fill: var(--muted); }
+  .dia .n .m { font-family: var(--mono); font-size: 9.6px; fill: var(--muted); }
+  .dia .n.chg rect { stroke: var(--new); stroke-width: 1.8; fill: var(--new-bg); }
+  .dia .n.keep rect { stroke-dasharray: 0; opacity: .75; }
+  .dia .n.keep .t, .dia .n.keep .s { opacity: .7; }
+  .dia .n.bad rect { stroke: var(--pain); stroke-dasharray: 4 3; fill: var(--pain-bg); }
+  .dia .n.gone rect { stroke: var(--defer); stroke-dasharray: 3 3; fill: transparent; }
+  .dia .n.gone .t, .dia .n.gone .s { fill: var(--defer); text-decoration: line-through; }
+  .dia .n.b2 rect { stroke: var(--new); stroke-dasharray: 5 4; fill: transparent; }
+  .dia .e { stroke: var(--muted); stroke-width: 1.4; fill: none; marker-end: url(#arr); }
+  .dia .e.bad { stroke: var(--pain); stroke-dasharray: 5 4; marker-end: url(#arr-bad); }
+  .dia .e.good { stroke: var(--match); stroke-width: 1.8; marker-end: url(#arr-good); }
+  .dia .e.b2 { stroke: var(--new); stroke-dasharray: 5 4; marker-end: url(#arr-new); }
+  .dia .el { font-size: 9.6px; fill: var(--muted); }
+  .dia .el.bad { fill: var(--pain); }
+  .dia .el.good { fill: var(--match); }
+  .dia .el.b2 { fill: var(--new); }
+  .dia .pin circle { fill: var(--pain); }
+  .dia .pin text { fill: #fff; font: 700 8.5px var(--sans); }
+  .dia .x { stroke: var(--pain); stroke-width: 2; }
+  .map .lbl { font-size: 11.5px; }
+  .map .lblm { font-family: var(--mono); font-size: 10.5px; }
+  .map .col { font: 700 10px var(--sans); letter-spacing: .12em; fill: var(--band-ink); }
+  .map rect.l { fill: var(--paper); stroke: var(--line); }
+  .map .ln { stroke-width: 2.2; fill: none; }
+  .map .tag { font: 700 9.5px var(--sans); }
+  @media (max-width: 920px) {
+    .cards, .pair, .notes, .align-grid, .phases { grid-template-columns: 1fr; }
+    .sources { columns: 1; }
+  }
+</style>
+</head>
+<body>
+<!-- shared SVG markers -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a8a8e"/></marker>
+    <marker id="arr-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d70015"/></marker>
+    <marker id="arr-good" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1a7f5a"/></marker>
+    <marker id="arr-new" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#7a4fd6"/></marker>
+  </defs>
+</svg>
+
+<main>
+<header class="hero">
+  <div class="eyebrow">Research &amp; design · not implemented · 2026-10-03</div>
+  <h1>Rethinking MCP, image models and the browser in Molly's harness, aligned with Pi&nbsp;1.0</h1>
+  <p class="lede">Molly already <em>runs</em> Pi natively: Codemode on, native MCP and tool search, no second client, no paid retries.
+  What still differs is how Molly <em>presents</em> its capabilities to Pi and how it <em>models</em> image generation.
+  This report shows each area before and after, maps Pi primitives onto Molly components, and lists
+  where Molly matches Pi's philosophy and where it diverges on purpose.</p>
+  <div class="meta">Baseline: Molly <code>main@a5740c08</code> pinned to Pi <code>1.0.0</code> · Pi sources cited at tag <code>v1.0.0</code> ·
+    Details: <a href="../research/pi-1.0-design.md">pi-1.0-design.md</a> · <a href="../research/current-design.md">current-design.md</a> · <a href="../research/redesign-proposal.md">redesign-proposal.md</a></div>
+  <nav class="toc">
+    <a href="#summary">Summary</a><a href="#pi">Pi 1.0 primitives</a><a href="#mcp">Generic MCP</a><a href="#image">Image models</a>
+    <a href="#browser">Browser</a><a href="#topology">Server topology</a><a href="#mapping">Concept mapping</a><a href="#alignment">Philosophy alignment</a>
+    <a href="#phases">Phasing</a><a href="#second-opinion">Second opinion</a><a href="#sources">Sources</a>
+  </nav>
+</header>
+
+<section id="summary">
+  <div class="eyebrow">At a glance</div>
+  <div class="cards">
+    <div class="card">
+      <h3>Generic MCP</h3>
+      <p>Catalog rows reach Pi without <code>description</code> or <code>exposure</code>, so every server, Molly's own included, gets Pi's default <code>codemode</code> exposure with a bare one-line listing.</p>
+      <div class="shift"><b>Redesign:</b> the catalog row becomes a lossless superset of a Pi <code>mcpServers</code> entry (<code>description</code>, <code>exposure</code>, <code>toolExposure</code>). Delete dead <code>imageBinding</code>.</div>
+    </div>
+    <div class="card">
+      <h3>Image models</h3>
+      <p>Images are MCP tools on the built-in server, while Pi's own <code>models.generateImages()</code> is also live in every script and unmanaged.</p>
+      <div class="shift"><b>Redesign:</b> B1 uses a dedicated <code>molly_image</code> namespace with structured results and suppresses Pi's built-in image models. B2 makes it a Pi image provider once Codemode can pass per-call options.</div>
+    </div>
+    <div class="card">
+      <h3>Browser automation</h3>
+      <p>One flattened seven-way <code>molly_browser</code> tool. By default every snapshot (up to 16&nbsp;KB) or screenshot lands in context, and scripts can filter only by regex over untyped text.</p>
+      <div class="shift"><b>Redesign:</b> a <code>molly_browser</code> namespace of seven single-purpose tools with annotations and structured snapshots, so scripts filter before the model sees anything. Transport unchanged.</div>
+    </div>
+  </div>
+</section>
+
+<section id="pi">
+  <h2>Pi 1.0 primitives that drive the redesign</h2>
+  <p class="section-intro">Pi rejected MCP until it could be composed. 1.0 adopts it through <b>Codemode</b>: a QuickJS script calls tools and non-chat models, and only the script's output reaches the model. MCP servers default to being reachable <em>only</em> from scripts.</p>
+  <table>
+    <thead><tr><th style="width:26%">Primitive</th><th>What it does</th><th style="width:16%">Source</th></tr></thead>
+    <tbody>
+      <tr><td><code>exposure</code> / <code>toolExposure</code></td><td><code>codemode</code> (default): scripts only. <code>deferred</code>: loaded by <code>tool_search</code>. <code>direct</code>: declared like a built-in. <code>hidden</code>: unreachable. Per-tool patterns override.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/mcp.md">mcp.md</a></td></tr>
+      <tr><td><code>description</code> → <code>mcp_servers</code> section</td><td>One prompt line per indirect server: <code>- mcp__name (codemode): summary</code>. Changes are appended so earlier messages stay cached.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/mcp.md">mcp.md</a></td></tr>
+      <tr><td><code>codemode</code> tool</td><td>Raw JS in a QuickJS sandbox with no fs, network or timers. <code>tools.*</code>, <code>searchTools</code>, <code>describeNamespace</code>, <code>store</code>, <code>models</code>. Output is bounded. Calls are real and never undone.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/codemode.md">codemode.md</a></td></tr>
+      <tr><td><code>outputSchema</code> / <code>structuredContent</code></td><td>Scripts receive structured values instead of text. The model still sees <code>content</code>.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md">extensions.md</a></td></tr>
+      <tr><td><code>models.generateImages()</code></td><td>Image models are a model type reached only from Codemode. They use session credentials, and usage counts toward session cost. Results are not saved. Input is <code>{ input }</code> only.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/models.md">models.md</a></td></tr>
+      <tr><td><code>registerProvider({ images })</code></td><td>Extensions add any image backend as <code>type: "image"</code> models with an <code>images</code> implementation.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/custom-provider.md">custom-provider.md</a></td></tr>
+      <tr><td>MCP annotations + <code>tool_call</code></td><td>No built-in prompts. Permission policy is an extension that reads <code>readOnlyHint</code> and <code>destructiveHint</code>.</td><td><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/security.md">security.md</a></td></tr>
+      <tr><td>Browser</td><td>Not shipped. The established idiom is small CLI scripts plus a README skill, or MCP filtered through Codemode.</td><td><a href="https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/">Zechner 2025</a></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ======================= GENERIC MCP ======================= -->
+<section id="mcp">
+  <h2>1 · Generic MCP connections</h2>
+  <p class="section-intro">The catalog in the workspace Flock document stays Molly's single editable truth. The change is what that row carries into Pi.</p>
+  <div class="legend">
+    <span><span class="chip c-new">changed / new</span></span>
+    <span><span class="chip c-pain">pain point</span></span>
+    <span><span class="sw" style="border-color:var(--muted)"></span>data flow</span>
+  </div>
+  <div class="pair">
+    <figure>
+      <figcaption><b>BEFORE</b><span>presentation fields dropped at the ACP boundary</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Generic MCP before">
+        <rect class="band" x="0" y="8" width="600" height="86" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON</text>
+        <rect class="band" x="0" y="102" width="600" height="122" rx="8"/><text class="bandlbl" x="10" y="116">CLI DAEMON</text>
+        <rect class="band" x="0" y="232" width="600" height="150" rx="8"/><text class="bandlbl" x="10" y="246">PI WORKER · harness-pi</text>
+        <rect class="band" x="0" y="390" width="600" height="72" rx="8"/><text class="bandlbl" x="10" y="404">MCP SERVERS</text>
+
+        <g class="n"><rect x="20" y="30" width="180" height="54" rx="8"/><text class="t" x="32" y="52">Settings › MCP</text><text class="m" x="32" y="70">mcp-setting.tsx</text></g>
+        <g class="n"><rect x="250" y="30" width="170" height="54" rx="8"/><text class="t" x="262" y="52">Main-process vault</text><text class="m" x="262" y="70">protectedCredentials</text></g>
+        <path class="e" d="M200,57 L248,57"/><text class="el" x="206" y="51">secrets</text>
+
+        <g class="n"><rect x="20" y="124" width="200" height="90" rx="8"/><text class="t" x="32" y="144">Workspace MCP catalog</text>
+          <text class="s" x="32" y="162">name · transport · connection</text><text class="s" x="32" y="177">description · enabledByDefault</text><text class="s" x="32" y="192" style="fill:var(--pain)">imageBinding (dead)</text><text class="m" x="32" y="206">workspace-mcp.ts:39</text></g>
+        <g class="n"><rect x="240" y="124" width="160" height="90" rx="8"/><text class="t" x="252" y="144">session-mcp-resolver</text>
+          <text class="s" x="252" y="162">per-turn mcpServerIds</text><text class="s" x="252" y="177">catalog fence:</text><text class="s" x="252" y="192">change ⇒ retire worker</text></g>
+        <g class="n"><rect x="420" y="124" width="160" height="90" rx="8"/><text class="t" x="432" y="144">agent-client</text>
+          <text class="s" x="432" y="162">built-in molly +</text><text class="s" x="432" y="177">selected servers</text><text class="s" x="432" y="192">→ ACP mcpServers</text></g>
+        <path class="e" d="M110,84 L110,122"/>
+        <path class="e" d="M220,169 L238,169"/><path class="e" d="M400,169 L418,169"/>
+
+        <g class="n"><rect x="420" y="254" width="160" height="58" rx="8"/><text class="t" x="432" y="274">PiAcpHost · acpMcpConfig</text><text class="s" x="432" y="291">fd-3 secrets → literal</text><text class="s" x="432" y="304">env / headers</text></g>
+        <g class="n bad"><rect x="230" y="254" width="172" height="58" rx="8"/><text class="t" x="242" y="274">registerMcpServer()</text><text class="s" x="242" y="291">{ command | url, headers }</text><text class="s" x="242" y="304">no exposure · no description</text></g>
+        <g class="n"><rect x="20" y="254" width="190" height="58" rx="8"/><text class="t" x="32" y="274">Pi native MCP</text><text class="s" x="32" y="291">exposure = default codemode</text><text class="s" x="32" y="304">for every server</text></g>
+        <path class="e" d="M500,214 L500,252"/><text class="el" x="506" y="238">ACP</text>
+        <path class="e" d="M420,283 L404,283"/><path class="e" d="M230,283 L212,283"/>
+        <g class="n"><rect x="20" y="320" width="190" height="52" rx="8"/><text class="t" x="32" y="340">codemode · tool_search</text><text class="s" x="32" y="357">tools.mcp__x__y(…)</text></g>
+        <g class="n bad"><rect x="230" y="320" width="350" height="52" rx="8"/><text class="t" x="242" y="340">mcp_servers prompt section</text><text class="m" x="242" y="358">- mcp__molly (codemode)   ← no summary</text></g>
+        <path class="e" d="M115,312 L115,318"/>
+
+        <g class="n"><rect x="20" y="412" width="180" height="42" rx="8"/><text class="t" x="32" y="431">molly (built-in)</text><text class="s" x="32" y="446">all Molly tools, one server</text></g>
+        <g class="n"><rect x="215" y="412" width="175" height="42" rx="8"/><text class="t" x="227" y="431">user stdio servers</text><text class="s" x="227" y="446">command · args · env</text></g>
+        <g class="n"><rect x="405" y="412" width="175" height="42" rx="8"/><text class="t" x="417" y="431">user HTTP servers</text><text class="s" x="417" y="446">url · vault headers</text></g>
+        <path class="e" d="M110,372 L110,410"/><path class="e" d="M302,372 L302,410"/><path class="e" d="M492,372 L492,410"/>
+
+        <g class="pin"><circle cx="402" cy="256" r="9"/><text x="396" y="259">G2</text></g>
+        <g class="pin"><circle cx="578" cy="322" r="9"/><text x="572" y="325">G1</text></g>
+        <g class="pin"><circle cx="218" cy="190" r="9"/><text x="212" y="193">G5</text></g>
+        <g class="pin"><circle cx="398" cy="126" r="9"/><text x="392" y="129">G4</text></g>
+      </svg>
+    </figure>
+    <figure>
+      <figcaption><b>AFTER</b><span>catalog row ≅ Pi <code>mcpServers</code> entry</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Generic MCP after">
+        <rect class="band" x="0" y="8" width="600" height="86" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON</text>
+        <rect class="band" x="0" y="102" width="600" height="122" rx="8"/><text class="bandlbl" x="10" y="116">CLI DAEMON</text>
+        <rect class="band" x="0" y="232" width="600" height="150" rx="8"/><text class="bandlbl" x="10" y="246">PI WORKER · harness-pi</text>
+        <rect class="band" x="0" y="390" width="600" height="72" rx="8"/><text class="bandlbl" x="10" y="404">MCP SERVERS</text>
+
+        <g class="n chg"><rect x="20" y="30" width="220" height="56" rx="8"/><text class="t" x="32" y="49">Settings › MCP</text><text class="s" x="32" y="65">Reach: scripts · search · visible · off</text><text class="s" x="32" y="79">+ Import from mcp.json</text></g>
+        <g class="n keep"><rect x="290" y="30" width="150" height="56" rx="8"/><text class="t" x="302" y="52">Main-process vault</text><text class="s" x="302" y="70">unchanged</text></g>
+        <path class="e" d="M240,57 L288,57"/>
+
+        <g class="n chg"><rect x="20" y="124" width="200" height="90" rx="8"/><text class="t" x="32" y="144">Workspace MCP catalog</text>
+          <text class="s" x="32" y="162">name · transport · connection</text><text class="s" x="32" y="177">description → forwarded</text><text class="s" x="32" y="192">exposure · toolExposure</text><text class="s" x="32" y="206" style="fill:var(--defer);text-decoration:line-through">imageBinding</text></g>
+        <g class="n keep"><rect x="240" y="124" width="160" height="90" rx="8"/><text class="t" x="252" y="144">session-mcp-resolver</text>
+          <text class="s" x="252" y="162">per-turn ids · fence</text><text class="s" x="252" y="177">(kept by design)</text></g>
+        <g class="n chg"><rect x="420" y="124" width="160" height="90" rx="8"/><text class="t" x="432" y="144">agent-client</text>
+          <text class="s" x="432" y="162">ACP _meta carries:</text><text class="m" x="432" y="178">description</text><text class="m" x="432" y="192">exposure, toolExposure</text></g>
+        <path class="e" d="M110,86 L110,122"/>
+        <path class="e" d="M220,169 L238,169"/><path class="e" d="M400,169 L418,169"/>
+
+        <g class="n keep"><rect x="420" y="254" width="160" height="58" rx="8"/><text class="t" x="432" y="274">PiAcpHost · acpMcpConfig</text><text class="s" x="432" y="291">+ pass 3 fields through</text></g>
+        <g class="n chg"><rect x="230" y="254" width="172" height="58" rx="8"/><text class="t" x="242" y="274">registerMcpServer()</text><text class="s" x="242" y="291">{ …, description,</text><text class="s" x="242" y="304">exposure, toolExposure }</text></g>
+        <g class="n"><rect x="20" y="254" width="190" height="58" rx="8"/><text class="t" x="32" y="274">Pi native MCP</text><text class="s" x="32" y="291">exposure honored per</text><text class="s" x="32" y="304">server and per tool</text></g>
+        <path class="e" d="M500,214 L500,252"/><text class="el" x="506" y="238">ACP</text>
+        <path class="e" d="M420,283 L404,283"/><path class="e" d="M230,283 L212,283"/>
+        <g class="n"><rect x="20" y="320" width="190" height="52" rx="8"/><text class="t" x="32" y="340">codemode · tool_search</text><text class="s" x="32" y="357">direct tools declared</text></g>
+        <g class="n chg"><rect x="230" y="320" width="350" height="52" rx="8"/><text class="t" x="242" y="340">mcp_servers prompt section</text><text class="m" x="242" y="358">- mcp__docs (codemode): Search product docs</text></g>
+        <path class="e" d="M115,312 L115,318"/>
+
+        <g class="n chg"><rect x="20" y="412" width="180" height="42" rx="8"/><text class="t" x="32" y="431">3 built-in namespaces</text><text class="s" x="32" y="446">molly · _image · _browser</text></g>
+        <g class="n"><rect x="215" y="412" width="175" height="42" rx="8"/><text class="t" x="227" y="431">user stdio servers</text><text class="s" x="227" y="446">e.g. hidden: delete_*</text></g>
+        <g class="n"><rect x="405" y="412" width="175" height="42" rx="8"/><text class="t" x="417" y="431">user HTTP servers</text><text class="s" x="417" y="446">e.g. direct: search_code</text></g>
+        <path class="e" d="M110,372 L110,410"/><path class="e" d="M302,372 L302,410"/><path class="e" d="M492,372 L492,410"/>
+      </svg>
+    </figure>
+  </div>
+  <div class="notes">
+    <div class="box"><h4>Changes</h4><ul>
+      <li>Forward the existing <code>description</code>, which closes G1. Pi renders the summary line for free.</li>
+      <li>Add <code>exposure</code>/<code>toolExposure</code> with Pi's exact names and semantics (G2). A GUI control replaces <code>/mcp</code>.</li>
+      <li>Accept a pasted <code>mcpServers</code> JSON entry. Secrets still go to the vault.</li>
+      <li>Delete <code>imageBinding</code>: readable until the next save, then dropped (G5).</li>
+    </ul></div>
+    <div class="box"><h4>Intentionally different</h4><ul>
+      <li><b>Catalog vs <code>mcp.json</code>:</b> one GUI-editable, Flock-synced truth. No project files, so no project-trust question.</li>
+      <li><b>Vault + fd-3 vs <code>mcp-auth.json</code> OAuth:</b> per-epoch profiles would lose sign-ins on worker rotation.</li>
+      <li><b>Fence kept (G4):</b> any selected-row change retires the worker. This is the simplest correct credential boundary.</li>
+      <li><b>No annotation gate (G3):</b> Molly keeps Pi's own no-prompt default, by owner decision. Settings shows hints so users can hide tools.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ======================= IMAGE ======================= -->
+<section id="image">
+  <h2>2 · Image model connections</h2>
+  <p class="section-intro">Pi models image generation as an <code>image</code> <em>model type</em> run through <code>models.generateImages()</code>. In 1.0.0 that call takes only <code>{ input }</code>, so it cannot carry <code>background: "transparent"</code>, <code>size</code> or <code>output_format</code>, which layered design needs. The redesign therefore has two phases.</p>
+  <div class="legend">
+    <span><span class="chip c-new">B1 changed</span></span>
+    <span><span class="sw" style="border-color:var(--new);border-top-style:dashed"></span>B2 (when Codemode accepts options)</span>
+    <span><span class="sw" style="border-color:var(--pain);border-top-style:dashed"></span>unmanaged / removed path</span>
+  </div>
+  <div class="pair">
+    <figure>
+      <figcaption><b>BEFORE</b><span>MCP tools on <code>molly</code> + an unmanaged native path</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Image models before">
+        <rect class="band" x="0" y="8" width="600" height="86" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON</text>
+        <rect class="band" x="0" y="102" width="600" height="146" rx="8"/><text class="bandlbl" x="10" y="116">CLI DAEMON</text>
+        <rect class="band" x="0" y="256" width="600" height="126" rx="8"/><text class="bandlbl" x="10" y="270">PI WORKER</text>
+        <rect class="band" x="0" y="390" width="600" height="72" rx="8"/><text class="bandlbl" x="10" y="404">IMAGE SERVICES</text>
+
+        <g class="n"><rect x="20" y="30" width="200" height="54" rx="8"/><text class="t" x="32" y="51">Settings › Image connection</text><text class="s" x="32" y="69">protocol · base URL · model</text></g>
+        <g class="n"><rect x="250" y="30" width="150" height="54" rx="8"/><text class="t" x="262" y="51">Vault (image key)</text><text class="s" x="262" y="69">acquired per call</text></g>
+
+        <g class="n"><rect x="20" y="126" width="150" height="54" rx="8"/><text class="t" x="32" y="147">machine Flock row</text><text class="m" x="32" y="165">imageConnection</text></g>
+        <g class="n"><rect x="190" y="126" width="200" height="112" rx="8"/><text class="t" x="202" y="147">molly MCP server</text>
+          <text class="m" x="202" y="166">molly_generate_image</text><text class="m" x="202" y="180">molly_edit_image</text>
+          <text class="s" x="202" y="198">schema switches per protocol</text><text class="s" x="202" y="213">+ tasks, sessions, browser,</text><text class="s" x="202" y="227">render… (one namespace)</text></g>
+        <g class="n"><rect x="410" y="126" width="170" height="54" rx="8"/><text class="t" x="422" y="147">image-generation.ts</text><text class="s" x="422" y="165">build · read · decode</text></g>
+        <g class="n"><rect x="410" y="190" width="170" height="48" rx="8"/><text class="t" x="422" y="210">media/ asset</text><text class="s" x="422" y="226">content-addressed file</text></g>
+        <path class="e" d="M95,84 L95,124"/>
+        <path class="e" d="M170,153 L188,153"/><text class="el" x="171" y="146">gate</text>
+        <path class="e" d="M390,153 L408,153"/>
+        <path class="e" d="M325,84 L325,100 L495,100 L495,124"/><text class="el" x="400" y="96">key</text>
+        <path class="e" d="M495,180 L495,188"/>
+
+        <g class="n"><rect x="20" y="282" width="250" height="56" rx="8"/><text class="t" x="32" y="302">codemode script</text><text class="m" x="32" y="320">tools.mcp__molly__molly_generate_image</text></g>
+        <g class="n"><rect x="20" y="346" width="250" height="30" rx="8"/><text class="s" x="32" y="365">read media/x.png → model sees pixels</text></g>
+        <g class="n bad"><rect x="300" y="282" width="280" height="56" rx="8"/><text class="t" x="312" y="302">models.generateImages()</text><text class="s" x="312" y="320">built-in, unmanaged, no explicit model rule</text></g>
+        <path class="e" d="M145,282 L145,250 L260,250 L260,240"/><text class="el" x="150" y="262">MCP · 900 s timeout · JSON text</text>
+        <g class="pin"><circle cx="292" cy="262" r="9"/><text x="285" y="265">M6</text></g>
+
+        <g class="n"><rect x="20" y="412" width="260" height="42" rx="8"/><text class="t" x="32" y="431">OpenAI Images / DashScope</text><text class="s" x="32" y="446">user's explicit model</text></g>
+        <g class="n bad"><rect x="300" y="412" width="280" height="42" rx="8"/><text class="t" x="312" y="431">OpenRouter image models</text><text class="s" x="312" y="446">reachable with the chat key?</text></g>
+        <path class="e" d="M495,180 L495,186"/>
+        <path class="e" d="M580,153 L592,153 L592,400 L150,400 L150,410"/><text class="el" x="430" y="396">HTTPS, no retry</text>
+        <path class="e bad" d="M440,338 L440,410"/><text class="el bad" x="446" y="378">same session key</text>
+
+        <g class="pin"><circle cx="578" cy="284" r="9"/><text x="571" y="287">M1</text></g>
+        <g class="pin"><circle cx="388" cy="128" r="9"/><text x="381" y="131">M3</text></g>
+        <g class="pin"><circle cx="268" cy="284" r="9"/><text x="261" y="287">M5</text></g>
+      </svg>
+    </figure>
+    <figure>
+      <figcaption><b>AFTER</b><span>B1 now · B2 dashed</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Image models after">
+        <rect class="band" x="0" y="8" width="600" height="86" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON</text>
+        <rect class="band" x="0" y="102" width="600" height="146" rx="8"/><text class="bandlbl" x="10" y="116">CLI DAEMON</text>
+        <rect class="band" x="0" y="256" width="600" height="126" rx="8"/><text class="bandlbl" x="10" y="270">PI WORKER</text>
+        <rect class="band" x="0" y="390" width="600" height="72" rx="8"/><text class="bandlbl" x="10" y="404">IMAGE SERVICES</text>
+
+        <g class="n keep"><rect x="20" y="30" width="200" height="54" rx="8"/><text class="t" x="32" y="51">Settings › Image connection</text><text class="s" x="32" y="69">unchanged: explicit model</text></g>
+        <g class="n keep"><rect x="250" y="30" width="150" height="54" rx="8"/><text class="t" x="262" y="51">Vault (image key)</text><text class="s" x="262" y="69">B2: fd-3 grant</text></g>
+
+        <g class="n keep"><rect x="20" y="126" width="150" height="54" rx="8"/><text class="t" x="32" y="147">machine Flock row</text><text class="m" x="32" y="165">imageConnection</text></g>
+        <g class="n chg"><rect x="190" y="126" width="200" height="112" rx="8"/><text class="t" x="202" y="147">molly_image namespace</text>
+          <text class="m" x="202" y="166">generate · edit</text>
+          <text class="s" x="202" y="183">one protocol-neutral schema</text><text class="s" x="202" y="198">→ structuredContent {path,</text><text class="s" x="202" y="212">sha256, width, height}</text><text class="s" x="202" y="227">B2: save · open only</text></g>
+        <g class="n keep"><rect x="410" y="126" width="170" height="54" rx="8"/><text class="t" x="422" y="147">image-generation.ts</text><text class="s" x="422" y="165">reused (B2: as provider)</text></g>
+        <g class="n keep"><rect x="410" y="190" width="170" height="48" rx="8"/><text class="t" x="422" y="210">media/ asset</text><text class="s" x="422" y="226">content-addressed file</text></g>
+        <path class="e" d="M95,84 L95,124"/>
+        <path class="e" d="M170,153 L188,153"/>
+        <path class="e" d="M390,153 L408,153"/>
+        <path class="e" d="M495,180 L495,188"/>
+
+        <g class="n chg"><rect x="20" y="282" width="250" height="56" rx="8"/><text class="t" x="32" y="302">codemode script</text><text class="m" x="32" y="320">Promise.all(variants) → table</text></g>
+        <g class="n"><rect x="20" y="346" width="250" height="30" rx="8"/><text class="s" x="32" y="365">read chosen media/x.png only</text></g>
+        <g class="n b2"><rect x="300" y="282" width="280" height="56" rx="8"/><text class="t" x="312" y="302" style="fill:var(--new)">B2 · molly-image provider</text><text class="s" x="312" y="320">registerProvider({ images }) · explicit model</text></g>
+        <path class="e good" d="M145,282 L145,250 L260,250 L260,240"/><text class="el good" x="150" y="262">compact structured results</text>
+        <path class="e b2" d="M270,300 L298,300"/><text class="el b2" x="272" y="294">B2</text>
+        <path class="e b2" d="M440,282 L440,240 L392,240 L392,232"/><text class="el b2" x="446" y="262">save</text>
+
+        <g class="n"><rect x="20" y="412" width="260" height="42" rx="8"/><text class="t" x="32" y="431">OpenAI Images / DashScope</text><text class="s" x="32" y="446">the only image path</text></g>
+        <g class="n gone"><rect x="300" y="412" width="280" height="42" rx="8"/><text class="t" x="312" y="431">OpenRouter image models</text><text class="s" x="312" y="446">removed: codemode models: false</text></g>
+        <path class="e" d="M580,153 L592,153 L592,400 L150,400 L150,410"/><text class="el" x="430" y="396">HTTPS, no retry</text>
+        <path class="e b2" d="M330,338 L330,380 L240,380 L240,410"/>
+        <line class="x" x1="548" y1="418" x2="572" y2="448"/><line class="x" x1="572" y1="418" x2="548" y2="448"/>
+      </svg>
+    </figure>
+  </div>
+  <div class="notes">
+    <div class="box"><h4>Changes</h4><ul>
+      <li><b>B1:</b> a dedicated <code>molly_image</code> namespace with a one-line description and <code>instructions</code> (billing and no-retry mechanics). Scene knowledge stays in the <code>imagegen</code> skill.</li>
+      <li><b>B1:</b> one protocol-neutral schema (M3). <code>outputSchema</code> gives the parallel variant scripts that already work a typed result instead of JSON text (M5).</li>
+      <li><b>B1:</b> close M1. The probe confirmed 57 OpenRouter image models reachable from scripts. The main session now uses Pi's public <code>createCodemodeExtension({ models: false })</code>. Limit: sub-agent children still build Pi's default Codemode, and no published setting changes that (upstream limitation, Q2).</li>
+      <li><b>B2:</b> the image connection becomes a Pi image model. Usage flows into session cost (M2), errors become <code>stopReason</code> data, and the 900&nbsp;s MCP timeout goes away (M6).</li>
+    </ul></div>
+    <div class="box"><h4>Intentionally different</h4><ul>
+      <li><b>Separate connection vs session credentials:</b> the Spec requires the image service to be independent of the language connection, with no product default model.</li>
+      <li><b>Files, not ephemeral blocks:</b> Pi doesn't save images. Bento needs validated, content-addressed <code>media/</code> assets.</li>
+      <li><b>B2 is gated on upstream</b> per-call options, including mask semantics. Model-ID variants (combinatorial) and prompt-parsed options (injection-prone) were rejected. B2 also needs a Spec revision to <code>draft</code>.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ======================= BROWSER ======================= -->
+<section id="browser">
+  <h2>3 · Built-in browser automation</h2>
+  <p class="section-intro">Pi ships no browser. Its idioms are small composable commands and MCP filtered through scripts. Molly keeps its visible, user-owned page and finite action set, and reshapes only the Agent surface.</p>
+  <div class="pair">
+    <figure>
+      <figcaption><b>BEFORE</b><span>one mega-tool; observations stream into context</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Browser before">
+        <rect class="band" x="0" y="8" width="600" height="146" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON MAIN</text>
+        <rect class="band" x="0" y="162" width="600" height="96" rx="8"/><text class="bandlbl" x="10" y="176">CLI DAEMON</text>
+        <rect class="band" x="0" y="266" width="600" height="196" rx="8"/><text class="bandlbl" x="10" y="280">PI WORKER</text>
+
+        <g class="n"><rect x="20" y="32" width="170" height="54" rx="8"/><text class="t" x="32" y="53">WebContentsView</text><text class="s" x="32" y="71">user's visible page</text></g>
+        <g class="n"><rect x="215" y="32" width="185" height="54" rx="8"/><text class="t" x="227" y="53">browser-mcp-driver</text><text class="s" x="227" y="71">Playwright MCP, allowlist 6</text></g>
+        <g class="n"><rect x="425" y="32" width="155" height="54" rx="8"/><text class="t" x="437" y="53">agent host service</text><text class="s" x="437" y="71">polls every 500 ms</text></g>
+        <g class="n"><rect x="215" y="96" width="185" height="48" rx="8"/><text class="s" x="227" y="116">snapshot text ≤ 16 KB</text><text class="s" x="227" y="131">screenshot JPEG</text></g>
+        <path class="e" d="M215,59 L192,59"/><text class="el" x="194" y="52">CDP</text>
+        <path class="e" d="M425,59 L402,59"/>
+
+        <g class="n"><rect x="215" y="184" width="185" height="62" rx="8"/><text class="t" x="227" y="204">browser-tools.ts</text><text class="s" x="227" y="221">machineRpc browser/execute</text><text class="s" x="227" y="235">50 s RPC · cancel on abort</text></g>
+        <g class="n"><rect x="425" y="184" width="155" height="62" rx="8"/><text class="t" x="437" y="204">BrowserHost</text><text class="s" x="437" y="221">queue ≤ 8 · 45 s</text><text class="s" x="437" y="235">run-bound leases</text></g>
+        <path class="e" d="M400,215 L423,215"/>
+        <path class="e" d="M502,184 L502,88"/><text class="el" x="508" y="140">work / reports</text>
+
+        <g class="n bad"><rect x="215" y="290" width="365" height="70" rx="8"/><text class="t" x="227" y="311">molly_browser (one tool, on molly)</text>
+          <text class="m" x="227" y="330">{ kind: navigate|snapshot|screenshot|</text><text class="m" x="227" y="344">        click|type|scroll|save_image, … }</text></g>
+        <g class="n"><rect x="20" y="290" width="175" height="70" rx="8"/><text class="t" x="32" y="311">model / codemode</text><text class="s" x="32" y="329">one call per action</text><text class="s" x="32" y="344">text-only results</text></g>
+        <path class="e" d="M195,325 L213,325"/>
+        <path class="e" d="M307,290 L307,248"/><text class="el" x="313" y="272">MCP</text>
+        <g class="n bad"><rect x="20" y="380" width="560" height="62" rx="8"/><text class="t" x="32" y="401">Model context</text><text class="s" x="32" y="419">direct calls return whole snapshots (≤ 16 KB) or screenshots; scripts can only regex untyped text</text><text class="s" x="32" y="433">usage mechanics duplicated in the tool description and a design skill</text></g>
+        <path class="e bad" d="M398,360 L398,378"/>
+
+        <g class="pin"><circle cx="578" cy="292" r="9"/><text x="572" y="295">B1</text></g>
+        <g class="pin"><circle cx="578" cy="382" r="9"/><text x="572" y="385">B2</text></g>
+        <g class="pin"><circle cx="578" cy="34" r="9"/><text x="572" y="37">B3</text></g>
+        <g class="pin"><circle cx="398" cy="34" r="9"/><text x="392" y="37">B4</text></g>
+        <g class="pin"><circle cx="20" cy="440" r="9"/><text x="14" y="443">B5</text></g>
+      </svg>
+    </figure>
+    <figure>
+      <figcaption><b>AFTER</b><span>typed namespace · scripts filter · transport unchanged</span></figcaption>
+      <svg class="dia" viewBox="0 0 600 470" role="img" aria-label="Browser after">
+        <rect class="band" x="0" y="8" width="600" height="146" rx="8"/><text class="bandlbl" x="10" y="22">ELECTRON MAIN · unchanged</text>
+        <rect class="band" x="0" y="162" width="600" height="96" rx="8"/><text class="bandlbl" x="10" y="176">CLI DAEMON</text>
+        <rect class="band" x="0" y="266" width="600" height="196" rx="8"/><text class="bandlbl" x="10" y="280">PI WORKER</text>
+
+        <g class="n keep"><rect x="20" y="32" width="170" height="54" rx="8"/><text class="t" x="32" y="53">WebContentsView</text><text class="s" x="32" y="71">user's visible page</text></g>
+        <g class="n keep"><rect x="215" y="32" width="185" height="54" rx="8"/><text class="t" x="227" y="53">browser-mcp-driver</text><text class="s" x="227" y="71">reused as-is</text></g>
+        <g class="n keep"><rect x="425" y="32" width="155" height="54" rx="8"/><text class="t" x="437" y="53">agent host service</text><text class="s" x="437" y="71">reused as-is</text></g>
+        <path class="e" d="M215,59 L192,59"/><path class="e" d="M425,59 L402,59"/>
+        <g class="n"><rect x="215" y="96" width="365" height="48" rx="8"/><text class="s" x="227" y="116">internal wire keeps the strict command union</text><text class="m" x="227" y="131">AgentBrowserCommandSchema</text></g>
+
+        <g class="n chg"><rect x="215" y="184" width="185" height="62" rx="8"/><text class="t" x="227" y="204">molly_browser server</text><text class="s" x="227" y="221">own namespace on the</text><text class="s" x="227" y="235">same daemon HTTP host</text></g>
+        <g class="n keep"><rect x="425" y="184" width="155" height="62" rx="8"/><text class="t" x="437" y="204">BrowserHost</text><text class="s" x="437" y="221">reused as-is</text></g>
+        <path class="e" d="M400,215 L423,215"/>
+        <path class="e" d="M502,184 L502,146"/>
+
+        <g class="n chg"><rect x="215" y="290" width="365" height="78" rx="8"/><text class="t" x="227" y="310">molly_browser namespace · 7 tools</text>
+          <text class="m" x="227" y="328">navigate  snapshot  screenshot  click</text><text class="m" x="227" y="342">type  scroll  save_image</text>
+          <text class="s" x="227" y="359">annotations · outputSchema · instructions</text></g>
+        <g class="n chg"><rect x="20" y="290" width="175" height="78" rx="8"/><text class="t" x="32" y="310">codemode script</text><text class="m" x="32" y="328">navigate → snapshot</text><text class="m" x="32" y="342">→ filter refs</text><text class="m" x="32" y="356">→ return 10 lines</text></g>
+        <path class="e" d="M195,329 L213,329"/>
+        <path class="e" d="M307,290 L307,248"/><text class="el" x="313" y="272">MCP</text>
+        <g class="n"><rect x="20" y="384" width="560" height="62" rx="8"/><text class="t" x="32" y="405">Model context</text><text class="s" x="32" y="423">only the script's filtered output; screenshots forwarded with image() when needed</text><text class="s" x="32" y="437">tool mechanics in namespace instructions; research method stays in the skill</text></g>
+        <path class="e good" d="M108,368 L108,382"/>
+        <g transform="translate(470,306)">
+          <rect x="0" y="0" width="34" height="14" rx="7" fill="var(--match-bg)"/><text x="17" y="10" text-anchor="middle" style="font:700 8.5px var(--sans);fill:var(--match)">RO</text>
+          <rect x="38" y="0" width="34" height="14" rx="7" fill="var(--diverge-bg)"/><text x="55" y="10" text-anchor="middle" style="font:700 8.5px var(--sans);fill:var(--diverge)">DEST</text>
+          <rect x="76" y="0" width="28" height="14" rx="7" fill="var(--adapt-bg)"/><text x="90" y="10" text-anchor="middle" style="font:700 8.5px var(--sans);fill:var(--adapt)">OW</text>
+        </g>
+      </svg>
+    </figure>
+  </div>
+  <div class="notes">
+    <div class="box"><h4>Changes</h4><ul>
+      <li>Split the flat-<code>kind</code> tool into seven strict tools. This removes the union-erasure workaround (B1).</li>
+      <li>Hints per action: <code>snapshot</code>/<code>screenshot</code> are read-only; <code>click</code>/<code>type</code> are destructive and open-world.</li>
+      <li>Structured <code>snapshot → { url, title, snapshot, truncated }</code>, so scripts filter typed fields instead of regexing text (B2). This requires extending <code>AgentBrowserReplySchema</code> across the daemon/Electron reply, not just MCP registration.</li>
+      <li>Mechanics (refs, re-observe, never repeat an uncertain click) get one home in namespace <code>instructions</code>, ending the duplication between the tool description and the skill (B5).</li>
+    </ul></div>
+    <div class="box"><h4>Intentionally different</h4><ul>
+      <li><b>Visible GUI page vs scripts launching Chrome:</b> the user's own session, takeover and password refusal. No arbitrary JS, CDP or cookie values.</li>
+      <li><b>Upstream Playwright catalog not exposed:</b> it would bring <code>browser_evaluate</code> and roughly 14k tokens.</li>
+      <li><b>Transport kept (B3, B4):</b> the owner-only socket and 500&nbsp;ms poll are a desktop concern, not a Pi-alignment concern.</li>
+    </ul></div>
+  </div>
+</section>
+
+<!-- ======================= TOPOLOGY ======================= -->
+<section id="topology">
+  <h2>4 · Built-in server topology</h2>
+  <p class="section-intro">Pi groups tools by server namespace, and each namespace gets one prompt line, its own exposure and its own instructions. Splitting Molly's single server lets each capability present itself independently, served by the same daemon HTTP host.</p>
+  <figure>
+    <svg class="dia" viewBox="0 0 1180 250" role="img" aria-label="Built-in server topology">
+      <g class="n bad"><rect x="20" y="70" width="268" height="110" rx="10"/><text class="t" x="36" y="96">molly (today)</text>
+        <text class="s" x="36" y="116">sessions · tasks · design render/resubmit</text><text class="s" x="36" y="132">mcp_configure · generate/edit image</text><text class="s" x="36" y="148">browser · uploads · operations</text><text class="s" x="36" y="166">one exposure (default codemode), no summary</text></g>
+      <path class="e" d="M290,125 L370,125"/><text class="el" x="292" y="117">split by capability</text>
+      <rect x="375" y="20" width="790" height="215" rx="12" fill="none" stroke="var(--line)" stroke-dasharray="4 4"/>
+      <text class="bandlbl" x="390" y="40">SAME DAEMON HTTP HOST · DISTINCT PATHS · PER-REQUEST GATING UNCHANGED</text>
+      <g class="n chg"><rect x="395" y="58" width="245" height="160" rx="10"/><text class="t" x="411" y="84">molly</text>
+        <text class="s" x="411" y="104">sessions · tasks · render · resubmit</text><text class="s" x="411" y="120">mcp_configure · uploads · operations</text>
+        <text class="m" x="411" y="146">exposure: codemode</text><text class="m" x="411" y="162">toolExposure:</text><text class="m" x="411" y="176">  molly_render_preview: direct</text><text class="m" x="411" y="198">timeout: Pi default</text></g>
+      <g class="n chg"><rect x="655" y="58" width="245" height="160" rx="10"/><text class="t" x="671" y="84">molly_image</text>
+        <text class="s" x="671" y="104">B1: generate · edit</text><text class="s" x="671" y="120">B2: save · open</text>
+        <text class="m" x="671" y="146">exposure: codemode</text><text class="m" x="671" y="162">description: "…each call</text><text class="m" x="671" y="176">  may be billed"</text><text class="m" x="671" y="198">timeout: 900 s (B1 only)</text></g>
+      <g class="n chg"><rect x="915" y="58" width="235" height="160" rx="10"/><text class="t" x="931" y="84">molly_browser</text>
+        <text class="s" x="931" y="104">navigate · snapshot · screenshot</text><text class="s" x="931" y="120">click · type · scroll · save_image</text>
+        <text class="m" x="931" y="146">exposure: codemode</text><text class="m" x="931" y="162">instructions: refs,</text><text class="m" x="931" y="176">  re-observe, takeover</text><text class="m" x="931" y="198">timeout: Pi default</text></g>
+    </svg>
+  </figure>
+  <p class="section-intro" style="margin-top:12px"><code>molly_render_preview</code> becomes <code>direct</code> because the design loop is render → <code>read</code> PNG. A script cannot pass a file's pixels on, so routing through Codemode only adds a hop. This follows Pi's rule: <code>direct</code> for small, frequently used tool sets.</p>
+</section>
+
+<!-- ======================= MAPPING ======================= -->
+<section id="mapping">
+  <h2>5 · Concept mapping: Pi 1.0 primitive → Molly component</h2>
+  <div class="legend">
+    <span><span class="sw" style="border-color:var(--match)"></span>match (already)</span>
+    <span><span class="sw" style="border-color:var(--adapt)"></span>adapted</span>
+    <span><span class="sw" style="border-color:var(--new)"></span>new in redesign</span>
+    <span><span class="sw" style="border-color:var(--diverge)"></span>diverges on purpose</span>
+    <span><span class="sw" style="border-color:var(--defer);border-top-style:dashed"></span>deferred (B2)</span>
+  </div>
+  <figure>
+    <svg class="dia map" viewBox="0 0 1180 640" role="img" aria-label="Concept mapping">
+      <text class="col" x="20" y="22">PI 1.0 PRIMITIVE</text>
+      <text class="col" x="770" y="22">MOLLY COMPONENT (REDESIGNED)</text>
+      <!-- 1 -->
+      <rect class="l" x="20" y="36" width="390" height="32" rx="7"/><text class="lblm" x="32" y="56">mcp.json · mcpServers entry</text>
+      <rect class="l" x="770" y="36" width="390" height="32" rx="7"/><text class="lbl" x="782" y="56">Workspace MCP catalog row (Flock) — superset</text>
+      <path class="ln" d="M410,52 L770,52" stroke="var(--adapt)"/><text class="tag" x="590" y="47" text-anchor="middle" fill="var(--adapt)">ADAPTED</text>
+      <!-- 2 -->
+      <rect class="l" x="20" y="78" width="390" height="32" rx="7"/><text class="lblm" x="32" y="98">pi.registerMcpServer()</text>
+      <rect class="l" x="770" y="78" width="390" height="32" rx="7"/><text class="lbl" x="782" y="98">createAcpMcpExtensions · harness-pi/src/mcp.ts</text>
+      <path class="ln" d="M410,94 L770,94" stroke="var(--match)"/><text class="tag" x="590" y="89" text-anchor="middle" fill="var(--match)">MATCH</text>
+      <!-- 3 -->
+      <rect class="l" x="20" y="120" width="390" height="32" rx="7"/><text class="lblm" x="32" y="140">exposure · toolExposure</text>
+      <rect class="l" x="770" y="120" width="390" height="32" rx="7"/><text class="lbl" x="782" y="140">Catalog fields + Settings "How the Agent reaches it"</text>
+      <path class="ln" d="M410,136 L770,136" stroke="var(--new)"/><text class="tag" x="590" y="131" text-anchor="middle" fill="var(--new)">NEW</text>
+      <!-- 4 -->
+      <rect class="l" x="20" y="162" width="390" height="32" rx="7"/><text class="lblm" x="32" y="182">description → mcp_servers prompt section</text>
+      <rect class="l" x="770" y="162" width="390" height="32" rx="7"/><text class="lbl" x="782" y="182">Existing catalog description, now forwarded</text>
+      <path class="ln" d="M410,178 L770,178" stroke="var(--adapt)"/><text class="tag" x="590" y="173" text-anchor="middle" fill="var(--adapt)">ADAPTED</text>
+      <!-- 5 -->
+      <rect class="l" x="20" y="204" width="390" height="32" rx="7"/><text class="lblm" x="32" y="224">namespace instructions · describeNamespace()</text>
+      <rect class="l" x="770" y="204" width="390" height="32" rx="7"/><text class="lbl" x="782" y="224">MCP instructions on molly_image / molly_browser</text>
+      <path class="ln" d="M410,220 L770,220" stroke="var(--new)"/><text class="tag" x="590" y="215" text-anchor="middle" fill="var(--new)">NEW</text>
+      <!-- 6 -->
+      <rect class="l" x="20" y="246" width="390" height="32" rx="7"/><text class="lblm" x="32" y="266">codemode tool (mode: on)</text>
+      <rect class="l" x="770" y="246" width="390" height="32" rx="7"/><text class="lbl" x="782" y="266">Profile defaultTools +codemode · profile-settings.ts</text>
+      <path class="ln" d="M410,262 L770,262" stroke="var(--match)"/><text class="tag" x="590" y="257" text-anchor="middle" fill="var(--match)">MATCH</text>
+      <!-- 7 -->
+      <rect class="l" x="20" y="288" width="390" height="32" rx="7"/><text class="lblm" x="32" y="308">tool_search · deferred exposure</text>
+      <rect class="l" x="770" y="288" width="390" height="32" rx="7"/><text class="lbl" x="782" y="308">createToolSearchExtension (already loaded)</text>
+      <path class="ln" d="M410,304 L770,304" stroke="var(--match)"/><text class="tag" x="590" y="299" text-anchor="middle" fill="var(--match)">MATCH</text>
+      <!-- 8 -->
+      <rect class="l" x="20" y="330" width="390" height="32" rx="7"/><text class="lblm" x="32" y="350">outputSchema · structuredContent</text>
+      <rect class="l" x="770" y="330" width="390" height="32" rx="7"/><text class="lbl" x="782" y="350">Structured image and browser results</text>
+      <path class="ln" d="M410,346 L770,346" stroke="var(--new)"/><text class="tag" x="590" y="341" text-anchor="middle" fill="var(--new)">NEW</text>
+      <!-- 9 -->
+      <rect class="l" x="20" y="372" width="390" height="32" rx="7"/><text class="lblm" x="32" y="392">MCP annotations → tool_call gate</text>
+      <rect class="l" x="770" y="372" width="390" height="32" rx="7"/><text class="lbl" x="782" y="392">Hints shown in Settings; no runtime gate</text>
+      <path class="ln" d="M410,388 L770,388" stroke="var(--diverge)"/><text class="tag" x="590" y="383" text-anchor="middle" fill="var(--diverge)">DIVERGES · BY DECISION</text>
+      <!-- 10 -->
+      <rect class="l" x="20" y="414" width="390" height="32" rx="7"/><text class="lblm" x="32" y="434">image model type · models.generateImages()</text>
+      <rect class="l" x="770" y="414" width="390" height="32" rx="7"/><text class="lbl" x="782" y="434">B1 molly_image namespace → B2 molly-image model</text>
+      <path class="ln" d="M410,430 L770,430" stroke="var(--defer)" stroke-dasharray="6 5"/><text class="tag" x="590" y="425" text-anchor="middle" fill="var(--defer)">B1 NOW · B2 DEFERRED</text>
+      <!-- 11 -->
+      <rect class="l" x="20" y="456" width="390" height="32" rx="7"/><text class="lblm" x="32" y="476">registerProvider({ images })</text>
+      <rect class="l" x="770" y="456" width="390" height="32" rx="7"/><text class="lbl" x="782" y="476">B2 provider reusing image-generation.ts builders</text>
+      <path class="ln" d="M410,472 L770,472" stroke="var(--defer)" stroke-dasharray="6 5"/><text class="tag" x="590" y="467" text-anchor="middle" fill="var(--defer)">DEFERRED</text>
+      <!-- 12 -->
+      <rect class="l" x="20" y="498" width="390" height="32" rx="7"/><text class="lblm" x="32" y="518">mcp-auth.json · MCP OAuth</text>
+      <rect class="l" x="770" y="498" width="390" height="32" rx="7"/><text class="lbl" x="782" y="518">Vault + fd-3 grant, literal headers</text>
+      <path class="ln" d="M410,514 L770,514" stroke="var(--diverge)"/><text class="tag" x="590" y="509" text-anchor="middle" fill="var(--diverge)">DIVERGES</text>
+      <!-- 13 -->
+      <rect class="l" x="20" y="540" width="390" height="32" rx="7"/><text class="lblm" x="32" y="560">project trust (.pi/mcp.json)</text>
+      <rect class="l" x="770" y="540" width="390" height="32" rx="7"/><text class="lbl" x="782" y="560">defaultProjectTrust: never · no project MCP file</text>
+      <path class="ln" d="M410,556 L770,556" stroke="var(--match)"/><text class="tag" x="590" y="551" text-anchor="middle" fill="var(--match)">MATCH</text>
+      <!-- 14 -->
+      <rect class="l" x="20" y="582" width="390" height="32" rx="7"/><text class="lblm" x="32" y="602">skills (on-demand) · browser via README + scripts</text>
+      <rect class="l" x="770" y="582" width="390" height="32" rx="7"/><text class="lbl" x="782" y="602">Design skills keep scene knowledge; visible-page tools</text>
+      <path class="ln" d="M410,598 L770,598" stroke="var(--diverge)"/><text class="tag" x="590" y="593" text-anchor="middle" fill="var(--diverge)">PARTIAL · BROWSER DIVERGES</text>
+    </svg>
+  </figure>
+</section>
+
+<!-- ======================= ALIGNMENT ======================= -->
+<section id="alignment">
+  <h2>6 · Design-philosophy alignment</h2>
+  <p class="section-intro">Pi's idioms (I1–I10, from <a href="../research/pi-1.0-design.md">pi-1.0-design.md §6</a>) and where the redesign lands.</p>
+  <div class="align-grid">
+    <div class="align match"><div class="hd"><b>I1 · Default <code>codemode</code>, <code>direct</code> only when hot</b><span class="chip c-match">match</span></div><p>All built-ins default to <code>codemode</code>. Only <code>molly_render_preview</code> is <code>direct</code>, for the render → read loop.</p></div>
+    <div class="align match"><div class="hd"><b>I2 · One-line description, longer instructions</b><span class="chip c-match">match</span></div><p>The catalog <code>description</code> is forwarded, and built-ins ship a description plus <code>instructions</code>. This also fixes skills that look for tools "in your tool list".</p></div>
+    <div class="align match"><div class="hd"><b>I3 · Compose and filter in scripts</b><span class="chip c-match">match</span></div><p>Image variants fan out in one script. Browser snapshots are filtered before reaching the model.</p></div>
+    <div class="align match"><div class="hd"><b>I4 · Structured data for scripts</b><span class="chip c-match">match</span></div><p><code>outputSchema</code> on image and browser tools. The model still gets readable <code>content</code>.</p></div>
+    <div class="align partial"><div class="hd"><b>I5 · Non-chat models as model types</b><span class="chip c-adapt">partial</span></div><p>B1 is Pi-style presentation only. B2 waits until Codemode can carry <code>background</code>, <code>size</code> and <code>format</code>; Molly won't hack them in.</p></div>
+    <div class="align defer"><div class="hd"><b>I6 · Backends are provider registrations</b><span class="chip c-defer">deferred</span></div><p>B2 registers <code>molly-image</code> and reuses today's request builders. It needs a Spec revision.</p></div>
+    <div class="align diverge"><div class="hd"><b>I7 · Permission = extension over annotations</b><span class="chip c-diverge">diverge</span></div><p>Same no-prompt default as Pi. Molly does not add the optional gate (owner decision, 2026-09-30); hints are surfaced for user policy instead.</p></div>
+    <div class="align match"><div class="hd"><b>I8 · Never auto-retry tool calls</b><span class="chip c-match">match</span></div><p>Already true: paid image calls and uncertain browser actions are never replayed.</p></div>
+    <div class="align match"><div class="hd"><b>I9 · Cache-friendly, append-only context</b><span class="chip c-match">match</span></div><p>Pi owns the <code>mcp_servers</code> section, and Molly adds no per-turn tool text. Lazy connect keeps first prompts fast.</p></div>
+    <div class="align match"><div class="hd"><b>I10 · Minimal, replaceable core</b><span class="chip c-match">match</span></div><p>Deletes <code>imageBinding</code>, the flat-union schema workaround and the 900&nbsp;s timeout on <code>molly</code>. No Pi patch, fork or second MCP client.</p></div>
+  </div>
+  <h3>Where Molly stays different, and why</h3>
+  <table>
+    <thead><tr><th style="width:24%">Divergence</th><th>Justification</th></tr></thead>
+    <tbody>
+      <tr><td>GUI catalog instead of <code>mcp.json</code></td><td>One editable truth, synced across machines through Flock and edited by designers in Settings. Per-turn selection is a product feature.</td></tr>
+      <tr><td>Vault instead of <code>mcp-auth.json</code></td><td>Secrets never live in config files or Loro. Per-epoch worker profiles would lose OAuth sign-ins on rotation.</td></tr>
+      <tr><td>Separate image connection</td><td>Spec story 8: the image service is independent of the language connection. The model is always the user's explicit choice.</td></tr>
+      <tr><td>Images saved as files</td><td>Bento assets need validated, decoded, content-addressed bytes in <code>media/</code>. Pi's ephemeral blocks are not artwork.</td></tr>
+      <tr><td>Visible, user-owned browser page</td><td>The user's real session, takeover, password refusal and finite actions. No arbitrary JS or CDP for the Agent.</td></tr>
+      <tr><td>No annotation permission gate</td><td>Matches Pi's own default; the owner chose no prompts. Hints remain available for a future policy.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ======================= PHASES ======================= -->
+<section id="phases">
+  <h2>7 · Phasing, confirmations and open questions</h2>
+  <div class="phases">
+    <div class="phase"><h4>Phase 1 · reductions <span class="chip c-match">no new capability</span></h4><ul>
+      <li>Forward catalog <code>description</code>.</li>
+      <li>Delete <code>imageBinding</code> (drop on save).</li>
+      <li>Remove Codemode's <code>models</code> global in the main session (Q1, Q2 settled).</li>
+      <li>Update skills: "listed in <code>mcp_servers</code>", not "in your tool list".</li>
+    </ul></div>
+    <div class="phase"><h4>Phase 2 · presentation <span class="chip c-new">approved 2026-10-03</span></h4><ul>
+      <li>Catalog <code>exposure</code>/<code>toolExposure</code> + Settings control + mcp.json import.</li>
+      <li>Split the built-in server into <code>molly</code>, <code>molly_image</code> and <code>molly_browser</code>.</li>
+      <li>Browser: seven tools, annotations and structured snapshots. Image B1: neutral schema and structured results.</li>
+    </ul></div>
+    <div class="phase"><h4>Phase 3 · B2 <span class="chip c-defer">gated on upstream</span></h4><ul>
+      <li>When Codemode <code>generateImages</code> accepts per-call options: <code>molly-image</code> provider, <code>save</code>/<code>open</code> tools.</li>
+      <li>Spec returns to <code>draft</code> for the changed chain.</li>
+    </ul></div>
+  </div>
+  <h3>Open questions</h3>
+  <table>
+    <thead><tr><th style="width:6%">#</th><th>Question</th><th style="width:38%">How to settle</th></tr></thead>
+    <tbody>
+      <tr><td>Q1</td><td>Can scripts in a Molly worker reach Pi's built-in OpenRouter image models today?</td><td><b>Settled 2026-10-03: yes.</b> OpenRouter connections expose 57 image models to scripts; the other presets expose none. No paid call was made.</td></tr>
+      <tr><td>Q2</td><td>Does a chat-only provider <code>models</code> list hide them, and how are sub-agents covered?</td><td><b>Settled 2026-10-03:</b> main runtime yes, children no (and it would persist a 423 KB <code>models.json</code>). Adopted <code>models: false</code> for the main session; children remain an upstream limitation.</td></tr>
+      <tr><td>Q3</td><td>Do custom/registry ACP agents still consume the current tool names?</td><td><b>Settled 2026-10-03: no.</b> Phase 2 renames tools without aliases.</td></tr>
+      <tr><td>Q4</td><td>Will Pi add per-call options to Codemode <code>generateImages</code>?</td><td>Track upstream. B2 does not wait on a Molly-specific PR.</td></tr>
+      <tr><td>Q5</td><td>Does splitting servers affect cold start?</td><td><code>codemode</code> servers connect lazily; measure once.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="second-opinion">
+  <h2>8 · Second opinion (advisory, not applied)</h2>
+  <p class="section-intro">A read-only Codex CLI review (<code>gpt-6-astra</code>, high reasoning) cross-checked the hardest calls. Its factual corrections were verified against the code and applied above. Where its recommendations differ, the owner decides.</p>
+  <table>
+    <thead><tr><th style="width:15%">Decision</th><th>This proposal</th><th>Codex recommendation</th><th style="width:30%">Case for this proposal</th></tr></thead>
+    <tbody>
+      <tr><td>Image models</td><td>B1 namespace + suppression now; B2 provider later</td><td><span class="chip c-match">agrees</span> Reuse the image server and defer the provider; preserve mask semantics first</td><td>Agreement. The B2 gate now includes masks.</td></tr>
+      <tr><td>Server topology</td><td>Split into <code>molly</code>, <code>molly_image</code>, <code>molly_browser</code></td><td><span class="chip c-diverge">differs</span> Keep one server: add description/instructions and use <code>toolExposure</code></td><td>Only separate servers get their own summary line, instructions and image-only timeout.</td></tr>
+      <tr><td>Browser</td><td>Seven single-purpose tools</td><td><span class="chip c-diverge">differs</span> Keep the single tool and add structured results; treat seven tools as a separate cleanup</td><td>Per-action schemas and annotations; no invalid field combinations.</td></tr>
+    </tbody>
+  </table>
+  <p class="section-intro" style="margin-top:12px"><strong>Owner decision (2026-10-03):</strong> additions 1–3 and the Q1/Q2 probe approved; sequencing follows this proposal. Codex's version is the smaller migration. A reasonable order: Phase 1 reductions, then structured results on the existing tools, then the namespace and browser splits as separately confirmed follow-ups.</p>
+</section>
+
+<section id="sources">
+  <h2>Sources</h2>
+  <ul class="sources">
+    <li><a href="https://pi.dev/changelog/releases/1.0.0">Pi 1.0.0 release notes</a></li>
+    <li><a href="https://earendil.com/posts/pi-1-0/">Earendil — Pi 1.0</a></li>
+    <li><a href="https://earendil.com/posts/you-said-no-mcp/">Earendil — "You Said No MCP!"</a></li>
+    <li><a href="https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/">Zechner — What if you don't need MCP at all?</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/mcp.md">Pi docs — MCP servers (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/codemode.md">Pi docs — Codemode (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/models.md">Pi docs — Models (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/custom-provider.md">Pi docs — Custom providers (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/extensions.md">Pi docs — Extensions (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/security.md">Pi docs — Security (v1.0.0)</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/CHANGELOG.md">Pi coding-agent CHANGELOG</a></li>
+    <li><a href="https://github.com/earendil-works/pi/blob/v1.0.0/packages/ai/src/types.ts">Pi source — ImagesContext (v1.0.0)</a></li>
+    <li>Molly code citations: <a href="../research/current-design.md">current-design.md</a></li>
+  </ul>
+</section>
+
+<footer>Research and design only. No production harness code was changed. Statements about Molly cite code at <code>main@a5740c08</code>; statements about Pi cite Pi's public sources at <code>v1.0.0</code>. Items marked "unverified" in the research notes need a probe before implementation.</footer>
+</main>
+</body>
+</html>

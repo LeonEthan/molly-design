@@ -14,6 +14,7 @@ import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
   MOLLY_BUILTIN_MCP_CONNECTION,
+  MOLLY_BUILTIN_MCP_DESCRIPTION,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
   HarnessQuestionDismissRequestSchema,
@@ -957,7 +958,14 @@ export class AgentClient implements acp.Client {
     const builtin = this.buildBuiltinMcpServers(workdir).map((server) =>
       this.options.agentConfig?.cliType === 'builtin' &&
       this.options.agentConfig.agentType === 'molly'
-        ? { ...server, _meta: { ...server._meta, mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION } }
+        ? {
+            ...server,
+            _meta: {
+              ...server._meta,
+              mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION,
+              mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
+            },
+          }
         : server
     );
     if (!externalLoad) {

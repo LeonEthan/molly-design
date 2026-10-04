@@ -81,7 +81,6 @@ export function McpSetting() {
       transport: value.transport,
       ...(value.description ? { description: value.description } : {}),
       ...(value.connection ? { connection: value.connection } : {}),
-      ...(existing?.imageBinding ? { imageBinding: existing.imageBinding } : {}),
       enabledByDefault: value.enabledByDefault,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,

@@ -15,8 +15,9 @@ or DashScope) using the model explicitly selected by the user; Molly has no defa
 ## Availability
 
 `molly_generate_image` and `molly_edit_image` are registered only when the user has configured and enabled an
-image connection (base URL, API key, model) in Molly settings. If the tool is not in
-your tool list, that tool is unavailable for this session. Molly settings can enable
+image connection (base URL, API key, model) in Molly settings. If the tool is neither
+declared nor callable from `codemode` scripts (find it with `searchTools`), that tool is
+unavailable for this session. Molly settings can enable
 its connection; assess other capabilities from the actual tools available to your
 Agent, without inferring that all image generation or image reading is unavailable.
 Never ask the user to paste an API key in chat; keys live in the app's settings storage.

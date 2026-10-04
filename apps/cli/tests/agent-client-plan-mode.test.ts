@@ -8,7 +8,10 @@ import type {
   WorkspaceId,
 } from '@molly/shared';
 import { parseAskUserQuestionPermissionMeta } from '@molly/shared';
-import { HARNESS_QUESTION_DISMISS_METHOD } from '@molly/shared/embedded-harness';
+import {
+  HARNESS_QUESTION_DISMISS_METHOD,
+  MOLLY_BUILTIN_MCP_DESCRIPTION,
+} from '@molly/shared/embedded-harness';
 import type {
   CreateElicitationRequest,
   PromptRequest,
@@ -173,9 +176,10 @@ describe('AgentClient plan mode permission restoration', () => {
       expect(servers.map((server) => server._meta?.mollyConnection)).toEqual([
         { id: 'molly:builtin', revision: 1 },
       ]);
+      expect(servers[0]?._meta?.mollyMcpDescription).toBe(MOLLY_BUILTIN_MCP_DESCRIPTION);
       // @ts-expect-error - inspect the legacy projection without a provider process
       const previous = await legacy.buildMcpServers('/tmp/synthetic-session', undefined);
-      expect(previous.every((server) => server._meta?.mollyConnection === undefined)).toBe(true);
+      expect(previous.every((server) => server._meta === undefined)).toBe(true);
     });
     it('passes public deployment endpoints to the MCP subprocess', () => {
       const keys = ['MOLLY_AUTH_URL', 'MOLLY_AUTH_SITE_URL', 'MOLLY_SERVER_URL'] as const;

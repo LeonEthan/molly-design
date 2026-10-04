@@ -43,7 +43,8 @@ authorize omitting other stages. A bounded edit does not regenerate every layer.
 A style reference offered as inspiration for a new composition remains a
 new-design task.
 
-Determine capabilities from the actual tool list. Before image calls, read the
+Determine capabilities from the tools actually available, including MCP tools
+that are callable only from `codemode` scripts. Before image calls, read the
 `imagegen` Skill for the configured model, inputs and paid-call behavior. Follow
 the user's budget and scope throughout drafting and repair. When a required
 action is blocked, state the limitation and what remains incomplete; tool

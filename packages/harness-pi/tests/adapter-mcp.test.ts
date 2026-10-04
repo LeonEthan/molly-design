@@ -432,6 +432,27 @@ describe('owned Pi ACP native MCP integration', () => {
     expect(await readFile(join(f.agentDir, 'mcp.json'), 'utf8')).toBe(original);
   });
 
+  it('gives codemode scripts no model catalog, so images need the image connection', async () => {
+    const f = await fixture({
+      responses: [codemode('text(typeof models); text(typeof tools);'), done()],
+    });
+    await f.initialize();
+    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [server(f.cwd)] });
+    await f.agent.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: 'Inspect script globals' }],
+    });
+    await f.agent.dispose();
+    const outputs = f.updates.flatMap(({ update }) =>
+      update.sessionUpdate === 'tool_call_update' && update.status === 'completed'
+        ? (update.content ?? []).flatMap((item) =>
+            item.type === 'content' && item.content.type === 'text' ? [item.content.text] : []
+          )
+        : []
+    );
+    expect(outputs.join('\n')).toMatch(/undefined[\s\S]*object/);
+  });
+
   it('rejects a discovered duplicate adapter package before executing its extension', async () => {
     const f = await fixture();
     const pkg = join(f.root, 'duplicate');
@@ -545,6 +566,7 @@ describe('owned Pi ACP native MCP integration', () => {
             { name: 'Authorization', value: '!literal$' },
             { name: 'X-Literal', value: '${HOME}' },
           ],
+          _meta: { mollyMcpDescription: '  Synthetic catalog summary  ' },
         },
       ],
       '/synthetic/project'
@@ -564,6 +586,7 @@ describe('owned Pi ACP native MCP integration', () => {
       {
         name: 'http',
         config: {
+          description: 'Synthetic catalog summary',
           type: 'http',
           url: 'https://synthetic.invalid/${HOME}',
           headers: { Authorization: '$!literal$$', 'X-Literal': '$${HOME}' },
@@ -576,6 +599,9 @@ describe('owned Pi ACP native MCP integration', () => {
     expect(() =>
       acpMcpConfig([{ ...server('/synthetic'), _meta: { mollyMcpCredential: {} } }], '/synthetic')
     ).toThrow('pi_acp_protected_mcp_not_integrated');
+    expect(() =>
+      acpMcpConfig([{ ...server('/synthetic'), _meta: { mollyMcpDescription: 1 } }], '/synthetic')
+    ).toThrow('pi_acp_mcp_description_invalid');
     expect(() =>
       acpMcpConfig(
         [{ name: 'sse', type: 'sse', url: 'https://synthetic.invalid/sse', headers: [] }],

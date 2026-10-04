@@ -38,7 +38,9 @@ Read [README](README.md) before changing session construction, packages or the b
   and an empty guard directory, never a successor's nonempty guard.
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.
-- MCP uses Pi's native MCP, codemode and tool search. Protected MCP values stay literal,
+- MCP uses Pi's native MCP, codemode and tool search. Main-session codemode exposes no
+  `models` global: images go only through the user's image connection. Sub-agents keep
+  Pi's default (known upstream limitation). Protected MCP values stay literal,
   bind the workspace/server/revision and are never written to config files. HTTP header
   credentials do not require an `Authorization` field.
 - Disable native agent/provider retries in the managed profile. The host's public

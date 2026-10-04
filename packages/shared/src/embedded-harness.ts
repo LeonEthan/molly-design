@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { ImageConnectionProtocolSchema } from '#image-connection';
-export { McpImageBindingSchema, type McpImageBinding } from '#mcp-image-binding';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
 // containment against the same value (issue #49: a stale copy broke prompts).
@@ -20,6 +19,9 @@ export const MOLLY_PI_PACKAGES = [
 ] as const;
 export type MollyPiPackage = (typeof MOLLY_PI_PACKAGES)[number];
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
+/** Pi lists this one line for the built-in server in its `mcp_servers` prompt section. */
+export const MOLLY_BUILTIN_MCP_DESCRIPTION =
+  'Molly design tools: render artwork previews, generate or edit images with the user’s image connection (each call may be billed), drive the visible browser page, upload files, and manage Molly sessions and tasks';
 
 /** Execution eligibility only: historical configs remain readable. */
 export function getEmbeddedHarnessTargetError(input: {

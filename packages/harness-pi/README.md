@@ -41,6 +41,11 @@ The managed profile enables native Codemode with `defaultTools: ['+codemode']` a
 directly available; direct `read` returns image content to the model. Pi owns script
 execution, tool discovery and nested calls. The published foreground sub-agent factory
 also loads native Codemode when its tool ceiling permits it.
+Main-session Codemode uses `createCodemodeExtension({ models: false })`, so scripts get
+no `models` global. Pi 1.0 otherwise lets scripts run OpenRouter's built-in image models
+with the chat key, bypassing the user's image connection. Sub-agent children still load
+Pi's default Codemode, and published settings cannot turn `models` off; this is a known
+upstream limitation ([redesign proposal](../../research/redesign-proposal.md), Q2).
 Reopen follows the unmodified Pi 1.0 SDK factory: saved messages remain intact, while
 active tools come from the current profile defaults and native MCP activation. A saved
 tool declaration does not override that factory loadout. Loading history performs no
@@ -98,6 +103,9 @@ reported distinctly. Native usage is projected to Core usage notifications
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.
+A catalog `description` (and Molly's fixed built-in summary) travels in ACP
+`_meta.mollyMcpDescription` and becomes Pi's native server `description`, the one line
+listed in the `mcp_servers` prompt section.
 Only the daemon-identified built-in Molly server in the managed host receives native
 `timeout: 900` (seconds); external and standalone ACP servers retain Pi's default.
 This is Pi's progress-reset request timeout, not an absolute whole-operation deadline.

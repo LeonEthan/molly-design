@@ -84,7 +84,7 @@ bundled example, and optional helpers describe the YAML snapshot entry:
   optional reconstruction aids.
 
 `skills/imagegen/` keeps the upstream prompting method, rewritten for the
-`molly_generate_image` and `molly_edit_image` MCP tools (registered only when the user configures and
+`molly_image` MCP server's `generate` and `edit` tools (registered only when the user configures and
 enables an image connection). Runtime per-file `VENDOR.lock` freezing is replaced
 by this package's build-time source manifest.
 

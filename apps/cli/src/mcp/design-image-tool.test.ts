@@ -21,8 +21,9 @@ import {
   resolveDesignGate,
   type McpDesignGate,
 } from './design-tools';
-import { buildMollyMcpServer, runWithMcpSessionContext } from './molly-mcp-server';
-const TOOL_NAME = 'molly_generate_image';
+import { runWithMcpSessionContext } from './molly-mcp-server';
+import { buildMollyImageMcpServer } from './molly-image-mcp-server';
+const TOOL_NAME = 'generate';
 
 const SECRET_KEY = 'sk-live-super-secret-value';
 
@@ -58,6 +59,16 @@ const readyGate: McpDesignGate = {
     model: 'gpt-image-2',
     updatedAt: 1_700_000_000_000,
   },
+};
+
+const readyDashScopeGate: McpDesignGate = {
+  imageConnection: {
+    ...readyGate.imageConnection!,
+    baseUrl: 'https://images.example.com/api/v1',
+    model: 'qwen-image-2.1',
+    protocol: 'dashscope',
+  },
+  imageProtocol: 'dashscope',
 };
 
 const jsonResponse = (status: number, body: unknown): ImageHttpResponse => ({
@@ -105,7 +116,7 @@ async function withServer(
   },
   run: (client: Client) => Promise<void>
 ): Promise<void> {
-  const server = buildMollyMcpServer({
+  const server = buildMollyImageMcpServer({
     ...(options.designGate === undefined
       ? {}
       : {
@@ -161,21 +172,33 @@ const callGenerate = async (
 const textOf = (result: CallToolResult): string =>
   result.content.map((part) => (part.type === 'text' ? part.text : '')).join('\n');
 
-describe('molly_generate_image gate', () => {
-  it('publishes autonomous image guidance while preserving paid-call disclosure', async () => {
+describe('molly_image generate gate', () => {
+  it('keeps paid-call mechanics in the server instructions and declares a typed result', async () => {
     await withServer({ designGate: readyGate }, async (client) => {
+      const instructions = client.getInstructions();
+      expect(instructions).toContain('never retried automatically');
+      expect(instructions).toContain('may still have been billed');
+      expect(instructions).toContain('image-reading tool');
       const tool = (await client.listTools()).tools.find((entry) => entry.name === TOOL_NAME);
-      expect(tool?.description).toContain('actual image-reading tool');
-      expect(tool?.description).toContain('only this generation tool is unavailable');
-      expect(tool?.description).toContain('never retried automatically');
-      expect(tool?.description).not.toContain('make one targeted change per call');
+      expect(tool?.description).toContain('Paid; see the server instructions.');
+      expect(tool?.annotations).toMatchObject({ openWorldHint: true, idempotentHint: false });
+      expect(Object.keys(tool?.outputSchema?.properties ?? {}).sort()).toEqual([
+        'absolutePath',
+        'bytes',
+        'height',
+        'mimeType',
+        'path',
+        'sha256',
+        'width',
+      ]);
+    });
+    await withServer({}, async (client) => {
+      expect(client.getInstructions()).toContain('unavailable in this session');
     });
   });
 
   it('is absent from the published tool list when no connection is configured', async () => {
-    const names = await listToolNames();
-    expect(names).not.toContain(TOOL_NAME);
-    expect(names).toContain('molly_session_list');
+    expect(await listToolNames()).toEqual([]);
   });
 
   it('is absent for an explicitly empty gate, a disabled connection, and a keyless one', async () => {
@@ -223,7 +246,7 @@ describe('molly_generate_image gate', () => {
     expect(JSON.stringify(gate)).not.toContain(SECRET_KEY);
   });
 
-  it('publishes only the options a DashScope connection accepts', async () => {
+  it('uses one neutral schema and states DashScope limits in the instructions', async () => {
     const gate = designGateFromRpcResult({
       type: 'design/image-connection',
       available: true,
@@ -241,26 +264,29 @@ describe('molly_generate_image gate', () => {
       workspaceRoot: '/tmp/workspace',
     });
     expect(gate.imageProtocol).toBe('dashscope');
-    const schemas = async (designGate: McpDesignGate) => {
-      let tools: Awaited<ReturnType<Client['listTools']>>['tools'] = [];
-      await withServer({ designGate }, async (client) => {
-        tools = (await client.listTools()).tools;
-      });
-      const schemaOf = (name: string) => tools.find((tool) => tool.name === name)?.inputSchema;
-      return { generate: schemaOf(TOOL_NAME), edit: schemaOf('molly_edit_image') };
-    };
-    const dashScope = await schemas(gate);
-    expect(Object.keys(dashScope.generate?.properties ?? {}).sort()).toEqual(['prompt', 'size']);
-    expect(Object.keys(dashScope.edit?.properties ?? {}).sort()).toEqual([
-      'images',
-      'prompt',
-      'size',
-    ]);
-    expect(dashScope.edit?.properties?.images).toMatchObject({ maxItems: 3 });
-    const openAi = await schemas(readyGate);
-    expect(Object.keys(openAi.edit?.properties ?? {})).toEqual(
+    let tools: Awaited<ReturnType<Client['listTools']>>['tools'] = [];
+    let instructions: string | undefined;
+    await withServer({ designGate: gate }, async (client) => {
+      tools = (await client.listTools()).tools;
+      instructions = client.getInstructions();
+    });
+    expect(instructions).toContain('DashScope');
+    expect(instructions).toContain('refuses background, output_format and mask');
+    const edit = tools.find((tool) => tool.name === 'edit')?.inputSchema;
+    expect(Object.keys(edit?.properties ?? {})).toEqual(
       expect.arrayContaining(['background', 'output_format', 'mask'])
     );
+    const { calls, transport } = recordedTransport(() => jsonResponse(500, {}));
+    const refused = await callGenerate(
+      {
+        designGate: readyDashScopeGate,
+        imageTransport: transport,
+      },
+      { prompt: 'a red kite', background: 'transparent' }
+    );
+    expect(refused.isError).toBe(true);
+    expect(textOf(refused)).toContain('not supported over DashScope');
+    expect(calls).toEqual([]);
   });
 
   it('is not callable while it is absent from the list', async () => {
@@ -410,7 +436,7 @@ describe('the daemon answer decides registration', () => {
   });
 });
 
-describe('molly_generate_image call', () => {
+describe('molly_image generate call', () => {
   it('generates through the configured upstream and returns the landed asset', async () => {
     const workdir = await mkdtemp(path.join(os.tmpdir(), 'molly-design-image-'));
     const png = pngFixture(64, 48);
@@ -425,7 +451,7 @@ describe('molly_generate_image call', () => {
 
     expect(result.isError).toBeFalsy();
     const payload = JSON.parse(textOf(result)) as Record<string, unknown>;
-    expect(payload.ok).toBe(true);
+    expect(result.structuredContent).toEqual(payload);
     expect(payload.path).toMatch(/^media\/[a-f0-9]{64}\.png$/);
     expect(payload.width).toBe(64);
     expect(payload.height).toBe(48);
@@ -560,9 +586,9 @@ describe('molly_generate_image call', () => {
   });
 
   it.each([
-    { name: 'molly_generate_image', args: { prompt: 'synthetic generation' } },
+    { name: 'generate', args: { prompt: 'synthetic generation' } },
     {
-      name: 'molly_edit_image',
+      name: 'edit',
       args: { prompt: 'synthetic edit', images: ['source.png'] },
     },
   ])('propagates SDK cancellation into a pending $name request', async ({ name, args }) => {
@@ -658,16 +684,16 @@ describe('molly_generate_image call', () => {
   });
 });
 
-describe('molly_edit_image', () => {
+describe('edit', () => {
   it('shares the generation gate including an explicitly empty model', async () => {
-    expect(await listToolNames()).not.toContain('molly_edit_image');
-    expect(await listToolNames(readyGate)).toContain('molly_edit_image');
+    expect(await listToolNames()).not.toContain('edit');
+    expect(await listToolNames(readyGate)).toContain('edit');
     const connection = readyGate.imageConnection;
     if (!connection) throw new Error('missing fixture connection');
     const gate = { imageConnection: { ...connection, model: '' } };
     const names = await listToolNames(gate);
-    expect(names).not.toContain('molly_generate_image');
-    expect(names).not.toContain('molly_edit_image');
+    expect(names).not.toContain('generate');
+    expect(names).not.toContain('edit');
   });
 
   it('validates edit inputs and returns a workspace asset from actual uploaded files', async () => {
@@ -686,12 +712,12 @@ describe('molly_edit_image', () => {
       { designGate: readyGate, imageTransport: transport, workdir },
       async (client) => {
         const invalid = await client.callTool({
-          name: 'molly_edit_image',
+          name: 'edit',
           arguments: { prompt: 'edit', images: [] },
         });
         expect(invalid.isError).toBe(true);
         const result = (await client.callTool({
-          name: 'molly_edit_image',
+          name: 'edit',
           arguments: { prompt: 'edit', images: ['source.png'] },
         })) as CallToolResult;
         expect(result.isError).toBeFalsy();
@@ -722,7 +748,7 @@ describe('resolved artwork asset directory', () => {
       await writeFile(attachment, png);
       await withServer({ workdir, designGate, imageTransport: transport }, async (client) => {
         const edited = (await client.callTool({
-          name: 'molly_edit_image',
+          name: 'edit',
           arguments: { prompt: 'Synthetic edit', images: [attachment] },
         })) as CallToolResult;
         expect(edited.isError).toBeFalsy();

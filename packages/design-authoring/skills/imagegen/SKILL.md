@@ -1,6 +1,6 @@
 ---
 name: imagegen
-description: "Use when the user asks to generate or edit images through Molly's image connection (for example: generate image, product shots, concept art, covers, or batch variants); calls molly_generate_image or molly_edit_image, which is registered only when an image connection is configured and enabled in Molly settings."
+description: "Use when the user asks to generate or edit images through Molly's image connection (for example: generate image, product shots, concept art, covers, or batch variants); calls the molly_image MCP server's generate or edit tool, which is registered only when an image connection is configured and enabled in Molly settings."
 metadata:
   short-description: Generate and edit images via Molly's image connection
 ---
@@ -8,16 +8,18 @@ metadata:
 # Image Generation and Editing Skill
 
 Generates and edits images for the current design work (product shots, concept art, covers,
-website heroes, illustrations, infographic art). Calls `molly_generate_image` or
-`molly_edit_image`, which talk to the user's configured connection (OpenAI Images
-or DashScope) using the model explicitly selected by the user; Molly has no default model.
+website heroes, illustrations, infographic art). Calls the `generate` and `edit` tools
+of the `molly_image` MCP server (from scripts: `tools.mcp__molly_image__generate(...)`),
+which talk to the user's configured connection (OpenAI Images or DashScope) using the
+model explicitly selected by the user; Molly has no default model.
 
 ## Availability
 
-`molly_generate_image` and `molly_edit_image` are registered only when the user has configured and enabled an
-image connection (base URL, API key, model) in Molly settings. If the tool is neither
-declared nor callable from `codemode` scripts (find it with `searchTools`), that tool is
-unavailable for this session. Molly settings can enable
+`generate` and `edit` are registered only when the user has configured and enabled an
+image connection (base URL, API key, model) in Molly settings. The `molly_image` server
+instructions (`describeNamespace("molly_image")` in scripts) say whether they are
+available and which options the current connection accepts. If neither tool is declared
+nor callable from `codemode` scripts, image generation is unavailable for this session. Molly settings can enable
 its connection; assess other capabilities from the actual tools available to your
 Agent, without inferring that all image generation or image reading is unavailable.
 Never ask the user to paste an API key in chat; keys live in the app's settings storage.
@@ -35,9 +37,9 @@ task branches. Choose image prompting and inspection techniques within that
 workflow and the user's budget. Each call may be billed; an unknown result may
 already have consumed budget. Useful inputs include exact text, subject,
 composition, intended use, and constraints.
-`molly_generate_image` writes returned bytes under `media/` in the supplied
-design authoring directory and returns both the artwork-relative and absolute
-paths. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
+Both tools write returned bytes under `media/` in the supplied design authoring
+directory and return a typed result (`structuredContent`) with the artwork-relative
+`path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
 judge the result and decide whether further changes are useful. Report material
 limits and the resulting asset path.
 
@@ -46,9 +48,8 @@ they do not replace the design workflow or its research requirement.
 
 ## Tool inputs and provider limits
 
-- `molly_generate_image`: `prompt`, optional `size`, `background` and
-  `output_format`.
-- `molly_edit_image`: `prompt`, `images` (1–16 workspace source/reference paths in
+- `generate`: `prompt`, optional `size`, `background` and `output_format`.
+- `edit`: `prompt`, `images` (1–16 workspace source/reference paths in
   prompt order), optional `mask`, `size`, `background` and `output_format`. Files
   are sent as data URLs in a JSON request; copy outside
   references into the workspace first. Each file is limited to 16 MiB and the
@@ -72,16 +73,15 @@ they do not replace the design workflow or its research requirement.
 ### DashScope (Qwen Image) connections
 
 When the user's connection uses DashScope, Molly sends Alibaba Model Studio's
-native request. The image tools then offer no `mask`, `background` or
-`output_format` option; Molly refuses these before sending anything, so the
-refusal is not billed:
+native request. The server instructions list the accepted options; Molly refuses
+the others before sending anything, so the refusal is not billed:
 
 - `mask`, `background` other than `auto`, and `output_format` other than `png`.
   DashScope returns PNG with the model's own background. For a standalone layer,
   choose another route in the design workflow, such as a plain background you
   can cut out or shapes drawn in YAML. Do not paint a fake transparency
   checkerboard.
-- More than 3 images for `molly_edit_image`, or any input image over 10 MB.
+- More than 3 images for `edit`, or any input image over 10 MB.
 - A `size` not written as width and height in pixels. Molly sends `1024x1024`
   as `1024*1024`. The model decides the allowed range; for example,
   `qwen-image-2.0` accepts 512×512 to 2048×2048 total pixels.

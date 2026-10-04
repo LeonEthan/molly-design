@@ -75,8 +75,6 @@ import {
   type SessionTurnInputConfig,
   hasPendingUserTurnActivation,
   normalizeSessionTurnInputConfig,
-  isImageConnectionReady,
-  type ImageHttpTransport,
 } from '@molly/shared';
 import { makeLocalControlClientAuto } from '@molly/shared/node/local-ipc';
 import {
@@ -133,24 +131,8 @@ import {
   runWithOperationStoreBusyRetry,
 } from '@/orchestration/operation-store';
 import { publishTaskProposal } from '@/mcp/task-proposal';
-import {
-  generateImageAsset,
-  editImageAsset,
-  describeImageFailure,
-  IMAGE_EDIT_MAX_INPUTS,
-  DASHSCOPE_EDIT_MAX_INPUTS,
-  IMAGE_BACKGROUNDS,
-  IMAGE_OUTPUT_FORMATS,
-} from '@/mcp/image-generation';
 import { getEmbeddedHarnessTargetError } from '@molly/shared/embedded-harness';
-import {
-  EMPTY_DESIGN_GATE,
-  requestDesignRenderPreview,
-  resolveDesignGate,
-  resolveRenderHost,
-  type McpDesignGate,
-} from '@/mcp/design-tools';
-import { fetchImageHttpTransport } from '@/design/image-connection';
+import { requestDesignRenderPreview, resolveRenderHost } from '@/mcp/design-tools';
 import {
   AgentBrowserCommandSchema,
   AgentBrowserToolInputSchema,
@@ -189,12 +171,8 @@ const TASK_PROPOSE_TOOL_NAME = 'molly_task_propose';
 const TASK_UPDATE_TOOL_NAME = 'molly_task_update';
 const TASK_EDIT_BODY_TOOL_NAME = 'molly_task_edit_body';
 const TASK_COMMENT_TOOL_NAME = 'molly_task_comment';
-const GENERATE_IMAGE_TOOL_NAME = 'molly_generate_image';
-const EDIT_IMAGE_TOOL_NAME = 'molly_edit_image';
 const RENDER_PREVIEW_TOOL_NAME = 'molly_render_preview';
 const BROWSER_TOOL_NAME = 'molly_browser';
-const DESIGN_IMAGE_PROMPT_MAX_CHARS = 8_000;
-const DESIGN_IMAGE_SIZE_SPEC_MAX_CHARS = 32;
 const SESSION_FILE_MAX_SIZE_MB = Math.floor(SESSION_FILE_MAX_SIZE_BYTES / (1024 * 1024));
 const SESSION_CONTROL_TIMEOUT_MS = 30_000;
 const MOLLY_CLI_DEFAULT_TIMEOUT_MS = 10 * 60_000;
@@ -272,73 +250,6 @@ const PreviewToolInputSchema = z
       .describe('Optional working directory of the server command.'),
     pid: z.number().int().positive().optional().describe('Optional dev server process id.'),
   })
-  .strict();
-
-const GenerateImageToolInputSchema = z
-  .object({
-    prompt: z
-      .string()
-      .trim()
-      .min(1)
-      .max(DESIGN_IMAGE_PROMPT_MAX_CHARS)
-      .describe(
-        'The generation prompt. Describe the asset you need (subject, style, composition, lighting, and any constraints or text to render).'
-      ),
-    size: z
-      .string()
-      .trim()
-      .min(1)
-      .max(DESIGN_IMAGE_SIZE_SPEC_MAX_CHARS)
-      .optional()
-      .describe(
-        'Optional output size as WIDTHxHEIGHT pixels, for example "1024x1024"; supported sizes depend on the configured service and model. Omit to use the provider default.'
-      ),
-    background: z
-      .enum(IMAGE_BACKGROUNDS)
-      .optional()
-      .describe(
-        'Optional provider background. Use "transparent" for a standalone layer with real alpha (requires PNG output); omit to use the provider default. Services without this option refuse it before any request is sent.'
-      ),
-    output_format: z
-      .enum(IMAGE_OUTPUT_FORMATS)
-      .optional()
-      .describe(
-        'Optional provider output format: "png" (supports transparency) or "jpeg". Omit to use the provider default. Services without this option refuse it before any request is sent.'
-      ),
-  })
-  .strict();
-type GenerateImageToolInput = z.infer<typeof GenerateImageToolInputSchema>;
-const EditImageToolInputSchema = GenerateImageToolInputSchema.extend({
-  images: z
-    .array(z.string().trim().min(1).max(4096))
-    .min(1)
-    .max(IMAGE_EDIT_MAX_INPUTS)
-    .describe(
-      'Paths to source/reference images inside the session workspace, in prompt order. The files are uploaded to the configured provider.'
-    ),
-  mask: z
-    .string()
-    .trim()
-    .min(1)
-    .max(4096)
-    .optional()
-    .describe(
-      'Optional workspace PNG mask for the first image; transparent areas indicate edits. Match the first image dimensions and provider requirements. Services without masks refuse it before any request is sent.'
-    ),
-}).strict();
-type EditImageToolInput = z.infer<typeof EditImageToolInputSchema>;
-// #33: DashScope has no background, output-format or mask parameter, so those options are
-// absent from its tools rather than advertised and then refused.
-const DashScopeGenerateImageToolInputSchema = GenerateImageToolInputSchema.omit({
-  background: true,
-  output_format: true,
-}).strict();
-const DashScopeEditImageToolInputSchema = EditImageToolInputSchema.omit({
-  background: true,
-  output_format: true,
-  mask: true,
-})
-  .extend({ images: EditImageToolInputSchema.shape.images.max(DASHSCOPE_EDIT_MAX_INPUTS) })
   .strict();
 
 const ImageUploadToolInputSchema = z
@@ -971,7 +882,7 @@ const mcpSessionContextStorage = new AsyncLocalStorage<McpSessionContext>();
 export const runWithMcpSessionContext = <T>(context: McpSessionContext, fn: () => T): T =>
   mcpSessionContextStorage.run(context, fn);
 
-const getSessionContext = (): McpSessionContext =>
+export const getMcpSessionContext = (): McpSessionContext =>
   mcpSessionContextStorage.getStore() ?? {
     designHookLaunchId: readOptionalEnv('MOLLY_DESIGN_LAUNCH_ID'),
     machineId: readRequiredEnv('MOLLY_MCP_MACHINE_ID', 'MOLLY_PREVIEW_MCP_MACHINE_ID'),
@@ -988,7 +899,7 @@ const getSessionContext = (): McpSessionContext =>
   };
 
 function getCliAuthContextOrThrow(_loggerName: string): AuthContext {
-  const context = getSessionContext();
+  const context = getMcpSessionContext();
   const identity = JSON.parse(readFileSync(getLocalIdentityPath(), 'utf8')) as {
     userId?: unknown;
   };
@@ -1020,7 +931,7 @@ function getCliAuthContextOrThrow(_loggerName: string): AuthContext {
 const sharedOperationStores = new Map<string, MollyOperationStore>();
 
 const resolveOperationStorePathForContext = (): string =>
-  getMollyOperationStorePath(getSessionContext().machineId);
+  getMollyOperationStorePath(getMcpSessionContext().machineId);
 
 const getSharedOperationStore = (): MollyOperationStore => {
   const storePath = resolveOperationStorePathForContext();
@@ -1244,13 +1155,13 @@ const runMollyCliJson = async (args: string[], timeoutMs?: number): Promise<unkn
 
 const resolveMcpSessionId = (
   sessionId: string | undefined,
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ) => {
   const normalized = normalizeCliValue(sessionId);
   return normalized && normalized !== 'current' ? normalized : ctx.sessionId;
 };
 
-const getMcpWorkspaceId = (ctx: ReturnType<typeof getSessionContext>) =>
+const getMcpWorkspaceId = (ctx: ReturnType<typeof getMcpSessionContext>) =>
   ctx.workspaceId as WorkspaceId;
 
 const buildStructuredOutputOptions = (
@@ -1346,7 +1257,7 @@ const buildResolvedMcpCreateCanonicalCommand = (
 
 const buildMcpCreateOptions = (
   input: SessionCreateCommandInput,
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ): CreateOptions => {
   const options: CreateOptions = {
     workspace: getMcpWorkspaceId(ctx),
@@ -1640,7 +1551,7 @@ const sessionSummaryForMcp = (
 
 const sessionListFingerprint = (
   input: SessionListToolInput,
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ) =>
   createHash('sha256')
     .update(
@@ -1692,7 +1603,7 @@ const parseSessionListCursor = (
 const matchesSessionListFilters = (
   session: SessionMeta,
   input: SessionListToolInput,
-  ctx: ReturnType<typeof getSessionContext>,
+  ctx: ReturnType<typeof getMcpSessionContext>,
   userId: string
 ): boolean => {
   if (input.archive === 'active' && session.isArchived === true) return false;
@@ -1747,7 +1658,7 @@ const matchesSessionListFilters = (
 };
 
 const buildSessionList = async (input: SessionListToolInput): Promise<unknown> => {
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -1832,7 +1743,7 @@ const buildSessionList = async (input: SessionListToolInput): Promise<unknown> =
 
 const buildSessionStatusMany = async (input: SessionStatusManyToolInput): Promise<unknown> => {
   assertBatchSize(input.sessionIds.length, MAX_MCP_STATUS_BATCH_SIZE);
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -1978,7 +1889,7 @@ const truncateUtf8HeadTail = (text: string, maxBytes: number) => {
 };
 
 const buildSessionHistory = async (input: SessionHistoryToolInput): Promise<unknown> => {
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   const sessionId = resolveMcpSessionId(input.sessionId, ctx) as SessionId;
@@ -2202,7 +2113,7 @@ type InvokingTurnSource = {
 };
 
 const resolveInvokingTurnSource = async (): Promise<InvokingTurnSource> => {
-  const active = await readActiveInvocationContext(getSessionContext());
+  const active = await readActiveInvocationContext(getMcpSessionContext());
   if (!active.active) {
     throw new MollyOperationStoreError(
       'INVOKING_TURN_NOT_FOUND',
@@ -2273,7 +2184,7 @@ const resolveInvokingTurnContext = async (session: SessionMeta): Promise<Invokin
 
 const makeMachineOnlineLookupForMcp = (
   manager: LoroDocumentManager,
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ): ((machineId: MachineId) => Promise<boolean>) => {
   let onlineMachineIds: ReturnType<LoroDocumentManager['getOnlineMachineIds']> | undefined;
   return async (machineId) => {
@@ -2288,7 +2199,7 @@ const makeMachineOnlineLookupForMcp = (
 const assertMachineOnlineForSingleCommand = async (
   manager: LoroDocumentManager,
   machineId: MachineId,
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ): Promise<void> => {
   if (!(await makeMachineOnlineLookupForMcp(manager, ctx)(machineId))) {
     throw new MollyOperationStoreError(
@@ -2482,7 +2393,7 @@ const summarizeLocalProjectForOptions = async (
 const buildSessionCreateOptions = async (
   input: SessionCreateOptionsToolInput
 ): Promise<unknown> => {
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, ctx.workspaceId);
   const workspaceId = workspace.id as WorkspaceId;
@@ -2608,7 +2519,7 @@ const startSessionCreateOperation = async (args: SessionCreateCommandInput): Pro
   if (!args.operationId) {
     throw new Error('operationId is required');
   }
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(
@@ -2757,7 +2668,7 @@ const startSessionChatOperation = async (args: SessionChatToolInput): Promise<un
   if (!args.operationId) {
     throw new Error('operationId is required');
   }
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(
@@ -2916,7 +2827,7 @@ type ResolvedSessionRenameItem = { sessionId: SessionId; title: string };
 
 const resolveSessionRenameItems = (
   items: readonly z.infer<typeof SessionRenameManyItemSchema>[],
-  ctx: ReturnType<typeof getSessionContext>
+  ctx: ReturnType<typeof getMcpSessionContext>
 ): ResolvedSessionRenameItem[] => {
   assertBatchSize(items.length, MAX_MCP_COMMAND_BATCH_SIZE);
   const resolved = items.map((item) => ({
@@ -2978,7 +2889,7 @@ const persistSessionRenameItems = async (
 const renameSessionItems = async (
   input: SessionRenameManyToolInput
 ): Promise<Awaited<ReturnType<typeof applySessionRenameItems>>> => {
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const resolved = resolveSessionRenameItems(input.items, ctx);
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
@@ -3033,7 +2944,7 @@ const startSessionCreateManyOperation = async (
   args: SessionCreateManyToolInput
 ): Promise<unknown> => {
   assertBatchSize(args.items.length, MAX_MCP_COMMAND_BATCH_SIZE);
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -3303,7 +3214,7 @@ const startSessionCreateManyOperation = async (
 
 const startSessionChatManyOperation = async (args: SessionChatManyToolInput): Promise<unknown> => {
   assertBatchSize(args.items.length, MAX_MCP_COMMAND_BATCH_SIZE);
-  const ctx = getSessionContext();
+  const ctx = getMcpSessionContext();
   const auth = getCliAuthContextOrThrow('mcp');
   const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
   return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -3909,7 +3820,7 @@ export const __mollyMcpServerInternals = {
   makeMachineOnlineLookupForMcp,
   startSessionChatOperation,
   startSessionChatManyOperation,
-  getSessionContext,
+  getSessionContext: getMcpSessionContext,
   resolveOperationStorePathForContext,
   postFileUpload,
   postImageUpload,
@@ -3925,33 +3836,16 @@ export function buildMollyMcpServer(
     taskToolsEnabled?: boolean;
     designResubmit?: boolean;
     /**
-     * Design capability snapshot (P2.4). Absent means "no image capability",
-     * which is the honest default for every caller that has not asked the
-     * daemon — including every test that is not about this feature. The daemon
-     * decides it from the asking session's identity plus the machine's row, so
-     * one field carries both halves.
-     */
-    designGate?: McpDesignGate;
-    /**
-     * Live re-check of the gate, run immediately before each paid generation so
-     * a connection revoked mid-session cannot be spent. Production callers pass
-     * the daemon lookup; when absent, `designGate` is the whole truth.
-     */
-    resolveGate?: () => Promise<McpDesignGate>;
-    /**
      * Whether a Molly desktop is polling this machine (P2.4b). Absent means "no
      * desktop", the honest default: rendering is done by the desktop app, so a
      * caller that has not asked the daemon has no reason to claim otherwise.
-     * Deliberately not folded into `designGate` — an image connection and a
-     * running desktop are independent facts.
+     * Independent of the image connection, which `molly_image` serves.
      */
     renderHost?: boolean;
     /** Live re-check of the render host, run immediately before each render. */
     resolveRenderHost?: () => Promise<boolean>;
     browserHost?: boolean;
     resolveBrowserHost?: () => Promise<boolean>;
-    /** Test seam: image generation transport. Production uses the shared fetch transport. */
-    imageTransport?: ImageHttpTransport;
   } = {}
 ): McpServer {
   // The HTTP host is long-lived and the stdio server normally lives for the
@@ -3962,106 +3856,6 @@ export function buildMollyMcpServer(
     name: 'molly',
     version: '0.1.0',
   });
-
-  // Design capability (P2.4). Registered unconditionally, then disabled below
-  // unless the asking session is a design session and the machine has a
-  // complete, enabled image connection — the same pattern the Task family uses,
-  // so a disabled tool is genuinely absent from `tools/list` and uncallable, not
-  // merely advertised and then refused.
-  const runImageTool = async (
-    args: GenerateImageToolInput | EditImageToolInput,
-    { signal }: { signal: AbortSignal }
-  ) => {
-    let dispatched = false;
-    let rejected = false;
-    try {
-      signal.throwIfAborted();
-      // Re-resolve before every paid call: the tool is registered from a
-      // snapshot, and a connection the user disabled or cleared since would
-      // otherwise turn into a call made on stale consent.
-      const gate = config.resolveGate
-        ? await config.resolveGate()
-        : (config.designGate ?? EMPTY_DESIGN_GATE);
-      const connection = gate.imageConnection;
-      signal.throwIfAborted();
-      if (connection === null) {
-        return textResult(
-          'Image generation is unavailable: this is not a design session, or the image connection is not configured, is disabled, or is missing its URL, API key or explicit model. Tell the user to enable it in Molly settings; do not retry.',
-          true
-        );
-      }
-      if (!gate.artworkWorkdir || !gate.workspaceRoot) {
-        return textResult('Design workspace is unavailable; no image request was sent.', true);
-      }
-      const common = {
-        settings: connection,
-        prompt: args.prompt,
-        ...(args.size === undefined ? {} : { size: args.size }),
-        ...(args.background === undefined ? {} : { background: args.background }),
-        ...(args.output_format === undefined ? {} : { outputFormat: args.output_format }),
-        workdir: gate.artworkWorkdir,
-        transport: (async (request) => {
-          if (request.method === 'POST') dispatched = true;
-          const response = await (config.imageTransport ?? fetchImageHttpTransport)(request);
-          if (request.method === 'POST' && (response.status < 200 || response.status >= 300))
-            rejected = true;
-          return response;
-        }) satisfies ImageHttpTransport,
-        signal,
-      };
-      const asset = await ('images' in args
-        ? editImageAsset({
-            ...common,
-            sourceWorkdir: gate.workspaceRoot,
-            images: args.images,
-            ...(args.mask === undefined ? {} : { mask: args.mask }),
-          })
-        : generateImageAsset(common));
-      return jsonTextResult({
-        ok: true,
-        path: asset.path,
-        absolutePath: asset.absolutePath,
-        sha256: asset.sha256,
-        mimeType: asset.mimeType,
-        width: asset.width,
-        height: asset.height,
-        bytes: asset.bytes,
-        note: `Reference "${asset.path}" from the project (relative to the project root), or copy it into the project's media/ directory if you keep one.`,
-      });
-    } catch (error) {
-      // The upstream's own message, or our refusal; never the request header.
-      return textResult(
-        describeImageFailure(
-          error instanceof Error ? error.message : `Image generation failed: ${String(error)}`,
-          { dispatched, rejected }
-        ),
-        true
-      );
-    }
-  };
-  const dashScopeTools = config.designGate?.imageProtocol === 'dashscope';
-  const generateImageTool = server.registerTool(
-    GENERATE_IMAGE_TOOL_NAME,
-    {
-      title: 'Generate an image through Molly image connection',
-      description:
-        "Generate one image with the image connection configured in Molly settings and write it into the current session workspace as a design asset. Use this for product shots, concept art, covers, illustrations, and other raster assets for the design you are building; it is available in design sessions only, and only when the user has configured and enabled an image connection. Returns an artwork-relative asset path (under media/ in the design authoring directory), its absolute path, sha256 and pixel dimensions. Reference that relative path from design.yaml in the authoring directory. Each call is a paid generation on the user's own account and is never retried automatically. A timeout or cancellation after dispatch may still have been billed; tell the user before calling again. Use an actual image-reading tool to judge outputs and choose further work according to the task. If this tool is absent, only this generation tool is unavailable; assess other Agent capabilities from the tools actually available. Never ask the user to paste an API key in chat.",
-      inputSchema: dashScopeTools
-        ? DashScopeGenerateImageToolInputSchema
-        : GenerateImageToolInputSchema,
-    },
-    runImageTool
-  );
-  const editImageTool = server.registerTool(
-    EDIT_IMAGE_TOOL_NAME,
-    {
-      title: 'Edit images through Molly image connection',
-      description:
-        "Edit one image using a prompt and one or more source/reference image files, with an optional PNG mask for the first image. Relative image/mask paths resolve from the design authoring directory (the same root as generated media/ assets); use absolute paths for attachments elsewhere in the Session workspace. Sends the actual files as data URLs in a JSON request to the user's configured image service (OpenAI Images /images/edits with a JSON body, or DashScope) using their explicitly selected model. Supported input counts, formats and mask/size limits depend on that service and model; failures are reported without model fallback, generation fallback or automatic paid retries. Each call can be billed. A timeout or cancellation after dispatch may still have been billed; tell the user before calling again. Returns a new workspace media asset for the Agent to read and optionally use in PPTD; it does not replace or commit the current artwork. Available only in design sessions with a complete enabled image connection. Never request an API key in chat.",
-      inputSchema: dashScopeTools ? DashScopeEditImageToolInputSchema : EditImageToolInputSchema,
-    },
-    runImageTool
-  );
 
   // Preview rendering (P2.4b). Registered unconditionally and disabled below
   // unless a Molly desktop is polling this machine, so the agent that cannot
@@ -4082,7 +3876,7 @@ export function buildMollyMcpServer(
       },
       async (input) => {
         try {
-          if (!(await requestDesignResubmit(getSessionContext(), input)))
+          if (!(await requestDesignResubmit(getMcpSessionContext(), input)))
             throw Error('Design resubmission unavailable');
           return textResult(
             'Exact preserved draft bound to the supplied expected canvas version. Nothing committed; continue editing or finish naturally.'
@@ -4102,7 +3896,7 @@ export function buildMollyMcpServer(
     },
     async () => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         // Re-resolve before rendering, for the same reason the image tool does:
         // the registration is a snapshot, and in a stdio session it can outlive
         // the desktop that made it available.
@@ -4158,7 +3952,7 @@ export function buildMollyMcpServer(
           : (config.browserHost ?? false);
         if (!available) return textResult('The Molly desktop browser is not connected.', true);
         const result = await requestBrowserOperation(
-          getSessionContext(),
+          getMcpSessionContext(),
           parsedCommand.data,
           extra.signal
         );
@@ -4195,7 +3989,7 @@ export function buildMollyMcpServer(
     },
     async (args: WorkspaceMcpConfigureToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4243,7 +4037,7 @@ export function buildMollyMcpServer(
     },
     async (args: PreviewToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const target: PreviewCandidateReportRequestPayload['target'] = {
           protocol: args.protocol,
           host: args.host,
@@ -4304,7 +4098,7 @@ export function buildMollyMcpServer(
     },
     async (args: ImageUploadToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const paths = args.paths.map((filePath) => resolveUploadPath(filePath, ctx.workdir));
         for (const filePath of paths) {
           const extension = path.extname(filePath).slice(1).toLowerCase();
@@ -4353,7 +4147,7 @@ export function buildMollyMcpServer(
     },
     async (args: FileUploadToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const request: SessionFileUploadRequestPayload = {
           type: 'session/file-upload',
           machineId: ctx.machineId,
@@ -4414,7 +4208,7 @@ export function buildMollyMcpServer(
       try {
         const args: SessionCreateToolInput = SessionCreateRuntimeInputSchema.parse(input);
         if (args.resume === true) {
-          const ctx = getSessionContext();
+          const ctx = getMcpSessionContext();
           return jsonTextResult(
             await snapshotOperation(ctx.sessionId as SessionId, args.operationId)
           );
@@ -4422,7 +4216,7 @@ export function buildMollyMcpServer(
         if (args.operationId) {
           return jsonTextResult(await startSessionCreateOperation(args));
         }
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4500,7 +4294,7 @@ export function buildMollyMcpServer(
         if (args.operationId) {
           return jsonTextResult(await startSessionChatOperation(args));
         }
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         const sessionId = args.sessionId as SessionId;
@@ -4596,7 +4390,7 @@ export function buildMollyMcpServer(
     },
     async (args: SessionCancelToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return jsonTextResult(
@@ -4625,7 +4419,7 @@ export function buildMollyMcpServer(
     },
     async (args: OperationGetToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         return jsonTextResult(
           await snapshotOperation(ctx.sessionId as SessionId, args.operationId)
         );
@@ -4645,7 +4439,7 @@ export function buildMollyMcpServer(
     },
     async (args: OperationCancelToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const requesterSessionId = ctx.sessionId as SessionId;
         const before = await withOperationStore((store) =>
           store.get(requesterSessionId, args.operationId)
@@ -4724,7 +4518,7 @@ export function buildMollyMcpServer(
     },
     async (args: SessionArchiveToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return jsonTextResult(
@@ -4807,7 +4601,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskListToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4837,7 +4631,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskGetToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4870,7 +4664,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskCreateToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4922,7 +4716,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskProposeToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4955,7 +4749,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskUpdateToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -4996,7 +4790,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskEditBodyToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -5070,7 +4864,7 @@ export function buildMollyMcpServer(
     },
     async (args: TaskCommentToolInput) => {
       try {
-        const ctx = getSessionContext();
+        const ctx = getMcpSessionContext();
         const auth = getCliAuthContextOrThrow('mcp');
         const workspace = await resolveWorkspaceOrThrow(auth, getMcpWorkspaceId(ctx));
         return await withWorkspaceManager(auth, workspace, 'mcp', async (manager) => {
@@ -5101,18 +4895,6 @@ export function buildMollyMcpServer(
     }
   );
 
-  // Capability presence matches environment presence: a session that is not a
-  // design session, or a machine with no complete, enabled image connection,
-  // means the tool is not published at all. The daemon answers both halves in
-  // one gate (see `resolveDesignGate`), so this stays a single check.
-  if (
-    !config.designGate?.imageAvailable &&
-    !isImageConnectionReady(config.designGate?.imageConnection ?? null)
-  ) {
-    generateImageTool.disable();
-    editImageTool.disable();
-  }
-
   // Preview rendering needs a desktop, not a credential: the gate is "is a
   // Molly window polling this machine right now". Without one there is nothing
   // to render with, so the tool is absent rather than present-and-always-failing.
@@ -5140,21 +4922,17 @@ export function buildMollyMcpServer(
 }
 
 export async function runMollyMcpServer(): Promise<void> {
-  const context = getSessionContext();
+  const context = getMcpSessionContext();
   // The stdio server lives for the whole agent session, so its tool list is
-  // fixed at startup from this session's own gate; `resolveGate` keeps the paid
-  // call itself honest if the connection is switched off afterwards.
-  const designGate = await resolveDesignGate(context);
+  // fixed at startup from this session's own gates.
   const renderHost = await resolveRenderHost(context);
   const browserHost = await resolveBrowserHost(context);
   const designResubmit = await resolveDesignResubmit(context);
   await buildMollyMcpServer({
     taskToolsEnabled: context.taskToolsEnabled,
-    designGate,
     designResubmit,
     renderHost,
     browserHost,
-    resolveGate: async () => await resolveDesignGate(context, undefined, true),
     resolveRenderHost: async () => await resolveRenderHost(context),
     resolveBrowserHost: async () => await resolveBrowserHost(context),
   }).connect(new StdioServerTransport());

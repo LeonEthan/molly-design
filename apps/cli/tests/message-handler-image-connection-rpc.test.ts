@@ -1,8 +1,8 @@
 /**
  * The daemon's image-connection Machine RPC: public discovery and run-bound
- * credential acquisition behind `molly_generate_image`.
+ * credential acquisition behind the `molly_image` tools.
  *
- * `molly_generate_image` is exposed to design sessions only, and the daemon is
+ * `molly_image` is exposed to design sessions only, and the daemon is
  * where that rule lives: the read method folds the asking session's identity and
  * the host's public metadata into availability. Only a live lease can acquire
  * the credential; discovery alone never grants execution. The read never opens,

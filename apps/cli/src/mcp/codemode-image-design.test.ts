@@ -31,7 +31,8 @@ import { DESIGN_ARTIFACT_ENTRY } from '../design/artifact';
 import { designOperation } from '../design/store';
 import { materializeDesignTurnInput } from '../design/turn-input';
 import { collectDesignTurnOutcome } from '../design/turn-outcome';
-import { buildMollyMcpServer, runWithMcpSessionContext } from './molly-mcp-server';
+import { runWithMcpSessionContext } from './molly-mcp-server';
+import { buildMollyImageMcpServer } from './molly-image-mcp-server';
 
 const imageBytes = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
@@ -40,7 +41,6 @@ const imageBytes = Buffer.from(
 const imageKey = 'SYNTHETIC_IMAGE_CONNECTION_KEY';
 const timestamp = '2026-10-01T00:00:00.000Z';
 const assetReceipt = z.object({
-  ok: z.literal(true),
   path: z.string(),
   absolutePath: z.string(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
@@ -71,7 +71,7 @@ const call = (name: string, args: Parameters<typeof fauxToolCall>[1]) =>
 it.each(['generate', 'edit'] as const)(
   'collects a real Molly %s receipt through native Codemode, image read and design CAS',
   async (operation) => {
-    const toolName = `molly_${operation}_image`;
+    const toolName = operation;
     const args = {
       prompt: 'Synthetic red square',
       size: '1x1',
@@ -82,7 +82,7 @@ it.each(['generate', 'edit'] as const)(
     const f = await fixture({
       responses: [
         call('codemode', {
-          code: `text(await tools.mcp__molly__${toolName}(${JSON.stringify(args)}));`,
+          code: `text(await tools.mcp__molly_image__${toolName}(${JSON.stringify(args)}));`,
         }),
       ],
     });
@@ -134,8 +134,7 @@ it.each(['generate', 'edit'] as const)(
       sessionData: createLoroSessionData({ sessionId, doc, writer }),
       getMetaState: async () => meta,
     };
-    const server = buildMollyMcpServer({
-      taskToolsEnabled: false,
+    const server = buildMollyImageMcpServer({
       designGate: {
         artworkWorkdir: f.cwd,
         workspaceRoot: f.cwd,
@@ -194,7 +193,7 @@ it.each(['generate', 'edit'] as const)(
     await bridge.start();
     vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
-      expect(request.url).toBe('https://synthetic-mcp.invalid/mcp');
+      expect(request.url).toBe('https://synthetic-mcp.invalid/mcp/molly_image');
       if (request.method === 'GET') return new Response(null, { status: 405 });
       if (request.method === 'DELETE') return new Response(null, { status: 200 });
       const message = JSONRPCMessageSchema.parse(await request.json());
@@ -211,7 +210,8 @@ it.each(['generate', 'edit'] as const)(
         expect(toolResult.isError).toBeFalsy();
         const text = toolResult.content.find((block) => block.type === 'text');
         if (!text || text.type !== 'text') throw new Error('Image receipt missing');
-        const receipt = assetReceipt.parse(JSON.parse(text.text));
+        const receipt = assetReceipt.parse(toolResult.structuredContent);
+        expect(JSON.parse(text.text)).toEqual(toolResult.structuredContent);
         receipts.push(receipt);
         expect(await readFile(receipt.absolutePath)).toEqual(imageBytes);
         expect(await designOperation(f.root, { operation: 'read', sessionId })).toEqual(created);
@@ -228,7 +228,12 @@ it.each(['generate', 'edit'] as const)(
       const session = await f.agent.newSession({
         cwd: f.cwd,
         mcpServers: [
-          { name: 'molly', type: 'http', url: 'https://synthetic-mcp.invalid/mcp', headers: [] },
+          {
+            name: 'molly_image',
+            type: 'http',
+            url: 'https://synthetic-mcp.invalid/mcp/molly_image',
+            headers: [],
+          },
         ],
       });
       const completed = await f.agent.prompt({
@@ -252,7 +257,7 @@ it.each(['generate', 'edit'] as const)(
       const nested = toolMessages.find(
         (item) =>
           item.type === 'tool_call' &&
-          item.toolName === `mcp__molly__${toolName}` &&
+          item.toolName === `mcp__molly_image__${toolName}` &&
           item.status === 'completed'
       );
       if (!parent || parent.type !== 'tool_call' || !nested || nested.type !== 'tool_call')
@@ -273,7 +278,7 @@ it.each(['generate', 'edit'] as const)(
       );
       expect(storedImageCall).toMatchObject({
         type: 'tool_call',
-        toolName: `mcp__molly__${toolName}`,
+        toolName: `mcp__molly_image__${toolName}`,
         parentToolCallId: parent.toolCallId,
         status: 'completed',
       });

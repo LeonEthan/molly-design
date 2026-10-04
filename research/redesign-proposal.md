@@ -276,6 +276,11 @@ built-in image models (after the probe).
 **Progress (2026-10-03):** Phase 1 is in draft PR #71. Phase 2a (catalog `exposure`/`toolExposure`, the
 Settings control and _Import from mcp.json_) is implemented on `feat/pi-mcp-phase2a`, stacked on #71. The
 Settings tool list with annotation hints (A step 5) needs live tool discovery from Settings and is deferred.
+Phase 2b (`molly_image` with neutral `generate`/`edit`, typed results, annotations and instructions;
+`molly_render_preview` direct) is on `feat/pi-mcp-phase2b`. Two deliberate differences from §D: the
+browser tool stays on `molly` until 2c creates `molly_browser` (one rename, not two), and `molly` keeps the
+900 s timeout because `molly_render_preview` can wait 75 s, beyond Pi's 60 s default.
+
 Divergence found in review: the catalog stores `toolExposure` as ordered `{ pattern, exposure }` rules,
 not Pi's object, because Flock reorders object keys and Pi applies the first matching pattern.
 

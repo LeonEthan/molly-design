@@ -41,7 +41,7 @@ Parent instructions apply.
   servers publish no Task tools, and a still-resident Agent whose next Turn disables the feature
   is rejected at every Task handler. Task-originated automation explicitly freezes `true` so it
   can update and comment on the Task it is executing.
-- INVARIANT: `molly_generate_image` and `molly_edit_image` are design-sessions-only; `molly_render_preview` needs a polling
+- INVARIANT: `molly_image` (`generate`, `edit`; `/mcp/molly_image`) exists only in design sessions; `molly_render_preview` needs a polling
   Molly desktop. Both gates are the daemon's: send `ownerSessionId`, and treat a missing gate as
   unregistered — absent from `tools/list`, never advertised-then-refused. Contract:
   `packages/shared/AGENTS.md`.
@@ -92,8 +92,8 @@ Parent instructions apply.
 
 - Image generate/edit use the user-selected model with no product default. Edits send
   bounded workspace files as ordered JSON data URLs; optional `background`/`output_format`
-  pass through, refusing transparent JPEG before dispatch; DashScope tools omit and
-  requests refuse unsupported options. Result URLs off the endpoint host download only from checked public addresses. Results are assets only, never artwork commits. Preserve upstream failures without automatic paid retries.
+  pass through; one schema for both protocols, with options stated in server instructions
+  and unsupported ones (and transparent JPEG) refused before dispatch. Result URLs off the endpoint host download only from checked public addresses. Results are assets only, never artwork commits. Preserve upstream failures without automatic paid retries.
   Return ordinary asset paths and metadata; transport loss or post-response publication
   failure is not proof of non-dispatch.
   Decode admitted image bytes before upload/publication, with edge, total-frame pixel

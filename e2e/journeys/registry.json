@@ -237,13 +237,14 @@
       "state": "active",
       "priority": "P1",
       "runtime": "simulator",
-      "title": "The embedded browser blocks a local address without a permission prompt",
+      "title": "The Agent browser navigates and reads a synthetic local page without a permission prompt",
       "owner": "embedded-browser",
-      "feature": "src/features/browser-permission.feature",
+      "feature": "src/features/browser-navigation.feature",
       "fixture": "scripted-model-wire",
-      "fingerprint": "9c8a542ab00c0911a0b150d3a753a7ef829ef8cd21515c5307f71437831952b4",
+      "fingerprint": "bb4169e3b723f5622c49eb0d8a011e6514b53ba4b5de5289d6ec5947868fb5d9",
       "ownerPaths": [
-        "apps/electron/src/main/services/public-browser-agent-policy.ts",
+        "apps/electron/src/main/services/public-browser-service.ts",
+        "apps/cli/src/mcp/molly-browser-mcp-server.ts",
         "packages/harness-pi/src/host.ts",
         "packages/components/src/components/sessions/"
       ],
@@ -252,23 +253,24 @@
           "id": "model.seedScriptedConnection"
         },
         {
-          "id": "browser.requestPrivateNavigation"
+          "id": "browser.navigateAndSnapshotLocalFixture"
         }
       ],
       "checkpoints": [
         "the browser request runs without a permission prompt",
-        "the browser policy blocks the local address without page data"
+        "the native browser returns the fixture URL and title",
+        "the browser snapshot contains the synthetic heading without truncation"
       ],
       "cleanup": [
         "isolated desktop process tree exits",
         "isolated workspace and profile are removed"
       ],
       "coverage": {
-        "renderer": "Session tool result without an approval prompt",
-        "electronIpc": "Real browser host and private-network guard",
-        "bundledCli": "Real Pi to MCP tool dispatch",
+        "renderer": "Session completes its browser probe without an approval prompt",
+        "electronIpc": "Real native browser navigation and accessibility snapshot",
+        "bundledCli": "Real Pi codemode to molly_browser navigate and snapshot",
         "durableState": "Isolated Session only",
-        "externalWire": "Scripted model tool call"
+        "externalWire": "Scripted model and synthetic page on an owned loopback port"
       },
       "signals": {
         "criticality": 5,

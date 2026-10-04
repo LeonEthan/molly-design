@@ -25,7 +25,7 @@ export type ScriptedRuntimeEvent = {
   model?: string;
   streaming?: boolean;
   transport?: string;
-  blockedPrivateHost?: boolean;
+  pageUrl?: string;
   resultText?: string;
 };
 

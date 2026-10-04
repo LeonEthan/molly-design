@@ -16,10 +16,10 @@ Backlog rows are evidence-backed gaps, not executable or promised scenarios.
 
 ## Active P1 journeys
 
-| Stable id          | Journey                                                                 | Renderer                                       | Electron / IPC                              | Bundled CLI                  | Durable state                           | External wire            |
-| ------------------ | ----------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------- | ---------------------------- | --------------------------------------- | ------------------------ |
-| `LODY-BROWSER-002` | The embedded browser blocks a local address without a permission prompt | Session tool result without an approval prompt | Real browser host and private-network guard | Real Pi to MCP tool dispatch | Isolated Session only                   | Scripted model tool call |
-| `LODY-REVIEW-001`  | Open, hide, and switch a synthetic large diff                           | Large diff Review lifecycle                    | Real window and diff RPC                    | Real owned runtime           | Synthetic project and Session lifecycle | Scripted model           |
+| Stable id          | Journey                                                                                  | Renderer                                                       | Electron / IPC                                            | Bundled CLI                                             | Durable state                           | External wire                                               |
+| ------------------ | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------- |
+| `LODY-BROWSER-002` | The Agent browser navigates and reads a synthetic local page without a permission prompt | Session completes its browser probe without an approval prompt | Real native browser navigation and accessibility snapshot | Real Pi codemode to molly_browser navigate and snapshot | Isolated Session only                   | Scripted model and synthetic page on an owned loopback port |
+| `LODY-REVIEW-001`  | Open, hide, and switch a synthetic large diff                                            | Large diff Review lifecycle                                    | Real window and diff RPC                                  | Real owned runtime                                      | Synthetic project and Session lifecycle | Scripted model                                              |
 
 ## Evidence-backed backlog
 

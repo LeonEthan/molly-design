@@ -468,7 +468,10 @@ describe('owned Pi ACP native MCP integration', () => {
       mcpServers: [
         {
           ...server(f.cwd),
-          _meta: { mollyMcpExposure: 'direct', mollyMcpToolExposure: { fail: 'hidden' } },
+          _meta: {
+            mollyMcpExposure: 'direct',
+            mollyMcpToolExposure: [{ pattern: 'fail', exposure: 'hidden' }],
+          },
         },
       ],
     });
@@ -607,7 +610,10 @@ describe('owned Pi ACP native MCP integration', () => {
           _meta: {
             mollyMcpDescription: '  Synthetic catalog summary  ',
             mollyMcpExposure: 'deferred',
-            mollyMcpToolExposure: { search: 'direct', 'delete_*': 'hidden' },
+            mollyMcpToolExposure: [
+              { pattern: 'delete_*', exposure: 'hidden' },
+              { pattern: '*', exposure: 'direct' },
+            ],
           },
         },
       ],
@@ -630,7 +636,7 @@ describe('owned Pi ACP native MCP integration', () => {
         config: {
           description: 'Synthetic catalog summary',
           exposure: 'deferred',
-          toolExposure: { search: 'direct', 'delete_*': 'hidden' },
+          toolExposure: { 'delete_*': 'hidden', '*': 'direct' },
           type: 'http',
           url: 'https://synthetic.invalid/${HOME}',
           headers: { Authorization: '$!literal$$', 'X-Literal': '$${HOME}' },
@@ -648,8 +654,15 @@ describe('owned Pi ACP native MCP integration', () => {
     ).toThrow('pi_acp_mcp_description_invalid');
     for (const _meta of [
       { mollyMcpExposure: 'codemode-deferred' },
-      { mollyMcpToolExposure: { search: 'visible' } },
-      { mollyMcpToolExposure: { ' padded': 'direct' } },
+      { mollyMcpToolExposure: [{ pattern: 'search', exposure: 'visible' }] },
+      { mollyMcpToolExposure: [{ pattern: ' padded', exposure: 'direct' }] },
+      { mollyMcpToolExposure: { search: 'direct' } },
+      {
+        mollyMcpToolExposure: [
+          { pattern: 'search', exposure: 'direct' },
+          { pattern: 'search', exposure: 'hidden' },
+        ],
+      },
     ])
       expect(() => acpMcpConfig([{ ...server('/synthetic'), _meta }], '/synthetic')).toThrow(
         'pi_acp_mcp_exposure_invalid'

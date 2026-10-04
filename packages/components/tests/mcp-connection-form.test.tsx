@@ -97,14 +97,19 @@ describe('Pi presentation fields', () => {
     const writes = await render({
       ...stored,
       exposure: 'hidden',
-      toolExposure: { search_issues: 'direct', 'read_*': 'deferred' },
+      toolExposure: [
+        { pattern: 'read_*', exposure: 'deferred' },
+        { pattern: '*', exposure: 'direct' },
+      ],
     });
     await submit();
     expect(writes[0]).toMatchObject({
       exposure: 'hidden',
-      toolExposure: { search_issues: 'direct', 'read_*': 'deferred' },
+      toolExposure: [
+        { pattern: 'read_*', exposure: 'deferred' },
+        { pattern: '*', exposure: 'direct' },
+      ],
     });
-    expect(Object.keys(writes[0]!.toolExposure!)).toEqual(['search_issues', 'read_*']);
   });
 
   it('omits the codemode default and empty rules', async () => {
@@ -151,7 +156,7 @@ describe('Pi presentation fields', () => {
       name: 'github',
       description: 'Synthetic issues',
       exposure: 'deferred',
-      toolExposure: { delete_issue: 'hidden' },
+      toolExposure: [{ pattern: 'delete_issue', exposure: 'hidden' }],
       transport: 'stdio',
       enabledByDefault: false,
       connection: {

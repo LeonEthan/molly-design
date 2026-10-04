@@ -1,4 +1,9 @@
-import { isMcpExposure, isMcpToolExposure, type McpExposure } from './embedded-harness';
+import {
+  isMcpExposure,
+  isMcpToolExposureRules,
+  type McpExposure,
+  type McpToolExposureRule,
+} from './embedded-harness';
 import type { McpConnectionSpec } from './workspace-mcp';
 
 /**
@@ -10,7 +15,7 @@ export type McpJsonImportedServer = {
   name?: string;
   description?: string;
   exposure?: McpExposure;
-  toolExposure?: Record<string, McpExposure>;
+  toolExposure?: McpToolExposureRule[];
   connection: McpConnectionSpec;
 };
 
@@ -85,17 +90,15 @@ export function parseMcpJsonImport(text: string): McpJsonImportResult {
   const exposure = canonicalExposure(entry.exposure);
   if (exposure !== undefined && !isMcpExposure(exposure))
     return { ok: false, reason: 'invalid_field', field: 'exposure' };
-  let toolExposure: Record<string, McpExposure> | undefined;
+  let toolExposure: McpToolExposureRule[] | undefined;
   if (entry.toolExposure !== undefined) {
     const rules = isRecord(entry.toolExposure)
-      ? Object.fromEntries(
-          Object.entries(entry.toolExposure).map(([pattern, value]) => [
-            pattern.trim(),
-            canonicalExposure(value),
-          ])
-        )
+      ? Object.entries(entry.toolExposure).map(([pattern, value]) => ({
+          pattern: pattern.trim(),
+          exposure: canonicalExposure(value),
+        }))
       : undefined;
-    if (!isMcpToolExposure(rules))
+    if (!isMcpToolExposureRules(rules))
       return { ok: false, reason: 'invalid_field', field: 'toolExposure' };
     toolExposure = rules;
   }
@@ -157,7 +160,7 @@ export function parseMcpJsonImport(text: string): McpJsonImportResult {
       ...(name ? { name } : {}),
       ...(description ? { description } : {}),
       ...(exposure !== undefined ? { exposure: exposure as McpExposure } : {}),
-      ...(toolExposure && Object.keys(toolExposure).length ? { toolExposure } : {}),
+      ...(toolExposure?.length ? { toolExposure } : {}),
       connection,
     },
     ignoredFields,

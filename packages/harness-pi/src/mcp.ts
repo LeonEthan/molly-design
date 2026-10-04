@@ -13,10 +13,11 @@ import { readFile, realpath } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import {
   isMcpExposure,
-  isMcpToolExposure,
+  isMcpToolExposureRules,
   McpCredentialBindingSchema,
   StoredMcpCredentialSchema,
   mcpCredentialMatchesServer,
+  toPiToolExposure,
 } from '@molly/shared/embedded-harness';
 
 type NativeMcpServerConfig = Parameters<ExtensionAPI['registerMcpServer']>[1];
@@ -68,12 +69,12 @@ export function acpMcpConfig(
     const { mollyMcpExposure: exposure, mollyMcpToolExposure: toolExposure } = server._meta ?? {};
     if (exposure !== undefined && !isMcpExposure(exposure))
       throw new Error('pi_acp_mcp_exposure_invalid');
-    if (toolExposure !== undefined && !isMcpToolExposure(toolExposure))
+    if (toolExposure !== undefined && !isMcpToolExposureRules(toolExposure))
       throw new Error('pi_acp_mcp_exposure_invalid');
     const presentation = {
       ...(rawDescription?.trim() ? { description: rawDescription.trim() } : {}),
       ...(exposure !== undefined ? { exposure } : {}),
-      ...(toolExposure !== undefined ? { toolExposure: { ...toolExposure } } : {}),
+      ...(toolExposure !== undefined ? { toolExposure: toPiToolExposure(toolExposure) } : {}),
     };
     names.add(server.name);
     if ('command' in server) {

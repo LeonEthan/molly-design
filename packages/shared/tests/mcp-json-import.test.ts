@@ -27,7 +27,10 @@ describe('parseMcpJsonImport', () => {
         name: 'github',
         description: 'GitHub issues and pull requests',
         exposure: 'codemode',
-        toolExposure: { search_issues: 'direct', 'delete_*': 'hidden' },
+        toolExposure: [
+          { pattern: 'search_issues', exposure: 'direct' },
+          { pattern: 'delete_*', exposure: 'hidden' },
+        ],
         connection: {
           transport: 'stdio',
           command: 'npx',
@@ -106,19 +109,31 @@ describe('catalog exposure fields', () => {
       isWorkspaceMcpServerMeta({
         ...row,
         exposure: 'hidden',
-        toolExposure: { search: 'direct', 'read_*': 'deferred' },
+        toolExposure: [
+          { pattern: 'read_*', exposure: 'deferred' },
+          { pattern: '*', exposure: 'direct' },
+        ],
       })
     ).toBe(true);
     for (const invalid of [
       { exposure: 'visible' },
-      { toolExposure: { search: 'visible' } },
-      { toolExposure: { '': 'direct' } },
-      { toolExposure: JSON.parse('{"__proto__":"direct"}') },
+      { toolExposure: [{ pattern: 'search', exposure: 'visible' }] },
+      { toolExposure: [{ pattern: '', exposure: 'direct' }] },
+      { toolExposure: { search: 'direct' } },
+      {
+        toolExposure: [
+          { pattern: 'a', exposure: 'direct' },
+          { pattern: 'a', exposure: 'hidden' },
+        ],
+      },
+      { toolExposure: [{ pattern: 'a', exposure: 'direct', extra: true }] },
+      { toolExposure: [JSON.parse('{"pattern":"__proto__","exposure":"direct"}')] },
       { toolExposure: ['direct'] },
       {
-        toolExposure: Object.fromEntries(
-          Array.from({ length: 65 }, (_, index) => [`tool_${index}`, 'direct'])
-        ),
+        toolExposure: Array.from({ length: 65 }, (_, index) => ({
+          pattern: `tool_${index}`,
+          exposure: 'direct',
+        })),
       },
     ])
       expect(isWorkspaceMcpServerMeta({ ...row, ...invalid }), JSON.stringify(invalid)).toBe(false);

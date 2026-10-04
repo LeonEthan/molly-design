@@ -83,7 +83,10 @@ export const ExposureRules: Story = {
     initialEntry: {
       ...stdioEntry,
       exposure: 'deferred',
-      toolExposure: { search_files: 'direct', 'delete_*': 'hidden' },
+      toolExposure: [
+        { pattern: 'search_files', exposure: 'direct' },
+        { pattern: 'delete_*', exposure: 'hidden' },
+      ],
     },
   },
 };

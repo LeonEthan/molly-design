@@ -106,7 +106,10 @@ native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExte
 A catalog `description` (and Molly's fixed built-in summary) travels in ACP
 `_meta.mollyMcpDescription` and becomes Pi's native server `description`, the one line
 listed in the `mcp_servers` prompt section. Catalog `exposure` and `toolExposure` use
-Pi's names and values and travel as `_meta.mollyMcpExposure`/`mollyMcpToolExposure`;
+Pi's names and values and travel as `_meta.mollyMcpExposure`/`mollyMcpToolExposure`.
+`toolExposure` is stored and sent as ordered `{ pattern, exposure }` rules, because Flock
+does not keep object key order and Pi applies the first matching pattern; the harness
+rebuilds Pi's object in rule order (`toPiToolExposure`);
 an invalid value refuses the session (`pi_acp_mcp_exposure_invalid`) rather than falling
 back to a default. The built-in server keeps Pi's default `codemode` exposure.
 Only the daemon-identified built-in Molly server in the managed host receives native

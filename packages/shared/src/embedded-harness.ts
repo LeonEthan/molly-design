@@ -29,22 +29,39 @@ const RESERVED_RECORD_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 export const isMcpExposure = (value: unknown): value is McpExposure =>
   typeof value === 'string' && (MCP_EXPOSURES as readonly string[]).includes(value);
 
-/** Pi `toolExposure`: exact tool names or `*` patterns; exact names win, then the first pattern. */
-export const isMcpToolExposure = (value: unknown): value is Record<string, McpExposure> => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const entries = Object.entries(value);
-  return (
-    entries.length <= MAX_MCP_TOOL_EXPOSURE_RULES &&
-    entries.every(
-      ([pattern, exposure]) =>
-        pattern.length > 0 &&
-        pattern.length <= MAX_MCP_TOOL_PATTERN_LENGTH &&
-        pattern.trim() === pattern &&
-        !RESERVED_RECORD_KEYS.has(pattern) &&
-        isMcpExposure(exposure)
+/**
+ * One Pi `toolExposure` entry. Pi applies exact names first, then the first matching `*` pattern, so
+ * rules persist as an ordered list: Flock does not preserve object key order.
+ */
+export type McpToolExposureRule = { pattern: string; exposure: McpExposure };
+
+export const isMcpToolExposureRules = (value: unknown): value is McpToolExposureRule[] => {
+  if (!Array.isArray(value) || value.length > MAX_MCP_TOOL_EXPOSURE_RULES) return false;
+  const patterns = new Set<string>();
+  return value.every((rule: unknown) => {
+    if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false;
+    const { pattern, exposure, ...rest } = rule as Record<string, unknown>;
+    if (
+      Object.keys(rest).length > 0 ||
+      typeof pattern !== 'string' ||
+      pattern.length === 0 ||
+      pattern.length > MAX_MCP_TOOL_PATTERN_LENGTH ||
+      pattern.trim() !== pattern ||
+      RESERVED_RECORD_KEYS.has(pattern) ||
+      patterns.has(pattern) ||
+      !isMcpExposure(exposure)
     )
-  );
+      return false;
+    patterns.add(pattern);
+    return true;
+  });
 };
+
+/** Pi's `toolExposure` object, built in rule order immediately before registration. */
+export const toPiToolExposure = (
+  rules: readonly McpToolExposureRule[]
+): Record<string, McpExposure> =>
+  Object.fromEntries(rules.map(({ pattern, exposure }) => [pattern, exposure]));
 
 /** Pi lists this one line for the built-in server in its `mcp_servers` prompt section. */
 export const MOLLY_BUILTIN_MCP_DESCRIPTION =

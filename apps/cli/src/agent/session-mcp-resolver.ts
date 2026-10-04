@@ -168,8 +168,8 @@ export const loadSessionMcpCatalog = async (
             mollyConnection: { id: entry.id, revision: entry.revision },
             ...(description ? { mollyMcpDescription: description } : {}),
             ...(entry.exposure ? { mollyMcpExposure: entry.exposure } : {}),
-            ...(entry.toolExposure && Object.keys(entry.toolExposure).length
-              ? { mollyMcpToolExposure: { ...entry.toolExposure } }
+            ...(entry.toolExposure?.length
+              ? { mollyMcpToolExposure: entry.toolExposure.map((rule) => ({ ...rule })) }
               : {}),
           },
         });

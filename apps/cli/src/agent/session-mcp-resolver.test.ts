@@ -48,7 +48,7 @@ describe('loadSessionMcpCatalog', () => {
           revision: 1,
           description: '  Synthetic summary  ',
           exposure: 'deferred',
-          toolExposure: { search: 'direct' },
+          toolExposure: [{ pattern: 'search', exposure: 'direct' }],
           connection: { transport: 'http', url: 'https://synthetic.invalid/mcp' },
           createdAt: 1,
           updatedAt: 1,
@@ -73,7 +73,7 @@ describe('loadSessionMcpCatalog', () => {
       mollyConnection: { id: selectedId, revision: 1 },
       mollyMcpDescription: 'Synthetic summary',
       mollyMcpExposure: 'deferred',
-      mollyMcpToolExposure: { search: 'direct' },
+      mollyMcpToolExposure: [{ pattern: 'search', exposure: 'direct' }],
     });
     rows[0]!.value = { ...rows[0]!.value, description: 'Changed summary' };
     expect(guarded.guard?.isCurrent()).toBe(false);

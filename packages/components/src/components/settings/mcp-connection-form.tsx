@@ -6,6 +6,7 @@ import {
   parseMcpJsonImport,
   type McpConnectionSpec,
   type McpExposure,
+  type McpToolExposureRule,
   type McpTransport,
   type WorkspaceMcpServerMeta,
 } from '@molly/shared';
@@ -25,7 +26,7 @@ import { Textarea } from '@/ui/textarea';
 import { Field, Section } from './form-primitives';
 
 type KeyValueDraft = { key: string; value: string };
-type ToolExposureDraft = { pattern: string; exposure: McpExposure };
+type ToolExposureDraft = McpToolExposureRule;
 
 type McpConnectionFormDraft = {
   name: string;
@@ -48,7 +49,7 @@ export type McpConnectionFormValue = {
   name: string;
   description?: string;
   exposure?: McpExposure;
-  toolExposure?: Record<string, McpExposure>;
+  toolExposure?: McpToolExposureRule[];
   transport: McpTransport;
   enabledByDefault: boolean;
   connection?: McpConnectionSpec;
@@ -84,10 +85,7 @@ const createMcpConnectionFormDraft = (entry?: McpConnectionFormSource): McpConne
     name: entry?.name ?? '',
     description: entry?.description ?? '',
     exposure: entry?.exposure ?? 'codemode',
-    toolExposure: Object.entries(entry?.toolExposure ?? {}).map(([pattern, exposure]) => ({
-      pattern,
-      exposure,
-    })),
+    toolExposure: (entry?.toolExposure ?? []).map((rule) => ({ ...rule })),
     transport,
     enabledByDefault: entry?.enabledByDefault ?? false,
     ...emptyConnectionFields(transport),
@@ -153,11 +151,12 @@ const buildHttpConnection = (draft: McpConnectionFormDraft): McpConnectionSpec |
 
 const buildToolExposure = (
   rows: readonly ToolExposureDraft[]
-): Record<string, McpExposure> | undefined => {
-  const entries = rows
-    .map(({ pattern, exposure }) => [pattern.trim(), exposure] as const)
-    .filter(([pattern]) => pattern.length > 0);
-  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+): McpToolExposureRule[] | undefined => {
+  const seen = new Set<string>();
+  const rules = rows
+    .map(({ pattern, exposure }) => ({ pattern: pattern.trim(), exposure }))
+    .filter(({ pattern }) => pattern.length > 0 && !seen.has(pattern) && seen.add(pattern));
+  return rules.length > 0 ? rules : undefined;
 };
 
 const buildMcpConnectionFormValue = (draft: McpConnectionFormDraft): McpConnectionFormValue => {

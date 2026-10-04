@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#80](https://github.com/LeonEthan/molly-design/pull/80)
+
 ## Abstract
 
 Chrome account import reported that cookies could not be fully decrypted even when the selected profile's Pinterest cookies had all been read successfully. The pinned reader emits an error for an excluded Chromium service directory at report scope, and Molly treated every report error as a selected-profile decryption failure. The importer now recognizes only that unscoped discovery diagnostic as informational while retaining every selected-profile/source failure and other request error. Synthetic transaction regressions, a native before/after read and actual Settings import followed by an authenticated Pinterest page establish current-machine account reuse; signed distribution and restart persistence were not revalidated.

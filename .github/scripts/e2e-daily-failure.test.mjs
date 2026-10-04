@@ -186,7 +186,7 @@ void test('creates a report for infrastructure failures without a failure index'
 
 void test('reports every recording through artifacts without requiring attachment authentication', async () => {
   await withWorkspace(async (workspace) => {
-    const evidenceRoot = await writeFailures(workspace, ['LODY-WORK-001', 'LODY-REVIEW-001']);
+    const evidenceRoot = await writeFailures(workspace, ['LODY-WORK-001', 'LODY-BROWSER-002']);
     const result = await prepareDailyFailureReport({
       ...RUN,
       evidenceRoot,
@@ -194,7 +194,10 @@ void test('reports every recording through artifacts without requiring attachmen
       workingDirectory: workspace,
       videoDelivery: 'artifact',
     });
-    assert.deepEqual(result.batches.map((batch) => batch.videos), [[], []]);
+    assert.deepEqual(
+      result.batches.map((batch) => batch.videos),
+      [[], []]
+    );
     for (const batch of result.batches) {
       const body = await readFile(join(workspace, batch.bodyPath), 'utf8');
       assert.ok(body.includes(`${RUN.runUrl}#artifacts`));
@@ -206,7 +209,7 @@ void test('reports every recording through artifacts without requiring attachmen
 
 void test('builds PR-specific markers and failure copy', async () => {
   await withWorkspace(async (workspace) => {
-    const evidenceRoot = await writeFailures(workspace, ['LODY-REVIEW-001']);
+    const evidenceRoot = await writeFailures(workspace, ['LODY-BROWSER-002']);
     const result = await prepareDailyFailureReport({
       ...RUN,
       evidenceRoot,
@@ -216,7 +219,7 @@ void test('builds PR-specific markers and failure copy', async () => {
       suite: 'full',
     });
     const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
-    assert.match(body, /desktop-e2e-pr-failure-run:123456:video:LODY-REVIEW-001/u);
+    assert.match(body, /desktop-e2e-pr-failure-run:123456:video:LODY-BROWSER-002/u);
     assert.match(body, /Desktop PR full regression failed/u);
     assert.doesNotMatch(body, /Desktop Daily/u);
   });

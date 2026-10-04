@@ -172,67 +172,6 @@
       "estimatedMinutes": 3
     },
     {
-      "id": "LODY-REVIEW-001",
-      "state": "active",
-      "priority": "P1",
-      "runtime": "simulator",
-      "title": "Open, hide, and switch a synthetic large diff",
-      "owner": "review-lifecycle",
-      "feature": "src/features/lifecycle.feature",
-      "fixture": "synthetic-large-diff-and-scripted-model",
-      "fingerprint": "56c7d7f18d76ba3f4f377ccdf025aca2d2fe211a9bcf84941bdfe7bd077e0187",
-      "ownerPaths": [
-        "packages/components/src/ui/diff-viewer/",
-        "packages/components/src/components/sessions/"
-      ],
-      "actions": [
-        {
-          "id": "project.addSyntheticLargeDiff"
-        },
-        {
-          "id": "session.createCompleted"
-        },
-        {
-          "id": "review.openAllChanges"
-        },
-        {
-          "id": "review.switchLargeDiff"
-        },
-        {
-          "id": "review.hideAndShow"
-        },
-        {
-          "id": "review.close"
-        },
-        {
-          "id": "session.deletePermanent"
-        }
-      ],
-      "checkpoints": [
-        "both synthetic changed files render",
-        "Review survives hide and restore",
-        "Review state is released after Session deletion"
-      ],
-      "cleanup": ["Review tabs close", "Session durable state is deleted"],
-      "coverage": {
-        "renderer": "Large diff Review lifecycle",
-        "electronIpc": "Real window and diff RPC",
-        "bundledCli": "Real owned runtime",
-        "durableState": "Synthetic project and Session lifecycle",
-        "externalWire": "Scripted model"
-      },
-      "signals": {
-        "criticality": 4,
-        "boundaryRisk": 4,
-        "changeFrequency": 4,
-        "escapedDefect": false
-      },
-      "freshness": 5,
-      "scoutJourneys": ["review"],
-      "blockedReason": null,
-      "estimatedMinutes": 4
-    },
-    {
       "id": "LODY-BROWSER-002",
       "state": "active",
       "priority": "P1",

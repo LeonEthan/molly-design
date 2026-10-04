@@ -41,15 +41,6 @@ export class WorkSessionPage {
     await expect(this.page.getByRole('button', { name: projectName, exact: true })).toBeVisible();
   }
 
-  async selectLocalProject(projectName: string): Promise<void> {
-    const selected = this.page.getByRole('button', { name: projectName, exact: true });
-    if (await selected.isVisible()) return;
-    await this.page.getByRole('button', { name: /^(Select a project|选择项目)$/u }).click();
-    await this.page.getByPlaceholder(/^(Search projects|搜索项目)$/u).fill(projectName);
-    await this.page.getByRole('menuitem', { name: projectName, exact: true }).click();
-    await expect(selected).toBeVisible();
-  }
-
   async startSession(prompt: string): Promise<string> {
     await this.page.locator('#chat-prompt').fill(prompt);
     await this.page.getByRole('button', { name: /^(Send|发送)$/u }).click();

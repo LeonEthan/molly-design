@@ -9,7 +9,7 @@ on:
         description: Resource journey to exercise
         required: true
         type: choice
-        options: [all, session, review, work]
+        options: [all, session, work]
         default: all
       iterations:
         description: Measured iterations per journey

@@ -10,6 +10,7 @@ import type {
 import { parseAskUserQuestionPermissionMeta } from '@molly/shared';
 import {
   HARNESS_QUESTION_DISMISS_METHOD,
+  MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION,
   MOLLY_BUILTIN_MCP_DESCRIPTION,
 } from '@molly/shared/embedded-harness';
 import type {
@@ -46,6 +47,7 @@ function createTestClient(options?: {
   agentType?: string;
   workspaceId?: WorkspaceId;
   machineId?: MachineId;
+  designHookLaunchId?: string;
 }) {
   const logger = createSilentLogger();
   const onUpdateMessage = vi.fn();
@@ -64,6 +66,7 @@ function createTestClient(options?: {
     sessionId: 'test-session' as SessionId,
     workspaceId: options?.workspaceId,
     machineId: options?.machineId,
+    ...(options?.designHookLaunchId ? { designHookLaunchId: options.designHookLaunchId } : {}),
     logger,
     terminalManager: {} as never,
     agentConfig: {
@@ -180,6 +183,26 @@ describe('AgentClient plan mode permission restoration', () => {
       // @ts-expect-error - inspect the legacy projection without a provider process
       const previous = await legacy.buildMcpServers('/tmp/synthetic-session', undefined);
       expect(previous.every((server) => server._meta === undefined)).toBe(true);
+    });
+    it('adds the molly_image namespace only to design sessions, with its own summary', async () => {
+      const design = createTestClient({
+        agentType: 'molly',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        machineId: 'machine-1' as MachineId,
+        designHookLaunchId: 'synthetic-launch',
+      }).client;
+      // @ts-expect-error - inspect the exact ACP startup payload without spawning a provider
+      const servers = await design.buildMcpServers('/tmp/synthetic-session', undefined);
+      expect(servers.map((server: { name: string }) => server.name)).toEqual(['molly', 'molly_image']);
+      expect(servers[0]?._meta).toMatchObject({
+        mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
+        mollyMcpToolExposure: [{ pattern: 'molly_render_preview', exposure: 'direct' }],
+      });
+      expect(servers[1]?._meta).toEqual({
+        mollyConnection: { id: 'molly:builtin', revision: 1 },
+        mollyMcpDescription: MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION,
+      });
+      expect(servers[1]?.args).toEqual([expect.any(String), '__internal', 'molly-image-mcp-server']);
     });
     it('passes public deployment endpoints to the MCP subprocess', () => {
       const keys = ['MOLLY_AUTH_URL', 'MOLLY_AUTH_SITE_URL', 'MOLLY_SERVER_URL'] as const;

@@ -193,7 +193,7 @@ describe('designSkillPointerLine', () => {
 });
 
 describe('designSkillsForImageCapability', () => {
-  /* The imagegen skill instructs the agent to call `molly_generate_image`, so it
+  /* The imagegen skill instructs the agent to call the `molly_image` tools, so it
      is delivered exactly when that tool will be registered — never on its own. */
   it('adds the imagegen skill only when the machine has image capability', () => {
     expect(designSkillsForImageCapability(false)).toEqual(['graphic-design']);
@@ -286,7 +286,7 @@ describe('packaged design materials', () => {
     }
     expect(graphicText).toContain('references/layered-workflow.md');
     expect(text).toContain('actual image-reading tool');
-    expect(text).toContain('molly_edit_image');
+    expect(text).toContain('mcp__molly_image__generate');
     expect(text).toContain('Molly has no default model');
     expect(text).toContain('sent as data URLs in a JSON request');
     expect(text).toContain('`background: "transparent"`');

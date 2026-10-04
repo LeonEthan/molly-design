@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from '@/utils/logger';
 import { createMcpHttpServer } from './molly-mcp-http-host';
 import {
+  MCP_HTTP_IMAGE_PATH,
   MCP_HTTP_MACHINE_ID_HEADER,
   MCP_HTTP_SESSION_ID_HEADER,
   MCP_HTTP_TASK_TOOLS_ENABLED_HEADER,
@@ -104,6 +105,30 @@ describe('MCP HTTP host wire behavior', () => {
     expect(payload.jsonrpc).toBe('2.0');
     expect(payload.id).toBe(1);
     expect(payload.result?.serverInfo?.name).toBe('molly');
+  });
+
+  it('serves the molly_image namespace on its own path and refuses unknown paths', async () => {
+    const post = (pathname: string) =>
+      fetch(`${baseUrl}${pathname}`, {
+        method: 'POST',
+        headers: {
+          accept: ACCEPT,
+          'content-type': 'application/json',
+          authorization: `Bearer ${TOKEN}`,
+          ...sessionContextHeaders(),
+        },
+        body: INITIALIZE_BODY,
+      });
+    const image = await post(MCP_HTTP_IMAGE_PATH);
+    expect(image.status).toBe(200);
+    const payload = (await image.json()) as {
+      result?: { serverInfo?: { name?: string }; instructions?: string };
+    };
+    expect(payload.result?.serverInfo?.name).toBe('molly_image');
+    expect(payload.result?.instructions).toContain('unavailable in this session');
+    const unknown = await post('/mcp/molly_unknown');
+    expect(unknown.status).toBe(404);
+    await unknown.arrayBuffer();
   });
 
   it('rejects GET with 405 instead of holding a stream open', async () => {

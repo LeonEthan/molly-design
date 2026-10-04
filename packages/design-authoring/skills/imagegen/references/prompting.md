@@ -63,7 +63,7 @@
 ## Quality vs latency
 
 - For latency-sensitive runs, start at the lowest quality the connection offers and only raise it if needed; put text-heavy or detail-critical requirements in the prompt text.
-- The parameters actually accepted are whatever the configured image connection supports; the `molly_generate_image` / `molly_edit_image` tool schemas is the honest surface.
+- The parameters actually accepted are whatever the configured image connection supports; the `molly_image` server instructions and its `generate` / `edit` tool schemas are the honest surface.
 
 ## Use-case tips
 

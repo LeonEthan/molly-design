@@ -16,7 +16,7 @@ describe('provider-neutral nested tool history', () => {
       kind: 'other',
       status: 'in_progress',
       rawInput: { script: 'UNSTORED_SCRIPT', image: 'UNSTORED_IMAGE_BYTES' },
-      _meta: { lody: { toolName: 'mcp__molly__molly_generate_image', parentToolCallId: 'parent' } },
+      _meta: { lody: { toolName: 'mcp__molly_image__generate', parentToolCallId: 'parent' } },
     });
     const finish = notification({
       sessionUpdate: 'tool_call_update',
@@ -33,7 +33,7 @@ describe('provider-neutral nested tool history', () => {
       {
         toolCallId: 'parent/1',
         parentToolCallId: 'parent',
-        toolName: 'mcp__molly__molly_generate_image',
+        toolName: 'mcp__molly_image__generate',
         status: 'completed',
         content: [
           { type: 'content', content: { type: 'text', text: '{"path":"media/asset.png"}' } },

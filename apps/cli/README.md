@@ -36,7 +36,7 @@ resubmission attempts and broader candidate retirement are separate work.
 ## Design image connection
 
 Design sessions with an enabled URL/key/model connection expose
-`molly_generate_image` (JSON `/images/generations`) and `molly_edit_image`
+`molly_image` `generate` (JSON `/images/generations`) and `edit`
 (multipart `/images/edits`, ordered workspace files and an optional PNG mask).
 The user must provide a model; existing explicit values are preserved. Each call
 returns a content-addressed workspace asset without changing or committing PPTD.

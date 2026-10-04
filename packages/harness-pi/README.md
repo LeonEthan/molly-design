@@ -112,7 +112,8 @@ does not keep object key order and Pi applies the first matching pattern; the ha
 rebuilds Pi's object in rule order (`toPiToolExposure`);
 an invalid value refuses the session (`pi_acp_mcp_exposure_invalid`) rather than falling
 back to a default. The built-in server keeps Pi's default `codemode` exposure.
-Only the daemon-identified built-in Molly server in the managed host receives native
+Only the daemon-identified built-in Molly servers (`molly` and, in design sessions,
+`molly_image`, which share the built-in catalog identity) in the managed host receive native
 `timeout: 900` (seconds); external and standalone ACP servers retain Pi's default.
 This is Pi's progress-reset request timeout, not an absolute whole-operation deadline.
 Image-service request deadlines and cancellation remain unchanged. Timeout or Stop

@@ -13,8 +13,10 @@ import { Logger } from '@/utils/logger';
 import * as acp from '@agentclientprotocol/sdk';
 import { z } from 'zod';
 import {
+  MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION,
   MOLLY_BUILTIN_MCP_CONNECTION,
   MOLLY_BUILTIN_MCP_DESCRIPTION,
+  MOLLY_BUILTIN_MCP_TOOL_EXPOSURE,
   HARNESS_QUESTION_DISMISS_METHOD,
   HarnessQuestionIdentitySchema,
   HarnessQuestionDismissRequestSchema,
@@ -54,7 +56,11 @@ import {
 } from '@molly/shared';
 import { getLocalControlSocketPath } from '@molly/shared/node/local-ipc';
 import { getMollyMcpHttpEndpoint } from '@/mcp/molly-mcp-http-server';
-import { buildMollyMcpHttpHeaders } from '@/mcp/molly-mcp-http-protocol';
+import {
+  MOLLY_IMAGE_MCP_SERVER_NAME,
+  buildMollyMcpHttpHeaders,
+  mollyImageMcpHttpUrl,
+} from '@/mcp/molly-mcp-http-protocol';
 import { TerminalManager } from '@/session/terminal-manager';
 import { reportError } from 'src/utils/telemetry';
 import { formatErrorMessage } from '@/utils/format-error';
@@ -880,23 +886,30 @@ export class AgentClient implements acp.Client {
     // per-session CLI Node subprocess that only proxies back to the daemon.
     // Anything else (and a daemon whose host is down or gave up) keeps the
     // stdio entry below.
+    const designSession = this.options.designHookLaunchId !== undefined;
     if (this.supportsHttpMcp) {
       const endpoint = getMollyMcpHttpEndpoint();
       if (endpoint) {
+        const headers = buildMollyMcpHttpHeaders(endpoint, {
+          sessionId: this.options.sessionId,
+          designHookLaunchId: this.options.designHookLaunchId,
+          workspaceId: this.options.workspaceId,
+          machineId: this.options.machineId,
+          workdir,
+          taskToolsEnabled: this.options.taskToolsEnabled === true,
+        });
         return [
-          {
-            type: 'http',
-            name: 'molly',
-            url: endpoint.url,
-            headers: buildMollyMcpHttpHeaders(endpoint, {
-              sessionId: this.options.sessionId,
-              designHookLaunchId: this.options.designHookLaunchId,
-              workspaceId: this.options.workspaceId,
-              machineId: this.options.machineId,
-              workdir,
-              taskToolsEnabled: this.options.taskToolsEnabled === true,
-            }),
-          },
+          { type: 'http', name: 'molly', url: endpoint.url, headers },
+          ...(designSession
+            ? [
+                {
+                  type: 'http' as const,
+                  name: MOLLY_IMAGE_MCP_SERVER_NAME,
+                  url: mollyImageMcpHttpUrl(endpoint),
+                  headers,
+                },
+              ]
+            : []),
         ];
       }
     }
@@ -948,6 +961,16 @@ export class AgentClient implements acp.Client {
         args: [cliEntrypoint, '__internal', 'molly-mcp-server'],
         env,
       },
+      ...(designSession
+        ? [
+            {
+              name: MOLLY_IMAGE_MCP_SERVER_NAME,
+              command: process.execPath,
+              args: [cliEntrypoint, '__internal', 'molly-image-mcp-server'],
+              env,
+            },
+          ]
+        : []),
     ];
   }
 
@@ -963,7 +986,14 @@ export class AgentClient implements acp.Client {
             _meta: {
               ...server._meta,
               mollyConnection: MOLLY_BUILTIN_MCP_CONNECTION,
-              mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
+              ...(server.name === MOLLY_IMAGE_MCP_SERVER_NAME
+                ? { mollyMcpDescription: MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION }
+                : {
+                    mollyMcpDescription: MOLLY_BUILTIN_MCP_DESCRIPTION,
+                    mollyMcpToolExposure: MOLLY_BUILTIN_MCP_TOOL_EXPOSURE.map((rule) => ({
+                      ...rule,
+                    })),
+                  }),
             },
           }
         : server

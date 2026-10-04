@@ -65,7 +65,13 @@ export const toPiToolExposure = (
 
 /** Pi lists this one line for the built-in server in its `mcp_servers` prompt section. */
 export const MOLLY_BUILTIN_MCP_DESCRIPTION =
-  'Molly design tools: render artwork previews, generate or edit images with the user’s image connection (each call may be billed), drive the visible browser page, upload files, and manage Molly sessions and tasks';
+  'Molly design tools: render artwork previews, resubmit drafts, drive the visible browser page, upload files, and manage Molly sessions and tasks';
+/** The render → read loop passes pixels the model must see, so the preview tool is declared directly. */
+export const MOLLY_BUILTIN_MCP_TOOL_EXPOSURE: readonly McpToolExposureRule[] = [
+  { pattern: 'molly_render_preview', exposure: 'direct' },
+];
+export const MOLLY_BUILTIN_IMAGE_MCP_DESCRIPTION =
+  'Generate or edit raster assets with the user’s image connection (each call may be billed)';
 
 /** Execution eligibility only: historical configs remain readable. */
 export function getEmbeddedHarnessTargetError(input: {

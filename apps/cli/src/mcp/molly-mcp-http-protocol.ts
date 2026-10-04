@@ -13,6 +13,14 @@ export interface MollyMcpHttpEndpoint {
   token: string;
 }
 
+export const MOLLY_IMAGE_MCP_SERVER_NAME = 'molly_image';
+
+/** The `molly_image` server's path on the same host; `/mcp` serves `molly`. */
+export const MCP_HTTP_IMAGE_PATH = '/mcp/molly_image';
+
+export const mollyImageMcpHttpUrl = (endpoint: MollyMcpHttpEndpoint): string =>
+  new URL(MCP_HTTP_IMAGE_PATH, endpoint.url).toString();
+
 export const MCP_HTTP_DESIGN_LAUNCH_ID_HEADER = 'x-molly-design-launch-id';
 export const MCP_HTTP_SESSION_ID_HEADER = 'x-lody-mcp-session-id';
 export const MCP_HTTP_WORKSPACE_ID_HEADER = 'x-lody-mcp-workspace-id';

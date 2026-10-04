@@ -8,7 +8,7 @@ techniques for those stages.
 ## Composition prompts and draft comparison
 
 Write a prompt for the whole canvas: subject, composition, style, palette,
-lighting and where the copy will sit. Use `molly_generate_image` for
+lighting and where the copy will sit. Use `molly_image` `generate` for
 composition drafts; vary composition or concept, not just surface detail. Choose
 a `size` whose aspect ratio matches the canvas (see the imagegen skill for size
 rules); matching pixel dimensions makes later comparison easier.
@@ -34,7 +34,7 @@ For raster objects that need reconstruction, regenerate the complete object
 from the chosen draft. A crop keeps holes where other objects overlapped.
 Keep separately supplied delivery assets as supplied, use supported native
 primitives for flat geometry, and preserve unaffected layers in local edits.
-For a foreground object that needs transparent isolation, call `molly_edit_image`
+For a foreground object that needs transparent isolation, call `molly_image` `edit`
 with the draft as the first image and:
 
 - a prompt that names only this element, asks for it to match the draft's

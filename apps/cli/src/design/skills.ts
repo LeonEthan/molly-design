@@ -33,7 +33,7 @@ export const SKILL_MANIFEST_FILENAME = '.molly-managed-files.json';
 export const DEFAULT_DESIGN_SKILLS = ['graphic-design'] as const;
 
 /**
- * The skill that only makes sense next to `molly_generate_image` and `molly_edit_image`.
+ * The skill that only makes sense next to the `molly_image` `generate` and `edit` tools.
  *
  * Delivered exactly when the tool is: this function is only ever reached for a
  * session whose meta carries `design` (see `prepareDesignTurn`), the machine

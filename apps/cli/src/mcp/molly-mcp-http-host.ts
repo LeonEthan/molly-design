@@ -11,12 +11,14 @@ import {
   runWithMcpSessionContext,
   type McpSessionContext,
 } from './molly-mcp-server';
+import { buildMollyImageMcpServer } from './molly-image-mcp-server';
 import { resolveDesignResubmit, resolveDesignGate, resolveRenderHost } from './design-tools';
 import { resolveBrowserHost } from './browser-tools';
 import { canReadProcNetTcp, lookupLoopbackPeerUid } from './loopback-peer-uid';
 import {
   MCP_HTTP_MACHINE_ID_HEADER,
   MCP_HTTP_DESIGN_LAUNCH_ID_HEADER,
+  MCP_HTTP_IMAGE_PATH,
   MCP_HTTP_PREFERRED_PORT_ENV,
   MCP_HTTP_SESSION_ID_HEADER,
   MCP_HTTP_TASK_TOOLS_ENABLED_HEADER,
@@ -254,7 +256,7 @@ async function handleRequest(
   logger: Logger
 ): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
-  if (url.pathname !== '/mcp') {
+  if (url.pathname !== '/mcp' && url.pathname !== MCP_HTTP_IMAGE_PATH) {
     reject(res, 404, 'Not found');
     return;
   }
@@ -316,20 +318,20 @@ async function handleRequest(
   // One server per request, so the design gate is resolved fresh for every turn
   // rather than frozen for a session: enabling the image connection takes effect
   // on the next turn, and disabling it removes the tool just as promptly.
-  const designGate = await resolveDesignGate(context, logger);
-  const renderHost = await resolveRenderHost(context, logger);
-  const browserHost = await resolveBrowserHost(context);
-  const designResubmit = await resolveDesignResubmit(context);
-  const server = buildMollyMcpServer({
-    taskToolsEnabled: context.taskToolsEnabled,
-    designGate,
-    designResubmit,
-    renderHost,
-    browserHost,
-    resolveGate: async () => await resolveDesignGate(context, logger, true),
-    resolveRenderHost: async () => await resolveRenderHost(context, logger),
-    resolveBrowserHost: async () => await resolveBrowserHost(context),
-  });
+  const server =
+    url.pathname === MCP_HTTP_IMAGE_PATH
+      ? buildMollyImageMcpServer({
+          designGate: await resolveDesignGate(context, logger),
+          resolveGate: async () => await resolveDesignGate(context, logger, true),
+        })
+      : buildMollyMcpServer({
+          taskToolsEnabled: context.taskToolsEnabled,
+          designResubmit: await resolveDesignResubmit(context),
+          renderHost: await resolveRenderHost(context, logger),
+          browserHost: await resolveBrowserHost(context),
+          resolveRenderHost: async () => await resolveRenderHost(context, logger),
+          resolveBrowserHost: async () => await resolveBrowserHost(context),
+        });
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,

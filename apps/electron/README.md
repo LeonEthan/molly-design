@@ -137,6 +137,9 @@ Settings > Website accounts lists supported local Chromium browser profiles and 
 Pinterest account (the first-release import scope). The importer checks detailed Cookie identities against
 the extraction report and rejects unsupported partitions before changing Molly
 cookies, including when the destination already contains site CHIPS cookies.
+The pinned reader reports excluded Chromium service directories as discovery errors;
+that specific unscoped diagnostic does not block a successfully read selected profile.
+Selected-profile/source errors and all other request errors still stop import.
 The user may need to approve macOS Keychain access during import. Browser-data
 permission is separate: macOS can attribute terminal-launched development access
 to the terminal. Allow the chosen browser under that app in Files & Folders, then

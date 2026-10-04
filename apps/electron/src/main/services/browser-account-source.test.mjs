@@ -90,6 +90,80 @@ void test('partial decrypts and off-site cookies never reach Molly', () => {
   )
 })
 
+void test('an excluded service directory does not block the successfully read selected profile', async () => {
+  const input = report({
+    status: 'partial',
+    issues: [
+      {
+        code: 'profile_excluded_service_directory',
+        stage: 'discovery',
+        severity: 'error',
+        profileId: null
+      }
+    ]
+  })
+  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
+  const store = cookieStore()
+  assert.equal(
+    await importBrowserAccountCookies({
+      store,
+      site: 'pinterest.com',
+      replaceExisting: true,
+      readSource: () =>
+        readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
+          browserReport: async () => input,
+          chromiumBasedDetailed: async () => details()
+        }),
+      beforeWrite: async () => {}
+    }),
+    1
+  )
+  assert.equal(store.state[0].value, cookie.value)
+})
+
+void test('discovery exclusion never hides selected-profile, source, or other request failures', async () => {
+  const excludedDirectory = {
+    code: 'profile_excluded_service_directory',
+    stage: 'discovery',
+    severity: 'error',
+    profileId: null
+  }
+  for (const scenario of ['profile', 'source', 'scoped', 'unknown', 'decrypt', 'missing-scope']) {
+    const input = report()
+    input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
+    const issue = { ...excludedDirectory }
+    if (scenario === 'scoped') issue.profileId = 'synthetic-profile'
+    if (scenario === 'unknown') issue.code = 'unknown-request-failure'
+    if (scenario === 'decrypt') {
+      issue.code = 'decrypt_failed'
+      issue.stage = 'decrypt'
+      issue.severity = 'warning'
+    }
+    if (scenario === 'missing-scope') delete issue.profileId
+    if (scenario === 'profile') input.profiles[0].issues.push(issue)
+    else if (scenario === 'source') input.profiles[0].sources[0].issues.push(issue)
+    else input.issues.push(issue)
+    const store = cookieStore()
+    const before = structuredClone(store.state)
+    await assert.rejects(
+      importBrowserAccountCookies({
+        store,
+        site: 'pinterest.com',
+        replaceExisting: true,
+        readSource: () =>
+          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
+            browserReport: async () => input,
+            chromiumBasedDetailed: async () => details()
+          }),
+        beforeWrite: async () => {}
+      }),
+      /could not be fully decrypted/,
+      scenario
+    )
+    assert.deepEqual(store.state, before)
+  }
+})
+
 void test('single CHIPS cookie and same-name partition collisions reject the whole import', () => {
   const partitioned = { cookie, context: { ...context, topFrameSiteKey: 'https://example.test' } }
   assert.throws(() => convert(report(), [[partitioned]]), /partitioned cookies/)

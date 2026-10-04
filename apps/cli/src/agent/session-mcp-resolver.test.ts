@@ -37,7 +37,7 @@ const catalogFlock = flockWithRows([
 ]);
 
 describe('loadSessionMcpCatalog', () => {
-  it('forwards the catalog description only into guarded startup and revokes on its edit', async () => {
+  it('forwards catalog presentation only into guarded startup and revokes on its edit', async () => {
     const rows = [
       {
         key: ['mcpServer', selectedId],
@@ -47,6 +47,8 @@ describe('loadSessionMcpCatalog', () => {
           transport: 'http',
           revision: 1,
           description: '  Synthetic summary  ',
+          exposure: 'deferred',
+          toolExposure: { search: 'direct' },
           connection: { transport: 'http', url: 'https://synthetic.invalid/mcp' },
           createdAt: 1,
           updatedAt: 1,
@@ -70,6 +72,8 @@ describe('loadSessionMcpCatalog', () => {
     expect(guarded({ http: true }).servers[0]?._meta).toEqual({
       mollyConnection: { id: selectedId, revision: 1 },
       mollyMcpDescription: 'Synthetic summary',
+      mollyMcpExposure: 'deferred',
+      mollyMcpToolExposure: { search: 'direct' },
     });
     rows[0]!.value = { ...rows[0]!.value, description: 'Changed summary' };
     expect(guarded.guard?.isCurrent()).toBe(false);

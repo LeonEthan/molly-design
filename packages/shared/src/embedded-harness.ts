@@ -19,6 +19,33 @@ export const MOLLY_PI_PACKAGES = [
 ] as const;
 export type MollyPiPackage = (typeof MOLLY_PI_PACKAGES)[number];
 export const MOLLY_BUILTIN_MCP_CONNECTION = { id: 'molly:builtin', revision: 1 } as const;
+/** Pi 1.0 `McpExposure`: how a server's tools reach the model. Absent means Pi's default, `codemode`. */
+export const MCP_EXPOSURES = ['codemode', 'deferred', 'direct', 'hidden'] as const;
+export type McpExposure = (typeof MCP_EXPOSURES)[number];
+export const MAX_MCP_TOOL_EXPOSURE_RULES = 64;
+const MAX_MCP_TOOL_PATTERN_LENGTH = 128;
+const RESERVED_RECORD_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+export const isMcpExposure = (value: unknown): value is McpExposure =>
+  typeof value === 'string' && (MCP_EXPOSURES as readonly string[]).includes(value);
+
+/** Pi `toolExposure`: exact tool names or `*` patterns; exact names win, then the first pattern. */
+export const isMcpToolExposure = (value: unknown): value is Record<string, McpExposure> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  return (
+    entries.length <= MAX_MCP_TOOL_EXPOSURE_RULES &&
+    entries.every(
+      ([pattern, exposure]) =>
+        pattern.length > 0 &&
+        pattern.length <= MAX_MCP_TOOL_PATTERN_LENGTH &&
+        pattern.trim() === pattern &&
+        !RESERVED_RECORD_KEYS.has(pattern) &&
+        isMcpExposure(exposure)
+    )
+  );
+};
+
 /** Pi lists this one line for the built-in server in its `mcp_servers` prompt section. */
 export const MOLLY_BUILTIN_MCP_DESCRIPTION =
   'Molly design tools: render artwork previews, generate or edit images with the user’s image connection (each call may be billed), drive the visible browser page, upload files, and manage Molly sessions and tasks';

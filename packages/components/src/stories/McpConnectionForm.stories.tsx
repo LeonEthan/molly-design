@@ -78,3 +78,12 @@ export const SaveFailedLocally: Story = {
       'MCP settings were not saved. Check local encrypted storage and re-enter credentials before retrying.',
   },
 };
+export const ExposureRules: Story = {
+  args: {
+    initialEntry: {
+      ...stdioEntry,
+      exposure: 'deferred',
+      toolExposure: { search_files: 'direct', 'delete_*': 'hidden' },
+    },
+  },
+};

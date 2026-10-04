@@ -1,5 +1,19 @@
 import type { McpServerId } from './ids';
-import { mcpCredentialMatchesServer, type McpCredentialBinding } from './embedded-harness';
+import {
+  isMcpExposure,
+  isMcpToolExposure,
+  mcpCredentialMatchesServer,
+  type McpCredentialBinding,
+  type McpExposure,
+} from './embedded-harness';
+
+export {
+  MCP_EXPOSURES,
+  MAX_MCP_TOOL_EXPOSURE_RULES,
+  isMcpExposure,
+  isMcpToolExposure,
+  type McpExposure,
+} from './embedded-harness';
 
 /**
  * Molly supports stdio and Streamable HTTP MCP servers. SSE is intentionally
@@ -42,6 +56,10 @@ export type WorkspaceMcpServerMeta = {
   name: string;
   transport: McpTransport;
   description?: string;
+  /** Pi `exposure`; absent means Pi's default, `codemode`. */
+  exposure?: McpExposure;
+  /** Pi `toolExposure`, in rule order. */
+  toolExposure?: Record<string, McpExposure>;
   connection?: McpConnectionSpec;
   enabledByDefault?: boolean;
   createdAt: number;
@@ -55,6 +73,8 @@ export type ResolvedStdioMcpServer = {
     mollyMcpCredential?: McpCredentialBinding;
     /** Catalog `description`, forwarded as Pi's one-line server summary. */
     mollyMcpDescription?: string;
+    mollyMcpExposure?: McpExposure;
+    mollyMcpToolExposure?: Record<string, McpExposure>;
   };
   name: string;
   command: string;
@@ -68,6 +88,8 @@ export type ResolvedHttpMcpServer = {
     mollyMcpCredential?: McpCredentialBinding;
     /** Catalog `description`, forwarded as Pi's one-line server summary. */
     mollyMcpDescription?: string;
+    mollyMcpExposure?: McpExposure;
+    mollyMcpToolExposure?: Record<string, McpExposure>;
   };
   type: 'http';
   name: string;
@@ -190,6 +212,8 @@ export const isWorkspaceMcpServerMeta = (value: unknown): value is WorkspaceMcpS
     (value.revision !== undefined &&
       (!Number.isSafeInteger(value.revision) || (value.revision as number) < 1)) ||
     (value.description !== undefined && typeof value.description !== 'string') ||
+    (value.exposure !== undefined && !isMcpExposure(value.exposure)) ||
+    (value.toolExposure !== undefined && !isMcpToolExposure(value.toolExposure)) ||
     (value.enabledByDefault !== undefined && typeof value.enabledByDefault !== 'boolean') ||
     (value.createdBy !== undefined && typeof value.createdBy !== 'string')
   ) {

@@ -80,6 +80,8 @@ export function McpSetting() {
       name: value.name,
       transport: value.transport,
       ...(value.description ? { description: value.description } : {}),
+      ...(value.exposure ? { exposure: value.exposure } : {}),
+      ...(value.toolExposure ? { toolExposure: value.toolExposure } : {}),
       ...(value.connection ? { connection: value.connection } : {}),
       enabledByDefault: value.enabledByDefault,
       createdAt: existing?.createdAt ?? now,

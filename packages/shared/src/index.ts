@@ -108,6 +108,7 @@ export * from './code-collab';
 export * from './file-preview';
 export * from './machine-flock';
 export * from './workspace-mcp';
+export * from './mcp-json-import';
 export * from './agent-role';
 export * from './workspace-flock';
 export * from './local-machine-rpc';

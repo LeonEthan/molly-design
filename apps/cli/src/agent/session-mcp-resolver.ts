@@ -167,6 +167,10 @@ export const loadSessionMcpCatalog = async (
             ...server._meta,
             mollyConnection: { id: entry.id, revision: entry.revision },
             ...(description ? { mollyMcpDescription: description } : {}),
+            ...(entry.exposure ? { mollyMcpExposure: entry.exposure } : {}),
+            ...(entry.toolExposure && Object.keys(entry.toolExposure).length
+              ? { mollyMcpToolExposure: { ...entry.toolExposure } }
+              : {}),
           },
         });
       }

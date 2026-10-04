@@ -105,7 +105,10 @@ native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExte
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.
 A catalog `description` (and Molly's fixed built-in summary) travels in ACP
 `_meta.mollyMcpDescription` and becomes Pi's native server `description`, the one line
-listed in the `mcp_servers` prompt section.
+listed in the `mcp_servers` prompt section. Catalog `exposure` and `toolExposure` use
+Pi's names and values and travel as `_meta.mollyMcpExposure`/`mollyMcpToolExposure`;
+an invalid value refuses the session (`pi_acp_mcp_exposure_invalid`) rather than falling
+back to a default. The built-in server keeps Pi's default `codemode` exposure.
 Only the daemon-identified built-in Molly server in the managed host receives native
 `timeout: 900` (seconds); external and standalone ACP servers retain Pi's default.
 This is Pi's progress-reset request timeout, not an absolute whole-operation deadline.

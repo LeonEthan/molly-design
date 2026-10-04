@@ -65,7 +65,7 @@ pnpm e2e:smoke
 pnpm e2e:full
 pnpm e2e:scout
 pnpm --filter @molly/e2e canvas:resources
-pnpm e2e:scout -- --journey review --iterations 50
+pnpm e2e:scout -- --journey session --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
 pnpm e2e:acceptance -- --subject desktop-local-bootstrap
 pnpm e2e:acceptance -- --subject desktop-session-lifecycle \
@@ -83,7 +83,7 @@ never rebuild, which keeps scenario timing about product behavior rather than
 toolchain work. `e2e:acceptance` creates a unique round under
 `e2e/artifacts/acceptance/`; it never overwrites an earlier round. Supported
 subjects are `desktop-local-bootstrap`, `desktop-session-lifecycle`,
-`desktop-review-lifecycle`, `desktop-work-lifecycle`, and `desktop-lifecycle`.
+`desktop-work-lifecycle`, and `desktop-lifecycle`.
 Optional before/after JSON and a retained-path summary are copied into the
 round, then covered by its checksummed manifest.
 Scout operation, classification, and triage are specified in

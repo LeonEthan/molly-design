@@ -6,7 +6,7 @@ import {
 
 const MEBIBYTE = 1024 * 1024;
 
-export type ScoutJourney = 'session' | 'review' | 'work';
+export type ScoutJourney = 'session' | 'work';
 
 export type ScoutCheckpoint = {
   journey: ScoutJourney;

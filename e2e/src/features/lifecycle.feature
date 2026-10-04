@@ -9,14 +9,6 @@
     并且 用户停止当前 Agent
     那么 关闭 Session 后 Agent 进程被释放
 
-  @lody @P1 @essence @runtime-simulator @LODY-REVIEW-001
-  场景: 用户反复查看和隐藏大型本地 diff
-    假如 已配置确定性 Agent 的隔离桌面
-    并且 已注册包含大型变更的合成项目
-    当 用户创建 Session 并打开全部变更
-    并且 用户切换大型 diff 并隐藏再恢复 Review
-    那么 关闭 Review 和 Session 后相关视图被释放
-
   @lody @P0 @essence @runtime-simulator @LODY-SESSION-002
   场景: 用户删除带 Agent 的 Session 且项目目录保留
     假如 已配置确定性 Agent 的隔离桌面

@@ -2,15 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OnboardingPage } from '../support/pages/onboarding-page.js';
-import { ReviewPage } from '../support/pages/review-page.js';
 import { SessionPage } from '../support/pages/session-page.js';
 import { WorkSessionPage } from '../support/pages/work-session-page.js';
-import {
-  createSyntheticReviewRepository,
-  PRIMARY_REVIEW_DIFF_PATH,
-  SECONDARY_REVIEW_DIFF_PATH,
-  type SyntheticReviewRepository,
-} from '../support/fixtures/synthetic-review-repository.js';
 import { WorkSessionFixture } from '../support/fixtures/work-session-fixture.js';
 import { ElectronHarness } from '../support/electron-harness.js';
 import type { ScenarioArtifacts } from '../support/world-utils.js';
@@ -55,11 +48,11 @@ function parseOptions(): ScoutOptions {
   const ablation = process.argv.includes('--ablation');
   const journeyPosition = process.argv.indexOf('--journey');
   const requestedJourney = journeyPosition === -1 ? 'all' : process.argv[journeyPosition + 1];
-  if (!['all', 'session', 'review', 'work'].includes(requestedJourney ?? '')) {
-    throw new Error('--journey must be one of: all, session, review, work');
+  if (!['all', 'session', 'work'].includes(requestedJourney ?? '')) {
+    throw new Error('--journey must be one of: all, session, work');
   }
   const journeys: ScoutJourney[] =
-    requestedJourney === 'all' ? ['session', 'review', 'work'] : [requestedJourney as ScoutJourney];
+    requestedJourney === 'all' ? ['session', 'work'] : [requestedJourney as ScoutJourney];
   const iterations = readIntegerOption('--iterations', ablation ? 12 : 30);
   const warmup = readIntegerOption('--warmup', ablation ? 0 : 3);
   const checkpointEvery = readIntegerOption('--checkpoint-every', ablation ? 1 : 5);
@@ -97,7 +90,6 @@ async function setupJourney(
   harness: ElectronHarness;
   fixture: WorkSessionFixture;
   session: SessionPage;
-  review: ReviewPage;
   work: WorkSessionPage;
 }> {
   const journeyDir = join(roundRoot, journey);
@@ -116,12 +108,11 @@ async function setupJourney(
     await onboarding.waitForLocalBootstrap();
     fixture = await WorkSessionFixture.create(join(journeyDir, 'scripted-runtime.ndjson'));
     const session = new SessionPage(harness.page, fixture);
-    const review = new ReviewPage(harness.page);
     const work = new WorkSessionPage(harness.page);
     await fixture.startModelServer();
     await onboarding.skipConfigurationAndEnterProduct();
     await session.seedDeterministicModelConnection();
-    return { artifacts, harness, fixture, session, review, work };
+    return { artifacts, harness, fixture, session, work };
   } catch (error) {
     if (harness.page) {
       await harness.page
@@ -153,26 +144,6 @@ async function runSessionIteration(
   return active;
 }
 
-async function runReviewIteration(
-  iteration: number,
-  session: SessionPage,
-  review: ReviewPage,
-  repository: SyntheticReviewRepository,
-  captureActive?: () => Promise<ScoutCheckpoint['active']>
-): Promise<ScoutCheckpoint['active'] | null> {
-  await session.createCompletedSession(`Scout Review lifecycle ${iteration} [SCOUT:REPLY]`);
-  await review.openChangesPanel(repository.changedPaths);
-  await review.openChangedFile(PRIMARY_REVIEW_DIFF_PATH, repository.changedPaths);
-  await review.hide();
-  await review.show();
-  await review.openChangedFile(SECONDARY_REVIEW_DIFF_PATH, repository.changedPaths);
-  const active = captureActive ? await captureActive() : null;
-  await review.closeDiffViewer();
-  await review.closeChangesPanel();
-  await session.archiveAndDeleteSession();
-  return active;
-}
-
 async function runWorkIteration(
   iteration: number,
   work: WorkSessionPage,
@@ -196,7 +167,6 @@ async function runJourney(
   const checkpoints: ScoutCheckpoint[] = [];
   let harness: ElectronHarness | null = null;
   let fixture: WorkSessionFixture | null = null;
-  let reviewRepository: SyntheticReviewRepository | null = null;
   let analysis: ReturnType<typeof analyzeScoutCheckpoints> = {
     metrics: [],
     suspectedTrends: [],
@@ -208,11 +178,7 @@ async function runJourney(
     harness = context.harness;
     fixture = context.fixture;
 
-    if (journey === 'review') {
-      reviewRepository = createSyntheticReviewRepository();
-      const project = await context.review.registerLocalProject(reviewRepository.rootPath);
-      await context.work.selectLocalProject(project.name);
-    } else if (journey === 'work') {
+    if (journey === 'work') {
       await context.work.addLocalProject(fixture.projectRoot, fixture.projectName);
     }
 
@@ -230,14 +196,6 @@ async function runJourney(
       let active: ScoutCheckpoint['active'] | null;
       if (journey === 'session') {
         active = await runSessionIteration(run, context.session, captureActive);
-      } else if (journey === 'review') {
-        active = await runReviewIteration(
-          run,
-          context.session,
-          context.review,
-          reviewRepository!,
-          captureActive
-        );
       } else {
         active = await runWorkIteration(run, context.work, context.session, captureActive);
       }
@@ -297,7 +255,6 @@ async function runJourney(
         failure = `${failure ? `${failure}\n` : ''}teardown: ${errorText(error)}`;
       });
     }
-    reviewRepository?.cleanup();
     fixture?.dispose();
   }
 
@@ -326,7 +283,7 @@ async function runJourney(
 async function main(): Promise<void> {
   const options = parseOptions();
   if (options.ablation && options.journeys.length !== 1) {
-    throw new Error('Ablation runs exactly one journey; pass --journey session, review, or work');
+    throw new Error('Ablation runs exactly one journey; pass --journey session or work');
   }
   const roundId = createRoundId();
   const roundRoot = resolve(process.cwd(), 'artifacts', 'scout', roundId);

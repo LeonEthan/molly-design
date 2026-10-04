@@ -10,7 +10,6 @@ behavior is deterministic.
 | Name      | Repeated lifecycle                                                         | Release evidence                          |
 | --------- | -------------------------------------------------------------------------- | ----------------------------------------- |
 | `session` | Create Session, stream, stop, archive, permanently delete                  | ACP PID exits                             |
-| `review`  | Open Review, switch between two large diffs, hide/show, close, delete      | Review surface and Session close          |
 | `work`    | Create worktree Session, run ACP and Terminal, archive, permanently delete | ACP PID, terminal, and worktree disappear |
 
 The default run executes three warmup iterations and 30 measured iterations
@@ -20,7 +19,7 @@ collects Electron main and renderer garbage, and captures the post-GC state.
 
 ```bash
 pnpm e2e:scout
-pnpm e2e:scout -- --journey review --iterations 50
+pnpm e2e:scout -- --journey session --iterations 50
 pnpm e2e:scout:ablation -- --iterations 12
 pnpm e2e:scout -- --journey work --iterations 30 --warmup 3 --checkpoint-every 5 --heap-baseline
 ```

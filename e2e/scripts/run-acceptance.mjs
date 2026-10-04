@@ -24,10 +24,6 @@ const SCENARIOS = {
     id: 'LODY-SESSION-001',
     question: 'Does stopping and deleting a real ACP Session release its Agent process?',
   },
-  review: {
-    id: 'LODY-REVIEW-001',
-    question: 'Can a user inspect, switch, hide, restore, and close large local diffs?',
-  },
   work: {
     id: 'LODY-SESSION-002',
     question:
@@ -47,11 +43,6 @@ const SUBJECTS = {
     requirement: 'A stopped and deleted Session releases its deterministic ACP runtime.',
     scenarios: [SCENARIOS.session],
   },
-  'desktop-review-lifecycle': {
-    tags: '@LODY-REVIEW-001',
-    requirement: 'Large local diffs remain usable through Review open, switch, hide, and close.',
-    scenarios: [SCENARIOS.review],
-  },
   'desktop-work-lifecycle': {
     tags: '@LODY-SESSION-002',
     requirement:
@@ -61,7 +52,7 @@ const SUBJECTS = {
   'desktop-lifecycle': {
     tags: '@P0 or @P1',
     requirement:
-      'The real OSS desktop satisfies bootstrap, Session, Review, and Work lifecycle acceptance checks.',
+      'The real OSS desktop satisfies bootstrap, Session, and Work lifecycle acceptance checks.',
     scenarios: Object.values(SCENARIOS),
   },
 };

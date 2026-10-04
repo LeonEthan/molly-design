@@ -128,6 +128,44 @@ describe('Settings MCP tool discovery', () => {
     });
   });
 
+  it.each([
+    ['user', 'secret'],
+    ['ab', 'xy'],
+    ['a', 'b'],
+    ['', 'pw'],
+    ['uv', ''],
+    ['uv', 'pw:tail'],
+  ])('redacts decoded Basic credentials %j / %j from tool metadata', async (user, password) => {
+    const decoded = `${user}:${password}`;
+    const token = Buffer.from(decoded).toString('base64');
+    const authorization = `Basic ${token}`;
+    const server = new Server({ name: 'echo', version: '1.0.0' }, { capabilities: { tools: {} } });
+    server.setRequestHandler(ListToolsRequestSchema, () => ({
+      tools: [
+        { name: 'inspect', title: decoded, description: `${user}|${password}` },
+        { name: 'encoded', annotations: { title: authorization }, description: token },
+        ...[decoded, user, password].filter(Boolean).map((value) => ({ name: `${value}_probe` })),
+      ].map((tool) => ({ ...tool, inputSchema: { type: 'object' as const } })),
+    }));
+    expect(
+      await discoverMcpTools(
+        await linked(server),
+        secretFragments({ Authorization: authorization })
+      )
+    ).toEqual({
+      ok: true,
+      truncated: false,
+      tools: [
+        {
+          name: 'inspect',
+          title: '•••',
+          description: `${user ? '•••' : ''}|${password ? '•••' : ''}`,
+        },
+        { name: 'encoded', title: '•••', description: '•••' },
+      ],
+    });
+  });
+
   it('reports a server that fails to start as unreachable, never as an empty list', async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await serverTransport.close();

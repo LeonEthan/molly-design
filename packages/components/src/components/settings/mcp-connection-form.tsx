@@ -244,6 +244,8 @@ export function McpConnectionForm({
   const isStdio = draft.transport === 'stdio';
   const savedEndpointUnchanged =
     !hasCredentialInput &&
+    JSON.stringify(draft.protectedCredentials ?? null) ===
+      JSON.stringify(initialEntry?.connection?.protectedCredentials ?? null) &&
     sameEndpoint(
       isStdio ? buildStdioConnection(draft) : buildHttpConnection(draft),
       initialEntry?.connection

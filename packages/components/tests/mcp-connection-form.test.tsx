@@ -298,6 +298,19 @@ describe('Settings tool list', () => {
     expect(host.textContent).not.toContain(en['settings.mcp.tools.empty']);
   });
 
+  it('stops listing once removal of the stored credentials is staged', async () => {
+    await render(stored, async () => listed);
+    const button = [...host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === en['settings.mcp.tools.list']
+    )!;
+    expect(button.disabled).toBe(false);
+    await click(en['settings.mcp.removeStoredCredentials']);
+    expect(button.disabled).toBe(true);
+    expect(host.textContent).toContain(en['settings.mcp.tools.saveFirst']);
+    await click(en['settings.mcp.tools.list']);
+    expect(host.textContent).not.toContain('Search things.');
+  });
+
   it('lists only the saved server: an edited endpoint disables the action', async () => {
     await render(stored, async () => listed);
     const url = [...host.querySelectorAll<HTMLInputElement>('input')].find(
@@ -311,4 +324,3 @@ describe('Settings tool list', () => {
     expect(host.textContent).toContain(en['settings.mcp.tools.saveFirst']);
   });
 });
-

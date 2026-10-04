@@ -24,17 +24,30 @@ import {
 const MAX_REQUEST_BYTES = 128 * 1024;
 const HELPER_DEADLINE_MS = 20_000;
 const MIN_SECRET_ECHO_CHARS = 4;
-const AUTH_SCHEME = /^(?:bearer|basic|token)\s+(.+)$/i;
+const AUTH_SCHEME = /^(bearer|basic|token)\s+(.+)$/i;
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
-/** Every saved value, plus the bare token inside an `Authorization`-style header value. */
+function decodedBasicParts(token: string): string[] {
+  if (!BASE64.test(token)) return [];
+  const decoded = Buffer.from(token, 'base64').toString('utf8');
+  const separator = decoded.indexOf(':');
+  return separator < 0
+    ? [decoded]
+    : [decoded, decoded.slice(0, separator), decoded.slice(separator + 1)];
+}
+
 export function secretFragments(values: Readonly<Record<string, string>>): string[] {
   const fragments = Object.values(values).flatMap((value) => {
-    const token = AUTH_SCHEME.exec(value.trim())?.[1]?.trim();
-    return token ? [value, token] : [value];
+    const auth = AUTH_SCHEME.exec(value.trim());
+    const token = auth?.[2]?.trim();
+    const literals = (token ? [value, token] : [value]).filter(
+      (fragment) => fragment.length >= MIN_SECRET_ECHO_CHARS
+    );
+    return token && auth?.[1]?.toLowerCase() === 'basic'
+      ? [...literals, ...decodedBasicParts(token)]
+      : literals;
   });
-  return [
-    ...new Set(fragments.filter((fragment) => fragment.length >= MIN_SECRET_ECHO_CHARS)),
-  ].sort((left, right) => right.length - left.length);
+  return [...new Set(fragments.filter(Boolean))].sort((left, right) => right.length - left.length);
 }
 
 export function buildDiscoveryTransport(request: McpToolDiscoveryRequest): Transport {
@@ -104,7 +117,7 @@ export async function discoverMcpTools(
   secrets: readonly string[] = []
 ): Promise<McpToolDiscoveryResult> {
   const client = new Client({ name: 'molly-settings', version: '1.0.0' }, { capabilities: {} });
-  const echoes = secrets.filter((secret) => secret.length >= MIN_SECRET_ECHO_CHARS);
+  const echoes = secrets.filter(Boolean);
   try {
     await client.connect(transport);
     const tools: McpDiscoveredTool[] = [];

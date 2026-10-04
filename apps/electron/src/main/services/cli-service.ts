@@ -945,7 +945,7 @@ export class CliService {
   ): Promise<PrivateHelperResult> {
     const entry = resolveBundledCliEntry()
     if (!entry || limits.signal?.aborted) return { kind: 'unavailable' }
-    const env = await bundledCliEnvironment({})
+    const env = await bundledCliEnvironment({ envOverrides: buildCliRuntimeEnvOverrides() })
     if (limits.signal?.aborted) return { kind: 'cancelled' }
     const child = spawn(resolveBundledCliRuntime(), ['--max-old-space-size=256', entry, ...args], {
       env,

@@ -90,3 +90,43 @@ export const ExposureRules: Story = {
     },
   },
 };
+
+const listedTools = {
+  ok: true as const,
+  truncated: false,
+  tools: [
+    {
+      name: 'search_issues',
+      description: 'Search issues by text, label or state.',
+      readOnlyHint: true,
+      openWorldHint: true,
+    },
+    {
+      name: 'delete_repository',
+      title: 'Delete a repository',
+      description: 'Permanently delete a repository and its history.',
+      destructiveHint: true,
+    },
+    { name: 'ping' },
+  ],
+};
+const protectedEntry: WorkspaceMcpServerMeta = {
+  ...httpEntry,
+  connection: {
+    transport: 'http',
+    url: 'https://mcp.example.com/mcp',
+    protectedCredentials: { credentialRef: '00000000-0000-4000-8000-000000000001', revision: 2 },
+  },
+};
+export const ToolsListed: Story = {
+  args: {
+    initialEntry: { ...protectedEntry, toolExposure: [{ pattern: 'ping', exposure: 'hidden' }] },
+    listTools: async () => listedTools,
+  },
+};
+export const ToolsListFailed: Story = {
+  args: {
+    initialEntry: protectedEntry,
+    listTools: async () => ({ ok: false as const, reason: 'needs_credentials' as const }),
+  },
+};

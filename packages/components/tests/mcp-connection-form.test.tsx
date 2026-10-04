@@ -3,6 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceMcpServerMeta } from '@molly/shared';
+import type { McpToolDiscoveryResult } from '@molly/shared/embedded-harness';
 import {
   McpConnectionForm,
   type McpConnectionFormValue,
@@ -47,12 +48,16 @@ afterEach(async () => {
   host.remove();
   vi.unstubAllGlobals();
 });
-async function render(entry = stored) {
+async function render(
+  entry = stored,
+  listTools?: () => Promise<McpToolDiscoveryResult>
+) {
   const writes: McpConnectionFormValue[] = [];
   await act(async () =>
     root.render(
       createElement(McpConnectionForm, {
         initialEntry: entry,
+        ...(listTools ? { listTools } : {}),
         onCancel() {},
         onSubmit(value) {
           writes.push(value);
@@ -250,3 +255,60 @@ describe('protected MCP credential form', () => {
     ).toBe(false);
   });
 });
+
+describe('Settings tool list', () => {
+  const listed: McpToolDiscoveryResult = {
+    ok: true,
+    truncated: false,
+    tools: [
+      { name: 'search', description: 'Search things.', readOnlyHint: true },
+      { name: 'wipe', destructiveHint: true },
+      { name: 'ping' },
+    ],
+  };
+
+  it('shows declared hints and adds an exact-name rule on request', async () => {
+    const writes = await render(
+      { ...stored, toolExposure: [{ pattern: 'ping', exposure: 'hidden' }] },
+      async () => listed
+    );
+    await click(en['settings.mcp.tools.list']);
+    const text = host.textContent ?? '';
+    expect(text).toContain(en['settings.mcp.tools.hints.readOnly']);
+    expect(text).toContain(en['settings.mcp.tools.hints.destructive']);
+    expect(text).toContain(en['settings.mcp.tools.hasRule']);
+    await act(async () =>
+      host
+        .querySelector<HTMLButtonElement>(
+          `button[aria-label="${en['settings.mcp.tools.addRuleFor'].replace('{{name}}', 'search')}"]`
+        )!
+        .click()
+    );
+    await submit();
+    expect(writes[0]?.toolExposure).toEqual([
+      { pattern: 'ping', exposure: 'hidden' },
+      { pattern: 'search', exposure: 'direct' },
+    ]);
+  });
+
+  it('reports a failure instead of an empty list', async () => {
+    await render(stored, async () => ({ ok: false, reason: 'timed_out' }));
+    await click(en['settings.mcp.tools.list']);
+    expect(host.textContent).toContain(en['settings.mcp.tools.failure.timed_out']);
+    expect(host.textContent).not.toContain(en['settings.mcp.tools.empty']);
+  });
+
+  it('lists only the saved server: an edited endpoint disables the action', async () => {
+    await render(stored, async () => listed);
+    const url = [...host.querySelectorAll<HTMLInputElement>('input')].find(
+      (input) => input.value === 'https://mcp.invalid/mcp'
+    )!;
+    await change(url, 'https://other.invalid/mcp');
+    const button = [...host.querySelectorAll('button')].find(
+      (candidate) => candidate.textContent === en['settings.mcp.tools.list']
+    )!;
+    expect(button.disabled).toBe(true);
+    expect(host.textContent).toContain(en['settings.mcp.tools.saveFirst']);
+  });
+});
+

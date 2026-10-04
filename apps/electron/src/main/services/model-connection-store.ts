@@ -246,6 +246,31 @@ export class ModelConnectionStore {
     })
   }
 
+  /**
+   * Settings tool listing only (A5): values for one explicit, user-initiated discovery of the
+   * exact saved binding. No run lease exists here; workspace, server, reference, revision and
+   * destination must all match, so a value never reaches another destination.
+   */
+  mcpValuesForDiscovery(input: {
+    workspaceId: string
+    serverId: string
+    credentialRef: string
+    revision: number
+    destination: McpCredentialBinding['destination']
+  }): Promise<Record<string, string> | null> {
+    return this.serial(async () => {
+      const entry = ((await this.read()).mcp ?? []).find(
+        ({ connection }) =>
+          connection.workspaceId === input.workspaceId &&
+          connection.serverId === input.serverId &&
+          connection.credentialRef === input.credentialRef &&
+          connection.revision === input.revision &&
+          sameMcpDestination(connection.destination, input.destination)
+      )
+      return entry ? { ...entry.values } : null
+    })
+  }
+
   saveImage(input: SaveProtectedImageConnection): Promise<ProtectedImageConnection> {
     const parsed = SaveProtectedImageConnectionSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_image_connection'))
@@ -442,4 +467,17 @@ export class ModelConnectionStore {
       return entry
     })
   }
+}
+
+function sameMcpDestination(
+  left: McpCredentialBinding['destination'],
+  right: McpCredentialBinding['destination']
+): boolean {
+  if (left.transport === 'http') return right.transport === 'http' && left.url === right.url
+  if (right.transport === 'http') return false
+  return (
+    left.command === right.command &&
+    left.args.length === right.args.length &&
+    left.args.every((arg, index) => arg === right.args[index])
+  )
 }

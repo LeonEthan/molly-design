@@ -23,7 +23,9 @@ import { Label } from '@/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
 import { Switch } from '@/ui/switch';
 import { Textarea } from '@/ui/textarea';
+import type { McpToolDiscoveryResult } from '@molly/shared/embedded-harness';
 import { Field, Section } from './form-primitives';
+import { McpToolList } from './mcp-tool-list';
 
 type KeyValueDraft = { key: string; value: string };
 type ToolExposureDraft = McpToolExposureRule;
@@ -175,6 +177,19 @@ const buildMcpConnectionFormValue = (draft: McpConnectionFormDraft): McpConnecti
   };
 };
 
+const sameEndpoint = (
+  left: McpConnectionSpec | undefined,
+  right: McpConnectionSpec | undefined
+): boolean => {
+  if (!left || !right || left.transport !== right.transport) return false;
+  if (left.transport === 'http') return right.transport === 'http' && left.url === right.url;
+  return (
+    right.transport === 'stdio' &&
+    left.command === right.command &&
+    JSON.stringify(left.args ?? []) === JSON.stringify(right.args ?? [])
+  );
+};
+
 /** Server editor body: a scrolling field stack plus the sticky action footer.
  *  It is sized by its container (the settings dialog), so it stays a plain
  *  `flex` column instead of owning any width or backdrop of its own. */
@@ -184,6 +199,7 @@ export function McpConnectionForm({
   error,
   onSubmit,
   onCancel,
+  listTools,
   className,
 }: {
   initialEntry?: WorkspaceMcpServerMeta;
@@ -191,6 +207,8 @@ export function McpConnectionForm({
   error?: string;
   onSubmit: (value: McpConnectionFormValue) => void | Promise<void>;
   onCancel: () => void;
+  /** Present only for a saved entry: lists that entry's tools as stored. */
+  listTools?: () => Promise<McpToolDiscoveryResult>;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -224,6 +242,12 @@ export function McpConnectionForm({
     setDraft((current) => ({ ...current, bearerToken: '', headers: [], env: [] }));
   };
   const isStdio = draft.transport === 'stdio';
+  const savedEndpointUnchanged =
+    !hasCredentialInput &&
+    sameEndpoint(
+      isStdio ? buildStdioConnection(draft) : buildHttpConnection(draft),
+      initialEntry?.connection
+    );
 
   return (
     <form className={cn('flex min-h-0 flex-col', className)} onSubmit={submit}>
@@ -338,6 +362,19 @@ export function McpConnectionForm({
               );
             })}
           </ListEditor>
+          {listTools ? (
+            <McpToolList
+              disabled={!savedEndpointUnchanged}
+              listTools={listTools}
+              ruledNames={new Set(draft.toolExposure.map((rule) => rule.pattern.trim()))}
+              onAddRule={(name) =>
+                setDraft((current) => ({
+                  ...current,
+                  toolExposure: [...current.toolExposure, { pattern: name, exposure: 'direct' }],
+                }))
+              }
+            />
+          ) : null}
         </Section>
 
         <Section

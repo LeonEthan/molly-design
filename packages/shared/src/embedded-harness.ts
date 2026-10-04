@@ -304,6 +304,70 @@ export const StoredMcpCredentialSchema = z
       JSON.stringify(Object.keys(value.values).sort())
   );
 
+/** Settings-only tool listing: one saved server, initialize and `tools/list` only (A5). */
+export const MCP_TOOL_DISCOVERY_LIMITS = {
+  tools: 256,
+  pages: 16,
+  name: 128,
+  title: 200,
+  description: 1_000,
+} as const;
+
+export const ListMcpToolsSchema = z
+  .object({
+    serverId: identifier,
+    destination: McpCredentialDestinationSchema,
+    protectedCredentials: z.object({ credentialRef: z.string().uuid(), revision }).strict().optional(),
+  })
+  .strict();
+export type ListMcpTools = z.infer<typeof ListMcpToolsSchema>;
+
+/** What main sends the one-shot CLI helper on stdin; values were checked against their binding. */
+export const McpToolDiscoveryRequestSchema = z
+  .object({
+    destination: McpCredentialDestinationSchema,
+    values: McpCredentialValuesSchema.optional(),
+  })
+  .strict();
+export type McpToolDiscoveryRequest = z.infer<typeof McpToolDiscoveryRequestSchema>;
+
+export const McpDiscoveredToolSchema = z
+  .object({
+    name: z.string().min(1).max(MCP_TOOL_DISCOVERY_LIMITS.name),
+    title: z.string().max(MCP_TOOL_DISCOVERY_LIMITS.title).optional(),
+    description: z.string().max(MCP_TOOL_DISCOVERY_LIMITS.description).optional(),
+    readOnlyHint: z.boolean().optional(),
+    destructiveHint: z.boolean().optional(),
+    idempotentHint: z.boolean().optional(),
+    openWorldHint: z.boolean().optional(),
+  })
+  .strict();
+export type McpDiscoveredTool = z.infer<typeof McpDiscoveredToolSchema>;
+
+export const MCP_TOOL_DISCOVERY_FAILURES = [
+  'changed',
+  'unsupported',
+  'needs_credentials',
+  'unreachable',
+  'timed_out',
+  'invalid_response',
+  'limit_exceeded',
+  'unavailable',
+] as const;
+export type McpToolDiscoveryFailure = (typeof MCP_TOOL_DISCOVERY_FAILURES)[number];
+
+export const McpToolDiscoveryResultSchema = z.discriminatedUnion('ok', [
+  z
+    .object({
+      ok: z.literal(true),
+      tools: z.array(McpDiscoveredToolSchema).max(MCP_TOOL_DISCOVERY_LIMITS.tools),
+      truncated: z.boolean(),
+    })
+    .strict(),
+  z.object({ ok: z.literal(false), reason: z.enum(MCP_TOOL_DISCOVERY_FAILURES) }).strict(),
+]);
+export type McpToolDiscoveryResult = z.infer<typeof McpToolDiscoveryResultSchema>;
+
 export const ProviderPresetIdSchema = z.enum([
   'openai',
   'anthropic',

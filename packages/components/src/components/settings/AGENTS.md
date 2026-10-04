@@ -14,6 +14,9 @@ the complete credential set. Clearing requires an explicit action; submission cl
 input fields and a failed save requires re-entry, not an implicit no-auth retry.
 Legacy history may retain plaintext. Saving does not attest authenticated execution.
 MCP tools use their native schemas; do not expose image-specific field mappings.
+"List tools" runs only on an explicit click for the saved entry (edited endpoints wait
+for Save), shows server-declared hints as unverified, stores nothing, and never edits
+rules except through the user's "add rule". Failures show their reason, never an empty list.
 Preserve historical catalog fields when editing unrelated values.
 
 ## Layout and components

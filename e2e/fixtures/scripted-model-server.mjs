@@ -2,16 +2,6 @@ import { appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
-// Deterministic OpenAI-completions wire for desktop E2E. The bundled engine
-// speaks `openai-completions` SSE to `{baseUrl}/chat/completions`; this server
-// is the only simulated external allowed by the e2e runtime boundary. Behavior
-// is keyed on the last user message:
-//   contains 'You generate titles for'  -> short canned title
-//   contains '[SCOUT:HOLD]'             -> stream HELD start, never finish
-//   contains '[E2E:BROWSER:PRIVATE]'     -> request one embedded-browser tool call
-//   otherwise                           -> short canned reply, stop
-// Every request and its terminal outcome land in the JSONL event log so the
-// harness can assert observable signals instead of timing.
 const eventLogPath = process.argv[2];
 const HELD_TEXT = 'Synthetic response started.';
 const REPLY_TEXT = 'Synthetic response complete.';
@@ -72,6 +62,14 @@ function readBody(req) {
 
 async function handleRequest(req, res) {
   const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+  if (req.method === 'GET' && url.pathname === '/browser-fixture') {
+    record('browser-page-served');
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(
+      '<!doctype html><title>Synthetic local browser page</title><h1>Local navigation reached the native browser.</h1>'
+    );
+    return;
+  }
   if (req.method === 'GET' && url.pathname.endsWith('/models')) {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ object: 'list', data: [] }));
@@ -105,8 +103,8 @@ async function handleRequest(req, res) {
     ? 'memory'
     : text.includes('You generate titles for')
       ? 'title'
-      : text.includes('[E2E:BROWSER:PRIVATE]')
-        ? 'browser-private'
+      : text.includes('[E2E:BROWSER:LOCAL]')
+        ? 'browser-local'
         : text.includes('[SCOUT:HOLD]')
           ? 'hold'
           : 'reply';
@@ -143,16 +141,16 @@ async function handleRequest(req, res) {
   });
   res.write(chunk(body?.model, { role: 'assistant' }));
 
-  if (mode === 'browser-private' && !toolResult) {
+  if (mode === 'browser-local' && !toolResult) {
     const tools = Array.isArray(body?.tools) ? body.tools : [];
-    // Pi's native MCP exposes servers to the model through its codemode script tool.
     const codemode = tools.find((tool) => tool?.function?.name === 'codemode');
     if (!codemode) {
       record('browser-tool-missing', { requestId, mode });
       res.write(chunk(body?.model, { content: 'Synthetic browser tool was unavailable.' }));
       res.write(chunk(body?.model, {}, 'stop'));
     } else {
-      record('browser-tool-dispatched', { requestId, mode });
+      const pageUrl = `http://127.0.0.1:${server.address().port}/browser-fixture`;
+      record('browser-tool-dispatched', { requestId, mode, pageUrl });
       res.write(
         chunk(
           body?.model,
@@ -160,12 +158,12 @@ async function handleRequest(req, res) {
             tool_calls: [
               {
                 index: 0,
-                id: 'synthetic-browser-private',
+                id: 'synthetic-browser-local',
                 type: 'function',
                 function: {
                   name: codemode.function.name,
                   arguments: JSON.stringify({
-                    code: "text(JSON.stringify(await tools.mcp__molly_browser__navigate({ url: 'http://127.0.0.1:8333/' })));",
+                    code: `const navigation = await tools.mcp__molly_browser__navigate({ url: ${JSON.stringify(pageUrl)} }); const snapshot = await tools.mcp__molly_browser__snapshot({}); text('BROWSER_PROBE_RESULT=' + JSON.stringify({ navigation, snapshot }));`,
                   }),
                 },
               },
@@ -180,13 +178,12 @@ async function handleRequest(req, res) {
     return;
   }
 
-  if (mode === 'browser-private') {
+  if (mode === 'browser-local') {
     const resultText = String(toolResult.content ?? '');
     record('browser-tool-result', {
       requestId,
       mode,
       resultText,
-      blockedPrivateHost: resultText.includes('Agent browser requires a public website.'),
     });
     res.write(chunk(body?.model, { content: 'Synthetic browser probe complete.' }));
     res.write(chunk(body?.model, {}, 'stop'));

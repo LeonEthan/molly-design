@@ -37,12 +37,14 @@ its bundled CLI cannot attach to the normal local daemon. Teardown first asks
 Electron to quit through its production shutdown barrier, then verifies the
 port can be rebound before deleting temporary state.
 
-The browser-permission journeys send their scripted navigation through Pi's
-`codemode` tool as `tools.mcp__molly_browser__navigate({ url })`.
-They exercise the real approval UI and daemon's public-website guard, checking
-the adapter's user-declined result separately from the local-host refusal before
-desktop navigation. The model fixture must follow this public adapter interface; individual
-MCP tools need not appear as direct model tools.
+The browser-navigation journey sends `navigate` and `snapshot` through Pi's
+`codemode` tool using `tools.mcp__molly_browser__navigate({ url })` and
+`tools.mcp__molly_browser__snapshot({})`. It checks the actual returned URL,
+title and accessibility snapshot against a synthetic page served on the model
+fixture's owned random loopback port. The native Agent browser permits local
+addresses, and embedded Pi executes tools without an approval prompt. No external
+website, user service or fixed port is used. The model fixture follows this public
+adapter interface; individual MCP tools need not appear as direct model tools.
 Background personal-preference extraction receives an empty `changes` response,
 identified by its system instruction before interpreting journey markers in the
 quoted user text. It must not dispatch another browser probe or held response.

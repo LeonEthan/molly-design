@@ -60,6 +60,10 @@ export function acpMcpConfig(
     }
     if ('type' in server && server.type === 'acp')
       throw new Error('pi_acp_mcp_transport_unsupported');
+    const rawDescription = server._meta?.mollyMcpDescription;
+    if (rawDescription !== undefined && typeof rawDescription !== 'string')
+      throw new Error('pi_acp_mcp_description_invalid');
+    const summary = rawDescription?.trim() ? { description: rawDescription.trim() } : {};
     names.add(server.name);
     if ('command' in server) {
       for (const value of [server.command, ...server.args]) assertLiteralPath(value);
@@ -71,6 +75,7 @@ export function acpMcpConfig(
       return {
         name: server.name,
         config: {
+          ...summary,
           command: server.command,
           args: [...server.args],
           cwd,
@@ -94,6 +99,7 @@ export function acpMcpConfig(
     return {
       name: server.name,
       config: {
+        ...summary,
         type: 'http',
         url: server.url,
         headers: Object.fromEntries(
@@ -150,7 +156,12 @@ export function createAcpMcpExtensions(
   servers: ReturnType<typeof acpMcpConfig>
 ): InlineExtension[] {
   return [
-    { name: 'codemode', builtin: true, replaceable: true, factory: createCodemodeExtension() },
+    {
+      name: 'codemode',
+      builtin: true,
+      replaceable: true,
+      factory: createCodemodeExtension({ models: false }),
+    },
     { name: 'tool-search', builtin: true, replaceable: true, factory: createToolSearchExtension() },
     {
       name: 'mcp',

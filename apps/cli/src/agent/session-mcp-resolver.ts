@@ -160,11 +160,13 @@ export const loadSessionMcpCatalog = async (
             continue;
           }
         }
+        const description = entry.description?.trim();
         servers.push({
           ...server,
           _meta: {
             ...server._meta,
             mollyConnection: { id: entry.id, revision: entry.revision },
+            ...(description ? { mollyMcpDescription: description } : {}),
           },
         });
       }

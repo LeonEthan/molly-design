@@ -15,7 +15,8 @@ Save an image only when it is needed as an asset or edit reference; observation
 alone does not require downloading it. Borrow ideas while respecting source
 artwork and asset permissions.
 
-Use `molly_browser` only when it appears in your current tool list. It controls
+Use `molly_browser` only when it is available: declared as a tool, or callable
+from `codemode` scripts (find it with `searchTools`). It controls
 the Session's built-in browser; it does not control Chrome. Open the relevant
 site, take a snapshot, and use the snapshot's current element references
 for clicks, typing, and selected-image saves (for example, `ref: "e5"`).

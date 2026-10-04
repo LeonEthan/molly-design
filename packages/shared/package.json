@@ -5,7 +5,6 @@
   "version": "0.0.1",
   "type": "module",
   "imports": {
-    "#mcp-image-binding": "./src/mcp-image-binding.ts",
     "#image-connection": "./src/image-connection.ts",
     "#session-paths": "./src/session-paths.ts"
   },

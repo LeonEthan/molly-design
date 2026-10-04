@@ -37,12 +37,7 @@ const catalogFlock = flockWithRows([
 ]);
 
 describe('loadSessionMcpCatalog', () => {
-  it('carries image binding only into guarded startup and revokes on a model edit', async () => {
-    const imageBinding = {
-      version: 1 as const,
-      model: 'synthetic-image',
-      generate: { tool: 'draw', fields: { prompt: 'text', model: 'model_id' } },
-    };
+  it('forwards the catalog description only into guarded startup and revokes on its edit', async () => {
     const rows = [
       {
         key: ['mcpServer', selectedId],
@@ -51,10 +46,11 @@ describe('loadSessionMcpCatalog', () => {
           name: 'images',
           transport: 'http',
           revision: 1,
+          description: '  Synthetic summary  ',
           connection: { transport: 'http', url: 'https://synthetic.invalid/mcp' },
           createdAt: 1,
           updatedAt: 1,
-          imageBinding,
+          imageBinding: { version: 1, model: 'retired-field' },
         },
       },
     ];
@@ -71,8 +67,11 @@ describe('loadSessionMcpCatalog', () => {
     const legacy = await load(false);
     expect(legacy({ http: true }).servers[0]?._meta).toBeUndefined();
     const guarded = await load(true);
-    expect(guarded({ http: true }).servers[0]?._meta?.mollyImageBinding).toBeUndefined();
-    rows[0]!.value = { ...rows[0]!.value, imageBinding: { ...imageBinding, model: 'changed' } };
+    expect(guarded({ http: true }).servers[0]?._meta).toEqual({
+      mollyConnection: { id: selectedId, revision: 1 },
+      mollyMcpDescription: 'Synthetic summary',
+    });
+    rows[0]!.value = { ...rows[0]!.value, description: 'Changed summary' };
     expect(guarded.guard?.isCurrent()).toBe(false);
     expect(() => guarded({ http: true })).toThrow('harness_mcp_catalog_changed');
   });

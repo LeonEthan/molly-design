@@ -57,6 +57,12 @@ user state or change a global preference; see the
 
 ## Commands
 
+The MCP private-helper process-tree acceptance probe is manual:
+`node e2e/scripts/mcp-helper-cleanup-probe.mjs` after building the CLI. It uses real
+child processes with an isolated synthetic MCP server and retains its result in
+`artifacts/helper-cleanup/result.json`. The verification branch's manual CI job
+runs it on Windows; normal regression does not execute this probe.
+
 ```bash
 pnpm install
 pnpm e2e:check

@@ -19,6 +19,39 @@ env:
   COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
 
 jobs:
+  mcp-helper-acceptance:
+    name: Windows MCP helper cleanup acceptance
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Initialize desktop source dependencies
+        run: git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build bundled CLI
+        run: pnpm --dir apps/cli build
+      - name: Verify native helper cleanup
+        run: node e2e/scripts/mcp-helper-cleanup-probe.mjs
+      - name: Retain acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-mcp-helper-cleanup
+          path: e2e/artifacts/helper-cleanup
+          if-no-files-found: warn
+
   static:
     name: Static checks
     runs-on: ubuntu-latest

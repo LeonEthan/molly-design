@@ -9,7 +9,6 @@ import {
   CircleQuestionMark,
   Search,
   ShieldCheck,
-  Workflow,
   type LucideIcon,
 } from '@/ui/icons';
 import { CompactSection } from './compact-layout';
@@ -18,7 +17,6 @@ import { WithInfo } from './info-tip';
 type Snapshot = Awaited<ReturnType<IpcServices['modelConnections']['getBundledCapabilities']>>;
 
 const addonCopy: Record<MollyPiPackage, { slug: string; icon: LucideIcon }> = {
-  'pi-subagents': { slug: 'subagents', icon: Workflow },
   'pi-skillful': { slug: 'skills', icon: BookOpen },
   '@juicesharp/rpiv-ask-user-question': { slug: 'questions', icon: CircleQuestionMark },
   '@zigai/pi-mention-skill': { slug: 'mentions', icon: AtSign },

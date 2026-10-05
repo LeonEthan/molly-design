@@ -25,7 +25,6 @@
     "acp-extension-core": "workspace:*",
     "typebox": "catalog:pi",
     "zod": "catalog:",
-    "pi-subagents": "catalog:pi",
     "pi-skillful": "catalog:pi",
     "@juicesharp/rpiv-ask-user-question": "catalog:pi",
     "@juicesharp/rpiv-i18n": "catalog:pi",

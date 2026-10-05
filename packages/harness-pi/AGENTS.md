@@ -11,14 +11,15 @@ Read [README](README.md) before changing session construction, packages or the b
   the user's `~/.pi/agent`. Keep native discovery, skills, context files and hooks; Molly owns
   `settings.json`. Project code defaults to untrusted; discover materialized text skills
   through the SDK's explicit skill paths independently of executable project trust.
-- Tools run without permission checks. `cc-safety-net` is the only floor and must stay in
-  `subagents.defaultExtensions`; keep external-CLI sub-agents disabled. Never infer an
-  answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
-- Model keys arrive on fd 3 per run, are pinned in memory and stored through native
-  `login` in that epoch's profile for sub-agents. Reject a changed key before either
-  runtime or disk mutation; rotation requires a fresh worker. Keys never enter ACP, argv, environment, native
-  history or diagnostics; errors carry static codes only. Serialize profile login and
-  provider read-merge-publish under one process lock; retain unrelated provider entries.
+- Tools run without permission checks; the main session loads `cc-safety-net` as its
+  destructive-command floor. The managed package set is single-session: `pi-subagents`
+  and its launch/configuration surfaces are retired (#72). Preserve shared task history.
+  Never infer an answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
+- Model keys arrive on fd 3 per run and stay in the worker's in-memory credential store;
+  model catalogs/configuration also stay in memory. The managed runtime neither reads
+  nor publishes profile auth/model files. Reject a changed key before runtime mutation;
+  rotation requires a fresh worker. Keys never enter ACP, argv, environment, native
+  history or diagnostics; errors carry static codes only. Preserve old profiles untouched.
 - Pi applies a provider endpoint override to every model of that provider. A connection on
   its preset's default endpoint registers none, so each model keeps its SDK endpoint
   (OpenRouter's Anthropic-protocol models use `/api`); a custom endpoint replaces every
@@ -39,8 +40,7 @@ Read [README](README.md) before changing session construction, packages or the b
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.
 - MCP uses Pi's native MCP, codemode and tool search. Main-session codemode exposes no
-  `models` global: images go only through the user's image connection. Sub-agents keep
-  Pi's default (known upstream limitation). Protected MCP values stay literal,
+  `models` global: images go only through the user's image connection. Protected MCP values stay literal,
   bind the workspace/server/revision and are never written to config files. HTTP header
   credentials do not require an `Authorization` field.
 - Disable native agent/provider retries in the managed profile. The host's public

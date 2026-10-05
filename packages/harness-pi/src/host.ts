@@ -1,6 +1,7 @@
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import { ModelRuntime, VERSION, type InlineExtension } from '@earendil-works/pi-coding-agent';
+import { InMemoryCredentialStore, InMemoryModelsStore } from '@earendil-works/pi-ai';
 import {
   HarnessRunSnapshotSchema,
   HarnessSessionBindingSchema,
@@ -23,7 +24,6 @@ import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import { configureModelConnection } from './model-connection';
-import { persistConnection } from './profile-credentials';
 import type { PrivateControlPipe } from './private-control-pipe';
 import {
   WorkerConfigSchema,
@@ -70,13 +70,12 @@ export class PiAcpHost {
   private binding?: HarnessSessionBinding;
   private mcpConnections: McpCredentialBinding[] = [];
   private runtime?: ModelRuntime;
-  private agentDir?: string;
   private providerId?: string;
   private modelBaseUrl?: string;
   private providerConfig?: ReturnType<ModelRuntime['getRegisteredProviderConfig']>;
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
-  private persistedKey?: string;
+  private grantedKey?: string;
   private sessionStarted = false;
 
   constructor(
@@ -155,9 +154,9 @@ export class PiAcpHost {
     if ((await realpath(agentDir)) !== (await realpath(profile)))
       throw new Error('pi_acp_host_profile_mismatch');
     const runtime = await ModelRuntime.create({
-      authPath: join(agentDir, 'auth.json'),
-      modelsPath: join(agentDir, 'models.json'),
-      modelsStorePath: join(agentDir, 'models-cache.json'),
+      credentials: new InMemoryCredentialStore(),
+      modelsStore: new InMemoryModelsStore(),
+      modelsPath: null,
       allowModelNetwork: false,
       refreshOnCreate: false,
     });
@@ -167,7 +166,6 @@ export class PiAcpHost {
       this.config.selection
     );
     this.runtime = runtime;
-    this.agentDir = agentDir;
     this.providerId = providerId;
     this.modelBaseUrl = baseUrl;
     this.providerConfig = runtime.getRegisteredProviderConfig(providerId);
@@ -383,19 +381,10 @@ export class PiAcpHost {
     if (grant.runId !== snapshot.runId || grant.runtimeEpoch !== this.config.runtimeEpoch)
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
-    if (this.persistedKey !== undefined && this.persistedKey !== grant.apiKey)
+    if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey)
       throw new Error('pi_acp_host_credential_changed');
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
-    if (this.persistedKey !== grant.apiKey) {
-      await persistConnection(
-        this.runtime!,
-        this.agentDir!,
-        this.providerId!,
-        this.providerConfig,
-        grant.apiKey
-      );
-      this.persistedKey = grant.apiKey;
-    }
+    this.grantedKey = grant.apiKey;
     signal.throwIfAborted();
     let memory: string | undefined;
     let recalled: PersonalMemorySnapshot | undefined;

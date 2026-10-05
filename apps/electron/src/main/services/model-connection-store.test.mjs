@@ -15,7 +15,6 @@ import { listMcpTools } from './mcp-tool-discovery.ts'
 
 const shippedPackages = [
   ['@earendil-works/pi-coding-agent', '1.0.0'],
-  ['pi-subagents', '0.74.0'],
   ['pi-skillful', '0.4.0'],
   ['@juicesharp/rpiv-ask-user-question', '2.12.0'],
   ['@zigai/pi-mention-skill', '0.10.4'],

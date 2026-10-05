@@ -141,9 +141,12 @@ The pinned reader reports excluded Chromium service directories as discovery err
 that specific unscoped diagnostic does not block a successfully read selected profile.
 Selected-profile/source errors and all other request errors still stop import.
 The user may need to approve macOS Keychain access during import. Browser-data
-permission is separate: macOS can attribute terminal-launched development access
-to the terminal. Allow the chosen browser under that app in Files & Folders, then
-refresh Molly; failed listing does not establish absent profiles.
+permission is separate: macOS can attribute development access to the terminal or
+coding agent that launched Molly. A coding agent can be the responsible app even
+when its terminal already has browser access. Allow the chosen browser under the
+responsible app in Files & Folders, then refresh Molly, or fully quit and launch
+`pnpm start:local` directly from an already authorized terminal. Failed listing
+does not establish absent profiles.
 The initial native report allows five minutes for human
 authorization; Settings shows a pending hint and manual retry guidance. Read
 failures leave existing Molly cookies unchanged. The pinned detailed-reader API

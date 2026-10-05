@@ -52,7 +52,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  commands.setShortcutAnalyticsHandler(null);
   for (const cmd of commands.list()) commands.unregister(cmd.id);
   commands.detach();
   vi.unstubAllGlobals();
@@ -140,25 +139,6 @@ describe('CommandRegistry keydown dispatch', () => {
     target.dispatch('keydown', event);
     expect(run).toHaveBeenCalledOnce();
     expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('captures shortcut usage analytics for matching key events', () => {
-    const run = vi.fn();
-    const analytics = vi.fn();
-    commands.setShortcutAnalyticsHandler(analytics);
-    commands.register({ id: 'k', title: 'K', keybindings: ['$mod+b'], run });
-
-    target.dispatch('keydown', ev({ key: 'b', ctrlKey: true }));
-
-    expect(run).toHaveBeenCalledOnce();
-    expect(analytics).toHaveBeenCalledWith({
-      commandId: 'k',
-      binding: '$mod+b',
-      source: 'keyboard',
-      runtime: 'web',
-      platform: 'unknown',
-      isUserOverride: false,
-    });
   });
 
   it('does not call preventDefault when binding opts out', () => {
@@ -327,7 +307,12 @@ describe('CommandRegistry key scopes', () => {
   it('leaves the suppressed event unprevented so the editor keymap still sees it', () => {
     // The whole point is handing the key over, not swallowing it. Calling
     // preventDefault here would mean bold never happens either.
-    commands.register({ id: 'sidebar.toggle', title: 'Toggle', keybindings: ['$mod+b'], run: () => {} });
+    commands.register({
+      id: 'sidebar.toggle',
+      title: 'Toggle',
+      keybindings: ['$mod+b'],
+      run: () => {},
+    });
     const editor = fakeNode();
     commands.registerKeyScope({ id: 'editor', element: () => editor });
 
@@ -368,7 +353,12 @@ describe('CommandRegistry key scopes', () => {
   it('suppresses only the listed keys when the scope declares claims', () => {
     const bold = vi.fn();
     const other = vi.fn();
-    commands.register({ id: 'sidebar.toggle', title: 'Toggle', keybindings: ['$mod+b'], run: bold });
+    commands.register({
+      id: 'sidebar.toggle',
+      title: 'Toggle',
+      keybindings: ['$mod+b'],
+      run: bold,
+    });
     commands.register({ id: 'other', title: 'Other', keybindings: ['$mod+j'], run: other });
     const editor = fakeNode();
     commands.registerKeyScope({ id: 'editor', element: () => editor, claims: ['$mod+b'] });

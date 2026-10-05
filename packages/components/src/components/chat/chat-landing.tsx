@@ -23,8 +23,6 @@ import {
   buildSessionTurnInputConfig,
   extractPromptPreviewFromInputBlocks,
   getServerNow,
-  hashAnalyticsId,
-  type SessionStartFailureReason,
   normalizeSessionInputBlocks,
   type AgentConfigMeta,
   githubFetchBranches,
@@ -37,7 +35,6 @@ import {
   type WorktreeCleanupScriptConfig,
   type WorkspaceId,
 } from '@molly/shared';
-import { usePostHog } from '@posthog/react';
 import { RefreshCw, PanelLeft } from 'lucide-react';
 import { Button } from '@/ui/button';
 
@@ -68,7 +65,6 @@ import {
   focusFirstChatLandingOption,
   useChatLandingKeyboardNav,
 } from '@/hooks/use-chat-landing-keyboard-nav';
-import { useFireOnKeyChange, useFireOncePerKey } from '@/hooks/use-fire-once';
 import { useSessionActions } from '@/hooks/use-session-actions';
 import { useChatLandingDefaults } from '@/hooks/use-chat-landing-defaults';
 import {
@@ -109,17 +105,6 @@ import {
   resolveChatLandingBranchSelection,
   type ChatLandingBranchSnapshot,
 } from '@/lib/chat-landing-branches';
-
-import {
-  capturePostHogEvent,
-  detectAppLaunchMode,
-  getDurationSinceMs,
-  getPerformanceNowMs,
-} from '@/lib/posthog-analytics';
-import {
-  SESSION_ACP_CONFIG_USED_EVENT,
-  buildSessionCreateAcpAnalyticsProperties,
-} from '@/lib/session-create-analytics';
 import { toIntlLocale } from '@/lib/intl-locale';
 import {
   arePastedTextDraftsEqual,
@@ -167,10 +152,7 @@ import { withGitHubTokenRetry } from '@/lib/github-token';
 import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
 import { useVisibleLocalProjectsFromMachineIndex } from '@/hooks/use-visible-local-projects';
 import { useLocalProjectRemovalResultNotifications } from '@/hooks/use-remove-local-project';
-import {
-  useVisibleArchivedSessionMetas,
-  useVisibleSessionMetas,
-} from '@/hooks/use-visible-session-metas';
+import { useVisibleSessionMetas } from '@/hooks/use-visible-session-metas';
 import { useReportVisibleSessionsForEagerSync } from '@/hooks/use-report-visible-sessions-for-eager-sync';
 import { getLocalProjectVisibilityKey } from '@/lib/visible-local-project-index';
 import { openExternalUrl } from '@/lib/native-browser';
@@ -227,11 +209,7 @@ interface ChatLandingProps {
   preSelectedMachine?: string;
   preSelectedProject?: string;
   preSelectedRepo?: string;
-  /**
-   * Mirrors the composer's effective selection back into the chat-route URL
-   * (with `replace`) once the URL names a selection. Passed by the desktop
-   * chat route only; mobile keeps its base-context model.
-   */
+
   onSelectionUrlSync?: (search: ChatLandingSearch) => void;
 }
 
@@ -269,7 +247,6 @@ function WorkspaceChatLanding({
   const navigate = useNavigate();
   const { openSettings } = useOpenSettings();
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
-  const postHog = usePostHog();
   const currentUser = useAtomValue(userAtom);
   const userId = currentUser?.id;
   const tasksFeatureEnabled = useAtomValue(tasksFeatureEnabledAtom);
@@ -301,31 +278,8 @@ function WorkspaceChatLanding({
     visibleActiveSessions,
     visibleAllActiveSessions
   );
-  const { archivedSessions: visibleArchivedSessions } = useVisibleArchivedSessionMetas();
-  /* Default cross-feature `visibleSessions` reference stays mapped to
-     the *active* list — that's what every existing consumer (desktop
-     sidebar, project pickers, analytics, etc.) wants. The mobile
-     archive toggle picks the archived list explicitly when needed
-     (see `mobileHomeChats` / `mobileProjectConversations`). */
+
   const visibleSessions = visibleActiveSessions;
-  // Best-effort count of sessions this user has already created (active +
-  // archived), used to derive `session_number`/`is_first_session_ever` for the
-  // activation anchor (spec §3.1). Client-side CRDT visibility is not an
-  // authoritative cross-client/CLI count — the server-side union anchor (§3.4)
-  // remains the source of truth; this only lets the Web funnel define "first".
-  const ownPriorSessionCount = useMemo(() => {
-    if (!userId) return 0;
-    let count = 0;
-    for (const session of visibleActiveSessions) {
-      if (session.userId === userId) count += 1;
-    }
-    for (const session of visibleArchivedSessions) {
-      if (session.userId === userId) count += 1;
-    }
-    return count;
-  }, [userId, visibleActiveSessions, visibleArchivedSessions]);
-  const ownPriorSessionCountRef = useRef(ownPriorSessionCount);
-  ownPriorSessionCountRef.current = ownPriorSessionCount;
   const docMetaCacheReady = useAtomValue(docMetaCacheReadyAtom);
   const localProbeResult = useAtomValue(localProbeResultAtom);
   const localProbeAttempted = useAtomValue(localProbeAttemptedAtom);
@@ -340,7 +294,6 @@ function WorkspaceChatLanding({
   const workspaceReposWithStatus = EMPTY_WORKSPACE_REPOSITORIES;
   const repositories = EMPTY_REPOSITORIES;
   const isElectron = isElectronRenderer();
-  const launchMode = useMemo(() => detectAppLaunchMode(isElectron), [isElectron]);
   const hasGitHubRepos = false;
   const { startSession, requestSessionDispatch } = useSessionActions();
   const isLeftSidebarHidden = useAtomValue(navigationSidebarHiddenAtom);
@@ -351,13 +304,11 @@ function WorkspaceChatLanding({
   }, [localProbeResult?.machineId, machines]);
 
   const hasLocalProjects = visibleLocalProjectMap.size > 0;
-  const localProjectCount = visibleLocalProjectMap.size;
 
   // ── Context type (Local Projects vs GitHub Worktrees) ──
   const [contextType, setContextType] = useState<SessionContextType>(
     () => preSelectedContext ?? readChatLandingDefaults(workspaceId)?.contextType ?? 'chat'
   );
-  const analyticsProjectKind = contextType === 'chat' ? null : contextType;
 
   // ── Prompt state (shared across contexts) ──
   const chatLandingDraftKey = buildChatLandingDraftKey(userId ?? null, workspaceSlug);
@@ -462,10 +413,7 @@ function WorkspaceChatLanding({
       setAddProjectInitialMachineId(null);
     }
   }, []);
-  /* Mobile-only: controls the bottom-sheet composer launched from the
-     home screen's new-chat chip. The sheet hosts the same composer +
-     selectors as the desktop landing — opening it doesn't navigate,
-     so the home tab list stays visible underneath. */
+
   // ── GitHub context state ──
   const [selectedRepo, setSelectedRepo] = useState<string | undefined>(undefined);
   const selectedRepoWorktreeSetup = useMemo(() => {
@@ -497,7 +445,7 @@ function WorkspaceChatLanding({
   // ── Common refs ──
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   // Scope root for the keyboard-nav controller (arrow roving over the desktop landing's
-  // config + composer column). Mobile/touch keeps native focus behavior.
+
   const keyboardNavRef = useRef<HTMLDivElement>(null);
   const keyboardNavEnabled = true;
   useChatLandingKeyboardNav(keyboardNavRef, {
@@ -506,7 +454,7 @@ function WorkspaceChatLanding({
 
   // Focus the new-chat composer with ⌘L on the landing. Shares the `session.focusInput`
   // command id (and binding) with the in-session composer; the two surfaces don't both
-  // "win" the shortcut — on desktop only one mounts at a time, and on mobile the registry
+
   // stack lets the most-recently-mounted (the open session) take the binding.
   useCommand({
     id: 'session.focusInput',
@@ -527,12 +475,6 @@ function WorkspaceChatLanding({
       el.focus();
     },
   });
-  const landingLoadStartMsRef = useRef(getPerformanceNowMs());
-  const fireLandingViewedOnce = useFireOncePerKey();
-  const fireProjectSourceReadyOnce = useFireOncePerKey();
-  const previousContextTypeRef = useRef(contextType);
-  const fireProjectSelectedOnChange = useFireOnKeyChange();
-  const fireAgentConfigOnChange = useFireOnKeyChange();
   const preSelectionAppliedRef = useRef<string | null>(null);
   // False while a just-applied URL intent has not rendered yet; the selection
   // mirror must not compare against that pre-application state.
@@ -600,8 +542,6 @@ function WorkspaceChatLanding({
     draftKey: chatLandingDraftKey,
     workspaceId: (workspaceId as WorkspaceId | null) ?? null,
     machineId: selectedMachineId,
-    isMobile: false,
-    projectKind: contextType === 'chat' ? null : contextType,
     sessionId: draftSessionId,
     ensureSessionId: ensureDraftSessionId,
   });
@@ -1080,15 +1020,6 @@ function WorkspaceChatLanding({
       isMachineOnline: isPresenceMachineOnline,
     });
   }, [visibleLocalMachineId, machines, isPresenceMachineOnline]);
-  const onlineMachineCount = useMemo(() => {
-    let count = 0;
-    for (const machineId of machines.keys()) {
-      if (onlineMachineIds.has(machineId)) {
-        count += 1;
-      }
-    }
-    return count;
-  }, [machines, onlineMachineIds]);
   const hasNoMachine = !hasAnyOnlineMachine;
 
   // ── Sync selectedMachineId from selectedAgent (e.g. when restored from defaults) ──
@@ -1292,143 +1223,6 @@ function WorkspaceChatLanding({
     }
   }, [contextType, executorConfigs, machines, selectedAgent, selectedLocalProject, workspaceId]);
 
-  // ── PostHog tracking ──
-  useEffect(() => {
-    if (!postHog || !userId || !workspaceId) return;
-    if (!fireLandingViewedOnce(`${userId}:${workspaceId}`)) return;
-    capturePostHogEvent(postHog, 'chat_landing/viewed', {
-      user_id: userId,
-      workspace_id: workspaceId,
-      context_type: contextType,
-      launch_mode: launchMode,
-      has_preselected_context: Boolean(preSelectedContext),
-      has_preselected_project: Boolean(preSelectedProject || preSelectedRepo),
-      github_repo_count: repositories?.length ?? null,
-      local_project_count: localProjectCount,
-      online_machine_count: onlineMachineCount,
-      ready_ms: getDurationSinceMs(landingLoadStartMsRef.current),
-    });
-  }, [
-    contextType,
-    fireLandingViewedOnce,
-    launchMode,
-    localProjectCount,
-    onlineMachineCount,
-    postHog,
-    preSelectedContext,
-    preSelectedProject,
-    preSelectedRepo,
-    repositories?.length,
-    userId,
-    workspaceId,
-  ]);
-
-  useEffect(() => {
-    const previousContextType = previousContextTypeRef.current;
-    if (previousContextType === contextType) return;
-    previousContextTypeRef.current = contextType;
-    capturePostHogEvent(postHog, 'chat_landing/context_changed', {
-      user_id: userId ?? null,
-      workspace_id: workspaceId ?? null,
-      previous_context_type: previousContextType,
-      context_type: contextType,
-      github_repo_count: repositories?.length ?? null,
-      local_project_count: localProjectCount,
-      online_machine_count: onlineMachineCount,
-    });
-  }, [
-    contextType,
-    localProjectCount,
-    onlineMachineCount,
-    postHog,
-    repositories?.length,
-    userId,
-    workspaceId,
-  ]);
-
-  useEffect(() => {
-    if (!postHog || !userId || !workspaceId) return;
-    // Wait until the GitHub repo query has settled (undefined = still loading)
-    if (repositories === undefined) return;
-    if (visibleLocalProjectsLoading) return;
-    const githubRepoCount = repositories.length;
-    if (githubRepoCount === 0 && localProjectCount === 0) return;
-    if (!fireProjectSourceReadyOnce(`${userId}:${workspaceId}`)) return;
-    const sourceKind =
-      githubRepoCount > 0 && localProjectCount > 0
-        ? 'mixed'
-        : githubRepoCount > 0
-          ? 'github'
-          : 'local';
-    capturePostHogEvent(postHog, 'onboarding/project_source_ready', {
-      user_id: userId,
-      workspace_id: workspaceId,
-      source_kind: sourceKind,
-      github_repo_count: githubRepoCount,
-      local_project_count: localProjectCount,
-    });
-  }, [
-    fireProjectSourceReadyOnce,
-    localProjectCount,
-    postHog,
-    repositories,
-    userId,
-    visibleLocalProjectsLoading,
-    workspaceId,
-  ]);
-
-  useEffect(() => {
-    if (!postHog || !userId || !workspaceId) return;
-    if (contextType === 'chat') return;
-    if (contextType === 'github' && !selectedRepo) return;
-    if (contextType === 'local' && !selectedLocalProject) return;
-    const selectionKey =
-      contextType === 'github'
-        ? `github:${selectedRepo}`
-        : `local:${selectedLocalProject?.machineId}:${selectedLocalProject?.localProjectId}`;
-    const analyticsKey = `${userId}:${workspaceId}:${selectionKey}`;
-    if (!fireProjectSelectedOnChange(analyticsKey)) return;
-    capturePostHogEvent(postHog, 'onboarding/project_selected', {
-      user_id: userId,
-      workspace_id: workspaceId,
-      project_kind: contextType,
-      repo_id_hash: contextType === 'github' ? hashAnalyticsId(selectedRepo) : null,
-      local_project_id:
-        contextType === 'local' ? (selectedLocalProject?.localProjectId ?? null) : null,
-      machine_id: contextType === 'local' ? (selectedLocalProject?.machineId ?? null) : null,
-      has_git_branch: contextType === 'github' ? true : null,
-    });
-  }, [
-    contextType,
-    fireProjectSelectedOnChange,
-    postHog,
-    selectedLocalProject,
-    selectedRepo,
-    userId,
-    workspaceId,
-  ]);
-
-  useEffect(() => {
-    if (!postHog || !userId || !workspaceId || !selectedAgent || !selectedConfig) return;
-    const analyticsKey = [
-      userId,
-      workspaceId,
-      selectedAgent.machineId,
-      selectedAgent.agentId,
-      selectedConfig.cliType,
-      selectedConfig.agentType,
-    ].join(':');
-    if (!fireAgentConfigOnChange(analyticsKey)) return;
-    capturePostHogEvent(postHog, 'onboarding/agent_config_selected', {
-      user_id: userId,
-      workspace_id: workspaceId,
-      machine_id: selectedAgent.machineId,
-      agent_config_id: selectedAgent.agentId,
-      cli_type: selectedConfig.cliType,
-      agent_type: selectedConfig.agentType,
-    });
-  }, [fireAgentConfigOnChange, postHog, selectedAgent, selectedConfig, userId, workspaceId]);
-
   // ── GitHub branch loading ──
   useLayoutEffect(() => {
     if (contextType !== 'github') return undefined;
@@ -1602,55 +1396,10 @@ function WorkspaceChatLanding({
     [handleSelectedLocalProjectChange]
   );
 
-  const captureSessionInputBlocked = useCallback(
-    (
-      reason:
-        | 'image_upload_in_progress'
-        | 'empty_input'
-        | 'missing_agent_config'
-        | 'missing_machine'
-        | 'missing_context'
-        | 'local_project_git_state_failed'
-        | 'missing_branch'
-        | 'missing_project'
-        | 'design_save_failed',
-      extra?: Record<string, unknown>
-    ) => {
-      capturePostHogEvent(postHog, 'session/input_blocked', {
-        reason,
-        entrypoint: 'chat_landing',
-        project_kind: analyticsProjectKind,
-        has_pending_images: hasBlockingImages,
-        workspace_id: workspaceId ?? null,
-        machine_id:
-          contextType === 'local'
-            ? (selectedLocalProject?.machineId ?? selectedAgent?.machineId ?? null)
-            : (selectedAgent?.machineId ?? null),
-        agent_config_id: selectedAgent?.agentId ?? null,
-        repo_id_hash: contextType === 'github' ? hashAnalyticsId(selectedRepo) : null,
-        local_project_id:
-          contextType === 'local' ? (selectedLocalProject?.localProjectId ?? null) : null,
-        ...extra,
-      });
-    },
-    [
-      analyticsProjectKind,
-      contextType,
-      hasBlockingImages,
-      postHog,
-      selectedAgent,
-      selectedLocalProject,
-      selectedRepo,
-      workspaceId,
-    ]
-  );
-
   // ── Submit ──
   const handleSubmit = async () => {
     if (submitting) return;
-    const submitStartedAtMs = getPerformanceNowMs();
     if (hasBlockingImages || hasBlockingFiles) {
-      captureSessionInputBlocked('image_upload_in_progress');
       return;
     }
 
@@ -1669,7 +1418,6 @@ function WorkspaceChatLanding({
     );
     const draftPromptText = extractPromptPreviewFromInputBlocks(draftInputBlocks);
     if (draftInputBlocks.length === 0) {
-      captureSessionInputBlocked('empty_input');
       setComposerError(t('chat.validation.missingPrompt'));
       return;
     }
@@ -1696,7 +1444,6 @@ function WorkspaceChatLanding({
     const { inputBlocks, dimensions } = canvasSubmission;
     const promptText = extractPromptPreviewFromInputBlocks(inputBlocks);
     if (!selectedAgent || !selectedConfig) {
-      captureSessionInputBlocked('missing_agent_config');
       setComposerError(t('chat.validation.missingAgent'));
       return;
     }
@@ -1709,23 +1456,19 @@ function WorkspaceChatLanding({
           ? selectedMachineId
           : null;
     if (!scopedMachineId || selectedAgent.machineId !== scopedMachineId) {
-      captureSessionInputBlocked('missing_machine');
       setComposerError(t('chat.validation.missingMachine'));
       return;
     }
     const machine = machines.get(scopedMachineId);
     if (!machine) {
-      captureSessionInputBlocked('missing_machine');
       setComposerError(t('chat.validation.missingMachine'));
       return;
     }
     if (!currentUser || !userId || !workspaceId) {
-      captureSessionInputBlocked('missing_context');
       setComposerError(t('chat.validation.missingContext'));
       return;
     }
     if (!runtime) {
-      captureSessionInputBlocked('missing_context');
       setComposerError(t('chat.validation.missingContext'));
       return;
     }
@@ -1733,23 +1476,9 @@ function WorkspaceChatLanding({
     // Only require branch selection when the repo actually has branches.
     // Empty repos have no branches, but sessions can still be created.
     if (contextType === 'github' && !githubBranch && repoBranches.length > 0) {
-      captureSessionInputBlocked('missing_branch');
       setComposerError(t('chat.validation.missingBranch'));
       return;
     }
-
-    // Tracks the dispatch phase so the catch block can emit a structured
-    // failure_reason (spec §5.4) instead of a flat "unknown". Each phase sets
-    // this immediately before the awaited call that owns it.
-    let startFailureReason: SessionStartFailureReason = 'unknown';
-    const acpAnalyticsProperties = buildSessionCreateAcpAnalyticsProperties({
-      cliType: selectedConfig?.cliType,
-      agentType: selectedConfig?.agentType,
-      modeId: modeOptions.length > 0 ? selectedModeId : null,
-      modelId: modelOptions.length > 0 ? selectedModelId : null,
-      configOptionValues,
-      configOptionSelectors,
-    });
     const sessionIdForStart = draftSessionId ?? ensureDraftSessionId();
     try {
       setSubmitting(true);
@@ -1765,12 +1494,10 @@ function WorkspaceChatLanding({
       let repoFullNameForMentions: string | undefined;
 
       if (contextType === 'local' && !selectedLocalProject) {
-        captureSessionInputBlocked('missing_project');
         setComposerError(t('chat.validation.missingProject', 'Please select a project'));
         return;
       }
       if (contextType === 'local' && selectedLocalProject?.machineId !== scopedMachineId) {
-        captureSessionInputBlocked('missing_project');
         setComposerError(t('chat.validation.missingProject', 'Please select a project'));
         return;
       }
@@ -1815,7 +1542,6 @@ function WorkspaceChatLanding({
       if (!pendingHistoryEntry) {
         throw new Error('Initial session history missing effective items');
       }
-      startFailureReason = 'session_create_failed';
       const designService = isElectron ? getIpcServices()?.design : undefined;
       if (
         isElectron &&
@@ -1841,10 +1567,7 @@ function WorkspaceChatLanding({
            none is attached). On failure block the send and keep the draft. */
         try {
           await flushDesignCanvasBeforeSend(association.sessionId);
-        } catch (error) {
-          captureSessionInputBlocked('design_save_failed', {
-            error_message: error instanceof Error ? error.message : String(error),
-          });
+        } catch {
           setComposerError(
             t(
               'design.saveFailedBeforeSend',
@@ -1923,118 +1646,15 @@ function WorkspaceChatLanding({
         )
       );
       handoffSessionPreparation(sessionId);
-
-      capturePostHogEvent(postHog, 'session/start_requested', {
-        user_id: userId,
-        workspace_id: workspaceId,
-        session_id: sessionId,
-        machine_id: selectedAgent.machineId,
-        agent_config_id: selectedAgent.agentId,
-        cli_type: selectedConfig.cliType,
-        agent_type: selectedConfig.agentType,
-        ...acpAnalyticsProperties,
-        repo_id_hash: hashAnalyticsId(repoFullNameForMentions),
-        project_kind: analyticsProjectKind,
-        local_project_id: selectedLocalProject?.localProjectId ?? null,
-        workdir_mode: contextType === 'local' ? 'local' : null,
-        has_images: inputBlocks.some((block) => block.type === 'image'),
-        image_count: inputBlocks.filter((block) => block.type === 'image').length,
-        entrypoint: 'chat_landing',
-        launch_mode: launchMode,
-        submit_prepare_ms: getDurationSinceMs(submitStartedAtMs),
-      });
-      capturePostHogEvent(postHog, SESSION_ACP_CONFIG_USED_EVENT, {
-        user_id: userId,
-        workspace_id: workspaceId,
-        session_id: sessionId,
-        machine_id: selectedAgent.machineId,
-        agent_config_id: selectedAgent.agentId,
-        cli_type: selectedConfig.cliType,
-        agent_type: selectedConfig.agentType,
-        ...acpAnalyticsProperties,
-        project_kind: analyticsProjectKind,
-        entrypoint: 'chat_landing',
-        launch_mode: launchMode,
-      });
-
-      const dispatchStartedAtMs = getPerformanceNowMs();
       void requestSessionDispatch(sessionId, historyEntry.id, {
         inputConfig,
         machineId: selectedAgent.machineId,
       }).catch((dispatchError: unknown) => {
         const errorMessage =
           dispatchError instanceof Error ? dispatchError.message : String(dispatchError);
-        capturePostHogEvent(postHog, 'session/start_dispatch_failed', {
-          user_id: userId,
-          workspace_id: workspaceId,
-          session_id: sessionId,
-          machine_id: selectedAgent.machineId,
-          agent_config_id: selectedAgent.agentId,
-          cli_type: selectedConfig.cliType,
-          agent_type: selectedConfig.agentType,
-          ...acpAnalyticsProperties,
-          repo_id_hash: hashAnalyticsId(repoFullNameForMentions),
-          project_kind: analyticsProjectKind,
-          local_project_id: selectedLocalProject?.localProjectId ?? null,
-          workdir_mode: contextType === 'local' ? 'local' : null,
-          entrypoint: 'chat_landing',
-          launch_mode: launchMode,
-          duration_ms: getDurationSinceMs(dispatchStartedAtMs),
-          error_message: errorMessage,
-        });
         console.error('Failed to request session dispatch', dispatchError);
         toast.error(t('chat.failed'), { description: errorMessage });
       });
-      // session_number is derived from the user's own prior sessions counted at
-      // submit start (ref snapshot avoids races with the just-created session
-      // streaming into the visible list). 1 = first-ever, which drives the
-      // activation anchor below (spec §3.1).
-      const sessionNumber = ownPriorSessionCountRef.current + 1;
-      const isFirstSessionEver = sessionNumber === 1;
-
-      capturePostHogEvent(postHog, 'session/start_success', {
-        user_id: userId,
-        workspace_id: workspaceId,
-        session_id: sessionId,
-        machine_id: selectedAgent.machineId,
-        agent_config_id: selectedAgent.agentId,
-        cli_type: selectedConfig.cliType,
-        agent_type: selectedConfig.agentType,
-        ...acpAnalyticsProperties,
-        repo_id_hash: hashAnalyticsId(repoFullNameForMentions),
-        project_kind: analyticsProjectKind,
-        local_project_id: selectedLocalProject?.localProjectId ?? null,
-        workdir_mode: contextType === 'local' ? 'local' : null,
-        session_number: sessionNumber,
-        launch_mode: launchMode,
-        dispatch_duration_ms: getDurationSinceMs(submitStartedAtMs),
-      });
-
-      // Unified activation anchor (spec §3.1/§3.4). Web fires it for the user's
-      // first-ever successful start; the CLI fires the same anchor for CLI-first
-      // users so the D1/D7/D30 cohort is the Web ∪ CLI union. signup_at /
-      // days_since_signup are sent only when available (not surfaced client-side
-      // today) so the property stays absent rather than wrong.
-      if (isFirstSessionEver) {
-        capturePostHogEvent(postHog, 'activation/first_session_succeeded', {
-          user_id: userId,
-          workspace_id: workspaceId,
-          session_id: sessionId,
-          machine_id: selectedAgent.machineId,
-          agent_config_id: selectedAgent.agentId,
-          cli_type: selectedConfig.cliType,
-          agent_type: selectedConfig.agentType,
-          project_kind: analyticsProjectKind,
-          is_first_session_ever: true,
-          created_via: 'web',
-          launch_mode: launchMode,
-        });
-      }
-
-      // Local session creation and history write succeeded; a later navigate()
-      // throw is not a session-start failure, so reset the phase before it can
-      // be misattributed.
-      startFailureReason = 'unknown';
 
       setPrompt('');
       clearPastedTextDrafts();
@@ -2047,28 +1667,11 @@ function WorkspaceChatLanding({
         height: canvasDraft.height,
       });
       await navigate(
-        getSessionCreationNavigation(workspaceSlug, sessionId, false, {
+        getSessionCreationNavigation(workspaceSlug, sessionId, {
           focusDesignCanvas: Boolean(designService),
         })
       );
     } catch (error) {
-      capturePostHogEvent(postHog, 'session/start_failed', {
-        user_id: userId ?? null,
-        workspace_id: workspaceId ?? null,
-        machine_id: selectedAgent?.machineId ?? null,
-        agent_config_id: selectedAgent?.agentId ?? null,
-        cli_type: selectedConfig?.cliType ?? null,
-        agent_type: selectedConfig?.agentType ?? null,
-        ...acpAnalyticsProperties,
-        repo_id_hash: contextType === 'github' ? hashAnalyticsId(selectedRepo) : null,
-        project_kind: analyticsProjectKind,
-        local_project_id: selectedLocalProject?.localProjectId ?? null,
-        failure_reason: startFailureReason,
-        entrypoint: 'chat_landing',
-        launch_mode: launchMode,
-        duration_ms: getDurationSinceMs(submitStartedAtMs),
-        error_message: error instanceof Error ? error.message : String(error),
-      });
       console.error('Failed to start session', error);
       const errMsg = error instanceof Error ? error.message : String(error);
       toast.error(t('chat.failed'), { description: errMsg });
@@ -2293,7 +1896,6 @@ function WorkspaceChatLanding({
     isInitialDataLoading,
   });
 
-  // Web/mobile users without any machine need the desktop client; send them to
   // the download page (localized) in their browser / external shell.
   const handleDownloadClient = () => {
     void openExternalUrl(getDownloadPageUrl(i18n.resolvedLanguage ?? i18n.language));

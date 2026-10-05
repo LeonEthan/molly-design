@@ -9,7 +9,6 @@
  */
 
 import { isConvexError } from '@molly/shared';
-import { isNativeAppShell } from './native-platform';
 
 export type ErrorBoundaryReportEnvironment = {
   url?: string;
@@ -96,7 +95,6 @@ function readBuildConstant(read: () => string | undefined): string | undefined {
 function resolveRuntime(): string {
   if (typeof window === 'undefined') return 'ssr';
   if (window.__MOLLY_ELECTRON__ === true) return 'electron';
-  if (isNativeAppShell()) return 'native';
   return 'web';
 }
 

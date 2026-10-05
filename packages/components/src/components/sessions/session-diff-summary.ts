@@ -1,8 +1,4 @@
-import {
-  normalizeFileDiff,
-  type FileDiff,
-} from '@molly/shared';
-import type { SessionFileChangeEntry } from '@/lib/session-file-provider';
+import { normalizeFileDiff, type FileDiff } from '@molly/shared';
 
 export type SessionDiffChangeEntry = {
   filePath: string;
@@ -159,44 +155,6 @@ export const isSessionDiffSummaryEmpty = (summary: SessionDiffSummary): boolean 
 const sortChangeEntries = (entries: SessionDiffChangeEntry[]): SessionDiffChangeEntry[] =>
   entries.toSorted((left, right) => left.filePath.localeCompare(right.filePath));
 
-const buildProviderTurnEntries = (
-  entries: readonly SessionFileChangeEntry[]
-): SessionDiffChangeEntry[] => {
-  const statsByPath = new Map<string, { add?: number; del?: number; hasProviderStats: boolean }>();
-
-  for (const entry of entries) {
-    if (!entry.path) {
-      continue;
-    }
-
-    const existing = statsByPath.get(entry.path);
-    if (entry.add === undefined && entry.del === undefined) {
-      if (!existing) {
-        statsByPath.set(entry.path, { hasProviderStats: false });
-      }
-      continue;
-    }
-
-    const add = entry.add ?? 0;
-    const del = entry.del ?? 0;
-    if (existing?.hasProviderStats) {
-      existing.add = (existing.add ?? 0) + add;
-      existing.del = (existing.del ?? 0) + del;
-      continue;
-    }
-
-    statsByPath.set(entry.path, { add, del, hasProviderStats: true });
-  }
-
-  return sortChangeEntries(
-    Array.from(statsByPath.entries()).map(([filePath, stats]) => ({
-      filePath,
-      add: stats.hasProviderStats ? stats.add : undefined,
-      del: stats.hasProviderStats ? stats.del : undefined,
-    }))
-  );
-};
-
 export const buildSessionDiffSummary = (
   history: SessionHistoryDiffLike[] | null | undefined
 ): SessionDiffSummary => {
@@ -244,87 +202,13 @@ export const buildSessionDiffSummary = (
     }
   }
 
-  if (
-    Object.keys(diffEntriesByTurn).length === 0 &&
-    Object.keys(fileDiffsByTurn).length === 0
-  ) {
+  if (Object.keys(diffEntriesByTurn).length === 0 && Object.keys(fileDiffsByTurn).length === 0) {
     return EMPTY_SESSION_DIFF_SUMMARY;
   }
 
   return {
     changeEntries: [],
     changeFilePaths: [],
-    diffFilePathsByTurn,
-    diffEntriesByTurn,
-    fileDiffsByTurn,
-  };
-};
-
-export const buildSessionDiffSummaryFromProviderChanges = (
-  allChangedFiles: readonly SessionFileChangeEntry[] | null | undefined,
-  changedFilesByTurn: Record<string, readonly SessionFileChangeEntry[]> | null | undefined,
-  fileDiffsByTurn: Record<string, FileDiff[]> = {}
-): SessionDiffSummary => {
-  const diffFilePathsByTurn: Record<string, string[]> = {};
-  const diffEntriesByTurn: Record<string, SessionDiffChangeEntry[]> = {};
-
-  if (changedFilesByTurn) {
-    for (const [turnId, entries] of Object.entries(changedFilesByTurn)) {
-      const turnEntries = buildProviderTurnEntries(entries);
-      if (turnEntries.length > 0) {
-        diffEntriesByTurn[turnId] = turnEntries;
-        diffFilePathsByTurn[turnId] = turnEntries.map((entry) => entry.filePath);
-      }
-    }
-  }
-
-  const changeStatsByPath = new Map<
-    string,
-    { add?: number; del?: number; hasProviderStats: boolean }
-  >();
-  const addProviderEntry = (entry: SessionFileChangeEntry): void => {
-    const existing = changeStatsByPath.get(entry.path);
-    if (entry.add === undefined && entry.del === undefined) {
-      if (!existing) {
-        changeStatsByPath.set(entry.path, { hasProviderStats: false });
-      }
-      return;
-    }
-    const add = entry.add ?? 0;
-    const del = entry.del ?? 0;
-    if (existing) {
-      if (existing.hasProviderStats) {
-        existing.add = (existing.add ?? 0) + add;
-        existing.del = (existing.del ?? 0) + del;
-      } else {
-        existing.add = add;
-        existing.del = del;
-        existing.hasProviderStats = true;
-      }
-    } else {
-      changeStatsByPath.set(entry.path, { add, del, hasProviderStats: true });
-    }
-  };
-
-  for (const entry of allChangedFiles ?? []) {
-    addProviderEntry(entry);
-  }
-
-  const changeEntries = Array.from(changeStatsByPath.entries())
-    .map(([filePath, stats]) => ({ filePath, add: stats.add, del: stats.del }))
-    .sort((a, b) => a.filePath.localeCompare(b.filePath));
-
-  if (
-    changeEntries.length === 0 &&
-    Object.keys(diffEntriesByTurn).length === 0 &&
-    Object.keys(fileDiffsByTurn).length === 0
-  ) {
-    return EMPTY_SESSION_DIFF_SUMMARY;
-  }
-
-  return {
-    changeEntries,
-    changeFilePaths: changeEntries.map((entry) => entry.filePath),
     diffFilePathsByTurn,
     diffEntriesByTurn,
     fileDiffsByTurn,

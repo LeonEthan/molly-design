@@ -4,12 +4,6 @@ import type { MachineId, MachineLifecycleCapability } from '@molly/shared';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
 import { currentWorkspaceIdAtom } from '@/atoms/workspace-context';
 
-/**
- * One-shot `machine/status` probe for a single machine's remote
- * restart/upgrade capability. Shared by the mobile machine-detail pane and the
- * desktop machine accordion so both surfaces know whether the daemon can be
- * remotely restarted/updated without duplicating the request/response wiring.
- */
 export function useMachineLifecycleCapability({
   machineId,
   enabled,

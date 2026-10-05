@@ -1,8 +1,5 @@
 import * as React from 'react';
-import { useAtomValue } from 'jotai';
-import { usePostHog } from '@posthog/react';
 import { useTranslation } from 'react-i18next';
-import { currentWorkspaceIdAtom } from '@/atoms';
 import {
   Boxes,
   ChevronLeft,
@@ -31,12 +28,6 @@ import {
   type MentionMenuView,
   type MentionSourceKey,
 } from '@/components/mentions/mention-registry';
-import {
-  captureMentionCategoryEnter,
-  captureMentionMenuOpen,
-  captureMentionSelect,
-  type MentionSurface,
-} from '@/components/mentions/mention-analytics';
 
 /**
  * Starts each lazy source the open menu needs, at most once while it stays
@@ -142,13 +133,7 @@ function CategoryRow({
   );
 }
 
-function CandidateRow({
-  candidate,
-  onSelect,
-}: {
-  candidate: MentionCandidate;
-  onSelect?: () => void;
-}) {
+function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
   return (
     <MentionItem
       value={candidate.value}
@@ -156,7 +141,6 @@ function CandidateRow({
       kind={candidate.kind}
       insertText={candidate.insertText}
       navigateText={candidate.navigateText}
-      onMentionSelect={onSelect}
     >
       <CandidateIcon
         icon={candidate.icon}
@@ -348,14 +332,12 @@ export function MentionTwoLevelMenuBody({
   onBack,
   showBack,
   onCategoryNavigate,
-  onCandidateSelect,
   detail,
 }: {
   view: MentionMenuView;
   onBack: () => void;
   showBack: boolean;
   onCategoryNavigate?: (category: MentionCategory) => void;
-  onCandidateSelect?: (category: MentionCategory, rank: number) => void;
   /** Side panel for the highlighted candidate; omitted on mobile. */
   detail?: MentionCandidateDetail | null;
 }) {
@@ -393,12 +375,8 @@ export function MentionTwoLevelMenuBody({
           {view.groups.map((group) => (
             <React.Fragment key={group.category.id}>
               <GroupLabel>{group.category.label}</GroupLabel>
-              {group.candidates.map((candidate, rank) => (
-                <CandidateRow
-                  key={candidate.value}
-                  candidate={candidate}
-                  onSelect={() => onCandidateSelect?.(group.category, rank)}
-                />
+              {group.candidates.map((candidate) => (
+                <CandidateRow key={candidate.value} candidate={candidate} />
               ))}
             </React.Fragment>
           ))}
@@ -419,12 +397,8 @@ export function MentionTwoLevelMenuBody({
           </Message>
         ) : candidates.length > 0 ? (
           <div className="scrollbar-pro max-h-[280px] overflow-y-auto">
-            {candidates.map((candidate, rank) => (
-              <CandidateRow
-                key={candidate.value}
-                candidate={candidate}
-                onSelect={() => onCandidateSelect?.(category, rank)}
-              />
+            {candidates.map((candidate) => (
+              <CandidateRow key={candidate.value} candidate={candidate} />
             ))}
           </div>
         ) : category.status === 'loading' ? (
@@ -449,13 +423,7 @@ export function MentionTwoLevelMenuBody({
  * scoped category. Replaces the per-trigger menus; `/` still opens the command
  * category directly through its `directTrigger`.
  */
-export function MentionTwoLevelMenu({
-  categories,
-  surface = 'unknown',
-}: {
-  categories: MentionCategory[];
-  surface?: MentionSurface;
-}) {
+export function MentionTwoLevelMenu({ categories }: { categories: MentionCategory[] }) {
   const context = useMentionContext('MentionTwoLevelMenu');
   const trigger = context.trigger;
   const search = context.filterStore.search;
@@ -511,49 +479,6 @@ export function MentionTwoLevelMenu({
     return match?.detail ?? null;
   }, [highlightedValue, visibleCandidates]);
 
-  const postHog = usePostHog();
-  const workspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const analyticsBase = React.useMemo(() => ({ workspaceId, surface }), [surface, workspaceId]);
-
-  // One `menu_open` per open, reset when it closes.
-  const shouldReportMenuOpen = useFireOncePerCycle<'menu-open'>(open);
-  React.useEffect(() => {
-    if (!open || !shouldReportMenuOpen('menu-open')) return;
-    captureMentionMenuOpen(postHog, analyticsBase, {
-      level: view?.level ?? 'none',
-      categoryCount: categories.length,
-    });
-  }, [analyticsBase, categories.length, open, postHog, shouldReportMenuOpen, view?.level]);
-
-  // The first-to-second-level step. Reported from the resolved view rather than
-  // the row callback: a navigation item never fires `onMentionSelect`, and this
-  // also covers the keyboard route into a category. Leaving a category and
-  // coming back is a real second entry, so this is key-change and not once-only.
-  const shouldReportCategoryEnter = useFireOnKeyChange<string | null>();
-  const scopedCategoryId = view?.level === 'category' ? view.category.id : null;
-  const scopedTermLength = view?.level === 'category' ? view.term.length : 0;
-  React.useEffect(() => {
-    if (!shouldReportCategoryEnter(scopedCategoryId) || !scopedCategoryId) return;
-    captureMentionCategoryEnter(postHog, analyticsBase, {
-      category: scopedCategoryId,
-      termLength: scopedTermLength,
-    });
-    // `scopedTermLength` is read at entry only; it must not re-fire on typing.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analyticsBase, postHog, scopedCategoryId, shouldReportCategoryEnter]);
-
-  const handleCandidateSelect = React.useCallback(
-    (category: MentionCategory, rank: number) => {
-      captureMentionSelect(postHog, analyticsBase, {
-        category: category.id,
-        level: view?.level ?? 'none',
-        rank,
-        termLength: search.length,
-      });
-    },
-    [analyticsBase, postHog, search.length, view?.level]
-  );
-
   if (!view) return null;
 
   // A category reached through its own trigger has no level above it to go back
@@ -564,7 +489,7 @@ export function MentionTwoLevelMenu({
     <MentionContent
       className={cn(
         'max-w-[min(var(--mention-input-width),calc(100vw-2rem))]',
-        detail ? 'w-[min(640px,var(--mention-input-width),calc(100vw-2rem))]' : 'w-max',
+        detail ? 'w-[min(640px,var(--mention-input-width),calc(100vw-2rem))]' : 'w-max'
       )}
     >
       <MentionTwoLevelMenuBody
@@ -572,7 +497,6 @@ export function MentionTwoLevelMenu({
         onBack={handleBack}
         showBack={showBack}
         onCategoryNavigate={activateCategory}
-        onCandidateSelect={handleCandidateSelect}
         detail={detail}
       />
     </MentionContent>

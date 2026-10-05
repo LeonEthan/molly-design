@@ -1,4 +1,4 @@
-import { useRef, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   type AcpSessionMonitorSnapshot,
@@ -15,7 +15,6 @@ import {
   Laptop,
   Loader2,
   LogOut,
-  MoreHorizontal,
   Pencil,
   RotateCcw,
   UserRound,
@@ -23,13 +22,6 @@ import {
 import { Badge } from '@/ui/badge';
 import { Button } from '@/ui/button';
 import { Input } from '@/ui/input';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,7 +34,7 @@ import {
 } from '@/ui/alert-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { useMachineActionState } from '@/hooks/use-machine-action-state';
 import { AgentEngineCatalog } from './agent-engine-catalog';
@@ -118,7 +110,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
     accordion,
   } = props;
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
+
   const monitoredOnline = useMachineOnlineStatus(machine.id) === 'online';
   // The accordion list already owns the workspace-wide presence snapshot. Reuse
   // it so collapsing and expanding a row cannot briefly change the status dot.
@@ -148,20 +140,14 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
     onPing,
     onRestartDaemon,
   });
-  const pendingRenameRef = useRef(false);
 
   const manageableOwnMachine = isOwn && !readOnly;
-  const restartVisible = !isMobile && !renaming && !readOnly && !!onRestartDaemon;
-  const removeVisible = !isMobile && !renaming && manageableOwnMachine;
-  const managementGroupVisible = restartVisible || (!isMobile && !renaming && !!onPing);
+  const restartVisible = !renaming && !readOnly && !!onRestartDaemon;
+  const removeVisible = !renaming && manageableOwnMachine;
+  const managementGroupVisible = restartVisible || (!renaming && !!onPing);
   const destructiveGroupVisible = removeVisible;
   // Desktop renders every action inline in the header (rename pencil, share
-  // switch, ping, restart, revoke, delete); the ⋮ menu is mobile-only.
-  const actionsMenuVisible =
-    !renaming &&
-    isMobile &&
-    !readOnly &&
-    (isOwn || canDelete || !!onRestartDaemon || !!onPing);
+
   const externalAccordionHeader = accordion?.headerRenderedExternally === true;
   const detailToolbarVisible =
     !externalAccordionHeader ||
@@ -183,17 +169,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
           {ownerName}
         </Badge>
       )}
-      {isMobile && (
-        <span
-          aria-hidden
-          className={cn(
-            'mx-1 h-2 w-2 shrink-0 rounded-full ring-4',
-            isOnline
-              ? 'bg-status-success ring-status-success/20'
-              : 'bg-muted-foreground/50 ring-muted'
-          )}
-        />
-      )}
+
       <Badge variant="secondary" className="gap-1 px-1.5 py-0 text-[10px]">
         <Laptop className="h-2.5 w-2.5" />
         {machine.os || '-'}
@@ -233,11 +209,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                   )}
                 />
               ) : null}
-              <div
-                className={cn(
-                  isMobile ? 'flex min-w-0 flex-1 items-center justify-center' : 'contents'
-                )}
-              >
+              <div className={cn('contents')}>
                 {renaming ? (
                   <Input
                     ref={inputRef}
@@ -275,16 +247,11 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                   ) : null
                 ) : (
                   <>
-                    <h2
-                      className={cn(
-                        'min-w-0 truncate font-semibold',
-                        isMobile ? 'text-center text-lg' : 'text-base'
-                      )}
-                    >
+                    <h2 className={cn('min-w-0 truncate font-semibold', 'text-base')}>
                       {machine.name || machine.id}
                     </h2>
                     {renameSaving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                    {!isMobile && manageableOwnMachine && (
+                    {manageableOwnMachine && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -298,7 +265,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                   </>
                 )}
               </div>
-              {onPing && !renaming && !isMobile && (
+              {onPing && !renaming && (
                 <div className="ml-auto flex shrink-0 items-center gap-1.5">
                   <Button
                     variant="ghost"
@@ -382,112 +349,7 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                   ) : null}
                 </Tooltip>
               ) : null}
-              {actionsMenuVisible && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      aria-label={t('workspace.machines.moreActions', 'Machine options')}
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    className="w-60"
-                    onCloseAutoFocus={(event) => {
-                      if (pendingRenameRef.current) {
-                        event.preventDefault();
-                        pendingRenameRef.current = false;
-                        requestAnimationFrame(() => {
-                          inputRef.current?.focus();
-                          inputRef.current?.select();
-                        });
-                      }
-                    }}
-                  >
-                    {isMobile && manageableOwnMachine && (
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          pendingRenameRef.current = true;
-                          setRenaming(true);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                        <span>{t('workspace.machines.editName', 'Edit machine name')}</span>
-                      </DropdownMenuItem>
-                    )}
-                    {isMobile && isOwn && (onPing || onRestartDaemon) && (
-                      <DropdownMenuSeparator />
-                    )}
-                    {isMobile && onPing && (
-                      <DropdownMenuItem
-                        onSelect={(event) => {
-                          event.preventDefault();
-                          void handlePing();
-                        }}
-                        disabled={pinging}
-                      >
-                        {pinging ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Activity className="h-3.5 w-3.5" />
-                        )}
-                        <span className="min-w-0 flex-1">
-                          {t('settings.agent.machinePing.button', 'Ping')}
-                        </span>
-                        {pingLatencyMs !== null && (
-                          <span className="font-mono text-[11px] text-muted-foreground">
-                            {t('settings.agent.machinePing.latency', '{{latency}} ms', {
-                              latency: String(pingLatencyMs),
-                            })}
-                          </span>
-                        )}
-                      </DropdownMenuItem>
-                    )}
-                    {onRestartDaemon && (
-                      <DropdownMenuItem
-                        onSelect={() => void handleRestartDaemon()}
-                        disabled={restartingDaemon}
-                      >
-                        {restartingDaemon ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        )}
-                        <span>
-                          {t('settings.agent.machineLifecycle.restartButton', 'Restart daemon')}
-                        </span>
-                      </DropdownMenuItem>
-                    )}
-                    {isMobile && isOwn && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={(event) => {
-                            event.preventDefault();
-                            setDeleteOpen(true);
-                          }}
-                          disabled={!canDelete}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <LogOut className="h-3.5 w-3.5" />
-                          <span>
-                            {canDelete
-                              ? t('workspace.machines.removeFromWorkspace', 'Remove from workspace')
-                              : t(
-                                  'workspace.machines.removeUnavailableOnlineShort',
-                                  'Stop machine before removing'
-                                )}
-                          </span>
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+
               {accordion && !externalAccordionHeader ? (
                 <Button
                   type="button"
@@ -509,9 +371,8 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
               ) : null}
             </div>
           </>
-          {/* Desktop (story) keeps the meta badges in the header; on mobile they
-            move to the first line of the content, flush with the body. */}
-          {!isMobile && accordion ? (
+
+          {accordion ? (
             externalAccordionHeader ? null : (
               <WorkspaceMachineAccordionSummary
                 meta={accordion.meta}
@@ -519,20 +380,15 @@ export function MachineDetailPane(props: MachineDetailPaneProps) {
                 showOwner={false}
               />
             )
-          ) : !isMobile ? (
+          ) : (
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
               {metaBadges}
             </div>
-          ) : null}
+          )}
         </header>
       ) : null}
 
       <div className={cn('min-h-0 flex-1', accordion ? 'overflow-visible' : 'overflow-y-auto')}>
-        {isMobile && (
-          <div className="flex flex-wrap items-center gap-1.5 px-4 pb-1 pt-1 text-[11px] text-muted-foreground">
-            {metaBadges}
-          </div>
-        )}
         {mode === 'devices' ? (
           <>
             {footer}

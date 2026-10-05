@@ -9,8 +9,8 @@ reasoning behind those rules.
 - `chat-composer.tsx` — the reusable composer shell: prompt textarea, attachment
   chips, status text, top/footer/bottom selector slots, image add, and
   primary/secondary action placement.
-- `chat-landing.tsx` — new-chat orchestration: selector state, mobile sheet
-  wiring, submit behavior, and the nodes passed into `ChatComposer`.
+- `chat-landing.tsx` — new-chat orchestration: selector state, submit behavior,
+  and the nodes passed into `ChatComposer`.
 - `canvas-size-selector.tsx` — the Auto/preset/custom dimensions popover at the
   composer's bottom left, beside attachments. Five common pixel presets share the
   existing custom-size contract; custom fields apply together and dismiss without changes.
@@ -31,9 +31,7 @@ reasoning behind those rules.
 - `context-switch.tsx`, `machine-pairing-dialog.tsx`, `web-chat-landing-screen.tsx`
   — landing chrome and host-specific entry points.
   The hero's scroll viewport reuses `getSessionChatInputAreaShellClassName()` so
-  an overlaying native keyboard reduces the visible area by its height and the
-  composer stays reachable by scrolling. The same shell removes the covered
-  bottom safe-area padding; the hero and gallery keep their existing layout.
+  the landing and conversation keep the same composer spacing.
 - [`submission/`](submission/AGENTS.md) — the composer submission lifecycle
   (its own scope, with its own rules).
 - `atoms/local-storage-cache.ts` owns the persisted landing prompt, pasted text,
@@ -52,9 +50,8 @@ legacy saved prompts while preserving a draft in another workspace.
 ## Why the rules read the way they do
 
 - **MCP as a second menu level.** The workspace MCP catalog is multi-select and
-  unbounded, so it cannot sit in the footer selector row. Desktop has hover and
-  opens a submenu; touch does not, so mobile pushes the panel onto the same
-  surface with a back row.
+  unbounded, so it cannot sit in the footer selector row. Its hover submenu
+  keeps the selection beside the attachment entry.
 - **The 20-row picker cap.** The complete option set is unbounded; the cap keeps
   the menu mountable while search still ranks over everything.
 - **Effective project access.** A project is only really shared when its machine

@@ -9,7 +9,6 @@ import {
 import { toggleNavigationSidebarAtom } from '@/atoms/layout-state';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
 import { useFocusScopeSwitcher } from '@/ui/focus-scope';
-import { useIsMobile } from './use-mobile';
 
 export type { SidebarNavItem } from '@/atoms/focus-layer';
 
@@ -37,7 +36,6 @@ export function useKeyboardNavigation(): void {
   const flatItems = useAtomValue(sidebarNavItemsAtom);
   const sidebarCallbacks = useAtomValue(sidebarNavCallbacksAtom);
   const toggleNavigationSidebar = useSetAtom(toggleNavigationSidebarAtom);
-  const isMobile = useIsMobile();
 
   const flatItemsRef = useRef(flatItems);
   flatItemsRef.current = flatItems;
@@ -82,17 +80,14 @@ export function useKeyboardNavigation(): void {
    * `onNavigateToSession` a session id from the previous workspace and build a
    * route the target workspace has no session for.
    */
-  const claimBurstTarget = useCallback(
-    (sessionIds: readonly string[]): string | null => {
-      const target = pendingSessionRef.current;
-      if (target === null) return null;
-      const callbacks = callbacksRef.current;
-      if (!callbacks) return null;
-      if (callbacks.getSelectedSessionId() !== navigatedSessionRef.current) return null;
-      return sessionIds.includes(target) ? target : null;
-    },
-    []
-  );
+  const claimBurstTarget = useCallback((sessionIds: readonly string[]): string | null => {
+    const target = pendingSessionRef.current;
+    if (target === null) return null;
+    const callbacks = callbacksRef.current;
+    if (!callbacks) return null;
+    if (callbacks.getSelectedSessionId() !== navigatedSessionRef.current) return null;
+    return sessionIds.includes(target) ? target : null;
+  }, []);
 
   const flushSessionNavigation = useCallback(() => {
     const callbacks = callbacksRef.current;
@@ -144,14 +139,14 @@ export function useKeyboardNavigation(): void {
     [abandonBurst, claimBurstTarget, flushSessionNavigation, getVisibleSessionIds]
   );
 
-  useFocusScopeSwitcher({ enabled: !isMobile });
+  useFocusScopeSwitcher({ enabled: true });
 
   useCommand({
     id: 'sidebar.toggle',
     title: t('commands.sidebar.toggle', 'Toggle Sidebar'),
     category: 'View',
     keybindings: getCommandKeybindings('sidebar.toggle'),
-    when: () => !isMobile,
+    when: () => true,
     run: () => toggleNavigationSidebar(),
   });
 
@@ -161,10 +156,7 @@ export function useKeyboardNavigation(): void {
     category: 'Navigation',
     keybindings: getCommandKeybindings('session.previousVisible'),
     when: () =>
-      !isMobile &&
-      !isPopupOpen() &&
-      callbacksRef.current !== null &&
-      getVisibleSessionIds().length > 0,
+      !isPopupOpen() && callbacksRef.current !== null && getVisibleSessionIds().length > 0,
     run: () => navigateVisibleSession('previous'),
   });
 
@@ -174,15 +166,11 @@ export function useKeyboardNavigation(): void {
     category: 'Navigation',
     keybindings: getCommandKeybindings('session.nextVisible'),
     when: () =>
-      !isMobile &&
-      !isPopupOpen() &&
-      callbacksRef.current !== null &&
-      getVisibleSessionIds().length > 0,
+      !isPopupOpen() && callbacksRef.current !== null && getVisibleSessionIds().length > 0,
     run: () => navigateVisibleSession('next'),
   });
 
   useEffect(() => {
-    if (isMobile) return undefined;
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -203,5 +191,5 @@ export function useKeyboardNavigation(): void {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isMobile]);
+  }, []);
 }

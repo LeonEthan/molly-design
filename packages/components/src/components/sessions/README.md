@@ -57,7 +57,6 @@ tracked `.agents/docs/` directory.
 | `session-usage-popover.tsx`                                                  | Usage/context popover                                            |
 | `pull-request-badge.tsx`, `pr-merge-button.tsx`, `pr-merge-method.ts`        | PR identity and merge split-button                               |
 | `create-pr-prompt.ts`, `session-pr-prompts.ts`, `session-pr-agent-action.ts` | Agent prompts behind Create PR / Fix CI / Resolve Conflicts      |
-| `diff-pr-analytics.ts`                                                       | Analytics for diff and PR surfaces                               |
 | `use-capacity-auto-retry.ts`                                                 | Capacity-error retry behaviour                                   |
 
 ## File, diff, and browser surfaces
@@ -79,8 +78,10 @@ tracked `.agents/docs/` directory.
 | `managed-preview-surface.tsx`, `managed-preview-frame-cache.ts`                                                                           | Managed Preview host and its LRU frame cache             |
 | `static-html-preview-document.ts`, `session-html-attachment-action.ts`                                                                    | Static `srcdoc` document policy for complete HTML text   |
 
-PR/CI actions, live GitHub review comments and automatic review settings/engines are
-retired from Molly. Generic file/diff viewers and send-to-chat references remain.
+PR/CI actions, All Changes, live GitHub review comments and automatic review engines
+are retired from Molly. Existing turn diffs read historical snapshots; their summary
+uses the shared conversation derivation without provider scans or retries. Saved Changes
+panels show Files. File previews, editing and send-to-chat references remain.
 
 ### Continue an old design with Molly
 
@@ -121,7 +122,7 @@ sidebar state. A new design's accepted first message from the landing page also
 requests focus once through navigation history state. Its active target canvas
 consumes the request after navigation, preserving the conversation; failed submissions,
 later messages and ordinary history visits leave the layout alone. No focus preference
-is persisted. Design sessions do not offer the code-diff All Changes panel.
+is persisted. Design sessions start no code-diff summary work.
 Native replacements prepare decoded pixels under the outgoing view and promote
 before disposal. Turn completion retains the final preview until the canonical
 editor is ready; component phase cleanup does not dispose that handoff surface.

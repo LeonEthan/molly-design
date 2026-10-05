@@ -50,23 +50,15 @@ export type SessionInfoBarProps = {
   onOpenPr?: () => void;
   /** Agent-driven PR/worktree actions shown inside the context stage. */
   contextActions?: readonly ContextChipAction[];
-  /** Open the complete working-tree diff from the context diffstat. */
-  onOpenAllChanges?: () => void;
   /** Open the session Browser panel. Renders a
    *  plain action chip in the cluster zone (no stage form). */
   onOpenBrowser?: () => void;
-  /** Mobile team workspace: persistent effective privacy status. */
+
   privateAccessStatus?: { label: string; description: string; onAction?: () => void };
-  diffStat?: { add: number; del: number } | null;
   /** Desktop-only ambient doc catch-up state: a quiet spinner pinned to the
    *  bar's right edge. Not a cluster/stage item — it must never steal focus
    *  or relayout the canonical order. */
   syncing?: boolean;
-  /** Mobile native shell only: lift the bar above the session drawer's
-   *  transparent z-30 left-edge swipe-back strip, which otherwise covers the
-   *  leftmost ~48px of the row and swallows taps on the first chip. Same
-   *  treatment (and same trade-off) as the composer's `protectFromEdgeBackZone`. */
-  protectFromEdgeBackZone?: boolean;
   /** Storybook/testing aid: initial staged item. */
   initialStage?: InfoBarItemKey;
 };
@@ -119,17 +111,13 @@ export function SessionInfoBar({
   pr,
   onOpenPr,
   contextActions,
-  onOpenAllChanges,
   onOpenBrowser,
   privateAccessStatus,
-  diffStat,
   syncing = false,
-  protectFromEdgeBackZone = false,
   initialStage,
 }: SessionInfoBarProps) {
   const { t } = useTranslation();
-  const hasDiff = diffStat != null && diffStat.add + diffStat.del > 0;
-  const hasContext = !!pr || !!projectName || !!branch || hasDiff || !!contextActions?.length;
+  const hasContext = !!pr || !!projectName || !!branch || !!contextActions?.length;
   const goalObjective = goal ? sanitizeGoalObjective(goal.objective) : '';
   const hasGoal = !!goal && !!goalObjective;
   const scheduleSignature = useScheduledTaskSignature(scheduledTasks);
@@ -162,7 +150,6 @@ export function SessionInfoBar({
         pr?.url ?? '',
         projectName ?? '',
         branch ?? '',
-        diffStat ? `${diffStat.add}:${diffStat.del}` : '',
         contextActions?.map((action) => action.id).join(',') ?? '',
       ].join('|')
     : null;
@@ -256,8 +243,6 @@ export function SessionInfoBar({
             pr={pr}
             onOpenPr={onOpenPr}
             actions={contextActions}
-            onOpenAllChanges={onOpenAllChanges}
-            diffStat={diffStat}
             prCiRuns={prCiRuns}
             onOpenPrCiRun={onOpenPrCiRun}
             {...itemMode}
@@ -276,16 +261,7 @@ export function SessionInfoBar({
   return (
     // Keep the bar in the composer's input-surface family, with a lighter
     // opacity so it reads as the secondary tier of the same control stack.
-    <div
-      className={cn(
-        'w-full shrink-0 bg-background pb-1.5',
-        /* Gutter is on ConversationColumn (same as stream + composer).
-           The native session drawer's transparent edge-back strip is z-30 and
-           spans the body's left 48px. Elevating this band keeps the leading
-           chip tappable; message body above still owns edge-back swipes. */
-        protectFromEdgeBackZone && 'relative z-40'
-      )}
-    >
+    <div className={cn('w-full shrink-0 bg-background pb-1.5')}>
       {/* Same centered width as the composer content, so the bar and the
           input box share edges. */}
       <ConversationColumn>

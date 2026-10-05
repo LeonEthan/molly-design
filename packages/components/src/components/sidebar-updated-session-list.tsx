@@ -12,7 +12,6 @@ import { Archive, GitBranch, Link2, Mail, Pencil, Pin, PinOff } from 'lucide-rea
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
-import { formatCompactRelativeTime } from '@/lib/format-relative-time';
 import { TooltipProvider } from '@/ui/tooltip';
 import {
   ContextMenu,
@@ -21,7 +20,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/ui/context-menu';
-import { SwipeActionRow } from '@/components/shared/swipe-action-row';
 import {
   SessionOpenedByTreeRow,
   SessionRowArtworkThumbnail,
@@ -265,7 +263,7 @@ export type SidebarUpdatedSessionListProps = {
   items: SidebarUpdatedItem[];
   now: Date;
   selectedItemId?: string | null;
-  isMobile?: boolean;
+
   /** Whether pinned rows show a leading pin icon. */
   showPinnedIcon?: boolean;
   /**
@@ -277,11 +275,7 @@ export type SidebarUpdatedSessionListProps = {
   className?: string;
   labels?: Partial<SidebarUpdatedSessionListLabels>;
   onSelectItem?: (id: string, tabSessionId?: string) => void;
-  /**
-   * Archive an item. When provided, desktop rows reveal an Archive button on hover
-   * (replacing the relative timestamp) with a two-step Archive → Confirm flow, and
-   * mobile rows expose the same action via left-swipe + tap-to-confirm.
-   */
+
   onArchiveItem?: (id: string) => void;
   /** Mark a read desktop item unread. */
   onMarkItemUnread?: (id: string) => void;
@@ -337,7 +331,6 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
   items,
   now,
   selectedItemId,
-  isMobile = false,
   showPinnedIcon = true,
   isLoading = false,
   className,
@@ -503,7 +496,6 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
                 label={bucket.label}
                 collapsed={collapsed}
                 action={bucketHeaderAction}
-                isMobile={isMobile}
                 toggleLabel={toggleBucketLabel}
                 onToggleCollapsed={canToggleBucket ? handleToggle : undefined}
               />
@@ -523,7 +515,6 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
                           item={node.item}
                           now={now}
                           selected={node.item.id === selectedItemId}
-                          isMobile={isMobile}
                           showPinnedIcon={showPinnedIcon}
                           href={getItemHref?.(node.item.id)}
                           onSelect={onSelectItem}
@@ -536,7 +527,6 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
                           openedByTree={openedByTree}
                           contextMenuLabels={contextMenuLabels}
                           archiveTooltipLabel={archiveLabels.tooltip}
-                          archiveActionLabel={archiveLabels.action}
                           archiveConfirmLabel={archiveLabels.confirm}
                         />
                       </SessionOpenedByTreeRow>
@@ -583,7 +573,7 @@ type UpdatedItemRowProps = {
   item: SidebarUpdatedItem;
   now: Date;
   selected: boolean;
-  isMobile: boolean;
+
   showPinnedIcon: boolean;
   href?: string;
   onSelect?: (id: string, tabSessionId?: string) => void;
@@ -597,7 +587,7 @@ type UpdatedItemRowProps = {
   openedByTree?: SessionRowOpenedByTreeSlot;
   contextMenuLabels: SidebarUpdatedContextMenuLabels;
   archiveTooltipLabel: string;
-  archiveActionLabel: string;
+
   archiveConfirmLabel: string;
 };
 
@@ -605,7 +595,6 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   item,
   now,
   selected,
-  isMobile,
   showPinnedIcon,
   href,
   onSelect,
@@ -618,13 +607,11 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   openedByTree,
   contextMenuLabels,
   archiveTooltipLabel,
-  archiveActionLabel,
   archiveConfirmLabel,
 }: UpdatedItemRowProps) {
   const showSelectedState = selected;
   const useAnchor = typeof href === 'string' && href.length > 0;
-  // Mobile keeps a right-edge relative time (no hover info card on touch).
-  const relativeTime = formatCompactRelativeTime(item.latestMessageAt, now);
+
   const addedLines = typeof item.addedLines === 'number' ? item.addedLines : 0;
   const deletedLines = typeof item.deletedLines === 'number' ? item.deletedLines : 0;
   // +/- diff stats only exist for repo (worktree) sessions. Local-project and
@@ -656,14 +643,14 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
 
   const canArchive = typeof onArchive === 'function';
   const canMarkUnread = typeof onMarkUnread === 'function' && !item.hasUnreadMessages;
-  const showInlineArchive = canArchive && !isMobile;
+  const showInlineArchive = canArchive;
   const canRename = typeof onRename === 'function';
   const canTogglePin = typeof onTogglePin === 'function';
   const canCopyUrl = typeof onCopyUrl === 'function';
   // Desktop-only context menu mirrors SessionList's: rename / pin / archive /
-  // copyUrl / copyBranch. Mobile users reach archive via swipe and lack the
+
   // other actions in both organize modes — keeping it consistent rather than
-  // inventing a new mobile entry point here.
+
   // Reverse leg of the opened-by relationship. Available even when the row is
   // NOT nested (opener pinned into the other section, archived, or filtered
   // out), which is exactly when the tree cannot show the link.
@@ -672,15 +659,14 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   const canGoToOpener = Boolean(openerSessionId && typeof onSelect === 'function');
   const openedByOpener = openedByTree?.kind === 'opener' ? openedByTree : null;
   const hasMenuActions =
-    !isMobile &&
-    (canRename ||
-      canTogglePin ||
-      canArchive ||
-      canMarkUnread ||
-      canCopyUrl ||
-      Boolean(branchName) ||
-      canGoToOpener ||
-      Boolean(openedByOpener));
+    canRename ||
+    canTogglePin ||
+    canArchive ||
+    canMarkUnread ||
+    canCopyUrl ||
+    Boolean(branchName) ||
+    canGoToOpener ||
+    Boolean(openedByOpener);
   const titleFontClassName = item.isPinned ? 'font-normal' : 'font-medium';
 
   const titleNode = (
@@ -727,7 +713,6 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         'border border-transparent bg-transparent',
         !showSelectedState &&
           onSelect &&
-          !isMobile &&
           'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
         showSelectedState &&
           'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
@@ -778,9 +763,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           restPointerClassName="group-hover/row:pointer-events-none"
           revealClassName="group-hover/row:opacity-100 group-hover/row:pointer-events-auto group-data-[menu-open]/row:opacity-100 group-data-[menu-open]/row:pointer-events-auto"
         />
-        {item.artworkId ? (
-          <SessionRowArtworkThumbnail artworkId={item.artworkId} />
-        ) : null}
+        {item.artworkId ? <SessionRowArtworkThumbnail artworkId={item.artworkId} /> : null}
         <SessionRowAuthorAvatar author={item.owner} />
         {showPinnedIcon && item.isPinned ? (
           <Pin
@@ -809,14 +792,13 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           hasUnreadMessages={item.hasUnreadMessages}
           fadeClassName="group-hover/row:opacity-0"
           restIcon={
-            hasChanges || isMobile || (item.kind === 'local' && item.isWorktree) ? (
+            hasChanges || (item.kind === 'local' && item.isWorktree) ? (
               <span
                 className={cn(
                   'flex select-none items-center gap-1.5 text-[11px] tabular-nums text-sidebar-foreground-muted/80',
                   useAnchor && 'z-20'
                 )}
               >
-                {isMobile ? <span>{relativeTime}</span> : null}
                 {hasChanges ? (
                   <span className="flex items-center gap-1">
                     <span className="text-code-added">+{addedLines}</span>
@@ -845,33 +827,8 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   );
 
   // Tooltip anchored to the row reveals the section the item belongs to (desktop only).
-  // Skipping it on mobile keeps long-press behavior available for native gestures.
-  // Mobile additionally wraps the row in SwipeActionRow when archive is wired so a
+
   // left-swipe reveals the Archive action with tap-to-confirm.
-  if (isMobile) {
-    if (!canArchive) return row;
-    return (
-      <SwipeActionRow
-        enabled={isMobile}
-        className="rounded-md"
-        contentClassName="bg-sidebar"
-        actions={[
-          {
-            key: 'archive',
-            label: archiveActionLabel,
-            ariaLabel: archiveTooltipLabel,
-            icon: <Archive className="h-4 w-4" />,
-            hideLabel: item.kind === 'chat',
-            className: 'bg-sidebar-hover text-sidebar-hover-foreground',
-            onClick: () => onArchive?.(item.id),
-          },
-        ]}
-        onCommit={() => onArchive?.(item.id)}
-      >
-        {row}
-      </SwipeActionRow>
-    );
-  }
 
   const menuRow = hasMenuActions ? (
     <ContextMenu onOpenChange={setRowMenuOpen}>

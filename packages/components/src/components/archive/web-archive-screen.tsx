@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils';
 import { navigationSidebarHiddenAtom, showNavigationSidebarAtom } from '@/atoms/layout-state';
 import { isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { useWindowDragRegionClass, useWindowsCaptionPadClass } from '@/ui/window-drag-region';
-import { isNativeAppShell } from '@/lib/native-platform';
 import { Button } from '@/ui/button';
 import { TooltipProvider } from '@/ui/tooltip';
 
@@ -43,8 +42,7 @@ export function WebArchiveScreen({
   const windowsCaptionPadClass = useWindowsCaptionPadClass();
   // Traffic lights auto-hide in native fullscreen — no inset to reserve then.
   // Mirrors the same derivation in session-detail.tsx.
-  const hasMacOSTitlebarInset =
-    !isNativeAppShell() && isMacOSElectronRenderer() && !isElectronFullscreen;
+  const hasMacOSTitlebarInset = isMacOSElectronRenderer() && !isElectronFullscreen;
 
   return (
     <TooltipProvider>

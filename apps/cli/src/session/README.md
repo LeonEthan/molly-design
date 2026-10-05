@@ -111,7 +111,7 @@ recovered without duplicate input. The control-plane Mirror never materializes h
   message-handler's `beginConversationTurn`, stored/disposed via `SessionTransientStore` turn
   state; it creates the assistant entry when it opens.
 - `session-execution-service.ts` — runs one turn end-to-end: ACP prompt, turn ids,
-  lifecycle/error handling, GitHub/local project setup, and post-turn diffStats.
+  lifecycle/error handling, historical project restore, design outcomes and Files refresh.
 - `acp-error-classification.ts` — JSON-RPC/transport error string matching for the above.
 - `session-manager.ts` / `session.ts` / `session-sandbox.ts` / `terminal-manager.ts` —
   session and process lifecycle, workdirs, worktrees, sandboxed spawning, ACP terminals.
@@ -120,8 +120,6 @@ recovered without duplicate input. The control-plane Mirror never materializes h
   machine-local marker store.
 - `session-edit-and-resend-service.ts` — same-session replacement of the last normal User turn.
 - `session-launch-config-resolver.ts` — durable launch config resolution.
-- `turn-post-processing-service.ts` — post-turn work (titles, notifications, diff stats).
-- `session-diff-stats-target.ts` — chooses which writer owns a session's `diffStats`.
 - `session-access-policy.ts` — local-first dispatch access precheck (optimistic-allow cache,
   D11). It may allow owner-cached turns from the catalog snapshot, deny `remote_missing`
   workspaces, or return `remote` to preserve the existing Convex three-state path. Catalog read
@@ -239,15 +237,14 @@ Recovery must never enumerate session rooms or open docs to find candidates: eac
 the room and pulls its stream, so a full scan is O(all historical sessions) of Streams
 subscriptions at every daemon start (see [../lib/loro/AGENTS.md](../lib/loro/AGENTS.md)).
 
-### GitHub credential broker
+### GitHub credentials
 
-Agent `gh` auth for GitHub repo sessions is set up in `session-manager.ts`: it creates the git
-credential broker, prepends the `~/.lody/bin/gh` shim, and injects/refreshes a managed
-`GH_TOKEN` when no user token is present. The shim lives in `../lib/gh-shim-script.ts`; token
-fetching/caching is in `../lib/github-token-manager.ts`; git HTTPS auth uses
-`../lib/git-credential-helper-script.ts`. Session process trees are already correct —
-`prepareGitHubRepoSessionConfig` injects the env explicitly. The host-side rule is in
-[worktree/AGENTS.md](worktree/AGENTS.md).
+Local session startup preserves ambient user credentials and does not fetch a
+product-managed GitHub token. The Agent `gh` shim and shell startup wrappers are
+retired. Host-side Git helper contracts in `../lib/git-credential-helper-script.ts`
+and `WorktreeManager` remain separate from Agent credential injection; their
+explicit per-call broker arguments are governed by [worktree/AGENTS.md](worktree/AGENTS.md).
+Existing user credentials and previously generated files remain on disk.
 
 ### Commit identity
 

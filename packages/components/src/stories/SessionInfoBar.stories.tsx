@@ -104,7 +104,6 @@ function StoryHarness({
   branch = 'feat/presence-machine-online-session-status',
   workspaceLocation = null,
   pr = openPr,
-  diffStat = { add: 128, del: 42 },
   width = 760,
   initialStage,
   withPreview = false,
@@ -125,7 +124,6 @@ function StoryHarness({
     path?: string | null;
   } | null;
   pr?: SessionPullRequestMeta | null;
-  diffStat?: { add: number; del: number } | null;
   width?: number;
   initialStage?: 'status' | 'goal' | 'schedule' | 'task' | 'context';
   task?: { taskId: string; title: string } | null;
@@ -174,9 +172,7 @@ function StoryHarness({
         pr={pr}
         onOpenPr={fn()}
         contextActions={contextActions}
-        onOpenAllChanges={fn()}
         onOpenBrowser={withPreview ? fn() : undefined}
-        diffStat={diffStat}
         syncing={syncing}
       />
       <div className="h-14 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -287,7 +283,7 @@ export const LocalFolderWithPr: Story = {
 };
 
 export const MergedPrLargeDiff: Story = {
-  args: { pr: mergedPr, diffStat: { add: 12345, del: 6789 } },
+  args: { pr: mergedPr },
 };
 
 export const StatusOnlyNoContext: Story = {
@@ -296,7 +292,6 @@ export const StatusOnlyNoContext: Story = {
     projectName: null,
     branch: null,
     pr: null,
-    diffStat: null,
   },
 };
 
@@ -421,7 +416,6 @@ export const GoalAndScheduleNoContext: Story = {
     projectName: null,
     branch: null,
     pr: null,
-    diffStat: null,
   },
 };
 
@@ -450,7 +444,6 @@ export const SyncOnly: Story = {
     projectName: null,
     branch: null,
     pr: null,
-    diffStat: null,
     syncing: true,
   },
 };
@@ -461,7 +454,6 @@ export const EmptyNotSyncingHidden: Story = {
     projectName: null,
     branch: null,
     pr: null,
-    diffStat: null,
   },
 };
 
@@ -523,7 +515,6 @@ function PeekPlayground() {
         branch="feat/presence-machine-online-session-status"
         pr={openPr}
         onOpenPr={fn()}
-        diffStat={{ add: 128, del: 42 }}
       />
       <div className="h-14 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         (composer placeholder)

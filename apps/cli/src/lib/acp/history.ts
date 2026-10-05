@@ -48,15 +48,6 @@ type ToolCallAccumulator = {
   refinedTitle?: string;
   /** Tool kind derived from title heuristic. */
   kind?: EnrichmentToolKind;
-  /**
-   * Diff content blocks from in-progress updates, latest per path. Claude Code puts ALL edit
-   * evidence (rawInput replacement pair, fragment diff, then a fuller whole-file diff) on
-   * non-terminal updates and sends a bare `status: completed` — the terminal update alone
-   * carries nothing to reconstruct from.
-   */
-  editDiffsByPath?: Map<string, { oldText?: string; newText: string; isCreate: boolean }>;
-  /** Edit-tool `old_string`/`new_string` from an in-progress update's rawInput. */
-  editReplacement?: { oldString: string; newString: string };
 };
 
 type EnrichmentState = Map<string, ToolCallAccumulator>;
@@ -111,17 +102,6 @@ const restoreTerminalOutputState = (
   }
 };
 
-const isRetryableEvidenceCallbackError = (error: unknown): boolean => {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const candidate = error as {
-    readonly retryable?: unknown;
-    readonly options?: { readonly retryable?: unknown };
-  };
-  return candidate.retryable === true || candidate.options?.retryable === true;
-};
-
 /**
  * Applies ACP notifications to the session's persisted history (Loro CRDT).
  *
@@ -140,8 +120,6 @@ export const handleACPUpdateMessage = async (
     getCurrentSessionTurnId?: (sessionId: SessionId) => string | undefined;
     targetAssistantEntryId?: string;
     allowAutonomousAssistantEntry?: boolean;
-    editCallback?: (edits: readonly AcpAgentEditEvidence[]) => void | Promise<void>;
-    standardDiffCallback?: (diffs: readonly AcpStandardDiffBlockEvidence[]) => void | Promise<void>;
     logger?: Logger;
   },
   model?: ModelInfo
@@ -195,23 +173,6 @@ export const handleACPUpdateMessage = async (
           ...(model ? { model } : {}),
         });
       }
-    }
-    // Evidence is derived from the same enriched notification, but it is only
-    // safe to publish after the corresponding history write commits. Otherwise
-    // a retried terminal notification records the same diff twice.
-    if (callbacks?.editCallback) {
-      await triggerEditCallbacksFromNotifications(
-        enrichedBatch,
-        getEnrichmentState(doc),
-        callbacks.editCallback
-      );
-    }
-    if (callbacks?.standardDiffCallback) {
-      await triggerStandardDiffCallbacksFromNotifications(
-        enrichedBatch,
-        getEnrichmentState(doc),
-        callbacks.standardDiffCallback
-      );
     }
   } catch (error) {
     // Terminal compaction consumes its cross-flush accumulator before the doc
@@ -559,42 +520,6 @@ const enrichNotificationBatch = (
       }
     }
 
-    // Accumulate edit evidence from non-terminal updates (Claude Code's completed update is
-    // bare; see ToolCallAccumulator.editDiffsByPath).
-    if (!isTerminal) {
-      const diffs = Array.isArray(update.content)
-        ? update.content.filter((c): c is Extract<typeof c, { type: 'diff' }> => c.type === 'diff')
-        : [];
-      const rawInput = update.rawInput;
-      const rawInputRecord =
-        rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)
-          ? (rawInput as Record<string, unknown>)
-          : undefined;
-      const replacement =
-        rawInputRecord !== undefined &&
-        typeof rawInputRecord.old_string === 'string' &&
-        typeof rawInputRecord.new_string === 'string'
-          ? { oldString: rawInputRecord.old_string, newString: rawInputRecord.new_string }
-          : undefined;
-      if (diffs.length > 0 || replacement !== undefined) {
-        let acc = state.get(id);
-        if (!acc) {
-          acc = { parsedInput: {} };
-          state.set(id, acc);
-        }
-        if (replacement !== undefined) acc.editReplacement = replacement;
-        for (const diff of diffs) {
-          if (typeof diff.path !== 'string' || typeof diff.newText !== 'string') continue;
-          acc.editDiffsByPath ??= new Map();
-          acc.editDiffsByPath.set(diff.path, {
-            ...(typeof diff.oldText === 'string' ? { oldText: diff.oldText } : {}),
-            newText: diff.newText,
-            isCreate: diff.oldText === null || diff.oldText === undefined,
-          });
-        }
-      }
-    }
-
     // Parse JSON from in-progress content (skip if agent already provides rawInput)
     if (
       update.sessionUpdate === 'tool_call_update' &&
@@ -880,221 +805,6 @@ const filterNotificationsForHistory = (
   };
 
   return batch.filter(shouldKeep);
-};
-
-/**
- * Evidence of one agent file edit extracted from a completed edit tool call. Per-turn diff
- * capture reconstructs full old/new text from it (specs/code-collab.md "ACP 可见编辑").
- *
- * `unifiedDiff` comes from Codex apply_patch payloads (`rawOutput.changes`) and supports exact
- * reconstruction. `fullNewText` is only set when the payload proves the complete new text
- * (an ACP diff content block with `oldText: null` — a created file). `contentOldText`/
- * `contentNewText` carry the raw diff content block texts and `oldString`/`newString` the
- * Edit-tool replacement pair from `rawInput`; both MAY be fragments, so the capture side must
- * verify them against the on-disk post-edit text before trusting them as file content —
- * treating fragments as full text is how truncated bases corrupted per-turn diffs before
- * this evidence shape.
- */
-export type AcpAgentEditEvidence = {
-  readonly path: string;
-  readonly changeType: 'update' | 'add' | 'delete';
-  readonly unifiedDiff?: string;
-  readonly movePath?: string;
-  readonly fullNewText?: string;
-  readonly contentOldText?: string;
-  readonly contentNewText?: string;
-  readonly oldString?: string;
-  readonly newString?: string;
-};
-
-export type AcpStandardDiffBlockEvidence = {
-  readonly path: string;
-  readonly oldText: string | null;
-  readonly newText: string;
-};
-
-const RAW_CHANGE_TYPES = new Set(['update', 'add', 'delete']);
-
-function editEvidenceFromRawChanges(rawValue: unknown): Map<string, AcpAgentEditEvidence> {
-  const evidence = new Map<string, AcpAgentEditEvidence>();
-  if (typeof rawValue !== 'object' || rawValue === null) return evidence;
-  const changes = (rawValue as { readonly changes?: unknown }).changes;
-  if (typeof changes !== 'object' || changes === null) return evidence;
-  for (const [path, change] of Object.entries(changes)) {
-    if (!path || typeof change !== 'object' || change === null) continue;
-    const record = change as Record<string, unknown>;
-    const rawType = typeof record.type === 'string' ? record.type : 'update';
-    const changeType = (RAW_CHANGE_TYPES.has(rawType) ? rawType : 'update') as
-      | 'update'
-      | 'add'
-      | 'delete';
-    const unifiedDiff = typeof record.unified_diff === 'string' ? record.unified_diff : undefined;
-    const movePath =
-      typeof record.move_path === 'string' && record.move_path.length > 0
-        ? record.move_path
-        : undefined;
-    evidence.set(path, {
-      path,
-      changeType,
-      ...(unifiedDiff === undefined ? {} : { unifiedDiff }),
-      ...(movePath === undefined ? {} : { movePath }),
-    });
-  }
-  return evidence;
-}
-
-const triggerEditCallbacksFromNotifications = async (
-  batch: AcpSessionNotification[],
-  state: EnrichmentState,
-  editCallback: (edits: readonly AcpAgentEditEvidence[]) => void | Promise<void>
-): Promise<void> => {
-  for (const message of batch) {
-    const update = message.update;
-    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update')
-      continue;
-    if (update.status !== 'completed') continue;
-
-    const acc = state.get(update.toolCallId);
-    // Read from the enriched notification batch (not from persisted history), because history
-    const contents = update.content ?? [];
-    // ACP marks `kind` as optional on tool updates. Codex can send terminal updates with diff
-    // content but no kind, and accumulator state is best-effort across flush/doc lifetimes.
-    // A completed diff payload is already file-edit evidence, so accept it as the fallback.
-    const hasDiffContent =
-      contents.some((content) => content.type === 'diff') || (acc?.editDiffsByPath?.size ?? 0) > 0;
-    // Codex apply_patch reports its change map on the completed update's rawOutput (rawInput on
-    // the begin notification); it is the only payload carrying full unified diffs.
-    const evidenceByPath = editEvidenceFromRawChanges(
-      (update as { readonly rawOutput?: unknown }).rawOutput ??
-        (update as { readonly rawInput?: unknown }).rawInput
-    );
-    if (update.kind !== 'edit' && !hasDiffContent && evidenceByPath.size === 0) continue;
-
-    // Edit-tool replacement pair: a fragment-level old/new string the capture side can verify
-    // against disk to reconstruct the full pre-image. Kimi puts it on the completed update's
-    // rawInput; Claude Code only on an in-progress update (accumulator fallback).
-    const rawInput = (update as { readonly rawInput?: unknown }).rawInput;
-    const rawInputRecord =
-      rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput)
-        ? (rawInput as Record<string, unknown>)
-        : undefined;
-    const replacement =
-      rawInputRecord !== undefined &&
-      typeof rawInputRecord.old_string === 'string' &&
-      typeof rawInputRecord.new_string === 'string'
-        ? { oldString: rawInputRecord.old_string, newString: rawInputRecord.new_string }
-        : acc?.editReplacement;
-
-    // Diff blocks on the completed update win; accumulated in-progress blocks fill the gaps
-    // (Claude Code's terminal update carries no content at all).
-    const diffBlocks = new Map<string, { oldText?: string; newText: string; isCreate: boolean }>(
-      acc?.editDiffsByPath ?? []
-    );
-    for (const content of contents) {
-      if (content.type !== 'diff') continue;
-      // The ACP content schema defines these fields, but the overall `content` array is still
-      // unstructured by spec; keep this defensive.
-      if (typeof content.path !== 'string' || typeof content.newText !== 'string') continue;
-      diffBlocks.set(content.path, {
-        ...(typeof content.oldText === 'string' ? { oldText: content.oldText } : {}),
-        newText: content.newText,
-        isCreate: content.oldText === null || content.oldText === undefined,
-      });
-    }
-
-    for (const [path, { oldText, newText, isCreate }] of diffBlocks) {
-      const existing = evidenceByPath.get(path);
-      if (existing) {
-        // unified_diff evidence wins; a created-file content block can still contribute the
-        // proven full new text.
-        if (isCreate && existing.fullNewText === undefined) {
-          evidenceByPath.set(path, { ...existing, fullNewText: newText });
-        }
-        continue;
-      }
-      evidenceByPath.set(path, {
-        path,
-        changeType: isCreate ? 'add' : 'update',
-        ...(isCreate ? { fullNewText: newText } : {}),
-        ...(oldText === undefined ? {} : { contentOldText: oldText }),
-        ...(isCreate ? {} : { contentNewText: newText }),
-        ...(replacement === undefined ? {} : replacement),
-      });
-    }
-
-    if (evidenceByPath.size === 0) continue;
-    try {
-      await editCallback([...evidenceByPath.values()]);
-    } catch (error) {
-      if (isRetryableEvidenceCallbackError(error)) {
-        throw error;
-      }
-      // Best-effort hook; don't break session processing if the callback fails.
-    }
-  }
-};
-
-const triggerStandardDiffCallbacksFromNotifications = async (
-  batch: AcpSessionNotification[],
-  state: EnrichmentState,
-  diffCallback: (diffs: readonly AcpStandardDiffBlockEvidence[]) => void | Promise<void>
-): Promise<void> => {
-  for (const message of batch) {
-    const update = message.update;
-    if (update.sessionUpdate !== 'tool_call' && update.sessionUpdate !== 'tool_call_update') {
-      continue;
-    }
-    const contents = update.content ?? [];
-    const hasDiffContent = contents.some((content) => content.type === 'diff');
-    const includeAccumulatedDiffs = update.status === 'completed';
-    if (!includeAccumulatedDiffs && !hasDiffContent) {
-      continue;
-    }
-
-    const acc = state.get(update.toolCallId);
-    const diffBlocks = new Map<string, AcpStandardDiffBlockEvidence>();
-    if (includeAccumulatedDiffs) {
-      for (const [path, diff] of acc?.editDiffsByPath ?? []) {
-        if (diff.oldText === undefined && !diff.isCreate) {
-          continue;
-        }
-        diffBlocks.set(path, {
-          path,
-          oldText: diff.isCreate ? null : (diff.oldText ?? null),
-          newText: diff.newText,
-        });
-      }
-    }
-
-    for (const content of contents) {
-      if (content.type !== 'diff') {
-        continue;
-      }
-      if (typeof content.path !== 'string' || typeof content.newText !== 'string') {
-        continue;
-      }
-      if (content.oldText !== null && typeof content.oldText !== 'string') {
-        continue;
-      }
-      diffBlocks.set(content.path, {
-        path: content.path,
-        oldText: content.oldText,
-        newText: content.newText,
-      });
-    }
-
-    if (diffBlocks.size === 0) {
-      continue;
-    }
-    try {
-      await diffCallback([...diffBlocks.values()]);
-    } catch (error) {
-      if (isRetryableEvidenceCallbackError(error)) {
-        throw error;
-      }
-      // Best-effort hook; don't break session processing if the callback fails.
-    }
-  }
 };
 
 const extractLatestPlanSnapshot = (batch: AcpSessionNotification[]): SessionPlanEntry[] | null => {

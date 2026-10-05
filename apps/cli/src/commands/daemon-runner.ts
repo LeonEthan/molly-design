@@ -9,7 +9,6 @@ import {
   isV8OutOfMemoryExit,
   type LaunchHandle,
   type CliRunResult,
-  type SupervisorState,
 } from '@molly/cli-supervisor';
 import {
   LOCAL_CLI_SUPERVISOR_CONTRACT_VERSION,
@@ -34,7 +33,6 @@ import {
 } from './daemon-shared';
 import { normalizeCurrentProcessResourceProfile } from '@/utils/process-resource-profile';
 import { flushTelemetry } from '@/instrument';
-import { captureSupervisorEvent } from './analytics-events';
 import { getRuntimeDiagnostics } from '@/utils/runtime-diagnostics';
 import {
   EXIT_CODE_REMOTE_RESTART,
@@ -217,49 +215,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
     // Everything after `daemon-runner` is passthrough to `molly start`
     const passthroughArgs = cmd.args;
 
-    // Track supervisor transitions so crash/restart/circuit-breaker analytics
-    // fire once per edge instead of on every state publish. The supervisor
-    // republishes state on each probe tick, so edge-detection here is required.
-    let lastExitAtMs: number | undefined;
-    let lastRetryAttempt = 0;
-    let fatalReported = false;
-    const reportSupervisorAnalytics = (state: SupervisorState): void => {
-      // A new process exit timestamp means the worker crashed/exited.
-      if (state.lastExitAtMs !== undefined && state.lastExitAtMs !== lastExitAtMs) {
-        lastExitAtMs = state.lastExitAtMs;
-        if (state.lastExitCode !== EXIT_CODE_REMOTE_RESTART) {
-          captureSupervisorEvent('worker_crashed', {
-            exit_code: state.lastExitCode ?? null,
-            crash_count_consecutive: state.retryAttempt ?? 0,
-            backoff_delay_ms: state.retryInMs ?? null,
-            phase: state.phase,
-          });
-        }
-      }
-      // A higher retry attempt means a restart is being scheduled/attempted.
-      if (typeof state.retryAttempt === 'number' && state.retryAttempt > lastRetryAttempt) {
-        lastRetryAttempt = state.retryAttempt;
-        captureSupervisorEvent('worker_restart_attempt', {
-          restart_attempt: state.retryAttempt,
-          backoff_delay_ms: state.retryInMs ?? null,
-        });
-      }
-      // Fatal phase = circuit breaker, but only the crash-loop variant. The
-      // supervisor also goes fatal on ownership conflicts and auth failures;
-      // those are not circuit-breaker
-      // trips, so key on the failure-window message the supervisor emits.
-      if (state.phase === 'fatal' && !fatalReported) {
-        fatalReported = true;
-        const isCrashLoop = (state.message ?? '').includes('times within');
-        if (isCrashLoop) {
-          captureSupervisorEvent('circuit_breaker_tripped', {
-            last_exit_code: state.lastExitCode ?? null,
-            crash_count_consecutive: state.retryAttempt ?? lastRetryAttempt,
-          });
-        }
-      }
-    };
-
     let terminating = false;
     const finish = async (code: number) => {
       if (terminating) return;
@@ -365,7 +320,6 @@ export const daemonRunnerCommand = new Command('daemon-runner')
         };
       },
       onStateChange: (state) => {
-        reportSupervisorAnalytics(state);
         if (launchOutcomePending && isDaemonWorkerReady(state)) {
           reportLaunchOutcome({
             status: 'ready',

@@ -12,7 +12,7 @@ import { ChevronDown, Clock, Loader2, Pause, Play, Target, X } from 'lucide-reac
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { getGoalStatusPresentation } from '@/lib/session-goal-status';
 import { formatDurationCompact, type DurationUnitLabels } from '@/lib/format-duration';
 import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
@@ -126,7 +126,7 @@ export const SessionGoalBanner = memo(function SessionGoalBanner({
   onDismiss,
 }: SessionGoalBannerProps) {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
+
   const [expanded, setExpanded] = useState(false);
   const [overflowsCollapsed, setOverflowsCollapsed] = useState(false);
   const objectiveRef = useRef<HTMLSpanElement>(null);
@@ -229,9 +229,9 @@ export const SessionGoalBanner = memo(function SessionGoalBanner({
         meta.surfaceClassName,
         meta.borderClassName,
         // Desktop: dim at rest so the banner yields to the conversation; lift
-        // on hover. Skipped on mobile — touch UI shouldn't dim chrome based on
+
         // a (non-existent) cursor.
-        !isMobile && 'opacity-75 transition-opacity hover:opacity-100'
+        'opacity-75 transition-opacity hover:opacity-100'
       )}
       role="status"
       aria-label={statusLabel}

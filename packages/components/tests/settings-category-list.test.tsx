@@ -35,8 +35,6 @@ describe('SettingsCategoryList', () => {
       configurable: true,
       value: vi.fn(),
     });
-    Reflect.deleteProperty(window, '__MOLLY_NATIVE__');
-    Reflect.deleteProperty(window, 'Capacitor');
     store = createStore();
   });
 

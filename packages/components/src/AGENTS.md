@@ -10,16 +10,6 @@ Parent `AGENTS.md` files also apply.
   an auth transition selects the destination, the host owns both the non-redirecting
   auth action and navigation so an auth helper cannot discard route-specific state.
 
-## Soft-keyboard viewport handling
-
-- Native non-iOS side drawers without snap points use `ui/drawer.tsx`'s live
-  viewport bottom inset when input repositioning is enabled. Never cache a
-  keyboard-shrunken drawer height or infer keyboard visibility from focus:
-  Android-compatible shells can resize the WebView and retain input focus on hide.
-  Preserve the separate iOS native keyboard offset and bottom-sheet handling.
-  `repositionInputs={false}` explicitly opts out of both Vaul repositioning and
-  this inset; callers using it own their keyboard layout.
-
 ## Keyboard navigation
 
 - Each independently navigable list owns one `FocusScope` and one
@@ -55,7 +45,7 @@ Parent `AGENTS.md` files also apply.
   placeholder until route, runtime, and doc-meta ownership agree. Pending scope
   still fails closed — never retain the previous workspace's rows or `<Outlet />`
   content — and passes `workspaceReady={false}` so workspace-owned background work
-  and the mobile workspace stack do not start early. The workspace identity's
+  does not start early. The workspace identity's
   syncing state follows that same scoped readiness, not the coarser connection
   state; an online transport does not imply that workspace data is ready.
 

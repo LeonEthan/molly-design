@@ -7,7 +7,7 @@ import {
  * How much a requested path may be rewritten before it is sent to the machine.
  *
  * `canonical` — the caller already holds the workspace-relative path the
- * machine indexed (file tree, quick open, mobile file browser, an LSP result).
+ * machine indexed (file tree, quick open, an LSP result).
  * `markdown-href` — an href an agent wrote in chat, which may carry a line
  * suffix, percent-encoding, or an absolute host path that needs stripping.
  */
@@ -26,8 +26,6 @@ export type SessionFileOpenTarget = {
   readonly filePath: string;
   readonly startLine?: number;
   readonly endLine?: number;
-  /** True when the path was parsed as an agent-written link, for analytics. */
-  readonly fromMarkdownLink: boolean;
   readonly lineSuffixFormat?: 'github' | 'colon' | 'vscode';
 };
 
@@ -56,7 +54,6 @@ export function resolveSessionFileOpenTarget(
       filePath: input.rawPath,
       ...(input.startLine === undefined ? {} : { startLine: input.startLine }),
       ...(input.endLine === undefined ? {} : { endLine: input.endLine }),
-      fromMarkdownLink: false,
     };
   }
 
@@ -68,7 +65,6 @@ export function resolveSessionFileOpenTarget(
     filePath: parsedTarget?.filePath ?? normalizedPath,
     ...(startLine === undefined ? {} : { startLine }),
     ...(endLine === undefined ? {} : { endLine }),
-    fromMarkdownLink: parsedTarget != null,
     ...(parsedTarget?.lineSuffixFormat === undefined
       ? {}
       : { lineSuffixFormat: parsedTarget.lineSuffixFormat }),

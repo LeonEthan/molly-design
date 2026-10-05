@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { usePostHog } from '@posthog/react';
 import { Loader2, Plug, Plus, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -10,13 +9,12 @@ import {
   type WorkspaceMcpServerMeta,
 } from '@molly/shared';
 import { userAtom } from '@/atoms';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import {
   useWorkspaceMcpCatalog,
   useWorkspaceMcpCatalogActions,
 } from '@/hooks/use-workspace-mcp-catalog';
 import { cn } from '@/lib/utils';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { MCP_TRANSPORT_LABELS, McpTransportIcon } from '@/components/shared/mcp-transport';
 import {
@@ -43,8 +41,7 @@ type EditorState = { mode: 'add' } | { mode: 'edit'; entry: WorkspaceMcpServerMe
 
 export function McpSetting() {
   const { t } = useTranslation();
-  const postHog = usePostHog();
-  const isMobile = useIsMobile();
+
   const user = useAtomValue(userAtom);
   const { servers, synced } = useWorkspaceMcpCatalog();
   const { upsert, remove } = useWorkspaceMcpCatalogActions();
@@ -101,12 +98,6 @@ export function McpSetting() {
       // upload runs on its own and is deliberately not reported.
       await upsert(protectedEntry);
       if (editor?.mode === 'add') {
-        capturePostHogEvent(postHog, 'workspace/mcp_created', {
-          source: 'settings',
-          transport: entry.transport,
-          enabled_by_default: entry.enabledByDefault,
-          has_description: Boolean(entry.description),
-        });
       }
       setEditor(null);
     } catch {
@@ -232,11 +223,11 @@ export function McpSetting() {
           overlayClassName={
             // Desktop settings is itself a dialog; match its z-index so this
             // later overlay covers it without stacking a second /80 veil.
-            isMobile ? undefined : 'z-[var(--z-dialog)] bg-black/20'
+            'z-[var(--z-dialog)] bg-black/20'
           }
           className={cn(
             'flex max-h-[min(680px,88dvh)] w-[min(620px,96dvw)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl border-border/50 bg-background p-0 sm:max-w-none sm:rounded-2xl sm:p-0',
-            !isMobile && 'shadow-popover'
+            'shadow-popover'
           )}
         >
           <header className="shrink-0 border-b border-border/40 px-5 py-5 pr-12">

@@ -1,12 +1,8 @@
-import { flushCliAnalytics } from './lib/analytics/posthog';
-
-export { flushCliAnalytics };
-
 // OSS Molly does not report diagnostics to a product service.
 export async function flushErrorReporting(_timeoutMs?: number): Promise<void> {}
 
 export async function flushTelemetry(timeoutMs?: number): Promise<void> {
-  await Promise.all([flushErrorReporting(timeoutMs), flushCliAnalytics(timeoutMs)]);
+  await flushErrorReporting(timeoutMs);
 }
 
 export function captureException(

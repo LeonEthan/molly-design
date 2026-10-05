@@ -108,7 +108,7 @@ import {
   machineSupportsDesignContinuationPreparation,
 } from '@molly/shared';
 import { DesignContinuationDialog } from './design-continuation-dialog';
-import { useIsMobile } from '../../hooks/use-mobile';
+
 import { useStableCallback } from '@/hooks/use-stable-callback';
 import {
   conversationFontSizeAtom,
@@ -238,12 +238,10 @@ import { SessionSearchProvider } from './session-search-context';
 import {
   buildSessionSearchResults,
   normalizeSessionSearchQuery,
-  type SessionSearchBlock,
   type SessionSearchResult,
 } from '@/lib/session-chat-search';
 import { useIncrementalSearchBlocks } from '@/hooks/use-incremental-search-blocks';
 import {
-  useConversationIndexRows,
   useConversationTail,
   useConversationVersion,
   useTurn,
@@ -252,7 +250,6 @@ import { collectConversationConfigSources } from '@/lib/conversation-view';
 import {
   latestGoalFromFacts,
   latestProposedPlanFromFacts,
-  permissionRequestsFromFacts,
   schedulingEntriesFromFacts,
   useSessionTurnFacts,
 } from './session-turn-facts';
@@ -267,21 +264,12 @@ import {
   AlertDialogTitle,
 } from '@/ui/alert-dialog';
 import { resolveSessionHtmlAttachmentAction } from './session-html-attachment-action';
-import { usePostHog } from '@posthog/react';
-import {
-  capturePostHogEvent,
-  capturePostHogOutcome,
-  getDurationSinceMs,
-  getPerformanceNowMs,
-} from '@/lib/posthog-analytics';
-import type { AnalyticsOutcome } from '@molly/shared';
 import { collectPendingScheduledTasksFromHistory, type PendingScheduledTask } from '@molly/shared';
 import { getSessionGitHubState } from '@/lib/session-github-state';
 import {
   resolveMachineDotlodyPath,
   resolveSessionWorkspacePath,
 } from '@/lib/session-workspace-path';
-import { isNativeAppShell } from '@/lib/native-platform';
 import { shouldShowCodexProposedPlanDecision } from '@/lib/codex-plan-decision';
 import { buildExecutionTurnConfigOverrides } from '@/lib/execution-turn-config';
 import { canShowSubscriptionRateLimits } from '@/lib/session-usage';
@@ -348,153 +336,6 @@ const TITLE_SYNCING_INDICATOR_DELAY_MS = 400;
 /** Exact ⌘F / Ctrl+F — no Alt/Shift/secondary primary mod. See find keydown handler. */
 const FIND_IN_CHAT_BINDING = parseBinding('$mod+f');
 
-const summarizeInputBlocksForAnalytics = (inputBlocks: readonly SessionInputBlock[]) => {
-  let textBlockCount = 0;
-  let imageCount = 0;
-  let commentReferenceCount = 0;
-  let visualAnnotationReferenceCount = 0;
-  let textLength = 0;
-
-  for (const block of inputBlocks) {
-    if (block.type === 'text') {
-      textBlockCount += 1;
-      textLength += block.text.length;
-    } else if (block.type === 'image') {
-      imageCount += 1;
-    } else if (block.type === 'comment_reference') {
-      commentReferenceCount += 1;
-    } else if (block.type === 'visual_annotation_reference') {
-      visualAnnotationReferenceCount += 1;
-    }
-  }
-
-  return {
-    text_block_count: textBlockCount,
-    image_count: imageCount,
-    comment_reference_count: commentReferenceCount,
-    visual_annotation_reference_count: visualAnnotationReferenceCount,
-    text_length: textLength,
-    has_text: textBlockCount > 0,
-    has_images: imageCount > 0,
-    has_comment_references: commentReferenceCount > 0,
-    has_visual_annotation_references: visualAnnotationReferenceCount > 0,
-  };
-};
-
-const getSessionAnalyticsProject = (project: {
-  kind: ProjectRef['kind'] | null;
-  repoFullName: string | null;
-  githubRepoFullName: string | null;
-  localProjectId: LocalProjectId | null;
-  sessionRepoFullName: string | undefined;
-}) => {
-  const trimRepoFullName = (repoFullName: string | null | undefined): string | undefined => {
-    const trimmed = repoFullName?.trim();
-    return trimmed ? trimmed : undefined;
-  };
-  const resolvedProjectRepo =
-    project.kind === 'github'
-      ? project.repoFullName
-      : project.kind === 'local'
-        ? project.githubRepoFullName
-        : null;
-  const repoFullName =
-    trimRepoFullName(resolvedProjectRepo) ?? trimRepoFullName(project.sessionRepoFullName) ?? null;
-  const projectKind =
-    project.kind === 'local'
-      ? 'local'
-      : project.kind === 'github' || repoFullName
-        ? 'github'
-        : 'chat';
-
-  return {
-    project_kind: projectKind,
-    repo_full_name: repoFullName,
-    local_project_id: project.kind === 'local' ? project.localProjectId : null,
-  };
-};
-
-// Session-end timing rolled up from history (spec §5.5 / §3.2). The schema
-// already stores per-turn start (`timestamp`/`startedAt`), `endedAt`, and
-// `permissionWaitMs` — these are aggregated here rather than tracked live so a
-// late client (resume/refresh) still reports a meaningful duration. `turn_count`
-// counts assistant turns; `duration_ms` spans the first turn start to the last
-// turn end; `permission_wait_ms` sums the per-turn waits.
-const summarizeSessionEndTiming = (
-  history:
-    | readonly Pick<
-        SessionHistory,
-        'role' | 'startedAt' | 'timestamp' | 'endedAt' | 'permissionWaitMs'
-      >[]
-    | undefined
-): {
-  turn_count: number;
-  duration_ms: number | null;
-  first_to_last_turn_ms: number | null;
-  permission_wait_ms: number | null;
-} => {
-  if (!history?.length) {
-    return {
-      turn_count: 0,
-      duration_ms: null,
-      first_to_last_turn_ms: null,
-      permission_wait_ms: null,
-    };
-  }
-
-  let turnCount = 0;
-  let firstTurnStart: number | null = null;
-  let lastTurnStart: number | null = null;
-  let lastTurnEnd: number | null = null;
-  let permissionWaitTotal = 0;
-  let sawPermissionWait = false;
-
-  for (const entry of history) {
-    if (entry.role !== 'assistant') {
-      continue;
-    }
-    turnCount += 1;
-    const start = parseTimestamp(entry.startedAt ?? entry.timestamp ?? null);
-    const end = parseTimestamp(entry.endedAt ?? null);
-    if (start != null) {
-      if (firstTurnStart == null) {
-        firstTurnStart = start;
-      }
-      lastTurnStart = start;
-    }
-    if (end != null) {
-      lastTurnEnd = end;
-    }
-    if (typeof entry.permissionWaitMs === 'number' && Number.isFinite(entry.permissionWaitMs)) {
-      permissionWaitTotal += entry.permissionWaitMs;
-      sawPermissionWait = true;
-    }
-  }
-
-  const positiveOrNull = (value: number | null): number | null =>
-    value != null && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
-
-  const durationMs =
-    firstTurnStart != null && lastTurnEnd != null ? lastTurnEnd - firstTurnStart : null;
-  const firstToLastTurnMs =
-    firstTurnStart != null && lastTurnStart != null ? lastTurnStart - firstTurnStart : null;
-
-  return {
-    turn_count: turnCount,
-    duration_ms: positiveOrNull(durationMs),
-    first_to_last_turn_ms: positiveOrNull(firstToLastTurnMs),
-    permission_wait_ms: sawPermissionWait ? Math.round(permissionWaitTotal) : null,
-  };
-};
-
-const countSearchBlockTypes = (blocks: readonly SessionSearchBlock[]): Record<string, number> => {
-  const counts: Record<string, number> = {};
-  for (const block of blocks) {
-    counts[block.blockType] = (counts[block.blockType] ?? 0) + 1;
-  }
-  return counts;
-};
-
 const formatSessionDate = (value?: string, localeObj?: Locale) => {
   if (!value) return '';
   const parsed = Date.parse(value);
@@ -513,10 +354,6 @@ const parseTimestamp = (value?: number | string | null): number | null => {
   if (Number.isFinite(asNumber)) return asNumber;
   const parsed = Date.parse(trimmed);
   return Number.isNaN(parsed) ? null : parsed;
-};
-
-const isTrackableRunningStatusType = (statusType: SessionStatus['type'] | undefined): boolean => {
-  return statusType === 'running' || statusType === 'requestPermission';
 };
 
 const STATUS_TONE_STYLES = {
@@ -642,7 +479,7 @@ export function SessionHistoryButton({
   compact = false,
 }: SessionHistoryButtonProps) {
   const { t, i18n } = useTranslation();
-  const isMobile = useIsMobile();
+
   const [open, setOpen] = useState(false);
   const localeObj = i18n.language?.startsWith('zh') ? zhCN : enUS;
   const defaultSessionTitle = t('sessions.untitled', 'Untitled session');
@@ -684,7 +521,7 @@ export function SessionHistoryButton({
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>{trigger}</SheetTrigger>
-      <SheetContent side={isMobile ? 'bottom' : 'right'} className="sm:max-w-md">
+      <SheetContent side={'right'} className="sm:max-w-md">
         <SheetHeader>
           <SheetTitle>{t('sessions.history', 'History')}</SheetTitle>
           <p className="text-sm text-muted-foreground">{t('sessions.newSession.title')}</p>
@@ -1578,9 +1415,7 @@ interface SessionChatInterfaceProps {
    */
   paintSessionMentionOverlay?: boolean;
   /** All-Changes totals for the context strip; null/undefined hides the diffstat. */
-  changesDiffStat?: { add: number; del: number } | null;
   /** Called when the context strip's diffstat is clicked. */
-  onOpenAllChanges?: () => void;
   /** Native ACP fork action for the latest completed assistant turn. */
   onForkLastAssistant?: (turnId: string, destination?: SessionForkDestination) => void;
   forkWorktreeAvailability?: SessionForkWorktreeAvailability;
@@ -1717,8 +1552,6 @@ export const SessionChatInterface = memo(
       onRevealDesignPanel,
       headerVariant = 'page',
       paintSessionMentionOverlay = true,
-      changesDiffStat,
-      onOpenAllChanges,
       onForkLastAssistant,
       forkWorktreeAvailability = 'hidden',
       onForkWorktreeMenuOpen,
@@ -1740,82 +1573,16 @@ export const SessionChatInterface = memo(
       };
     }, [session.id]);
     const { t, i18n } = useTranslation();
-    const isMobile = useIsMobile();
-    const isNativeApp = isNativeAppShell();
+
     const isElectronFullscreen = useElectronFullscreen();
     const resolvedTheme = useResolvedTheme();
     const isDark = resolvedTheme === 'dark';
-    const postHog = usePostHog();
     const localeObj = i18n.language?.startsWith('zh') ? zhCN : enUS;
     const workspaceId = useAtomValue(currentWorkspaceIdAtom);
     const currentUser = useAtomValue(userAtom);
     const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
     const { openSettings } = useOpenSettings();
     const conversationFontSize = useAtomValue(conversationFontSizeAtom);
-    const analyticsSessionProject = session.project;
-    const analyticsSessionProjectKind = analyticsSessionProject?.kind ?? null;
-    const analyticsSessionProjectRepoFullName =
-      analyticsSessionProject?.kind === 'github' ? analyticsSessionProject.repoFullName : null;
-    const analyticsSessionProjectGithubRepoFullName =
-      analyticsSessionProject?.kind === 'local'
-        ? (analyticsSessionProject.githubRepoFullName ?? null)
-        : null;
-    const analyticsSessionProjectLocalProjectId =
-      analyticsSessionProject?.kind === 'local'
-        ? (analyticsSessionProject.localProjectId ?? null)
-        : null;
-    const sessionAnalyticsProject = useMemo(
-      () =>
-        getSessionAnalyticsProject({
-          kind: analyticsSessionProjectKind,
-          repoFullName: analyticsSessionProjectRepoFullName,
-          githubRepoFullName: analyticsSessionProjectGithubRepoFullName,
-          localProjectId: analyticsSessionProjectLocalProjectId,
-          sessionRepoFullName: session.repoFullName,
-        }),
-      [
-        analyticsSessionProjectGithubRepoFullName,
-        analyticsSessionProjectKind,
-        analyticsSessionProjectLocalProjectId,
-        analyticsSessionProjectRepoFullName,
-        session.repoFullName,
-      ]
-    );
-    const sessionAnalyticsProperties = useMemo(
-      () => ({
-        session_id: session.id,
-        workspace_id: workspaceId ?? null,
-        machine_id: session.machineId,
-        agent_config_id: session.agentConfigId ?? null,
-        cli_type: session.cliType,
-        agent_type: session.agentType,
-        is_mobile: isMobile,
-        is_child_session: isChildTab || Boolean(session.parentSessionId),
-        parent_session_id: session.parentSessionId ?? null,
-        ...sessionAnalyticsProject,
-      }),
-      [
-        isChildTab,
-        isMobile,
-        session.agentConfigId,
-        session.agentType,
-        session.cliType,
-        session.id,
-        session.machineId,
-        session.parentSessionId,
-        sessionAnalyticsProject,
-        workspaceId,
-      ]
-    );
-    const captureSessionEvent = useCallback(
-      (event: string, properties?: Record<string, unknown>) => {
-        capturePostHogEvent(postHog, event, {
-          ...sessionAnalyticsProperties,
-          ...properties,
-        });
-      },
-      [postHog, sessionAnalyticsProperties]
-    );
 
     const localMachineId = useAtomValue(localMachineIdAtom);
     const localHomeDir = useAtomValue(localHomeDirAtom);
@@ -2066,23 +1833,7 @@ export const SessionChatInterface = memo(
     type InputActionState = 'ready' | 'dispatching';
     const [inputActionState, setInputActionState] = useState<InputActionState>('ready');
     const directDispatchInFlightRef = useRef(false);
-    const previousStatusTypeRef = useRef<SessionStatus['type'] | undefined>(session.status?.type);
-    const pendingUserInterruptRef = useRef(false);
     const steeringQueueItemIdsRef = useRef(new Set<string>());
-    // requestId -> { shownAtMs, requestKind, toolKind }. Tracks permission
-    // requests already observed so the diff effect emits shown/responded exactly
-    // once per request. shownAtMs uses performance.now() (local-only wait timing).
-    const permissionRequestStateRef = useRef<
-      Map<
-        string,
-        {
-          shownAtMs: number;
-          requestKind: 'ask_user_question' | 'tool_permission';
-          toolKind: ToolKind | null;
-          responded: boolean;
-        }
-      >
-    >(new Map());
     const isArchivedSession = session.isArchived === true;
     const [pendingGoalCommand, setPendingGoalCommand] = useState<{
       threadId: string;
@@ -2100,7 +1851,6 @@ export const SessionChatInterface = memo(
     const [searchQuery, setSearchQuery] = useState('');
     const deferredSearchQuery = useDeferredValue(searchQuery);
     const [activeSearchResultIndex, setActiveSearchResultIndex] = useState(0);
-    const lastSearchAnalyticsKeyRef = useRef<string | null>(null);
 
     const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
     const [designContinuationSourceId, setDesignContinuationSourceId] = useState<string | null>(
@@ -2347,7 +2097,6 @@ export const SessionChatInterface = memo(
     /** The hydrated tail; every reader below that scans backwards for the latest turn uses it. */
     const sessionHistory = sessionTailHistory;
     const turnFacts = useSessionTurnFacts(conversationView);
-    const conversationIndexRows = useConversationIndexRows(conversationView);
     const [lastCompletedAssistantTarget, setLastCompletedAssistantTarget] = useState<{
       sessionId: SessionId;
       messageId: string | null;
@@ -2619,14 +2368,9 @@ export const SessionChatInterface = memo(
           toast.error(t('sessions.editAndResendFailed', 'Unable to edit and resend this message'));
           return false;
         }
-        captureSessionEvent('session/edit_and_resend_succeeded', {
-          replaced_user_turn_id: message.id,
-          replacement_user_turn_id: replacementUserTurnId,
-        });
         return true;
       },
       [
-        captureSessionEvent,
         currentUser?.id,
         editableLastUserMessageId,
         guardNewBillableTurn,
@@ -2715,41 +2459,20 @@ export const SessionChatInterface = memo(
 
     const openSearch = useCallback(() => {
       if (!isSearchOpen) {
-        captureSessionEvent('session/search_opened', {
-          history_count: sessionHistoryLength,
-          searchable_block_count: searchBlocks.length,
-          source: 'conversation',
-        });
       }
       setIsSearchOpen(true);
       focusSearchInput();
-    }, [
-      captureSessionEvent,
-      focusSearchInput,
-      isSearchOpen,
-      searchBlocks.length,
-      sessionHistoryLength,
-    ]);
+    }, [focusSearchInput, isSearchOpen]);
 
     const closeSearch = useCallback(() => {
-      captureSessionEvent('session/search_closed', {
-        had_query: normalizedSearchQuery.length > 0,
-        query_length: searchQuery.trim().length,
-        result_count: searchResults.length,
-      });
       setIsSearchOpen(false);
-    }, [captureSessionEvent, normalizedSearchQuery.length, searchQuery, searchResults.length]);
+    }, []);
 
     const moveToSearchResult = useCallback(
       (direction: 'previous' | 'next') => {
         if (searchResults.length === 0) {
           return;
         }
-        captureSessionEvent('session/search_navigated', {
-          direction,
-          result_count: searchResults.length,
-          current_index: activeSearchResultIndex,
-        });
         startTransition(() => {
           setActiveSearchResultIndex((previousIndex) => {
             if (direction === 'previous') {
@@ -2759,40 +2482,8 @@ export const SessionChatInterface = memo(
           });
         });
       },
-      [activeSearchResultIndex, captureSessionEvent, searchResults.length]
+      [searchResults.length]
     );
-
-    useEffect(() => {
-      if (!isSearchOpen || normalizedSearchQuery.length === 0) {
-        return undefined;
-      }
-
-      const analyticsKey = `${session.id}:${normalizedSearchQuery}:${searchResults.length}`;
-      const timeoutId = window.setTimeout(() => {
-        if (lastSearchAnalyticsKeyRef.current === analyticsKey) {
-          return;
-        }
-        lastSearchAnalyticsKeyRef.current = analyticsKey;
-        captureSessionEvent('session/search_performed', {
-          query_length: searchQuery.trim().length,
-          result_count: searchResults.length,
-          searchable_block_count: searchBlocks.length,
-          searchable_block_type_counts: countSearchBlockTypes(searchBlocks),
-          matched_block_count: searchBlockMatches.size,
-        });
-      }, 750);
-
-      return () => window.clearTimeout(timeoutId);
-    }, [
-      captureSessionEvent,
-      isSearchOpen,
-      normalizedSearchQuery,
-      searchBlockMatches.size,
-      searchBlocks,
-      searchQuery,
-      searchResults.length,
-      session.id,
-    ]);
 
     useEffect(() => {
       setIsSearchOpen(false);
@@ -2810,7 +2501,7 @@ export const SessionChatInterface = memo(
     // and file attachments, and a session dragged out of the sidebar, which
     // becomes a mention of that conversation. Each zone ignores the other's
     // transfer, so they share the container without competing for it.
-    const canHandlePageDrop = !isArchivedSession && !isMobile && !hideMessageArea;
+    const canHandlePageDrop = !isArchivedSession && !hideMessageArea;
     const imageDropZone = useDropZone({
       enabled: canHandlePageDrop,
       accepts: hasFileTransfer,
@@ -2932,10 +2623,6 @@ export const SessionChatInterface = memo(
 
     const handleCopyConversationHistory = useCallback(async () => {
       if (!conversationView?.turnCount) {
-        captureSessionEvent('session/history_copy_failed', {
-          reason: 'empty_history',
-          history_count: 0,
-        });
         toast.error(t('sessions.copyConversationHistoryEmpty', 'No conversation history to copy'));
         return;
       }
@@ -2948,30 +2635,14 @@ export const SessionChatInterface = memo(
           title: session.title ?? undefined,
         });
         await navigator.clipboard.writeText(markdown);
-        captureSessionEvent('session/history_copy_succeeded', {
-          history_count: conversationView.turnCount,
-          prompt_length: stats.chars,
-          estimated_tokens: stats.estimatedTokens,
-          over_budget: stats.overBudget,
-          thinking_omitted: stats.thinkingOmitted,
-          terminal_omitted: stats.terminalOutputOmitted,
-          tool_calls_collapsed: stats.toolCallsCollapsed,
-          tool_results_truncated: stats.toolResultsTruncated,
-        });
         toast.success(describeCopiedConversation(stats, t));
       } catch (error) {
         console.error('Failed to copy conversation history', error);
-        captureSessionEvent('session/history_copy_failed', {
-          reason: 'clipboard_error',
-          history_count: conversationView.turnCount,
-          error_name: error instanceof Error ? error.name : typeof error,
-          error_message: error instanceof Error ? error.message : String(error),
-        });
         toast.error(
           t('sessions.copyConversationHistoryFailed', 'Failed to copy conversation history')
         );
       }
-    }, [captureSessionEvent, session.title, conversationView, t]);
+    }, [session.title, conversationView, t]);
 
     // Inactive tabs and collapsed side chats stay mounted for fast switching, so
     // being mounted is not evidence the user saw this conversation: only the
@@ -3101,34 +2772,6 @@ export const SessionChatInterface = memo(
       }
       return { kind: 'github', repoFullName: fallbackRepo, branch: sessionBranch };
     }, [session.isWorktree, session.project, session.repoFullName, sessionBranch]);
-    const trackUserInterruptEnd = useCallback(() => {
-      const timing = summarizeSessionEndTiming(conversationIndexRows);
-      capturePostHogEvent(postHog, 'session/end_user_interrupt', {
-        session_id: session.id,
-        workspace_id: workspaceId ?? null,
-        machine_id: session.machineId,
-        agent_config_id: session.agentConfigId ?? null,
-        cli_type: session.cliType,
-        agent_type: session.agentType,
-        project_kind: sessionProject?.kind ?? 'none',
-        repo_full_name: resolveProjectGitHubRepo(sessionProject) ?? session.repoFullName ?? null,
-        duration_ms: timing.duration_ms,
-        turn_count: timing.turn_count,
-        first_to_last_turn_ms: timing.first_to_last_turn_ms,
-        permission_wait_ms: timing.permission_wait_ms,
-      });
-    }, [
-      postHog,
-      session.agentConfigId,
-      session.cliType,
-      session.agentType,
-      session.id,
-      session.machineId,
-      session.repoFullName,
-      conversationIndexRows,
-      sessionProject,
-      workspaceId,
-    ]);
     const agentActivityLabel =
       initStatusLabel && !isEmptyConversation
         ? initStatusLabel
@@ -3238,11 +2881,6 @@ export const SessionChatInterface = memo(
               machineId: session.machineId,
             }).catch((err: unknown) => {
               console.error('Failed to request session dispatch', err);
-              captureSessionEvent('session/message_dispatch_failed', {
-                route: 'direct_dispatch',
-                error_name: err instanceof Error ? err.name : typeof err,
-                error_message: getErrorMessage(err),
-              });
               // A failed dispatch must unblock resend right away; otherwise the
               // composer stays locked until DISPATCHING_TIMEOUT_MS expires.
               directDispatchInFlightRef.current = false;
@@ -3250,35 +2888,24 @@ export const SessionChatInterface = memo(
               toast.error(t('sessions.sendError'), { description: getErrorMessage(err) });
             });
           } else if (options?.guideExpectedTurnId && userTurnId) {
-            void guideHistoryEntry(userTurnId, options.guideExpectedTurnId)
-              .then((applied) => {
-                captureSessionEvent('session/message_guide_result', {
-                  user_turn_id: userTurnId,
-                  applied,
-                });
-              })
-              .catch((error: unknown) => {
+            void guideHistoryEntry(userTurnId, options.guideExpectedTurnId).catch(
+              (error: unknown) => {
                 console.error('Failed to apply guide message', error);
                 toast.error(t('sessions.sendError'), { description: getErrorMessage(error) });
-              });
+              }
+            );
           }
 
           scrollChatToBottom();
           return true;
         } catch (err) {
           console.error('Failed to queue session message', err);
-          captureSessionEvent('session/message_enqueue_failed', {
-            route: 'direct_dispatch',
-            error_name: err instanceof Error ? err.name : typeof err,
-            error_message: getErrorMessage(err),
-          });
           toast.error(t('sessions.sendError'), { description: getErrorMessage(err) });
           return false;
         }
       },
       [
         addSessionHistory,
-        captureSessionEvent,
         configOptionValues,
         currentUser?.id,
         guardNewBillableTurn,
@@ -3371,11 +2998,6 @@ export const SessionChatInterface = memo(
           return true;
         } catch (err) {
           console.error('Failed to queue session message', err);
-          captureSessionEvent('session/message_enqueue_failed', {
-            route: 'queue',
-            error_name: err instanceof Error ? err.name : typeof err,
-            error_message: getErrorMessage(err),
-          });
           toast.error(t('sessions.queueError', 'Failed to queue message'), {
             description: getErrorMessage(err),
           });
@@ -3383,7 +3005,6 @@ export const SessionChatInterface = memo(
         }
       },
       [
-        captureSessionEvent,
         configOptionValues,
         currentUser?.id,
         guardNewBillableTurn,
@@ -3451,22 +3072,10 @@ export const SessionChatInterface = memo(
           hasUnfinishedAssistantTurn: activeAssistantTurnId != null,
           queuedMessageBehavior,
         });
-        const startedAtMs = getPerformanceNowMs();
-        const inputSummary = summarizeInputBlocksForAnalytics(normalized);
         if (isArchivedSession) {
-          captureSessionEvent('session/input_blocked', {
-            reason: 'session_archived',
-            entrypoint: 'session_chat',
-            has_pending_images: inputSummary.has_images,
-          });
           return false;
         }
         if (isExternalHistoryRefreshing) {
-          captureSessionEvent('session/input_blocked', {
-            reason: 'external_history_syncing',
-            entrypoint: 'session_chat',
-            has_pending_images: inputSummary.has_images,
-          });
           return false;
         }
         // P2.2: a design turn may only leave once the canvas editor (possibly
@@ -3483,42 +3092,18 @@ export const SessionChatInterface = memo(
                 .join('\n')
             );
           } catch (error) {
-            captureSessionEvent('session/input_blocked', {
-              reason: 'design_save_failed',
-              entrypoint: 'session_chat',
-              has_pending_images: inputSummary.has_images,
-            });
             toast.error(t('design.saveFailedBeforeSend', 'Canvas save failed'), {
               description: getErrorMessage(error),
             });
             return false;
           }
         }
-        captureSessionEvent('session/message_submit_requested', {
-          ...inputSummary,
-          force_queue: Boolean(options?.forceQueue),
-          force_direct: forceDirect,
-          submit_route: submitRoute.type,
-          is_agent_busy: isAgentBusy,
-          mode_id: turnModeId ?? null,
-          model_id: turnModelId ?? null,
-          config_option_count: Object.keys(turnConfigOptionValues).length,
-        });
         if (submitRoute.type === 'queue') {
           const accepted = await queueInputBlocks(normalized, {
             modeIdOverride: turnModeId,
             modelIdOverride: turnModelId,
             configOptionValuesOverride: turnConfigOptionValues,
           });
-          captureSessionEvent(
-            accepted ? 'session/message_queued' : 'session/message_submit_failed',
-            {
-              ...inputSummary,
-              submit_route: 'queue',
-              duration_ms: getDurationSinceMs(startedAtMs),
-              queue_reason: submitRoute.reason,
-            }
-          );
           return accepted;
         }
 
@@ -3530,23 +3115,10 @@ export const SessionChatInterface = memo(
             modelIdOverride: turnModelId,
             configOptionValuesOverride: turnConfigOptionValues,
           });
-          captureSessionEvent(
-            accepted ? 'session/message_guide_requested' : 'session/message_submit_failed',
-            {
-              ...inputSummary,
-              submit_route: 'guide',
-              duration_ms: getDurationSinceMs(startedAtMs),
-            }
-          );
           return accepted;
         }
 
         if (directDispatchInFlightRef.current) {
-          captureSessionEvent('session/input_blocked', {
-            reason: 'direct_dispatch_in_flight',
-            entrypoint: 'session_chat',
-            has_pending_images: inputSummary.has_images,
-          });
           return false;
         }
 
@@ -3559,18 +3131,12 @@ export const SessionChatInterface = memo(
           configOptionValuesOverride: turnConfigOptionValues,
         });
         if (!accepted) {
-          captureSessionEvent('session/message_submit_failed', {
-            ...inputSummary,
-            submit_route: 'direct_dispatch',
-            duration_ms: getDurationSinceMs(startedAtMs),
-          });
           directDispatchInFlightRef.current = false;
           setInputActionState('ready');
         }
         return accepted;
       },
       [
-        captureSessionEvent,
         configOptionValues,
         directDispatchInputBlocks,
         activeAssistantTurnId,
@@ -3697,12 +3263,6 @@ export const SessionChatInterface = memo(
         options?: { showPending?: boolean }
       ): Promise<boolean> => {
         if (!goalCommands.includes(command)) {
-          captureSessionEvent('session/goal_command_failed', {
-            command,
-            goal_thread_id: goal?.threadId ?? null,
-            error_name: 'UnsupportedGoalCommand',
-            error_message: 'Goal command is unavailable for this agent transport',
-          });
           toast.error(t('sessions.goal.commandError', 'Failed to send goal command'));
           return false;
         }
@@ -3723,10 +3283,6 @@ export const SessionChatInterface = memo(
           if (!accepted) {
             throw new Error('Goal command was not accepted for dispatch');
           }
-          captureSessionEvent('session/goal_command_dispatched', {
-            command,
-            goal_thread_id: goal.threadId,
-          });
           return true;
         } catch (error) {
           if (options?.showPending !== false) {
@@ -3734,19 +3290,13 @@ export const SessionChatInterface = memo(
               current?.threadId === goal.threadId && current.command === command ? null : current
             );
           }
-          captureSessionEvent('session/goal_command_failed', {
-            command,
-            goal_thread_id: goal.threadId,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.goal.commandError', 'Failed to send goal command'), {
             description: getErrorMessage(error),
           });
           return false;
         }
       },
-      [captureSessionEvent, dispatchPrompt, goalCommands, latestGoal, t]
+      [dispatchPrompt, goalCommands, latestGoal, t]
     );
 
     const handleGoalCardCommand = useCallback(
@@ -3764,12 +3314,8 @@ export const SessionChatInterface = memo(
         void runtime.writer.upsertDocMeta(roomId, {
           dismissedGoalThreadId: goal.threadId,
         } as Partial<SessionMeta>);
-        captureSessionEvent('session/goal_banner_dismissed', {
-          goal_thread_id: goal.threadId,
-          goal_status: goal.status,
-        });
       },
-      [captureSessionEvent, runtime, session.id, session.dismissedGoalThreadId]
+      [runtime, session.id, session.dismissedGoalThreadId]
     );
 
     // Child sessions use their own empty-state suggestions.
@@ -3790,26 +3336,15 @@ export const SessionChatInterface = memo(
     const handlePinMessage = useCallback(
       (historyId: string | null) => {
         if (!runtime) {
-          captureSessionEvent('session/message_pin_failed', {
-            reason: 'missing_runtime',
-            action: historyId ? 'pin' : 'unpin',
-          });
           return;
         }
         const roomId = getSessionRoomId(session.id);
-        const historyIndex =
-          historyId && conversationView ? conversationView.indexOf(historyId) : -1;
         // Use empty string as "cleared" — undefined is skipped by upsertDocMeta merge
         void runtime.writer.upsertDocMeta(roomId, {
           pinnedHistoryId: historyId ?? '',
         } as Partial<SessionMeta>);
-        captureSessionEvent(historyId ? 'session/message_pinned' : 'session/message_unpinned', {
-          history_id: historyId ?? null,
-          history_index: historyIndex >= 0 ? historyIndex : null,
-          previous_pinned_history_id: session.pinnedHistoryId || null,
-        });
       },
-      [captureSessionEvent, conversationView, runtime, session.id, session.pinnedHistoryId]
+      [runtime, session.id]
     );
 
     const pinnedHistoryId = session.pinnedHistoryId || null;
@@ -3962,16 +3497,8 @@ export const SessionChatInterface = memo(
     );
 
     const handleOpenBrowser = useCallback(() => {
-      const browserSession = headerBrowserSession ?? session;
-      captureSessionEvent('session/quick_action_selected', {
-        action_id: 'browser',
-        preview_status:
-          browserSession.previewConnection?.status ??
-          browserSession.previewCandidate?.status ??
-          null,
-      });
       onOpenBrowser?.();
-    }, [captureSessionEvent, headerBrowserSession, onOpenBrowser, session]);
+    }, [onOpenBrowser]);
 
     const assistantQuickActions = useMemo<AssistantMessageAction[]>(() => {
       const actions: AssistantMessageAction[] = [];
@@ -4067,14 +3594,10 @@ export const SessionChatInterface = memo(
       setPrevSessionIdForActionReset(session.id);
       setInputActionState('ready');
       directDispatchInFlightRef.current = false;
-      previousStatusTypeRef.current = undefined;
-      pendingUserInterruptRef.current = false;
-      permissionRequestStateRef.current = new Map();
       setPendingGoalCommand(null);
     }
 
     useEffect(() => {
-      const dispatchWaitStatusType = liveSessionStatus?.type ?? null;
       if (inputActionState !== 'dispatching') {
         directDispatchInFlightRef.current = false;
         return undefined;
@@ -4086,93 +3609,14 @@ export const SessionChatInterface = memo(
       }
 
       const timeoutId = window.setTimeout(() => {
-        captureSessionEvent('session/message_dispatch_wait_timeout', {
-          timeout_ms: DISPATCHING_TIMEOUT_MS,
-          status_type: dispatchWaitStatusType,
-        });
         setInputActionState('ready');
       }, DISPATCHING_TIMEOUT_MS);
 
       return () => window.clearTimeout(timeoutId);
-    }, [captureSessionEvent, inputActionState, isSessionWorking, liveSessionStatus]);
-
-    useEffect(() => {
-      if (hideMessageArea) return undefined;
-      const previousStatusType = previousStatusTypeRef.current;
-      const currentStatusType = session.status?.type;
-
-      const transitionedToIdle =
-        isTrackableRunningStatusType(previousStatusType) && currentStatusType === 'idle';
-
-      if (transitionedToIdle) {
-        if (pendingUserInterruptRef.current) {
-          trackUserInterruptEnd();
-        }
-        pendingUserInterruptRef.current = false;
-      }
-
-      previousStatusTypeRef.current = currentStatusType;
-      return undefined;
-    }, [hideMessageArea, session.status?.type, trackUserInterruptEnd]);
-
-    // Permission funnel (spec §5.5): emit shown/responded by diffing the set of
-    // tool-call permission requests in history. A request seen without an outcome
-    // emits `_shown`; the same request later carrying an outcome emits
-    // `_responded` with the local wait_ms. An outcome that appears for a request
-    // we never saw pending is treated as resolved elsewhere and never surfaced
-    // a card to this client.
-    useEffect(() => {
-      if (hideMessageArea) return undefined;
-      const scanned = permissionRequestsFromFacts(turnFacts.ordered);
-      if (scanned.length === 0) return undefined;
-      const state = permissionRequestStateRef.current;
-
-      for (const entry of scanned) {
-        const tracked = state.get(entry.requestId);
-        if (!tracked) {
-          if (entry.hasOutcome) {
-            state.set(entry.requestId, {
-              shownAtMs: getPerformanceNowMs(),
-              requestKind: entry.requestKind,
-              toolKind: entry.toolKind,
-              responded: true,
-            });
-            continue;
-          }
-          capturePostHogEvent(postHog, 'session/permission_request_shown', {
-            ...sessionAnalyticsProperties,
-            request_kind: entry.requestKind,
-            tool_kind: entry.toolKind,
-          });
-          state.set(entry.requestId, {
-            shownAtMs: getPerformanceNowMs(),
-            requestKind: entry.requestKind,
-            toolKind: entry.toolKind,
-            responded: false,
-          });
-          continue;
-        }
-
-        if (entry.hasOutcome && !tracked.responded) {
-          tracked.responded = true;
-          const outcome: AnalyticsOutcome = entry.decision === 'allow' ? 'success' : 'blocked';
-          capturePostHogOutcome(postHog, 'session/permission_request_responded', outcome, {
-            ...sessionAnalyticsProperties,
-            request_kind: tracked.requestKind,
-            tool_kind: tracked.toolKind,
-            decision: entry.decision,
-            wait_ms: getDurationSinceMs(tracked.shownAtMs),
-          });
-        }
-      }
-      return undefined;
-    }, [hideMessageArea, postHog, sessionAnalyticsProperties, turnFacts.ordered]);
+    }, [inputActionState, isSessionWorking, liveSessionStatus]);
 
     const handleStop = useCallback(async () => {
       if (!workspaceId) {
-        captureSessionEvent('session/stop_blocked', {
-          reason: 'missing_workspace',
-        });
         toast.error(t('sessions.stopError'));
         return;
       }
@@ -4183,10 +3627,6 @@ export const SessionChatInterface = memo(
 
       if (goalToPause) {
         setInputActionState('ready');
-        captureSessionEvent('session/goal_pause_requested', {
-          goal_thread_id: goalToPause.threadId,
-          cancel_turn_id: turnIdToCancel,
-        });
       }
 
       if (!turnIdToCancel) {
@@ -4194,32 +3634,15 @@ export const SessionChatInterface = memo(
           await handleGoalCommand('pause', goalToPause, { showPending: false });
           return;
         }
-        captureSessionEvent('session/stop_blocked', {
-          reason: 'missing_active_turn',
-        });
         toast.error(t('sessions.stopError'));
         return;
       }
 
       setInputActionState('ready');
-      pendingUserInterruptRef.current = true;
-      const stopAnalyticsProperties = {
-        active_assistant_turn_id: activeAssistantTurnId ?? null,
-        cancel_turn_id: turnIdToCancel,
-        goal_thread_id: goalToPause?.threadId ?? null,
-      };
-      captureSessionEvent('session/stop_requested', stopAnalyticsProperties);
       try {
         await requestSessionCancel(session.id, turnIdToCancel);
-        captureSessionEvent('session/stop_request_succeeded', stopAnalyticsProperties);
       } catch (error) {
         console.error('Failed to request session cancel', error);
-        pendingUserInterruptRef.current = false;
-        captureSessionEvent('session/stop_request_failed', {
-          ...stopAnalyticsProperties,
-          error_name: error instanceof Error ? error.name : typeof error,
-          error_message: getErrorMessage(error),
-        });
         toast.error(t('sessions.stopError'), { description: getErrorMessage(error) });
         return;
       }
@@ -4230,7 +3653,6 @@ export const SessionChatInterface = memo(
     }, [
       activeAssistantTurnId,
       canPauseGoal,
-      captureSessionEvent,
       handleGoalCommand,
       isGoalActive,
       latestGoal,
@@ -4240,55 +3662,31 @@ export const SessionChatInterface = memo(
       workspaceId,
     ]);
 
-    const handleInterruptAndSend = useCallback(
-      async (item: MessageQueueItem) => {
-        if (isExternalHistoryRefreshing) {
-          captureSessionEvent('session/queue_interrupt_blocked', {
-            reason: 'external_history_syncing',
-            queue_item_id: item.$cid,
-          });
-          return;
-        }
-        if (!workspaceId || !activeAssistantTurnId) {
-          captureSessionEvent('session/queue_interrupt_blocked', {
-            reason: !workspaceId ? 'missing_workspace' : 'missing_active_turn',
-            queue_item_id: item.$cid,
-          });
-          toast.error(t('sessions.interruptFailed', 'Failed to interrupt current task'));
-          return;
-        }
-        setInputActionState('ready');
-        pendingUserInterruptRef.current = true;
-        try {
-          await requestSessionCancel(session.id, activeAssistantTurnId, { action: 'interrupt' });
-          captureSessionEvent('session/queue_interrupt_succeeded', {
-            queue_item_id: item.$cid,
-            active_assistant_turn_id: activeAssistantTurnId,
-          });
-        } catch (error) {
-          console.error('Failed to interrupt for queued message', error);
-          pendingUserInterruptRef.current = false;
-          captureSessionEvent('session/queue_interrupt_failed', {
-            queue_item_id: item.$cid,
-            active_assistant_turn_id: activeAssistantTurnId,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
-          toast.error(t('sessions.interruptFailed', 'Failed to interrupt current task'), {
-            description: getErrorMessage(error),
-          });
-        }
-      },
-      [
-        activeAssistantTurnId,
-        captureSessionEvent,
-        isExternalHistoryRefreshing,
-        requestSessionCancel,
-        session.id,
-        t,
-        workspaceId,
-      ]
-    );
+    const handleInterruptAndSend = useCallback(async () => {
+      if (isExternalHistoryRefreshing) {
+        return;
+      }
+      if (!workspaceId || !activeAssistantTurnId) {
+        toast.error(t('sessions.interruptFailed', 'Failed to interrupt current task'));
+        return;
+      }
+      setInputActionState('ready');
+      try {
+        await requestSessionCancel(session.id, activeAssistantTurnId, { action: 'interrupt' });
+      } catch (error) {
+        console.error('Failed to interrupt for queued message', error);
+        toast.error(t('sessions.interruptFailed', 'Failed to interrupt current task'), {
+          description: getErrorMessage(error),
+        });
+      }
+    }, [
+      activeAssistantTurnId,
+      isExternalHistoryRefreshing,
+      requestSessionCancel,
+      session.id,
+      t,
+      workspaceId,
+    ]);
 
     const handleNativeSteerQueuedMessage = useCallback(
       async (item: MessageQueueItem) => {
@@ -4328,20 +3726,9 @@ export const SessionChatInterface = memo(
           touchSessionActivity(session.id).catch((error: unknown) => {
             console.warn('Failed to update session activity for steer', error);
           });
-          const applied = await guideHistoryEntry(historyEntry.id, activeAssistantTurnId);
-          captureSessionEvent('session/queue_guide_result', {
-            queue_item_id: item.$cid,
-            active_assistant_turn_id: activeAssistantTurnId,
-            applied,
-          });
+          await guideHistoryEntry(historyEntry.id, activeAssistantTurnId);
         } catch (error) {
           console.error('Failed to guide with queued message', error);
-          captureSessionEvent('session/queue_guide_failed', {
-            queue_item_id: item.$cid,
-            active_assistant_turn_id: activeAssistantTurnId,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.sendError'), {
             description: getErrorMessage(error),
           });
@@ -4352,7 +3739,6 @@ export const SessionChatInterface = memo(
       [
         activeAssistantTurnId,
         addSessionHistory,
-        captureSessionEvent,
         guideHistoryEntry,
         isExternalHistoryRefreshing,
         removeMessageQueueItem,
@@ -4376,7 +3762,7 @@ export const SessionChatInterface = memo(
           await handleNativeSteerQueuedMessage(item);
           return;
         }
-        await handleInterruptAndSend(item);
+        await handleInterruptAndSend();
       },
       [handleInterruptAndSend, handleNativeSteerQueuedMessage, shouldUseNativeQueueSteer]
     );
@@ -4384,40 +3770,22 @@ export const SessionChatInterface = memo(
     const handleReorderQueueItem = useCallback(
       async (activeCid: string, overCid: string) => {
         try {
-          captureSessionEvent('session/queue_item_reorder_requested', {
-            queue_item_id: activeCid,
-            over_queue_item_id: overCid,
-          });
           await reorderMessageQueueItem(activeCid, overCid);
-          captureSessionEvent('session/queue_item_reordered', {
-            queue_item_id: activeCid,
-            over_queue_item_id: overCid,
-          });
         } catch (error) {
           console.error('Failed to reorder queued message', error);
-          captureSessionEvent('session/queue_item_reorder_failed', {
-            queue_item_id: activeCid,
-            over_queue_item_id: overCid,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.queueReorderError', 'Failed to reorder messages'), {
             description: getErrorMessage(error),
           });
           throw error;
         }
       },
-      [captureSessionEvent, reorderMessageQueueItem, t]
+      [reorderMessageQueueItem, t]
     );
 
     const handleStartQueueItemEdit = useCallback(
       async (item: MessageQueueItem) => {
         const isFirstItem = messageQueue[0]?.$cid === item.$cid;
         try {
-          captureSessionEvent('session/queue_item_edit_started', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-          });
           await updateMessageQueueItem(item.$cid, (current) =>
             current.isEditing
               ? current
@@ -4428,19 +3796,13 @@ export const SessionChatInterface = memo(
           }
         } catch (error) {
           console.error('Failed to start editing queued message', error);
-          captureSessionEvent('session/queue_item_edit_start_failed', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.queueEditError', 'Failed to edit message'), {
             description: getErrorMessage(error),
           });
           throw error;
         }
       },
-      [captureSessionEvent, messageQueue, t, updateMessageQueueItem, waitUntilSynced]
+      [messageQueue, t, updateMessageQueueItem, waitUntilSynced]
     );
 
     const handleCancelQueueItemEdit = useCallback(
@@ -4455,25 +3817,15 @@ export const SessionChatInterface = memo(
           if (isFirstItem) {
             await waitUntilSynced();
           }
-          captureSessionEvent('session/queue_item_edit_cancelled', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-          });
         } catch (error) {
           console.error('Failed to cancel queued message edit', error);
-          captureSessionEvent('session/queue_item_edit_cancel_failed', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.queueEditError', 'Failed to edit message'), {
             description: getErrorMessage(error),
           });
           throw error;
         }
       },
-      [captureSessionEvent, messageQueue, t, updateMessageQueueItem, waitUntilSynced]
+      [messageQueue, t, updateMessageQueueItem, waitUntilSynced]
     );
 
     const handleSaveQueueItemEdit = useCallback(
@@ -4490,47 +3842,29 @@ export const SessionChatInterface = memo(
           if (isFirstItem) {
             await waitUntilSynced();
           }
-          captureSessionEvent('session/queue_item_edit_saved', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-          });
         } catch (error) {
           console.error('Failed to save queued message edit', error);
-          captureSessionEvent('session/queue_item_edit_save_failed', {
-            queue_item_id: item.$cid,
-            is_first_queue_item: isFirstItem,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.queueEditError', 'Failed to edit message'), {
             description: getErrorMessage(error),
           });
           throw error;
         }
       },
-      [captureSessionEvent, messageQueue, t, updateMessageQueueItem, waitUntilSynced]
+      [messageQueue, t, updateMessageQueueItem, waitUntilSynced]
     );
 
     const handleRemoveQueueItem = useCallback(
       async (itemId: string) => {
         try {
           await removeMessageQueueItem(itemId);
-          captureSessionEvent('session/queue_item_removed', {
-            queue_item_id: itemId,
-          });
         } catch (error) {
           console.error('Failed to remove queued message', error);
-          captureSessionEvent('session/queue_item_remove_failed', {
-            queue_item_id: itemId,
-            error_name: error instanceof Error ? error.name : typeof error,
-            error_message: getErrorMessage(error),
-          });
           toast.error(t('sessions.queueRemoveError', 'Failed to remove message'), {
             description: getErrorMessage(error),
           });
         }
       },
-      [captureSessionEvent, removeMessageQueueItem, t]
+      [removeMessageQueueItem, t]
     );
 
     const shouldHideHeader = hideHeader;
@@ -4566,13 +3900,11 @@ export const SessionChatInterface = memo(
     const handleCopySessionLink = useCallback(async () => {
       try {
         await navigator.clipboard.writeText(getAppShareUrl());
-        captureSessionEvent('session/share_link_copied');
         toast.success(t('sessions.urlCopied', 'Session URL copied to clipboard'));
       } catch {
-        captureSessionEvent('session/share_link_copy_failed');
         toast.error(t('sessions.shareFailed', 'Unable to share link'));
       }
-    }, [captureSessionEvent, t]);
+    }, [t]);
 
     const headerGitHubActions = headerActionsSlot;
 
@@ -4684,7 +4016,7 @@ export const SessionChatInterface = memo(
                     />
                   }
                   desktopActionsSlot={
-                    <div className={cn('flex shrink-0 items-center gap-2', isMobile && 'hidden')}>
+                    <div className={cn('flex shrink-0 items-center gap-2')}>
                       {headerDesignAction}
                       {headerGitHubActions}
                       {headerArchivedNode}
@@ -4692,12 +4024,8 @@ export const SessionChatInterface = memo(
                   }
                   menuSlot={headerMenuNode}
                   endSlot={headerEndSlot}
-                  nativeApp={isNativeApp}
                   reserveMacTrafficLightInset={
-                    !isNativeApp &&
-                    Boolean(headerStartSlot) &&
-                    isMacOSElectronRenderer() &&
-                    !isElectronFullscreen
+                    Boolean(headerStartSlot) && isMacOSElectronRenderer() && !isElectronFullscreen
                   }
                 />
               </ErrorBoundary>
@@ -4791,19 +4119,10 @@ export const SessionChatInterface = memo(
                   />
 
                   {/* Notification permission prompt - shown when session becomes idle (turn completed) */}
-                  {/* TODO(analytics): session/notification_prompt_shown|_permission_granted|_permission_denied.
-                      Visibility + enable/dismiss live inside NotificationPermissionPrompt (owned elsewhere)
-                      and the actual grant/deny resolves on the settings page, so these must be emitted from
-                      that component via onShown/onEnableClicked/onDismissed callbacks (see crossFileNeeds). */}
                   <NotificationPermissionPrompt
                     sessionCompleted={session.status?.type === 'idle' && !isSessionWorking}
                   />
 
-                  {/* Session info bar (desktop AND mobile): the canonical
-                      cluster + fixed stage row merging status, goal, schedule,
-                      and work context, glued to the composer shell. It
-                      replaced the mobile status strip / goal banner /
-                      in-composer scheduled panel. */}
                   {session.dispatchPause?.state === 'paused' ? (
                     <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
                       <span className="min-w-0 flex-1">
@@ -4853,7 +4172,7 @@ export const SessionChatInterface = memo(
                     onOpenTask={handleOpenSessionTask}
                     scheduledTasks={pendingScheduledTasks}
                     projectName={repoFullName || resolvedLocalProjectMeta?.name || null}
-                    branch={isMobile ? null : session.branchName?.trim() || null}
+                    branch={session.branchName?.trim() || null}
                     workspaceLocation={
                       session.isWorktree
                         ? {
@@ -4866,14 +4185,10 @@ export const SessionChatInterface = memo(
                           ? { kind: 'folder', path: sessionWorkspacePath }
                           : null
                     }
-                    onOpenAllChanges={onOpenAllChanges}
                     onOpenBrowser={browserActionAvailable ? handleOpenBrowser : undefined}
-                    diffStat={changesDiffStat}
-                    // Desktop only: mobile already shows catch-up in its header.
-                    syncing={!isMobile && effectiveTitleSyncing}
-                    // Mobile keeps the bar above the session drawer's z-30
+                    syncing={effectiveTitleSyncing}
+
                     // edge-back strip so its leading chip stays tappable.
-                    protectFromEdgeBackZone={isMobile}
                   />
 
                   {/* Input area - isolated component to prevent full re-renders on typing.

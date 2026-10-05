@@ -13,11 +13,6 @@ import {
   type SessionSandbox,
 } from '../src/session/session-sandbox';
 import type { Logger } from '../src/utils/logger';
-import {
-  captureGitWorkingTreeDiffBaseline,
-  getCurrentCommitHash,
-  type GitRunner,
-} from '../src/lib/git/git-diff-stats';
 
 const createSilentLogger = (): Logger => ({
   info: () => {},
@@ -291,20 +286,6 @@ describe('Session command execution', () => {
     await expect(
       session.exec('git', ['rev-parse', '--is-inside-work-tree'], process.cwd(), false)
     ).rejects.toBe(spawnError);
-    expect(onSessionError).not.toHaveBeenCalled();
-  });
-
-  it('lets best-effort Git baselines fall back without a session error', async () => {
-    const spawnError = Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' });
-    const sandbox = createSandbox([]);
-    sandbox.spawn.mockRejectedValue(spawnError);
-    const session = createSession('session-git-baseline-error', sandbox);
-    const onSessionError = vi.fn();
-    session.on('error', onSessionError);
-    const runGit: GitRunner = (args) => session.exec('git', args, process.cwd(), false);
-
-    await expect(getCurrentCommitHash(runGit)).resolves.toBeNull();
-    await expect(captureGitWorkingTreeDiffBaseline(runGit)).resolves.toBeNull();
     expect(onSessionError).not.toHaveBeenCalled();
   });
 

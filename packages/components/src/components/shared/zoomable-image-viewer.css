@@ -30,16 +30,6 @@
   user-select: none;
 }
 
-/* Desktop lightbox.
- *
- * A phone viewer fills the screen because the screen IS the surface. In a
- * desktop window the same treatment reads as "the app is gone": the photo runs
- * edge to edge into an opaque black window with a 24px close glyph in the
- * corner. Everything below turns the same viewer into an overlay ON the app —
- * inset photo, translucent mask, and a top bar that clears the native window
- * controls. `--desktop` comes from `useIsMobile()` in the component, so the
- * layout breakpoint that decides every other surface decides this one too.
- */
 .molly-photo-slider--desktop .molly-photo-slider-image {
   /* Inset with a TRANSFORM, never a smaller box and never padding.
      react-photo-view sizes the photo to the window and then positions it by

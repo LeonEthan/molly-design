@@ -13,6 +13,8 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
 - Grok Always Approve uses `allow_once`, never lasting grants; pending calls drain through
   the durable permission flow on accepted config changes. Questions remain interactive.
 - Builtin Grok uses native reads: advertise terminal/readTextFile false; retain host writes.
+  Host `writeTextFile` performs the existing write without reading a pre-image or
+  emitting retired turn-diff evidence callbacks.
 - Send the driving turn's config on every session establishment as `_meta.lody.sessionConfig`;
   provider-specific startup translation belongs in the ACP adapter. `session/set_config_option`
   stays the live-session switch, and a successful selection becomes a later replacement's

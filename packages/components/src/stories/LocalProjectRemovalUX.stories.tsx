@@ -75,9 +75,7 @@ function ProjectRow({ state }: { state?: LocalProjectRemovalState }) {
       selectedSessionId={null}
       removeProjectLabel="移除项目"
       archiveTooltipLabel="归档"
-      archiveActionLabel="归档"
       archiveConfirmLabel="归档对话"
-      isMobile={false}
       toggleLabel="展开或收起对话"
       onNavigateProject={() => {}}
       onNavigateSession={() => {}}
@@ -115,7 +113,6 @@ function DesktopSidebar({
             label="本地项目"
             collapsed={false}
             count={2}
-            isMobile={false}
             toggleLabel="展开或收起本地项目"
             onToggleCollapsed={() => {}}
             action={
@@ -150,9 +147,7 @@ function DesktopSidebar({
             selectedSessionId={null}
             removeProjectLabel="移除项目"
             archiveTooltipLabel="归档"
-            archiveActionLabel="归档"
             archiveConfirmLabel="归档对话"
-            isMobile={false}
             toggleLabel="展开或收起对话"
             onNavigateProject={() => {}}
             onNavigateSession={() => {}}

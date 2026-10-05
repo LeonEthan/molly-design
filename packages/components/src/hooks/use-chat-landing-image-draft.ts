@@ -17,9 +17,7 @@ import { canUseElectronLocalFileSend } from '@/lib/electron-session-file-sender'
 import { useAtomValue, useAtom } from 'jotai';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
-import { usePostHog } from '@posthog/react';
 import { chatLandingPendingImagesAtomFamily, type PendingImage } from '@/atoms/chat-landing-draft';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
 import { uploadSessionReferenceImage, validateSessionImageFile } from '@/lib/session-image-upload';
 
 export type ChatLandingImageDraftItem = {
@@ -56,20 +54,12 @@ export function useChatLandingImageDraft(args: {
   draftKey: string;
   workspaceId: WorkspaceId | null;
   machineId?: MachineId | null;
-  isMobile: boolean;
-  projectKind: 'github' | 'local' | null;
+
   sessionId: SessionId | null;
   ensureSessionId: () => SessionId;
 }) {
   const { t } = useTranslation();
-  const {
-    draftKey,
-    workspaceId,
-    isMobile,
-    projectKind,
-    sessionId: draftSessionId,
-    ensureSessionId,
-  } = args;
+  const { draftKey, workspaceId, sessionId: draftSessionId, ensureSessionId } = args;
   const localMachineId = useAtomValue(localMachineIdAtom);
   const attachmentMachine = useAtomValue(getMachineMetaByIdAtomFamily(args.machineId ?? undefined));
   const localImageMachineId =
@@ -79,7 +69,6 @@ export function useChatLandingImageDraft(args: {
     machineSupportsLocalSessionAttachments(attachmentMachine)
       ? args.machineId
       : undefined;
-  const postHog = usePostHog();
   const [pendingImages, setPendingImages] = useAtom(chatLandingPendingImagesAtomFamily(draftKey));
   const imageUploadFailedLabel = t('sessions.imageUploadFailed', 'Image upload failed');
   const imageUploadMissingAuthLabel = t(
@@ -144,17 +133,6 @@ export function useChatLandingImageDraft(args: {
   const startUpload = useCallback(
     async (localId: string, file: File, sessionId: SessionId) => {
       if (!workspaceId) {
-        capturePostHogEvent(postHog, 'session/image_upload_failed', {
-          channel: 'web',
-          entrypoint: 'chat_landing',
-          actor: 'user',
-          workspace_id: workspaceId ?? null,
-          session_id: sessionId,
-          image_count: 1,
-          total_size_bytes: file.size,
-          project_kind: projectKind,
-          failure_reason: 'missing_auth',
-        });
         updatePendingImage(localId, (image) => ({
           ...image,
           status: 'failed',
@@ -170,16 +148,6 @@ export function useChatLandingImageDraft(args: {
         progress: 0,
         error: undefined,
       }));
-      capturePostHogEvent(postHog, 'session/image_upload_requested', {
-        channel: 'web',
-        entrypoint: 'chat_landing',
-        actor: 'user',
-        workspace_id: workspaceId,
-        session_id: sessionId,
-        image_count: 1,
-        total_size_bytes: file.size,
-        project_kind: projectKind,
-      });
 
       try {
         const uploaded = await uploadSessionReferenceImage({
@@ -198,17 +166,6 @@ export function useChatLandingImageDraft(args: {
           uploaded,
           error: undefined,
         }));
-        capturePostHogEvent(postHog, 'session/image_upload_succeeded', {
-          channel: 'web',
-          entrypoint: 'chat_landing',
-          actor: 'user',
-          workspace_id: workspaceId,
-          session_id: sessionId,
-          image_count: 1,
-          total_size_bytes: file.size,
-          project_kind: projectKind,
-          mime_type: uploaded.mimeType,
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : imageUploadFailedLabel;
         updatePendingImage(localId, (image) => ({
@@ -217,26 +174,12 @@ export function useChatLandingImageDraft(args: {
           progress: 0,
           error: errorMessage,
         }));
-        capturePostHogEvent(postHog, 'session/image_upload_failed', {
-          channel: 'web',
-          entrypoint: 'chat_landing',
-          actor: 'user',
-          workspace_id: workspaceId,
-          session_id: sessionId,
-          image_count: 1,
-          total_size_bytes: file.size,
-          project_kind: projectKind,
-          failure_reason: 'upload_error',
-          error_message: errorMessage,
-        });
       }
     },
     [
       localImageMachineId,
       imageUploadFailedLabel,
       imageUploadMissingAuthLabel,
-      postHog,
-      projectKind,
       updatePendingImage,
       workspaceId,
     ]
@@ -300,9 +243,6 @@ export function useChatLandingImageDraft(args: {
 
   const handlePromptPaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (isMobile) {
-        return;
-      }
       // A Word or PowerPoint copy carries a picture of the selection beside
       // the text; the text is what the composer wants.
       const { files: fileItems } = selectPastedClipboardFiles({
@@ -320,7 +260,7 @@ export function useChatLandingImageDraft(args: {
       event.preventDefault();
       handleAddFiles(fileItems);
     },
-    [handleAddFiles, isMobile]
+    [handleAddFiles]
   );
 
   const handleRemoveImage = useCallback(

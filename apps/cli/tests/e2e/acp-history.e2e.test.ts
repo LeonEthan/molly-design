@@ -306,6 +306,7 @@ e2eDescribe('acp history e2e (codex stream)', () => {
 
       await appendAutonomousACPNotifications(doc, notifications);
 
+      await appendAutonomousACPNotifications(doc, notifications);
       const history = await doc.getHistory();
       const allText = history
         .flatMap((h) => parseContents(h))
@@ -454,6 +455,7 @@ e2eDescribe('acp history e2e (codex stream)', () => {
         expect(parsed.success).toBe(true);
       }
 
+      await appendAutonomousACPNotifications(doc, notifications);
       await appendAutonomousACPNotifications(doc, notifications);
       const history = await doc.getHistory();
       const summarizedHistory = summarizeHistory(history);
@@ -797,13 +799,7 @@ e2eDescribe('acp history e2e (codex stream)', () => {
       }).length;
       expect(executeUpdateCount).toBeGreaterThan(1);
 
-      const editCalls: unknown[] = [];
-      await appendAutonomousACPNotifications(doc, notifications, {
-        editCallback: (edits) => {
-          editCalls.push(...edits);
-        },
-      });
-      console.log(JSON.stringify(editCalls, null, 2));
+      await appendAutonomousACPNotifications(doc, notifications);
       const history = await doc.getHistory();
       // fs.writeFileSync("./e2e-notifications.json", JSON.stringify(notifications, null, 2));
       // fs.writeFileSync("./e2e-history.json", JSON.stringify(history, null, 2));

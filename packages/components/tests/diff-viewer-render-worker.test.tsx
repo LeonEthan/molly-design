@@ -39,10 +39,6 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../src/hooks/use-mobile', () => ({
-  useIsMobile: () => false,
-}));
-
 vi.mock('../src/theme-provider', () => ({
   useActiveVSCodeDiffThemeName: () => undefined,
   useResolvedTheme: () => 'dark',

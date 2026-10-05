@@ -21,6 +21,7 @@ import {
   type CodeCollabV2WorkspaceResolver,
 } from './code-collab-v2-service';
 import { CodeCollabV2DiffStore } from './code-collab-v2-diff-store';
+import { SqliteTurnDiffStore } from '@molly/turn-diff-store/sqlite';
 import type {
   WorkspaceWatchCoordinatorApi,
   WorkspaceWatchDirtyReason,
@@ -39,8 +40,6 @@ type PublishedSharedState = {
   readonly fileTree: CodeCollabV2FileTreeState;
   readonly allChanges: CodeCollabV2AllChangesState;
   readonly fileIndex: CodeCollabV2FileIndexState;
-  readonly allChangesDiffStats: CodeCollabV2FileIndexPublication['allChangesDiffStats'];
-  readonly persistAllChangesDiffStats: boolean;
   readonly updatedAtMs: number;
 };
 
@@ -61,8 +60,6 @@ function collectPublishedSharedStates(): {
         fileTree,
         allChanges,
         fileIndex: state.fileIndex,
-        allChangesDiffStats: state.allChangesDiffStats,
-        persistAllChangesDiffStats: state.persistAllChangesDiffStats,
         updatedAtMs: state.updatedAtMs,
       });
     },
@@ -86,6 +83,35 @@ async function withWorkspace<T>(fn: (workspaceRoot: string) => Promise<T>): Prom
     return await fn(workspaceRoot);
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
+  }
+}
+
+function seedLegacyTurn(input: {
+  readonly workspaceRoot: string;
+  readonly ownerSessionId: SessionId;
+  readonly turnId: string;
+  readonly capturedAtMs: number;
+  readonly recordedAtMs?: number;
+  readonly events: readonly { readonly path: string; readonly oldText: string | null; readonly newText: string | null }[];
+}): void {
+  const store = new SqliteTurnDiffStore({ dbPath: path.join(input.workspaceRoot, 'diff-store.sqlite3') });
+  try {
+    store.recordTurn({
+      ownerId: input.ownerSessionId,
+      turnId: input.turnId,
+      capturedAtMs: input.capturedAtMs,
+      recordedAtMs: input.recordedAtMs ?? input.capturedAtMs,
+      events: input.events.map((event) => ({
+        ...event,
+        path: path.relative(input.workspaceRoot, event.path).replace(/\\/g, '/'),
+        add: 0,
+        del: 0,
+        newIsCurrent: false,
+        headProof: null,
+      })),
+    });
+  } finally {
+    store.close();
   }
 }
 
@@ -538,7 +564,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
     });
   });
 
-  it('publishes path-keyed file tree and current All Changes state on directory init', async () => {
+  it('publishes path-keyed Files without deriving All Changes on directory init', async () => {
     await withWorkspace(async (workspaceRoot) => {
       await execFileAsync('git', ['-c', 'init.defaultBranch=main', 'init'], { cwd: workspaceRoot });
       await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
@@ -573,10 +599,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
         'binary.bin': true,
       });
       expect(latest?.fileTree).not.toHaveProperty('src');
-      expect(latest?.allChanges).toMatchObject({
-        'tracked.txt': { diff: [1, 0] },
-        'untracked.txt': { diff: [1, 0] },
-      });
+      expect(latest?.allChanges).toEqual({});
     });
   });
 
@@ -656,7 +679,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
     });
   });
 
-  it('publishes non-Git All Changes from local ACP diff evidence and opens current diffs', async () => {
+  it('keeps file-index refresh free of legacy changes while historical diff reads remain available', async () => {
     await withWorkspace(async (workspaceRoot) => {
       const filePath = path.join(workspaceRoot, 'notes.txt');
       await writeFile(filePath, 'one\ntwo\n');
@@ -666,7 +689,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
       const { published, publishFileIndex } = collectPublishedSharedStates();
       try {
         const nowMs = Date.now();
-        await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-1',
@@ -686,9 +709,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
         });
 
         await service.initDirectory({ sessionId: SESSION_ID, path: '.' });
-        expect(published.at(-1)?.allChanges).toEqual({
-          'notes.txt': { diff: [1, 0] },
-        });
+        expect(published.at(-1)?.allChanges).toEqual({});
 
         const diff = await service.openCurrentDiff({ sessionId: SESSION_ID, path: 'notes.txt' });
         expect(diff.status).toBe('ok');
@@ -739,7 +760,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
         dbPath: path.join(workspaceRoot, 'diff-store.sqlite3'),
       });
       try {
-        await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-large',
@@ -768,7 +789,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
     });
   });
 
-  it('keeps multi-turn local ACP evidence aligned for turn diffs and current All Changes', async () => {
+  it('reads multiple historical turns without publishing new All Changes', async () => {
     await withWorkspace(async (workspaceRoot) => {
       const filePath = path.join(workspaceRoot, 'target.txt');
       await writeFile(filePath, 'alpha turn one\nbeta turn two\ngamma turn three\n');
@@ -778,7 +799,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
       const { published, publishFileIndex } = collectPublishedSharedStates();
       try {
         const capturedAtMs = Date.now();
-        const turnOneFileDiff = await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-1',
@@ -791,7 +812,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
             },
           ],
         });
-        const turnTwoFileDiff = await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-2',
@@ -804,7 +825,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
             },
           ],
         });
-        const turnThreeFileDiff = await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-3',
@@ -818,9 +839,6 @@ describe('CodeCollabV2Service text RPC boundary', () => {
           ],
         });
 
-        expect(turnOneFileDiff).toEqual([{ filePath: 'target.txt', add: 1, del: 1 }]);
-        expect(turnTwoFileDiff).toEqual([{ filePath: 'target.txt', add: 1, del: 1 }]);
-        expect(turnThreeFileDiff).toEqual([{ filePath: 'target.txt', add: 1, del: 1 }]);
 
         const service = new CodeCollabV2Service({
           resolveWorkspace: makeResolver(workspaceRoot),
@@ -829,9 +847,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
         });
 
         await service.initDirectory({ sessionId: SESSION_ID, path: '.' });
-        expect(published.at(-1)?.allChanges).toEqual({
-          'target.txt': { diff: [3, 3] },
-        });
+        expect(published.at(-1)?.allChanges).toEqual({});
 
         const currentDiff = await service.openCurrentDiff({
           sessionId: SESSION_ID,
@@ -895,7 +911,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
     });
   });
 
-  it('uses the owner session base branch for committed All Changes state', async () => {
+  it('publishes file paths without change summaries for historical Git sessions', async () => {
     await withWorkspace(async (workspaceRoot) => {
       await execFileAsync('git', ['-c', 'init.defaultBranch=main', 'init'], { cwd: workspaceRoot });
       await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
@@ -925,12 +941,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
 
       await service.refreshSharedState({ sessionId: SESSION_ID });
 
-      expect(published.at(-1)?.allChanges).toMatchObject({
-        'tracked.txt': { diff: [1, 0] },
-      });
-      expect(published.at(-1)?.allChangesDiffStats).toEqual({
-        allChange: { add: 1, del: 0 },
-      });
+      expect(published.at(-1)?.allChanges).toEqual({});
     });
   });
 
@@ -1278,49 +1289,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
         'src/new.ts': true,
       });
       expect(published.at(-1)?.fileTree).not.toHaveProperty('untouched/stale.txt');
-      expect(published.at(-1)?.allChanges).toMatchObject({
-        'src/new.ts': { diff: [1, 0] },
-      });
-      expect(published.at(-1)).toMatchObject({
-        allChangesDiffStats: { allChange: { add: 1, del: 0 } },
-        persistAllChangesDiffStats: true,
-      });
-    });
-  });
-
-  it('publishes a turn-end meta summary after a watcher already published the same state', async () => {
-    await withWorkspace(async (workspaceRoot) => {
-      await execFileAsync('git', ['-c', 'init.defaultBranch=main', 'init'], { cwd: workspaceRoot });
-      await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
-        cwd: workspaceRoot,
-      });
-      await execFileAsync('git', ['config', 'user.name', 'Test User'], { cwd: workspaceRoot });
-      await writeFile(path.join(workspaceRoot, 'tracked.txt'), 'one\n');
-      await execFileAsync('git', ['add', 'tracked.txt'], { cwd: workspaceRoot });
-      await execFileAsync('git', ['commit', '-m', 'init'], { cwd: workspaceRoot });
-
-      const { published, publishFileIndex } = collectPublishedSharedStates();
-      const service = new CodeCollabV2Service({
-        resolveWorkspace: makeResolver(workspaceRoot),
-        publishFileIndex,
-      });
-
-      await service.initDirectory({ sessionId: SESSION_ID, path: '.' });
-      await writeFile(path.join(workspaceRoot, 'tracked.txt'), 'one\ntwo\n');
-      await service.refreshSharedState({ sessionId: SESSION_ID });
-      expect(published.at(-1)).toMatchObject({
-        allChangesDiffStats: { allChange: { add: 1, del: 0 } },
-        persistAllChangesDiffStats: false,
-      });
-
-      const publicationCount = published.length;
-      await service.refreshSharedStateAfterTurn({ sessionId: SESSION_ID });
-
-      expect(published).toHaveLength(publicationCount + 1);
-      expect(published.at(-1)).toMatchObject({
-        allChangesDiffStats: { allChange: { add: 1, del: 0 } },
-        persistAllChangesDiffStats: true,
-      });
+      expect(published.at(-1)?.allChanges).toEqual({});
     });
   });
 
@@ -1353,7 +1322,7 @@ describe('CodeCollabV2Service text RPC boundary', () => {
     });
   });
 
-  it('publishes deleted tracked files in All Changes with a deletion marker', async () => {
+  it('removes deleted tracked files from Files without deriving deletion changes', async () => {
     await withWorkspace(async (workspaceRoot) => {
       await execFileAsync('git', ['-c', 'init.defaultBranch=main', 'init'], { cwd: workspaceRoot });
       await execFileAsync('git', ['config', 'user.email', 'test@example.com'], {
@@ -1375,12 +1344,8 @@ describe('CodeCollabV2Service text RPC boundary', () => {
       await service.refreshSharedState({ sessionId: SESSION_ID });
 
       expect(published.at(-1)?.fileTree).not.toHaveProperty('delete-me.txt');
-      expect(published.at(-1)?.allChanges).toMatchObject({
-        'delete-me.txt': { diff: [0, 2], del: true },
-      });
-      expect(published.at(-1)?.fileIndex).toMatchObject({
-        'delete-me.txt': { kind: 'deleted', change: { diff: [0, 2], del: true } },
-      });
+      expect(published.at(-1)?.allChanges).toEqual({});
+      expect(published.at(-1)?.fileIndex).not.toHaveProperty('delete-me.txt');
     });
   });
 
@@ -1516,14 +1481,13 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
         dbPath: path.join(workspaceRoot, 'diff-store.sqlite3'),
       });
       try {
-        await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-1',
           capturedAtMs: Date.now(),
           events: [{ path: filePath, oldText: 'one\n', newText: 'one\ntwo\n' }],
         });
-        const earliestOld = vi.spyOn(diffStore, 'getEarliestOldSnapshot');
         const service = new CodeCollabV2Service({
           resolveWorkspace: makeResolver(workspaceRoot),
           diffStore,
@@ -1536,7 +1500,6 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
         expect(result.base).toBe('diff-store');
         expect(result.entries).toHaveLength(1);
         expect(result.entries[0]?.status).toBe('ok');
-        expect(earliestOld).toHaveBeenCalledTimes(1);
       } finally {
         await diffStore.close();
       }
@@ -1554,7 +1517,7 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
       });
       try {
         const nowMs = Date.now();
-        await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-cache-bound',
@@ -1566,7 +1529,6 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
             newText: `${workspacePath[0]}x\n`,
           })),
         });
-        const earliestOld = vi.spyOn(diffStore, 'getEarliestOldSnapshot');
         const service = new CodeCollabV2Service({
           resolveWorkspace: makeResolver(workspaceRoot),
           diffStore,
@@ -1590,7 +1552,6 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
         expect(byPath.get('later-b.txt')?.status).toBe('deferred');
         expect(byPath.get('later-c.txt')?.status).toBe('deferred');
         expect(result.truncated).toBe(true);
-        expect(earliestOld).toHaveBeenCalledTimes(paths.length);
       } finally {
         await diffStore.close();
       }
@@ -1609,7 +1570,7 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
       });
       try {
         const nowMs = Date.now();
-        await diffStore.recordTurnDiffs({
+        seedLegacyTurn({
           workspaceRoot,
           ownerSessionId: SESSION_ID,
           turnId: 'turn-large-base',
@@ -1617,7 +1578,6 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
           recordedAtMs: nowMs,
           events: [{ path: filePath, oldText, newText }],
         });
-        const earliestOld = vi.spyOn(diffStore, 'getEarliestOldSnapshot');
         const service = new CodeCollabV2Service({
           resolveWorkspace: makeResolver(workspaceRoot),
           diffStore,
@@ -1635,13 +1595,6 @@ describe('CodeCollabV2Service openAllChangesDiff', () => {
         expect(result.entries).toEqual([
           expect.objectContaining({ status: 'deferred', path: workspacePath }),
         ]);
-        expect(earliestOld).toHaveBeenCalledWith(
-          expect.objectContaining({ path: workspacePath, maxRawBytes: 1024 })
-        );
-        expect(await earliestOld.mock.results[0]?.value).toEqual({
-          status: 'too_large',
-          rawBytes: Buffer.byteLength(oldText),
-        });
       } finally {
         await diffStore.close();
       }

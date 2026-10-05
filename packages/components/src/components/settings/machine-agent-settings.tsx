@@ -21,7 +21,7 @@ import { activeWorkspaceRuntimeAtom, authTokenAtom, type WorkspaceRuntime } from
 import { developerModeEnabledAtom } from '@/atoms/settings';
 import { settingsDialogOpenAtom } from '@/atoms/settings';
 import { sessionMetaCacheAtom } from '@/atoms/doc-meta';
-import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom } from '@/atoms/workspace-context';
+import { currentWorkspaceIdAtom } from '@/atoms/workspace-context';
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import { getAllAgentConfigAtom, getAllProviderSetupsAtom } from '@/atoms/agents';
 import { machineSettingsFilterAtom } from '@/atoms/settings-machine-tab';
@@ -29,7 +29,7 @@ import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
 import { useVisibleLocalProjectsFromMachineIndex } from '@/hooks/use-visible-local-projects';
 import { useMachineActions } from '@/hooks/use-machine-actions';
 import { useMachineFlockAgentConfigsForMachineIds } from '@/hooks/use-machine-flock-agent-configs';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { canDeleteOfflineMachine, canManageAllMachines } from '@/lib/machine-deletion';
 import { mintMachineLifecycleRequestToken } from '@/lib/machine-lifecycle-api';
 import { useOrganization } from '@/hooks/useOrganization';
@@ -187,14 +187,13 @@ function MachineSettingsView({
   const { t } = useTranslation();
   const { openSettings } = useOpenSettings();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
+
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const authToken = useAtomValue(authTokenAtom);
   const developerModeEnabled = useAtomValue(developerModeEnabledAtom);
   const setSettingsDialogOpen = useSetAtom(settingsDialogOpenAtom);
   const sessionMetaCache = useAtomValue(sessionMetaCacheAtom);
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   // Remote daemon restart is brokered through the cloud control plane
   // (lifecycle token mint); machine sharing needs workspace members. Both are
   // cloud-only surfaces hidden on the local platform.
@@ -227,7 +226,7 @@ function MachineSettingsView({
     selectedMachineId
   );
   const selectionFramesRef = useRef<{ first: number; second: number | null } | null>(null);
-  const usesDesktopMachineAccordion = !isMobile && remoteMachinesAvailable;
+  const usesDesktopMachineAccordion = remoteMachinesAvailable;
   const visibleSelectedMachineId = usesDesktopMachineAccordion
     ? desktopExpandedMachineId
     : selectedMachineId;
@@ -398,18 +397,10 @@ function MachineSettingsView({
   );
   const openAgentsForMachine = useCallback(
     (machineId: MachineId) => {
-      if (isMobile && workspaceSlug) {
-        void navigate({
-          to: '/$workspaceName/settings/agents',
-          params: { workspaceName: workspaceSlug },
-          search: { machine: machineId },
-        });
-        return;
-      }
       onSelectedMachineChange(machineId);
       openSettings('agents');
     },
-    [isMobile, navigate, onSelectedMachineChange, openSettings, workspaceSlug]
+    [onSelectedMachineChange, openSettings]
   );
 
   // Remote-capable Machines stays inside the filtered visible pool. A local-only
@@ -436,7 +427,6 @@ function MachineSettingsView({
   );
 
   useEffect(() => {
-    if (isMobile) return;
     if (machines.size === 0) return;
     if (remoteMachinesAvailable && visibleSelectedMachineId === null) return;
     if (nextSelectedMachineId !== visibleSelectedMachineId) {
@@ -447,7 +437,6 @@ function MachineSettingsView({
       }
     }
   }, [
-    isMobile,
     machines,
     nextSelectedMachineId,
     onSelectedMachineChange,
@@ -457,15 +446,8 @@ function MachineSettingsView({
     visibleSelectedMachineId,
   ]);
 
-  const resolvedSelectedMachine: MachineViewMeta | undefined = isMobile
-    ? !remoteMachinesAvailable
-      ? localMachineId
-        ? machines.get(localMachineId)
-        : undefined
-      : selectedMachineId
-        ? machines.get(selectedMachineId)
-        : undefined
-    : remoteMachinesAvailable && visibleSelectedMachineId === null
+  const resolvedSelectedMachine: MachineViewMeta | undefined =
+    remoteMachinesAvailable && visibleSelectedMachineId === null
       ? undefined
       : resolvedDesktopMachine;
   const configsForMachine = useMemo(() => {
@@ -516,7 +498,7 @@ function MachineSettingsView({
     !!resolvedSelectedMachine &&
     !!currentUserId &&
     selectedOwnerUserId === currentUserId;
-  // Probed for the single selected machine (both mobile detail + desktop pills).
+
   const selectedLifecycleCapability = useMachineLifecycleCapability({
     machineId: resolvedSelectedMachine?.id ?? null,
     enabled: selectedCanManageLifecycle && selectedIsOnline,
@@ -580,7 +562,6 @@ function MachineSettingsView({
     },
     [runtime, t]
   );
-
 
   const pingMachine = useCallback(
     (machineId: MachineId): Promise<number> => {
@@ -766,8 +747,8 @@ function MachineSettingsView({
             onRename={actions.renameMachine}
             onDelete={actions.deleteMachine}
             onPing={isOwn && developerModeEnabled ? pingMachine : undefined}
-              onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
-              monitorSnapshot={machineMonitor.snapshot}
+            onRestartDaemon={isOwn && selectedCanRemoteRestart ? restartMachine : undefined}
+            monitorSnapshot={machineMonitor.snapshot}
             monitorState={machineMonitor.state}
             monitorSessionMetas={monitorSessionMetas}
             onOpenMonitorSession={openMonitorSession}

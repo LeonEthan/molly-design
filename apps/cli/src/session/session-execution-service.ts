@@ -2,7 +2,6 @@ import { createCancellationDrain } from './cancellation-drain';
 import { decodeMollyModelOption } from '@molly/shared/embedded-harness';
 import type { SteerOutcomeResult } from '@/agent/agent-client';
 import { readSessionHistory } from '@molly/shared/session-data';
-import { readLatestTurn } from '@molly/shared/session-data';
 import {
   type ACPSessionId,
   ACP_CAPABILITY_CACHE_VERSION,
@@ -60,12 +59,6 @@ import type { ContentBlock } from '@agentclientprotocol/sdk';
 import { sanitizeTitle } from '@/agent/title-generator';
 import type { ModelInfo } from '@molly/shared';
 import { Cause, Data, Effect, Exit, Fiber, type Scope } from 'effect';
-import {
-  captureGitWorkingTreeDiffBaseline,
-  getCurrentCommitHash,
-  type GitRunner,
-  type GitWorkingTreeDiffBaseline,
-} from '@/lib/git/git-diff-stats';
 import { resolveWorkspaceLocalProjectRootPathWithRetry } from '@/lib/local-project-meta';
 import { readTimeoutEnv } from '@/lib/loro/timeout-utils';
 import { ConcurrentQueue } from '@/lib/concurrent-queue';
@@ -75,8 +68,6 @@ import {
   getLocalProjectGitStateAtRootPath,
   resolveLocalProjectBranchAtRootPath,
 } from '@molly/shared/node/local-project';
-import { resolveACPProcessLaunch } from '@/agent/setting';
-import { type AcpLauncher, resolveAcpLauncher } from '@/agent/acp-analytics';
 import { assertEmbeddedHarnessTarget } from '@/agent/embedded-harness-runtime';
 import type { FetchAcpCapabilitiesOptions } from '@/agent/acp-capabilities';
 import { AcpAuthenticationRequiredError } from '@/agent/agent-client';
@@ -87,7 +78,6 @@ import {
 import { formatErrorMessage } from '@/utils/format-error';
 import type { Logger } from '@/utils/logger';
 import { startTraceSpan, traceAsync } from '@/utils/trace-span';
-import { captureCli } from '@/lib/analytics/posthog';
 import type { SessionActivePresencePhase } from '@/lib/loro/session-active-presence';
 import type { SessionConfig } from './types';
 import type { ISession, SessionManager } from './session-manager';
@@ -121,22 +111,11 @@ import {
 
 type FinalizeTurnContext = {
   sessionId: SessionId;
-  session: ISession;
   sessionDoc: SessionDocument;
   turnId: string;
-  baseCommitHash: string | null;
-  turnStartWorkingTreeDiff?: GitWorkingTreeDiffBaseline | null;
   userId: string;
-  project?: ProjectRef;
   isTurnCancelled?: () => boolean;
   abortSignal?: AbortSignal;
-  onAutoPromptStart?: () => void | Promise<void>;
-  onAutoPromptEnd?: () => void | Promise<void>;
-  /**
-   * False when the prompt returned without the agent ever emitting output. The
-   * turn is still finalized (diff stats, PR detection, auto-commit all stay
-   * correct), but it must not be announced as a completed answer.
-   */
   producedOutput?: boolean;
 };
 
@@ -178,39 +157,7 @@ type TurnFinalizationEffects = {
     turnId?: string,
     options?: { settleContextCompactionAsFailed?: boolean }
   ) => Promise<void>;
-  persistCodeCollabTurnDiffs?: (sessionId: SessionId, turnId: string) => Promise<boolean>;
   flushSessionUsage: (sessionId: SessionId) => Promise<void>;
-  syncSessionBranchName: (sessionId: SessionId, session: ISession) => Promise<string | null>;
-  updateSessionDiffStats: (
-    sessionId: SessionId,
-    session: ISession,
-    options: {
-      turnId: string;
-      baseCommitHash?: string;
-      turnStartWorkingTreeDiff?: GitWorkingTreeDiffBaseline | null;
-      preferredBaseBranch?: string;
-      skipHistoryFileDiff?: boolean;
-    }
-  ) => Promise<SessionHistoryInput['fileDiff']>;
-  detectAndAssociatePR: (ctx: {
-    sessionId: SessionId;
-    session: ISession;
-    sessionDoc: SessionDocument;
-    project?: ProjectRef;
-    branchName?: string | null;
-  }) => Promise<{ readonly baseBranch: string } | null>;
-  autoCommitAndPushForPR: (ctx: {
-    sessionId: SessionId;
-    session: ISession;
-    sessionDoc: SessionDocument;
-    project?: ProjectRef;
-    preferredBaseBranch?: string;
-    userId: string;
-    isTurnCancelled?: () => boolean;
-    abortSignal?: AbortSignal;
-    onAutoPromptStart?: () => void | Promise<void>;
-    onAutoPromptEnd?: () => void | Promise<void>;
-  }) => Promise<void>;
   refreshCodeCollabSharedState?: (sessionId: SessionId) => Promise<void>;
   notifySessionCompleted: (
     sessionId: SessionId,
@@ -270,12 +217,8 @@ type TurnRuntimeState = {
   userTurnId?: string;
   invocation?: TurnInvocation;
   session?: ISession;
-  project?: ProjectRef;
-  baseCommitHash?: string | null;
-  turnStartWorkingTreeDiff?: GitWorkingTreeDiffBaseline | null;
   promptStarted: boolean;
   promptInFlight: boolean;
-  autoPromptInFlight: boolean;
   promptFailed: boolean;
   finalizeStarted: boolean;
   finalizeCompleted: boolean;
@@ -321,7 +264,6 @@ export type SessionExecutionSnapshot = {
   /** True while edit-and-resend owns the durable history tail. */
   hasRewriteBarrier: boolean;
   /** True while post-turn automation owns an ACP prompt. */
-  hasActiveAutomation: boolean;
 };
 
 type TurnCancellationFinalizerOptions = {
@@ -348,18 +290,9 @@ type VisibleSessionTurnContext = {
     terminateSession?: boolean;
   }) => Effect.Effect<void, unknown, never>;
   openAssistantEntry: (options?: {
-    analytics?: VisibleSessionTurnAnalytics;
     unhandledErrorContext?: VisibleSessionTurnUnhandledErrorContext;
   }) => Effect.Effect<void, unknown, never>;
   prompt: (promptBlocks: ContentBlock[]) => Effect.Effect<void, unknown, never>;
-};
-
-type VisibleSessionTurnAnalytics = {
-  dispatchMode: 'start' | 'continue';
-  inputBlockCount: number;
-  cliType?: AgentConfigCliType;
-  agentType?: string;
-  dispatchSource?: SessionDispatchSource;
 };
 
 type VisibleSessionTurnUnhandledErrorContext = {
@@ -597,14 +530,6 @@ export type SessionExecutionServiceDeps = {
     customAcp?: CustomAcpLaunchSpec,
     runtimeOverrides?: BuiltinRuntimeOverrides
   ) => Promise<void>;
-  maybeRenameSessionBranchFromPrompt: (
-    sessionId: SessionId,
-    session: ISession,
-    cliType: AgentConfigCliType,
-    agentType: string,
-    prompt: string,
-    env?: Record<string, string>
-  ) => Promise<void>;
   processMessageQueue: (sessionId: SessionId) => Promise<void>;
   syncLiveActivitySummary?: (userId: string) => Promise<void>;
   collectMachineResources: () => Promise<MachineResourceInfo>;
@@ -734,13 +659,6 @@ const summarizeAcpAuthMethod = (method: unknown): MachineAcpAuthMethodSummary =>
   };
 };
 
-type TurnAnalyticsState = {
-  turnId: string;
-  startedAtMs: number;
-  dispatchMode: 'start' | 'continue';
-  hasReplayPrompt: boolean;
-};
-
 export class SessionExecutionService {
   /** UI, MCP and durable delivery share the same explicit catalog projection. */
   private resolveEmbeddedRunSelection(config: SessionChatRequestValidated['acpSessionConfig']) {
@@ -777,14 +695,6 @@ export class SessionExecutionService {
   // this is pure per-session serialization, matching the old hand-rolled lock.
   private readonly steerMutationQueue = new ConcurrentQueue<SessionId>(Number.POSITIVE_INFINITY);
   private readonly steerStatusQueue = new ConcurrentQueue<SessionId>(Number.POSITIVE_INFINITY);
-  // Analytics-only state (spec §5b). Tracks per-turn timing + the last status
-  // we reported so status_changed can carry from→to + dwell time. Never read by
-  // product logic; kept here so capture stays side-effect-only.
-  private readonly turnAnalyticsBySession = new Map<SessionId, TurnAnalyticsState>();
-  private readonly lastStatusBySession = new Map<
-    SessionId,
-    { status: string; stage?: string; atMs: number }
-  >();
   // Coalesce reads of the existing embedded catalog, with independent cancellation.
   private readonly inFlightAcpRefresh = new Map<string, InFlightAcpRefreshEntry>();
 
@@ -906,7 +816,6 @@ export class SessionExecutionService {
     try {
       this.deps.setSessionActivePresencePhase(sessionId, 'thinking');
       await sessionDoc.setStatus(SessionStatusFactory.running());
-      this.captureStatusChanged(sessionId, 'running', undefined, triggerReason);
     } catch (error) {
       this.deps.logger.warn(
         `[${sessionId}] Failed to mark prompt working: ${formatErrorMessage(error)}`
@@ -928,7 +837,6 @@ export class SessionExecutionService {
   ): Promise<void> {
     try {
       await sessionDoc.setStatus(SessionStatusFactory.idle());
-      this.captureStatusChanged(sessionId, 'idle', undefined, triggerReason);
     } catch (error) {
       this.deps.logger.warn(
         `[${sessionId}] Failed to mark prompt idle: ${formatErrorMessage(error)}`
@@ -940,205 +848,6 @@ export class SessionExecutionService {
       triggerReason,
       status: 'idle',
     });
-  }
-
-  // --- Analytics helpers (spec §5b) -----------------------------------------
-  // All side-effect-only: captureCli is a no-op when analytics is disabled and
-  // never throws, so call sites do not need to guard.
-
-  /**
-   * Resolve the launcher family (npx/uvx/local) for analytics without spawning.
-   * Best-effort: returns 'local' if the launch cannot be resolved (e.g. unknown
-   * registry agent) so analytics never throws.
-   */
-  private resolveLauncherForAgent(
-    cliType: AgentConfigCliType,
-    agentType: string,
-    customAcp?: CustomAcpLaunchSpec
-  ): AcpLauncher | undefined {
-    if (cliType === 'builtin') {
-      return 'local';
-    }
-    try {
-      const launch = resolveACPProcessLaunch({ cliType, agentType, customAcp });
-      return resolveAcpLauncher(launch.command);
-    } catch {
-      return undefined;
-    }
-  }
-
-  private baseSessionAnalyticsProps(
-    sessionId: SessionId,
-    extra?: { cliType?: AgentConfigCliType; agentType?: string }
-  ): Record<string, unknown> {
-    return {
-      session_id: sessionId,
-      workspace_id: this.deps.workspaceId,
-      ...(extra?.cliType ? { cli_type: extra.cliType } : {}),
-      ...(extra?.agentType ? { agent_type: extra.agentType } : {}),
-    };
-  }
-
-  /**
-   * session/status_changed (spec §5b, P0). Reports from→to with dwell time in
-   * the previous state. Deduped: identical consecutive (status, stage) pairs are
-   * dropped so high-frequency activity sub-states do not spam events.
-   */
-  private captureStatusChanged(
-    sessionId: SessionId,
-    toStatus: string,
-    toStage: string | undefined,
-    triggerReason: string
-  ): void {
-    const previous = this.lastStatusBySession.get(sessionId);
-    if (previous && previous.status === toStatus && previous.stage === toStage) {
-      return;
-    }
-    const nowMs = getServerNow();
-    captureCli(
-      'session/status_changed',
-      {
-        ...this.baseSessionAnalyticsProps(sessionId),
-        ...(previous ? { from_status: previous.status } : {}),
-        to_status: toStatus,
-        ...(toStage ? { to_stage: toStage } : {}),
-        trigger_reason: triggerReason,
-        transition_at_ms: nowMs,
-        ...(previous ? { duration_in_previous_state_ms: nowMs - previous.atMs } : {}),
-      },
-      { tier: 'A' }
-    );
-    this.lastStatusBySession.set(sessionId, { status: toStatus, stage: toStage, atMs: nowMs });
-  }
-
-  /** session/turn_started (spec §5b, P0). */
-  private captureTurnStarted(
-    sessionId: SessionId,
-    turnId: string,
-    args: {
-      dispatchMode: 'start' | 'continue';
-      hasReplayPrompt: boolean;
-      inputBlockCount: number;
-      dispatchSource?: SessionDispatchSource;
-      extra?: { cliType?: AgentConfigCliType; agentType?: string };
-    }
-  ): void {
-    this.turnAnalyticsBySession.set(sessionId, {
-      turnId,
-      startedAtMs: getServerNow(),
-      dispatchMode: args.dispatchMode,
-      hasReplayPrompt: args.hasReplayPrompt,
-    });
-    captureCli(
-      'session/turn_started',
-      {
-        ...this.baseSessionAnalyticsProps(sessionId, args.extra),
-        turn_id: turnId,
-        dispatch_mode: args.dispatchMode,
-        dispatch_source: args.dispatchSource ?? 'crdt',
-        has_replay_prompt: args.hasReplayPrompt,
-        input_block_count: args.inputBlockCount,
-        started_at_ms: getServerNow(),
-      },
-      { tier: 'A' }
-    );
-  }
-
-  /**
-   * session/turn_completed (spec §5b, P0). Reads PR/diff aggregates from the
-   * session doc after finalize so we emit one aggregated event per turn instead
-   * of per-tool-call (spec §2.5).
-   */
-  private async captureTurnCompleted(
-    sessionId: SessionId,
-    sessionDoc: SessionDocument,
-    turnId: string
-  ): Promise<void> {
-    try {
-      const analytics = this.turnAnalyticsBySession.get(sessionId);
-      const totalTurnMs =
-        analytics && analytics.turnId === turnId
-          ? getServerNow() - analytics.startedAtMs
-          : undefined;
-
-      let prDetected = false;
-      let diffFileCount = 0;
-      try {
-        const meta = await sessionDoc.getMetaState();
-        prDetected = (meta?.pullRequests ?? []).length > 0;
-      } catch {
-        // Best-effort: missing meta should not break turn completion.
-      }
-      try {
-        const latestAssistant = await readLatestTurn(sessionDoc.sessionData.history, 'assistant');
-        diffFileCount = Array.isArray(latestAssistant?.fileDiff)
-          ? latestAssistant.fileDiff.length
-          : 0;
-      } catch {
-        // Best-effort.
-      }
-
-      captureCli(
-        'session/turn_completed',
-        {
-          ...this.baseSessionAnalyticsProps(sessionId),
-          turn_id: turnId,
-          ...(typeof totalTurnMs === 'number' ? { total_turn_ms: totalTurnMs } : {}),
-          // TODO(analytics): permission_wait_ms is accumulated in MessageHandler's
-          // SessionTransientStore (state.permissionWaitMs); plumb it here to populate it.
-          pr_detected: prDetected,
-          diff_file_count: diffFileCount,
-          ...(analytics?.dispatchMode ? { dispatch_mode: analytics.dispatchMode } : {}),
-        },
-        { tier: 'A' }
-      );
-    } catch {
-      // Analytics must never break turn finalization.
-    } finally {
-      this.turnAnalyticsBySession.delete(sessionId);
-    }
-  }
-
-  /** session/turn_failed (spec §5b, P0). reason = ACP ChatFailedReason. */
-  private captureTurnFailed(
-    sessionId: SessionId,
-    turnId: string | undefined,
-    reason: ChatFailedReason,
-    isAcpError: boolean
-  ): void {
-    const analytics = turnId ? this.turnAnalyticsBySession.get(sessionId) : undefined;
-    const totalTurnMs =
-      analytics && analytics.turnId === turnId ? getServerNow() - analytics.startedAtMs : undefined;
-    captureCli(
-      'session/turn_failed',
-      {
-        ...this.baseSessionAnalyticsProps(sessionId),
-        ...(turnId ? { turn_id: turnId } : {}),
-        chat_failed_reason: reason,
-        is_acp_error: isAcpError,
-        ...(typeof totalTurnMs === 'number' ? { total_turn_ms: totalTurnMs } : {}),
-      },
-      { tier: 'A' }
-    );
-    if (turnId && analytics?.turnId === turnId) {
-      this.turnAnalyticsBySession.delete(sessionId);
-    }
-  }
-
-  private captureDuplicateDispatchPrevented(
-    sessionId: SessionId,
-    existingTurnId: string,
-    userTurnId: string | undefined
-  ): void {
-    captureCli(
-      'duplicate_dispatch_prevented',
-      {
-        ...this.baseSessionAnalyticsProps(sessionId),
-        existing_turn_id: existingTurnId,
-        ...(userTurnId ? { user_turn_id: userTurnId } : {}),
-      },
-      { tier: 'C' }
-    );
   }
 
   getExecutionSnapshot(sessionId: SessionId): SessionExecutionSnapshot {
@@ -1154,7 +863,6 @@ export class SessionExecutionService {
       hasBlockingPendingCreate: Boolean(runtime?.pendingSession || (runtime && pendingSession)),
       hasReusableSession: Boolean(this.deps.sessionManager.getSession(sessionId)),
       hasRewriteBarrier: this.rewriteBarrierSessions.has(sessionId),
-      hasActiveAutomation: Boolean(runtime?.autoPromptInFlight),
     };
   }
 
@@ -1900,7 +1608,6 @@ export class SessionExecutionService {
       session: options.session,
       promptStarted: false,
       promptInFlight: false,
-      autoPromptInFlight: false,
       promptFailed: false,
       finalizeStarted: false,
       finalizeCompleted: false,
@@ -1957,11 +1664,6 @@ export class SessionExecutionService {
     const releasedOwner = runtime?.turnId === turnId;
     if (releasedOwner) {
       this.turnRuntimeBySession.delete(sessionId);
-    }
-    // Safety net: drop per-turn analytics state if the turn ended without a
-    // completed/failed capture (e.g. cancellation), so the map cannot leak.
-    if (releasedOwner || this.turnAnalyticsBySession.get(sessionId)?.turnId === turnId) {
-      this.turnAnalyticsBySession.delete(sessionId);
     }
     this.clearCurrentTurn(sessionId, turnId);
     this.resolveTurnReleaseWaiters(sessionId, turnId);
@@ -2080,7 +1782,7 @@ export class SessionExecutionService {
       // Native evidence remains owned even after its bounded waiter timed out.
       void runtime.stopClosure?.catch(() => {});
     }
-    if (stage === 'preparing' || (stage === 'finalizing' && !runtime.autoPromptInFlight)) return;
+    if (stage === 'preparing' || stage === 'finalizing') return;
     void runtimeSession.agentClient
       .cancel(runtimeSession.acpSessionId)
       .then(() => {
@@ -2352,7 +2054,7 @@ export class SessionExecutionService {
             await self.deps.turnFinalization.finalizeACPState(options.sessionId, options.turnId, {
               settleContextCompactionAsFailed: true,
             });
-            await self.persistTurnDiffsAndFlushUsage(options.sessionId, options.turnId);
+            await self.flushTurnUsage(options.sessionId, options.turnId);
           })
         );
       }
@@ -2418,42 +2120,13 @@ export class SessionExecutionService {
     code?: string;
     message: string;
   }): Promise<void> {
-    // turn_failed (spec §5b, P0). These are known, pre-prompt halts — not ACP
-    // protocol errors — so is_acp_error=false.
-    this.captureTurnFailed(
-      options.sessionId,
-      this.currentTurnBySession.get(options.sessionId),
-      options.reason,
-      false
-    );
     // session/restore_failed & session/init_failed (spec §5b, P0): the two known
     // halts that map to dedicated lifecycle events.
-    if (options.reason === 'session_restore_failed') {
-      captureCli(
-        'session/restore_failed',
-        {
-          ...this.baseSessionAnalyticsProps(options.sessionId),
-          reason: options.reason,
-        },
-        { tier: 'A' }
-      );
-    } else if (options.reason === 'session_init_failed') {
-      captureCli(
-        'session/init_failed',
-        {
-          ...this.baseSessionAnalyticsProps(options.sessionId),
-          failure_stage: 'session_init',
-          chat_failed_reason: options.reason,
-        },
-        { tier: 'A' }
-      );
-    }
     await this.deps.recordChatFailure(options.sessionDoc, options.reason, options.message);
     if (options.userTurnId) {
       await this.markTurnFailed(options.sessionId, options.sessionDoc, options.userTurnId);
     }
     await options.sessionDoc.setStatus(SessionStatusFactory.idle());
-    this.captureStatusChanged(options.sessionId, 'idle', undefined, 'turn_failed');
   }
 
   private formatMemoryPressureFailureMessage(result: MemoryPressureEvictionResult): string {
@@ -2721,10 +2394,6 @@ export class SessionExecutionService {
           options?.providerPromptSettled === true || acpError !== null || providerDisconnected,
       }
     );
-    await this.persistCodeCollabTurnDiffsAfterACPFinalization(
-      sessionId,
-      this.currentTurnBySession.get(sessionId)
-    );
     await this.deps.turnFinalization.flushSessionUsage(sessionId);
 
     if (error) {
@@ -2738,13 +2407,6 @@ export class SessionExecutionService {
 
         this.deps.logger.warn(
           `[${sessionId}] ACP error occurred (code=${acpError.code} reason=${failureReason}): ${userMessage}`
-        );
-
-        this.captureTurnFailed(
-          sessionId,
-          this.currentTurnBySession.get(sessionId),
-          failureReason,
-          true
         );
         await this.deps.recordChatFailure(sessionDoc, failureReason, recordedMessage);
 
@@ -2771,13 +2433,6 @@ export class SessionExecutionService {
       } else if (providerDisconnected) {
         this.deps.logger.warn(
           `[${sessionId}] Agent disconnected during chat, terminating session for clean restart`
-        );
-
-        this.captureTurnFailed(
-          sessionId,
-          this.currentTurnBySession.get(sessionId),
-          'agent_disconnected',
-          true
         );
         await this.deps.recordChatFailure(
           sessionDoc,
@@ -2818,24 +2473,6 @@ export class SessionExecutionService {
     }
   }
 
-  private async persistCodeCollabTurnDiffsAfterACPFinalization(
-    sessionId: SessionId,
-    turnId: string | undefined
-  ): Promise<boolean> {
-    const persist = this.deps.turnFinalization.persistCodeCollabTurnDiffs;
-    if (!persist || !turnId) {
-      return false;
-    }
-    try {
-      return await persist(sessionId, turnId);
-    } catch (error) {
-      this.deps.logger.error(
-        `[${sessionId}] Failed to persist Code Collab v2 turn diff evidence; not falling back to git history fileDiff: ${formatErrorMessage(error)}`
-      );
-      return true;
-    }
-  }
-
   private async runTurnFinalizationStage<T>(
     sessionId: SessionId,
     turnId: string,
@@ -2865,27 +2502,17 @@ export class SessionExecutionService {
     }
   }
 
-  private async persistTurnDiffsAndFlushUsage(
-    sessionId: SessionId,
-    turnId: string
-  ): Promise<boolean> {
-    const codeCollabHistoryFileDiffPersisted = await this.runTurnFinalizationStage(
-      sessionId,
-      turnId,
-      'persistCodeCollabTurnDiffs',
-      async () => await this.persistCodeCollabTurnDiffsAfterACPFinalization(sessionId, turnId)
-    );
+  private async flushTurnUsage(sessionId: SessionId, turnId: string): Promise<void> {
     await this.runTurnFinalizationStage(sessionId, turnId, 'flushSessionUsage', async () => {
       await this.deps.turnFinalization.flushSessionUsage(sessionId);
     });
-    return codeCollabHistoryFileDiffPersisted;
   }
 
-  private async finalizeTurnOutput(sessionId: SessionId, turnId: string): Promise<boolean> {
+  private async finalizeTurnOutput(sessionId: SessionId, turnId: string): Promise<void> {
     await this.runTurnFinalizationStage(sessionId, turnId, 'finalizeACPState', async () => {
       await this.deps.turnFinalization.finalizeACPState(sessionId, turnId);
     });
-    return await this.persistTurnDiffsAndFlushUsage(sessionId, turnId);
+    await this.flushTurnUsage(sessionId, turnId);
   }
 
   private async finalizeYieldedTurnOutput(
@@ -2898,7 +2525,7 @@ export class SessionExecutionService {
     });
     runtime.yieldedFinalization = runtime.yieldedFinalization
       .then(async () => {
-        await this.persistTurnDiffsAndFlushUsage(sessionId, turnId);
+        await this.flushTurnUsage(sessionId, turnId);
       })
       .catch((error: unknown) => {
         this.deps.logger.error(
@@ -3005,16 +2632,7 @@ export class SessionExecutionService {
   }
 
   private async finalizeTurnWork(ctx: FinalizeTurnContext): Promise<void> {
-    const {
-      sessionId,
-      session,
-      sessionDoc,
-      turnId,
-      baseCommitHash,
-      turnStartWorkingTreeDiff,
-      userId,
-      project,
-    } = ctx;
+    const { sessionId, sessionDoc, turnId, userId } = ctx;
     const isTurnCancelled = ctx.isTurnCancelled ?? (() => false);
     const stopIfTurnCancelled = async (stage: string): Promise<boolean> => {
       if (!isTurnCancelled() && !ctx.abortSignal?.aborted) {
@@ -3028,7 +2646,7 @@ export class SessionExecutionService {
       return true;
     };
 
-    const codeCollabHistoryFileDiffPersisted = await this.finalizeTurnOutput(sessionId, turnId);
+    await this.finalizeTurnOutput(sessionId, turnId);
 
     const userTurnId = this.turnRuntimeBySession.get(sessionId)?.userTurnId;
 
@@ -3063,101 +2681,6 @@ export class SessionExecutionService {
           : { status: 'collect' },
     });
 
-    const githubProject = resolveProjectGitHubRepo(project);
-    let branchName: string | null = null;
-    let preferredStatsBaseBranch = project?.branch;
-    if (project?.kind === 'local') {
-      preferredStatsBaseBranch =
-        (await sessionDoc.getMetaState())?.baseBranch?.trim() || preferredStatsBaseBranch;
-    }
-
-    if (githubProject) {
-      branchName = await this.runTurnFinalizationStage(
-        sessionId,
-        turnId,
-        'syncSessionBranchName',
-        async () => await this.deps.turnFinalization.syncSessionBranchName(sessionId, session)
-      );
-
-      if (await stopIfTurnCancelled('branch synchronization')) {
-        return;
-      }
-
-      try {
-        const detectedPr = await this.runTurnFinalizationStage(
-          sessionId,
-          turnId,
-          'detectAndAssociatePR',
-          async () =>
-            await this.deps.turnFinalization.detectAndAssociatePR({
-              sessionId,
-              session,
-              sessionDoc,
-              project,
-              branchName,
-            })
-        );
-        preferredStatsBaseBranch = detectedPr?.baseBranch ?? preferredStatsBaseBranch;
-      } catch (error) {
-        this.deps.logger.debug(`[${sessionId}] PR detection failed: ${formatErrorMessage(error)}`);
-      }
-
-      if (await stopIfTurnCancelled('PR detection')) {
-        return;
-      }
-
-      // No post-turn PR-poll hook: the reconciler's activity rule
-      // (`lastMessageAt` within 10 min → high lane) already keeps this
-      // session on the fast refresh cadence after a turn ends
-      // (specs/pr-status-reconciler.md).
-
-      await this.runTurnFinalizationStage(sessionId, turnId, 'updateSessionDiffStats', async () => {
-        await this.deps.turnFinalization.updateSessionDiffStats(sessionId, session, {
-          turnId,
-          baseCommitHash: baseCommitHash ?? undefined,
-          turnStartWorkingTreeDiff,
-          preferredBaseBranch: preferredStatsBaseBranch,
-          skipHistoryFileDiff: codeCollabHistoryFileDiffPersisted,
-        });
-      });
-
-      if (await stopIfTurnCancelled('diff recording')) {
-        return;
-      }
-    }
-
-    if (githubProject) {
-      try {
-        await this.runTurnFinalizationStage(
-          sessionId,
-          turnId,
-          'autoCommitAndPushForPR',
-          async () => {
-            await this.deps.turnFinalization.autoCommitAndPushForPR({
-              sessionId,
-              session,
-              sessionDoc,
-              project,
-              preferredBaseBranch: preferredStatsBaseBranch,
-              userId,
-              isTurnCancelled,
-              abortSignal: ctx.abortSignal,
-              onAutoPromptStart: ctx.onAutoPromptStart,
-              onAutoPromptEnd: ctx.onAutoPromptEnd,
-            });
-          }
-        );
-      } catch (error) {
-        this.deps.logger.error(
-          `[${sessionId}] auto-commit-push failed: ${formatErrorMessage(error)}`
-        );
-      }
-
-      if (await stopIfTurnCancelled('auto-commit/push')) {
-        return;
-      }
-    }
-
     await this.runTurnFinalizationStage(
       sessionId,
       turnId,
@@ -3174,9 +2697,6 @@ export class SessionExecutionService {
         await sessionDoc.waitUntilSynced();
       }
     );
-    await this.runTurnFinalizationStage(sessionId, turnId, 'captureTurnCompleted', async () => {
-      await this.captureTurnCompleted(sessionId, sessionDoc, turnId);
-    });
     this.deps.logger.info(`Session chat completed: ${sessionId}`);
 
     try {
@@ -3242,7 +2762,6 @@ export class SessionExecutionService {
     const existingRuntime = this.turnRuntimeBySession.get(sessionId);
     if (existingRuntime) {
       releaseConflict();
-      this.captureDuplicateDispatchPrevented(sessionId, existingRuntime.turnId, userTurnId);
       this.deps.logger.warn(
         `[${sessionId}] Prevented duplicate visible turn dispatch while turn ${existingRuntime.turnId} is active`
       );
@@ -3382,7 +2901,6 @@ export class SessionExecutionService {
               });
 
             const openAssistantEntry = (openOptions?: {
-              analytics?: VisibleSessionTurnAnalytics;
               unhandledErrorContext?: VisibleSessionTurnUnhandledErrorContext;
             }): Effect.Effect<void, unknown, never> =>
               Effect.gen(function* () {
@@ -3414,20 +2932,6 @@ export class SessionExecutionService {
                   return undefined;
                 }
                 assistantEntryOpened = true;
-
-                const analytics = openOptions?.analytics;
-                if (analytics) {
-                  self.captureTurnStarted(sessionId, runtime.turnId, {
-                    dispatchMode: analytics.dispatchMode,
-                    hasReplayPrompt: false,
-                    inputBlockCount: analytics.inputBlockCount,
-                    dispatchSource: analytics.dispatchSource,
-                    extra: {
-                      ...(analytics.cliType ? { cliType: analytics.cliType } : {}),
-                      ...(analytics.agentType ? { agentType: analytics.agentType } : {}),
-                    },
-                  });
-                }
 
                 if (userTurnId) {
                   yield* self.tryPromise(() =>
@@ -4102,7 +3606,6 @@ export class SessionExecutionService {
       `[${options.sessionId}] Turn ${options.turnId} completed without any agent output; ` +
         'recording it as a failed turn instead of a silent completion'
     );
-    this.captureTurnFailed(options.sessionId, options.turnId, 'agent_no_output', false);
     await this.deps.recordChatFailure(
       options.sessionDoc,
       'agent_no_output',
@@ -4266,18 +3769,6 @@ export class SessionExecutionService {
       describe: (error) =>
         `[${sessionId}] Failed to process chat request: ${formatErrorMessage(error)}`,
     };
-    const turnAnalytics: VisibleSessionTurnAnalytics = {
-      dispatchMode: 'continue',
-      inputBlockCount: normalizeSessionInputBlocks(
-        acpSessionConfig.inputBlocks,
-        acpSessionConfig.prompt
-      ).length,
-      ...(acpSessionConfig.cliType ? { cliType: acpSessionConfig.cliType } : {}),
-      ...(acpSessionConfig.agentType ? { agentType: acpSessionConfig.agentType } : {}),
-      ...(dispatchOptions?.dispatchSource
-        ? { dispatchSource: dispatchOptions.dispatchSource }
-        : {}),
-    };
 
     const restoreMissingSession = (
       ctx: VisibleSessionTurnContext
@@ -4394,7 +3885,6 @@ export class SessionExecutionService {
         yield* self.tryPromise(() =>
           sessionDoc.setStatus(SessionStatusFactory.initializing('resuming'))
         );
-        self.captureStatusChanged(sessionId, 'initializing', 'resuming', 'session_restore');
         self.deps.logger.debug(
           `[${sessionId}] Resuming status published; preparing session restore (resumeSource=${resumeSource} resumeSessionId=${resumeSessionId ?? 'none'})`
         );
@@ -4629,8 +4119,6 @@ export class SessionExecutionService {
         const { turnId, runtime, abortIfCancelled, openAssistantEntry, prompt } = ctx;
         let activeSession = readySession;
         let staleAcpPromptRecoveryAttempted = false;
-        let baseCommitHash: string | null = null;
-        let turnStartWorkingTreeDiff: GitWorkingTreeDiffBaseline | null = null;
 
         const bindReadySession = (nextSession: ISession): void => {
           activeSession = nextSession;
@@ -4732,35 +4220,6 @@ export class SessionExecutionService {
             )
           );
 
-        const capturePromptBaseline = (
-          targetSession: ISession,
-          triggerReason: 'initial' | 'stale_acp_recovery'
-        ): Effect.Effect<void, unknown, never> =>
-          Effect.gen(function* () {
-            const workdir = targetSession.getWorkdir();
-            const runGit: GitRunner = (args) => targetSession.exec('git', args, workdir, false);
-            baseCommitHash = yield* self.tryPromise(() =>
-              traceAsync(
-                self.deps.logger,
-                'execution.get_base_commit_hash',
-                { sessionId, turnId, triggerReason },
-                async () => await getCurrentCommitHash(runGit)
-              )
-            );
-            turnStartWorkingTreeDiff = yield* self.tryPromise(() =>
-              traceAsync(
-                self.deps.logger,
-                'execution.capture_worktree_diff_baseline',
-                { sessionId, turnId, triggerReason },
-                async () => await captureGitWorkingTreeDiffBaseline(runGit)
-              )
-            );
-            runtime.project = project;
-            runtime.baseCommitHash = baseCommitHash;
-            runtime.turnStartWorkingTreeDiff = turnStartWorkingTreeDiff;
-            return undefined;
-          });
-
         // A disposed ACP JSON-RPC connection means the adapter rejected the prompt before it
         // could own the turn. Retry only once, and only while MessageHandler reports no ACP
         // output for this assistant entry, so we never replay a prompt that may have acted.
@@ -4804,7 +4263,6 @@ export class SessionExecutionService {
                 yield* acpReplaySuppression.release;
                 yield* applyPromptConfig(restoredSession, 'stale_acp_recovery');
                 yield* maybeRecordHistoryReplayNotice();
-                yield* capturePromptBaseline(restoredSession, 'stale_acp_recovery');
 
                 let retryPromptBlocks = promptBlocks;
                 if (usedHistoryReplay && !hadHistoryReplay && replayPromptResult?.promptText) {
@@ -4824,7 +4282,6 @@ export class SessionExecutionService {
         yield* acpReplaySuppression.release;
         self.deps.setSessionActivePresencePhase(sessionId, 'thinking');
         yield* self.tryPromise(() => sessionDoc.setStatus(SessionStatusFactory.running()));
-        self.captureStatusChanged(sessionId, 'running', undefined, 'chat_dispatch');
         self.scheduleLiveActivitySummarySync(userId, {
           sessionId,
           triggerReason: 'chat_dispatch',
@@ -4840,10 +4297,6 @@ export class SessionExecutionService {
         yield* abortIfCancelled();
 
         const promptBlocks = yield* self.tryPromise(() => promptBlocksPromise);
-
-        yield* abortIfCancelled();
-
-        yield* capturePromptBaseline(activeSession, 'initial');
 
         yield* abortIfCancelled();
 
@@ -4886,34 +4339,12 @@ export class SessionExecutionService {
             async () =>
               await self.finalizeTurn({
                 sessionId,
-                session: activeSession,
                 sessionDoc,
                 turnId: completedTurnId,
-                baseCommitHash,
-                turnStartWorkingTreeDiff,
                 userId: completedRequesterUserId,
-                project,
                 producedOutput,
                 isTurnCancelled: () => self.isTurnCancelled(sessionId, completedTurnId),
                 abortSignal: signal,
-                onAutoPromptStart: async () => {
-                  runtime.autoPromptInFlight = true;
-                  await self.markPromptWorkingStarted(
-                    sessionId,
-                    sessionDoc,
-                    completedRequesterUserId,
-                    'auto_prompt_started'
-                  );
-                },
-                onAutoPromptEnd: async () => {
-                  runtime.autoPromptInFlight = false;
-                  await self.markPromptWorkingEnded(
-                    sessionId,
-                    sessionDoc,
-                    completedRequesterUserId,
-                    'auto_prompt_completed'
-                  );
-                },
               })
           )
         );
@@ -5022,7 +4453,6 @@ export class SessionExecutionService {
             yield* self.tryPromise(() => sessionDoc.setBaseBranch(incomingProjectBranch));
           }
           yield* ctx.openAssistantEntry({
-            analytics: turnAnalytics,
             unhandledErrorContext: turnErrorContext,
           });
 
@@ -5032,7 +4462,6 @@ export class SessionExecutionService {
           // once the ACP session is ready. Runs after the duplicate-dispatch guard
           // so it can never overwrite a running turn's status.
           yield* self.tryPromise(() => sessionDoc.setStatus(SessionStatusFactory.initializing()));
-          self.captureStatusChanged(sessionId, 'initializing', undefined, 'chat_dispatch');
 
           let readySession = session;
           const dispatchMeta = yield* self.tryPromise(() => sessionDoc.getMetaState());
@@ -5095,9 +4524,6 @@ export class SessionExecutionService {
                     yield* ctx.abortIfCancelled();
                     const errMessage = formatErrorMessage(error);
                     const acpError = parseACPError(error);
-                    // Pending-session startup historically owns the
-                    // session/init_failed analytics bucket. Only auth-required
-                    // needs a distinct reason so the UI can offer sign-in.
                     const mappedFailureReason = acpError
                       ? mapACPErrorToFailureReason(acpError)
                       : null;
@@ -5313,27 +4739,6 @@ export class SessionExecutionService {
     if (fromFeedbackPostId && existingMeta?.fromFeedbackPostId !== fromFeedbackPostId) {
       dispatchStartPatch.fromFeedbackPostId = fromFeedbackPostId;
     }
-    // acp/agent_config_used (spec §8c, P0): enrich session start with the agent
-    // identity + launcher family. Non-PII: only cli_type/agent_type/launcher.
-    captureCli(
-      'acp/agent_config_used',
-      {
-        ...this.baseSessionAnalyticsProps(sessionId, {
-          cliType: acpSessionConfig.cliType,
-          agentType: acpSessionConfig.agentType,
-        }),
-        launcher: this.resolveLauncherForAgent(
-          acpSessionConfig.cliType,
-          acpSessionConfig.agentType,
-          acpSessionConfig.customAcp
-        ),
-        ...(acpSessionConfig.modeId ? { mode_id: acpSessionConfig.modeId } : {}),
-        ...(acpSessionConfig.modelId ? { model_id: acpSessionConfig.modelId } : {}),
-        is_resume: !!acpSessionConfig.resume,
-      },
-      { tier: 'A' }
-    );
-    const startSessionStartedAtMs = getServerNow();
 
     if (sessionConfig.agentType !== 'molly')
       void this.deps.maybeGenerateAndStoreSessionTitle(
@@ -5353,16 +4758,6 @@ export class SessionExecutionService {
       onUnhandledError: async () => {
         await self.deps.sessionManager.setSessionError(sessionId, 'execution_error');
       },
-    };
-    const turnAnalytics: VisibleSessionTurnAnalytics = {
-      dispatchMode: 'start',
-      inputBlockCount: normalizeSessionInputBlocks(agentConfig.inputBlocks, agentConfig.prompt)
-        .length,
-      ...(agentConfig.cliType ? { cliType: agentConfig.cliType } : {}),
-      ...(agentConfig.agentType ? { agentType: agentConfig.agentType } : {}),
-      ...(dispatchOptions?.dispatchSource
-        ? { dispatchSource: dispatchOptions.dispatchSource }
-        : {}),
     };
     return {
       options: {
@@ -5415,10 +4810,8 @@ export class SessionExecutionService {
           }
           yield* self.tryPromise(async () => {
             await sessionDoc.setStatus(SessionStatusFactory.initializing(), dispatchStartPatch);
-            self.captureStatusChanged(sessionId, 'initializing', undefined, 'session_create');
           });
           yield* openAssistantEntry({
-            analytics: turnAnalytics,
             unhandledErrorContext: turnErrorContext,
           });
 
@@ -5454,7 +4847,6 @@ export class SessionExecutionService {
             yield* self.tryPromise(() =>
               sessionDoc.setStatus(SessionStatusFactory.initializing('git-clone'))
             );
-            self.captureStatusChanged(sessionId, 'initializing', 'git-clone', 'session_create');
           }
 
           const normalizedInputBlocks = normalizeSessionInputBlocks(
@@ -5505,27 +4897,11 @@ export class SessionExecutionService {
 
           self.deps.setSessionActivePresencePhase(sessionId, 'thinking');
           yield* self.tryPromise(() => sessionDoc.setStatus(SessionStatusFactory.running()));
-          self.captureStatusChanged(sessionId, 'running', undefined, 'session_create');
           self.scheduleLiveActivitySummarySync(sessionConfig.requesterUserId, {
             sessionId,
             triggerReason: 'session_create',
             status: 'running',
           });
-          // session/init_completed (spec §5b, P0): the create reached a running
-          // ACP session. total_init_ms covers create dispatch → process ready.
-          captureCli(
-            'session/init_completed',
-            {
-              ...self.baseSessionAnalyticsProps(sessionId, {
-                cliType: sessionConfig.agentCliType,
-                agentType: sessionConfig.agentType,
-              }),
-              total_init_ms: getServerNow() - startSessionStartedAtMs,
-              git_clone_required: shouldPrepareWorktree,
-              acp_resume_honored: !!session.acpSessionId,
-            },
-            { tier: 'A' }
-          );
           // Register with the ACP idle timer so the process is recycled after inactivity.
           // continueSession() does this at its top, but startSession creates the process
           // independently and would otherwise be invisible to the idle timer.
@@ -5533,16 +4909,6 @@ export class SessionExecutionService {
           self.deps.logger.debug(
             `[${sessionId}] session ready (workdir=${session.getWorkdir()} acpSessionId=${session.acpSessionId ?? 'null'})`
           );
-          if (shouldPrepareWorktree) {
-            void self.deps.maybeRenameSessionBranchFromPrompt(
-              sessionId,
-              session,
-              sessionConfig.agentCliType,
-              sessionConfig.agentType,
-              agentConfig.prompt ?? '',
-              env
-            );
-          }
 
           yield* self.tryPromise((signal) =>
             traceAsync(
@@ -5564,30 +4930,6 @@ export class SessionExecutionService {
                 )
             )
           );
-
-          yield* abortIfCancelled();
-
-          const containerWorkdir = session.getWorkdir();
-          const runGit: GitRunner = (args) => session.exec('git', args, containerWorkdir, false);
-          const baseCommitHash = yield* self.tryPromise(() =>
-            traceAsync(
-              self.deps.logger,
-              'execution.get_base_commit_hash',
-              { sessionId, turnId },
-              async () => await getCurrentCommitHash(runGit)
-            )
-          );
-          const turnStartWorkingTreeDiff = yield* self.tryPromise(() =>
-            traceAsync(
-              self.deps.logger,
-              'execution.capture_worktree_diff_baseline',
-              { sessionId, turnId },
-              async () => await captureGitWorkingTreeDiffBaseline(runGit)
-            )
-          );
-          runtime.project = project;
-          runtime.baseCommitHash = baseCommitHash;
-          runtime.turnStartWorkingTreeDiff = turnStartWorkingTreeDiff;
 
           yield* abortIfCancelled();
 
@@ -5632,34 +4974,12 @@ export class SessionExecutionService {
               async () =>
                 await self.finalizeTurn({
                   sessionId,
-                  session,
                   sessionDoc,
                   turnId: completedTurnId,
-                  baseCommitHash,
-                  turnStartWorkingTreeDiff,
                   userId: completedRequesterUserId,
-                  project,
                   producedOutput,
                   isTurnCancelled: () => self.isTurnCancelled(sessionId, completedTurnId),
                   abortSignal: signal,
-                  onAutoPromptStart: async () => {
-                    runtime.autoPromptInFlight = true;
-                    await self.markPromptWorkingStarted(
-                      sessionId,
-                      sessionDoc,
-                      completedRequesterUserId,
-                      'auto_prompt_started'
-                    );
-                  },
-                  onAutoPromptEnd: async () => {
-                    runtime.autoPromptInFlight = false;
-                    await self.markPromptWorkingEnded(
-                      sessionId,
-                      sessionDoc,
-                      completedRequesterUserId,
-                      'auto_prompt_completed'
-                    );
-                  },
                 })
             )
           );

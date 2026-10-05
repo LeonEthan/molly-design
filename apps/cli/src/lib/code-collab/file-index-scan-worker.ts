@@ -3,15 +3,12 @@ import path from 'node:path';
 
 import {
   buildCodeCollabFileIndexState,
-  type CodeCollabV2AllChangesState,
   type CodeCollabV2FileIndexState,
   type CodeCollabV2FileTreeValue,
 } from '@molly/shared';
 
 import { closeDirectoryQuietly } from './directory-handle';
 import {
-  computeAllChanges,
-  isInsideGitWorktree,
   joinWorkspacePath,
   pathSegmentComparisonKey,
   scanGitDirectoryEntries,
@@ -36,34 +33,18 @@ export type FileIndexFullStateWorkerInput = {
   readonly workspaceRoot: string;
   readonly maxRawTextBytes: number;
   readonly entryBudget: number;
-  readonly preferredBaseBranch?: string;
-  readonly providedAllChanges?: {
-    readonly source: 'diff-store';
-    readonly state: CodeCollabV2AllChangesState;
-    readonly computeMs: number;
-  };
 };
 
-export type FileIndexFullStateWorkerResult =
-  | {
-      readonly kind: 'full-state';
-      readonly status: 'ok';
-      readonly fileTreeEntries: readonly (readonly [string, CodeCollabV2FileTreeValue])[];
-      readonly allChanges: CodeCollabV2AllChangesState;
-      readonly fileIndex: CodeCollabV2FileIndexState;
-      readonly allChangesSource: 'git' | 'diff-store';
-      readonly changedPaths: number;
-      readonly pathCount: number;
-      readonly durationMs: number;
-      readonly scanMs: number;
-      readonly allChangesMs: number;
-      readonly buildMs: number;
-    }
-  | {
-      readonly kind: 'full-state';
-      readonly status: 'needs-provided-all-changes';
-      readonly reason: 'not-git';
-    };
+export type FileIndexFullStateWorkerResult = {
+  readonly kind: 'full-state';
+  readonly status: 'ok';
+  readonly fileTreeEntries: readonly (readonly [string, CodeCollabV2FileTreeValue])[];
+  readonly fileIndex: CodeCollabV2FileIndexState;
+  readonly pathCount: number;
+  readonly durationMs: number;
+  readonly scanMs: number;
+  readonly buildMs: number;
+};
 
 export type FileIndexWorkerInput = FileIndexScanWorkerInput | FileIndexFullStateWorkerInput;
 export type FileIndexWorkerResult = FileIndexScanWorkerResult | FileIndexFullStateWorkerResult;
@@ -91,15 +72,6 @@ async function computeFullFileIndexState(
   input: FileIndexFullStateWorkerInput
 ): Promise<FileIndexFullStateWorkerResult> {
   const startedAtMs = Date.now();
-  const allChangesResult = await resolveFullStateAllChanges(input);
-  if (allChangesResult.status !== 'ok') {
-    return {
-      kind: 'full-state',
-      status: 'needs-provided-all-changes',
-      reason: allChangesResult.reason,
-    };
-  }
-
   const scanStartedAtMs = Date.now();
   const fileTreeEntries = await scanDirectoryEntries({
     directoryAbsolutePath: input.workspaceRoot,
@@ -111,54 +83,17 @@ async function computeFullFileIndexState(
   const scanMs = Date.now() - scanStartedAtMs;
   const fileTree = Object.fromEntries(fileTreeEntries);
   const buildStartedAtMs = Date.now();
-  const fileIndex = buildCodeCollabFileIndexState(fileTree, allChangesResult.allChanges);
+  const fileIndex = buildCodeCollabFileIndexState(fileTree, {});
   const buildMs = Date.now() - buildStartedAtMs;
   return {
     kind: 'full-state',
     status: 'ok',
     fileTreeEntries: [...fileTreeEntries],
-    allChanges: allChangesResult.allChanges,
     fileIndex,
-    allChangesSource: allChangesResult.source,
-    changedPaths: Object.keys(allChangesResult.allChanges).length,
     pathCount: Object.keys(fileIndex).length,
     durationMs: Date.now() - startedAtMs,
     scanMs,
-    allChangesMs: allChangesResult.allChangesMs,
     buildMs,
-  };
-}
-
-async function resolveFullStateAllChanges(input: FileIndexFullStateWorkerInput): Promise<
-  | {
-      readonly status: 'ok';
-      readonly source: 'git' | 'diff-store';
-      readonly allChanges: CodeCollabV2AllChangesState;
-      readonly allChangesMs: number;
-    }
-  | { readonly status: 'needs-provided-all-changes'; readonly reason: 'not-git' }
-> {
-  if (input.providedAllChanges) {
-    return {
-      status: 'ok',
-      source: input.providedAllChanges.source,
-      allChanges: input.providedAllChanges.state,
-      allChangesMs: input.providedAllChanges.computeMs,
-    };
-  }
-  if (!(await isInsideGitWorktree(input.workspaceRoot))) {
-    return { status: 'needs-provided-all-changes', reason: 'not-git' };
-  }
-
-  const allChangesStartedAtMs = Date.now();
-  const allChanges = await computeAllChanges(input.workspaceRoot, {
-    preferredBaseBranch: input.preferredBaseBranch,
-  });
-  return {
-    status: 'ok',
-    source: 'git',
-    allChanges,
-    allChangesMs: Date.now() - allChangesStartedAtMs,
   };
 }
 

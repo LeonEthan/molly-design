@@ -65,7 +65,6 @@ describe('image preview context menu', () => {
   beforeEach(async () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     await initI18n('en');
-    // jsdom ships no matchMedia, which `useIsMobile` subscribes to.
     Object.defineProperty(window, 'matchMedia', {
       configurable: true,
       writable: true,

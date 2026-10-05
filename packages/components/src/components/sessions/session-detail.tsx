@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/ui/button';
 import { useRouter } from '@tanstack/react-router';
 import { useComposerNavigationFocus } from '../chat/submission/use-composer-navigation-focus';
-import { usePostHog } from '@posthog/react';
 import {
   buildPendingUserHistoryEntry,
   getAcpCapabilityCacheKey,
@@ -19,7 +18,6 @@ import {
   type LocalProjectHistoryProvider,
   type LocalProjectId,
   type LocalProjectMeta,
-  type ProjectRef,
   type SessionId,
   type SessionMeta,
   type ConversationMessage,
@@ -47,8 +45,6 @@ import {
   type DraftSessionSendPayload,
 } from '@/components/sessions/draft-session-chat-interface';
 import { SessionMentionDropLayer } from '@/components/sessions/session-mention-drop-layer';
-import { useIsMobile } from '@/hooks/use-mobile';
-import { useFireOncePerKey } from '@/hooks/use-fire-once';
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { useStableCallback } from '@/hooks/use-stable-callback';
 import { useAtomValue, useSetAtom } from 'jotai';
@@ -164,7 +160,6 @@ import {
   formatSessionTabSearch,
   parseSessionTabSearch,
   resolveActiveSessionTab,
-  type ParsedSessionTabSearch,
 } from '@/lib/session-tab-url';
 import {
   getSessionNavigationLocation,
@@ -223,19 +218,7 @@ import {
   EMPTY_VISUAL_ANNOTATION_REFERENCE_KEYS,
   getVisualAnnotationReferenceKey,
 } from '@/components/chat/visual-annotation-reference-state';
-import { isNativeAppShell } from '@/lib/native-platform';
-import {
-  capturePostHogEvent,
-  createThrottledCapture,
-  getDurationSinceMs,
-  getPerformanceNowMs,
-} from '@/lib/posthog-analytics';
-import {
-  SESSION_ACP_CONFIG_USED_EVENT,
-  buildSessionCreateAcpAnalyticsProperties,
-} from '@/lib/session-create-analytics';
 import { persistAgentSessionDefaults } from '@/lib/local-storage-cache';
-import { SessionChangesSidebar } from './session-changes-sidebar';
 
 type SidebarTab = PersistedSidePanelTab;
 
@@ -265,13 +248,6 @@ type ViewerTab =
     };
 
 type SessionDetailOpenFileOptions = {
-  /** Analytics only. */
-  readonly source?:
-    | 'file_tree'
-    | 'conversation_file_diff'
-    | 'lsp'
-    | 'diff_header'
-    | 'html_attachment';
   /** Defaults to `markdown-href`; see `lib/session-file-open-target.ts`. */
   readonly pathKind?: SessionFileOpenPathKind;
   /** Explicit 1-based anchor, for callers that have one without encoding it in the path. */
@@ -280,16 +256,6 @@ type SessionDetailOpenFileOptions = {
   /** Enter rendered HTML after the file snapshot becomes available. */
   readonly previewHtml?: boolean;
 };
-
-/** Mobile diff sheet state */
-type MobileDiffState = {
-  turnId: string;
-  filePaths: string[];
-  focusFilePath: string | null;
-  focusComment?: DiffCommentFocusTarget | null;
-  focusRequestSeq: number;
-  mode?: 'conversation' | 'base';
-} | null;
 
 type ExternalHistoryRefreshViewState = {
   key: string;
@@ -457,53 +423,6 @@ const areViewerTabsEquivalent = (prev: ViewerTab, next: ViewerTab): boolean => {
   return false;
 };
 
-const getSortedUniqueDiffFilePaths = (filePaths: readonly string[]): string[] =>
-  Array.from(new Set(filePaths.map((filePath) => filePath.trim()).filter(Boolean))).toSorted(
-    (left, right) => left.localeCompare(right)
-  );
-
-const getSessionProjectAnalytics = (project: {
-  kind: ProjectRef['kind'] | null;
-  repoFullName: string | null;
-  githubRepoFullName: string | null;
-  localProjectId: LocalProjectId | null;
-  sessionRepoFullName: string | undefined;
-}) => {
-  const trimRepoFullName = (repoFullName: string | null | undefined): string | undefined => {
-    const trimmed = repoFullName?.trim();
-    return trimmed ? trimmed : undefined;
-  };
-  const resolvedProjectRepo =
-    project.kind === 'github'
-      ? project.repoFullName
-      : project.kind === 'local'
-        ? project.githubRepoFullName
-        : null;
-  const repoFullName =
-    trimRepoFullName(resolvedProjectRepo) ?? trimRepoFullName(project.sessionRepoFullName) ?? null;
-  const projectKind =
-    project.kind === 'local'
-      ? 'local'
-      : project.kind === 'github' || repoFullName
-        ? 'github'
-        : 'chat';
-
-  return {
-    project_kind: projectKind,
-    repo_full_name: repoFullName,
-    local_project_id: project.kind === 'local' ? project.localProjectId : null,
-  };
-};
-
-const getFileExtension = (filePath: string): string | null => {
-  const basename = getBasename(filePath);
-  const dotIndex = basename.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex === basename.length - 1) {
-    return null;
-  }
-  return basename.slice(dotIndex + 1).toLowerCase();
-};
-
 /**
  * Session detail page component.
  * Displays the chat interface for a single session.
@@ -521,8 +440,7 @@ const SessionDetail = ({
   const { t } = useTranslation();
   const router = useRouter();
   const claimNavigationFocus = useComposerNavigationFocus(sessionId);
-  const postHog = usePostHog();
-  const isMobile = useIsMobile();
+
   const isZenLayoutMode = useAtomValue(zenLayoutModeAtom);
   const setZenLayoutMode = useSetAtom(zenLayoutModeAtom);
   const isElectronFullscreen = useElectronFullscreen();
@@ -541,7 +459,7 @@ const SessionDetail = ({
   const sendingDraftIdsRef = useRef<Set<DraftSessionTab['id']>>(new Set());
   const desktopTabFocusRegionRef = useRef<SessionTabFocusRegion>('conversation');
   const initialTabState = getSessionDetailInitialTabState(sessionId, urlTab, {
-    oneActiveSurface: isMobile,
+    oneActiveSurface: false,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => initialTabState.sidePanel.open);
   const isSidebarVisible = isSidebarOpen && !isZenLayoutMode;
@@ -596,10 +514,6 @@ const SessionDetail = ({
   const [isFileQuickOpenOpen, setIsFileQuickOpenOpen] = useState(false);
   const [fileProviderRequestedByInteraction, setFileProviderRequestedByInteraction] =
     useState(false);
-  const [mobileDiffState, setMobileDiffState] = useState<MobileDiffState>(null);
-  const [mobileFilesBrowserOpen, setMobileFilesBrowserOpen] = useState(false);
-  const [mobileFileViewerTabId, setMobileFileViewerTabId] = useState<string | null>(null);
-  const [, setMobileFileViewerOpen] = useState(false);
   const [localStateSessionId, setLocalStateSessionId] = useState(sessionId);
   const [canvasEntrySessionId, setCanvasEntrySessionId] = useState<SessionId | null>(null);
   const [commentReferenceKeysBySession, setCommentReferenceKeysBySession] = useState<
@@ -674,12 +588,6 @@ const SessionDetail = ({
     isSessionStateCurrent &&
     (isFileQuickOpenOpen ||
       hasFileProviderViewerTabs ||
-      mobileDiffState !== null ||
-      /* The mobile files drawer is the only tree surface on that platform:
-         `isFileProviderSidebarActive` needs the desktop side panel, which
-         the mobile branch never renders, so without this the drawer would
-         open against a provider that was never built. */
-      mobileFilesBrowserOpen ||
       isFileProviderSidebarActive ||
       fileProviderRequestedByInteraction)
   );
@@ -749,14 +657,11 @@ const SessionDetail = ({
     () => new Set()
   );
   const [tabOrder, setTabOrderState] = useState<string[]>(() => readStoredTabOrder(sessionId));
-  const detailLoadStartMsRef = useRef(getPerformanceNowMs());
-  const fireDetailNotFoundOnce = useFireOncePerKey<SessionId>();
 
   if (localStateSessionId !== sessionId) {
     const nextInitialTabState = getSessionDetailInitialTabState(sessionId, urlTab, {
-      oneActiveSurface: isMobile,
+      oneActiveSurface: false,
     });
-    detailLoadStartMsRef.current = getPerformanceNowMs();
     sendingDraftIdsRef.current.clear();
     desktopTabFocusRegionRef.current = 'conversation';
     setLocalStateSessionId(sessionId);
@@ -776,13 +681,10 @@ const SessionDetail = ({
     setViewerTabs(nextInitialTabState.viewerTabs);
     setActiveViewerTabId(nextInitialTabState.activeViewerTabId);
     setViewerTabSaveStates({});
-    setMobileDiffState(null);
-    setMobileFilesBrowserOpen(false);
     setFileProviderRequestedByInteraction(false);
   }
 
   if (
-    !isMobile &&
     localStateSessionId === sessionId &&
     canvasEntrySessionId !== sessionId &&
     activeSession?.id === sessionId &&
@@ -1065,13 +967,6 @@ const SessionDetail = ({
         toast.error(response?.error?.message ?? t('sessions.forkFailed', 'Unable to fork session'));
         return;
       }
-      capturePostHogEvent(postHog, 'session/fork_succeeded', {
-        workspace_id: currentWorkspaceId ?? null,
-        source_session_id: source.id,
-        source_is_child: Boolean(source.parentSessionId),
-        destination: placement,
-        partial: response.partial,
-      });
       setPendingForks((current) => {
         const pending = current[source.id];
         if (!pending || pending.targetSessionId !== targetSessionId) return current;
@@ -1089,16 +984,7 @@ const SessionDetail = ({
         );
       }
     },
-    [
-      canForkSession,
-      currentWorkspaceId,
-      pendingForks,
-      postHog,
-      runtime,
-      sessionGroupIds,
-      t,
-      user?.id,
-    ]
+    [canForkSession, pendingForks, runtime, sessionGroupIds, t, user?.id]
   );
   const pendingForkSourceByTargetSessionId = useMemo(() => {
     const sourceByTarget = new Map<SessionId, string>();
@@ -1161,99 +1047,19 @@ const SessionDetail = ({
   // The session displayed in the active tab
   const {
     ready: sessionDiffReady,
-    synced: sessionDiffSynced,
-    unavailableMessage: sessionDiffUnavailableMessage,
-    revision: allChangesRefreshToken,
-    summary: {
-      changeEntries,
-      changeFilePaths,
-      diffFilePathsByTurn,
-      diffEntriesByTurn,
-      fileDiffsByTurn,
-    },
+    summary: { diffFilePathsByTurn, diffEntriesByTurn, fileDiffsByTurn },
   } = useSessionDiffSummary(activeSessionTabId ?? sessionId, {
-    enabled: activeSessionTabId !== null,
-    fileProvider: activeSessionFileProvider,
-    fileProviderPending: activeSessionFileProviderPending,
+    enabled: activeSessionTabId !== null && !activeSession?.design,
   });
   const messageFileDiffEntriesByTurn = useMemo(
     () => (Object.keys(diffEntriesByTurn).length > 0 ? diffEntriesByTurn : undefined),
     [diffEntriesByTurn]
   );
 
-  // Keep the info bar aligned with the left sidebar session row. Both surfaces
-  // use the same durable session-meta snapshot instead of independently
-  // totaling provider entries that can resolve at different times.
-  const changesDiffStat = activeSession?.diffStats?.allChange ?? null;
   const activeBrowserSession = activeDraftTab ? null : activeTabSession;
   const workspaceOwnerSession = activeTabSession?.parentSessionId
     ? activeSession
     : activeTabSession;
-  const activeSessionProject = activeSession?.project;
-  const activeSessionProjectKind = activeSessionProject?.kind ?? null;
-  const activeSessionProjectRepoFullName =
-    activeSessionProject?.kind === 'github' ? activeSessionProject.repoFullName : null;
-  const activeSessionProjectGithubRepoFullName =
-    activeSessionProject?.kind === 'local'
-      ? (activeSessionProject.githubRepoFullName ?? null)
-      : null;
-  const activeSessionProjectLocalProjectId =
-    activeSessionProject?.kind === 'local' ? (activeSessionProject.localProjectId ?? null) : null;
-  const sessionDetailProjectAnalytics = useMemo(
-    () =>
-      getSessionProjectAnalytics({
-        kind: activeSessionProjectKind,
-        repoFullName: activeSessionProjectRepoFullName,
-        githubRepoFullName: activeSessionProjectGithubRepoFullName,
-        localProjectId: activeSessionProjectLocalProjectId,
-        sessionRepoFullName: activeSession?.repoFullName,
-      }),
-    [
-      activeSession?.repoFullName,
-      activeSessionProjectGithubRepoFullName,
-      activeSessionProjectKind,
-      activeSessionProjectLocalProjectId,
-      activeSessionProjectRepoFullName,
-    ]
-  );
-  const sessionDetailAnalyticsProperties = useMemo(
-    () => ({
-      workspace_id: currentWorkspaceId ?? null,
-      session_id: sessionId,
-      active_tab_session_id: activeTabSessionId,
-      is_mobile: isMobile,
-      child_session_count: childSessions.length,
-      draft_tab_count: draftTabs.length,
-      viewer_tab_count: viewerTabs.length,
-      has_url_tab: parsedUrlTab.kind !== 'missing',
-      url_tab_kind: parsedUrlTab.kind,
-      ...sessionDetailProjectAnalytics,
-    }),
-    [
-      activeTabSessionId,
-      childSessions.length,
-      currentWorkspaceId,
-      draftTabs.length,
-      isMobile,
-      parsedUrlTab.kind,
-      sessionDetailProjectAnalytics,
-      sessionId,
-      viewerTabs.length,
-    ]
-  );
-  const captureSessionDetailEvent = useCallback(
-    (event: string, properties?: Record<string, unknown>) => {
-      capturePostHogEvent(postHog, event, {
-        ...sessionDetailAnalyticsProperties,
-        ...properties,
-      });
-    },
-    [postHog, sessionDetailAnalyticsProperties]
-  );
-  const captureThrottledTabSelected = useMemo(
-    () => createThrottledCapture(postHog, 'session/tab_selected', { intervalMs: 1000, tier: 'C' }),
-    [postHog]
-  );
 
   // Set document title based on session title
   useDocumentTitle(activeSession?.title);
@@ -1652,22 +1458,9 @@ const SessionDetail = ({
     });
     setDraftTabs((prev) => [...prev, draft]);
     setTabOrderState((prev) => appendTabOrderId(prev, sessionGroupIds, draft.id));
-    if (isMobile) {
-      setActiveViewerTabId(null);
-    }
+
     navigateToSessionTab(draft.id, { push: true });
-    captureSessionDetailEvent('session/tab_draft_created', {
-      draft_tab_id: draft.id,
-      source_session_id: activeSession.id,
-    });
-  }, [
-    activeSession,
-    captureSessionDetailEvent,
-    isMobile,
-    navigateToSessionTab,
-    sessionGroupIds,
-    setDraftTabs,
-  ]);
+  }, [activeSession, navigateToSessionTab, sessionGroupIds, setDraftTabs]);
 
   const handleDraftChange = useCallback(
     (draftId: DraftSessionTab['id'], patch: Partial<DraftSessionTab>) => {
@@ -1686,11 +1479,8 @@ const SessionDetail = ({
         // Explicit parent, replacing the dead draft URL in place.
         navigateToSessionTab(sessionId);
       }
-      captureSessionDetailEvent('session/tab_draft_closed', {
-        draft_tab_id: draftId,
-      });
     },
-    [activeTabSessionId, captureSessionDetailEvent, navigateToSessionTab, sessionId, setDraftTabs]
+    [activeTabSessionId, navigateToSessionTab, sessionId, setDraftTabs]
   );
 
   const handleSendDraft = useCallback(
@@ -1700,35 +1490,11 @@ const SessionDetail = ({
         return false;
       }
       if (sendingDraftIdsRef.current.has(payload.draftId)) {
-        captureSessionDetailEvent('session/tab_draft_send_blocked', {
-          draft_tab_id: payload.draftId,
-          reason: 'already_sending',
-        });
         return false;
       }
 
       sendingDraftIdsRef.current.add(payload.draftId);
-      const startedAtMs = getPerformanceNowMs();
-      const imageCount = payload.inputBlocks.filter((block) => block.type === 'image').length;
       const prompt = payload.inputConfig.prompt ?? '';
-      const acpAnalyticsProperties = buildSessionCreateAcpAnalyticsProperties({
-        cliType: payload.cliType,
-        agentType: payload.agentType,
-        modeId: payload.inputConfig.modeId,
-        modelId: payload.inputConfig.modelId,
-        configOptionValues: payload.inputConfig.configOptionValues,
-        configOptionSelectors: payload.configOptionSelectors,
-      });
-      captureSessionDetailEvent('session/tab_draft_send_requested', {
-        draft_tab_id: payload.draftId,
-        prompt_length: prompt.length,
-        has_preserved_input: Boolean(payload.preservedInputText?.trim()),
-        cli_type: payload.cliType,
-        agent_type: payload.agentType,
-        agent_config_id: payload.agentConfigId ?? null,
-        ...acpAnalyticsProperties,
-        image_count: imageCount,
-      });
       const childSessionId = payload.sessionId;
       try {
         const draftTitle = getDraftTabLabel({ prompt }, '').trim();
@@ -1783,18 +1549,6 @@ const SessionDetail = ({
           configOptionValues: payload.inputConfig.configOptionValues,
         });
 
-        captureSessionDetailEvent(SESSION_ACP_CONFIG_USED_EVENT, {
-          session_id: childSessionId,
-          source_session_id: activeSession.id,
-          draft_tab_id: payload.draftId,
-          child_session_id: childSessionId,
-          cli_type: payload.cliType,
-          agent_type: payload.agentType,
-          agent_config_id: payload.agentConfigId ?? null,
-          ...acpAnalyticsProperties,
-          entrypoint: 'session_child_tab',
-        });
-
         // Draft tabs reuse the future child session id. Clear input caches before promotion;
         // waiting for the old draft input to clear lets the newly mounted child input hydrate
         // from stale text/image drafts. Preserved text is handed over through the
@@ -1811,9 +1565,7 @@ const SessionDetail = ({
             childSessionId
           )
         );
-        if (isMobile) {
-          setActiveViewerTabId(null);
-        }
+
         /* One replace navigation swaps `draft:<id>` for `session:<child>`.
            The `pendingDraftChildSessionIds` entry deliberately SURVIVES the
            promotion as a resolution alias: React commits the draft removal
@@ -1831,19 +1583,6 @@ const SessionDetail = ({
           console.error('Failed to request child session dispatch', dispatchError);
           toast.error(t('sessions.sendError'));
         });
-        captureSessionDetailEvent('session/tab_child_created', {
-          draft_tab_id: payload.draftId,
-          child_session_id: childSessionId,
-          duration_ms: getDurationSinceMs(startedAtMs),
-          prompt_length: prompt.length,
-          has_initial_prompt: Boolean(prompt.trim()),
-          image_count: imageCount,
-          has_restored_input: Boolean(payload.preservedInputText?.trim()),
-          cli_type: payload.cliType,
-          agent_type: payload.agentType,
-          agent_config_id: payload.agentConfigId ?? null,
-          ...acpAnalyticsProperties,
-        });
         return true;
       } catch (error) {
         console.error('Failed to create child tab session', error);
@@ -1857,16 +1596,6 @@ const SessionDetail = ({
             return rest;
           });
         }
-        captureSessionDetailEvent('session/tab_child_create_failed', {
-          draft_tab_id: payload.draftId,
-          duration_ms: getDurationSinceMs(startedAtMs),
-          cli_type: payload.cliType,
-          agent_type: payload.agentType,
-          agent_config_id: payload.agentConfigId ?? null,
-          ...acpAnalyticsProperties,
-          error_name: error instanceof Error ? error.name : typeof error,
-          error_message: error instanceof Error ? error.message : String(error),
-        });
         toast.error(t('sessions.sendError'));
         return false;
       } finally {
@@ -1875,9 +1604,7 @@ const SessionDetail = ({
     },
     [
       activeSession,
-      captureSessionDetailEvent,
       deleteSessions,
-      isMobile,
       navigateToSessionTab,
       requestSessionDispatch,
       sessionGroupIds,
@@ -1903,23 +1630,13 @@ const SessionDetail = ({
         return;
       }
       const tabSessionId = tabId as SessionId;
-      captureSessionDetailEvent('session/tab_close_requested', {
-        tab_session_id: tabSessionId,
-        is_active_tab: tabSessionId === activeTabSessionId,
-      });
       // If the tab has never had a message, just delete it instead of archiving
       const tabMeta = childSessions.find((s) => s.id === tabSessionId);
       try {
         if (tabMeta && !tabMeta.lastMessageAt) {
           await deleteSessions([tabSessionId]);
-          captureSessionDetailEvent('session/tab_deleted_empty', {
-            tab_session_id: tabSessionId,
-          });
         } else {
           await archiveSession(tabSessionId);
-          captureSessionDetailEvent('session/tab_archived', {
-            tab_session_id: tabSessionId,
-          });
         }
         // Switch to the parent tab only once the close is durable; a failed
         // close keeps the tab selected instead of yanking the user off it.
@@ -1932,17 +1649,11 @@ const SessionDetail = ({
         // it and leave the tab where it was.
         console.error('Failed to close session tab', { tabSessionId, error });
         toast.error(t('sessions.tabCloseFailed', 'Could not close this tab'));
-        captureSessionDetailEvent('session/tab_close_failed', {
-          tab_session_id: tabSessionId,
-          error_name: error instanceof Error ? error.name : typeof error,
-          error_message: error instanceof Error ? error.message : String(error),
-        });
       }
     },
     [
       activeTabSessionId,
       archiveSession,
-      captureSessionDetailEvent,
       childSessions,
       closeDraftTab,
       deleteSessions,
@@ -1954,15 +1665,9 @@ const SessionDetail = ({
 
   const handleTabRestore = useCallback(
     async (tabSessionId: SessionId) => {
-      captureSessionDetailEvent('session/tab_restore_requested', {
-        tab_session_id: tabSessionId,
-      });
       await restoreSession(tabSessionId);
-      captureSessionDetailEvent('session/tab_restored', {
-        tab_session_id: tabSessionId,
-      });
     },
-    [captureSessionDetailEvent, restoreSession]
+    [restoreSession]
   );
 
   // Navigate back to session list.
@@ -2002,7 +1707,6 @@ const SessionDetail = ({
     handleBackToList();
   }, [activeSession, archiveSession, handleBackToList]);
 
-  // Archive the active tab (mobile more menu) — archives child if child is active, parent otherwise
   const handleArchiveActiveTab = useCallback(async () => {
     if (!activeSession) return;
     if (activeDraftTab) {
@@ -2043,7 +1747,6 @@ const SessionDetail = ({
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const archiveConfirmButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Rename dialog target for the mobile header more menu
   const [renameDialogTarget, setRenameDialogTarget] = useState<RenameSessionDialogTarget | null>(
     null
   );
@@ -2091,14 +1794,12 @@ const SessionDetail = ({
     async (successMessage?: string, failureMessage?: string) => {
       try {
         await navigator.clipboard.writeText(getAppShareUrl());
-        captureSessionDetailEvent('session/share_link_copied');
         toast.success(successMessage ?? t('sessions.urlCopied', 'Session URL copied to clipboard'));
       } catch {
-        captureSessionDetailEvent('session/share_link_copy_failed');
         toast.error(failureMessage ?? t('sessions.copyFailed', 'Unable to copy'));
       }
     },
-    [captureSessionDetailEvent, t]
+    [t]
   );
 
   const handleCopyText = useCallback(
@@ -2131,10 +1832,6 @@ const SessionDetail = ({
     }
     const activeChatRef = chatRefsMap.current.get(activeTabSessionId);
     if (!activeChatRef || !('copyConversationHistory' in activeChatRef)) {
-      captureSessionDetailEvent('session/history_copy_blocked', {
-        reason: 'unavailable_tab',
-        tab_session_id: activeTabSessionId,
-      });
       toast.error(
         t(
           'sessions.copyConversationHistoryUnavailable',
@@ -2144,7 +1841,7 @@ const SessionDetail = ({
       return;
     }
     void activeChatRef.copyConversationHistory();
-  }, [activeDraftTab, activeTabSessionId, captureSessionDetailEvent, t]);
+  }, [activeDraftTab, activeTabSessionId, t]);
 
   const handleShareAsImage = useCallback(async () => {
     if (activeDraftTab) {
@@ -2180,13 +1877,9 @@ const SessionDetail = ({
     }
     const activeChatRef = chatRefsMap.current.get(activeTabSessionId);
     if (activeChatRef && 'openSearch' in activeChatRef) {
-      captureSessionDetailEvent('session/search_open_requested', {
-        tab_session_id: activeTabSessionId,
-        source: 'session_detail_menu',
-      });
       activeChatRef.openSearch();
     }
-  }, [activeDraftTab, activeTabSessionId, captureSessionDetailEvent]);
+  }, [activeDraftTab, activeTabSessionId]);
 
   // Single fork entry point for every launcher: the header/footer action forks
   // into a top tab, the side-panel launcher forks into a right-hand panel.
@@ -2244,16 +1937,15 @@ const SessionDetail = ({
     }
   }, [activeBrowserSession, activeSidebarTab]);
 
-  // The ?browser=1 URL param is only meaningful for the mobile full-screen
   // drawer. On desktop the browser lives in the resizable sidebar (no URL
   // state), so strip the flag to keep the URL consistent and avoid a stale
-  // "open" intent if the user resizes from mobile to desktop while the
+
   // drawer is open.
   useEffect(() => {
-    if (!isMobile && urlBrowser) {
+    if (urlBrowser) {
       replaceSessionUrlBrowser(false);
     }
-  }, [isMobile, replaceSessionUrlBrowser, urlBrowser]);
+  }, [replaceSessionUrlBrowser, urlBrowser]);
 
   /* A child session's root URL redirects to its parent. Corrupted meta can
      hold a parentSessionId CYCLE (X↔P): following it unguarded redirects
@@ -2291,24 +1983,6 @@ const SessionDetail = ({
      the route has this navigation's own params, so the workspace-slug
      staleness dance and the one-shot claim ref are gone with it. */
 
-  /* Mobile keeps one active surface: a `?tab` change dismisses the file
-     viewer, matching what explicit tab selection does. Ref-compared so the
-     session-entry run cannot clobber viewer state the entry just restored. */
-  const lastUrlTabSyncRef = useRef<{ sessionId: SessionId; parsed: ParsedSessionTabSearch }>({
-    sessionId,
-    parsed: parsedUrlTab,
-  });
-  useEffect(() => {
-    const last = lastUrlTabSyncRef.current;
-    lastUrlTabSyncRef.current = { sessionId, parsed: parsedUrlTab };
-    if (last.sessionId !== sessionId || last.parsed === parsedUrlTab) {
-      return;
-    }
-    if (isMobile) {
-      setActiveViewerTabId(null);
-    }
-  }, [isMobile, parsedUrlTab, sessionId]);
-
   const resolveDiffFilePaths = useCallback(
     (turnId: string): string[] => diffFilePathsByTurn[turnId] ?? [],
     [diffFilePathsByTurn]
@@ -2336,18 +2010,10 @@ const SessionDetail = ({
         next[idx] = tab;
         return next;
       });
-      if (isMobile && tab.type === 'file') {
-        setActiveViewerTabId(null);
-        setMobileFileViewerTabId(tab.id);
-        setMobileFileViewerOpen(true);
-      } else if (isMobile) {
-        setActiveViewerTabId((prevActiveId) => (prevActiveId === tab.id ? prevActiveId : tab.id));
-      } else {
-        selectSidePanelTab(tab.id);
-        revealRightSidebar();
-      }
+      selectSidePanelTab(tab.id);
+      revealRightSidebar();
     },
-    [isMobile, revealRightSidebar, selectSidePanelTab]
+    [revealRightSidebar, selectSidePanelTab]
   );
 
   const nextFocusRequestSeq = useCallback(() => {
@@ -2372,15 +2038,8 @@ const SessionDetail = ({
         mode: 'conversation',
         label: t('sessions.diffTab'),
       });
-      captureSessionDetailEvent('session/viewer_diff_opened', {
-        source: 'conversation_file_diff',
-        turn_id: turnId,
-        file_count: filePaths.length,
-        focus_file_extension: getFileExtension(filePath),
-        surface: 'desktop',
-      });
     },
-    [captureSessionDetailEvent, nextFocusRequestSeq, resolveDiffFilePaths, t, upsertViewerTab]
+    [nextFocusRequestSeq, resolveDiffFilePaths, t, upsertViewerTab]
   );
 
   const handleNavigateToComment = useCallback(
@@ -2389,10 +2048,7 @@ const SessionDetail = ({
       const mode = reference.mode ?? (reference.turnId ? 'conversation' : 'base');
       const turnId = mode === 'base' ? 'all-changes' : (reference.turnId ?? null);
       if (!turnId) return;
-      const filePaths =
-        mode === 'base'
-          ? getSortedUniqueDiffFilePaths(changeFilePaths)
-          : resolveDiffFilePaths(turnId);
+      const filePaths = mode === 'base' ? [reference.path] : resolveDiffFilePaths(turnId);
       const resolvedFilePaths =
         mode === 'conversation' && filePaths.length === 0 ? [reference.path] : filePaths;
       upsertViewerTab({
@@ -2406,23 +2062,8 @@ const SessionDetail = ({
         mode,
         label: mode === 'base' ? t('sessions.diffTabAllChanges') : t('sessions.diffTab'),
       });
-      captureSessionDetailEvent('session/viewer_diff_opened', {
-        source: 'comment_reference',
-        turn_id: turnId,
-        mode,
-        file_count: resolvedFilePaths.length,
-        focus_file_extension: getFileExtension(reference.path),
-        has_github_thread: Boolean(reference.githubThreadId),
-      });
     },
-    [
-      captureSessionDetailEvent,
-      changeFilePaths,
-      nextFocusRequestSeq,
-      resolveDiffFilePaths,
-      t,
-      upsertViewerTab,
-    ]
+    [nextFocusRequestSeq, resolveDiffFilePaths, t, upsertViewerTab]
   );
 
   useEffect(() => {
@@ -2431,16 +2072,7 @@ const SessionDetail = ({
         return tab;
       }
 
-      if (tab.mode === 'base' || tab.turnId === 'all-changes') {
-        const nextFilePaths = getSortedUniqueDiffFilePaths(changeFilePaths);
-        if (areStringArraysEqual(tab.filePaths, nextFilePaths)) {
-          return tab;
-        }
-        return {
-          ...tab,
-          filePaths: nextFilePaths,
-        };
-      }
+      if (tab.mode === 'base' || tab.turnId === 'all-changes') return tab;
 
       const nextFilePaths = diffFilePathsByTurn[tab.turnId] ?? [];
       if (nextFilePaths.length === 0) {
@@ -2460,100 +2092,7 @@ const SessionDetail = ({
     if (hasViewerTabUpdates) {
       setViewerTabs(nextViewerTabs);
     }
-  }, [changeFilePaths, diffFilePathsByTurn, viewerTabs]);
-
-  useEffect(() => {
-    if (!mobileDiffState) {
-      return;
-    }
-    if (mobileDiffState.mode === 'base' || mobileDiffState.turnId === 'all-changes') {
-      const nextFilePaths = getSortedUniqueDiffFilePaths(changeFilePaths);
-      if (areStringArraysEqual(mobileDiffState.filePaths, nextFilePaths)) {
-        return;
-      }
-      setMobileDiffState({
-        ...mobileDiffState,
-        filePaths: nextFilePaths,
-      });
-      return;
-    }
-
-    const nextFilePaths = diffFilePathsByTurn[mobileDiffState.turnId] ?? [];
-    if (nextFilePaths.length === 0) {
-      return;
-    }
-    if (areStringArraysEqual(mobileDiffState.filePaths, nextFilePaths)) {
-      return;
-    }
-
-    setMobileDiffState({
-      ...mobileDiffState,
-      filePaths: nextFilePaths,
-    });
-  }, [changeFilePaths, diffFilePathsByTurn, mobileDiffState]);
-
-  const handleOpenChangesDiff = useCallback(
-    (filePath: string, filePaths: string[]) => {
-      setFileProviderRequestedByInteraction(true);
-      const mergedFilePaths = getSortedUniqueDiffFilePaths(filePaths);
-      upsertViewerTab({
-        id: 'diff:all-changes',
-        type: 'diff',
-        turnId: 'all-changes',
-        filePaths: mergedFilePaths,
-        focusFilePath: filePath,
-        focusComment: null,
-        focusRequestSeq: nextFocusRequestSeq(),
-        mode: 'base',
-        label: t('sessions.diffTabAllChanges'),
-      });
-      captureSessionDetailEvent('session/viewer_diff_opened', {
-        source: 'changes_sidebar',
-        turn_id: 'all-changes',
-        mode: 'base',
-        file_count: mergedFilePaths.length,
-        focus_file_extension: getFileExtension(filePath),
-      });
-    },
-    [captureSessionDetailEvent, nextFocusRequestSeq, t, upsertViewerTab]
-  );
-
-  const handleOpenAllChanges = useCallback(() => {
-    setFileProviderRequestedByInteraction(true);
-    const filePaths = getSortedUniqueDiffFilePaths(changeFilePaths);
-    if (isMobile) {
-      setMobileDiffState({
-        turnId: 'all-changes',
-        filePaths,
-        focusFilePath: null,
-        focusComment: null,
-        focusRequestSeq: nextFocusRequestSeq(),
-        mode: 'base',
-      });
-      captureSessionDetailEvent('session/viewer_diff_opened', {
-        source: 'info_bar_diff_stat',
-        turn_id: 'all-changes',
-        mode: 'base',
-        file_count: filePaths.length,
-        surface: 'mobile_sheet',
-      });
-    } else {
-      revealRightSidebar();
-      activateSidebarTab('changes');
-      captureSessionDetailEvent('session/sidebar_tab_selected', {
-        source: 'info_bar_diff_stat',
-        sidebar_tab: 'changes',
-        change_file_count: filePaths.length,
-      });
-    }
-  }, [
-    activateSidebarTab,
-    captureSessionDetailEvent,
-    changeFilePaths,
-    isMobile,
-    nextFocusRequestSeq,
-    revealRightSidebar,
-  ]);
+  }, [diffFilePathsByTurn, viewerTabs]);
 
   const handleOpenBrowser = useCallback(
     (tabSessionId?: SessionId, navigateCandidate = false) => {
@@ -2567,26 +2106,11 @@ const SessionDetail = ({
           id: ++browserCandidateNavigationSequenceRef.current,
         });
       }
-      if (isMobile) {
-        replaceSessionUrlBrowser(true, { push: true });
-      } else {
-        revealRightSidebar();
-        activateSidebarTab('browser');
-      }
-      captureSessionDetailEvent('session/browser_tab_opened', {
-        tab_session_id: tabSessionId ?? activeTabSessionId,
-      });
+
+      revealRightSidebar();
+      activateSidebarTab('browser');
     },
-    [
-      activeBrowserSession?.id,
-      activeTabSessionId,
-      activateSidebarTab,
-      captureSessionDetailEvent,
-      isMobile,
-      navigateToSessionTab,
-      revealRightSidebar,
-      replaceSessionUrlBrowser,
-    ]
+    [activeBrowserSession?.id, activateSidebarTab, navigateToSessionTab, revealRightSidebar]
   );
 
   const handleBrowserCandidateNavigationRequestHandled = useCallback((requestId: number) => {
@@ -2629,13 +2153,6 @@ const SessionDetail = ({
           focusRequestSeq: requestSeq,
           ...(options.previewHtml ? { htmlPreviewRequestSeq: requestSeq } : {}),
         });
-        captureSessionDetailEvent('session/viewer_file_opened', {
-          source: target.fromMarkdownLink ? 'markdown_link' : (options.source ?? 'file_tree'),
-          file_extension: getFileExtension(resolvedFilePath),
-          has_line_anchor: target.startLine != null,
-          line_suffix_format: target.lineSuffixFormat ?? null,
-          symlink_redirected: resolution.redirected,
-        });
       })();
     }
   );
@@ -2643,7 +2160,6 @@ const SessionDetail = ({
   const handleOpenHtmlFile = useStableCallback((filePath: string) => {
     handleOpenFile(filePath, {
       pathKind: 'canonical',
-      source: 'html_attachment',
       previewHtml: true,
     });
   });
@@ -2657,7 +2173,7 @@ const SessionDetail = ({
   });
 
   const handleOpenFileFromDiff = useStableCallback((filePath: string) => {
-    handleOpenFile(filePath, { pathKind: 'canonical', source: 'diff_header' });
+    handleOpenFile(filePath, { pathKind: 'canonical' });
   });
 
   const handleOpenFileDiffForChat = useStableCallback((turnId: string, filePath: string) => {
@@ -2774,28 +2290,13 @@ const SessionDetail = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeSession, handleFileQuickOpenChange]);
 
-  // Session tabs and viewer tabs are independent on desktop; mobile keeps one active surface.
   const handleSessionTabSelect = useCallback(
     (tabId: string) => {
       desktopTabFocusRegionRef.current = 'conversation';
       // A user-driven switch PUSHES so tabs participate in history back.
       navigateToSessionTab(tabId, { push: true });
-      if (isMobile) {
-        setActiveViewerTabId(null);
-      }
-      captureThrottledTabSelected({
-        ...sessionDetailAnalyticsProperties,
-        tab_id: tabId,
-        tab_kind: isDraftSessionTabId(tabId) ? 'draft' : tabId === sessionId ? 'parent' : 'child',
-      });
     },
-    [
-      captureThrottledTabSelected,
-      isMobile,
-      navigateToSessionTab,
-      sessionDetailAnalyticsProperties,
-      sessionId,
-    ]
+    [navigateToSessionTab]
   );
 
   const handleForkedConversationPrepared = useCallback(
@@ -2857,42 +2358,21 @@ const SessionDetail = ({
   // When a viewer tab is selected, activate the viewer surface for the current session.
   const handleViewerTabSelect = useCallback(
     (tabId: string) => {
-      if (isMobile) {
-        setActiveViewerTabId(tabId);
-      } else {
-        selectSidePanelTab(tabId);
-        revealRightSidebar();
-      }
-      captureSessionDetailEvent('session/viewer_tab_selected', {
-        viewer_tab_id: tabId,
-        viewer_tab_type: tabId.startsWith('file:') ? 'file' : 'diff',
-      });
+      selectSidePanelTab(tabId);
+      revealRightSidebar();
     },
-    [captureSessionDetailEvent, isMobile, revealRightSidebar, selectSidePanelTab]
+    [revealRightSidebar, selectSidePanelTab]
   );
 
   const handleSidebarTabSelect = useCallback(
     (tabId: SidebarTab) => {
-      if (!isMobile) {
-        desktopTabFocusRegionRef.current = 'side-panel';
-      }
+      desktopTabFocusRegionRef.current = 'side-panel';
       activateSidebarTab(tabId);
       if (tabId === 'pr' && latestPrNumber != null) {
         replaceSessionUrlPr(latestPrNumber, { push: true });
       }
-      captureSessionDetailEvent('session/sidebar_tab_selected', {
-        sidebar_tab: tabId,
-        change_file_count: changeEntries.length,
-      });
     },
-    [
-      activateSidebarTab,
-      captureSessionDetailEvent,
-      changeEntries.length,
-      isMobile,
-      latestPrNumber,
-      replaceSessionUrlPr,
-    ]
+    [activateSidebarTab, latestPrNumber, replaceSessionUrlPr]
   );
 
   // Fixed panels are persistable side-panel tabs; Side Chat is an action that
@@ -2906,12 +2386,6 @@ const SessionDetail = ({
         kind: 'files',
       },
     ];
-    if (!activeSession?.design)
-      options.push({
-        id: 'changes',
-        label: t('sessions.detailTabs.allChanges', 'All Changes'),
-        kind: 'changes',
-      });
     if (activeBrowserSession) {
       options.push({
         id: 'browser',
@@ -2967,7 +2441,6 @@ const SessionDetail = ({
     return openedSidebarTabs.filter((tabId) => availableTabIds.has(tabId));
   }, [openedSidebarTabs, sidePanelFixedOptions]);
 
-  // Shared viewer metadata powers the mobile switcher and desktop side-panel tabs.
   const viewerTabItems: ViewerTabItem[] = useMemo(
     () =>
       viewerTabs.map((tab) => ({
@@ -3092,23 +2565,9 @@ const SessionDetail = ({
       zenMode: isZenLayoutMode,
       panelOpen: isSidebarOpen,
     });
-    captureSessionDetailEvent(
-      next.panelOpen ? 'session/sidebar_opened' : 'session/sidebar_closed',
-      {
-        default_tab: activeSidebarTab,
-        change_file_count: changeEntries.length,
-      }
-    );
     setZenLayoutMode(next.zenMode);
     setIsSidebarOpen(next.panelOpen);
-  }, [
-    activeSidebarTab,
-    captureSessionDetailEvent,
-    changeEntries.length,
-    isSidebarOpen,
-    isZenLayoutMode,
-    setZenLayoutMode,
-  ]);
+  }, [isSidebarOpen, isZenLayoutMode, setZenLayoutMode]);
 
   const handleCloseViewerTab = useCallback(
     (tabId: string) => {
@@ -3132,11 +2591,6 @@ const SessionDetail = ({
         if (!sidebarOpen) {
           setIsSidebarOpen(false);
         }
-        captureSessionDetailEvent('session/viewer_tab_closed', {
-          viewer_tab_id: tabId,
-          viewer_tab_type: tabId.startsWith('file:') ? 'file' : 'diff',
-          remaining_viewer_tab_count: Math.max(0, viewerTabs.length - 1),
-        });
       }
       setViewerTabSaveStates((prev) => {
         if (!Object.prototype.hasOwnProperty.call(prev, tabId)) return prev;
@@ -3145,10 +2599,6 @@ const SessionDetail = ({
         return next;
       });
       setTabOrderState((prev) => removeTabOrderId(prev, tabId));
-      if (mobileFileViewerTabId === tabId) {
-        setMobileFileViewerOpen(false);
-        setMobileFileViewerTabId(null);
-      }
       setViewerTabs((prev) => {
         const idx = prev.findIndex((tab) => tab.id === tabId);
         if (idx === -1) {
@@ -3161,16 +2611,7 @@ const SessionDetail = ({
         return next;
       });
     },
-    [
-      activeViewerTabId,
-      captureSessionDetailEvent,
-      mobileFileViewerTabId,
-      selectSidePanelTab,
-      sidePanelTabIds,
-      t,
-      viewerTabSaveStates,
-      viewerTabs,
-    ]
+    [activeViewerTabId, selectSidePanelTab, sidePanelTabIds, t, viewerTabSaveStates, viewerTabs]
   );
 
   // Fixed side-panel tabs remain selectable even while viewer tabs stay mounted.
@@ -3227,20 +2668,13 @@ const SessionDetail = ({
       currentBranch,
       t('sessions.currentBranchCopied', 'Current branch name copied to clipboard')
     );
-    captureSessionDetailEvent('session/current_branch_copied', {
-      tab_session_id: activeTabSessionId,
-    });
-  }, [activeTabSessionId, captureSessionDetailEvent, currentBranch, handleCopyText, t]);
+  }, [currentBranch, handleCopyText, t]);
 
   const handleFocusActiveInput = useCallback(() => {
-    if (isMobile) {
-      setActiveViewerTabId(null);
-    }
-
     requestAnimationFrame(() => {
       chatRefsMap.current.get(activeTabSessionId)?.focusInput();
     });
-  }, [activeTabSessionId, isMobile]);
+  }, [activeTabSessionId]);
 
   const handleRenameCurrentSession = useCallback(() => {
     const targetSession = activeDraftTab ? null : activeTabSession;
@@ -3341,7 +2775,7 @@ const SessionDetail = ({
     title: t('commands.session.toggleExplorerSidebar', 'Toggle Files and Changes Sidebar'),
     category: 'View',
     keybindings: getCommandKeybindings('session.toggleExplorerSidebar'),
-    when: () => !isMobile && Boolean(activeSession),
+    when: () => Boolean(activeSession),
     run: handleToggleSidebar,
   });
 
@@ -3600,23 +3034,20 @@ const SessionDetail = ({
     ]
   );
 
-  useDesktopTabCloser(
-    () => {
-      const target = resolveFocusedTabCloseTarget();
-      if (!target) return 'handled';
-      if (target.kind === 'landing') {
-        handleBackToList();
-        return 'handled';
-      }
-      if (target.kind === 'side-panel') {
-        handleSidePanelTabClose(target.tabId);
-        return 'handled';
-      }
-      void handleTabClose(target.tabId);
+  useDesktopTabCloser(() => {
+    const target = resolveFocusedTabCloseTarget();
+    if (!target) return 'handled';
+    if (target.kind === 'landing') {
+      handleBackToList();
       return 'handled';
-    },
-    !isMobile && Boolean(activeSession)
-  );
+    }
+    if (target.kind === 'side-panel') {
+      handleSidePanelTabClose(target.tabId);
+      return 'handled';
+    }
+    void handleTabClose(target.tabId);
+    return 'handled';
+  }, Boolean(activeSession));
 
   useEffect(() => {
     if (
@@ -3693,36 +3124,6 @@ const SessionDetail = ({
     }`
   );
 
-  useEffect(() => {
-    if (sessionPresenceState === 'loading') {
-      return;
-    }
-
-    if (sessionPresenceState === 'not-found') {
-      if (!fireDetailNotFoundOnce(sessionId)) {
-        return;
-      }
-      capturePostHogEvent(postHog, 'session/detail_not_found', {
-        workspace_id: currentWorkspaceId ?? null,
-        session_id: sessionId,
-        route_ready_ms: getDurationSinceMs(detailLoadStartMsRef.current),
-        is_mobile: isMobile,
-        runtime_initializing: runtimeInitializing,
-        doc_meta_cache_ready: docMetaCacheReady,
-      });
-      return;
-    }
-  }, [
-    currentWorkspaceId,
-    docMetaCacheReady,
-    fireDetailNotFoundOnce,
-    isMobile,
-    postHog,
-    runtimeInitializing,
-    sessionId,
-    sessionPresenceState,
-  ]);
-
   if (sessionPresenceState === 'loading') {
     return (
       <LoadingPlaceholder
@@ -3771,7 +3172,7 @@ const SessionDetail = ({
 
   const deleteConfirmDialog = (
     <Dialog open={deleteConfirmOpen} onOpenChange={(open) => setDeleteConfirmOpen(open)}>
-      <DialogContent className={cn(isMobile ? '' : 'max-w-sm')}>
+      <DialogContent className={cn('max-w-sm')}>
         <DialogHeader>
           <DialogTitle>{t('archive.deleteConfirm.title', 'Delete permanently?')}</DialogTitle>
           <DialogDescription>
@@ -3806,7 +3207,7 @@ const SessionDetail = ({
   const archiveConfirmDialog = (
     <Dialog open={archiveConfirmOpen} onOpenChange={setArchiveConfirmOpen}>
       <DialogContent
-        className={cn(isMobile ? '' : 'max-w-sm')}
+        className={cn('max-w-sm')}
         // Focus the confirm button on open so Enter archives; Esc still cancels (Radix
         // default close-on-escape). Rejected onKeyDown-on-content: it double-fires when a
         // button already has focus.
@@ -3878,7 +3279,7 @@ const SessionDetail = ({
         if (!open) cancelDirtyFork();
       }}
     >
-      <DialogContent className={cn(isMobile ? '' : 'max-w-md')}>
+      <DialogContent className={cn('max-w-md')}>
         <DialogHeader>
           <DialogTitle>{t('sessions.forkDirty.title', 'Uncommitted changes found')}</DialogTitle>
           <DialogDescription>
@@ -3924,7 +3325,6 @@ const SessionDetail = ({
         htmlPreviewRequestSeq={tab.htmlPreviewRequestSeq}
         saveRequestSeq={viewerTabSaveStates[tab.id]?.saveRequestSeq ?? 0}
         copyMarkdownRequestSeq={viewerTabSaveStates[tab.id]?.copyMarkdownRequestSeq ?? 0}
-        preferNativeMarkdownSelection={isMobile}
         fileProvider={activeSessionFileProvider}
         fileProviderPending={activeSessionFileProviderPending}
         fileProviderMessage={activeSessionFileProviderMessage}
@@ -3953,7 +3353,6 @@ const SessionDetail = ({
             pathKind: 'canonical',
             // Was reported as `markdown_link` only because the locator used to
             // ride in the path as a `:L<n>` suffix; name the real source now.
-            source: 'lsp',
             ...(target.line === undefined ? {} : { startLine: target.line + 1 }),
           });
         }}
@@ -3968,7 +3367,6 @@ const SessionDetail = ({
         focusComment={tab.focusComment}
         focusRequestSeq={tab.focusRequestSeq}
         mode={tab.mode ?? 'conversation'}
-        refreshToken={(tab.mode ?? 'conversation') === 'base' ? allChangesRefreshToken : undefined}
         fileDiffs={(tab.mode ?? 'conversation') === 'base' ? [] : resolveTurnFileDiffs(tab.turnId)}
         fileDiffsPending={!sessionDiffReady}
         session={activeSession}
@@ -3995,11 +3393,10 @@ const SessionDetail = ({
     );
 
   // Traffic lights auto-hide in native fullscreen — no inset to reserve then.
-  const hasMacOSTitlebarInset =
-    !isNativeAppShell() && isMacOSElectronRenderer() && !isElectronFullscreen;
+  const hasMacOSTitlebarInset = isMacOSElectronRenderer() && !isElectronFullscreen;
 
   const nonBrowserSidebarContent =
-    activeSidebarTab === 'files' ? (
+    activeSidebarTab === 'files' || activeSidebarTab === 'changes' ? (
       <FileTreeView
         session={activeSession}
         handleOpenFile={handleOpenIndexedFile}
@@ -4008,19 +3405,9 @@ const SessionDetail = ({
         fileProviderMessage={activeSessionFileProviderMessage}
         autoCodeCollab={false}
         fileMenuItems={activeSessionFileActions.menuItems}
-        changedFilePaths={changeFilePaths}
         // Opening a file selects its viewer tab, which unmounts this tree. Key
         // its expanded folders per session so returning to Files restores them.
         viewStateKey={`session-files:${activeSession.id}`}
-      />
-    ) : activeSidebarTab === 'changes' ? (
-      <SessionChangesSidebar
-        ready={sessionDiffReady}
-        synced={sessionDiffSynced}
-        unavailableMessage={sessionDiffUnavailableMessage}
-        changeEntries={changeEntries}
-        changeFilePaths={changeFilePaths}
-        onOpenChangesDiff={handleOpenChangesDiff}
       />
     ) : null;
 
@@ -4275,7 +3662,6 @@ const SessionDetail = ({
       onVisualAnnotationReferencesSubmitted: getVisualAnnotationReferencesSubmittedHandler(
         chatSession.id
       ),
-      onOpenAllChanges: handleOpenAllChanges,
       onNavigateSession: handleNavigateSession,
       onConversationPrepared: pendingForkSourceId
         ? () => handleForkedConversationPrepared(pendingForkSourceId, chatSession.id)
@@ -4314,7 +3700,6 @@ const SessionDetail = ({
                 tabSession.id === activeSessionTabId ? messageFileDiffEntriesByTurn : undefined
               }
               onOpenBrowser={() => handleOpenBrowser(tabSession.id, true)}
-              changesDiffStat={changesDiffStat}
               onForkLastAssistant={
                 canForkSession(tabSession)
                   ? (turnId, destination) => handleForkDestination(tabSession, turnId, destination)
@@ -4474,10 +3859,7 @@ const SessionDetail = ({
         deleteConfirmDialog={deleteConfirmDialog}
         sidebarRestoreSeq={sidebarRestoreSeq}
       />
-      {/* These dialogs live at the desktop root too (the mobile branch renders its own
-          copies) so the `session.renameCurrent` / `session.archiveCurrent` keyboard
-          shortcuts have a mounted target on desktop. They portal out, so tree position
-          doesn't matter. */}
+      {}
       {archiveConfirmDialog}
       {dirtyForkDialog}
       {worktreeForkObservers}

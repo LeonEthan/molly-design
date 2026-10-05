@@ -1,16 +1,10 @@
 import * as React from 'react';
 import { forEachAtTokenSpan, type HydratedMentions } from '@/components/mentions/mention-hydration';
 import { useAtomValue } from 'jotai';
-import { usePostHog } from '@posthog/react';
 import { z } from 'zod';
 import { githubFetchFilePaths } from '@molly/shared';
 
 import { currentWorkspaceIdAtom } from '@/atoms';
-import {
-  captureMentionFileFetchError,
-  getRepoMentionAnalyticsId,
-  normalizeGithubFetchErrorCode,
-} from '@/components/mentions/mention-analytics';
 import { scoreMentionMatch } from '@/components/mentions/mention-rank';
 import { withGitHubTokenRetry } from '@/lib/github-token';
 import { cn } from '@/lib/utils';
@@ -346,7 +340,6 @@ export function hydrateFileMentionsFromText(text: string, knownPaths: Set<string
 
 export function useRepoFilePaths(repoFullName?: string) {
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const postHog = usePostHog();
 
   const [data, setData] = React.useState<{
     entry: RepoFilePathsCacheEntry | null;
@@ -365,7 +358,6 @@ export function useRepoFilePaths(repoFullName?: string) {
 
     let cancelled = false;
     const now = Date.now();
-    const fetchStartedAt = Date.now();
     const key = getCacheKey(workspaceIdValue, repoFullNameValue);
 
     async function run() {
@@ -407,17 +399,6 @@ export function useRepoFilePaths(repoFullName?: string) {
           status: 'error',
           error: message,
         }));
-        // Repo visibility is unknown in this hook, so hash the repo id (treat as
-        // private) — never send the raw repo name (spec §2.3).
-        captureMentionFileFetchError(
-          postHog,
-          { workspaceId: workspaceIdValue },
-          {
-            errorCode: normalizeGithubFetchErrorCode(err),
-            repo: getRepoMentionAnalyticsId(repoFullNameValue, false),
-            durationMs: Date.now() - fetchStartedAt,
-          }
-        );
       }
     }
 
@@ -426,7 +407,7 @@ export function useRepoFilePaths(repoFullName?: string) {
     return () => {
       cancelled = true;
     };
-  }, [postHog, repoFullName, workspaceId]);
+  }, [repoFullName, workspaceId]);
 
   return data;
 }

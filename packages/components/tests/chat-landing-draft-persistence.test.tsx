@@ -41,10 +41,6 @@ vi.mock('react-i18next', () => ({
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
-vi.mock('@posthog/react', () => ({ usePostHog: () => null }));
-
-vi.mock('../src/lib/posthog-analytics', () => ({ capturePostHogEvent: vi.fn() }));
-
 vi.mock('../src/lib/session-image-upload', () => ({
   validateSessionImageFile: () => null,
   uploadSessionReferenceImage: () => {
@@ -87,8 +83,6 @@ function DraftHarness({ draftKey }: { draftKey: string }) {
   const imageDraft = useChatLandingImageDraft({
     draftKey,
     workspaceId: 'workspace-a' as WorkspaceId,
-    isMobile: false,
-    projectKind: null,
     sessionId,
     ensureSessionId,
   });

@@ -93,7 +93,6 @@ minimumReleaseAgeExclude:
 
 onlyBuiltDependencies:
   - '@moonshot-ai/kimi-code'
-  - '@posthog/cli'
   - '@prisma/engines'
   - '@swc/core'
   - core-js

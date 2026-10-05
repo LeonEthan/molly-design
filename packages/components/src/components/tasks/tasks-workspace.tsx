@@ -3,9 +3,8 @@ import { useCallback, useEffect, useMemo } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useParams, useRouter } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
-import { Check, LayoutGrid, List, ListFilter, ListTodo, Plus } from 'lucide-react';
+import { Check, LayoutGrid, List, ListFilter } from 'lucide-react';
 
-import { atom } from 'jotai';
 import {
   computeTaskQueuePositions,
   generateTaskOrderKeyBetween,
@@ -27,7 +26,7 @@ import {
 } from '@/atoms/tasks';
 import { TaskInboxPanel } from './task-inbox-panel';
 import { useStableNow } from '@/hooks/use-stable-now';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useOrganization } from '@/hooks/useOrganization';
 import { useTaskActions } from '@/hooks/use-task-actions';
 import { useTaskSessionRollups } from '@/hooks/use-task-session-rollup';
@@ -50,7 +49,6 @@ import {
 } from '@/atoms/tasks';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { useVisibleLocalProjects } from '@/hooks/use-visible-local-projects';
-import { BaseHeader } from '@/components/page-headers/base-header';
 import { TasksBoardView, type TaskCardData } from './tasks-board-view';
 import type { TaskBoardMove } from './task-board-move';
 import { TaskTabBar } from './task-tab-bar';
@@ -64,22 +62,6 @@ type TasksLayout = 'board' | 'list';
 
 const tasksLayoutAtom = atomWithProductStorage<TasksLayout>('molly-tasks-layout', 'board');
 
-/**
- * Mobile-only filter for "just what is blocked on me". Off by default and not
- * persisted: a filtered-by-default phone screen shows nothing when nothing needs
- * you, which reads as "no tasks" rather than "filtered".
- */
-const mobileNeedsYouOnlyAtom = atom(false);
-
-/**
- * Desktop Tasks shell: a pinned "All Tasks" home tab plus a detail tab for each
- * opened task. URL is the source of truth for the *active* tab
- * (`/tasks` vs `/tasks/$taskId`); open-tab membership lives in
- * `openTaskTabsAtom` so closing a tab and reopening from the list is cheap.
- *
- * Mobile keeps the prior stack: list page or full detail, no multi-tab chrome
- * (browser-tab metaphors belong to desktop).
- */
 /** Fixed order and wording for the Show toggles. */
 const TASK_CARD_PROPERTY_LABELS: Record<TaskCardProperty, { key: string; fallback: string }> = {
   priority: { key: 'tasks.properties.priority', fallback: 'Priority' },
@@ -89,7 +71,6 @@ const TASK_CARD_PROPERTY_LABELS: Record<TaskCardProperty, { key: string; fallbac
 };
 
 export function TasksWorkspace() {
-  const isMobile = useIsMobile();
   // Prefer the detail-route params over `strict: false` so a bookmarked
   // `/tasks/$taskId` always yields the id when that route is matched, and
   // yields nothing on the All Tasks index (where the param does not exist).
@@ -103,10 +84,6 @@ export function TasksWorkspace() {
       openTab(activeTaskId);
     }
   }, [activeTaskId, openTab]);
-
-  if (isMobile) {
-    return activeTaskId ? <TaskDetailView /> : <TasksListBody mobile />;
-  }
 
   return <DesktopTasksWorkspace activeTaskId={activeTaskId} />;
 }
@@ -291,27 +268,9 @@ function DesktopTasksWorkspace({ activeTaskId }: { activeTaskId: TaskId | null }
   );
 }
 
-/**
- * The All Tasks surface: inbox + board/list. Used as the home tab on desktop
- * and as the full page on mobile. Layout chrome (tabs / mobile header) lives
- * outside this body so the same content can sit under either.
- *
- * Exported for the mobile home screen, which embeds the same body as its
- * Tasks dock tab (see `mobile-home-screen.tsx`). Pass `embedded` when the
- * body sits under another page header (home dock) so we don't double
- * safe-area padding or re-draw the drawer menu.
- */
-export function TasksListBody({
-  mobile = false,
-  embedded = false,
-}: {
-  mobile?: boolean;
-  /** Under an outer chrome (mobile home header). Skip safe-area BaseHeader. */
-  embedded?: boolean;
-}) {
-  const { t } = useTranslation();
+export function TasksListBody() {
   const router = useRouter();
-  const isMobile = mobile;
+
   const visibleByView = useAtomValue(taskVisiblePropertiesAtom);
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const agentConfigs = useAtomValue(getAllAgentConfigAtom) as {
@@ -325,15 +284,13 @@ export function TasksListBody({
   const threadReadAt = useAtomValue(taskThreadReadAtAtom);
   const rollups = useTaskSessionRollups();
   const layout = useAtomValue(tasksLayoutAtom);
-  // Mobile only ever has the list; the Show set must follow what is drawn.
-  const effectiveLayout = isMobile ? 'list' : layout;
+
+  const effectiveLayout = layout;
   const openQuickAdd = useSetAtom(taskQuickAddOpenAtom);
   const setQuickAddStatus = useSetAtom(taskQuickAddStatusAtom);
-  const needsYouOnly = useAtomValue(mobileNeedsYouOnlyAtom);
   const inboxItems = useAtomValue(taskInboxAtom);
   const now = useStableNow();
   const { activeOrganization } = useOrganization();
-  const setNeedsYouOnly = useSetAtom(mobileNeedsYouOnlyAtom);
   const { updateTaskFields } = useTaskActions();
   const setTaskIndexRows = useSetAtom(taskIndexRowsAtom);
 
@@ -405,17 +362,8 @@ export function TasksListBody({
     });
     // Keep manual `order` as the only sort: needs-you is a badge, not a
     // second ordering axis — board drag would fight a needsYou pin.
-    return needsYouOnly ? withRollup.filter((task) => task.needsYou) : withRollup;
-  }, [
-    agentNameById,
-    localProjectNameById,
-    membersByUserId,
-    needsYouOnly,
-    rollups,
-    tasks,
-    threadReadAt,
-    userId,
-  ]);
+    return withRollup;
+  }, [agentNameById, localProjectNameById, membersByUserId, rollups, tasks, threadReadAt, userId]);
 
   const handleOpenTask = useCallback(
     (taskId: string) => {
@@ -475,7 +423,7 @@ export function TasksListBody({
   // horizontal scrollbar sits on the board floor. List must NOT do that —
   // it grows with content and scrolls inside ScrollArea; `h-full` +
   // `overflow-hidden` would clip rows instead of letting the page scroll.
-  const boardFillsViewport = !isMobile && layout === 'board';
+  const boardFillsViewport = layout === 'board';
 
   const body = (
     <div
@@ -505,63 +453,11 @@ export function TasksListBody({
     </div>
   );
 
-  if (!isMobile) {
-    // Desktop: chrome is the workspace tab bar. Body fills the rest.
-    return layout === 'list' ? (
-      <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
-    ) : (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{body}</div>
-    );
-  }
-
-  const mobileActions = (
-    <div className="flex items-center gap-1">
-      <Button
-        size="sm"
-        variant={needsYouOnly ? 'default' : 'outline'}
-        onClick={() => setNeedsYouOnly(!needsYouOnly)}
-      >
-        {t('tasks.needsYou', 'Needs you')}
-      </Button>
-      <Button size="sm" onClick={() => handleQuickAdd()}>
-        <Plus className="h-4 w-4" />
-        {t('tasks.newTask', 'New task')}
-      </Button>
-    </div>
-  );
-
-  /* Embedded under the mobile home header: a compact toolbar without
-     safe-area inset or the drawer Menu button. BaseHeader always adds
-     `pt-[var(--safe-area-top)]` on native, which under the home chrome
-     reads as a large empty band at the top of the Tasks tab. */
-  const mobileChrome = embedded ? (
-    <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-      <ListTodo className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
-        {t('tasks.title', 'Tasks')}
-      </h2>
-      {mobileActions}
-    </div>
+  // Desktop: chrome is the workspace tab bar. Body fills the rest.
+  return layout === 'list' ? (
+    <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
   ) : (
-    <BaseHeader
-      title={t('tasks.title', 'Tasks')}
-      leading={<ListTodo className="h-4 w-4 text-muted-foreground" />}
-      actions={mobileActions}
-    />
-  );
-
-  return (
-    <TooltipProvider>
-      <div
-        className={cn(
-          TASKS_SURFACE_CLASS,
-          'flex h-full w-full flex-1 flex-col overflow-hidden bg-background'
-        )}
-      >
-        {mobileChrome}
-        <ScrollArea className="flex-1">{body}</ScrollArea>
-      </div>
-    </TooltipProvider>
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{body}</div>
   );
 }
 

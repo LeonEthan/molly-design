@@ -36,7 +36,6 @@ rules live in [AGENTS.md](AGENTS.md); this file maps their implementation.
 - `mention-rank.ts` and `vscode-fuzzy-score.ts` own ranking. The vendored score is
   taken from the pinned VS Code source identified in its header; AGENTS.md states
   what must survive an update.
-- `mention-analytics.ts` centralizes mention analytics event helpers.
 
 `design-element-mention.ts` reuses imperative mention insertion and persisted ranges
 for canonical Bento selection. Expansion sends artwork, saved baseline and stable

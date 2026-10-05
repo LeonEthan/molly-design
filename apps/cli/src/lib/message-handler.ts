@@ -123,7 +123,6 @@ import {
   type MessageContent,
   type AcpSessionNotification,
   getServerNow,
-  CODE_COLLAB_V2_TEXT_LIMITS,
   isSessionGoalActive,
   resolveLatestSessionGoalFromHistory,
   resolveProjectGitHubRepo,
@@ -168,7 +167,6 @@ import {
   hasPendingUserTurnActivation,
 } from '@molly/shared';
 import { ISession, SessionManager } from '../session/session-manager';
-import { captureCli } from '@/lib/analytics/posthog';
 import { LoroDocumentManager, SessionDocument, subscribeSessionChanges } from './loro/doc';
 import {
   type ContentBlock,
@@ -221,11 +219,9 @@ import {
   upsertThreadGoalInHistory,
   clearThreadGoalFromHistory,
 } from '@/lib/acp/history';
-import type { AcpAgentEditEvidence, AcpStandardDiffBlockEvidence } from '@/lib/acp/history';
 import { mergeAcpRuntimeConfigUpdates } from '@/lib/acp/runtime-config';
 import { generateTitleIsolated, sanitizeTitle } from '@/agent/title-generator';
 import type { AgentSessionWarning } from '@/agent/agent-client';
-import { ensureValidBranchName } from '@/agent/branch-name-generator';
 import {
   SessionActivePresenceController,
   type SessionActivePresencePhase,
@@ -235,19 +231,13 @@ import {
   shouldRestoreRunningAfterPermission,
 } from './session-activity-status';
 import type { RepoWatchHandle } from 'loro-repo';
-import { resolveGitBranchName } from './git/resolve-git-branch-name';
 import {
   AgentClient,
-  type AcpWriteTextFileEvidence,
   type ImageGenerationBeginEvent,
   type ImageGenerationEndEvent,
 } from 'src/agent/agent-client';
 import type { RateLimit, SessionUsageUpdate } from 'acp-extension-core';
 import { getWorktreeManager } from '@/session/worktree/worktree-manager';
-import {
-  isManagedWorktreeBranchName,
-  renameBranchWithAvailableSuffix,
-} from '@/session/worktree/branch-name-allocation';
 import { createWorktreeScriptHistoryRecorder } from '@/session/worktree/worktree-script-history';
 import { runWorktreeCleanup } from '@/session/worktree/worktree-setup-runner';
 import {
@@ -295,17 +285,10 @@ import {
 } from '@/commands/session';
 import { listAliveSessionMetas, type AuthContext } from '@/lib/command-runtime';
 import { makeSessionAccessPolicy } from '@/session/session-access-policy';
-import { AutoPromptRunner } from '@/session/auto-prompt-runner';
-import { TurnPostProcessingService } from '@/session/turn-post-processing-service';
 import {
   applyAcpSessionRunConfig,
   type AcpSessionRunConfig,
 } from '@/session/acp-session-config-applier';
-import {
-  readDiffStatsMetadata,
-  resolveCodeCollabAllChangesDiffStatsPatch,
-  resolveDiffStatsTarget,
-} from '@/session/session-diff-stats-target';
 import type { MachineAccessVerification } from '@/session/session-access-retry';
 import {
   CodeCollabV2Service,
@@ -314,20 +297,7 @@ import {
   type CodeCollabV2WorkspaceResolver,
 } from '@/lib/code-collab/code-collab-v2-service';
 import { FilePreviewService } from '@/lib/file-preview/file-preview-service';
-import {
-  CodeCollabV2DiffStore,
-  type CodeCollabV2DiffStoreEvent,
-} from '@/lib/code-collab/code-collab-v2-diff-store';
-import {
-  mergePendingDiffStoreEvents,
-  pendingEventFromAgentEditEvidence,
-  pendingEventFromStandardDiffEvidence,
-  pendingEventFromWriteTextFileEvidence,
-  resolveCodeCollabV2EvidencePath,
-  type AgentEditLatestText,
-  type CodeCollabV2PendingDiffStoreEvent,
-  type CodeCollabV2WriteTextFileEvidence,
-} from '@/lib/code-collab/code-collab-v2-diff-evidence';
+import { CodeCollabV2DiffStore } from '@/lib/code-collab/code-collab-v2-diff-store';
 import {
   readMachineLocalProjects,
   removeMachineLocalProject,
@@ -365,7 +335,6 @@ import {
   handleLocalProjectWorktreeConfigRequest,
   isLocalProjectWorktreeConfigRequest,
 } from '@/session/worktree/worktree-setup-config-store';
-import { readLegacySessionLaunchConfig } from '@/session/session-launch-config-resolver';
 import { resolveSessionWorktreeCleanupConfig } from '@/session/worktree/worktree-config-resolver';
 
 type RepoDocMetaPatch = Parameters<LoroDocumentManager['repo']['upsertDocMeta']>[1];
@@ -848,9 +817,6 @@ export class MessageHandler {
   private static readonly ACP_MAX_AUTOMATIC_FLUSH_FAILURES = 5;
   private static readonly ACP_FLUSH_RETRY_BASE_DELAY_MS = 100;
   private static readonly ACP_FLUSH_RETRY_MAX_DELAY_MS = 1_600;
-  private static readonly CODE_COLLAB_EVIDENCE_MAX_AUTOMATIC_RETRIES = 5;
-  private static readonly CODE_COLLAB_EVIDENCE_RETRY_BASE_DELAY_MS = 100;
-  private static readonly CODE_COLLAB_EVIDENCE_RETRY_MAX_DELAY_MS = 1_600;
   private static readonly CONTEXT_WINDOW_USAGE_THROTTLE_MS = 400;
   // Track permission wait time: requestId -> timestamp when permission was requested
   private readonly permissionRequestStartTimes = new Map<string, number>();
@@ -878,21 +844,10 @@ export class MessageHandler {
   private designContinuationService: DesignContinuationService;
   private sessionEditAndResendService: SessionEditAndResendService;
   private operationCoordinator: MollyOperationCoordinator;
-  private autoPromptRunner: AutoPromptRunner;
-  private turnPostProcessingService: TurnPostProcessingService;
   private localProjectControlService: LocalProjectControlService;
   private localWorkspaceCatalog: LocalWorkspaceCatalogService;
   private cleanedUp = false;
   private readonly codeCollabV2DiffStore: CodeCollabV2DiffStore;
-  private readonly codeCollabV2TurnDiffs = new Map<string, CodeCollabV2PendingDiffStoreEvent[]>();
-  // Edit-tool changes (Codex apply_patch et al) for the in-flight turn. These bypass
-  // fs/write_text_file + standard ACP diff blocks, so they are gap-filled into the diff
-  // store at turn end (old text chained from the prior recorded state). Keyed by turn.
-  private readonly codeCollabV2TurnEdits = new Map<string, AcpAgentEditEvidence[]>();
-  private readonly codeCollabV2PendingEvidenceWrites = new Map<SessionId, Set<Promise<void>>>();
-  private readonly codeCollabV2TurnPersistChains = new Map<string, Promise<void>>();
-  private readonly codeCollabV2TurnRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly codeCollabV2TurnRetryFailures = new Map<string, number>();
   private codeCollabV2Service: CodeCollabV2Service;
   // File Preview v3. Separate from Code Collab on purpose: previewing a file must
   // not start a workspace watcher or publish a file index.
@@ -3016,20 +2971,6 @@ export class MessageHandler {
           updatedAtMs: state.updatedAtMs,
           reconcileRemote: state.reconcileRemote,
         });
-        if (state.persistAllChangesDiffStats && state.allChangesDiffStats) {
-          try {
-            await this.persistCodeCollabAllChangesDiffStats(
-              state.ownerSessionId,
-              state.allChangesDiffStats
-            );
-          } catch (error) {
-            this.logger.debug(
-              `[code-collab-v2] Failed to persist All Changes diffStats ownerSessionId=${
-                state.ownerSessionId
-              }: ${formatErrorMessage(error)}`
-            );
-          }
-        }
         this.logger.info(
           `[code-collab-v2] file-index flock publish completed ownerSessionId=${
             state.ownerSessionId
@@ -3081,25 +3022,6 @@ export class MessageHandler {
           signal
         )
     );
-    this.autoPromptRunner = new AutoPromptRunner({
-      workspaceId: this.workspaceId,
-      beginConversationTurn: (sessionId, userTurnId) =>
-        this.beginConversationTurn(sessionId, userTurnId),
-      clearActiveTurnId: (sessionId, turnId) => this.clearActiveTurnIdIfMatches(sessionId, turnId),
-      buildAcpPromptBlocks: async (args) => await this.buildAcpPromptBlocks(args),
-      createAssistantEntryForTurn: async (sessionId, sessionDoc, turnId, modelInfo) =>
-        await this.createAssistantEntryForTurn(sessionId, sessionDoc, turnId, modelInfo),
-      finalizeACPState: async (sessionId) => await this.finalizeACPState(sessionId),
-      flushSessionUsage: async (sessionId) => await this.flushSessionUsage(sessionId),
-    });
-    this.turnPostProcessingService = new TurnPostProcessingService({
-      logger: this.logger,
-      workspaceDocument: this.workspaceDocument,
-      workspaceId: this.workspaceId,
-      preferredBaseBranch: this.preferredBaseBranch,
-      prAssociation: this.cloudPort.prAssociation,
-      runAutoPrompt: async (ctx) => await this.autoPromptRunner.run(ctx),
-    });
     this.executionService = new SessionExecutionService({
       logger: this.logger,
       sessionManager: this.sessionManager,
@@ -3187,19 +3109,9 @@ export class MessageHandler {
       turnFinalization: {
         finalizeACPState: async (sessionId, turnId, options) =>
           await this.finalizeACPState(sessionId, turnId, options),
-        persistCodeCollabTurnDiffs: async (sessionId, turnId) =>
-          await this.persistCodeCollabTurnDiffs(sessionId, turnId),
         flushSessionUsage: async (sessionId) => await this.flushSessionUsage(sessionId),
-        syncSessionBranchName: async (sessionId, session) =>
-          await this.turnPostProcessingService.syncSessionBranchName(sessionId, session),
-        updateSessionDiffStats: async (sessionId, session, options) =>
-          await this.turnPostProcessingService.updateSessionDiffStats(sessionId, session, options),
         refreshCodeCollabSharedState: async (sessionId) =>
           await this.codeCollabV2Service.refreshSharedStateAfterTurn({ sessionId }),
-        detectAndAssociatePR: async (ctx) =>
-          await this.turnPostProcessingService.detectAndAssociatePR(ctx),
-        autoCommitAndPushForPR: async (ctx) =>
-          await this.turnPostProcessingService.autoCommitAndPushForPR(ctx),
         notifySessionCompleted: async (sessionId, userId, occurrenceId) =>
           await this.notifySessionCompleted(sessionId, userId, occurrenceId),
       },
@@ -3222,22 +3134,6 @@ export class MessageHandler {
           env,
           customAcp,
           runtimeOverrides
-        ),
-      maybeRenameSessionBranchFromPrompt: async (
-        sessionId,
-        session,
-        cliType,
-        agentType,
-        prompt,
-        env
-      ) =>
-        await this.maybeRenameSessionBranchFromPrompt(
-          sessionId,
-          session,
-          cliType,
-          agentType,
-          prompt,
-          env
         ),
       processMessageQueue: async (sessionId) => await this.processMessageQueue(sessionId),
       syncLiveActivitySummary: async (userId) => {
@@ -3499,13 +3395,6 @@ export class MessageHandler {
     // session history. We buffer them briefly to reduce the number of CRDT writes.
     this.sessionManager.on('onACPUpdateMessage', (sessionId, update) => {
       this.enqueueACPUpdate(sessionId, update);
-    });
-
-    this.sessionManager.on('onWriteTextFile', (sessionId, event) => {
-      this.trackCodeCollabEvidenceWrite(
-        sessionId,
-        this.collectCodeCollabWriteTextFileEvidence(sessionId, event)
-      );
     });
 
     this.sessionManager.on('onUsageUpdate', ({ sessionId, acpSessionId, usage }) => {
@@ -4522,22 +4411,10 @@ export class MessageHandler {
     }
     const target = this.store.getCurrentACPUpdateTarget(sessionId);
     if (!target) {
-      this.captureACPUpdateInvariant('out_of_turn_acp_update_without_target', sessionId, update);
       this.logger.debug(
         `[${sessionId}] Dropping ACP update without an active/finalized assistant entry target (${update.update.sessionUpdate})`
       );
       return;
-    }
-    if (target.source === 'finalized_turn') {
-      this.captureACPUpdateInvariant(
-        'late_acp_update_routed_to_finalized_turn',
-        sessionId,
-        update,
-        {
-          assistantEntryId: target.assistantEntryId,
-          turnEpoch: target.turnEpoch,
-        }
-      );
     }
     this.store.get(sessionId).acpUpdateBuffer.push({ notification: update, target });
     this.scheduleFlushACPUpdates(sessionId);
@@ -4575,7 +4452,6 @@ export class MessageHandler {
     if (state) {
       state.acpUpdateBuffer = [];
     }
-    await this.quiesceCodeCollabTurnPersistenceForDeletion(sessionId);
     this.store.deleteSession(sessionId);
   }
 
@@ -4764,25 +4640,6 @@ export class MessageHandler {
     });
   }
 
-  private captureACPUpdateInvariant(
-    eventName: 'late_acp_update_routed_to_finalized_turn' | 'out_of_turn_acp_update_without_target',
-    sessionId: SessionId,
-    notification: AcpSessionNotification,
-    extra?: { assistantEntryId?: string; turnEpoch?: number }
-  ): void {
-    captureCli(
-      eventName,
-      {
-        workspace_id: this.workspaceId,
-        session_id: sessionId,
-        session_update: notification.update.sessionUpdate,
-        ...(extra?.assistantEntryId ? { assistant_entry_id: extra.assistantEntryId } : {}),
-        ...(typeof extra?.turnEpoch === 'number' ? { turn_epoch: extra.turnEpoch } : {}),
-      },
-      { tier: 'C' }
-    );
-  }
-
   private getACPUpdateTargetKey(target: ACPUpdateTarget): string {
     return `${target.assistantEntryId}\0${target.turnEpoch}\0${target.source}`;
   }
@@ -4920,16 +4777,6 @@ export class MessageHandler {
         args.assistantEntryId,
         {
           logger: this.logger,
-          editCallback: async (edits) => {
-            // Edit tool calls (Codex apply_patch et al) bypass `fs/write_text_file` and
-            // standard ACP diff blocks. Collect them so the turn-end persist can gap-fill
-            // them into the diff store (old text chained from the prior recorded state),
-            // keeping the turn-diff badge and its clickable content from the same source.
-            this.collectCodeCollabEditEvidence(args.sessionId, args.turnId, edits);
-          },
-          standardDiffCallback: async (diffs) => {
-            await this.collectCodeCollabStandardDiffs(args.sessionId, args.turnId, diffs);
-          },
         },
         args.modelInfo
       );
@@ -4937,9 +4784,6 @@ export class MessageHandler {
         args.progress.persistedNotifications += notifications.length;
       }
       await this.markACPNotificationsUnread(args.sessionId, args.sessionDoc, notifications);
-      if (args.targetSource === 'finalized_turn') {
-        await this.persistLateCodeCollabTurnDiffs(args.sessionId, args.turnId);
-      }
     };
 
     const flushNotifications = async (notifications: AcpSessionNotification[]) => {
@@ -5152,471 +4996,6 @@ export class MessageHandler {
       if (this.store.hasPendingTurnWork(sessionId)) {
         await this.finalizeACPState(sessionId);
       }
-    }
-  }
-
-  private codeCollabTurnDiffKey(sessionId: SessionId, turnId: string): string {
-    return `${sessionId}\0${turnId}`;
-  }
-
-  private trackCodeCollabEvidenceWrite(sessionId: SessionId, promise: Promise<void>): void {
-    let pending = this.codeCollabV2PendingEvidenceWrites.get(sessionId);
-    if (!pending) {
-      pending = new Set();
-      this.codeCollabV2PendingEvidenceWrites.set(sessionId, pending);
-    }
-    pending.add(promise);
-    void promise
-      .finally(() => {
-        const latest = this.codeCollabV2PendingEvidenceWrites.get(sessionId);
-        latest?.delete(promise);
-        if (latest?.size === 0) {
-          this.codeCollabV2PendingEvidenceWrites.delete(sessionId);
-        }
-      })
-      .catch(() => {});
-  }
-
-  private async flushCodeCollabEvidenceWrites(sessionId: SessionId): Promise<void> {
-    while (true) {
-      const pending = this.codeCollabV2PendingEvidenceWrites.get(sessionId);
-      if (!pending || pending.size === 0) {
-        return;
-      }
-      const results = await Promise.allSettled([...pending]);
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          this.logger.debug(
-            `[${sessionId}] Code Collab v2 diff evidence collection failed: ${formatErrorMessage(
-              result.reason
-            )}`
-          );
-        }
-      }
-    }
-  }
-
-  private async flushAllCodeCollabEvidenceWrites(): Promise<void> {
-    while (true) {
-      const pending = [...this.codeCollabV2PendingEvidenceWrites.values()].flatMap((writes) => [
-        ...writes,
-      ]);
-      if (pending.length === 0) {
-        return;
-      }
-      await Promise.allSettled(pending);
-    }
-  }
-
-  private async collectCodeCollabStandardDiffs(
-    sessionId: SessionId,
-    turnId: string,
-    diffs: readonly AcpStandardDiffBlockEvidence[]
-  ): Promise<void> {
-    if (diffs.length === 0) {
-      return;
-    }
-    const resolved = await this.resolveCodeCollabV2Workspace(sessionId);
-    if (!resolved.ok) {
-      if (resolved.code === 'transient_io' || resolved.code === 'machine_offline') {
-        throw new CodeCollabV2ServiceError(resolved.code, resolved.message, { retryable: true });
-      }
-      this.logger.debug(
-        `[${sessionId}] Dropping Code Collab v2 standard diff evidence: ${resolved.code}`
-      );
-      return;
-    }
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const existing = this.codeCollabV2TurnDiffs.get(key) ?? [];
-    for (const diff of diffs) {
-      const event = await pendingEventFromStandardDiffEvidence({
-        workspaceRoot: resolved.workspaceRoot,
-        diff,
-      });
-      if (event) {
-        existing.push(event);
-      }
-    }
-    if (existing.length > 0) {
-      this.codeCollabV2TurnDiffs.set(key, existing);
-    }
-  }
-
-  private async collectCodeCollabWriteTextFileEvidence(
-    sessionId: SessionId,
-    evidence: AcpWriteTextFileEvidence
-  ): Promise<void> {
-    const turnId = this.store.getTurnId(sessionId);
-    if (!turnId) {
-      return;
-    }
-    await this.collectCodeCollabWriteEvidence(sessionId, turnId, evidence);
-  }
-
-  private async collectCodeCollabWriteEvidence(
-    sessionId: SessionId,
-    turnId: string,
-    evidence: CodeCollabV2WriteTextFileEvidence
-  ): Promise<void> {
-    // Buffer the exact fs/write_text_file payload before resolving workspace
-    // ownership. Resolution is retried by turn persistence; doing it here would
-    // turn a transient machine/workspace lookup failure into permanent evidence
-    // loss because this event is delivered only once.
-    const event = pendingEventFromWriteTextFileEvidence(evidence);
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const existing = this.codeCollabV2TurnDiffs.get(key) ?? [];
-    existing.push(event);
-    this.codeCollabV2TurnDiffs.set(key, existing);
-  }
-
-  private collectCodeCollabEditEvidence(
-    sessionId: SessionId,
-    turnId: string,
-    edits: readonly AcpAgentEditEvidence[]
-  ): void {
-    if (edits.length === 0) {
-      return;
-    }
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const existing = this.codeCollabV2TurnEdits.get(key) ?? [];
-    existing.push(...edits);
-    this.codeCollabV2TurnEdits.set(key, existing);
-  }
-
-  // Gap-fill edit-tool changes (apply_patch et al) that produced no fs/write_text_file or
-  // standard ACP diff evidence: new text is the file's current on-disk content, old text is
-  // chained from the prior recorded state for the path (see pendingEventFromAgentEditEvidence).
-  // `getLatestText` is read before recordTurnDiffs, so it reflects the pre-turn state. Paths
-  // already covered by strong ACP evidence this turn are skipped (that evidence is exact).
-  private async buildCodeCollabEditGapEvents(
-    workspaceRoot: string,
-    ownerSessionId: SessionId,
-    acpEvents: readonly CodeCollabV2PendingDiffStoreEvent[],
-    editEvidence: readonly AcpAgentEditEvidence[]
-  ): Promise<CodeCollabV2PendingDiffStoreEvent[]> {
-    if (editEvidence.length === 0) {
-      return [];
-    }
-    const coveredRelativePaths = new Set<string>();
-    for (const event of acpEvents) {
-      const resolved = resolveCodeCollabV2EvidencePath(workspaceRoot, event.path);
-      if (resolved) {
-        coveredRelativePaths.add(resolved.relativePath);
-      }
-    }
-    // Dedup edits per path; the converter reads the file's final on-disk state, so the last
-    // edit to a path in the turn subsumes earlier ones.
-    const latestEditByPath = new Map<string, AcpAgentEditEvidence>();
-    for (const edit of editEvidence) {
-      latestEditByPath.set(edit.path, edit);
-    }
-    const gapEvents: CodeCollabV2PendingDiffStoreEvent[] = [];
-    for (const edit of latestEditByPath.values()) {
-      const resolved = resolveCodeCollabV2EvidencePath(workspaceRoot, edit.path);
-      if (!resolved || coveredRelativePaths.has(resolved.relativePath)) {
-        continue;
-      }
-      const normalizedEdit = {
-        path: edit.path,
-        changeType: edit.changeType,
-        contentOldText: edit.contentOldText,
-        oldString: edit.oldString,
-        newString: edit.newString,
-      };
-      const hasDirectOldEvidence =
-        typeof edit.contentOldText === 'string' ||
-        (edit.oldString !== undefined && edit.newString !== undefined);
-      let latestText: AgentEditLatestText = { status: 'untracked' };
-      let event = hasDirectOldEvidence
-        ? await pendingEventFromAgentEditEvidence({
-            workspaceRoot,
-            edit: normalizedEdit,
-            latestText,
-          })
-        : null;
-      if (!event) {
-        latestText = await this.codeCollabV2DiffStore.getLatestText({
-          ownerSessionId,
-          path: resolved.relativePath,
-          maxRawBytes: CODE_COLLAB_V2_TEXT_LIMITS.maxRawTextBytes,
-        });
-        event = await pendingEventFromAgentEditEvidence({
-          workspaceRoot,
-          edit: normalizedEdit,
-          latestText,
-        });
-      }
-      if (!event) {
-        const message = `Code Collab v2 edit evidence for ${edit.path} (${edit.changeType}) could not be converted into a turn diff event; missing pre-image or unreadable current file`;
-        this.logger.error(
-          `[${ownerSessionId}] ${message} latestText=${latestText.status} workspaceRoot=${workspaceRoot}`
-        );
-        throw new Error(message);
-      }
-      gapEvents.push(event);
-    }
-    return gapEvents;
-  }
-
-  private mergeCodeCollabTurnDiffEvents(
-    events: readonly CodeCollabV2PendingDiffStoreEvent[]
-  ): CodeCollabV2DiffStoreEvent[] {
-    return mergePendingDiffStoreEvents(events);
-  }
-
-  private async persistCodeCollabTurnDiffsOnce(
-    sessionId: SessionId,
-    turnId: string
-  ): Promise<boolean> {
-    await this.flushCodeCollabEvidenceWrites(sessionId);
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const acpEvents = this.codeCollabV2TurnDiffs.get(key) ?? [];
-    this.codeCollabV2TurnDiffs.delete(key);
-    const editEvidence = this.codeCollabV2TurnEdits.get(key) ?? [];
-    this.codeCollabV2TurnEdits.delete(key);
-    if (acpEvents.length === 0 && editEvidence.length === 0) {
-      return false;
-    }
-    try {
-      const resolved = await this.resolveCodeCollabV2Workspace(sessionId);
-      if (!resolved.ok) {
-        if (resolved.code === 'transient_io' || resolved.code === 'machine_offline') {
-          throw new CodeCollabV2ServiceError(resolved.code, resolved.message, { retryable: true });
-        }
-        this.logger.debug(
-          `[${sessionId}] Dropping Code Collab v2 diff evidence for turn ${turnId}: ${resolved.code}`
-        );
-        return false;
-      }
-      const gapEvents = await this.buildCodeCollabEditGapEvents(
-        resolved.workspaceRoot,
-        resolved.ownerSessionId,
-        acpEvents,
-        editEvidence
-      );
-      const mergedEvents = this.mergeCodeCollabTurnDiffEvents([...acpEvents, ...gapEvents]);
-      if (mergedEvents.length === 0) {
-        return false;
-      }
-      const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
-      const recordedAtMs = getServerNow();
-      const turnStorageMetadata = sessionDoc.getAssistantHistoryEntryTurnStorageMetadata(turnId);
-      const capturedAtMs = turnStorageMetadata?.capturedAtMs ?? recordedAtMs;
-      const fileDiff = await this.codeCollabV2DiffStore.recordTurnDiffs({
-        workspaceRoot: resolved.workspaceRoot,
-        ownerSessionId: resolved.ownerSessionId,
-        turnId,
-        events: mergedEvents,
-        capturedAtMs,
-        recordedAtMs,
-        orderKey:
-          turnStorageMetadata?.orderKey ??
-          `${capturedAtMs.toString().padStart(16, '0')}:${sessionId}:${turnId}`,
-      });
-      if (fileDiff.length === 0) {
-        return false;
-      }
-      const updated =
-        (
-          await sessionDoc.sessionData.commands.applyHistoryAction({
-            kind: 'assistant-file-diff',
-            change: { kind: 'set', value: fileDiff },
-            turnId,
-          })
-        ).matched ?? false;
-      if (!updated) {
-        this.logger.debug(
-          `[${sessionId}] Code Collab v2 diff evidence persisted, but no assistant history entry matched turn ${turnId}`
-        );
-      }
-      return updated;
-    } catch (error) {
-      // A later finalized-turn update is a natural retry trigger. Put the
-      // captured evidence back ahead of anything collected concurrently so a
-      // transient workspace/SQLite/history failure cannot lose it.
-      const concurrentAcpEvents = this.codeCollabV2TurnDiffs.get(key) ?? [];
-      const concurrentEditEvidence = this.codeCollabV2TurnEdits.get(key) ?? [];
-      const restoredAcpEvents = [...acpEvents, ...concurrentAcpEvents];
-      const restoredEditEvidence = [...editEvidence, ...concurrentEditEvidence];
-      if (restoredAcpEvents.length > 0) {
-        this.codeCollabV2TurnDiffs.set(key, restoredAcpEvents);
-      }
-      if (restoredEditEvidence.length > 0) {
-        this.codeCollabV2TurnEdits.set(key, restoredEditEvidence);
-      }
-      throw error;
-    }
-  }
-
-  private async persistCodeCollabTurnDiffs(sessionId: SessionId, turnId: string): Promise<boolean> {
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const previous = this.codeCollabV2TurnPersistChains.get(key) ?? Promise.resolve();
-    let persisted = false;
-    const next = previous
-      .catch(() => {})
-      .then(async () => {
-        persisted = await this.persistCodeCollabTurnDiffsOnce(sessionId, turnId);
-      });
-    this.codeCollabV2TurnPersistChains.set(key, next);
-    try {
-      await next;
-      return persisted;
-    } finally {
-      if (this.codeCollabV2TurnPersistChains.get(key) === next) {
-        this.codeCollabV2TurnPersistChains.delete(key);
-      }
-    }
-  }
-
-  private clearCodeCollabTurnRetry(sessionId: SessionId, turnId: string): void {
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    const timer = this.codeCollabV2TurnRetryTimers.get(key);
-    if (timer) {
-      clearTimeout(timer);
-      this.codeCollabV2TurnRetryTimers.delete(key);
-    }
-    this.codeCollabV2TurnRetryFailures.delete(key);
-  }
-
-  private scheduleCodeCollabTurnRetry(sessionId: SessionId, turnId: string): void {
-    if (this.cleanedUp || this.deletedSessionIds.has(sessionId)) {
-      return;
-    }
-    const key = this.codeCollabTurnDiffKey(sessionId, turnId);
-    if (this.codeCollabV2TurnRetryTimers.has(key)) {
-      return;
-    }
-    const failures = (this.codeCollabV2TurnRetryFailures.get(key) ?? 0) + 1;
-    this.codeCollabV2TurnRetryFailures.set(key, failures);
-    if (failures > MessageHandler.CODE_COLLAB_EVIDENCE_MAX_AUTOMATIC_RETRIES) {
-      this.logger.warn(
-        `[${sessionId}] Pausing automatic Code Collab evidence retries for turn ${turnId} after ${failures - 1} failures; evidence remains buffered for a later trigger`
-      );
-      return;
-    }
-    const retryDelayMs = Math.min(
-      MessageHandler.CODE_COLLAB_EVIDENCE_RETRY_BASE_DELAY_MS * 2 ** Math.max(0, failures - 1),
-      MessageHandler.CODE_COLLAB_EVIDENCE_RETRY_MAX_DELAY_MS
-    );
-    const timer = setTimeout(() => {
-      this.codeCollabV2TurnRetryTimers.delete(key);
-      if (this.cleanedUp || this.deletedSessionIds.has(sessionId)) {
-        this.codeCollabV2TurnRetryFailures.delete(key);
-        return;
-      }
-      void this.persistLateCodeCollabTurnDiffs(sessionId, turnId);
-    }, retryDelayMs);
-    timer.unref?.();
-    this.codeCollabV2TurnRetryTimers.set(key, timer);
-  }
-
-  private cancelAllCodeCollabTurnRetryTimers(): void {
-    for (const timer of this.codeCollabV2TurnRetryTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.codeCollabV2TurnRetryTimers.clear();
-  }
-
-  private async drainCodeCollabTurnPersistenceForCleanup(): Promise<void> {
-    this.cancelAllCodeCollabTurnRetryTimers();
-    // Producers have stopped, but their async write_text_file collectors may
-    // still be resolving workspace ownership. Wait until they have populated
-    // the per-turn maps before taking any map/chain snapshot.
-    await this.flushAllCodeCollabEvidenceWrites();
-    const inFlight = [...this.codeCollabV2TurnPersistChains.values()];
-    if (inFlight.length > 0) {
-      await Promise.allSettled(inFlight);
-    }
-
-    // Cleanup cannot leave timer-backed evidence for the next process: these
-    // maps are memory-only. Retry each retained turn directly while the diff
-    // store and session documents are still alive, without replaying history.
-    for (
-      let round = 0;
-      round < MessageHandler.CODE_COLLAB_EVIDENCE_MAX_AUTOMATIC_RETRIES;
-      round += 1
-    ) {
-      const keys = new Set([
-        ...this.codeCollabV2TurnDiffs.keys(),
-        ...this.codeCollabV2TurnEdits.keys(),
-      ]);
-      if (keys.size === 0) {
-        break;
-      }
-      for (const key of keys) {
-        const separatorIndex = key.indexOf('\0');
-        if (separatorIndex <= 0) {
-          continue;
-        }
-        const sessionId = key.slice(0, separatorIndex) as SessionId;
-        const turnId = key.slice(separatorIndex + 1);
-        try {
-          await this.persistCodeCollabTurnDiffs(sessionId, turnId);
-        } catch (error) {
-          this.logger.debug(
-            `[${sessionId}] Cleanup retry ${round + 1} failed to persist Code Collab v2 evidence for turn ${turnId}: ${formatErrorMessage(error)}`
-          );
-        }
-      }
-    }
-
-    const remainingKeys = new Set([
-      ...this.codeCollabV2TurnDiffs.keys(),
-      ...this.codeCollabV2TurnEdits.keys(),
-    ]);
-    if (remainingKeys.size > 0) {
-      this.logger.warn(
-        `Message handler cleanup could not persist Code Collab v2 evidence for ${remainingKeys.size} turn(s)`
-      );
-    }
-    this.cancelAllCodeCollabTurnRetryTimers();
-    this.codeCollabV2TurnRetryFailures.clear();
-  }
-
-  private async quiesceCodeCollabTurnPersistenceForDeletion(sessionId: SessionId): Promise<void> {
-    const keyPrefix = `${sessionId}\0`;
-    for (const [key, timer] of this.codeCollabV2TurnRetryTimers) {
-      if (key.startsWith(keyPrefix)) {
-        clearTimeout(timer);
-        this.codeCollabV2TurnRetryTimers.delete(key);
-      }
-    }
-    for (const key of this.codeCollabV2TurnRetryFailures.keys()) {
-      if (key.startsWith(keyPrefix)) {
-        this.codeCollabV2TurnRetryFailures.delete(key);
-      }
-    }
-    await this.flushCodeCollabEvidenceWrites(sessionId);
-    const inFlight = [...this.codeCollabV2TurnPersistChains]
-      .filter(([key]) => key.startsWith(keyPrefix))
-      .map(([, promise]) => promise);
-    if (inFlight.length > 0) {
-      await Promise.allSettled(inFlight);
-    }
-    for (const key of this.codeCollabV2TurnDiffs.keys()) {
-      if (key.startsWith(keyPrefix)) {
-        this.codeCollabV2TurnDiffs.delete(key);
-      }
-    }
-    for (const key of this.codeCollabV2TurnEdits.keys()) {
-      if (key.startsWith(keyPrefix)) {
-        this.codeCollabV2TurnEdits.delete(key);
-      }
-    }
-  }
-
-  private async persistLateCodeCollabTurnDiffs(
-    sessionId: SessionId,
-    turnId: string
-  ): Promise<void> {
-    try {
-      await this.persistCodeCollabTurnDiffs(sessionId, turnId);
-      this.clearCodeCollabTurnRetry(sessionId, turnId);
-    } catch (error) {
-      this.logger.debug(
-        `[${sessionId}] Failed to persist late Code Collab v2 evidence for turn ${turnId}: ${formatErrorMessage(error)}`
-      );
-      this.scheduleCodeCollabTurnRetry(sessionId, turnId);
     }
   }
 
@@ -6335,24 +5714,6 @@ export class MessageHandler {
       return undefined;
     }
     return metaRecord.meta as SessionMeta;
-  }
-
-  private async persistCodeCollabAllChangesDiffStats(
-    ownerSessionId: SessionId,
-    diffStats: NonNullable<SessionMeta['diffStats']>
-  ): Promise<void> {
-    const ownerRoomId = getSessionRoomId(ownerSessionId);
-    const metaRecord = await this.workspaceDocument.repo.getDocMeta(ownerRoomId);
-    if (!metaRecord?.meta || isLoroRepoDocDeleted(metaRecord)) {
-      return;
-    }
-    const ownerMeta = readDiffStatsMetadata(metaRecord.meta);
-    const target = resolveDiffStatsTarget({ ownerRoomId, ownerMeta });
-    const patch = resolveCodeCollabAllChangesDiffStatsPatch({ target, ownerMeta, diffStats });
-    if (!patch) {
-      return;
-    }
-    await this.workspaceDocument.repo.upsertDocMeta(ownerRoomId, patch);
   }
 
   private canWriteCodeCollabOwnerSession(args: {
@@ -8158,38 +7519,6 @@ export class MessageHandler {
       `[${sessionId}] Processing permission request ${requestId} for tool call ${request.toolCall.toolCallId}`
     );
 
-    const permissionRequestedAt = Date.now();
-    // acp/permission_requested (spec §8c, P0). Non-PII: only request/tool kinds.
-    captureCli(
-      'acp/permission_requested',
-      {
-        session_id: sessionId,
-        workspace_id: this.workspaceId,
-        request_kind: requestKind,
-        ...(toolKind ? { tool_kind: toolKind } : {}),
-      },
-      { tier: 'A' }
-    );
-    const capturePermissionResolved = (
-      outcome: 'allow' | 'deny' | 'cancelled' | 'timeout',
-      opts: { resolutionSource: string }
-    ): void => {
-      captureCli(
-        'acp/permission_resolved',
-        {
-          session_id: sessionId,
-          workspace_id: this.workspaceId,
-          request_kind: requestKind,
-          ...(toolKind ? { tool_kind: toolKind } : {}),
-          outcome,
-          wait_ms: Date.now() - permissionRequestedAt,
-          was_timeout: outcome === 'timeout',
-          resolution_source: opts.resolutionSource,
-        },
-        { tier: 'A' }
-      );
-    };
-
     const doc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
     let sessionTitle: string | undefined;
     let metaUserId: string | undefined;
@@ -8230,9 +7559,6 @@ export class MessageHandler {
       this.logger.warn(
         `[${sessionId}] Permission request ${requestId} for tool call ${request.toolCall.toolCallId} could not be attached to an active assistant entry; cancelling to avoid waiting for an unobservable permission outcome`
       );
-      capturePermissionResolved('cancelled', {
-        resolutionSource: 'unobservable',
-      });
       return { outcome: { outcome: 'cancelled' } };
     }
 
@@ -8249,7 +7575,6 @@ export class MessageHandler {
         );
         return { outcome: { outcome: 'cancelled' } };
       }
-      capturePermissionResolved('allow', { resolutionSource: 'run_config_auto_approve' });
       return { outcome: signal?.aborted ? { outcome: 'cancelled' } : automaticOutcome };
     }
 
@@ -8341,7 +7666,6 @@ export class MessageHandler {
 
     // Subscribe to LoroDoc and wait for outcome
     return new Promise<RequestPermissionResponse>((resolve, reject) => {
-      let timedOutResolution = false;
       let unsubscribe: (() => void) | null = null;
       let unsubscribeConfig: (() => void) | undefined;
       let timeoutId: NodeJS.Timeout | null = null;
@@ -8412,12 +7736,6 @@ export class MessageHandler {
         this.logger.debug(
           `[${sessionId}] Permission request ${requestId} resolved with outcome: ${outcome.outcome}`
         );
-
-        if (!timedOutResolution) {
-          capturePermissionResolved(outcome.outcome === 'selected' ? 'allow' : 'cancelled', {
-            resolutionSource,
-          });
-        }
         if (notificationService) {
           void permissionInboxRecordPromise.then(async () => {
             await this.runTurnCloudSideEffect(
@@ -8532,11 +7850,6 @@ export class MessageHandler {
           this.logger.debug(
             `[${sessionId}] Permission request ${requestId} timed out after ${permissionTimeoutMs}ms`
           );
-
-          timedOutResolution = true;
-          capturePermissionResolved('timeout', {
-            resolutionSource: usesProviderAutoResolution ? 'provider_auto_resolution' : 'timeout',
-          });
 
           // Update history to mark as cancelled due to timeout
           try {
@@ -9265,7 +8578,6 @@ export class MessageHandler {
     this.logger.debug('Cleaning up message handler resources');
     this.cleanedUp = true;
     this.titleGenerationAbort.abort();
-    this.cancelAllCodeCollabTurnRetryTimers();
     this.operationCoordinator.stop();
     this.sessionDispatchWatcher.stop();
     this.harnessCredentials.dispose();
@@ -9290,166 +8602,9 @@ export class MessageHandler {
       .map((id) => this.store.get(id).acpFlushInFlight)
       .filter((p): p is Promise<void> => p !== null);
     await Promise.all(inFlightPromises);
-    await this.drainCodeCollabTurnPersistenceForCleanup();
     await this.codeCollabV2DiffStore.close();
     await this.previewService.closeAllActiveTunnelsForCleanup('Message handler cleanup');
     await this.sessionManager.cleanUp();
-  }
-
-  private async maybeRenameSessionBranchFromPrompt(
-    sessionId: SessionId,
-    session: ISession,
-    cliType: AgentConfigCliType,
-    agentType: string,
-    taskPrompt: string,
-    env?: Record<string, string>,
-    titleConfig?: TitleGenerationConfig
-  ): Promise<void> {
-    const trimmedPrompt = taskPrompt.trim();
-    if (!trimmedPrompt) {
-      return;
-    }
-
-    let metaBranchName: string | null = null;
-    let metaCustomAcp: CustomAcpLaunchSpec | undefined;
-    let metaRuntimeOverrides: BuiltinRuntimeOverrides | undefined;
-    let metaAgentConfigId: AgentConfigId | undefined;
-    let reusableTitlePromise: Promise<string | null> | undefined;
-    try {
-      const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
-      const meta = await sessionDoc.getMetaState();
-      metaBranchName = meta?.branchName?.trim() || null;
-      metaAgentConfigId = meta?.agentConfigId;
-      const generatedMetaTitle = meta?.titleSource === 'generated' ? meta.title?.trim() : '';
-      reusableTitlePromise = generatedMetaTitle
-        ? Promise.resolve(generatedMetaTitle)
-        : this.titleGenerationInFlight.get(sessionId);
-      const agentConfig = metaAgentConfigId
-        ? await this.workspaceDocument.getAgentConfigById(metaAgentConfigId)
-        : null;
-      const legacyLaunchConfig = await readLegacySessionLaunchConfig({
-        repo: this.workspaceDocument.repo,
-        workspaceId: this.workspaceId,
-        machineId: this.machineId,
-        sessionId,
-        sessionMeta: meta,
-        logger: this.logger,
-      });
-      metaCustomAcp = agentConfig?.customAcp ?? legacyLaunchConfig?.customAcp;
-      metaRuntimeOverrides = agentConfig?.runtimeOverrides ?? legacyLaunchConfig?.runtimeOverrides;
-      if (metaBranchName && !isManagedWorktreeBranchName(metaBranchName)) {
-        return;
-      }
-    } catch (error) {
-      this.logger.debug(
-        `[${sessionId}] Failed to read session meta before branch rename: ${formatErrorMessage(error)}`
-      );
-    }
-
-    const resolvedTitleConfig =
-      titleConfig ?? (await this.resolveTitleConfig(sessionId, metaAgentConfigId));
-    const branchName = await this.generateBranchNameWithTimeout(
-      cliType,
-      agentType,
-      trimmedPrompt,
-      env,
-      20_000,
-      resolvedTitleConfig,
-      metaCustomAcp,
-      metaRuntimeOverrides,
-      reusableTitlePromise
-    );
-    if (this.cleanedUp || !branchName) {
-      this.logger.debug(`[${sessionId}] Skipping branch rename: name generation timed out`);
-      return;
-    }
-
-    const workdir = session.getWorkdir();
-    const currentBranch = await resolveGitBranchName(session.exec.bind(session), workdir);
-    if (!currentBranch || currentBranch === branchName) {
-      return;
-    }
-    if (!isManagedWorktreeBranchName(currentBranch)) {
-      this.logger.debug(
-        `[${sessionId}] Skipping branch rename: not on a managed worktree branch (currentBranch=${currentBranch})`
-      );
-      return;
-    }
-    if (metaBranchName && metaBranchName !== currentBranch) {
-      this.logger.debug(
-        `[${sessionId}] Skipping branch rename: branch changed before rename (metaBranchName=${metaBranchName} currentBranch=${currentBranch})`
-      );
-      return;
-    }
-
-    try {
-      const renamedBranch = await renameBranchWithAvailableSuffix({
-        exec: session.exec.bind(session),
-        workdir,
-        currentBranch,
-        desiredBranchName: branchName,
-        maxLength: 50,
-      });
-      if (!renamedBranch) {
-        this.logger.debug(
-          `[${sessionId}] Skipping branch rename: branch changed or git rejected the rename`
-        );
-        return;
-      }
-      await this.turnPostProcessingService.syncSessionBranchName(sessionId, session);
-    } catch (error) {
-      this.logger.debug(`[${sessionId}] Failed to rename branch: ${formatErrorMessage(error)}`);
-    }
-  }
-
-  private async generateBranchNameWithTimeout(
-    cliType: AgentConfigCliType,
-    agentType: string,
-    taskPrompt: string,
-    env: Record<string, string> | undefined,
-    timeoutMs: number,
-    titleConfig?: TitleGenerationConfig,
-    customAcp?: CustomAcpLaunchSpec,
-    runtimeOverrides?: BuiltinRuntimeOverrides,
-    reusableTitlePromise?: Promise<string | null>
-  ): Promise<string | null> {
-    if (this.cleanedUp) return null;
-    let timeoutHandle: NodeJS.Timeout | null = null;
-    const timeoutPromise = new Promise<null>((resolve) => {
-      timeoutHandle = setTimeout(() => resolve(null), timeoutMs);
-    });
-
-    const namePromise = (async (): Promise<string> => {
-      const title = reusableTitlePromise
-        ? await reusableTitlePromise
-        : await this.runIsolatedTitle({
-            cliType,
-            agentType,
-            customAcp,
-            runtimeOverrides,
-            taskPrompt,
-            logger: this.logger,
-            env,
-            titleConfig,
-          });
-      this.titleGenerationAbort.signal.throwIfAborted();
-      const base = title ?? taskPrompt;
-      return ensureValidBranchName(base, 'task');
-    })();
-
-    try {
-      const result = await Promise.race([namePromise, timeoutPromise]);
-      return result ?? null;
-    } catch (error) {
-      this.logger.debug(
-        `[branch-name] Failed to generate branch name: ${formatErrorMessage(error)}`
-      );
-      return null;
-    } finally {
-      if (timeoutHandle) {
-        clearTimeout(timeoutHandle);
-      }
-    }
   }
 
   private async notifySessionCompleted(

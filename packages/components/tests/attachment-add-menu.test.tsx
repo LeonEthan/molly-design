@@ -40,7 +40,7 @@ describe('AttachmentAddMenu', () => {
   it('offers one attachment action for the unified picker', async () => {
     const onAddAttachment = vi.fn();
     await act(async () => {
-      root.render(<AttachmentAddMenu isMobile={false} onAddAttachment={onAddAttachment} />);
+      root.render(<AttachmentAddMenu onAddAttachment={onAddAttachment} />);
     });
 
     const trigger = container.querySelector<HTMLButtonElement>(

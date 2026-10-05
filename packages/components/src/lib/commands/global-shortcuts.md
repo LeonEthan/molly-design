@@ -23,7 +23,7 @@ them with `globalShortcut.register`, so they can run while the app is unfocused.
     owns registration/persistence rather than window behavior.
   - `app.getGlobalShortcuts` and `app.setGlobalShortcut` validate IPC input. A trigger
     sends `app.globalShortcut` (`GLOBAL_SHORTCUT_TRIGGERED_CHANNEL`) to an available
-    renderer, which owns any analytics event.
+    renderer.
 
 - **Renderer:** `lib/native-global-shortcuts.ts` provides a null-safe API wrapper,
   `hooks/use-global-shortcuts.ts` loads and updates bindings, and

@@ -34,7 +34,6 @@
 'scope: code-review':
   - changed-files:
       - any-glob-to-any-file:
-          - 'packages/code-review-helper/**'
           - 'packages/turn-diff-store/**'
 
 'scope: agent-runtime':

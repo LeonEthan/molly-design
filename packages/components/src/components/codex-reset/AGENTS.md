@@ -31,8 +31,8 @@ popover.
   `SessionUsagePopover` renders `CodexResetForecastDialogHost` as a sibling of the
   popover instead.
 - The provider-row dialog is nested inside desktop settings: pass `nestedInDialog` there
-  so its overlay uses `--z-dialog` plus `bg-black/20`. Mobile settings and the
-  usage-popover host stay top-level and keep the default dialog overlay.
+  so its overlay uses `--z-dialog` plus `bg-black/20`. The usage-popover host
+  stays top-level and keeps the default dialog overlay.
 - `forecast_window` is FREE TEXT, not a timestamp ("the next 6 hours", "later today").
   Never show that untranslated phrase as the forecast time: render the absolute UTC
   `expires_at` instant semantically ("Today 2:00 PM", "明天 14:00") in the user's

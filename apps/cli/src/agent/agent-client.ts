@@ -71,17 +71,6 @@ import { formatErrorMessage } from '@/utils/format-error';
 import { MOLLY_AUTH_SITE_URL, MOLLY_AUTH_URL, MOLLY_SERVER_URL } from '@/utils/const';
 import { startTraceSpan } from '@/utils/trace-span';
 import { withSlowOperationWarning } from '@/utils/slow-operation-warning';
-import {
-  type AcpLauncher,
-  type AcpSessionPath,
-  captureAcpProtocolInitCompleted,
-  captureAcpProtocolInitFailed,
-  captureAcpSessionEstablished,
-  captureAcpSessionEstablishFailed,
-  captureAcpStartupCompleted,
-  captureAcpStartupTimeout,
-  classifyAcpProtocolReason,
-} from './acp-analytics';
 import { filterAcpConfigOptions } from './acp-config-option-filter';
 import {
   readLegacySessionModelState,
@@ -116,15 +105,6 @@ function isTransportError(err: unknown): boolean {
     msg.includes('not ready for writing') ||
     msg.includes('transport') ||
     (msg.includes('process') && msg.includes('not ready'))
-  );
-}
-
-function isNodeErrorCode(error: unknown, code: string): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    (error as { readonly code?: unknown }).code === code
   );
 }
 
@@ -628,8 +608,6 @@ export interface AgentClientOptions {
   configOptionValues?: SessionTurnInputConfig['configOptionValues'];
   /** Whether this Agent session mounts the built-in Molly Task MCP tools. */
   taskToolsEnabled?: boolean;
-  /** Launcher family (npx/uvx/local) for ACP startup analytics; non-PII. */
-  launcher?: AcpLauncher;
   /**
    * Overrides terminal capability advertisement. Builtin Grok defaults to false so its
    * adapter uses the native local runner; other agents default to true.
@@ -660,14 +638,7 @@ export interface AgentClientOptions {
   onPersonalMemory?(request: HarnessMemoryRequest): Promise<PersonalMemorySnapshot>;
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
-  onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
 }
-
-export type AcpWriteTextFileEvidence = {
-  readonly path: string;
-  readonly oldText: string | null;
-  readonly newText: string;
-};
 
 export class AgentClient implements acp.Client {
   private mcpCatalogGuard?: NonNullable<SessionMcpCatalogSelector['guard']>;
@@ -1551,29 +1522,8 @@ export class AgentClient implements acp.Client {
     // ACP file writes are executed locally by the CLI and may be invoked by the agent.
     this.ensureSessionMatch(params.sessionId as ACPSessionId);
     const resolvedPath = this.resolvePath(params.path);
-    let oldText: string | null = null;
-    try {
-      oldText = await fs.readFile(resolvedPath, 'utf8');
-    } catch (error) {
-      if (!isNodeErrorCode(error, 'ENOENT')) {
-        throw error;
-      }
-    }
     await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
     await fs.writeFile(resolvedPath, params.content, 'utf8');
-    if (this.options.onWriteTextFile) {
-      try {
-        await this.options.onWriteTextFile({
-          path: resolvedPath,
-          oldText,
-          newText: params.content,
-        });
-      } catch (error) {
-        this.logger.debug(
-          `[${this.options.sessionId}] ACP write_text_file evidence callback failed: ${formatErrorMessage(error)}`
-        );
-      }
-    }
     return {};
   }
   async readTextFile?(params: acp.ReadTextFileRequest): Promise<acp.ReadTextFileResponse> {
@@ -2029,20 +1979,6 @@ export class AgentClient implements acp.Client {
       );
     }
 
-    // Common analytics props for the ACP startup funnel (spec §8c). Non-PII:
-    // only cli_type/agent_type/launcher + opaque ids are emitted.
-    const startupAnalyticsProps = {
-      ...(this.options.agentConfig?.cliType ? { cliType: this.options.agentConfig.cliType } : {}),
-      ...(this.options.agentConfig?.agentType
-        ? { agentType: this.options.agentConfig.agentType }
-        : {}),
-      ...(this.options.launcher ? { launcher: this.options.launcher } : {}),
-      isResume: !!resumeSessionId,
-      sessionId: this.options.sessionId,
-      ...(this.options.workspaceId ? { workspaceId: this.options.workspaceId } : {}),
-    };
-    const startupStart = performance.now();
-
     // Off the critical path on purpose: loading the workspace MCP catalog is a
     // remote sync plus a document read, and nothing in it depends on the
     // `initialize` response — only the selection applied afterwards does. Start
@@ -2064,60 +2000,51 @@ export class AgentClient implements acp.Client {
     );
 
     let initResponse: acp.InitializeResponse;
-    try {
-      initResponse = await withTimeout(
-        withAbort(
-          connection.initialize({
-            protocolVersion: acp.PROTOCOL_VERSION,
-            ...(grokClientIdentifier ? { _meta: { clientIdentifier: grokClientIdentifier } } : {}),
-            clientCapabilities: {
-              terminal: this.terminalEnabled,
-              plan: {},
-              auth: {
-                terminal: true,
-              },
-              session: {
-                configOptions: {
-                  boolean: {},
-                },
-              },
-              // Grok must read files natively: delegating PNG reads to the standard
-              // UTF-8 text RPC loses binary data before its image handling.
-              fs: {
-                readTextFile: !(
-                  this.options.agentConfig?.cliType === 'builtin' &&
-                  this.options.agentConfig.agentType === 'grok'
-                ),
-                writeTextFile: true,
-              },
-              // Form elicitation is how acp-extension-claude >= 0.44.0 surfaces
-              // AskUserQuestion; without it the agent disables the tool entirely.
-              // Handled in `unstable_createElicitation` by bridging onto the
-              // existing AskUserQuestion permission UI.
-              elicitation: {
-                form: {},
-              },
-              ...(this.options.agentConfig?.cliType === 'builtin' &&
-              this.options.agentConfig.agentType === 'molly'
-                ? { _meta: { mollyQuestionUI: { version: 1 } } }
-                : {}),
+    initResponse = await withTimeout(
+      withAbort(
+        connection.initialize({
+          protocolVersion: acp.PROTOCOL_VERSION,
+          ...(grokClientIdentifier ? { _meta: { clientIdentifier: grokClientIdentifier } } : {}),
+          clientCapabilities: {
+            terminal: this.terminalEnabled,
+            plan: {},
+            auth: {
+              terminal: true,
             },
-          }),
-          startupAbort
-        ),
-        this.logger,
-        'connection.initialize',
-        this.options.sessionId,
-        ACP_INIT_TIMEOUT_MS
-      );
-    } catch (error) {
-      const reason = classifyAcpProtocolReason(error);
-      captureAcpProtocolInitFailed({ ...startupAnalyticsProps, reason });
-      if (reason === 'timeout') {
-        captureAcpStartupTimeout({ ...startupAnalyticsProps, timedOutOperation: 'initialize' });
-      }
-      throw error;
-    }
+            session: {
+              configOptions: {
+                boolean: {},
+              },
+            },
+            // Grok must read files natively: delegating PNG reads to the standard
+            // UTF-8 text RPC loses binary data before its image handling.
+            fs: {
+              readTextFile: !(
+                this.options.agentConfig?.cliType === 'builtin' &&
+                this.options.agentConfig.agentType === 'grok'
+              ),
+              writeTextFile: true,
+            },
+            // Form elicitation is how acp-extension-claude >= 0.44.0 surfaces
+            // AskUserQuestion; without it the agent disables the tool entirely.
+            // Handled in `unstable_createElicitation` by bridging onto the
+            // existing AskUserQuestion permission UI.
+            elicitation: {
+              form: {},
+            },
+            ...(this.options.agentConfig?.cliType === 'builtin' &&
+            this.options.agentConfig.agentType === 'molly'
+              ? { _meta: { mollyQuestionUI: { version: 1 } } }
+              : {}),
+          },
+        }),
+        startupAbort
+      ),
+      this.logger,
+      'connection.initialize',
+      this.options.sessionId,
+      ACP_INIT_TIMEOUT_MS
+    );
     const initDurationMs = performance.now() - initStart;
     this.options.onStartupStage?.({ type: 'initialize_end', durationMs: initDurationMs });
     this.logger.debug(
@@ -2134,11 +2061,6 @@ export class AgentClient implements acp.Client {
     const resumeCapability = initResponse.agentCapabilities?.sessionCapabilities?.resume;
     this.supportsResume = !!resumeCapability;
     this.supportsHttpMcp = initResponse.agentCapabilities?.mcpCapabilities?.http === true;
-    captureAcpProtocolInitCompleted({
-      ...startupAnalyticsProps,
-      initDurationMs,
-      supportsResume: this.supportsResume || this.supportsLoadSession,
-    });
     const hasResumeMethod = typeof connection.resumeSession === 'function';
     const closeCapability = initResponse.agentCapabilities?.sessionCapabilities?.close;
     this.supportsClose = !!closeCapability;
@@ -2188,13 +2110,6 @@ export class AgentClient implements acp.Client {
       resumeSessionId && canResumeSession && (preferResumeOverLoad || !canLoadSession)
     );
     const shouldLoad = Boolean(resumeSessionId && canLoadSession && !shouldResume);
-    const sessionPath: AcpSessionPath = forkSessionId
-      ? 'fork'
-      : shouldLoad
-        ? 'load'
-        : shouldResume
-          ? 'resume'
-          : 'new';
 
     if (forkSessionId && !canForkSession) {
       const reasons: string[] = [];
@@ -2208,11 +2123,6 @@ export class AgentClient implements acp.Client {
       this.logger.error(
         `[${this.options.sessionId}] ACP fork unsupported (${reason}): ${forkSessionId}`
       );
-      captureAcpSessionEstablishFailed({
-        ...startupAnalyticsProps,
-        sessionPath: 'fork',
-        reason: 'protocol_error',
-      });
       throw new Error(`[ACP_FORK_UNSUPPORTED] ${reason}`);
     }
     if (forkSessionId && forkSessionTurnId && !this.supportsForkAtTurn) {
@@ -2232,11 +2142,6 @@ export class AgentClient implements acp.Client {
         this.logger.error(
           `[${this.options.sessionId}] ACP resume unsupported (${reason}): ${resumeSessionId}`
         );
-        captureAcpSessionEstablishFailed({
-          ...startupAnalyticsProps,
-          sessionPath: 'resume',
-          reason: 'protocol_error',
-        });
         throw new Error(`[ACP_RESUME_UNSUPPORTED] ${reason}`);
       }
     }
@@ -2272,18 +2177,6 @@ export class AgentClient implements acp.Client {
         if (isAcpAuthenticationRequired(error)) {
           this.authenticationRequired = true;
           throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
-        }
-        const reason = classifyAcpProtocolReason(error);
-        captureAcpSessionEstablishFailed({
-          ...startupAnalyticsProps,
-          sessionPath: 'fork',
-          reason,
-        });
-        if (reason === 'timeout') {
-          captureAcpStartupTimeout({
-            ...startupAnalyticsProps,
-            timedOutOperation: 'fork_session',
-          });
         }
         throw new Error(`[ACP_FORK_FAILED] ${formatErrorMessage(error)}`, { cause: error });
       }
@@ -2334,14 +2227,6 @@ export class AgentClient implements acp.Client {
             loadDurationMs
           )}ms (acpSessionId=${resumeSessionId}): ${formatErrorMessage(error)}`
         );
-        const reason = classifyAcpProtocolReason(error);
-        captureAcpSessionEstablishFailed({ ...startupAnalyticsProps, sessionPath: 'load', reason });
-        if (reason === 'timeout') {
-          captureAcpStartupTimeout({
-            ...startupAnalyticsProps,
-            timedOutOperation: 'load_session',
-          });
-        }
         throw new Error(`[ACP_RESUME_FAILED] loadSession: ${formatErrorMessage(error)}`, {
           cause: error,
         });
@@ -2394,18 +2279,6 @@ export class AgentClient implements acp.Client {
             resumeDurationMs
           )}ms (acpSessionId=${resumeSessionId}): ${formatErrorMessage(error)}`
         );
-        const reason = classifyAcpProtocolReason(error);
-        captureAcpSessionEstablishFailed({
-          ...startupAnalyticsProps,
-          sessionPath: 'resume',
-          reason,
-        });
-        if (reason === 'timeout') {
-          captureAcpStartupTimeout({
-            ...startupAnalyticsProps,
-            timedOutOperation: 'resume_session',
-          });
-        }
         throw new Error(`[ACP_RESUME_FAILED] ${formatErrorMessage(error)}`, { cause: error });
       }
     } else {
@@ -2439,14 +2312,6 @@ export class AgentClient implements acp.Client {
           this.authenticationRequired = true;
           throw new AcpAuthenticationRequiredError(this.authMethods, { cause: error });
         }
-        const reason = classifyAcpProtocolReason(error);
-        captureAcpSessionEstablishFailed({ ...startupAnalyticsProps, sessionPath: 'new', reason });
-        if (reason === 'timeout') {
-          captureAcpStartupTimeout({
-            ...startupAnalyticsProps,
-            timedOutOperation: 'new_session',
-          });
-        }
         throw error;
       }
       this.logger.debug(`[${this.options.sessionId}] connection.newSession returned`);
@@ -2463,21 +2328,6 @@ export class AgentClient implements acp.Client {
     );
     this.logger.debug('ACP Session started:', sessionResponse);
     this.applySessionResponseState(sessionResponse);
-
-    const availableModesCount = sessionResponse.modes?.availableModes?.length ?? 0;
-    captureAcpSessionEstablished({
-      ...startupAnalyticsProps,
-      sessionPath,
-      availableModesCount,
-      establishDurationMs: newSessionDurationMs,
-    });
-    captureAcpStartupCompleted({
-      ...startupAnalyticsProps,
-      sessionPath,
-      totalStartupMs: performance.now() - startupStart,
-      initDurationMs,
-      sessionEstablishDurationMs: newSessionDurationMs,
-    });
 
     for (const [id, waiter] of this.steerApplicationWaiters) {
       if (waiter.sessionId !== sessionResponse.sessionId) {

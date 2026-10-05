@@ -5,8 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentRoleId, SessionMeta, SessionInputBlock } from '@molly/shared';
 
-vi.mock('@posthog/react', () => ({ usePostHog: () => null }));
-
 vi.mock('../src/components/mentions/mention-session-source', async (importOriginal) => ({
   ...(await importOriginal()),
   useSessionMentionItems: () => [],
@@ -177,7 +175,6 @@ describe('SessionChatInputArea submission feedback', () => {
 
   afterEach(async () => {
     await act(async () => root?.unmount());
-    Reflect.deleteProperty(window, '__MOLLY_NATIVE__');
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
     root = null;
     container?.remove();

@@ -5,9 +5,7 @@ import { currentWorkspaceSlugAtom, settingsDialogOpenAtom, toggleZenLayoutModeAt
 import { taskQuickAddOpenAtom } from '@/atoms/tasks';
 import { tasksFeatureEnabledAtom } from '@/atoms/settings';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
-import { getAppCurrentPathWithSearch } from '@/lib/app-location';
-import { isSettingsPath, resolveSettingsCloseTo } from '@/lib/settings-navigation';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useOpenSettings } from '@/hooks/use-open-settings';
 import { nextCycledTheme, useTheme } from '../theme-provider';
 
@@ -22,7 +20,7 @@ export function AppCommands() {
   const { t } = useTranslation();
   const router = useRouter();
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
-  const isMobile = useIsMobile();
+
   const settingsModalOpen = useAtomValue(settingsDialogOpenAtom);
   const { openSettings, closeSettings } = useOpenSettings();
   const { theme, setTheme } = useTheme();
@@ -61,7 +59,7 @@ export function AppCommands() {
     title: t('commands.layout.toggleZenMode', 'Toggle Zen Layout'),
     category: 'View',
     keybindings: getCommandKeybindings('layout.toggleZenMode'),
-    when: () => !isMobile,
+    when: () => true,
     run: () => toggleZenLayoutMode(),
   });
 
@@ -113,35 +111,13 @@ export function AppCommands() {
     run: () => {
       if (!workspaceSlug) return;
       // Desktop: settings is a modal overlay — toggle it without leaving the page.
-      if (!isMobile) {
-        if (settingsModalOpen) {
-          closeSettings();
-        } else {
-          openSettings();
-        }
-        return;
+
+      if (settingsModalOpen) {
+        closeSettings();
+      } else {
+        openSettings();
       }
-      // Mobile: settings is a full-page route — toggle by navigating.
-      // Read the location at command time instead of subscribing: this component
-      // renders null and has no render-time need for it.
-      const { pathname, search } = router.state.location;
-      if (isSettingsPath(pathname, workspaceSlug)) {
-        const closeTo = resolveSettingsCloseTo((search as { from?: string }).from);
-        if (closeTo) {
-          void router.navigate({ to: closeTo });
-        } else {
-          void router.navigate({
-            to: '/$workspaceName/chat',
-            params: { workspaceName: workspaceSlug },
-          });
-        }
-        return;
-      }
-      void router.navigate({
-        to: '/$workspaceName/settings',
-        params: { workspaceName: workspaceSlug },
-        search: { from: getAppCurrentPathWithSearch() },
-      });
+      return;
     },
   });
 

@@ -1,7 +1,7 @@
 # CLI Agent Guidelines
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
-Root `AGENTS.md` applies; this file adds CLI context. Build, PR-poller, and adapter background:
+Root `AGENTS.md` applies; this file adds CLI context. Build, runtime, and adapter background:
 .agents/docs/cli-overview.md. Scoped rules live under
 `src/{agent,commands,session,mcp,orchestration,preview,lib}`.
 
@@ -71,12 +71,13 @@ execution/consent rules. These rules also bind CLI callers outside that director
 
 - Agent startup and retired CLI authentication: [src/agent/AGENTS.md](src/agent/AGENTS.md).
   Legacy process targets fail closed; historical configuration grants no execution permission.
-- Agent `gh` auth for GitHub repo sessions is set up in `src/session/session-manager.ts`; the
-  host-side credential-broker INVARIANT is in [worktree](src/session/worktree/AGENTS.md).
+- Historical worktree Git credentials use the explicit host-side broker contract in
+  [worktree](src/session/worktree/AGENTS.md); no `gh` shim or token injection is installed.
 - Startup initializes the local workspace runtime without CLI credential detection,
   legacy registration or runtime updates. The protected desktop catalog publisher
   alone registers bundled Molly; preserve historical configs and runtime caches.
-- Molly does not start PR reconciliation or automatic code-review/merge engines. Preserve
+- Molly does not query PRs, collect turn Git baselines, generate branch names, or prompt an Agent
+  to commit/push after turns. PR reconciliation and automatic code-review/merge are retired. Preserve
   generic task dispatch, file watchers, and existing session/history records when changing fleet wiring.
 
 ## Design workspace files

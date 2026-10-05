@@ -111,9 +111,6 @@ export function usePendingLocalProjectRemovals(
 }
 
 /**
- * Shared logic for removing a local project, used by both the desktop sidebar
- * trash affordance and the mobile project-settings screen.
- *
  * Removal is always represented as a durable machine Flock command row. Readers
  * hide the project optimistically while the owning machine applies the command
  * after syncing, even if it is offline when the user confirms.

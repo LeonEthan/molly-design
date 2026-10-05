@@ -59,7 +59,9 @@ describes the per-client/turn fence and independent terminal validation, not rea
 ## Files
 
 - `agent-client.ts` — the ACP connection: initialize/session lifecycle, client
-  capabilities (fs, elicitation), permission/fs request handling, update callbacks. Lody
+  capabilities (fs, elicitation), permission/fs request handling, update callbacks.
+  Host file writes no longer read a pre-image or emit per-turn diff evidence;
+  standard ACP write responses and file guards remain in place. Lody
   ACP extensions are consumed through `acp-extension-core`, so capability discovery lives
   at `agentCapabilities._meta.lody`, session metadata at `_meta.lody`, and custom methods
   use the Core `_lody/...` names.
@@ -71,8 +73,7 @@ describes the per-client/turn fence and independent terminal validation, not rea
 - `acp-authentication.ts` — fixed refusal responses for retired CLI login/status/input
   RPCs; Molly directs users to protected model connections. No subprocesses or CLI
   credential reads remain. `acp-authentication-output.ts` retains historical output parsing.
-- `acp-capabilities.ts` / `acp-startup-monitor.ts` / `acp-analytics.ts` — capability cache,
-  startup health, analytics.
+- `acp-capabilities.ts` / `acp-startup-monitor.ts` — capability cache and startup health.
 - `login-shell-env.ts` — login-shell env capture for spawned agents.
 - `fixtures/` — synthetic test fixtures.
 

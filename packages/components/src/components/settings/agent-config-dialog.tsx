@@ -62,7 +62,6 @@ import {
 } from 'lucide-react';
 import { AgentIcon } from '@/components/icons/agent-icon';
 import { cn } from '@/lib/utils';
-import { useKeyboardAwareScrollIntoView } from '@/hooks/use-keyboard-aware-scroll-into-view';
 import { useMachineAcpBinaryProgress } from '@/hooks/use-machine-acp-binary-progress';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
 import { Button } from '@/ui/button';
@@ -987,7 +986,6 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
   const formScrollRef = useRef<HTMLDivElement>(null);
   const machineRef = useRef(machine);
   machineRef.current = machine;
-  useKeyboardAwareScrollIntoView(formScrollRef);
 
   useEffect(() => {
     if (open) {
@@ -2493,7 +2491,6 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
           nestedInDialog && 'shadow-popover',
           isNarrowLayout
             ? cn(
-                // True full-screen sheet on mobile: override the safe-area-aware
                 // centering/max-height that DialogContent applies by default.
                 // Keep keyboard height changes synchronous: the form scroll hook
                 // measures the container on the keyboard event.
@@ -2503,7 +2500,7 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
                 // panes — including their fixed-height headers and footers —
                 // away from the safe-area edges.
                 'pt-[var(--safe-area-top)] pb-[max(0px,var(--safe-area-bottom,0px)-var(--native-keyboard-height,0px))] pl-[var(--safe-area-left)] pr-[var(--safe-area-right)]',
-                // Hide the Radix-rendered X close button: on mobile the
+
                 // picker/form headers render their own left-aligned back
                 // button (which doubles as a close on the root step), so the
                 // top-right X would be redundant and easy to hit by accident.
@@ -2529,11 +2526,6 @@ export function AgentConfigDialog(props: AgentConfigDialogProps) {
   );
 }
 
-/**
- * Returns true when the dialog should switch to the narrow / mobile two-step
- * flow. We watch viewport width directly (instead of `useIsMobile`) so a
- * narrow desktop window also switches.
- */
 function useNarrowDialogLayout() {
   const [narrow, setNarrow] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -2593,7 +2585,7 @@ function RailItem({
   selected: boolean;
   disabled?: boolean;
   onSelect: () => void;
-  /** Show a chevron-right at the end of the row (used in mobile picker). */
+
   chevron?: boolean;
 }) {
   const { t } = useTranslation();

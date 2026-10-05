@@ -56,8 +56,6 @@ const TEST_PATTERNS = Object.freeze([
   '**/stories/**',
 ]);
 
-const RUNTIME_MARKDOWN_GLOBS = Object.freeze(['packages/code-review-helper/prompts/**']);
-
 const SKIPPABLE_GLOBS = Object.freeze([
   'specs/**',
   '.agents/**',
@@ -353,9 +351,6 @@ export function classifyPath(filePath, workspace) {
   if (matchesAnyGlob(path, TEST_PATTERNS)) {
     const pkg = longestPackage(path, workspace);
     return pkg ? { kind: 'test', packages: [pkg.name] } : { kind: 'unknown' };
-  }
-  if (matchesAnyGlob(path, RUNTIME_MARKDOWN_GLOBS)) {
-    return { kind: 'source', packages: ['@molly/code-review-helper'] };
   }
   const extra = extraMapClassification(path);
   if (extra) return extra;

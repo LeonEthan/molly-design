@@ -46,7 +46,6 @@ import { type DraftSessionTab } from '@/lib/session-draft-tabs';
 import { agentDefaultsCache } from '@/lib/local-storage-cache';
 import {
   isThoughtLevelSelector,
-  type AcpConfigOptionSelector,
   type AcpSelectConfigOptionSelector,
 } from '@/components/shared/acp-selector-options';
 import {
@@ -85,8 +84,6 @@ export type DraftSessionSendPayload = {
   customAcp?: CustomAcpLaunchSpec;
   /** Runtime binary override resolved from the selected builtin agent config. */
   runtimeOverrides?: BuiltinRuntimeOverrides;
-  /** Analytics-only; the dispatched values live in `inputConfig`. */
-  configOptionSelectors?: AcpConfigOptionSelector[];
   /**
    * Complete first-turn input config, built by the composer that owns the
    * selections. The parent accepts the session with this turn as one unit
@@ -394,7 +391,6 @@ export const DraftSessionChatInterface = memo(
             agentType: draft.agentType,
             customAcp: sessionAgentConfig?.customAcp,
             runtimeOverrides: sessionAgentConfig?.runtimeOverrides,
-            configOptionSelectors,
             // Child tabs retain the explicit prompt and the parent workspace context.
             inputConfig: buildSessionTurnInputConfig({
               inputBlocks,
@@ -418,7 +414,6 @@ export const DraftSessionChatInterface = memo(
           };
         },
         [
-          configOptionSelectors,
           draft.agentConfigId,
           draft.agentType,
           draft.cliType,

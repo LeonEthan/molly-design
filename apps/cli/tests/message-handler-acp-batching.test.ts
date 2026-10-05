@@ -831,354 +831,47 @@ describe('MessageHandler ACP batching', () => {
     }
   }, 120_000);
 
-  it('persists late diff evidence against its finalized enqueue-time turn', async () => {
+  it('keeps late ACP edit history on its finalized turn without writing new diff snapshots', async () => {
     vi.useRealTimers();
     const sessionId = 's-1' as SessionId;
-    const { repo, handler } = await createHandlerHarness([sessionId]);
-    const standardDiffSpy = vi
-      .spyOn(
-        handler as unknown as {
-          collectCodeCollabStandardDiffs: (
-            sessionId: SessionId,
-            turnId: string,
-            diffs: readonly unknown[]
-          ) => Promise<void>;
-        },
-        'collectCodeCollabStandardDiffs'
-      )
-      .mockResolvedValue();
-
-    try {
-      const host = handler as unknown as {
-        beginConversationTurn(sessionId: SessionId): string;
-        enqueueACPUpdate(sessionId: SessionId, update: AcpSessionNotification): void;
-        flushACPUpdatesNow(sessionId: SessionId): Promise<void>;
-        finalizeACPState(sessionId: SessionId, turnId?: string): Promise<void>;
-      };
-      const oldTurnId = host.beginConversationTurn(sessionId);
-      await host.finalizeACPState(sessionId, oldTurnId);
-      const persistDiffsSpy = vi
-        .spyOn(
-          handler as unknown as {
-            persistCodeCollabTurnDiffs: (sessionId: SessionId, turnId: string) => Promise<boolean>;
-          },
-          'persistCodeCollabTurnDiffs'
-        )
-        .mockResolvedValue(true);
-      host.enqueueACPUpdate(sessionId, {
-        sessionId,
-        update: {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'edit-1',
-          status: 'completed',
-          content: [{ type: 'diff', path: '/tmp/a.txt', oldText: 'old', newText: 'new' }],
-        },
-      });
-      const newTurnId = host.beginConversationTurn(sessionId);
-      expect(newTurnId).not.toBe(oldTurnId);
-
-      await host.flushACPUpdatesNow(sessionId);
-
-      expect(standardDiffSpy).toHaveBeenCalledWith(sessionId, oldTurnId, [
-        { path: '/tmp/a.txt', oldText: 'old', newText: 'new' },
-      ]);
-      expect(persistDiffsSpy).toHaveBeenCalledWith(sessionId, oldTurnId);
-    } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('buffers write_text_file evidence before workspace resolution', async () => {
-    vi.useRealTimers();
-    const sessionId = 's-1' as SessionId;
-    const { repo, handler, sessionManager } = await createHandlerHarness([sessionId]);
-    const internals = handler as unknown as {
-      beginConversationTurn(sessionId: SessionId): string;
-      flushCodeCollabEvidenceWrites(sessionId: SessionId): Promise<void>;
-      codeCollabV2TurnDiffs: Map<string, unknown[]>;
-      resolveCodeCollabV2Workspace(sessionId: SessionId): Promise<unknown>;
-    };
-    const onWriteTextFile = sessionManager.on.mock.calls.find(
-      ([eventName]) => eventName === 'onWriteTextFile'
-    )?.[1] as
-      | ((
-          sessionId: SessionId,
-          evidence: { path: string; oldText: string | null; newText: string }
-        ) => void)
-      | undefined;
-
-    try {
-      expect(onWriteTextFile).toBeTypeOf('function');
-      const turnId = internals.beginConversationTurn(sessionId);
-      const resolveWorkspaceSpy = vi.spyOn(internals, 'resolveCodeCollabV2Workspace');
-
-      onWriteTextFile?.(sessionId, {
-        path: '/tmp/a.txt',
-        oldText: 'old',
-        newText: 'new',
-      });
-      await internals.flushCodeCollabEvidenceWrites(sessionId);
-
-      expect(resolveWorkspaceSpy).not.toHaveBeenCalled();
-      expect(internals.codeCollabV2TurnDiffs.get(`${sessionId}\0${turnId}`)).toEqual([
-        {
-          path: '/tmp/a.txt',
-          oldText: 'old',
-          newText: 'new',
-          oldTextEvidence: 'strong',
-        },
-      ]);
-    } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('restores both diff evidence sets after a transient persistence failure', async () => {
-    vi.useRealTimers();
-    const sessionId = 's-1' as SessionId;
-    const turnId = 'turn-retry';
-    const key = `${sessionId}\0${turnId}`;
-    const { repo, handler } = await createHandlerHarness([sessionId]);
-    const acpEvent = { path: 'a.txt', oldText: 'old', newText: 'new' };
-    const editEvidence = {
-      path: '/tmp/a.txt',
-      changeType: 'update',
-      contentOldText: 'old',
-      contentNewText: 'new',
-    };
-    const internals = handler as unknown as {
-      codeCollabV2TurnDiffs: Map<string, unknown[]>;
-      codeCollabV2TurnEdits: Map<string, unknown[]>;
-      resolveCodeCollabV2Workspace: (sessionId: SessionId) => Promise<unknown>;
-      persistCodeCollabTurnDiffsOnce: (sessionId: SessionId, turnId: string) => Promise<boolean>;
-    };
-    internals.codeCollabV2TurnDiffs.set(key, [acpEvent]);
-    internals.codeCollabV2TurnEdits.set(key, [editEvidence]);
-    const resolveWorkspaceSpy = vi
-      .spyOn(internals, 'resolveCodeCollabV2Workspace')
-      .mockResolvedValueOnce({
-        ok: false,
-        code: 'transient_io',
-        message: 'transient workspace failure',
-      })
-      .mockResolvedValueOnce({ ok: false, code: 'workspace_unavailable' });
-
-    try {
-      await expect(internals.persistCodeCollabTurnDiffsOnce(sessionId, turnId)).rejects.toThrow(
-        'transient workspace failure'
-      );
-      expect(internals.codeCollabV2TurnDiffs.get(key)).toEqual([acpEvent]);
-      expect(internals.codeCollabV2TurnEdits.get(key)).toEqual([editEvidence]);
-
-      // A later finalized-turn notification invokes the same drain again. The
-      // second workspace resolution proves the restored evidence was retained
-      // past the early empty-evidence return.
-      await expect(internals.persistCodeCollabTurnDiffsOnce(sessionId, turnId)).resolves.toBe(
-        false
-      );
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('retries late finalized-turn evidence without another ACP notification', async () => {
-    vi.useRealTimers();
-    const sessionId = 's-1' as SessionId;
-    const { repo, handler } = await createHandlerHarness([sessionId]);
+    const { repo, docs, handler } = await createHandlerHarness([sessionId]);
+    const doc = docs.get(sessionId);
+    if (!doc) throw new Error(`Missing session doc for ${sessionId}`);
     const host = handler as unknown as {
       beginConversationTurn(sessionId: SessionId): string;
       enqueueACPUpdate(sessionId: SessionId, update: AcpSessionNotification): void;
       flushACPUpdatesNow(sessionId: SessionId): Promise<void>;
       finalizeACPState(sessionId: SessionId, turnId?: string): Promise<void>;
-      persistCodeCollabTurnDiffs: (sessionId: SessionId, turnId: string) => Promise<boolean>;
-      collectCodeCollabStandardDiffs(
-        sessionId: SessionId,
-        turnId: string,
-        diffs: readonly unknown[]
-      ): Promise<void>;
+      codeCollabV2DiffStore: { stats(): Promise<{ turns: number; files: number }> };
     };
-
     try {
-      const turnId = host.beginConversationTurn(sessionId);
-      await host.finalizeACPState(sessionId, turnId);
-      vi.spyOn(host, 'collectCodeCollabStandardDiffs').mockResolvedValue();
-      const persistSpy = vi
-        .spyOn(host, 'persistCodeCollabTurnDiffs')
-        .mockRejectedValueOnce(new Error('transient persistence failure'))
-        .mockResolvedValueOnce(true);
-      vi.useFakeTimers();
-
+      const before = await host.codeCollabV2DiffStore.stats();
+      const oldTurnId = host.beginConversationTurn(sessionId);
       host.enqueueACPUpdate(sessionId, {
         sessionId,
-        update: {
-          sessionUpdate: 'tool_call_update',
-          toolCallId: 'edit-1',
-          status: 'completed',
-          content: [{ type: 'diff', path: '/tmp/a.txt', oldText: 'old', newText: 'new' }],
-        },
+        update: { sessionUpdate: 'tool_call', toolCallId: 'late-edit', title: 'Edit artwork',
+          kind: 'edit', status: 'in_progress' },
       });
+      await host.finalizeACPState(sessionId, oldTurnId);
+      host.enqueueACPUpdate(sessionId, {
+        sessionId,
+        update: { sessionUpdate: 'tool_call_update', toolCallId: 'late-edit', status: 'completed',
+          content: [{ type: 'diff', path: '/tmp/artwork.yaml', oldText: 'old', newText: 'new' }] },
+      });
+      const newTurnId = host.beginConversationTurn(sessionId);
       await host.flushACPUpdatesNow(sessionId);
-      expect(persistSpy).toHaveBeenCalledTimes(1);
-
-      await vi.advanceTimersByTimeAsync(99);
-      expect(persistSpy).toHaveBeenCalledTimes(1);
-
-      await vi.advanceTimersByTimeAsync(1);
-      expect(persistSpy).toHaveBeenCalledTimes(2);
-      expect(persistSpy).toHaveBeenLastCalledWith(sessionId, turnId);
+      const history = await doc.sessionData.history.readAll();
+      const oldEntry = history.find((entry) => entry.id === oldTurnId);
+      expect(oldEntry).toBeDefined();
+      expect(oldEntry?.fileDiff).toEqual([]);
+      expect(readItems(oldEntry)).toContainEqual(expect.objectContaining({
+        type: 'tool_call', toolCallId: 'late-edit', status: 'completed',
+        locations: [{ path: '/tmp/artwork.yaml' }],
+      }));
+      expect(history.some((entry) => entry.id === newTurnId)).toBe(false);
+      expect(await host.codeCollabV2DiffStore.stats()).toMatchObject({ turns: before.turns, files: before.files });
     } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('drains pending evidence retries before cleanup closes the diff store', async () => {
-    const sessionId = 's-1' as SessionId;
-    const turnId = 'turn-cleanup';
-    const key = `${sessionId}\0${turnId}`;
-    const { repo, handler } = await createHandlerHarness([sessionId]);
-    const internals = handler as unknown as {
-      codeCollabV2TurnDiffs: Map<string, unknown[]>;
-      codeCollabV2DiffStore: { close(): void };
-      resolveCodeCollabV2Workspace: (sessionId: SessionId) => Promise<unknown>;
-      persistLateCodeCollabTurnDiffs: (sessionId: SessionId, turnId: string) => Promise<void>;
-    };
-    internals.codeCollabV2TurnDiffs.set(key, [{ path: 'a.txt', oldText: 'old', newText: 'new' }]);
-    const resolveWorkspaceSpy = vi
-      .spyOn(internals, 'resolveCodeCollabV2Workspace')
-      .mockRejectedValueOnce(new Error('transient persistence failure'))
-      .mockResolvedValueOnce({ ok: false, code: 'workspace_unavailable' });
-    const closeSpy = vi.spyOn(internals.codeCollabV2DiffStore, 'close');
-
-    try {
-      await internals.persistLateCodeCollabTurnDiffs(sessionId, turnId);
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(1);
-
       await handler.cleanup();
-
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(2);
-      expect(internals.codeCollabV2TurnDiffs.has(key)).toBe(false);
-      expect(closeSpy).toHaveBeenCalledTimes(1);
-      expect(resolveWorkspaceSpy.mock.invocationCallOrder[1]).toBeLessThan(
-        closeSpy.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
-      );
-
-      await vi.advanceTimersByTimeAsync(2_000);
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(2);
-    } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('stops ACP producers before the final cleanup evidence drain', async () => {
-    vi.useRealTimers();
-    const sessionId = 's-1' as SessionId;
-    const { repo, handler, sessionManager } = await createHandlerHarness([sessionId]);
-    const host = handler as unknown as {
-      beginConversationTurn(sessionId: SessionId): string;
-      enqueueACPUpdate(sessionId: SessionId, update: AcpSessionNotification): void;
-      finalizeACPState(sessionId: SessionId, turnId?: string): Promise<void>;
-      codeCollabV2DiffStore: { close(): void };
-      resolveCodeCollabV2Workspace: (sessionId: SessionId) => Promise<unknown>;
-    };
-
-    try {
-      const turnId = host.beginConversationTurn(sessionId);
-      await host.finalizeACPState(sessionId, turnId);
-      const resolveWorkspaceSpy = vi
-        .spyOn(host, 'resolveCodeCollabV2Workspace')
-        .mockResolvedValueOnce({
-          ok: true,
-          ownerSessionId: sessionId,
-          workspaceRoot: '/tmp',
-          allChangesBaseBranch: 'main',
-        })
-        .mockRejectedValueOnce(new Error('transient persistence failure'))
-        .mockResolvedValueOnce({ ok: false, code: 'workspace_unavailable' });
-      const closeSpy = vi.spyOn(host.codeCollabV2DiffStore, 'close');
-      let cleanupCalls = 0;
-      sessionManager.cleanUp.mockImplementation(async () => {
-        cleanupCalls += 1;
-        if (cleanupCalls === 1) {
-          host.enqueueACPUpdate(sessionId, {
-            sessionId,
-            update: {
-              sessionUpdate: 'tool_call_update',
-              toolCallId: 'late-cleanup-edit',
-              status: 'completed',
-              content: [{ type: 'diff', path: '/tmp/a.txt', oldText: 'old', newText: 'new' }],
-            },
-          });
-        }
-      });
-
-      await handler.cleanup();
-
-      expect(sessionManager.cleanUp).toHaveBeenNthCalledWith(1, {
-        keepWorkspaceDocumentOpen: true,
-      });
-      expect(sessionManager.cleanUp).toHaveBeenNthCalledWith(2);
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(3);
-      expect(closeSpy).toHaveBeenCalledTimes(1);
-      expect(resolveWorkspaceSpy.mock.invocationCallOrder[2]).toBeLessThan(
-        closeSpy.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
-      );
-    } finally {
-      await destroyRepoOnRealTimers(repo);
-    }
-  }, 120_000);
-
-  it('waits for pending evidence collectors before the cleanup map snapshot', async () => {
-    const sessionId = 's-1' as SessionId;
-    const turnId = 'turn-pending-collector';
-    const key = `${sessionId}\0${turnId}`;
-    const { repo, handler } = await createHandlerHarness([sessionId]);
-    const internals = handler as unknown as {
-      codeCollabV2PendingEvidenceWrites: Map<SessionId, Set<Promise<void>>>;
-      codeCollabV2TurnDiffs: Map<string, unknown[]>;
-      codeCollabV2DiffStore: { close(): void };
-      resolveCodeCollabV2Workspace: (sessionId: SessionId) => Promise<unknown>;
-    };
-    let releaseCollector: (() => void) | undefined;
-    let trackedCollector: Promise<void>;
-    const pending = new Set<Promise<void>>();
-    const collector = new Promise<void>((resolve) => {
-      releaseCollector = () => {
-        internals.codeCollabV2TurnDiffs.set(key, [
-          { path: 'a.txt', oldText: 'old', newText: 'new' },
-        ]);
-        resolve();
-      };
-    });
-    trackedCollector = collector.finally(() => {
-      pending.delete(trackedCollector);
-      if (pending.size === 0) {
-        internals.codeCollabV2PendingEvidenceWrites.delete(sessionId);
-      }
-    });
-    pending.add(trackedCollector);
-    internals.codeCollabV2PendingEvidenceWrites.set(sessionId, pending);
-    const resolveWorkspaceSpy = vi
-      .spyOn(internals, 'resolveCodeCollabV2Workspace')
-      .mockResolvedValue({ ok: false, code: 'workspace_unavailable' });
-    const closeSpy = vi.spyOn(internals.codeCollabV2DiffStore, 'close');
-
-    try {
-      const cleanup = handler.cleanup();
-      await Promise.resolve();
-      await Promise.resolve();
-      expect(closeSpy).not.toHaveBeenCalled();
-
-      releaseCollector?.();
-      await cleanup;
-
-      expect(resolveWorkspaceSpy).toHaveBeenCalledTimes(1);
-      expect(internals.codeCollabV2TurnDiffs.has(key)).toBe(false);
-      expect(closeSpy).toHaveBeenCalledTimes(1);
-      expect(resolveWorkspaceSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        closeSpy.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
-      );
-    } finally {
       await destroyRepoOnRealTimers(repo);
     }
   }, 120_000);

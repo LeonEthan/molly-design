@@ -4,10 +4,6 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import {
-  type MentionFileSourceKind,
-  type MentionSurface,
-} from '@/components/mentions/mention-analytics';
-import {
   buildItemSuggestions,
   IssuePrMentionHydrator,
   IssuePrMentionTitleHint,
@@ -63,6 +59,8 @@ import { Textarea, type TextareaProps } from '@/ui/textarea';
 import { parseMentionNamespaceSearch } from '@/ui/mention/mention-trigger';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
 
+type MentionFileSourceKind = 'github' | 'local' | 'worktree';
+
 // ============================================================================
 // Two-level `@` menu
 // ============================================================================
@@ -99,7 +97,6 @@ function TwoLevelMentionMenu({
   sessionItems,
   sessionProjectKey,
   commandsEnabled,
-  surface,
 }: {
   fileData: MentionFileDataState;
   fileSourceKind: MentionFileSourceKind;
@@ -120,7 +117,6 @@ function TwoLevelMentionMenu({
   sessionItems: SessionMentionItem[];
   sessionProjectKey: SessionMentionProjectKey;
   commandsEnabled: boolean;
-  surface: MentionSurface;
 }) {
   const context = useMentionContext('TwoLevelMentionMenu');
   const { t } = useTranslation();
@@ -341,7 +337,7 @@ function TwoLevelMentionMenu({
     onLazyDirectoryOpen(directoryId);
   }, [active, lazyDirectoryIdByToken, onLazyDirectoryOpen, search]);
 
-  return <MentionTwoLevelMenu categories={categories} surface={surface} />;
+  return <MentionTwoLevelMenu categories={categories} />;
 }
 
 // ============================================================================
@@ -634,8 +630,6 @@ export interface CombinedMentionTextareaProps extends Omit<
      skills from the directories that provider is known to use; omit to offer
      every discovered skill. ACP does not define a universal project skill dir. */
   skillAgent?: SkillMentionAgent;
-  /** Entry point for mention analytics (spec §8e). Defaults to 'unknown'. */
-  mentionSurface?: MentionSurface;
   /** False for a mounted but hidden composer that must not own app commands. */
   commandsEnabled?: boolean;
   /** Dropped from the `@session:` category — a session never references itself. */
@@ -697,7 +691,6 @@ export const CombinedMentionTextarea = React.forwardRef<
       mentionSource,
       availableCommands,
       skillAgent,
-      mentionSurface = 'unknown',
       commandsEnabled = true,
       currentSessionId,
       value,
@@ -732,8 +725,6 @@ export const CombinedMentionTextarea = React.forwardRef<
       mentionSource?.kind === 'github' || mentionSource?.kind === 'provider'
         ? mentionSource.isPublic
         : undefined;
-    // Resolve the analytics source_kind: worktree (live session FS) wins over the
-    // project/github source, mirroring useMentionProjectFiles' source resolution.
     const usesWorktreeSource =
       mentionSource?.kind === 'provider' ||
       Boolean(mentionSource?.localWorktree?.sessionId && mentionSource?.localWorktree?.repoKey);
@@ -1041,7 +1032,6 @@ export const CombinedMentionTextarea = React.forwardRef<
           sessionItems={sessionItems}
           sessionProjectKey={sessionProjectKey}
           commandsEnabled={commandsEnabled}
-          surface={mentionSurface}
         />
       </Mention>
     );

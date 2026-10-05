@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next';
 import { useAppCapability } from '@/lib/app-platform';
 import { resolveWorkspaceIdentityLogo } from '@/lib/workspace-identity';
 import { cn } from '@/lib/utils';
-import { formatCompactRelativeTime } from '@/lib/format-relative-time';
 import { isElectronRenderer, useElectronFullscreen } from '@/lib/electron';
 import { WindowDragStrip } from '@/ui/window-drag-region';
 import { getIpcServices } from '@/lib/electron-ipc-client';
@@ -83,7 +82,7 @@ import { SidebarUpdateBanner } from '@/components/sidebar-update-banner';
 import { UpdateChangelogDialog } from '@/components/update-changelog-dialog';
 import { pickLocalizedReleaseNotes, readUpdateBannerState } from '@/lib/electron-update-banner';
 import { useElectronUpdaterState } from '@/hooks/use-electron-updater-state';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useOpenSettings } from '@/hooks/use-open-settings';
 import { useOrganization } from '@/hooks/useOrganization';
 import { useVisibleSessionMetas } from '@/hooks/use-visible-session-metas';
@@ -112,7 +111,6 @@ import {
 } from '@/ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
-import { SwipeActionRow } from '@/components/shared/swipe-action-row';
 import {
   SessionList,
   shallowEqualExceptKeys,
@@ -157,7 +155,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useOnlineMachineIds } from '@/hooks/use-machine-online-status';
-import { useStableNow } from '@/hooks/use-stable-now';
 import { writePreferredWorkspaceSlug } from '@/lib/workspace';
 import {
   SessionOpenedByTreeRow,
@@ -221,8 +218,6 @@ export type RemoveLocalProjectDialogProps = {
   onPreflightCleanup: () => Promise<LocalProjectWorktreeCleanupPreflightResult>;
   onConfirm: (options: { cleanupWorktrees: boolean }) => void;
 };
-
-const SIDEBAR_RELATIVE_TIME_REFRESH_MS = 30_000;
 
 export function RemoveLocalProjectDialog({
   open,
@@ -533,9 +528,8 @@ type LocalProjectSessionItemProps = {
   openerRootSessionId?: string | null;
   openedByTree?: SessionRowOpenedByTreeSlot;
   archiveTooltipLabel: string;
-  archiveActionLabel: string;
+
   archiveConfirmLabel: string;
-  isMobile: boolean;
 };
 
 const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
@@ -559,19 +553,15 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
   openerRootSessionId,
   openedByTree,
   archiveTooltipLabel,
-  archiveActionLabel,
   archiveConfirmLabel,
-  isMobile,
 }: LocalProjectSessionItemProps) {
   const { t } = useTranslation();
   const moreActionsLabel = t('sessions.moreActions', 'More actions');
   const title = (session.title ?? '').trim() || defaultSessionTitle;
   // Self-ticking on the shared sidebar timer: a tick re-renders only this row's
   // time label, not every row in the project section.
-  const now = useStableNow(SIDEBAR_RELATIVE_TIME_REFRESH_MS);
-  const relativeTime = formatCompactRelativeTime(effectiveLatestMessageAt, now);
-  const showSelectedState = isSelected && !isMobile;
-  const showInlineArchive = !isMobile;
+  const showSelectedState = isSelected;
+  const showInlineArchive = true;
   const showWorktreeIcon = session.isWorktree === true;
   const isPinned = Boolean(session.isPinned);
   // Local-project sessions linked to a GitHub repo can carry a PR — the repo
@@ -586,7 +576,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
   const canTogglePinned = typeof onTogglePinned === 'function';
   const canCopyUrl = typeof onCopyUrl === 'function';
   const canMarkUnread = typeof onMarkUnread === 'function' && !hasUnreadMessages;
-  const hasContextMenuActions = !isMobile;
+  const hasContextMenuActions = true;
   const openedByOpener = openedByTree?.kind === 'opener' ? openedByTree : null;
   const contextMenuLabels = useMemo(
     () => ({
@@ -627,7 +617,6 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
         'py-[7px]',
         'border border-transparent bg-transparent',
         !showSelectedState &&
-          !isMobile &&
           'hover:bg-sidebar-foreground/[0.04] data-[menu-open]:bg-sidebar-foreground/[0.04]',
         showSelectedState &&
           'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
@@ -671,13 +660,6 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           ) : null}
           {titleContent}
         </div>
-        {/* ③ A relative time on mobile only (no hover info card on touch); on desktop
-            the time / branch live in the hover info card, so nothing sits here. */}
-        {isMobile ? (
-          <span className="ml-auto flex shrink-0 select-none items-center gap-1 text-xs tabular-nums text-muted-foreground">
-            {relativeTime}
-          </span>
-        ) : null}
         {/* ④ Fixed end slot: the PR status sits here at rest when the session
             has one, with a faint worktree glyph just to its left; the Archive
             button replaces it on desktop hover. */}
@@ -778,54 +760,27 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
     />
   );
 
-  if (!isMobile) {
-    // Desktop hover info card (right side) carries the time / branch pulled out of
-    // the single-line row. Mobile has no hover, so it keeps the inline time instead.
-    return (
-      <>
-        <SessionInfoHoverCard
-          kind="local"
-          author={author ?? undefined}
-          title={title}
-          isWorktree={showWorktreeIcon}
-          latestMessageAt={effectiveLatestMessageAt}
-          repoFullName={prRepoFullName}
-          folderName={projectName}
-          machineName={machineName}
-          branchName={session.branchName}
-          prStatus={showPr ? prStatus : undefined}
-          prCiState={prInfo.ciState}
-          prNumber={prInfo.number}
-          prUrl={prInfo.url}
-        >
-          {menuRow}
-        </SessionInfoHoverCard>
-        {renameDialog}
-      </>
-    );
-  }
+  // Desktop hover info card (right side) carries the time / branch pulled out of
 
   return (
     <>
-      <SwipeActionRow
-        enabled={isMobile}
-        className="rounded-md"
-        contentClassName="bg-sidebar"
-        actions={[
-          {
-            key: 'archive',
-            label: archiveActionLabel,
-            ariaLabel: archiveTooltipLabel,
-            icon: <Archive className="h-4 w-4" />,
-            hideLabel: true,
-            className: 'bg-sidebar-hover text-sidebar-hover-foreground',
-            onClick: () => onArchive(session.id),
-          },
-        ]}
-        onCommit={() => onArchive(session.id)}
+      <SessionInfoHoverCard
+        kind="local"
+        author={author ?? undefined}
+        title={title}
+        isWorktree={showWorktreeIcon}
+        latestMessageAt={effectiveLatestMessageAt}
+        repoFullName={prRepoFullName}
+        folderName={projectName}
+        machineName={machineName}
+        branchName={session.branchName}
+        prStatus={showPr ? prStatus : undefined}
+        prCiState={prInfo.ciState}
+        prNumber={prInfo.number}
+        prUrl={prInfo.url}
       >
-        {row}
-      </SwipeActionRow>
+        {menuRow}
+      </SessionInfoHoverCard>
       {renameDialog}
     </>
   );
@@ -862,9 +817,9 @@ export type LocalProjectItemProps = {
   removeProjectLabel: string;
   newChatLabel?: string;
   archiveTooltipLabel: string;
-  archiveActionLabel: string;
+
   archiveConfirmLabel: string;
-  isMobile: boolean;
+
   toggleLabel: string;
   onNavigateProject: (machineId: MachineId, localProjectId: string) => void;
   onNewChatInProject?: (machineId: MachineId, localProjectId: string) => void;
@@ -942,9 +897,7 @@ export const LocalProjectItem = memo(function LocalProjectItem({
   removeProjectLabel,
   newChatLabel,
   archiveTooltipLabel,
-  archiveActionLabel,
   archiveConfirmLabel,
-  isMobile,
   toggleLabel,
   onNavigateProject,
   onNewChatInProject,
@@ -999,13 +952,13 @@ export const LocalProjectItem = memo(function LocalProjectItem({
         ? t('sidebar.localProjects.remove.removing', 'Removing…')
         : null;
   const ariaLabel = removalStateLabel ? `${baseAriaLabel} · ${removalStateLabel}` : baseAriaLabel;
-  const showSelectedState = isSelected && !isMobile;
+  const showSelectedState = isSelected;
   const handleNavigate = useCallback(() => {
     if (!canNavigateProject || removalState) return;
     onNavigateProject(machineId, project.id);
   }, [canNavigateProject, machineId, onNavigateProject, project.id, removalState]);
   const projectCanNavigate = canNavigateProject && removalState === null;
-  // Mobile has no hover, so both row controls stay desktop-only, exactly like
+
   // the ⋯ on session rows.
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const projectMenuLabel = t('sessions.moreActions', 'More actions');
@@ -1018,12 +971,11 @@ export const LocalProjectItem = memo(function LocalProjectItem({
   );
   const revealPath = onRevealProject && formattedPath ? formattedPath : null;
   const showProjectMenu =
-    !isMobile &&
-    (canRemoveProject ||
-      Boolean(onOpenProjectSettings) ||
-      Boolean(revealPath) ||
-      Boolean(onArchiveProjectChats));
-  const showNewChatButton = Boolean(onNewChatInProject) && projectCanNavigate && !isMobile;
+    canRemoveProject ||
+    Boolean(onOpenProjectSettings) ||
+    Boolean(revealPath) ||
+    Boolean(onArchiveProjectChats);
+  const showNewChatButton = Boolean(onNewChatInProject) && projectCanNavigate;
 
   return (
     <div className="space-y-0.5">
@@ -1049,7 +1001,6 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                     'group relative min-h-9 w-full rounded-lg pl-2 pr-3 py-[7px] text-left',
                     'border border-transparent bg-transparent',
                     !showSelectedState &&
-                      !isMobile &&
                       'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
                     showSelectedState &&
                       'bg-sidebar-foreground/[0.06] hover:bg-sidebar-foreground/[0.06]',
@@ -1062,7 +1013,7 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                           // Project folder names are content rather than section chrome,
                           // but still recede behind the conversation in dark mode.
                           'text-sidebar-foreground dark:text-sidebar-foreground/75',
-                          !isMobile && 'hover:text-sidebar-hover-foreground'
+                          'hover:text-sidebar-hover-foreground'
                         )
                   )}
                   onClick={handleNavigate}
@@ -1085,20 +1036,16 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                     <Folder
                       className={cn(
                         'absolute left-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-current transition-opacity duration-100',
-                        // Mobile: chevron is always visible so the folder icon must hide
+
                         // permanently to avoid stacking. Desktop keeps the hover swap.
-                        isMobile
-                          ? 'opacity-0'
-                          : 'opacity-80 group-hover:opacity-0 group-focus-visible/folder-toggle:opacity-0'
+                        'opacity-80 group-hover:opacity-0 group-focus-visible/folder-toggle:opacity-0'
                       )}
                     />
                     <ChevronDown
                       className={cn(
                         'absolute left-0 top-1/2 h-4 w-4 -translate-y-1/2 text-current',
                         'transition-[opacity,translate,scale] duration-100',
-                        isMobile
-                          ? 'opacity-100'
-                          : 'opacity-0 group-hover:opacity-100 group-focus-visible/folder-toggle:opacity-100',
+                        'opacity-0 group-hover:opacity-100 group-focus-visible/folder-toggle:opacity-100',
                         collapsed ? '-rotate-90' : 'rotate-0'
                       )}
                     />
@@ -1272,9 +1219,7 @@ export const LocalProjectItem = memo(function LocalProjectItem({
                   }
                   openedByTree={openedByTree}
                   archiveTooltipLabel={archiveTooltipLabel}
-                  archiveActionLabel={archiveActionLabel}
                   archiveConfirmLabel={archiveConfirmLabel}
-                  isMobile={isMobile}
                 />
               </SessionOpenedByTreeRow>
             );
@@ -1293,7 +1238,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
   const location = useLocation({
     select: (l) => ({ pathname: l.pathname, search: l.search }),
   });
-  const isMobile = useIsMobile();
+
   const multiWorkspaceAvailable = useAppCapability('multiWorkspace');
   const { openSettings } = useOpenSettings();
 
@@ -2099,7 +2044,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
   );
 
   const archiveTooltipLabel = useMemo(() => t('sessions.archive', 'Archive session'), [t]);
-  const archiveActionLabel = useMemo(() => t('archive.title', 'Archive'), [t]);
+
   const archiveConfirmLabel = useMemo(() => t('common.confirm', 'Confirm'), [t]);
   const removeProjectLabel = useMemo(
     () => t('sidebar.localProjects.remove', 'Remove project'),
@@ -2139,9 +2084,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     [t]
   );
   const sidebarFilterPlaceholder =
-    !isMobile && pinnedItems.length === 0 ? (
-      <span aria-hidden="true" className="block h-6 w-6" />
-    ) : null;
+    pinnedItems.length === 0 ? <span aria-hidden="true" className="block h-6 w-6" /> : null;
   const localProjectsTopContent =
     localProjectSections.length === 0 ? null : (
       // Sections carry their own bottom margin (see sidebarTopContent): 12px
@@ -2190,7 +2133,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
                 label={section.sectionLabel}
                 collapsed={sectionCollapsed}
                 action={headerAction}
-                isMobile={isMobile}
                 toggleLabel={toggleLabel}
                 onToggleCollapsed={() => handleToggleLocalProjectsSection(section.sectionKey)}
               />
@@ -2213,9 +2155,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
                       <LocalProjectItem
                         key={project.id}
                         machineId={machineId}
-                        machineName={
-                          section.kind === 'remote' ? section.machineDisplayName : null
-                        }
+                        machineName={section.kind === 'remote' ? section.machineDisplayName : null}
                         project={project}
                         canRemoveProject={section.canRemoveProject}
                         canNavigateProject={section.canNavigateProject}
@@ -2238,9 +2178,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
                         removeProjectLabel={removeProjectLabel}
                         newChatLabel={newChatLabel}
                         archiveTooltipLabel={archiveTooltipLabel}
-                        archiveActionLabel={archiveActionLabel}
                         archiveConfirmLabel={archiveConfirmLabel}
-                        isMobile={isMobile}
                         toggleLabel={toggleLabel}
                         onNavigateProject={handleNavigateToProject}
                         onNewChatInProject={handleNavigateToProject}
@@ -2576,7 +2514,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
           label={githubWorktreesLabel}
           collapsed={githubWorktreesSectionCollapsed}
           count={workspaceRepoSessions.length}
-          isMobile={isMobile}
           toggleLabel={toggleLabel}
           onToggleCollapsed={handleToggleGithubWorktreesSection}
           action={
@@ -2866,7 +2803,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     [handleNavigateToSession]
   );
   useListKeyboardNavigation({
-    enabled: !isMobile,
+    enabled: true,
     onItemFocus: handleSidebarItemFocus,
     scopeId: WORKSPACE_FOCUS_SCOPES.sidebar,
   });
@@ -2889,12 +2826,10 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         className
       )}
     >
-      {!isMobile ? <WindowDragStrip /> : null}
+      {<WindowDragStrip />}
       <LoroSidebar
         className={cn(
-          isMobile
-            ? 'h-full w-full rounded-none border-0 shadow-none'
-            : 'mb-2 ml-2 mr-1 mt-2 h-[calc(100%_-_1rem)] rounded-xl border border-sidebar-border/40 bg-sidebar',
+          'mb-2 ml-2 mr-1 mt-2 h-[calc(100%_-_1rem)] rounded-xl border border-sidebar-border/40 bg-sidebar',
           isElectron && !isElectronFullscreen && 'z-20'
         )}
         workspaceName={resolvedWorkspaceName}

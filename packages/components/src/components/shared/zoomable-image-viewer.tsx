@@ -1,8 +1,8 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PhotoSlider } from 'react-photo-view';
 import { toast } from 'sonner';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import {
   isMacOSElectronRenderer,
   isWindowsElectronRenderer,
@@ -37,7 +37,6 @@ import './zoomable-image-viewer.css';
  * screen is the expected one.
  */
 
-/** Mask alpha on desktop; mobile keeps the library's opaque black. */
 const DESKTOP_MASK_OPACITY = 0.86;
 
 export type ZoomableImageViewerItem = {
@@ -48,57 +47,6 @@ export type ZoomableImageViewerItem = {
   readonly fileName?: string | undefined;
 };
 
-export type ImagePreviewPortalAnchorRef = { readonly current: HTMLElement | null };
-
-/**
- * Inside mobile Vaul drawers, do not let the viewer default its portal to
- * `document.body`: Radix/Vaul treats body portals as outside the drawer, so
- * touch/scroll can be blocked or fall through. Resolve the real
- * `[data-vaul-drawer]` instead (the `data-vaul-no-drag` wrapper is only a
- * `display: contents` fallback). Returns undefined outside a drawer, where the
- * library's own body portal is correct.
- */
-export const resolveImagePreviewPortalContainer = (
-  anchor: HTMLElement | null | undefined
-): HTMLElement | undefined => {
-  if (typeof document === 'undefined') {
-    return undefined;
-  }
-
-  return (
-    anchor?.closest<HTMLElement>('[data-vaul-drawer]') ??
-    anchor?.closest<HTMLElement>('[data-vaul-no-drag]') ??
-    undefined
-  );
-};
-
-/**
- * Mark the mounted portal root `data-vaul-no-drag` so Vaul does not take over
- * the viewer's pan/pinch gestures and drag the drawer toward dismissal.
- */
-export function useImagePreviewPortalNoDrag(
-  active: boolean,
-  portalContainer: HTMLElement | undefined
-) {
-  useLayoutEffect(() => {
-    if (!active || !portalContainer) {
-      return undefined;
-    }
-
-    const portal = portalContainer.querySelector<HTMLElement>(
-      ':scope > .molly-photo-slider.PhotoView-Portal'
-    );
-    if (!portal) {
-      return undefined;
-    }
-
-    portal.setAttribute('data-vaul-no-drag', '');
-    return () => {
-      portal.removeAttribute('data-vaul-no-drag');
-    };
-  }, [active, portalContainer]);
-}
-
 export type ZoomableImageViewerProps = {
   readonly open: boolean;
   readonly onClose: () => void;
@@ -107,11 +55,6 @@ export type ZoomableImageViewerProps = {
   readonly images: ZoomableImageViewerItem[];
   readonly index: number;
   readonly onIndexChange?: (index: number) => void;
-  /**
-   * An element inside the surface that opened the viewer. Used only to find the
-   * enclosing Vaul drawer; pass the scroll root or the preview container.
-   */
-  readonly portalAnchorRef?: ImagePreviewPortalAnchorRef;
 };
 
 export function ZoomableImageViewer({
@@ -120,11 +63,7 @@ export function ZoomableImageViewer({
   images,
   index,
   onIndexChange,
-  portalAnchorRef,
 }: ZoomableImageViewerProps) {
-  const portalContainer = resolveImagePreviewPortalContainer(portalAnchorRef?.current);
-  useImagePreviewPortalNoDrag(open, portalContainer);
-
   if (!open || index < 0 || index >= images.length) {
     return null;
   }
@@ -135,7 +74,6 @@ export function ZoomableImageViewer({
       images={images}
       index={index}
       {...(onIndexChange ? { onIndexChange } : {})}
-      {...(portalContainer ? { portalContainer } : {})}
     />
   );
 }
@@ -230,16 +168,14 @@ function OpenZoomableImageViewer({
   images,
   index,
   onIndexChange,
-  portalContainer,
 }: {
   readonly onClose: () => void;
   readonly images: ZoomableImageViewerItem[];
   readonly index: number;
   readonly onIndexChange?: (index: number) => void;
-  readonly portalContainer?: HTMLElement;
 }) {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
+
   const isElectronFullscreen = useElectronFullscreen();
   useImagePreviewContextMenu(images);
 
@@ -249,7 +185,7 @@ function OpenZoomableImageViewer({
   const reservesWindowControls = !isElectronFullscreen;
   const sliderClassName = cn(
     'molly-photo-slider',
-    !isMobile && 'molly-photo-slider--desktop',
+    'molly-photo-slider--desktop',
     // A single image has nothing to count; "1 / 1" is only noise.
     images.length < 2 && 'molly-photo-slider--single',
     reservesWindowControls && isMacOSElectronRenderer() && 'molly-photo-slider--mac-controls',
@@ -277,10 +213,9 @@ function OpenZoomableImageViewer({
       {...(onIndexChange ? { onIndexChange } : {})}
       maskClosable
       photoClosable
-      {...(isMobile ? {} : { maskOpacity: DESKTOP_MASK_OPACITY })}
+      {...{ maskOpacity: DESKTOP_MASK_OPACITY }}
       photoClassName="molly-photo-slider-image"
       photoWrapClassName="molly-photo-slider-photo-wrap"
-      {...(portalContainer ? { portalContainer } : {})}
     />
   );
 }

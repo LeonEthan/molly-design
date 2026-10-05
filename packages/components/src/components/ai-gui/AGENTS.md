@@ -48,10 +48,8 @@ File-by-file ownership and coverage pointers: [README.md](README.md).
   13px hierarchy. Execute calls are not cards; Thought headings stay at
   activity-detail scale. Turns are avatar-free and full-width, and run
   configuration belongs in the footer info control.
-- Duration has one owner: desktop uses `WorkedGroupHeader` for folded turns and
-  the footer after buttons otherwise; mobile always uses the footer before
-  buttons, and the worked header suppresses its copy. Preserve
-  `MOBILE_TURN_ACTION_LEADING_INSET_PX` so actions clear the edge-back strip.
+- Duration has one owner: `WorkedGroupHeader` for folded turns and the footer
+  after buttons otherwise.
 - The gutter belongs to `ConversationColumn`, not Virtua. EVERY row shares one left rail with no shell pad, INCLUDING
   the contents of an expanded region: expanding reveals rows, it never shifts
   them right, and the chevron carries the hierarchy. Hover pills bleed instead
@@ -122,7 +120,7 @@ File-by-file ownership and coverage pointers: [README.md](README.md).
   dialog resends the same content as a new ordinary message, then marks the old
   entry `canceled` while retaining the marker as a tombstone. Never automatically
   dispatch or revive the old turn.
-- Attachment and mobile image-preview invariants live in
+- Attachment and image-preview invariants live in
   [session-files-rendering.md](session-files-rendering.md).
 - Agent Markdown images use the owning Session's file preview; never load raw
   local paths or retain images across resolver changes.

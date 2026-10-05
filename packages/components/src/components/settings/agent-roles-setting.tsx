@@ -187,7 +187,6 @@ export function AgentRolesSetting() {
         accessibleRoles={roles}
         onChange={setEditor}
         onClose={() => setEditor(null)}
-        source="settings"
       />
 
       <AlertDialog

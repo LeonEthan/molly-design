@@ -23,7 +23,6 @@ type TestServiceApi = {
     state: TestOwnerState,
     options?: {
       readonly forcePublish?: boolean;
-      readonly persistAllChangesDiffStats?: boolean;
     }
   ) => Promise<void>;
 };

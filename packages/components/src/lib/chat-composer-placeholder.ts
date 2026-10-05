@@ -11,12 +11,6 @@ export type ChatComposerPromptPlaceholderKey =
   | 'composer.promptPlaceholder.mentionsSkills'
   | 'composer.promptPlaceholder.commandsMentionsSkills';
 
-export type ChatComposerMobilePromptPlaceholderKey =
-  | 'composer.promptPlaceholder.base'
-  | 'composer.promptPlaceholder.mobile'
-  | 'composer.promptPlaceholder.mobileSkills'
-  | 'composer.promptPlaceholder.mobileMentionsSkills';
-
 function hasChatComposerCommandHints(availableCommands?: AcpCommandSummary[]): boolean {
   return Boolean(availableCommands && availableCommands.length > 0);
 }
@@ -76,21 +70,5 @@ export function getChatComposerPromptPlaceholderKey({
   if (hasCommands) return 'composer.promptPlaceholder.commands';
   if (hasMentions) return 'composer.promptPlaceholder.mentions';
   if (hasSkills) return 'composer.promptPlaceholder.skills';
-  return 'composer.promptPlaceholder.base';
-}
-
-export function getChatComposerMobilePromptPlaceholderKey({
-  mentionSource,
-  skillAgent,
-}: {
-  mentionSource?: MentionProjectSource;
-  skillAgent?: { machineId?: string };
-}): ChatComposerMobilePromptPlaceholderKey {
-  const hasMentions = hasChatComposerMentionHints(mentionSource);
-  const hasSkills = hasChatComposerSkillHints(mentionSource, skillAgent);
-
-  if (hasMentions && hasSkills) return 'composer.promptPlaceholder.mobileMentionsSkills';
-  if (hasMentions) return 'composer.promptPlaceholder.mobile';
-  if (hasSkills) return 'composer.promptPlaceholder.mobileSkills';
   return 'composer.promptPlaceholder.base';
 }

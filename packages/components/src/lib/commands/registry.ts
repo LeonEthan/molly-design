@@ -1,9 +1,5 @@
 import { matchesKeyboardEvent, parseBinding } from './key-matcher';
 import { getPlatform, getRuntime, isMac } from './platform';
-import {
-  createShortcutUsagePayload,
-  type ShortcutUsageAnalyticsHandler,
-} from './shortcut-analytics';
 import { keybindingAppliesToEnvironment, UNINTERCEPTABLE_WEB_KEYS } from './shortcuts';
 import type { Command, KeyBinding, KeyScope } from './types';
 import { loadUserBindings, saveUserBindings, type UserBindingsMap } from './user-bindings';
@@ -67,7 +63,6 @@ class CommandRegistry {
   // Innermost-last, like the command stacks: a scope registered later wins.
   private scopes: ScopeRegistration[] = [];
   private pauseTimer: ReturnType<typeof setTimeout> | null = null;
-  private shortcutAnalyticsHandler: ShortcutUsageAnalyticsHandler | null = null;
 
   /**
    * Suspend dispatch without unbinding anything. Used by the rebinding UI so the
@@ -94,10 +89,6 @@ class CommandRegistry {
 
   isPaused(): boolean {
     return this.paused;
-  }
-
-  setShortcutAnalyticsHandler(handler: ShortcutUsageAnalyticsHandler | null): void {
-    this.shortcutAnalyticsHandler = handler;
   }
 
   /**
@@ -418,31 +409,11 @@ class CommandRegistry {
       if (cmd.when && !cmd.when()) continue;
       if (b.preventDefault) event.preventDefault();
       try {
-        this.captureShortcutUsage(b);
         void cmd.run();
       } catch (error) {
         console.error(`[commands] failed to execute "${cmd.id}"`, error);
       }
       return;
-    }
-  }
-
-  private captureShortcutUsage(binding: ResolvedBinding): void {
-    if (!this.shortcutAnalyticsHandler) return;
-    try {
-      this.shortcutAnalyticsHandler(
-        createShortcutUsagePayload({
-          commandId: binding.commandId,
-          binding: binding.raw,
-          source: 'keyboard',
-          isUserOverride: this.hasUserOverride(binding.commandId),
-        })
-      );
-    } catch (error) {
-      console.error(
-        `[commands] failed to capture shortcut usage for "${binding.commandId}"`,
-        error
-      );
     }
   }
 

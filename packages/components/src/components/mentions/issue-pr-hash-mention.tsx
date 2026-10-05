@@ -1,14 +1,11 @@
 import * as React from 'react';
 import { useAtomValue } from 'jotai';
 import { CircleDot, Github, GitPullRequest } from 'lucide-react';
-import { usePostHog } from '@posthog/react';
 import { useTranslation } from 'react-i18next';
 import { githubFetchIssuesAndPRs, type GitHubIssueOrPR } from '@molly/shared';
 import type { IssuePRMention } from '@molly/shared';
 
 import { currentWorkspaceIdAtom } from '@/atoms';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
-import { normalizeGithubFetchErrorCode } from '@/components/mentions/mention-analytics';
 import { scoreMentionMatch } from '@/components/mentions/mention-rank';
 import {
   useMentionHydration,
@@ -103,30 +100,6 @@ function isIssuePrEntryFresh(entry: RepoIssuesAndPRsResult, now: number) {
 export function __resetIssuePrFetchFreshnessForTests() {
   issuePrMemoryCache.clear();
   issuePrInFlightRequests.clear();
-}
-
-// ============================================================================
-// Analytics
-// ============================================================================
-
-function fnv1a32(value: string) {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  // Convert to unsigned hex
-  return (hash >>> 0).toString(16).padStart(8, '0');
-}
-
-function getRepoAnalyticsId(repoFullName: string, isPublic: boolean) {
-  if (isPublic) return repoFullName;
-  return `private:${fnv1a32(repoFullName.toLowerCase())}`;
-}
-
-function getIsOnline(): boolean | null {
-  if (typeof navigator === 'undefined') return null;
-  return navigator.onLine;
 }
 
 function toErrorMessage(err: unknown) {
@@ -404,7 +377,6 @@ export function useRepoIssuesAndPRs(
   isPublic?: boolean
 ): UseRepoIssuesAndPRsResult {
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const postHog = usePostHog();
 
   const [data, setData] = React.useState<IssuePrMentionData>({
     entry: null,
@@ -417,8 +389,6 @@ export function useRepoIssuesAndPRs(
 
       const workspaceIdValue = workspaceId;
       const repoFullNameValue = repoFullName;
-      const isPublicValue = isPublic ?? false;
-      const repoAnalyticsId = getRepoAnalyticsId(repoFullNameValue, isPublicValue);
       const key = getCacheKey(workspaceIdValue, repoFullNameValue);
 
       const cached = issuePrMemoryCache.get(key);
@@ -450,31 +420,12 @@ export function useRepoIssuesAndPRs(
         return;
       }
 
-      const fetchStart = Date.now();
-      const source = 'github-direct';
-      capturePostHogEvent(postHog, 'mention/issue_pr/fetch_start', {
-        workspace_id: workspaceIdValue,
-        source,
-        repo: repoAnalyticsId,
-        repoIsPublic: isPublicValue,
-        online: getIsOnline(),
-      });
-
       const request = (async () => {
         const items = await withGitHubTokenRetry(workspaceIdValue, repoFullNameValue, (token) =>
           githubFetchIssuesAndPRs(token, repoFullNameValue)
         );
         const entry = toRepoIssuesAndPRsResult(repoFullNameValue, items);
         publishIssuePrCacheEntry(key, entry);
-        capturePostHogEvent(postHog, 'mention/issue_pr/fetch_success', {
-          workspace_id: workspaceIdValue,
-          source,
-          repo: repoAnalyticsId,
-          repoIsPublic: isPublicValue,
-          durationMs: Date.now() - fetchStart,
-          itemsCount: entry.items.length,
-          online: getIsOnline(),
-        });
         return entry;
       })();
 
@@ -489,22 +440,11 @@ export function useRepoIssuesAndPRs(
           status: 'error',
           error: message,
         }));
-        // `error` was silently stripped by the denylist (spec §2.3). Send a
-        // normalized `error_code` enum instead — never the raw message.
-        capturePostHogEvent(postHog, 'mention/issue_pr/fetch_error', {
-          workspace_id: workspaceIdValue,
-          source,
-          repo: repoAnalyticsId,
-          repoIsPublic: isPublicValue,
-          durationMs: Date.now() - fetchStart,
-          error_code: normalizeGithubFetchErrorCode(err),
-          online: getIsOnline(),
-        });
       } finally {
         issuePrInFlightRequests.delete(key);
       }
     },
-    [isPublic, postHog, repoFullName, workspaceId]
+    [repoFullName, workspaceId]
   );
 
   React.useEffect(() => {
@@ -547,7 +487,7 @@ export function useRepoIssuesAndPRs(
       cancelled = true;
       unsubscribe();
     };
-  }, [isPublic, postHog, refresh, repoFullName, workspaceId]);
+  }, [isPublic, refresh, repoFullName, workspaceId]);
 
   // Stable between renders: the menu keys its issue/PR slices off this object,
   // so a fresh one per keystroke re-partitions the cached list while the user

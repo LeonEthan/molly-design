@@ -21,18 +21,11 @@ import { ProjectsScreen } from './screens/projects-screen';
 import { FirstTaskScreen } from './screens/first-task-screen';
 import { SummaryScreen } from './screens/summary-screen';
 import { isOnboardingMollyConfig } from './onboarding-agent';
-import {
-  useOnboardingAnalytics,
-  type DesktopOnboardingTraceProperties,
-} from './onboarding-analytics';
 import { WindowDragStrip } from '@/ui/window-drag-region';
 
 export type DesktopOnboardingCompletion = {
   sessionId?: string;
   workspaceSlug?: string;
-  entryPoint?: 'first_task' | 'first_task_skip' | 'summary';
-  sourceStep?: DesktopOnboardingResumePhase;
-  sourceStepDurationMs?: number | null;
 };
 
 export function resolveDesktopOnboardingSummaryAgent(
@@ -72,7 +65,6 @@ export function OnboardingOverlay({
   const [persistedPhase, setPersistedPhase] = useAtom(desktopOnboardingPhaseAtom);
   const [draft, setDraft] = useAtom(desktopOnboardingDraftAtom);
   const onboardingAudio = useOnboardingAudio();
-  const analytics = useOnboardingAnalytics();
   const { stop: stopOnboardingAudio } = onboardingAudio;
   const audioHandoffStoppedRef = useRef(false);
 
@@ -105,92 +97,22 @@ export function OnboardingOverlay({
         : steps,
     [draft.provider?.kind, phase, steps]
   );
-  const stepStartedAtRef = useRef(analytics.now());
-  const flowStartedCapturedRef = useRef(false);
-  const viewedPhaseRef = useRef<DesktopOnboardingResumePhase | null>(null);
-  const captureStepExit = useCallback(
-    (
-      action: 'continue' | 'back' | 'skip' | 'authenticated' | 'complete',
-      nextStep: DesktopOnboardingResumePhase | 'product',
-      properties?: DesktopOnboardingTraceProperties
-    ) => {
-      analytics.capture('onboarding/step_exited', {
-        step: phase,
-        next_step: nextStep,
-        action,
-        duration_ms: analytics.durationSince(stepStartedAtRef.current),
-        ...properties,
-      });
-    },
-    [analytics, phase]
-  );
   const advanceTo = useCallback(
-    (
-      next: DesktopOnboardingResumePhase,
-      action: 'continue' | 'back' | 'skip' | 'authenticated' = 'continue',
-      properties?: DesktopOnboardingTraceProperties
-    ) => {
-      captureStepExit(action, next, properties);
+    (next: DesktopOnboardingResumePhase) => {
       setPersistedPhase(next);
     },
-    [captureStepExit, setPersistedPhase]
+    [setPersistedPhase]
   );
   const goAfterCeremony = useCallback(() => {
     stopOnboardingAudio();
-    advanceTo(cloudAccount ? 'login' : multiWorkspace ? 'workspace' : 'providers', 'continue');
+    advanceTo(cloudAccount ? 'login' : multiWorkspace ? 'workspace' : 'providers');
   }, [advanceTo, cloudAccount, multiWorkspace, stopOnboardingAudio]);
   const goBeforeProviders = useCallback(
-    () => advanceTo(multiWorkspace ? 'workspace' : cloudAccount ? 'login' : 'ceremony', 'back'),
+    () => advanceTo(multiWorkspace ? 'workspace' : cloudAccount ? 'login' : 'ceremony'),
     [advanceTo, cloudAccount, multiWorkspace]
   );
 
-  useEffect(() => {
-    if (!flowStartedCapturedRef.current) {
-      flowStartedCapturedRef.current = true;
-      analytics.capture(
-        persistedPhase === null ? 'onboarding/flow_started' : 'onboarding/flow_resumed',
-        {
-          initial_step: phase,
-          resumed: persistedPhase !== null,
-          cloud_account: cloudAccount,
-          multi_workspace: multiWorkspace,
-        }
-      );
-    }
-    if (viewedPhaseRef.current === phase) return;
-    viewedPhaseRef.current = phase;
-    stepStartedAtRef.current = analytics.now();
-    const stepIndex = visibleSteps.indexOf(phase);
-    analytics.capture('onboarding/step_viewed', {
-      step: phase,
-      step_index: stepIndex === -1 ? null : stepIndex + 1,
-      step_count: visibleSteps.length,
-      provider_selection_kind: draft.provider?.kind ?? 'none',
-      project_kind: draft.project?.kind ?? 'none',
-      agent_state: phase === 'summary' ? summaryAgent.state : undefined,
-    });
-  }, [
-    analytics,
-    cloudAccount,
-    draft.project?.kind,
-    draft.provider?.kind,
-    multiWorkspace,
-    persistedPhase,
-    phase,
-    summaryAgent.state,
-    visibleSteps,
-  ]);
-
-  const completeOnboarding = useCallback(
-    async (entryPoint: NonNullable<DesktopOnboardingCompletion['entryPoint']>) => {
-      return onCompleted({
-        entryPoint,
-        sourceStep: phase,
-        sourceStepDurationMs: analytics.durationSince(stepStartedAtRef.current),
-      });
-    },
-    [analytics, onCompleted, phase]
-  );
+  const completeOnboarding = useCallback(() => onCompleted({}), [onCompleted]);
 
   useEffect(() => {
     if (phase === 'ceremony') {
@@ -217,7 +139,7 @@ export function OnboardingOverlay({
     workspace: (
       <WorkspaceScreen
         key="workspace"
-        onBack={() => advanceTo(cloudAccount ? 'login' : 'ceremony', 'back')}
+        onBack={() => advanceTo(cloudAccount ? 'login' : 'ceremony')}
         onNext={() => advanceTo('providers')}
       />
     ),
@@ -227,30 +149,28 @@ export function OnboardingOverlay({
         onBack={goBeforeProviders}
         onSkip={() => {
           setDraft({ provider: null, project: null });
-          advanceTo('summary', 'skip', { provider_selection_kind: 'none' });
+          advanceTo('summary');
         }}
         onNext={(provider) => {
           setDraft({ provider, project: null });
-          advanceTo('projects', 'continue', { provider_selection_kind: provider.kind });
+          advanceTo('projects');
         }}
       />
     ),
     projects: (
       <ProjectsScreen
         key="projects"
-        onBack={() => advanceTo('providers', 'back')}
+        onBack={() => advanceTo('providers')}
         onSkip={() => {
           setDraft((previous) => ({ ...previous, project: null }));
-          advanceTo('summary', 'skip', { project_kind: 'none' });
+          advanceTo('summary');
         }}
         onComplete={(project) => {
           setDraft((previous) => ({ ...previous, project }));
           advanceTo(
             project.kind === 'local' && draft.provider?.kind === 'agentConfig'
               ? 'firstTask'
-              : 'summary',
-            'continue',
-            { project_kind: project.kind }
+              : 'summary'
           );
         }}
       />
@@ -261,7 +181,7 @@ export function OnboardingOverlay({
           key="firstTask"
           agentConfigId={draft.provider.agentConfigId}
           project={draft.project}
-          onBack={() => advanceTo('projects', 'back')}
+          onBack={() => advanceTo('projects')}
           onAgentConfigChange={(config) => {
             setDraft((previous) => ({
               ...previous,
@@ -273,10 +193,10 @@ export function OnboardingOverlay({
             }));
           }}
           onSkip={() => {
-            void completeOnboarding('first_task_skip');
+            void completeOnboarding();
           }}
           onContinue={() => {
-            return completeOnboarding('first_task');
+            return completeOnboarding();
           }}
         />
       ) : null,
@@ -286,9 +206,9 @@ export function OnboardingOverlay({
         agentState={summaryAgent.state}
         agentName={summaryAgent.name}
         projectName={draft.project?.name}
-        onBack={() => advanceTo(draft.project ? 'projects' : 'providers', 'back')}
+        onBack={() => advanceTo(draft.project ? 'projects' : 'providers')}
         onComplete={() => {
-          void completeOnboarding('summary');
+          void completeOnboarding();
         }}
       />
     ),

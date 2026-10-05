@@ -25,9 +25,9 @@ and file responsibilities: [../README.md](../README.md).
 
 ## Worktrees, branches, and setup
 
-- Post-turn automatic commit/push is allowed for GitHub worktrees and local projects with
-  `ProjectRef.useWorktree === true`. Never run it against a local project's original directory,
-  even when that project has a `githubRepoFullName` or associated PR.
+- Do not run post-turn automatic commit/push, PR discovery or Agent-driven branch renaming,
+  including historical GitHub/worktree sessions with associated PRs. Keep worktree restore,
+  setup and cleanup; design saves use the separate Molly-managed history repository.
 - Resume a Session on a local project with the workspace's current branch as-is, worktree mode
   included: a persisted `acpSessionId` proves prior execution, so the stored `project.branch` is
   historical state, not a checkout request. A legacy direct local Session may re-enter

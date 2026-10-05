@@ -13,7 +13,7 @@ export interface SessionConversationPageHeaderProps {
   desktopActionsSlot?: ReactNode;
   menuSlot?: ReactNode;
   endSlot?: ReactNode;
-  nativeApp?: boolean;
+
   reserveMacTrafficLightInset?: boolean;
 }
 
@@ -23,15 +23,12 @@ export function SessionConversationPageHeader({
   desktopActionsSlot,
   menuSlot,
   endSlot,
-  nativeApp = false,
   reserveMacTrafficLightInset = false,
 }: SessionConversationPageHeaderProps) {
   return (
     <CardHeader
       className={cn(
         'flex flex-col justify-center gap-1 border-b border-border px-3 py-2 shrink-0 h-12',
-        nativeApp &&
-          'h-[calc(3rem+var(--safe-area-top))] pt-[calc(0.5rem+var(--safe-area-top))] pl-[calc(0.75rem+var(--safe-area-left))] pr-[calc(0.75rem+var(--safe-area-right))]',
         reserveMacTrafficLightInset && 'pl-20'
       )}
     >

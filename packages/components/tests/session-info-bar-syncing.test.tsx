@@ -21,7 +21,6 @@ const CONTEXT_LESS_PROPS = {
   branch: null,
   workspaceLocation: null,
   pr: null,
-  diffStat: null,
 } as const;
 
 const ACTIVE_GOAL: SessionGoalMessage = {

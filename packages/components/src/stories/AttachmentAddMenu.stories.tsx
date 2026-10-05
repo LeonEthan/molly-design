@@ -70,7 +70,7 @@ const Frame = ({ children, dark }: { children: React.ReactNode; dark?: boolean }
 );
 
 export const DesktopLight: Story = {
-  args: { isMobile: false, onAddAttachment: noop },
+  args: { onAddAttachment: noop },
   render: (args) => (
     <Frame>
       <AttachmentAddMenu {...args} />
@@ -79,7 +79,7 @@ export const DesktopLight: Story = {
 };
 
 export const DesktopDark: Story = {
-  args: { isMobile: false, onAddAttachment: noop },
+  args: { onAddAttachment: noop },
   render: (args) => (
     <Frame dark>
       <AttachmentAddMenu {...args} />
@@ -88,7 +88,7 @@ export const DesktopDark: Story = {
 };
 
 export const Disabled: Story = {
-  args: { isMobile: false, disabled: true, onAddAttachment: noop },
+  args: { disabled: true, onAddAttachment: noop },
   render: (args) => (
     <Frame>
       <AttachmentAddMenu {...args} />
@@ -98,7 +98,6 @@ export const Disabled: Story = {
 
 export const DesktopWithMcp: Story = {
   args: {
-    isMobile: false,
     onAddAttachment: noop,
     mcp: { servers: mcpServers, selectedIds: [], onSelectedIdsChange: noop },
   },
@@ -111,7 +110,6 @@ export const DesktopWithMcp: Story = {
 
 export const McpOnly: Story = {
   args: {
-    isMobile: false,
     mcp: { servers: mcpServers, selectedIds: [], onSelectedIdsChange: noop },
   },
   render: (args) => (

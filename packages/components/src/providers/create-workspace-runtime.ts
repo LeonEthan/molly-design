@@ -35,7 +35,6 @@ import {
   parseMollyPresenceStates,
   MOLLY_PRESENCE_TTL_MS,
   type MollyPresenceStateMap,
-  type SyncReason,
 } from '@molly/shared';
 import { LocalLoroTransportAdapter } from '@molly/shared/local-loro-transport';
 import type { TaskId, WorkspaceId } from '@molly/shared';
@@ -93,18 +92,6 @@ declare global {
   }
 }
 
-/**
- * Side-effect-only analytics intent emitted by the runtime. The runtime has no
- * PostHog client of its own (it is a non-React module), so it forwards
- * structured events to the React-side RuntimeProvider, which captures them via
- * the PostHog wrappers. Rejected: importing posthog-js here directly — the
- * runtime must stay framework-agnostic and unit-testable without a client.
- */
-export type WorkspaceRuntimeAnalyticsEvent = {
-  name: string;
-  properties: Record<string, unknown>;
-};
-
 type RuntimeDeps = {
   /**
    * Used for caching the (slug, id) mapping in localStorage.
@@ -122,12 +109,6 @@ type RuntimeDeps = {
    * The local presence feed has produced a snapshot.
    */
   onPresenceSyncStateChange?: (state: RoomSyncState) => void;
-  /**
-   * Forward analytics intents (meta-sync outcome, connection-state changes,
-   * durable-transport init failures) to the PostHog-aware caller. Optional so
-   * the runtime works in tests and contexts without analytics wired.
-   */
-  onAnalyticsEvent?: (event: WorkspaceRuntimeAnalyticsEvent) => void;
   eagerSyncSurface?: EagerSyncSurface;
 };
 
@@ -320,50 +301,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
 
   // workspaceId is required and provided at initialization
   const workspaceId: WorkspaceId = deps.workspaceId;
-
-  // Analytics is side-effect-only: never let a capture path throw into the
-  // runtime control flow. The caller wires `onAnalyticsEvent` to PostHog.
-  const emitAnalytics = (name: string, properties: Record<string, unknown>): void => {
-    if (!deps.onAnalyticsEvent) {
-      return;
-    }
-    try {
-      deps.onAnalyticsEvent({
-        name,
-        properties: { workspace_id: workspaceId, ...properties },
-      });
-    } catch (error) {
-      console.warn('createWorkspaceRuntime: analytics emit failed', { name, error });
-    }
-  };
-
-  const classifyMetaSyncReason = (error: unknown): SyncReason => {
-    if (isTimeoutError(error)) {
-      return 'timeout';
-    }
-    const message =
-      error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-    if (message.includes('token')) {
-      return 'token_fetch_failed';
-    }
-    if (message.includes('cursor')) {
-      return 'cursor_degraded';
-    }
-    if (message.includes('auth')) {
-      return 'fatal_auth';
-    }
-    if (message.includes('reject')) {
-      return 'rejected_by_server';
-    }
-    if (
-      message.includes('transport') ||
-      message.includes('network') ||
-      message.includes('connect')
-    ) {
-      return 'transport_error';
-    }
-    return 'unknown';
-  };
 
   const publishLocalPresence = (states: MollyPresenceStateMap): void => {
     deps.onPresenceSnapshot?.(states);
@@ -1622,7 +1559,7 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     emitControlConnectionState();
   };
 
-  const joinAndWatchMetaRoom = async (syncPhase: 'initial' | 'recovery') => {
+  const joinAndWatchMetaRoom = async () => {
     if (metaSub) {
       return;
     }
@@ -1644,13 +1581,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
       initialMetaSyncCompleted = false;
       initialMetaSyncFailed = true;
       currentMetaTracker.markFirstSyncFailed();
-      emitAnalytics('workspace/meta_sync_failed', {
-        reason_code: classifyMetaSyncReason(error),
-        error_name: error instanceof Error ? error.name : 'unknown',
-        meta_room_status: 'error',
-        duration_ms: Date.now() - joinStartedAt,
-        phase: syncPhase,
-      });
       console.error('Failed to join repo meta room', {
         workspaceId,
         elapsedMs: Date.now() - joinStartedAt,
@@ -1667,17 +1597,9 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     currentMetaTracker.attach(currentMetaSub);
     console.debug('Repo meta room join returned', { workspaceId, status: currentMetaSub.status });
     detachMetaRoomStatusListener?.();
-    const watchMetaFirstSync = (
-      failureMessage: string,
-      timeoutMessage: string,
-      watchPhase: 'initial' | 'recovery'
-    ): Promise<void> => {
+    const watchMetaFirstSync = (failureMessage: string, timeoutMessage: string): Promise<void> => {
       const startedAt = Date.now();
       const firstSyncPromise = currentMetaSub.firstSyncedWithRemote;
-      // Each watch invocation reports exactly one terminal meta-sync outcome.
-      // The success/failure handlers and the timeout race can otherwise both
-      // fire (e.g. slow reject after a timeout), so guard double-emit here.
-      let metaSyncOutcomeReported = false;
       console.info('createWorkspaceRuntime: waiting for repo meta room first remote sync', {
         workspaceId,
         status: currentMetaSub.status,
@@ -1691,10 +1613,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
           initialMetaSyncCompleted = true;
           initialMetaSyncFailed = false;
           currentMetaTracker.markFirstSynced();
-          // Claim the single-outcome slot on success so a later transient
-          // failure can't emit a false meta_sync_failed/timed_out. The success
-          // event itself was removed as low-value (high volume, no churn signal).
-          metaSyncOutcomeReported = true;
           console.info('createWorkspaceRuntime: repo meta room first remote sync completed', {
             workspaceId,
             elapsedMs: Date.now() - startedAt,
@@ -1713,16 +1631,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
           initialMetaSyncCompleted = false;
           initialMetaSyncFailed = true;
           currentMetaTracker.markFirstSyncFailed();
-          if (!metaSyncOutcomeReported) {
-            metaSyncOutcomeReported = true;
-            emitAnalytics('workspace/meta_sync_failed', {
-              reason_code: classifyMetaSyncReason(error),
-              error_name: error instanceof Error ? error.name : 'unknown',
-              meta_room_status: currentMetaSub.status,
-              duration_ms: Date.now() - startedAt,
-              phase: watchPhase,
-            });
-          }
           console.error(failureMessage, {
             workspaceId,
             elapsedMs: Date.now() - startedAt,
@@ -1750,15 +1658,6 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
         initialMetaSyncCompleted = false;
         initialMetaSyncFailed = true;
         currentMetaTracker.markFirstSyncFailed();
-        if (!metaSyncOutcomeReported) {
-          metaSyncOutcomeReported = true;
-          emitAnalytics('workspace/meta_sync_timed_out', {
-            timeout_ms: META_FIRST_SYNC_TIMEOUT_MS,
-            meta_room_status: currentMetaSub.status,
-            duration_ms: Date.now() - startedAt,
-            phase: watchPhase,
-          });
-        }
         console.warn(timeoutMessage, {
           workspaceId,
           timeoutMs: META_FIRST_SYNC_TIMEOUT_MS,
@@ -1777,8 +1676,7 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
       initialMetaSyncFailed = false;
       const recovery = watchMetaFirstSync(
         'Failed to recover repo meta room sync',
-        'Timed out waiting for repo meta room sync recovery',
-        'recovery'
+        'Timed out waiting for repo meta room sync recovery'
       ).finally(() => {
         if (metaFirstSyncRecovery === recovery) {
           metaFirstSyncRecovery = null;
@@ -1786,7 +1684,7 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
       });
       metaFirstSyncRecovery = recovery;
     };
-    // Meta-specific first-sync recovery policy (timeout + analytics + cursor
+    // Meta-specific first-sync recovery policy (timeout + cursor
     // invalidation). Plain health mirroring lives in currentMetaTracker.
     detachMetaRoomStatusListener = currentMetaSub.onStatusChange((status) => {
       if (disposePromise || metaSub !== currentMetaAggregate) {
@@ -1809,12 +1707,11 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
     });
     void watchMetaFirstSync(
       'Failed to sync repo meta room',
-      'Timed out waiting for repo meta room initial sync',
-      syncPhase
+      'Timed out waiting for repo meta room initial sync'
     );
   };
 
-  const ensureMetaRoomSynced = async (syncPhase: 'initial' | 'recovery' = 'initial') => {
+  const ensureMetaRoomSynced = async () => {
     if (metaSub) {
       return;
     }
@@ -1823,7 +1720,7 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
       return;
     }
 
-    const pendingJoin = joinAndWatchMetaRoom(syncPhase);
+    const pendingJoin = joinAndWatchMetaRoom();
     metaRoomJoinPromise = pendingJoin;
     try {
       await pendingJoin;
@@ -1890,7 +1787,7 @@ export async function createWorkspaceRuntime(deps: RuntimeDeps): Promise<Workspa
           // repo.reconnect() to revive. Rejoin it through the same recovery
           // episode instead of letting auth refresh start a new initial sync.
           if (!metaSub && !disposePromise) {
-            await ensureMetaRoomSynced('recovery');
+            await ensureMetaRoomSynced();
           }
         }
       }

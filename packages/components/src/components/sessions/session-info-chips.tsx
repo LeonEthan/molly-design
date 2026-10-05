@@ -556,8 +556,6 @@ export function ContextChip({
   pr,
   onOpenPr,
   actions,
-  onOpenAllChanges,
-  diffStat,
   prCiRuns,
   onOpenPrCiRun,
   ...itemMode
@@ -574,15 +572,12 @@ export function ContextChip({
   /** Agent-driven PR/worktree actions pinned after the context summary. */
   actions?: readonly ContextChipAction[];
   /** Open the complete working-tree diff. */
-  onOpenAllChanges?: () => void;
-  diffStat?: { add: number; del: number } | null;
   prCiRuns?: readonly PrCiRun[];
   onOpenPrCiRun?: (run: PrCiRun) => void;
 } & InfoBarItemMode) {
   const { t } = useTranslation();
-  const hasDiff = diffStat != null && diffStat.add + diffStat.del > 0;
   const trimmedBranch = branch?.trim() || '';
-  if (!pr && !projectName && !trimmedBranch && !hasDiff && !actions?.length) return null;
+  if (!pr && !projectName && !trimmedBranch && !actions?.length) return null;
 
   const status: PrStatus | null = pr ? (pr.status ?? 'open') : null;
   const statusMeta = status ? (PR_STATUS_META[status] ?? PR_STATUS_META.open) : null;
@@ -668,19 +663,6 @@ export function ContextChip({
           className="-mx-1 flex h-6 min-w-0 shrink items-center rounded-md px-1 text-foreground/85 transition-colors hover:bg-muted-foreground/10 hover:text-foreground"
         >
           <span className="truncate">{trimmedBranch}</span>
-        </button>
-      ) : null}
-      {hasDiff ? (
-        <button
-          type="button"
-          onClick={onOpenAllChanges}
-          disabled={!onOpenAllChanges}
-          aria-label={t('sessions.detailTabs.allChanges', 'All Changes')}
-          title={t('sessions.detailTabs.allChanges', 'All Changes')}
-          className="-mx-1 flex h-6 shrink-0 items-center gap-1 rounded-md px-1 tabular-nums transition-colors enabled:hover:bg-muted-foreground/10 disabled:pointer-events-none"
-        >
-          <span className="text-code-added">+{diffStat.add}</span>
-          <span className="text-code-removed">−{diffStat.del}</span>
         </button>
       ) : null}
     </span>

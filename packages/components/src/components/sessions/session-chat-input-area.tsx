@@ -43,13 +43,6 @@ import {
   type PersistedMentionRange,
 } from '@/components/mentions/mention-persistence';
 import { useTranslation } from 'react-i18next';
-import { usePostHog } from '@posthog/react';
-import {
-  capturePostHogEvent,
-  getDurationSinceMs,
-  getPerformanceNowMs,
-} from '@/lib/posthog-analytics';
-import { IMAGE_UPLOAD_REASONS, type ImageUploadReason } from '@molly/shared';
 import type {
   AcpCommandSummary,
   CommentReferencePayload,
@@ -73,7 +66,7 @@ import {
 import { SESSION_IMAGE_MAX_COUNT } from '@molly/shared';
 import { cn } from '@/lib/utils';
 import { ConversationColumn } from '@/components/shared/conversation-column';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import type {
   AcpConfigOptionSelector,
   AcpConfigOptionValue,
@@ -144,34 +137,6 @@ type PendingFile = {
   /** Abort controller for the in-flight upload (cleared on terminal state). */
   abort?: AbortController;
 };
-
-const imageUploadReasonSet = new Set<ImageUploadReason>(IMAGE_UPLOAD_REASONS);
-
-// uploadSessionImage throws plain Errors whose message embeds the HTTP status
-// ("Upload failed with status 503"). Until the uploader attaches a structured
-// status (see crossFileNeeds), parse it here so failures carry http_status
-// without ever sending the raw, denylisted error_message.
-const parseUploadHttpStatus = (error: unknown): number | null => {
-  if (!(error instanceof Error)) return null;
-  const match = /status\s+(\d{3})/i.exec(error.message);
-  if (!match?.[1]) return null;
-  const status = Number(match[1]);
-  return Number.isFinite(status) ? status : null;
-};
-
-const classifyImageUploadReason = (error: unknown): ImageUploadReason => {
-  const status = parseUploadHttpStatus(error);
-  if (status === 404) return 'session_not_found';
-  if (status === 403) return 'session_archived';
-  const message = error instanceof Error ? error.message.toLowerCase() : '';
-  if (message.includes('unsupported') || message.includes('invalid') || message.includes('empty')) {
-    return 'validation_error';
-  }
-  return 'upload_error';
-};
-
-const toImageUploadReason = (value: ImageUploadReason): ImageUploadReason =>
-  imageUploadReasonSet.has(value) ? value : 'unknown';
 
 const sessionImageDraftsCache = new Map<SessionId, PendingImage[]>();
 const sessionFileDraftsCache = new Map<SessionId, PendingFile[]>();
@@ -332,29 +297,8 @@ const createLocalImageId = (): string => {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
 
-export function getSessionChatInputAreaShellClassName({
-  protectFromEdgeBackZone = false,
-}: { protectFromEdgeBackZone?: boolean } = {}): string {
-  return cn(
-    'relative shrink-0 pt-0',
-    /* The native session drawer owns a z-30 transparent left-edge swipe zone.
-       Keep the whole mobile composer above it so the zone cannot swallow the
-       left side of controls such as the attachment button. Swiping still works
-       everywhere in the message body above the composer. */
-    protectFromEdgeBackZone && 'z-40',
-    /* On iOS Capacitor the WebView is NOT resized when the soft keyboard opens
-       (`resize: "none"` + `interactive-widget=overlaps-content`). The root
-       layout's `pb-[var(--native-keyboard-height)]` can't reach the session
-       detail page because it renders inside a portal'd drawer, so the composer
-       has to lift itself: `mb` raises it by the keyboard height (the flex-1
-       message list above it shrinks to match), and the bottom padding collapses
-       the home-indicator safe-area once the keyboard covers it.
-       `--native-keyboard-height` is `0px` on web / Android, so both are a no-op
-       there. */
-    'mb-[var(--native-keyboard-height,0px)] transition-[margin-bottom] duration-[250ms] ease-out',
-    'pb-[calc(0.5rem+max(0px,env(safe-area-inset-bottom,0px)-var(--native-keyboard-height,0px)))]',
-    'bg-background'
-  );
+export function getSessionChatInputAreaShellClassName(): string {
+  return 'relative shrink-0 pt-0 pb-2 bg-background';
 }
 
 export interface SessionChatInputAreaProps {
@@ -500,7 +444,7 @@ export const SessionChatInputArea = memo(
       () => toIntlLocale(i18n.resolvedLanguage ?? i18n.language),
       [i18n.language, i18n.resolvedLanguage]
     );
-    const isMobile = useIsMobile();
+
     const numberFormatter = useMemo(() => new Intl.NumberFormat(intlLocale), [intlLocale]);
     const localMachineId = useAtomValue(localMachineIdAtom);
     // Desktop local-transport fast path is available only when this very machine
@@ -524,7 +468,6 @@ export const SessionChatInputArea = memo(
       runtimeWorkspaceId: workspaceRuntime?.workspaceId,
     });
     const currentUser = useAtomValue(userAtom);
-    const postHog = usePostHog();
     const isArchived = session.isArchived === true;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     useLayoutEffect(() => {
@@ -707,14 +650,6 @@ export const SessionChatInputArea = memo(
       },
       [imageSelectionSkippedLabel]
     );
-    const sessionProjectKind =
-      session.project?.kind === 'local'
-        ? 'local'
-        : session.project?.kind === 'github' || session.repoFullName
-          ? 'github'
-          : null;
-    const sessionLocalProjectId =
-      session.project?.kind === 'local' ? session.project.localProjectId : null;
 
     // Use local state with cache sync for draft persistence
     const [userInput, setUserInputState] = useState(
@@ -904,20 +839,6 @@ export const SessionChatInputArea = memo(
     const startUpload = useCallback(
       async (targetSessionId: SessionId, localId: string, file: File) => {
         if (!workspaceId) {
-          capturePostHogEvent(postHog, 'session/image_upload_failed', {
-            channel: 'web',
-            entrypoint: 'session_chat',
-            actor: 'user',
-            workspace_id: workspaceId ?? null,
-            session_id: targetSessionId,
-            image_count: 1,
-            total_size_bytes: file.size,
-            project_kind: sessionProjectKind,
-            local_project_id: sessionLocalProjectId,
-            failure_reason: 'missing_auth',
-            reason_code: toImageUploadReason('missing_auth'),
-            http_status: null,
-          });
           updatePendingImage(targetSessionId, localId, (image) => ({
             ...image,
             status: 'failed',
@@ -933,20 +854,6 @@ export const SessionChatInputArea = memo(
           progress: 0,
           error: undefined,
         }));
-        capturePostHogEvent(postHog, 'session/image_upload_requested', {
-          channel: 'web',
-          entrypoint: 'session_chat',
-          actor: 'user',
-          workspace_id: workspaceId,
-          session_id: targetSessionId,
-          image_count: 1,
-          total_size_bytes: file.size,
-          project_kind: sessionProjectKind,
-          local_project_id: sessionLocalProjectId,
-        });
-
-        // Local-only upload timing (performance.now); not compared across clients.
-        const uploadStartedAtMs = getPerformanceNowMs();
 
         try {
           const uploaded = await uploadSessionReferenceImage({
@@ -965,54 +872,21 @@ export const SessionChatInputArea = memo(
             uploaded,
             error: undefined,
           }));
-          capturePostHogEvent(postHog, 'session/image_upload_succeeded', {
-            channel: 'web',
-            entrypoint: 'session_chat',
-            actor: 'user',
-            workspace_id: workspaceId,
-            session_id: targetSessionId,
-            image_count: 1,
-            total_size_bytes: file.size,
-            project_kind: sessionProjectKind,
-            local_project_id: sessionLocalProjectId,
-            mime_type: uploaded.mimeType,
-            upload_duration_ms: getDurationSinceMs(uploadStartedAtMs),
-          });
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : imageUploadFailedLabel;
-          const reasonCode = toImageUploadReason(classifyImageUploadReason(error));
           updatePendingImage(targetSessionId, localId, (image) => ({
             ...image,
             status: 'failed',
             progress: 0,
             error: errorMessage,
           }));
-          capturePostHogEvent(postHog, 'session/image_upload_failed', {
-            channel: 'web',
-            entrypoint: 'session_chat',
-            actor: 'user',
-            workspace_id: workspaceId,
-            session_id: targetSessionId,
-            image_count: 1,
-            total_size_bytes: file.size,
-            project_kind: sessionProjectKind,
-            local_project_id: sessionLocalProjectId,
-            failure_reason: reasonCode,
-            reason_code: reasonCode,
-            http_status: parseUploadHttpStatus(error),
-            error_name: error instanceof Error ? error.name : typeof error,
-            upload_duration_ms: getDurationSinceMs(uploadStartedAtMs),
-          });
         }
       },
       [
         canSendFileLocally,
         imageUploadFailedLabel,
         imageUploadMissingAuthLabel,
-        postHog,
         session.machineId,
-        sessionLocalProjectId,
-        sessionProjectKind,
         updatePendingImage,
         workspaceId,
       ]
@@ -1123,7 +997,7 @@ export const SessionChatInputArea = memo(
     );
 
     const handleAddFiles = useCallback(
-      (files: File[], source: 'file_input' | 'electron_picker' | 'paste' | 'drop') => {
+      (files: File[]) => {
         if (isArchived) {
           return;
         }
@@ -1181,38 +1055,11 @@ export const SessionChatInputArea = memo(
         }
 
         if (nextEntries.length === 0) {
-          capturePostHogEvent(postHog, 'session/image_files_selected', {
-            entrypoint: 'session_chat',
-            source,
-            workspace_id: workspaceId ?? null,
-            session_id: session.id,
-            project_kind: sessionProjectKind,
-            local_project_id: sessionLocalProjectId,
-            requested_count: files.length,
-            accepted_count: 0,
-            invalid_count: invalidCount,
-            skipped_by_limit: issues.includes(imageCountLimitLabel),
-            pending_image_count_before: pendingImages.length,
-          });
           showImageSelectionIssues(issues);
           return;
         }
 
         showImageSelectionIssues(issues);
-
-        capturePostHogEvent(postHog, 'session/image_files_selected', {
-          entrypoint: 'session_chat',
-          source,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-          project_kind: sessionProjectKind,
-          local_project_id: sessionLocalProjectId,
-          requested_count: files.length,
-          accepted_count: nextEntries.length,
-          invalid_count: invalidCount,
-          skipped_by_limit: issues.includes(imageCountLimitLabel),
-          pending_image_count_before: pendingImages.length,
-        });
         updatePendingImagesForSession(session.id, (prev) => [...prev, ...nextEntries]);
         for (const entry of nextEntries) {
           void startUpload(session.id, entry.localId, entry.file);
@@ -1223,15 +1070,11 @@ export const SessionChatInputArea = memo(
         imageCountLimitLabel,
         isArchived,
         pendingImages.length,
-        postHog,
         session.id,
-        sessionLocalProjectId,
-        sessionProjectKind,
         showImageSelectionIssues,
         startUpload,
         t,
         updatePendingImagesForSession,
-        workspaceId,
       ]
     );
 
@@ -1242,14 +1085,6 @@ export const SessionChatInputArea = memo(
         }
         const target = getSessionImageDrafts(session.id).find((item) => item.localId === localId);
         if (target) {
-          capturePostHogEvent(postHog, 'session/image_draft_removed', {
-            entrypoint: 'session_chat',
-            workspace_id: workspaceId ?? null,
-            session_id: session.id,
-            project_kind: sessionProjectKind,
-            local_project_id: sessionLocalProjectId,
-            status: target.status,
-          });
         }
         updatePendingImagesForSession(session.id, (prev) => {
           if (target) {
@@ -1258,15 +1093,7 @@ export const SessionChatInputArea = memo(
           return prev.filter((item) => item.localId !== localId);
         });
       },
-      [
-        isArchived,
-        postHog,
-        session.id,
-        sessionLocalProjectId,
-        sessionProjectKind,
-        updatePendingImagesForSession,
-        workspaceId,
-      ]
+      [isArchived, session.id, updatePendingImagesForSession]
     );
 
     const handleRetryImage = useCallback(
@@ -1278,26 +1105,9 @@ export const SessionChatInputArea = memo(
         if (!target) {
           return;
         }
-        capturePostHogEvent(postHog, 'session/image_upload_retry_requested', {
-          entrypoint: 'session_chat',
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-          project_kind: sessionProjectKind,
-          local_project_id: sessionLocalProjectId,
-          total_size_bytes: target.file.size,
-        });
         void startUpload(session.id, localId, target.file);
       },
-      [
-        isArchived,
-        pendingImages,
-        postHog,
-        session.id,
-        sessionLocalProjectId,
-        sessionProjectKind,
-        startUpload,
-        workspaceId,
-      ]
+      [isArchived, pendingImages, session.id, startUpload]
     );
 
     const handleAttachmentInputChange = useCallback(
@@ -1309,7 +1119,7 @@ export const SessionChatInputArea = memo(
           const images = disableImageUpload ? [] : selectedImages;
           const attachments = disableImageUpload ? files : selectedAttachments;
           if (images.length > 0) {
-            handleAddFiles(images, 'file_input');
+            handleAddFiles(images);
           }
           if (attachments.length > 0) {
             enqueueFileAttachments(attachments);
@@ -1425,7 +1235,7 @@ export const SessionChatInputArea = memo(
         const images = disableImageUpload ? [] : pastedImages;
         const attachments = disableImageUpload ? files : pastedAttachments;
         if (images.length > 0) {
-          handleAddFiles(images, 'paste');
+          handleAddFiles(images);
         }
         if (attachments.length > 0) {
           enqueueFileAttachments(attachments);
@@ -1506,7 +1316,7 @@ export const SessionChatInputArea = memo(
         const images = disableImageUpload ? [] : droppedImages;
         const attachments = disableImageUpload ? files : droppedAttachments;
         if (images.length > 0) {
-          handleAddFiles(images, 'drop');
+          handleAddFiles(images);
         }
         if (attachments.length > 0) {
           enqueueFileAttachments(attachments);
@@ -1578,49 +1388,18 @@ export const SessionChatInputArea = memo(
 
     const sendMessage = useCallback(async () => {
       if (freeTurnLimitNotice && freeTurnLimitNotice.current >= freeTurnLimitNotice.limit) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'free_session_turn_limit_reached',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
       if (isArchived) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'session_archived',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          has_pending_images: pendingImages.length > 0,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
       if (sessionConfigReady === false) {
         return;
       }
       if (isMachineRemoved) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'machine_removed',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          has_pending_images: pendingImages.length > 0,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
       if (isExternalHistoryRefreshing) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'external_history_syncing',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          has_pending_images: pendingImages.length > 0,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
       const currentValue = textareaRef.current?.value ?? userInput;
@@ -1667,14 +1446,6 @@ export const SessionChatInputArea = memo(
         })
         .map((file) => toFileInputBlock(file.uploaded));
       if (hasBlockingImages || hasBlockingFiles) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'image_upload_in_progress',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          has_pending_images: true,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
       const commentRefBlocks: SessionInputBlock[] = commentReferencesRef.current.map((item) => ({
@@ -1697,14 +1468,6 @@ export const SessionChatInputArea = memo(
         commentRefBlocks.length === 0 &&
         visualAnnotationRefBlocks.length === 0
       ) {
-        capturePostHogEvent(postHog, 'session/input_blocked', {
-          reason: 'empty_input',
-          entrypoint: 'session_chat',
-          project_kind: sessionProjectKind,
-          has_pending_images: false,
-          workspace_id: workspaceId ?? null,
-          session_id: session.id,
-        });
         return;
       }
 
@@ -1721,7 +1484,7 @@ export const SessionChatInputArea = memo(
         files: sessionFileDraftsCache.get(session.id),
         pastedText: sessionPastedTextDraftsCache.get(session.id),
       };
-      const submission = beginSubmission({ dismissKeyboard: false });
+      const submission = beginSubmission();
       if (!submission) return;
       try {
         const accepted = await onSendMessage(inputBlocks);
@@ -1768,12 +1531,9 @@ export const SessionChatInputArea = memo(
       pastedTextDrafts,
       publishCommentReferences,
       publishVisualAnnotationReferences,
-      postHog,
       session.id,
-      sessionProjectKind,
       updatePastedTextDraftsForSession,
       userInput,
-      workspaceId,
     ]);
 
     const handleKeyDown = useCallback(
@@ -1975,13 +1735,8 @@ export const SessionChatInputArea = memo(
         })),
       [pendingFiles]
     );
-    /* Desktop mirrors the mobile consolidation with TWO buttons: one
-       run-config dropdown (Provider/Model/Reasoning value rows) and a
-       standalone permission-mode button showing the full
-       mode name. The old bottom bar (machine chip + workdir + mode
-       selectors) is gone — machine/workdir identity moved to the header
-       "…" menu, so the composer is a single footer row. */
-    const desktopFooterSelectorNode = !isMobile ? (
+
+    const desktopFooterSelectorNode = (
       <>
         <DesktopRunConfigMenu
           agentSelection={
@@ -2007,22 +1762,13 @@ export const SessionChatInputArea = memo(
           onConfigOptionChange={onConfigOptionChange}
         />
       </>
-    ) : null;
+    );
     const selectedModelLabel = modelOptions.find(
       (option) => option.value === selectedModelId
     )?.label;
     const footerSelectorNode = (
       <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden">
-        {/* Mobile: run-config button is w-full inside this flex-1 slot so the
-            model label can shrink. Desktop: two trigger buttons sit natural-
-            width with gap (fragment children of this flex row). */}
-        <div
-          className={
-            isMobile
-              ? 'min-w-0 flex-1 overflow-hidden'
-              : 'flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden'
-          }
-        >
+        <div className={'flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-hidden'}>
           {desktopFooterSelectorNode}
         </div>
         <SessionUsagePopover
@@ -2033,7 +1779,7 @@ export const SessionChatInputArea = memo(
           modelLabel={selectedModelLabel}
           isContextCompacting={isContextCompacting}
           showCodexResetForecast={showCodexResetForecast}
-          className={isMobile ? 'h-8 shrink-0' : 'shrink-0'}
+          className={'shrink-0'}
         />
       </div>
     );
@@ -2064,8 +1810,8 @@ export const SessionChatInputArea = memo(
         ) : null}
       </div>
     ) : null;
-    /* Keep desktop actions compact while preserving the mobile touch target. */
-    const primaryActionSizeClassName = isMobile ? 'h-8 w-8' : 'h-9 w-9';
+
+    const primaryActionSizeClassName = 'h-9 w-9';
     const primaryActionSurfaceClassName =
       'rounded-full transition-colors bg-foreground text-background hover:bg-foreground/90 hover:text-background';
     const primaryActionNode = showStopButton ? (
@@ -2078,7 +1824,7 @@ export const SessionChatInputArea = memo(
         aria-label={t('sessions.stop')}
         className={cn(primaryActionSizeClassName, primaryActionSurfaceClassName)}
       >
-        <Stop className={isMobile ? 'h-7 w-7' : 'h-6 w-6'} aria-hidden="true" />
+        <Stop className={'h-6 w-6'} aria-hidden="true" />
       </Button>
     ) : (
       <Button
@@ -2095,17 +1841,13 @@ export const SessionChatInputArea = memo(
         className={cn(primaryActionSizeClassName, primaryActionSurfaceClassName)}
       >
         {submissionPending || hasBlockingImages || isExternalHistoryRefreshing ? (
-          <Loader2 className={isMobile ? 'h-5 w-5 animate-spin' : 'h-4 w-4 animate-spin'} />
+          <Loader2 className={'h-4 w-4 animate-spin'} />
         ) : (
           <ArrowUp className="h-5 w-5" />
         )}
       </Button>
     );
 
-    /* Mobile no longer inlines run-config pickers into the composer
-       footer — that footer now holds a single `MobileSessionRunConfig`
-       button that opens the run-config sheet (which owns its own picker
-       coordinator). So the composer renders the same on both platforms. */
     const composerNode = (
       <ChatComposer
         tone={tone}
@@ -2136,7 +1878,7 @@ export const SessionChatInputArea = memo(
           submissionPending || isArchived ? undefined : removeCommentReference
         }
         onCommentReferenceClick={onNavigateToComment}
-        revealCommentReferenceRemoveOnClick={isMobile}
+        revealCommentReferenceRemoveOnClick={false}
         visualAnnotationReferenceItems={submissionPending ? [] : visualAnnotationReferences}
         onVisualAnnotationReferenceRemove={
           submissionPending || isArchived ? undefined : removeVisualAnnotationReference
@@ -2176,11 +1918,7 @@ export const SessionChatInputArea = memo(
     );
 
     return (
-      <div
-        className={getSessionChatInputAreaShellClassName({
-          protectFromEdgeBackZone: isMobile,
-        })}
-      >
+      <div className={getSessionChatInputAreaShellClassName()}>
         <ConversationColumn>
           <div aria-hidden="true" className="h-1" />
           {queueDisplay ? <div className="pb-2">{queueDisplay}</div> : null}

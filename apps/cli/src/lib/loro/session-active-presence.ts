@@ -1,5 +1,4 @@
 import {
-  hashAnalyticsId,
   MOLLY_PRESENCE_HEARTBEAT_MS,
   SessionStatusFactory,
   type MachineId,
@@ -10,12 +9,7 @@ import type { LoroDocumentManager } from './doc';
 import type { Logger } from '@/utils/logger';
 import { captureMessage, isErrorReportingEnabled } from '@/instrument';
 import { formatErrorMessage } from '@/utils/format-error';
-import { captureCli } from '../analytics/posthog';
 
-// Minimum interval between `app/active_ping` emissions (spec §3.3: >= 60s).
-// Mirrors ACTIVE_PING_MIN_INTERVAL_MS in commands/analytics-events.ts; kept local
-// so this lib module does not depend on the commands layer.
-const ACTIVE_PING_MIN_INTERVAL_MS = 60_000;
 const DEFAULT_SLOW_THRESHOLD_MS = 120_000;
 
 export type SessionActivePresencePhase =
@@ -36,7 +30,6 @@ type ActivePresenceState = {
   reportedSlowKeys: Set<string>;
   lastPhase: SessionActivePresencePhase | null | undefined;
   stageStartMs: number;
-  lastActivePingAtMs: number;
 };
 
 type SessionActivePresenceOptions = {
@@ -135,7 +128,6 @@ export class SessionActivePresenceController {
       reportedSlowKeys: new Set(),
       lastPhase: undefined,
       stageStartMs: nowMs,
-      lastActivePingAtMs: nowMs,
     };
     state.timer.unref?.();
     this.active.set(sessionId, state);
@@ -203,28 +195,7 @@ export class SessionActivePresenceController {
       state.lastPhase = state.phase;
       state.stageStartMs = nowMs;
     }
-
-    this.maybeEmitActivePing(sessionId, state, status, nowMs);
     await this.maybeReportSlow(sessionId, state, status);
-  }
-
-  private maybeEmitActivePing(
-    sessionId: SessionId,
-    state: ActivePresenceState,
-    status: SessionStatus,
-    nowMs: number
-  ): void {
-    if (status.type !== 'running') return;
-    if (nowMs - state.lastActivePingAtMs < ACTIVE_PING_MIN_INTERVAL_MS) return;
-    state.lastActivePingAtMs = nowMs;
-    captureCli(
-      'app/active_ping',
-      {
-        active_context: 'session_turn',
-        session_id_hash: hashAnalyticsId(sessionId),
-      },
-      { tier: 'C' }
-    );
   }
 
   private async maybeReportSlow(

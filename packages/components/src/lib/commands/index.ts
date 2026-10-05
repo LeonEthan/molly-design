@@ -1,14 +1,6 @@
 export type { Command, CommandCategory, KeyBinding, KeyScope, Platform, Runtime } from './types';
 export { commands } from './registry';
 export type { CommandRegistry } from './registry';
-export {
-  captureShortcutUsage,
-  createShortcutUsagePayload,
-  type GlobalShortcutTriggeredPayload,
-  type ShortcutUsageAnalyticsHandler,
-  type ShortcutUsagePayload,
-  type ShortcutUsageSource,
-} from './shortcut-analytics';
 export { useCommand, useCommands, useKeyScope } from './use-commands';
 export { useKeyCapture, eventToBindingString } from './key-capture';
 export type { KeyCaptureStatus, KeyCaptureControls } from './key-capture';

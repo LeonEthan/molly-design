@@ -216,11 +216,11 @@ afterEach(async () => {
 
 describe('design canvas creation navigation', () => {
   it('requests canvas focus only when explicitly enabled', () => {
-    const ordinary = getSessionCreationNavigation('local', SESSION_ID, false);
+    const ordinary = getSessionCreationNavigation('local', SESSION_ID);
     expect(ordinary.state.focusDesignCanvasSessionId).toBeUndefined();
     expect(ordinary.state.focusComposerSessionId).toBe(SESSION_ID);
 
-    const design = getSessionCreationNavigation('local', SESSION_ID, false, {
+    const design = getSessionCreationNavigation('local', SESSION_ID, {
       focusDesignCanvas: true,
     });
     expect(design.state.focusDesignCanvasSessionId).toBe(SESSION_ID);

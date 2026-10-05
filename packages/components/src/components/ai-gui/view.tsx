@@ -25,10 +25,7 @@ import {
   MessageSelectionOverlay,
   MessageSelectionRow,
 } from './message-selection';
-import {
-  ZoomableImageViewer,
-  type ImagePreviewPortalAnchorRef,
-} from '@/components/shared/zoomable-image-viewer';
+import { ZoomableImageViewer } from '@/components/shared/zoomable-image-viewer';
 import { useIsMessageSendingVisible } from './message-send-status-context';
 import {
   getCopyTextFromMessageItems,
@@ -200,7 +197,7 @@ import {
 import { stripRecommended } from '@/components/shared/acp-selector-options';
 import { DiffViewer } from '@/ui/diff-viewer/diff-viewer';
 import { Skeleton } from '@/ui/skeleton';
-import { getSessionImageBlobUrl, getSessionImageDataUrl } from '@/lib/session-image-cache';
+import { getSessionImageBlobUrl } from '@/lib/session-image-cache';
 import { SessionLocalImage } from './session-local-image';
 import { SessionFileCard, SessionFileCardList } from './session-file-card';
 import {
@@ -221,7 +218,6 @@ import type {
   TaskProposalMeta,
 } from '@molly/shared';
 import { MessageTextWithChips } from '@/components/mentions/message-text-chips';
-import { isNativeIOSAppShell } from '@/lib/native-platform';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
 import { UserAvatar } from '../user-avatar';
@@ -244,7 +240,7 @@ import {
   userTextCollapsedHeight,
 } from './conversation-font-size-classes';
 import { useSessionPin } from '@/components/sessions/session-pin-context';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { Rectangle } from '@/ui/icons';
 import { parseCanvasSizeInstruction } from '@/components/chat/canvas-submission';
 import {
@@ -1419,7 +1415,7 @@ export const SessionChatStreamView = forwardRef<
     // The left table of contents. Everything here is derived from `items` and
     // from Virtua's index math; the rail never inspects the DOM of the message
     // rows, because virtualization means most rounds have no DOM at all.
-    const isMobile = useIsMobile();
+
     const previousOutlineRef = useRef<readonly ConversationOutlineEntry[] | undefined>(undefined);
     const outlineEntries = useMemo(() => {
       // `items` gets a new identity on every streamed delta, so this runs at
@@ -1774,8 +1770,6 @@ export const SessionChatStreamView = forwardRef<
               // the untouched x axis to auto too, letting any wide row pan the
               // entire conversation instead of its own nested scroller.
               className="chat-scrollbar relative h-full overflow-x-hidden py-5 sm:py-6"
-              // Mobile session page floats a frosted header over the list;
-              // `--conversation-top-inset` (set by session-detail's mobile
               // branch) pads the scroll content so the first message clears the
               // header at rest while later content scrolls under it and blurs.
               // Unset elsewhere → falls back to py-6's 1.5rem, a no-op.
@@ -1800,7 +1794,7 @@ export const SessionChatStreamView = forwardRef<
                 onScroll={handleStreamScroll}
                 onScrollEnd={handleStreamScrollEnd}
                 // Pre-render extra items outside the viewport to reduce blank areas
-                // during fast scrolling (especially on mobile). This is 4x Virtua's
+
                 // default (200px) — generous, but deliberately not the previous 2000px:
                 // an oversized buffer keeps a huge set of still-resizing rows mounted,
                 // which widens the window where Virtua's offsets are mid-recompute and
@@ -1881,16 +1875,11 @@ export const SessionChatStreamView = forwardRef<
             </div>
             {/* Top fade into the bg-background canvas above (desktop only),
                 hinting that the conversation continues past the top edge. */}
-            {!isMobile && isScrolledFromTop ? (
+            {isScrolledFromTop ? (
               <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-background to-transparent" />
             ) : null}
-            {/* Round outline. Its visual layer portals to the full-page overlay
-                when supplied, so composer growth cannot move its centre. It is
-                never a Virtua row or a child of the viewport: sticky scroll
-                takes the content element from that div's `firstElementChild`.
-                Touch has no hover, so mobile is excluded rather than shipped
-                without its preview card. */}
-            {isMobile ? null : (
+
+            {
               <ConversationOutlineRail
                 entries={outlineEntries}
                 activeIndex={activeOutlineIndex}
@@ -1899,7 +1888,7 @@ export const SessionChatStreamView = forwardRef<
                 overlayRoot={outlineOverlayRoot}
                 enableArrivalIntent
               />
-            )}
+            }
             {showScrollToLatest && !isSticky && (
               /* Full-bleed overlay; ConversationColumn carries the shared
                  horizontal gutter so the button lines up with the composer. */
@@ -1927,7 +1916,6 @@ export const SessionChatStreamView = forwardRef<
               activeImageKey={activeImageKey}
               onActiveImageKeyChange={setActiveImageKey}
               entries={activeGalleryEntries}
-              portalAnchorRef={scrollRootRef}
             />
           </ContainerQueryProvider>
         </SessionImagePreviewContext.Provider>
@@ -2589,9 +2577,6 @@ const ChatFailedNoticeView = ({
 
   return (
     <div className="space-y-2 py-1 @[640px]:pl-3">
-      {/* Tapping the notice opens a modal instead of a hover tooltip: a tooltip
-          is unreachable on touch devices, which left mobile users with no way to
-          read or copy the actual agent error. */}
       <div role="alert" className="flex w-fit max-w-full flex-wrap items-center gap-2">
         {hasDetail ? (
           <button
@@ -2827,7 +2812,7 @@ const UserMessageRowView = ({
   onResendUndelivered?: (userTurnId: string, inputBlocks: SessionInputBlock[]) => Promise<boolean>;
 }) => {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
+
   const fileActions = useContext(SessionChatActionContext);
   // The RPC fast-path ACK overlays "delivered" before the entry's CRDT status
   // flip syncs back (the machine may run the whole turn before it can see the
@@ -2928,14 +2913,14 @@ const UserMessageRowView = ({
   }, [editText, isSavingEdit, message, onEdit]);
 
   return (
-    <div className={cn('flex w-full flex-row-reverse', isMobile ? 'gap-2 pl-7' : 'gap-2.5')}>
+    <div className={cn('flex w-full flex-row-reverse', 'gap-2.5')}>
       <div className="mt-0.5 shrink-0 text-muted-foreground">
-        <UserAvatar user={user} className={cn(isMobile ? 'h-7 w-7' : 'h-8 w-8')} showIcon />
+        <UserAvatar user={user} className={cn('h-8 w-8')} showIcon />
       </div>
       <div
         className={cn(
           'group/usermsg flex min-w-0 flex-1 flex-col items-end text-left',
-          isMobile ? 'max-w-[min(100%,28rem)] gap-1' : 'max-w-[80%] gap-1.5 sm:max-w-[70%]'
+          'max-w-[80%] gap-1.5 sm:max-w-[70%]'
         )}
       >
         <div className="flex flex-row-reverse items-center gap-1.5 text-xs text-muted-foreground">
@@ -2949,7 +2934,7 @@ const UserMessageRowView = ({
                 aria-label={recoveryLabel}
               >
                 <AlertCircle className="h-3.5 w-3.5" strokeWidth={2} />
-                {!isMobile ? recoveryLabel : null}
+                {recoveryLabel}
               </button>
             ) : (
               <span
@@ -2957,13 +2942,13 @@ const UserMessageRowView = ({
                 title={recoveryLabel}
               >
                 <AlertCircle className="h-3.5 w-3.5" strokeWidth={2} />
-                {!isMobile ? recoveryLabel : null}
+                {recoveryLabel}
               </span>
             )
           ) : isPendingApply ? (
             <span className="inline-flex items-center gap-1 text-muted-foreground">
               <Clock3 className="h-3.5 w-3.5" strokeWidth={2} />
-              {!isMobile ? t('sessions.messageStatus.pendingApply', 'Steering') : null}
+              {t('sessions.messageStatus.pendingApply', 'Steering')}
             </span>
           ) : (
             <span title={isDelivered ? 'Delivered' : 'Sending'}>
@@ -3053,8 +3038,7 @@ const UserMessageRowView = ({
                       size="icon"
                       className={cn(
                         'h-7 w-7 text-muted-foreground hover:bg-hover hover:text-foreground transition-opacity',
-                        !isMobile &&
-                          'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
+                        'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
                       )}
                       onClick={() => {
                         setEditText(getTextContentFromMessageItems(message.items));
@@ -3079,8 +3063,7 @@ const UserMessageRowView = ({
                       size="icon"
                       className={cn(
                         'h-7 w-7 text-muted-foreground hover:bg-hover hover:text-foreground transition-opacity',
-                        !isMobile &&
-                          'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
+                        'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
                       )}
                       onClick={handlePin}
                       aria-label={
@@ -3113,8 +3096,7 @@ const UserMessageRowView = ({
                     size="icon"
                     className={cn(
                       'h-7 w-7 text-muted-foreground hover:bg-hover hover:text-foreground transition-opacity',
-                      !isMobile &&
-                        'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
+                      'opacity-0 group-hover/usermsg:opacity-100 focus-visible:opacity-100'
                     )}
                     onClick={() => {
                       void handleCopy();
@@ -3406,18 +3388,14 @@ const WorkedGroupHeader = ({
   onExpandedChange: (expanded: boolean) => void;
 }) => {
   const { t } = useTranslation();
-  const isMobile = useIsMobile();
+
   const durationUnitLabels: DurationUnitLabels = {
     hour: t('time.unitShort.hour', 'h'),
     minute: t('time.unitShort.minute', 'm'),
     second: t('time.unitShort.second', 's'),
   };
-  /* Mobile moves the turn duration to the footer action bar, where it also
-     keeps the copy button clear of the session drawer's left-edge back-swipe
-     strip. Both rows read the same `resolveSessionHistoryDurationMs(message)`,
-     so keeping it here too would print the same "Worked for 12s" twice, a few
-     rows apart. The header falls back to its existing no-duration copy. */
-  const effectiveDurationMs = isMobile ? null : durationMs;
+
+  const effectiveDurationMs = durationMs;
   const durationLabel =
     effectiveDurationMs === null
       ? ''
@@ -3449,9 +3427,7 @@ const WorkedGroupHeader = ({
           expanded && 'rotate-90'
         )}
       />
-      <span className="min-w-0 flex-1 text-xs leading-tight">
-        {label}
-      </span>
+      <span className="min-w-0 flex-1 text-xs leading-tight">{label}</span>
     </button>
   );
 };
@@ -3639,19 +3615,6 @@ const AssistantThoughtVirtualRow = memo(function AssistantThoughtVirtualRow({
   );
 });
 
-/**
- * Width reserved before the mobile assistant-turn action buttons, so the copy
- * button always clears the session drawer's left-edge back-swipe strip
- * (`EDGE_ZONE_PX` in `../mobile/mobile-edge-back-swipe`). The turn duration
- * renders inside it; the reserved width is what makes the guarantee hold even
- * when the duration is unknown.
- *
- * Kept as a local number rather than importing `EDGE_ZONE_PX`, which would pull
- * the gesture module into the conversation renderer's import graph.
- * `tests/assistant-turn-action-inset.test.ts` asserts the two stay in sync.
- */
-export const MOBILE_TURN_ACTION_LEADING_INSET_PX = 48;
-
 const AssistantForkButton = ({
   turnId,
   isForking,
@@ -3739,7 +3702,7 @@ const AssistantTurnFooter = ({
   isForking?: boolean;
 }) => {
   const { t, i18n } = useTranslation();
-  const isMobile = useIsMobile();
+
   const [didCopy, setDidCopy] = useState(false);
   const textContent = useMemo(() => {
     const contentItems = buildAssistantMessageRenderItems(message.items).map(
@@ -3758,29 +3721,15 @@ const AssistantTurnFooter = ({
   const durationLabel =
     durationMs === null ? '' : formatDurationCompact(durationMs, durationUnitLabels);
   const showFinishedMetadata = message.finished === true;
-  /* Mobile: no completion timestamp — model meta + Worked-for already carry
-     enough chrome; the stamp only adds a second clock under the answer. */
-  const completionTimestampLabel = isMobile
-    ? ''
-    : formatConversationTimestamp(message.endedAt, {
-        locale: toIntlLocale(i18n.resolvedLanguage ?? i18n.language),
-      });
+
+  const completionTimestampLabel = formatConversationTimestamp(message.endedAt, {
+    locale: toIntlLocale(i18n.resolvedLanguage ?? i18n.language),
+  });
   const hasTurnConfigInfo = hasAssistantTurnConfigInfo(message);
-  /* Mobile shows the duration here for EVERY finished turn, ignoring
-     `showDuration`: `WorkedGroupHeader` drops it on mobile (it would otherwise
-     print the identical `resolveSessionHistoryDurationMs` value twice per turn),
-     so this footer is the single place the turn duration appears. */
-  const mobileDurationLabel =
-    isMobile && durationLabel
-      ? t('sessions.workedFor', {
-          duration: durationLabel,
-          defaultValue: 'Worked for {{duration}}',
-        })
-      : '';
   const hasActionBarContent =
     hasCopyableText ||
     completionTimestampLabel.length > 0 ||
-    (durationLabel.length > 0 && (isMobile || showDuration)) ||
+    (durationLabel.length > 0 && showDuration) ||
     hasTurnConfigInfo;
   const showActionBar = hasActionBarContent || onFork !== undefined;
 
@@ -3797,7 +3746,6 @@ const AssistantTurnFooter = ({
       {showFinishedMetadata && fileDiffs.length > 0 ? (
         <AssistantEditedFiles
           files={fileDiffs}
-          /* Mobile: quieter surface so the file card does not outrank the answer. */
           className={cn(
             /* The footer ROW is `pt-0` (see `verticalClass`) because a text-only
                action bar can ride on the answer's line leading. This is a
@@ -3806,8 +3754,7 @@ const AssistantTurnFooter = ({
                (measured 0px, and since the card shares the text's left edge it
                read as part of the paragraph). 8px puts the visible gap at ~10px,
                matching the block rhythm of the rest of the turn. */
-            'pt-2',
-            isMobile && '[&>div]:rounded-lg [&>div]:border-border/40 [&>div]:bg-muted/10'
+            'pt-2'
           )}
           onFileClick={
             onFileDiffClick ? (filePath) => onFileDiffClick(message.id, filePath) : undefined
@@ -3818,39 +3765,14 @@ const AssistantTurnFooter = ({
         <div
           className={cn(
             'flex flex-wrap items-center justify-start text-xs text-muted-foreground',
-            isMobile ? 'min-h-6 gap-1' : 'min-h-7 gap-2',
-            !isMobile && 'opacity-0 transition-opacity duration-150 focus-within:opacity-100',
-            !isMobile && isTurnHovered && 'opacity-100'
+            'min-h-7 gap-2',
+            'opacity-0 transition-opacity duration-150 focus-within:opacity-100',
+            isTurnHovered && 'opacity-100'
           )}
           data-assistant-turn-actions
         >
-          {/* Mobile leads with the turn duration, and that is load-bearing: the
-             native session drawer owns a left-edge back-swipe strip, and no row
-             inside the conversation `VList` can paint above it (virtua sets
-             `contain: strict`, so the list is its own stacking context and the
-             composer's `z-40` trick does not reach here). A leading copy button
-             lands inside that strip and is all but untappable, so this label is
-             what pushes the cluster clear of it. The reserved min-width holds
-             even when the duration is unknown and the text is empty.
-             Desktop keeps the duration AFTER the buttons (see below). */}
-          {isMobile ? (
-            <span
-              className="shrink-0 tabular-nums"
-              style={{ minWidth: MOBILE_TURN_ACTION_LEADING_INSET_PX }}
-            >
-              {mobileDurationLabel}
-            </span>
-          ) : null}
-          {/* Icon buttons are 28px boxes around 14px glyphs, so their own 7px of
-             interior padding would push the glyph 7px inside the answer text
-             above. Pull the cluster back by that padding so the outermost glyph
-             sits on the text's edge (and the inner one keeps the row gap to the
-             timestamp). Keep it on the cluster, not the row: when no buttons
-             render, the timestamp must stay on the plain gutter. Mobile pulls
-             only the trailing edge — its leading glyph aligns to the duration
-             label, not to the answer text. */}
           {hasCopyableText || hasTurnConfigInfo || onFork ? (
-            <div className={cn('flex items-center gap-0.5', isMobile ? '-mr-[7px]' : '-mx-[7px]')}>
+            <div className={cn('flex items-center gap-0.5', '-mx-[7px]')}>
               {hasCopyableText ? (
                 <TooltipProvider>
                   <Tooltip delayDuration={500}>
@@ -3902,7 +3824,7 @@ const AssistantTurnFooter = ({
           {completionTimestampLabel ? (
             <span className="tabular-nums">{completionTimestampLabel}</span>
           ) : null}
-          {!isMobile && showDuration && durationLabel ? (
+          {showDuration && durationLabel ? (
             <>
               {completionTimestampLabel ? <span aria-hidden="true">·</span> : null}
               <span className="font-mono tabular-nums">{durationLabel}</span>
@@ -4632,14 +4554,12 @@ const ImagePreviewDialog = ({
   activeImageKey,
   onActiveImageKeyChange,
   entries,
-  portalAnchorRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   activeImageKey: string | null;
   onActiveImageKeyChange: (imageKey: string | null) => void;
   entries: ReadonlyArray<SessionImageGalleryEntry>;
-  portalAnchorRef?: ImagePreviewPortalAnchorRef;
 }) => {
   const activeIndex = useMemo(
     () => findSessionImageGalleryEntryIndex(entries, activeImageKey),
@@ -4678,7 +4598,6 @@ const ImagePreviewDialog = ({
       images={images}
       index={activeIndex}
       onIndexChange={handleIndexChange}
-      {...(portalAnchorRef ? { portalAnchorRef } : {})}
     />
   );
 };
@@ -4696,7 +4615,6 @@ const UserImageBlock = ({
 }) => {
   const { t } = useTranslation();
   const sessionImagePreview = useContext(SessionImagePreviewContext);
-  const previewPortalAnchorRef = useRef<HTMLDivElement>(null);
   const workspaceId = useAtomValue(currentWorkspaceIdAtom) as WorkspaceId | null;
   const [thumbnailBlobUrl, setThumbnailBlobUrl] = useState<string | null>(null);
   const [thumbnailLoadingError, setThumbnailLoadingError] = useState<string | null>(null);
@@ -4707,8 +4625,6 @@ const UserImageBlock = ({
   const thumbnailEdge = isLargeThumbnail ? IMAGE_ATTACHMENT_THUMBNAIL_SIZE : IMAGE_THUMBNAIL_SIZE;
   const thumbnailWidth = isThumbnail ? thumbnailEdge : IMAGE_INLINE_PREVIEW_MAX_WIDTH;
   const thumbnailHeight = isThumbnail ? thumbnailEdge : undefined;
-  // iOS WKWebView shares `blob:` image URLs as text from the native long-press menu.
-  const useNativeIOSShareSafeImageUrl = isNativeIOSAppShell();
   const fullFrameWidthClass = 'w-56 max-w-full sm:w-72 md:w-80';
   const thumbnailFrameClass = isLargeThumbnail ? 'h-36 w-36 sm:h-40 sm:w-40' : 'h-24 w-24';
   const previewImageAlt =
@@ -4733,11 +4649,7 @@ const UserImageBlock = ({
     setIsThumbnailLoading(true);
     setThumbnailLoadingError(null);
 
-    const loadImageUrl = useNativeIOSShareSafeImageUrl
-      ? getSessionImageDataUrl
-      : getSessionImageBlobUrl;
-
-    void loadImageUrl({
+    void getSessionImageBlobUrl({
       workspaceId,
       sessionId: entry.sessionId,
       imageId: entry.imageId,
@@ -4772,13 +4684,11 @@ const UserImageBlock = ({
     isThumbnail,
     thumbnailHeight,
     thumbnailWidth,
-    useNativeIOSShareSafeImageUrl,
     workspaceId,
   ]);
 
   return (
     <div
-      ref={previewPortalAnchorRef}
       className={cn(
         /* 12px: the shared radius of every top-level conversation card (file
            card, proposed plan, permission record). An 8px frame beside them
@@ -4842,7 +4752,6 @@ const UserImageBlock = ({
           activeImageKey={localActiveImageKey}
           onActiveImageKeyChange={setLocalActiveImageKey}
           entries={[entry]}
-          portalAnchorRef={previewPortalAnchorRef}
         />
       ) : null}
     </div>
@@ -4865,7 +4774,6 @@ export const ImageGroupBubble = ({
   thumbnailSize?: ImageThumbnailSize;
 }) => {
   const sessionImagePreview = useContext(SessionImagePreviewContext);
-  const previewPortalAnchorRef = useRef<HTMLDivElement>(null);
   const [localActiveImageKey, setLocalActiveImageKey] = useState<string | null>(null);
   /* An assistant attachment (`align="start"`) is a top-level row on the turn's
      left rail: no horizontal pad (the gutter belongs to `ConversationColumn`)
@@ -4902,7 +4810,7 @@ export const ImageGroupBubble = ({
 
     return (
       <>
-        <div ref={previewPortalAnchorRef} className={cn('flex w-full', rowClass)}>
+        <div className={cn('flex w-full', rowClass)}>
           <UserImageBlock entry={entry} onPreviewRequest={handlePreviewRequest} variant="full" />
         </div>
         {!sessionImagePreview ? (
@@ -4916,7 +4824,6 @@ export const ImageGroupBubble = ({
             activeImageKey={localActiveImageKey}
             onActiveImageKeyChange={setLocalActiveImageKey}
             entries={entries}
-            portalAnchorRef={previewPortalAnchorRef}
           />
         ) : null}
       </>
@@ -4925,7 +4832,7 @@ export const ImageGroupBubble = ({
 
   return (
     <>
-      <div ref={previewPortalAnchorRef} className={cn('flex w-full', rowClass)}>
+      <div className={cn('flex w-full', rowClass)}>
         <div className={cn('grid grid-cols-2 gap-2', gridMaxWidthClass)}>
           {entries.map((entry, index) => (
             <UserImageBlock
@@ -4949,7 +4856,6 @@ export const ImageGroupBubble = ({
           activeImageKey={localActiveImageKey}
           onActiveImageKeyChange={setLocalActiveImageKey}
           entries={entries}
-          portalAnchorRef={previewPortalAnchorRef}
         />
       ) : null}
     </>
@@ -5154,7 +5060,8 @@ const renderUserContent = (
   switch (content.type) {
     case 'text': {
       const requestedSize = parseCanvasSizeInstruction(content.text, requestedSizeTemplates());
-      if (requestedSize) return <UserCanvasSizeChip instruction={content.text} {...requestedSize} />;
+      if (requestedSize)
+        return <UserCanvasSizeChip instruction={content.text} {...requestedSize} />;
       return (
         <UserPlainTextBlock
           text={content.text}

@@ -10,6 +10,8 @@ Translation: current
 
 As of 2026-09-21, Linux desktop support is retired. Official release scope remains macOS arm64; Intel macOS and Windows keep experimental local builds. Historical Linux build evidence below remains historical; Ubuntu CI and cross-platform Bento resource checks do not imply desktop support.
 
+The product retains desktop interactions, including narrow Electron windows; mobile navigation, touch gestures and keyboard adaptations are retired. New turns collect no code diff evidence, derive no All Changes summaries, and run no PR/commit/push background work. Existing code-history diffs remain readable for compatibility. Files, attachment previews, text saves and conflict protection reuse their existing capabilities; design versions remain in the separate Molly-managed Git repository.
+
 2026-09-15 approved revision: the user confirmed retiring old conversion semantics and consolidating the artwork projection into one `design.yaml`; type-block restructuring is conditional on complete roundtrip and Agent operability checks. A real Kimi Code CLI golden replication case with a fixed reference and prompt is required. The user explicitly approved this first-stage revision on 2026-09-15. Confirmed direction, completed first-stage implementation and acceptance are recorded in the single-canvas redesign note.
 
 2026-09-17 naming revision: New YAML writes use `molly-canvas/1`; existing `geon-canvas/1` files remain readable with identical field semantics. Reads do not rewrite source files or history. Implementation was requested after the naming proposal; this changed Spec revision remains draft pending a linked approval record.

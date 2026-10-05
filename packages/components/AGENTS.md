@@ -50,9 +50,13 @@ mobile surfaces.
   and the light/dark standalone wordmarks; run it after editing these masters.
   `MollyWordmark` renders the complete outlined Molly Design signature with currentColor.
   No font substitution or runtime reference to ignored `output/` assets is allowed.
-- Designer surfaces keep one type ladder: 36px display (home heading only), 14px
-  reading, 13px sidebar and chrome rows, 12px regular muted metadata. Chrome has no
-  hue accent; links are ink with a muted underline (owner choice, 2026-10-02).
+- Designer surfaces follow the Atelier system (2026-10-04): regular-weight editorial
+  serif display (`font-editorial`) for the home heading and section titles only; 14px
+  reading, 13px chrome rows, 12px muted metadata; mono uppercase `eyebrow` labels and
+  mono dimensions. Chrome stays near-monochrome: primary is the ink inversion, and the
+  vermilion `--signal` marks only focus and live or changed state. No gradients, glows
+  or decorative hue. Rationale:
+  [Atelier note](../../.agents/notes/proposed/feature/2026-10-04-atelier-redesign.md).
 
 ## Rules shared by callers
 

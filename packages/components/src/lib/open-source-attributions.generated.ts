@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-04T16:01:28.425Z",
+  "generatedAt": "2026-10-05T04:42:43.540Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -1955,6 +1955,19 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://fontsource.org/fonts/bitcount-grid-double",
       "author": "Google Inc.",
       "description": "Self-host the Bitcount Grid Double font in a neatly bundled NPM package.",
+      "versions": [
+        "5.3.0"
+      ]
+    },
+    {
+      "id": "pkg-fontsource-instrument-serif-ofl-1-1",
+      "kind": "package",
+      "scope": "production-dependency",
+      "name": "@fontsource/instrument-serif",
+      "license": "OFL-1.1",
+      "homepage": "https://fontsource.org/fonts/instrument-serif",
+      "author": "Google Inc.",
+      "description": "Self-host the Instrument Serif font in a neatly bundled NPM package.",
       "versions": [
         "5.3.0"
       ]

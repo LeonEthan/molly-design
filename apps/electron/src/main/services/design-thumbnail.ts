@@ -5,9 +5,17 @@ import { app, BrowserWindow, nativeImage } from 'electron'
 import { designRequest, renderSavedDesign } from './design-service'
 import { DesignThumbnails, type DesignThumbnail } from './design-thumbnail-core'
 
-const THUMBNAIL_SHORT_EDGE_PX = 48
+const THUMBNAIL_SHORT_EDGE_PX = 560
 
-const cacheDirectory = () => join(app.getPath('userData'), 'design-thumbnails')
+const cacheDirectory = () => join(app.getPath('userData'), 'design-thumbnails-560')
+const retiredCacheDirectories = ['design-thumbnails']
+let retiredCachesRemoved: Promise<void> | undefined
+const removeRetiredCaches = () =>
+  (retiredCachesRemoved ??= Promise.all(
+    retiredCacheDirectories.map((name) =>
+      rm(join(app.getPath('userData'), name), { recursive: true, force: true }).catch(() => {})
+    )
+  ).then(() => {}))
 const cacheFile = (artworkId: string) => join(cacheDirectory(), `${artworkId}.json`)
 
 async function readCached(artworkId: string): Promise<DesignThumbnail | undefined> {
@@ -22,6 +30,7 @@ async function readCached(artworkId: string): Promise<DesignThumbnail | undefine
 }
 
 async function writeCached(artworkId: string, thumbnail: DesignThumbnail): Promise<void> {
+  await removeRetiredCaches()
   await mkdir(cacheDirectory(), { recursive: true })
   const temporary = join(cacheDirectory(), `.${randomUUID()}.tmp`)
   try {

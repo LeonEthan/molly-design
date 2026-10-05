@@ -467,6 +467,7 @@ function OnboardingShellSurface({
   const isLocal = platform?.kind === 'local';
   const composition = STEP_COMPOSITION[stepKey] ?? STEP_COMPOSITION.appearance!;
   const formPose = isLocal ? { ...composition.form, ...LOCAL_FORM_POSE } : composition.form;
+  const { t } = useTranslation();
   const debug = useAtomValue(onboardingDebugAtom);
   const baseShot = previewShot ?? STEP_FRAME[stepKey] ?? { anchor: 'window', padding: 26 };
   const shot = import.meta.env.DEV ? applyOnboardingDebugShot(baseShot, debug) : baseShot;
@@ -482,26 +483,26 @@ function OnboardingShellSurface({
 
   return (
     <div
-      className="absolute inset-0 isolate overflow-hidden bg-transparent text-slate-950"
+      className="absolute inset-0 isolate overflow-hidden bg-transparent text-[#141413]"
       data-onboarding-stage={stepKey}
     >
       <motion.div
         aria-hidden
         className="absolute inset-0"
         initial={{ opacity: 0 }}
-        animate={{ opacity: 0.82 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
         style={{
-          backgroundImage:
-            'linear-gradient(rgba(33,68,79,0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(33,68,79,0.055) 1px, transparent 1px), radial-gradient(circle at 52% 42%, rgba(255,255,255,0.92), rgba(239,244,245,0.72) 58%, rgba(220,229,231,0.78))',
-          backgroundSize: '44px 44px, 44px 44px, 100% 100%',
+          backgroundColor: '#f4f1ea',
+          backgroundImage: 'radial-gradient(rgba(20,20,19,0.08) 1px, transparent 1.2px)',
+          backgroundSize: '24px 24px',
         }}
       />
 
       {isLocal ? (
         <div
           aria-hidden
-          className="pointer-events-none absolute top-1/2 hidden -translate-y-1/2 opacity-60 min-[1080px]:block"
+          className="pointer-events-none absolute top-1/2 hidden -translate-y-1/2 opacity-95 min-[1080px]:block"
           style={LOCAL_ARTWORK_STYLE}
         >
           <MollySetupArtwork />
@@ -584,19 +585,18 @@ function OnboardingShellSurface({
           >
             <div className="scrollbar-pro -mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1">
               <div className="my-auto flex flex-col gap-5 py-2">
-                {eyebrow == null ? null : (
-                  <div className="text-[11.5px] font-medium tracking-wide text-slate-500">
-                    {eyebrow}
-                  </div>
-                )}
+                <div className="eyebrow inline-flex items-center gap-2.5 text-[#6b6963]">
+                  <span aria-hidden className="size-[6px] rounded-full bg-[var(--signal)]" />
+                  {eyebrow ?? t('onboarding.setupEyebrow', 'Molly · Setup')}
+                </div>
                 <h1
-                  className={`${isLocal ? 'text-[clamp(31px,2.1vw,44px)]' : 'text-[31px]'} font-semibold leading-tight tracking-tight text-slate-950`}
+                  className={`font-editorial ${isLocal ? 'text-[clamp(40px,3vw,60px)]' : 'text-[40px]'} leading-[1.02] text-[#141413]`}
                 >
                   {title}
                 </h1>
                 {description == null ? null : (
                   <div
-                    className={`max-w-[40ch] ${isLocal ? 'text-[clamp(14.5px,1vw,18px)]' : 'text-[14.5px]'} leading-relaxed text-slate-600`}
+                    className={`max-w-[40ch] ${isLocal ? 'text-[clamp(14.5px,1vw,17px)]' : 'text-[14.5px]'} leading-relaxed text-[#6b6963]`}
                   >
                     {description}
                   </div>

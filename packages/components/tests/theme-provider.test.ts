@@ -174,10 +174,10 @@ describe('ThemeProvider', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(true);
     expect(document.documentElement.dataset.mollyVscodeTheme).toBe(FIXED_DARK_THEME_ID);
     expect(document.documentElement.style.getPropertyValue('--vscode-editor-background')).toBe(
-      '#1E1E1E'
+      '#0B0B0C'
     );
     expect(document.documentElement.style.getPropertyValue('--vscode-button-background')).toBe(
-      '#FFFFFF'
+      '#F1EFEA'
     );
   });
 

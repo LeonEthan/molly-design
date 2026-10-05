@@ -15,7 +15,15 @@ import { WINDOW_DRAG_EXEMPT_CLASS, WindowDragStrip } from '@/ui/window-drag-regi
 import { WORKSPACE_FOCUS_SCOPES } from '@/atoms';
 
 export type WebChatLandingScreenProps = {
-  title: string;
+  title: ReactNode;
+  /** Short brand line above the heading. */
+  eyebrow?: string;
+  /** The promise under the heading. */
+  subtitle?: string;
+  /** Prompt starters shown under the composer. */
+  ideas?: ReactNode;
+  /** Recent work below the hero. */
+  gallery?: ReactNode;
   contextSwitch?: ReactNode;
   composer: ReactNode;
   noMachineHint?: ReactNode;
@@ -32,6 +40,10 @@ export type WebChatLandingScreenProps = {
 
 export function WebChatLandingScreen({
   title,
+  eyebrow,
+  subtitle,
+  ideas,
+  gallery,
   contextSwitch,
   composer,
   noMachineHint,
@@ -84,24 +96,59 @@ export function WebChatLandingScreen({
           }
         }}
       >
-        {/* Greeting fills the space above the docked composer and stays vertically
-            centered. overflow-auto lets it yield when the iPad soft keyboard shrinks the
-            area (the composer band lifts itself — see the note below). */}
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-auto px-4">
-          <h1 className="text-4xl font-semibold tracking-tight text-foreground">{title}</h1>
-          {contextSwitch}
-        </div>
-
-        {/* Docked composer. Reuse the session composer's shell class verbatim so the
-            landing inherits its exact bottom docking + iPad `--native-keyboard-height`
-            lift and can never drift from the session composer. Hints sit above the
-            composer so its bottom edge stays pinned to the shell when a hint toggles. */}
-        <div className={getSessionChatInputAreaShellClassName()}>
-          <ConversationColumn className="@container">
-            {noMachineHint != null ? <div className="pb-2">{noMachineHint}</div> : null}
-            {agentConfigHint != null ? <div className="pb-2">{agentConfigHint}</div> : null}
-            {composer}
-          </ConversationColumn>
+        <div
+          className={cn(
+            getSessionChatInputAreaShellClassName(),
+            'input-scrollbar flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5vw,64px)]'
+          )}
+        >
+          <div className="relative flex min-h-[74%] w-full max-w-[820px] shrink-0 flex-col items-center justify-center gap-9 pb-8 pt-20">
+            <div className="flex flex-col items-center gap-6 text-center">
+              {eyebrow ? (
+                <span className="eyebrow animate-reveal inline-flex items-center gap-2.5 text-muted-foreground">
+                  <span
+                    aria-hidden
+                    className="animate-signal size-[6px] rounded-full bg-[var(--signal)]"
+                  />
+                  {eyebrow}
+                </span>
+              ) : null}
+              <h1
+                className="font-editorial animate-reveal text-balance text-[clamp(52px,6.6vw,104px)] leading-[0.94] text-foreground [&_em]:italic"
+                style={{ animationDelay: '80ms' }}
+              >
+                {title}
+              </h1>
+              {subtitle ? (
+                <p
+                  className="animate-reveal max-w-[480px] text-balance text-[15px] leading-relaxed text-muted-foreground"
+                  style={{ animationDelay: '160ms' }}
+                >
+                  {subtitle}
+                </p>
+              ) : null}
+            </div>
+            <ConversationColumn
+              className="@container animate-reveal w-full"
+              style={{ animationDelay: '240ms' }}
+            >
+              {noMachineHint != null ? <div className="pb-2">{noMachineHint}</div> : null}
+              {agentConfigHint != null ? <div className="pb-2">{agentConfigHint}</div> : null}
+              {composer}
+            </ConversationColumn>
+            {ideas != null || contextSwitch != null ? (
+              <div
+                className="animate-reveal flex w-full flex-col items-center gap-7"
+                style={{ animationDelay: '320ms' }}
+              >
+                {ideas}
+                {contextSwitch}
+              </div>
+            ) : null}
+          </div>
+          {gallery != null ? (
+            <div className="relative w-full max-w-[1240px] shrink-0 pb-24 pt-10">{gallery}</div>
+          ) : null}
         </div>
       </FocusScope>
     </div>

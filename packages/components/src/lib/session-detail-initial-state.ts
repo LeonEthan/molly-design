@@ -56,3 +56,16 @@ export const getSessionDetailInitialTabState = (
     sidePanel: persistedState?.sidePanel ?? DEFAULT_SIDE_PANEL_STATE,
   };
 };
+
+/**
+ * A design session enters with its canvas showing, whatever panel state was
+ * saved (or never saved) for it; restored tabs stay open behind the canvas.
+ */
+export const revealDesignCanvas = (
+  sidePanel: PersistedSidePanelState
+): PersistedSidePanelState => ({
+  open: true,
+  tab: 'design',
+  tabs: sidePanel.tabs.includes('design') ? sidePanel.tabs : ['design', ...sidePanel.tabs],
+  sideSessionId: null,
+});

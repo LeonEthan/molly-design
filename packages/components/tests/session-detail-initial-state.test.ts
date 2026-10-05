@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionId } from '@molly/shared';
-import { getSessionDetailInitialTabState } from '../src/lib/session-detail-initial-state';
+import {
+  getSessionDetailInitialTabState,
+  revealDesignCanvas,
+} from '../src/lib/session-detail-initial-state';
 import type { PersistedLastActiveTabState } from '../src/lib/session-draft-tabs';
 
 const parentSessionId = 'parent-session' as SessionId;
@@ -120,5 +123,27 @@ describe('getSessionDetailInitialTabState', () => {
         sideSessionId: null,
       },
     });
+  });
+});
+
+describe('revealDesignCanvas', () => {
+  it('opens and selects the canvas for a design session with no saved panel state', () => {
+    expect(revealDesignCanvas({ open: false, tab: null, tabs: [], sideSessionId: null })).toEqual({
+      open: true,
+      tab: 'design',
+      tabs: ['design'],
+      sideSessionId: null,
+    });
+  });
+
+  it('brings the canvas forward over a saved closed panel and keeps the other tabs', () => {
+    expect(
+      revealDesignCanvas({
+        open: false,
+        tab: 'browser',
+        tabs: ['browser', 'design'],
+        sideSessionId: 'side-session-1',
+      })
+    ).toEqual({ open: true, tab: 'design', tabs: ['browser', 'design'], sideSessionId: null });
   });
 });

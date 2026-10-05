@@ -592,8 +592,8 @@ export function ChatComposer({
 
   const composerSurfaceClassName = cn(
     'rounded-2xl border border-input-border/70 bg-input-field transition-[border-color,box-shadow] duration-150',
-    'shadow-[0_2px_6px_hsl(0_0%_0%/0.03),0_10px_28px_-16px_hsl(0_0%_0%/0.14)]',
-    'focus-within:border-primary/60 focus-within:ring-1 focus-within:ring-primary/20',
+    'shadow-[0_1px_2px_hsl(0_0%_0%/0.03),0_18px_40px_-28px_hsl(0_0%_0%/0.22)]',
+    'focus-within:border-foreground/30',
     mentionSurfaceClassName
   );
 

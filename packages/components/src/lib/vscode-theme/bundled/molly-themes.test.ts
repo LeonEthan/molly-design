@@ -7,168 +7,165 @@ import {
 } from './bundled-vscode-themes';
 
 /**
- * Frozen chrome contract for the Molly monochrome themes.
+ * Chrome contract for the Molly "Atelier" themes.
  *
- * Authority: .agents/notes/proposed/feature/2026-09-16-monochrome-chrome-visual-refresh.zh.md
- * (in-repo decision record with the token mapping table). The full user-approved
- * frozen spec and the interactive demo live locally under
- * output/visual-refresh-demo/ — that directory is gitignored (generated
- * artifacts), so committed code cites the note, not the output path.
- *
- * These expectations are the source of truth for the black/white Figma-language
- * palette: greys resolve to exact HSL channels, --primary/--selection/--ring are
- * the solid foreground inversion, and the only chromatic values are the red/green
- * signal pair plus the retained theme magenta for --status-merged (documented
- * exception — it is git/syntax territory, not chrome).
+ * Authority: .agents/notes/proposed/feature/2026-10-04-atelier-redesign.md
+ * (owner-approved 2026-10-04 overhaul that supersedes the 2026-09-16 monochrome
+ * record). Bone paper and near-black grounds, warm ink, primary actions as the
+ * ink inversion, tonal selection, and a single vermilion reserved for focus and
+ * the active-tab accent. Signal red/green and the retained --status-merged
+ * exceptions are unchanged.
  */
 
 const EXPECTED_MOLLY_LIGHT_CHROME: Record<string, string> = {
-  '--background': '0 0% 96.1%', // canvas ground #f5f5f5 (lighter than panels in light)
-  '--foreground': '0 0% 11.8%', // #1e1e1e
-  '--card': '0 0% 100%', // panel #ffffff
-  '--card-foreground': '0 0% 11.8%',
-  '--popover': '0 0% 100%',
-  '--muted': '0 0% 96.1%',
-  '--muted-foreground': '0 0% 43.5%', // fg-2 #6f6f6f
-  '--secondary': '0 0% 96.1%',
-  '--secondary-foreground': '0 0% 11.8%',
-  '--destructive': '11 88.9% 54.1%', // signal red #f24822
-  '--destructive-foreground': '0 0% 100%',
-  '--button-secondary': '0 0% 96.1%',
-  '--button-secondary-foreground': '0 0% 11.8%',
-  '--button-secondary-hover': '0 0% 92.2%',
-  '--hover': '0 0% 92.2%', // #ebebeb
-  '--hover-foreground': '0 0% 11.8%',
-  '--highlight': '0 0% 11.8%',
-  '--highlight-foreground': '0 0% 100%',
-  '--selection': '0 0% 11.8%', // solid inversion (black row, white text)
-  '--selection-foreground': '0 0% 100%',
-  '--selection-inactive': '0 0% 96.1%',
-  '--selection-inactive-foreground': '0 0% 11.8%',
-  '--bottom-bar': '0 0% 100%',
-  '--bottom-bar-foreground': '0 0% 43.5%',
-  '--tab-bar': '0 0% 100%',
-  '--tab-active': '0 0% 100%',
-  '--tab-active-foreground': '0 0% 11.8%',
-  '--tab-inactive': '0 0% 96.1%',
-  '--tab-inactive-foreground': '0 0% 43.5%',
-  '--tab-hover': '0 0% 92.2%',
-  '--tab-hover-foreground': '0 0% 11.8%',
-  '--tab-border': '0 0% 89.8%', // #e5e5e5
-  '--tab-active-accent': '0 0% 11.8%', // black top border on active tab
-  '--primary': '0 0% 11.8%', // inverted foreground = primary
-  '--primary-foreground': '0 0% 100%',
-  '--button-hover': '0 0% 20%', // #333333
-  '--status-info': '0 0% 11.8%',
-  '--status-success': '148.1 79.4% 38%', // signal green #14ae5c
-  '--status-warning': '40.1 100% 30.2%', // #9a6700
+  '--background': '42 27.8% 92.9%',
+  '--foreground': '60 2.6% 7.6%',
+  '--card': '45 40% 98%',
+  '--card-foreground': '60 2.6% 7.6%',
+  '--popover': '45 40% 98%',
+  '--muted': '42 27.8% 92.9%',
+  '--muted-foreground': '45 3.9% 40.4%',
+  '--secondary': '42 27.8% 92.9%',
+  '--secondary-foreground': '60 2.6% 7.6%',
+  '--destructive': '11 88.9% 54.1%',
+  '--destructive-foreground': '45 40% 98%',
+  '--button-secondary': '42 27.8% 92.9%',
+  '--button-secondary-foreground': '60 2.6% 7.6%',
+  '--button-secondary-hover': '40 22.2% 89.4%',
+  '--hover': '40 22.2% 89.4%',
+  '--hover-foreground': '60 2.6% 7.6%',
+  '--highlight': '11.9 81.5% 51.4%',
+  '--highlight-foreground': '45 40% 98%',
+  '--selection': '41.5 21.3% 88%',
+  '--selection-foreground': '60 2.6% 7.6%',
+  '--selection-inactive': '42 27.8% 92.9%',
+  '--selection-inactive-foreground': '60 2.6% 7.6%',
+  '--bottom-bar': '45 40% 98%',
+  '--bottom-bar-foreground': '45 3.9% 40.4%',
+  '--tab-bar': '45 40% 98%',
+  '--tab-active': '45 40% 98%',
+  '--tab-active-foreground': '60 2.6% 7.6%',
+  '--tab-inactive': '42 27.8% 92.9%',
+  '--tab-inactive-foreground': '45 3.9% 40.4%',
+  '--tab-hover': '40 22.2% 89.4%',
+  '--tab-hover-foreground': '60 2.6% 7.6%',
+  '--tab-border': '40 18.2% 87.1%',
+  '--tab-active-accent': '11.9 81.5% 51.4%',
+  '--primary': '60 2.6% 7.6%',
+  '--primary-foreground': '45 40% 98%',
+  '--button-hover': '60 2.4% 16.5%',
+  '--status-info': '60 2.6% 7.6%',
+  '--status-success': '148.1 79.4% 38%',
+  '--status-warning': '40.1 100% 30.2%',
   '--status-danger': '11 88.9% 54.1%',
-  '--status-merged': '334.3 48.4% 42.5%', // retained theme magenta (exception)
-  '--border': '0 0% 89.8%',
-  '--input': '0 0% 100%', // raised field
-  '--switch-track': '0 0% 85.1%', // #d9d9d9
-  '--input-foreground': '0 0% 11.8%',
-  '--input-placeholder': '0 0% 63.9%', // #a3a3a3
-  '--input-border': '0 0% 85.1%',
-  '--ring': '0 0% 11.8%', // 2px solid focus ring
-  '--sidebar-background': '0 0% 100%',
-  '--sidebar-foreground': '0 0% 11.8%',
-  '--sidebar-foreground-muted': '0 0% 63.9%',
-  '--sidebar-primary': '0 0% 11.8%',
-  '--sidebar-primary-foreground': '0 0% 100%',
-  '--sidebar-hover': '0 0% 92.2%',
-  '--sidebar-hover-foreground': '0 0% 11.8%',
-  '--sidebar-highlight': '0 0% 11.8%',
-  '--sidebar-highlight-foreground': '0 0% 100%',
-  '--sidebar-selection': '0 0% 11.8%',
-  '--sidebar-selection-foreground': '0 0% 100%',
-  '--sidebar-border': '0 0% 89.8%',
-  '--sidebar-ring': '0 0% 11.8%',
-  '--code-background': '0 0% 96.1%',
-  '--code-foreground': '0 0% 11.8%',
-  '--code-border': '0 0% 85.1%',
+  '--status-merged': '334.3 48.4% 42.5%',
+  '--border': '40 18.2% 87.1%',
+  '--input': '45 40% 98%',
+  '--switch-track': '41.5 14.3% 82.2%',
+  '--input-foreground': '60 2.6% 7.6%',
+  '--input-placeholder': '43.6 5.6% 61.8%',
+  '--input-border': '41.5 14.3% 82.2%',
+  '--ring': '11.9 81.5% 51.4%',
+  '--sidebar-background': '45 40% 98%',
+  '--sidebar-foreground': '60 2.6% 7.6%',
+  '--sidebar-foreground-muted': '43.6 5.6% 61.8%',
+  '--sidebar-primary': '60 2.6% 7.6%',
+  '--sidebar-primary-foreground': '45 40% 98%',
+  '--sidebar-hover': '40 22.2% 89.4%',
+  '--sidebar-hover-foreground': '60 2.6% 7.6%',
+  '--sidebar-highlight': '11.9 81.5% 51.4%',
+  '--sidebar-highlight-foreground': '45 40% 98%',
+  '--sidebar-selection': '41.5 21.3% 88%',
+  '--sidebar-selection-foreground': '60 2.6% 7.6%',
+  '--sidebar-border': '40 18.2% 87.1%',
+  '--sidebar-ring': '11.9 81.5% 51.4%',
+  '--code-background': '42 27.8% 92.9%',
+  '--code-foreground': '60 2.6% 7.6%',
+  '--code-border': '41.5 14.3% 82.2%',
   '--code-added': '148.1 79.4% 38%',
   '--code-removed': '11 88.9% 54.1%',
   '--modified-file': '40.1 100% 30.2%',
-  '--scrollbar-thumb': '0 0% 92.9%',
-  '--scrollbar-thumb-hover': '0 0% 86.3%',
-  '--scrollbar-thumb-active': '0 0% 78%',
-  '--input-field': '0 0% 100%',
+  '--scrollbar-thumb': '45 8.7% 91%',
+  '--scrollbar-thumb-hover': '45 4.9% 83.9%',
+  '--scrollbar-thumb-active': '40 2.4% 75.5%',
+  '--input-field': '45 40% 98%',
 };
 
 const EXPECTED_MOLLY_DARK_CHROME: Record<string, string> = {
-  '--background': '0 0% 11.8%', // canvas ground #1e1e1e (darker than panels)
-  '--foreground': '0 0% 100%',
-  '--card': '0 0% 17.3%', // panel #2c2c2c
-  '--card-foreground': '0 0% 100%',
-  '--popover': '0 0% 17.3%',
-  '--muted': '0 0% 22%', // #383838
-  '--muted-foreground': '0 0% 72.2%', // fg-2 #b8b8b8
-  '--secondary': '0 0% 22%',
-  '--secondary-foreground': '0 0% 100%',
+  '--background': '240 4.3% 4.5%',
+  '--foreground': '42.9 20% 93.1%',
+  '--card': '240 2.4% 8%',
+  '--card-foreground': '42.9 20% 93.1%',
+  '--popover': '240 2.4% 8%',
+  '--muted': '240 3.9% 15.1%',
+  '--muted-foreground': '260 2% 70%',
+  '--secondary': '240 3.9% 15.1%',
+  '--secondary-foreground': '42.9 20% 93.1%',
   '--destructive': '11 88.9% 54.1%',
-  '--destructive-foreground': '0 0% 17.3%',
-  '--button-secondary': '0 0% 22%',
-  '--button-secondary-foreground': '0 0% 100%',
-  '--button-secondary-hover': '0 0% 26.7%', // #444444
-  '--hover': '0 0% 22%',
-  '--hover-foreground': '0 0% 100%',
-  '--highlight': '0 0% 100%',
-  '--highlight-foreground': '0 0% 17.3%',
-  '--selection': '0 0% 100%', // solid inversion (white row, dark text)
-  '--selection-foreground': '0 0% 17.3%',
-  '--selection-inactive': '0 0% 22%',
-  '--selection-inactive-foreground': '0 0% 100%',
-  '--bottom-bar': '0 0% 11.8%',
-  '--bottom-bar-foreground': '0 0% 72.2%',
-  '--tab-bar': '0 0% 11.8%',
-  '--tab-active': '0 0% 17.3%',
-  '--tab-active-foreground': '0 0% 100%',
-  '--tab-inactive': '0 0% 11.8%',
-  '--tab-inactive-foreground': '0 0% 72.2%',
-  '--tab-hover': '0 0% 22%',
-  '--tab-hover-foreground': '0 0% 100%',
-  '--tab-border': '0 0% 22%',
-  '--tab-active-accent': '0 0% 100%',
-  '--primary': '0 0% 100%', // inverted foreground = primary
-  '--primary-foreground': '0 0% 17.3%',
-  '--button-hover': '0 0% 89.8%', // #e5e5e5
-  '--status-info': '0 0% 100%',
+  '--destructive-foreground': '240 4.3% 4.5%',
+  '--button-secondary': '240 3.9% 15.1%',
+  '--button-secondary-foreground': '42.9 20% 93.1%',
+  '--button-secondary-hover': '240 3.4% 17.5%',
+  '--hover': '240 3.9% 15.1%',
+  '--hover-foreground': '42.9 20% 93.1%',
+  '--highlight': '12.6 100% 59%',
+  '--highlight-foreground': '240 4.3% 4.5%',
+  '--selection': '240 3.9% 15.1%',
+  '--selection-foreground': '42.9 20% 93.1%',
+  '--selection-inactive': '240 3.9% 15.1%',
+  '--selection-inactive-foreground': '42.9 20% 93.1%',
+  '--bottom-bar': '240 4.3% 4.5%',
+  '--bottom-bar-foreground': '260 2% 70%',
+  '--tab-bar': '240 4.3% 4.5%',
+  '--tab-active': '240 2.4% 8%',
+  '--tab-active-foreground': '42.9 20% 93.1%',
+  '--tab-inactive': '240 4.3% 4.5%',
+  '--tab-inactive-foreground': '260 2% 70%',
+  '--tab-hover': '240 3.9% 15.1%',
+  '--tab-hover-foreground': '42.9 20% 93.1%',
+  '--tab-border': '240 3.9% 15.1%',
+  '--tab-active-accent': '12.6 100% 59%',
+  '--primary': '42.9 20% 93.1%',
+  '--primary-foreground': '240 4.3% 4.5%',
+  '--button-hover': '42.9 12.3% 88.8%',
+  '--status-info': '42.9 20% 93.1%',
   '--status-success': '148.1 79.4% 38%',
-  '--status-warning': '48.8 54.9% 47.8%', // #bda437
+  '--status-warning': '48.8 54.9% 47.8%',
   '--status-danger': '11 88.9% 54.1%',
-  '--status-merged': '48.8 54.9% 47.8%', // forked Vesper merge yellow (exception)
-  '--border': '0 0% 22%',
-  '--input': '0 0% 17.3%',
-  '--switch-track': '0 0% 30.2%', // #4d4d4d
-  '--input-foreground': '0 0% 100%',
-  '--input-placeholder': '0 0% 50.2%', // #808080
-  '--input-border': '0 0% 30.2%',
-  '--ring': '0 0% 100%',
-  '--sidebar-background': '0 0% 17.3%',
-  '--sidebar-foreground': '0 0% 100%',
-  '--sidebar-foreground-muted': '0 0% 50.2%',
-  '--sidebar-primary': '0 0% 100%',
-  '--sidebar-primary-foreground': '0 0% 17.3%',
-  '--sidebar-hover': '0 0% 22%',
-  '--sidebar-hover-foreground': '0 0% 100%',
-  '--sidebar-highlight': '0 0% 100%',
-  '--sidebar-highlight-foreground': '0 0% 17.3%',
-  '--sidebar-selection': '0 0% 100%',
-  '--sidebar-selection-foreground': '0 0% 17.3%',
-  '--sidebar-border': '0 0% 22%',
-  '--sidebar-ring': '0 0% 100%',
-  '--code-background': '0 0% 17.3%',
-  '--code-foreground': '0 0% 100%',
-  '--code-border': '0 0% 30.2%',
+  '--status-merged': '48.8 54.9% 47.8%',
+  '--border': '240 3.9% 15.1%',
+  '--input': '240 2.4% 8%',
+  '--switch-track': '240 3.6% 22%',
+  '--input-foreground': '42.9 20% 93.1%',
+  '--input-placeholder': '252 2% 49.2%',
+  '--input-border': '240 3.6% 22%',
+  '--ring': '12.6 100% 59%',
+  '--sidebar-background': '240 2.4% 8%',
+  '--sidebar-foreground': '42.9 20% 93.1%',
+  '--sidebar-foreground-muted': '252 2% 49.2%',
+  '--sidebar-primary': '42.9 20% 93.1%',
+  '--sidebar-primary-foreground': '240 4.3% 4.5%',
+  '--sidebar-hover': '240 3.9% 15.1%',
+  '--sidebar-hover-foreground': '42.9 20% 93.1%',
+  '--sidebar-highlight': '12.6 100% 59%',
+  '--sidebar-highlight-foreground': '240 4.3% 4.5%',
+  '--sidebar-selection': '240 3.9% 15.1%',
+  '--sidebar-selection-foreground': '42.9 20% 93.1%',
+  '--sidebar-border': '240 3.9% 15.1%',
+  '--sidebar-ring': '12.6 100% 59%',
+  '--code-background': '240 2.4% 8%',
+  '--code-foreground': '42.9 20% 93.1%',
+  '--code-border': '240 3.6% 22%',
   '--code-added': '148.1 79.4% 38%',
   '--code-removed': '11 88.9% 54.1%',
   '--modified-file': '48.8 54.9% 47.8%',
-  '--scrollbar-thumb': '0 0% 23.9%',
-  '--scrollbar-thumb-hover': '0 0% 30.2%',
-  '--scrollbar-thumb-active': '0 0% 38%',
-  '--input-field': '0 0% 17.3%',
+  '--scrollbar-thumb': '240 3.9% 15.1%',
+  '--scrollbar-thumb-hover': '240 3.6% 22%',
+  '--scrollbar-thumb-active': '240 2.2% 36.1%',
+  '--input-field': '240 2.4% 8%',
 };
+
+const lightness = (channel: string) => Number.parseFloat(channel.split(' ')[2]);
 
 const variablesOf = (themeId: string, syntax: boolean): Record<string, string> => {
   const theme = getBundledVSCodeThemeByIdSync(themeId);
@@ -179,7 +176,7 @@ const variablesOf = (themeId: string, syntax: boolean): Record<string, string> =
   );
 };
 
-describe('molly monochrome themes', () => {
+describe('molly atelier themes', () => {
   it('registers both themes as selectable bundled themes', () => {
     expect(isSelectableBundledVSCodeThemeId('molly-light')).toBe(true);
     expect(isSelectableBundledVSCodeThemeId('molly-dark')).toBe(true);
@@ -194,34 +191,29 @@ describe('molly monochrome themes', () => {
     });
   });
 
-  it('resolves molly-light chrome to the frozen monochrome channels', () => {
+  it('resolves molly-light chrome to the Atelier channels', () => {
     expect(variablesOf('molly-light', false)).toEqual(EXPECTED_MOLLY_LIGHT_CHROME);
   });
 
-  it('resolves molly-dark chrome to the frozen monochrome channels', () => {
+  it('resolves molly-dark chrome to the Atelier channels', () => {
     expect(variablesOf('molly-dark', false)).toEqual(EXPECTED_MOLLY_DARK_CHROME);
   });
 
-  it('keeps the canvas/panel ordering of the demo (canvas darker than panels in dark, lighter in light)', () => {
+  it('keeps the ground/panel ordering (panels lift above the ground in light, ground sinks below panels in dark)', () => {
     const light = variablesOf('molly-light', false);
     const dark = variablesOf('molly-dark', false);
-    // Light: ground 96.1% is lighter than the 100% panel.
-    expect(light['--background']).toBe('0 0% 96.1%');
-    expect(light['--card']).toBe('0 0% 100%');
-    // Dark: ground 11.8% is darker than the 17.3% panel.
-    expect(dark['--background']).toBe('0 0% 11.8%');
-    expect(dark['--card']).toBe('0 0% 17.3%');
+    expect(lightness(light['--background'])).toBeLessThan(lightness(light['--card']));
+    expect(lightness(dark['--background'])).toBeLessThan(lightness(dark['--card']));
   });
 
-  it('resolves selection and ring to the solid foreground inversion', () => {
-    const light = variablesOf('molly-light', false);
-    const dark = variablesOf('molly-dark', false);
-    expect(light['--selection']).toBe(light['--foreground']);
-    expect(light['--selection-foreground']).toBe(light['--card']);
-    expect(light['--ring']).toBe(light['--foreground']);
-    expect(dark['--selection']).toBe(dark['--foreground']);
-    expect(dark['--selection-foreground']).toBe(dark['--card']);
-    expect(dark['--ring']).toBe(dark['--foreground']);
+  it('keeps primary as the ink inversion and reserves vermilion for focus and the active-tab accent', () => {
+    for (const id of ['molly-light', 'molly-dark']) {
+      const vars = variablesOf(id, false);
+      expect(vars['--primary']).toBe(vars['--foreground']);
+      expect(vars['--tab-active-accent']).toBe(vars['--ring']);
+      expect(Number.parseFloat(vars['--ring'])).toBeLessThan(15);
+      expect(vars['--selection']).not.toBe(vars['--primary']);
+    }
   });
 
   it('resolves syntax colors from the forked themes (content, not chrome)', () => {

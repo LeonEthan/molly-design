@@ -170,7 +170,10 @@ import {
   getSessionNavigationLocation,
   type SessionNavigationTarget,
 } from '@/lib/session-navigation';
-import { getSessionDetailInitialTabState } from '@/lib/session-detail-initial-state';
+import {
+  getSessionDetailInitialTabState,
+  revealDesignCanvas,
+} from '@/lib/session-detail-initial-state';
 import { recordSessionRenderTrace, shortTraceId } from '@/lib/session-render-trace';
 /* Relative, not `@/providers/*`: the Electron web tsconfig maps only an
    allowlist of `@/` subpaths and has no `@/providers/*` entry, so the alias
@@ -598,6 +601,7 @@ const SessionDetail = ({
   const [mobileFileViewerTabId, setMobileFileViewerTabId] = useState<string | null>(null);
   const [, setMobileFileViewerOpen] = useState(false);
   const [localStateSessionId, setLocalStateSessionId] = useState(sessionId);
+  const [canvasEntrySessionId, setCanvasEntrySessionId] = useState<SessionId | null>(null);
   const [commentReferenceKeysBySession, setCommentReferenceKeysBySession] = useState<
     Record<string, string[]>
   >({});
@@ -756,6 +760,7 @@ const SessionDetail = ({
     sendingDraftIdsRef.current.clear();
     desktopTabFocusRegionRef.current = 'conversation';
     setLocalStateSessionId(sessionId);
+    setCanvasEntrySessionId(null);
     setSidebarRestoreSeq((seq) => seq + 1);
     setIsSidebarOpen(nextInitialTabState.sidePanel.open);
     setActiveSidebarTab(nextInitialTabState.sidePanel.tab);
@@ -774,6 +779,28 @@ const SessionDetail = ({
     setMobileDiffState(null);
     setMobileFilesBrowserOpen(false);
     setFileProviderRequestedByInteraction(false);
+  }
+
+  if (
+    !isMobile &&
+    localStateSessionId === sessionId &&
+    canvasEntrySessionId !== sessionId &&
+    activeSession?.id === sessionId &&
+    activeSession.design
+  ) {
+    const sidePanel = revealDesignCanvas({
+      open: isSidebarOpen,
+      tab: activeSidebarTab,
+      tabs: openedSidebarTabs,
+      sideSessionId: activeSideSessionId,
+    });
+    setCanvasEntrySessionId(sessionId);
+    if (!isSidebarOpen) setSidebarRestoreSeq((seq) => seq + 1);
+    setIsSidebarOpen(sidePanel.open);
+    setActiveSidebarTab(sidePanel.tab);
+    setOpenedSidebarTabs(sidePanel.tabs);
+    setActiveSideSessionId(sidePanel.sideSessionId);
+    setActiveViewerTabId(null);
   }
 
   const setDraftTabs = useCallback(
@@ -4394,11 +4421,7 @@ const SessionDetail = ({
           ) : undefined
         }
         soloPanelMinWidth={DESIGN_CANVAS_TOOLBAR_MIN_WIDTH}
-        className={cn(
-          'border-b border-border/50 bg-background',
-          'h-11',
-          windowsCaptionPadClass
-        )}
+        className={cn('border-b border-border/50 bg-background', 'h-11', windowsCaptionPadClass)}
       />
       <div className="relative min-h-0 flex-1 overflow-hidden">
         {showFixedSidePanelBody && activeSidebarTab !== null ? sidebarContent : null}

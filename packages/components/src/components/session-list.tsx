@@ -622,7 +622,8 @@ const SessionGroupSection = memo(function SessionGroupSection({
   // Typography splits with color: repo headers read as content (xs semibold),
   // the "Chats" header reads as section chrome (13px medium) so
   // section labels visually recede from titles at a glance.
-  const headerTypographyClass = 'text-[13px] font-medium';
+  const headerTypographyClass =
+    group.kind === 'chat' ? 'eyebrow text-[10.5px]' : 'text-[13px] font-medium';
   const headerToggleHoverClass =
     group.kind === 'repo' ? 'hover:text-sidebar-hover-foreground' : 'hover:text-sidebar-foreground';
 

@@ -38,10 +38,7 @@ const COPY = {
     'Finish text input before saving or leaving the canvas',
   ],
   finishComposing: ['canvasFinishComposing', 'Finish text input first'],
-  versionConflict: [
-    'canvasVersionConflict',
-    'This artwork changed elsewhere; your edits are kept',
-  ],
+  versionConflict: ['canvasVersionConflict', 'This artwork changed elsewhere; your edits are kept'],
   select: ['toolSelect', 'Select'],
   undo: ['toolUndo', 'Undo (⌘Z)'],
   redo: ['toolRedo', 'Redo (⇧⌘Z)'],
@@ -113,6 +110,11 @@ export function createProductSession(options: {
   const style = document.createElement('style');
   style.textContent = `
 :root{color-scheme:light dark}
+/* Atelier palette (2026-10-04 redesign): the artwork rests on a quiet light
+   table one step off the shell ground; chrome is warm ink with hairlines. */
+:root,:root[data-theme="light"]{--ink:#141413;--ink-2:#2b2b29;--chrome:#ebe7df;--chrome-2:#e2ded5;--line:#dcd8cf;--muted:#6b6963;--surface:#fcfbf8;--grid-dot:#d3cec4;--slide-shadow:0 1px 2px rgb(20 20 19 / .08),0 28px 60px -22px rgb(20 20 19 / .32)}
+:root[data-theme="dark"]{--ink:#f1efea;--ink-2:#b2b1b4;--chrome:#070708;--chrome-2:#18181a;--line:#252527;--muted:#7c7b80;--surface:#141415;--grid-dot:#1b1b1d;--slide-shadow:0 0 0 1px rgb(255 255 255 / .05),0 32px 80px -24px rgb(0 0 0 / .85)}
+.ed-zoombar{box-shadow:none;border-color:var(--line)}
 .ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}
 .ed-corner-br{inset-inline-end:auto!important;left:14px!important}
 .ed-zoombtn:has(.molly-zoom-icon){padding:5px 6px}
@@ -126,24 +128,24 @@ export function createProductSession(options: {
 .ed-stage-scale .moveable-control-box .moveable-e::after,.ed-stage-scale .moveable-control-box .moveable-w::after{width:5px;height:14px;border-radius:999px}
 .ed-stage-scale .moveable-control-box .moveable-control:hover::after{border-color:#627994;background:#edf2f7}
 /* Reserve the 281px dock, the 14px edge inset and a 12px minimum gap. */
-#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:6px;max-width:calc(50vw - 168px);box-sizing:border-box;padding:5px 11px;background:Canvas;color:CanvasText;border-radius:9px;font:12px system-ui;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);opacity:.85}
+#autosave-status{position:fixed;bottom:14px;right:14px;z-index:9999;display:flex;align-items:center;gap:7px;max-width:calc(50vw - 168px);box-sizing:border-box;padding:6px 12px;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;font:500 10.5px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}
 #autosave-status .message{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#autosave-status .dot{width:6px;height:6px;border-radius:50%;background:#14ae5c;flex:none}
+#autosave-status .dot{width:5px;height:5px;border-radius:50%;background:#14ae5c;flex:none}
 #autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:#888}
 #autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:#f24822}
-.molly-dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:Canvas;color:CanvasText;border-radius:999px;padding:8px 10px;box-shadow:0 6px 20px rgb(0 0 0 / .12),0 0 0 1px rgb(0 0 0 / .04)}
+.molly-dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 8px;box-shadow:0 18px 40px -20px rgb(0 0 0 / .35)}
 .molly-dock button{width:38px;height:38px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:inherit;cursor:pointer;font:400 18px system-ui;padding:0}
-.molly-dock button:hover{background:#8882}
-.molly-dock button.on{background:CanvasText;color:Canvas}
-.molly-dock svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.molly-dock .sep{width:1px;height:18px;background:#8884;margin:0 4px}
+.molly-dock button:hover{background:var(--chrome-2)}
+.molly-dock button.on{background:var(--ink);color:var(--surface)}
+.molly-dock svg{width:19px;height:19px;stroke:currentColor;stroke-width:1.35;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.molly-dock .sep{width:1px;height:18px;background:var(--line);margin:0 4px}
 .molly-dock .caret{width:12px;height:12px;margin-left:-2px}
 .molly-dock button:disabled{opacity:.35;pointer-events:none}
-.molly-shape-popup{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:2147483001;display:none;flex-direction:column;background:Canvas;color:CanvasText;border-radius:16px;padding:6px;box-shadow:0 4px 14px rgb(0 0 0 / .16),0 0 0 1px rgb(0 0 0 / .04);min-width:170px;max-height:50vh;overflow:auto}
+.molly-shape-popup{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:2147483001;display:none;flex-direction:column;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 18px 40px -20px rgb(0 0 0 / .35);min-width:170px;max-height:50vh;overflow:auto}
 .molly-shape-popup.open{display:flex}
 .ed-toast{bottom:84px;z-index:2147483002;width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box}
 .molly-shape-popup button{display:flex;align-items:center;gap:9px;padding:7px 10px;border:none;border-radius:8px;background:transparent;color:inherit;cursor:pointer;font:12.5px system-ui;text-align:left}
-.molly-shape-popup button:hover{background:#8882}
+.molly-shape-popup button:hover{background:var(--chrome-2)}
 .molly-shape-popup svg{width:16px;height:16px;flex:none;stroke:currentColor;stroke-width:1.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
 /* Keep zoom and save feedback reachable when all three bottom surfaces cannot
    fit on one row. Extremely narrow docks scroll without shrinking the targets. */
@@ -200,12 +202,7 @@ export function createProductSession(options: {
     'history'
   );
   dockSep();
-  dockButton(
-    renderUiIconSvg(typeIcon),
-    COPY.text,
-    () => addElement({ kind: 'text' }),
-    'create'
-  );
+  dockButton(renderUiIconSvg(typeIcon), COPY.text, () => addElement({ kind: 'text' }), 'create');
   const shapePopup = document.createElement('div');
   shapePopup.className = 'molly-shape-popup';
   // Insert menu mirrors the kernel's modeled presets; each entry carries the

@@ -585,9 +585,16 @@ export function DesignCanvas({
   const toolbarItems = (
     <>
       <span
-        className="min-w-0 max-w-full truncate rounded-full bg-foreground/[0.04] px-3 py-1 text-xs leading-5 text-muted-foreground"
+        className="eyebrow inline-flex min-w-0 max-w-full items-center gap-2 truncate px-1 leading-5 text-muted-foreground"
         role="status"
       >
+        <span
+          aria-hidden
+          className={cn(
+            'size-[5px] shrink-0 rounded-full',
+            canvasState?.changed ? 'bg-[var(--signal)]' : 'bg-foreground/30'
+          )}
+        />
         {currentVersion
           ? canvasState?.changed
             ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
@@ -604,7 +611,7 @@ export function DesignCanvas({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 rounded-full"
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                   disabled={busy || readonlyView || !canvasState?.changed}
                   onClick={saveVersion}
                   aria-label={t('design.saveVersion', 'Save version')}
@@ -626,7 +633,7 @@ export function DesignCanvas({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-9 rounded-full"
+                    className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                     disabled={busy}
                     aria-label={t('design.versions', 'Version history')}
                   >
@@ -670,21 +677,18 @@ export function DesignCanvas({
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="h-9 rounded-full bg-foreground/[0.08] px-3 font-medium text-foreground hover:bg-foreground/[0.12]"
+                    className="ml-1 h-8 rounded-full bg-foreground px-3.5 text-[13px] font-medium text-background hover:bg-foreground/85 hover:text-background"
                     disabled={busy || readonlyView}
                     aria-label={t('design.export', 'Export')}
                   >
-                    <Download className="size-[18px]" />
+                    <Download className="size-4" />
                     {t('design.export', 'Export')}
                   </Button>
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent>{t('design.export', 'Export')}</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent
-              align="end"
-              className="min-w-40 rounded-xl border-border/50 p-1.5"
-            >
+            <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-border/50 p-1.5">
               <DropdownMenuItem
                 className="min-h-9 rounded-md px-3"
                 onClick={() => exportArtwork('png')}
@@ -706,7 +710,7 @@ export function DesignCanvas({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-9 rounded-full"
+                    className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                     aria-label={t('design.more', 'More')}
                   >
                     <MoreHorizontal className="size-[18px]" />
@@ -715,10 +719,7 @@ export function DesignCanvas({
               </TooltipTrigger>
               <TooltipContent>{t('design.more', 'More')}</TooltipContent>
             </Tooltip>
-            <DropdownMenuContent
-              align="end"
-              className="min-w-40 rounded-xl border-border/50 p-1.5"
-            >
+            <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-border/50 p-1.5">
               <DropdownMenuItem
                 className="min-h-9 rounded-md px-3"
                 disabled={busy || readonlyView}
@@ -738,7 +739,7 @@ export function DesignCanvas({
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-9 rounded-full"
+                className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                 aria-label={
                   focused
                     ? t('design.showSidebar', 'Show sidebar')
@@ -768,7 +769,7 @@ export function DesignCanvas({
       {toolbarHost ? (
         createPortal(toolbarItems, toolbarHost)
       ) : (
-        <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-border/40 bg-background px-3 py-2">
+        <div className="flex min-h-14 flex-wrap items-center gap-2 border-b border-hairline bg-background px-3 py-2">
           {toolbarItems}
         </div>
       )}

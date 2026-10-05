@@ -295,7 +295,12 @@ export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string })
       )}
     >
       {src ? (
-        <img src={src} alt="" draggable={false} className="size-full object-cover dark:brightness-[0.8]" />
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          className="size-full object-cover dark:brightness-[0.8]"
+        />
       ) : null}
     </span>
   );
@@ -766,7 +771,7 @@ export function GitHubOwnerIcon({
 const SECTION_HEADER_BUTTON_CLASS = cn(
   'relative flex h-8 min-w-0 flex-1 select-none items-center gap-2 rounded-lg px-2 text-left',
   'border border-transparent bg-transparent',
-  'text-[13px] font-medium text-sidebar-foreground-muted transition-colors',
+  'eyebrow text-[10.5px] text-sidebar-foreground-muted transition-colors',
   // The outer row paints the focus ring; suppress the global :focus-visible
   // box-shadow here so the ring wraps the whole row (label + action).
   'focus-visible:shadow-none'

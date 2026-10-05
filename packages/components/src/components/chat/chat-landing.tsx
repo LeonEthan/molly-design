@@ -32,6 +32,7 @@ import {
   type MachineId,
   type MachineViewMeta,
   type ProjectRef,
+  type SessionId,
   type WorktreeSetupScriptConfig,
   type WorktreeCleanupScriptConfig,
   type WorkspaceId,
@@ -138,6 +139,8 @@ import { wrapPastedTextChipLabel } from '@/components/mentions/mention-chips';
 
 import { ErrorBoundary } from '@/components/error-boundary';
 import { ChatLandingView, type ChatLandingHintType } from './chat-landing-view';
+import { HomeArtworkGallery, type HomeArtworkGalleryItem } from './home-artwork-gallery';
+import { HomeIdeaChips } from './home-idea-chips';
 import { getSessionCreationNavigation } from './submission/use-composer-navigation-focus';
 import { getSelectorTagClassName } from './chat-landing-selectors';
 import {
@@ -251,6 +254,8 @@ const EMPTY_REPOSITORIES: { fullName: string }[] = [];
 export function ChatLanding(props: ChatLandingProps) {
   return <WorkspaceChatLanding key={props.workspaceSlug} {...props} />;
 }
+
+const HOME_GALLERY_LIMIT = 24;
 
 function WorkspaceChatLanding({
   workspaceSlug,
@@ -1908,7 +1913,10 @@ function WorkspaceChatLanding({
             modelLabel: currentRunConfigFace.modelLabel,
             reasoningLabel: currentRunConfigFace.reasoningLabel,
             planOn: currentRunConfigFace.planOn,
-            configOptionValues: sanitizeRecentConfigOptionValues(dispatchConfigOptionValues, configOptionSelectors),
+            configOptionValues: sanitizeRecentConfigOptionValues(
+              dispatchConfigOptionValues,
+              configOptionSelectors
+            ),
             agentRoleId: null,
           },
           Date.now()
@@ -2455,6 +2463,49 @@ function WorkspaceChatLanding({
   // ── Title ──
   // Rotate the landing heading once per (UTC) day: stable within a day, no
   // flicker across re-renders, no Math.random().
+  const homeGalleryDateFormatter = useMemo(
+    () => new Intl.DateTimeFormat(intlLocale, { month: 'short', day: 'numeric' }),
+    [intlLocale]
+  );
+  const homeGalleryItems = useMemo<HomeArtworkGalleryItem[]>(
+    () =>
+      visibleActiveSessions
+        .flatMap((session) =>
+          session.design?.artworkId
+            ? [
+                {
+                  session,
+                  artworkId: session.design.artworkId,
+                  recency: session.lastMessageAt ?? Date.parse(session.createdAt),
+                },
+              ]
+            : []
+        )
+        .sort((left, right) => right.recency - left.recency)
+        .slice(0, HOME_GALLERY_LIMIT)
+        .map(({ session, artworkId, recency }) => ({
+          sessionId: session.id,
+          artworkId,
+          title: session.title?.trim() || t('sessions.untitled', 'Untitled'),
+          dateLabel: homeGalleryDateFormatter.format(recency),
+        })),
+    [homeGalleryDateFormatter, t, visibleActiveSessions]
+  );
+  const homeIdeas = [1, 2, 3, 4].map((index) => ({
+    label: t(`home.idea${index}.label`),
+    prompt: t(`home.idea${index}.prompt`),
+  }));
+  const handlePickIdea = (idea: string) => {
+    setPrompt(idea);
+    requestAnimationFrame(() => promptTextareaRef.current?.focus());
+  };
+  const handleOpenArtwork = (sessionId: string) => {
+    void navigate({
+      to: '/$workspaceName/sessions/$sessionId',
+      params: { workspaceName: workspaceSlug, sessionId: sessionId as SessionId },
+    });
+  };
+
   const headings = [t('chat.heading'), t('chat.heading2')];
   const title = headings[Math.floor(getServerNow() / 86_400_000) % headings.length];
 
@@ -2473,7 +2524,39 @@ function WorkspaceChatLanding({
         mentionSource={mentionSource}
         availableCommands={availableCommands}
         skillAgent={skillAgent}
-        title={title}
+        title={
+          isElectron ? (
+            <>
+              {t('home.headlineBefore')}
+              <em>{t('home.headlineEmphasis')}</em>
+              {t('home.headlineAfter')}
+            </>
+          ) : (
+            title
+          )
+        }
+        eyebrow={isElectron ? t('home.eyebrow') : undefined}
+        subtitle={isElectron ? t('home.subtitle') : undefined}
+        ideas={
+          isElectron ? (
+            <HomeIdeaChips
+              label={t('home.ideasLabel')}
+              ideas={homeIdeas}
+              disabled={submitting}
+              onPick={handlePickIdea}
+            />
+          ) : null
+        }
+        gallery={
+          isElectron ? (
+            <HomeArtworkGallery
+              heading={t('home.yourWork')}
+              countLabel={t('home.yourWorkCount', { count: homeGalleryItems.length })}
+              items={homeGalleryItems}
+              onOpen={handleOpenArtwork}
+            />
+          ) : null
+        }
         promptValue={prompt}
         onPromptChange={setPrompt}
         onPromptKeyDown={handlePromptKeyDown}

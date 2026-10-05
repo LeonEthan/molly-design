@@ -62,7 +62,7 @@ export function CanvasFormatTiles({
     <div
       role="group"
       aria-label={t('design.size', 'Canvas size')}
-      className="flex max-w-full select-none flex-wrap justify-center gap-1"
+      className="flex max-w-full select-none flex-wrap items-end justify-center gap-x-1 gap-y-3"
     >
       {tiles.map(({ label, size }) => {
         const auto = size.mode === 'auto';
@@ -78,32 +78,47 @@ export function CanvasFormatTiles({
             title={auto ? label : `${label} · ${size.width} × ${size.height}`}
             onClick={() => onChange(size)}
             className={cn(
-              'group flex w-[76px] flex-col items-center gap-2 rounded-xl px-1 pb-2 pt-3 text-xs transition-colors',
-              'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
-              'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40',
-              selected && 'text-foreground'
+              'group flex w-[92px] flex-col items-center gap-2.5 rounded-lg px-1 pb-1.5 pt-2 transition-colors duration-200',
+              'disabled:pointer-events-none disabled:opacity-50',
+              'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/60'
             )}
           >
-            <span aria-hidden className="flex size-11 items-center justify-center">
+            <span aria-hidden className="flex h-12 w-12 items-end justify-center">
               <span
                 className={cn(
-                  'rounded-[3px] border transition-colors',
+                  'relative border transition-[border-color,background-color] duration-200',
                   auto ? 'border-dashed' : 'border-solid',
                   selected
-                    ? 'border-foreground bg-foreground/[0.06]'
-                    : 'border-muted-foreground/50 group-hover:border-foreground/70'
+                    ? 'border-foreground bg-foreground/[0.07]'
+                    : 'border-foreground/25 group-hover:border-foreground/60'
                 )}
                 style={
                   auto
-                    ? { width: 34, height: 34 }
+                    ? { width: 38, height: 38 }
                     : {
-                        width: 40 * Math.min(1, size.width / size.height),
-                        height: 40 * Math.min(1, size.height / size.width),
+                        width: 46 * Math.min(1, size.width / size.height),
+                        height: 46 * Math.min(1, size.height / size.width),
                       }
                 }
-              />
+              >
+                {selected ? (
+                  <span className="absolute -right-[3px] -top-[3px] size-[5px] rounded-full bg-[var(--signal)]" />
+                ) : null}
+              </span>
             </span>
-            <span className="max-w-full truncate">{label}</span>
+            <span className="flex flex-col items-center gap-0.5">
+              <span
+                className={cn(
+                  'max-w-full truncate text-[12.5px] transition-colors',
+                  selected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                )}
+              >
+                {label}
+              </span>
+              <span className="font-mono text-[10px] tabular-nums tracking-wide text-muted-foreground/70">
+                {auto ? t('design.autoSizeTile', 'by brief') : `${size.width}×${size.height}`}
+              </span>
+            </span>
           </button>
         );
       })}

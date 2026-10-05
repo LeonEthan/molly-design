@@ -39,7 +39,7 @@ export interface ChatLandingViewProps {
      machine's global skills in non-local chats. */
   skillAgent?: { cliType: AgentConfigCliType; agentType: string; machineId?: string };
   /** Page title displayed above the composer */
-  title: string;
+  title: ReactNode;
   /** Current prompt value */
   promptValue: string;
   /** Callback when prompt changes */
@@ -95,6 +95,11 @@ export interface ChatLandingViewProps {
   composerStatusTone?: 'error' | 'warning' | 'info';
   /** Context switch (Local Projects / GitHub Worktrees) shown below the title */
   contextSwitch?: ReactNode;
+  /** Brand line, promise, prompt starters and recent work around the hero composer. */
+  eyebrow?: string;
+  subtitle?: string;
+  ideas?: ReactNode;
+  gallery?: ReactNode;
   /** Whether the submit button is disabled */
   submitDisabled?: boolean;
   /** Draft is handed off for durable acceptance but remains restorable on failure. */
@@ -212,6 +217,10 @@ export function ChatLandingView({
   composerStatusMessage,
   composerStatusTone = 'info',
   contextSwitch,
+  eyebrow,
+  subtitle,
+  ideas,
+  gallery,
   submitDisabled = false,
   submissionPending = false,
   onSubmit,
@@ -461,6 +470,10 @@ export function ChatLandingView({
       dropHandlers={dropZone.handlers}
       navRootRef={navRootRef}
       contextSwitch={contextSwitch}
+      eyebrow={eyebrow}
+      subtitle={subtitle}
+      ideas={ideas}
+      gallery={gallery}
       composer={composerNode}
       noMachineHint={noMachineHintNode}
       agentConfigHint={agentConfigHintNode}

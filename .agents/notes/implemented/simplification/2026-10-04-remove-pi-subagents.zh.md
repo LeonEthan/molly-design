@@ -4,6 +4,7 @@ Status: implemented
 Date: 2026-10-04
 Translation: pending
 Issue: [Molly #72](https://github.com/LeonEthan/molly-design/issues/72)
+PR: [Molly #81](https://github.com/LeonEthan/molly-design/pull/81)
 
 ## 摘要
 

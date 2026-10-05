@@ -12,7 +12,6 @@ import {
 import { ConversationColumn } from '@/components/shared/conversation-column';
 import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
 import { usePermissionResponse } from '@/hooks/use-permission-response';
-import { useKeyboardAwareScrollIntoView } from '@/hooks/use-keyboard-aware-scroll-into-view';
 import { useTranslation } from 'react-i18next';
 import {
   createAskUserQuestionPermissionOutcome,
@@ -497,8 +496,6 @@ export function FloatingPermissionRequest({
     if (sessionStatus?.type !== 'requestPermission' && sessionStatus?.type !== 'running') return [];
     return findPendingPermissions(sessionHistory);
   }, [sessionStatus, sessionHistory]);
-
-  useKeyboardAwareScrollIntoView(askQuestionScrollRef);
 
   if (pendingList.length === 0) return null;
 

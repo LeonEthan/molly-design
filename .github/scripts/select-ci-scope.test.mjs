@@ -28,7 +28,6 @@ function syntheticWorkspace() {
     pkg('molly', 'apps/cli', {
       deps: [
         '@molly/cli-supervisor',
-        '@molly/code-review-helper',
         '@molly/cloud-api',
         '@molly/loro-streams-rpc',
         '@molly/platform',
@@ -67,9 +66,6 @@ function syntheticWorkspace() {
     pkg('@molly/cloud-api', 'packages/cloud-api', {
       test: false,
       deps: ['@molly/shared', 'acp-extension-core'],
-    }),
-    pkg('@molly/code-review-helper', 'packages/code-review-helper', {
-      deps: ['@molly/components'],
     }),
     pkg('@molly/configs', 'packages/configs', { test: false, typecheck: false }),
     pkg('@molly/ignore', 'packages/ignore'),
@@ -138,15 +134,10 @@ void test('2. cli-only source', () => {
   assertExcludes(scope.testPackages, ['@molly/components', '@molly/electron']);
 });
 
-void test('3. components-only source fans out through helper to molly', () => {
+void test('3. components-only source fans out to electron', () => {
   const scope = select(['packages/components/src/index.ts']);
   assert.equal(scope.mode, 'affected');
-  assertIncludes(scope.testPackages, [
-    '@molly/components',
-    '@molly/code-review-helper',
-    '@molly/electron',
-    'molly',
-  ]);
+  assert.deepEqual(scope.testPackages, ['@molly/components', '@molly/electron']);
 });
 
 void test('4. shared source is near-full affected', () => {
@@ -191,22 +182,6 @@ void test('9. markdown-only inside a package is skip-tests', () => {
   assert.equal(scope.mode, 'skip-tests');
 });
 
-void test('10. runtime markdown exception fans out to molly', () => {
-  const scope = select(['packages/code-review-helper/prompts/review-helper-agent.md']);
-  assert.equal(scope.mode, 'affected');
-  assertIncludes(scope.seedPackages, ['@molly/code-review-helper']);
-  assertIncludes(scope.fanoutPackages, ['molly']);
-});
-
-void test('10a. imported review fixture is helper test-only', () => {
-  const scope = select([
-    'packages/code-review-helper/src/stories/fixtures/grouped-refactor.review.md',
-  ]);
-  assert.equal(scope.mode, 'affected');
-  assert.deepEqual(scope.testPackages, ['@molly/code-review-helper']);
-  assert.deepEqual(scope.fanoutPackages, []);
-});
-
 void test('11. unknown path is full', () => {
   const scope = select(['not-a-real-root-file.bin']);
   assert.equal(scope.mode, 'full');
@@ -225,10 +200,10 @@ void test('13. git failure is full even with docs files', () => {
   assert.equal(scope.reason, 'git_diff_failed');
 });
 
-void test('16. locales seed components and electron with fan-out', () => {
+void test('16. locales seed components and electron', () => {
   const scope = select(['locales/en.json']);
   assertIncludes(scope.seedPackages, ['@molly/components', '@molly/electron']);
-  assertIncludes(scope.fanoutPackages, ['@molly/code-review-helper', 'molly']);
+  assert.deepEqual(scope.fanoutPackages, []);
 });
 
 void test('17. e2e only keeps check:quick', () => {
@@ -307,7 +282,7 @@ void test('32. cloud-api source has no own tests and fans out', () => {
   const scope = select(['packages/cloud-api/src/index.ts']);
   assert.deepEqual(
     scope.testPackages.sort(),
-    ['@molly/code-review-helper', '@molly/components', '@molly/electron', 'molly'].sort()
+    ['@molly/components', '@molly/electron', 'molly'].sort()
   );
 });
 
@@ -389,14 +364,9 @@ void test("listChangedFiles fail-open is the caller's job when exec throws", () 
   );
 });
 
-void test('platform source log includes helper surfaces', () => {
+void test('platform source fans out to product consumers', () => {
   const scope = select(['packages/platform/src/index.ts']);
-  assertIncludes(scope.fanoutPackages, [
-    '@molly/components',
-    '@molly/code-review-helper',
-    '@molly/electron',
-    'molly',
-  ]);
+  assertIncludes(scope.fanoutPackages, ['@molly/components', '@molly/electron', 'molly']);
 });
 
 void test('real workspace includes required contracts and excludes retired projects', () => {
@@ -407,6 +377,7 @@ void test('real workspace includes required contracts and excludes retired proje
   for (const name of [
     '@molly/site-docs',
     '@molly/code-review-viewer',
+    '@molly/code-review-helper',
     'acp-extension-claude',
     'acp-extension-codex',
     'acp-extension-grok',

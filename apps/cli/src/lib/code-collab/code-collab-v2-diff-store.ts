@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import {
   TurnDiffStore,
-  type LatestTurnDiffText,
   type TurnDiffStoreOptions,
   type TurnDiffStoreStats,
 } from '@molly/turn-diff-store';
@@ -14,8 +13,6 @@ import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 
 import { getLogger } from '@/utils/logger';
 
-import { mapWithConcurrency } from '../bounded-concurrency';
-import { computeTurnEvidenceAsync } from './diff-line-count-pool';
 
 const DEFAULT_RETENTION_DAYS = 100;
 const MIN_RETENTION_DAYS = 1;
@@ -23,22 +20,6 @@ const MAX_RETENTION_DAYS = 365;
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WORKER_FILENAME = path.join(MODULE_DIR, 'turn-diff-store-worker.js');
 const SOURCE_WORKER_FILENAME = path.join(MODULE_DIR, 'turn-diff-store-worker-entry.mjs');
-
-export type CodeCollabV2DiffStoreEvent = {
-  readonly path: string;
-  readonly oldText: string | null;
-  readonly newText: string | null;
-};
-
-export type CodeCollabV2DiffStoreRecordInput = {
-  readonly workspaceRoot: string;
-  readonly ownerSessionId: SessionId;
-  readonly turnId: string;
-  readonly events: readonly CodeCollabV2DiffStoreEvent[];
-  readonly capturedAtMs?: number;
-  readonly recordedAtMs?: number;
-  readonly orderKey?: string;
-};
 
 export type CodeCollabV2DiffStoreSnapshot =
   | { readonly status: 'ready'; readonly text: string | null }
@@ -104,76 +85,6 @@ export class CodeCollabV2DiffStore {
     await this.store.close();
   }
 
-  async recordTurnDiffs(input: CodeCollabV2DiffStoreRecordInput): Promise<FileDiff[]> {
-    const startedAtMs = Date.now();
-    const recordedAtMs = input.recordedAtMs ?? this.now();
-    const capturedAtMs = input.capturedAtMs ?? recordedAtMs;
-    const aggregated = aggregateDiffStoreEvents(input.workspaceRoot, input.events);
-    if (aggregated.length === 0) return [];
-    // One durable token per persistence attempt orders current-state proofs even
-    // when an older multi-file turn finishes compression after a newer turn.
-    const headProof = await this.store.allocateHeadProof();
-
-    const analysisStartedAtMs = Date.now();
-    const analyses = await mapWithConcurrency(aggregated, 2, async (event) => {
-      const analysis = await computeTurnEvidenceAsync(
-        event.oldText,
-        event.newText,
-        path.resolve(input.workspaceRoot, event.path)
-      );
-      return {
-        ...analysis,
-        headProof: analysis.newIsCurrent ? headProof : null,
-      };
-    });
-    const analysisMs = Date.now() - analysisStartedAtMs;
-    const result = await this.store.recordTurn({
-      ownerId: input.ownerSessionId,
-      turnId: input.turnId,
-      capturedAtMs,
-      recordedAtMs,
-      ...(input.orderKey === undefined ? {} : { orderKey: input.orderKey }),
-      events: aggregated.map((event, index) => {
-        const analysis = analyses[index];
-        if (!analysis) throw new Error(`Missing turn analysis for turn-diff path ${event.path}.`);
-        return {
-          path: event.path,
-          oldText: event.oldText,
-          newText: event.newText,
-          newIsCurrent: analysis.newIsCurrent,
-          headProof: analysis.headProof,
-          add: analysis.lineCounts[0],
-          del: analysis.lineCounts[1],
-        };
-      }),
-    });
-    const fileDiff = result.files.map((file) => ({
-      filePath: file.path,
-      add: file.add,
-      del: file.del,
-    }));
-    this.logger.info(
-      `[code-collab] diff store recordTurnDiffs completed ownerSessionId=${
-        input.ownerSessionId
-      } turnId=${input.turnId} inputEvents=${input.events.length} aggregatedEvents=${
-        aggregated.length
-      } fileDiffs=${fileDiff.length} totalTextBytes=${sumEventTextBytes(
-        aggregated
-      )} durationMs=${Date.now() - startedAtMs} analysisMs=${analysisMs} storeMs=${result.metrics.totalMs.toFixed(
-        1
-      )} encodeMs=${result.metrics.encodeMs.toFixed(
-        1
-      )} chunkingMs=${result.metrics.chunkingMs.toFixed(1)} hashingMs=${result.metrics.hashingMs.toFixed(
-        1
-      )} compressionMs=${result.metrics.compressionMs.toFixed(
-        1
-      )} transactionMs=${result.metrics.transactionMs.toFixed(1)} newChunks=${
-        result.metrics.newChunks
-      } reusedChunks=${result.metrics.reusedChunks} gcScheduled=${result.gcScheduled}`
-    );
-    return fileDiff;
-  }
-
   async listChangedPaths(input: {
     readonly ownerSessionId: SessionId;
     readonly nowMs?: number;
@@ -210,18 +121,6 @@ export class CodeCollabV2DiffStore {
       turnId: input.turnId,
       path: input.path,
       ...(input.nowMs === undefined ? {} : { nowMs: input.nowMs }),
-      ...(input.maxRawBytes === undefined ? {} : { maxRawBytes: input.maxRawBytes }),
-    });
-  }
-
-  async getLatestText(input: {
-    readonly ownerSessionId: SessionId;
-    readonly path: string;
-    readonly maxRawBytes?: number;
-  }): Promise<LatestTurnDiffText> {
-    return await this.store.getLatestText({
-      ownerId: input.ownerSessionId,
-      path: input.path,
       ...(input.maxRawBytes === undefined ? {} : { maxRawBytes: input.maxRawBytes }),
     });
   }
@@ -276,68 +175,6 @@ export function getCodeCollabV2DiffStoreDbPath(workspaceId: string): string {
     safeWorkspaceSegment(workspaceId),
     'diff-store.sqlite3'
   );
-}
-
-function aggregateDiffStoreEvents(
-  workspaceRoot: string,
-  events: readonly CodeCollabV2DiffStoreEvent[]
-): readonly CodeCollabV2DiffStoreEvent[] {
-  const root = path.resolve(workspaceRoot);
-  const byPath = new Map<string, CodeCollabV2DiffStoreEvent>();
-  for (const event of events) {
-    const normalizedPath = normalizeEvidencePath(root, event.path);
-    if (!normalizedPath) continue;
-    const existing = byPath.get(normalizedPath);
-    byPath.set(normalizedPath, {
-      path: normalizedPath,
-      oldText: existing === undefined ? event.oldText : existing.oldText,
-      newText: event.newText,
-    });
-  }
-  return [...byPath.values()];
-}
-
-function sumEventTextBytes(events: readonly CodeCollabV2DiffStoreEvent[]): number {
-  let total = 0;
-  for (const event of events) {
-    total += event.oldText === null ? 0 : Buffer.byteLength(event.oldText, 'utf8');
-    total += event.newText === null ? 0 : Buffer.byteLength(event.newText, 'utf8');
-  }
-  return total;
-}
-
-function normalizeEvidencePath(workspaceRoot: string, evidencePath: string): string | null {
-  if (evidencePath.includes('\0')) return null;
-  const realWorkspaceRoot = realpathOrSelf(workspaceRoot);
-  const absolutePath = path.isAbsolute(evidencePath)
-    ? path.resolve(evidencePath)
-    : path.resolve(workspaceRoot, evidencePath);
-  const realAbsolutePath = realpathOrSelf(absolutePath);
-  for (const candidatePath of uniqueStrings([absolutePath, realAbsolutePath])) {
-    for (const candidateRoot of uniqueStrings([workspaceRoot, realWorkspaceRoot])) {
-      const relative = path.relative(candidateRoot, candidatePath).replace(/\\/g, '/');
-      if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) continue;
-      return path.posix.normalize(relative.normalize('NFC'));
-    }
-  }
-  return null;
-}
-
-function realpathOrSelf(inputPath: string): string {
-  try {
-    return realpathSync.native(inputPath);
-  } catch {
-    const parent = path.dirname(inputPath);
-    if (parent !== inputPath) {
-      const realParent = realpathOrSelf(parent);
-      if (realParent !== parent) return path.join(realParent, path.basename(inputPath));
-    }
-    return inputPath;
-  }
-}
-
-function uniqueStrings(values: readonly string[]): string[] {
-  return [...new Set(values)];
 }
 
 function normalizeRetentionDays(value: number | undefined): number {

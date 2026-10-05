@@ -43,7 +43,6 @@ import { SessionConfig, SessionOutputEvent, SessionErrorEvent, SessionExitEvent 
 import { LoroDocumentManager } from '../lib/loro/doc';
 import {
   AgentClient,
-  type AcpWriteTextFileEvidence,
   type AcpStartupStageEvent,
   type AcpSessionStartTarget,
   type AgentClientOptions,
@@ -359,7 +358,6 @@ export interface CreateAgentConfig {
   loadExternalMcpServers: NonNullable<AgentClientOptions['loadExternalMcpServers']>;
   onImageGenerationBegin: (event: ImageGenerationBeginEvent) => void;
   onImageGenerationEnd: (event: ImageGenerationEndEvent) => void;
-  onWriteTextFile: (event: AcpWriteTextFileEvidence) => void | Promise<void>;
 }
 
 export type AgentStartConfig = {
@@ -405,7 +403,6 @@ interface SessionManagerEvents {
   onAgentWarning: (sessionId: SessionId, warning: AgentSessionWarning) => void;
   onImageGenerationBegin: (sessionId: SessionId, event: ImageGenerationBeginEvent) => void;
   onImageGenerationEnd: (sessionId: SessionId, event: ImageGenerationEndEvent) => void;
-  onWriteTextFile: (sessionId: SessionId, event: AcpWriteTextFileEvidence) => void;
   ping: () => void;
 }
 
@@ -1382,9 +1379,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         dispatchEvent(() => this.emit('onImageGenerationBegin', sessionId, event)),
       onImageGenerationEnd: (event) =>
         dispatchEvent(() => this.emit('onImageGenerationEnd', sessionId, event)),
-      onWriteTextFile: (event) => {
-        dispatchEvent(() => this.emit('onWriteTextFile', sessionId, event));
-      },
     };
   }
 

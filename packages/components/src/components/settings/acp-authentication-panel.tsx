@@ -28,7 +28,6 @@ import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { isElectronRenderer } from '@/lib/electron';
 import { openExternalUrl } from '@/lib/native-browser';
-import { isNativeAppShell } from '@/lib/native-platform';
 import { cn } from '@/lib/utils';
 import { selectTriggerClassName } from '@/ui/select';
 
@@ -937,7 +936,7 @@ function getAcpAuthenticationAccountName(agentType: string): string | undefined 
 }
 
 function prepareAuthorizationWindow(message: string): Window | null {
-  if (typeof window === 'undefined' || isElectronRenderer() || isNativeAppShell()) {
+  if (typeof window === 'undefined' || isElectronRenderer()) {
     return null;
   }
   try {

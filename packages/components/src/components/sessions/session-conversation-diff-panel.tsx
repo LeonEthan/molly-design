@@ -10,10 +10,8 @@ import {
   type SessionMeta,
 } from '@molly/shared';
 import { useAtomValue } from 'jotai';
-import { usePostHog } from '@posthog/react';
 import { toast } from 'sonner';
-import { currentWorkspaceIdAtom, userAtom } from '@/atoms';
-import { captureDiffCommentSentToChat } from './diff-pr-analytics';
+import { userAtom } from '@/atoms';
 import { DiffViewer } from '@/ui/diff-viewer/diff-viewer';
 import { ScrollArea } from '@/ui/scroll-area';
 import { Skeleton } from '@/ui/skeleton';
@@ -289,13 +287,7 @@ function SessionConversationDiffPanelImpl({
   onOpenFile,
 }: SessionConversationDiffPanelProps) {
   const { t } = useTranslation();
-  const postHog = usePostHog();
-  const currentWorkspaceId = useAtomValue(currentWorkspaceIdAtom);
   const user = useAtomValue(userAtom);
-  const diffCommentAnalyticsBase = useMemo(
-    () => ({ workspaceId: currentWorkspaceId ?? null, sessionId, mode }),
-    [currentWorkspaceId, mode, sessionId]
-  );
   const currentUser = useMemo<CommentUser | null>(
     () => (user ? { id: user.id, name: user.name, image: user.image ?? null } : null),
     [user]
@@ -424,14 +416,9 @@ function SessionConversationDiffPanelImpl({
         return false;
       }
       const accepted = onSendToChat(reference) !== false;
-      captureDiffCommentSentToChat(postHog, diffCommentAnalyticsBase, {
-        source: reference.source,
-        accepted,
-        replyCount: reference.replies?.length ?? 0,
-      });
       return accepted;
     },
-    [diffCommentAnalyticsBase, onSendToChat, postHog]
+    [onSendToChat]
   );
 
   const commentCallbacks = useMemo<DiffViewerCommentCallbacks>(

@@ -15,8 +15,6 @@
     "dev:local": "corepack pnpm --dir apps/electron dev:local",
     "start:local": "corepack pnpm --dir apps/electron start:local",
     "storybook": "corepack pnpm --filter @molly/components storybook",
-    "storybook:review-helper": "corepack pnpm --filter @molly/code-review-helper storybook",
-    "build-storybook:review-helper": "corepack pnpm --filter @molly/code-review-helper build-storybook",
     "clean": "corepack pnpm -r run clean",
     "format": "corepack pnpm -r run format",
     "format:check": "corepack pnpm -r run format:check",

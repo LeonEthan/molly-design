@@ -23,8 +23,6 @@ import { isImeComposingNativeKeyboardEvent } from '@/lib/ime';
  *     control reports `aria-expanded="true"`).
  *   - The composer textarea is NOT part of the arrow ring (arrows edit text there); it
  *     is reached via the ⌘L `session.focusInput` command (a toggle: focus / exit).
- *
- * Scoped to `rootRef` and only active when `enabled`, so mobile/touch is untouched.
  */
 
 type Direction = 'up' | 'down' | 'left' | 'right';

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from '@tanstack/react-router';
 import { ElectronBrowserAccountSiteInputSchema } from '@molly/shared/electron-ipc';
 import {
   BrowserAddressError,
@@ -22,14 +21,13 @@ import {
 
 import {
   activeWorkspaceRuntimeAtom,
-  currentWorkspaceSlugAtom,
   settingsActiveTabAtom,
   settingsDialogOpenAtom,
   userAtom,
 } from '@/atoms';
 import { Button } from '@/ui/button';
 import { isElectronRenderer } from '@/lib/electron';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { getPlatform } from '@/lib/commands/platform';
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { useSessionDoc } from '@/hooks/use-session-doc';
@@ -79,10 +77,8 @@ function SessionBrowserPanelController({
 }: SessionBrowserPanelProps) {
   const { t } = useTranslation();
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
-  const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const user = useAtomValue(userAtom);
-  const isMobile = useIsMobile();
-  const routeNavigate = useNavigate();
+
   const setSettingsTab = useSetAtom(settingsActiveTabAtom);
   const setSettingsOpen = useSetAtom(settingsDialogOpenAtom);
   const sessionDoc = useSessionDoc(session.id);
@@ -693,13 +689,6 @@ function SessionBrowserPanelController({
     : undefined;
 
   const openAccountSettings = () => {
-    if (isMobile && workspaceSlug) {
-      void routeNavigate({
-        to: '/$workspaceName/settings/browser-accounts',
-        params: { workspaceName: workspaceSlug },
-      });
-      return;
-    }
     setSettingsTab('browser-accounts');
     setSettingsOpen(true);
   };

@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type MutableRefObject,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useAtomValue } from 'jotai';
 import {
   getLocalProjectHistoryProviderKey,
@@ -161,13 +154,6 @@ function useWorktreeScriptConfigState(cache: WorktreeScriptConfigCache) {
   };
 }
 
-/**
- * Subscribes to the same atoms + Convex mutations as the original
- * `ProjectSettingsComponent` and exposes the sections + handlers it
- * needs. Both `ProjectSettingsComponent` and `MobileLocalProjectSettings`
- * call this hook so they share the same data model and produce
- * identical `ProjectSettingsRow` shapes.
- */
 export function useLocalProjectsAdmin(): LocalProjectsAdminData {
   const currentUserId = useAtomValue(userAtom)?.id ?? null;
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
@@ -177,11 +163,7 @@ export function useLocalProjectsAdmin(): LocalProjectsAdminData {
      workspace slug doesn't match the runtime's — that guard makes
      sense for chat / session ACTIONS (PR #2220), but reading
      read-only project metadata is fine even mid-route-switch.
-     Going through the stricter atom caused the ACP-history "Sync"
-     section to flicker / stay hidden on Capacitor mobile, where the
-     slug atom takes a beat longer to settle after route changes.
-     The desktop path doesn't hit this because Electron loads the
-     route synchronously from the URL on cold start. */
+     */
   const runtime = useAtomValue(runtimeAtom);
   const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   const sessionMetas = useAtomValue(sessionMetaCacheAtom);

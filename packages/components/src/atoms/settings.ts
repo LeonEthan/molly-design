@@ -65,16 +65,13 @@ export const interfaceFontFamilyAtom = atom(
   }
 );
 
-// Desktop settings modal open state. On desktop (non-mobile) the settings UI is a
-// modal overlay driven by this atom instead of a full-page route. Mobile keeps the
 // route-based settings page and ignores this atom.
 export const settingsDialogOpenAtom = atom<boolean>(false);
 
-// Which tab the desktop settings modal shows. Mirrors the route-based tab on mobile.
 export const settingsActiveTabAtom = atom<SettingsTabId>(SETTINGS_DEFAULT_TAB);
 
 // Optional resource targets used by Account shortcuts. Routes keep the same
-// values in search params on mobile; the desktop modal keeps them here while
+
 // switching between its Account, Agents, Projects, and machine-detail views.
 export const settingsSelectedMachineIdAtom = atom<MachineId | null>(null);
 export const settingsSelectedProjectKeyAtom = atom<string | null>(null);
@@ -94,7 +91,7 @@ export const electronSessionCompletionNotificationsEnabledAtom = atomWithProduct
 
 // File viewer (Monaco) line-wrap toggle. Defaults on so a long single line
 // (e.g. an unwrapped Markdown paragraph) stays readable without horizontal
-// scrolling — especially on mobile. Shared by every SessionMonacoTextViewer
+
 // mount via the viewer reading this atom directly.
 export const fileViewerWordWrapAtom = atomWithProductStorage<boolean>(
   'molly-file-viewer-word-wrap',
@@ -138,7 +135,6 @@ export const autoArchiveOnPrClosedAtom = atomWithProductStorage<boolean>(
 /** localStorage keys for developer-only beta gates — keep in sync with the atoms below. */
 export const DEVELOPER_MODE_STORAGE_KEY = 'molly-developer-mode-enabled';
 export const TASKS_BETA_STORAGE_KEY = 'molly-tasks-beta-enabled';
-export const INBOX_BETA_STORAGE_KEY = 'molly-inbox-beta-enabled';
 
 /**
  * Synchronous read of the Tasks feature gate from localStorage.
@@ -192,20 +188,6 @@ export const tasksBetaEnabledAtom = atomWithProductStorage<boolean>(
  */
 export const tasksFeatureEnabledAtom = atom(
   (get) => get(developerModeEnabledAtom) && get(tasksBetaEnabledAtom)
-);
-
-// Opt-in for the unfinished mobile Inbox. Like Tasks, this is reachable only
-// from the beta section while Developer mode is on.
-export const inboxBetaEnabledAtom = atomWithProductStorage<boolean>(
-  INBOX_BETA_STORAGE_KEY,
-  false,
-  undefined,
-  { getOnInit: true }
-);
-
-/** The single gate for showing the unfinished mobile Inbox entry. */
-export const inboxFeatureEnabledAtom = atom(
-  (get) => get(developerModeEnabledAtom) && get(inboxBetaEnabledAtom)
 );
 
 /** localStorage keys for the experimental features gate. */

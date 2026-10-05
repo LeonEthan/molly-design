@@ -7,19 +7,10 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from 'react';
-import {
-  Archive,
-  GitBranch,
-  GitPullRequest,
-  Link2,
-  Pencil,
-  Pin,
-  PinOff,
-} from 'lucide-react';
+import { Archive, GitBranch, GitPullRequest, Link2, Pencil, Pin, PinOff } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
-import { formatCompactRelativeTime } from '@/lib/format-relative-time';
 import { TooltipProvider } from '@/ui/tooltip';
 import {
   ContextMenu,
@@ -28,7 +19,6 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/ui/context-menu';
-import { SwipeActionRow } from '@/components/shared/swipe-action-row';
 import {
   SessionPrIcon,
   SessionMergeablePill,
@@ -193,7 +183,7 @@ export type SidebarUpdatedTaskListProps = {
   items: SidebarUpdatedItem[];
   now: Date;
   selectedItemId?: string | null;
-  isMobile?: boolean;
+
   /** Whether pinned rows show a leading pin icon. */
   showPinnedIcon?: boolean;
   /**
@@ -205,11 +195,7 @@ export type SidebarUpdatedTaskListProps = {
   className?: string;
   labels?: Partial<SidebarUpdatedTaskListLabels>;
   onSelectItem?: (id: string) => void;
-  /**
-   * Archive an item. When provided, desktop rows reveal an Archive button on hover
-   * (replacing the relative timestamp) with a two-step Archive → Confirm flow, and
-   * mobile rows expose the same action via left-swipe + tap-to-confirm.
-   */
+
   onArchiveItem?: (id: string) => void;
   /**
    * Inline-rename an item. When provided, rows expose Rename via the desktop
@@ -266,7 +252,6 @@ export const SidebarUpdatedTaskList = memo(function SidebarUpdatedTaskList({
   items,
   now,
   selectedItemId,
-  isMobile = false,
   showPinnedIcon = true,
   isLoading = false,
   className,
@@ -419,7 +404,6 @@ export const SidebarUpdatedTaskList = memo(function SidebarUpdatedTaskList({
                 label={bucket.label}
                 collapsed={collapsed}
                 action={bucketHeaderAction}
-                isMobile={isMobile}
                 toggleLabel={toggleBucketLabel}
                 onToggleCollapsed={canToggleBucket ? handleToggle : undefined}
               />
@@ -431,7 +415,6 @@ export const SidebarUpdatedTaskList = memo(function SidebarUpdatedTaskList({
                       item={item}
                       now={now}
                       selected={item.id === selectedItemId}
-                      isMobile={isMobile}
                       showPinnedIcon={showPinnedIcon}
                       href={getItemHref?.(item.id)}
                       isEditing={editingItemId === item.id}
@@ -448,7 +431,6 @@ export const SidebarUpdatedTaskList = memo(function SidebarUpdatedTaskList({
                       onCancelRename={cancelRename}
                       contextMenuLabels={contextMenuLabels}
                       archiveTooltipLabel={archiveLabels.tooltip}
-                      archiveActionLabel={archiveLabels.action}
                       archiveConfirmLabel={archiveLabels.confirm}
                     />
                   ))}
@@ -488,7 +470,7 @@ type UpdatedItemRowProps = {
   item: SidebarUpdatedItem;
   now: Date;
   selected: boolean;
-  isMobile: boolean;
+
   showPinnedIcon: boolean;
   href?: string;
   isEditing: boolean;
@@ -505,7 +487,7 @@ type UpdatedItemRowProps = {
   onCancelRename: () => void;
   contextMenuLabels: SidebarUpdatedContextMenuLabels;
   archiveTooltipLabel: string;
-  archiveActionLabel: string;
+
   archiveConfirmLabel: string;
 };
 
@@ -513,7 +495,6 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   item,
   now,
   selected,
-  isMobile,
   showPinnedIcon,
   href,
   isEditing,
@@ -530,15 +511,13 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   onCancelRename,
   contextMenuLabels,
   archiveTooltipLabel,
-  archiveActionLabel,
   archiveConfirmLabel,
 }: UpdatedItemRowProps) {
   const showSelectedState = selected;
   // Editing rows must not turn into anchors: the overlay <a> would intercept
   // clicks on the input. Same trick as TaskList.
   const useAnchor = typeof href === 'string' && href.length > 0 && !isEditing;
-  // Mobile keeps a right-edge relative time (no hover info card on touch).
-  const relativeTime = formatCompactRelativeTime(item.latestMessageAt, now);
+
   const prUrl = typeof item.prUrl === 'string' && item.prUrl.trim() ? item.prUrl.trim() : null;
   const prNumber =
     typeof item.prNumber === 'number' && Number.isFinite(item.prNumber)
@@ -583,22 +562,21 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
     : undefined;
 
   const canArchive = typeof onArchive === 'function';
-  const showInlineArchive = canArchive && !isMobile;
+  const showInlineArchive = canArchive;
   const canRename = typeof onRename === 'function';
   const canTogglePin = typeof onTogglePin === 'function';
   const canCopyUrl = typeof onCopyUrl === 'function';
   // Desktop-only context menu mirrors TaskList's: rename / pin / archive /
-  // copyUrl / copyBranch. Mobile users reach archive via swipe and lack the
+
   // other actions in both organize modes — keeping it consistent rather than
-  // inventing a new mobile entry point here.
+
   const hasMenuActions =
-    !isMobile &&
-    (canRename ||
-      canTogglePin ||
-      canArchive ||
-      canCopyUrl ||
-      Boolean(branchName) ||
-      (showPr && Boolean(onOpenPullRequest)));
+    canRename ||
+    canTogglePin ||
+    canArchive ||
+    canCopyUrl ||
+    Boolean(branchName) ||
+    (showPr && Boolean(onOpenPullRequest));
   const titleFontClassName = item.isPinned ? 'font-normal' : 'font-medium';
 
   const handlePrOpen =
@@ -677,7 +655,6 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         'border border-transparent bg-transparent',
         !showSelectedState &&
           onSelect &&
-          !isMobile &&
           'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-hover data-[menu-open]:text-sidebar-hover-foreground',
         showSelectedState &&
           'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
@@ -755,17 +732,13 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           hasUnreadMessages={item.hasUnreadMessages}
           fadeClassName="group-hover/row:opacity-0"
           restIcon={
-            showPr ||
-            hasChanges ||
-            showMergeablePill ||
-            isMobile ? (
+            showPr || hasChanges || showMergeablePill ? (
               <span
                 className={cn(
                   'flex select-none items-center gap-1.5 text-[11px] tabular-nums text-sidebar-foreground-muted/80',
                   useAnchor && 'z-20'
                 )}
               >
-                {isMobile ? <span>{relativeTime}</span> : null}
                 {showMergeablePill ? (
                   <SessionMergeablePill />
                 ) : hasChanges && !isMergeable ? (
@@ -794,33 +767,8 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
   );
 
   // Tooltip anchored to the row reveals the section the item belongs to (desktop only).
-  // Skipping it on mobile keeps long-press behavior available for native gestures.
-  // Mobile additionally wraps the row in SwipeActionRow when archive is wired so a
+
   // left-swipe reveals the Archive action with tap-to-confirm.
-  if (isMobile) {
-    if (!canArchive) return row;
-    return (
-      <SwipeActionRow
-        enabled={isMobile}
-        className="rounded-md"
-        contentClassName="bg-sidebar"
-        actions={[
-          {
-            key: 'archive',
-            label: archiveActionLabel,
-            ariaLabel: archiveTooltipLabel,
-            icon: <Archive className="h-4 w-4" />,
-            hideLabel: item.kind === 'chat',
-            className: 'bg-sidebar-hover text-sidebar-hover-foreground',
-            onClick: () => onArchive?.(item.id),
-          },
-        ]}
-        onCommit={() => onArchive?.(item.id)}
-      >
-        {row}
-      </SwipeActionRow>
-    );
-  }
 
   const menuRow = hasMenuActions ? (
     <ContextMenu onOpenChange={setRowMenuOpen}>

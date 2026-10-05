@@ -12,7 +12,6 @@ import type { TerminalManager } from '@/session/terminal-manager';
 import {
   AgentClient,
   type AgentClientOptions,
-  type AcpWriteTextFileEvidence,
   type AgentSessionWarning,
   type ImageGenerationBeginEvent,
   type ImageGenerationEndEvent,
@@ -34,7 +33,6 @@ import type {
 } from '@molly/shared';
 
 import type { RateLimit, SessionUsageUpdate } from 'acp-extension-core';
-import type { AcpLauncher } from './acp-analytics';
 import { assertEmbeddedHarnessTarget } from './embedded-harness-runtime';
 
 export type CreateAcpClientOptions = {
@@ -49,8 +47,6 @@ export type CreateAcpClientOptions = {
   };
   configOptionValues?: AgentClientOptions['configOptionValues'];
   taskToolsEnabled?: boolean;
-  /** Launcher family (npx/uvx/local) for ACP startup analytics; non-PII. */
-  launcher?: AcpLauncher;
   resumeSessionId?: ACPSessionId;
   forkSessionId?: ACPSessionId;
   /** Provider-native turn id selected as the source boundary for a turn-addressed fork. */
@@ -81,7 +77,6 @@ export type CreateAcpClientOptions = {
   onPersonalMemory?: AgentClientOptions['onPersonalMemory'];
   onImageGenerationBegin?(event: ImageGenerationBeginEvent): void;
   onImageGenerationEnd?(event: ImageGenerationEndEvent): void;
-  onWriteTextFile?(event: AcpWriteTextFileEvidence): void | Promise<void>;
   sessionId?: SessionId;
   startupTimeouts?: AcpStartupTimeoutOptions;
   startupAbort?: Promise<never>;
@@ -101,7 +96,6 @@ export const createAcpClient = async (options: CreateAcpClientOptions) => {
     agentConfig: options.agentConfig,
     configOptionValues: options.configOptionValues,
     taskToolsEnabled: options.taskToolsEnabled,
-    launcher: options.launcher,
     terminalEnabled: options.terminalEnabled,
     onStartupStage: options.onStartupStage,
     onUpdateMessage: options.onUpdateMessage,
@@ -119,7 +113,6 @@ export const createAcpClient = async (options: CreateAcpClientOptions) => {
     onPersonalMemory: options.onPersonalMemory,
     onImageGenerationBegin: options.onImageGenerationBegin,
     onImageGenerationEnd: options.onImageGenerationEnd,
-    onWriteTextFile: options.onWriteTextFile,
   });
   options.logger.debug(`[${sessionId}] createAcpClient: AgentClient created, calling startSession`);
   const sessionResponse = await client.startSession(

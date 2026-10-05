@@ -544,309 +544,9 @@ svg.lucide:not([data-molly-brand]) {
 }
 
 @layer components {
-  /* Mobile home (Konsta). Tints Konsta's iOS/Material chrome with project
-     theme tokens. Two layout vars expose the sticky header height + the
-     Konsta Tabbar height so the sticky machine bar can park beneath the
-     header and the scroll region can reserve bottom space for the Tabbar.
-
-     Rejected: per-element class overrides on Konsta internals — re-derives
-     upstream layout and drifts on Konsta upgrades. We retint at the
-     `.k-list-*` and `.k-tabbar` level only. */
-
-  .mobile-home-app {
-    --mobile-tabbar-height: 3.75rem;
-    --mobile-home-header-height: calc(3.25rem + var(--k-safe-area-top, 0px));
-  }
-
-  /* Konsta's Material tabbar reserves more vertical space for the top label
-     padding. Theme via `.k-material` so each theme gets the right height. */
-  .mobile-home-app.k-material {
-    --mobile-tabbar-height: 4.25rem;
-  }
-
-  /* iOS-style translucent material for the sticky header + machine bar.
-     Mirrors Konsta's `.translucent` recipe (`saturate(180%) blur(20px)` +
-     ~70% bg opacity) so the custom bars match the Konsta Tabbar and Popover
-     that already opt in. The `-webkit-` prefix is for WKWebView, which still
-     ships the prefixed version of backdrop-filter alongside the unprefixed
-     one. */
-  @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-    .mobile-home-glass {
-      background: hsl(var(--background) / 0.72);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      backdrop-filter: saturate(180%) blur(20px);
-    }
-  }
-
-  @supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
-    .mobile-home-glass {
-      background: hsl(var(--background) / 0.96);
-    }
-  }
-
-  /* Sticky machine / owner heading inside the home tab lists.
-     Translucent + backdrop-blur like `.mobile-home-glass`, but the
-     opacity is bumped to 0.9 (vs 0.72 for the screen header) because
-     the rows scrolling underneath are full-opacity Konsta List cards
-     — with 0.72 the row content reads through the heading background
-     as soft ghosting. The backdrop-blur catches the rest so the
-     heading still feels like the iOS material rather than a flat
-     opaque bar. */
-  @supports (backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px)) {
-    .mobile-home-group-heading {
-      background: hsl(var(--background) / 0.9);
-      -webkit-backdrop-filter: saturate(180%) blur(20px);
-      backdrop-filter: saturate(180%) blur(20px);
-    }
-  }
-  @supports not ((backdrop-filter: blur(20px)) or (-webkit-backdrop-filter: blur(20px))) {
-    .mobile-home-group-heading {
-      background: hsl(var(--background));
-    }
-  }
-
-  /* Hide horizontal scrollbar on the machine chip row. */
-  .mobile-home-shell .hide-scrollbar {
-    scrollbar-width: none;
-  }
-
-  .mobile-home-shell .hide-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* GitHub row description: single line, ellipsis on overflow. Konsta's
-     subtitle slot has no width constraints of its own, and Tailwind's
-     line-clamp-1 utility wasn't being authored in this layer, so we own
-     the rule here. */
-  .mobile-home-row-description {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    word-break: break-word;
-  }
-
-  /* Active machine pill: a 2px primary-tinted ring makes the selected chip
-     obviously distinct from the rest of the row. The default floating pill
-     only carries a shadow, which reads as a flat row of chips when scanning
-     quickly. Pair with a faint primary background tint so the pill is still
-     legible in low-contrast environments. */
-  .mobile-home-machine-pill--active {
-    box-shadow:
-      0 0 0 2px hsl(var(--primary) / 0.55),
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 8px 24px -12px rgba(0, 0, 0, 0.18) !important;
-    background-color: hsl(var(--primary) / 0.08) !important;
-  }
-
-  /* Chat landing keyboard navigation: the option under the roving
-     focus carries `data-qs-active` (set by useChatLandingKeyboardNav). A
-     primary outline + faint tint highlights it consistently across pickers,
-     tabs, toggles and the send button, independent of each control's own
-     :focus-visible. An INSET ring (not outline / outer ring) so global focus
-     outline-suppression can't hide it and the overflow-hidden animated sheet
-     rows can't clip it; `!important` to win over each control's own ring vars. */
   [data-qs-active] {
     box-shadow: inset 0 0 0 2px hsl(var(--primary) / 0.75) !important;
     background-color: hsl(var(--primary) / 0.08) !important;
-  }
-
-  /* Konsta List surfaces: use shadow elevation to float the card above the
-     scroll surface. In dark mode --card may match --background, so add a 1px
-     border to keep the card distinguishable.
-
-     Konsta's default surface is `bg-ios-light-surface-1` /
-     `dark:bg-ios-dark-surface-1` — those are hard-coded greys that ignore
-     our HSL theme tokens. Force the surface to use `--card` so the list
-     follows whatever theme the rest of the app uses (warm white in light,
-     dark navy in dark).
-
-     Tighten Konsta's `inset` left/right margin (defaults to ml-safe-4 /
-     mr-safe-4 = 16px each side) so list rows reach closer to the screen
-     edge. The full design uses a roomy card; we go down to 12px = ps-safe-3
-     so rows still breathe and the rounded corners remain visible. */
-  .mobile-home-list {
-    border: none !important;
-    margin-left: max(0.75rem, env(safe-area-inset-left, 0px)) !important;
-    margin-right: max(0.75rem, env(safe-area-inset-right, 0px)) !important;
-    background: hsl(var(--card)) !important;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 8px 24px -16px rgba(0, 0, 0, 0.12);
-  }
-
-  .dark .mobile-home-list,
-  .mobile-home-app.dark .mobile-home-list {
-    border: 1px solid hsl(var(--border) / 0.55) !important;
-    box-shadow: none;
-  }
-
-  .mobile-home-list :where(.k-list-item) {
-    background: transparent;
-    color: hsl(var(--foreground));
-  }
-
-  .mobile-home-list :where(.k-list-item:not(:last-child)) {
-    border-color: hsl(var(--border) / 0.55);
-  }
-
-  .mobile-home-list :where(.k-list-item-content) {
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  /* Konsta renders the row's interactive surface as a `<button>` that sizes
-     to content. With short titles ("lody", "loro") `justify-between` in the
-     title wrap collapses to the title width and the `after` badge ends up
-     beside the text instead of at the row's right edge. Force the row to
-     fill the list width (then the after slot snaps to the rounded card
-     edge) and reset the browser default `text-align: center` on `<button>`,
-     which otherwise leaks into the subtitle block below the title wrap. */
-  .mobile-home-list :where(.k-list-item) > :where(button, a, div, span) {
-    width: 100%;
-    text-align: start;
-  }
-
-  .mobile-home-list :where(.k-list-item-content:active) {
-    background: hsl(var(--muted) / 0.7);
-  }
-
-  /* Konsta hard-codes font-semibold on the iOS strong-list title; dial that
-     back to medium so list rows match the rest of the project's Inter
-     typography. */
-  .mobile-home-list :where(.k-list-item-title),
-  .mobile-home-list :where(div[class*='shrink'].font-semibold) {
-    color: hsl(var(--foreground));
-    font-weight: 500 !important;
-    letter-spacing: -0.005em;
-  }
-
-  .mobile-home-list :where(.k-list-item-subtitle),
-  .mobile-home-list :where(.k-list-item-text) {
-    color: hsl(var(--muted-foreground));
-  }
-
-  .mobile-home-list :where(.k-list-item-inner) {
-    min-width: 0;
-  }
-
-  /* Bottom dock pill surface (Chat / Projects). Solid elevated card —
-     frosted / semi-transparent experiments were dropped (no useful
-     blur over white canvas). Crisp rim + soft outer lift only. */
-  .mobile-tabbar-glass {
-    background: hsl(var(--card)) !important;
-    border: 1px solid hsl(var(--foreground) / 0.1);
-    box-shadow:
-      0 0 0 0.5px hsl(var(--foreground) / 0.04),
-      0 6px 20px -6px rgba(0, 0, 0, 0.14),
-      0 18px 40px -16px rgba(0, 0, 0, 0.16) !important;
-  }
-
-  .dark .mobile-tabbar-glass,
-  .mobile-home-app.dark .mobile-tabbar-glass {
-    background: hsl(var(--card)) !important;
-    border-color: hsl(0 0% 100% / 0.16);
-    box-shadow:
-      0 0 0 0.5px hsl(0 0% 100% / 0.08),
-      0 8px 24px -6px rgba(0, 0, 0, 0.5),
-      0 20px 48px -16px rgba(0, 0, 0, 0.45) !important;
-  }
-
-  .mobile-home-tabbar {
-    height: calc(var(--mobile-tabbar-height) + var(--k-safe-area-bottom, 0px)) !important;
-    padding-bottom: var(--k-safe-area-bottom, 0px) !important;
-  }
-
-  .mobile-home-tabbar
-    :where(.k-toolbar-pane, [class*='bg-ios-light-glass'], [class*='bg-ios-dark-glass']) {
-    background: hsl(var(--card)) !important;
-    border: 1px solid hsl(var(--foreground) / 0.1) !important;
-    box-shadow:
-      0 0 0 0.5px hsl(var(--foreground) / 0.04),
-      0 6px 20px -6px rgba(0, 0, 0, 0.14),
-      0 18px 40px -16px rgba(0, 0, 0, 0.16) !important;
-  }
-
-  .dark
-    .mobile-home-tabbar
-    :where(.k-toolbar-pane, [class*='bg-ios-light-glass'], [class*='bg-ios-dark-glass']),
-  .mobile-home-app.dark
-    .mobile-home-tabbar
-    :where(.k-toolbar-pane, [class*='bg-ios-light-glass'], [class*='bg-ios-dark-glass']) {
-    background: hsl(var(--card)) !important;
-    border-color: hsl(0 0% 100% / 0.16) !important;
-    box-shadow:
-      0 0 0 0.5px hsl(0 0% 100% / 0.08),
-      0 8px 24px -6px rgba(0, 0, 0, 0.5),
-      0 20px 48px -16px rgba(0, 0, 0, 0.45) !important;
-  }
-
-  .mobile-home-tabbar :where(.k-tabbar-link-active) {
-    color: hsl(var(--primary)) !important;
-  }
-
-  /* Project detail screen reuses the home screen's chrome (App shell, glass
-     bars, popovers, tab dock spacing), so its surface tokens piggyback off
-     the existing `.mobile-home-*` rules. The card itself is plain so we
-     style it with Tailwind utilities + this one block: same shadow/border
-     story as the Konsta List card but on a plain <div>. */
-  .mobile-project-list-card {
-    margin-left: max(0.75rem, env(safe-area-inset-left, 0px));
-    margin-right: max(0.75rem, env(safe-area-inset-right, 0px));
-    border-radius: 1.5rem;
-    background: hsl(var(--card));
-    overflow: hidden;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 8px 24px -16px rgba(0, 0, 0, 0.12);
-  }
-
-  .dark .mobile-project-list-card,
-  .mobile-home-app.dark .mobile-project-list-card {
-    border: 1px solid hsl(var(--border) / 0.55);
-    box-shadow: none;
-  }
-
-  /* Filter popover lives inside Konsta's Glass inner — drop its default
-     padding so our own per-section padding lines up cleanly with the
-     popover edges. */
-  .mobile-project-filter-panel {
-    padding-bottom: 0.5rem;
-  }
-
-  .mobile-project-filter-panel + * {
-    /* nothing yet — placeholder for future sub-panels */
-  }
-
-  /* Popover for workspace switcher / overflow / project-screen filter +
-     scope menus. Konsta's Popover renders two concentric containers: the
-     outer `.k-popover` (positioning wrapper) and an inner Glass child
-     (`bg-ios-light-glass`, `rounded-4xl` = 32px). We let Konsta's inner
-     Glass own the rounded shape (the radius matches the list rows
-     inside) but retint the background to the project theme — Konsta's
-     default surface is a hard-coded translucent grey that doesn't
-     follow our HSL tokens, which read as off-theme in dark mode. The
-     border + drop shadow give the popover the same lift as the home
-     screen's floating chips. */
-  .mobile-home-popover > :where(div) {
-    background: hsl(var(--popover)) !important;
-    color: hsl(var(--popover-foreground));
-    border: 1px solid hsl(var(--border) / 0.55);
-    box-shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.35);
-  }
-
-  .mobile-home-popover-item-active {
-    background: hsl(var(--muted)) !important;
-  }
-
-  .mobile-home-popover-item-active :where(a, button) {
-    background: transparent !important;
-  }
-
-  .mobile-home-shell button:focus-visible,
-  .mobile-home-shell [role='button']:focus-visible {
-    outline: 2px solid hsl(var(--primary));
-    outline-offset: 2px;
   }
 }
 
@@ -1200,30 +900,6 @@ svg.lucide:not([data-molly-brand]) {
     background: hsl(var(--primary) / 0.25);
   }
 
-  body.native-mobile-shell,
-  body.native-mobile-shell * {
-    -webkit-touch-callout: none;
-  }
-
-  body.native-mobile-shell * {
-    -webkit-user-select: none;
-    user-select: none;
-  }
-
-  body.native-mobile-shell textarea,
-  body.native-mobile-shell [contenteditable='true'],
-  body.native-mobile-shell [contenteditable='true'] *,
-  body.native-mobile-shell [data-native-selection-allow],
-  body.native-mobile-shell [data-native-selection-allow] *,
-  body.native-mobile-shell
-    input:not([type='button']):not([type='submit']):not([type='reset']):not([type='checkbox']):not(
-      [type='radio']
-    ):not([type='range']):not([type='file']):not([type='color']) {
-    -webkit-touch-callout: default;
-    -webkit-user-select: text;
-    user-select: text;
-  }
-
   button,
   [role='button'],
   input[type='button'],
@@ -1434,16 +1110,6 @@ svg.lucide:not([data-molly-brand]) {
     overflow: auto;
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
-  }
-
-  /* iOS bottom bar with safe area */
-  .bottom-bar-pro {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    padding: 12px 16px;
-    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Full screen container with dynamic viewport */
@@ -1819,7 +1485,6 @@ svg.lucide:not([data-molly-brand]) {
     opacity: 0.8;
   }
 
-  /* Photo viewer safe area insets for mobile (notch/status bar) */
   .PhotoView-Slider__BannerWrap {
     padding-top: env(safe-area-inset-top, 0px);
     height: calc(44px + env(safe-area-inset-top, 0px));
@@ -1882,29 +1547,6 @@ svg.lucide:not([data-molly-brand]) {
  ---break---
  */
 
-/* Spinners must rotate about their OWN center, not orbit a point.
-   `animate-spin` is `rotate(360deg)` with the default
-   `transform-origin: 50% 50%`, and `transform-box`'s initial value is
-   `view-box` — for an SVG that percentage resolves against the nearest
-   SVG viewport rather than the element's CSS box. A root `<svg>` has a
-   CSS layout box, so `view-box` is specified to act as `border-box`
-   there and modern engines land on the box center. But nothing in the
-   markup states that intent, so any element that loses its CSS layout
-   box, is sized asymmetrically, or is rotated by an engine resolving
-   the percentage against the 24-unit `viewBox` pivots off-center — the
-   glyph then sweeps a circle around a point beside it (measured: a
-   14px icon pivoting on the viewBox center orbits with a ~14px
-   diameter, i.e. wider than the icon itself) instead of turning in
-   place. Pinning both properties states the intent once, globally.
-
-   `flex-shrink: 0` belongs here for the same reason: in a tight flex
-   row (the mobile home status pill, whose label truncates) a spinner
-   without it is compressed to a non-square box, so the rotation
-   sweeps an ellipse and the glyph visibly wobbles. Measured 14×14 →
-   13.55×15.43 in the reconnecting pill before this rule.
-
-   `@layer base` keeps this below utilities, so an explicit
-   `origin-*` / `shrink` utility at a call site still wins. */
 @layer base {
   svg.animate-spin {
     transform-box: border-box;
@@ -1928,51 +1570,6 @@ svg.lucide:not([data-molly-brand]) {
 /*
  ---break---
  */
-
-/* Mobile drill-in transition for `MobileDrillPageLayout` (and any
-   future "push" routes). Pure CSS keyframes so the slide runs on the
-   compositor thread independent of main-thread work — framer-motion's
-   JS-driven transform updates were stuttering badly because the
-   SessionDetail subtree mounts heavily (Loro subscribes, message
-   list, composer pickers) at the same time the animation starts.
-   The compositor doesn't care about main-thread blocking. */
-@keyframes mobile-drill-in {
-  from {
-    transform: translate3d(100%, 0, 0);
-  }
-  to {
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-@keyframes mobile-drill-out {
-  from {
-    transform: translate3d(0, 0, 0);
-  }
-  to {
-    transform: translate3d(100%, 0, 0);
-  }
-}
-
-.mobile-drill-in {
-  animation: mobile-drill-in 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
-  /* `will-change` promotes the element to its own compositor layer
-     before the animation starts, so the browser doesn't have to do
-     a layer-promotion mid-animation. */
-  will-change: transform;
-}
-
-.mobile-drill-out {
-  animation: mobile-drill-out 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
-  will-change: transform;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mobile-drill-in,
-  .mobile-drill-out {
-    animation: none;
-  }
-}
 
 /* An agent runtime whose wait has no denominator (the ACP handshake) gets the
    same ring as a download, on an orbit instead of a fill. Transform-only and
@@ -2084,17 +1681,6 @@ svg.lucide:not([data-molly-brand]) {
     animation: none;
     transform: scale(0.8);
   }
-}
-
-/* Mobile mention picker: collapse the menu's inner `scrollbar-pro
-   max-h-[260px] overflow-auto` list into a single scroller owned by the
-   docked panel. Two nested scroll containers (panel + inner cap) made
-   touch scrolling flaky and pinned the list to 260px regardless of the
-   panel's own max-height. Inside the mobile panel the inner list should
-   just flow; the panel scrolls. */
-.mention-mobile-panel .scrollbar-pro {
-  max-height: none !important;
-  overflow: visible !important;
 }
 
 /* Usage heatmap: each day pops in with a short scale+fade. The stagger is

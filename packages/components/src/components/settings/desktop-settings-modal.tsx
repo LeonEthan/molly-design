@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/ui';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import {
   useVisibleSettingsTabs,
   type SettingsSectionId,
@@ -25,20 +25,8 @@ import { BrowserAccountsSetting } from './browser-accounts-setting';
 import { AdvancedSettings } from './advanced-settings';
 import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
 
-/**
- * Desktop-only settings overlay. Mounted once at the app level (like the bug-report
- * dialog) and shown whenever `settingsDialogOpenAtom` is set on a non-mobile viewport.
- * It renders the same per-tab setting components that the route-based settings page
- * uses, so behavior stays in sync; mobile keeps the full-page route instead.
- */
 export function DesktopSettingsModal() {
-  const isMobile = useIsMobile();
   const [open, setOpen] = useAtom(settingsDialogOpenAtom);
-
-  // Never mount the modal tree on mobile — that path uses the route-based page.
-  if (isMobile) {
-    return null;
-  }
 
   return (
     <Dialog
@@ -185,7 +173,6 @@ function SettingsModalBody() {
 }
 
 function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
-  // Mobile routes keep the machine in URL search. The modal uses a shared atom
   // so Account shortcuts can select a machine before switching tabs.
   const [selectedMachineId, setSelectedMachineId] = useAtom(settingsSelectedMachineIdAtom);
 

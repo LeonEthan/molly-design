@@ -11,7 +11,7 @@ strings on i18n rather than the registry's inline English.
 
 - Its dataset SHIPS WITH THE APP. `frimousse` otherwise fetches
   `${emojibaseUrl}/${locale}/{data,messages}.json` from a public CDN, which leaves the
-  picker spinning forever in an offline desktop or mobile app. Every host build must
+  picker spinning forever in an offline desktop app. Every host build must
   register `vite-emojibase-assets.ts` (see `apps/electron/electron.vite.config.ts`) and
   the picker must read `getBundledEmojibaseUrl()`.
 - This is a URL contract, not an import: the library builds those paths at runtime, so

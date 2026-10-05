@@ -63,8 +63,8 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 - No ACP output: read `turnProducedVisibleOutput` before finalization, then use
   `recordSilentTurnFailure`, finalize, advance pointer and fail open. Prompt resolution
   alone never proves success.
-- Diff content comes only from the CLI-local ACP evidence store; GitHub `diffStats` use PR compare
-  semantics, and `session-diff-stats-target.ts` skips rather than overwrites a good total.
+- Turns retain raw ACP tool history and locations; new diff evidence and Git summaries are retired.
+  Read existing CLI-local diff snapshots only for historical viewers.
 
 ## Lifecycle
 

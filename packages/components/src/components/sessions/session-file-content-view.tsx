@@ -89,10 +89,7 @@ import {
   buildCodeCollabMonacoUri,
   registerCodeCollabMonacoModelProvider,
 } from '@/lib/session-monaco-language-providers';
-import {
-  normalizeSessionMonacoSelectedLines,
-  type SessionMonacoSelectedLines,
-} from '@/lib/session-monaco-viewer-state';
+import { type SessionMonacoSelectedLines } from '@/lib/session-monaco-viewer-state';
 import type { SessionMonacoSelectionRestore } from '@/lib/session-monaco-editor-controller';
 import { useMachineOnlineStatus } from '@/hooks/use-machine-online-status';
 import { FamiconsCloudOfflineOutline } from '@/components/icons/famicons-cloud-offline-outline';
@@ -157,12 +154,6 @@ export type SessionFileContentViewProps = {
   htmlPreviewRequestSeq?: number;
   saveRequestSeq?: number;
   copyMarkdownRequestSeq?: number;
-  /**
-   * Mobile file drawers use the platform text surface for Markdown source so
-   * long-press opens the OS selection controls instead of Monaco's desktop
-   * context menu. Rendered Markdown opts into native selection as well.
-   */
-  preferNativeMarkdownSelection?: boolean;
   className?: string;
   active?: boolean;
   fileProvider?: SessionFileProvider | null;
@@ -220,7 +211,6 @@ function SessionFileContentViewImpl({
   htmlPreviewRequestSeq,
   saveRequestSeq,
   copyMarkdownRequestSeq,
-  preferNativeMarkdownSelection = false,
   className,
   active = true,
   fileProvider,
@@ -1247,28 +1237,7 @@ function SessionFileContentViewImpl({
       body = (
         <div className="flex h-full min-h-0 flex-col">
           <div className="min-h-0 flex-1">
-            {isMarkdownTextFile && preferNativeMarkdownSelection ? (
-              <NativeMarkdownSource
-                key={liveFileId ?? normalizedPath}
-                text={
-                  hasAcceptedLocalContentChangeRef.current || isProviderEditorDirty
-                    ? (latestEditorTextRef.current ?? data.snapshot.text)
-                    : data.snapshot.text
-                }
-                readOnly={!isProviderFileEditable}
-                wordWrap={wordWrapEnabled}
-                selectedLines={selectedLines}
-                externalTextUpdate={externalTextUpdate}
-                onContentChange={
-                  isProviderFileEditable ? handleProviderEditorContentChange : undefined
-                }
-                onSelectionChange={
-                  liveFileId !== null ? handleProviderEditorSelectionChange : undefined
-                }
-                onExternalTextUpdateApplied={handleExternalTextUpdateApplied}
-                ariaLabel={t('sessions.fileViewer.markdownSource', 'Markdown source')}
-              />
-            ) : (
+            {
               <LazyProviderTextMonacoViewer
                 key={lspModelUri?.toString() ?? liveFileId ?? normalizedPath}
                 text={
@@ -1294,7 +1263,7 @@ function SessionFileContentViewImpl({
                 findRequestSeq={findRequestSeq}
                 modelUri={lspModelUri}
               />
-            )}
+            }
           </div>
           {data.snapshot.truncated ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -1316,16 +1285,7 @@ function SessionFileContentViewImpl({
       body = (
         <div className="flex h-full min-h-0 flex-col">
           <div className="min-h-0 flex-1">
-            {isMarkdownTextFile && preferNativeMarkdownSelection ? (
-              <NativeMarkdownSource
-                key={normalizedPath}
-                text={data.snapshot.text}
-                readOnly
-                wordWrap={wordWrapEnabled}
-                selectedLines={selectedLines}
-                ariaLabel={t('sessions.fileViewer.markdownSource', 'Markdown source')}
-              />
-            ) : (
+            {
               <LazyTextMonacoViewer
                 key={normalizedPath}
                 text={data.snapshot.text}
@@ -1336,7 +1296,7 @@ function SessionFileContentViewImpl({
                 findRequestSeq={findRequestSeq}
                 readOnly
               />
-            )}
+            }
           </div>
           {data.snapshot.truncated ? (
             <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -1356,11 +1316,7 @@ function SessionFileContentViewImpl({
   // preview has no editor to search.
   const showPreviewToggle = isSvgTextFile || isMarkdownTextFile || isHtmlTextFile;
   const showSearchButton =
-    isTextFileReady &&
-    !showSvgRendered &&
-    !showMarkdownRendered &&
-    !showHtmlRendered &&
-    !(isMarkdownTextFile && preferNativeMarkdownSelection);
+    isTextFileReady && !showSvgRendered && !showMarkdownRendered && !showHtmlRendered;
   const showWordWrapButton =
     isTextFileReady && !showSvgRendered && !showMarkdownRendered && !showHtmlRendered;
   const showSaveButton = isProviderFileEditable && isTextFileReady;
@@ -1576,113 +1532,6 @@ function SessionFileContentViewImpl({
 }
 
 export const SessionFileContentView = memo(SessionFileContentViewImpl);
-
-function NativeMarkdownSource({
-  text,
-  readOnly,
-  wordWrap,
-  selectedLines,
-  externalTextUpdate,
-  onContentChange,
-  onSelectionChange,
-  onExternalTextUpdateApplied,
-  ariaLabel,
-}: {
-  readonly text: string;
-  readonly readOnly: boolean;
-  readonly wordWrap: boolean;
-  readonly selectedLines?: SessionMonacoSelectedLines;
-  readonly externalTextUpdate?: SessionMonacoExternalTextUpdate;
-  readonly onContentChange?: (text: string) => void;
-  readonly onSelectionChange?: (state: ProviderEditorSelectionState) => void;
-  readonly onExternalTextUpdateApplied?: (result: 'applied' | 'no-op') => void;
-  readonly ariaLabel: string;
-}) {
-  const [value, setValue] = useState(text);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lastAppliedSeqRef = useRef<number | undefined>(undefined);
-  const pendingSelectionRestoreRef = useRef<SessionMonacoSelectionRestore | null>(null);
-
-  useEffect(() => {
-    if (!readOnly) return;
-    setValue(text);
-  }, [readOnly, text]);
-
-  useEffect(() => {
-    if (!externalTextUpdate || lastAppliedSeqRef.current === externalTextUpdate.seq) return;
-    lastAppliedSeqRef.current = externalTextUpdate.seq;
-    const result = value === externalTextUpdate.text ? 'no-op' : 'applied';
-    if (result === 'applied') {
-      pendingSelectionRestoreRef.current = externalTextUpdate.restoreSelection ?? null;
-      setValue(externalTextUpdate.text);
-    }
-    onExternalTextUpdateApplied?.(result);
-  }, [externalTextUpdate, onExternalTextUpdateApplied, value]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const currentValue = textarea.value;
-    const lineCount = currentValue.split('\n').length;
-    const range = normalizeSessionMonacoSelectedLines(selectedLines, lineCount);
-    if (!range) return;
-    const lineStarts = [0];
-    for (let index = 0; index < currentValue.length; index += 1) {
-      if (currentValue[index] === '\n') lineStarts.push(index + 1);
-    }
-    const startOffset = lineStarts[range.startLineNumber - 1] ?? 0;
-    const nextLineOffset = lineStarts[range.endLineNumber];
-    const endOffset =
-      nextLineOffset === undefined
-        ? currentValue.length
-        : Math.max(startOffset, nextLineOffset - 1);
-    textarea.setSelectionRange(startOffset, endOffset);
-    textarea.scrollTop = Math.max(0, range.startLineNumber - 1) * 20;
-  }, [selectedLines]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    const restore = pendingSelectionRestoreRef.current;
-    if (!textarea || !restore) return;
-    pendingSelectionRestoreRef.current = null;
-    const anchor = Math.min(value.length, Math.max(0, restore.anchorOffset));
-    const head = Math.min(value.length, Math.max(0, restore.headOffset));
-    textarea.setSelectionRange(
-      Math.min(anchor, head),
-      Math.max(anchor, head),
-      anchor > head ? 'backward' : 'forward'
-    );
-  }, [value]);
-
-  return (
-    <textarea
-      ref={textareaRef}
-      value={value}
-      readOnly={readOnly}
-      wrap={wordWrap ? 'soft' : 'off'}
-      spellCheck={false}
-      aria-label={ariaLabel}
-      data-native-selection-allow
-      className="h-full min-h-[240px] w-full resize-none overflow-auto border-0 bg-background p-3 font-mono text-xs leading-5 text-foreground outline-none"
-      onChange={(event) => {
-        const nextValue = event.currentTarget.value;
-        setValue(nextValue);
-        onContentChange?.(nextValue);
-      }}
-      onSelect={(event) => {
-        const textarea = event.currentTarget;
-        const selectionStart = textarea.selectionStart;
-        const selectionEnd = textarea.selectionEnd;
-        const backwards = textarea.selectionDirection === 'backward';
-        onSelectionChange?.({
-          anchorOffset: backwards ? selectionEnd : selectionStart,
-          headOffset: backwards ? selectionStart : selectionEnd,
-          isEmpty: selectionStart === selectionEnd,
-        });
-      }}
-    />
-  );
-}
 
 // Eye-icon preview toggle for text files that also have a rendered preview
 // (SVG, Markdown). Click commits the render mode; hover only shows a tooltip

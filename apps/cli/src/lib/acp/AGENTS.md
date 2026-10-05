@@ -4,7 +4,7 @@
 Root `AGENTS.md`, `apps/cli/AGENTS.md`, and `../AGENTS.md` also apply.
 
 `history.ts` owns `handleACPUpdateMessage`, per-toolCallId enrichment, and
-edit-evidence extraction; `history-apply.ts` owns the CRDT history writes. Protocol
+tool-title/location enrichment; `history-apply.ts` owns the CRDT history writes. Protocol
 reference: `context/acp-protocol.md`; per-agent payload quirks:
 `context/acp-agent-edit-evidence.md`.
 
@@ -42,25 +42,20 @@ goes silently empty (unit tests fabricate history and will not catch it).
 The former `_meta.claudeCode.toolName` carrier is read only by the centralized
 one-release compatibility path; new provider output must use the Core contract.
 
-## Flush, evidence, and shutdown
+## Flush and shutdown
 
 These bind `../message-handler.ts` and `../session-transient-store.ts`, which drive
 this pipeline. Flush retries retain notification-level progress and cached
-rich-content materialization — never re-upload an attachment after only its history
-write failed — stop after a bounded backoff budget, and carry the enqueue-time turn id
-into Code Collab evidence. Evidence arriving for a finalized target is serialized
-through the same per-turn persistence chain as normal finalization; a failed attempt
-restores both captured evidence sets ahead of concurrently collected evidence and
-schedules bounded, evidence-only backoff retries that never replay the
-already-persisted ACP history update.
+rich-content materialization, never re-upload an attachment after only its history
+write failed, and stop after a bounded backoff budget. ACP diff blocks contribute
+file locations to sanitized tool history; no collector, retry chain, per-turn
+snapshot or `assistant-file-diff` write is attached to history flushes.
 
-Shutdown order: cancel those timers, stop SessionManager producers while keeping
-workspace documents open, wait for already-started async evidence collectors, flush
-ACP/evidence, then close stores. Never close a store or take the final map/chain
-snapshot while agent callbacks or tracked evidence collectors can still populate turn
-evidence. Permanent deletion blocks new ACP enqueue, waits for an already-started
-flush, and drops retry state before deleting the session doc, so a late retry cannot
-recreate deleted data.
+Shutdown stops SessionManager producers while keeping workspace documents open,
+flushes ACP notifications and waits for in-flight flushes, then closes the legacy
+diff reader and other stores. Permanent deletion blocks new ACP enqueue, waits
+for an already-started flush, and drops ACP retry state before deleting the session
+doc, so a late retry cannot recreate deleted data.
 
 The finalized-turn late-ACP routing target in `../session-transient-store.ts` does NOT
 expire by wall-clock time: agent sessions stay alive and emit events long after

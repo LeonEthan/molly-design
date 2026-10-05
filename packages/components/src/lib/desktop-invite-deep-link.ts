@@ -1,5 +1,4 @@
 import { isDesktopDeepLinkProtocol } from '@/lib/desktop-deep-link-protocol';
-import { isIOSRuntimeEnvironment, isNativeAppShell } from '@/lib/native-platform';
 
 const ANDROID_BROWSER_PATTERN = /Android/i;
 
@@ -54,8 +53,8 @@ export function attemptDesktopInviteHandoff(deepLinkUrl: string): boolean {
   if (
     !shouldAttemptDesktopInviteHandoff({
       isElectron: window.__MOLLY_ELECTRON__ === true,
-      isNativeAppShell: isNativeAppShell(),
-      isIOSRuntime: isIOSRuntimeEnvironment(),
+      isNativeAppShell: false,
+      isIOSRuntime: false,
       userAgent: window.navigator.userAgent,
     })
   ) {

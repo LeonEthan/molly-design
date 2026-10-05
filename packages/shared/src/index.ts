@@ -116,7 +116,6 @@ export * from './local-loro-data-plane';
 export * from './json-guards';
 export * from './password-validation';
 export * from './in-flight-dedupe';
-export * from './analytics';
 export * from './live-activity-summary';
 export * from './live-activity-permission-action';
 export * from './convex-site-url';

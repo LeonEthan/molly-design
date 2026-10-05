@@ -55,9 +55,11 @@ describe('ContextChip actions', () => {
     container = undefined;
   });
 
-  it('keeps PR, branch, and All Changes as independent click targets', async () => {
-    const onOpenPr = vi.fn();
-    const onOpenAllChanges = vi.fn();
+  it('keeps historical PR and branch targets without an All Changes action', async () => {
+    const opened: string[] = [];
+    const onOpenPr = () => {
+      opened.push('legacy-pr');
+    };
     const branch = 'fix/acp-capability-authority';
 
     container = document.createElement('div');
@@ -73,9 +75,7 @@ describe('ContextChip actions', () => {
             url: 'https://github.com/loro-dev/lody/pull/2894',
             status: 'open',
           } as SessionPullRequestMeta,
-          diffStat: { add: 1048, del: 821 },
           onOpenPr,
-          onOpenAllChanges,
         })
       );
     });
@@ -83,25 +83,20 @@ describe('ContextChip actions', () => {
     const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('button'));
     const prButton = buttons.find((button) => button.textContent?.includes('#2894'));
     const branchButton = buttons.find((button) => button.textContent?.includes(branch));
-    const diffButton = buttons.find((button) => button.textContent?.includes('+1048'));
 
     expect(prButton).toBeInstanceOf(HTMLButtonElement);
     expect(branchButton).toBeInstanceOf(HTMLButtonElement);
-    expect(diffButton).toBeInstanceOf(HTMLButtonElement);
+    expect(
+      buttons.find((button) => button.getAttribute('aria-label') === 'All Changes')
+    ).toBeUndefined();
 
     await act(async () => prButton?.click());
-    expect(onOpenPr).toHaveBeenCalledTimes(1);
-    expect(onOpenAllChanges).not.toHaveBeenCalled();
+    expect(opened).toEqual(['legacy-pr']);
     expect(writeTextToClipboard).not.toHaveBeenCalled();
 
     await act(async () => branchButton?.click());
     expect(writeTextToClipboard).toHaveBeenCalledWith(branch);
-    expect(onOpenPr).toHaveBeenCalledTimes(1);
-    expect(onOpenAllChanges).not.toHaveBeenCalled();
-
-    await act(async () => diffButton?.click());
-    expect(onOpenAllChanges).toHaveBeenCalledTimes(1);
-    expect(onOpenPr).toHaveBeenCalledTimes(1);
+    expect(opened).toEqual(['legacy-pr']);
   });
 
   it('renders the highest-priority action directly and folds the rest into a menu', async () => {
@@ -118,7 +113,6 @@ describe('ContextChip actions', () => {
           projectName: 'loro-dev/lody',
           branch: 'feat/info-bar-actions',
           workspaceLocation: { kind: 'worktree', path: '/tmp/lody-worktree' },
-          diffStat: { add: 12, del: 4 },
           actions: [
             { id: 'create-pr', label: 'Create PR', onClick: onCreatePr },
             {
@@ -147,9 +141,7 @@ describe('ContextChip actions', () => {
     // Light theme uses a soft hairline border + faint fill; dark keeps muted fill only.
     expect(createPrButton?.parentElement?.className).toContain('border-foreground/[0.08]');
     expect(createPrButton?.parentElement?.className).toContain('bg-foreground/[0.03]');
-    expect(createPrButton?.parentElement?.className).toContain(
-      'dark:bg-muted-foreground/[0.08]'
-    );
+    expect(createPrButton?.parentElement?.className).toContain('dark:bg-muted-foreground/[0.08]');
 
     await act(async () => createPrButton?.click());
 

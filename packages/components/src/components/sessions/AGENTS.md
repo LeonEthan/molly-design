@@ -23,8 +23,8 @@ Files: [README.md](README.md). Scopes:
 
 ## Shell, side panel, side chats
 
-- Desktop file/diff/browser surfaces are closeable right-panel tabs, never split
-  conversations. `sidePanelTabs` owns strip order and each close's fallback neighbour.
+- File, historical diff and browser surfaces use closeable right-panel tabs.
+  `sidePanelTabs` owns order and close fallback; retired Changes entries show Files.
 - Human forks share the workspace; no Git probe/new-worktree menu. Keep recovery
   for previously accepted worktree forks.
 - Keep one canvas, with Save version and direct history switching. Active Agent
@@ -116,8 +116,8 @@ Files: [README.md](README.md). Scopes:
 
 ## Auto review, status slot
 
-- PR panels and automatic code review are retired; never mount their polls or
-  write legacy review settings. Preserve generic file/tool output and history.
+- PR panels, All Changes and automatic code review are retired. Preserve historical
+  diff reads and generic file/tool output; design sessions derive no diff summary.
 - One priority-ordered status slot (browser-offline > machine-removed >
   machine-offline): states hand off, never stack; machine-offline never blocks
   sends; doc-stream degradation is never re-added.

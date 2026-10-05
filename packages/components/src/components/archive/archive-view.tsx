@@ -52,7 +52,7 @@ import {
   isArchivedLocalProjectRestoreUnavailableError,
   useSessionActions,
 } from '@/hooks/use-session-actions';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useOrganization } from '@/hooks/useOrganization';
 import { useVisibleArchivedSessionMetas } from '@/hooks/use-visible-session-metas';
 import { AgentIcon } from '@/components/icons/agent-icon';
@@ -744,29 +744,27 @@ export function ArchivedSessionGroupSection({
 
       {showSessions ? (
         <div className={cn('flex w-full min-w-0 flex-col', showHeader && 'mt-1')}>
-          {sessionTree.map(({ item: session, depth }) =>
-            (
-              <DesktopArchivedSessionItem
-                key={session.id}
-                session={session}
-                depth={depth}
-                now={now}
-                onRestore={onRestore}
-                onDelete={onDelete}
-                onNavigate={onNavigate}
-                restoreLabel={restoreLabel}
-                restoreAvailable={restoreAvailable}
-                restoreUnavailableLabel={restoreUnavailableLabel}
-                removedProjectLabel={removedProjectLabel}
-                deleteLabel={deleteLabel}
-                isMultiSelectMode={isMultiSelectMode}
-                isSelected={selectedIds.has(session.id)}
-                onToggleSelect={onToggleSelect}
-                onEnterMultiSelect={onEnterMultiSelect}
-                owner={membersByUserId.get(session.userId)}
-              />
-            )
-          )}
+          {sessionTree.map(({ item: session, depth }) => (
+            <DesktopArchivedSessionItem
+              key={session.id}
+              session={session}
+              depth={depth}
+              now={now}
+              onRestore={onRestore}
+              onDelete={onDelete}
+              onNavigate={onNavigate}
+              restoreLabel={restoreLabel}
+              restoreAvailable={restoreAvailable}
+              restoreUnavailableLabel={restoreUnavailableLabel}
+              removedProjectLabel={removedProjectLabel}
+              deleteLabel={deleteLabel}
+              isMultiSelectMode={isMultiSelectMode}
+              isSelected={selectedIds.has(session.id)}
+              onToggleSelect={onToggleSelect}
+              onEnterMultiSelect={onEnterMultiSelect}
+              owner={membersByUserId.get(session.userId)}
+            />
+          ))}
         </div>
       ) : null}
     </div>
@@ -778,7 +776,7 @@ export function ArchiveView() {
   const listScopeId = useId();
   useListKeyboardNavigation({ scopeId: listScopeId });
   const router = useRouter();
-  const isMobile = useIsMobile();
+
   const user = useAtomValue(userAtom);
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const { archivedSessions } = useVisibleArchivedSessionMetas();
@@ -1333,7 +1331,7 @@ export function ArchiveView() {
         open={deleteConfirmSession != null}
         onOpenChange={(open) => setDeleteConfirmSession(open ? deleteConfirmSession : null)}
       >
-        <DialogContent className={cn(isMobile ? '' : 'max-w-sm')}>
+        <DialogContent className={cn('max-w-sm')}>
           <DialogHeader>
             <DialogTitle>{t('archive.deleteConfirm.title', 'Delete permanently?')}</DialogTitle>
             <DialogDescription>
@@ -1372,7 +1370,7 @@ export function ArchiveView() {
           setBulkDeleteConfirmOpen(open);
         }}
       >
-        <DialogContent className={cn(isMobile ? '' : 'max-w-sm')}>
+        <DialogContent className={cn('max-w-sm')}>
           <DialogHeader>
             <DialogTitle>
               {t('archive.bulkDeleteConfirm.title', 'Delete {{count}} sessions permanently?', {

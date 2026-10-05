@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Paperclip, Plug, Plus } from 'lucide-react';
+import { Paperclip, Plug, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { describeMcpConnection, type McpServerId, type WorkspaceMcpServerMeta } from '@molly/shared';
+import {
+  describeMcpConnection,
+  type McpServerId,
+  type WorkspaceMcpServerMeta,
+} from '@molly/shared';
 import { Button } from '@/ui/button';
 import { cn } from '@/lib/utils';
 import {
@@ -28,11 +32,6 @@ export interface AttachmentAddMenuMcp {
 }
 
 export interface AttachmentAddMenuProps {
-  /** Larger trigger + roomier items for touch; desktop and mobile both use the
-   * same upward popover dropdown. */
-  isMobile: boolean;
-  /** Smaller trigger for the landing composer variant. */
-  isLanding?: boolean;
   /** Disables the whole trigger (e.g. the prompt is disabled). */
   disabled?: boolean;
   /** Omit the callback to hide the attachment item entirely. The picker is
@@ -43,23 +42,7 @@ export interface AttachmentAddMenuProps {
   mcp?: AttachmentAddMenuMcp;
 }
 
-/**
- * The single bottom-left "+" entry point for the composer. One rounded "+" that
- * opens an upward popover dropdown with one attachment picker plus the per-turn
- * MCP selection. Same dropdown on desktop and mobile (mobile just gets larger
- * touch targets).
- *
- * MCP is a second level, not a flat list, because a workspace can register many
- * servers and they are multi-select. Desktop opens it as a hover submenu;
- * touch has no hover, so mobile PUSHES the panel onto the same surface (a
- * back row returns) rather than flying a submenu out past the screen edge.
- *
- * Otherwise pure/presentational: the unfiltered file picker lives in
- * onAddAttachment. Drag/drop and paste bypass this menu entirely.
- */
 export function AttachmentAddMenu({
-  isMobile,
-  isLanding,
   disabled,
   onAddAttachment,
   attachmentDisabled,
@@ -67,8 +50,6 @@ export function AttachmentAddMenu({
 }: AttachmentAddMenuProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  // Mobile's pushed panel. Desktop uses a real submenu and stays on 'root'.
-  const [view, setView] = useState<'root' | 'mcp'>('root');
   const triggerLabel = t('sessions.addAttachmentMenu', 'Add attachment');
 
   const mcpServers = mcp?.servers ?? [];
@@ -77,8 +58,7 @@ export function AttachmentAddMenu({
     return null;
   }
 
-  const triggerSize = !isLanding && isMobile ? 'size-9' : 'size-7';
-  const itemClass = cn('cursor-pointer', isMobile && 'gap-2.5 py-2.5 text-[15px]');
+  const itemClass = cn('cursor-pointer');
   const iconClass = 'size-4 shrink-0 text-muted-foreground';
   const selectedCount = mcp
     ? mcp.selectedIds.filter((id) => mcpServers.some((server) => server.id === id)).length
@@ -89,15 +69,7 @@ export function AttachmentAddMenu({
       : t('session.mcp.loadNone');
 
   return (
-    <DropdownMenu
-      open={open}
-      onOpenChange={(nextOpen) => {
-        setOpen(nextOpen);
-        // Always reopen at the root level; a stale pushed panel would hide the
-        // upload actions behind a back row.
-        if (!nextOpen) setView('root');
-      }}
-    >
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
@@ -106,7 +78,7 @@ export function AttachmentAddMenu({
           disabled={disabled}
           aria-label={triggerLabel}
           className={cn(
-            triggerSize,
+            'size-7',
             // Light-stroke "+" with a circular hover/open fill. `bg-hover` (not
             // `bg-accent`/`bg-muted`) because those equal the background in the
             // dark theme and paint nothing.
@@ -115,90 +87,44 @@ export function AttachmentAddMenu({
             'data-[state=open]:bg-hover data-[state=open]:text-foreground'
           )}
         >
-          <Plus strokeWidth={1.5} className={isMobile ? 'size-6' : 'size-5'} />
+          <Plus strokeWidth={1.5} className={'size-5'} />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        side="top"
-        /* Size to the widest item (`w-max`) so short attachment labels don't
-           leave a wide blank gutter; a small floor keeps it from
-           collapsing too narrow. The pushed MCP panel needs room for server
-           names, so it takes its own floor and ceiling. */
-        className={cn(
-          view === 'mcp'
-            ? 'w-[min(20rem,calc(100vw-2rem))]'
-            : cn('w-max', isMobile ? 'min-w-[160px]' : 'min-w-[140px]')
-        )}
-      >
-        {view === 'mcp' && mcp ? (
-          // Keyed so the panel swap replays the slide: the pushed level enters
-          // from the right, the root returns from the left.
-          <div key="mcp" className="animate-in fade-in-0 slide-in-from-right-2 duration-150">
+      <DropdownMenuContent align="start" side="top" className="w-max min-w-[140px]">
+        <div key="root" className="animate-in fade-in-0 slide-in-from-left-2 duration-150">
+          {onAddAttachment ? (
             <DropdownMenuItem
-              className={cn(itemClass, 'gap-2 font-medium')}
-              onSelect={(event) => {
-                event.preventDefault();
-                setView('root');
-              }}
+              onSelect={onAddAttachment}
+              disabled={attachmentDisabled}
+              className={itemClass}
             >
-              <ChevronLeft className={iconClass} />
-              {t('session.mcp.title')}
+              <Paperclip className={iconClass} />
+              {triggerLabel}
             </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <McpServerItems mcp={mcp} isMobile={isMobile} />
-          </div>
-        ) : (
-          <div key="root" className="animate-in fade-in-0 slide-in-from-left-2 duration-150">
-            {onAddAttachment ? (
-              <DropdownMenuItem
-                onSelect={onAddAttachment}
-                disabled={attachmentDisabled}
-                className={itemClass}
-              >
-                <Paperclip className={iconClass} />
-                {triggerLabel}
-              </DropdownMenuItem>
-            ) : null}
-            {hasMcp && mcp ? (
-              <>
-                {onAddAttachment ? <DropdownMenuSeparator /> : null}
-                {isMobile ? (
-                  <DropdownMenuItem
-                    className={itemClass}
-                    disabled={mcp.disabled}
-                    onSelect={(event) => {
-                      event.preventDefault();
-                      setView('mcp');
-                    }}
-                  >
+          ) : null}
+          {hasMcp && mcp ? (
+            <>
+              {onAddAttachment ? <DropdownMenuSeparator /> : null}
+              {
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger className={itemClass} disabled={mcp.disabled}>
                     <Plug className={iconClass} />
                     <span className="min-w-0 flex-1 truncate">{mcpLabel}</span>
-                    <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground" />
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger className={itemClass} disabled={mcp.disabled}>
-                      <Plug className={iconClass} />
-                      <span className="min-w-0 flex-1 truncate">{mcpLabel}</span>
-                    </DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="w-[min(20rem,calc(100vw-2rem))]">
-                      <McpServerItems mcp={mcp} isMobile={isMobile} />
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                )}
-              </>
-            ) : null}
-          </div>
-        )}
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent className="w-[min(20rem,calc(100vw-2rem))]">
+                    <McpServerItems mcp={mcp} />
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
+              }
+            </>
+          ) : null}
+        </div>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
 
-/** The multi-select rows themselves, shared by the desktop submenu and the
- *  mobile pushed panel. Toggling keeps the menu open — that is the feedback. */
-function McpServerItems({ mcp, isMobile }: { mcp: AttachmentAddMenuMcp; isMobile: boolean }) {
+function McpServerItems({ mcp }: { mcp: AttachmentAddMenuMcp }) {
   const { t } = useTranslation();
   const selected = new Set(mcp.selectedIds);
   const toggle = (id: McpServerId, checked: boolean) => {
@@ -224,12 +150,11 @@ function McpServerItems({ mcp, isMobile }: { mcp: AttachmentAddMenuMcp; isMobile
             // Stays `items-center` (the shared selection-item default): the check
             // indicator is absolutely positioned from its static spot, so the row's
             // own alignment is what centers it against the two-line label.
-            className={cn(isMobile && 'py-2.5')}
             onSelect={(event) => event.preventDefault()}
             onCheckedChange={(checked) => toggle(server.id, checked === true)}
           >
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className={cn('truncate', isMobile && 'text-[15px]')}>{server.name}</span>
+              <span className="truncate">{server.name}</span>
               <span
                 className={cn(
                   'truncate text-xs leading-snug text-muted-foreground',

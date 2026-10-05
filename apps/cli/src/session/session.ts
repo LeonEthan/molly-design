@@ -28,20 +28,8 @@ import * as fs from 'fs';
 import type { AgentClient } from '@/agent/agent-client';
 import { createAcpClient } from '@/agent/acp-runner';
 import { withAcpSessionStartSlot } from '@/agent/acp-session-start-gate';
-import {
-  AcpStartupProcessError,
-  AcpStartupProcessExitError,
-  appendStderrTail,
-  createAcpStartupMonitor,
-} from '@/agent/acp-startup-monitor';
+import { appendStderrTail, createAcpStartupMonitor } from '@/agent/acp-startup-monitor';
 import { ensureMollyDataDir, getMollyDataDir } from '@molly/shared/node/installation-profile';
-import {
-  type AcpLauncher,
-  captureAcpSpawnFailed,
-  captureAcpSpawnStarted,
-  classifyCliSpawnReason,
-  resolveAcpLauncher,
-} from '@/agent/acp-analytics';
 import { scrubInheritedClaudeAuthEnv, shouldScrubClaudeAuthEnv } from '@/agent/claude-env-conflict';
 import { getCachedLoginShellEnvSync, getLoginShellEnv } from '@/agent/login-shell-env';
 import { mergeLoginShellEnv, withDefaultAcpPathEntries } from '@/agent/setting';
@@ -594,15 +582,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
     // Trusted design launch identity also serves exact submission; it does not
     // assert that this runtime implements native tool or terminal hooks.
     this.designHookRuntime = embeddedConfig && callbacks.designHooks ? 'molly' : undefined;
-    const launcher: AcpLauncher = resolveAcpLauncher(callbacks.command);
-    const spawnAnalyticsProps = {
-      cliType: callbacks.cliType,
-      agentType: callbacks.agentType,
-      launcher,
-      isResume: !!callbacks.resumeSessionId,
-      sessionId: this.sessionId,
-      ...(this.config.workspaceId ? { workspaceId: this.config.workspaceId } : {}),
-    };
     let lastAgentProcessHandle: SessionProcessHandle | null = null;
 
     const cleanupFailedAttempt = async (): Promise<void> => {
@@ -635,19 +614,13 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           callbacks.command
         } args=${JSON.stringify(callbacks.args ?? [])})`
       );
-      captureAcpSpawnStarted(spawnAnalyticsProps);
       let agentProcessHandle: SessionProcessHandle;
-      try {
-        callbacks.abortSignal?.throwIfAborted();
-        agentProcessHandle = await this.sandbox.spawn(callbacks.command, callbacks.args ?? [], {
-          cwd: this.getWorkdir(),
-          env,
-          stdio: embeddedConfig ? ['pipe', 'pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe'],
-        });
-      } catch (error) {
-        captureAcpSpawnFailed({ ...spawnAnalyticsProps, reason: classifyCliSpawnReason(error) });
-        throw error;
-      }
+      callbacks.abortSignal?.throwIfAborted();
+      agentProcessHandle = await this.sandbox.spawn(callbacks.command, callbacks.args ?? [], {
+        cwd: this.getWorkdir(),
+        env,
+        stdio: embeddedConfig ? ['pipe', 'pipe', 'pipe', 'pipe'] : ['pipe', 'pipe', 'pipe'],
+      });
       const agentProcess = agentProcessHandle.child;
 
       this.agentProcess = agentProcessHandle;
@@ -746,7 +719,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           },
           configOptionValues: this.config.configOptionValues,
           taskToolsEnabled: this.config.taskToolsEnabled,
-          launcher,
           workspaceId: this.config.workspaceId,
           machineId: this.config.machineId as MachineId,
           resumeSessionId: callbacks.resumeSessionId,
@@ -778,7 +750,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
             : undefined,
           onImageGenerationBegin: callbacks.onImageGenerationBegin,
           onImageGenerationEnd: callbacks.onImageGenerationEnd,
-          onWriteTextFile: callbacks.onWriteTextFile,
           sessionId: this.sessionId,
           startupAbort: externalAbort
             ? Promise.race([startupMonitor.abortPromise, externalAbort.promise])
@@ -794,18 +765,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
           acknowledgedSteer: started.client.supportsAcknowledgedSteer(),
           agent: { cliType: this.config.agentCliType, agentType: this.config.agentType },
         });
-      } catch (error) {
-        // The agent process died before startup completed (the startup monitor
-        // surfaces async ENOENT/EACCES/early-exit here). Protocol-level failures
-        // are captured inside AgentClient.startSession; only spawn-level monitor
-        // errors are reported here to avoid double-counting.
-        if (
-          error instanceof AcpStartupProcessExitError ||
-          error instanceof AcpStartupProcessError
-        ) {
-          captureAcpSpawnFailed({ ...spawnAnalyticsProps, reason: classifyCliSpawnReason(error) });
-        }
-        throw error;
       } finally {
         startupMonitor.dispose();
         externalAbort?.dispose();

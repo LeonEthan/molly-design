@@ -2,8 +2,8 @@
 
 `CLAUDE.md` is a symlink to this file. Parent guidelines also apply.
 
-- `useComposerSubmission` owns one in-flight submission per mounted scope, immediate
-  mobile blur, and the post-commit focus handoff. Completion is an explicit state
+- `useComposerSubmission` owns one in-flight submission per mounted scope and the
+  post-commit focus handoff. Completion is an explicit state
   transition, even when pending and completion batch into one render.
 - Scope changes and unmount retire submissions. Late completion must not unlock,
   clear, or focus a newer composer. Draft persistence stays with the caller.
@@ -22,6 +22,4 @@
   history-state request, claimed by the visible target composer after mounting.
   Consume it from history before focusing; ordinary visits, remounts, and Back
   must not replay the handoff. Never guess readiness with a timeout.
-- Automatic composer focus is desktop-only. Narrow mobile layouts and native
-  shells (including wide iPads) must not focus on entry or submission completion,
-  whether the submission succeeds or fails. Explicit user focus actions still work.
+- Narrow desktop windows keep the same navigation and submission focus handoff.

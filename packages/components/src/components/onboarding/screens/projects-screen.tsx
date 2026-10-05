@@ -20,7 +20,6 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
 import { selectAndWriteLocalProject } from '@/lib/local-project-import';
 import { Button } from '@/ui/button';
 import { OnboardingShell, OnboardingBackButton, OnboardingNextButton } from '../onboarding-shell';
-import { useOnboardingAnalytics } from '../onboarding-analytics';
 
 export interface ProjectsScreenLocalEntry {
   key: string;
@@ -227,7 +226,6 @@ interface ProjectsScreenProps {
 
 export function ProjectsScreen({ onBack, onSkip, onComplete }: ProjectsScreenProps) {
   const { t } = useTranslation();
-  const analytics = useOnboardingAnalytics();
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const localMachineId = useAtomValue(localMachineIdAtom);
@@ -284,11 +282,6 @@ export function ProjectsScreen({ onBack, onSkip, onComplete }: ProjectsScreenPro
 
   const handleAddLocalProject = useCallback(() => {
     if (!canImportLocal || !selectLocalProjectDirectory) return;
-    const startedAtMs = analytics.now();
-    analytics.capture('onboarding/operation_started', {
-      step: 'projects',
-      operation: 'local_project_import',
-    });
     void (async () => {
       try {
         setImporting(true);
@@ -299,12 +292,6 @@ export function ProjectsScreen({ onBack, onSkip, onComplete }: ProjectsScreenPro
           timeoutMessage: t('localProjects.add.timeout', 'The machine did not respond in time.'),
         });
         if (!result) {
-          analytics.capture('onboarding/operation_succeeded', {
-            step: 'projects',
-            operation: 'local_project_import',
-            result: 'cancelled',
-            duration_ms: analytics.durationSince(startedAtMs),
-          });
           return;
         }
         setSelectedProject({
@@ -321,35 +308,14 @@ export function ProjectsScreen({ onBack, onSkip, onComplete }: ProjectsScreenPro
             homeDir: window.__MOLLY_PLATFORM__?.homeDir,
           });
         }
-        analytics.capture('onboarding/operation_succeeded', {
-          step: 'projects',
-          operation: 'local_project_import',
-          result: 'imported',
-          duration_ms: analytics.durationSince(startedAtMs),
-        });
       } catch (error) {
         console.error('Failed to import local project', error);
-        analytics.capture('onboarding/operation_failed', {
-          step: 'projects',
-          operation: 'local_project_import',
-          failure_code: 'local_project_import_failed',
-          duration_ms: analytics.durationSince(startedAtMs),
-          retryable: true,
-        });
         toast.error(t('onboarding.projects.localImportFailed', 'Could not add the local project.'));
       } finally {
         setImporting(false);
       }
     })();
-  }, [
-    analytics,
-    canImportLocal,
-    selectLocalProjectDirectory,
-    runtime,
-    setLocalProbeResult,
-    t,
-    workspaceId,
-  ]);
+  }, [canImportLocal, selectLocalProjectDirectory, runtime, setLocalProbeResult, t, workspaceId]);
 
   const local: ProjectsScreenLocalEntry[] = useMemo(
     () =>

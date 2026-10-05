@@ -12,10 +12,7 @@ export function getPlatform(): Platform {
   if (electronOs === 'win32') return (cachedPlatform = 'win');
   if (electronOs === 'linux') return (cachedPlatform = 'linux');
 
-  const ua = navigator.userAgent || '';
   const platform = (navigator.platform || '').toLowerCase();
-  if (/iphone|ipad|ipod/i.test(ua)) return (cachedPlatform = 'ios');
-  if (/android/i.test(ua)) return (cachedPlatform = 'android');
   if (platform.includes('mac')) return (cachedPlatform = 'mac');
   if (platform.includes('win')) return (cachedPlatform = 'win');
   if (platform.includes('linux')) return (cachedPlatform = 'linux');
@@ -25,19 +22,12 @@ export function getPlatform(): Platform {
 export function getRuntime(): Runtime {
   if (cachedRuntime) return cachedRuntime;
   if (typeof window === 'undefined') return 'web';
-  const w = window as {
-    __MOLLY_ELECTRON__?: boolean;
-    __MOLLY_NATIVE__?: boolean;
-    __MOLLY_CORDOVA_READY__?: boolean;
-  };
-  if (w.__MOLLY_ELECTRON__) return (cachedRuntime = 'electron');
-  if (w.__MOLLY_NATIVE__ || w.__MOLLY_CORDOVA_READY__) return (cachedRuntime = 'mobile');
+  if (window.__MOLLY_ELECTRON__) return (cachedRuntime = 'electron');
   return (cachedRuntime = 'web');
 }
 
 export function isMac(): boolean {
-  const p = getPlatform();
-  return p === 'mac' || p === 'ios';
+  return getPlatform() === 'mac';
 }
 
 // Test-only: reset module-cached platform/runtime for tests that mock window globals.

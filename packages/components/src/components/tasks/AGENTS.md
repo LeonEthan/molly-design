@@ -59,10 +59,9 @@ starts now and a Task for work recorded for later.
 - Board drag-and-drop updates only the moved row's fractional `order`; cross-column
   moves also update `status`. List view is not draggable.
 - The desktop shell pins All Tasks and opens Task details as closable tabs. The URL is
-  the active-tab source of truth. Mobile retains a list/detail navigation stack.
+  the active-tab source of truth.
 - The desktop new-task entry lives on the sidebar Tasks row. Do not add a duplicate
-  header action that appears only after navigating to Tasks; mobile keeps its header
-  action because it has no persistent sidebar.
+  header action that appears only after navigating to Tasks.
 - `TaskProjectSelector` wraps the shared `UnifiedProjectSelectorView`. Keep
   `ProjectRef` conversion in `task-project-key.ts`; do not fork project search or
   ranking for Tasks.

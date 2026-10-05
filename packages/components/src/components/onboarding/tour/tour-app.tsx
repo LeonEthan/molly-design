@@ -587,14 +587,6 @@ function TourWindow({
                                   ]
                                 : undefined
                             }
-                            diffStat={
-                              revealedChanges.length > 0
-                                ? {
-                                    add: revealedChanges.reduce((sum, e) => sum + (e.add ?? 0), 0),
-                                    del: revealedChanges.reduce((sum, e) => sum + (e.del ?? 0), 0),
-                                  }
-                                : null
-                            }
                             contextActions={
                               tracks.pr >= 1
                                 ? undefined
@@ -610,7 +602,6 @@ function TourWindow({
                                   : undefined
                             }
                             onOpenPr={() => onSidePanelTabSelect('pr')}
-                            onOpenAllChanges={() => onSidePanelTabSelect('changes')}
                             syncing={
                               configurationState?.agentStatus === 'preparing' ||
                               configurationState?.agentStatus === 'verifying' ||

@@ -66,7 +66,7 @@ never pushed to renderers as local room health.
   attachments remain local; do not restore relay backfill.
 - Upload replies use local blocks without URLs and preserve workspace containment.
 - [acp/AGENTS.md](acp/AGENTS.md) specifies ACP buffering/flush in `message-handler.ts`,
-  turn-evidence persistence, shutdown ordering, the non-expiring late-ACP target in
+  legacy diff-read boundaries, shutdown ordering, the non-expiring late-ACP target in
   `session-transient-store.ts`, and the `awaitTurnHistoryGate` requirement for
   turn-scoped history LIST writes. Read it before changing any of them. The
   `replay-prompt-builder` resume fallback is in `context/hotspots.md`.

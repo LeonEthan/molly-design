@@ -221,13 +221,7 @@ function NavigationLanding() {
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const navigate = () => {
-    void router.navigate(
-      getSessionCreationNavigation(
-        'storybook',
-        'session-storybook-idle',
-        false
-      )
-    );
+    void router.navigate(getSessionCreationNavigation('storybook', 'session-storybook-idle'));
   };
   return (
     <>

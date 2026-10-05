@@ -24,7 +24,7 @@ Translation: current
 | 当前稿实际位置 | 当前实现位于 dataRoot/chats/<artworkId>/design.json，Agent 工作文件由 [workspace.ts](../../../../apps/cli/src/design/workspace.ts) 解析到会话目录或项目 .folio/artworks 下。提交用户 Git 项目不能保证包含 canonical 画稿 |
 | 另存作品入口 | [design-canvas.tsx](../../../../packages/components/src/components/sessions/design-canvas.tsx) 的 Save as new design 调用 create 创建作品；它与同一作品内创建版本不同，不能只改文案而沿用创建作品的行为 |
 | Lody 项目分支切换 | [local-project.ts](../../../../packages/shared/src/node/local-project.ts) 的 checkoutLocalProjectBranchAtRootPath 要求工作树干净，并切换项目分支；不是只恢复一幅画稿 |
-| Lody worktree 与自动提交 | [worktree 规则](../../../../apps/cli/src/session/worktree/AGENTS.md) 保护原项目目录；[turn-post-processing-service.ts](../../../../apps/cli/src/session/turn-post-processing-service.ts) 的自动提交路径在特定 GitHub/PR 条件下再次提示 Agent commit/push，不适合作为本地“存为版本”的实现 |
+| Lody worktree 与自动提交 | [worktree 规则](../../../../apps/cli/src/session/worktree/AGENTS.md) 保护原项目目录；[turn-post-processing-service.ts](https://github.com/LeonEthan/molly-design/blob/462073d59bbca557411519c871bf501b8a36fb85/apps/cli/src/session/turn-post-processing-service.ts) 的自动提交路径在特定 GitHub/PR 条件下再次提示 Agent commit/push，不适合作为本地“存为版本”的实现 |
 | 来源项目快照经验 | 相邻 agentic-listing-design 的 packages/authoring/src/revisions.ts 已有 writeSnapshot、listRevisions、loadRevision、commit、rollback，保存文档、素材及来源信息。其完整实现还带事件日志、trace、候选分叉等合同，只借用本次需要的快照/校验经验，不整体移入 |
 
 ## 建议交互

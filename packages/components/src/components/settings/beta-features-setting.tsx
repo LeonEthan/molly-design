@@ -1,11 +1,7 @@
 import { useAtom, useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { Switch } from '@/ui/switch';
-import {
-  developerModeEnabledAtom,
-  inboxBetaEnabledAtom,
-  tasksBetaEnabledAtom,
-} from '@/atoms/settings';
+import { developerModeEnabledAtom, tasksBetaEnabledAtom } from '@/atoms/settings';
 import { CompactRow, CompactSection } from './compact-layout';
 
 /**
@@ -22,7 +18,6 @@ export function BetaFeaturesSection() {
   const { t } = useTranslation();
   const developerModeEnabled = useAtomValue(developerModeEnabledAtom);
   const [tasksBetaEnabled, setTasksBetaEnabled] = useAtom(tasksBetaEnabledAtom);
-  const [inboxBetaEnabled, setInboxBetaEnabled] = useAtom(inboxBetaEnabledAtom);
 
   if (!developerModeEnabled) return null;
 
@@ -39,19 +34,6 @@ export function BetaFeaturesSection() {
           checked={tasksBetaEnabled}
           onCheckedChange={setTasksBetaEnabled}
           aria-label={t('settings.beta.tasks', 'Tasks')}
-        />
-      </CompactRow>
-      <CompactRow
-        label={t('settings.beta.inbox', 'Inbox')}
-        helper={t(
-          'settings.beta.inboxHelper',
-          'Show the unfinished mobile Inbox tab. In development — expect rough edges.'
-        )}
-      >
-        <Switch
-          checked={inboxBetaEnabled}
-          onCheckedChange={setInboxBetaEnabled}
-          aria-label={t('settings.beta.inbox', 'Inbox')}
         />
       </CompactRow>
     </CompactSection>

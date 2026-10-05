@@ -38,7 +38,7 @@ surfaces, or Electron IPC typing. Read the relevant sections before those change
 ## File Preview and Code Collab
 
 - Remote file surfaces read the owner-session file-index Flock. Local Electron targets
-  load initial file trees and All Changes from the local `code-collab/get-file-index`
+  load initial file trees from the local `code-collab/get-file-index`
   Machine RPC snapshot without awaiting Flock, then subscribe to local Flock events.
   Subscription delay/failure cannot block IPC or trigger cloud fallback. Allow stale
   join events to converge with the CLI's asynchronous snapshot reconciliation.
@@ -58,14 +58,14 @@ surfaces, or Electron IPC typing. Read the relevant sections before those change
   readonly regardless of the index; saves stay inside the session workspace.
 - Validate file-index rows with shared Zod helpers; preserve structured lazy-directory
   entries so `@file` completion initializes directories before refreshing results.
-- Turn-scoped diffs come only from the CLI-local evidence store, never current disk,
-  All Changes, or the removed v1 capture. File/diff reads retain cross-render in-flight
+- Historical turn diffs read retained CLI-local snapshots; new turns produce no diff evidence
+  or All Changes summaries. File/diff reads retain cross-render in-flight
   limits; active requests release slots only on settlement.
 
 ## File identity, caching, and errors
 
 - `session-file-open-target.ts` alone owns path normalization. Canonical workspace-relative
-  paths (tree, quick open, mobile browser, LSP) travel verbatim. Only Markdown hrefs
+  paths (tree, quick open, LSP) travel verbatim. Only Markdown hrefs
   are URL-decoded and stripped of `:<line>` / `#L<line>` suffixes, absolute host
   roots, and `.../worktrees/<uuid>/` prefixes.
   Line anchors travel as fields, not inside paths.

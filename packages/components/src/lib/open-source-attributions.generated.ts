@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-05T04:42:43.540Z",
+  "generatedAt": "2026-10-05T11:07:31.821Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -694,19 +694,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-babel-helper-plugin-utils-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@babel/helper-plugin-utils",
-      "license": "MIT",
-      "homepage": "https://babel.dev/docs/en/next/babel-helper-plugin-utils",
-      "author": "The Babel Team",
-      "description": "General utilities for plugins to use",
-      "versions": [
-        "7.28.6"
-      ]
-    },
-    {
       "id": "pkg-babel-helper-string-parser-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -769,32 +756,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "A JavaScript parser",
       "versions": [
         "7.29.0"
-      ]
-    },
-    {
-      "id": "pkg-babel-plugin-transform-react-jsx-self-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@babel/plugin-transform-react-jsx-self",
-      "license": "MIT",
-      "homepage": "https://babel.dev/docs/en/next/babel-plugin-transform-react-jsx-self",
-      "author": "The Babel Team",
-      "description": "Add a __self prop to all JSX Elements",
-      "versions": [
-        "7.27.1"
-      ]
-    },
-    {
-      "id": "pkg-babel-plugin-transform-react-jsx-source-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@babel/plugin-transform-react-jsx-source",
-      "license": "MIT",
-      "homepage": "https://babel.dev/docs/en/next/babel-plugin-transform-react-jsx-source",
-      "author": "The Babel Team",
-      "description": "Add a __source prop to all JSX Elements",
-      "versions": [
-        "7.27.1"
       ]
     },
     {
@@ -1822,7 +1783,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/evanw/esbuild#readme",
       "description": "The macOS ARM 64-bit binary for esbuild, a JavaScript bundler.",
       "versions": [
-        "0.25.12",
         "0.27.0",
         "0.28.2"
       ]
@@ -2809,42 +2769,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-posthog-core-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@posthog/core",
-      "license": "MIT",
-      "homepage": "https://github.com/PostHog/posthog-js#readme",
-      "versions": [
-        "1.39.6"
-      ]
-    },
-    {
-      "id": "pkg-posthog-react-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@posthog/react",
-      "license": "MIT",
-      "homepage": "https://posthog.com/docs/libraries/react",
-      "author": "engineering@posthog.com",
-      "description": "Provides components and hooks for React integrations of PostHog.",
-      "versions": [
-        "1.10.3"
-      ]
-    },
-    {
-      "id": "pkg-posthog-types-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@posthog/types",
-      "license": "MIT",
-      "homepage": "https://github.com/PostHog/posthog-js#readme",
-      "description": "Type definitions for the PostHog JavaScript SDK",
-      "versions": [
-        "1.392.1"
-      ]
-    },
-    {
       "id": "pkg-prisma-client-apache-2-0",
       "kind": "package",
       "scope": "production-dependency",
@@ -3292,8 +3216,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://radix-ui.com/primitives",
       "versions": [
-        "1.1.7",
-        "1.1.10"
+        "1.1.7"
       ]
     },
     {
@@ -3351,8 +3274,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://radix-ui.com/primitives",
       "versions": [
-        "1.1.1",
-        "1.1.2"
+        "1.1.1"
       ]
     },
     {
@@ -3502,8 +3424,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "2.1.3",
         "2.1.4",
-        "2.1.5",
-        "2.1.6"
+        "2.1.5"
       ]
     },
     {
@@ -3525,8 +3446,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://radix-ui.com/primitives",
       "versions": [
-        "1.1.11",
-        "1.1.13"
+        "1.1.11"
       ]
     },
     {
@@ -3572,8 +3492,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "1.2.3",
         "1.2.4",
-        "1.2.5",
-        "1.3.0"
+        "1.2.5"
       ]
     },
     {
@@ -3606,19 +3525,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://radix-ui.com/primitives",
       "versions": [
-        "1.1.10",
-        "1.1.12"
-      ]
-    },
-    {
-      "id": "pkg-radix-ui-react-toggle-group-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@radix-ui/react-toggle-group",
-      "license": "MIT",
-      "homepage": "https://radix-ui.com/primitives",
-      "versions": [
-        "1.1.13"
+        "1.1.10"
       ]
     },
     {
@@ -3629,7 +3536,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "license": "MIT",
       "homepage": "https://radix-ui.com/primitives",
       "versions": [
-        "1.2.8",
         "1.2.9"
       ]
     },
@@ -3786,7 +3692,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/rolldown/plugins/tree/main/packages/pluginutils#readme",
       "description": "Plugin utilities for Rolldown",
       "versions": [
-        "1.0.0-beta.27",
         "1.0.1"
       ]
     },
@@ -4447,54 +4352,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Modern and scalable routing for React applications",
       "versions": [
         "1.162.0"
-      ]
-    },
-    {
-      "id": "pkg-types-babel-core-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@types/babel__core",
-      "license": "MIT",
-      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/babel__core",
-      "description": "TypeScript definitions for @babel/core",
-      "versions": [
-        "7.20.5"
-      ]
-    },
-    {
-      "id": "pkg-types-babel-generator-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@types/babel__generator",
-      "license": "MIT",
-      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/babel__generator",
-      "description": "TypeScript definitions for @babel/generator",
-      "versions": [
-        "7.27.0"
-      ]
-    },
-    {
-      "id": "pkg-types-babel-template-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@types/babel__template",
-      "license": "MIT",
-      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/babel__template",
-      "description": "TypeScript definitions for @babel/template",
-      "versions": [
-        "7.4.4"
-      ]
-    },
-    {
-      "id": "pkg-types-babel-traverse-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@types/babel__traverse",
-      "license": "MIT",
-      "homepage": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/babel__traverse",
-      "description": "TypeScript definitions for @babel/traverse",
-      "versions": [
-        "7.28.0"
       ]
     },
     {
@@ -5281,45 +5138,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Area Proportional Venn and Euler Diagrams",
       "versions": [
         "2.0.0"
-      ]
-    },
-    {
-      "id": "pkg-use-gesture-core-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@use-gesture/core",
-      "license": "MIT",
-      "homepage": "https://use-gesture.netlify.app",
-      "author": "Paul Henschel",
-      "description": "Core engine for receiving gestures",
-      "versions": [
-        "10.3.1"
-      ]
-    },
-    {
-      "id": "pkg-use-gesture-react-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@use-gesture/react",
-      "license": "MIT",
-      "homepage": "https://use-gesture.netlify.app",
-      "author": "Paul Henschel",
-      "description": "React target for @use-gesture",
-      "versions": [
-        "10.3.1"
-      ]
-    },
-    {
-      "id": "pkg-vitejs-plugin-react-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "@vitejs/plugin-react",
-      "license": "MIT",
-      "homepage": "https://github.com/vitejs/vite-plugin-react/tree/main/packages/plugin-react#readme",
-      "author": "Evan You",
-      "description": "The default Vite plugin for React projects",
-      "versions": [
-        "4.7.0"
       ]
     },
     {
@@ -6741,8 +6559,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "2.20.3",
         "7.2.0",
-        "8.3.0",
-        "12.1.0"
+        "8.3.0"
       ]
     },
     {
@@ -6882,19 +6699,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Sign and unsign cookies",
       "versions": [
         "1.2.2"
-      ]
-    },
-    {
-      "id": "pkg-core-js-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "core-js",
-      "license": "MIT",
-      "homepage": "https://core-js.io",
-      "author": "Denis Pushkarev",
-      "description": "Standard library",
-      "versions": [
-        "3.48.0"
       ]
     },
     {
@@ -7606,19 +7410,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-decimal-js-light-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "decimal.js-light",
-      "license": "MIT",
-      "homepage": "https://github.com/MikeMcl/decimal.js-light#readme",
-      "author": "Michael Mclaughlin",
-      "description": "An arbitrary-precision Decimal type for JavaScript.",
-      "versions": [
-        "2.5.1"
-      ]
-    },
-    {
       "id": "pkg-decode-named-character-reference-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -7925,19 +7716,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Docker Remote API module.",
       "versions": [
         "4.0.9"
-      ]
-    },
-    {
-      "id": "pkg-dom-helpers-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "dom-helpers",
-      "license": "MIT",
-      "homepage": "https://github.com/react-bootstrap/dom-helpers#readme",
-      "author": "Jason Quense",
-      "description": "tiny modular DOM lib for ie9+",
-      "versions": [
-        "5.2.1"
       ]
     },
     {
@@ -8337,7 +8115,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/evanw/esbuild#readme",
       "description": "An extremely fast JavaScript and CSS bundler and minifier.",
       "versions": [
-        "0.25.12",
         "0.27.0",
         "0.28.2"
       ]
@@ -8625,19 +8402,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-fast-equals-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "fast-equals",
-      "license": "MIT",
-      "homepage": "https://github.com/planttheidea/fast-equals#readme",
-      "author": "Tony Quetano",
-      "description": "A blazing fast equality comparison, either shallow or deep",
-      "versions": [
-        "5.4.1"
-      ]
-    },
-    {
       "id": "pkg-fast-uri-bsd-3-clause",
       "kind": "package",
       "scope": "production-dependency",
@@ -8726,19 +8490,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "A module written in Rust and N-API provides interface (FFI) features for Node.js",
       "versions": [
         "1.3.7"
-      ]
-    },
-    {
-      "id": "pkg-fflate-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "fflate",
-      "license": "MIT",
-      "homepage": "https://101arrowz.github.io/fflate",
-      "author": "Arjun Barrett",
-      "description": "High performance (de)compression in an 8kB package",
-      "versions": [
-        "0.4.8"
       ]
     },
     {
@@ -9114,19 +8865,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "5.2.0",
         "6.0.1"
-      ]
-    },
-    {
-      "id": "pkg-get-tsconfig-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "get-tsconfig",
-      "license": "MIT",
-      "homepage": "https://github.com/privatenumber/get-tsconfig#readme",
-      "author": "Hiroki Osame",
-      "description": "Find and parse the tsconfig.json file from a directory path",
-      "versions": [
-        "4.13.6"
       ]
     },
     {
@@ -10593,8 +10331,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "John-David Dalton",
       "description": "Lodash modular utilities.",
       "versions": [
-        "4.17.21",
-        "4.18.1"
+        "4.17.21"
       ]
     },
     {
@@ -10673,19 +10410,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Count the longest repeating streak of a substring",
       "versions": [
         "3.1.0"
-      ]
-    },
-    {
-      "id": "pkg-loose-envify-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "loose-envify",
-      "license": "MIT",
-      "homepage": "https://github.com/zertosh/loose-envify",
-      "author": "Andres Suarez",
-      "description": "Fast (and loose) selective `process.env` replacer using js-tokens instead of an AST",
-      "versions": [
-        "1.4.0"
       ]
     },
     {
@@ -10892,7 +10616,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Eric Fennis",
       "description": "A Lucide icon library package for React applications.",
       "versions": [
-        "0.523.0",
         "0.525.0",
         "1.27.0"
       ]
@@ -12784,31 +12507,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-posthog-js-apache-2-0-and-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "posthog-js",
-      "license": "(Apache-2.0 AND MIT)",
-      "homepage": "https://posthog.com/docs/libraries/js",
-      "author": "engineering@posthog.com",
-      "description": "Posthog-js allows you to automatically capture usage and send events to PostHog.",
-      "versions": [
-        "1.396.6"
-      ]
-    },
-    {
-      "id": "pkg-preact-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "preact",
-      "license": "MIT",
-      "homepage": "https://preactjs.com",
-      "description": "Fast 3kb React-compatible Virtual DOM library.",
-      "versions": [
-        "10.29.4"
-      ]
-    },
-    {
       "id": "pkg-prebuild-install-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -12884,18 +12582,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Flexible ascii progress bar",
       "versions": [
         "2.0.3"
-      ]
-    },
-    {
-      "id": "pkg-prop-types-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "prop-types",
-      "license": "MIT",
-      "homepage": "https://facebook.github.io/react/",
-      "description": "Runtime type checking for React props and similar objects.",
-      "versions": [
-        "15.8.1"
       ]
     },
     {
@@ -13287,19 +12973,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-query-selector-shadow-dom-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "query-selector-shadow-dom",
-      "license": "MIT",
-      "homepage": "https://github.com/webdriverio/query-selector-shadow-dom#readme",
-      "author": "George Griffiths",
-      "description": "use querySelector syntax to search for nodes inside of (nested) shadow roots",
-      "versions": [
-        "1.0.1"
-      ]
-    },
-    {
       "id": "pkg-quick-lru-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13452,19 +13125,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-react-is-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "react-is",
-      "license": "MIT",
-      "homepage": "https://reactjs.org/",
-      "description": "Brand checking of React Elements.",
-      "versions": [
-        "16.13.1",
-        "18.3.1"
-      ]
-    },
-    {
       "id": "pkg-react-markdown-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13500,18 +13160,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "HTML and SVG DOM property configs used by React.",
       "versions": [
         "2.0.2"
-      ]
-    },
-    {
-      "id": "pkg-react-refresh-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "react-refresh",
-      "license": "MIT",
-      "homepage": "https://react.dev/",
-      "description": "React is a JavaScript library for building user interfaces.",
-      "versions": [
-        "0.17.0"
       ]
     },
     {
@@ -13554,19 +13202,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-react-smooth-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "react-smooth",
-      "license": "MIT",
-      "homepage": "https://github.com/recharts/react-smooth#readme",
-      "author": "JasonHzq",
-      "description": "react animation library",
-      "versions": [
-        "4.0.4"
-      ]
-    },
-    {
       "id": "pkg-react-style-singleton-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13606,18 +13241,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-react-transition-group-bsd-3-clause",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "react-transition-group",
-      "license": "BSD-3-Clause",
-      "homepage": "https://github.com/reactjs/react-transition-group#readme",
-      "description": "A react component toolset for managing animations",
-      "versions": [
-        "4.4.5"
-      ]
-    },
-    {
       "id": "pkg-react-use-measure-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -13654,32 +13277,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "4.1.2",
         "5.0.0"
-      ]
-    },
-    {
-      "id": "pkg-recharts-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "recharts",
-      "license": "MIT",
-      "homepage": "https://github.com/recharts/recharts",
-      "author": "recharts group",
-      "description": "React charts",
-      "versions": [
-        "2.15.4"
-      ]
-    },
-    {
-      "id": "pkg-recharts-scale-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "recharts-scale",
-      "license": "MIT",
-      "homepage": "https://github.com/recharts/recharts-scale",
-      "author": "recharts group",
-      "description": "Scale of Cartesian Coordinates",
-      "versions": [
-        "0.4.5"
       ]
     },
     {
@@ -13991,19 +13588,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "Detects the ALPN protocol",
       "versions": [
         "1.2.1"
-      ]
-    },
-    {
-      "id": "pkg-resolve-pkg-maps-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "resolve-pkg-maps",
-      "license": "MIT",
-      "homepage": "https://github.com/privatenumber/resolve-pkg-maps#readme",
-      "author": "Hiroki Osame",
-      "description": "Resolve package.json exports & imports maps",
-      "versions": [
-        "1.0.0"
       ]
     },
     {
@@ -15426,7 +15010,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Hiroki Osame",
       "description": "TypeScript Execute (tsx): Node.js enhanced with esbuild to run TypeScript & ESM files",
       "versions": [
-        "4.21.0",
         "4.23.13"
       ]
     },
@@ -15899,19 +15482,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-vaul-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "vaul",
-      "license": "MIT",
-      "homepage": "https://vaul.emilkowal.ski/",
-      "author": "Emil Kowalski",
-      "description": "Drawer component for React.",
-      "versions": [
-        "1.1.2"
-      ]
-    },
-    {
       "id": "pkg-vfile-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -15951,19 +15521,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-victory-vendor-mit-and-isc",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "victory-vendor",
-      "license": "MIT AND ISC",
-      "homepage": "https://commerce.nearform.com/open-source/victory",
-      "author": "Formidable",
-      "description": "Vendored dependencies for Victory",
-      "versions": [
-        "36.9.2"
-      ]
-    },
-    {
       "id": "pkg-virtua-mit",
       "kind": "package",
       "scope": "production-dependency",
@@ -15986,7 +15543,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Evan You",
       "description": "Native-ESM powered web dev build tool",
       "versions": [
-        "6.4.1",
         "7.3.1",
         "8.1.5"
       ]
@@ -16105,19 +15661,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "versions": [
         "3.3.3",
         "4.0.0-beta.3"
-      ]
-    },
-    {
-      "id": "pkg-web-vitals-apache-2-0",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "web-vitals",
-      "license": "Apache-2.0",
-      "homepage": "https://github.com/GoogleChrome/web-vitals#readme",
-      "author": "Philip Walton",
-      "description": "Easily measure performance metrics in JavaScript",
-      "versions": [
-        "5.3.0"
       ]
     },
     {

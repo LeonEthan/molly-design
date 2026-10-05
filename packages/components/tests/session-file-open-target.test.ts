@@ -7,13 +7,16 @@ describe('resolveSessionFileOpenTarget', () => {
   describe('a path that came from the file index', () => {
     // Every one of these is a legal filename, and every one of them used to be
     // rewritten into a path the machine could not find, because the file tree,
-    // quick open and the mobile browser all shared the markdown-href parser
+    // quick open shared the markdown-href parser
     // with agent-written chat links.
     const untouched = [
       ['percent-encoding in the name', 'docs/report%20v2.md'],
       ['a percent sign in the name', 'assets/100%25.png'],
       ['a colon and digits at the end', 'logs/2024:30.txt'],
-      ['a `worktrees/<uuid>/` segment of its own', 'fixtures/worktrees/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/case.txt'],
+      [
+        'a `worktrees/<uuid>/` segment of its own',
+        'fixtures/worktrees/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/case.txt',
+      ],
       ['a hash in the name', 'notes/draft#2.md'],
       ['a leading space', ' notes.md'],
     ] as const;
@@ -26,7 +29,7 @@ describe('resolveSessionFileOpenTarget', () => {
             pathKind: 'canonical',
             workspacePath: WORKSPACE,
           })
-        ).toEqual({ filePath, fromMarkdownLink: false });
+        ).toEqual({ filePath });
       });
     }
 
@@ -38,7 +41,7 @@ describe('resolveSessionFileOpenTarget', () => {
           workspacePath: WORKSPACE,
           startLine: 42,
         })
-      ).toEqual({ filePath: 'src/app.ts', startLine: 42, fromMarkdownLink: false });
+      ).toEqual({ filePath: 'src/app.ts', startLine: 42 });
     });
   });
 
@@ -53,7 +56,6 @@ describe('resolveSessionFileOpenTarget', () => {
       ).toMatchObject({
         filePath: 'src/app.ts',
         startLine: 12,
-        fromMarkdownLink: true,
         lineSuffixFormat: 'colon',
       });
     });

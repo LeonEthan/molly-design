@@ -45,7 +45,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/ui/textarea';
 import { getFirstTaskPrimaryAction } from '../first-task-primary-action';
 import { OnboardingBackButton, OnboardingNextButton, OnboardingShell } from '../onboarding-shell';
-import { useOnboardingAnalytics } from '../onboarding-analytics';
 import { isOnboardingMollyConfig } from '../onboarding-agent';
 
 export function getFirstTaskAgentConfigs(
@@ -100,7 +99,6 @@ export function FirstTaskScreen({
   onContinue: () => Promise<boolean>;
 }) {
   const { t } = useTranslation();
-  const analytics = useOnboardingAnalytics();
   const store = useStore();
   const user = useAtomValue(userAtom);
   const localMachineId = useAtomValue(localMachineIdAtom);
@@ -218,11 +216,6 @@ export function FirstTaskScreen({
         contextType: 'local',
         agentRoleId: null,
       });
-      const sessionStartedAtMs = analytics.now();
-      analytics.capture('onboarding/operation_started', {
-        step: 'firstTask',
-        operation: 'first_session_create',
-      });
       try {
         // Completion and product navigation remain independent of creation.
         const entered = await onContinue();
@@ -303,47 +296,17 @@ export function FirstTaskScreen({
             toast.error(String(error));
           });
         }
-        analytics.capture('onboarding/operation_succeeded', {
-          step: 'firstTask',
-          operation: 'first_session_create',
-          duration_ms: analytics.durationSince(sessionStartedAtMs),
-        });
-        const dispatchStartedAtMs = analytics.now();
-        analytics.capture('onboarding/operation_started', {
-          step: 'firstTask',
-          operation: 'first_session_dispatch',
-        });
         void requestSessionDispatch(result.sessionId, result.historyEntry.id, {
           inputConfig: result.historyEntry.inputConfig,
           machineId,
         }).then(
-          () => {
-            analytics.capture('onboarding/operation_succeeded', {
-              step: 'firstTask',
-              operation: 'first_session_dispatch',
-              duration_ms: analytics.durationSince(dispatchStartedAtMs),
-            });
-          },
+          () => {},
           (dispatchError: unknown) => {
             console.error('Failed to accelerate the first onboarding session', dispatchError);
-            analytics.capture('onboarding/operation_failed', {
-              step: 'firstTask',
-              operation: 'first_session_dispatch',
-              failure_code: 'first_session_dispatch_failed',
-              duration_ms: analytics.durationSince(dispatchStartedAtMs),
-              retryable: false,
-            });
           }
         );
       } catch (submitError) {
         console.error('Failed to start the first onboarding session', submitError);
-        analytics.capture('onboarding/operation_failed', {
-          step: 'firstTask',
-          operation: 'first_session_create',
-          failure_code: 'first_session_create_failed',
-          duration_ms: analytics.durationSince(sessionStartedAtMs),
-          retryable: false,
-        });
         setStartError(submitError instanceof Error ? submitError.message : String(submitError));
         toast.error(t('onboarding.firstTask.startFailed', 'The first session could not start.'), {
           description: submitError instanceof Error ? submitError.message : String(submitError),
@@ -354,7 +317,6 @@ export function FirstTaskScreen({
       }
     })();
   }, [
-    analytics,
     store,
     runtime,
     draftSessionId,

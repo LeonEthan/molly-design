@@ -180,7 +180,6 @@ function fixture(
     hasBlockingPendingCreate: false,
     hasReusableSession: false,
     hasRewriteBarrier: false,
-    hasActiveAutomation: false,
     ...(state.sourceBusy ? { activeTurnId: 'running-turn' } : {}),
   });
   execution.getActiveInvocationContext = () => state.invocation;

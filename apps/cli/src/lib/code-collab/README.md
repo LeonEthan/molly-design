@@ -1,36 +1,31 @@
 # apps/cli/src/lib/code-collab — file responsibilities
 
 Binding rules live in [AGENTS.md](AGENTS.md); this file is the navigation index.
-Ground truth for the rewrite: specs/code-collab-v2.md. The old v1
-host/runtime/CRDT capture implementation has been removed from this directory.
+The historical Code Collab rewrite is recorded in `specs/code-collab-v2.md`;
+current scope follows the graphic-design platform Spec.
 
-- `code-collab-v2-service.ts` — the unified CLI Code Collab v2 service. It resolves
-  owner/child workspace roots through `message-handler.ts`, treats relative paths as
-  file ids, enforces path/text/payload limits, handles open/refresh/save conflicts,
-  publishes file tree/current All Changes, and opens current or turn-scoped diffs.
-  Git All Changes uses the owner base; non-Git uses local diff evidence only when a
-  trustworthy base exists. It owns in-memory file-index state replacement and Flock
-  publish even when the scan itself ran in a worker.
-- `code-collab-v2-diff-store.ts` / `turn-diff-store-worker.ts` — CLI adapter and the
-  mandatory production Worker for local ACP turn evidence. The adapter returns
-  per-turn `FileDiff` and `getLatestText` heads; `message-handler.ts` passes the
-  associated user-history timestamp/order key for turn/GC order and the calibrated
-  recorded time separately. Storage/FastCDC/GC invariants live in
-  [packages/turn-diff-store/AGENTS.md](../../../../../packages/turn-diff-store/AGENTS.md).
-- `file-index-scan-worker.ts` / `file-index-scan-pool.ts` — off-main-thread directory
-  scanning and full file-index state refresh. For Git worktrees the worker computes
-  Git-backed All Changes; for non-Git/no-Git workspaces it first requests
-  service-provided All Changes, then `code-collab-v2-service.ts` supplies diff-store
-  state for the second worker call.
+- `code-collab-v2-service.ts` — unified Files service. It resolves owner/child
+  workspace roots, enforces path/text/payload limits, handles open/refresh/save
+  conflicts, and publishes a Files index. Initial activation, watcher refresh and
+  terminal turn refresh reuse the existing full scan and Flock publication path;
+  they do not compute All Changes, derive turn diffs, or publish diff summaries.
+  Explicit historical turn/current/batched diff RPC reads remain available for
+  compatibility and are not scheduled by Files lifecycle events.
+- `code-collab-v2-diff-store.ts` / `turn-diff-store-worker.ts` — legacy snapshot
+  read adapter and required worker. New turn writes and edit-evidence chaining
+  have been removed. Existing schema, snapshot reads, limits and retention/GC
+  remain in [packages/turn-diff-store](../../../../../packages/turn-diff-store/AGENTS.md).
+- `file-index-scan-worker.ts` / `file-index-scan-pool.ts` — off-main-thread
+  directory scanning and Files index construction. Git workspaces reuse
+  `git ls-files` for path listing; plain directories reuse the bounded filesystem
+  scan. Neither path computes a diff or loads a stored pre-image.
 - `workspace-watch-coordinator.ts` / `workspace-watch-worker.ts` /
-  `workspace-watch-worker-core.ts` — Fleet-level best-effort invalidation: the
-  coordinator shares one child and one recursive watcher per canonical root, and
-  the child core owns the native `fs.watch` handles.
-- `code-collab-v2-service.test.ts` — path validation, digest conflicts, refresh
-  behavior, compression limits, shared state publishing, current diff opening, and
-  unsupported LSP responses.
-- `code-collab-publish-repair.test.ts` — file-index initial reconcile and
+  `workspace-watch-worker-core.ts` — shared Fleet-level watcher invalidation.
+- `code-collab-v2-service.test.ts` — path validation, digest conflicts, file
+  refresh and publication, payload limits, historical snapshot reads and
+  unsupported LSP responses. Legacy snapshots are seeded through the existing
+  package API as synthetic fixtures, then read through the CLI adapter.
+- `code-collab-publish-repair.test.ts` — initial Flock reconciliation and
   owner-scoped publication repair/backoff.
-- `code-collab-v2-diff-store.test.ts` — adapter tests for exact snapshots, path
-  scoping, chaining, and retention GC. Package-level dedup/refcount/size-GC tests
-  live in `packages/turn-diff-store/tests`.
+- `code-collab-v2-diff-store.test.ts` — existing database reopening, exact legacy
+  snapshots, missing/oversized reads, owner scoping and retention behavior.

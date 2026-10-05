@@ -2,10 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FolderPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type {
-  LoroSidebarNavKey,
-  LoroSidebarOrganizeMode,
-} from '@/components/loro-sidebar';
+import type { LoroSidebarNavKey, LoroSidebarOrganizeMode } from '@/components/loro-sidebar';
 import { LoroSidebar } from '@/components/loro-sidebar';
 import { LocalProjectItem } from '@/components/loro-app-sidebar';
 import { SidebarSectionHeader } from '@/components/sidebar-row-shared';
@@ -21,7 +18,7 @@ import type {
   SidebarUpdatedBucketKey,
   SidebarUpdatedItem,
 } from '@/components/sidebar-updated-session-list';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import type {
   LocalProjectHistoryProvider,
   LocalProjectId,
@@ -370,7 +367,6 @@ function StoryLayout(args: Parameters<typeof LoroSidebar>[0]) {
     [allSidebarItems]
   );
   const workspaceTasks = useMemo(() => sessions.filter((task) => !task.isPinned), [sessions]);
-  const isMobile = useIsMobile();
 
   const sidebar = (
     <LoroSidebar
@@ -409,17 +405,9 @@ function StoryLayout(args: Parameters<typeof LoroSidebar>[0]) {
     />
   );
 
-  // Mobile preview: the production sidebar fills the MobileSidebarDrawer panel
   // (full width, no shoulder padding, no adjacent content card). We mirror that
   // here so the screenshots reflect production layout instead of a squeezed
   // desktop column with truncated labels.
-  if (isMobile) {
-    return (
-      <div className="min-h-screen w-full bg-background text-foreground">
-        <div className="h-screen w-full">{sidebar}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen w-full bg-background p-10 text-foreground">
@@ -910,7 +898,6 @@ function ProductionLikeTopContent({
   chatsCollapsed: boolean;
   onToggleChatsCollapsed: () => void;
 }) {
-  const isMobile = useIsMobile();
   const [localProjectsCollapsed, setLocalProjectsCollapsed] = useState(false);
   const [githubCollapsed, setGithubCollapsed] = useState(false);
   const projectCollapseStates = useMemo(
@@ -952,7 +939,6 @@ function ProductionLikeTopContent({
             label="Local Projects"
             collapsed={localProjectsCollapsed}
             count={demoProjects.length}
-            isMobile={isMobile}
             toggleLabel="Toggle"
             onToggleCollapsed={() => setLocalProjectsCollapsed((v) => !v)}
             action={
@@ -990,9 +976,7 @@ function ProductionLikeTopContent({
                     selectedSessionId={null}
                     removeProjectLabel="Remove folder"
                     archiveTooltipLabel="Archive"
-                    archiveActionLabel="Archive"
                     archiveConfirmLabel="Confirm"
-                    isMobile={isMobile}
                     toggleLabel="Toggle"
                     onNavigateProject={() => {}}
                     onNavigateSession={() => {}}
@@ -1016,7 +1000,6 @@ function ProductionLikeTopContent({
             label="MacBook Pro projects"
             collapsed={false}
             count={1}
-            isMobile={isMobile}
             toggleLabel="Toggle"
             onToggleCollapsed={() => {}}
           />
@@ -1043,9 +1026,7 @@ function ProductionLikeTopContent({
                   selectedSessionId={null}
                   removeProjectLabel="Remove folder"
                   archiveTooltipLabel="Archive"
-                  archiveActionLabel="Archive"
                   archiveConfirmLabel="Confirm"
-                  isMobile={isMobile}
                   toggleLabel="Toggle"
                   onNavigateProject={() => {}}
                   onNavigateSession={() => {}}
@@ -1068,7 +1049,6 @@ function ProductionLikeTopContent({
         label="GitHub Worktrees"
         collapsed={githubCollapsed}
         count={githubWorktreeCount}
-        isMobile={isMobile}
         toggleLabel="Toggle"
         onToggleCollapsed={() => setGithubCollapsed((v) => !v)}
       />
@@ -1128,8 +1108,6 @@ function WithProjectsLayout(args: Parameters<typeof LoroSidebar>[0]) {
     );
   };
 
-  const isMobile = useIsMobile();
-
   const sidebar = (
     <LoroSidebar
       {...args}
@@ -1162,14 +1140,6 @@ function WithProjectsLayout(args: Parameters<typeof LoroSidebar>[0]) {
       onArchiveClicked={() => setActiveNav('archive')}
     />
   );
-
-  if (isMobile) {
-    return (
-      <div className="min-h-screen w-full bg-background text-foreground">
-        <div className="h-screen w-full">{sidebar}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen w-full bg-background p-10 text-foreground">

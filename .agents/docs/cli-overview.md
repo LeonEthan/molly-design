@@ -72,7 +72,11 @@ composition.
 ## Retired developer workflows
 
 Molly no longer runs PR discovery/status reconciliation or automatic review/merge.
-The CLI review command, viewer download and review submission MCP tool are removed.
+The CLI review command, viewer download, independent code-review-helper package and review
+submission MCP tool are removed. Turns no longer collect Git baselines, query associated PRs,
+generate or rename branches, or send commit/push prompts to the Agent. New turn diff evidence
+and automatic All Changes derivation are retired; Files scanning, text saves and legacy
+snapshot reading continue.
 Existing scheduling caches, review records, working files and session history are
 not deleted. Generic task automation, workspace watchers and Agent tools remain.
 See [T24's consumer audit](../notes/implemented/simplification/2026-09-11-developer-workflow-retirement.md).

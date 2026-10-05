@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { useAtomValue } from 'jotai';
-import { usePostHog } from '@posthog/react';
 import { useTranslation } from 'react-i18next';
 import {
   canManageAgentRole,
@@ -19,7 +18,7 @@ import { userAtom } from '@/atoms';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { onlineMachineIdsAtom } from '@/atoms/presence';
 import { useAcpSelectorOptions } from '@/hooks/use-acp-selector-options';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
 import { useWorkspaceAgentRoleActions } from '@/hooks/use-workspace-agent-roles';
 import {
@@ -34,7 +33,6 @@ import {
   type AgentRoleFormValue,
 } from '@/lib/agent-role-form';
 import { cn } from '@/lib/utils';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog';
 import { AgentRoleForm } from './agent-role-form';
 
@@ -85,7 +83,6 @@ export function AgentRoleEditorDialog({
   onChange,
   onClose,
   onSaved,
-  source,
 }: {
   editor: AgentRoleEditorState | null;
   /** Roles this user can see, for the mention-token uniqueness check. */
@@ -99,12 +96,9 @@ export function AgentRoleEditorDialog({
    * edit.
    */
   onSaved?: (role: AgentRole, meta: { created: boolean }) => void;
-  /** Entry point that opened the editor; used only for product analytics. */
-  source: 'settings' | 'chat_landing' | 'session_composer';
 }) {
   const { t } = useTranslation();
-  const postHog = usePostHog();
-  const isMobile = useIsMobile();
+
   const currentUserId = useAtomValue(userAtom)?.id ?? null;
   const onlineMachineIds = useAtomValue(onlineMachineIdsAtom);
   const agentConfigs = useAtomValue(getAllAgentConfigAtom);
@@ -261,12 +255,6 @@ export function AgentRoleEditorDialog({
       // upload is not a failed save and there is nothing to act on.
       await upsert(role);
       if (editor.mode === 'add') {
-        capturePostHogEvent(postHog, 'settings/agent_role_created', {
-          source,
-          visibility: role.visibility,
-          has_prompt_prefix: Boolean(role.promptPrefix),
-          run_config_option_count: Object.keys(role.runConfig.configOptionValues ?? {}).length,
-        });
       }
       onSaved?.(role, { created: editor.mode === 'add' });
       close();
@@ -294,11 +282,11 @@ export function AgentRoleEditorDialog({
         overlayClassName={
           // Desktop settings is itself a dialog; match its z-index so this
           // later overlay covers it without stacking a second /80 veil.
-          isMobile ? undefined : 'z-[var(--z-dialog)] bg-black/20'
+          'z-[var(--z-dialog)] bg-black/20'
         }
         className={cn(
           'flex max-h-[min(680px,88dvh)] w-[min(620px,96dvw)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl border-border/50 bg-background p-0 sm:max-w-none sm:rounded-2xl sm:p-0',
-          !isMobile && 'shadow-popover'
+          'shadow-popover'
         )}
       >
         <header className="shrink-0 border-b border-border/40 px-5 py-5 pr-12">

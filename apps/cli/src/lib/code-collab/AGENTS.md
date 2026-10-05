@@ -2,36 +2,30 @@
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 
-Ground truth for the rewrite: specs/code-collab-v2.md. The old v1
+Historical rewrite: specs/code-collab-v2.md. Current product scope follows
+specs/graphic-design-platform.zh.md. The old v1
 host/runtime/CRDT capture implementation has been removed from this directory.
 File-by-file responsibilities: [README.md](README.md).
 
 ## Invariants
 
-- Do not reintroduce per-session Code Collab host runtimes, host handles, bootstrap
-  secrets, or synced text CRDT documents here. Turn diff support is CLI-local:
-  standard ACP diff blocks are written to `code-collab-v2-diff-store.ts`, and Web
-  reads them back through Machine RPC.
-- Turn-diff evidence unifies 3 ACP sources at turn end (`message-handler.ts`
-  `persistCodeCollabTurnDiffs`): `fs/write_text_file`, standard `diff` blocks, and
-  edit-tool changes gap-filled with new text from disk and old text chained from
-  `getLatestText`. Resolve direct old evidence before loading a bounded path head.
-  ACP-covered paths skip gap-fill; missing pre-images fail loudly.
-  Badge and clickable content both derive from these exact events, never Git stats.
-- The mandatory production Worker `turn-diff-store-worker.ts` must exist: missing
-  emitted workers are fatal. The diff-store adapter injects `getServerNow()` so
-  worker startup, retention reads, and background/manual GC stay on the same
-  calibrated clock as persisted turn timestamps; it allocates one durable
-  attempt-start head proof and advances a path only when its `newText` matches
-  current disk.
-- Shared file tree/All Changes uses owner-session Flock stream
-  `<workspace-id>:fi:<master-session-id>` (one row per path); successful changes or
-  targeted repairs advance signal stream `<workspace-id>:fis:<master-session-id>`,
-  and the named Flock bridge in `apps/cli/src/lib/loro/doc.ts` lets Electron
-  invalidate and refresh its Machine RPC snapshot. Both streams have 180-day TTL and
-  must not enter repo meta. Root activation and terminal turn refresh may mirror only
-  compact aggregate add/del `diffStats`; watcher refreshes stay Flock-only, and PR
-  sessions retain committed compare totals.
+- Do not reintroduce per-session Code Collab host runtimes, host handles,
+  bootstrap secrets, synced text CRDT documents, ACP diff evidence collectors,
+  per-turn snapshot writes, or automatic Git/All Changes summaries. ACP tool
+  history and file locations remain on the existing history pipeline.
+- `code-collab-v2-diff-store.ts` exposes legacy snapshot reads and existing
+  retention/GC only. Preserve the stored format and production
+  `turn-diff-store-worker.ts` for those reads; do not migrate, replace, or
+  newly populate the historical store. Its calibrated retention clock stays
+  injected through `getServerNow()`.
+- The Files index uses owner-session Flock stream
+  `<workspace-id>:fi:<master-session-id>` (one row per path). Successful index
+  changes or targeted repairs advance `<workspace-id>:fis:<master-session-id>`;
+  the bridge in `../loro/doc.ts` lets Electron invalidate its Machine RPC
+  snapshot. Preserve 180-day TTL, content dedupe and scoped publication repair;
+  publish no new `diffStats` or change rows. Root activation, watcher and terminal
+  turn refresh all reuse the full Files scan without reading snapshots or
+  computing Git diffs.
 - A file-index row whose path key carries U+FFFD came from a byte stream decoded
   across a chunk boundary, not from a scan; it is its own LWW key, so a correct
   republish cannot overwrite it. The shared helpers hide it on read and delete it on
@@ -55,7 +49,7 @@ File-by-file responsibilities: [README.md](README.md).
 - Machine RPC is the integration boundary. Local/Electron direct transport can be
   added below that RPC abstraction, but file operations still route to the single CLI
   service. In particular, local `code-collab/get-file-index` scans/builds the initial
-  tree and All Changes snapshot without awaiting Flock publication, then queues a
+  Files snapshot without awaiting Flock publication, then queues a
   force-reconcile of that fresh in-memory state without delaying the response. This
   repairs a durable file-index Flock that became stale while the CLI was stopped;
   Flock remains the durable replication path for remote consumers and local renderer
@@ -69,7 +63,7 @@ File-by-file responsibilities: [README.md](README.md).
   paths outside that root remain `invalid_path`; never rely on frontend path stripping
   as the filesystem access boundary.
 - Native `fs.watch` handles must stay in `workspace-watch-worker-core.ts`; the main CLI
-  Worker owns only subscriptions, refresh timers, scans, file-index/All Changes state,
+  Worker owns only subscriptions, refresh timers, scans, file-index state,
   and Flock publication. The child receives canonical roots over private IPC only and
   exits on IPC disconnect. Do not restore direct or per-directory watches in the service.
 - Child sessions resolve file operations against the parent session host/worktree when

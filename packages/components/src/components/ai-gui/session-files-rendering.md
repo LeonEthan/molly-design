@@ -37,29 +37,16 @@ File attachments use `file` blocks; the product contract is in
   and `../sessions/session-file-image-preview.tsx` (Code Collab file preview, one
   image). A new image surface must reuse it rather than hand-roll gestures —
   the two paths are required to feel identical.
-- The file preview stays a fitted `<img>` inline and opens the viewer on tap.
-  `react-photo-view` has no inline mode, and a hand-rolled inline zoom would be a
-  second gesture implementation fighting Vaul drawer drag + the file browser's
-  `MobileEdgeBackSwipeZone`.
-- Inside mobile Vaul drawers, do not default the portal to `document.body`:
-  Radix/Vaul treats body portals as outside the drawer, so touch/scroll can be
-  blocked or fall through. Pass an in-drawer element as `portalAnchorRef`;
-  `resolveImagePreviewPortalContainer` walks up to the real `[data-vaul-drawer]`
-  (not the `data-vaul-no-drag` body wrapper, which is `display: contents`) and
-  `useImagePreviewPortalNoDrag` marks the mounted portal root `data-vaul-no-drag`
-  so Vaul does not take over pan/pinch gestures.
+- The file preview stays a fitted `<img>` inline and opens the viewer on click.
 - `react-photo-view@1.2.7` is patched in root `patches/` to hard-clamp the MINIMUM
   pinch scale at `1` (no shrink-below-fit rubber band; max stays 6×). Do not replace
   this with an outer `overlayRender`/React state clamp; that fights PhotoView's touch
   state.
-- One viewer, two presentations (`zoomable-image-viewer.css`): touch keeps the
-  full-bleed overlay; desktop (`useIsMobile() === false`) gets a lightbox — the
-  photo inset by a `transform: scale()`, a translucent + blurred mask
-  (`maskOpacity`), a gradient top bar padded clear of the macOS traffic lights /
-  Windows caption buttons, and no `1 / 1` counter for a single image. Never inset
-  the photo by capping `width`/`height` (PhotoView centers the box IT sized, so a
-  capped box lands off center) or by padding (it erases an image smaller than the
-  inset).
+- The viewer is a desktop lightbox (`zoomable-image-viewer.css`): the photo is
+  inset by a `transform: scale()`, with a translucent blurred mask and a top bar
+  padded clear of the macOS traffic lights / Windows caption buttons. A single
+  image has no `1 / 1` counter. Never inset the photo by capping `width`/`height`
+  or padding; PhotoView centers its own box and small images must stay visible.
 - Right-click inside the viewer opens a NATIVE Copy / Save menu, Electron only
   (`../../lib/image-preview-export.ts` + `apps/electron/.../image-export-service.ts`).
   The image is a `blob:` URL, so main cannot download it: main pops the menu and

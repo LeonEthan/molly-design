@@ -162,7 +162,7 @@ describe('session history storage (integration)', () => {
     expect(doc.handle?.doc.export({ mode: 'snapshot' }).length).toBeLessThan(6500);
   });
 
-  it('does not persist file contents for read/edit but still triggers editCallback', async () => {
+  it('preserves read and edit tool history without storing full file contents', async () => {
     const repo = await LoroRepo.create({});
     const sessionId = uuidv4() as SessionId;
     const doc = new SessionDocument(repo, sessionId);
@@ -317,7 +317,6 @@ describe('session history storage (integration)', () => {
       expect(readTypes.has('diff')).toBe(false);
 
       // Edit should not persist diffs, but should still trigger the callback.
-      const editsSeen: Array<{ path: string; oldText: string | null; newText: string }> = [];
       await appendAutonomousACPNotifications(
         doc,
         [
@@ -347,56 +346,9 @@ describe('session history storage (integration)', () => {
             ],
           }),
         ],
-        {
-          editCallback: (edits) => {
-            editsSeen.push(...edits);
-          },
-        },
+        {},
         undefined
       );
-
-      // Hunk-level old/new text is not forwarded as file content; the edit still reports the
-      // path as an update so per-turn membership survives.
-      expect(editsSeen).toEqual([
-        {
-          path: '/tmp/acp-history-storage.txt',
-          changeType: 'update',
-          contentOldText: oldText,
-          contentNewText: newText,
-        },
-      ]);
-
-      const newFileEditsSeen: Array<unknown> = [];
-      await appendAutonomousACPNotifications(
-        doc,
-        [
-          makeNotification({
-            sessionUpdate: 'tool_call_update',
-            toolCallId: 'edit-new-file',
-            status: 'completed',
-            kind: 'edit',
-            content: [
-              {
-                type: 'diff',
-                path: '/tmp/new-file.txt',
-                oldText: null,
-                newText: 'created\n',
-              },
-            ],
-          }),
-        ],
-        {
-          editCallback: (edits) => {
-            newFileEditsSeen.push(...edits);
-          },
-        },
-        undefined
-      );
-
-      // A created-file diff block (oldText: null) proves the full new text.
-      expect(newFileEditsSeen).toEqual([
-        { path: '/tmp/new-file.txt', changeType: 'add', fullNewText: 'created\n' },
-      ]);
 
       history = await doc.sessionData.history.readAll();
       const editTool = findToolCall(history, editId);

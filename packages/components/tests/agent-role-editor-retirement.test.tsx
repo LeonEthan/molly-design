@@ -43,9 +43,6 @@ vi.mock('../src/hooks/use-workspace-agent-roles', () => ({
     },
   }),
 }));
-vi.mock('../src/hooks/use-mobile', () => ({ useIsMobile: () => false }));
-vi.mock('@posthog/react', () => ({ usePostHog: () => undefined }));
-vi.mock('../src/lib/posthog-analytics', () => ({ capturePostHogEvent: () => {} }));
 vi.mock('../src/ui/dialog', () => {
   const Part = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return { Dialog: Part, DialogContent: Part, DialogDescription: Part, DialogTitle: Part };
@@ -144,7 +141,6 @@ async function render(editor: AgentRoleEditorState) {
           accessibleRoles={[]}
           onChange={() => {}}
           onClose={() => {}}
-          source="settings"
         />
       </Provider>
     )

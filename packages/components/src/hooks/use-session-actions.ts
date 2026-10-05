@@ -33,7 +33,6 @@ import {
   shouldQueueMachineDeleteSession,
 } from '@molly/shared';
 import { useAtomValue, useSetAtom, useStore } from 'jotai';
-import { usePostHog } from '@posthog/react';
 // Default import: `debug` is CJS. Named `{ debug }` breaks Vite 8 / TanStack
 // module-runner interop used by site-docs SSR (UNEXPECTED named-export error).
 import debug from 'debug';
@@ -47,7 +46,6 @@ import {
 } from '@/atoms/session-dispatch-delivery';
 import { resolveSessionCreateRepoFullName } from '@/lib/session-repo';
 import { collectSessionLifecycleIds } from '@/lib/session-lifecycle';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 
 const log = debug('lody:session-actions');
@@ -524,7 +522,6 @@ export function useSessionActions(): SessionActions {
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const setDocMetaByRoomId = useSetAtom(setDocMetaByRoomIdAtom);
   const store = useStore();
-  const postHog = usePostHog();
 
   const getSessionLifecycleMetas = useCallback(
     (sessionId: SessionId, rootMeta: SessionMeta): SessionMeta[] => {
@@ -610,22 +607,9 @@ export function useSessionActions(): SessionActions {
         }
       );
       setDocMetaByRoomId(sessionRoomId, sessionMeta);
-      capturePostHogEvent(postHog, 'session/chat', {
-        user_id: sessionMeta.userId,
-        workspace_id: runtime.workspaceId,
-        session_id: sessionId,
-        machine_id: sessionMeta.machineId,
-        agent_config_id: sessionMeta.agentConfigId,
-        cli_type: sessionMeta.cliType,
-        agent_type: sessionMeta.agentType,
-        project_kind: sessionMeta.project?.kind ?? null,
-        is_first_message: true,
-        session_type: resolveSessionChatType(sessionMeta),
-        ...countSessionMentions(history.items),
-      });
       return { sessionId, sessionMeta, historyEntry };
     },
-    [postHog, runtime, setDocMetaByRoomId]
+    [runtime, setDocMetaByRoomId]
   );
 
   const addSessionHistory = useCallback(
@@ -636,11 +620,6 @@ export function useSessionActions(): SessionActions {
     ) => {
       if (!runtime) {
         throw new Error('Runtime not ready');
-      }
-
-      // Sending any user message (new chat, reply, child-session/filter reply)
-      // counts as an explicit active user action.
-      if (history.role === 'user') {
       }
 
       const entry = { ...history, id: uuidv4() } as SessionHistory;
@@ -681,30 +660,9 @@ export function useSessionActions(): SessionActions {
         };
       }
       await runtime.writer.appendSessionTurn(sessionId, entry, dispatch);
-      // session/chat fires once for every user message dispatched through Molly —
-      // the session-creating turn AND every follow-up — so it tracks active-use
-      // frequency, unlike session/start_success which only covers creation. This
-      // is the single convergence point for both the chat-landing (new session)
-      // and session-chat-interface (reply/queue/child) send paths.
-      if (history.role === 'user') {
-        const sessionMeta = store.get(sessionMetaCacheAtom)[getSessionRoomId(sessionId)];
-        capturePostHogEvent(postHog, 'session/chat', {
-          user_id: sessionMeta?.userId,
-          workspace_id: runtime.workspaceId,
-          session_id: sessionId,
-          machine_id: sessionMeta?.machineId,
-          agent_config_id: sessionMeta?.agentConfigId,
-          cli_type: sessionMeta?.cliType,
-          agent_type: sessionMeta?.agentType,
-          project_kind: sessionMeta?.project?.kind ?? null,
-          is_first_message: false,
-          session_type: resolveSessionChatType(sessionMeta),
-          ...countSessionMentions(history.items),
-        });
-      }
       return entry;
     },
-    [runtime, postHog, store]
+    [runtime]
   );
 
   const updateSessionStatus = useCallback(

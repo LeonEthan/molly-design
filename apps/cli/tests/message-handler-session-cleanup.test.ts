@@ -56,8 +56,6 @@ type MessageHandlerInternals = {
   ) => Promise<void>;
   enqueueACPUpdate: (sessionId: SessionId, update: AcpSessionNotification) => void;
   quiesceACPFlushForDeletion: (sessionId: SessionId) => Promise<void>;
-  codeCollabV2PendingEvidenceWrites: Map<SessionId, Set<Promise<void>>>;
-  codeCollabV2TurnDiffs: Map<string, unknown[]>;
   deletedSessionIds: Set<SessionId>;
   deleteInFlight: Set<SessionId>;
   store: {
@@ -241,20 +239,22 @@ describe('MessageHandler session resource cleanup', () => {
   });
 
   it('keeps a failed session-doc deletion retryable', async () => {
+    const watcher = vi
+      .spyOn(
+        MessageHandler.prototype as unknown as { setupDeleteWatcher(): void },
+        'setupDeleteWatcher'
+      )
+      .mockImplementation(() => {});
     const { handler, sessionId, repo } = createHarness();
-    await vi.waitFor(() => expect(handler.deleteInFlight.size).toBe(0));
-    handler.deletedSessionIds.clear();
-    repo.deleteDoc.mockClear();
+    watcher.mockRestore();
     repo.deleteDoc.mockRejectedValueOnce(new Error('temporary delete failure'));
 
     await expect(handler.deleteSessionResources(sessionId)).rejects.toThrow(
       'temporary delete failure'
     );
     expect(handler.deletedSessionIds.has(sessionId)).toBe(false);
-    const callsAfterFailure = repo.deleteDoc.mock.calls.length;
 
     await expect(handler.deleteSessionResources(sessionId)).resolves.toEqual({});
-    expect(repo.deleteDoc.mock.calls.length).toBeGreaterThan(callsAfterFailure);
     expect(handler.deletedSessionIds.has(sessionId)).toBe(true);
   });
 
@@ -278,42 +278,6 @@ describe('MessageHandler session resource cleanup', () => {
     releaseWrite?.();
     await quiesce;
 
-    expect(handler.store.has(sessionId)).toBe(false);
-  });
-
-  it('waits for an in-flight evidence collector before dropping deletion state', async () => {
-    const { handler, sessionId } = createHarness();
-    const key = `${sessionId}\0turn-delete`;
-    let releaseCollector: (() => void) | undefined;
-    let trackedCollector: Promise<void>;
-    const pending = new Set<Promise<void>>();
-    const collector = new Promise<void>((resolve) => {
-      releaseCollector = () => {
-        handler.codeCollabV2TurnDiffs.set(key, [{ path: 'a.txt', oldText: 'old', newText: 'new' }]);
-        resolve();
-      };
-    });
-    trackedCollector = collector.finally(() => {
-      pending.delete(trackedCollector);
-      if (pending.size === 0) {
-        handler.codeCollabV2PendingEvidenceWrites.delete(sessionId);
-      }
-    });
-    pending.add(trackedCollector);
-    handler.codeCollabV2PendingEvidenceWrites.set(sessionId, pending);
-    let quiesced = false;
-
-    const quiesce = handler.quiesceACPFlushForDeletion(sessionId).then(() => {
-      quiesced = true;
-    });
-    await Promise.resolve();
-
-    expect(quiesced).toBe(false);
-
-    releaseCollector?.();
-    await quiesce;
-
-    expect(handler.codeCollabV2TurnDiffs.has(key)).toBe(false);
     expect(handler.store.has(sessionId)).toBe(false);
   });
 

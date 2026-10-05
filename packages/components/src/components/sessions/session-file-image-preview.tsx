@@ -12,22 +12,6 @@ interface SessionFileImagePreviewProps {
   readonly svgText?: string;
 }
 
-/**
- * Inline image preview backed by an object URL. Returns null when the path is
- * not a previewable image or no source is available, so callers can fall back
- * to other rendering (e.g. a binary notice or the code viewer).
- *
- * Uses <img src=blob:> rather than inlining SVG markup: it keeps the same code
- * path for raster and vector images and sandboxes SVGs (no script/external
- * resource execution).
- *
- * Tapping the fitted image opens the shared `ZoomableImageViewer`, the SAME
- * full-screen surface chat image blocks use, so pinch-to-zoom, double-tap,
- * drag-to-pan, and the top-right close button behave identically in both. The
- * inline surface deliberately stays a plain fitted <img>: `react-photo-view`
- * has no inline mode, and a hand-rolled inline zoom would be a second gesture
- * implementation fighting the mobile drawer/edge-back gestures.
- */
 export const SessionFileImagePreview = memo(function SessionFileImagePreview({
   path,
   bytes,
@@ -86,13 +70,7 @@ export const SessionFileImagePreview = memo(function SessionFileImagePreview({
       >
         <img src={imageUrl} alt={path} className="max-h-full max-w-full object-contain" />
       </button>
-      <ZoomableImageViewer
-        open={viewerOpen}
-        onClose={handleClose}
-        images={images}
-        index={0}
-        portalAnchorRef={containerRef}
-      />
+      <ZoomableImageViewer open={viewerOpen} onClose={handleClose} images={images} index={0} />
     </div>
   );
 });

@@ -3,8 +3,7 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 Root `AGENTS.md` also applies.
 
-This package contains shared React UI for browser-shaped, Electron, and responsive
-mobile surfaces.
+This package contains the local desktop React UI, including narrow Electron windows.
 
 ## General rules
 
@@ -74,6 +73,6 @@ at cache-clear level; local file routes must never silently fall back to cloud.
   [src/ui/AGENTS.md](src/ui/AGENTS.md).
 - Hooks: [src/hooks/AGENTS.md](src/hooks/AGENTS.md). Workspace runtime, transports, and
   presence: [src/providers/AGENTS.md](src/providers/AGENTS.md).
-- Sessions, mobile, chat, mentions, tasks, onboarding, settings, and Codex reset
+- Sessions, chat, mentions, tasks, onboarding, settings, and Codex reset
   forecast each own an `AGENTS.md` under `src/components/`. Commands and shortcuts:
   [src/lib/commands/AGENTS.md](src/lib/commands/AGENTS.md).

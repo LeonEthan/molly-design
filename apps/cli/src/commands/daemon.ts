@@ -9,7 +9,6 @@ import { version } from '@/pkg';
 import { stopDaemonProcess } from './daemon-stop';
 import { MOLLY_LOG_DIR, readPidFileRecord, spawnDaemonRunnerAndAwaitReady } from './daemon-shared';
 import { flushTelemetry } from '@/instrument';
-import { captureDaemonEvent } from './analytics-events';
 import { fetchLocalProbeHealth } from '@/lib/local-probe-health';
 import { getCliPlatformKind } from '@/lib/cli-platform';
 import { buildDaemonStartPassthroughArgs, type DaemonStartOptions } from './daemon-start-options';
@@ -18,7 +17,6 @@ import { readLatestLogTail } from '@/utils/log-files';
 
 async function exitDaemonCommand(code: number): Promise<void> {
   process.exitCode = code;
-  // Flush buffered analytics before the one-shot daemon command exits.
   await flushTelemetry();
   process.exit(code);
 }
@@ -131,17 +129,13 @@ export const daemonCommand = new Command('daemon')
           return;
         }
         const passthroughArgs = buildDaemonStartPassthroughArgs(options, cmd.args);
-
-        captureDaemonEvent('daemon_start_requested');
         const result = await startDaemonProcess(passthroughArgs);
         if (result.status === 'missing_child_pid') {
-          captureDaemonEvent('daemon_start_failed', { reason_code: 'missing_child_pid' });
           console.error('Failed to start daemon process');
           await exitDaemonCommand(1);
           return;
         }
         if (result.status === 'ownership_conflict') {
-          captureDaemonEvent('daemon_start_failed', { reason_code: 'ownership_conflict' });
           console.error(
             `Another local agent Host won the startup race (${result.ownerMode ?? 'unknown'} process ${result.pid}).`
           );
@@ -149,25 +143,20 @@ export const daemonCommand = new Command('daemon')
           return;
         }
         if (result.status === 'startup_error') {
-          captureDaemonEvent('daemon_start_failed', { reason_code: 'startup_error' });
           console.error(`Daemon startup (runner PID ${result.pid}) failed: ${result.message}`);
           await exitDaemonCommand(1);
           return;
         }
         if (result.status === 'runner_exited') {
-          captureDaemonEvent('daemon_start_failed', { reason_code: 'runner_exited' });
           console.error(`Daemon runner (PID ${result.pid}) exited before its worker became ready.`);
           await exitDaemonCommand(1);
           return;
         }
         if (result.status === 'startup_timeout') {
-          captureDaemonEvent('daemon_start_failed', { reason_code: 'startup_timeout' });
           console.error(`Daemon worker (PID ${result.pid}) did not become ready in time.`);
           await exitDaemonCommand(1);
           return;
         }
-
-        captureDaemonEvent('daemon_start_succeeded');
         console.log(`Daemon started (PID ${result.pid})`);
         printStartTips();
         await exitDaemonCommand(0);
@@ -176,9 +165,7 @@ export const daemonCommand = new Command('daemon')
   )
   .addCommand(
     new Command('stop').description('Stop the running molly daemon').action(async () => {
-      captureDaemonEvent('daemon_stop_requested');
       const result = await stopDaemonProcess();
-      captureDaemonEvent('daemon_stop_result', { result: result.status });
       if (result.status === 'not_running') {
         console.log('No daemon PID file found. Daemon is not running.');
         await exitDaemonCommand(0);
@@ -224,14 +211,6 @@ export const daemonCommand = new Command('daemon')
         runtimeState.supervisor.pid === host.pid &&
         runtimeState.supervisor.launchMode === 'daemon';
       if (host?.mode === 'daemon') {
-        captureDaemonEvent('daemon_status_checked', {
-          daemon_status: 'running',
-          phase: runtimeBelongsToDaemon ? runtimeState.phase : 'starting',
-          connectivity: runtimeBelongsToDaemon ? runtimeState.connectivity : undefined,
-          active_session_count: runtimeBelongsToDaemon
-            ? runtimeState.activeSessionCount
-            : undefined,
-        });
         console.log(chalk.green('● Daemon is running'));
         console.log(`  PID:          ${host.pid}`);
         console.log(`  Phase:        ${runtimeBelongsToDaemon ? runtimeState.phase : 'starting'}`);
@@ -263,7 +242,6 @@ export const daemonCommand = new Command('daemon')
       }
 
       if (host) {
-        captureDaemonEvent('daemon_status_checked', { daemon_status: 'not_running' });
         console.log(chalk.red('● Daemon is not running'));
         console.log(`  Local agent Host: ${host.mode} process ${host.pid}`);
         await exitDaemonCommand(1);
@@ -271,7 +249,6 @@ export const daemonCommand = new Command('daemon')
       }
 
       if (runtimeState) {
-        captureDaemonEvent('daemon_status_checked', { daemon_status: 'orphan_runtime' });
         console.log(chalk.yellow('● Daemon Host is absent, but an orphan runtime is responding'));
         console.log(`  Runtime PID: ${runtimeState.pid}`);
         await exitDaemonCommand(1);
@@ -281,10 +258,8 @@ export const daemonCommand = new Command('daemon')
       const pidRecord = readPidFileRecord();
       const pid = pidRecord?.pid ?? null;
       if (pid) {
-        captureDaemonEvent('daemon_status_checked', { daemon_status: 'stale_pid' });
         console.log(chalk.red('● Daemon is not running (stale PID file)'));
       } else {
-        captureDaemonEvent('daemon_status_checked', { daemon_status: 'not_running' });
         console.log(chalk.red('● Daemon is not running'));
       }
       await exitDaemonCommand(1);
@@ -325,8 +300,6 @@ export const daemonCommand = new Command('daemon')
       .allowUnknownOption(true)
       .action(async (_options: unknown, cmd: Command) => {
         const passthroughArgs = cmd.args;
-
-        captureDaemonEvent('daemon_restart_requested');
         const runningProbeHealth = await fetchLocalProbeHealth();
         const versionMismatchHealth =
           runningProbeHealth && runningProbeHealth.cliVersion !== version
@@ -339,7 +312,6 @@ export const daemonCommand = new Command('daemon')
         }
 
         const stopResult = await stopDaemonProcess();
-        captureDaemonEvent('daemon_stop_result', { result: stopResult.status, via: 'restart' });
         if (stopResult.status === 'not_running') {
           console.log('No daemon was running.');
         } else if (stopResult.status === 'stale_pid_file') {
@@ -372,14 +344,8 @@ export const daemonCommand = new Command('daemon')
         if (await reportDaemonStartBlocked(readiness, { restart: true })) {
           return;
         }
-
-        captureDaemonEvent('daemon_start_requested', { via: 'restart' });
         const startResult = await startDaemonProcess(passthroughArgs);
         if (startResult.status === 'missing_child_pid') {
-          captureDaemonEvent('daemon_start_failed', {
-            reason_code: 'missing_child_pid',
-            via: 'restart',
-          });
           console.error('Failed to start daemon process');
           await exitDaemonCommand(1);
           return;
@@ -410,8 +376,6 @@ export const daemonCommand = new Command('daemon')
           await exitDaemonCommand(1);
           return;
         }
-
-        captureDaemonEvent('daemon_start_succeeded', { via: 'restart' });
         console.log(`Daemon started (PID ${startResult.pid})`);
         printStartTips();
         await exitDaemonCommand(0);

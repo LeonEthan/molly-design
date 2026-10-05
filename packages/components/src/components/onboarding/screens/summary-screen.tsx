@@ -5,7 +5,6 @@ import type { ProviderSetupFailureCode } from '@molly/shared';
 import { Table, TableBody, TableCell, TableRow } from '@/ui/table';
 import { Button } from '@/ui/button';
 import { OnboardingBackButton, OnboardingNextButton, OnboardingShell } from '../onboarding-shell';
-import { useOnboardingAnalytics } from '../onboarding-analytics';
 
 export type OnboardingSummaryAgentState = 'ready' | 'preparing' | 'failed' | 'missing' | 'retired';
 
@@ -29,7 +28,6 @@ export function SummaryScreen({
   onRetryAgent?: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const analytics = useOnboardingAnalytics();
   const [retryingAgent, setRetryingAgent] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
   const title =
@@ -126,30 +124,12 @@ export function SummaryScreen({
             disabled={retryingAgent}
             onClick={() => {
               if (retryingAgent) return;
-              const startedAtMs = analytics.now();
               setRetryingAgent(true);
               setRetryError(null);
-              analytics.capture('onboarding/operation_started', {
-                step: 'summary',
-                operation: 'agent_setup_retry_request',
-              });
               void onRetryAgent()
-                .then(() => {
-                  analytics.capture('onboarding/operation_succeeded', {
-                    step: 'summary',
-                    operation: 'agent_setup_retry_request',
-                    duration_ms: analytics.durationSince(startedAtMs),
-                  });
-                })
+                .then(() => {})
                 .catch((error: unknown) => {
                   console.error('[onboarding] Failed to retry Agent setup from Summary:', error);
-                  analytics.capture('onboarding/operation_failed', {
-                    step: 'summary',
-                    operation: 'agent_setup_retry_request',
-                    failure_code: 'agent_setup_retry_failed',
-                    duration_ms: analytics.durationSince(startedAtMs),
-                    retryable: true,
-                  });
                   setRetryError(error instanceof Error ? error.message : String(error));
                 })
                 .finally(() => setRetryingAgent(false));

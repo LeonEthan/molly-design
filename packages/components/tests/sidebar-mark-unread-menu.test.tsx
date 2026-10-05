@@ -198,7 +198,6 @@ describe('desktop sidebar mark-unread menus', () => {
             archiveTooltipLabel="Archive session"
             archiveActionLabel="Archive"
             archiveConfirmLabel="Confirm"
-            isMobile={false}
             toggleLabel="Toggle"
             onNavigateProject={() => undefined}
             onNavigateSession={() => undefined}

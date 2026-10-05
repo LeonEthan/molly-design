@@ -1,27 +1,20 @@
 import { useCallback } from 'react';
 import { useAtomValue } from 'jotai';
 import { useRouter } from '@tanstack/react-router';
-import { usePostHog } from '@posthog/react';
 import {
   buildPendingUserHistoryEntry,
   buildSessionTurnInputConfig,
   getMissingTaskExecutionFields,
   getServerNow,
-  hashAnalyticsId,
   type AgentConfigMeta,
   type ProjectRef,
   type SessionId,
   type TaskAgentRef,
   type TaskId,
 } from '@molly/shared';
-import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom, userAtom } from '@/atoms';
+import { currentWorkspaceSlugAtom, userAtom } from '@/atoms';
 import { getAllAgentConfigAtom } from '@/atoms/agents';
 import { buildAgentPrompt } from '@/lib';
-import { capturePostHogEvent } from '@/lib/posthog-analytics';
-import {
-  buildSessionCreateAcpAnalyticsProperties,
-  SESSION_ACP_CONFIG_USED_EVENT,
-} from '@/lib/session-create-analytics';
 import { useSessionActions } from '@/hooks/use-session-actions';
 import { useTaskActions } from '@/hooks/use-task-actions';
 
@@ -63,9 +56,7 @@ export const buildTaskBrief = (title: string, body: string): string => {
  */
 export function useTaskRun() {
   const router = useRouter();
-  const postHog = usePostHog();
   const user = useAtomValue(userAtom);
-  const workspaceId = useAtomValue(currentWorkspaceIdAtom);
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   const { startSession, requestSessionDispatch } = useSessionActions();
@@ -136,38 +127,6 @@ export function useTaskRun() {
         pendingHistoryEntry
       );
 
-      // Task Run is a third session-creation surface alongside chat landing and
-      // child tabs; it reports the same two events so sessions started from a
-      // task are not invisible in session-creation analytics.
-      const analyticsProperties = {
-        user_id: userId,
-        workspace_id: workspaceId,
-        session_id: sessionId,
-        machine_id: config.machineId,
-        agent_config_id: config.id,
-        cli_type: config.cliType,
-        agent_type: config.agentType,
-        ...buildSessionCreateAcpAnalyticsProperties({
-          cliType: config.cliType,
-          agentType: config.agentType,
-          modeId: request.agent.modeId,
-          modelId: request.agent.modelId,
-          configOptionValues: request.agent.configOptionValues,
-        }),
-        project_kind: project?.kind ?? null,
-        entrypoint: 'task_run',
-      };
-      capturePostHogEvent(postHog, 'session/start_requested', {
-        ...analyticsProperties,
-        repo_id_hash: hashAnalyticsId(
-          project?.kind === 'github' ? project.repoFullName : undefined
-        ),
-        local_project_id: project?.kind === 'local' ? project.localProjectId : null,
-        has_images: false,
-        image_count: 0,
-      });
-      capturePostHogEvent(postHog, SESSION_ACP_CONFIG_USED_EVENT, analyticsProperties);
-
       // Dual-author (#3138): the renderer direct-authors its own durable writes,
       // so start never absorbs the dispatch and every creation surface requests
       // it unconditionally — same as chat landing and child tabs.
@@ -200,13 +159,11 @@ export function useTaskRun() {
     [
       agentConfigs,
       linkSession,
-      postHog,
       requestSessionDispatch,
       router,
       startSession,
       updateTaskFields,
       user?.id,
-      workspaceId,
       workspaceSlug,
     ]
   );

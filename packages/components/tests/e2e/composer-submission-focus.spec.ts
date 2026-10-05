@@ -57,14 +57,9 @@ for (const stopPropagation of [false, true]) {
   });
 }
 
-for (const platform of ['desktop', 'narrow-browser', 'wide-native'] as const) {
-  test(`landing navigation hands off focus only on desktop (${platform})`, async ({ page }) => {
-    if (platform === 'narrow-browser') await page.setViewportSize({ width: 390, height: 844 });
-    if (platform === 'wide-native') {
-      await page.addInitScript(() => {
-        Object.defineProperty(window, '__MOLLY_NATIVE__', { configurable: true, value: true });
-      });
-    }
+for (const platform of ['desktop', 'narrow-desktop'] as const) {
+  test(`landing navigation hands off focus once (${platform})`, async ({ page }) => {
+    if (platform === 'narrow-desktop') await page.setViewportSize({ width: 620, height: 844 });
     await page.goto(
       '/iframe.html?id=sessions-sessionchatinputarea--landing-navigation&viewMode=story'
     );
@@ -74,13 +69,9 @@ for (const platform of ['desktop', 'narrow-browser', 'wide-native'] as const) {
     await expect(page.getByText('Preparing session')).toBeVisible();
     await page.evaluate(() => window.dispatchEvent(new Event('storybook:composer-ready')));
     await expect(input).toBeVisible();
-    if (platform === 'desktop') {
-      await expect(input).toBeFocused();
-      await page.keyboard.type('Continue conversation');
-      await expect(input).toHaveValue('Continue conversation');
-    } else {
-      await expect(input).not.toBeFocused();
-    }
+    await expect(input).toBeFocused();
+    await page.keyboard.type('Continue conversation');
+    await expect(input).toHaveValue('Continue conversation');
     await page.getByRole('button', { name: 'Leave session' }).click();
     await page.getByRole('button', { name: 'Back to session' }).click();
     await expect(page.getByText('Preparing session')).toBeVisible();

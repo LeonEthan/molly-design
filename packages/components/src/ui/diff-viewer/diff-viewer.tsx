@@ -29,7 +29,7 @@ import { getSessionDiffErrorMessage } from '@/lib/session-diff-diagnostics';
 import { getDiffPerfNow, isDiffPerfEnabled, logDiffPerfDurationLazy } from '@/lib/diff-perf';
 import { observeResizeOnAnimationFrame } from '@/lib/resize-observer';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { DEFAULT_VSCODE_DIFF_THEME_FALLBACK } from '@/lib/vscode-theme';
 import { parseDiffInWorker, parseDiffTextSourceInWorker } from '@/lib/diff-parse-worker';
 import type { DiffTextChunkSource } from '@/lib/diff-text-chunk-source';
@@ -79,9 +79,6 @@ const prerenderedHtmlCache = new Map<string, string>();
 type DiffLineEnterProps = Parameters<
   NonNullable<NonNullable<FileDiffProps<CommentAnnotationMeta>['options']>['onLineEnter']>
 >[0];
-type DiffLineClickHandler = NonNullable<
-  NonNullable<FileDiffProps<CommentAnnotationMeta>['options']>['onLineClick']
->;
 
 const MemoizedFileDiff = memo(
   function MemoizedFileDiff({
@@ -504,7 +501,7 @@ function DiffViewerImpl({
   const renderStartedAt = isDiffPerfEnabled() ? getDiffPerfNow() : 0;
   const resolvedTheme = useResolvedTheme();
   const activeDiffThemeName = useActiveVSCodeDiffThemeName();
-  const isMobile = useIsMobile();
+
   // Use responsive style when diffStyle is not explicitly set and responsiveSplit is enabled
   const { style: responsiveStyle, containerRef } = useResponsiveDiffStyle(
     responsiveSplit && diffStyle === undefined
@@ -899,16 +896,6 @@ function DiffViewerImpl({
     setHoveredLine(null);
   }, [commentsEnabled, setHoveredLine]);
 
-  const commentLineClick = useCallback<DiffLineClickHandler>(
-    (props) => {
-      if (!commentsEnabled || !isMobile) return;
-      if (!isCommentableDiffLineType(props.lineType)) return;
-      props.event.preventDefault();
-      startDraft(props.annotationSide, props.lineNumber);
-    },
-    [commentsEnabled, isMobile, startDraft]
-  );
-
   const renderCommentAnnotation = useCallback(
     (annotation: DiffLineAnnotation<CommentAnnotationMeta>) => (
       <SessionCommentAnnotation
@@ -973,10 +960,10 @@ function DiffViewerImpl({
       unsafeCSS: `${DIFF_OPERATION_ICON_CSS}\n${options?.unsafeCSS ?? ''}`,
       ...(commentsEnabled
         ? {
-            enableHoverUtility: !isMobile,
-            onLineClick: isMobile ? commentLineClick : undefined,
-            onLineEnter: isMobile ? undefined : commentLineEnter,
-            onLineLeave: isMobile ? undefined : commentLineLeave,
+            enableHoverUtility: true,
+            onLineClick: undefined,
+            onLineEnter: commentLineEnter,
+            onLineLeave: commentLineLeave,
           }
         : {}),
     }),
@@ -987,8 +974,6 @@ function DiffViewerImpl({
       options,
       resolvedTheme,
       commentsEnabled,
-      isMobile,
-      commentLineClick,
       commentLineEnter,
       commentLineLeave,
     ]
@@ -1058,7 +1043,7 @@ function DiffViewerImpl({
         prerenderedHTML={commentsEnabled ? undefined : cachedPrerenderedHTML}
         lineAnnotations={commentsEnabled ? commentAnnotations : undefined}
         renderAnnotation={commentsEnabled ? renderCommentAnnotation : undefined}
-        renderHoverUtility={commentsEnabled && !isMobile ? renderCommentHoverUtility : undefined}
+        renderHoverUtility={commentsEnabled ? renderCommentHoverUtility : undefined}
       />
     ) : null;
 

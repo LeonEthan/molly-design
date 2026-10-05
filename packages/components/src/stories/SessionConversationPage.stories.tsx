@@ -19,10 +19,10 @@
  * - After changing anything here, verify in the REAL app;
  *   story preview chrome (backdrop/frame) is not production.
  */
-import type { Decorator, Meta, StoryObj } from '@storybook/react';
+import type { Meta, StoryObj } from '@storybook/react';
 import { createLocalPlatformProvider, createStaticStore } from '@molly/platform';
 import { PlatformContext } from '@molly/platform/react';
-import type { ComponentProps, ReactNode } from 'react';
+import type { ComponentProps } from 'react';
 import { Provider, createStore } from 'jotai';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -885,7 +885,6 @@ function StoryInfoBar({ session }: { session: SessionMeta }) {
       branch={session.branchName}
       pr={storyPullRequest}
       onOpenPr={action}
-      diffStat={{ add: 128, del: 42 }}
     />
   );
 }
@@ -1010,7 +1009,7 @@ function StoryShell({
     parentSessionId: session.id,
     status: { type: 'idle' as const },
   };
-  // Mobile renders full-bleed (fills the phone-width viewport) to match how the
+
   // app actually looks on a phone — no fake bezel or gray padding that could
   // clip content or misrepresent spacing. Desktop keeps the framed preview.
   const frameClassName = 'mx-auto h-full w-full max-w-6xl border-x border-border/70 shadow-sm';
@@ -1071,7 +1070,6 @@ function StoryShell({
                   dropKind="session-mention"
                   headerSlot={null}
                   subHeaderSlot={
-                    // Mobile has no tab bar now (tabs live in the 💬 sheet); desktop keeps it.
                     // Mirrors the production merged top row (session-detail
                     // desktop): tabs + right-side toolbar ("…" menu) in ONE bar;
                     // the old repo-title header row is gone.
@@ -1125,8 +1123,6 @@ function StoryShell({
                         shouldShowPermissionSurface ? null : (
                           <>
                             <div hidden={selection.active}>
-                              {/* Mirrors the production info bar (cluster + stage)
-                              glued above the composer — desktop AND mobile. */}
                               <StoryInfoBar session={session} />
                               <StoryComposer
                                 session={session}
@@ -1177,7 +1173,6 @@ function StoryShell({
                     ) : undefined
                   }
                 />
-                {null}
               </div>
             </div>
           </StableSessionContext.Provider>
@@ -1186,58 +1181,6 @@ function StoryShell({
     </PlatformContext.Provider>
   );
 }
-
-/**
- * The composer (and other components) branch on `useIsMobile()`, which reads
- * `window.innerWidth` — NOT the CSS phone frame. So a fixed-width CSS "phone"
- * box still renders the DESKTOP layout at a wide manager width, which is why
- * the mobile stories previously leaked the desktop composer. To render the real
- * mobile layout, resize the Storybook preview iframe so the story window is
- * genuinely phone-sized (this is what the viewport addon does under the hood).
- *
- * Passing a `height` also lets us simulate short-body phones (e.g. iPhone SE):
- * the app fills `100dvh`, so a short iframe surfaces whether the fixed header /
- * tab bar / composer crowd out the scrollable message area. Only effective in
- * the Storybook manager (there is a real preview iframe); in `iframe.html` it is
- * a no-op, so resize the browser instead.
- */
-// Every prop the mobile lock touches. Cleared explicitly (rather than restoring
-// a snapshot of `style.cssText`) so a desktop story can deterministically undo
-// whatever a previously-viewed mobile story left on the shared preview iframe.
-const VIEWPORT_LOCK_PROPS = [
-  'width',
-  'min-width',
-  'max-width',
-  'height',
-  'min-height',
-  'max-height',
-  'margin',
-] as const;
-
-function clearViewportLock(frame: HTMLElement) {
-  for (const prop of VIEWPORT_LOCK_PROPS) frame.style.removeProperty(prop);
-}
-
-// Desktop stories must forcibly release any mobile lock left on the shared
-// preview iframe (Storybook reuses one iframe across stories, and the mobile
-// cleanup can race a direct desktop→mobile→desktop navigation). Without this the
-// desktop frame's `w-full` collapses to the leaked 430px.
-const withDesktopViewport: Decorator = (Story) => {
-  function DesktopViewport({ children }: { children: ReactNode }) {
-    useEffect(() => {
-      const frame = window.frameElement as HTMLElement | null;
-      if (!frame) return;
-      clearViewportLock(frame);
-      window.dispatchEvent(new Event('resize'));
-    }, []);
-    return <>{children}</>;
-  }
-  return (
-    <DesktopViewport>
-      <Story />
-    </DesktopViewport>
-  );
-};
 
 const meta = {
   title: 'Sessions/SessionConversationPage',
@@ -1257,43 +1200,36 @@ type Story = StoryObj<typeof meta>;
 
 export const DesktopIdle: Story = {
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopShareImage: Story = {
   args: { shareImage: true },
   globals: { theme: 'light' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopShareImageDark: Story = {
   args: { shareImage: true },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopSessionMentionDrop: Story = {
   args: { dropActive: true },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopStreamingWorking: Story = {
   args: { state: 'working' },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopPermissionApproval: Story = {
   args: { state: 'permission' },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopAgentQuestion: Story = {
   args: { state: 'question' },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 /**
@@ -1305,23 +1241,19 @@ export const DesktopAgentQuestion: Story = {
 export const DesktopPlanFlow: Story = {
   args: { state: 'plan' },
   globals: { theme: 'dark' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopPlanFlowLight: Story = {
   args: { state: 'plan' },
   globals: { theme: 'light' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopCapacityRetry: Story = {
   args: { showCapacityRetry: true },
   globals: { theme: 'light' },
-  decorators: [withDesktopViewport],
 };
 
 export const DesktopCapacityRetryChinese: Story = {
   args: { showCapacityRetry: true },
   globals: { theme: 'light', locale: 'zh_CN' },
-  decorators: [withDesktopViewport],
 };

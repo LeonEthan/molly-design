@@ -7,8 +7,8 @@ Parent `AGENTS.md` files also apply. `CLAUDE.md` is a symlink to this file; edit
   (`transform`/`opacity`). Do not restore canvas frame loops, React animation state, or
   timers; keep the Storybook Playwright render budgets passing.
 - `ZoomableImageViewer` is the one image viewer, and it presents per
-  surface: full-bleed on touch, a lightbox on desktop (inset photo, translucent mask, a
-  top bar that clears the native window controls). Inset the photo with a transform
+  surface as a lightbox (inset photo, translucent mask, a top bar that clears
+  the native window controls). Inset the photo with a transform
   only — `react-photo-view` positions the box it sized itself, so a capped
   `width`/`height` decenters it and padding erases a small image. Its portal sits at
   `--z-image-viewer`, deliberately UNDER `--z-toast`, because the viewer's own copy/save

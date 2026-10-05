@@ -11,14 +11,13 @@ declare module '@tanstack/react-router' {
 export function getSessionCreationNavigation(
   workspaceName: string,
   sessionId: string,
-  usesMobileKeyboard: boolean,
   options: { focusDesignCanvas?: boolean } = {}
 ) {
   return {
     to: '/$workspaceName/sessions/$sessionId' as const,
     params: { workspaceName, sessionId },
     state: {
-      focusComposerSessionId: usesMobileKeyboard ? undefined : sessionId,
+      focusComposerSessionId: sessionId,
       focusDesignCanvasSessionId: options.focusDesignCanvas ? sessionId : undefined,
     },
   };

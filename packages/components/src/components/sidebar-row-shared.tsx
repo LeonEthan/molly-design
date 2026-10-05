@@ -181,15 +181,6 @@ function hasSessionRowStatus({
   return Boolean(isWaitingPermission || isWorking || hasUnreadMessages);
 }
 
-/**
- * ③ The PR status icon shown in the final slot (colored, non-interactive —
- * opening the PR is handled by the row context menu + info card). Sized to match
- * the Archive button that replaces it on hover.
- *
- * The mobile conversation row (`mobile/mobile-project-screen.tsx`) renders this
- * same component at the end of its own metric cluster, so PR status tone and the
- * CI verdict badge read identically on both platforms.
- */
 export function SessionPrIcon({
   prStatus,
   prCiState,
@@ -795,7 +786,6 @@ export function SidebarSectionHeader({
   collapsed,
   action,
   onToggleCollapsed,
-  isMobile,
   toggleLabel,
 }: {
   icon?: ReactNode;
@@ -805,7 +795,7 @@ export function SidebarSectionHeader({
   count?: number;
   action?: ReactNode;
   onToggleCollapsed?: () => void;
-  isMobile?: boolean;
+
   toggleLabel?: string;
 }) {
   const canToggle = typeof onToggleCollapsed === 'function';
@@ -831,9 +821,7 @@ export function SidebarSectionHeader({
         }
         className={cn(
           SECTION_HEADER_BUTTON_CLASS,
-          canToggle
-            ? cn('cursor-pointer', !isMobile && 'hover:text-sidebar-foreground')
-            : 'cursor-default'
+          canToggle ? cn('cursor-pointer', 'hover:text-sidebar-foreground') : 'cursor-default'
         )}
       >
         {icon}
@@ -844,7 +832,7 @@ export function SidebarSectionHeader({
               SECTION_HEADER_CHEVRON_CLASS,
               // This shared header is reserved for top-level sections (Chats,
               // machine names, GitHub Worktrees), whose folded affordance stays visible.
-              collapsed || isMobile ? 'opacity-100' : 'group-hover:opacity-100',
+              collapsed ? 'opacity-100' : 'group-hover:opacity-100',
               // Collapsed points right (the platform-wide convention).
               collapsed ? '-rotate-90' : 'rotate-0'
             )}

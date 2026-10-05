@@ -55,6 +55,9 @@ cross-module explanations under tracked `.agents/docs/`.
 - `local-project-removal.ts` — local project deletion, session archiving, and optional
   Lody-created worktree cleanup.
 - `provider-setup-manager.ts` — durable default managed-builtin agent config creation.
+- Product-managed Agent GitHub token injection and shell shims are retired. Host-side
+  Git credential helpers and legacy worktree recovery retain their existing contracts;
+  removal of the unused shim source does not clean user credentials or generated files.
 - `task-doc.ts` — every CLI-side read/write of a Task document, plus
   `listWorkspaceTaskIds` and the index-only listing (`listTasksFromIndex` / pure
   `selectTaskIndexRows`). Normative contract: specs/tasks.md.
@@ -98,7 +101,7 @@ cross-module explanations under tracked `.agents/docs/`.
   edge trigger recovery; unavailable/corrupt evidence holds new automation and owns
   a 30-second retry. Disposal cancels the retry and drains owned recovery. Legacy
   dispatches without receipts are not guessed or replayed; the boot baseline remains.
-- `analytics/`, `git/`, `notifications/`, `session-export/`, `usage/` — supporting
+- `git/`, `notifications/`, `session-export/`, `usage/` — supporting
   services.
 
 ## Local reference images

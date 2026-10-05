@@ -38,12 +38,6 @@ import {
   type LocalCliHostLease,
 } from '@molly/shared/node/local-cli-host-lease';
 import { traceAsync } from '@/utils/trace-span';
-import {
-  captureAgentServiceEvent,
-  captureCliActivePing,
-  captureCliActiveUser,
-  ACTIVE_PING_MIN_INTERVAL_MS,
-} from './analytics-events';
 import { createLocalCloudPort } from '@molly/platform';
 
 interface StartOptions {
@@ -169,16 +163,12 @@ export const startCommand = new Command('start')
         machineId,
         logger,
         runtimeStateReporter,
-        authMethod,
         foregroundHostLease,
         supervisorIdentity,
         machineLifecycleCapability,
         unregisterStartupSupervisorControl
       );
     } catch (error) {
-      captureAgentServiceEvent('agent_service_startup_failed', {
-        failure_stage: runtimeStateReporter.snapshot().startupStage ?? 'unknown',
-      });
       runtimeStateReporter.upsertIssue({
         code: 'service_start_failed',
         severity: 'fatal',
@@ -205,7 +195,6 @@ async function startAgentService(
   machineId: string,
   logger: Logger,
   runtimeStateReporter: CliRuntimeStateReporter,
-  authMethod: 'local_platform',
   foregroundHostLease: LocalCliHostLease | null,
   supervisorIdentity: LocalSupervisorIdentity | null,
   machineLifecycleCapability: ReturnType<typeof resolveMachineLifecycleCapability>,
@@ -215,16 +204,6 @@ async function startAgentService(
   // the graceful controller registration below there is no async yield.
   unregisterStartupSupervisorControl();
   logger.info(`Starting agent service...`);
-
-  // `app/active` distinct_id is the machine_id (non-PII) for cross-client DAU.
-  const serviceStartMs = Date.now();
-  let activePingTimer: ReturnType<typeof setInterval> | null = null;
-  const stopActivePing = () => {
-    if (activePingTimer) {
-      clearInterval(activePingTimer);
-      activePingTimer = null;
-    }
-  };
 
   const startupStartMs = Date.now();
   logger.debug('Initializing workspace fleet...');
@@ -281,16 +260,11 @@ async function startAgentService(
     shutdown: async () => {
       unregisterSupervisorControl();
       unregisterProcessCleanup();
-      stopActivePing();
       eventLoopLagMonitor.stop();
       await fleet.shutdown();
       await closeForegroundHostLease();
     },
     flushTelemetry: async () => {
-      captureAgentServiceEvent('agent_service_shutdown', {
-        uptime_ms: Date.now() - serviceStartMs,
-        auth_method: authMethod,
-      });
       await flushTelemetry();
     },
     exit: (code) => process.exit(code),
@@ -323,30 +297,6 @@ async function startAgentService(
     logger.debug(`Workspace fleet started (${Date.now() - connectStartMs}ms)`);
     logger.debug(`Agent startup completed in ${Date.now() - startupStartMs}ms`);
 
-    const startupSnapshot = runtimeStateReporter.snapshot();
-    captureAgentServiceEvent('agent_service_started', {
-      auth_method: authMethod,
-      // Best-effort: the workspace subscription may still be populating right
-      // after fleet.start(); connected rooms approximate workspace count.
-      workspace_count: startupSnapshot.connectedRoomCount,
-      startup_duration_ms: Date.now() - startupStartMs,
-    });
-    captureCliActiveUser({ auth_method: authMethod });
-
-    // app/active_ping: emit while the service is doing work (>=1 active
-    // session). >=60s interval (tier C), idle-stop (skipped when no active
-    // session) so an idle daemon does not generate a steady ping stream.
-    activePingTimer = setInterval(() => {
-      const snapshot = runtimeStateReporter.snapshot();
-      if ((snapshot.activeSessionCount ?? 0) <= 0) return;
-      captureCliActivePing({
-        active_context: 'cli_agent_service',
-        active_session_count: snapshot.activeSessionCount,
-        connected_room_count: snapshot.connectedRoomCount,
-      });
-    }, ACTIVE_PING_MIN_INTERVAL_MS);
-    activePingTimer.unref?.();
-
     logger.success('✨ Local agent service is ready. Open Molly to create.');
     logger.info(`Press ${chalk.yellow('Ctrl+C')} to stop`);
 
@@ -362,7 +312,6 @@ async function startAgentService(
     });
     shutdownController.unregister();
     unregisterProcessCleanup();
-    stopActivePing();
     eventLoopLagMonitor.stop();
     await fleet.shutdown().catch((err: unknown) => {
       logger.error('Cleanup failed:', err);

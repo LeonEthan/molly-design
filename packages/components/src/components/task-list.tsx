@@ -55,8 +55,7 @@ import type {
   SessionPullRequestReadiness,
 } from '@molly/shared';
 import { ONLY_CHATS_KEY, sidebarShowFullListAtom } from '@/atoms/focus-layer';
-import { SwipeActionRow } from '@/components/shared/swipe-action-row';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useStableNow } from '@/hooks/use-stable-now';
 import { formatCompactRelativeTime } from '@/lib/format-relative-time';
 import {
@@ -334,10 +333,10 @@ type TaskGroupSectionProps = {
   getTaskHref?: (taskId: string) => string | undefined;
   dragHandle?: ReactNode;
   archiveTooltipLabel: string;
-  archiveActionLabel: string;
+
   archiveConfirmLabel: string;
   contextMenuLabels: ContextMenuLabels;
-  isMobile: boolean;
+
   trailingContent?: ReactNode;
   /**
    * Always-visible action at the right end of the header row, after the
@@ -376,10 +375,8 @@ const TaskGroupSection = memo(function TaskGroupSection({
   getTaskHref,
   dragHandle,
   archiveTooltipLabel,
-  archiveActionLabel,
   archiveConfirmLabel,
   contextMenuLabels,
-  isMobile,
   trailingContent,
   headerAction,
 }: TaskGroupSectionProps) {
@@ -426,7 +423,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
     [draftTitle, onRenameTask]
   );
   const isActiveGroup = activeGroupKey === group.key;
-  const showActiveGroupState = isActiveGroup && !isMobile;
+  const showActiveGroupState = isActiveGroup;
   const canToggle =
     group.kind === 'repo'
       ? typeof onToggleRepoCollapsed === 'function'
@@ -497,13 +494,13 @@ const TaskGroupSection = memo(function TaskGroupSection({
                 ? cn(
                     'cursor-pointer bg-transparent',
                     headerBaseColorClass,
-                    !isMobile && 'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
+                    'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground'
                   )
                 : canToggle
                   ? cn(
                       'cursor-pointer bg-transparent',
                       headerBaseColorClass,
-                      !isMobile && headerToggleHoverClass
+                      headerToggleHoverClass
                     )
                   : cn('cursor-default bg-transparent', headerBaseColorClass)
           )}
@@ -546,11 +543,9 @@ const TaskGroupSection = memo(function TaskGroupSection({
                   // Left-anchored (not centered in the 20px button) so its left edge
                   // lines up with the session rows' leading status slot below.
                   'absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 transition-opacity duration-100',
-                  // Mobile: chevron is always shown so the owner avatar must hide
+
                   // permanently to avoid the two icons overlapping.
-                  canToggle && isMobile
-                    ? 'opacity-0'
-                    : cn('opacity-80', canToggle && 'group-hover:opacity-0')
+                  cn('opacity-80', canToggle && 'group-hover:opacity-0')
                 )}
               />
               {canToggle && (
@@ -558,7 +553,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
                   className={cn(
                     'absolute left-0 top-1/2 -translate-y-1/2 h-4 w-4',
                     'transition-[opacity,translate,scale] duration-150 ease-out',
-                    isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                    'opacity-0 group-hover:opacity-100',
                     group.collapsed ? '-rotate-90' : 'rotate-0'
                   )}
                 />
@@ -571,7 +566,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
               className={cn(
                 'h-3.5 w-3.5 shrink-0 text-current',
                 'transition-[opacity,translate,scale] duration-150 ease-out',
-                group.collapsed || isMobile ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
+                group.collapsed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100',
                 // Chats is a top-level sidebar section, so its collapsed chevron
                 // stays visible without hover.
                 group.collapsed ? '-rotate-90' : 'rotate-0'
@@ -609,11 +604,11 @@ const TaskGroupSection = memo(function TaskGroupSection({
           {visibleTasks.length > 0 &&
             visibleTasks.map((task) => {
               const isSelected = task.taskId === selectedTaskId;
-              const showSelectedState = isSelected && !isMobile;
+              const showSelectedState = isSelected;
               const relativeTime = formatCompactRelativeTime(task.latestMessageAt, now);
               const hasChanges = task.addedLines !== 0 || task.deletedLines !== 0;
               const canArchive = typeof onArchiveTask === 'function';
-              const showInlineArchive = canArchive && !isMobile;
+              const showInlineArchive = canArchive;
               const isChatTask = group.kind === 'chat';
               // Stretched-link pattern: a transparent absolute `<a>` overlays the row so
               // browsers can handle middle/Cmd-click natively (open in new tab). Plain left
@@ -682,18 +677,16 @@ const TaskGroupSection = memo(function TaskGroupSection({
                     onSelectTask?.(task.taskId);
                   }
                 : undefined;
-              // Mobile keeps swipe-to-archive as the only row gesture; the context
+
               // menu (and its ⋯ button) is desktop-only. Computed before the row so
               // the leading slot can show the ⋯ affordance.
-              const hasMenuActions =
-                !isMobile &&
-                Boolean(
-                  onRenameTask ||
-                  onTogglePinTask ||
-                  onArchiveTask ||
-                  onCopySessionUrl ||
-                  task.branchName
-                );
+              const hasMenuActions = Boolean(
+                onRenameTask ||
+                onTogglePinTask ||
+                onArchiveTask ||
+                onCopySessionUrl ||
+                task.branchName
+              );
               const row = (
                 <div
                   key={task.taskId}
@@ -713,7 +706,6 @@ const TaskGroupSection = memo(function TaskGroupSection({
                     'border border-transparent bg-transparent',
                     !showSelectedState &&
                       isSelectable &&
-                      !isMobile &&
                       'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground',
                     showSelectedState &&
                       'border-sidebar-foreground/10 bg-sidebar-foreground/10 text-sidebar-foreground hover:bg-sidebar-foreground/10',
@@ -799,26 +791,19 @@ const TaskGroupSection = memo(function TaskGroupSection({
                               className="text-xs text-muted-foreground"
                             />
                           </span>
-                        ) : hasChanges || isMobile ? (
+                        ) : hasChanges ? (
                           <span
                             className={cn(
                               'flex select-none items-center gap-1.5 text-[11px] tabular-nums text-sidebar-foreground-muted/80',
                               useAnchor && 'z-20'
                             )}
                           >
-                            {isMobile ? (
-                              <TaskRowTime
-                                relativeTime={relativeTime}
-                                className="text-muted-foreground"
-                              />
-                            ) : null}
                             {hasChanges ? (
                               <span className="flex items-center gap-1">
                                 <span className="text-code-added">+{task.addedLines}</span>
                                 <span className="text-code-removed">-{task.deletedLines}</span>
                               </span>
                             ) : null}
-
                           </span>
                         ) : undefined
                       }
@@ -836,7 +821,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
                 </div>
               );
               // Desktop repo rows get a hover info card wrapping the whole row/menu.
-              const showInfoCard = !isMobile;
+              const showInfoCard = true;
               const menuRow = hasMenuActions ? (
                 <ContextMenu key={task.taskId}>
                   <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
@@ -925,32 +910,7 @@ const TaskGroupSection = memo(function TaskGroupSection({
                 menuRow
               );
 
-              if (!canArchive || !isMobile) {
-                return desktopRow;
-              }
-
-              return (
-                <SwipeActionRow
-                  key={task.taskId}
-                  enabled={isMobile}
-                  className="rounded-md"
-                  contentClassName="bg-sidebar"
-                  actions={[
-                    {
-                      key: 'archive',
-                      label: archiveActionLabel,
-                      ariaLabel: archiveTooltipLabel,
-                      icon: <Archive className="h-4 w-4" />,
-                      hideLabel: group.kind === 'chat',
-                      className: 'bg-sidebar-hover text-sidebar-hover-foreground',
-                      onClick: () => onArchiveTask?.(task.taskId),
-                    },
-                  ]}
-                  onCommit={() => onArchiveTask?.(task.taskId)}
-                >
-                  {menuRow}
-                </SwipeActionRow>
-              );
+              return desktopRow;
             })}
           {shouldShowExpandCollapse && (
             <button
@@ -1071,7 +1031,7 @@ export const TaskList = memo(function TaskList({
 }: TaskListProps) {
   const { t } = useTranslation();
   const archiveTooltipLabel = t('sessions.archive', 'Archive session');
-  const archiveActionLabel = t('archive.title', 'Archive');
+
   const archiveConfirmLabel = t('common.confirm', 'Confirm');
   const contextMenuLabels: ContextMenuLabels = useMemo(
     () => ({
@@ -1085,7 +1045,7 @@ export const TaskList = memo(function TaskList({
     }),
     [t]
   );
-  const isMobile = useIsMobile();
+
   const groups = useMemo(
     () => buildGroups(tasks, repos, chatsCollapsed),
     [tasks, repos, chatsCollapsed]
@@ -1205,10 +1165,8 @@ export const TaskList = memo(function TaskList({
                     onToggleFullList={handleToggleFullList}
                     getTaskHref={getTaskHref}
                     archiveTooltipLabel={archiveTooltipLabel}
-                    archiveActionLabel={archiveActionLabel}
                     archiveConfirmLabel={archiveConfirmLabel}
                     contextMenuLabels={contextMenuLabels}
-                    isMobile={isMobile}
                   />
                 );
               }
@@ -1234,10 +1192,8 @@ export const TaskList = memo(function TaskList({
                   onToggleFullList={handleToggleFullList}
                   getTaskHref={getTaskHref}
                   archiveTooltipLabel={archiveTooltipLabel}
-                  archiveActionLabel={archiveActionLabel}
                   archiveConfirmLabel={archiveConfirmLabel}
                   contextMenuLabels={contextMenuLabels}
-                  isMobile={isMobile}
                 />
               );
             })}

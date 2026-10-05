@@ -114,10 +114,6 @@
       "types": "./src/deepseek-harness.ts",
       "import": "./src/deepseek-harness.ts"
     },
-    "./analytics": {
-      "types": "./src/analytics/index.ts",
-      "import": "./src/analytics/index.ts"
-    },
     "./message": {
       "types": "./src/message.ts",
       "import": "./src/message.ts"

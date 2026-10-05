@@ -456,11 +456,6 @@ function runDiffWorkerSmoke() {
   }
   const smokeScript = `
 const { default: Tinypool } = await import('tinypool');
-const { mkdtemp, rm, writeFile } = await import('node:fs/promises');
-const { tmpdir } = await import('node:os');
-const path = await import('node:path');
-const root = await mkdtemp(path.join(tmpdir(), 'molly-diff-worker-smoke-'));
-const filePath = path.join(root, 'smoke.txt');
 const pool = new Tinypool({
   filename: ${JSON.stringify(workerPath)},
   minThreads: 1,
@@ -468,18 +463,15 @@ const pool = new Tinypool({
   execArgv: [],
 });
 try {
-  await writeFile(filePath, 'worker proof ok\\n');
   const result = await pool.run({
-    kind: 'turn-evidence',
+    kind: 'line-count',
     oldText: 'old\\n',
     newText: 'worker proof ok\\n',
-    absolutePath: filePath,
   });
-  if (result?.kind !== 'turn-evidence' || result.newIsCurrent !== true) process.exit(2);
-  if (!Array.isArray(result.lineCounts) || result.lineCounts.length !== 2) process.exit(3);
+  if (result?.kind !== 'line-count') process.exit(2);
+  if (result.lineCounts?.[0] !== 1 || result.lineCounts?.[1] !== 1) process.exit(3);
 } finally {
   await pool.destroy();
-  await rm(root, { recursive: true, force: true });
 }
 `;
   try {

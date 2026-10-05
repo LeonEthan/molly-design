@@ -172,7 +172,6 @@ function createHarness(
       hasBlockingPendingCreate: false,
       hasReusableSession: true,
       hasRewriteBarrier: barrierHeld,
-      hasActiveAutomation: false,
     })),
     tryAcquireSessionRewriteBarrier: vi.fn(() => {
       barrierHeld = true;

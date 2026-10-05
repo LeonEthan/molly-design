@@ -4,8 +4,6 @@ import { createStore, Provider, useAtomValue } from 'jotai';
 import { BetaFeaturesSection } from '@/components/settings/beta-features-setting';
 import {
   developerModeEnabledAtom,
-  inboxBetaEnabledAtom,
-  inboxFeatureEnabledAtom,
   tasksBetaEnabledAtom,
   tasksFeatureEnabledAtom,
 } from '@/atoms/settings';
@@ -18,37 +16,23 @@ import { settingContainerClass } from '@/components/settings';
  */
 function GateReadout() {
   const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
-  const inboxEnabled = useAtomValue(inboxFeatureEnabledAtom);
   return (
     <div className="mt-3 space-y-1 text-xs text-muted-foreground">
       <p>
         <span className="font-mono">tasksFeatureEnabledAtom</span> ={' '}
         <span className="font-mono font-semibold">{String(tasksEnabled)}</span>
       </p>
-      <p>
-        <span className="font-mono">inboxFeatureEnabledAtom</span> ={' '}
-        <span className="font-mono font-semibold">{String(inboxEnabled)}</span>
-      </p>
     </div>
   );
 }
 
-function Harness({
-  developerMode,
-  tasksBeta,
-  inboxBeta,
-}: {
-  developerMode: boolean;
-  tasksBeta: boolean;
-  inboxBeta: boolean;
-}) {
+function Harness({ developerMode, tasksBeta }: { developerMode: boolean; tasksBeta: boolean }) {
   // Seeded once per story: a store rebuilt on every render would throw away the
   // switch the viewer just clicked.
   const [store] = useState(() => {
     const next = createStore();
     next.set(developerModeEnabledAtom, developerMode);
     next.set(tasksBetaEnabledAtom, tasksBeta);
-    next.set(inboxBetaEnabledAtom, inboxBeta);
     return next;
   });
 
@@ -71,24 +55,19 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Developer mode off: the section and both beta features are absent. */
+/** Developer mode off: the section and Tasks are absent. */
 export const DeveloperModeOff: Story = {
-  args: { developerMode: false, tasksBeta: false, inboxBeta: false },
+  args: { developerMode: false, tasksBeta: false },
 };
 
-/** Developer mode on: both switches are offered, but both features stay hidden. */
+/** Developer mode on: the switch is offered, but Tasks stay hidden. */
 export const AvailableNotEnabled: Story = {
-  args: { developerMode: true, tasksBeta: false, inboxBeta: false },
+  args: { developerMode: true, tasksBeta: false },
 };
 
 /** Developer mode and the Tasks opt-in are the only combination that enables Tasks. */
 export const TasksBetaEnabled: Story = {
-  args: { developerMode: true, tasksBeta: true, inboxBeta: false },
-};
-
-/** Inbox can be enabled independently while Developer mode stays on. */
-export const InboxBetaEnabled: Story = {
-  args: { developerMode: true, tasksBeta: false, inboxBeta: true },
+  args: { developerMode: true, tasksBeta: true },
 };
 
 /**
@@ -96,5 +75,5 @@ export const InboxBetaEnabled: Story = {
  * the choices are restored when Developer mode comes back.
  */
 export const OptInRetainedWhileHidden: Story = {
-  args: { developerMode: false, tasksBeta: true, inboxBeta: true },
+  args: { developerMode: false, tasksBeta: true },
 };

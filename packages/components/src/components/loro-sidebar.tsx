@@ -60,7 +60,7 @@ import { SidebarFilterPopover, type SidebarFilterLabels } from './sidebar-filter
 import { MollyWordmark } from './molly-wordmark';
 import { WorkspaceAvatar } from './workspace-avatar';
 import type { SidebarOrganizeMode } from '@/atoms/sidebar-state';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { useStableNow } from '@/hooks/use-stable-now';
 
 export type LoroSidebarNavKey = 'home' | 'archive' | 'tasks';
@@ -240,11 +240,7 @@ export interface LoroSidebarProps {
   onJoinCommunityClicked?: () => void;
   onFeedbackClicked?: () => void;
   onWidthChange?: (width: number) => void;
-  /**
-   * When true, the sidebar renders nothing (fully hidden). Mobile ignores this —
-   * mobile uses the drawer instead. Drag-to-collapse and the workspace-row
-   * hover button both fire `onRequestCollapse` to set this externally.
-   */
+
   collapsed?: boolean;
   /**
    * Fired when the user requests collapsing the sidebar (drag past threshold,
@@ -458,14 +454,13 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconB
   { active = false, className, label, children, ...buttonProps }: IconButtonProps,
   ref
 ) {
-  const isMobile = useIsMobile();
   return (
     <Button
       ref={ref}
       type="button"
       variant="ghost"
       size="icon"
-      className={cn(getLoroSidebarFooterIconButtonClassName(isMobile, active), className)}
+      className={cn(getLoroSidebarFooterIconButtonClassName(active), className)}
       {...buttonProps}
     >
       {children}
@@ -576,19 +571,17 @@ function NavButton({
   );
 }
 
-export function getLoroSidebarFooterClassName(isMobile: boolean): string {
+export function getLoroSidebarFooterClassName(): string {
   return cn(
     'flex shrink-0 items-center justify-between border-t',
-    isMobile
-      ? 'pl-[calc(6px+var(--safe-area-left))] pr-[calc(12px+var(--safe-area-right))] pt-1 pb-2'
-      : 'px-1.5 py-1',
+    'px-1.5 py-1',
     'border-sidebar-border/40'
   );
 }
 
-export function getLoroSidebarFooterIconButtonClassName(isMobile: boolean, active = false): string {
+export function getLoroSidebarFooterIconButtonClassName(active = false): string {
   return cn(
-    isMobile ? 'h-12 w-12 rounded-xl [&_svg]:h-5 [&_svg]:w-5' : 'h-8 w-8 rounded-full',
+    'h-8 w-8 rounded-full',
     'transition-colors focus-visible:ring-1 focus-visible:ring-sidebar-ring/40',
     active
       ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
@@ -654,7 +647,6 @@ export const LoroSidebar = memo(function LoroSidebar({
   collapsed = false,
   onRequestCollapse,
 }: LoroSidebarProps) {
-  const isMobile = useIsMobile();
   const isElectronFullscreen = useElectronFullscreen();
   const mergedLabels: LoroSidebarLabels = {
     ...defaultLabels,
@@ -680,7 +672,6 @@ export const LoroSidebar = memo(function LoroSidebar({
 
   const handleResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (isMobile) return;
       if (event.button !== 0) return;
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -691,12 +682,11 @@ export const LoroSidebar = memo(function LoroSidebar({
       };
       setIsResizing(true);
     },
-    [isMobile, sidebarWidth]
+    [sidebarWidth]
   );
 
   const handleResizeMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (isMobile) return;
       const { pointerId, startX, startWidth } = resizeStateRef.current;
       if (pointerId !== event.pointerId) return;
       const rawWidth = startWidth + (event.clientX - startX);
@@ -716,24 +706,20 @@ export const LoroSidebar = memo(function LoroSidebar({
       setSidebarWidth(nextWidth);
       onWidthChange?.(nextWidth);
     },
-    [isMobile, resolvedMinWidth, resolvedMaxWidth, onWidthChange, onRequestCollapse]
+    [resolvedMinWidth, resolvedMaxWidth, onWidthChange, onRequestCollapse]
   );
 
-  const handleResizeEnd = useCallback(
-    (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (isMobile) return;
-      const { pointerId } = resizeStateRef.current;
-      if (pointerId !== event.pointerId) return;
-      resizeStateRef.current.pointerId = -1;
-      setIsResizing(false);
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      } catch {
-        // Ignore release errors when pointer capture is already gone.
-      }
-    },
-    [isMobile]
-  );
+  const handleResizeEnd = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const { pointerId } = resizeStateRef.current;
+    if (pointerId !== event.pointerId) return;
+    resizeStateRef.current.pointerId = -1;
+    setIsResizing(false);
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore release errors when pointer capture is already gone.
+    }
+  }, []);
   const fallbackChatSessions: SessionListRow[] = chats.map((chat) => ({
     sessionId: chat.id,
     title: chat.title,
@@ -753,13 +739,13 @@ export const LoroSidebar = memo(function LoroSidebar({
     : null;
   const sessionListClassName = sessionListProps?.className;
   const chatsSessionListClassName = resolvedChatsSessionListProps?.className;
-  if (!isMobile && collapsed) {
+  if (collapsed) {
     return null;
   }
 
   // This instance never moves between section headers: only its same-sized
   // placeholder moves. That keeps an open popover open across organize changes.
-  const desktopFilterNode = !isMobile ? (
+  const desktopFilterNode = (
     <SidebarFilterPopover
       organize={organizeMode}
       onOrganizeChange={onOrganizeModeChange}
@@ -768,10 +754,10 @@ export const LoroSidebar = memo(function LoroSidebar({
       align="end"
       triggerClassName="h-5 w-5 [&_svg]:h-3.5 [&_svg]:w-3.5"
     />
-  ) : null;
-  const sectionHeaderFilterPlaceholder = !isMobile
-    ? (desktopFilterPlaceholder ?? <span aria-hidden="true" className="block h-5 w-5" />)
-    : null;
+  );
+  const sectionHeaderFilterPlaceholder = desktopFilterPlaceholder ?? (
+    <span aria-hidden="true" className="block h-5 w-5" />
+  );
   const hasPinnedItems = Boolean(pinnedItems?.length);
   const workspaceIdentityStatus: WorkspaceIdentityStatus | null =
     connectionUiState && connectionUiState !== 'online'
@@ -800,7 +786,7 @@ export const LoroSidebar = memo(function LoroSidebar({
   const windowDrag = isElectron && !isElectronFullscreen;
   const workspaceIdentityClassName = cn(
     'grid w-full min-w-0 select-none grid-cols-[20px_1fr_16px] items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm',
-    isMobile ? 'h-9' : 'h-8',
+    'h-8',
     'text-sidebar-foreground dark:text-sidebar-foreground/75',
     workspaceSwitcherEnabled &&
       'hover:bg-sidebar-hover hover:text-sidebar-hover-foreground focus-visible:outline-hidden focus-visible:bg-sidebar-hover'
@@ -816,13 +802,9 @@ export const LoroSidebar = memo(function LoroSidebar({
         'border-sidebar-border/70 bg-sidebar text-sidebar-foreground shadow-[0_1px_2px_hsl(0_0%_0%/0.03)]',
         className
       )}
-      style={
-        isMobile
-          ? undefined
-          : { width: sidebarWidth, minWidth: resolvedMinWidth, maxWidth: resolvedMaxWidth }
-      }
+      style={{ width: sidebarWidth, minWidth: resolvedMinWidth, maxWidth: resolvedMaxWidth }}
     >
-      {!isMobile && (
+      {
         // VSCode-style sash: a 12px pointer hit area straddling the border
         // (6px inside + 6px outside, so hovering ON or just past the edge
         // still triggers); the visible affordance is a thin 2px line covering
@@ -844,27 +826,20 @@ export const LoroSidebar = memo(function LoroSidebar({
           onPointerUp={handleResizeEnd}
           onPointerCancel={handleResizeEnd}
         />
-      )}
+      }
 
       <div
-        className={cn(
-          'relative flex h-full flex-col overflow-hidden rounded-[inherit]',
-          !isMobile && 'p-[2px]'
-        )}
+        className={cn('relative flex h-full flex-col overflow-hidden rounded-[inherit]', 'p-[2px]')}
       >
         <div
           className={cn(
             'group/sidebar-header relative flex items-center justify-between gap-2',
-            isMobile
-              ? 'pl-[calc(12px+var(--safe-area-left))] pr-[calc(12px+var(--safe-area-right))] pt-[calc(12px+var(--safe-area-top))]'
-              : isElectronMacOS
-                ? 'h-[72px] px-1.5 pt-7'
-                : 'h-11 px-1.5',
+            isElectronMacOS ? 'h-[72px] px-1.5 pt-7' : 'h-11 px-1.5',
             windowDrag && WINDOW_DRAG_HEADER_CLASS
           )}
         >
           {workspaceSwitcherEnabled ? (
-            <DropdownMenu modal={!isMobile}>
+            <DropdownMenu modal={true}>
               <div className="min-w-0 flex-1">
                 <DropdownMenuTrigger asChild>
                   <button
@@ -948,7 +923,7 @@ export const LoroSidebar = memo(function LoroSidebar({
               collapsed-state expand button (`top-[9px]` in
               web-chat-landing-screen.tsx), so the control stays put across
               collapse/expand. */}
-          {!isMobile && onRequestCollapse ? (
+          {onRequestCollapse ? (
             <button
               type="button"
               aria-label="Collapse sidebar"
@@ -973,11 +948,7 @@ export const LoroSidebar = memo(function LoroSidebar({
             // `gap-px` keeps New chat / Tasks from painting as one fused block
             // when both are selected-adjacent or hover-highlighted.
             'flex flex-col gap-px',
-            isMobile
-              ? 'mt-2 pl-[calc(12px+var(--safe-area-left))] pr-[calc(12px+var(--safe-area-right))]'
-              : workspaceSwitcherEnabled
-                ? '-mt-1 px-1.5'
-                : 'mt-1 px-1.5'
+            workspaceSwitcherEnabled ? '-mt-1 px-1.5' : 'mt-1 px-1.5'
           )}
         >
           <NavButton
@@ -1005,15 +976,10 @@ export const LoroSidebar = memo(function LoroSidebar({
         </div>
 
         <ScrollArea
-          className={cn(
-            'min-h-0 flex-1',
-            isMobile ? 'mt-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))]' : 'mt-2'
-          )}
-          scrollbarClassName={!isMobile ? 'w-2 p-px' : undefined}
+          className={cn('min-h-0 flex-1', 'mt-2')}
+          scrollbarClassName={'w-2 p-px'}
           scrollbarThumbClassName={
-            !isMobile
-              ? 'bg-[hsl(var(--muted-foreground)/0.35)] hover:bg-[hsl(var(--muted-foreground)/0.45)] active:bg-[hsl(var(--muted-foreground)/0.55)]'
-              : undefined
+            'bg-[hsl(var(--muted-foreground)/0.35)] hover:bg-[hsl(var(--muted-foreground)/0.45)] active:bg-[hsl(var(--muted-foreground)/0.55)]'
           }
           // The horizontal gutter must live on the *viewport*, not the ScrollArea
           // root. Radix's viewport is the scroll/clip container; with rows at
@@ -1023,14 +989,10 @@ export const LoroSidebar = memo(function LoroSidebar({
           // scrolls vertically. Padding the viewport insets the rows from that clip
           // edge so the highlight outline renders fully. Geometry/scrollbar position
           // are unchanged (the absolutely-positioned scrollbar tracks the root edge).
-          viewportClassName={cn(
-            isMobile
-              ? 'pl-[calc(12px+env(safe-area-inset-left,0px))] pr-[calc(12px+env(safe-area-inset-right,0px))]'
-              : 'pl-1.5 pr-2.5 pb-3'
-          )}
+          viewportClassName={cn('pl-1.5 pr-2.5 pb-3')}
         >
           <div className="relative">
-            {!isMobile && desktopFilterNode ? (
+            {desktopFilterNode ? (
               <div className="pointer-events-none absolute right-[9px] top-1 z-10 flex h-7 items-center">
                 <div className="pointer-events-auto flex">{desktopFilterNode}</div>
               </div>
@@ -1040,7 +1002,6 @@ export const LoroSidebar = memo(function LoroSidebar({
                 <SidebarUpdatedSessionList
                   items={pinnedItems ?? []}
                   now={now}
-                  isMobile={isMobile}
                   showPinnedIcon={false}
                   selectedItemId={updatedSelectedItemId ?? null}
                   collapsedBuckets={pinnedSectionCollapsed ? PINNED_BUCKETS_COLLAPSED : undefined}
@@ -1080,7 +1041,6 @@ export const LoroSidebar = memo(function LoroSidebar({
                   <SidebarUpdatedSessionList
                     items={updatedItems ?? []}
                     now={now}
-                    isMobile={isMobile}
                     isLoading={updatedIsLoading}
                     selectedItemId={updatedSelectedItemId ?? null}
                     labels={mergedLabels.updated}
@@ -1184,19 +1144,12 @@ export const LoroSidebar = memo(function LoroSidebar({
         </ScrollArea>
 
         {bottomFloatingContent ? (
-          <div
-            className={cn(
-              'pointer-events-none absolute z-10',
-              isMobile
-                ? 'bottom-12 left-[calc(16px+var(--safe-area-left))] '
-                : 'bottom-[44px] left-3 right-3'
-            )}
-          >
+          <div className={cn('pointer-events-none absolute z-10', 'bottom-[44px] left-3 right-3')}>
             <div className="pointer-events-auto">{bottomFloatingContent}</div>
           </div>
         ) : null}
 
-        <div className={getLoroSidebarFooterClassName(isMobile)}>
+        <div className={getLoroSidebarFooterClassName()}>
           <div className="flex items-center gap-1">
             <IconButton label="Settings" onClick={onSettingsClicked}>
               <Settings className="h-4 w-4" />
@@ -1228,14 +1181,6 @@ export const LoroSidebar = memo(function LoroSidebar({
               <Archive className="h-4 w-4" />
             </IconButton>
           </div>
-
-          {isMobile ? (
-            <SidebarFilterPopover
-              organize={organizeMode}
-              onOrganizeChange={onOrganizeModeChange}
-              labels={mergedLabels.filter}
-            />
-          ) : null}
         </div>
       </div>
     </div>

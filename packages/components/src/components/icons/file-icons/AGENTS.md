@@ -13,9 +13,6 @@
 - When copying from `vscode-symbols`, materialize aliases as local SVG files. Example:
   upstream `go-mod` points at `go-pink.svg`, so this package keeps a `go-mod.svg`
   alias file.
-- `packages/code-review-helper/src/file-icons` is a standalone copy of the file
-  icon subset. Keep file SVG additions in sync there when its mappings reference
-  the same icon names.
 
 ## Verification
 

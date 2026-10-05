@@ -6,7 +6,6 @@ import { getLogger } from '@/utils/logger';
 
 import { computeLineCounts } from './diff-line-counts';
 import {
-  runDiffWorkerTask,
   type DiffWorkerTaskInput,
   type DiffWorkerTaskResult,
 } from './diff-worker-task';
@@ -137,37 +136,6 @@ export async function computeLineCountsAsync(
     const startedAtMs = Date.now();
     const result = computeLineCounts(oldText, newText);
     logInlineComputation({ reason: 'pool_run_failed', startedAtMs, oldText, newText });
-    return result;
-  }
-}
-
-/** Count lines and prove the proposed new snapshot still matches disk in one worker task. */
-export async function computeTurnEvidenceAsync(
-  oldText: string | null,
-  newText: string | null,
-  absolutePath: string
-): Promise<{ readonly lineCounts: [number, number]; readonly newIsCurrent: boolean }> {
-  const input = { kind: 'turn-evidence', oldText, newText, absolutePath } as const;
-  const activePool = await getPool();
-  if (!activePool) {
-    const result = await runDiffWorkerTask(input);
-    if (result.kind !== 'turn-evidence') throw new Error('Unexpected inline diff result.');
-    return result;
-  }
-  try {
-    const result = await activePool.run(input);
-    if (result.kind !== 'turn-evidence') throw new Error('Unexpected diff worker result.');
-    return result;
-  } catch (error) {
-    // Unlike line-count-only callers, a failed disk proof must not silently
-    // degrade to a stale head. Retry inline and propagate real I/O failures.
-    logInlineFallbackOnce('turn_evidence_pool_run_failed', error);
-    const result = await runDiffWorkerTask(input);
-    if (result.kind !== 'turn-evidence') {
-      throw new Error('Unexpected inline diff result after worker pool failure.', {
-        cause: error,
-      });
-    }
     return result;
   }
 }

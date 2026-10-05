@@ -44,7 +44,7 @@ import {
 import type { Mention as MentionRange } from '@/ui/mention/index';
 import type { PersistedMentionRange } from '@/components/mentions/mention-persistence';
 import { toIntlLocale } from '@/lib/intl-locale';
-import { useIsMobile } from '@/hooks/use-mobile';
+
 import { Button, type ButtonProps } from '@/ui/button';
 import {
   Dialog,
@@ -54,13 +54,9 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/ui/dialog';
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/ui/sheet';
 import { Textarea, type TextareaProps } from '@/ui/textarea';
 import { getFilesFromDataTransfer, hasFileTransfer } from '@/lib/file-drop';
-import {
-  getChatComposerPromptPlaceholderKey,
-  getChatComposerMobilePromptPlaceholderKey,
-} from '@/lib/chat-composer-placeholder';
+import { getChatComposerPromptPlaceholderKey } from '@/lib/chat-composer-placeholder';
 import { Kbd } from '@/components/commands/kbd';
 import { commands, formatKeyBinding } from '@/lib/commands';
 
@@ -190,11 +186,9 @@ export interface ChatComposerProps {
 
 export function getChatComposerTextareaClassName({
   variant,
-  isMobile = false,
 }: {
   tone: ChatComposerTone;
   variant: ChatComposerVariant;
-  isMobile?: boolean;
 }) {
   const isLanding = variant === 'landing';
 
@@ -204,8 +198,8 @@ export function getChatComposerTextareaClassName({
       ? 'min-h-[120px] border-transparent bg-transparent px-0 py-0 sm:min-h-[140px]'
       : cn(
           'border-transparent bg-transparent px-1 py-1',
-          // Mobile floors at a single line; desktop leaves room around two lines.
-          isMobile ? 'min-h-[24px]' : 'min-h-[64px]'
+
+          'min-h-[64px]'
         ),
     'focus-visible:outline-hidden focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:shadow-none',
     'text-input-foreground placeholder:text-input-placeholder'
@@ -287,22 +281,17 @@ export function ChatComposer({
     () => toIntlLocale(i18n.resolvedLanguage ?? i18n.language),
     [i18n.language, i18n.resolvedLanguage]
   );
-  const isMobile = useIsMobile();
+
   const isDialog = variant === 'dialog';
   const isLanding = variant === 'landing';
-  // Mobile session composer starts at a single line to save vertical space
+
   // (desktop keeps its 2-line default); it still auto-grows as the user types.
-  const singleLineMobile = isMobile && variant === 'session';
-  const effectivePromptRows = singleLineMobile ? 1 : promptRows;
   // Desktop-only ⌘L discovery hint in the empty composer. Requires a fine pointer
-  // AND non-mobile layout so phone frames / narrow viewports never show a
+
   // keyboard shortcut that doesn't exist on touch. Hidden once focused or typing.
   const focusHintSupported = useMemo(
-    () =>
-      !isMobile &&
-      typeof window !== 'undefined' &&
-      !!window.matchMedia?.('(pointer: fine)').matches,
-    [isMobile]
+    () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches,
+    []
   );
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewPastedTextDraftId, setPreviewPastedTextDraftId] = useState<string | null>(null);
@@ -319,15 +308,13 @@ export function ChatComposer({
   const pastedTextEditorLabel = t('composer.pastedTextEditorLabel', 'Edit pasted text');
   const resolvedPromptPlaceholder =
     promptPlaceholder ??
-    (isMobile
-      ? t(getChatComposerMobilePromptPlaceholderKey({ mentionSource, skillAgent }))
-      : t(
-          getChatComposerPromptPlaceholderKey({
-            mentionSource,
-            availableCommands,
-            skillAgent,
-          })
-        ));
+    t(
+      getChatComposerPromptPlaceholderKey({
+        mentionSource,
+        availableCommands,
+        skillAgent,
+      })
+    );
   const numberFormatter = useMemo(() => new Intl.NumberFormat(intlLocale), [intlLocale]);
   const previewPastedTextDraft =
     pastedTextDrafts.find((item) => item.id === previewPastedTextDraftId) ?? null;
@@ -518,7 +505,7 @@ export function ChatComposer({
     const lineHeight = parseInt(computedStyle.lineHeight || '24', 10) || 24;
     const paddingTop = parseInt(computedStyle.paddingTop || '0', 10);
     const paddingBottom = parseInt(computedStyle.paddingBottom || '0', 10);
-    const minHeight = lineHeight * effectivePromptRows + paddingTop + paddingBottom;
+    const minHeight = lineHeight * promptRows + paddingTop + paddingBottom;
     const maxHeight = lineHeight * maxRows + paddingTop + paddingBottom;
 
     const previousHeight = textarea.style.height;
@@ -544,12 +531,12 @@ export function ChatComposer({
     autoResize,
     promptValue,
     promptRef,
-    effectivePromptRows,
+    promptRows,
     maxRows,
     skipNextViewportResizeAutoScrollRef,
   ]);
 
-  const boxTextareaClassName = getChatComposerTextareaClassName({ tone, variant, isMobile });
+  const boxTextareaClassName = getChatComposerTextareaClassName({ tone, variant });
 
   /**
    * The colour a mention decoration paints to hide the textarea's own glyphs
@@ -720,7 +707,7 @@ export function ChatComposer({
               {imageItems.length > 0 || fileItems.length > 0 ? (
                 // Unified horizontal, scrollable attachment strip: image thumbnails
                 // and file cards share the same square-card shape and scroll
-                // sideways together (cards step up in size on mobile for touch).
+
                 <div className="input-scrollbar flex gap-2 overflow-x-auto pb-1">
                   {imageItems.map((image) => (
                     <div
@@ -730,7 +717,7 @@ export function ChatComposer({
                       }
                       className={cn(
                         'relative shrink-0 overflow-hidden rounded-xl border',
-                        isMobile ? 'h-[104px] w-[104px]' : 'h-20 w-20',
+                        'h-20 w-20',
                         image.status === 'failed' && 'border-destructive/50'
                       )}
                     >
@@ -765,7 +752,7 @@ export function ChatComposer({
                           type="button"
                           variant="secondary"
                           size="icon"
-                          className={cn('rounded-full', isMobile ? 'h-6 w-6' : 'h-5 w-5')}
+                          className={cn('rounded-full', 'h-5 w-5')}
                           onClick={() => onImageRemove?.(image.id)}
                           aria-label={removeImageLabel}
                         >
@@ -796,7 +783,7 @@ export function ChatComposer({
                       title={file.status === 'failed' ? file.error || uploadFailedLabel : undefined}
                       className={cn(
                         'relative flex shrink-0 flex-col overflow-hidden rounded-xl border p-2',
-                        isMobile ? 'h-[104px] w-[104px]' : 'h-20 w-20',
+                        'h-20 w-20',
                         file.status === 'failed'
                           ? 'border-destructive/45 bg-muted/60'
                           : 'border-border/60 bg-muted/60'
@@ -808,7 +795,7 @@ export function ChatComposer({
                           file.status === 'failed'
                             ? 'text-destructive/80'
                             : 'text-muted-foreground',
-                          isMobile ? 'text-xs' : 'text-[10px]'
+                          'text-[10px]'
                         )}
                       >
                         {getFileTypeLabel(file.name)}
@@ -816,7 +803,7 @@ export function ChatComposer({
                       <span
                         className={cn(
                           'mt-1 break-words text-left font-medium text-input-foreground',
-                          isMobile ? 'line-clamp-3 text-sm' : 'line-clamp-2 text-xs'
+                          'line-clamp-2 text-xs'
                         )}
                       >
                         {file.name}
@@ -861,7 +848,7 @@ export function ChatComposer({
                           type="button"
                           variant="secondary"
                           size="icon"
-                          className={cn('rounded-full', isMobile ? 'h-6 w-6' : 'h-5 w-5')}
+                          className={cn('rounded-full', 'h-5 w-5')}
                           onClick={() => onFileRemove?.(file.id)}
                           aria-label={removeAttachmentLabel}
                         >
@@ -895,7 +882,7 @@ export function ChatComposer({
                 onPaste={onPromptPaste}
                 onCopy={handlePromptCopy}
                 disabled={promptDisabled}
-                rows={effectivePromptRows}
+                rows={promptRows}
                 enterKeyHint={promptEnterKeyHint}
                 placeholder={resolvedPromptPlaceholder}
                 // While the ⌘L focus hint is shown the box is empty, so the (long)
@@ -934,17 +921,12 @@ export function ChatComposer({
                     image + paperclip icons). Hidden when neither add callback
                     is provided. */}
                 <AttachmentAddMenu
-                  isMobile={isMobile}
-                  isLanding={isLanding}
                   disabled={promptDisabled}
                   onAddAttachment={onAttachmentAddClick}
                   attachmentDisabled={attachmentAddDisabled}
                   mcp={mcp}
                 />
 
-                {/* Single row only: long model names must shrink/truncate inside
-                    the run-config face rather than wrapping config chips onto a
-                    second line (especially on mobile). */}
                 <div className="flex min-w-0 flex-1 flex-nowrap items-center gap-x-2 overflow-hidden">
                   {footerSelector ?? selector}
                 </div>
@@ -997,7 +979,7 @@ export function ChatComposer({
               onPaste={onPromptPaste}
               onCopy={handlePromptCopy}
               disabled={promptDisabled}
-              rows={effectivePromptRows}
+              rows={promptRows}
               enterKeyHint={promptEnterKeyHint}
               placeholder={resolvedPromptPlaceholder}
               containerClassName={mentionContainerClassName}
@@ -1077,43 +1059,6 @@ export function ChatComposer({
               ),
             })
           : '';
-
-        if (isMobile) {
-          return (
-            <Sheet open={previewPastedTextDraft !== null} onOpenChange={handlePastedTextOpenChange}>
-              <SheetContent
-                side="bottom"
-                className="flex h-[85vh] flex-col gap-0 rounded-t-2xl p-0"
-              >
-                {previewPastedTextDraft ? (
-                  <>
-                    <div className="flex shrink-0 justify-center pt-2 pb-1">
-                      <div className="h-1 w-9 rounded-full bg-muted-foreground/30" />
-                    </div>
-                    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
-                      <SheetTitle className="flex items-center gap-2 text-sm font-medium">
-                        <ClipboardPaste className="h-3.5 w-3.5 text-muted-foreground" />
-                        {pastedTextDialogTitle}
-                      </SheetTitle>
-                      <SheetDescription className="text-xs text-muted-foreground tabular-nums">
-                        {summaryText}
-                      </SheetDescription>
-                    </div>
-                    <Textarea
-                      aria-label={pastedTextEditorLabel}
-                      value={previewPastedTextEditorValue}
-                      onChange={handlePastedTextDraftTextChange}
-                      readOnly={!onPastedTextDraftsChange}
-                      spellCheck={false}
-                      autoFocus={false}
-                      className="input-scrollbar min-h-0 flex-1 resize-none rounded-none border-0 bg-background px-4 py-3 font-mono text-[13px] leading-relaxed text-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                    />
-                  </>
-                ) : null}
-              </SheetContent>
-            </Sheet>
-          );
-        }
 
         return (
           <Dialog open={previewPastedTextDraft !== null} onOpenChange={handlePastedTextOpenChange}>

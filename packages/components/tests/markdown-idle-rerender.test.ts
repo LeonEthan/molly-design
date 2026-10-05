@@ -19,10 +19,6 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@/hooks/use-mobile', () => ({
-  useIsMobile: () => false,
-}));
-
 vi.mock('../src/components/ai-gui/markdown-renderer', async () => {
   const React = await import('react');
   type MarkdownRendererProps = Pick<
@@ -129,8 +125,7 @@ describe('idle markdown rendering', () => {
 
     // The stable callback always routes to the latest handler, so calling the
     // first render's callback invokes the second render's `onFilePathClick`.
-    const rawFileHref =
-      'workspace/lody/packages/components/src/components/ai-gui/view.tsx#L10';
+    const rawFileHref = 'workspace/lody/packages/components/src/components/ai-gui/view.tsx#L10';
     stableFileLinkCallback?.(rawFileHref);
     expect(firstOpen).not.toHaveBeenCalled();
     expect(secondOpen).toHaveBeenCalledWith(rawFileHref);

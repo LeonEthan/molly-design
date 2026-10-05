@@ -1,5 +1,5 @@
-export type Platform = 'mac' | 'win' | 'linux' | 'ios' | 'android' | 'unknown';
-export type Runtime = 'web' | 'electron' | 'mobile';
+export type Platform = 'mac' | 'win' | 'linux' | 'unknown';
+export type Runtime = 'web' | 'electron';
 
 /**
  * A key binding spec.

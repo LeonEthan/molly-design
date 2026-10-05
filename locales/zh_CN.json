@@ -63,8 +63,6 @@
   "settings.engine.pi.title": "Pi {{version}}",
   "settings.engine.pi.description": "运行每个设计任务的引擎，内置工具连接（MCP）、代码模式和工具搜索。",
   "settings.engine.addonsTitle": "扩展 · {{count}}",
-  "settings.engine.addons.subagents.title": "助手 Agent",
-  "settings.engine.addons.subagents.description": "把任务的一部分交给与 Molly 并行或在后台工作的助手 Agent。会驱动其他已安装 AI 应用的助手已关闭。",
   "settings.engine.addons.skills.title": "技能",
   "settings.engine.addons.skills.description": "发现 Molly 可用的技能，并在需要时加载。",
   "settings.engine.addons.questions.title": "向你提问",

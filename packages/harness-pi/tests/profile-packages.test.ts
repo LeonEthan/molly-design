@@ -5,13 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CreateElicitationRequest } from '@agentclientprotocol/sdk';
 import { DefaultResourceLoader, SettingsManager, initTheme } from '@earendil-works/pi-coding-agent';
 import { z } from 'zod';
-import {
-  createProfileSettings,
-  externalCliSubagents,
-  resolvePiPackageRoot,
-  writeProfileSettings,
-} from '../src/profile-settings';
-import { pathToFileURL } from 'node:url';
+import { createProfileSettings, writeProfileSettings } from '../src/profile-settings';
 import type { AdapterPeer } from '../src/session';
 import { fauxAssistantMessage, fauxToolCall, fixture } from './fixtures/adapter';
 
@@ -47,9 +41,7 @@ describe('application Pi profile packages', () => {
       enableAnalytics: false,
       retry: { enabled: false, maxRetries: 0 },
     });
-    expect(settings.subagents.defaultExtensions).toEqual([
-      expect.stringMatching(/cc-safety-net[/\\]dist[/\\]pi[/\\]index\.js$/),
-    ]);
+    expect(settings).not.toHaveProperty('subagents');
     initTheme('dark', false);
     const loader = new DefaultResourceLoader({
       cwd: root,
@@ -60,28 +52,13 @@ describe('application Pi profile packages', () => {
     const { errors, extensions } = loader.getExtensions();
     expect(errors).toEqual([]);
     const tools = extensions.flatMap((extension) => [...extension.tools.keys()]);
-    expect(tools).toEqual(
-      expect.arrayContaining(['subagent', 'ask_user_question', 'ffgrep', 'fffind'])
-    );
+    expect(tools).toEqual(expect.arrayContaining(['ask_user_question', 'ffgrep', 'fffind']));
+    expect(tools.some((name) => name.startsWith('subagent'))).toBe(false);
     const commands = extensions.flatMap((extension) => [...extension.commands.keys()]);
+    expect(commands.filter((name) => /^subagents?(?:-|$)/.test(name))).toEqual([]);
+    expect(commands).not.toContain('run');
+    expect(commands).not.toContain('prompt-workflow');
     expect(commands).toEqual(expect.arrayContaining(['skillful', 'cc-safety-net']));
-  });
-
-  it('offers only native Pi sub-agents, never another installed CLI and account', async () => {
-    const root = await realpath(await mkdtemp(join(tmpdir(), 'molly-profile-')));
-    roots.push(root);
-    vi.stubEnv('PI_CODING_AGENT_DIR', join(root, 'config'));
-    await writeProfileSettings(join(root, 'config'));
-    const discovery = await import(
-      pathToFileURL(join(resolvePiPackageRoot('pi-subagents'), 'src/agents/agents.js')).href
-    );
-    const names = z
-      .object({ agents: z.array(z.object({ name: z.string() })) })
-      .parse(discovery.discoverAgents(root, 'both'))
-      .agents.map((agent) => agent.name);
-    expect(externalCliSubagents()).toContain('codex-exec');
-    expect(names).toContain('worker');
-    expect(names.filter((name) => externalCliSubagents().includes(name))).toEqual([]);
   });
 
   it('fails a retryable provider response without another inference under production settings', async () => {

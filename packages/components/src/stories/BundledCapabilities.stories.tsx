@@ -30,7 +30,6 @@ export const Included: Story = {
       },
       engine: { name: '@earendil-works/pi-coding-agent', version: '1.0.0', license: 'MIT' },
       addons: [
-        { name: 'pi-subagents', version: '0.74.0', license: 'MIT' },
         { name: 'pi-skillful', version: '0.4.0', license: 'MIT' },
         { name: '@juicesharp/rpiv-ask-user-question', version: '2.12.0', license: 'MIT' },
         { name: '@zigai/pi-mention-skill', version: '0.10.4', license: 'MIT' },

@@ -13,6 +13,10 @@ reference. The worker now runs Pi 0.99.2 in Molly's own Pi profile with six publ
 packages, Pi's native MCP and no permission checks; the curated question/classifier
 copies, OS sandbox, approval policy and HTTP request journal are deleted.
 
+The 2026-10-04 [pi-subagents retirement](../../implemented/simplification/2026-10-04-remove-pi-subagents.zh.md)
+replaces this record's child package, profile credential publication and child safety-floor
+choices. The decisions and validation below describe their original scope.
+
 ## Decisions (owner, 2026-09-30)
 
 1. **No permission checks.** Runs use Pi's default. Auto-review, its OS sandbox

@@ -14,21 +14,20 @@ the same path before importing the SDK. It never reads or writes the user's `~/.
 writes the profile's `settings.json` from [profile-settings.ts](src/profile-settings.ts), listing
 shared `MOLLY_PI_PACKAGES` (Settings › Advanced › System › Engine details reports the same set):
 
-| Package                              | Purpose                                        |
-| ------------------------------------ | ---------------------------------------------- |
-| `pi-subagents`                       | Delegation to foreground and background agents |
-| `pi-skillful`                        | Skill discovery and inline expansion           |
-| `@juicesharp/rpiv-ask-user-question` | Questions through the GUI form dialog          |
-| `@zigai/pi-mention-skill`            | Typed `$skill` mentions                        |
-| `@ff-labs/pi-fff`                    | Fast file search tools                         |
-| `cc-safety-net`                      | Deterministic destructive-command floor        |
+| Package                              | Purpose                                 |
+| ------------------------------------ | --------------------------------------- |
+| `pi-skillful`                        | Skill discovery and inline expansion    |
+| `@juicesharp/rpiv-ask-user-question` | Questions through the GUI form dialog   |
+| `@zigai/pi-mention-skill`            | Typed `$skill` mentions                 |
+| `@ff-labs/pi-fff`                    | Fast file search tools                  |
+| `cc-safety-net`                      | Deterministic destructive-command floor |
 
 Packages are referenced by their absolute paths in the sealed closure and loaded by Pi's
-native package discovery; none is patched or forked. `cc-safety-net` is also listed in
-`subagents.defaultExtensions`, because sub-agent children load only that list. The
-`pi-subagents` built-ins that drive another installed CLI (Codex, Claude Code, Cursor) are
-disabled through `subagents.agentOverrides`: they would run on another account and skip that
-list.
+native package discovery; none is patched or forked. The managed runtime is single-session:
+[`pi-subagents` retirement #72](https://github.com/LeonEthan/molly-design/issues/72) removes the
+package, child configuration and foreground/background/workflow launch surfaces. Existing
+native/product histories and shared task-history readers remain available. `cc-safety-net`
+continues to load in the main session.
 `defaultProjectTrust` is `never`: opening a directory does not authorize its `.pi`
 settings, packages or JavaScript extensions. Pi's saved trust grants remain authoritative
 inside that worker profile; a fresh worker does not inherit another profile's grants or
@@ -39,13 +38,12 @@ Tools run without permission checks.
 The managed profile enables native Codemode with `defaultTools: ['+codemode']` and
 `codemode.mode: 'on'`, including fresh sessions without MCP. Ordinary tools remain
 directly available; direct `read` returns image content to the model. Pi owns script
-execution, tool discovery and nested calls. The published foreground sub-agent factory
-also loads native Codemode when its tool ceiling permits it.
+execution, tool discovery and nested calls.
 Main-session Codemode uses `createCodemodeExtension({ models: false })`, so scripts get
 no `models` global. Pi 1.0 otherwise lets scripts run OpenRouter's built-in image models
-with the chat key, bypassing the user's image connection. Sub-agent children still load
-Pi's default Codemode, and published settings cannot turn `models` off; this is a known
-upstream limitation ([redesign proposal](../../research/redesign-proposal.md), Q2).
+with the chat key, bypassing the user's image connection. Removing the delegation package
+closes its separate default-Codemode route. Ordinary shell and trusted native code retain
+normal OS-user access; this is not an OS sandbox.
 Reopen follows the unmodified Pi 1.0 SDK factory: saved messages remain intact, while
 active tools come from the current profile defaults and native MCP activation. A saved
 tool declaration does not override that factory loadout. Loading history performs no
@@ -53,30 +51,32 @@ inference or tool execution.
 
 The managed settings disable native agent and provider retries. The main host's public
 `session_before_compact` hook also cancels overflow/truncation recovery when Pi would
-retry inference; ordinary compaction remains available. These settings do not change
-the unmodified sub-agent package's separate lifecycle behavior.
+retry inference; ordinary compaction remains available.
 
 In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form dialog
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
-widgets, footers, autocomplete and the sub-agent fleet view are unavailable.
+widgets, footers and autocomplete are unavailable.
 
 ## Credentials and models
 
 The host grants the selected connection's key over the private fd-3 pipe for each run.
-The worker pins its first granted key in memory with `setRuntimeApiKey` and
-stores it through Pi's native `login` in the profile's `auth.json` and writes a custom
-endpoint's provider entry into `models.json`
-([profile-credentials.ts](src/profile-credentials.ts)). Sub-agents, including detached
-background runners that outlive the turn, read those files. Workers sharing a Pi provider
-ID have separate files, so one connection cannot replace another's endpoint or key.
-A changed grant retires the worker before replacing either key; rotation needs a fresh
-worker and never automatically replays the fenced run. A process lock
-holds native login and the `models.json` read-merge-publish together, so concurrent updates
-retain other providers. The catalog is still replaced atomically, keeping readers from
-seeing a partial file. Lock contention has a bounded retry budget and fails the run rather
-than stealing from a live worker. Old shared profiles are neither imported nor deleted;
-product history restores independently. Deleting a connection or retiring a worker does
-not yet remove its plaintext profile copy or revoke a detached child's provider key.
+The worker pins its first granted key with `setRuntimeApiKey` and uses Pi's public
+`InMemoryCredentialStore` and `InMemoryModelsStore`; `modelsPath: null` keeps old profile
+models out of session construction. Connection configuration remains registered in memory.
+No native login or `auth.json` / `models.json` publication serves child runtimes anymore.
+Workers sharing a Pi provider ID keep separate runtimes and cannot replace another
+connection's endpoint or key. A changed grant retires the worker before replacing its key;
+rotation needs a fresh worker and never automatically replays the fenced run. Existing
+profile files are neither imported nor deleted; product history restores independently.
+This stops new profile credential copies, not prior copies or keys held by old processes.
+
+Before upgrading from a build that bundled `pi-subagents`, finish or stop outstanding old
+foreground, background and scheduled extension tasks. The old package exposes
+`subagent({ action: "stop", id: "<run-id>" })` (and `/subagents-stop`); a stop request alone
+is not proof that a detached process exited. Upgrade only after old tasks have exited;
+when that cannot be established, defer the upgrade. The new build does not kill unrelated
+processes, revoke old provider keys or erase old profiles. Detached-process settlement has
+not been validated by this retirement's synthetic checks.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
 including declared OpenAI-compatible models. Pi applies a provider endpoint override to every
@@ -98,7 +98,7 @@ to the current SDK; [translate/](src/translate) is copied from that revision
 ([MIT license](src/LICENSE.pi-acp), shipped in the bundle). Success requires native
 settlement and a final assistant entry; cancellation, truncation and handled commands are
 reported distinctly. Native usage is projected to Core usage notifications
-([usage.ts](src/usage.ts)); sub-agent usage is not included.
+([usage.ts](src/usage.ts)).
 
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
@@ -160,7 +160,7 @@ lock whose owner has exited (the host stops workers with SIGKILL) is taken over.
 `.acp-lock.guard` stays held through shutdown and marker removal; empty or malformed legacy
 markers remain untouched and refuse acquisition because their owner's exit is unproven.
 
-[process-lock.ts](src/process-lock.ts) provides both locks. It publishes a fully staged,
+[process-lock.ts](src/process-lock.ts) provides the history writer guards. It publishes a fully staged,
 nonempty directory containing a unique PID/UUID owner filename. Recovery removes only
 the exited owner's filename, then attempts a nonrecursive `rmdir`. A successor's nonempty
 directory survives a delayed recovery or release; release is idempotent. Only `ESRCH`
@@ -180,8 +180,9 @@ The Settings capability reader verifies the staged question package's `package.j
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker
 in a temporary root, checks package commands and tools, runs one turn against a loopback
-synthetic model, executes native Codemode and a nested file read, and checks the profile
-credential. This exercises the sealed QuickJS worker/WASM resources rather than only
+synthetic model, executes native Codemode and a nested file read, and checks the granted
+key reaches only the synthetic endpoint without creating profile auth/model files. It also
+checks the retired package, tools and commands are absent. This exercises the sealed QuickJS worker/WASM resources rather than only
 checking that files exist.
 
 On macOS, signing changes the sealed native binaries' bytes. The public
@@ -203,8 +204,8 @@ uses native Codemode and the actual Molly image server with synthetic transport.
 covers generation/editing receipts, direct image reads, live and reopened asset paths,
 YAML authoring, natural completion and the existing canonical CAS commit. Assets and
 draft files alone do not commit the canvas.
-[profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker and catalog-update
-races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
+[profile-races.test.ts](tests/profile-races.test.ts) forces stale-marker
+history-owner races with explicit barriers; [process-lock.test.ts](tests/process-lock.test.ts) checks
 competing reapers, delayed cleanup and real worker death without timed sleeps.
 One desktop design run (DeepSeek, text and shapes) completed without permission prompts.
 An additional macOS arm64 packaged-daemon/worker check on 2026-10-01 made two live image
@@ -217,3 +218,5 @@ Language inference was controlled loopback, with a source Electron protected-cre
 this does not establish autonomous visual judgment, GUI or live daemon-restart acceptance,
 upstream proxy billing, or real latency above 60 seconds. Native deterministic tests cover
 the longer timeout boundary. Background sub-agents and other providers remain unverified.
+
+The dated runs above precede [the #72 retirement record](../../.agents/notes/implemented/simplification/2026-10-04-remove-pi-subagents.zh.md); current removal checks and limits are recorded there.

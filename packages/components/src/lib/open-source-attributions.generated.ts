@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-02T03:21:23.156Z",
+  "generatedAt": "2026-10-04T16:01:28.425Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -5709,8 +5709,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "homepage": "https://github.com/acornjs/acorn",
       "description": "ECMAScript parser",
       "versions": [
-        "8.16.0",
-        "8.18.0"
+        "8.16.0"
       ]
     },
     {
@@ -12590,19 +12589,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       ]
     },
     {
-      "id": "pkg-pi-subagents-mit",
-      "kind": "package",
-      "scope": "production-dependency",
-      "name": "pi-subagents",
-      "license": "MIT",
-      "homepage": "https://github.com/nicobailon/pi-subagents#readme",
-      "author": "Nico Bailon",
-      "description": "Pi extension for single-agent delegation and scripted multi-agent workflows",
-      "versions": [
-        "0.74.0"
-      ]
-    },
-    {
       "id": "pkg-picocolors-isc",
       "kind": "package",
       "scope": "production-dependency",
@@ -16384,7 +16370,6 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "description": "JavaScript parser and stringifier for YAML",
       "versions": [
         "2.8.2",
-        "2.8.3",
         "2.9.0"
       ]
     },

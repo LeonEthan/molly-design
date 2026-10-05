@@ -63,8 +63,6 @@
   "settings.engine.pi.title": "Pi {{version}}",
   "settings.engine.pi.description": "The engine that runs every design task. Tool connections (MCP), code mode and tool search are built in.",
   "settings.engine.addonsTitle": "Add-ons · {{count}}",
-  "settings.engine.addons.subagents.title": "Helper agents",
-  "settings.engine.addons.subagents.description": "Hands parts of a task to helper agents that work alongside Molly or in the background. Helpers that would run another installed AI app are turned off.",
   "settings.engine.addons.skills.title": "Skills",
   "settings.engine.addons.skills.description": "Finds the skills Molly can use and loads them when needed.",
   "settings.engine.addons.questions.title": "Questions for you",

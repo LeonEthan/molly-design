@@ -47,7 +47,7 @@ it.each(['en', 'zh_CN'] as const)(
     expect(host.textContent).toContain('@earendil-works/pi-coding-agent · 1.0.0 · MIT');
     for (const name of MOLLY_PI_PACKAGES)
       expect(host.textContent).toContain(`${name} · 1.2.3 · MIT`);
-    for (const slug of ['subagents', 'skills', 'questions', 'mentions', 'fileSearch', 'safetyNet'])
+    for (const slug of ['skills', 'questions', 'mentions', 'fileSearch', 'safetyNet'])
       expect(host.textContent).toContain(
         copy[`settings.engine.addons.${slug}.title` as keyof typeof copy]
       );

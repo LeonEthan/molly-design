@@ -4,6 +4,8 @@ Audit date: 2026-10-03, at `main` `a5740c08`. Every claim cites the code. Docs a
 cited only where they record an intentional decision. Line numbers refer to that commit.
 External Pi facts are in [pi-1.0-design.md](pi-1.0-design.md) (IDs in brackets such as [MCP]).
 
+The M1 image-route and profile-credential observations below are historical: #71 disabled the main-session Codemode models, and [#72](https://github.com/LeonEthan/molly-design/issues/72) retires the child extension and its credential publication. Current evidence is in the [retirement record](../.agents/notes/implemented/simplification/2026-10-04-remove-pi-subagents.zh.md).
+
 ## 0. Shared runtime context
 
 - **Engine.** The product Agent is unmodified Pi `@earendil-works/pi-coding-agent` 1.0.0

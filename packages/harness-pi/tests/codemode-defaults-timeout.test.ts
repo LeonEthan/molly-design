@@ -1,13 +1,12 @@
 import type { McpServer } from '@agentclientprotocol/sdk';
 import { fauxAssistantMessage, fauxToolCall, getCurrentTools } from '@earendil-works/pi-ai';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { SessionManager } from '@earendil-works/pi-coding-agent';
 import { MOLLY_BUILTIN_MCP_CONNECTION } from '@molly/shared/embedded-harness';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { acpMcpConfig } from '../src/mcp';
-import { resolvePiPackageRoot, writeProfileSettings } from '../src/profile-settings';
+import { writeProfileSettings } from '../src/profile-settings';
+import { sessionDirectory } from '../src/profile';
 import { deferred, fixture } from './fixtures/adapter';
 import { managed } from './fixtures/managed';
 
@@ -117,55 +116,9 @@ describe('managed Codemode defaults and MCP request budget', () => {
     const session = await f.open();
     f.grant(session.snapshot);
     await session.prompt();
-    expect(getCurrentTools(JSON.parse(f.observed[0]!).messages).map(({ name }) => name)).toEqual(
-      expect.arrayContaining(['codemode', 'read', 'bash', 'edit', 'write'])
-    );
-  });
-
-  it('loads native Codemode in a published foreground child using the same managed profile', async () => {
-    const f = await fixture();
-    await writeProfileSettings(f.agentDir);
-    await f.initialize();
-    await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
-    const childModule = await import(
-      pathToFileURL(join(resolvePiPackageRoot('pi-subagents'), 'src/runs/shared/child-session.js'))
-        .href
-    );
-    const factory = childModule.createDefaultChildSessionFactory({
-      loadPiCodingAgent: () => import('@earendil-works/pi-coding-agent'),
-    });
-    const tools: string[] = [];
-    const errors: unknown[] = [];
-    try {
-      const child = await factory.create({
-        cwd: f.cwd,
-        projectTrusted: false,
-        parentProviderRegistry: f.runtime(),
-        storage: { kind: 'memory' },
-        model: 'synthetic/model',
-        extensionPaths: [],
-        ambientExtensions: false,
-        hooks: [
-          {
-            name: 'observe-native-child-tools',
-            factory: (pi: ExtensionAPI) => {
-              pi.on('session_start', () => {
-                tools.push(...pi.getActiveTools());
-              });
-            },
-          },
-        ],
-        noSkills: true,
-        noContextFiles: true,
-        runtime: { fanoutChild: false, depth: 1, waitTool: { enabled: false }, fast: false },
-        onExtensionError: (error: unknown) => errors.push(error),
-      });
-      expect(tools).toEqual(expect.arrayContaining(['codemode', 'read', 'bash', 'edit', 'write']));
-      expect(errors).toEqual([]);
-      await child.dispose();
-    } finally {
-      await factory.dispose();
-    }
+    const tools = getCurrentTools(JSON.parse(f.observed[0]!).messages).map(({ name }) => name);
+    expect(tools).toEqual(expect.arrayContaining(['codemode', 'read', 'bash', 'edit', 'write']));
+    expect(tools.some((name) => name.startsWith('subagent'))).toBe(false);
   });
 
   it('restores native history without replay and uses the SDK factory default tool selection', async () => {
@@ -195,6 +148,31 @@ describe('managed Codemode defaults and MCP request budget', () => {
         .sort()
     ).toEqual(['read', 'write']);
     await f.agent.dispose();
+    const directory = await sessionDirectory(f.agentDir);
+    const saved = (await SessionManager.list(f.cwd, directory)).find(
+      (entry) => entry.id === session.sessionId
+    )!;
+    const history = SessionManager.open(saved.path, directory);
+    history.appendMessage(
+      fauxAssistantMessage(
+        {
+          type: 'toolCall',
+          id: 'synthetic-retired-delegation',
+          name: 'subagent',
+          arguments: { task: 'Synthetic saved delegation' },
+        },
+        { stopReason: 'toolUse' }
+      )
+    );
+    history.appendMessage({
+      role: 'toolResult',
+      toolCallId: 'synthetic-retired-delegation',
+      toolName: 'subagent',
+      content: [{ type: 'text', text: 'SYNTHETIC_SAVED_SUBAGENT_RESULT' }],
+      isError: false,
+      timestamp: 0,
+    });
+    history.appendMessage(fauxAssistantMessage('SYNTHETIC_SAVED_SUBAGENT_COMPLETE'));
     restoring = true;
     f.updates.length = 0;
     const resumed = f.makeAgent();
@@ -202,6 +180,7 @@ describe('managed Codemode defaults and MCP request budget', () => {
     await resumed.loadSession({ sessionId: session.sessionId, cwd: f.cwd, mcpServers: [] });
     expect(f.prompts).toHaveLength(1);
     expect(JSON.stringify(f.updates)).toContain('Persist the selected native tools');
+    expect(JSON.stringify(f.updates)).toContain('SYNTHETIC_SAVED_SUBAGENT_RESULT');
     f.responses.push(fauxAssistantMessage('SYNTHETIC_RESTORED'));
     await resumed.prompt({
       sessionId: session.sessionId,
@@ -212,6 +191,11 @@ describe('managed Codemode defaults and MCP request budget', () => {
         .map(({ name }) => name)
         .sort()
     ).toEqual(expect.arrayContaining(['codemode', 'read', 'bash', 'edit', 'write']));
+    expect(
+      getCurrentTools(JSON.parse(f.prompts[1]!).messages).some(({ name }) =>
+        name.startsWith('subagent')
+      )
+    ).toBe(false);
   });
 
   it('extends only the exact managed built-in catalog identity', async () => {

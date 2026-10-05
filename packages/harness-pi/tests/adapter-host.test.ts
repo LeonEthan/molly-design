@@ -97,7 +97,7 @@ describe('owned ACP host integration', () => {
       })
     );
   });
-  it('binds the host identity and persists the granted key and endpoint for sub-agents', async () => {
+  it('binds the granted key and endpoint in memory without changing old profile files', async () => {
     const f = await managed();
     await writeFile(
       join(f.agentDir, 'auth.json'),
@@ -117,15 +117,15 @@ describe('owned ACP host integration', () => {
     });
     expect(f.observed[0]).toContain(f.config.systemPrompt);
     expect(f.observed[0]).toContain('IANA time zone:');
-    const child = await ModelRuntime.create({
-      authPath: join(f.agentDir, 'auth.json'),
-      modelsPath: join(f.agentDir, 'models.json'),
-      modelsStorePath: join(f.agentDir, 'child-models-cache.json'),
-      refreshOnCreate: false,
-    });
-    const model = child.getModel(providerId, 'model');
+    const model = f.runtime().getModel(providerId, 'model');
     expect(model?.baseUrl).toBe(f.config.connection.baseUrl);
-    expect((await child.getAuth(model!))?.auth.apiKey).toBe('SYNTHETIC_SECRET');
+    expect((await f.runtime().getAuth(model!))?.auth.apiKey).toBe('SYNTHETIC_SECRET');
+    expect(JSON.parse(await readFile(join(f.agentDir, 'auth.json'), 'utf8'))).toEqual({
+      [providerId]: { type: 'api_key', key: 'PROFILE_SECRET' },
+    });
+    expect(JSON.parse(await readFile(join(f.agentDir, 'models.json'), 'utf8'))).toEqual({
+      providers: { [providerId]: { baseUrl: 'https://wrong.invalid' } },
+    });
     const content = await readFile(s.binding.nativeSessionFile, 'utf8');
     expect(content).not.toContain('SYNTHETIC_SECRET');
     expect(JSON.stringify(f.updates)).not.toContain('SYNTHETIC_SECRET');
@@ -140,7 +140,7 @@ describe('owned ACP host integration', () => {
     expect(entry.message.role).toBe('assistant');
   });
 
-  it('keeps same-preset workers and their native children on their own endpoint and key', async () => {
+  it('keeps same-preset workers on their own endpoint and key without publishing credentials', async () => {
     const first = await managed();
     const firstSession = await first.open();
     first.grant(firstSession.snapshot, 'FIRST_SYNTHETIC_KEY');
@@ -168,31 +168,14 @@ describe('owned ACP host integration', () => {
       [first, 'FIRST_SYNTHETIC_KEY'],
       [second, 'SECOND_SYNTHETIC_KEY'],
     ] as const) {
-      vi.stubEnv('PI_CODING_AGENT_DIR', owner.agentDir);
-      const detached = await ModelRuntime.create({
-        refreshOnCreate: false,
-        allowModelNetwork: false,
-      });
-      const foreground = await ModelRuntime.create({
-        refreshOnCreate: false,
-        allowModelNetwork: false,
-      });
-      for (const provider of owner.runtime().getRegisteredProviderIds()) {
-        const config = owner.runtime().getRegisteredProviderConfig(provider);
-        if (config) foreground.registerProvider(provider, config);
-      }
-      for (const child of [foreground, detached]) {
-        const model = child.getModel(providerId, 'model');
-        expect(model?.baseUrl).toBe(owner.config.connection.baseUrl);
-        expect((await child.getAuth(model!))?.auth.apiKey).toBe(key);
-      }
+      const model = owner.runtime().getModel(providerId, 'model');
+      expect(model?.baseUrl).toBe(owner.config.connection.baseUrl);
+      expect((await owner.runtime().getAuth(model!))?.auth.apiKey).toBe(key);
+      for (const name of ['auth.json', 'models.json', 'models-cache.json'])
+        await expect(readFile(join(owner.agentDir, name))).rejects.toMatchObject({
+          code: 'ENOENT',
+        });
     }
-    expect(await readFile(join(first.agentDir, 'auth.json'), 'utf8')).not.toContain(
-      'SECOND_SYNTHETIC_KEY'
-    );
-    expect(await readFile(join(second.agentDir, 'auth.json'), 'utf8')).not.toContain(
-      'FIRST_SYNTHETIC_KEY'
-    );
   });
 
   it('dispatches a default-endpoint model only to its own SDK endpoint', async () => {
@@ -238,12 +221,11 @@ describe('owned ACP host integration', () => {
     );
   });
 
-  it('retires a worker before a changed grant can replace its runtime or persisted key', async () => {
+  it('retires a worker before a changed grant can replace its runtime key', async () => {
     const f = await managed();
     const s = await f.open();
     f.grant(s.snapshot);
     await s.prompt();
-    const auth = await readFile(join(f.agentDir, 'auth.json'), 'utf8');
     const history = await readFile(s.binding.nativeSessionFile, 'utf8');
     const snapshot = { ...s.snapshot, runId: 'changed-key', turnId: 'changed-key-turn' };
     f.grant(snapshot, 'CHANGED_SYNTHETIC_KEY');
@@ -251,7 +233,9 @@ describe('owned ACP host integration', () => {
       'pi_acp_host_execution_failed'
     );
     expect((await f.runtime().getAuth(providerId))?.auth.apiKey).toBe('SYNTHETIC_SECRET');
-    expect(await readFile(join(f.agentDir, 'auth.json'), 'utf8')).toBe(auth);
+    await expect(readFile(join(f.agentDir, 'auth.json'))).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
     expect(await readFile(s.binding.nativeSessionFile, 'utf8')).toBe(history);
     expect(f.pipe.destroyed).toBe(true);
   });

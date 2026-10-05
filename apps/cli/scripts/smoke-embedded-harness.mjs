@@ -76,6 +76,8 @@ async function syntheticModel() {
  */
 export async function runPackagedSmoke({ output, executable }) {
   const manifest = verifyEmbeddedHarness(path.join(output, 'harness'));
+  assert.ok(!manifest.packages.some((entry) => entry.path.includes('/pi-subagents')));
+  assert.ok(!manifest.files.some((entry) => entry.path.includes('/pi-subagents/')));
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'molly-harness-smoke-')));
   const model = await syntheticModel();
   let child;
@@ -179,7 +181,13 @@ export async function runPackagedSmoke({ output, executable }) {
       const session = await peer.newSession({ cwd, mcpServers: [] });
       const binding = session._meta.mollyRuntime;
       assert.equal(binding.runtimeEpoch, config.runtimeEpoch);
-      for (const command of ['subagents', 'skillful', 'fff-health', 'cc-safety-net'])
+      assert.deepEqual(
+        commands.filter((name) => /^subagents?(?:-|$)/.test(name)),
+        []
+      );
+      assert.ok(!commands.includes('run'));
+      assert.ok(!commands.includes('prompt-workflow'));
+      for (const command of ['skillful', 'fff-health', 'cc-safety-net'])
         assert.ok(commands.includes(command), `Pi package command missing: ${command}`);
       const runId = 'synthetic-package-run';
       await write({ type: 'credential', runtimeEpoch: config.runtimeEpoch, runId, apiKey: SECRET });
@@ -205,6 +213,7 @@ export async function runPackagedSmoke({ output, executable }) {
       assert.equal(response._meta.mollyNativeOutcome.status, 'completed');
       assert.equal(model.requests[0].authorization, `Bearer ${SECRET}`);
       const tools = model.requests[0].body.tools.map((tool) => tool.function.name);
+      assert.ok(!tools.some((name) => name.startsWith('subagent')));
       for (const tool of [
         'codemode',
         'read',
@@ -227,19 +236,14 @@ export async function runPackagedSmoke({ output, executable }) {
         'Packaged Codemode did not execute its nested native read'
       );
       assert.ok(!JSON.stringify(model.requests).includes('SYNTHETIC_POLLUTION_CANARY'));
-      const auth = JSON.parse(
-        await readFile(
-          path.join(
-            config.privateRoot,
-            'config',
-            'workers',
-            createHash('sha256').update(config.runtimeEpoch).digest('hex'),
-            'auth.json'
-          ),
-          'utf8'
-        )
+      const profile = path.join(
+        config.privateRoot,
+        'config',
+        'workers',
+        createHash('sha256').update(config.runtimeEpoch).digest('hex')
       );
-      assert.equal(auth['molly-compatible'].key, SECRET);
+      for (const name of ['auth.json', 'models.json', 'models-cache.json'])
+        await assert.rejects(readFile(path.join(profile, name)), { code: 'ENOENT' });
       await writeFile(path.join(root, 'smoke-ok'), '');
     } finally {
       clearTimeout(timeout);

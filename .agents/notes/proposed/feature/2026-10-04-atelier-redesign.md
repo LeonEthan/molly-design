@@ -15,9 +15,9 @@ The adopted direction, Atelier, follows what premium creative tools share: the a
 supplies the colour, the chrome stays near-monochrome with hairline rules and tonal
 depth, display type is a regular-weight editorial serif, and one vermilion signal marks
 only focus and live or changed state. The home page becomes an editorial launchpad with
-the composer in the hero and a "Your work" gallery. Visual quality still awaits the
-owner's review, and the canvas restyle could not be checked in the running app because
-the display was asleep (macOS reports the window as occluded, so the canvas cannot attach).
+the composer in the hero and a "Your work" gallery, and the first-launch guide adopts the
+same type and paper. Visual quality still awaits the owner's review; the canvas was checked
+in dark mode only.
 
 ## Problem
 
@@ -65,6 +65,14 @@ and bold display type. That explains why it read as a generic AI-startup templat
   off the shell, hairline dock, zoom bar and save pill, and a soft cast shadow under the
   artwork. The vendored Bento tree is untouched.
 - **Sidebar.** Section labels use the mono eyebrow style.
+- **First-launch guide.** The three opening scenes keep their artwork and paper colour
+  (#fafaf7; the collages were painted on it, so a warmer ground exposes their edges), but
+  headings move from Georgia to the shared serif display, every subtitle uses the same
+  sans style, and the ink matches the app. The setup steps replace the cool blue-grey
+  grid with warm paper and a faint dot grid, set step titles in the serif display under a
+  mono "Molly · Setup" eyebrow with the signal dot, use warm ink, and show the setup
+  artwork at full strength. The project and first-task steps could not be reached in the
+  dev build without a working built-in agent, so they are unverified.
 
 ## Alternatives considered
 
@@ -90,6 +98,9 @@ and bold display type. That explains why it read as a generic AI-startup templat
 - `pnpm lint:i18n`, `pnpm lint` (0 errors), and typechecks for `@molly/components` and
   `@molly/electron` pass. The `@molly/components` test suite passes after updating the theme
   contract, the ThemeProvider dark-ground expectation and the dark sidebar-border contrast.
+- The model-setup and summary steps and all three opening scenes were checked in the
+  running app; onboarding tests (7 files) pass.
 - Home, light and dark themes and the sidebar were checked in the running dev app with real
-  local data through CDP screenshots. The canvas restyle is unverified, for the reason given
-  in the abstract.
+  local data through CDP screenshots. The canvas was checked in dark mode through a window
+  capture: near-black light table, hairline dock with an ink active tool, mono save pill,
+  and the floating text-selection toolbar. The canvas in light mode is unverified.

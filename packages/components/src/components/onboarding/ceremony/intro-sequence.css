@@ -5,7 +5,7 @@
   align-items: safe center;
   overflow: auto;
   background: #fafaf7;
-  color: #26281f;
+  color: #141413;
 }
 .molly-intro-frame {
   container-type: inline-size;
@@ -44,7 +44,7 @@
   background: #efefe9;
 }
 .molly-intro-sound:focus-visible {
-  outline: 2px solid #26281f;
+  outline: 2px solid #141413;
   outline-offset: 4px;
 }
 .molly-intro-scene {
@@ -55,10 +55,10 @@
   animation: molly-intro-fade 400ms ease both;
 }
 .molly-intro-title {
-  font-family: Georgia, 'Songti SC', 'STSong', serif;
+  font-family: var(--font-display);
   font-weight: 400;
-  line-height: 1.08;
-  letter-spacing: -0.04em;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 .molly-intro-title:lang(zh-CN) {
@@ -69,7 +69,7 @@
   margin-top: 12px;
   font-size: clamp(14px, 1.8cqw, 35px);
   line-height: 1.5;
-  color: #5c5e56;
+  color: #6b6963;
 }
 .molly-intro-artwork {
   display: block;
@@ -97,15 +97,12 @@
 }
 .molly-intro-inspiration .molly-intro-description {
   max-width: 21.7em;
-  font-family: Georgia, 'Songti SC', 'STSong', serif;
 }
 .molly-intro-art-phrase {
   max-width: 7em;
   margin-bottom: 14px;
-  font:
-    400 clamp(22px, 3cqw, 58px) / 0.98 Georgia,
-    serif;
-  letter-spacing: -0.035em;
+  font: 400 clamp(22px, 3cqw, 58px) / 0.98 var(--font-display);
+  letter-spacing: -0.012em;
 }
 .molly-intro-creation {
   display: flex;
@@ -173,7 +170,7 @@
 .molly-intro-expression .molly-intro-description {
   margin: 0;
   font-size: clamp(20px, 2.5cqw, 48px);
-  color: #26281f;
+  color: #141413;
 }
 .molly-intro-footer {
   display: flex;
@@ -209,7 +206,7 @@
   cursor: pointer;
 }
 .molly-intro-segments button:focus-visible {
-  outline: 2px solid #26281f;
+  outline: 2px solid #141413;
   outline-offset: 3px;
 }
 .molly-intro-segments span {
@@ -220,7 +217,7 @@
 }
 .molly-intro-segments button[aria-current='step'] span,
 .molly-intro-segments button:hover span {
-  background: #26281f;
+  background: #141413;
 }
 .molly-intro-count {
   font-size: 11px;
@@ -232,11 +229,11 @@
   min-width: 156px;
   gap: 18px;
   border-radius: 999px;
-  background: #26281f;
+  background: #141413;
   color: #fafaf7;
 }
 .molly-intro-start:hover {
-  background: #414438;
+  background: #2b2b29;
 }
 .molly-intro-skip {
   color: #62655e;

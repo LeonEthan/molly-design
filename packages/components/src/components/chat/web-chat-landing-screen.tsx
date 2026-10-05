@@ -2,6 +2,7 @@ import type { ReactNode, Ref } from 'react';
 import type { DropZone } from '@/hooks/use-drop-zone';
 import { cn } from '@/lib/utils';
 import { isElectronRenderer, isMacOSElectronRenderer, useElectronFullscreen } from '@/lib/electron';
+import { getSessionChatInputAreaShellClassName } from '@/components/sessions/session-chat-input-area';
 import { ConversationColumn } from '@/components/shared/conversation-column';
 import {
   ConversationDropOverlay,
@@ -95,7 +96,12 @@ export function WebChatLandingScreen({
           }
         }}
       >
-        <div className="input-scrollbar relative flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5vw,64px)]">
+        <div
+          className={cn(
+            getSessionChatInputAreaShellClassName(),
+            'input-scrollbar flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5vw,64px)]'
+          )}
+        >
           <div className="relative flex min-h-[74%] w-full max-w-[820px] shrink-0 flex-col items-center justify-center gap-9 pb-8 pt-20">
             <div className="flex flex-col items-center gap-6 text-center">
               {eyebrow ? (

@@ -30,6 +30,10 @@ reasoning behind those rules.
   state and rendering for references attached to outgoing messages.
 - `context-switch.tsx`, `machine-pairing-dialog.tsx`, `web-chat-landing-screen.tsx`
   — landing chrome and host-specific entry points.
+  The hero's scroll viewport reuses `getSessionChatInputAreaShellClassName()` so
+  an overlaying native keyboard reduces the visible area by its height and the
+  composer stays reachable by scrolling. The same shell removes the covered
+  bottom safe-area padding; the hero and gallery keep their existing layout.
 - [`submission/`](submission/AGENTS.md) — the composer submission lifecycle
   (its own scope, with its own rules).
 - `atoms/local-storage-cache.ts` owns the persisted landing prompt, pasted text,

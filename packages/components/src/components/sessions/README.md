@@ -159,6 +159,11 @@ scale and canvas-coordinate center survive surface replacement within native bou
 
 ### Design versions
 
+Every desktop design-session entry selects and opens the canvas while retaining
+the other restored tabs. The render-phase session-switch reset clears the entry
+marker, including when visiting a non-design session before returning. Once the
+entry is handled, ordinary rerenders preserve the user's current panel choice.
+
 Design sessions open canvas-first: the conversation starts near a 460px reading
 width (22–40% of the window, `design-panel-sizes.ts`) and the split is saved under
 its own layout id. When the canvas is the only side-panel tab, its action row is

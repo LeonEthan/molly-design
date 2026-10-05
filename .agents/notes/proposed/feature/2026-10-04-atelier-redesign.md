@@ -86,6 +86,37 @@ and bold display type. That explains why it read as a generic AI-startup templat
   rejected twice in September 2026, and an ink primary keeps the chrome out of the artwork's
   way. Vermilion stays a small signal.
 
+## Review corrections (2026-10-05)
+
+PR #82 identified two interaction regressions. The hero's scroll viewport had
+stopped reserving space for an overlaying native keyboard. It now reuses the
+existing session-composer shell's keyboard-height margin and adjusted bottom
+safe-area padding. Reusing that shell keeps one implementation of the inset
+behavior; replacing it with new keyboard state or restoring the old docked
+layout was unnecessary.
+
+The canvas-entry marker also survived a visit to a non-design session, so returning
+to the previous design could restore its closed panel instead of opening the
+canvas. The existing render-phase session-switch reset now clears the marker.
+Ordinary rerenders still preserve the user's panel choice; there is no new
+session-id effect or persisted entry state.
+
+The 24 focused landing/layout/initial-state tests and the local desktop build
+passed. An isolated built-Electron probe seeded synthetic design A and non-design
+B, closed A's right panel, navigated A → B → A, and observed the canvas panel open
+again; a subsequent close remained closed after a resize and a session-title
+update. At a 390 × 844 viewport with a simulated 350px keyboard inset, the scroll
+viewport ended at y=494 and the
+focused prompt ended at y=382.57; the Send button also remained above the keyboard.
+The first probe selected the navigation-sidebar toggle because both controls
+shared a label; the corrected
+probe targeted the right-panel toggle and passed. No user profile was used.
+
+Read-only Codex CLI review (`gpt-6-astra`, high reasoning) found no concrete P0/P1
+in these two fixes. It was source review; its additional review tools were
+unavailable. Desktop geometry does not establish native iOS keyboard delivery,
+focus scrolling, or nonzero `env(safe-area-inset-bottom)` behavior.
+
 ## Not done yet
 
 - **Conversation on the right (Lovart-style).** Approved in the plan but not built. It

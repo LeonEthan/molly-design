@@ -760,6 +760,7 @@ const SessionDetail = ({
     sendingDraftIdsRef.current.clear();
     desktopTabFocusRegionRef.current = 'conversation';
     setLocalStateSessionId(sessionId);
+    setCanvasEntrySessionId(null);
     setSidebarRestoreSeq((seq) => seq + 1);
     setIsSidebarOpen(nextInitialTabState.sidePanel.open);
     setActiveSidebarTab(nextInitialTabState.sidePanel.tab);

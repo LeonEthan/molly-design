@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#82](https://github.com/LeonEthan/molly-design/pull/82)
+
 ## 摘要
 
 开发版 Molly 的网站账号设置无法列出 Chrome 配置，刷新后导入按钮仍禁用，而启动终端已有 Chrome 数据访问权限。macOS 实际把运行中 Electron 的浏览器数据访问归属给启动链中的 Claude Code，并拒绝读取。从已有浏览器访问权限的启动环境正常重启 Molly 后，现有配置发现和导入流程恢复，Pinterest 在内置浏览器中识别了导入的账号。中英文错误提示和使用文档补充了编程 Agent 的权限归属；本次没有新增读取器或权限机制，开发会话仍只保存在内存中。

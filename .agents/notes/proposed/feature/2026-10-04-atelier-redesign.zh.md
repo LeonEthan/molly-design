@@ -3,6 +3,8 @@
 Status: proposed
 Translation: current
 
+PR: [#82](https://github.com/LeonEthan/molly-design/pull/82)
+
 [English](2026-10-04-atelier-redesign.md)
 
 ## 摘要

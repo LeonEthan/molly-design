@@ -27,10 +27,10 @@ Files: [README.md](README.md). Scopes:
   `sidePanelTabs` owns order and close fallback; retired Changes entries show Files.
 - Human forks share the workspace; no Git probe/new-worktree menu. Keep recovery
   for previously accepted worktree forks.
-- Keep one canvas, with Save version and direct history switching. Active Agent
-  drafts replace its display only when valid; execution/processing owns readonly.
-- A sole canvas tab gets the top row via `toolbarHost` portal only while the row
-  fits (`soloPanelMinWidth`); its state stays in `DesignCanvas`.
+- Keep one canvas, Save version and direct history switching. Only valid Agent
+  drafts replace its display; execution/processing owns readonly.
+- Portal a sole canvas toolbar only when it fits (`soloPanelMinWidth`);
+  `DesignCanvas` owns state.
 - Attachment recovery clears only attachment errors from the current view generation;
   preserve save/sync errors and ignore superseded attachment results.
 - A Side Chat is a durable child Session (`childSessionPlacement: 'side-panel'`):
@@ -147,4 +147,5 @@ Files: [README.md](README.md). Scopes:
   `SessionConversationPage.stories.tsx` hand-composes leaves and drifts — keep it
   minimal and verify UI changes in the real app.
 
-Canvas previews, receipts and versions follow [README](README.md).
+History feedback never implies autosave success. Covered canvases retain inert,
+transient pixels; stale captures never cross hosts. Details: [README](README.md).

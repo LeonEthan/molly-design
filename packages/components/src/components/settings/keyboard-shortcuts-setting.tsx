@@ -27,8 +27,8 @@ import { CompactRow, CompactSection } from './compact-layout';
 import { settingContainerClass } from '.';
 
 const CATEGORY_ORDER: CommandCategory[] = [
-  'Navigation',
   'Session',
+  'Navigation',
   'Editor',
   'View',
   'Workspace',
@@ -99,6 +99,25 @@ export function KeyboardShortcutsSetting() {
 
   return (
     <div className={settingContainerClass}>
+      <CompactSection
+        title={t('settings.keyboardShortcuts.canvas')}
+        description={t('settings.keyboardShortcuts.canvasScope')}
+      >
+        {[
+          ['undo', '$mod+z'],
+          ['redo', '$mod+Shift+z'],
+          ['group', '$mod+g'],
+          ['ungroup', '$mod+Shift+g'],
+          ['delete', 'Backspace'],
+          ['zoomIn', '$mod+='],
+          ['zoomOut', '$mod+-'],
+          ['pan', 'Space'],
+        ].map(([action, binding]) => (
+          <CompactRow key={action} label={t(`settings.keyboardShortcuts.canvas.${action}`)}>
+            <Kbd binding={binding} />
+          </CompactRow>
+        ))}
+      </CompactSection>
       <div className="flex items-center justify-between gap-4">
         <p className="text-xs text-muted-foreground">
           {t('settings.keyboardShortcuts.description')}

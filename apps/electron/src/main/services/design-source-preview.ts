@@ -1,4 +1,5 @@
-import { prepareDesignFrame } from './design-frame'
+import { captureDesignViewFrame, prepareDesignFrame } from './design-frame'
+import { canPresentDesignHost, coverDesignHost, uncoverDesignHost } from './design-view-visibility'
 import { bindLiveSource, type LiveSource } from './design-live-source'
 import { fitDesignViewport } from './design-viewport'
 import { WebContentsView, type BrowserWindow } from 'electron'
@@ -13,7 +14,8 @@ import {
   hideDesign,
   attachDesign,
   currentDesignBounds,
-  isDesignVisible
+  isDesignVisible,
+  captureDesignFrame
 } from './design-service'
 import type { ObservedPreviewResult } from '../../../../cli/src/design/render-preview'
 import { PreviewRequests } from './design-source-preview-core'
@@ -75,6 +77,33 @@ const views = new Map<
     dispose(): void
   }
 >()
+
+async function captureVisibleDesignFrame(owner: BrowserWindow, artworkId: string, hostId: string) {
+  const record = views.get(hostId)
+  if (record?.view.getVisible()) {
+    if (record.owner !== owner || record.artworkId !== artworkId) return null
+    return captureDesignViewFrame(record.view, () => views.get(hostId) === record)
+  }
+  return captureDesignFrame(owner, artworkId, hostId)
+}
+
+export async function coverDesignCanvas(
+  owner: BrowserWindow,
+  artworkId: string,
+  hostId: string,
+  covered: boolean
+) {
+  if (!covered) {
+    uncoverDesignHost(owner, hostId)
+    return null
+  }
+  const current = coverDesignHost(owner, hostId)
+  const captured = captureVisibleDesignFrame(owner, artworkId, hostId)
+  hideDesign(artworkId, hostId)
+  hideSourcePreview(hostId, false)
+  const frame = await captured
+  return current() ? frame : null
+}
 
 export function hideSourcePreview(hostId: string, cancel = true) {
   if (cancel) {
@@ -139,13 +168,24 @@ export async function attachSourcePreview(hostId: string, bounds: Electron.Recta
   })
   const needsFrame = !current.view.getVisible()
   try {
-    if (views.get(hostId) !== current || !boundsByHost.has(hostId) || !current.isCurrent()) return
+    if (
+      views.get(hostId) !== current ||
+      !boundsByHost.has(hostId) ||
+      !current.isCurrent() ||
+      !canPresentDesignHost(current.owner, hostId)
+    )
+      return
     await fitDesignViewport(current.view)
     if (needsFrame) await prepareDesignFrame(current.view, current.owner)
   } catch (error) {
     if (views.get(hostId) === current) throw error
   }
-  if (views.get(hostId) === current && boundsByHost.has(hostId) && current.isCurrent()) {
+  if (
+    views.get(hostId) === current &&
+    boundsByHost.has(hostId) &&
+    current.isCurrent() &&
+    canPresentDesignHost(current.owner, hostId)
+  ) {
     current.view.setVisible(true)
     current.owner.contentView.addChildView(current.view)
     hideDesign(current.artworkId, hostId)
@@ -390,7 +430,9 @@ async function renderSourcePreview(
         width: Math.max(1, Math.round(intended.width)),
         height: Math.max(1, Math.round(intended.height))
       })
-      view.setVisible(boundsByHost.has(hostId) || isDesignVisible(hostId))
+      view.setVisible(
+        canPresentDesignHost(owner, hostId) && (boundsByHost.has(hostId) || isDesignVisible(hostId))
+      )
       owner.contentView.addChildView(view, 0)
       view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       view.webContents.on('will-navigate', (event) => event.preventDefault())
@@ -428,7 +470,10 @@ async function renderSourcePreview(
         return { status: 'superseded' as const }
       }
       const previous = views.get(hostId)
-      if (boundsByHost.has(hostId) || isDesignVisible(hostId)) {
+      if (
+        canPresentDesignHost(owner, hostId) &&
+        (boundsByHost.has(hostId) || isDesignVisible(hostId))
+      ) {
         if (!current() || view.webContents.isDestroyed()) throw Error('Preview superseded')
         await fitDesignViewport(view)
         await prepareDesignFrame(view, owner)
@@ -440,7 +485,8 @@ async function renderSourcePreview(
         return { status: 'superseded' as const }
       }
       // Promote prepared pixels before retiring the outgoing view, in one main-process turn.
-      if (boundsByHost.has(hostId)) owner.contentView.addChildView(view)
+      if (boundsByHost.has(hostId) && canPresentDesignHost(owner, hostId))
+        owner.contentView.addChildView(view)
       else view.setVisible(false)
       if (previous && views.get(hostId) === previous) {
         owner.contentView.removeChildView(previous.view)

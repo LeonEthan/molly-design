@@ -8,7 +8,7 @@ const meta = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="w-[520px]">
+      <div className="w-[min(520px,calc(100vw-32px))]">
         <Story />
       </div>
     ),
@@ -16,6 +16,7 @@ const meta = {
   beforeEach: ({ name }) => {
     const previous = window.ipc;
     window.ipc = {
+      on: () => () => undefined,
       invoke: async (channel: string) => {
         switch (channel) {
           case 'publicBrowser.getAccountSummary':

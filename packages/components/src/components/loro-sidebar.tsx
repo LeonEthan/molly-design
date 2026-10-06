@@ -902,10 +902,10 @@ export const LoroSidebar = memo(function LoroSidebar({
           ) : (
             <div className="min-w-0 flex-1">
               <div
-                className={cn(workspaceIdentityClassName, 'flex h-8 py-0 text-[15px]')}
+                className={cn(workspaceIdentityClassName, 'flex h-10 py-0')}
                 data-workspace-identity
               >
-                <MollyWordmark className="h-8 text-sidebar-foreground" />
+                <MollyWordmark className="h-9 text-sidebar-foreground" />
                 {workspaceIdentityStatus ? (
                   <ConnectionPill state={workspaceIdentityStatus} labels={mergedLabels} />
                 ) : null}

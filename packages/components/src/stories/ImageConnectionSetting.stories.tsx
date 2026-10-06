@@ -38,7 +38,7 @@ type StoryProps = {
 function StoryWrapper({ stored, saving = false, saveError, checkResult }: StoryProps) {
   const [lastSaved, setLastSaved] = useState<ImageConnectionFormDraft | null>(null);
   return (
-    <div className="w-[560px]">
+    <div className="w-[min(560px,calc(100vw-32px))]">
       <ImageConnectionForm
         stored={stored}
         saving={saving}
@@ -68,7 +68,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Nothing stored yet: the create form, with the default model prefilled. */
 export const Empty: Story = {
   args: {},
 };

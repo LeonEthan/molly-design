@@ -77,6 +77,8 @@ it('enables memory-only development import with pending authorization and explic
     zh['settings.browserAccounts.retryHint']
   );
   expect(importButton.disabled).toBe(false);
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Google Chrome');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Test profile');
   expect(host.querySelector('[role="status"]')).toBeNull();
 
   request = Promise.withResolvers();
@@ -195,9 +197,16 @@ it('imports from the browser profile Molly found, naming any it could not read',
     return { imported: 3 };
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
+  expect(host.textContent).not.toContain('Microsoft Edge');
+  const details = [...host.querySelectorAll('button')].find(
+    (button) => button.textContent === zh['settings.browserAccounts.otherSourceIssues']
+  )!;
+  await act(async () => details.click());
   expect(host.textContent).toContain(
     zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Microsoft Edge')
   );
+  await act(async () => details.click());
+  expect(host.textContent).not.toContain('Microsoft Edge');
   const importButton = Array.from(host.querySelectorAll('button')).find(
     (button) =>
       button.textContent === zh['settings.browserAccounts.importFrom'].replace('{{browser}}', 'Arc')

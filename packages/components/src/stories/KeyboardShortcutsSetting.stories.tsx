@@ -42,7 +42,7 @@ type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {
   render: () => (
-    <div className="w-[560px] rounded-lg border border-border/60 bg-background p-4">
+    <div className="w-[min(560px,calc(100vw-32px))] rounded-lg border border-border/60 bg-background p-4">
       <KeyboardShortcutsSetting />
     </div>
   ),

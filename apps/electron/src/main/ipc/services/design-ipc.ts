@@ -19,7 +19,8 @@ import {
   hideSourcePreview,
   attachSourcePreview,
   attachDesignFromPreview,
-  closeSourcePreview
+  closeSourcePreview,
+  coverDesignCanvas
 } from '../../services/design-source-preview'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import {
@@ -62,6 +63,10 @@ function owner() {
 }
 export class DesignIpc extends IpcService {
   static override readonly groupName = 'design'
+  @IpcMethod() async cover(artworkId: string, hostId: string, covered: boolean) {
+    if (typeof covered !== 'boolean') throw Error('Invalid canvas visibility')
+    return coverDesignCanvas(owner(), id.parse(artworkId), id.parse(hostId), covered)
+  }
   @IpcMethod() async create(raw: DesignCreationInput) {
     owner()
     return designRequest({ operation: 'create', ...creation.parse(raw) })

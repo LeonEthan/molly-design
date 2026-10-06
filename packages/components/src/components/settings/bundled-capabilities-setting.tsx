@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MollyPiPackage } from '@molly/shared/embedded-harness';
 import { getIpcServices, type IpcServices } from '@/lib/electron-ipc-client';
@@ -6,11 +6,14 @@ import {
   AtSign,
   BookOpen,
   Cpu,
+  ChevronDown,
   CircleQuestionMark,
   Search,
   ShieldCheck,
   type LucideIcon,
 } from '@/ui/icons';
+import { Button } from '@/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { CompactSection } from './compact-layout';
 import { WithInfo } from './info-tip';
 
@@ -34,7 +37,7 @@ function PackageLine({
   license: string;
 }) {
   return (
-    <p className="truncate font-mono text-[11px] text-muted-foreground" title={name}>
+    <p className="break-all font-mono text-[11px] text-muted-foreground" title={name}>
       {name} · {version} · {license}
     </p>
   );
@@ -45,13 +48,11 @@ function EngineRow({
   title,
   description,
   info,
-  children,
 }: {
   icon: LucideIcon;
   title: string;
   description: string;
   info?: string;
-  children?: ReactNode;
 }) {
   return (
     <li className="flex gap-3 px-5 py-3.5">
@@ -63,7 +64,6 @@ function EngineRow({
         <p className="text-xs leading-relaxed text-muted-foreground">
           <WithInfo text={description} info={info} />
         </p>
-        {children}
       </div>
     </li>
   );
@@ -86,44 +86,59 @@ export function BundledCapabilitiesView({ snapshot }: { snapshot: Snapshot | nul
           {t('settings.models.capabilitiesUnavailable')}
         </p>
       ) : (
-        <ul className="divide-y divide-border/40 border-t border-border/40 pb-1">
-          <EngineRow
-            icon={Cpu}
-            title={t('settings.engine.pi.title', { version: snapshot.engine.version })}
-            description={t('settings.engine.pi.description')}
-          >
-            <PackageLine {...snapshot.engine} />
-            <p
-              className="truncate font-mono text-[11px] text-muted-foreground"
-              title={snapshot.harness.buildId}
-            >
-              {t('settings.models.capabilitiesBuild', {
-                build: snapshot.harness.buildId.slice(0, 12),
-              })}
-            </p>
-          </EngineRow>
-          <li className="px-5 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {t('settings.engine.addonsTitle', { count: snapshot.addons.length })}
-          </li>
-          {snapshot.addons.map((addon) => {
-            const copy = addonCopy[addon.name as MollyPiPackage];
-            return (
-              <EngineRow
-                key={addon.name}
-                icon={copy?.icon ?? Cpu}
-                title={copy ? t(`settings.engine.addons.${copy.slug}.title`) : addon.name}
-                description={copy ? t(`settings.engine.addons.${copy.slug}.description`) : ''}
-                info={
-                  copy?.slug === 'questions'
-                    ? `${t('settings.models.capabilitiesQuestionActivation')} ${t('settings.models.capabilitiesLimits')}`
-                    : undefined
-                }
+        <>
+          <ul className="divide-y divide-border/40 border-t border-border/40 pb-1">
+            <EngineRow
+              icon={Cpu}
+              title={t('settings.engine.pi.title', { version: snapshot.engine.version })}
+              description={t('settings.engine.pi.description')}
+            />
+            <li className="px-5 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {t('settings.engine.addonsTitle', { count: snapshot.addons.length })}
+            </li>
+            {snapshot.addons.map((addon) => {
+              const copy = addonCopy[addon.name as MollyPiPackage];
+              return (
+                <EngineRow
+                  key={addon.name}
+                  icon={copy?.icon ?? Cpu}
+                  title={copy ? t(`settings.engine.addons.${copy.slug}.title`) : addon.name}
+                  description={copy ? t(`settings.engine.addons.${copy.slug}.description`) : ''}
+                  info={
+                    copy?.slug === 'questions'
+                      ? `${t('settings.models.capabilitiesQuestionActivation')} ${t('settings.models.capabilitiesLimits')}`
+                      : undefined
+                  }
+                />
+              );
+            })}
+          </ul>
+          <Collapsible className="px-5 py-3">
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="group gap-1.5 px-0 text-xs text-muted-foreground"
               >
-                <PackageLine {...addon} />
-              </EngineRow>
-            );
-          })}
-        </ul>
+                <ChevronDown
+                  aria-hidden
+                  className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                />
+                {t('settings.engine.technicalDetails')}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2">
+              <PackageLine {...snapshot.engine} />
+              {snapshot.addons.map((addon) => (
+                <PackageLine key={addon.name} {...addon} />
+              ))}
+              <p className="break-all font-mono text-[11px] text-muted-foreground">
+                {t('settings.models.capabilitiesBuild', { build: snapshot.harness.buildId })}
+              </p>
+            </CollapsibleContent>
+          </Collapsible>
+        </>
       )}
     </CompactSection>
   );

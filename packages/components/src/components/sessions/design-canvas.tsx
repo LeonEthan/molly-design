@@ -38,6 +38,10 @@ import {
 } from 'lucide-react';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
+import {
+  DesignVersionHistoryFeedback,
+  type VersionHistoryLoad,
+} from './design-version-history-feedback';
 import { WINDOW_DRAG_EXEMPT_CLASS } from '@/ui/window-drag-region';
 import { cn } from '@/lib/utils';
 import { useDesignCanvasNavigationFocus } from '../chat/submission/use-composer-navigation-focus';
@@ -49,17 +53,10 @@ type Association = {
   machineId: string;
   createdAt: string;
 };
-/**
- * Modal overlays hide the native canvas view so they never render beneath it.
- * Legacy marked canvas overlays opt out; native property popups stay in Bento.
- * Blocking requires the overlay to actually intersect the canvas host: the
- * sidebar session hover card and similar surfaces portal to <body> far away
- * from the canvas, and hiding the canvas under them leaves a blank panel.
- */
 const hasCanvasBlockingOverlay = (host: HTMLElement) => {
   const hostRect = host.getBoundingClientRect();
   const overlays = document.querySelectorAll(
-    '[role="dialog"]:not([data-design-canvas-overlay]), [role="listbox"]:not([data-design-canvas-overlay]), [role="menu"]:not([data-design-canvas-overlay])'
+    '[role="dialog"]:not([data-design-canvas-overlay]), [role="alertdialog"]:not([data-design-canvas-overlay]), [role="listbox"]:not([data-design-canvas-overlay]), [role="menu"]:not([data-design-canvas-overlay])'
   );
   for (const overlay of overlays) {
     const rect = overlay.getBoundingClientRect();
@@ -158,6 +155,7 @@ export function DesignCanvas({
   toolbarHost?: HTMLElement | null;
 }) {
   const artworkId = artworkIdProp ?? sessionId;
+  const referenceActionsEnabled = !!onReferenceSelection;
   const { t } = useTranslation();
   const host = useRef<HTMLDivElement>(null);
   // Native-view host key, stable per session consumer (NOT per mount). The main process
@@ -169,6 +167,13 @@ export function DesignCanvas({
   const hostId = sessionId;
   const [error, setError] = useState('');
   const [attachmentError, setAttachmentError] = useState('');
+  const [overlayFrame, setOverlayFrame] = useState<{
+    artworkId: string;
+    hostId: string;
+    src: string;
+    width: number;
+    height: number;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const create = useDesignCreation(workspaceSlug);
   const [canvasFocus, setFocused] = useAtom(designCanvasFocusAtom);
@@ -189,6 +194,7 @@ export function DesignCanvas({
   const [versions, setVersions] = useState<Awaited<ReturnType<IpcServices['design']['versions']>>>(
     []
   );
+  const [versionsLoad, setVersionsLoad] = useState<VersionHistoryLoad>({ phase: 'loading' });
   const versionsGeneration = useRef(0);
   const preview = !!canvasState?.turnId;
   const readonlyView = canvasState?.readonly ?? true;
@@ -197,25 +203,30 @@ export function DesignCanvas({
   const refreshVersions = useCallback(
     async (isCurrent: () => boolean = () => true) => {
       const generation = ++versionsGeneration.current;
-      const service = getIpcServices()?.design;
-      if (!service) throw Error('Local workspace is not ready');
-      const [result, state] = await Promise.all([
-        service.versions(artworkId),
-        service.state(artworkId),
-      ]);
-      if (isCurrent() && generation === versionsGeneration.current) {
-        setVersions(result);
-        setCanvasState(state);
+      setVersionsLoad({ phase: 'loading' });
+      try {
+        const service = getIpcServices()?.design;
+        if (!service) throw Error('Local workspace is not ready');
+        const [result, state] = await Promise.all([
+          service.versions(artworkId),
+          service.state(artworkId),
+        ]);
+        if (isCurrent() && generation === versionsGeneration.current) {
+          setVersions(result);
+          setCanvasState(state);
+          setVersionsLoad({ phase: 'ready' });
+        }
+      } catch (cause) {
+        if (!isCurrent() || generation !== versionsGeneration.current) return;
+        setVersionsLoad({ phase: 'error', message: String(cause) });
+        throw cause;
       }
     },
     [artworkId]
   );
   useEffect(() => {
     let cancelled = false;
-    if (active)
-      void refreshVersions(() => !cancelled).catch((cause) => {
-        if (!cancelled) setError(String(cause));
-      });
+    if (active) void refreshVersions(() => !cancelled).catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -243,14 +254,6 @@ export function DesignCanvas({
       setPreviewReady(result.status === 'ready' || !!result.retained);
       setPreviewError(result.status === 'waiting' ? (result.error ?? '') : '');
       setAutomaticError(result.automaticError ?? '');
-      if (
-        (result.status === 'ready' || result.retained) &&
-        host.current &&
-        !hasCanvasBlockingOverlay(host.current)
-      ) {
-        const { x, y, width, height } = host.current.getBoundingClientRect();
-        await service.attachPreview(hostId, { x, y, width, height });
-      }
     } catch (cause) {
       if (generation !== previewGeneration.current) return;
       setPreviewError(String(cause));
@@ -275,7 +278,7 @@ export function DesignCanvas({
   useEffect(() => {
     if (!active) return undefined;
     const refresh = () => {
-      void refreshVersions().catch((cause) => setError(String(cause)));
+      void refreshVersions().catch(() => {});
     };
     const stop = onIpcEvent('design.state', (event) => {
       if (!event.artworkId || event.artworkId === artworkId) refresh();
@@ -342,36 +345,61 @@ export function DesignCanvas({
     const service = getIpcServices()?.design;
     if (!service) return undefined;
     let work = Promise.resolve();
+    let covered: boolean | undefined;
+    let presentation = 0;
     const update = () => {
+      const nextCovered = !!(active && host.current && hasCanvasBlockingOverlay(host.current));
+      if (covered !== nextCovered) {
+        covered = nextCovered;
+        const epoch = ++presentation;
+        void service
+          .cover(artworkId, hostId, covered)
+          .then(async (frame) => {
+            if (!frame || disposed || !ownsAttachment() || presentation !== epoch || !covered)
+              return;
+            const image = new Image();
+            image.src = frame.src;
+            await image.decode();
+            if (!disposed && ownsAttachment() && presentation === epoch && covered)
+              setOverlayFrame({ ...frame, artworkId, hostId });
+          })
+          .catch((cause) => console.error(cause));
+      }
+      if (covered) return;
+      const epoch = presentation;
+      const current = () => !disposed && ownsAttachment() && presentation === epoch;
       work = work
         .catch(() => {})
         .then(async () => {
-          if (attachmentGeneration.current !== generation) return;
-          if (disposed || !active || !host.current || hasCanvasBlockingOverlay(host.current)) {
+          if (!current()) return;
+          if (!active || !host.current) {
             await service.hide(artworkId, hostId);
             await service.hidePreview(hostId, false);
+            if (current()) setOverlayFrame(null);
             return;
           }
           const { x, y, width, height } = host.current.getBoundingClientRect();
-          if (width > 0 && height > 0) {
-            if (visiblePreview) {
-              await service.attachPreview(hostId, { x, y, width, height });
-            } else {
-              await service.attach(artworkId, { x, y, width, height }, hostId);
-              if (disposed || !ownsAttachment()) return;
-              await service.presentToolbar(artworkId, hostId, {
-                dark: document.documentElement.classList.contains('dark'),
-                actionsEnabled: !!onReferenceSelection,
-                labels: Object.fromEntries(
-                  DESIGN_CANVAS_LABEL_KEYS.map((key) => [key, t(`design.${key}`)])
-                ),
-              });
-            }
-            if (!disposed && ownsAttachment()) setAttachmentError('');
+          if (width <= 0 || height <= 0) return;
+          if (visiblePreview) {
+            await service.attachPreview(hostId, { x, y, width, height });
+          } else {
+            await service.attach(artworkId, { x, y, width, height }, hostId);
+            if (!current()) return;
+            await service.presentToolbar(artworkId, hostId, {
+              dark: document.documentElement.classList.contains('dark'),
+              actionsEnabled: referenceActionsEnabled,
+              labels: Object.fromEntries(
+                DESIGN_CANVAS_LABEL_KEYS.map((key) => [key, t(`design.${key}`)])
+              ),
+            });
+          }
+          if (current()) {
+            setAttachmentError('');
+            setOverlayFrame(null);
           }
         })
-        .catch((e) => {
-          if (!disposed && ownsAttachment()) setAttachmentError(String(e));
+        .catch((cause) => {
+          if (current()) setAttachmentError(String(cause));
         });
     };
     const resize = new ResizeObserver(update);
@@ -379,20 +407,23 @@ export function DesignCanvas({
     const appearance = new MutationObserver(update);
     appearance.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     if (host.current) resize.observe(host.current);
-    dialogs.observe(document.body, { childList: true, subtree: true });
+    dialogs.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-state', 'style', 'hidden'],
+    });
     update();
     return () => {
       disposed = true;
       resize.disconnect();
       dialogs.disconnect();
       appearance.disconnect();
-      void work
-        .then(async () => {
-          if (ownsAttachment()) await service.hide(artworkId, hostId);
-        })
-        .catch((cause) => console.error(cause));
+      ++presentation;
+      void service.hide(artworkId, hostId).catch((cause) => console.error(cause));
+      void service.cover(artworkId, hostId, false).catch((cause) => console.error(cause));
     };
-  }, [sessionId, artworkId, active, hostId, preview, visiblePreview, t, onReferenceSelection]);
+  }, [sessionId, artworkId, active, hostId, preview, visiblePreview, t, referenceActionsEnabled]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
@@ -582,26 +613,26 @@ export function DesignCanvas({
     // same-count selections or editing properties must re-capture so the
     // mirrored chip never keeps stale element ids or a stale revision.
   }, [selection, readonlyView, selectionCount, sessionId, artworkId, hostId, t]);
-  const toolbarItems = (
-    <>
-      <span
-        className="eyebrow inline-flex min-w-0 max-w-full items-center gap-2 truncate px-1 leading-5 text-muted-foreground"
-        role="status"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            'size-[5px] shrink-0 rounded-full',
-            canvasState?.changed ? 'bg-[var(--signal)]' : 'bg-foreground/30'
-          )}
-        />
-        {currentVersion
+  const versionStatus =
+    versionsLoad.phase === 'loading'
+      ? t('design.versionsLoading', 'Loading versions…')
+      : versionsLoad.phase === 'error'
+        ? t('design.versionsUnavailable', 'Version history unavailable')
+        : currentVersion
           ? canvasState?.changed
-            ? t('design.basedOnVersion', 'Based on V{{number}} · New changes', {
+            ? t('design.unversionedChanges', 'V{{number}} · Changes not versioned', {
                 number: currentVersion.number,
               })
             : `V${currentVersion.number}`
-          : t('design.currentCanvas', 'Current artwork')}
+          : t('design.noSavedVersion', 'No saved version');
+  const toolbarItems = (
+    <div className="@container/canvas-toolbar flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <span
+        className="inline-flex min-w-0 max-w-full truncate px-1 text-xs leading-5 text-muted-foreground"
+        role="status"
+        title={versionStatus}
+      >
+        {versionStatus}
       </span>
       <TooltipProvider>
         <div className={cn('ml-auto flex shrink-0 items-center gap-1', WINDOW_DRAG_EXEMPT_CLASS)}>
@@ -611,12 +642,17 @@ export function DesignCanvas({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-                  disabled={busy || readonlyView || !canvasState?.changed}
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground @[520px]/canvas-toolbar:w-auto @[520px]/canvas-toolbar:px-3"
+                  disabled={
+                    busy || readonlyView || versionsLoad.phase !== 'ready' || !canvasState?.changed
+                  }
                   onClick={saveVersion}
                   aria-label={t('design.saveVersion', 'Save version')}
                 >
-                  <Save className="size-[18px]" aria-hidden="true" />
+                  <Save className="size-[18px] shrink-0" aria-hidden="true" />
+                  <span className="hidden @[520px]/canvas-toolbar:inline">
+                    {t('design.saveVersion', 'Save version')}
+                  </span>
                 </Button>
               </span>
             </TooltipTrigger>
@@ -624,7 +660,7 @@ export function DesignCanvas({
           </Tooltip>
           <DropdownMenu
             onOpenChange={(open) => {
-              if (open) void refreshVersions().catch((cause) => setError(String(cause)));
+              if (open) void refreshVersions().catch(() => {});
             }}
           >
             <Tooltip>
@@ -647,27 +683,33 @@ export function DesignCanvas({
               align="end"
               className="max-h-[60vh] w-80 max-w-[calc(100vw-32px)] overflow-y-auto rounded-xl border-border/50 p-1.5"
             >
-              {[...versions].reverse().map((version) => (
-                <DropdownMenuItem
-                  key={version.commitId}
-                  className="min-h-9 rounded-md px-3 py-2 text-xs leading-relaxed"
-                  disabled={busy || readonlyView}
-                  onClick={() => chooseVersion(version.commitId)}
-                >
-                  V{version.number} · {new Date(version.createdAt).toLocaleString()}
-                  {version.kind === 'before-restore'
-                    ? ` · ${t('design.beforeRestore', 'Before restore')}`
-                    : ''}
-                  {version.baseVersionId &&
-                    versions.find((v) => v.commitId === version.baseVersionId) &&
-                    ` · ${t('design.versionOrigin', 'Based on V{{number}}', {
-                      number: versions.find((v) => v.commitId === version.baseVersionId)?.number,
-                    })}`}
-                  {canvasState?.baseVersionId === version.commitId && (
-                    <Check className="ml-auto size-4" />
-                  )}
-                </DropdownMenuItem>
-              ))}
+              <DesignVersionHistoryFeedback
+                load={versionsLoad}
+                empty={versions.length === 0}
+                onRetry={() => void refreshVersions().catch(() => {})}
+              />
+              {versionsLoad.phase === 'ready' &&
+                [...versions].reverse().map((version) => (
+                  <DropdownMenuItem
+                    key={version.commitId}
+                    className="min-h-9 rounded-md px-3 py-2 text-xs leading-relaxed"
+                    disabled={busy || readonlyView}
+                    onClick={() => chooseVersion(version.commitId)}
+                  >
+                    V{version.number} · {new Date(version.createdAt).toLocaleString()}
+                    {version.kind === 'before-restore'
+                      ? ` · ${t('design.beforeRestore', 'Before restore')}`
+                      : ''}
+                    {version.baseVersionId &&
+                      versions.find((v) => v.commitId === version.baseVersionId) &&
+                      ` · ${t('design.versionOrigin', 'Based on V{{number}}', {
+                        number: versions.find((v) => v.commitId === version.baseVersionId)?.number,
+                      })}`}
+                    {canvasState?.baseVersionId === version.commitId && (
+                      <Check className="ml-auto size-4" />
+                    )}
+                  </DropdownMenuItem>
+                ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
@@ -742,8 +784,8 @@ export function DesignCanvas({
                 className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                 aria-label={
                   focused
-                    ? t('design.showSidebar', 'Show sidebar')
-                    : t('design.hideSidebar', 'Hide sidebar')
+                    ? t('design.showSidebar', 'Show navigation sidebar')
+                    : t('design.hideSidebar', 'Hide navigation sidebar')
                 }
                 onClick={() => setFocused(!focused)}
               >
@@ -756,13 +798,13 @@ export function DesignCanvas({
             </TooltipTrigger>
             <TooltipContent>
               {focused
-                ? t('design.showSidebar', 'Show sidebar')
-                : t('design.hideSidebar', 'Hide sidebar')}
+                ? t('design.showSidebar', 'Show navigation sidebar')
+                : t('design.hideSidebar', 'Hide navigation sidebar')}
             </TooltipContent>
           </Tooltip>
         </div>
       </TooltipProvider>
-    </>
+    </div>
   );
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -798,7 +840,23 @@ export function DesignCanvas({
           {error || attachmentError}
         </p>
       )}
-      <div ref={host} className="min-h-0 flex-1" aria-label={t('design.canvas', 'Design canvas')} />
+      <div
+        ref={host}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        aria-label={t('design.canvas', 'Design canvas')}
+      >
+        {active && overlayFrame?.artworkId === artworkId && overlayFrame.hostId === hostId && (
+          <img
+            src={overlayFrame.src}
+            width={overlayFrame.width}
+            height={overlayFrame.height}
+            className="pointer-events-none absolute left-0 top-0 max-w-none select-none"
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+          />
+        )}
+      </div>
     </div>
   );
 }

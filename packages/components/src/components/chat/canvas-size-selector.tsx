@@ -102,20 +102,20 @@ export function CanvasFormatTiles({
                 }
               >
                 {selected ? (
-                  <span className="absolute -right-[3px] -top-[3px] size-[5px] rounded-full bg-[var(--signal)]" />
+                  <span className="absolute -right-[3px] -top-[3px] size-[5px] rounded-full bg-foreground" />
                 ) : null}
               </span>
             </span>
             <span className="flex flex-col items-center gap-0.5">
               <span
                 className={cn(
-                  'max-w-full truncate text-[12.5px] transition-colors',
+                  'max-w-full truncate text-[13px] transition-colors',
                   selected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
                 )}
               >
                 {label}
               </span>
-              <span className="font-mono text-[10px] tabular-nums tracking-wide text-muted-foreground/70">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
                 {auto ? t('design.autoSizeTile', 'by brief') : `${size.width}×${size.height}`}
               </span>
             </span>

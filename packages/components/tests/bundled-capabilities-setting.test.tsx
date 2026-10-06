@@ -44,7 +44,15 @@ it.each(['en', 'zh_CN'] as const)(
     await initI18n(lang);
     await act(async () => root.render(<BundledCapabilitiesView snapshot={snapshot} />));
     const copy = lang === 'en' ? en : zh;
+    expect(host.textContent).not.toContain('@earendil-works/pi-coding-agent');
+    const details = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === copy['settings.engine.technicalDetails']
+    )!;
+    expect(details.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => details.click());
+    expect(details.getAttribute('aria-expanded')).toBe('true');
     expect(host.textContent).toContain('@earendil-works/pi-coding-agent · 1.0.0 · MIT');
+    expect(host.textContent).toContain(snapshot.harness.buildId);
     for (const name of MOLLY_PI_PACKAGES)
       expect(host.textContent).toContain(`${name} · 1.2.3 · MIT`);
     for (const slug of ['skills', 'questions', 'mentions', 'fileSearch', 'safetyNet'])
@@ -52,10 +60,9 @@ it.each(['en', 'zh_CN'] as const)(
         copy[`settings.engine.addons.${slug}.title` as keyof typeof copy]
       );
     expect(host.querySelector('input, select, a')).toBeNull();
-    expect([...host.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-      '',
-      '',
-    ]);
+    expect(host.querySelector('[role="switch"]')).toBeNull();
+    await act(async () => details.click());
+    expect(host.textContent).not.toContain('@earendil-works/pi-coding-agent');
   }
 );
 

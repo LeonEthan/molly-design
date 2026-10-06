@@ -6,6 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   hostId: '',
+  translate: (_key: string, fallback: string) => fallback,
   refreshCalls: 0,
   events: new Map<string, (payload: unknown) => void>(),
   history: [] as Array<{ role: 'assistant'; id: string; finished: boolean; endedAt: number }>,
@@ -41,7 +42,7 @@ vi.mock('../src/components/chat/submission/use-composer-navigation-focus', () =>
   useDesignCanvasNavigationFocus: () => () => false,
 }));
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }),
+  useTranslation: () => ({ t: state.translate }),
 }));
 vi.mock('../src/hooks/use-session-doc', () => ({
   useSessionDoc: () => ({
@@ -63,6 +64,12 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   },
   getIpcServices: () => ({
     design: {
+      cover: async (_artwork: string, _host: string, covered: boolean) => {
+        if (!covered) return null;
+        state.previewVisible = false;
+        state.visible = false;
+        return { src: 'data:image/png;base64,cHJldmlldw==', width: 400, height: 300 };
+      },
       presentToolbar: async () => {},
       attach: async () => {
         await state.attach();
@@ -98,6 +105,13 @@ import { DesignCanvas } from '../src/components/sessions/design-canvas';
 let root: Root;
 let container: HTMLDivElement;
 beforeEach(async () => {
+  vi.stubGlobal(
+    'Image',
+    class {
+      src = '';
+      async decode() {}
+    }
+  );
   state.events.clear();
   state.history = [];
   state.canvasState = { readonly: false, turnId: undefined, preparing: false, changed: true };
@@ -240,4 +254,31 @@ test('turn completion keeps the final preview until the editor handoff finishes'
   await act(async () => finish());
   expect(state.visible).toBe(true);
   expect(state.previewVisible).toBe(false);
+});
+
+test('keeps preview pixels through turn completion under a menu until the editor restores', async () => {
+  state.refresh = async () => ({ status: 'ready', sourceIdentity: 'final-frame' });
+  await mount();
+  await execution('active');
+  const menu = document.createElement('div');
+  menu.setAttribute('role', 'menu');
+  try {
+    await act(async () => document.body.append(menu));
+    expect(state.previewVisible).toBe(false);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      'data:image/png;base64,cHJldmlldw=='
+    );
+    await execution();
+    expect(state.visible).toBe(false);
+    expect(container.querySelector('img')).not.toBeNull();
+    const restore = Promise.withResolvers<void>();
+    state.attach = () => restore.promise;
+    await act(async () => menu.remove());
+    expect(container.querySelector('img')).not.toBeNull();
+    await act(async () => restore.resolve());
+    expect(state.visible).toBe(true);
+    expect(container.querySelector('img')).toBeNull();
+  } finally {
+    menu.remove();
+  }
 });

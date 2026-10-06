@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { QueuedMessageBehavior } from '@/atoms';
+import { cn } from '@/lib/utils';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 
 export type QueuedMessageBehaviorControlProps = {
@@ -19,20 +20,23 @@ export function QueuedMessageBehaviorControl({
     <SegmentedControl
       ariaLabel={t(
         'settings.general.sessions.queuedMessageBehavior.label',
-        'Messages sent while Molly is designing'
+        'When I send a message during a design task'
       )}
       size="sm"
-      className={className}
+      className={cn('h-auto min-h-[30px] w-full [&>button]:py-1.5', className)}
       value={value}
       onChange={onChange}
       options={[
         {
           value: 'queue',
-          label: t('settings.general.sessions.queuedMessageBehavior.queue', 'Wait'),
+          label: t(
+            'settings.general.sessions.queuedMessageBehavior.queue',
+            'After the current step'
+          ),
         },
         {
           value: 'guide',
-          label: t('settings.general.sessions.queuedMessageBehavior.guide', 'Change course'),
+          label: t('settings.general.sessions.queuedMessageBehavior.guide', 'As soon as possible'),
         },
       ]}
     />

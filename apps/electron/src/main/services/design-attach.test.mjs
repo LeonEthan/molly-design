@@ -9,7 +9,11 @@ import { compileFunction } from 'node:vm'
 const require = createRequire(import.meta.url)
 const { build } = createRequire(new URL('../../../../cli/package.json', import.meta.url))('esbuild')
 const compiled = await build({
-  entryPoints: [fileURLToPath(new URL('./design-service.ts', import.meta.url))],
+  stdin: {
+    contents: "export * from './design-service'; export * from './design-view-visibility'",
+    resolveDir: fileURLToPath(new URL('.', import.meta.url)),
+    loader: 'ts'
+  },
   bundle: true,
   write: false,
   platform: 'node',
@@ -37,6 +41,7 @@ function fixture() {
     visible = true
     bounds = { x: 0, y: 0, width: 800, height: 600 }
     webContents = {
+      capturePage: async () => ({ isEmpty: () => false, toPNG: () => Buffer.from('pixels') }),
       setWindowOpenHandler() {},
       on() {},
       isDestroyed: () => false,
@@ -185,4 +190,72 @@ void test('a failed initial load rejects every waiting attachment', async () => 
     { status: 'rejected', reason: failure }
   ])
   assert.deepEqual(f.scripts, [])
+})
+
+async function openedCanvas() {
+  const f = fixture()
+  const opening = f.attachDesign(f.owner, 'artwork', { x: 0, y: 0, width: 800, height: 600 })
+  await f.loadStarted.promise
+  f.loading.resolve()
+  await f.readyStarted.promise
+  f.apiReady.resolve()
+  await opening
+  return f
+}
+
+void test('captures the visible host only for its owning window and artwork', async () => {
+  const f = await openedCanvas()
+  assert.equal(await f.captureDesignFrame({}, 'artwork', 'artwork'), null)
+  assert.equal(await f.captureDesignFrame(f.owner, 'another', 'artwork'), null)
+  assert.deepEqual(await f.captureDesignFrame(f.owner, 'artwork', 'artwork'), {
+    src: 'data:image/png;base64,cGl4ZWxz',
+    x: 0,
+    y: 0,
+    width: 800,
+    height: 600
+  })
+  f.hideDesign('artwork')
+  assert.equal(await f.captureDesignFrame(f.owner, 'artwork', 'artwork'), null)
+})
+
+void test('a capture started while visible may finish after hiding without revealing the editor', async () => {
+  const f = await openedCanvas()
+  const capture = Promise.withResolvers()
+  f.view().webContents.capturePage = () => capture.promise
+  const pending = f.captureDesignFrame(f.owner, 'artwork', 'artwork')
+  f.hideDesign('artwork')
+  capture.resolve({ isEmpty: () => false, toPNG: () => Buffer.from('pixels') })
+  assert.equal((await pending).src, 'data:image/png;base64,cGl4ZWxz')
+  assert.equal(f.view().getVisible(), false)
+})
+
+void test('discards captured pixels when the viewport changed during capture', async () => {
+  const f = await openedCanvas()
+  const capture = Promise.withResolvers()
+  f.view().webContents.capturePage = () => capture.promise
+  const pending = f.captureDesignFrame(f.owner, 'artwork', 'artwork')
+  f.view().setBounds({ x: 0, y: 0, width: 400, height: 600 })
+  capture.resolve({ isEmpty: () => false, toPNG: () => Buffer.from('pixels') })
+  assert.equal(await pending, null)
+})
+
+void test('a loading editor cannot reveal itself under an overlapping shell menu', async () => {
+  const f = fixture()
+  const bounds = { x: 0, y: 0, width: 800, height: 600 }
+  const opening = f.attachDesign(f.owner, 'artwork', bounds)
+  await f.loadStarted.promise
+  f.coverDesignHost(f.owner, 'artwork')
+  f.hideDesign('artwork')
+  f.loading.resolve()
+  await f.readyStarted.promise
+  f.apiReady.resolve()
+  await opening
+  assert.equal(f.view().getVisible(), false)
+  const retained = f.view()
+  await f.attachDesign(f.owner, 'artwork', bounds)
+  assert.equal(f.view().getVisible(), false)
+  f.uncoverDesignHost(f.owner, 'artwork')
+  await f.attachDesign(f.owner, 'artwork', bounds)
+  assert.equal(f.view(), retained)
+  assert.equal(f.view().getVisible(), true)
 })

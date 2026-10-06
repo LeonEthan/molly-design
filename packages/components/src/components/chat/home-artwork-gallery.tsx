@@ -74,8 +74,8 @@ export function HomeArtworkGallery({
   if (items.length === 0) return null;
   return (
     <section aria-label={heading} className="w-full">
-      <header className="mb-8 flex items-end justify-between gap-6 border-b border-hairline pb-4">
-        <h2 className="font-editorial text-[44px] leading-none text-foreground">{heading}</h2>
+      <header className="mb-6 flex items-end justify-between gap-6 border-b border-hairline pb-4">
+        <h2 className="font-editorial text-[32px] leading-none text-foreground">{heading}</h2>
         <span className="eyebrow pb-1 text-muted-foreground">{countLabel}</span>
       </header>
       <div className="columns-[220px] gap-6">

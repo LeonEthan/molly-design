@@ -183,3 +183,8 @@ which kernel replay alone does not enforce. YAML intake/projection and the CLI
 store share `assertRenderableLines`; malformed lines fail before persistence or
 editor startup, with the element ID and point count. Two-point lines remain
 straight. Existing invalid files are reported without rewriting their geometry.
+
+The graphic-design skill keeps final replies proportionate to the requested change:
+a short result first, with direction, editability and next steps when useful. Material
+limitations and the distinction between preview and observed save receipts remain
+mandatory; reply length does not change the creative workflow or admission rules.

@@ -60,7 +60,7 @@ export function WebChatLandingScreen({
   return (
     <div
       className={cn(
-        'relative flex h-full w-full flex-1 flex-col overflow-hidden',
+        '@container relative flex h-full w-full flex-1 flex-col overflow-hidden',
         'bg-background text-foreground',
         isElectron &&
           'select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text'
@@ -99,22 +99,18 @@ export function WebChatLandingScreen({
         <div
           className={cn(
             getSessionChatInputAreaShellClassName(),
-            'input-scrollbar flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5vw,64px)]'
+            'input-scrollbar flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5cqw,64px)]'
           )}
         >
-          <div className="relative flex min-h-[74%] w-full max-w-[820px] shrink-0 flex-col items-center justify-center gap-9 pb-8 pt-20">
-            <div className="flex flex-col items-center gap-6 text-center">
+          <div className="relative flex w-full max-w-[820px] shrink-0 flex-col items-center justify-center gap-6 pb-6 pt-12">
+            <div className="flex flex-col items-center gap-4 text-center">
               {eyebrow ? (
                 <span className="eyebrow animate-reveal inline-flex items-center gap-2.5 text-muted-foreground">
-                  <span
-                    aria-hidden
-                    className="animate-signal size-[6px] rounded-full bg-[var(--signal)]"
-                  />
                   {eyebrow}
                 </span>
               ) : null}
               <h1
-                className="font-editorial animate-reveal text-balance text-[clamp(52px,6.6vw,104px)] leading-[0.94] text-foreground [&_em]:italic"
+                className="font-editorial animate-reveal text-balance text-[clamp(36px,4.5cqw,64px)] leading-[1.05] text-foreground [&_em]:italic"
                 style={{ animationDelay: '80ms' }}
               >
                 {title}
@@ -138,7 +134,7 @@ export function WebChatLandingScreen({
             </ConversationColumn>
             {ideas != null || contextSwitch != null ? (
               <div
-                className="animate-reveal flex w-full flex-col items-center gap-7"
+                className="animate-reveal flex w-full flex-col items-center gap-5"
                 style={{ animationDelay: '320ms' }}
               >
                 {ideas}
@@ -147,7 +143,7 @@ export function WebChatLandingScreen({
             ) : null}
           </div>
           {gallery != null ? (
-            <div className="relative w-full max-w-[1240px] shrink-0 pb-24 pt-10">{gallery}</div>
+            <div className="relative w-full max-w-[1240px] shrink-0 pb-12 pt-6">{gallery}</div>
           ) : null}
         </div>
       </FocusScope>

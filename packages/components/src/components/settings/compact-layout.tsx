@@ -101,7 +101,7 @@ export function CompactRow({
         // render inside a panel that is much narrower than the window, so a column capped at a
         // fixed px width (which a viewport breakpoint cannot see) would eat the whole row and
         // push the control past the panel's clipped edge.
-        'flex flex-col gap-3 px-5 py-4 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5',
+        'flex flex-col gap-3 px-5 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5',
         alignTop && 'sm:items-start sm:[&>div:last-child]:self-start',
         !alignTop && 'sm:items-center',
         className
@@ -110,7 +110,7 @@ export function CompactRow({
       {/* Helper copy is capped so it stays readable on a wide panel; a bare label is free to
           use the whole column, because long command names should not wrap early. */}
       <div className={cn('min-w-0', helper && 'sm:max-w-[520px]')}>
-        <p className="font-normal leading-snug text-foreground">{label}</p>
+        <p className="text-[13px] font-normal leading-snug text-foreground">{label}</p>
         {helper && <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{helper}</p>}
       </div>
       {children ? (

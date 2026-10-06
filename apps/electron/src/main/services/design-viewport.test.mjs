@@ -1,6 +1,11 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { runInNewContext } from 'node:vm'
+import {
+  coverDesignHost,
+  uncoverDesignHost,
+  canPresentDesignHost
+} from './design-view-visibility.ts'
 import { fitDesignViewport } from './design-viewport.ts'
 
 function surface({ layoutReady = true } = {}) {
@@ -167,4 +172,18 @@ void test('returning to an earlier size cannot reuse a camera changed by an in-f
   held.release()
   await first
   assert.deepEqual(current.camera(), { scale: 736 / 1200, x: 600, y: 314 })
+})
+
+void test('host occlusion is window-scoped and invalidates earlier presentation tokens', () => {
+  const owner = {},
+    other = {}
+  const first = coverDesignHost(owner, 'canvas')
+  assert.equal(canPresentDesignHost(owner, 'canvas'), false)
+  assert.equal(canPresentDesignHost(other, 'canvas'), true)
+  const second = coverDesignHost(owner, 'canvas')
+  assert.equal(first(), false)
+  assert.equal(second(), true)
+  uncoverDesignHost(owner, 'canvas')
+  assert.equal(second(), false)
+  assert.equal(canPresentDesignHost(owner, 'canvas'), true)
 })

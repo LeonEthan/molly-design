@@ -128,8 +128,8 @@ export function AboutSettingsComponent() {
 
   return (
     <div className={settingContainerClass}>
-      <div className="flex flex-col items-start gap-3">
-        <MollyWordmark className="h-7 text-foreground" />
+      <div className="flex flex-col items-start gap-4 py-2">
+        <MollyWordmark className="h-12 text-foreground" />
         <p className="text-sm text-muted-foreground">{t('settings.about.mollyDescription')}</p>
       </div>
       <CompactSection>

@@ -1,8 +1,6 @@
 import {
   getWorkspaceFlockDocId,
   workspaceFlockKeys,
-  type AgentRole,
-  type AgentRoleId,
   type McpServerId,
   type WorkspaceId,
   type WorkspaceMcpServerMeta,
@@ -76,20 +74,3 @@ export const deleteWorkspaceMcpServer = (
   deps: WorkspaceCatalogWriteDeps,
   id: McpServerId
 ): Promise<void> => deleteRow(deps, workspaceFlockKeys.mcpServer(id));
-
-/**
- * Write a Role — created, edited, shared, or unshared.
- *
- * Sharing is this same call: `visibility` lives on the row, so the whole catalog
- * stays one family and no state exists where a Role is in both directories or
- * neither.
- */
-export const writeWorkspaceAgentRole = (
-  deps: WorkspaceCatalogWriteDeps,
-  role: AgentRole
-): Promise<void> => putRow(deps, workspaceFlockKeys.agentRole(role.id), role);
-
-export const deleteWorkspaceAgentRole = (
-  deps: WorkspaceCatalogWriteDeps,
-  id: AgentRoleId
-): Promise<void> => deleteRow(deps, workspaceFlockKeys.agentRole(id));

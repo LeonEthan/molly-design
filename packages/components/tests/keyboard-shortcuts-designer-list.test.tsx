@@ -31,7 +31,6 @@ it('lists design shortcuts and leaves code-workflow commands out of the designer
   expect(text).toContain(en['commands.session.new']);
   for (const key of [
     'commands.session.copyCurrentBranch',
-    'commands.session.copyUrl',
     'commands.session.saveCurrentFile',
     'commands.session.toggleExplorerSidebar',
     'commands.session.cycleMode',

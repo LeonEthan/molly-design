@@ -15,6 +15,7 @@ import {
   type ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
 import { useTranslation } from 'react-i18next';
+import { useAtom } from 'jotai';
 import {
   IMAGE_CONNECTION_MAX_MODEL_LENGTH,
   IMAGE_CONNECTION_PROTOCOLS,
@@ -22,6 +23,7 @@ import {
   normalizeImageConnectionBaseUrl,
   type ImageConnectionProtocol,
 } from '@molly/shared';
+import { imageKeyMigrationNoticeDismissedAtom } from '@/atoms';
 import { SegmentedControl } from '@/components/shared/segmented-control';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
@@ -42,6 +44,7 @@ import {
   LoaderCircle,
   Sparkles,
   Trash2,
+  X,
 } from '@/ui/icons';
 import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
@@ -337,13 +340,7 @@ export function ImageConnectionForm({
           htmlFor={`${fieldId}-api-key`}
           label={t('settings.imageConnection.apiKey')}
           icon={<KeyRound className="h-3.5 w-3.5" aria-hidden="true" />}
-          hint={
-            destinationNeedsKey
-              ? t('settings.models.keyRequired')
-              : hasStoredKey
-                ? t('settings.imageConnection.apiKeyHintStored')
-                : t('settings.imageConnection.apiKeyHintNew')
-          }
+          hint={destinationNeedsKey ? t('settings.models.keyRequired') : undefined}
         >
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
@@ -580,6 +577,9 @@ export function ImageConnectionSetting({
   const [saveError, setSaveError] = useState<string>();
   const [editing, setEditing] = useState(false);
   const [check, setCheck] = useState<{ revision: number; state: ConnectionCheckState }>();
+  const [migrationNoticeDismissed, dismissMigrationNotice] = useAtom(
+    imageKeyMigrationNoticeDismissedAtom
+  );
   useEffect(() => {
     if (ready) onConnectionChange?.(stored ?? null);
   }, [onConnectionChange, ready, stored]);
@@ -610,9 +610,7 @@ export function ImageConnectionSetting({
   );
   const remove = async (connection: ProtectedImageConnection) => {
     if (!ipc || !ready || saving) return;
-    if (
-      !window.confirm(t('settings.imageConnection.deleteConfirm', { model: connection.model }))
-    )
+    if (!window.confirm(t('settings.imageConnection.deleteConfirm', { model: connection.model })))
       return;
     setSaving(true);
     setSaveError(undefined);
@@ -663,14 +661,25 @@ export function ImageConnectionSetting({
     );
   };
   if (!ipc) return <p>{t('settings.imageConnection.unavailable')}</p>;
-  const notice = stored?.legacyHistoryMayContainKey ? (
-    <p
-      role="alert"
-      className="rounded-xl border border-border/60 px-4 py-3 text-xs leading-relaxed text-warning-foreground"
-    >
-      {t('settings.imageConnection.legacyHistoryWarning')}
-    </p>
-  ) : undefined;
+  const notice =
+    stored?.legacyHistoryMayContainKey && !migrationNoticeDismissed ? (
+      <div
+        role="alert"
+        className="flex items-start gap-2 rounded-xl border border-border/60 px-4 py-3 text-xs leading-relaxed text-warning-foreground"
+      >
+        <p className="min-w-0 flex-1">{t('settings.imageConnection.legacyHistoryWarning')}</p>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="-mr-1.5 -mt-1 h-6 w-6 shrink-0 text-warning-foreground/70 hover:text-warning-foreground"
+          aria-label={t('common.dismiss')}
+          onClick={() => dismissMigrationNotice(true)}
+        >
+          <X aria-hidden className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    ) : undefined;
   return (
     <CompactSection
       title={t('settings.imageConnection.sectionConnection')}

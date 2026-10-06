@@ -49,6 +49,9 @@ This package contains the local desktop React UI, including narrow Electron wind
   and the light/dark standalone wordmarks; run it after editing these masters.
   `MollyWordmark` renders the complete outlined Molly Design signature with currentColor.
   No font substitution or runtime reference to ignored `output/` assets is allowed.
+  The handwritten signature is a brand moment only: sidebar header, onboarding ceremony,
+  share cards, and the About tab. It never shares a lockup or heading line with the
+  `font-editorial` serif display type — on any surface, pick one voice.
 - Designer surfaces follow the Atelier system (2026-10-04): regular-weight editorial
   serif display (`font-editorial`) for the home heading and section titles only; 14px
   reading, 13px chrome rows, 12px muted metadata; mono uppercase `eyebrow` labels and

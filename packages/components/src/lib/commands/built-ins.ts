@@ -47,7 +47,7 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
   {
     id: 'app.cycleTheme',
     titleKey: 'commands.app.cycleTheme',
-    title: 'Cycle Theme',
+    title: 'Switch theme',
     category: 'View',
   },
   {
@@ -102,12 +102,6 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
     id: 'session.copyCurrentBranch',
     titleKey: 'commands.session.copyCurrentBranch',
     title: 'Copy Current Branch',
-    category: 'Session',
-  },
-  {
-    id: 'session.copyUrl',
-    titleKey: 'commands.session.copyUrl',
-    title: 'Copy Current URL',
     category: 'Session',
   },
   {
@@ -167,13 +161,13 @@ const UNAVAILABLE_COMMANDS: BuiltInCommandDefinition[] = [
   {
     id: 'session.cycleModel',
     titleKey: 'commands.session.cycleModel',
-    title: 'Cycle Model',
+    title: 'Switch model',
     category: 'Session',
   },
   {
     id: 'session.cycleThinkEffort',
     titleKey: 'commands.session.cycleThinkEffort',
-    title: 'Cycle Thinking Effort',
+    title: 'Switch thinking effort',
     category: 'Session',
   },
   {

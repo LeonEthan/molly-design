@@ -101,7 +101,7 @@ export function AppearanceSettingsView({
     },
   ];
 
-  const defaultFontLabel = t('settings.fontFamily.placeholder', 'Default');
+  const defaultFontLabel = t('settings.fontFamily.placeholder', 'Default (Inter)');
   const interfaceFontOptions = useMemo(
     () =>
       buildSystemFontOptions(

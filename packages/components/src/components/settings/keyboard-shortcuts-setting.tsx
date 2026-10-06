@@ -38,7 +38,6 @@ const CATEGORY_ORDER: CommandCategory[] = [
 
 const CODE_WORKFLOW_SHORTCUTS: ReadonlySet<string> = new Set<ShortcutCommandId>([
   'session.copyCurrentBranch',
-  'session.copyUrl',
   'session.saveCurrentFile',
   'session.toggleExplorerSidebar',
   'session.cycleMode',

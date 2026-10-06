@@ -1,10 +1,8 @@
 import { mollyStorage } from '@/lib/product-storage';
 import type {
   AcpConfigOptionValue,
-  AgentConfigMeta,
   AgentConfigCliType,
   AgentConfigId,
-  AgentRole,
   AgentRoleId,
   SessionId,
 } from '@molly/shared';
@@ -88,7 +86,7 @@ export type DraftSessionTab = {
   sessionId: SessionId;
   prompt: string;
   agentConfigId?: AgentConfigId;
-  /** Role preference for this not-yet-created Session. */
+  /** Historical Role id on a persisted draft; retired Roles are never set on new drafts. */
   agentRoleId?: AgentRoleId;
   cliType: AgentConfigCliType;
   agentType: string;
@@ -162,33 +160,6 @@ export const createDraftSessionTab = (options: {
     modeId: options.modeId,
     modelId: options.modelId,
     configOptionValues: options.configOptionValues,
-  };
-};
-
-/**
- * Apply a Role as a complete new-Session preference to a child-tab draft.
- *
- * A draft tab has not created its Session yet, so unlike an existing Session it
- * may move to the Role's bound Agent Config. Unpinned run-config fields are
- * cleared here so the selected agent's defaults can fill them during the normal
- * ACP reconcile pass; retaining values from the previous agent would make the
- * footer claim the Role while dispatching unrelated settings.
- */
-export const buildDraftSessionAgentRolePatch = (
-  role: AgentRole,
-  agentConfig: AgentConfigMeta
-): Partial<DraftSessionTab> | null => {
-  if (agentConfig.id !== role.agentConfigId || agentConfig.machineId !== role.machineId) {
-    return null;
-  }
-  return {
-    agentRoleId: role.id,
-    agentConfigId: agentConfig.id,
-    cliType: agentConfig.cliType,
-    agentType: agentConfig.agentType,
-    modeId: role.runConfig.modeId ?? null,
-    modelId: role.runConfig.modelId ?? null,
-    configOptionValues: role.runConfig.configOptionValues,
   };
 };
 

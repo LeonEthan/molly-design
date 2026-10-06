@@ -46,7 +46,7 @@ export function AppCommands() {
 
   useCommand({
     id: 'app.cycleTheme',
-    title: t('commands.app.cycleTheme', 'Cycle Theme'),
+    title: t('commands.app.cycleTheme', 'Switch theme'),
     category: 'View',
     keybindings: getCommandKeybindings('app.cycleTheme'),
     run: () => {

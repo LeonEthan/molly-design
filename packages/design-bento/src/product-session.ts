@@ -117,7 +117,9 @@ export function createProductSession(options: {
 .ed-zoombar{box-shadow:none;border-color:var(--line)}
 .ed-panel-toggle,.ed-resizer,.ed-logo,.ed-title,.ed-insert,.ed-group-right,.ed-sidebar,.ed-present-pill,.ed-phone-only,.ed-props,.ed-topbar,.c2a-surface{display:none!important}
 .ed-corner-br{inset-inline-end:auto!important;left:14px!important}
-.ed-zoombtn:has(.molly-zoom-icon){padding:5px 6px}
+.ed-zoombar .ed-zoombtn{min-height:24px;display:inline-flex;align-items:center;justify-content:center}
+.ed-zoombar .ed-zoombtn:not(.ed-zoomlabel){min-width:24px}
+.ed-zoombtn:has(.molly-zoom-icon){padding:7px 8px}
 .molly-zoom-icon{display:block;width:14px;height:14px}
 /* Keep Moveable's 14px targets and inverse-zoom geometry; only the painted
    handles shrink. The opaque centers stay legible over light and dark artwork. */

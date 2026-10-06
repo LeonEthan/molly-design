@@ -10,8 +10,10 @@ import { CompactRow, CompactSection } from './compact-layout';
 import { settingContainerClass } from '.';
 import { useElectronUpdaterState } from '@/hooks/use-electron-updater-state';
 import { OpenSourceAttributionsDialog } from './open-source-attributions-dialog';
+import { MollyWordmark } from '@/components/molly-wordmark';
 import { openExternalUrl } from '@/lib/native-browser';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { toIntlLocaleOrEn } from '@/lib/intl-locale';
 import { getMollyDocumentationUrl, MOLLY_REPOSITORY_URL, MOLLY_ISSUES_URL } from '@/lib/molly-urls';
 import { developerModeEnabledAtom } from '@/atoms/settings';
 
@@ -23,12 +25,14 @@ const GIT_COMMIT = typeof __GIT_COMMIT__ !== 'undefined' ? __GIT_COMMIT__ : 'unk
 const APP_VERSION =
   typeof __APP_VERSION__ !== 'undefined' && __APP_VERSION__.length > 0 ? __APP_VERSION__ : null;
 
-function formatBuildDate(isoDate: string): string {
+function formatBuildDate(isoDate: string, intlLocale: string): string {
   if (isoDate === 'development') {
     return isoDate;
   }
   try {
-    return new Date(isoDate).toLocaleString();
+    return new Intl.DateTimeFormat(intlLocale, { dateStyle: 'medium', timeStyle: 'short' }).format(
+      new Date(isoDate)
+    );
   } catch {
     return isoDate;
   }
@@ -120,10 +124,14 @@ export function AboutSettingsComponent() {
   // Electron reports its running version through the updater; on the web there
   // is no updater, so fall back to the build-time linked client version.
   const displayVersion = updaterState?.currentVersion ?? APP_VERSION;
+  const intlLocale = toIntlLocaleOrEn(i18n.resolvedLanguage ?? i18n.language);
 
   return (
     <div className={settingContainerClass}>
-      <p className="text-sm text-muted-foreground">{t('settings.about.mollyDescription')}</p>
+      <div className="flex flex-col items-start gap-3">
+        <MollyWordmark className="h-7 text-foreground" />
+        <p className="text-sm text-muted-foreground">{t('settings.about.mollyDescription')}</p>
+      </div>
       <CompactSection>
         {displayVersion && (
           <CompactRow label={t('settings.about.version')}>
@@ -132,7 +140,7 @@ export function AboutSettingsComponent() {
         )}
         <CompactRow label={t('settings.about.buildDate')}>
           <span className="text-sm text-muted-foreground font-mono">
-            {formatBuildDate(BUILD_DATE)}
+            {formatBuildDate(BUILD_DATE, intlLocale)}
           </span>
         </CompactRow>
         <CompactRow label={t('settings.about.commitHash')}>
@@ -140,10 +148,12 @@ export function AboutSettingsComponent() {
         </CompactRow>
         <CompactRow label={t('sidebar.feedback', 'Feedback')}>
           <Button
+            variant="outline"
             size="sm"
             className="h-7 px-2.5"
             onClick={() => void openExternalUrl(MOLLY_ISSUES_URL)}
           >
+            <ExternalLink className="mr-1 h-3.5 w-3.5" />
             {t('sidebar.feedback')}
           </Button>
         </CompactRow>

@@ -10,10 +10,6 @@ vi.mock('../src/components/mentions/mention-session-source', async (importOrigin
   ...(await importOriginal<object>()),
   useSessionMentionItems: () => [],
 }));
-vi.mock('../src/components/mentions/mention-agent-role-source', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useAgentRoleMentionItems: () => [],
-}));
 import { ChatComposer } from '../src/components/chat/chat-composer';
 import { DesktopRunConfigMenu } from '../src/components/sessions/desktop-run-config-menu';
 import { initI18n } from '../src/i18n';

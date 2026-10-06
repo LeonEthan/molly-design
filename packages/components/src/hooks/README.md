@@ -67,12 +67,7 @@ memos built on it actually hit.
 
 Catalog `upsert`/`remove` resolve on durability because a dialog that awaited the
 upload sat open for the whole round trip, and the row it had already written showed
-up in the catalog underneath it — so the open create form reported its own name as
-taken (`resolveAgentRoleNameCheckExemption`) moments before closing on success.
-
-Hiding a private Agent Role in the UI is not an access check, and an availability
-rule copied into a component is one that can drift into a silent fallback; both stay
-in the shared `listAccessibleAgentRoles` / `resolveAgentRoleAvailability` helpers.
+up in the catalog underneath it.
 
 ## `use-session-doc.ts`
 

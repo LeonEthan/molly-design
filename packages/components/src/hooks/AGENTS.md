@@ -57,14 +57,13 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
   owners' timing entries or retain a per-read global timeline.
 - `use-workspace-catalog.ts` reads a ref-counted per-workspace room in
   `lib/workspace-catalog-room.ts`; it must not open the Flock document, subscribe, or
-  join the room per mount. MCP servers and Agent Roles are two row families of that ONE
-  document, so `use-workspace-mcp-catalog.ts` and `use-workspace-agent-roles.ts` derive
-  from that room instead of opening a second one. Keep the shared snapshot identity
-  stable across mounts.
+  join the room per mount. MCP servers and retired Agent Role rows live in that ONE
+  document, so `use-workspace-mcp-catalog.ts` derives from that room instead of
+  opening a second one. Keep the shared snapshot identity stable across mounts.
 - MCP catalog `upsert`/`remove` resolve on DURABILITY; the upload runs on its own
   and no surface waits for it or reports it.
-- Role hooks remain legacy helpers, unmounted by the product composer and settings.
-  Stored Role ids never restore selection, prefix prompts or drive new execution.
+- Role hooks are deleted with the retired feature cluster. Stored Role ids never
+  restore selection, prefix prompts or drive new execution.
 
 ## Code Collab
 

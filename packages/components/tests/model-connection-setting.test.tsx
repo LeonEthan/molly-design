@@ -97,7 +97,8 @@ describe('encrypted model connection form', () => {
       },
       { ...stored, providerPresetId: 'openai-compatible', customModels }
     );
-    expect(host.textContent).toContain(en['settings.models.compatibleHint']);
+    expect(host.textContent).toContain(en['settings.models.compatibleLead']);
+    expect(host.textContent).not.toContain(en['settings.models.compatibleHint']);
     const limit = host.querySelector<HTMLInputElement>('input[id$="-maxTokens"]')!;
     await change(limit, '65536');
     expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
@@ -185,7 +186,8 @@ describe('encrypted model connection form', () => {
       providerPresetId: 'openai-compatible',
       customModels: [model, { ...model, modelId: 'second' }],
     });
-    expect(host.textContent).toContain(zh['settings.models.compatibleHint']);
+    expect(host.textContent).toContain(zh['settings.models.compatibleLead']);
+    expect(host.textContent).not.toContain(zh['settings.models.compatibleHint']);
     expect(host.textContent).toContain(zh['settings.models.toolsRequiredHint']);
     await change(host.querySelectorAll<HTMLInputElement>('input[id$="-modelId"]')[1], 'first');
     expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);

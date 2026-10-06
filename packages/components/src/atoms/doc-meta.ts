@@ -19,10 +19,6 @@ import { mergeBootstrapMetaCache } from '@/lib/doc-meta-bootstrap';
 import { listDocMetaEntries } from '@/lib/doc-meta-batch';
 import { getDocMetaRoomKind, withDerivedDocMetaId } from '@/lib/doc-meta-room';
 import { sessionLivePresenceAtomFamily, sessionLiveStatusAtomFamily } from './presence';
-import {
-  sessionAgentRoleSelectionAtomFamily,
-  sessionAgentRoleDurableSnapshotAtomFamily,
-} from './session-agent-roles';
 
 // ---------------------------------------------------------------------------
 // Runtime guard for metadata entering the cache.
@@ -646,7 +642,7 @@ export const docMetaSubscriptionAtom = atomEffect((get, set) => {
       if (sessionId) {
         // atomFamily strongly caches its keys even after the last UI consumer
         // unmounts. Only explicit deletion retires these transient identities;
-        // archive/navigation/missing metadata must preserve unsent Role choices.
+        // archive/navigation/missing metadata must preserve them.
         sessionMetaAtomFamily.remove(docId);
         childSessionsAtomFamily.remove(sessionId);
         archivedChildSessionsAtomFamily.remove(sessionId);
@@ -654,8 +650,6 @@ export const docMetaSubscriptionAtom = atomEffect((get, set) => {
         sideSessionsAtomFamily.remove(sessionId);
         sessionLiveStatusAtomFamily.remove(sessionId);
         sessionLivePresenceAtomFamily.remove(sessionId);
-        sessionAgentRoleSelectionAtomFamily.remove(sessionId);
-        sessionAgentRoleDurableSnapshotAtomFamily.remove(sessionId);
       }
       return;
     }

@@ -42,7 +42,7 @@ Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md)
   `sourceKey`.
 - Activation means "make sure this is loaded", not "revalidate": Issues/PRs gate
   on `ISSUE_PR_FRESH_FOR_MS`, and only explicit gestures pass `refresh({ force:
-  true })`. The fetch timestamp rides on the cached entry (survives IndexedDB).
+true })`. The fetch timestamp rides on the cached entry (survives IndexedDB).
   An unasked source reports `loading`, never `ready` with zero rows.
 
 ## Hydration and drafts
@@ -116,23 +116,3 @@ Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md)
   file/diff tabs are not mention sources. The conversation COLUMN paints ONE
   `ConversationDropOverlay` via `SessionMentionDropLayer`, never one per
   keep-alive tab page.
-
-## Agent Roles
-
-- An Agent Role mention has the session mention's shape (plain `@<token>`,
-  stable Role id on the committed RANGE), but its rewrite asks the agent to
-  CREATE a Session and carries the Role id only (root `AGENTS.md` owns MCP
-  create/freeze). A Role the composer no longer offers stays plain text and
-  produces no create instruction. The token is DERIVED from the Role's name
-  (`getAgentRoleMentionSlug`), never a second authored field: renaming renames
-  the mention, and uniqueness is checked on the derived token.
-- A Role candidate's emoji REPLACES the category glyph
-  (`MentionCandidate.iconEmoji`), defaulted through `getAgentRoleEmoji`, and its
-  candidate sets no detail `title`. The committed range shows that emoji through
-  `applyAgentRoleEmojiChip`, boxed to the icon slot and clipped; its agent
-  config and machine ride on `AgentRoleMentionItem`.
-- Role candidates pass visibility, executability, then work context: Local
-  Project (and V1 plain chat) pins to its own machine, while a GitHub project
-  may reach any authorized machine unless already checked out (`localWorktree`).
-  An unavailable Role is never a submittable candidate — no fallback machine,
-  provider, or model.

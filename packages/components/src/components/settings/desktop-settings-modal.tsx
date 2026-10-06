@@ -181,7 +181,6 @@ function SettingsTabContent({ tabId }: { tabId: SettingsTabId }) {
       return <GeneralSettingsComponent />;
     case 'appearance':
       return <AppearanceSettingsComponent />;
-    case 'agent-roles':
     case 'account':
     case 'workspace':
     case 'people':

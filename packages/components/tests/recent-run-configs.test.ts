@@ -6,14 +6,7 @@
 // picking it would be a no-op row at the top of the menu.
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  AGENT_ROLE_VERSION,
-  type AgentConfigId,
-  type AgentConfigMeta,
-  type AgentRole,
-  type AgentRoleId,
-  type MachineId,
-} from '@molly/shared';
+import { type AgentConfigId, type AgentConfigMeta, type MachineId } from '@molly/shared';
 
 import type { AcpConfigOptionSelector } from '../src/components/shared/acp-selector-options';
 import {
@@ -287,20 +280,6 @@ describe('applying a record to the current selectors', () => {
 });
 
 describe('recent Agent Role entries', () => {
-  const role = (id: string, name: string): AgentRole => ({
-    v: AGENT_ROLE_VERSION,
-    id: id as AgentRoleId,
-    ownerUserId: 'user-1',
-    visibility: 'private',
-    name,
-    emoji: '\u{1F50D}',
-    machineId: MACHINE,
-    agentConfigId: 'agent-1' as AgentConfigId,
-    runConfig: {},
-    revision: 1,
-    createdAt: 1,
-    updatedAt: 1,
-  });
   const agentConfigs = [agentConfig('agent-1', 'Claude')];
 
   // The same knobs picked by hand and picked through a Role are not the same
@@ -311,33 +290,17 @@ describe('recent Agent Role entries', () => {
     );
   });
 
-  it('never offers a retired Role entry even when its catalog row still exists', () => {
-    const items = buildRecentRunConfigItems({
-      records: [record({ agentRoleId: 'role-1' })],
-      agentConfigs,
-      agentRoles: [role('role-1', 'Code Reviewer')],
-      currentKey: null,
-    });
-    expect(items).toEqual([]);
-  });
-
-  // A Role never falls back, so an entry whose Role is gone or cannot run must
-  // drop out rather than quietly re-running its values without it.
-  it('drops an entry whose Role can no longer run', () => {
+  it('never offers a retired Role entry', () => {
     const records = [record({ agentRoleId: 'role-1' })];
-    expect(
-      buildRecentRunConfigItems({ records, agentConfigs, agentRoles: [], currentKey: null })
-    ).toHaveLength(0);
     expect(buildRecentRunConfigItems({ records, agentConfigs, currentKey: null })).toHaveLength(0);
   });
 
-  it('leaves plain entries alone when no Roles are passed', () => {
+  it('leaves plain entries alone', () => {
     const items = buildRecentRunConfigItems({
       records: [record()],
       agentConfigs,
       currentKey: null,
     });
     expect(items).toHaveLength(1);
-    expect(items[0]?.role).toBeUndefined();
   });
 });

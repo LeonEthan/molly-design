@@ -278,7 +278,7 @@ export function BrowserAccountsSetting() {
                   })}
                 </p>
               ) : null}
-              {!summary.persistent ? (
+              {import.meta.env.DEV && !summary.persistent ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.developmentMemory')}
                 </p>

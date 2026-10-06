@@ -79,9 +79,9 @@ Preserve historical catalog fields when editing unrelated values.
 
 ## Retired Agent Roles
 
-Role management and migration are retired. Preserve stored rows and historical
-provenance; the legacy settings route/tab resolves to General. Do not mount
-Role editors or catalog subscriptions. The writer rejects Role mutations; the
+Role management and migration are retired, and their settings/composer UI cluster
+is deleted. Preserve stored rows and historical provenance; the legacy settings
+route/tab resolves to General. The writer rejects Role mutations; the
 cross-surface contract is in `packages/shared/AGENTS.md`.
 
 ## Design product scope

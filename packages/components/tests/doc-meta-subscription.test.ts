@@ -26,10 +26,6 @@ import {
   sideSessionsAtomFamily,
 } from '../src/atoms/doc-meta';
 import { sessionLivePresenceAtomFamily, sessionLiveStatusAtomFamily } from '../src/atoms/presence';
-import {
-  sessionAgentRoleSelectionAtomFamily,
-  sessionAgentRoleDurableSnapshotAtomFamily,
-} from '../src/atoms/session-agent-roles';
 import { runtimeAtom, type WorkspaceRuntime } from '../src/atoms/runtime';
 
 type RepoWithSyncRunner = LoroRepo & {
@@ -170,8 +166,6 @@ describe('docMetaSubscriptionAtom', () => {
       sideSessionsAtomFamily,
       sessionLivePresenceAtomFamily,
       sessionLiveStatusAtomFamily,
-      sessionAgentRoleSelectionAtomFamily,
-      sessionAgentRoleDurableSnapshotAtomFamily,
     ];
     const repo = new CompatRepoDouble(
       [sessionId, siblingId].map((id) => ({
@@ -189,27 +183,12 @@ describe('docMetaSubscriptionAtom', () => {
       const atoms = [sessionMetaAtomFamily(docId), ...families.map((family) => family(sessionId))];
       const siblingAtoms = families.map((family) => family(siblingId));
       const unmountAtoms = atoms.map((entry) => store.sub(entry, () => {}));
-      store.set(sessionAgentRoleSelectionAtomFamily(sessionId), {
-        providerKey: 'synthetic-provider',
-        roleId: null,
-        basedOnTurnKeys: [],
-      });
-      store.set(sessionAgentRoleDurableSnapshotAtomFamily(sessionId), {
-        providerKey: 'synthetic-provider',
-        roleId: null,
-        roleRevision: undefined,
-        currentTurnKey: 'old-turn',
-        knownTurnKeys: ['old-turn'],
-      });
       unmountAtoms.forEach((dispose) => dispose());
 
-      // Navigation and archival preserve identity and unsent choices.
+      // Navigation and archival preserve identity.
       repo.emit({ kind: 'doc-metadata', docId, patch: { isArchived: true }, by: 'live' });
       await vi.runAllTimersAsync();
       expect(sessionMetaAtomFamily(docId)).toBe(atoms[0]);
-      expect(store.get(sessionAgentRoleSelectionAtomFamily(sessionId))?.providerKey).toBe(
-        'synthetic-provider'
-      );
 
       // Missing metadata can be temporary; it is not authority to retire drafts.
       repo.emit({
@@ -249,8 +228,6 @@ describe('docMetaSubscriptionAtom', () => {
       await vi.runAllTimersAsync();
       expect(sessionMetaAtomFamily(docId)).not.toBe(atoms[0]);
       expect(store.get(sessionMetaAtomFamily(docId))?.title).toBe('Restored');
-      expect(store.get(sessionAgentRoleSelectionAtomFamily(sessionId))).toBeUndefined();
-      expect(store.get(sessionAgentRoleDurableSnapshotAtomFamily(sessionId))).toBeUndefined();
     } finally {
       unmount();
       sessionMetaAtomFamily.remove(docId);

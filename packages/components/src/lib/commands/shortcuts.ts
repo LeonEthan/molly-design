@@ -16,7 +16,6 @@ export type ShortcutCommandId =
   | 'session.focusInput'
   | 'session.toggleExplorerSidebar'
   | 'session.copyCurrentBranch'
-  | 'session.copyUrl'
   | 'session.renameCurrent'
   | 'session.newTab'
   | 'session.saveCurrentFile'
@@ -68,7 +67,6 @@ export const COMMAND_SHORTCUTS: Record<ShortcutCommandId, CommandKeybindings> = 
   'session.focusInput': [electron('$mod+l')],
   'session.toggleExplorerSidebar': ['$mod+Alt+b'],
   'session.copyCurrentBranch': ['Alt+Shift+b'],
-  'session.copyUrl': ['Alt+Shift+c'],
   'session.renameCurrent': ['F2'],
   // ⌥N creates a new tab. ⌘T is intentionally avoided — the browser claims it on web.
   'session.newTab': ['Alt+n'],

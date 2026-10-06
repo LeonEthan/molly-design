@@ -100,7 +100,6 @@ import { deletePrCacheEntriesForSession } from '@/lib/github-pr-cache';
 import { FileTreeView } from './components/file-tree-view';
 import { useSessionFileActions } from '@/hooks/use-session-file-actions';
 import { SessionFileActionsMenu } from './session-file-actions-menu';
-import { getAppShareUrl } from '@/lib/app-location';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
 import { useDesktopTabCloser } from '@/lib/desktop-tab-or-window-close';
 import { cn, getBasename } from '@/lib';
@@ -1790,18 +1789,6 @@ const SessionDetail = ({
     handleBackToList();
   }, [activeSession, currentWorkspaceId, deleteArchivedSession, handleBackToList, repoFullName, t]);
 
-  const handleCopyUrl = useCallback(
-    async (successMessage?: string, failureMessage?: string) => {
-      try {
-        await navigator.clipboard.writeText(getAppShareUrl());
-        toast.success(successMessage ?? t('sessions.urlCopied', 'Session URL copied to clipboard'));
-      } catch {
-        toast.error(failureMessage ?? t('sessions.copyFailed', 'Unable to copy'));
-      }
-    },
-    [t]
-  );
-
   const handleCopyText = useCallback(
     (text: string, successMessage?: string) => {
       void navigator.clipboard
@@ -2795,17 +2782,6 @@ const SessionDetail = ({
     keybindings: getCommandKeybindings('session.copyCurrentBranch'),
     when: () => currentBranch.length > 0,
     run: handleCopyCurrentBranch,
-  });
-
-  useCommand({
-    id: 'session.copyUrl',
-    title: t('commands.session.copyUrl', 'Copy Current URL'),
-    category: 'Session',
-    keybindings: getCommandKeybindings('session.copyUrl'),
-    when: () => Boolean(activeSession),
-    run: () => {
-      void handleCopyUrl();
-    },
   });
 
   useCommand({

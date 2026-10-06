@@ -111,16 +111,13 @@ const selectors: AcpConfigOptionSelector[] = [
   },
 ];
 
-/* The three entries a caller would hand over after filtering: a Role, the same
-   agent with a different model, and a plan/fast variant. A Role IS one of these
-   combinations, so it belongs in this list — leading with its own mark and
-   name, since that is what picking the row does. */
+/* The entries a caller would hand over after filtering: the same agent
+   with a different model, and a plan/fast variant. */
 const threeRecents: RecentRunConfigItem[] = [
   {
-    id: 'recent-role-reviewer',
+    id: 'recent-codex-54-high',
     agent: agents[0]!,
-    role: { name: 'Code Reviewer', emoji: '\u{1F50D}' },
-    modelLabel: '5.5',
+    modelLabel: '5.4',
     reasoningLabel: 'High',
     planOn: false,
   },

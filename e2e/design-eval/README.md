@@ -61,3 +61,21 @@ never retried.
 
 `node e2e/scripts/design-eval-gate.mjs <case.json> <design.json>` re-checks the
 gate for any saved design.
+
+## Reviewing
+
+```sh
+# Accept a first baseline run by run
+node e2e/scripts/design-eval-review.mjs --candidate <label>
+# Compare a new version blind against the accepted baseline
+node e2e/scripts/design-eval-review.mjs --candidate <new-label> --baseline <label>
+# Un-blind and score when done
+node e2e/scripts/design-eval-review.mjs --candidate <new-label> --baseline <label> --score
+```
+
+The page shows the source, each output (and its follow-ups), the gate result and
+the Agent's final message. In pairwise mode, run _i_ of each label is paired and
+randomly placed as A or B; the placement is fixed in `private/reviews/<name>/key.json`
+on first launch, so version labels never reach the page. Each choice saves to
+`verdicts.json` immediately. Scoring writes `summary.json` and marks a case
+regressed when most of its pairs are worse on any dimension.

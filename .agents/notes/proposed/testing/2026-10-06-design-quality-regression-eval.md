@@ -139,6 +139,11 @@ receipt to appear for each turn. It records the committed design, an exported
 PNG, the artwork directory and the visible conversation. `design-eval-gate.mjs`
 is a pure check over the committed design and has a unit test.
 
+`design-eval-review.mjs` serves a local review page. Pairwise mode fixes a
+random A/B placement in a key file before the owner sees anything; single-label
+mode lets the owner accept a first baseline. Verdicts save as each choice is made,
+and scoring un-blinds them and applies the majority-worse rule.
+
 Runs may execute in parallel. The e2e rule to run scenarios serially exists for
 OS endpoints that are still fixed. On macOS each harness owns its data directory,
 the IPC sockets inside it and a random CLI port, and E2E skips the single-instance
@@ -169,7 +174,6 @@ times.
 
 - Image calls per run are not counted yet; the retained artwork directory and
   conversation allow a later count.
-- The blind pairwise review sheet is not built yet.
 - The imported baseline run did not record its exact build or image-call count.
 - A single judge brings consistent but personal taste. That is accepted for a
   regression signal, but it does not establish general design quality.

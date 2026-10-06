@@ -1,16 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type {
-  AgentConfigId,
-  AgentConfigMeta,
-  AgentRole,
-  AgentRoleId,
-  MachineId,
-  SessionId,
-} from '@molly/shared';
+import type { AgentRoleId, SessionId } from '@molly/shared';
 
 import {
   appendTabOrderId,
-  buildDraftSessionAgentRolePatch,
   createDraftSessionTab,
   filterPendingPromotedChildSessions,
   getDraftTabLabel,
@@ -91,72 +83,6 @@ describe('session draft tabs', () => {
     expect(draft.prompt).toBe('');
   });
 
-  it('applies a Role as a complete new-child-Session Agent selection', () => {
-    const role = {
-      v: 1,
-      id: 'reviewer' as AgentRoleId,
-      ownerUserId: 'user-1',
-      visibility: 'private',
-      name: 'Reviewer',
-      machineId: 'machine-1' as MachineId,
-      agentConfigId: 'claude-config' as AgentConfigId,
-      runConfig: {
-        modeId: 'plan',
-        modelId: 'claude-opus',
-        configOptionValues: { thought_level: 'high' },
-      },
-      revision: 2,
-      createdAt: 1,
-      updatedAt: 2,
-    } satisfies AgentRole;
-    const agentConfig = {
-      id: role.agentConfigId,
-      machineId: role.machineId,
-      name: 'Claude',
-      description: undefined,
-      cliType: 'builtin',
-      agentType: 'claude',
-      env: {},
-    } satisfies AgentConfigMeta;
-
-    expect(buildDraftSessionAgentRolePatch(role, agentConfig)).toEqual({
-      agentRoleId: role.id,
-      agentConfigId: role.agentConfigId,
-      cliType: 'builtin',
-      agentType: 'claude',
-      modeId: 'plan',
-      modelId: 'claude-opus',
-      configOptionValues: { thought_level: 'high' },
-    });
-  });
-
-  it('refuses to apply a Role through a different Agent Config binding', () => {
-    const role = {
-      v: 1,
-      id: 'reviewer' as AgentRoleId,
-      ownerUserId: 'user-1',
-      visibility: 'private',
-      name: 'Reviewer',
-      machineId: 'machine-1' as MachineId,
-      agentConfigId: 'codex-config' as AgentConfigId,
-      runConfig: {},
-      revision: 1,
-      createdAt: 1,
-      updatedAt: 1,
-    } satisfies AgentRole;
-    const wrongConfig = {
-      id: 'claude-config' as AgentConfigId,
-      machineId: role.machineId,
-      name: 'Claude',
-      description: undefined,
-      cliType: 'builtin',
-      agentType: 'claude',
-      env: {},
-    } satisfies AgentConfigMeta;
-
-    expect(buildDraftSessionAgentRolePatch(role, wrongConfig)).toBeNull();
-  });
-
   it('hydrates legacy persisted draft tabs with an upload-safe session id', () => {
     installWindowStorage();
     localStorage.setItem(
@@ -203,7 +129,7 @@ describe('session draft tabs', () => {
     expect(drafts[0]?.sessionId).toBe(validSessionId);
   });
 
-  it('persists the selected Role identity with a non-empty child-tab draft', () => {
+  it('persists a stored Role identity with a non-empty child-tab draft', () => {
     installWindowStorage();
     const draft = createDraftSessionTab({
       cliType: 'builtin',

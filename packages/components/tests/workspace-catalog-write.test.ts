@@ -1,17 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  AGENT_ROLE_VERSION,
-  type AgentConfigId,
-  type AgentRole,
-  type AgentRoleId,
-  type MachineId,
-  type WorkspaceMcpServerMeta,
-} from '@molly/shared';
+import { type WorkspaceMcpServerMeta } from '@molly/shared';
 import {
   deleteWorkspaceMcpServer,
   putWorkspaceMcpServer,
   uploadWorkspaceCatalog,
-  writeWorkspaceAgentRole,
   type WorkspaceCatalogWriteDeps,
 } from '../src/lib/workspace-catalog-write';
 
@@ -21,19 +13,6 @@ const entry: WorkspaceMcpServerMeta = {
   name: 'Files',
   transport: 'stdio',
   connection: { transport: 'stdio', command: 'mcp-files' },
-  createdAt: 1,
-  updatedAt: 1,
-};
-const role: AgentRole = {
-  v: AGENT_ROLE_VERSION,
-  id: 'role-1' as AgentRoleId,
-  ownerUserId: 'user-1',
-  visibility: 'private',
-  name: 'Reviewer',
-  machineId: 'machine-1' as MachineId,
-  agentConfigId: 'config-1' as AgentConfigId,
-  runConfig: {},
-  revision: 1,
   createdAt: 1,
   updatedAt: 1,
 };
@@ -94,11 +73,7 @@ describe('workspace catalog writes', () => {
     expect(calls).toContain('syncOnce:end');
   });
 
-  it('does the same for a role, and for a delete', async () => {
-    const put = createDeps();
-    await writeWorkspaceAgentRole(put.deps, role);
-    expect(put.calls).not.toContain('syncOnce:end');
-
+  it('does the same for a delete', async () => {
     const removal = createDeps();
     await deleteWorkspaceMcpServer(removal.deps, entry.id);
     expect(removal.calls).toContain('flockRowDelete');
@@ -115,7 +90,7 @@ describe('workspace catalog writes', () => {
     await expect(uploadWorkspaceCatalog(failed.deps)).resolves.toBeUndefined();
 
     const unopenable = createDeps({ openError: new Error('room unavailable') });
-    await expect(writeWorkspaceAgentRole(unopenable.deps, role)).resolves.toBeUndefined();
+    await expect(putWorkspaceMcpServer(unopenable.deps, entry)).resolves.toBeUndefined();
     await expect(uploadWorkspaceCatalog(unopenable.deps)).resolves.toBeUndefined();
   });
 });

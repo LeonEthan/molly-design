@@ -30,13 +30,6 @@ vi.mock('../src/components/mentions/mention-session-source', async (importOrigin
   useSessionMentionItems: () => sessionItems,
 }));
 
-// Agent Roles read the visible-machine index, which needs the authenticated
-// Convex context; the same reason the session source above is stubbed.
-vi.mock('../src/components/mentions/mention-agent-role-source', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useAgentRoleMentionItems: () => [],
-}));
-
 import {
   CombinedMentionTextarea,
   type CombinedMentionTextareaHandle,
@@ -159,18 +152,31 @@ describe('inserting a session mention from outside the composer', () => {
     expect(ranges).toHaveLength(0);
   });
   it('inserts canonical element identity as a real focused mention and refuses active IME', async () => {
-    const reference = { artworkId: 'art', baselineRevisionId: 'a'.repeat(64), elementIds: ['chosen'] };
+    const reference = {
+      artworkId: 'art',
+      baselineRevisionId: 'a'.repeat(64),
+      elementIds: ['chosen'],
+    };
     await render('Change');
     const input = container.querySelector('textarea')!;
-    await act(async () => input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })));
-    expect(() => handle?.insertDesignElementMention(reference, 'Selected elements (1)')).toThrow('Finish composing');
+    await act(async () =>
+      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+    );
+    expect(() => handle?.insertDesignElementMention(reference, 'Selected elements (1)')).toThrow(
+      'Finish composing'
+    );
     expect(value).toBe('Change');
-    await act(async () => input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })));
-    await act(async () => { handle?.insertDesignElementMention(reference, 'Selected elements (1)'); });
+    await act(async () =>
+      input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }))
+    );
+    await act(async () => {
+      handle?.insertDesignElementMention(reference, 'Selected elements (1)');
+    });
     await render(value);
     expect(value).toBe('Change @Selected elements (1) ');
     expect(document.activeElement).toBe(input);
-    expect(ranges).toEqual([{ start: 7, end: 29, value: JSON.stringify(reference), kind: 'design_element' }]);
+    expect(ranges).toEqual([
+      { start: 7, end: 29, value: JSON.stringify(reference), kind: 'design_element' },
+    ]);
   });
-
 });

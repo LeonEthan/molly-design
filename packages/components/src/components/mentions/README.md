@@ -20,8 +20,6 @@ rules live in [AGENTS.md](AGENTS.md); this file maps their implementation.
 - `mention-session-source.ts` owns session slugs, candidates, the slug → id cache,
   hydration, the drop-time insertion, and the before-send expansion. Transfer
   format and the self-drop check live in `lib/session-mention-drag.ts`.
-- `mention-agent-role-source.ts` contains legacy Role helpers. Product composers
-  no longer mount its catalog hook, hydration, menu or prompt expansion.
 - `issue-pr-hash-mention.tsx` provides cached GitHub issue/PR lookup, ranking,
   hydration, and post-insert title hints.
 - `mention-skill-source.tsx` provides `$` skill discovery, provider directory

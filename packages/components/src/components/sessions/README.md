@@ -35,7 +35,6 @@ tracked `.agents/docs/` directory.
 | `session-message-submit-route.ts`                               | Send vs. queue vs. steer routing decision                                                                                                           |
 | `desktop-run-config-menu.tsx`                                   | Desktop provider/model picker with reasoning + permission-mode button                                                                               |
 | `recent-run-config-menu-group.tsx`                              | "Recently used" run-config entries                                                                                                                  |
-| `composer-agent-role-panel.tsx`, `agent-role-detail-pane.tsx`   | Legacy, unmounted Role selection and detail components                                                                                              |
 | `floating-permission-request.tsx`, `ask-user-question-card.tsx` | Floating permission requests and agent questions                                                                                                    |
 | `design-file-receipt.tsx`                                       | Durable save receipts and diagnostics; original files open through the ordinary file viewer                                                         |
 | `notification-permission-prompt.tsx`                            | Notification permission ask                                                                                                                         |

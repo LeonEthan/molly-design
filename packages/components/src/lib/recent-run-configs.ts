@@ -1,6 +1,6 @@
 import { mollyStorage } from '@/lib/product-storage';
 import { z } from 'zod';
-import { getAgentRoleEmoji, type AgentConfigMeta, type AgentRole } from '@molly/shared';
+import { type AgentConfigMeta } from '@molly/shared';
 import type { RecentRunConfigItem } from '@/components/sessions/recent-run-config-menu-group';
 import {
   isConfigOptionValueValid,
@@ -257,26 +257,17 @@ export function recordRecentRunConfig(
 export function buildRecentRunConfigItems({
   records,
   agentConfigs,
-  agentRoles,
   currentKey,
   limit = MAX_VISIBLE_RECENT_RUN_CONFIGS,
 }: {
   records: ReadonlyArray<RecentRunConfigRecord>;
   agentConfigs: ReadonlyArray<AgentConfigMeta>;
-  /**
-   * Roles the composer can run RIGHT NOW. A recorded Role entry is offered only
-   * while its Role is in here: a Role never falls back, so an entry whose Role
-   * was deleted, unshared, or whose machine went offline must drop out rather
-   * than quietly re-running its values without it.
-   */
-  agentRoles?: ReadonlyArray<AgentRole>;
   currentKey: string | null;
   limit?: number;
 }): RecentRunConfigItem[] {
   const configByKey = new Map(
     agentConfigs.map((config) => [`${config.machineId} ${config.id}`, config])
   );
-  const roleById = new Map((agentRoles ?? []).map((role) => [role.id as string, role]));
   const items: RecentRunConfigItem[] = [];
   const seen = new Set<string>();
   for (const record of records) {
@@ -285,7 +276,6 @@ export function buildRecentRunConfigItems({
     if (key === currentKey || seen.has(key)) continue;
     const config = configByKey.get(`${record.machineId} ${record.agentId}`);
     if (!config) continue;
-    const role = record.agentRoleId ? roleById.get(record.agentRoleId) : undefined;
     // Retired Roles cannot be reapplied from the local recent list.
     if (record.agentRoleId) continue;
     seen.add(key);
@@ -298,9 +288,6 @@ export function buildRecentRunConfigItems({
         brandId: config.brandId,
         env: config.env,
       },
-      // A Role names itself; the row then reads as that Role rather than as the
-      // agent it happens to be bound to.
-      ...(role ? { role: { name: role.name, emoji: getAgentRoleEmoji(role) } } : {}),
       modelLabel: record.modelLabel,
       reasoningLabel: record.reasoningLabel,
       planOn: record.planOn,

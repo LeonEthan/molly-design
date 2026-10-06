@@ -28,11 +28,6 @@ vi.mock('../src/components/mentions/mention-session-source', async (importOrigin
   useSessionMentionItems: () => [],
 }));
 
-vi.mock('../src/components/mentions/mention-agent-role-source', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useAgentRoleMentionItems: () => [],
-}));
-
 import {
   CombinedMentionTextarea,
   type CombinedMentionTextareaHandle,

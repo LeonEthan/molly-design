@@ -13,7 +13,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useFireOnKeyChange, useFireOncePerCycle } from '@/hooks/use-fire-once';
 import { FileIcon, FolderIcon } from '@/components/icons/file-icons';
-import { AgentRoleDetailPane } from '@/components/sessions/agent-role-detail-pane';
 import { MentionContent, MentionItem, useMentionContext } from '@/ui/mention';
 import {
   getCategoryNavigateText,
@@ -175,19 +174,6 @@ function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
  * full-width strip with no hover, so it stays list-only.
  */
 function CandidateDetailPane({ detail }: { detail: MentionCandidateDetail }) {
-  // A Role is the composer's object, read with the composer's pane: same rows,
-  // same wording for the ids, same instruction block — sized to this menu.
-  if (detail.agentRole) {
-    return (
-      <AgentRoleDetailPane
-        role={detail.agentRole.role}
-        agentConfig={detail.agentRole.agentConfig}
-        machine={detail.agentRole.machine}
-        machineLabel={detail.agentRole.machineLabel}
-        className="h-[320px] w-[248px]"
-      />
-    );
-  }
   return (
     <div className="scrollbar-pro h-[320px] w-[248px] shrink-0 overflow-y-auto border-l border-border px-3 py-2.5 [scrollbar-gutter:stable]">
       <p className="truncate text-sm font-semibold text-foreground">{detail.title}</p>

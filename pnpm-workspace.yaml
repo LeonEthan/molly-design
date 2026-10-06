@@ -51,17 +51,17 @@ catalog:
 # Pi SDK and the unmodified Pi packages loaded by the embedded harness profile.
 catalogs:
   pi:
-    '@earendil-works/pi-ai': 1.0.0
-    '@earendil-works/pi-agent-core': 1.0.0
-    '@earendil-works/pi-coding-agent': 1.0.0
-    '@earendil-works/pi-tui': 1.0.0
+    '@earendil-works/pi-ai': 1.0.4
+    '@earendil-works/pi-agent-core': 1.0.4
+    '@earendil-works/pi-coding-agent': 1.0.4
+    '@earendil-works/pi-tui': 1.0.4
     typebox: 1.3.34
     pi-skillful: 0.4.0
     '@juicesharp/rpiv-ask-user-question': 2.12.0
     '@juicesharp/rpiv-i18n': 2.12.0
     '@zigai/pi-mention-skill': 0.10.4
     '@ff-labs/pi-fff': 0.11.0
-    cc-safety-net: 2.4.14
+    cc-safety-net: 2.6.0
 
 ignoredBuiltDependencies:
   # >=13.0.2 has no install script; pnpm still offers to build it because the

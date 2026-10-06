@@ -79,7 +79,7 @@ R1 → R2 是关键路径；R3 嵌入 R2，随后完成 R4 和 R5。新增真实
 
 ### 内置交付与隔离
 
-引擎基线为 Pi v1.0.0，使用公开 coding-agent SDK、固定绝对路径和独立进程。引擎、下列 Pi 包及实际需要的资源在构建时锁定并随包交付；发布产物带版本、依赖/资源摘要、协议版本和平台清单。开发与安装包均需验证实际 Node 版本满足引擎要求，不以宿主开发 Node 代替包内探针。
+引擎基线为 Pi v1.0.4，使用公开 coding-agent SDK、固定绝对路径和独立进程。引擎、下列 Pi 包及实际需要的资源在构建时锁定并随包交付；发布产物带版本、依赖/资源摘要、协议版本和平台清单。开发与安装包均需验证实际 Node 版本满足引擎要求，不以宿主开发 Node 代替包内探针。
 
 Molly 不定位、启动或修改本地 Pi，从不读写用户自己的 Pi 配置（`~/.pi/agent`），也不继承其认证。每个 worker epoch 在 Molly 私有数据下拥有独立的原生 Pi 配置（agent 目录），在导入 SDK 前由 epoch 派生；settings 和包状态位于该配置；受管模型运行时的凭据、模型目录及连接配置保留在内存。产品历史和临时文件保留在现有私有根目录下。在该配置内保留 Pi 的通用 Agent 能力：原生资源发现、skills、提示模板、上下文文件和扩展钩子。打开会话目录不会自动信任其中的项目代码：默认不加载项目 `.pi` 配置、包和 JavaScript 扩展；Pi 保存的显式信任决定在所属配置内有效；新 worker 不继承另一 worker 的信任授予或包状态。Molly 在工作目录 `.agents/skills` 中生成的文本 skills 通过 SDK 的显式 skill 路径加载，不授予可执行项目资源信任；用户 `~/.agents/skills` 中的共享 skills 也会被原生发现。worker 环境采用白名单，保留包内 Node 启动所需变量，移除外部认证和代码注入变量。退出只清理自己拥有的进程。
 
@@ -91,7 +91,7 @@ Molly 以尽量少的胶水代码交付未修改、锁定版本的已发布 Pi �
 
 Provider preset、用户连接和模型选择分别建模。同厂商多个连接独立拥有 endpoint、凭据引用和 revision；按会话/连接隔离 ModelRuntime。未显式选择模型、凭据缺失或能力不兼容时明确失败，不选择首个模型或另一个账号作为 fallback。配置变更在下一安全边界生效；撤销可以终止当前工作，但不能换用别的凭据。原生连接可附带可选的模型清单（2026-10-03 用户需求）：它只限制对话选择器提供哪些目录模型，不构成默认选择，worker 拒绝清单外的模型。设置页可在粘贴或已保存密钥时，通过服务商免费的模型列表或密钥接口检查连接，不发送模型请求；输入的密钥只发往当前显示的地址，已保存的密钥只发往其自身的服务商和地址。检查通过不代表计费或特定模型可用。
 
-保留已有原生 presets、高级 OpenAI-compatible 和多连接架构；本次真实服务交付以已配置的 Kimi k3-256k/high 为准，不再扩展逐厂商、地域和模型验收。SDK 升级到锁定的 v1.0.0 基线，以使用其原生 MCP 和包。Molly 不再包装 provider 传输，因此先前 Google 拒绝自定义 fetch 的问题不再适用；Google 仍未验证。支持矩阵区分真实验证、模拟验证、阻塞和未执行；只有真实通过的范围可称为正式支持。目录存在不代表服务可用，无视觉能力的模型不得显示为完成了原生看图评审。
+保留已有原生 presets、高级 OpenAI-compatible 和多连接架构；本次真实服务交付以已配置的 Kimi k3-256k/high 为准，不再扩展逐厂商、地域和模型验收。SDK 升级到锁定的 v1.0.4 基线，以使用其原生 MCP 和包。Molly 不再包装 provider 传输，因此先前 Google 拒绝自定义 fetch 的问题不再适用；Google 仍未验证。支持矩阵区分真实验证、模拟验证、阻塞和未执行；只有真实通过的范围可称为正式支持。目录存在不代表服务可用，无视觉能力的模型不得显示为完成了原生看图评审。
 
 凭据由 SecretStore 保护，普通配置仅保存引用；保存后无通用明文读取 API。每轮运行通过 fd 3 向 worker 的 Pi 内存凭据存储授予所选连接的模型 Key。模型目录、自定义端点和已声明模型保留在该运行时内存；使用预设默认端点的连接让每个模型沿用其自身的 SDK 端点。受管运行时不读取旧 profile 认证/模型文件，也不再为子会话发布新副本。独立 worker 运行时保留原生 provider ID，同时隔离连接。该 epoch 第一次成功授予的 Key 固定不变；后续不同 Key 的授予在修改运行时前使 worker 退役，必须使用新 worker，且不会自动重放已加 fence 的 run。旧配置既不导入也不删除；原生产品历史独立恢复。旧明文 profile 副本和旧 detached 进程持有的 Key 仍是升级边界；升级前旧扩展任务必须已经退出，卸包不会停止它们或撤销 Key。秘密不进入工作区/Loro 配置、Role、原生会话、模型上下文、工具参数、命令行、诊断或 Git；模型 Key 不通过环境变量传给 shell，不同 MCP 不共享秘密。旧图片 Key 的迁移必须考虑 CRDT 历史和备份，不能将删除当前字段宣称为彻底清除历史明文。SecretStore 无法可靠持久化时明确失败。
 
@@ -103,7 +103,7 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 2026-09-28 方向修订，2026-10-01 因 Pi 内置 MCP 更新：采用普通 coding agent 的标准链路：`Pi Agent → Pi 原生 MCP → Molly 图片 MCP server → 图片服务`。该链路已基于 Pi 原生 MCP 实施（[PR #55](https://github.com/LeonEthan/molly-design/pull/55)）；决策及历史证据见[迁移记录](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md)。
 
-使用锁定 SDK 的公开 `createMcpExtension`、codemode 和 tool-search 扩展，通过 `registerMcpServer` 注册已选择的服务器。Molly 只提供已选择的 MCP 配置，以及公开接口需要的常规宿主接入；工具发现、命名、schema、调用、结果处理、目录更新、连接恢复和关闭沿用 Pi 原生 MCP。受保护的 HTTP 凭据可使用不含 Authorization 的自定义 header；值保持字面量，绑定选中的 server，且不写入配置文件。Pi 保留其原生 OAuth 回退语义。已知上游缺陷（[Pi #10249](https://github.com/earendil-works/pi/issues/10249)）可能让关闭时仍在启动的服务器继续运行；Molly 记录该问题，不绕过修补。不修改 Pi 或其包，不维护依赖补丁、fork、定制 host-managed profile、传输拦截器或第二套 MCP 客户端，不等待上游接受 Molly 专用接口。普通配置不等于开启全部可选功能。
+使用锁定 SDK 的公开 `createMcpExtension`、codemode 和 tool-search 扩展，通过 `registerMcpServer` 注册已选择的服务器。Molly 只提供已选择的 MCP 配置，以及公开接口需要的常规宿主接入；工具发现、命名、schema、调用、结果处理、目录更新、连接恢复和关闭沿用 Pi 原生 MCP。受保护的 HTTP 凭据可使用不含 Authorization 的自定义 header；值保持字面量，绑定选中的 server，且不写入配置文件。Pi 保留其原生 OAuth 回退语义。不修改 Pi 或其包，不维护依赖补丁、fork、定制 host-managed profile、传输拦截器或第二套 MCP 客户端，不等待上游接受 Molly 专用接口。普通配置不等于开启全部可选功能。
 
 托管配置默认启用原生 Codemode 的 `on` 模式，无 MCP 的会话同样可用，同时保留普通工具的直接调用与看图能力。脚本执行与工具发现由 Pi 负责。重开保留已存消息，工具集合遵循原版 SDK factory 的当前默认配置；历史工具声明不会覆盖该集合。仅 daemon 标识的内置 Molly server 使用公开原生 900 秒请求超时；外部 MCP 保留默认值。进度通知可重置计时，因此这不是整个操作的绝对期限。图片服务期限保持不变。实时子调用在既有产品历史中保留原生 ID、规范工具名与父调用关联。仅原生历史恢复使用有界摘要，并明确原始子调用结果不可用；不完整结果保持未知。恢复不执行脚本，不重复付费调用。
 
@@ -169,6 +169,6 @@ Role 选择、创建、管理、迁移、`@` 引用展开和新程序化创建�
 仓库核查基线为 `7c85b3b06cc227a4e9e0c0e61d769352754aaa00`。实现证据、合成测试、资源探针及部分 Kimi/图片真实调用见实施计划的进度记录。此前图片解码探针的路径别名误报已修复并回归通过。#57 升级现已通过 macOS arm64 签名包完整性校验，以及使用合成推理的真实 Helper Codemode 执行；该证据不涵盖 notarization、真实服务或人工视觉验收。R1 尚未完成。部分服务通过不等于所有服务、安装包、社区 GUI 或人工视觉均已验收；剩余工作以本修订 R1–R5 为准，历史矩阵不再额外扩大本次门槛。
 
 - [现有 Agent 责任](../apps/cli/src/agent/README.md)、[设计链路](../apps/cli/src/design/README.md)、[共享合同](../packages/shared/AGENTS.md)。
-- [Pi v1.0.0 包清单](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/package.json)：公开包和 Node `>=22.19.0` 要求。
-- [Pi v1.0.0 SDK 文档](https://github.com/earendil-works/pi/blob/v1.0.0/packages/coding-agent/docs/sdk.md)：原生会话、ModelRuntime、资源发现、包及默认认证/模型选择行为。
+- [Pi v1.0.4 包清单](https://github.com/earendil-works/pi/blob/v1.0.4/packages/coding-agent/package.json)：公开包和 Node `>=22.19.0` 要求。
+- [Pi v1.0.4 SDK 文档](https://github.com/earendil-works/pi/blob/v1.0.4/packages/coding-agent/docs/sdk.md)：原生会话、ModelRuntime、资源发现、包及默认认证/模型选择行为。
 - [Pi 附加包决策记录](../.agents/notes/proposed/architecture/2026-10-01-pi-native-addons.md)：包选择、不做权限检查的决定和配置凭据存储。

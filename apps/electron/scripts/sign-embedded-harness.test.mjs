@@ -41,7 +41,7 @@ function fixture(t, native = false) {
     fs.mkdirSync(path.dirname(location), { recursive: true })
     fs.writeFileSync(
       location,
-      JSON.stringify({ name: `@earendil-works/${name}`, version: '1.0.0' })
+      JSON.stringify({ name: `@earendil-works/${name}`, version: '1.0.4' })
     )
     paths.push(relative)
   }
@@ -69,7 +69,7 @@ function fixture(t, native = false) {
   }))
   const manifest = {
     schemaVersion: 1,
-    engineVersion: '1.0.0',
+    engineVersion: '1.0.4',
     protocolVersion: 1,
     packages: [],
     files,

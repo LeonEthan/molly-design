@@ -54,7 +54,7 @@ function fixture(
     harness: {
       id: 'molly',
       engine: 'pi',
-      engineVersion: '1.0.0',
+      engineVersion: '1.0.4',
       buildId: 'test-build',
       protocolVersion: 1,
     },

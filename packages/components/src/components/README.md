@@ -37,3 +37,42 @@ owner. Its public toolbar/loading slots use the shared operation icons; scoped C
 masks replace the built-in navigation paths from the same canonical SVG files.
 The close button calls the slider's own close callback. Window-control insets,
 hover surfaces, image sizing, keyboard navigation and copy/save remain unchanged.
+
+## Connection settings
+
+`settings/model-connection-setting.tsx` and `settings/image-connection-setting.tsx`
+keep their existing save and check contracts. Model connection names and native
+catalog filters are under More options; required compatible model fields stay
+visible. The service destination is always visible, and changing it still requires
+renewed key entry. Image protocol and API-path details use the existing help tips;
+model suggestions never select a model automatically. The setup strip distinguishes
+saved configuration from a passed key check and labels image and website setup as
+optional. See the [Phase 3 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-connection-form-clarity.md).
+
+## Settings explanations
+
+General settings name concrete actions and keep privacy/data destinations beside
+personal memory. Queue/guide choices use a full-width row that can wrap inside a
+narrow panel. Notification status distinguishes system denial, an unrequested
+permission, platform unavailability and Molly's own off switch.
+
+Advanced settings keep plain-language capability descriptions visible and move
+package/version/license/build metadata under Technical details. Website accounts
+keep import failures beside the source picker and name the failed browser profile;
+unreadable other browsers are expandable when a usable source is selected. When
+no source is usable, the diagnostic remains visible beside the disabled import
+action. These disclosures reuse Radix Collapsible and never alter import or
+execution support. See the [Phase 4 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-settings-explanations.md).
+
+Shortcuts settings starts with a fixed canvas reference backed by Bento's existing
+keyboard handlers, followed by editable application commands and desktop global
+bindings. Canvas guidance states focus, text-editing and Agent read-only limits;
+it neither registers nor overrides the editor's shortcuts.
+
+Brand presentation reuses the outlined MollyWordmark: 36px high in navigation,
+48px in About, with separate space from editorial headings. Prompt actions and
+format labels use the interface font; dimensions and secondary labels use 12px
+metadata. Static selection uses ink, reserving the signal colour for focus and
+live/changed state. Compact settings rows use 13px labels and 12px vertical padding.
+The AtelierInterface stories pair the shipped components with default Inter in
+both themes and languages without changing a user's saved font preference.

@@ -159,3 +159,13 @@ export const InSettingsLayout: Story = {
     layout: 'fullscreen',
   },
 };
+
+export const NarrowPanel: Story = {
+  decorators: [
+    (Story) => (
+      <div className="w-[360px] max-w-full p-4">
+        <Story />
+      </div>
+    ),
+  ],
+};

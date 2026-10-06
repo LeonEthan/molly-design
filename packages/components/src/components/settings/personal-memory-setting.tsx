@@ -97,12 +97,12 @@ export function PersonalMemoryPanel({
   return (
     <CompactSection title={t('settings.memory.title', 'Personal memory')}>
       <CompactRow
-        label={t('settings.memory.automatic', 'Remember preferences automatically')}
+        label={t('settings.memory.automatic', 'Learn my design preferences')}
         helper={
           <WithInfo
             text={t(
               'settings.memory.description',
-              'Learns your taste across designs. Stored on this computer; your messages and preferences may be sent to your chosen model to learn and apply them.'
+              'Saved on this computer. Your messages and preferences may be sent to your chosen model to learn and apply them.'
             )}
             info={t(
               'settings.memory.scope',
@@ -112,7 +112,7 @@ export function PersonalMemoryPanel({
         }
       >
         <Switch
-          aria-label={t('settings.memory.automatic', 'Remember preferences automatically')}
+          aria-label={t('settings.memory.automatic', 'Learn my design preferences')}
           checked={snapshot?.enabled ?? false}
           disabled={!snapshot || busy}
           onCheckedChange={(enabled) =>

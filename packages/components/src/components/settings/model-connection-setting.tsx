@@ -26,7 +26,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
-import { Ellipsis, Plus } from '@/ui/icons';
+import { ChevronDown, Ellipsis, Plus } from '@/ui/icons';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
+import { InfoTip } from './info-tip';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Switch } from '@/ui/switch';
@@ -340,7 +342,10 @@ export function ModelConnectionForm({
       {provider !== '' ? (
         <>
           <div className="space-y-2">
-            <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
+            <div className="flex items-center gap-2">
+              <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
+              <InfoTip>{t('settings.models.keyHelp')}</InfoTip>
+            </div>
             <Input
               id={`${id}-key`}
               type="password"
@@ -414,61 +419,82 @@ export function ModelConnectionForm({
               {t(issueKeys[configurationIssue])}
             </p>
           )}
-          <div className="space-y-2">
-            <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
-            <Input
-              id={`${id}-name`}
-              value={name}
-              disabled={busy}
-              maxLength={120}
-              onChange={(event) => setName(event.target.value)}
-              aria-describedby={`${id}-name-hint`}
-            />
-            <p id={`${id}-name-hint`} className="text-xs text-muted-foreground">
-              {t('settings.models.nameHint')}
-            </p>
-          </div>
-          {native && (providerModels || stored?.models) ? (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label>{t('settings.models.picker.title')}</Label>
-                {providerModels ? (
-                  <SegmentedControl
-                    ariaLabel={t('settings.models.picker.title')}
-                    size="sm"
-                    value={chooseModels ? 'choose' : 'all'}
-                    disabled={busy}
-                    options={[
-                      {
-                        value: 'all',
-                        label: t('settings.models.picker.all', { count: providerModels.length }),
-                      },
-                      { value: 'choose', label: t('settings.models.picker.choose') },
-                    ]}
-                    onChange={(value) =>
-                      value === 'all' ? setChooseModels(false) : startChoosing()
-                    }
-                  />
-                ) : null}
-              </div>
-              {providerModels && chooseModels ? (
-                <ModelChecklist
-                  models={providerModels}
-                  selected={selectedModels}
-                  listed={listed}
-                  disabled={busy}
-                  onChange={setSelectedModels}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy}
+                className="group gap-1.5 px-0 text-xs text-muted-foreground"
+              >
+                <ChevronDown
+                  aria-hidden
+                  className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
                 />
+                {t('settings.models.moreOptions')}
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-5 pt-3">
+              <div className="space-y-2">
+                <Label htmlFor={`${id}-name`}>{t('settings.models.name')}</Label>
+                <Input
+                  id={`${id}-name`}
+                  value={name}
+                  disabled={busy}
+                  maxLength={120}
+                  onChange={(event) => setName(event.target.value)}
+                  aria-describedby={`${id}-name-hint`}
+                />
+                <p id={`${id}-name-hint`} className="text-xs text-muted-foreground">
+                  {t('settings.models.nameHint')}
+                </p>
+              </div>
+              {native && (providerModels || stored?.models) ? (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>{t('settings.models.picker.title')}</Label>
+                    {providerModels ? (
+                      <SegmentedControl
+                        ariaLabel={t('settings.models.picker.title')}
+                        size="sm"
+                        value={chooseModels ? 'choose' : 'all'}
+                        disabled={busy}
+                        options={[
+                          {
+                            value: 'all',
+                            label: t('settings.models.picker.all', {
+                              count: providerModels.length,
+                            }),
+                          },
+                          { value: 'choose', label: t('settings.models.picker.choose') },
+                        ]}
+                        onChange={(value) =>
+                          value === 'all' ? setChooseModels(false) : startChoosing()
+                        }
+                      />
+                    ) : null}
+                  </div>
+                  {providerModels && chooseModels ? (
+                    <ModelChecklist
+                      models={providerModels}
+                      selected={selectedModels}
+                      listed={listed}
+                      disabled={busy}
+                      onChange={setSelectedModels}
+                    />
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {!providerModels
+                      ? t('settings.models.picker.unavailable')
+                      : chooseModels && models?.length === 0
+                        ? t('settings.models.picker.chooseOne')
+                        : t('settings.models.picker.hint')}
+                  </p>
+                </div>
               ) : null}
-              <p className="text-xs text-muted-foreground">
-                {!providerModels
-                  ? t('settings.models.picker.unavailable')
-                  : chooseModels && models?.length === 0
-                    ? t('settings.models.picker.chooseOne')
-                    : t('settings.models.picker.hint')}
-              </p>
-            </div>
-          ) : null}
+            </CollapsibleContent>
+          </Collapsible>
           {provider === 'openai-compatible' && (
             <>
               <CompatibleModelFields models={customModels} busy={busy} onChange={setCustomModels} />

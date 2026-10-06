@@ -23,7 +23,7 @@ const meta = {
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
-      <div className="w-[560px] rounded-2xl border border-border/40 bg-card">
+      <div className="w-[min(560px,calc(100vw-32px))] rounded-2xl border border-border/40 bg-card">
         <Story />
       </div>
     ),

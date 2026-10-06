@@ -40,3 +40,13 @@ it('lists design shortcuts and leaves code-workflow commands out of the designer
     expect(text).not.toContain(en[key]);
   }
 });
+
+it('shows fixed canvas guidance before editable app commands with no rebinding controls', async () => {
+  await act(async () => root.render(<KeyboardShortcutsSetting />));
+  const sections = host.querySelectorAll('section');
+  expect(sections[0].textContent).toContain(en['settings.keyboardShortcuts.canvas']);
+  expect(sections[0].textContent).toContain(en['settings.keyboardShortcuts.canvasScope']);
+  expect(sections[0].querySelector('button')).toBeNull();
+  expect(sections[0].querySelectorAll('kbd').length).toBeGreaterThan(0);
+  expect(host.textContent).toContain(en['commands.session.archiveCurrent']);
+});

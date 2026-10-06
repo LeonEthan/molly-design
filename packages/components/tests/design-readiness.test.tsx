@@ -129,14 +129,14 @@ describe('design setup strip', () => {
       pinterestCookieCount: 12,
     });
     expect(chips()).toEqual([
-      'set: Models· DeepSeek +1',
-      'set: Image generation· synthetic-image-model',
-      'unverified: Pinterest· Sign-in not verified',
+      'set: Models· Configured: DeepSeek +1',
+      'set: Image generation (optional)· Configured: synthetic-image-model',
+      'unverified: Pinterest (optional)· Sign-in not verified',
     ]);
   });
 
   it.each([
-    [[], 'Not connected'],
+    [[], 'Not configured'],
     [[{ ...connection, enabled: false }], 'Off'],
     [
       [
@@ -160,14 +160,18 @@ describe('design setup strip', () => {
   ] as const)('explains why image generation is not set up', async (image, reason) => {
     await renderView({ imageConnection: image, pinterestCookieCount: 0 });
     expect(chips().slice(1)).toEqual([
-      `unset: Image generation· ${reason}`,
-      'unset: Pinterest· Not signed in',
+      `unset: Image generation (optional)· ${reason}`,
+      'unset: Pinterest (optional)· Not signed in',
     ]);
   });
 
   it('claims nothing about a setting it has not read', async () => {
     await renderView({});
-    expect(chips()).toEqual(['unknown: Models', 'unknown: Image generation', 'unknown: Pinterest']);
+    expect(chips()).toEqual([
+      'unknown: Models',
+      'unknown: Image generation (optional)',
+      'unknown: Pinterest (optional)',
+    ]);
   });
 
   it('sends each chip to the place that fixes it', async () => {
@@ -198,9 +202,9 @@ describe('AI models page', () => {
   it('follows a connection switched off below it', async () => {
     await renderPage();
     expect(chips()).toEqual([
-      'set: Models· DeepSeek',
-      'unset: Image generation· Off',
-      'unset: Pinterest· Not signed in',
+      'set: Models· Configured: DeepSeek',
+      'unset: Image generation (optional)· Off',
+      'unset: Pinterest (optional)· Not signed in',
     ]);
     await act(async () =>
       host.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Use DeepSeek"]')!.click()

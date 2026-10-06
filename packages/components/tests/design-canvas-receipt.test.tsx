@@ -9,7 +9,12 @@ const state = vi.hoisted(() => ({
   history: [] as { designOutcome?: unknown }[],
   synced: false,
   previewVisible: false,
+  canvasVisible: false,
+  cover: vi.fn<() => Promise<{ src: string; width: number; height: number } | null>>(),
   processing: false,
+  versions: vi.fn<() => Promise<{ commitId: string; number: number; createdAt: string }[]>>(),
+  baseVersionId: undefined as string | undefined,
+  changed: true,
   sync: vi.fn<() => Promise<void>>(),
   attach: vi.fn<() => Promise<void>>(),
   saveVersion: vi.fn<() => Promise<unknown>>(),
@@ -60,18 +65,30 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   onIpcEvent: () => () => {},
   getIpcServices: () => ({
     design: {
-      versions: async (id: string) => (state.calls.push(['versions', id]), []),
+      versions: async (id: string) => {
+        state.calls.push(['versions', id]);
+        return state.versions();
+      },
       state: async (id: string) => (
         state.calls.push(['state', id]),
         {
           readonly: state.processing,
           turnId: state.processing ? 'active' : undefined,
-          changed: true,
+          changed: state.changed,
+          baseVersionId: state.baseVersionId,
         }
       ),
       presentToolbar: async () => {},
       syncFromStore: () => state.sync(),
-      hide: async () => {},
+      cover: async (_artworkId: string, _hostId: string, covered: boolean) => {
+        if (!covered) return null;
+        state.canvasVisible = false;
+        state.previewVisible = false;
+        return state.cover();
+      },
+      hide: async () => {
+        state.canvasVisible = false;
+      },
       hidePreview: async () => {
         state.previewVisible = false;
       },
@@ -81,6 +98,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       attach: async (id: string) => {
         state.calls.push(['attach', id]);
         await state.attach();
+        state.canvasVisible = true;
       },
       saveVersion: () => state.saveVersion(),
       attachPreview: async () => {
@@ -113,19 +131,30 @@ const receipt = (
     timestamp: '2026-09-11T00:00:00.000Z',
   },
 });
-const render = (props?: { sessionId?: string; artworkId?: string }) =>
+const render = (props?: { sessionId?: string; artworkId?: string; active?: boolean }) =>
   act(async () => {
     root.render(
       <DesignCanvas
         sessionId={props?.sessionId ?? 'artwork'}
         artworkId={props?.artworkId ?? 'artwork'}
-        active
+        active={props?.active ?? true}
         workspaceSlug="local"
         name="Artwork"
       />
     );
   });
 beforeEach(() => {
+  vi.stubGlobal(
+    'Image',
+    class {
+      src = '';
+      async decode() {}
+    }
+  );
+  state.cover
+    .mockReset()
+    .mockResolvedValue({ src: 'data:image/png;base64,cGl4ZWxz', width: 800, height: 600 });
+  state.canvasVisible = false;
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -149,6 +178,9 @@ beforeEach(() => {
   state.synced = false;
   state.previewVisible = false;
   state.processing = false;
+  state.versions.mockReset().mockResolvedValue([]);
+  state.baseVersionId = undefined;
+  state.changed = true;
   state.calls = [];
   state.docSessionId = '';
   state.sync.mockReset().mockResolvedValue(undefined);
@@ -162,6 +194,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   container.remove();
+  document.querySelectorAll('[data-test-overlay]').forEach((node) => node.remove());
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -306,4 +339,168 @@ it('routes artwork operations by artwork id while the conversation stays session
   expect(state.calls.map(([, id]) => id)).not.toContain('session-continuation');
   // The committed receipt for artwork-y must trigger a store sync of artwork-y.
   expect(state.sync).toHaveBeenCalled();
+});
+
+const openVersions = () =>
+  act(async () => {
+    const button = container.querySelector<HTMLButtonElement>('[aria-label="Version history"]');
+    button?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+
+it('shows loading before an empty history and explains versions without claiming a successful autosave', async () => {
+  let finish!: (versions: []) => void;
+  state.versions.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      })
+  );
+  await render();
+  await openVersions();
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('Loading versions…');
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain(
+    'No saved versions yet'
+  );
+  await act(async () => finish([]));
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No saved versions yet');
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('Use Save version');
+  expect(container.textContent).toContain('No saved version');
+  expect(container.textContent).not.toContain('Autosaved');
+});
+
+it('shows a failed history read and recovers with an explicit retry', async () => {
+  state.versions.mockRejectedValue(Error('History unavailable'));
+  await render();
+  await openVersions();
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('History unavailable');
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain(
+    'No saved versions yet'
+  );
+  state.versions.mockResolvedValue([]);
+  const retry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === 'Retry loading versions'
+  );
+  await act(async () => retry?.click());
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No saved versions yet');
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('History unavailable');
+});
+
+it('keeps the version state after a failed save and disables version actions while processing', async () => {
+  state.baseVersionId = 'version-one';
+  state.versions.mockResolvedValue([
+    { commitId: 'version-one', number: 1, createdAt: '2026-10-05T12:00:00Z' },
+  ]);
+  state.saveVersion.mockRejectedValue(Error('Version write failed'));
+  await render();
+  const save = container.querySelector<HTMLButtonElement>('[aria-label="Save version"]')!;
+  await act(async () => save.click());
+  expect(container.textContent).toContain('Changes not versioned');
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain('Version write failed');
+  state.processing = true;
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(save.disabled).toBe(true);
+  await openVersions();
+  const version = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) =>
+    item.textContent?.includes('V1')
+  );
+  expect(version?.getAttribute('aria-disabled')).toBe('true');
+});
+
+it('identifies an unchanged saved version without implying autosave success', async () => {
+  state.baseVersionId = 'version-one';
+  state.changed = false;
+  state.versions.mockResolvedValue([
+    { commitId: 'version-one', number: 1, createdAt: '2026-10-05T12:00:00Z' },
+  ]);
+  await render();
+  expect(container.querySelector('[role="status"]')?.textContent).toBe('V1');
+  expect(container.querySelector<HTMLButtonElement>('[aria-label="Save version"]')?.disabled).toBe(
+    true
+  );
+  expect(container.querySelector('[aria-label="Hide navigation sidebar"]')).not.toBeNull();
+});
+
+const blockingOverlay = (role = 'menu') => {
+  const overlay = document.createElement('div');
+  overlay.setAttribute('role', role);
+  overlay.setAttribute('data-test-overlay', '');
+  document.body.append(overlay);
+  return overlay;
+};
+
+it('retains inert canvas pixels under nested overlays until the native editor returns', async () => {
+  visibleCanvas();
+  await render();
+  expect(state.canvasVisible).toBe(true);
+  const menu = blockingOverlay();
+  await resizeCanvas();
+  expect(state.canvasVisible).toBe(false);
+  const frame = container.querySelector('img');
+  expect(frame?.getAttribute('src')).toBe('data:image/png;base64,cGl4ZWxz');
+  expect(frame?.getAttribute('aria-hidden')).toBe('true');
+  const nested = blockingOverlay('alertdialog');
+  menu.remove();
+  await resizeCanvas();
+  expect(container.querySelector('img')).toBe(frame);
+  expect(state.canvasVisible).toBe(false);
+  const restore = deferredAttachment();
+  state.attach.mockReturnValueOnce(restore.promise);
+  nested.remove();
+  await resizeCanvas();
+  expect(container.querySelector('img')).toBe(frame);
+  await act(async () => restore.resolve());
+  expect(state.canvasVisible).toBe(true);
+  expect(container.querySelector('img')).toBeNull();
+});
+
+it('ignores a delayed capture after the menu closes and after switching artwork', async () => {
+  visibleCanvas();
+  await render();
+  const capture = Promise.withResolvers<{ src: string; width: number; height: number } | null>();
+  state.cover.mockReturnValueOnce(capture.promise);
+  const menu = blockingOverlay();
+  await resizeCanvas();
+  menu.remove();
+  await resizeCanvas();
+  await render({ artworkId: 'another-artwork' });
+  await act(async () =>
+    capture.resolve({ src: 'data:image/png;base64,b2xk', width: 800, height: 600 })
+  );
+  expect(container.querySelector('img')).toBeNull();
+  expect(state.canvasVisible).toBe(true);
+});
+
+it('keeps menus usable on capture failure and restores the editor afterward', async () => {
+  visibleCanvas();
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  await render();
+  state.cover.mockRejectedValueOnce(Error('Capture failed'));
+  const menu = blockingOverlay();
+  await resizeCanvas();
+  expect(state.canvasVisible).toBe(false);
+  expect(container.querySelector('img')).toBeNull();
+  menu.remove();
+  await resizeCanvas();
+  expect(state.canvasVisible).toBe(true);
+});
+
+it('does not hide the canvas for non-intersecting overlays', async () => {
+  visibleCanvas();
+  await render();
+  const menu = blockingOverlay();
+  vi.spyOn(menu, 'getBoundingClientRect').mockReturnValue(new DOMRect(900, 0, 100, 100));
+  await resizeCanvas();
+  expect(state.canvasVisible).toBe(true);
+  expect(container.querySelector('img')).toBeNull();
+});
+
+it('clears the temporary frame when the panel becomes inactive', async () => {
+  visibleCanvas();
+  await render();
+  blockingOverlay();
+  await resizeCanvas();
+  expect(container.querySelector('img')).not.toBeNull();
+  await render({ active: false });
+  expect(container.querySelector('img')).toBeNull();
+  expect(state.canvasVisible).toBe(false);
 });

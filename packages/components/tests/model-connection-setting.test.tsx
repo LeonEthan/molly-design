@@ -75,6 +75,15 @@ async function change(field: HTMLInputElement, value: string) {
   });
 }
 
+async function openMoreOptions() {
+  const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+    (button) => button.textContent === en['settings.models.moreOptions']
+  )!;
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  await act(async () => trigger.click());
+  expect(trigger.getAttribute('aria-expanded')).toBe('true');
+}
+
 describe('encrypted model connection form', () => {
   it('edits explicit compatible metadata without exposing or replacing the stored key', async () => {
     const writes: SaveModelConnection[] = [];
@@ -250,9 +259,44 @@ describe('encrypted model connection form', () => {
     await act(async () => tile.click());
     expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
     expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
+    await openMoreOptions();
     expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
       en['settings.models.providers.deepseek']
     );
+  });
+
+  it('keeps optional edits when collapsed and saves without a model catalog or a key check', async () => {
+    const writes: SaveModelConnection[] = [];
+    await render(async (input) => {
+      writes.push(input);
+    }, stored);
+    expect(host.querySelector('input[id$="-name"]')).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!.value).toBe(
+      stored.baseUrl
+    );
+    await openMoreOptions();
+    await change(host.querySelector<HTMLInputElement>('input[id$="-name"]')!, 'Studio');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.moreOptions'])!
+        .click()
+    );
+    expect(host.querySelector('input[id$="-name"]')).toBeNull();
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(writes).toEqual([
+      {
+        id: stored.id,
+        expectedRevision: stored.revision,
+        displayName: 'Studio',
+        providerPresetId: stored.providerPresetId,
+        baseUrl: stored.baseUrl,
+        enabled: true,
+      },
+    ]);
   });
 
   it('retains the key by omission and sends the exact CAS revision', async () => {
@@ -527,7 +571,8 @@ describe('free key check and model choice', () => {
     expect(requests).toEqual([
       { providerPresetId: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'SYNTHETIC_KEY' },
     ]);
-    expect(host.textContent).toContain('Key works · 1 model on this account');
+    expect(host.textContent).toContain('Key check passed · 1 model listed');
+    await openMoreOptions();
     expect(radio('All 2').getAttribute('aria-checked')).toBe('true');
     await act(async () => radio(en['settings.models.picker.choose']).click());
     expect(host.textContent).toContain(en['settings.models.picker.notListed']);
@@ -554,6 +599,7 @@ describe('free key check and model choice', () => {
         })
       )
     );
+    await openMoreOptions();
     expect(radio(en['settings.models.picker.choose']).getAttribute('aria-checked')).toBe('true');
     await settle();
     expect(requests).toEqual([
@@ -564,6 +610,7 @@ describe('free key check and model choice', () => {
       },
     ]);
     expect(host.textContent).toContain('The provider rejected this key (401).');
+    expect(host.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(false);
     await change(
       host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
       'https://x.invalid/v1'
@@ -584,6 +631,7 @@ describe('free key check and model choice', () => {
         })
       )
     );
+    await openMoreOptions();
     await act(async () => radio('All 2').click());
     await submit();
     expect(writes[0]).not.toHaveProperty('models');
@@ -620,6 +668,7 @@ describe('connection management', () => {
       node.textContent?.endsWith(en['settings.models.providers.anthropic'])
     )!;
     await act(async () => shortcut.click());
+    await openMoreOptions();
     expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
       en['settings.models.providers.anthropic']
     );

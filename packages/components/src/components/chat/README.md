@@ -73,3 +73,13 @@ legacy saved prompts while preserving a draft in another workspace.
   nothing.
 - Draft ACP preparation has a longer contract that remains in the private
   architecture context.
+
+The landing hero uses content height so recent artwork appears earlier. Its composer,
+format tiles and gallery retain their existing state and navigation owners; layout
+changes do not create a second artwork or session model.
+
+Home heading size and horizontal inset follow the landing container width, not the
+window width, so a narrow content area beside navigation retains usable space.
+Prompt starters use interface type; editorial type stays on display headings.
+Format selection uses ink and its existing pressed state; dimensions use full
+muted text at 12px rather than an additional opacity reduction.

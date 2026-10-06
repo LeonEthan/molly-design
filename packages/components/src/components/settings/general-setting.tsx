@@ -47,6 +47,23 @@ function getDesktopNotificationHintKey(platform: ElectronPlatform): string {
   }
 }
 
+export function getDesktopNotificationStatusKey({
+  supported,
+  permission,
+  enabled,
+}: {
+  supported: boolean;
+  permission: NotificationPermission;
+  enabled: boolean;
+}) {
+  if (!supported) return 'settings.notifications.unsupportedDesktop';
+  if (permission === 'denied') return 'settings.notifications.permissionDeniedStatusDesktop';
+  if (permission === 'default') return 'settings.notifications.permissionDefault';
+  return enabled
+    ? 'settings.notifications.permissionGranted'
+    : 'settings.notifications.disabledDesktop';
+}
+
 /**
  * Fetches the prevent-sleep setting from the main process on mount.
  */
@@ -213,21 +230,13 @@ export function GeneralSettingsComponent() {
 
   useElectronPreventSleepSetting(isElectron, setPreventSleepEnabled);
 
-  const permissionLabel = useMemo(() => {
-    if (!notificationsEnabled) return t('settings.notifications.disabledDesktop');
-    switch (permissionStatus) {
-      case 'granted':
-        return t('settings.notifications.permissionGranted');
-      case 'denied':
-        return t('settings.notifications.permissionDeniedStatusDesktop');
-      default:
-        return t('settings.notifications.permissionDefault');
-    }
-  }, [notificationsEnabled, permissionStatus, t]);
-
-  const disableReason = notificationSupported
-    ? undefined
-    : t('settings.notifications.reason.notSupported');
+  const permissionLabel = t(
+    getDesktopNotificationStatusKey({
+      supported: notificationSupported,
+      permission: permissionStatus,
+      enabled: notificationsEnabled,
+    })
+  );
 
   const desktopHint = useMemo(() => {
     return t(getDesktopNotificationHintKey(electronPlatform));
@@ -340,13 +349,10 @@ export function GeneralSettingsComponent() {
         <PersonalMemorySetting />
         <CompactSection>
           <CompactRow
+            className="sm:grid-cols-1"
             label={t(
               'settings.general.sessions.queuedMessageBehavior.label',
-              'Messages sent while Molly is designing'
-            )}
-            helper={t(
-              'settings.general.sessions.queuedMessageBehavior.helper',
-              'Wait for the current step to finish, or change course right away.'
+              'When I send a message during a design task'
             )}
           >
             <QueuedMessageBehaviorControl
@@ -378,12 +384,8 @@ export function GeneralSettingsComponent() {
             helper={
               <span className="flex flex-col gap-0.5">
                 <span>{permissionLabel}</span>
-                {disableReason && !isProcessing ? <span>{disableReason}</span> : null}
-                {permissionStatus !== 'granted' ? <span>{desktopHint}</span> : null}
-                {!notificationSupported ? (
-                  <span className="text-destructive">
-                    {t('settings.notifications.unsupportedDesktop')}
-                  </span>
+                {notificationSupported && permissionStatus !== 'granted' ? (
+                  <span>{desktopHint}</span>
                 ) : null}
               </span>
             }
@@ -394,6 +396,7 @@ export function GeneralSettingsComponent() {
             ) : (
               <Switch
                 id="notification-toggle"
+                aria-label={t('settings.notifications.enableToggleDesktop')}
                 checked={notificationsEnabled}
                 disabled={isSwitchDisabled}
                 onCheckedChange={(checked) => {
@@ -405,18 +408,13 @@ export function GeneralSettingsComponent() {
         </CompactSection>
         {isElectron && (
           <CompactSection title={t('settings.general.autoLaunch.title', 'Startup')}>
-            <CompactRow
-              label={t('settings.general.autoLaunch.label', 'Launch at startup')}
-              helper={t(
-                'settings.general.autoLaunch.helper',
-                'Automatically run Molly when you sign in'
-              )}
-            >
+            <CompactRow label={t('settings.general.autoLaunch.label', 'Open Molly when I sign in')}>
               {autoLaunch.enabledLoading ? (
                 <Loading size="sm" className="h-5 w-9" />
               ) : (
                 <Switch
                   id="auto-launch-toggle"
+                  aria-label={t('settings.general.autoLaunch.label')}
                   checked={autoLaunch.enabled}
                   disabled={!autoLaunch.supported || autoLaunch.loading}
                   onCheckedChange={(checked) => {
@@ -429,7 +427,7 @@ export function GeneralSettingsComponent() {
               label={t('settings.general.autoLaunch.hideWindowLabel', 'Start in the background')}
               helper={t(
                 'settings.general.autoLaunch.hideWindowHelper',
-                'When Molly launches at sign-in, keep its window hidden.'
+                'Keep the window hidden at sign-in.'
               )}
             >
               {autoLaunch.hideWindowLoading ? (
@@ -437,6 +435,7 @@ export function GeneralSettingsComponent() {
               ) : (
                 <Switch
                   id="auto-launch-hide-window-toggle"
+                  aria-label={t('settings.general.autoLaunch.hideWindowLabel')}
                   checked={autoLaunch.hideWindowOnAutoLaunch}
                   disabled={!autoLaunch.enabled || autoLaunch.loading}
                   onCheckedChange={(checked) => {
@@ -447,14 +446,15 @@ export function GeneralSettingsComponent() {
             </CompactRow>
             <div id="prevent-sleep" className="scroll-mt-24">
               <CompactRow
-                label={t('settings.general.preventSleep.label', 'Prevent sleep')}
+                label={t('settings.general.preventSleep.label', 'Keep this computer awake')}
                 helper={t(
                   'settings.general.preventSleep.helper',
-                  'Keep this computer awake while Molly is open so long design runs are not interrupted.'
+                  'Prevents sleep while Molly is open, even between design tasks.'
                 )}
               >
                 <Switch
                   id="prevent-sleep-toggle"
+                  aria-label={t('settings.general.preventSleep.label')}
                   checked={preventSleepEnabled}
                   onCheckedChange={(checked) => {
                     void (async () => {

@@ -7,7 +7,7 @@ import type {
 } from '@molly/shared/electron-ipc';
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
-import { Circle, CircleDashed, RefreshCw } from '@/ui/icons';
+import { ChevronDown, Circle, CircleDashed, RefreshCw } from '@/ui/icons';
 import {
   Select,
   SelectContent,
@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/ui/select';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { WithInfo } from './info-tip';
 
 type Site = ElectronBrowserAccountSiteInput['site'];
@@ -46,6 +47,7 @@ export function BrowserAccountsSetting() {
   const [busy, setBusy] = useState(false);
   const [importingSite, setImportingSite] = useState<Site | null>(null);
   const [importFailed, setImportFailed] = useState(false);
+  const [failedSource, setFailedSource] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ site: Site; imported: number } | null>(null);
 
@@ -118,6 +120,12 @@ export function BrowserAccountsSetting() {
         setResult({ site, imported: response.imported });
       } catch (failure) {
         setImportFailed(true);
+        setFailedSource(
+          t('settings.browserAccounts.sourceOption', {
+            browser: selected.source.browserName,
+            profile: selected.profile.name,
+          })
+        );
         throw failure;
       } finally {
         setImportingSite(null);
@@ -149,12 +157,9 @@ export function BrowserAccountsSetting() {
           info={t('settings.browserAccounts.introDetail')}
         />
       </p>
-      {error ? (
+      {error && !importFailed ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
-          {importFailed ? (
-            <span className="mt-1 block">{t('settings.browserAccounts.retryHint')}</span>
-          ) : null}
         </p>
       ) : null}
       {!summary ? (
@@ -270,12 +275,43 @@ export function BrowserAccountsSetting() {
                   {t('settings.browserAccounts.noSources')}
                 </p>
               ) : null}
+              {importFailed && error ? (
+                <div role="alert" className="space-y-1 text-xs text-destructive">
+                  <p>{t('settings.browserAccounts.importFailedFor', { source: failedSource })}</p>
+                  <p className="break-words">{error}</p>
+                  <p>{t('settings.browserAccounts.retryHint')}</p>
+                </div>
+              ) : null}
               {sources && sources.unreadable.length > 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.browserAccounts.unreadableSources', {
-                    browsers: sources.unreadable.join(', '),
-                  })}
-                </p>
+                selected ? (
+                  <Collapsible>
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="group gap-1.5 px-0 text-xs text-muted-foreground"
+                      >
+                        <ChevronDown
+                          aria-hidden
+                          className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                        />
+                        {t('settings.browserAccounts.otherSourceIssues')}
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent className="pt-2 text-xs text-muted-foreground">
+                      {t('settings.browserAccounts.unreadableSources', {
+                        browsers: sources.unreadable.join(', '),
+                      })}
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.browserAccounts.unreadableSources', {
+                      browsers: sources.unreadable.join(', '),
+                    })}
+                  </p>
+                )
               ) : null}
               {import.meta.env.DEV && !summary.persistent ? (
                 <p className="text-xs text-muted-foreground">

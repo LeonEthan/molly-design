@@ -112,9 +112,15 @@ export function DesignReadinessView({
                   item.state === 'set' ? 'text-foreground' : 'text-muted-foreground'
                 )}
               />
-              <span className="shrink-0 text-foreground">{item.label}</span>
+              <span className="shrink-0 text-foreground">
+                {item.label}
+                {item.target !== 'models' ? ` (${t('settings.readiness.optional')})` : ''}
+              </span>
               {item.value ? (
-                <span className="min-w-0 truncate text-muted-foreground">· {item.value}</span>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  · {item.state === 'set' ? `${t('settings.readiness.configured')}: ` : ''}
+                  {item.value}
+                </span>
               ) : null}
               <ChevronRight aria-hidden className="h-3 w-3 shrink-0 text-muted-foreground" />
             </button>

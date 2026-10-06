@@ -351,7 +351,9 @@ describe('ImageConnectionForm', () => {
           apiKey: 'synthetic-typed-key',
         },
       ]);
-      expect(view.textContent).toContain('Key works · 3 models on this account');
+      expect(view.textContent).toContain('Key check passed · 3 models listed');
+      expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')!.value).toBe('');
+      expect(view.querySelector<HTMLButtonElement>('button[type="submit"]')!.disabled).toBe(true);
       await typeInto(view.querySelector<HTMLInputElement>('input[id$="-model"]')!, 'image');
       await click(button(view, 'gpt-image-2'));
       expect(view.querySelector<HTMLInputElement>('input[id$="-model"]')!.value).toBe(
@@ -399,7 +401,7 @@ describe('ImageConnectionForm', () => {
       });
       await settle();
       expect(requests).toEqual([]);
-      expect(view.textContent).toContain(copy('settings.imageConnection.testUnsupportedDashscope'));
+      expect(view.textContent).toContain(copy('settings.check.badge.unsupported'));
     });
   });
 

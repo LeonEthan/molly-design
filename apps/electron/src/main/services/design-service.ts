@@ -1,4 +1,5 @@
-import { prepareDesignFrame } from './design-frame'
+import { captureDesignViewFrame, prepareDesignFrame } from './design-frame'
+import { canPresentDesignHost } from './design-view-visibility'
 import { fitDesignViewport } from './design-viewport'
 import {
   DesignElementReferenceSchema,
@@ -102,6 +103,11 @@ export async function prepareDesignUpdate(): Promise<() => Promise<void>> {
 const records = new Map<string, RecordEntry>()
 export const currentDesignBounds = (hostId: string) => records.get(hostId)?.view.getBounds()
 export const isDesignVisible = (hostId: string) => records.get(hostId)?.view.getVisible() ?? false
+export async function captureDesignFrame(owner: BrowserWindow, artworkId: string, hostId: string) {
+  const record = records.get(hostId)
+  if (!record || record.owner !== owner || record.artworkId !== artworkId) return null
+  return captureDesignViewFrame(record.view, () => records.get(hostId) === record)
+}
 // Last non-empty selection summary per host, mirrored from the canvas's own
 // reports. A hidden-but-alive canvas keeps its document (and selection) across
 // renderer remounts while no new report fires, so the shell reseeds its
@@ -395,7 +401,7 @@ export async function attachDesign(
             height: Math.max(1, Math.round(bounds.height))
           })
           // Loading may outlive a panel close before the record existed.
-          view.setVisible(hosts.get(hostId) === id)
+          view.setVisible(hosts.get(hostId) === id && canPresentDesignHost(owner, hostId))
           view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
           view.webContents.on('will-navigate', (event) => event.preventDefault())
           view.webContents.on('will-redirect', (event) => event.preventDefault())
@@ -436,7 +442,12 @@ export async function attachDesign(
   try {
     await record.view.webContents.executeJavaScript('document.body.inert = false')
     // Preparing layout can reveal a hidden view; do not revive a cancelled attach.
-    if (records.get(hostId) !== record || hosts.get(hostId) !== id) return
+    if (
+      records.get(hostId) !== record ||
+      hosts.get(hostId) !== id ||
+      !canPresentDesignHost(owner, hostId)
+    )
+      return
     await fitDesignViewport(record.view)
     if (needsFrame) await prepareDesignFrame(record.view, owner)
   } catch (error) {
@@ -446,7 +457,8 @@ export async function attachDesign(
     }
     return
   }
-  if (records.get(hostId) === record) record.view.setVisible(hosts.get(hostId) === id)
+  if (records.get(hostId) === record)
+    record.view.setVisible(hosts.get(hostId) === id && canPresentDesignHost(owner, hostId))
 }
 export function hideDesign(id: string, hostId?: string) {
   // Cancel visibility intent even while the first native instance is still loading.

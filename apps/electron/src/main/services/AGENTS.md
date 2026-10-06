@@ -29,14 +29,13 @@ vault read limit.
 
 ## Design canvas contracts
 
-Views accept validated CLI design-worker documents without Node, preload,
-permissions or external network.
-Bind saves to Session/host; CLI owns bytes, Electron renders and shows dialogs.
-Retain hidden editors; explicit close saves before disposal.
+Views accept validated CLI documents without Node, preload, permissions or network.
+Bind saves to Session/host; CLI owns bytes, Electron renders/dialogs. Retain hidden
+editors; close saves before disposal. Covered hosts gate native reveals;
+compositor captures are transient, never saves or exports.
 Canvas leases are exclusive, even for same-artwork siblings, with fresh origins.
-Disposal clears owned payload callbacks before unregistering native handlers and
-closing contents. Reuse follows destruction,
-request drainage and successful storage/cache cleanup; failures stay denied.
+Dispose payload callbacks before handlers and contents. Reuse requires destruction,
+drained requests and successful storage/cache cleanup; failures stay denied.
 Recheck lease liveness after awaits before mutations; Session identity is reusable.
 Hidden editors retain their lease. Run native `canvas:resources` for lifetime changes.
 Source previews never register for save/flush; preserve
@@ -73,7 +72,7 @@ DOM load event alone is not canvas readiness. Before changing these boundaries, 
 [design resources](../../../../../packages/design-bento/README.md).
 The preview host uses the same local socket, independently of canvas preparation.
 Keep render policy in Node-testable `design-render-host-core.ts`: no retries, repair or
-per-turn thumbnails; sidebar ones cache the saved revision. Previews/PNG/JPEG use canvas dimensions.
+per-turn thumbnails; sidebar ones cache the saved revision. Previews/PNG/JPEG use canvas size.
 Historical files resolve by artwork/digest in the worker; local resources serve
 original bytes and embedded assets.
 

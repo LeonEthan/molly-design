@@ -39,8 +39,6 @@ import {
   CircleDashed,
   Ellipsis,
   Image as ImageIcon,
-  KeyRound,
-  Link2,
   LoaderCircle,
   Sparkles,
   Trash2,
@@ -56,7 +54,7 @@ import {
   type ConnectionCheckState,
 } from './connection-check';
 import { Field } from './form-primitives';
-import { WithInfo } from './info-tip';
+import { InfoTip } from './info-tip';
 
 /** Image settings use only the main-process vault's public metadata. */
 
@@ -290,13 +288,12 @@ export function ImageConnectionForm({
       <div className="space-y-5">
         {notice}
         <Field
-          htmlFor={`${fieldId}-protocol`}
           label={t('settings.imageConnection.protocol')}
-          hint={
-            <WithInfo
-              text={t('settings.imageConnection.protocolHint')}
-              info={t('settings.imageConnection.protocolDetail')}
-            />
+          icon={
+            <InfoTip>
+              {t('settings.imageConnection.protocolHint')}{' '}
+              {t('settings.imageConnection.protocolDetail')}
+            </InfoTip>
           }
         >
           <SegmentedControl
@@ -315,11 +312,11 @@ export function ImageConnectionForm({
         <Field
           htmlFor={`${fieldId}-base-url`}
           label={t('settings.imageConnection.baseUrl')}
-          icon={<Link2 className="h-3.5 w-3.5" aria-hidden="true" />}
+          icon={<InfoTip>{t(protocolCopy.baseUrlHint)}</InfoTip>}
           hint={
             issues.baseUrl && baseUrl.length > 0
               ? t('settings.imageConnection.invalidBaseUrl')
-              : t(protocolCopy.baseUrlHint)
+              : undefined
           }
         >
           <Input
@@ -339,7 +336,7 @@ export function ImageConnectionForm({
         <Field
           htmlFor={`${fieldId}-api-key`}
           label={t('settings.imageConnection.apiKey')}
-          icon={<KeyRound className="h-3.5 w-3.5" aria-hidden="true" />}
+          icon={<InfoTip>{t('settings.models.keyHelp')}</InfoTip>}
           hint={destinationNeedsKey ? t('settings.models.keyRequired') : undefined}
         >
           <div className="space-y-1.5">
@@ -384,7 +381,8 @@ export function ImageConnectionForm({
             {draft.protocol === 'dashscope' ? (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CircleDashed aria-hidden className="h-3.5 w-3.5 shrink-0" />
-                {t('settings.imageConnection.testUnsupportedDashscope')}
+                {t('settings.check.badge.unsupported')}
+                <InfoTip>{t('settings.imageConnection.testUnsupportedDashscope')}</InfoTip>
               </p>
             ) : (
               <ConnectionCheckLine state={check} baseUrl={baseUrl} onRecheck={recheck} />

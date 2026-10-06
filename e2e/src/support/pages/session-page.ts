@@ -133,7 +133,7 @@ export class SessionPage {
       .getByRole('button', { name: /^(More actions|更多操作)$/u })
       .last()
       .click();
-    await this.page.getByRole('menuitem', { name: /^(Archive session|归档会话)$/u }).click();
+    await this.page.getByRole('menuitem', { name: /^(Archive conversation|归档对话)$/u }).click();
     await expect(this.page).toHaveURL(/#\/local\/chat(?:\?.*)?$/u, { timeout: 30_000 });
   }
 

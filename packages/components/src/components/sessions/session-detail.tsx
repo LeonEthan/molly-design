@@ -3500,8 +3500,8 @@ const SessionDetail = ({
       onClick={handleToggleSidebar}
       aria-label={
         isSidebarVisible
-          ? t('sessions.sidebar.hide', 'Hide sidebar')
-          : t('sessions.sidebar.show', 'Show sidebar')
+          ? t('sessions.sidebar.hide', 'Hide right panel')
+          : t('sessions.sidebar.show', 'Show right panel')
       }
       className={cn('h-7 w-7 shrink-0 text-muted-foreground', !isSidebarVisible && 'mr-[9px]')}
     >

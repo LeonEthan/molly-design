@@ -115,7 +115,7 @@ files retain the last valid frame. There is no source switch, manual refresh or 
 Focus canvas is the transient `designCanvasFocusAtom`. It hides only the navigation
 sidebar, so the conversation and canvas remain, and the conversation header then
 reserves the macOS traffic-light inset and leads with the show-sidebar button. The
-canvas toolbar's button toggles it and reads "Hide sidebar" / "Show sidebar"; ending
+canvas toolbar's button toggles it and reads "Hide navigation sidebar" / "Show navigation sidebar"; ending
 focus, deactivating the canvas or an explicit show-sidebar request restores the saved
 sidebar state. A new design's accepted first message from the landing page also
 requests focus once through navigation history state. Its active target canvas
@@ -177,11 +177,24 @@ out of the row. The conversation header offers “Show artwork” only while the
 hidden.
 
 The canvas action row uses 36px controls and pill-shaped version status, with
-separate icon-only Save version and history actions, plus labelled Export. Save
-version keeps its translated accessible name and tooltip. History and export
+separate Save version and history actions, plus labelled Export. Save version
+shows its text when the toolbar container reaches 520px; narrower toolbars retain
+the icon, translated accessible name and tooltip. The right-panel toggle is named
+"Hide right panel" / "Show right panel", distinct from navigation. History and export
 menus use the same softer surface and 36px item height. The row wraps within its
 panel; preview/save errors keep their original status semantics in a quieter
 inset surface. Selection popups remain inside the native canvas.
+
+Intersecting shell menus, listboxes and dialogs cover the retained native view with
+an inert compositor image of its current viewport. The image is transient component
+memory, never a saved artwork, export or version. Main hides both canonical and
+preview views immediately and gates late native reveals while covered. Non-overlapping
+popups do not hide the canvas. Nested blockers share one image; reopening restores
+the appropriate retained editor/preview before removing it, preserving same-size zoom
+and edit state. Superseded captures cannot paint another artwork or inactive panel.
+Capture failure leaves menus usable and does not prevent normal reattachment.
+The asynchronous handoff does not guarantee a zero-frame flash or live updates
+beneath a modal surface.
 
 The separate Save version button flushes current edits and saves exact assets in
 immutable local Git history. Ordinary autosave does not create a version. Clicking
@@ -189,8 +202,12 @@ history directly switches the editable current draft, protecting unversioned wor
 the same Git repository first. The selected base survives restart; subsequent saves
 record that logical source without deleting later versions. An unchanged draft does
 not create a duplicate. Version operations use the execution/processing gate.
-The label distinguishes Vn from “Based on Vn · New changes”; selections are recaptured
-after switching.
+The label distinguishes Vn, “Vn · Changes not versioned”, and “No saved version”.
+It does not attest autosave; Bento separately reports actual saving, autosaved and
+failed-save states. History distinguishes loading, empty and failed reads, with
+an explicit retry after failure. Empty history explains how Save version differs
+from autosave without claiming a successful save. Superseded reads cannot replace
+newer results or errors. Selections are recaptured after switching.
 If the Git version was written but the retained native canvas failed to refresh,
 the shell refreshes history and reports both the saved Vn and the reload failure.
 It does not claim the version save failed or create another version automatically.

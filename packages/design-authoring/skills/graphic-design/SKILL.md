@@ -198,16 +198,15 @@ unless a person actually performed and reported that check.
 
 ## Reply to the designer
 
-Write the final reply for a designer, not an engineer, in the user's language,
-in a few short paragraphs or bullets:
+Write in the user's language. Lead with the result or requested change in one
+or two sentences. For a bounded edit, a brief confirmation usually suffices.
+Explain the design direction when it helps the user judge the result. Mention
+editability when requested or when it differs from what the user would expect.
+Offer next tweaks only when requested or when a concrete decision remains.
 
-1. **Direction** — the idea, hierarchy and mood in one or two sentences, and how
-   it answers the brief or the requested change.
-2. **What you can edit** — which copy is live text, which pictures are separate
-   layers, and anything flattened, merged or otherwise limited.
-3. **Next tweaks** — two or three concrete changes the user might ask for next.
-4. **Limits** — unmet requirements, assumptions, blocked steps and concerns from
-   your own review. Omit this part when there are none.
+Always report unmet requirements, material assumptions, blocked steps and
+concerns from your review, including flattened or otherwise limited content.
+Keep this explanation proportionate to the issue; brevity never hides a limit.
 
 Name research sources briefly. Leave out file paths, YAML fields, element IDs,
 tool and script names, commands and diagnostic codes unless the user asks or a

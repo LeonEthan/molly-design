@@ -43,3 +43,12 @@ Full `pnpm check`, the Electron application build, scoped formatting and
 No real artwork, model request, shortcut binding or user preference was modified.
 Skill response length has not been evaluated with a paid live generation; the change
 is guidance, not a runtime output-length guarantee.
+
+## CI follow-up
+
+[PR #86](https://github.com/LeonEthan/molly-design/pull/86) exposed two stale archive
+selectors in the existing Session and WorkSession Page Objects. Both now match
+Archive conversation / 归档对话 through the same accessible menuitem role. Runtime
+behavior, lifecycle assertions, timeouts and retry policy are unchanged.
+`pnpm e2e:check`, `pnpm e2e:build` and the real Electron `pnpm e2e:smoke` pass:
+three scenarios and all 18 steps, including both previously failing lifecycle paths.

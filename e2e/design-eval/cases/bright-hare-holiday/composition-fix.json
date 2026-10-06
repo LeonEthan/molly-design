@@ -1,0 +1,31 @@
+{
+  "id": "bright-hare-holiday/composition-fix",
+  "input": {
+    "type": "flat-raster",
+    "source": "media/source.png",
+    "sha256": "3df13bf673cc1c9fab7bdcd52a2bfb2ef4dc857f763a99c8abec1cfa5b3c2abc"
+  },
+  "prompt": "缩小人物，给标题留白。保持主色调蓝色，保持代言人人脸和两杯咖啡的一致性，保持海报尺寸不变。",
+  "followUps": [],
+  "gate": {
+    "canvas": [1126, 1500],
+    "requiredText": [
+      "假期快乐！",
+      "一起喝",
+      "小椰乳",
+      "小椰乳拿铁",
+      "小椰乳美式",
+      "含海南椰乳*，满杯清甜椰香",
+      "*冰块减半隐藏喝法，口感加倍顺滑"
+    ],
+    "textInsideCanvas": true
+  },
+  "preserve": ["face", "held cup", "latte cup", "americano cup", "brand logo"],
+  "knownDefects": [
+    "person fills most of the frame; should shrink or reframe",
+    "headline column crowds the face and the held cup",
+    "endorsement credit competes with the hand and bracelet",
+    "footer panel and fine print are cramped",
+    "third-party platform watermark must not carry over"
+  ]
+}

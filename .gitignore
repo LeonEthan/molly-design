@@ -125,6 +125,7 @@ logs/
 .lody-e2e/
 /.lody-artifacts/
 /e2e/artifacts/
+/e2e/design-eval/private/
 
 # OS
 .DS_Store

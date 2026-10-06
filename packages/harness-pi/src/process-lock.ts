@@ -16,6 +16,20 @@ export function processExited(pid: number): boolean {
   }
 }
 
+const OWNER_NAME = /^([1-9]\d*)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+export function createOwnerName(): string {
+  return `${process.pid}.${randomUUID()}`;
+}
+
+/** Only a PID/UUID owner name whose probe returns `ESRCH` proves its owner exited. */
+export function ownerExited(name: string): boolean {
+  const match = OWNER_NAME.exec(name);
+  if (!match) return false;
+  const pid = Number(match[1]);
+  return Number.isSafeInteger(pid) && processExited(pid);
+}
+
 async function removeOwner(directory: string, owner: string): Promise<void> {
   try {
     await unlink(join(directory, owner));
@@ -49,12 +63,7 @@ async function recoverExitedOwner(
     return 'recovered';
   }
   const owner = owners[0]!;
-  const match = /^([1-9]\d*)\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.exec(
-    owner
-  );
-  if (owners.length !== 1 || !match) return 'held';
-  const pid = Number(match[1]);
-  if (!Number.isSafeInteger(pid) || !processExited(pid)) return 'held';
+  if (owners.length !== 1 || !ownerExited(owner)) return 'held';
   await removeOwner(directory, owner);
   return 'recovered';
 }
@@ -63,7 +72,7 @@ export async function acquireProcessLock(
   directory: string,
   retries = 0
 ): Promise<() => Promise<void>> {
-  const owner = `${process.pid}.${randomUUID()}`;
+  const owner = createOwnerName();
   const staged = `${directory}.${owner}.tmp`;
   const busy = () => Object.assign(new Error('pi_acp_profile_locked'), { code: 'EEXIST' });
   let recoveries = 0;

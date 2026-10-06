@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -244,6 +244,9 @@ export async function runPackagedSmoke({ output, executable }) {
       );
       for (const name of ['auth.json', 'models.json', 'models-cache.json'])
         await assert.rejects(readFile(path.join(profile, name)), { code: 'ENOENT' });
+      const temporary = await readdir(path.join(config.privateRoot, 'tmp'));
+      assert.equal(temporary.length, 1, 'Worker must own one temporary directory');
+      assert.match(temporary[0], new RegExp(`^${child.pid}\\.`));
       await writeFile(path.join(root, 'smoke-ok'), '');
     } finally {
       clearTimeout(timeout);
@@ -255,6 +258,11 @@ export async function runPackagedSmoke({ output, executable }) {
       else child.once('exit', resolve);
     });
     assert.equal(code, 0, `Worker exit ${code}: ${stderr}`);
+    assert.deepEqual(
+      await readdir(path.join(config.privateRoot, 'tmp')),
+      [],
+      'Worker left its temporary directory'
+    );
     return {
       engineVersion: manifest.engineVersion,
       commands: commands.length,

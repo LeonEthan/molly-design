@@ -35,6 +35,7 @@ export function createWorkerEnvironment(
     PI_CODING_AGENT_DIR: join(privateRoot, 'config', 'workers', profile),
     PI_OFFLINE: '1',
     DO_NOT_TRACK: '1',
+    CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
     NO_PROXY: 'localhost,127.0.0.1,::1',
     no_proxy: 'localhost,127.0.0.1,::1',
     TMPDIR: join(privateRoot, 'tmp'),

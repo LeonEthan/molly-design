@@ -53,6 +53,9 @@ Assess other available capabilities without claiming they are equivalent.
 
 Keep temporary scripts, dependency environments and caches in the session workspace
 outside the collected artwork directory, or in the shell's supplied `$TMPDIR`.
+`$TMPDIR`, including files Pi saves for truncated tool output and images shown
+from `codemode` scripts, is removed when the Agent's worker exits; copy anything
+a later turn or the artwork needs into the workspace.
 Prefer shipped helpers. Read a helper's `--help` before constructing its command;
 use documented field lookups rather than searching the bundled library source.
 Correct argument errors before attributing failures to the sandbox. Do not use

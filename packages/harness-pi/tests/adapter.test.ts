@@ -527,6 +527,7 @@ describe('owned native Pi ACP adapter', () => {
     const environment = createWorkerEnvironment(inherited, config);
     expect(environment).toMatchObject({
       HOME: '/real-home',
+      CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
     });
     expect(dirname(environment.PI_CODING_AGENT_DIR!)).toBe(
       join(config.privateRoot, 'config', 'workers')

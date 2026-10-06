@@ -1,12 +1,13 @@
 import { Readable, Writable } from 'node:stream';
 import { AgentSideConnection, ndJsonStream } from '@agentclientprotocol/sdk';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { createWorkerEnvironment } from './environment';
 import { WorkerConfigSchema } from './worker-config';
 import { PrivateControlPipe } from './private-control-pipe';
 import { prepareProfile } from './profile';
 import { writeProfileSettings } from './profile-settings';
+import { acquireWorkerTemporaryDirectory } from './worker-temp';
 
 /** Packaging check: the sealed SDK and every Pi package resolve, without a profile or key. */
 async function probe() {
@@ -58,32 +59,40 @@ async function main(): Promise<void> {
     )
       throw new Error('harness_build_mismatch');
     const environment = createWorkerEnvironment(process.env, config);
+    const temporary = await acquireWorkerTemporaryDirectory(environment.TMPDIR!);
     for (const key of Object.keys(process.env)) delete process.env[key];
-    Object.assign(process.env, environment);
-    await mkdir(environment.TMPDIR!, { recursive: true, mode: 0o700 });
-    // Pi and its packages resolve the profile through the process-wide agent directory.
-    const agentDir = await prepareProfile(environment.PI_CODING_AGENT_DIR!);
-    await writeProfileSettings(agentDir);
-    const { PiAcpAgent } = await import('./agent');
-    const { PiAcpHost } = await import('./host');
-    let agent: InstanceType<typeof PiAcpAgent> | undefined;
-    const connection = new AgentSideConnection(
-      (peer) => {
-        agent = new PiAcpAgent(peer, { agentDir, host: new PiAcpHost(config, control, peer) });
-        return agent;
-      },
-      ndJsonStream(
-        Writable.toWeb(process.stdout),
-        Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>
-      )
-    );
+    Object.assign(process.env, environment, {
+      TMPDIR: temporary.path,
+      TMP: temporary.path,
+      TEMP: temporary.path,
+    });
+    let agent: InstanceType<typeof import('./agent').PiAcpAgent> | undefined;
     process.once('SIGTERM', () => {
-      void Promise.resolve(agent?.dispose()).finally(() => process.exit(0));
+      void Promise.resolve(agent?.dispose())
+        .catch(() => undefined)
+        .then(temporary.release)
+        .finally(() => process.exit(0));
     });
     try {
+      // Pi and its packages resolve the profile through the process-wide agent directory.
+      const agentDir = await prepareProfile(environment.PI_CODING_AGENT_DIR!);
+      await writeProfileSettings(agentDir);
+      const { PiAcpAgent } = await import('./agent');
+      const { PiAcpHost } = await import('./host');
+      const connection = new AgentSideConnection(
+        (peer) => {
+          agent = new PiAcpAgent(peer, { agentDir, host: new PiAcpHost(config, control, peer) });
+          return agent;
+        },
+        ndJsonStream(
+          Writable.toWeb(process.stdout),
+          Readable.toWeb(process.stdin) as ReadableStream<Uint8Array>
+        )
+      );
       await connection.closed;
     } finally {
       await agent?.dispose();
+      await temporary.release();
     }
   } finally {
     control.close();

@@ -12,7 +12,7 @@ Read [README](README.md) before changing session construction, packages or the b
   `settings.json`. Project code defaults to untrusted; discover materialized text skills
   through the SDK's explicit skill paths independently of executable project trust.
 - Tools run without permission checks; the main session loads `cc-safety-net` as its
-  destructive-command floor. The managed package set is single-session: `pi-subagents`
+  destructive-command floor with `CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1`. The managed package set is single-session: `pi-subagents`
   and its launch/configuration surfaces are retired (#72). Preserve shared task history.
   Never infer an answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
 - Model keys arrive on fd 3 per run and stay in the worker's in-memory credential store;
@@ -35,7 +35,8 @@ Read [README](README.md) before changing session construction, packages or the b
 - Serialize session construction; one managed worker owns one session, connection, model
   and thinking level. Hold the history writer guard through shutdown and legacy-marker
   removal. Reclaim only an identified owner whose PID probe returns `ESRCH`; preserve
-  unidentified legacy markers. Reclamation and release remove only that owner's token
+  unidentified legacy markers. Per-worker `TMPDIR` directories follow the same ownership
+  check: remove one only after its owner exits. Reclamation and release remove only that owner's token
   and an empty guard directory, never a successor's nonempty guard.
 - Preserve the partitioned history layout and validate restored histories without
   rewriting them. Missing or corrupt history stays untouched.

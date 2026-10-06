@@ -27,7 +27,8 @@ native package discovery; none is patched or forked. The managed runtime is sing
 [`pi-subagents` retirement #72](https://github.com/LeonEthan/molly-design/issues/72) removes the
 package, child configuration and foreground/background/workflow launch surfaces. Existing
 native/product histories and shared task-history readers remain available. `cc-safety-net`
-continues to load in the main session.
+continues to load in the main session; the worker sets `CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1`,
+so a project policy can tighten the user's policy but never weaken it.
 `defaultProjectTrust` is `never`: opening a directory does not authorize its `.pi`
 settings, packages or JavaScript extensions. Pi's saved trust grants remain authoritative
 inside that worker profile; a fresh worker does not inherit another profile's grants or
@@ -44,6 +45,12 @@ no `models` global. Pi 1.0 otherwise lets scripts run OpenRouter's built-in imag
 with the chat key, bypassing the user's image connection. Removing the delegation package
 closes its separate default-Codemode route. Ordinary shell and trusted native code retain
 normal OS-user access; this is not an OS sandbox.
+Pi writes output files (full truncated tool output, binary MCP resources and images shown
+from scripts) to `TMPDIR` and never removes them. Each worker therefore gets its own
+`<private>/tmp/<pid>.<uuid>` as `TMPDIR` ([worker-temp.ts](src/worker-temp.ts)) and removes
+it on exit. A worker stopped with SIGKILL leaves its directory; the next worker removes
+directories whose owner PID probe returns `ESRCH`, using the history guards' ownership check,
+and leaves live owners and unidentified entries untouched.
 Reopen follows the unmodified Pi 1.0 SDK factory: saved messages remain intact, while
 active tools come from the current profile defaults and native MCP activation. A saved
 tool declaration does not override that factory loadout. Loading history performs no

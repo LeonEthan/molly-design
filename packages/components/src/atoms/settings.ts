@@ -83,6 +83,12 @@ export const notificationPromptDismissedAtom = atomWithProductStorage<boolean>(
   false
 );
 
+// Image settings: the one-time key-rotation warning stays dismissed once closed.
+export const imageKeyMigrationNoticeDismissedAtom = atomWithProductStorage<boolean>(
+  'molly-image-key-migration-notice-dismissed',
+  false
+);
+
 // Desktop app: whether to send a native notification when an AI turn completes.
 export const electronSessionCompletionNotificationsEnabledAtom = atomWithProductStorage<boolean>(
   'molly-electron-session-completion-notifications-enabled',

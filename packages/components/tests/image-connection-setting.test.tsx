@@ -3,12 +3,15 @@
 import { act, createElement, type ComponentProps } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Provider, createStore } from 'jotai';
 import type {
   CheckImageConnection,
   ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
 
 import en from '../../../locales/en.json';
+import { imageKeyMigrationNoticeDismissedAtom } from '../src/atoms/settings';
+import { mollyStorage } from '../src/lib/product-storage';
 import {
   ImageConnectionForm,
   ImageConnectionSetting,
@@ -246,7 +249,6 @@ describe('ImageConnectionForm', () => {
     expect(input.getAttribute('placeholder')).toBe(
       copy('settings.imageConnection.apiKeyPlaceholderStored')
     );
-    expect(view.textContent).toContain(copy('settings.imageConnection.apiKeyHintStored'));
     expect(view.textContent).not.toContain(STORED_KEY);
     expect(removeKeyButton(view)).not.toBeNull();
   });
@@ -254,7 +256,6 @@ describe('ImageConnectionForm', () => {
   it('offers no remove action when nothing is stored', async () => {
     const view = await renderForm();
     expect(apiKeyInput(view).getAttribute('placeholder')).toBe('sk-...');
-    expect(view.textContent).toContain(copy('settings.imageConnection.apiKeyHintNew'));
     expect(removeKeyButton(view)).toBeNull();
   });
 
@@ -503,5 +504,31 @@ describe('ImageConnectionForm', () => {
     await act(async () => textButton(copy('settings.imageConnection.delete')).click());
     expect(deleted).toEqual([{ expectedRevision: 3 }]);
     expect(view.textContent).toContain(copy('settings.imageConnection.statusNotReady'));
+  });
+
+  it('dismisses the key-rotation notice and keeps it dismissed', async () => {
+    imageIpc.getImageSnapshot.mockImplementation(async () => ({
+      connection: storedConnection({ legacyHistoryMayContainKey: true }),
+    }));
+    // A fresh store per render keeps the jotai default store — used by every
+    // other test here — untouched by the dismissal.
+    await act(async () => {
+      root?.render(
+        createElement(Provider, { store: createStore() }, createElement(ImageConnectionSetting))
+      );
+    });
+    const view = container as HTMLElement;
+    expect(view.textContent).toContain(copy('settings.imageConnection.legacyHistoryWarning'));
+    await click(
+      view.querySelector<HTMLButtonElement>(`button[aria-label="${copy('common.dismiss')}"]`)!
+    );
+    expect(view.textContent).not.toContain(copy('settings.imageConnection.legacyHistoryWarning'));
+
+    // A restarted app mounts a fresh store on the same storage: still dismissed.
+    const nextStore = createStore();
+    const unsubscribe = nextStore.sub(imageKeyMigrationNoticeDismissedAtom, () => undefined);
+    expect(nextStore.get(imageKeyMigrationNoticeDismissedAtom)).toBe(true);
+    unsubscribe();
+    mollyStorage.removeItem('molly-image-key-migration-notice-dismissed');
   });
 });

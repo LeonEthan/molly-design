@@ -9,6 +9,7 @@ import { Checkbox } from '@/ui/checkbox';
 import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
+import { WithInfo } from './info-tip';
 
 export type CompatibleModelDraft = Omit<
   CompatibleModelDefinition,
@@ -49,7 +50,12 @@ export function CompatibleModelFields({
     onChange(models.map((model, current) => (current === index ? { ...model, ...patch } : model)));
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">{t('settings.models.compatibleHint')}</p>
+      <p className="text-xs text-muted-foreground">
+        <WithInfo
+          text={t('settings.models.compatibleLead')}
+          info={t('settings.models.compatibleHint')}
+        />
+      </p>
       {models.map((model, index) => (
         <fieldset key={index} disabled={busy} className="space-y-3 rounded-lg border p-3">
           <legend className="px-1 text-sm">

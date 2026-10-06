@@ -1,20 +1,13 @@
 import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LocalProjectId, MachineId } from '@molly/shared';
-import {
-  Check,
-  CircleSlash2,
-  FolderOpen,
-  FolderPlus,
-  Github,
-  Search,
-  X,
-} from 'lucide-react';
+import { Check, CircleSlash2, FolderOpen, FolderPlus, Github, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useVisibleLocalProjects } from '@/hooks/use-visible-local-projects';
 import { CachedAvatarImg } from '@/components/cached-avatar-img';
 import { getGitHubOwnerAvatarUrl } from '@/lib/github-avatar';
 import type { VisibleLocalProjectIndex } from '@/lib/visible-local-project-index';
 import { cn } from '@/lib/utils';
+import { ChevronDown } from '@/ui/icons';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,10 +156,7 @@ export function buildUnifiedLocalProjectOptions({
   selectedMachineId,
   latestMessageAtByLocalProject,
 }: {
-  visibleLocalProjects: Pick<
-    VisibleLocalProjectIndex,
-    'projects'
-  >;
+  visibleLocalProjects: Pick<VisibleLocalProjectIndex, 'projects'>;
   selectedMachineId: MachineId | null;
   latestMessageAtByLocalProject?: ReadonlyMap<string, number>;
 }): UnifiedLocalProjectOption[] {
@@ -405,6 +395,7 @@ export function UnifiedProjectSelectorView({
               {triggerIcon}
             </span>
             <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
+            {isPropertyRow ? null : <ChevronDown aria-hidden className="size-3 shrink-0" />}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent

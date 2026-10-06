@@ -350,12 +350,14 @@ export function ModelConnectionForm({
               spellCheck={false}
               placeholder={requiresKey ? undefined : t('settings.models.keyStoredPlaceholder')}
               onChange={(event) => setApiKey(event.target.value)}
-              aria-describedby={`${id}-key-hint`}
+              aria-describedby={requiresKey ? `${id}-key-hint` : undefined}
             />
             <ConnectionCheckLine state={check} baseUrl={endpoint} onRecheck={recheck} />
-            <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
-              {requiresKey ? t('settings.models.keyRequired') : t('settings.models.keyStored')}
-            </p>
+            {requiresKey ? (
+              <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
+                {t('settings.models.keyRequired')}
+              </p>
+            ) : null}
           </div>
           {showEndpointField ? (
             <div className="space-y-2">
@@ -479,7 +481,6 @@ export function ModelConnectionForm({
           )}
         </>
       ) : null}
-      <p className="text-xs text-muted-foreground">{t('settings.models.storageHint')}</p>
       <div className="flex flex-wrap items-center gap-2">
         {onDelete ? (
           <Button

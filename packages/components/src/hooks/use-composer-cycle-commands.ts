@@ -67,7 +67,7 @@ export function useComposerCycleCommands(params: {
   useCommand(
     {
       id: 'session.cycleModel',
-      title: t('commands.session.cycleModel', 'Cycle Model'),
+      title: t('commands.session.cycleModel', 'Switch model'),
       category: 'Session',
       keybindings: getCommandKeybindings('session.cycleModel'),
       when: () => canCycle(model),
@@ -79,7 +79,7 @@ export function useComposerCycleCommands(params: {
   useCommand(
     {
       id: 'session.cycleThinkEffort',
-      title: t('commands.session.cycleThinkEffort', 'Cycle Thinking Effort'),
+      title: t('commands.session.cycleThinkEffort', 'Switch thinking effort'),
       category: 'Session',
       keybindings: getCommandKeybindings('session.cycleThinkEffort'),
       when: () => canCycle(thinkEffort),

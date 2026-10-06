@@ -90,7 +90,10 @@ async function listRuns(label) {
       const names = (await readdir(directory)).filter((name) => /^run-\d+$/.test(name));
       const complete = [];
       for (const name of names.sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))) {
-        if (existsSync(join(directory, name, 'preview.png'))) complete.push(join(directory, name));
+        const run = join(directory, name);
+        if (!existsSync(join(run, 'preview.png'))) continue;
+        const report = JSON.parse(await readFile(join(run, 'run.json'), 'utf8'));
+        if (!report.error) complete.push(run);
       }
       if (complete.length) runs[`${source}/${variant}`] = complete;
     }

@@ -170,6 +170,26 @@ capture, now fixed. Neither run resized the subject, the main known defect.
 The large difference between runs 2 and 3 supports running each case three
 times.
 
+## First baseline attempt (2026-10-06)
+
+The first baseline ran six cases three times on six parallel desktops, then
+re-ran the failures four at a time. Of 26 runs, 13 produced a valid result. The
+rest ended without one: the Agent stopped with `pi_acp_host_execution_failed`
+after 0 to 35 minutes, or was still working at the 45-minute limit. The local
+endpoint's own error log shows the upstream provider returning
+`server_is_overloaded` at the time of the first group of failures; later failures
+left no entry there, and the Pi session records were deleted before they could be
+read. The runner now keeps the CLI backlog, logs and, on failure, the Pi session
+records, and it treats a visible Agent internal error as a failed run rather than
+an output. The review tool skips such runs, so an infrastructure failure is never
+judged as a design. The twin's redesign case produced no valid run under parallel
+load, although it completed twice when run alone during the trial, so parallelism
+is not yet proven safe for long turns.
+
+Among the valid runs, most outputs for the private case were a single flattened
+image with no editable copy; the gate flags them, and whether that trade is
+acceptable is for the owner's review.
+
 ## Open questions and limits
 
 - Image calls per run are not counted yet; the retained artwork directory and

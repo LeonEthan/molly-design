@@ -195,6 +195,7 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     scenarioDir: directory,
     stableId: 'design-eval',
   });
+  let dataRoot;
   try {
     await persist();
     await h.launch();
@@ -211,7 +212,7 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     await persist();
     console.log(`${name} configured: ${report.runConfiguration.replace(/\s+/g, ' ')}`);
 
-    const dataRoot = await h.app.evaluate(() => process.env.MOLLY_DATA_DIR);
+    dataRoot = await h.app.evaluate(() => process.env.MOLLY_DATA_DIR);
     for (const [index, prompt] of [evalCase.prompt, ...evalCase.followUps].entries()) {
       const startedAt = Date.now();
       await send(page, prompt, index === 0 ? source : undefined);
@@ -224,6 +225,8 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
       console.log(`${name} turn ${index} running in ${report.artworkId}`);
       await expect(stopButton(page)).toBeHidden({ timeout });
       delete report.activeTurn;
+      if (await page.getByText('Agent internal error', { exact: true }).count())
+        throw Error(`agent_internal_error in turn ${index}`);
       const workdir = join(dataRoot, 'chats', report.artworkId);
       await expect
         .poll(async () => (await receipts(workdir)).length, { timeout: 60_000 })
@@ -251,8 +254,25 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     process.exitCode = 1;
   } finally {
     report.finishedAt = new Date().toISOString();
-    if (h.page && !h.page.isClosed())
+    if (h.page && !h.page.isClosed()) {
       await h.page.screenshot({ path: join(directory, 'last-desktop.png') }).catch(() => {});
+      if (report.overall === 'failed')
+        await writeFile(
+          join(directory, 'conversation.txt'),
+          await h.page.locator('body').innerText()
+        ).catch(() => {});
+      const backlog = await h.captureCliBacklog().catch(() => null);
+      await writeFile(join(directory, 'cli-backlog.json'), JSON.stringify(backlog, null, 2));
+    }
+    if (dataRoot) {
+      await cp(join(dataRoot, 'logs'), join(directory, 'logs'), { recursive: true }).catch(
+        () => {}
+      );
+      if (report.overall === 'failed')
+        await cp(join(dataRoot, 'harness/pi/sessions'), join(directory, 'pi-sessions'), {
+          recursive: true,
+        }).catch(() => {});
+    }
     await h.close().catch((error) => {
       report.teardownError = String(error);
       process.exitCode = 1;

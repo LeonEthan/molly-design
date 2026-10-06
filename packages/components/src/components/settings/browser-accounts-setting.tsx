@@ -202,7 +202,10 @@ export function BrowserAccountsSetting() {
             </header>
             <div className="space-y-3 border-t border-border/40 px-5 py-4">
               <p className="text-xs font-medium text-foreground">
-                {t('settings.browserAccounts.importTitle')}
+                <WithInfo
+                  text={t('settings.browserAccounts.importTitle')}
+                  info={t('settings.browserAccounts.importTitleInfo')}
+                />
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 {summary.importAvailable && sources && sources.sources.length > 0 ? (
@@ -265,10 +268,6 @@ export function BrowserAccountsSetting() {
               ) : sources && sources.sources.length === 0 && sources.unreadable.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.noSources')}
-                </p>
-              ) : selected ? (
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.browserAccounts.sourceHint')}
                 </p>
               ) : null}
               {sources && sources.unreadable.length > 0 ? (

@@ -67,7 +67,7 @@ user's repository; sandbox/approval-heavy packages contradict decision 1.
   (locks now record their owner process and are taken over once it has exited). A reused
   process ID can still make a stale lock look held.
 - [Pi #10249](https://github.com/earendil-works/pi/issues/10249): an MCP server still
-  starting at shutdown can outlive it. Not patched.
+  starting at shutdown can outlive it. Not patched; fixed upstream in Pi 1.0.4.
 - Evidence: real-SDK package tests (all six load; safety floor blocks without prompting;
   question answered through the GUI dialog), host tests, a bundled smoke with a loopback
   model, and `pnpm check`. One desktop design run on the locally built app (DeepSeek V4.1

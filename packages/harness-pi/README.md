@@ -1,7 +1,7 @@
 # Molly embedded Pi
 
 This package is Molly's Agent engine: the public Pi SDK (`@earendil-works/pi-coding-agent`
-1.0.0) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
+1.0.4) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
 dispatch, credentials, design transactions and session history policy; Pi owns the model
 loop, tools, resource discovery and native conversation history.
 Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
@@ -124,8 +124,8 @@ values replace public headers case-insensitively and reach native requests liter
 They stay in extension configuration in memory. Pi may use its normal OAuth fallback
 after a 401 when no Authorization header exists; this does not turn the custom header
 into OAuth credentials or persist that header in native OAuth state.
-Known upstream defect: [Pi #10249](https://github.com/earendil-works/pi/issues/10249) — a
-server still starting during shutdown can outlive it. Molly does not patch around it.
+Since Pi 1.0.4 ([#10249](https://github.com/earendil-works/pi/issues/10249)), shutdown also
+closes a server that is still connecting before it returns; a harness test covers this.
 
 Live tool activity preserves native call IDs, canonical names and parent IDs in the
 existing product history and activity rows. On native-only restore, Pi's bounded
@@ -175,7 +175,7 @@ the repaired protocol. History files and their partition layout are unchanged.
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
 The workspace, CLI install/startup checks and bundle require Node `>=22.19.0 <23 || >=23.6.0`
-with Node-API 10, matching Pi 1.0.0 and the SQLite binding.
+with Node-API 10, matching Pi 1.0.4 and the SQLite binding.
 The Settings capability reader verifies the staged question package's `package.json`
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker

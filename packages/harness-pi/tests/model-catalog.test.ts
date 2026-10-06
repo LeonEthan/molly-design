@@ -10,7 +10,7 @@ it('projects the pinned SDK catalog without network, credentials or an implicit 
     throw new Error('catalog_must_be_offline');
   });
   const catalog = await createBundledModelCatalog();
-  expect(catalog.engineVersion).toBe('1.0.0');
+  expect(catalog.engineVersion).toBe('1.0.4');
   expect(
     catalog.models.find(
       (model) => model.providerPresetId === 'kimi-coding' && model.modelId === 'k3-256k'

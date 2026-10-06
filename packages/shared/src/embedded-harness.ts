@@ -8,7 +8,7 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
-export const PI_ENGINE_VERSION = '1.0.0' as const;
+export const PI_ENGINE_VERSION = '1.0.4' as const;
 /** Unmodified published Pi packages every worker profile lists; settings reports the same set. */
 export const MOLLY_PI_PACKAGES = [
   'pi-skillful',

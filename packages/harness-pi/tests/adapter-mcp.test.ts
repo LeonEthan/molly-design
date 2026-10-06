@@ -592,6 +592,30 @@ describe('owned Pi ACP native MCP integration', () => {
     }
   });
 
+  it('closes a native MCP child that is still connecting before shutdown returns (Pi #10249)', async () => {
+    const f = await fixture();
+    await f.initialize();
+    const initializing = fileSignal(f.cwd, 'initializing');
+    try {
+      await f.agent.newSession({
+        cwd: f.cwd,
+        mcpServers: [
+          {
+            name: 'silent',
+            command: process.execPath,
+            args: [fileURLToPath(new URL('./fixtures/silent-mcp.mjs', import.meta.url)), f.cwd],
+            env: [],
+          },
+        ],
+      });
+      await initializing.promise;
+    } finally {
+      initializing.close();
+    }
+    await f.agent.dispose();
+    expect(JSON.parse(await readFile(join(f.cwd, 'exited.json'), 'utf8'))).toEqual({ code: 0 });
+  });
+
   it('converts ACP servers to native configs while keeping argv, URLs, env and headers literal', () => {
     const selected = server('/synthetic');
     selected.args.push('${HOME}');

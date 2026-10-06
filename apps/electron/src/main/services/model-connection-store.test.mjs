@@ -14,12 +14,12 @@ import { readBundledCapabilities } from './bundled-capabilities.ts'
 import { listMcpTools } from './mcp-tool-discovery.ts'
 
 const shippedPackages = [
-  ['@earendil-works/pi-coding-agent', '1.0.0'],
+  ['@earendil-works/pi-coding-agent', '1.0.4'],
   ['pi-skillful', '0.4.0'],
   ['@juicesharp/rpiv-ask-user-question', '2.12.0'],
   ['@zigai/pi-mention-skill', '0.10.4'],
   ['@ff-labs/pi-fff', '0.11.0'],
-  ['cc-safety-net', '2.4.14']
+  ['cc-safety-net', '2.6.0']
 ]
 
 for (const mode of [
@@ -58,7 +58,7 @@ for (const mode of [
     if (mode === 'duplicate') files.push(files[1])
     const runtime = {
       engine: 'pi',
-      engineVersion: '1.0.0',
+      engineVersion: '1.0.4',
       protocolVersion: 1,
       buildId: 'b'.repeat(64),
       buildPlatform: mode === 'platform' ? 'other' : process.platform,
@@ -75,7 +75,7 @@ for (const mode of [
     assert.equal(snapshot.harness.buildId, runtime.buildId)
     assert.deepEqual(snapshot.engine, {
       name: '@earendil-works/pi-coding-agent',
-      version: '1.0.0',
+      version: '1.0.4',
       license: 'MIT'
     })
     assert.deepEqual(

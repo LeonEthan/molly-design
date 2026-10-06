@@ -32,7 +32,7 @@ export function verifyEmbeddedHarness(directory) {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.protocolVersion !== 1 ||
-    manifest.engineVersion !== '1.0.0' ||
+    manifest.engineVersion !== '1.0.4' ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.packages)
   )

@@ -4,7 +4,7 @@ import type { OpenSourceAttributionBundle } from './open-source-attributions';
 // Do not edit manually.
 export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
   "schemaVersion": 1,
-  "generatedAt": "2026-10-05T11:07:31.821Z",
+  "generatedAt": "2026-10-06T06:53:49.153Z",
   "entries": [
     {
       "id": "molly-design-adapters",
@@ -266,7 +266,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Anthropic",
       "description": "The official TypeScript library for the Anthropic API",
       "versions": [
-        "0.124.0"
+        "0.129.0"
       ]
     },
     {
@@ -1578,7 +1578,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Application composition runtime for services, replicated state, RPC, and plugins",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1591,7 +1591,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "General-purpose agent with transport abstraction, state management, and attachment support",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1604,7 +1604,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Unified LLM API with automatic model discovery and provider configuration",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1617,7 +1617,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Sandboxed JavaScript execution where the only capability is calling injected tools",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1630,7 +1630,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Coding agent CLI with read, bash, edit, write tools and session management",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1643,7 +1643,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Earendil Works",
       "description": "Standalone Model Context Protocol client for pi and other applications",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1656,7 +1656,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Vendor-neutral telemetry contracts and typed schema utilities for pi",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -1669,7 +1669,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "Mario Zechner",
       "description": "Terminal User Interface library with differential rendering for efficient text-based applications",
       "versions": [
-        "1.0.0"
+        "1.0.4"
       ]
     },
     {
@@ -6245,7 +6245,7 @@ export const OPEN_SOURCE_ATTRIBUTION_BUNDLE: OpenSourceAttributionBundle = {
       "author": "J Liew",
       "description": "A coding agent CLI hook - block destructive commands and secret file access",
       "versions": [
-        "2.4.14"
+        "2.6.0"
       ]
     },
     {

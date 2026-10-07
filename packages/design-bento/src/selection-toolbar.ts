@@ -38,12 +38,24 @@ const PALETTE = [
   '#78350f',
 ];
 type Rect = { left: number; top: number; right: number; bottom: number };
-/** Screen pixels: the toolbar never inherits the artwork's zoom transform. */
+
+function overlapArea(a: Rect, b: Rect) {
+  const width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+  const height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+  return width > 0 && height > 0 ? width * height : 0;
+}
+
+/**
+ * Screen pixels: the toolbar never inherits the artwork's zoom transform.
+ * Above the selection is preferred; below wins only when it covers less of the
+ * selection and the `obstacles` (other artwork elements) than above would.
+ */
 export function placeToolbar(
   anchor: Rect,
   width: number,
   height: number,
-  viewport: { width: number; height: number }
+  viewport: { width: number; height: number },
+  obstacles: readonly Rect[] = []
 ) {
   if (
     anchor.right <= 0 ||
@@ -54,13 +66,17 @@ export function placeToolbar(
     return null;
   const clamp = (value: number, max: number) => Math.max(8, Math.min(value, max - 8));
   const center = (Math.max(0, anchor.left) + Math.min(viewport.width, anchor.right)) / 2;
-  return {
-    left: clamp(center - width / 2, viewport.width - width),
-    top: clamp(
-      anchor.top >= height + 20 ? anchor.top - height - 12 : anchor.bottom + 12,
-      viewport.height - height
-    ),
-  };
+  const left = clamp(center - width / 2, viewport.width - width);
+  const covered = (top: number) =>
+    [anchor, ...obstacles].reduce(
+      (sum, rect) =>
+        sum + overlapArea({ left, top, right: left + width, bottom: top + height }, rect),
+      0
+    );
+  const below = clamp(anchor.bottom + 12, viewport.height - height);
+  if (anchor.top < height + 20) return { left, top: below };
+  const above = clamp(anchor.top - height - 12, viewport.height - height);
+  return { left, top: covered(below) < covered(above) ? below : above };
 }
 
 const icons = {
@@ -232,10 +248,32 @@ export function createSelectionToolbar(options: {
           ...anchor,
           bottom: Math.max(anchor.bottom, sizeLabel.offsetTop + sizeLabel.offsetHeight),
         };
-    const place = placeToolbar(toolbarAnchor, bar.offsetWidth, bar.offsetHeight, {
-      width: innerWidth,
-      height: innerHeight,
-    });
+    const selectedNodes = nodes.filter((node): node is HTMLElement => !!node);
+    const obstacles = [...document.querySelectorAll<HTMLElement>('.ed-stage-scale [data-el-id]')]
+      .filter(
+        (node) =>
+          !selectedNodes.some(
+            (selectedNode) => selectedNode.contains(node) || node.contains(selectedNode)
+          )
+      )
+      .map((node) => node.getBoundingClientRect())
+      .filter(
+        // A backdrop that contains the whole selection is covered either way.
+        (rect) =>
+          !(
+            rect.left <= anchor.left &&
+            rect.top <= anchor.top &&
+            rect.right >= anchor.right &&
+            rect.bottom >= anchor.bottom
+          )
+      );
+    const place = placeToolbar(
+      toolbarAnchor,
+      bar.offsetWidth,
+      bar.offsetHeight,
+      { width: innerWidth, height: innerHeight },
+      obstacles
+    );
     if (!place) {
       bar.hidden = true;
       closePopup();
@@ -519,14 +557,16 @@ export function createSelectionToolbar(options: {
         String(summary.count)
       )
     );
-    const count = document.createElement('span');
-    count.className = 'count';
-    count.textContent = String(summary.count);
-    count.setAttribute(
-      'aria-label',
-      label('selectionCount', '{{count}} item(s)').replace('{{count}}', String(summary.count))
-    );
-    bar.append(count);
+    if (summary.count > 1) {
+      const count = document.createElement('span');
+      count.className = 'count';
+      count.textContent = String(summary.count);
+      count.setAttribute(
+        'aria-label',
+        label('selectionCount', '{{count}} item(s)').replace('{{count}}', String(summary.count))
+      );
+      bar.append(count);
+    }
     const action = (
       name: 'reference' | 'generate' | 'edit' | 'style' | 'regenerate',
       key: string,
@@ -539,13 +579,16 @@ export function createSelectionToolbar(options: {
         () => void request({ type: 'action', selectionEpoch: epoch, action: name })
       );
       b.disabled = busy || !presentation?.actionsEnabled;
+      return b;
     };
     const separator = () => {
       const node = document.createElement('span');
       node.className = 'sep';
       bar.append(node);
     };
-    action('reference', 'referenceSelection', 'Reference selected elements');
+    action('reference', 'referenceSelection', 'Ask Molly about the selection').append(
+      label('askMolly', 'Ask Molly')
+    );
     separator();
     const kind = summary.kinds.length === 1 ? summary.kinds[0] : undefined;
     const current = summary.elements?.find((element) => element.kind === kind);

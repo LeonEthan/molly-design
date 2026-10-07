@@ -15,6 +15,7 @@ import {
   type DesignCanvasCommandResult,
   type DesignSelectionSummary
 } from '@molly/shared/design-selection-commands'
+import type { DesignExportScale } from '@molly/shared/electron-ipc'
 import { isDeepStrictEqual } from 'node:util'
 import {
   app,
@@ -831,17 +832,25 @@ function installCloseGuard(owner: BrowserWindow) {
   })
 }
 
-export async function exportDesign(id: string, format: 'png' | 'jpeg', title: string) {
+export async function exportDesign(
+  id: string,
+  format: 'png' | 'jpeg',
+  title: string,
+  scale: DesignExportScale = 1
+) {
   if (!designCanvasAccess.isReadonly(id)) await saveDesign(id)
   const payload = await designRequest({ operation: 'read', sessionId: id })
+  assertExportFits(payload.doc.canvas, scale)
   const target = await dialog.showSaveDialog({
     defaultPath:
       // oxlint-disable-next-line no-control-regex -- File names cannot contain control characters.
-      title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') + (format === 'png' ? '.png' : '.jpg'),
+      title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_') +
+      (scale === 1 ? '' : `@${scale}x`) +
+      (format === 'png' ? '.png' : '.jpg'),
     filters: [{ name: format.toUpperCase(), extensions: [format === 'png' ? 'png' : 'jpg'] }]
   })
   if (target.canceled || !target.filePath) return
-  const bytes = await renderSavedDesign(payload, format)
+  const bytes = await renderSavedDesign(payload, format, scale)
   const temporary = target.filePath + '.' + randomUUID() + '.tmp'
   try {
     const file = await open(temporary, 'wx', 0o600)
@@ -869,7 +878,8 @@ const RENDER_CAPTURE_VERIFY_TIMEOUT_MS = 30_000
  */
 async function captureVerifiedArtwork(
   window: BrowserWindow,
-  format: 'png' | 'jpeg'
+  format: 'png' | 'jpeg',
+  scaledClip?: { width: number; height: number; scale: DesignExportScale }
 ): Promise<NativeImage> {
   const client = window.webContents.debugger
   let timer: NodeJS.Timeout | undefined
@@ -884,7 +894,8 @@ async function captureVerifiedArtwork(
       return client.sendCommand('Page.captureScreenshot', {
         format: 'png',
         fromSurface: true,
-        captureBeyondViewport: false
+        captureBeyondViewport: false,
+        ...(scaledClip ? { clip: { x: 0, y: 0, ...scaledClip } } : {})
       })
     })()
     const deadline = new Promise<never>((_resolve, reject) => {
@@ -905,10 +916,22 @@ async function captureVerifiedArtwork(
   }
 }
 
+/** Chromium cannot capture a surface edge beyond its maximum texture size. */
+const MAX_EXPORT_EDGE_PX = 16_384
+
+function assertExportFits(canvas: { width: number; height: number }, scale: DesignExportScale) {
+  if (Math.max(canvas.width, canvas.height) * scale > MAX_EXPORT_EDGE_PX)
+    throw Error(
+      `A ${scale}× export would exceed ${MAX_EXPORT_EDGE_PX} px on one side; choose a smaller scale`
+    )
+}
+
 export async function renderSavedDesign(
   payload: DesignPayload,
-  format: 'png' | 'jpeg'
+  format: 'png' | 'jpeg',
+  scale: DesignExportScale = 1
 ): Promise<Buffer> {
+  assertExportFits(payload.doc.canvas, scale)
   const source = await surface(payload, false)
   const { width, height } = payload.doc.canvas
   const window = source.own(
@@ -955,8 +978,12 @@ export async function renderSavedDesign(
         } catch(error) { clearTimeout(timer); reject(error); }
       } check();
     })`)
-    const image = await captureVerifiedArtwork(window, format)
-    const exact = image.resize({ width, height })
+    const image = await captureVerifiedArtwork(
+      window,
+      format,
+      scale === 1 ? undefined : { width, height, scale }
+    )
+    const exact = image.resize({ width: width * scale, height: height * scale })
     return format === 'png' ? exact.toPNG() : exact.toJPEG(95)
   } finally {
     window.destroy()

@@ -72,7 +72,7 @@ DOM load event alone is not canvas readiness. Before changing these boundaries, 
 [design resources](../../../../../packages/design-bento/README.md).
 The preview host uses the same local socket, independently of canvas preparation.
 Keep render policy in Node-testable `design-render-host-core.ts`: no retries, repair or
-per-turn thumbnails; sidebar ones cache the saved revision. Previews/PNG/JPEG use canvas size.
+per-turn thumbnails; sidebar ones cache the saved revision. Previews use canvas size.
 Historical files resolve by artwork/digest in the worker; local resources serve
 original bytes and embedded assets.
 

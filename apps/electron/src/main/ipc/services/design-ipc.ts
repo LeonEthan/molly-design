@@ -6,6 +6,8 @@ import {
   DesignCreationSchema as creation,
   DesignBoundsSchema,
   DesignExportFormatSchema,
+  DesignExportScaleSchema,
+  type DesignExportScale,
   type DesignCreationInput,
   type DesignAssociationInput
 } from '@molly/shared/electron-ipc'
@@ -257,12 +259,18 @@ export class DesignIpc extends IpcService {
       throw Error('Invalid design version')
     return restoreDesignVersion(id.parse(sessionId), commitId)
   }
-  @IpcMethod() async export(sessionId: string, format: 'png' | 'jpeg', title: string) {
+  @IpcMethod() async export(
+    sessionId: string,
+    format: 'png' | 'jpeg',
+    title: string,
+    scale: DesignExportScale = 1
+  ) {
     owner()
     return exportDesign(
       id.parse(sessionId),
       DesignExportFormatSchema.parse(format),
-      association.shape.name.parse(title)
+      association.shape.name.parse(title),
+      DesignExportScaleSchema.parse(scale)
     )
   }
 }

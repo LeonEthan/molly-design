@@ -3,6 +3,7 @@ export const DESIGN_CANVAS_LABEL_KEYS = [
   'selectionCount',
   'selectedElements',
   'referenceSelection',
+  'askMolly',
   'generateSelectedImages',
   'editSelectedImages',
   'adjustSelectedStyle',

@@ -234,6 +234,23 @@ it('clears a recovered attachment error after the current canvas attaches succes
   expect(container.querySelector('[role="alert"]')).toBeNull();
 });
 
+it('explains a failed attachment without the IPC wrapper and retries on request', async () => {
+  visibleCanvas();
+  state.attach.mockRejectedValueOnce(
+    Error(
+      "Error invoking remote method 'design.attach': Error: Canvas product API did not become ready"
+    )
+  );
+  await render();
+  const alert = container.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain("The canvas couldn't open.");
+  expect(alert?.textContent).toContain('Canvas product API did not become ready');
+  expect(alert?.textContent).not.toContain('Error invoking remote method');
+  const retry = [...container.querySelectorAll('button')].find((b) => b.textContent === 'Retry');
+  await act(async () => retry?.click());
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+});
+
 it('preserves a save error when a pending attachment succeeds', async () => {
   visibleCanvas();
   await render();
@@ -358,13 +375,11 @@ it('shows loading before an empty history and explains versions without claiming
   await render();
   await openVersions();
   expect(document.querySelector('[role="menu"]')?.textContent).toContain('Loading versions…');
-  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain(
-    'No saved versions yet'
-  );
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('No versions yet');
   await act(async () => finish([]));
-  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No saved versions yet');
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No versions yet');
   expect(document.querySelector('[role="menu"]')?.textContent).toContain('Use Save version');
-  expect(container.textContent).toContain('No saved version');
+  expect(container.textContent).toContain('No versions yet');
   expect(container.textContent).not.toContain('Autosaved');
 });
 
@@ -373,15 +388,13 @@ it('shows a failed history read and recovers with an explicit retry', async () =
   await render();
   await openVersions();
   expect(document.querySelector('[role="menu"]')?.textContent).toContain('History unavailable');
-  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain(
-    'No saved versions yet'
-  );
+  expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('No versions yet');
   state.versions.mockResolvedValue([]);
   const retry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
     (item) => item.textContent === 'Retry loading versions'
   );
   await act(async () => retry?.click());
-  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No saved versions yet');
+  expect(document.querySelector('[role="menu"]')?.textContent).toContain('No versions yet');
   expect(document.querySelector('[role="menu"]')?.textContent).not.toContain('History unavailable');
 });
 

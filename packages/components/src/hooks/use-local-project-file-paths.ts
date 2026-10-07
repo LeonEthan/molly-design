@@ -9,6 +9,7 @@ import {
   createLocalProjectRpcFileTransport,
 } from '@/lib/local-project-rpc-file-provider';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { ipcErrorMessage } from '@/lib/ipc-error-message';
 
 export type LocalProjectFilePathsEntry = {
   paths: string[];
@@ -238,10 +239,7 @@ export function useLocalProjectFilePaths(
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const rawMessage = error instanceof Error ? error.message : String(error);
-        // Electron IPC wraps errors with "Error invoking remote method '...': Error: ..."
-        const ipcPrefix = /^Error invoking remote method '[^']*':\s*Error:\s*/;
-        const errorCode = rawMessage.replace(ipcPrefix, '');
+        const errorCode = ipcErrorMessage(error);
         const message =
           errorCode === 'cli_not_running'
             ? i18next.t('sessions.localProject.files.cliNotRunning')

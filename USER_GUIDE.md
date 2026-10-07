@@ -85,7 +85,7 @@ Then try:
 > Make the heading smaller and give the subtitle more space. Keep the canvas size.
 
 You can also select and edit text, change colors, insert an image and adjust the
-layout directly in Bento. Save the design before exporting PNG or JPEG. Generated
+layout directly in Bento. Save the design before exporting PNG or JPEG at 1×, 2× or 3×. Generated
 images are optional; text and shape design does not require an image service.
 
 ## Built-in browser research (current development build)

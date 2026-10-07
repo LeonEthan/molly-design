@@ -1,10 +1,11 @@
 import { useConversationIndexRows } from '@/hooks/use-conversation-view';
 import type { DesignElementReference } from '@molly/shared/design-element-reference';
+import type { DesignExportScale } from '@molly/shared/electron-ipc';
 import type {
   DesignSelectionAction,
   DesignSelectionSummary,
 } from '@molly/shared/design-selection-commands';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAtom, useAtomValue } from 'jotai';
 import { useBlocker, useNavigate } from '@tanstack/react-router';
@@ -23,6 +24,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
@@ -35,6 +37,7 @@ import {
 } from './design-version-history-feedback';
 import { WINDOW_DRAG_EXEMPT_CLASS } from '@/ui/window-drag-region';
 import { cn } from '@/lib/utils';
+import { ipcErrorMessage } from '@/lib/ipc-error-message';
 import { useDesignCanvasNavigationFocus } from '../chat/submission/use-composer-navigation-focus';
 
 type Association = {
@@ -44,6 +47,12 @@ type Association = {
   machineId: string;
   createdAt: string;
 };
+const EXPORT_FORMATS = [
+  ['png', 'PNG'],
+  ['jpeg', 'JPEG'],
+] as const;
+const EXPORT_SCALES: readonly DesignExportScale[] = [1, 2, 3];
+
 const hasCanvasBlockingOverlay = (host: HTMLElement) => {
   const hostRect = host.getBoundingClientRect();
   const overlays = document.querySelectorAll(
@@ -158,6 +167,7 @@ export function DesignCanvas({
   const hostId = sessionId;
   const [error, setError] = useState('');
   const [attachmentError, setAttachmentError] = useState('');
+  const [attachAttempt, setAttachAttempt] = useState(0);
   const [overlayFrame, setOverlayFrame] = useState<{
     artworkId: string;
     hostId: string;
@@ -209,7 +219,7 @@ export function DesignCanvas({
         }
       } catch (cause) {
         if (!isCurrent() || generation !== versionsGeneration.current) return;
-        setVersionsLoad({ phase: 'error', message: String(cause) });
+        setVersionsLoad({ phase: 'error', message: ipcErrorMessage(cause) });
         throw cause;
       }
     },
@@ -247,7 +257,7 @@ export function DesignCanvas({
       setAutomaticError(result.automaticError ?? '');
     } catch (cause) {
       if (generation !== previewGeneration.current) return;
-      setPreviewError(String(cause));
+      setPreviewError(ipcErrorMessage(cause));
     }
   }, [workspaceId, machine?.machineId, sessionId, artworkId, hostId]);
   useEffect(() => {
@@ -324,7 +334,7 @@ export function DesignCanvas({
       try {
         return !(await getIpcServices()?.design.leave(artworkId, hostId));
       } catch (e) {
-        setError(String(e));
+        setError(ipcErrorMessage(e));
         return true;
       }
     },
@@ -390,7 +400,7 @@ export function DesignCanvas({
           }
         })
         .catch((cause) => {
-          if (current()) setAttachmentError(String(cause));
+          if (current()) setAttachmentError(ipcErrorMessage(cause));
         });
     };
     const resize = new ResizeObserver(update);
@@ -414,14 +424,24 @@ export function DesignCanvas({
       void service.hide(artworkId, hostId).catch((cause) => console.error(cause));
       void service.cover(artworkId, hostId, false).catch((cause) => console.error(cause));
     };
-  }, [sessionId, artworkId, active, hostId, preview, visiblePreview, t, referenceActionsEnabled]);
+  }, [
+    sessionId,
+    artworkId,
+    active,
+    hostId,
+    preview,
+    visiblePreview,
+    t,
+    referenceActionsEnabled,
+    attachAttempt,
+  ]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
     void syncOpenDesignCanvas(artworkId)
       .then(() => (cancelled ? undefined : refreshVersions()))
       .catch((cause) => {
-        if (!cancelled) setError(String(cause));
+        if (!cancelled) setError(ipcErrorMessage(cause));
       });
     return () => {
       cancelled = true;
@@ -431,7 +451,7 @@ export function DesignCanvas({
     setBusy(true);
     setError('');
     void action()
-      .catch((e) => setError(String(e)))
+      .catch((e) => setError(ipcErrorMessage(e)))
       .finally(() => setBusy(false));
   };
   const referenceSelection = (prompt?: string, kind?: 'image', captured?: DesignElementReference) =>
@@ -535,8 +555,8 @@ export function DesignCanvas({
         );
       toast.success(t('design.versionSaved', 'Saved as V{{number}}', { number: version.number }));
     });
-  const exportArtwork = (format: 'png' | 'jpeg') =>
-    run(async () => getIpcServices()?.design.export(artworkId, format, name));
+  const exportArtwork = (format: 'png' | 'jpeg', scale: DesignExportScale) =>
+    run(async () => getIpcServices()?.design.export(artworkId, format, name, scale));
   // Live selection size pushed from the canvas drives the native toolbar and
   // the mirrored composer chip. Syncing stays passive: it captures through the
   // same validated path as an explicit click, but never surfaces errors, never
@@ -615,7 +635,7 @@ export function DesignCanvas({
                 number: currentVersion.number,
               })
             : `V${currentVersion.number}`
-          : t('design.noSavedVersion', 'No saved version');
+          : t('design.noSavedVersion', 'No versions yet');
   const toolbarItems = (
     <div className="@container/canvas-toolbar flex min-w-0 flex-1 flex-wrap items-center gap-2">
       <span
@@ -722,18 +742,25 @@ export function DesignCanvas({
               <TooltipContent>{t('design.export', 'Export')}</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-border/50 p-1.5">
-              <DropdownMenuItem
-                className="min-h-9 rounded-md px-3"
-                onClick={() => exportArtwork('png')}
-              >
-                PNG
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="min-h-9 rounded-md px-3"
-                onClick={() => exportArtwork('jpeg')}
-              >
-                JPEG
-              </DropdownMenuItem>
+              {EXPORT_FORMATS.map(([format, formatLabel], index) => (
+                <Fragment key={format}>
+                  {index > 0 ? <DropdownMenuSeparator /> : null}
+                  {EXPORT_SCALES.map((scale) => (
+                    <DropdownMenuItem
+                      key={scale}
+                      className="min-h-9 rounded-md px-3"
+                      onClick={() => exportArtwork(format, scale)}
+                    >
+                      {formatLabel}
+                      {scale === 1 ? null : (
+                        <span className="ml-auto pl-4 font-mono text-xs text-muted-foreground">
+                          @{scale}x
+                        </span>
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </Fragment>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
           <Tooltip>
@@ -813,13 +840,35 @@ export function DesignCanvas({
           {automaticError}
         </p>
       )}
-      {(error || attachmentError) && (
+      {error && (
         <p
           role="alert"
           className="mx-3 mt-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm leading-relaxed text-destructive"
         >
-          {error || attachmentError}
+          {error}
         </p>
+      )}
+      {attachmentError && (
+        <div
+          role="alert"
+          className="mx-3 mt-3 flex items-center gap-3 rounded-xl bg-destructive/5 px-3 py-2 text-sm leading-relaxed"
+        >
+          <p className="min-w-0 flex-1">
+            <span className="text-destructive">
+              {t('design.attachFailed', "The canvas couldn't open.")}
+            </span>{' '}
+            <span className="text-muted-foreground">{attachmentError}</span>
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 rounded-full"
+            onClick={() => setAttachAttempt((attempt) => attempt + 1)}
+          >
+            {t('common.retry', 'Retry')}
+          </Button>
+        </div>
       )}
       <div
         ref={host}

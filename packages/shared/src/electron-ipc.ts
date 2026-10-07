@@ -818,5 +818,7 @@ export const DesignBoundsSchema = z
   })
   .strict();
 export const DesignExportFormatSchema = z.enum(['png', 'jpeg']);
+export const DesignExportScaleSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+export type DesignExportScale = z.infer<typeof DesignExportScaleSchema>;
 export type DesignCreationInput = z.input<typeof DesignCreationSchema>;
 export type DesignAssociationInput = z.input<typeof DesignAssociationSchema>;

@@ -117,7 +117,10 @@ the React shell through `@molly/shared/ui-icons`, including text, dropdown and
 zoom glyphs. The dock uses 20px outline icons with a 1.5 stroke and 38px circular
 targets inside a capsule. The selection toolbar uses 18px icons with the same
 stroke, 32px buttons, 16px container/menu corners and a matching soft shadow;
-numeric fields remain 51×28px. At canvas widths of 640px or less, the dock and its
+numeric fields remain 51×28px. The toolbar sits above the selection unless
+below covers less of the other elements; backdrops containing the whole selection
+are ignored. The count appears only for multiple elements, and the reference
+action shows its "Ask Molly" label. At canvas widths of 640px or less, the dock and its
 shape menu rise above the existing zoom
 and save row. Narrower docks scroll horizontally without shrinking targets.
 The save/status pill truncates within the space left by zoom and the dock, with

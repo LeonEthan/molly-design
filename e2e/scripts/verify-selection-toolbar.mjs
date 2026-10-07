@@ -569,7 +569,7 @@ try {
   await expect.poll(() => editor('!!document.querySelector(".molly-selection-error")')).toBe(true);
   await shot('action-error');
   await select('text');
-  await click('Reference selected elements');
+  await click('Ask Molly about the selection');
   await expect
     .poll(() =>
       page.evaluate(() => ({

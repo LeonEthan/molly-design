@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#90](https://github.com/LeonEthan/molly-design/pull/90)
+
 ## Abstract
 
 The 2026-10-07 UI/UX audit of `a93b3838` found coding-tool residue on designer

@@ -80,27 +80,27 @@ export function DesignFileReceipt({
       ) : null}
       {candidateId ? (
         <p>
-          {t('design.files.notCommitted', 'This turn was not committed. Original file:')}{' '}
+          {t('design.files.notCommitted', "This change wasn't applied to the artwork.")}{' '}
           <button
             type="button"
-            className="break-all underline"
+            className="underline"
             disabled={!onOpenFile}
             onClick={() => void openFile()}
           >
-            {`candidates/${candidateId}.json`}
+            {t('design.files.openDraft', 'Open draft')}
           </button>
         </p>
       ) : null}
       {hasDraft ? (
         <p>
-          {t('design.files.workingFile', 'Working file (may have changed since this turn):')}{' '}
+          {t('design.files.workingFile', 'The working draft may have changed since this turn.')}{' '}
           <button
             type="button"
             className="underline"
             disabled={!onOpenFile || !workspaceId}
             onClick={() => void openDraft()}
           >
-            design.yaml
+            {t('design.files.openDraft', 'Open draft')}
           </button>
         </p>
       ) : null}
@@ -113,9 +113,7 @@ export function DesignFileReceipt({
         </p>
       ) : null}
       {fileError ? (
-        <p role="alert">
-          {t('design.files.unavailable', 'The original file could not be opened.')}
-        </p>
+        <p role="alert">{t('design.files.unavailable', 'The draft could not be opened.')}</p>
       ) : null}
     </div>
   );

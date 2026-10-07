@@ -158,7 +158,6 @@ import { getLocalProjectVisibilityKey } from '@/lib/visible-local-project-index'
 import { openExternalUrl } from '@/lib/native-browser';
 import { getDownloadPageUrl, MOLLY_ISSUES_URL } from '@/lib/molly-urls';
 
-import { getChatComposerPromptPlaceholderKey } from '@/lib/chat-composer-placeholder';
 import { selectPastedClipboardFiles, splitImageAndFileAttachments } from '@/lib/file-drop';
 import { canShowSubscriptionRateLimits } from '@/lib/session-usage';
 import { canShowCodexResetForecast } from '@/lib/codex-reset-forecast';
@@ -2007,9 +2006,7 @@ function WorkspaceChatLanding({
     skillAgent,
     promptValue: prompt,
   });
-  const promptPlaceholder = t(
-    getChatComposerPromptPlaceholderKey({ mentionSource, availableCommands, skillAgent })
-  );
+  const promptPlaceholder = t('composer.promptPlaceholder.base', 'Describe a design or a change…');
   const issuePrRepoFullName = contextType === 'github' ? selectedRepo : undefined;
   const issuePrRepoIsPublic = contextType === 'github' ? isSelectedRepoPublic : undefined;
 

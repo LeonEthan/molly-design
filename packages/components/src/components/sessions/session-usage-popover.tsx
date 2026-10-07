@@ -27,6 +27,8 @@ import {
   type MachineRateLimits,
 } from '@/lib/session-usage';
 
+export const SESSION_USAGE_TRIGGER_MIN_PERCENT = 70;
+
 export type SessionUsagePopoverProps = {
   contextWindowUsage?: SessionContextWindowUsage | null;
   rateLimits?: MachineRateLimits | null;
@@ -108,7 +110,9 @@ export const SessionUsagePopover = memo(function SessionUsagePopover({
     [t]
   );
 
-  if (!isContextCompacting && triggerValue === undefined) return null;
+  const isUsageNotable =
+    triggerValue !== undefined && triggerValue >= SESSION_USAGE_TRIGGER_MIN_PERCENT;
+  if (!isContextCompacting && !isUsageNotable) return null;
 
   const roundedTriggerValue = Math.round(triggerValue ?? 0);
   const triggerLabel = isContextCompacting

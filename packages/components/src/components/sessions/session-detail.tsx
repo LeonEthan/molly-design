@@ -3669,7 +3669,6 @@ const SessionDetail = ({
             <SessionChatInterface
               {...getSharedChatSurfaceProps(tabSession, isActive)}
               paintSessionMentionOverlay={false}
-              isChildTab={tabSession.id !== sessionId}
               isExternalHistoryRefreshing={externalHistoryRefresh !== undefined}
               externalHistoryProviderLabel={externalHistoryProviderLabel}
               messageFileDiffEntriesByTurn={
@@ -3741,7 +3740,6 @@ const SessionDetail = ({
         >
           <SessionChatInterface
             {...getSharedChatSurfaceProps(sideSession, isActive, isActive && isSidebarVisible)}
-            isChildTab
           />
         </div>
       );

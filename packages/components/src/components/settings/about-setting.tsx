@@ -139,12 +139,9 @@ export function AboutSettingsComponent() {
           </CompactRow>
         )}
         <CompactRow label={t('settings.about.buildDate')}>
-          <span className="text-sm text-muted-foreground font-mono">
+          <span className="text-sm text-muted-foreground font-mono" title={GIT_COMMIT}>
             {formatBuildDate(BUILD_DATE, intlLocale)}
           </span>
-        </CompactRow>
-        <CompactRow label={t('settings.about.commitHash')}>
-          <span className="text-sm text-muted-foreground font-mono">{GIT_COMMIT}</span>
         </CompactRow>
         <CompactRow label={t('sidebar.feedback', 'Feedback')}>
           <Button
@@ -154,7 +151,7 @@ export function AboutSettingsComponent() {
             onClick={() => void openExternalUrl(MOLLY_ISSUES_URL)}
           >
             <ExternalLink className="mr-1 h-3.5 w-3.5" />
-            {t('sidebar.feedback')}
+            {t('settings.about.reportIssue', 'Report an issue')}
           </Button>
         </CompactRow>
         <CompactRow label={t('menu.documentation', 'Documentation')}>
@@ -165,7 +162,7 @@ export function AboutSettingsComponent() {
             onClick={handleOpenDownloadPage}
           >
             <ExternalLink className="mr-1 h-3.5 w-3.5" />
-            {t('menu.documentation', 'Documentation')}
+            {t('settings.about.readGuide', 'Read the guide')}
           </Button>
         </CompactRow>
         <CompactRow label={t('settings.about.website', 'Website')}>

@@ -38,7 +38,6 @@ const meta = {
   args: {
     session: githubWorktreeSession,
     workspacePath: '/Users/developer/Code/test-readme',
-    machineName: 'Rems-MacBook-Pro.local',
     onCopyConversationHistory: fn(),
     onCopyUrl: fn(),
     onOpenSearch: fn(),

@@ -26,16 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
-import {
-  Check,
-  Copy,
-  Download,
-  History,
-  Maximize2,
-  Minimize2,
-  MoreHorizontal,
-  Save,
-} from 'lucide-react';
+import { Check, Copy, Download, History, Maximize2, Minimize2, Save } from 'lucide-react';
 import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import { DESIGN_CANVAS_LABEL_KEYS } from './design-canvas-labels';
 import {
@@ -745,37 +736,27 @@ export function DesignCanvas({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-8 rounded-full text-muted-foreground hover:text-foreground"
-                    aria-label={t('design.more', 'More')}
-                  >
-                    <MoreHorizontal className="size-[18px]" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>{t('design.more', 'More')}</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="end" className="min-w-40 rounded-xl border-border/50 p-1.5">
-              <DropdownMenuItem
-                className="min-h-9 rounded-md px-3"
-                disabled={busy || readonlyView}
-                onClick={() =>
-                  run(() =>
-                    create(name + t('design.copySuffix', ' — copy'), 800, 600, artworkId, hostId)
-                  )
-                }
-              >
-                <Copy className="size-4" />
-                {t('design.saveCopy', 'Save as new design')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full text-muted-foreground hover:text-foreground"
+                  disabled={busy || readonlyView}
+                  aria-label={t('design.saveCopy', 'Save as new design')}
+                  onClick={() =>
+                    run(() =>
+                      create(name + t('design.copySuffix', ' — copy'), 800, 600, artworkId, hostId)
+                    )
+                  }
+                >
+                  <Copy className="size-[18px]" />
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{t('design.saveCopy', 'Save as new design')}</TooltipContent>
+          </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -784,8 +765,8 @@ export function DesignCanvas({
                 className="size-8 rounded-full text-muted-foreground hover:text-foreground"
                 aria-label={
                   focused
-                    ? t('design.showSidebar', 'Show navigation sidebar')
-                    : t('design.hideSidebar', 'Hide navigation sidebar')
+                    ? t('design.showSidebar', 'Show sidebar')
+                    : t('design.focusCanvas', 'Focus canvas')
                 }
                 onClick={() => setFocused(!focused)}
               >
@@ -798,8 +779,8 @@ export function DesignCanvas({
             </TooltipTrigger>
             <TooltipContent>
               {focused
-                ? t('design.showSidebar', 'Show navigation sidebar')
-                : t('design.hideSidebar', 'Hide navigation sidebar')}
+                ? t('design.showSidebar', 'Show sidebar')
+                : t('design.focusCanvas', 'Focus canvas')}
             </TooltipContent>
           </Tooltip>
         </div>

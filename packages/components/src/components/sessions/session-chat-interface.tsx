@@ -37,7 +37,6 @@ import {
   Image,
   Loader2,
   MessageCircle,
-  Monitor,
   Pencil,
   Play,
   Search,
@@ -190,7 +189,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -219,7 +217,6 @@ import {
 import { SessionPin } from './session-pin';
 import { SessionPinContext, type SessionPinContextValue } from './session-pin-context';
 import { SessionSyncingIndicator } from './session-syncing-indicator';
-import { ChildTabEmptyState } from './child-tab-empty-state';
 import {
   SessionConversationPage,
   SessionConversationPageHeader,
@@ -687,9 +684,7 @@ export type SessionOpenedByMenuState = {
 /** Session header "···" menu — local context and session actions. */
 export function SessionHeaderMenu({
   session,
-  localProjectMeta,
   workspacePath,
-  machineName,
   onCopyConversationHistory,
   onCopyUrl,
   onShareAsImage,
@@ -704,15 +699,10 @@ export function SessionHeaderMenu({
   onArchive,
   onRestore,
   onDelete,
-  compact = false,
   t,
 }: {
   session: SessionMeta;
-  localProjectMeta?: { name?: string; rootPath?: string } | null;
   workspacePath?: string | null;
-  /** Session machine display name — shown as an info row (moved here from the
-   * old composer bottom bar so the composer stays a single footer row). */
-  machineName?: string | null;
   onCopyConversationHistory?: () => void | Promise<void>;
   onCopyUrl: () => void | Promise<void>;
   /** Opens the share-as-image preview dialog. Pure local feature; no gating. */
@@ -730,7 +720,6 @@ export function SessionHeaderMenu({
   onArchive?: () => void | Promise<void>;
   onRestore?: () => void | Promise<void>;
   onDelete?: () => void | Promise<void>;
-  compact?: boolean;
   t: (key: string, fallback: string, options?: Record<string, unknown>) => string;
 }) {
   const isArchived = !!session.isArchived;
@@ -738,22 +727,11 @@ export function SessionHeaderMenu({
     | { kind: 'github'; repoFullName?: string; branch?: string }
     | { kind: 'local'; localProjectId?: string; branch?: string; githubRepoFullName?: string }
     | undefined;
-  const repoFullName = (resolveProjectGitHubRepo(project) ?? session.repoFullName)?.trim() ?? '';
-  const isGitHub = project?.kind === 'github' || !!repoFullName;
   const baseBranch = session.baseBranch?.trim() || getProjectRefBranch(project) || '';
   const currentBranch = session.branchName?.trim() || '';
-  const showBranchInfo = Boolean(
-    (isGitHub || project?.kind === 'local') && (baseBranch || currentBranch)
-  );
-  const localPath = localProjectMeta?.rootPath ?? '';
   const trimmedWorkspacePath = workspacePath?.trim() || '';
-  const branchDisplayValue = currentBranch || baseBranch;
   const showBaseBranchContext = Boolean(
     currentBranch && baseBranch && currentBranch !== baseBranch
-  );
-  const showProjectPath = !showBranchInfo && Boolean(localPath);
-  const showSessionContext = Boolean(
-    (isGitHub && repoFullName) || showBranchInfo || showProjectPath || machineName
   );
 
   const openedBySession = openedByRelations?.openedBy ?? null;
@@ -843,108 +821,6 @@ export function SessionHeaderMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[200px] max-w-[320px]">
-          {/* One compact context group keeps useful identity visible. Separate labels make
-              every value pay for two rows, while a submenu hides context behind another step. */}
-          {!compact && showSessionContext ? (
-            <>
-              <DropdownMenuLabel className="pb-0.5 pt-1.5 text-[0.7rem] font-medium text-muted-foreground">
-                {t('sessions.sessionContextLabel', 'Session')}
-              </DropdownMenuLabel>
-
-              {isGitHub && repoFullName ? (
-                <DropdownMenuItem
-                  className="py-1.5"
-                  onClick={() =>
-                    copyToClipboard(
-                      repoFullName,
-                      t('sessions.repoCopied', 'Repository name copied to clipboard')
-                    )
-                  }
-                  title={repoFullName}
-                  aria-label={`${t('sessions.copyRepository', 'Copy repository')}: ${repoFullName}`}
-                >
-                  <Github className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{repoFullName}</span>
-                  <Copy className="ml-auto h-3 w-3 shrink-0 opacity-50" />
-                </DropdownMenuItem>
-              ) : null}
-
-              {showBranchInfo ? (
-                <DropdownMenuItem
-                  className="items-start py-1.5"
-                  onClick={() =>
-                    copyToClipboard(
-                      branchDisplayValue,
-                      currentBranch
-                        ? t(
-                            'sessions.currentBranchCopied',
-                            'Current branch name copied to clipboard'
-                          )
-                        : t('sessions.baseBranchCopied', 'Base branch name copied to clipboard')
-                    )
-                  }
-                  title={
-                    showBaseBranchContext
-                      ? `${branchDisplayValue}\n${t(
-                          'sessions.baseBranch',
-                          'Base branch'
-                        )}: ${baseBranch}`
-                      : branchDisplayValue
-                  }
-                  aria-label={`${
-                    currentBranch
-                      ? t('sessions.copyCurrentBranch', 'Copy current branch')
-                      : t('sessions.copyBaseBranch', 'Copy base branch')
-                  }: ${branchDisplayValue}`}
-                >
-                  <GitBranch className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{branchDisplayValue}</span>
-                    {showBaseBranchContext ? (
-                      <span className="block truncate text-[0.68rem] leading-4 text-muted-foreground">
-                        {t('sessions.baseBranch', 'Base branch')}: {baseBranch}
-                      </span>
-                    ) : null}
-                  </span>
-                  <Copy className="ml-auto mt-0.5 h-3 w-3 shrink-0 opacity-50" />
-                </DropdownMenuItem>
-              ) : showProjectPath ? (
-                <DropdownMenuItem
-                  className="py-1.5"
-                  onClick={() =>
-                    copyToClipboard(
-                      localPath,
-                      t('sessions.projectPathCopied', 'Project path copied to clipboard')
-                    )
-                  }
-                  title={localPath}
-                  aria-label={`${t('sessions.copyProjectPath', 'Copy project path')}: ${localPath}`}
-                >
-                  <Folder className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{localPath}</span>
-                  <Copy className="ml-auto h-3 w-3 shrink-0 opacity-50" />
-                </DropdownMenuItem>
-              ) : null}
-
-              {machineName ? (
-                <div className="flex min-w-0 items-center gap-2 px-2.5 py-1.5 text-[0.8rem]">
-                  <Monitor className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="sr-only">{t('sessions.machineLabel', 'Machine')}: </span>
-                  <span className="min-w-0 flex-1 truncate">{machineName}</span>
-                  {project?.kind === 'local' ? (
-                    <span className="ml-auto shrink-0 rounded border border-border/70 px-1 py-px text-[0.62rem] font-medium leading-none text-muted-foreground">
-                      {session.isWorktree
-                        ? t('chat.workdir.worktree', 'Worktree')
-                        : t('chat.workdir.local', 'Local')}
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <DropdownMenuSeparator />
-            </>
-          ) : null}
-
           {openedByRelationRows}
 
           {onOpenSearch && (
@@ -954,7 +830,7 @@ export function SessionHeaderMenu({
               }}
             >
               <Search className="h-3.5 w-3.5 shrink-0" />
-              {t('sessions.findInConversation', 'Find in session')}
+              {t('sessions.findInConversation', 'Find in conversation')}
             </DropdownMenuItem>
           )}
 
@@ -1025,7 +901,7 @@ export function SessionHeaderMenu({
               }}
             >
               <Pencil className="h-3.5 w-3.5 shrink-0" />
-              {t('sidebar.renameChat.title', 'Rename Chat')}
+              {t('sidebar.renameChat.title', 'Rename conversation')}
             </DropdownMenuItem>
           )}
 
@@ -1247,8 +1123,8 @@ export function SessionSearchBar({
           type="search"
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder={t('sessions.findInConversation', 'Find in session')}
-          aria-label={t('sessions.findInConversation', 'Find in session')}
+          placeholder={t('sessions.findInConversation', 'Find in conversation')}
+          aria-label={t('sessions.findInConversation', 'Find in conversation')}
           className="h-9 min-w-0 flex-1 border-0 bg-transparent px-2 py-0 text-[13.5px] tracking-tight shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 [&::-webkit-search-cancel-button]:hidden"
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -1368,10 +1244,6 @@ interface SessionChatInterfaceProps {
   onVisualAnnotationReferencesSubmitted?: (
     references: VisualAnnotationReferencePayload[]
   ) => void | Promise<void>;
-  /** Explicitly marks this as a child tab session (shows guided landing instead of empty state) */
-  isChildTab?: boolean;
-  /** Title of the parent session, used in child tab empty state */
-  parentSessionTitle?: string;
   /** Called to archive the current session */
   onArchiveSession?: () => void | Promise<void>;
   /** Called to restore the current session when it is archived */
@@ -1537,7 +1409,6 @@ export const SessionChatInterface = memo(
       onCommentReferencesChange,
       onVisualAnnotationReferencesChange,
       onVisualAnnotationReferencesSubmitted,
-      isChildTab = false,
       onArchiveSession,
       onRestoreSession,
       onDeleteSession,
@@ -3318,20 +3189,6 @@ export const SessionChatInterface = memo(
       [runtime, session.id, session.dismissedGoalThreadId]
     );
 
-    // Child sessions use their own empty-state suggestions.
-    const isChildSession = isChildTab || !!session.parentSessionId;
-    const handleChildEmptyStateSuggest = useCallback((text: string) => {
-      inputAreaRef.current?.setInputText(text);
-    }, []);
-    const chatStreamEmptyState = useMemo(
-      () =>
-        isChildSession ? (
-          <ChildTabEmptyState onSuggest={handleChildEmptyStateSuggest} />
-        ) : (
-          EMPTY_CHAT_STREAM_EMPTY_STATE
-        ),
-      [handleChildEmptyStateSuggest, isChildSession]
-    );
     // ── Pin management ──────────────────────────────────────────────────
     const handlePinMessage = useCallback(
       (historyId: string | null) => {
@@ -3931,9 +3788,7 @@ export const SessionChatInterface = memo(
     const headerMenuNode = (
       <SessionHeaderMenu
         session={session}
-        localProjectMeta={resolvedLocalProjectMeta}
         workspacePath={sessionWorkspacePath}
-        machineName={sessionMachine?.name}
         onCopyConversationHistory={
           hideMessageArea && onCopyConversationHistoryExternal
             ? onCopyConversationHistoryExternal
@@ -4075,7 +3930,7 @@ export const SessionChatInterface = memo(
                             dividerLabel={sessionDividerLabel}
                             className="h-full"
                             leadingContent={openedByConversationStart}
-                            emptyState={chatStreamEmptyState}
+                            emptyState={EMPTY_CHAT_STREAM_EMPTY_STATE}
                             agentActivityLabel={agentActivityLabel}
                             agentActivityTone={agentActivityTone}
                             onFileDiffClick={onFileDiffClick}
@@ -4129,7 +3984,7 @@ export const SessionChatInterface = memo(
                         {session.dispatchPause.error ??
                           t(
                             'sessions.dispatchPaused',
-                            'Stopped. Queued inputs are preserved until you continue.'
+                            'Molly stopped. Anything you queued will wait until you continue.'
                           )}
                       </span>
                       <Button
@@ -4142,7 +3997,7 @@ export const SessionChatInterface = memo(
                           ).catch((error) => toast.error(getErrorMessage(error)));
                         }}
                       >
-                        {t('sessions.retryStop', 'Retry Stop')}
+                        {t('sessions.retryStop', 'Stop again')}
                       </Button>
                       <Button
                         variant="outline"

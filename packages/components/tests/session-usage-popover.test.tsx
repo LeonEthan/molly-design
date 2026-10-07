@@ -31,7 +31,7 @@ const rateLimits: MachineRateLimits = {
     planName: 'ChatGPT Plus',
     windows: [
       {
-        usedPercent: 29,
+        usedPercent: 72,
         windowDurationSeconds: 7 * 24 * 60 * 60,
         resetsAtEpochSeconds: null,
       },
@@ -68,21 +68,31 @@ describe('SessionUsagePopover', () => {
     });
   };
 
-  it('shows the used context percentage in the composer trigger', async () => {
-    await renderUsage({ contextWindowUsage: { size: 128_000, used: 32_000 } });
+  it('shows the used context percentage in the composer trigger once usage is high', async () => {
+    await renderUsage({ contextWindowUsage: { size: 128_000, used: 96_000 } });
 
     const trigger = container.querySelector('button');
-    expect(trigger?.textContent).toBe('25%');
-    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 25% used');
-    expect(trigger?.getAttribute('title')).toBe('Open usage details, 25% used');
+    expect(trigger?.textContent).toBe('75%');
+    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 75% used');
+    expect(trigger?.getAttribute('title')).toBe('Open usage details, 75% used');
+  });
+
+  it('keeps low usage out of the composer', async () => {
+    await renderUsage({
+      contextWindowUsage: { size: 128_000, used: 32_000 },
+      rateLimits,
+      showRateLimitWithoutContext: true,
+    });
+
+    expect(container.querySelector('button')).toBeNull();
   });
 
   it('shows rate limit usage and details without context when explicitly enabled', async () => {
     await renderUsage({ rateLimits, showRateLimitWithoutContext: true });
 
     const trigger = container.querySelector('button');
-    expect(trigger?.textContent).toBe('29%');
-    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 29% used');
+    expect(trigger?.textContent).toBe('72%');
+    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 72% used');
 
     await act(async () => {
       trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -90,7 +100,7 @@ describe('SessionUsagePopover', () => {
 
     const popover = document.body.querySelector('[aria-label="Usage"]');
     expect(popover?.textContent).toContain('Weekly');
-    expect(popover?.textContent).toContain('29% used');
+    expect(popover?.textContent).toContain('72% used');
   });
 
   it('keeps rate-limit-only usage hidden unless explicitly enabled', async () => {
@@ -110,7 +120,7 @@ describe('SessionUsagePopover', () => {
           scope: { providerId: 'claude' },
           windows: [
             { usedPercent: 12, windowDurationSeconds: 18_000, resetsAtEpochSeconds: null },
-            { usedPercent: 30, windowDurationSeconds: 604_800, resetsAtEpochSeconds: null },
+            { usedPercent: 80, windowDurationSeconds: 604_800, resetsAtEpochSeconds: null },
             {
               label: 'Fable',
               usedPercent: 67,
@@ -129,7 +139,7 @@ describe('SessionUsagePopover', () => {
       Array.from(popover?.querySelectorAll('[role="progressbar"]') ?? []).map((meter) =>
         meter.getAttribute('aria-label')
       )
-    ).toEqual(['Weekly: 30% used', 'Weekly · Fable: 67% used', '5 hours: 12% used']);
+    ).toEqual(['Weekly: 80% used', 'Weekly · Fable: 67% used', '5 hours: 12% used']);
   });
 
   it('shows a truthful unavailable state when the provider omits utilization', async () => {
@@ -146,12 +156,12 @@ describe('SessionUsagePopover', () => {
       agentType: 'grok',
       modelId: 'grok-4.5',
       rateLimits: unavailableLimits,
-      contextWindowUsage: { size: 128_000, used: 32_000 },
+      contextWindowUsage: { size: 128_000, used: 96_000 },
     });
 
     const trigger = container.querySelector('button');
-    expect(trigger?.textContent).toBe('25%');
-    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 25% used');
+    expect(trigger?.textContent).toBe('75%');
+    expect(trigger?.getAttribute('aria-label')).toBe('Open usage details, 75% used');
 
     await act(async () => {
       trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

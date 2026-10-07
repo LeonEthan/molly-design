@@ -40,9 +40,14 @@ function RowDot() {
   );
 }
 
+/** Molly is the only agent, so a row names its model; the agent name is the fallback. */
+function primaryLabel(item: RecentRunConfigItem): string {
+  return item.modelLabel ?? item.agent.name;
+}
+
 /** Flat, comma-free reading of a row for assistive tech and the row tooltip. */
 function describeItem(item: RecentRunConfigItem, planLabel: string): string {
-  return [item.agent.name, item.modelLabel, item.reasoningLabel, item.planOn ? planLabel : null]
+  return [primaryLabel(item), item.reasoningLabel, item.planOn ? planLabel : null]
     .filter(Boolean)
     .join(' · ');
 }
@@ -85,24 +90,12 @@ export function RecentRunConfigMenuGroup({
             env={item.agent.env}
             className="h-4 w-4 shrink-0"
           />
-          {/* One left-packed phrase — "Claude · Opus 5 · High" reads as a single
+          {/* One left-packed phrase — "Opus 5 · High" reads as a single
               configuration, the way the trigger face does. The dots only work
               while the parts stay adjacent, so nothing in here may grow; the
-              row's slack goes to the spacer before the glyph column instead.
-              Name and model both shrink, proportionally to their length, so
-              the longer one gives up more: a fixed-width model truncated names
-              to "Cla…", and a min-width floor padded a short name like "Grok"
-              and reopened the gap before the dot. */}
+              row's slack goes to the spacer before the glyph column instead. */}
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="min-w-0 truncate">{item.agent.name}</span>
-            {item.modelLabel ? (
-              <>
-                <RowDot />
-                <span className="min-w-0 max-w-32 truncate text-xs text-muted-foreground">
-                  {item.modelLabel}
-                </span>
-              </>
-            ) : null}
+            <span className="min-w-0 truncate">{primaryLabel(item)}</span>
             {item.reasoningLabel ? (
               <>
                 <RowDot />

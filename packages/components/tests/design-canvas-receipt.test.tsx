@@ -417,7 +417,7 @@ it('identifies an unchanged saved version without implying autosave success', as
   expect(container.querySelector<HTMLButtonElement>('[aria-label="Save version"]')?.disabled).toBe(
     true
   );
-  expect(container.querySelector('[aria-label="Hide navigation sidebar"]')).not.toBeNull();
+  expect(container.querySelector('[aria-label="Focus canvas"]')).not.toBeNull();
 });
 
 const blockingOverlay = (role = 'menu') => {

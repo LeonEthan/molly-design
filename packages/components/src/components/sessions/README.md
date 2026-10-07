@@ -17,7 +17,6 @@ tracked `.agents/docs/` directory.
 | `session-side-panel-tab-bar.tsx`             | Right-panel tab strip (fixed panels, side chats, viewers)                              |
 | `session-tab-close-target.ts`                | Registration for the Cmd/Ctrl+W close target                                           |
 | `session-list-rows.ts`                       | Sidebar/tab row derivation, including child grouping by parent                         |
-| `child-tab-empty-state.tsx`                  | Suggestions shown in an empty child tab                                                |
 | `session-not-found.tsx`                      | Missing-session surface                                                                |
 | `session-mention-drop-layer.tsx`             | Drop target that turns a dragged tab into a mention                                    |
 | `session-pin.tsx`, `session-pin-context.tsx` | Pinned content above the stream                                                        |

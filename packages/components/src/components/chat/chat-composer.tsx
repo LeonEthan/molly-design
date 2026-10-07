@@ -56,9 +56,6 @@ import {
 } from '@/ui/dialog';
 import { Textarea, type TextareaProps } from '@/ui/textarea';
 import { getFilesFromDataTransfer, hasFileTransfer } from '@/lib/file-drop';
-import { getChatComposerPromptPlaceholderKey } from '@/lib/chat-composer-placeholder';
-import { Kbd } from '@/components/commands/kbd';
-import { commands, formatKeyBinding } from '@/lib/commands';
 
 type ChatComposerTone = 'light' | 'dark';
 type ChatComposerVariant = 'landing' | 'session' | 'dialog';
@@ -285,14 +282,6 @@ export function ChatComposer({
   const isDialog = variant === 'dialog';
   const isLanding = variant === 'landing';
 
-  // (desktop keeps its 2-line default); it still auto-grows as the user types.
-  // Desktop-only ⌘L discovery hint in the empty composer. Requires a fine pointer
-
-  // keyboard shortcut that doesn't exist on touch. Hidden once focused or typing.
-  const focusHintSupported = useMemo(
-    () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: fine)').matches,
-    []
-  );
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [previewPastedTextDraftId, setPreviewPastedTextDraftId] = useState<string | null>(null);
   const [previewPastedTextEditorValue, setPreviewPastedTextEditorValue] = useState('');
@@ -307,14 +296,7 @@ export function ChatComposer({
   const pastedTextDialogTitle = t('composer.pastedTextTitle', 'Pasted text');
   const pastedTextEditorLabel = t('composer.pastedTextEditorLabel', 'Edit pasted text');
   const resolvedPromptPlaceholder =
-    promptPlaceholder ??
-    t(
-      getChatComposerPromptPlaceholderKey({
-        mentionSource,
-        availableCommands,
-        skillAgent,
-      })
-    );
+    promptPlaceholder ?? t('composer.promptPlaceholder.base', 'Describe a design or a change…');
   const numberFormatter = useMemo(() => new Intl.NumberFormat(intlLocale), [intlLocale]);
   const previewPastedTextDraft =
     pastedTextDrafts.find((item) => item.id === previewPastedTextDraftId) ?? null;
@@ -595,16 +577,6 @@ export function ChatComposer({
   );
 
   const boxContainerClassName = isLanding ? landingContainerClassName : sessionContainerClassName;
-  const composerHasAttachments =
-    imageItems.length > 0 ||
-    fileItems.length > 0 ||
-    commentReferenceItems.length > 0 ||
-    visualAnnotationReferenceItems.length > 0;
-  const focusHintBinding = commands.getKeybindingsFor('session.focusInput')[0];
-  // Only when the box is idle: desktop, has a focus binding, and nothing entered/attached
-  // yet (so the chip never collides with text or thumbnails). focus-within hides it too.
-  const showFocusHint =
-    focusHintSupported && Boolean(focusHintBinding) && !promptValue && !composerHasAttachments;
   const imageDropClassName = isImageDropActive
     ? 'border-primary/50 bg-primary/[0.04] ring-2 ring-primary/25'
     : undefined;
@@ -885,26 +857,9 @@ export function ChatComposer({
                 rows={promptRows}
                 enterKeyHint={promptEnterKeyHint}
                 placeholder={resolvedPromptPlaceholder}
-                // While the ⌘L focus hint is shown the box is empty, so the (long)
-                // placeholder would otherwise run under the top-right ⌘L chip. Reserve
-                // room for it so the placeholder wraps before the chip; the padding is
-                // dropped once the user types (showFocusHint → false → full width).
-                className={cn(boxTextareaClassName, showFocusHint && 'pr-16')}
+                className={boxTextareaClassName}
                 data-keyboard-nav="composer"
               />
-
-              {showFocusHint ? (
-                <div
-                  className="pointer-events-none absolute right-3 top-3 z-10 flex items-center opacity-50 transition-opacity duration-150 group-focus-within:opacity-0"
-                  title={t('chat.composer.focusHint', {
-                    defaultValue: 'Press {{shortcut}} to focus',
-                    shortcut: formatKeyBinding(focusHintBinding!),
-                  })}
-                  aria-hidden="true"
-                >
-                  <Kbd binding={focusHintBinding!} />
-                </div>
-              ) : null}
 
               {statusMessage ? (
                 <div

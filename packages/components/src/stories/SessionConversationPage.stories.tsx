@@ -1017,9 +1017,7 @@ function StoryShell({
   const headerMenuNode = (
     <SessionHeaderMenu
       session={session}
-      localProjectMeta={machineMeta.localProjects?.[STORY_LOCAL_PROJECT_ID]}
       workspacePath="/Users/developer/Code/lody"
-      machineName={machineMeta.name}
       onCopyConversationHistory={action}
       onCopyUrl={action}
       onShareAsImage={

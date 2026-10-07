@@ -54,7 +54,6 @@ import {
 } from '@/hooks/use-acp-session-config-selection';
 import { filterAcpSessionConfigOptionValues } from '@/lib/acp-session-config-selection';
 import { useComposerCycleCommands } from '@/hooks/use-composer-cycle-commands';
-import { ChildTabEmptyState } from './child-tab-empty-state';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { useConversationTail, useConversationVersion } from '@/hooks/use-conversation-view';
 import { collectConversationConfigSources } from '@/lib/conversation-view';
@@ -456,9 +455,7 @@ export const DraftSessionChatInterface = memo(
 
       return (
         <div className="flex h-full flex-col">
-          <div className="relative min-h-0 flex-1 bg-background">
-            <ChildTabEmptyState onSuggest={(text) => inputAreaRef.current?.setInputText(text)} />
-          </div>
+          <div className="relative min-h-0 flex-1 bg-background" />
           <SessionChatInputArea
             ref={inputAreaRef}
             session={transientSession}

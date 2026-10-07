@@ -9,9 +9,6 @@ pointer to this page live in
 this page is the full text of the rules summarised there.
 
 - `session-chat-input-area.tsx` — composer; `message-queue-display.tsx` — queued turns.
-  Child-tab suggestions are shared by draft and persisted child sessions through
-  `child-tab-empty-state.tsx`; it uses the same `px-3` + `ConversationColumn` as
-  the composer, so its right edge and max width must stay aligned automatically.
   Desktop run knobs are TWO footer buttons from `desktop-run-config-menu.tsx`:
   `DesktopRunConfigMenu` (pill face `agent icon · model · reasoning ⌄`,
   reasoning muted) and `DesktopPermissionModeButton` (permission icon + full

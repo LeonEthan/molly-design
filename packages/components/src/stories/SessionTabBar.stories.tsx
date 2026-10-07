@@ -121,9 +121,7 @@ function ConversationToolbar() {
     <div className="flex h-full shrink-0 items-center gap-1 pl-1 pr-2">
       <SessionHeaderMenu
         session={screenshotParentSession}
-        localProjectMeta={{ name: 'lody', rootPath: '/Users/developer/Code/lody' }}
         workspacePath="/Users/developer/Code/lody"
-        machineName="Studio Mac"
         onCopyConversationHistory={toolbarAction}
         onCopyUrl={toolbarAction}
         onOpenSearch={toolbarAction}

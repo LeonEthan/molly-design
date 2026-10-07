@@ -54,11 +54,11 @@ test('historical candidate opens the verified original file through the ordinary
       />
     )
   );
-  expect(element.textContent).toContain('not committed');
+  expect(element.textContent).toContain("wasn't applied");
   expect(element.querySelector('[data-design-result-status]')).toBeNull();
   expect(element.querySelector('img')).toBeNull();
   expect([...element.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
-    `candidates/${candidateId}.json`,
+    'Open draft',
   ]);
   await act(async () => element.querySelector('button')?.click());
   expect(opened).toBe(`/synthetic/chats/${artworkId}/candidates/${candidateId}.json`);
@@ -131,7 +131,7 @@ test('cancelled working files resolve the historical session and turn through or
   );
   expect(element.textContent).toContain('may have changed');
   expect(element.textContent).not.toContain('Cancelled');
-  expect(element.querySelector('button')?.textContent).toBe('design.yaml');
+  expect(element.querySelector('button')?.textContent).toBe('Open draft');
   await act(async () => element.querySelector('button')?.click());
   expect(opened).toBe('/synthetic/original/design.yaml');
   opened = undefined;

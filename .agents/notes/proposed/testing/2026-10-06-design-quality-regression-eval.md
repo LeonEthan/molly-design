@@ -98,8 +98,9 @@ so the case records what an expert would fix unprompted.
 
 1. Run each case three times on the candidate version. Record version, model,
    duration, image calls, tool errors and the final summary text.
-2. Gate: final-commit checks, canvas size, required text as text elements, text
-   bounds inside the canvas. A failure on any run is a regression.
+2. Record final-commit checks, canvas size, required text as text elements and
+   text bounds inside the canvas as evidence for the owner. These checks do not
+   decide design acceptance.
 3. Blind pairwise review against the stored outputs of the last accepted version.
    Side order is randomised and version labels are hidden. For each pair the
    owner marks better, same or worse on composition, hierarchy, brand accuracy
@@ -107,8 +108,10 @@ so the case records what an expert would fix unprompted.
    regions survived.
 4. Summary honesty: the owner marks whether the final summary matches the visible
    change.
-5. A case regresses when the majority of its pairs are worse on any dimension.
-   Accepted outputs become the next baseline, so a baseline is never re-run.
+5. The owner decides whether the results are acceptable. The summary counts
+   completed human answers and comparisons without an automatic quality verdict.
+   Explicitly accepted outputs become the next baseline, so a baseline is never
+   re-run.
 
 Automatic layout metrics (subject area ratio, text-to-subject gap, contrast) are
 deferred. They are worth building only once the owner's verdicts show which ones
@@ -142,8 +145,45 @@ is a pure check over the committed design and has a unit test.
 
 `design-eval-review.mjs` serves a local review page. Pairwise mode fixes a
 random A/B placement in a key file before the owner sees anything; single-label
-mode lets the owner accept a first baseline. Verdicts save as each choice is made,
-and scoring un-blinds them and applies the majority-worse rule.
+mode lets the owner accept a baseline. Verdicts save as each choice is made,
+and scoring un-blinds and summarizes completed human answers.
+
+### PR review corrections and scope clarification
+
+The owner clarified that this work is only an independent end-to-end evaluation
+lane and that design acceptance must depend entirely on human review. No AI
+evaluator or product-runtime change is needed. The earlier majority-worse quality
+verdict is removed; automatic size and editable-text checks remain visible
+reference evidence. Execution completion is recorded separately from acceptance.
+This supersedes the earlier automatic gate-failure-as-regression rule.
+
+The existing review tool and its `key.json` / `verdicts.json` files are reused.
+Partial autosaves no longer count as completed reviews. Single-label review needs
+an explicit yes or no; pairwise review needs all four dimensions and both sides'
+preservation and summary-honesty answers. Only runs explicitly accepted by the
+owner may be loaded as a baseline, including when reopening a saved pair key.
+
+New runs retain their attached input and original case manifest in their private
+run directory. Review uses those inputs instead of the current case manifest;
+paired runs must have the same recorded task and rubric. Keeping these snapshots
+is necessary because the original input cannot be recomputed after a case edit.
+Historical records are not backfilled with invented evidence: they remain usable
+for single-label human review with a visible caveat, but not strict version
+comparisons. Saved owner verdicts are not rewritten.
+
+For build evidence, the renderer entry and its directly referenced JS/CSS hashes
+borrow the existing Kimi replication runner's implementation. A new artifact
+registry, recursive build scanner and automatic scoring framework were rejected
+as unnecessary for this independent lane. These changes remain under `e2e/` and
+the owning docs; no product-runtime implementation or paid model rerun is added.
+
+Review-fix verification passed 19 focused tests and all 65 E2E contract/unit
+tests. Re-summarizing the existing accepted output preserved the owner verdict
+file byte-for-byte and counted one human acceptance without a quality decision.
+The advisory, read-only Codex CLI source-code review (`gpt-6-astra`, high) found
+no P0/P1 in these fixes. Its verification excluded filesystem-fixture and live
+browser tests; the local suite covered the filesystem fixtures. It did not judge
+any artwork or access private runs.
 
 Runs may execute in parallel. The e2e rule to run scenarios serially exists for
 OS endpoints that are still fixed. On macOS each harness owns its data directory,

@@ -7,7 +7,7 @@ const { OnboardingPage } = await import('../src/support/pages/onboarding-page.ts
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, extname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { expect } from '@playwright/test';
@@ -73,6 +73,13 @@ for (const rel of [
   'apps/electron/resources/design/build.json',
 ])
   sourceIdentity.buildHashes[rel] = sha(await readFile(join(root, rel)));
+const rendererEntry = 'apps/electron/out/renderer/index.html';
+const rendererHtml = await readFile(join(root, rendererEntry));
+sourceIdentity.buildHashes[rendererEntry] = sha(rendererHtml);
+for (const asset of rendererHtml.toString().matchAll(/(?:src|href)="\.\/assets\/([^"]+\.(?:js|css))"/g)) {
+  const rel = `apps/electron/out/renderer/assets/${asset[1]}`;
+  sourceIdentity.buildHashes[rel] = sha(await readFile(join(root, rel)));
+}
 
 const ipc = (page, method, ...args) =>
   page.evaluate(`window.ipc.invoke(${JSON.stringify(method)}, ...${JSON.stringify(args)})`);
@@ -185,6 +192,8 @@ let browserPreparation = Promise.resolve();
 async function runOnce({ evalCase, source, directory: caseDirectory }) {
   const directory = await nextRunDirectory(caseDirectory);
   const name = `${evalCase.id}/${directory.split('/').at(-1)}`;
+  const inputFile = `input${extname(source)}`;
+  const followUps = values['first-turn-only'] ? [] : (evalCase.followUps ?? []);
   const report = {
     case: evalCase.id,
     label: values.label,
@@ -192,7 +201,12 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     model: { modelId: connection.model.modelId, reasoning: connection.model.reasoning },
     imageModel: connection.image.model,
     prompt: evalCase.prompt,
-    followUps: values['first-turn-only'] ? [] : evalCase.followUps,
+    followUps,
+    caseSnapshot: {
+      ...evalCase,
+      input: { ...evalCase.input, source: inputFile },
+      followUps,
+    },
     startedAt: new Date().toISOString(),
     turns: [],
     gate: { status: 'pending' },
@@ -207,6 +221,11 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
   });
   let dataRoot;
   try {
+    const sourceBytes = await readFile(source);
+    if (sha(sourceBytes) !== evalCase.input.sha256)
+      throw Error(`${evalCase.id}: case source changed before this attempt`);
+    const attachment = join(directory, inputFile);
+    await writeFile(attachment, sourceBytes);
     await persist();
     await h.launch();
     const page = h.page;
@@ -243,7 +262,7 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     console.log(`${name} browser imported and research page verified`);
     for (const [index, prompt] of [evalCase.prompt, ...report.followUps].entries()) {
       const startedAt = Date.now();
-      await send(page, prompt, index === 0 ? source : undefined);
+      await send(page, prompt, index === 0 ? attachment : undefined);
       if (index === 0) {
         await expect(page).toHaveURL(/#\/local\/sessions\/[^/?#]+(?:\?.*)?$/);
         report.artworkId = decodeURIComponent(page.url().split('/sessions/')[1].split(/[?#]/)[0]);
@@ -275,7 +294,7 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     report.receipts = await receipts(workdir);
     await cp(workdir, join(directory, 'workdir'), { recursive: true });
     await writeFile(join(directory, 'conversation.txt'), await page.locator('body').innerText());
-    report.overall = report.gate.status;
+    report.overall = 'completed';
   } catch (error) {
     report.overall = 'failed';
     if (report.browser.status === 'pending') report.browser.status = 'failed';

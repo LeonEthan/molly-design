@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Owner review of design-eval runs: blind pairwise against a baseline, or single-label acceptance.
 import { createServer } from 'node:http';
-import { randomInt } from 'node:crypto';
+import { createHash, randomInt } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArgs } from 'node:util';
+import { isDeepStrictEqual, parseArgs } from 'node:util';
 
 export const DIMENSIONS = ['composition', 'hierarchy', 'brand accuracy', 'finish'];
 
@@ -65,14 +65,25 @@ export function buildItems(candidateRuns, baselineRuns, flip) {
   return items;
 }
 
-/** Un-blinds verdicts; a case regresses when most of its pairs are worse on any dimension. */
+export function isVerdictComplete(item, verdict) {
+  if (!item.sides.B) return typeof verdict?.accept === 'boolean';
+  return (
+    DIMENSIONS.every((dimension) => ['A', 'same', 'B'].includes(verdict?.dims?.[dimension])) &&
+    Object.keys(item.sides).every(
+      (side) =>
+        typeof verdict?.preserved?.[side] === 'boolean' &&
+        typeof verdict?.honest?.[side] === 'boolean'
+    )
+  );
+}
+
 export function scoreReview(items, verdicts) {
   const cases = {};
   for (const item of items) {
     const verdict = verdicts[item.id];
     const entry = (cases[item.caseId] ??= { pairs: 0, reviewed: 0, worse: {}, better: {} });
     entry.pairs += 1;
-    if (!verdict) continue;
+    if (!isVerdictComplete(item, verdict)) continue;
     entry.reviewed += 1;
     if (!item.sides.B) {
       entry.accepted = (entry.accepted ?? 0) + (verdict.accept ? 1 : 0);
@@ -85,11 +96,6 @@ export function scoreReview(items, verdicts) {
       const bucket = choice === candidateSide ? entry.better : entry.worse;
       bucket[dimension] = (bucket[dimension] ?? 0) + 1;
     }
-  }
-  for (const entry of Object.values(cases)) {
-    entry.regressed = Object.entries(entry.worse)
-      .filter(([, count]) => count > entry.pairs / 2)
-      .map(([dimension]) => dimension);
   }
   return cases;
 }
@@ -111,8 +117,23 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const evalRoot = join(root, 'e2e/design-eval');
 const privateRoot = join(evalRoot, 'private');
 
-async function listRuns(label) {
-  const base = join(privateRoot, 'runs', label);
+export async function listRuns(label, { acceptedOnly = false, dataRoot = privateRoot } = {}) {
+  let accepted;
+  if (acceptedOnly) {
+    const review = join(dataRoot, 'reviews', label);
+    if (!existsSync(join(review, 'key.json')) || !existsSync(join(review, 'verdicts.json')))
+      throw Error(
+        'Review and explicitly accept baseline runs in single-label mode before comparing'
+      );
+    const items = JSON.parse(await readFile(join(review, 'key.json'), 'utf8'));
+    const verdicts = JSON.parse(await readFile(join(review, 'verdicts.json'), 'utf8'));
+    accepted = new Set(
+      items
+        .filter((item) => !item.sides.B && verdicts[item.id]?.accept === true)
+        .map((item) => item.sides.A.run)
+    );
+  }
+  const base = join(dataRoot, 'runs', label);
   const runs = {};
   for (const source of await readdir(base)) {
     for (const variant of await readdir(join(base, source))) {
@@ -121,6 +142,7 @@ async function listRuns(label) {
       const complete = [];
       for (const name of names.sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))) {
         const run = join(directory, name);
+        if (accepted && !accepted.has(run)) continue;
         if (!existsSync(join(run, 'preview.png'))) continue;
         const report = JSON.parse(await readFile(join(run, 'run.json'), 'utf8'));
         if (!report.error) complete.push(run);
@@ -140,8 +162,22 @@ async function findCase(caseId) {
   throw Error(`No case file for ${caseId}`);
 }
 
-async function describeRun(run) {
+export async function describeRun(run) {
   const report = JSON.parse(await readFile(join(run, 'run.json'), 'utf8'));
+  const snapshot = report.caseSnapshot;
+  const source = snapshot ? resolve(run, snapshot.input.source) : undefined;
+  if (snapshot) {
+    const hash = createHash('sha256')
+      .update(await readFile(source))
+      .digest('hex');
+    if (
+      hash !== snapshot.input.sha256 ||
+      snapshot.id !== report.case ||
+      snapshot.prompt !== report.prompt ||
+      !isDeepStrictEqual(snapshot.followUps, report.followUps)
+    )
+      throw Error(`${report.case}: retained inputs do not match the run record`);
+  }
   const previews = [join(run, 'preview.png')];
   for (let index = 1; existsSync(join(run, `follow-up-${index}`, 'preview.png')); index += 1)
     previews.push(join(run, `follow-up-${index}`, 'preview.png'));
@@ -150,11 +186,30 @@ async function describeRun(run) {
     : '';
   return {
     previews,
+    prompt: report.prompt,
     followUps: report.followUps,
+    caseSnapshot: snapshot,
+    source,
     gate: report.gate,
     minutes: (report.turns ?? []).map((turn) => Math.round(turn.durationMs / 60000)),
     summary: finalAgentMessage(conversation),
   };
+}
+
+export function validateReviewInputs(sides) {
+  if (!sides.B) return;
+  const inputs = Object.values(sides).map(({ caseSnapshot }) => {
+    if (!caseSnapshot)
+      throw Error(
+        'Historical runs without original case snapshots cannot be used for version comparisons'
+      );
+    return {
+      ...caseSnapshot,
+      input: { type: caseSnapshot.input.type, sha256: caseSnapshot.input.sha256 },
+    };
+  });
+  if (!isDeepStrictEqual(inputs[0], inputs[1]))
+    throw Error('Candidate and baseline have different recorded case inputs or review rubrics');
 }
 
 const page = (title) => `<!doctype html>
@@ -174,7 +229,8 @@ table{border-collapse:collapse;margin-top:10px}td,th{padding:4px 10px;border-bot
 <header><b>${title}</b><span id="progress"></span><span class="muted">选择后自动保存。点击图片可放大。</span></header>
 <main id="app"></main>
 <script>
-const DIMS=${JSON.stringify(DIMENSIONS)};
+const DIMENSIONS=${JSON.stringify(DIMENSIONS)};
+${isVerdictComplete.toString()}
 const LABELS=${JSON.stringify(REVIEW_LABELS)};
 const zh=(value)=>LABELS[value]??value;
 const gateFailure=(message)=>message.replace(/^canvas is (.+), expected (.+)$/,'画布尺寸为 $1，要求为 $2').replace(/^missing editable text: /,'缺少可编辑文字：').replace(/^text (.+) extends outside the canvas$/,'文字元素 $1 超出画布');
@@ -184,23 +240,24 @@ const zoom=(src)=>{const z=document.createElement('div');z.className='zoom';z.in
  const {items,verdicts}=await (await fetch('/data')).json();
  const app=document.getElementById('app');
  const save=async(id)=>{await fetch('/verdict',{method:'POST',body:JSON.stringify({id,verdict:verdicts[id]})});progress()};
- const progress=()=>{document.getElementById('progress').textContent='已评审 '+Object.values(verdicts).filter(v=>Object.keys(v).length).length+' / '+items.length+' 项'};
+ const progress=()=>{document.getElementById('progress').textContent='已评审 '+items.filter(item=>isVerdictComplete(item,verdicts[item.id])).length+' / '+items.length+' 项'};
  progress();
  for(const item of items){
   const v=(verdicts[item.id]??={});const sides=Object.keys(item.sides);const pair=sides.length===2;
   const el=document.createElement('section');el.className='item';
   el.innerHTML='<h2>'+item.caseLabel+' <span class="muted">第 '+item.id.split('#')[1]+(pair?' 组对比':' 次运行')+'</span></h2>'+
-   '<p><b>任务要求：</b> '+item.prompt+(item.followUps.length?' <b>后续要求：</b> '+item.followUps.join(' / '):'')+'</p>';
+   '<p><b>任务要求：</b> '+item.prompt+(item.followUps.length?' <b>后续要求：</b> '+item.followUps.join(' / '):'')+'</p>'+
+   (item.legacyInputs?'<p class="muted">历史记录未保存原始案例快照。原图和问题清单来自当前案例，仅供本次人工查看，不能用于严格的版本比较。</p>':'');
   const cols=document.createElement('div');cols.className='cols';cols.style.setProperty('--n',sides.length+1);
   cols.innerHTML='<div><h3>原图</h3><img src="'+file(item.source)+'"></div>';
   for(const s of sides){const d=item.sides[s];
-   const gate=d.gate?.status==='passed'?'<span class="done">自动检查通过</span>':d.gate?.status==='failed'?'自动检查未通过：'+(d.gate.failures??[]).map(gateFailure).join('；'):'未记录自动检查结果';
+   const gate=d.gate?.status==='passed'?'<span class="done">尺寸与文字检查通过（供参考）</span>':d.gate?.status==='failed'?'尺寸与文字检查未通过（供参考）：'+(d.gate.failures??[]).map(gateFailure).join('；'):'未记录尺寸与文字检查结果';
    cols.innerHTML+='<div class="side"><h3>'+(pair?'方案 '+s:'生成结果')+'</h3>'+d.previews.map((p,i)=>'<p class="muted">'+(i?'第 '+i+' 次后续修改后':'首轮结果')+'</p><img src="'+file(p)+'">').join('')+
     '<p class="muted">'+gate+' · 各轮耗时：'+d.minutes.join(' + ')+' 分钟</p><b>助手总结</b><div class="summary">'+(d.summary||'（未记录最终回复）').replace(/</g,'&lt;')+'</div></div>'}
   el.append(cols);
   const t=document.createElement('table');
   const radio=(name,value,label,checked)=>'<label><input type="radio" name="'+name+'" value="'+value+'"'+(checked?' checked':'')+'> '+label+'</label> ';
-  if(pair){t.innerHTML+='<tr><th>评分维度</th><th>哪个方案更好？</th></tr>'+DIMS.map(d=>'<tr><td>'+zh(d)+'</td><td>'+['A','same','B'].map(c=>radio(item.id+d,c,c==='same'?'相当':'方案 '+c,v.dims?.[d]===c)).join('')+'</td></tr>').join('')}
+  if(pair){t.innerHTML+='<tr><th>评分维度</th><th>哪个方案更好？</th></tr>'+DIMENSIONS.map(d=>'<tr><td>'+zh(d)+'</td><td>'+['A','same','B'].map(c=>radio(item.id+d,c,c==='same'?'相当':'方案 '+c,v.dims?.[d]===c)).join('')+'</td></tr>').join('')}
   else{t.innerHTML+='<tr><td>接受为基准结果</td><td>'+radio(item.id+'accept','yes','是',v.accept===true)+radio(item.id+'accept','no','否',v.accept===false)+'</td></tr>'}
   for(const s of sides){
    t.innerHTML+='<tr><td colspan=2><b>'+(pair?'方案 '+s:'生成结果')+'</b> · 勾选已修复的问题：</td></tr>'+item.knownDefects.map((k,i)=>'<tr><td></td><td><label><input type="checkbox" data-side="'+s+'" data-defect="'+i+'"'+(v.defectsFixed?.[s]?.includes(i)?' checked':'')+'> '+zh(k)+'</label></td></tr>').join('')+
@@ -210,7 +267,7 @@ const zoom=(src)=>{const z=document.createElement('div');z.className='zoom';z.in
   el.append(t);
   el.addEventListener('change',(e)=>{const x=e.target;
    if(x.type==='radio'){const n=x.name.slice(item.id.length);
-    if(DIMS.includes(n))(v.dims??={})[n]=x.value;else if(n==='accept')v.accept=x.value==='yes';
+    if(DIMENSIONS.includes(n))(v.dims??={})[n]=x.value;else if(n==='accept')v.accept=x.value==='yes';
     else{const s=n.slice(0,-1);(n.endsWith('p')?(v.preserved??={}):(v.honest??={}))[s]=x.value==='yes'}}
    else if(x.type==='checkbox'){const list=((v.defectsFixed??={})[x.dataset.side]??=[]);const i=Number(x.dataset.defect);
     if(x.checked)list.push(i);else list.splice(list.indexOf(i),1)}
@@ -241,51 +298,62 @@ async function main() {
   await mkdir(reviewDir, { recursive: true });
   const keyFile = join(reviewDir, 'key.json');
   const verdictFile = join(reviewDir, 'verdicts.json');
+  const candidate = await listRuns(values.candidate);
+  const baseline = values.baseline
+    ? await listRuns(values.baseline, { acceptedOnly: true })
+    : undefined;
 
   let items;
   if (existsSync(keyFile)) {
     items = JSON.parse(await readFile(keyFile, 'utf8'));
   } else {
-    const candidate = await listRuns(values.candidate);
-    const baseline = values.baseline ? await listRuns(values.baseline) : undefined;
     items = buildItems(candidate, baseline, () => randomInt(2) === 1);
-    await writeFile(keyFile, JSON.stringify(items, null, 2));
   }
+  if (!items.length) throw Error('No reviewable outputs or accepted baseline runs');
+  const baselinePaths = new Set(Object.values(baseline ?? {}).flat());
+  for (const item of items)
+    for (const side of Object.values(item.sides))
+      if (
+        (side.label === 'baseline' && !baselinePaths.has(side.run)) ||
+        (side.label === 'candidate' && !candidate[item.caseId]?.includes(side.run))
+      )
+        throw Error(`${item.caseId}: saved review key includes an ineligible run`);
   const verdicts = existsSync(verdictFile) ? JSON.parse(await readFile(verdictFile, 'utf8')) : {};
+
+  const blind = [];
+  for (const item of items) {
+    const sides = {};
+    for (const [side, { run }] of Object.entries(item.sides)) sides[side] = await describeRun(run);
+    validateReviewInputs(sides);
+    const snapshot = sides.A.caseSnapshot;
+    const currentCase = snapshot ? undefined : await findCase(item.caseId);
+    const data = snapshot ?? currentCase.data;
+    blind.push({
+      id: item.id,
+      caseId: item.caseId,
+      caseLabel: `${item.caseId.split('/')[0]} · ${REVIEW_LABELS[item.caseId.split('/')[1]] ?? item.caseId}`,
+      prompt: sides.A.prompt,
+      followUps: sides.A.followUps ?? [],
+      knownDefects: data.knownDefects,
+      preserve: data.preserve,
+      source: sides.A.source ?? resolve(dirname(currentCase.file), data.input.source),
+      legacyInputs: !snapshot,
+      sides,
+    });
+  }
+  if (!existsSync(keyFile)) await writeFile(keyFile, JSON.stringify(items, null, 2));
 
   if (values.score) {
     const result = scoreReview(items, verdicts);
     await writeFile(join(reviewDir, 'summary.json'), JSON.stringify(result, null, 2));
     for (const [caseId, entry] of Object.entries(result)) {
-      const status =
-        entry.reviewed < entry.pairs
-          ? 'incomplete'
-          : entry.regressed.length
-            ? `REGRESSED: ${entry.regressed.join(', ')}`
-            : 'ok';
+      const status = entry.reviewed < entry.pairs ? '人工评审未完成' : '人工评审已完成';
       const accepted =
-        entry.accepted === undefined ? '' : ` accepted ${entry.accepted}/${entry.pairs}`;
-      console.log(`${caseId}: ${entry.reviewed}/${entry.pairs} reviewed${accepted} → ${status}`);
+        entry.accepted === undefined ? '' : `；人工接受 ${entry.accepted}/${entry.pairs}`;
+      console.log(`${caseId}: ${entry.reviewed}/${entry.pairs} ${status}${accepted}`);
     }
+    console.log('summary.json 仅汇总人工答案；设计质量与是否接受由评审者判定。');
     return;
-  }
-
-  const blind = [];
-  for (const item of items) {
-    const { data, file } = await findCase(item.caseId);
-    const sides = {};
-    for (const [side, { run }] of Object.entries(item.sides)) sides[side] = await describeRun(run);
-    blind.push({
-      id: item.id,
-      caseId: item.caseId,
-      caseLabel: `${file.startsWith(privateRoot + sep) ? '私有案例' : '合成案例'} · ${REVIEW_LABELS[item.caseId.split('/')[1]] ?? item.caseId}`,
-      prompt: data.prompt,
-      followUps: sides.A.followUps ?? data.followUps,
-      knownDefects: data.knownDefects,
-      preserve: data.preserve,
-      source: resolve(dirname(file), data.input.source),
-      sides,
-    });
   }
   const allowed = [privateRoot + sep, join(evalRoot, 'cases') + sep];
   const handle = async (req, res) => {

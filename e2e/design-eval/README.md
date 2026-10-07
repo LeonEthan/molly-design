@@ -6,6 +6,11 @@ every case several times, and the owner compares outputs blind against the last
 accepted version. The rationale is in the
 [proposal note](../../.agents/notes/proposed/testing/2026-10-06-design-quality-regression-eval.md).
 
+The owner alone judges design quality and acceptance. This standalone E2E lane
+collects artifacts and human answers; it adds no AI evaluator or product-runtime
+behavior. Canvas and editable-text checks are reference evidence, not a quality
+verdict.
+
 This is a live-model lane: it calls real model and image APIs, costs money and is
 never part of CI.
 
@@ -66,8 +71,11 @@ browser/profile IDs from Molly's existing Website accounts source list. Each
 run launches an isolated desktop through the
 e2e harness, saves the connections there, sends the prompts and records
 `run.json`, `design.json`, `preview.png`, the artwork directory and the visible
-conversation. A run directory is never overwritten, and a failed paid call is
-never retried.
+conversation. New runs retain the attached source and the original case manifest
+in `run.json.caseSnapshot`, including the actual follow-ups. Later edits to a case
+do not change what the review page shows. A run directory is never overwritten,
+and a failed paid call is never retried. `overall: completed` records execution
+completion independently of the reference checks and human acceptance.
 
 Before sending a design prompt, every instance imports the selected profile's
 Pinterest account through the existing product IPC. Account preparation is
@@ -120,5 +128,20 @@ It shows the source, each output (and its follow-ups), the gate result and
 the Agent's final message. In pairwise mode, run _i_ of each label is paired and
 randomly placed as A or B; the placement is fixed in `private/reviews/<name>/key.json`
 on first launch, so version labels never reach the page. Each choice saves to
-`verdicts.json` immediately. Scoring writes `summary.json` and marks a case
-regressed when most of its pairs are worse on any dimension.
+`verdicts.json` immediately. A pair counts as reviewed after all four dimensions
+and both sides' preservation and summary-honesty questions have explicit answers.
+Single-label mode requires an explicit acceptance or rejection; notes and defect
+checkboxes are optional.
+
+`--score` writes `summary.json` with completed-review counts, human acceptance
+counts and human dimension choices. It never declares quality `ok` or `REGRESSED`,
+and automatic checks do not override the owner's verdict. Before using any label
+as a baseline, review it in single-label mode; only explicitly accepted runs are
+eligible. Cached pairs are refused if a baseline run is later rejected.
+
+Version comparisons require matching original case snapshots and retained source
+hashes. Changed prompts, images, follow-ups or review rubrics cannot silently
+become the same task. Historical runs without snapshots remain available for
+single-label human review with a warning that the source and rubric come from
+the current case; they cannot establish a strict version comparison. Existing
+verdicts are preserved, and missing historical evidence is not reconstructed.

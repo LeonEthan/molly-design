@@ -76,6 +76,13 @@ in `run.json.caseSnapshot`, including the actual follow-ups. Later edits to a ca
 do not change what the review page shows. A run directory is never overwritten,
 and a failed paid call is never retried. `overall: completed` records execution
 completion independently of the reference checks and human acceptance.
+New runs become reviewable only after that completion is recorded, including
+all requested follow-ups and exports. An unfinished preview cannot be accepted.
+
+Each prompt must produce a new `committed` receipt whose turn, artwork and
+prompt match that request. The current design revision must match its receipt
+before any export or follow-up. Other terminal statuses stop the run and retain
+the receipt as failure evidence; an older saved design cannot count as completion.
 
 Before sending a design prompt, every instance imports the selected profile's
 Pinterest account through the existing product IPC. Account preparation is
@@ -101,7 +108,8 @@ follow-ups. For three redesign attempts, select one redesign case with `--runs 3
 
 Keep a separate label when changing the Agent model, image model or reasoning.
 Such a backfill is a separate cohort, not a version comparison with fixed model
-settings. Changing `model.modelId` in the private connection file selects the
+settings. Pairwise review rejects missing or different Agent model, reasoning
+and image-model settings. Changing `model.modelId` in the private connection file selects the
 model inside the isolated desktops without changing the provider configuration.
 The eval declares only `off` and the requested `model.reasoning` level in its
 custom model metadata. This lets the existing picker select an explicit level
@@ -127,8 +135,10 @@ defects and protected regions; saved verdict keys and values remain unchanged.
 It shows the source, each output (and its follow-ups), the gate result and
 the Agent's final message. In pairwise mode, run _i_ of each label is paired and
 randomly placed as A or B; the placement is fixed in `private/reviews/<name>/key.json`
-on first launch, so version labels never reach the page. Each choice saves to
-`verdicts.json` immediately. A pair counts as reviewed after all four dimensions
+on first launch. The browser receives opaque image IDs rather than run paths or
+model metadata. Each choice queues a save to `verdicts.json`; the server serializes
+updates and atomically replaces the file. Failed saves remain visible and can be
+retried with the page's save button. A pair counts as reviewed after all four dimensions
 and both sides' preservation and summary-honesty questions have explicit answers.
 Single-label mode requires an explicit acceptance or rejection; notes and defect
 checkboxes are optional.

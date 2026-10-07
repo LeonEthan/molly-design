@@ -185,6 +185,48 @@ no P0/P1 in these fixes. Its verification excluded filesystem-fixture and live
 browser tests; the local suite covered the filesystem fixtures. It did not judge
 any artwork or access private runs.
 
+### Further PR review corrections (2026-10-07)
+
+The four additional review findings concern the reliability of this independent
+test lane. The existing verdict file is retained: browser requests and server
+read/modify/write operations are serialized, with atomic file replacement and an
+explicit failed-save indicator. The temporary-file replacement pattern is
+borrowed from the existing turn-input writer rather than importing its product
+implementation. The existing image endpoint now accepts opaque per-process IDs;
+run paths and model metadata remain server-side. This needs only an in-memory
+lookup, not a persistent artifact registry or product API.
+
+Pairwise comparisons require identical recorded Agent model, reasoning and image
+model settings as well as identical case snapshots. The runner reuses
+`@molly/shared`'s receipt sanitizer, identifies the new input directory for each
+prompt and requires a matching committed receipt and current design revision
+before exporting or continuing. Failed or uncommitted receipts are retained as
+execution failures; they do not establish design quality. A new receipt schema,
+AI quality evaluator and product-runtime changes are unnecessary.
+
+Focused fixtures exercise queued saves, failed-write recovery, opaque image
+projection, model mismatches and rejected or unrelated receipts. These fixtures
+use explicit promise gates and synthetic temporary files, with no paid model
+calls or live browser data.
+
+Before commit, the whole-PR read-only Codex CLI review (`gpt-6-astra`, high)
+identified two additional P1 issues: verdict-write authorization and admission of
+unfinished runs. These findings are accepted. The local review server now checks
+its bound host and origin and requires a per-process token on verdict writes.
+New runs must record successful execution completion before either review or
+accepted-baseline selection; historical records without the new completion
+markers retain their existing single-label compatibility. Both changes stay in
+the independent E2E lane and have synthetic regression fixtures.
+
+Final verification passed 27 focused fixtures, all 73 E2E contract/unit tests,
+`pnpm check`, formatting and documentation checks. A synthetic Chrome probe
+loaded opaque images, saved a Chinese-page answer and rejected unauthorized
+requests without changing the verdict. The final whole-PR Codex CLI re-review
+found no remaining P0/P1 across all six fixes and the original evaluation flow.
+Both CLI reviews were read-only; source, syntax and documentation inspection did
+not evaluate artwork or access private trial records. No paid design run was
+repeated for these fixes.
+
 Runs may execute in parallel. The e2e rule to run scenarios serially exists for
 OS endpoints that are still fixed. On macOS each harness owns its data directory,
 the IPC sockets inside it and a random CLI port, and E2E skips the single-instance

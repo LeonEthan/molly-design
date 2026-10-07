@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Owner review of design-eval runs: blind pairwise against a baseline, or single-label acceptance.
 import { createServer } from 'node:http';
-import { createHash, randomInt } from 'node:crypto';
+import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual, parseArgs } from 'node:util';
@@ -100,6 +100,77 @@ export function scoreReview(items, verdicts) {
   return cases;
 }
 
+export function serialize(operation) {
+  let pending = Promise.resolve();
+  return (...args) => {
+    const result = pending.then(() => operation(...args));
+    pending = result.catch(() => {});
+    return result;
+  };
+}
+
+export async function writeVerdicts(file, contents) {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, contents, { flag: 'wx', mode: 0o600 });
+    await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
+  }
+}
+
+export function createVerdictWriter(file, verdicts, persist = writeVerdicts) {
+  const write = serialize(async (id, verdict) => {
+    const next = { ...verdicts, [id]: verdict };
+    await persist(file, JSON.stringify(next, null, 2));
+    verdicts[id] = verdict;
+  });
+  return (id, verdict) => write(id, structuredClone(verdict));
+}
+
+export function isReviewRequestAllowed(headers, origin, token, writing = false) {
+  if (headers.host !== new URL(origin).host) return false;
+  if (headers.origin !== undefined && headers.origin !== origin) return false;
+  return (
+    !writing ||
+    (headers.origin === origin &&
+      headers['content-type'] === 'application/json' &&
+      headers['x-review-token'] === token)
+  );
+}
+
+export function createBlindReview(items) {
+  const artifacts = new Map();
+  const artifact = (path) => {
+    const id = randomUUID();
+    artifacts.set(id, path);
+    return id;
+  };
+  const data = items.map((item) => ({
+    id: item.id,
+    caseId: item.caseId,
+    caseLabel: item.caseLabel,
+    prompt: item.prompt,
+    followUps: item.followUps,
+    knownDefects: item.knownDefects,
+    preserve: item.preserve,
+    legacyInputs: item.legacyInputs,
+    source: artifact(item.source),
+    sides: Object.fromEntries(
+      Object.entries(item.sides).map(([side, details]) => [
+        side,
+        {
+          previews: details.previews.map(artifact),
+          gate: details.gate,
+          minutes: details.minutes,
+          summary: details.summary,
+        },
+      ])
+    ),
+  }));
+  return { data, artifacts };
+}
+
 export function finalAgentMessage(conversation) {
   const lines = conversation.split('\n');
   const start = lines.findLastIndex((line) => /^Worked for /.test(line.trim()));
@@ -145,7 +216,11 @@ export async function listRuns(label, { acceptedOnly = false, dataRoot = private
         if (accepted && !accepted.has(run)) continue;
         if (!existsSync(join(run, 'preview.png'))) continue;
         const report = JSON.parse(await readFile(join(run, 'run.json'), 'utf8'));
-        if (!report.error) complete.push(run);
+        if (
+          !report.error &&
+          (report.overall === 'completed' || (report.overall === undefined && !report.caseSnapshot))
+        )
+          complete.push(run);
       }
       if (complete.length) runs[`${source}/${variant}`] = complete;
     }
@@ -190,6 +265,8 @@ export async function describeRun(run) {
     followUps: report.followUps,
     caseSnapshot: snapshot,
     source,
+    model: report.model,
+    imageModel: report.imageModel,
     gate: report.gate,
     minutes: (report.turns ?? []).map((turn) => Math.round(turn.durationMs / 60000)),
     summary: finalAgentMessage(conversation),
@@ -210,9 +287,22 @@ export function validateReviewInputs(sides) {
   });
   if (!isDeepStrictEqual(inputs[0], inputs[1]))
     throw Error('Candidate and baseline have different recorded case inputs or review rubrics');
+  const configurations = Object.values(sides).map(({ model, imageModel }) => {
+    if (
+      ![model?.modelId, model?.reasoning, imageModel].every(
+        (value) => typeof value === 'string' && value.trim()
+      )
+    )
+      throw Error('Version comparisons require recorded Agent model, reasoning and image model');
+    return { modelId: model.modelId, reasoning: model.reasoning, imageModel };
+  });
+  if (!isDeepStrictEqual(configurations[0], configurations[1]))
+    throw Error(
+      'Candidate and baseline use different Agent models, reasoning levels or image models'
+    );
 }
 
-const page = (title) => `<!doctype html>
+const page = (title, token) => `<!doctype html>
 <html lang="zh-CN"><meta charset="utf-8"><title>${title}</title>
 <style>
 body{font:14px/1.5 system-ui;margin:0;background:#f6f5f2;color:#222}
@@ -226,20 +316,27 @@ main{padding:20px;max-width:1500px;margin:auto}
 table{border-collapse:collapse;margin-top:10px}td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left}
 .done{color:#0a7d3b}.zoom{position:fixed;inset:0;background:#000c;display:flex;justify-content:center;align-items:center}.zoom img{max-height:96vh;max-width:96vw}
 </style>
-<header><b>${title}</b><span id="progress"></span><span class="muted">选择后自动保存。点击图片可放大。</span></header>
+<header><b>${title}</b><span id="progress"></span><span id="save-status" class="muted">选择后自动保存。点击图片可放大。</span><button id="retry-save" hidden>重试保存</button></header>
 <main id="app"></main>
 <script>
 const DIMENSIONS=${JSON.stringify(DIMENSIONS)};
 ${isVerdictComplete.toString()}
+${serialize.toString()}
 const LABELS=${JSON.stringify(REVIEW_LABELS)};
 const zh=(value)=>LABELS[value]??value;
 const gateFailure=(message)=>message.replace(/^canvas is (.+), expected (.+)$/,'画布尺寸为 $1，要求为 $2').replace(/^missing editable text: /,'缺少可编辑文字：').replace(/^text (.+) extends outside the canvas$/,'文字元素 $1 超出画布');
-const file=(p)=>'/file?path='+encodeURIComponent(p);
+const file=(id)=>'/file?id='+encodeURIComponent(id);
 const zoom=(src)=>{const z=document.createElement('div');z.className='zoom';z.innerHTML='<img src="'+src+'">';z.onclick=()=>z.remove();document.body.append(z)};
 (async()=>{
  const {items,verdicts}=await (await fetch('/data')).json();
  const app=document.getElementById('app');
- const save=async(id)=>{await fetch('/verdict',{method:'POST',body:JSON.stringify({id,verdict:verdicts[id]})});progress()};
+ const failed=new Set();let pendingSaves=0;
+ const saveStatus=document.getElementById('save-status');const retry=document.getElementById('retry-save');
+ const status=()=>{retry.hidden=!failed.size;saveStatus.textContent=failed.size?'保存失败，请重试':pendingSaves?'正在保存…':'已保存'};
+ const post=serialize(async(body)=>{const response=await fetch('/verdict',{method:'POST',headers:{'Content-Type':'application/json','X-Review-Token':${JSON.stringify(token)}},body});if(!response.ok)throw Error('Save failed')});
+ const save=async(id)=>{const body=JSON.stringify({id,verdict:verdicts[id]});pendingSaves+=1;status();
+  try{await post(body);failed.delete(id);progress()}catch{failed.add(id)}finally{pendingSaves-=1;status()}};
+ retry.onclick=()=>{for(const id of failed)void save(id)};
  const progress=()=>{document.getElementById('progress').textContent='已评审 '+items.filter(item=>isVerdictComplete(item,verdicts[item.id])).length+' / '+items.length+' 项'};
  progress();
  for(const item of items){
@@ -319,6 +416,7 @@ async function main() {
       )
         throw Error(`${item.caseId}: saved review key includes an ineligible run`);
   const verdicts = existsSync(verdictFile) ? JSON.parse(await readFile(verdictFile, 'utf8')) : {};
+  const saveVerdict = createVerdictWriter(verdictFile, verdicts);
 
   const blind = [];
   for (const item of items) {
@@ -355,18 +453,30 @@ async function main() {
     console.log('summary.json 仅汇总人工答案；设计质量与是否接受由评审者判定。');
     return;
   }
+  const { data: reviewData, artifacts } = createBlindReview(blind);
+  const token = randomUUID();
   const allowed = [privateRoot + sep, join(evalRoot, 'cases') + sep];
   const handle = async (req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1');
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const writing = url.pathname === '/verdict' && req.method === 'POST';
+    if (!isReviewRequestAllowed(req.headers, origin, token, writing)) {
+      res.writeHead(403).end();
+      return;
+    }
     if (url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(page(`设计评审：${values.baseline ? 'A/B 盲评' : values.candidate}`));
+      res.end(page(`设计评审：${values.baseline ? 'A/B 盲评' : values.candidate}`, token));
     } else if (url.pathname === '/data') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ items: blind, verdicts }));
+      res.end(JSON.stringify({ items: reviewData, verdicts }));
     } else if (url.pathname === '/file') {
-      const path = resolve(url.searchParams.get('path') ?? '');
-      if (!allowed.some((prefix) => path.startsWith(prefix)) || !CONTENT_TYPES[extname(path)]) {
+      const path = artifacts.get(url.searchParams.get('id'));
+      if (
+        !path ||
+        !allowed.some((prefix) => path.startsWith(prefix)) ||
+        !CONTENT_TYPES[extname(path)]
+      ) {
         res.writeHead(403).end();
         return;
       }
@@ -380,8 +490,7 @@ async function main() {
         res.writeHead(400).end();
         return;
       }
-      verdicts[id] = verdict;
-      await writeFile(verdictFile, JSON.stringify(verdicts, null, 2));
+      await saveVerdict(id, verdict);
       res.writeHead(204).end();
     } else {
       res.writeHead(404).end();

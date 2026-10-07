@@ -4,6 +4,8 @@ import { register } from 'tsx/esm/api';
 register();
 const { ElectronHarness } = await import('../src/support/electron-harness.ts');
 const { OnboardingPage } = await import('../src/support/pages/onboarding-page.ts');
+const { readDesignEvalTurnIds, readDesignEvalTurn, requireCommittedDesignEvalTurn } =
+  await import('../src/support/design-eval-receipts.ts');
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -76,7 +78,9 @@ for (const rel of [
 const rendererEntry = 'apps/electron/out/renderer/index.html';
 const rendererHtml = await readFile(join(root, rendererEntry));
 sourceIdentity.buildHashes[rendererEntry] = sha(rendererHtml);
-for (const asset of rendererHtml.toString().matchAll(/(?:src|href)="\.\/assets\/([^"]+\.(?:js|css))"/g)) {
+for (const asset of rendererHtml
+  .toString()
+  .matchAll(/(?:src|href)="\.\/assets\/([^"]+\.(?:js|css))"/g)) {
   const rel = `apps/electron/out/renderer/assets/${asset[1]}`;
   sourceIdentity.buildHashes[rel] = sha(await readFile(join(root, rel)));
 }
@@ -261,6 +265,9 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     await persist();
     console.log(`${name} browser imported and research page verified`);
     for (const [index, prompt] of [evalCase.prompt, ...report.followUps].entries()) {
+      const previousTurnIds = report.artworkId
+        ? await readDesignEvalTurnIds(join(dataRoot, 'chats', report.artworkId))
+        : [];
       const startedAt = Date.now();
       await send(page, prompt, index === 0 ? attachment : undefined);
       if (index === 0) {
@@ -271,19 +278,38 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
       await persist();
       console.log(`${name} turn ${index} running in ${report.artworkId}`);
       await expect(stopButton(page)).toBeHidden({ timeout });
-      delete report.activeTurn;
       if (await page.getByText('Agent internal error', { exact: true }).count())
         throw Error(`agent_internal_error in turn ${index}`);
       const workdir = join(dataRoot, 'chats', report.artworkId);
+      let turn;
       await expect
-        .poll(async () => (await receipts(workdir)).length, { timeout: 60_000 })
-        .toBe(index + 1);
-      report.turns.push({ prompt, durationMs: Date.now() - startedAt });
+        .poll(
+          async () => {
+            turn = await readDesignEvalTurn(workdir, previousTurnIds);
+            return !!turn;
+          },
+          { timeout: 60_000 }
+        )
+        .toBe(true);
+      if (!turn) throw Error('Design turn receipt was not observed');
+      report.receipts ??= [];
+      report.receipts.push(turn.receipt);
+      await persist();
+      const receipt = requireCommittedDesignEvalTurn(turn, report.artworkId, prompt);
+      const design = await ipc(page, 'design.read', report.artworkId);
+      if (design.revisionId !== receipt.revisionId)
+        throw Error('Current design revision does not match the committed turn receipt');
+      delete report.activeTurn;
+      report.turns.push({
+        prompt,
+        turnId: receipt.turnId,
+        revisionId: receipt.revisionId,
+        durationMs: Date.now() - startedAt,
+      });
       await persist();
       console.log(
         `${name} turn ${index} committed after ${Math.round((Date.now() - startedAt) / 1000)}s`
       );
-      const design = await ipc(page, 'design.read', report.artworkId);
       const turnDirectory = index === 0 ? directory : join(directory, `follow-up-${index}`);
       await mkdir(turnDirectory, { recursive: true });
       await writeFile(join(turnDirectory, 'design.json'), JSON.stringify(design, null, 2));

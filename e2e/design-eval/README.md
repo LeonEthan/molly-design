@@ -44,20 +44,61 @@ pnpm e2e:build
 node e2e/scripts/run-design-eval.mjs \
   --case e2e/design-eval/cases/bright-hare-holiday/redesign.json \
   --case e2e/design-eval/cases/bright-hare-holiday/resize-9x16.json \
-  --label <version-label> --runs 3 --concurrency 6
+  --label <version-label> --runs 3 --concurrency 2
 ```
 
 `--case` repeats. `--concurrency` runs that many isolated desktops at once. On
 macOS each one owns its data directory, IPC sockets and a random CLI port, so they
 do not collide; Windows still shares fixed named pipes, so keep concurrency at 1
-there. A turn usually takes 15–25 minutes.
+there. The default timeout is 45 minutes per turn; duration varies by case and
+model.
 
-`private/connection.json` holds `model.{baseUrl,apiKey,modelId,reasoning}` and
-`image.{baseUrl,apiKey,model}`. Each run launches an isolated desktop through the
+The first baseline hit provider overload and incomplete turns with six and four
+workers. Two workers is the owner's choice for backfills; it is not a verified
+general reliability limit. To fill missing outputs, use `--runs 1` and repeat
+`--case` for each intended attempt, including repeated paths for the same case.
+Completed outputs that fail the design gate still need review; execution errors
+are skipped by the review tool.
+
+`private/connection.json` holds `model.{baseUrl,apiKey,modelId,reasoning}`,
+`image.{baseUrl,apiKey,model}` and `browser.{browserId,profileId}`. Select the
+browser/profile IDs from Molly's existing Website accounts source list. Each
+run launches an isolated desktop through the
 e2e harness, saves the connections there, sends the prompts and records
 `run.json`, `design.json`, `preview.png`, the artwork directory and the visible
 conversation. A run directory is never overwritten, and a failed paid call is
 never retried.
+
+Before sending a design prompt, every instance imports the selected profile's
+Pinterest account through the existing product IPC. Account preparation is
+serialized across workers; design turns still use `--concurrency`. The runner
+opens a Pinterest design search in the native browser and requires visible
+signed-in controls, loaded Pin images and no login overlay. Avatars and business
+hub artwork do not count as reference images. Cookie counts alone never pass
+preparation. A missing profile, import denial or blocked website fails the run
+before any paid design turn; there is no automatic import or paid-call retry.
+macOS browser-data and Keychain permissions must be granted by the user. For
+development builds, imports last only until that instance quits, so preparation
+runs again for every fresh instance.
+
+`run.json` records preparation status, source IDs, cookie counts and website
+verification; `browser-ready.png` retains private visual evidence. No Cookie
+values are exported by the runner. Successful and failed native Pi session
+records are kept under the ignored run directory to audit the Agent's actual
+research separately from website readiness.
+
+Use `--first-turn-only` to run the case's initial prompt without its copy-edit
+follow-ups. For three redesign attempts, select one redesign case with `--runs 3
+--concurrency 3 --first-turn-only` and use a fresh label.
+
+Keep a separate label when changing the Agent model, image model or reasoning.
+Such a backfill is a separate cohort, not a version comparison with fixed model
+settings. Changing `model.modelId` in the private connection file selects the
+model inside the isolated desktops without changing the provider configuration.
+The eval declares only `off` and the requested `model.reasoning` level in its
+custom model metadata. This lets the existing picker select an explicit level
+such as `max`; provider acceptance is established by the live run, not this
+declaration. Native session records retain the model and thinking-level selection.
 
 `node e2e/scripts/design-eval-gate.mjs <case.json> <design.json>` re-checks the
 gate for any saved design.
@@ -73,7 +114,9 @@ node e2e/scripts/design-eval-review.mjs --candidate <new-label> --baseline <labe
 node e2e/scripts/design-eval-review.mjs --candidate <new-label> --baseline <label> --score
 ```
 
-The page shows the source, each output (and its follow-ups), the gate result and
+The page uses Simplified Chinese labels for controls, review dimensions, known
+defects and protected regions; saved verdict keys and values remain unchanged.
+It shows the source, each output (and its follow-ups), the gate result and
 the Agent's final message. In pairwise mode, run _i_ of each label is paired and
 randomly placed as A or B; the placement is fixed in `private/reviews/<name>/key.json`
 on first launch, so version labels never reach the page. Each choice saves to

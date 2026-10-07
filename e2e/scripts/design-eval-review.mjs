@@ -10,6 +10,36 @@ import { parseArgs } from 'node:util';
 
 export const DIMENSIONS = ['composition', 'hierarchy', 'brand accuracy', 'finish'];
 
+const REVIEW_LABELS = {
+  composition: '构图',
+  hierarchy: '视觉层级',
+  'brand accuracy': '品牌准确性',
+  finish: '完成度',
+  redesign: '重新设计',
+  'composition-fix': '优化构图',
+  'resize-9x16': '调整为 9:16 竖版',
+  face: '人脸',
+  'held cup': '手持杯',
+  'latte cup': '拿铁杯',
+  'americano cup': '美式杯',
+  'brand logo': '品牌标志',
+  signature: '签名',
+  'person fills most of the frame; should shrink or reframe':
+    '人物占据大部分画面，应缩小人物或重新安排构图',
+  'headline column crowds the face and the held cup': '标题挤占人脸和手持杯的空间',
+  'endorsement credit competes with the hand and bracelet': '代言人信息与手部、手镯争夺视觉焦点',
+  'footer panel and fine print are cramped': '底部信息区和小字过于拥挤',
+  'third-party platform watermark must not carry over': '不应保留第三方平台水印',
+  'person fills ~70% of the frame; should shrink or reframe':
+    '人物占据约 70% 的画面，应缩小人物或重新安排构图',
+  'headline block crowds her hair and face; needs a clear gap':
+    '标题紧贴头发和人脸，需要留出清晰间隔',
+  'endorsement credit and signature compete with the held cup':
+    '代言人信息和签名与手持杯争夺视觉焦点',
+  'footer band is cramped': '底部信息区过于拥挤',
+  'third-party watermark must not carry over': '不应保留第三方水印',
+};
+
 /** Pairs run-i with run-i per case; `flip` decides whether the candidate shows as A. */
 export function buildItems(candidateRuns, baselineRuns, flip) {
   const items = [];
@@ -120,13 +150,15 @@ async function describeRun(run) {
     : '';
   return {
     previews,
+    followUps: report.followUps,
     gate: report.gate,
     minutes: (report.turns ?? []).map((turn) => Math.round(turn.durationMs / 60000)),
     summary: finalAgentMessage(conversation),
   };
 }
 
-const page = (title) => `<!doctype html><meta charset="utf-8"><title>${title}</title>
+const page = (title) => `<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><title>${title}</title>
 <style>
 body{font:14px/1.5 system-ui;margin:0;background:#f6f5f2;color:#222}
 header{position:sticky;top:0;background:#fff;border-bottom:1px solid #ddd;padding:10px 20px;display:flex;gap:16px;align-items:center;z-index:1}
@@ -139,39 +171,42 @@ main{padding:20px;max-width:1500px;margin:auto}
 table{border-collapse:collapse;margin-top:10px}td,th{padding:4px 10px;border-bottom:1px solid #eee;text-align:left}
 .done{color:#0a7d3b}.zoom{position:fixed;inset:0;background:#000c;display:flex;justify-content:center;align-items:center}.zoom img{max-height:96vh;max-width:96vw}
 </style>
-<header><b>${title}</b><span id="progress"></span><span class="muted">Choices save automatically.</span></header>
+<header><b>${title}</b><span id="progress"></span><span class="muted">选择后自动保存。点击图片可放大。</span></header>
 <main id="app"></main>
 <script>
 const DIMS=${JSON.stringify(DIMENSIONS)};
+const LABELS=${JSON.stringify(REVIEW_LABELS)};
+const zh=(value)=>LABELS[value]??value;
+const gateFailure=(message)=>message.replace(/^canvas is (.+), expected (.+)$/,'画布尺寸为 $1，要求为 $2').replace(/^missing editable text: /,'缺少可编辑文字：').replace(/^text (.+) extends outside the canvas$/,'文字元素 $1 超出画布');
 const file=(p)=>'/file?path='+encodeURIComponent(p);
 const zoom=(src)=>{const z=document.createElement('div');z.className='zoom';z.innerHTML='<img src="'+src+'">';z.onclick=()=>z.remove();document.body.append(z)};
 (async()=>{
  const {items,verdicts}=await (await fetch('/data')).json();
  const app=document.getElementById('app');
  const save=async(id)=>{await fetch('/verdict',{method:'POST',body:JSON.stringify({id,verdict:verdicts[id]})});progress()};
- const progress=()=>{document.getElementById('progress').textContent=Object.values(verdicts).filter(v=>Object.keys(v).length).length+' / '+items.length+' reviewed'};
+ const progress=()=>{document.getElementById('progress').textContent='已评审 '+Object.values(verdicts).filter(v=>Object.keys(v).length).length+' / '+items.length+' 项'};
  progress();
  for(const item of items){
   const v=(verdicts[item.id]??={});const sides=Object.keys(item.sides);const pair=sides.length===2;
   const el=document.createElement('section');el.className='item';
-  el.innerHTML='<h2>'+item.caseId+' <span class="muted">'+(pair?'pair ':'run ')+item.id.split('#')[1]+'</span></h2>'+
-   '<p><b>Prompt:</b> '+item.prompt+(item.followUps.length?' <b>Follow-ups:</b> '+item.followUps.join(' / '):'')+'</p>';
+  el.innerHTML='<h2>'+item.caseLabel+' <span class="muted">第 '+item.id.split('#')[1]+(pair?' 组对比':' 次运行')+'</span></h2>'+
+   '<p><b>任务要求：</b> '+item.prompt+(item.followUps.length?' <b>后续要求：</b> '+item.followUps.join(' / '):'')+'</p>';
   const cols=document.createElement('div');cols.className='cols';cols.style.setProperty('--n',sides.length+1);
-  cols.innerHTML='<div><h3>Source</h3><img src="'+file(item.source)+'"></div>';
+  cols.innerHTML='<div><h3>原图</h3><img src="'+file(item.source)+'"></div>';
   for(const s of sides){const d=item.sides[s];
-   const gate=d.gate?.status==='passed'?'<span class="done">gate passed</span>':'gate failed: '+(d.gate?.failures??[]).join('; ');
-   cols.innerHTML+='<div class="side"><h3>'+(pair?s:'Output')+'</h3>'+d.previews.map((p,i)=>'<p class="muted">'+(i?'after follow-up '+i:'first turn')+'</p><img src="'+file(p)+'">').join('')+
-    '<p class="muted">'+gate+' · turns: '+d.minutes.join(' + ')+' min</p><div class="summary">'+(d.summary||'(no final message captured)').replace(/</g,'&lt;')+'</div></div>'}
+   const gate=d.gate?.status==='passed'?'<span class="done">自动检查通过</span>':d.gate?.status==='failed'?'自动检查未通过：'+(d.gate.failures??[]).map(gateFailure).join('；'):'未记录自动检查结果';
+   cols.innerHTML+='<div class="side"><h3>'+(pair?'方案 '+s:'生成结果')+'</h3>'+d.previews.map((p,i)=>'<p class="muted">'+(i?'第 '+i+' 次后续修改后':'首轮结果')+'</p><img src="'+file(p)+'">').join('')+
+    '<p class="muted">'+gate+' · 各轮耗时：'+d.minutes.join(' + ')+' 分钟</p><b>助手总结</b><div class="summary">'+(d.summary||'（未记录最终回复）').replace(/</g,'&lt;')+'</div></div>'}
   el.append(cols);
   const t=document.createElement('table');
   const radio=(name,value,label,checked)=>'<label><input type="radio" name="'+name+'" value="'+value+'"'+(checked?' checked':'')+'> '+label+'</label> ';
-  if(pair){t.innerHTML+='<tr><th>Dimension</th><th>Which is better?</th></tr>'+DIMS.map(d=>'<tr><td>'+d+'</td><td>'+['A','same','B'].map(c=>radio(item.id+d,c,c,v.dims?.[d]===c)).join('')+'</td></tr>').join('')}
-  else{t.innerHTML+='<tr><td>Accept as baseline</td><td>'+radio(item.id+'accept','yes','yes',v.accept===true)+radio(item.id+'accept','no','no',v.accept===false)+'</td></tr>'}
+  if(pair){t.innerHTML+='<tr><th>评分维度</th><th>哪个方案更好？</th></tr>'+DIMS.map(d=>'<tr><td>'+zh(d)+'</td><td>'+['A','same','B'].map(c=>radio(item.id+d,c,c==='same'?'相当':'方案 '+c,v.dims?.[d]===c)).join('')+'</td></tr>').join('')}
+  else{t.innerHTML+='<tr><td>接受为基准结果</td><td>'+radio(item.id+'accept','yes','是',v.accept===true)+radio(item.id+'accept','no','否',v.accept===false)+'</td></tr>'}
   for(const s of sides){
-   t.innerHTML+='<tr><td colspan=2><b>'+(pair?s:'Output')+'</b> — known defects fixed:</td></tr>'+item.knownDefects.map((k,i)=>'<tr><td></td><td><label><input type="checkbox" data-side="'+s+'" data-defect="'+i+'"'+(v.defectsFixed?.[s]?.includes(i)?' checked':'')+'> '+k+'</label></td></tr>').join('')+
-    '<tr><td></td><td>Protected regions intact ('+item.preserve.join(', ')+'): '+radio(item.id+s+'p','yes','yes',v.preserved?.[s]===true)+radio(item.id+s+'p','no','no',v.preserved?.[s]===false)+'</td></tr>'+
-    '<tr><td></td><td>Summary matches the visible change: '+radio(item.id+s+'h','yes','yes',v.honest?.[s]===true)+radio(item.id+s+'h','no','no',v.honest?.[s]===false)+'</td></tr>'}
-  t.innerHTML+='<tr><td>Note</td><td><input size="80" data-note value="'+(v.note??'').replace(/"/g,'&quot;')+'"></td></tr>';
+   t.innerHTML+='<tr><td colspan=2><b>'+(pair?'方案 '+s:'生成结果')+'</b> · 勾选已修复的问题：</td></tr>'+item.knownDefects.map((k,i)=>'<tr><td></td><td><label><input type="checkbox" data-side="'+s+'" data-defect="'+i+'"'+(v.defectsFixed?.[s]?.includes(i)?' checked':'')+'> '+zh(k)+'</label></td></tr>').join('')+
+    '<tr><td></td><td>指定保留区域是否完好（'+item.preserve.map(zh).join('、')+'）：'+radio(item.id+s+'p','yes','是',v.preserved?.[s]===true)+radio(item.id+s+'p','no','否',v.preserved?.[s]===false)+'</td></tr>'+
+    '<tr><td></td><td>总结是否符合实际可见的修改：'+radio(item.id+s+'h','yes','是',v.honest?.[s]===true)+radio(item.id+s+'h','no','否',v.honest?.[s]===false)+'</td></tr>'}
+  t.innerHTML+='<tr><td>备注</td><td><input size="80" data-note value="'+(v.note??'').replace(/"/g,'&quot;')+'"></td></tr>';
   el.append(t);
   el.addEventListener('change',(e)=>{const x=e.target;
    if(x.type==='radio'){const n=x.name.slice(item.id.length);
@@ -184,7 +219,7 @@ const zoom=(src)=>{const z=document.createElement('div');z.className='zoom';z.in
   el.querySelectorAll('img').forEach(i=>i.onclick=()=>zoom(i.src));
   app.append(el)}
 })();
-</script>`;
+</script></html>`;
 
 const CONTENT_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' };
 
@@ -243,8 +278,9 @@ async function main() {
     blind.push({
       id: item.id,
       caseId: item.caseId,
+      caseLabel: `${file.startsWith(privateRoot + sep) ? '私有案例' : '合成案例'} · ${REVIEW_LABELS[item.caseId.split('/')[1]] ?? item.caseId}`,
       prompt: data.prompt,
-      followUps: data.followUps,
+      followUps: sides.A.followUps ?? data.followUps,
       knownDefects: data.knownDefects,
       preserve: data.preserve,
       source: resolve(dirname(file), data.input.source),
@@ -256,7 +292,7 @@ async function main() {
     const url = new URL(req.url, 'http://127.0.0.1');
     if (url.pathname === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(page(`Design eval review: ${values.baseline ? 'blind pairwise' : values.candidate}`));
+      res.end(page(`设计评审：${values.baseline ? 'A/B 盲评' : values.candidate}`));
     } else if (url.pathname === '/data') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ items: blind, verdicts }));

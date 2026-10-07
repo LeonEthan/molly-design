@@ -12,6 +12,11 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { expect } from '@playwright/test';
 import { checkDesignGate, readCase } from './design-eval-gate.mjs';
+import {
+  prepareDesignEvalBrowser,
+  validateBrowserSelection,
+  verifyResearchBrowser,
+} from './design-eval-browser.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const privateRoot = join(root, 'e2e/design-eval/private');
@@ -23,6 +28,7 @@ const { values } = parseArgs({
     runs: { type: 'string', default: '3' },
     concurrency: { type: 'string', default: '1' },
     'timeout-ms': { type: 'string', default: '2700000' },
+    'first-turn-only': { type: 'boolean', default: false },
   },
 });
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
@@ -35,7 +41,7 @@ if (
   ![runs, concurrency, timeout].every(positive)
 )
   throw Error(
-    'usage: node e2e/scripts/run-design-eval.mjs --case <case.json> [--case ...] --label <version-label> [--runs 3] [--concurrency 1] [--timeout-ms 2700000]'
+    'usage: node e2e/scripts/run-design-eval.mjs --case <case.json> [--case ...] --label <version-label> [--runs 3] [--concurrency 1] [--timeout-ms 2700000] [--first-turn-only]'
   );
 
 const cases = [];
@@ -50,6 +56,7 @@ for (const file of values.case) {
   cases.push({ evalCase, source, directory });
 }
 const connection = JSON.parse(await readFile(join(privateRoot, 'connection.json'), 'utf8'));
+const browserSelection = validateBrowserSelection(connection.browser);
 
 const sourceIdentity = {
   commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
@@ -85,7 +92,7 @@ async function configureConnections(page) {
         input: ['text', 'image'],
         contextWindow: 400_000,
         maxTokens: 128_000,
-        thinking: ['off', 'low', 'medium', 'high'],
+        thinking: [...new Set(['off', model.reasoning])],
         toolCalls: true,
         usageInStreaming: true,
         maxTokensField: 'max_completion_tokens',
@@ -173,6 +180,8 @@ async function nextRunDirectory(caseDirectory) {
   }
 }
 
+let browserPreparation = Promise.resolve();
+
 async function runOnce({ evalCase, source, directory: caseDirectory }) {
   const directory = await nextRunDirectory(caseDirectory);
   const name = `${evalCase.id}/${directory.split('/').at(-1)}`;
@@ -183,11 +192,12 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     model: { modelId: connection.model.modelId, reasoning: connection.model.reasoning },
     imageModel: connection.image.model,
     prompt: evalCase.prompt,
-    followUps: evalCase.followUps,
+    followUps: values['first-turn-only'] ? [] : evalCase.followUps,
     startedAt: new Date().toISOString(),
     turns: [],
     gate: { status: 'pending' },
     ownerReview: 'pending',
+    browser: { status: 'pending', source: browserSelection },
   };
   const persist = () => writeFile(join(directory, 'run.json'), JSON.stringify(report, null, 2));
   const h = new ElectronHarness({
@@ -213,7 +223,25 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     console.log(`${name} configured: ${report.runConfiguration.replace(/\s+/g, ' ')}`);
 
     dataRoot = await h.app.evaluate(() => process.env.MOLLY_DATA_DIR);
-    for (const [index, prompt] of [evalCase.prompt, ...evalCase.followUps].entries()) {
+    const preparation = browserPreparation.then(() =>
+      prepareDesignEvalBrowser({
+        invoke: (method, ...args) => ipc(page, method, ...args),
+        selection: browserSelection,
+        verify: (site) =>
+          verifyResearchBrowser({
+            h,
+            invoke: (method, ...args) => ipc(page, method, ...args),
+            site,
+            directory,
+          }),
+      })
+    );
+    browserPreparation = preparation.catch(() => {});
+    report.browser = await preparation;
+    report.browser.verifiedAt = new Date().toISOString();
+    await persist();
+    console.log(`${name} browser imported and research page verified`);
+    for (const [index, prompt] of [evalCase.prompt, ...report.followUps].entries()) {
       const startedAt = Date.now();
       await send(page, prompt, index === 0 ? source : undefined);
       if (index === 0) {
@@ -250,6 +278,7 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
     report.overall = report.gate.status;
   } catch (error) {
     report.overall = 'failed';
+    if (report.browser.status === 'pending') report.browser.status = 'failed';
     report.error = String(error);
     process.exitCode = 1;
   } finally {
@@ -268,10 +297,9 @@ async function runOnce({ evalCase, source, directory: caseDirectory }) {
       await cp(join(dataRoot, 'logs'), join(directory, 'logs'), { recursive: true }).catch(
         () => {}
       );
-      if (report.overall === 'failed')
-        await cp(join(dataRoot, 'harness/pi/sessions'), join(directory, 'pi-sessions'), {
-          recursive: true,
-        }).catch(() => {});
+      await cp(join(dataRoot, 'harness/pi/sessions'), join(directory, 'pi-sessions'), {
+        recursive: true,
+      }).catch(() => {});
     }
     await h.close().catch((error) => {
       report.teardownError = String(error);

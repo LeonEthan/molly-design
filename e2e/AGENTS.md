@@ -90,6 +90,10 @@ also applies.
   `@P1` regression scenarios.
 - Runtime artifacts under `e2e/artifacts/` are ignored. Fixtures committed to
   the suite must be synthetic and contain no user or agent transcript.
+- Live design-quality eval imports the selected website account into each owned
+  instance and verifies signed-in controls and visible references before sending
+  a design prompt. Failed preparation retains evidence and starts no paid turn;
+  website readiness does not establish that the Agent completed visual research.
 
 Run `pnpm e2e:check` after changing suite metadata and `pnpm e2e:build && pnpm
 e2e:smoke` after changing the harness or an active P0 journey.

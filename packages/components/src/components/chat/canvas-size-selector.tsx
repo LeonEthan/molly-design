@@ -90,7 +90,7 @@ export function CanvasFormatTiles({
                   auto ? 'border-dashed' : 'border-solid',
                   selected
                     ? 'border-foreground bg-foreground/[0.07]'
-                    : 'border-foreground/25 group-hover:border-foreground/60'
+                    : 'border-foreground/45 group-hover:border-foreground/75'
                 )}
                 style={
                   auto
@@ -109,8 +109,8 @@ export function CanvasFormatTiles({
             <span className="flex flex-col items-center gap-0.5">
               <span
                 className={cn(
-                  'max-w-full truncate text-[13px] transition-colors',
-                  selected ? 'text-foreground' : 'text-muted-foreground group-hover:text-foreground'
+                  'max-w-full truncate text-[13px] text-foreground',
+                  selected && 'font-medium'
                 )}
               >
                 {label}

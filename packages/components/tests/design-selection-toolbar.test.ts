@@ -116,13 +116,32 @@ it('anchors above, flips below, clamps edges, and hides wholly offscreen selecti
     })
   ).toBeNull();
 });
+it('moves below the selection only when that covers less of the other artwork', () => {
+  const anchor = { left: 100, right: 300, top: 200, bottom: 300 };
+  const viewport = { width: 800, height: 600 };
+  const textAbove = { left: 120, right: 280, top: 150, bottom: 180 };
+  expect(placeToolbar(anchor, 200, 40, viewport, [textAbove])).toEqual({ left: 100, top: 312 });
+  const textBelow = { left: 120, right: 280, top: 310, bottom: 350 };
+  expect(placeToolbar(anchor, 200, 40, viewport, [textAbove, textBelow])).toEqual({
+    left: 100,
+    top: 148,
+  });
+});
+it('shows the count only for multiple selected elements', () => {
+  select('text');
+  vi.advanceTimersByTime(20);
+  expect(document.querySelector('.molly-selection-toolbar .count')).toBeNull();
+  toolbar.update({ count: 2, kinds: ['text', 'image'] }, ['one', 'two'], 2);
+  vi.advanceTimersByTime(20);
+  expect(document.querySelector('.molly-selection-toolbar .count')?.textContent).toBe('2');
+});
 it.each(['text', 'image', 'shape', 'line', 'icon', 'table', 'chart'] as const)(
   'exposes the existing controls for %s',
   (kind) => {
     select(kind, { fontFamily: 'Inter', fontSize: 24, fit: 'cover' });
     expect(getByRole(document.body, 'toolbar')).toBeTruthy();
     expect(
-      getByRole(document.body, 'button', { name: 'Reference selected elements' })
+      getByRole(document.body, 'button', { name: 'Ask Molly about the selection' })
     ).toBeTruthy();
     const expected = {
       text: 'Bold',

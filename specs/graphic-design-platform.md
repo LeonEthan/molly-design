@@ -24,6 +24,8 @@ The product retains desktop interactions, including narrow Electron windows; mob
 
 2026-10-04 Atelier revision: the owner asked for a complete, high-end redesign that makes designers want to try Molly and delegated the design decisions. The chrome becomes near-monochrome (bone-paper or near-black grounds, warm ink, and a single vermilion signal for focus and live or changed state) so the artwork supplies the colour, and display type is an editorial serif. The home page moves the composer into the hero under the heading, adds one line of prompt starters that only fill the composer, keeps the format tiles, and lists recent artworks ("Your work") from the same disposable thumbnail cache; choosing one opens its session. These are presentation changes: creation, submission, canvas and storage semantics are unchanged. Rationale is in the [Atelier note](../.agents/notes/proposed/feature/2026-10-04-atelier-redesign.md). This revision remains draft pending a linked approval record.
 
+2026-10-07 export scale revision: the owner chose to add 2× and 3× export for PNG and JPEG, so a designer can deliver high-density files without upscaling. The capture renders the artwork at the chosen scale, a 1× export keeps the canvas size, and a scale whose result would exceed 16384 px on one side is refused before saving. PDF, SVG and print bleed remain outside this draft. Rationale is in the [batch 2 note](../.agents/notes/implemented/bug-fix/2026-10-07-designer-canvas-batch2.md). This revision remains draft pending a linked approval record.
+
 ## Usage scenario
 
 The user starts a design session, enters requirements and adds reference images, and uses a local Agent to generate an editable graphic design; they then refine it through element-targeted conversation or manual edits, and save, reopen and export images. The user finds past output through session history rather than managing a separate artwork directory. Normal creation requires no knowledge of Git repositories, branches, terminal commands or code review.
@@ -124,7 +126,7 @@ The right panel exposes one canvas with no Artwork / Preview source switch. Whil
 - History versions use the Git store of the next section; the neighboring project's full revision library is not migrated in, and no parallel snapshot backend is built. Editor undo/redo is separate from the history nodes saved by the human.
 - While an artwork tab stays open, ordinary artwork/panel switching keeps undo/redo. Switching historical versions rebuilds undo and selection rather than undoing across versions. Closing the tab or restarting drops undo history without affecting saved artwork.
 - Formal export is based on the saved current artwork, using the fixed editor rendering path, fonts and assets. Pending unsaved edits are handled before export; an old draft is never silently exported.
-- PNG keeps transparency; JPEG fills transparent areas white. Pixel dimensions follow the actual canvas size; zoom only affects the interface display.
+- PNG keeps transparency; JPEG fills transparent areas white. Pixel dimensions are the actual canvas size times the chosen 1×, 2× or 3× export scale; zoom only affects the interface display.
 - Invalid documents, missing assets, fonts or render failures must raise errors; placeholders or window screenshots must not impersonate a successful export.
 - The first release provides no artwork-directory management and no import of the neighboring project's artwork directory; old program data is left as is.
 

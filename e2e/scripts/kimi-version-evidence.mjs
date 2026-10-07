@@ -40,7 +40,7 @@ export async function verifyKimiVersions(h, { directory, artworkId, dataRoot, re
   await choose(v1);
   let canvas = await editHeading('GOLDEN-HUMAN');
   const human = await ui.ipc('design.read', artworkId);
-  await canvas.getByRole('button', { name: 'Reference selected elements', exact: true }).click();
+  await canvas.getByRole('button', { name: 'Ask Molly about the selection', exact: true }).click();
   const prompt = ui.page.locator('[data-molly-composer-input]');
   await expect(prompt).toHaveValue(/@Selected elements/);
   await prompt.focus();

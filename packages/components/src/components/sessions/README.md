@@ -201,7 +201,7 @@ history directly switches the editable current draft, protecting unversioned wor
 the same Git repository first. The selected base survives restart; subsequent saves
 record that logical source without deleting later versions. An unchanged draft does
 not create a duplicate. Version operations use the execution/processing gate.
-The label distinguishes Vn, “Vn · Changes not versioned”, and “No saved version”.
+The label distinguishes Vn, “Vn · Changes not versioned”, and “No versions yet”.
 It does not attest autosave; Bento separately reports actual saving, autosaved and
 failed-save states. History distinguishes loading, empty and failed reads, with
 an explicit retry after failure. Empty history explains how Save version differs

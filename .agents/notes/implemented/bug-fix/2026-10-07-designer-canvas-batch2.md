@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#91](https://github.com/LeonEthan/molly-design/pull/91)
+
 ## Abstract
 
 The 2026-10-07 UI/UX audit found several canvas problems:

@@ -22,6 +22,7 @@ import {
   VisualAnnotationReferenceChip,
   type VisualAnnotationReferenceChipItem,
 } from './visual-annotation-reference-chip';
+import { DesignSelectionChip, type DesignSelectionChipItem } from './design-selection-chip';
 import { cn } from '@/lib/utils';
 import {
   CombinedMentionTextarea,
@@ -154,6 +155,9 @@ export interface ChatComposerProps {
   visualAnnotationReferenceItems?: VisualAnnotationReferenceChipItem[];
   /** Remove a visual annotation reference by localId */
   onVisualAnnotationReferenceRemove?: (localId: string) => void;
+  designSelectionItem?: DesignSelectionChipItem | null;
+  designSelectionRemoveLabel?: string;
+  onDesignSelectionRemove?: () => void;
   /** @deprecated Use footerSelector instead */
   selector?: ReactNode;
   /** Selector node displayed above the textarea (e.g., repo, agent) */
@@ -258,6 +262,9 @@ export function ChatComposer({
   onCommentReferenceClick,
   revealCommentReferenceRemoveOnClick = false,
   visualAnnotationReferenceItems = [],
+  designSelectionItem = null,
+  designSelectionRemoveLabel = '',
+  onDesignSelectionRemove,
   onVisualAnnotationReferenceRemove,
   selector,
   topSelector,
@@ -637,7 +644,7 @@ export function ChatComposer({
                       if (
                         !event.currentTarget.contains(target) ||
                         target.closest(
-                          'button, a, input, textarea, select, [role="button"], [role="menuitem"], [role="option"], [data-comment-ref], [data-visual-annotation-ref]'
+                          'button, a, input, textarea, select, [role="button"], [role="menuitem"], [role="option"], [data-comment-ref], [data-visual-annotation-ref], [data-design-selection-ref]'
                         )
                       ) {
                         return;
@@ -651,6 +658,15 @@ export function ChatComposer({
                   : undefined
               }
             >
+              {designSelectionItem ? (
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <DesignSelectionChip
+                    item={designSelectionItem}
+                    removeLabel={designSelectionRemoveLabel}
+                    onRemove={onDesignSelectionRemove}
+                  />
+                </div>
+              ) : null}
               {commentReferenceItems.length > 0 ? (
                 <div className="flex flex-wrap gap-2 pb-1">
                   {commentReferenceItems.map((item) => (

@@ -345,7 +345,7 @@ export class CliService {
     phase: 'stopped',
     desiredState: 'stopped',
     updatedAtMs: Date.now(),
-    preventSleepEnabled: false
+    preventSleepEnabled: true
   }
   private cachedMachineId: string | null = null
   // Reused across requests: the clients cache the resolved socket path, so
@@ -357,7 +357,8 @@ export class CliService {
   private readonly localControlClient = makeLocalControlClientAuto({
     runFilePath: LOCAL_DAEMON_RUN_FILE
   })
-  private preventSleepEnabled = false
+  private preventSleepEnabled = true
+  private runActive = false
   private powerSaveBlockerId: number | null = null
   private supervisor: CliSupervisor | null = null
   private readonly supervisorInstanceId = randomUUID()
@@ -495,6 +496,12 @@ export class CliService {
     settings.preventSleepEnabled = enabled
     writeElectronSettings(settings)
     this.publishCliState()
+  }
+
+  setRunActive(active: boolean): void {
+    if (this.runActive === active) return
+    this.runActive = active
+    this.updatePowerSaveBlocker()
   }
 
   getPreventSleepEnabled(): boolean {
@@ -1021,7 +1028,7 @@ export class CliService {
   }
 
   private updatePowerSaveBlocker(): void {
-    const shouldBlock = this.preventSleepEnabled
+    const shouldBlock = this.preventSleepEnabled && this.runActive
 
     if (shouldBlock) {
       if (

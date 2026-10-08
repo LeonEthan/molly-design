@@ -1323,12 +1323,12 @@ export type SessionChatInterfaceHandle = {
   ) => void;
   openSearch: () => void;
   getLastAssistantTurnId: () => string | null;
-  insertDesignElementMention: (
+  referenceDesignSelection: (
     reference: DesignElementReference,
     label: string,
     prompt?: string
   ) => boolean;
-  syncDesignElementMention: (reference: DesignElementReference | null, label: string) => boolean;
+  syncDesignSelection: (reference: DesignElementReference | null, label: string) => boolean;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -3427,10 +3427,10 @@ export const SessionChatInterface = memo(
         startShareImageSelection: shareSelection.start,
         openSearch,
         getLastAssistantTurnId: () => lastCompletedAssistantMessageId,
-        insertDesignElementMention: (reference, label, prompt) =>
-          inputAreaRef.current?.insertDesignElementMention(reference, label, prompt) ?? false,
-        syncDesignElementMention: (reference, label) =>
-          inputAreaRef.current?.syncDesignElementMention(reference, label) ?? false,
+        referenceDesignSelection: (reference, label, prompt) =>
+          inputAreaRef.current?.referenceDesignSelection(reference, label, prompt) ?? false,
+        syncDesignSelection: (reference, label) =>
+          inputAreaRef.current?.syncDesignSelection(reference, label) ?? false,
         insertSessionMention: (sessionId: string) => {
           return inputAreaRef.current?.insertSessionMention(sessionId) ?? false;
         },

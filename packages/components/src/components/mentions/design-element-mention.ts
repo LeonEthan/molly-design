@@ -4,19 +4,24 @@ import {
   type DesignElementReference,
 } from '@molly/shared/design-element-reference';
 import type { TextRewrite } from '@molly/shared';
-import type { MentionInsertRequest } from '@/ui/mention/index';
+import type { Mention } from '@/ui/mention/index';
 
-export function buildDesignElementMentionInsertion(
+export function appendDesignSelectionMention(
+  text: string,
   reference: DesignElementReference,
-  label: string,
-  prompt?: string
-): MentionInsertRequest {
+  label: string
+): { text: string; mention: Mention } {
+  const separator = text.length === 0 || /\s$/.test(text) ? '' : ' ';
+  const mentionText = '@' + label;
+  const start = text.length + separator.length;
   return {
-    text: '@' + label,
-    value: JSON.stringify(DesignElementReferenceSchema.parse(reference)),
-    kind: 'design_element',
-    separate: true,
-    suffix: prompt ? ` ${prompt} ` : ' ',
+    text: text + separator + mentionText,
+    mention: {
+      start,
+      end: start + mentionText.length,
+      value: JSON.stringify(DesignElementReferenceSchema.parse(reference)),
+      kind: 'design_element',
+    },
   };
 }
 

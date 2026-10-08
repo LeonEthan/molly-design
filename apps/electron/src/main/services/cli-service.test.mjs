@@ -92,7 +92,7 @@ for (const inheritedPlatform of ['cloud', 'invalid']) {
 }
 
 function loadCliServiceWithSettings(savedSettings) {
-  const powerSave = { started: 0 }
+  const powerSave = { started: 0, stopped: 0, active: false }
   const module = { exports: {} }
   const anyFunction = new Proxy({}, { get: () => () => ({}) })
   compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require', 'process'])(
@@ -109,10 +109,14 @@ function loadCliServiceWithSettings(savedSettings) {
           powerSaveBlocker: {
             start() {
               powerSave.started += 1
+              powerSave.active = true
               return 1
             },
-            stop() {},
-            isStarted: () => true
+            stop() {
+              powerSave.stopped += 1
+              powerSave.active = false
+            },
+            isStarted: () => powerSave.active
           }
         }
       if (name === 'node:fs')
@@ -137,14 +141,28 @@ function loadCliServiceWithSettings(savedSettings) {
   return { service: new module.exports.CliService(), powerSave }
 }
 
-void test('the computer is not kept awake until the user turns it on', () => {
+void test('sleep is blocked only while a run is active', () => {
   const { service, powerSave } = loadCliServiceWithSettings(undefined)
+  assert.equal(service.getPreventSleepEnabled(), true)
+  assert.equal(powerSave.started, 0)
+  service.setRunActive(true)
+  assert.equal(powerSave.started, 1)
+  assert.equal(powerSave.active, true)
+  service.setRunActive(false)
+  assert.equal(powerSave.stopped, 1)
+  assert.equal(powerSave.active, false)
+})
+
+void test('turning the setting off keeps sleep allowed even during a run', () => {
+  const { service, powerSave } = loadCliServiceWithSettings({ preventSleepEnabled: false })
   assert.equal(service.getPreventSleepEnabled(), false)
+  service.setRunActive(true)
   assert.equal(powerSave.started, 0)
 })
 
-void test('an explicit saved choice to keep the computer awake is honoured', () => {
-  const { service, powerSave } = loadCliServiceWithSettings({ preventSleepEnabled: true })
-  assert.equal(service.getPreventSleepEnabled(), true)
-  assert.equal(powerSave.started, 1)
+void test('turning the setting off during a run releases the block', () => {
+  const { service, powerSave } = loadCliServiceWithSettings(undefined)
+  service.setRunActive(true)
+  service.setPreventSleepEnabled(false)
+  assert.equal(powerSave.active, false)
 })

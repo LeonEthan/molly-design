@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { sessionListAtom } from '@/atoms/doc-meta';
+import { allActiveSessionsAtom, sessionListAtom } from '@/atoms/doc-meta';
 import { userAtom } from '@/atoms';
 import { mollyPresenceNowMsAtom, mollyPresenceStatesAtom } from '@/atoms/presence';
 import { isElectronRenderer } from '@/lib/electron';
@@ -9,9 +9,10 @@ import { findFreshSessionPresenceState } from '@molly/shared';
 import { useResolvedWorkspaceScope } from '@/hooks/use-resolved-workspace-scope';
 
 type WindowBadge = { unread: number; waiting: number };
+type WindowReport = WindowBadge & { working: number };
 
 const DEBOUNCE_MS = 150;
-const ZERO: WindowBadge = { unread: 0, waiting: 0 };
+const ZERO: WindowReport = { unread: 0, waiting: 0, working: 0 };
 
 /**
  * Compute the OS dock/taskbar badge for *this window*: how many sessions in
@@ -26,6 +27,7 @@ const ZERO: WindowBadge = { unread: 0, waiting: 0 };
  */
 export function useWorkspaceBadge(): void {
   const sessions = useAtomValue(sessionListAtom);
+  const allSessions = useAtomValue(allActiveSessionsAtom);
   const presenceStates = useAtomValue(mollyPresenceStatesAtom);
   const presenceNowMs = useAtomValue(mollyPresenceNowMsAtom);
   const user = useAtomValue(userAtom);
@@ -33,7 +35,7 @@ export function useWorkspaceBadge(): void {
   const userId = user?.id ?? null;
 
   const badge = useMemo<WindowBadge>(() => {
-    if (!userId || !currentWorkspaceId) return ZERO;
+    if (!userId || !currentWorkspaceId) return { unread: 0, waiting: 0 };
     let unread = 0;
     let waiting = 0;
     for (const session of sessions) {
@@ -57,19 +59,28 @@ export function useWorkspaceBadge(): void {
     return { unread, waiting };
   }, [sessions, presenceNowMs, presenceStates, userId, currentWorkspaceId]);
 
+  const working = useMemo(() => {
+    if (!userId || !currentWorkspaceId) return 0;
+    return allSessions.filter(
+      (session) =>
+        session.userId === userId &&
+        findFreshSessionPresenceState(presenceStates, session.id, presenceNowMs) !== undefined
+    ).length;
+  }, [allSessions, presenceNowMs, presenceStates, userId, currentWorkspaceId]);
+
   const { unread, waiting } = badge;
   useEffect(() => {
     const services = getIpcServices();
     if (!isElectronRenderer() || !services) return undefined;
 
     const handle = window.setTimeout(() => {
-      void services.app.setWindowBadge({ unread, waiting });
+      void services.app.setWindowBadge({ unread, waiting, working });
     }, DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(handle);
     };
-  }, [unread, waiting]);
+  }, [unread, waiting, working]);
 
   // Clear our contribution when the hook unmounts (workspace switch / logout).
   useEffect(() => {

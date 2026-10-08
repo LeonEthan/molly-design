@@ -28,7 +28,7 @@ export type RendererFatalErrorReport = {
   copied?: boolean;
 };
 
-export type WindowBadgeInput = { unread: number; waiting: number };
+export type WindowBadgeInput = { unread: number; waiting: number; working: number };
 
 export type SessionControlSendInput = {
   requestId: string;

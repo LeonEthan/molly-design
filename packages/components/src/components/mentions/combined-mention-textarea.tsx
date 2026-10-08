@@ -1,5 +1,3 @@
-import type { DesignElementReference } from '@molly/shared/design-element-reference';
-import { buildDesignElementMentionInsertion } from './design-element-mention';
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
@@ -49,12 +47,6 @@ import {
 import { type AcpCommandSummary } from '@molly/shared';
 import { Mention, MentionInput, MentionLabel, useMentionContext } from '@/ui/mention';
 import type { Mention as MentionRange, MentionChipResolver } from '@/ui/mention/index';
-import {
-  applyMentionSplice,
-  removeMentionText,
-  resolveMentionInsertPrefix,
-  type MentionSplice,
-} from '@/ui/mention/mention-input-core';
 import { Textarea, type TextareaProps } from '@/ui/textarea';
 import { parseMentionNamespaceSearch } from '@/ui/mention/mention-trigger';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
@@ -459,18 +451,7 @@ function SessionMentionHydrator({
  * re-slugging every visible session on every session-list tick.
  */
 export type CombinedMentionTextareaHandle = {
-  insertDesignElementMention: (
-    reference: DesignElementReference,
-    label: string,
-    prompt?: string
-  ) => boolean;
-  /**
-   * Mirror the canvas selection as a promptless design-element chip: a live
-   * selection replaces the previously mirrored chip, an empty selection
-   * removes it. The chip the user already deleted by hand stays deleted until
-   * the next sync call. Never steals composer focus.
-   */
-  syncDesignElementMention: (reference: DesignElementReference | null, label: string) => boolean;
+  isComposing: () => boolean;
   /**
    * Append a session mention. Returns false when nothing was written: an
    * unknown/archived/own session, or one the draft already mentions.
@@ -493,113 +474,11 @@ function MentionActionsBridge({
   actionsRef: React.Ref<CombinedMentionTextareaHandle>;
   items: readonly SessionMentionItem[];
 }) {
-  const { t } = useTranslation();
   const context = useMentionContext('MentionActionsBridge');
   const { mentions, onMentionInsert } = context;
-  // Payload of the chip the last sync wrote, so a later sync replaces exactly
-  // that chip and never one the user attached through an explicit action.
-  const lastSyncedDesignValue = React.useRef<string | undefined>(undefined);
   React.useImperativeHandle(actionsRef, () => {
-    // Shared write path for design-element chips: drops the mirrored chip,
-    // then splices the request into the post-removal text. Going through the
-    // context setters (never onMentionInsert) keeps the two edits consistent
-    // in one commit and lets the sync path skip the focus grab.
-    const commitDesignElementRequest = (
-      request: ReturnType<typeof buildDesignElementMentionInsertion>,
-      focus: boolean
-    ) => {
-      let text = context.inputValue;
-      const synced = lastSyncedDesignValue.current;
-      lastSyncedDesignValue.current = undefined;
-      let removedSynced = false;
-      if (synced !== undefined) {
-        const stale = mentions.find(
-          (mention) => mention.kind === 'design_element' && mention.value === synced
-        );
-        if (stale) {
-          removedSynced = true;
-          context.onMentionsRemove([stale]);
-          text = removeMentionText(text, stale, text[stale.end] === ' ');
-        }
-      }
-      const at = text.length;
-      const splice: MentionSplice = {
-        replaceStart: at,
-        replaceEnd: at,
-        prefix: resolveMentionInsertPrefix(text, at, request.separate),
-        text: request.text,
-        suffix: request.suffix,
-        value: request.value,
-        kind: request.kind,
-        commitRange: true,
-      };
-      const inserted = applyMentionSplice(text, [], splice);
-      context.onMentionsChange((previous) => applyMentionSplice(text, previous, splice).mentions);
-      context.onValueChange((previous) => {
-        const next = [...(previous ?? [])];
-        if (!next.includes(request.value)) next.push(request.value);
-        return next;
-      });
-      context.onInputValueChange(inserted.value);
-      context.onPendingSelectionChange({
-        start: inserted.caret,
-        end: inserted.caret,
-        expectedValue: inserted.value,
-      });
-      if (focus) context.inputRef.current?.focus();
-      return removedSynced;
-    };
     return {
-      insertDesignElementMention: (reference, label, prompt) => {
-        if (composing.current)
-          throw Error(
-            t(
-              'design.finishComposition',
-              'Finish composing text before adding an element reference'
-            )
-          );
-        const request = buildDesignElementMentionInsertion(reference, label, prompt);
-        const alreadyPresent = mentions.some(
-          (mention) => mention.kind === 'design_element' && mention.value === request.value
-        );
-        // An explicit prompt consumes the mirrored chip instead of
-        // duplicating the same reference; a promptless repeat stays a no-op.
-        if (alreadyPresent && !prompt) return false;
-        commitDesignElementRequest(request, true);
-        return true;
-      },
-      syncDesignElementMention: (reference, label) => {
-        if (composing.current) return false;
-        if (!reference) {
-          const synced = lastSyncedDesignValue.current;
-          lastSyncedDesignValue.current = undefined;
-          if (synced === undefined) return true;
-          const stale = mentions.find(
-            (mention) => mention.kind === 'design_element' && mention.value === synced
-          );
-          if (stale) {
-            context.onMentionsRemove([stale]);
-            context.onInputValueChange(
-              removeMentionText(context.inputValue, stale, context.inputValue[stale.end] === ' ')
-            );
-          }
-          return true;
-        }
-        const request = buildDesignElementMentionInsertion(reference, label);
-        const alreadyPresent = mentions.some(
-          (mention) => mention.kind === 'design_element' && mention.value === request.value
-        );
-        if (alreadyPresent) {
-          // A payload-equal chip is either this mirror's own (nothing to do)
-          // or one the user attached explicitly or restored from a draft:
-          // user-owned chips are never adopted, so a later passive sync can
-          // never retire them.
-          return true;
-        }
-        commitDesignElementRequest(request, false);
-        lastSyncedDesignValue.current = request.value;
-        return true;
-      },
+      isComposing: () => composing.current,
       insertSessionMention: (sessionId: string) => {
         // Session mentions being disabled IS an empty list, so the lookup is
         // also the enablement check — there is nothing to mention.
@@ -611,7 +490,7 @@ function MentionActionsBridge({
         return true;
       },
     };
-  }, [items, mentions, onMentionInsert, composing, t, context]);
+  }, [items, mentions, onMentionInsert, composing]);
 
   return null;
 }
@@ -968,9 +847,9 @@ export const CombinedMentionTextarea = React.forwardRef<
           />
           {mentionActionsRef ? (
             <MentionActionsBridge
+              composing={composing}
               actionsRef={mentionActionsRef}
               items={sessionItems}
-              composing={composing}
             />
           ) : null}
           {enableSkillMentions ? (

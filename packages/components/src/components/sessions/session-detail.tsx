@@ -3406,7 +3406,7 @@ const SessionDetail = ({
               if (
                 activeTabSessionId !== activeSession.id ||
                 !chat ||
-                !('insertDesignElementMention' in chat)
+                !('referenceDesignSelection' in chat)
               )
                 throw Error(
                   t(
@@ -3414,7 +3414,7 @@ const SessionDetail = ({
                     'Open this artwork’s conversation before referencing elements'
                   )
                 );
-              chat.insertDesignElementMention(
+              chat.referenceDesignSelection(
                 reference,
                 t('design.selectedElements', 'Selected elements ({{count}})', {
                   count: reference.elementIds.length,
@@ -3427,10 +3427,10 @@ const SessionDetail = ({
               if (
                 activeTabSessionId !== activeSession.id ||
                 !chat ||
-                !('syncDesignElementMention' in chat)
+                !('syncDesignSelection' in chat)
               )
                 return;
-              chat.syncDesignElementMention(reference, label);
+              chat.syncDesignSelection(reference, label);
             }}
             name={activeSession.title || t('design.untitled', 'Untitled design')}
             key={activeSession.id}

@@ -36,6 +36,7 @@ import {
   type ExpandedMentionPrompt,
   type MentionPromptExpansionArgs,
 } from '@/components/mentions/mention-expansion';
+import { appendDesignSelectionMention } from '@/components/mentions/design-element-mention';
 import { reanchorMessageTextSpansForTrim } from '@molly/shared';
 import type { Mention as MentionRange } from '@/ui/mention/index';
 import {
@@ -385,12 +386,12 @@ export type SessionChatInputAreaHandle = {
    * written (archived draft, unknown/own session, already mentioned), so the
    * caller can leave the gesture unacknowledged instead of implying a change.
    */
-  insertDesignElementMention: (
+  referenceDesignSelection: (
     reference: DesignElementReference,
     label: string,
     prompt?: string
   ) => boolean;
-  syncDesignElementMention: (reference: DesignElementReference | null, label: string) => boolean;
+  syncDesignSelection: (reference: DesignElementReference | null, label: string) => boolean;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -495,6 +496,15 @@ export const SessionChatInputArea = memo(
     >([]);
     const visualAnnotationReferencesRef = useRef<VisualAnnotationReferenceChipItem[]>([]);
     const visualAnnotationRefIdCounter = useRef(0);
+    const [designSelectionState, setDesignSelectionState] = useState<{
+      sessionId: SessionId;
+      reference: DesignElementReference;
+      label: string;
+    } | null>(null);
+    const designSelection =
+      designSelectionState?.sessionId === session.id ? designSelectionState : null;
+    const designSelectionRef = useRef(designSelection);
+    designSelectionRef.current = designSelection;
 
     const publishCommentReferences = useCallback(
       (items: CommentReferenceChipItem[]) => {
@@ -1325,6 +1335,37 @@ export const SessionChatInputArea = memo(
       [disableImageUpload, enqueueFileAttachments, handleAddFiles, isArchived]
     );
 
+    const syncDesignSelection = useCallback(
+      (reference: DesignElementReference | null, label: string) => {
+        if (isArchived) return false;
+        setDesignSelectionState(reference ? { sessionId: session.id, reference, label } : null);
+        return true;
+      },
+      [isArchived, session.id]
+    );
+
+    const referenceDesignSelection = useCallback(
+      (reference: DesignElementReference, label: string, prompt?: string) => {
+        if (isArchived) return false;
+        if (prompt && mentionActionsRef.current?.isComposing())
+          throw Error(
+            t(
+              'design.finishComposition',
+              'Finish composing text before adding an element reference'
+            )
+          );
+        setDesignSelectionState({ sessionId: session.id, reference, label });
+        if (prompt) {
+          const current = textareaRef.current?.value ?? userInput;
+          const separator = current.length === 0 || /\s$/.test(current) ? '' : ' ';
+          setUserInput(`${current}${separator}${prompt} `);
+        }
+        textareaRef.current?.focus();
+        return true;
+      },
+      [isArchived, session.id, setUserInput, t, userInput]
+    );
+
     const insertSessionMention = useCallback(
       (sessionId: string) => {
         if (isArchived) {
@@ -1348,13 +1389,8 @@ export const SessionChatInputArea = memo(
         toggleVisualAnnotationReference,
         handleImageDrop,
         insertSessionMention,
-        insertDesignElementMention: (reference, label, prompt) =>
-          !isArchived &&
-          (mentionActionsRef.current?.insertDesignElementMention(reference, label, prompt) ??
-            false),
-        syncDesignElementMention: (reference, label) =>
-          !isArchived &&
-          (mentionActionsRef.current?.syncDesignElementMention(reference, label) ?? false),
+        referenceDesignSelection,
+        syncDesignSelection,
       }),
       [
         setInputText,
@@ -1364,7 +1400,8 @@ export const SessionChatInputArea = memo(
         toggleVisualAnnotationReference,
         handleImageDrop,
         insertSessionMention,
-        isArchived,
+        referenceDesignSelection,
+        syncDesignSelection,
       ]
     );
 
@@ -1402,13 +1439,26 @@ export const SessionChatInputArea = memo(
       if (isExternalHistoryRefreshing) {
         return;
       }
-      const currentValue = textareaRef.current?.value ?? userInput;
+      const typedValue = textareaRef.current?.value ?? userInput;
+      const selection = designSelectionRef.current;
+      const selectionTravelsWithMessage =
+        selection !== null &&
+        (typedValue.trim().length > 0 ||
+          pastedTextDrafts.length > 0 ||
+          pendingImages.length > 0 ||
+          pendingFiles.length > 0);
+      const withSelection = selectionTravelsWithMessage
+        ? appendDesignSelectionMention(typedValue, selection.reference, selection.label)
+        : null;
+      const currentValue = withSelection?.text ?? typedValue;
       // One pass: pasted placeholders, `$skill`, `@session:`, and the mentions
       // that need no rewrite all resolve against the same original text, and
       // the spans record where each landed.
       const expandedPrompt = expandPromptMentionsRef.current({
         text: currentValue,
-        mentions: mentionRangesRef.current,
+        mentions: withSelection
+          ? [...mentionRangesRef.current, withSelection.mention]
+          : mentionRangesRef.current,
         pastedTextDrafts,
       });
       const trimmedPrompt = expandedPrompt.text.trim();
@@ -1496,6 +1546,7 @@ export const SessionChatInputArea = memo(
             updatePastedTextDraftsForSession(session.id, () => []);
             publishCommentReferences([]);
             publishVisualAnnotationReferences([]);
+            if (withSelection) setDesignSelectionState(null);
           } else if (
             sessionDraftsCache.get(session.id) === submittedDraft.text &&
             sessionImageDraftsCache.get(session.id) === submittedDraft.images &&
@@ -1880,6 +1931,11 @@ export const SessionChatInputArea = memo(
         onCommentReferenceClick={onNavigateToComment}
         revealCommentReferenceRemoveOnClick={false}
         visualAnnotationReferenceItems={submissionPending ? [] : visualAnnotationReferences}
+        designSelectionItem={submissionPending || !designSelection ? null : designSelection}
+        designSelectionRemoveLabel={t('design.removeSelection', 'Remove selection')}
+        onDesignSelectionRemove={
+          submissionPending || isArchived ? undefined : () => setDesignSelectionState(null)
+        }
         onVisualAnnotationReferenceRemove={
           submissionPending || isArchived ? undefined : removeVisualAnnotationReference
         }

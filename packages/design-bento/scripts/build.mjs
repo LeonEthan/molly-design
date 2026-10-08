@@ -64,6 +64,10 @@ try {
     join(root, 'src/selection-toolbar.ts'),
     join(destination, 'editor-bento/src/boot/selection-toolbar.ts')
   );
+  cpSync(
+    join(root, 'src/layers-panel.ts'),
+    join(destination, 'editor-bento/src/boot/layers-panel.ts')
+  );
   cpSync(join(root, 'src/image.ts'), join(destination, 'editor-bento/src/ui/dom/image.ts'));
   const imageFile = join(destination, 'editor-bento/src/ui/dom/image.ts');
   writeFileSync(
@@ -79,15 +83,91 @@ try {
   const payloadAnchor = '  const payload = (await response.json()) as WorkspacePayload';
   if (boot.split(payloadAnchor).length !== 2)
     throw Error('Pinned image preparation boundary changed');
-  writeFileSync(
-    bootFile,
-    `import { prepareImageSampling } from '../image-sampling.ts'\n` +
-      boot.replace(
-        payloadAnchor,
-        payloadAnchor +
-          `\n  for (const source of new Set(payload.doc.elements.filter(element => element.kind === 'image').map(element => payload.assets[element.src.replace(/^asset:/, '')]))) {\n    if (source?.startsWith('data:image/')) await prepareImageSampling(source)\n  }`
-      )
+  let adaptedBoot = boot.replace(
+    payloadAnchor,
+    payloadAnchor +
+      `\n  for (const source of new Set(payload.doc.elements.filter(element => element.kind === 'image').map(element => payload.assets[element.src.replace(/^asset:/, '')]))) {\n    if (source?.startsWith('data:image/')) await prepareImageSampling(source)\n  }`
   );
+  // Layer and property commands reuse the kernel's setZOrder, setRotation and
+  // setStyle/setText; the product session reads elements and selects by id.
+  for (const [anchor, replacement] of [
+    [
+      "const applyField = (key: 'color' | 'fontFamily' | 'fontSize' | 'bold' | 'italic', value: string | number | boolean) => {",
+      "const applyField = (key: 'color' | 'fontFamily' | 'fontSize' | 'bold' | 'italic' | 'letterSpacing', value: string | number | boolean) => {",
+    ],
+    [
+      "                if (typeof input.italic === 'boolean') applyField('italic', input.italic)\n",
+      `                if (typeof input.italic === 'boolean') applyField('italic', input.italic)
+                if (typeof input.letterSpacing === 'number') applyField('letterSpacing', input.letterSpacing)
+                if (typeof input.lineHeight === 'number') {
+                  text.lineHeight = input.lineHeight
+                  delete text.lineHeightPx
+                  for (const paragraph of text.paragraphs ?? []) delete paragraph.lineHeight
+                  changed = true
+                }
+`,
+    ],
+    [
+      "              case 'line-arrow': {\n",
+      `              case 'transform': {
+                if (typeof input.opacity === 'number')
+                  commands.push({ type: 'setStyle', targetId: element.id, patch: { opacity: input.opacity === 1 ? null : input.opacity } })
+                if (typeof input.rotation === 'number' && element.kind !== 'table' && element.kind !== 'chart')
+                  commands.push({ type: 'setRotation', targetId: element.id, rotation: input.rotation === 0 ? null : input.rotation })
+                break
+              }
+              case 'line-arrow': {
+`,
+    ],
+    [
+      '          const commands: VisualCommandV4[] = []\n          for (const element of selectedElements()) {\n',
+      `          if (input?.verb === 'arrange') {
+            const order = doc().elements.map((element) => element.id)
+            const chosen = new Set(store.selection)
+            const moves: VisualCommandV4[] = []
+            const move = (id: string, index: number) => {
+              const from = order.indexOf(id)
+              if (from === index) return
+              order.splice(from, 1)
+              order.splice(index, 0, id)
+              moves.push({ type: 'setZOrder', targetId: id, index })
+            }
+            const selectedInOrder = order.filter((id) => chosen.has(id))
+            if (input.to === 'front') for (const id of selectedInOrder) move(id, order.length - 1)
+            if (input.to === 'back') for (const id of [...selectedInOrder].reverse()) move(id, 0)
+            if (input.to === 'forward')
+              for (const id of [...selectedInOrder].reverse()) {
+                const at = order.indexOf(id)
+                const above = order[at + 1]
+                if (above !== undefined && !chosen.has(above)) move(id, at + 1)
+              }
+            if (input.to === 'backward')
+              for (const id of selectedInOrder) {
+                const at = order.indexOf(id)
+                const below = order[at - 1]
+                if (below !== undefined && !chosen.has(below)) move(id, at - 1)
+              }
+            if (selectedInOrder.length === 0) return { ok: false, error: 'No matching elements' }
+            if (moves.length === 0) return { ok: true, applied: 0 }
+            const result = bridge.dispatch(moves)
+            if (!result.ok) return { ok: false, error: result.error.message }
+            pushSelection()
+            return { ok: true, applied: moves.length }
+          }
+          const commands: VisualCommandV4[] = []
+          for (const element of selectedElements()) {
+`,
+    ],
+    [
+      '          applyCommands, pickImageFile })',
+      '          applyCommands, pickImageFile, elements: () => doc().elements, select: (ids) => store.select(ids) })',
+    ],
+  ]) {
+    if (adaptedBoot.split(anchor).length !== 2)
+      throw Error('Pinned canvas command executor changed; review layer and property commands');
+    adaptedBoot = adaptedBoot.replace(anchor, replacement);
+  }
+  writeFileSync(bootFile, `import { prepareImageSampling } from '../image-sampling.ts'\n` + adaptedBoot);
   const renderFile = join(tree, 'slides/src/render.ts');
   const ordinaryImage = `      const img = document.createElement('img')
       const imgSrc = assetSrc(doc, el.src)

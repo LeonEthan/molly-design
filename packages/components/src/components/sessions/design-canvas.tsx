@@ -708,9 +708,10 @@ export function DesignCanvas({
                     onClick={() => chooseVersion(version.commitId)}
                   >
                     V{version.number} · {new Date(version.createdAt).toLocaleString()}
-                    {version.kind === 'before-restore'
-                      ? ` · ${t('design.beforeRestore', 'Before restore')}`
-                      : ''}
+                    {version.kind === 'before-restore' &&
+                      ` · ${t('design.beforeRestore', 'Before restore')}`}
+                    {version.kind === 'before-agent' &&
+                      ` · ${t('design.beforeAgent', "Before Molly's edit")}`}
                     {version.baseVersionId &&
                       versions.find((v) => v.commitId === version.baseVersionId) &&
                       ` · ${t('design.versionOrigin', 'Based on V{{number}}', {

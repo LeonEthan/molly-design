@@ -925,7 +925,7 @@ export function ArchiveView() {
     }).map((group) => {
       if (groupMode === 'flat') return group;
       if (group.kind !== 'chat') return group;
-      return { ...group, label: t('archive.chats', 'Chats') };
+      return { ...group, label: t('archive.chats', 'Designs') };
     });
   }, [filteredArchivedSessions, groupMode, localProjectLabelByKey, sortMode, t]);
 
@@ -1170,7 +1170,7 @@ export function ArchiveView() {
   const restoreLabel = t('archive.restore', 'Restore session');
   const deleteLabel = t('archive.delete', 'Delete permanently');
   const deleteButtonLabel = t('common.delete', 'Delete');
-  const chatLabel = t('archive.chats', 'Chats');
+  const chatLabel = t('archive.chats', 'Designs');
   const emptyLabel = normalizedSearchQuery
     ? t('archive.emptySearch', 'No matching archived sessions')
     : t('archive.empty', 'No archived sessions');

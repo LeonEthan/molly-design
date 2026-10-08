@@ -18,9 +18,9 @@ export type SidebarFilterLabels = {
 
 const defaultLabels: SidebarFilterLabels = {
   triggerAriaLabel: 'Filter sidebar',
-  organizeHeading: 'Organize',
-  organizeWorkspace: 'Workspace',
-  organizeUpdated: 'Updated',
+  organizeHeading: 'Show',
+  organizeWorkspace: 'By project',
+  organizeUpdated: 'All designs',
 };
 
 export type SidebarFilterPopoverProps = {

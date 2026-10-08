@@ -88,6 +88,13 @@ You can also select and edit text, change colors, insert an image and adjust the
 layout directly in Bento. Save the design before exporting PNG or JPEG at 1×, 2× or 3×. Generated
 images are optional; text and shape design does not require an image service.
 
+Open **Layers** in the canvas dock to pick an element by name, change its stacking
+order, or type an exact position, size, rotation, opacity, line height or letter
+spacing. Before each Molly turn that starts from existing artwork, History keeps a
+"Before Molly's edit" version you can return to. The size menu also offers print
+sheets (A4, A5, A3, US Letter and business card) as pixel sizes; there is no bleed
+or millimetre unit.
+
 ## Built-in browser research (current development build)
 
 In a design session, the `molly_browser` tools control only the page in Molly's Browser sidebar through the existing tool permission flow. Browsing has no per-site authorization scope. Navigation and selected-image fetching follow your normal network, including proxies and TUN, without a DNS setup step. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover. If an operation returns an uncertain result, the Agent must observe before deciding what to do next; Molly does not automatically repeat the action or block browsing for the rest of the task.

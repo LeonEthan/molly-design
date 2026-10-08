@@ -1508,11 +1508,7 @@ function WorkspaceChatLanding({
         repoFullNameForMentions = selectedRepo;
       }
 
-      const draftTitle = draftPromptText
-        .split('\n')
-        .map((line) => line.trim())
-        .find((line) => line.length > 0)
-        ?.slice(0, 50);
+
       const promptPayload = buildAgentPrompt(promptText, selectedConfig.prompt ?? '');
       const issuePRMentions = extractIssuePRMentionsFromText(
         promptText,
@@ -1542,6 +1538,13 @@ function WorkspaceChatLanding({
         throw new Error('Initial session history missing effective items');
       }
       const designService = isElectron ? getIpcServices()?.design : undefined;
+      const draftTitle = designService
+        ? t('design.untitled', 'Untitled design')
+        : draftPromptText
+            .split('\n')
+            .map((line) => line.trim())
+            .find((line) => line.length > 0)
+            ?.slice(0, 50);
       if (
         isElectron &&
         (!designService || selectedAgent.machineId !== localProbeResult?.machineId)

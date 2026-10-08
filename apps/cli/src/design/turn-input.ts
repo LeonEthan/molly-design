@@ -57,7 +57,7 @@ import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import { collectAuthoring } from '@molly/design-authoring';
 import { snapshotIdentity } from './render-preview';
 import { artifactAtSendRecord, readDesignArtifact, type DesignArtifactAtSend } from './artifact';
-import { designOperation } from './store';
+import { designOperation, type DesignPayload } from './store';
 
 export const DESIGN_TURN_INPUT_DIRNAME = 'design-input';
 export const DESIGN_TURN_MANIFEST_FILENAME = 'manifest.json';
@@ -127,6 +127,8 @@ export interface MaterializeDesignTurnInputOptions {
   skillSourceIdentity: string;
   skillDrift?: string[];
   references?: DesignTurnReferenceInput[];
+  /** Receives the baseline once a new turn's input is durable; re-dispatches skip it. */
+  onFrozen?: (baseline: DesignPayload) => void;
   /** Test seam: defaults to the daemon data root (same root the workdir lives under). */
   dataRoot?: string;
 }
@@ -306,7 +308,7 @@ export async function materializeDesignTurnInput(
   // The baseline is read through the single design committer: a missing or
   // corrupt canvas fails the dispatch here rather than anchoring the turn to
   // an unreadable baseline.
-  let baseline: Awaited<ReturnType<typeof designOperation>>;
+  let baseline: DesignPayload;
   try {
     baseline = await designOperation(
       dataRoot,
@@ -373,6 +375,7 @@ export async function materializeDesignTurnInput(
     DESIGN_TURN_MANIFEST_FILENAME,
     Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   );
+  opts.onFrozen?.(baseline);
   return manifest;
 }
 

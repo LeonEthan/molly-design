@@ -34,11 +34,13 @@ export const designHistoryRequest = z.discriminatedUnion('operation', [
     .strict(),
 ]);
 export type DesignHistoryRequest = z.input<typeof designHistoryRequest>;
+const versionKinds = ['saved', 'before-restore', 'before-agent'] as const;
+const versionKind = z.enum(versionKinds);
 export interface DesignVersion {
   commitId: string;
   number: number;
   createdAt: string;
-  kind: 'saved' | 'before-restore';
+  kind: (typeof versionKinds)[number];
   baseVersionId?: string;
   contentDigest?: string;
   sourceRevisionId?: string;
@@ -128,14 +130,14 @@ async function list(repository: string): Promise<DesignVersion[]> {
     .filter(Boolean)
     .map((line, index) => {
       const [hash, seconds, subject, body] = line.split('\t');
-      if (subject !== 'saved' && subject !== 'before-restore')
-        throw Error('Invalid design history entry');
+      const kind = versionKind.safeParse(subject);
+      if (!kind.success) throw Error('Invalid design history entry');
       const timestamp = z.coerce.number().int().nonnegative().parse(seconds);
       return {
         commitId: commitId.parse(hash),
         number: index + 1,
         createdAt: new Date(timestamp * 1000).toISOString(),
-        kind: subject,
+        kind: kind.data,
         ...(body ? metadata.parse(JSON.parse(body)) : {}),
       };
     });
@@ -151,6 +153,38 @@ async function read(repository: string, version: string) {
   );
   if (!acceptsDesignContent(content)) throw Error('Invalid design version content');
   return { content, version: entry };
+}
+
+async function holds(repository: string, content: import('./store').DesignPayload) {
+  const blob = (
+    await git(repository, ['hash-object', '--stdin'], canonicalContentBytes(content))
+  ).trim();
+  const reachable = (await head(repository))
+    ? await git(repository, ['rev-list', '--objects', historyRef])
+    : '';
+  return reachable.split('\n').some((line) => line.split(' ')[0] === blob);
+}
+
+async function initialize(repository: string) {
+  if (!(await exists(path.join(repository, 'objects'))))
+    await git(repository, ['init', '--bare', '--template=', '--object-format=sha1', repository]);
+}
+
+async function locate(dataRoot: string, sessionId: string) {
+  const directory = path.join(dataRoot, 'chats', sessionId);
+  const repository = path.join(directory, 'history.git');
+  await ensureDesignDirectory(directory, repository);
+  return { repository, available: await exists(repository) };
+}
+
+async function openRepository(dataRoot: string, sessionId: string) {
+  const { repository, available } = await locate(dataRoot, sessionId);
+  if (!available)
+    await mkdir(repository).catch(async (error: unknown) => {
+      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
+      await exists(repository);
+    });
+  return repository;
 }
 
 async function append(
@@ -201,12 +235,9 @@ export async function designHistoryOperation(
     operation: 'read',
     sessionId: request.sessionId,
   });
-  const directory = path.join(dataRoot, 'chats', request.sessionId);
-  const repository = path.join(directory, 'history.git');
-  await ensureDesignDirectory(directory, repository);
-  const available = await exists(repository);
-  if (request.operation === 'history-list') return available ? list(repository) : [];
-  if (request.operation === 'history-read') {
+  if (request.operation === 'history-list' || request.operation === 'history-read') {
+    const { repository, available } = await locate(dataRoot, request.sessionId);
+    if (request.operation === 'history-list') return available ? list(repository) : [];
     if (!available) throw Error('Design version not found');
     const historic = await read(repository, request.commitId);
     // Use current artwork identity; never restore another Session's metadata or conversation.
@@ -218,11 +249,7 @@ export async function designHistoryOperation(
         .digest('hex'),
     };
   }
-  if (!available)
-    await mkdir(repository).catch(async (error: unknown) => {
-      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error;
-      await exists(repository);
-    });
+  const repository = await openRepository(dataRoot, request.sessionId);
   return withDesignLock(repository, options.lock ?? {}, async (assertHeld) => {
     // Another instance may restore or save while this operation waits for Git.
     // Never publish a stale snapshot as a successful current-version save.
@@ -244,14 +271,7 @@ export async function designHistoryOperation(
       )
         return prior;
       if (lockedCurrent.revisionId !== request.baseRevisionId) throw Error('DESIGN_CONFLICT');
-      if (!(await exists(path.join(repository, 'objects'))))
-        await git(repository, [
-          'init',
-          '--bare',
-          '--template=',
-          '--object-format=sha1',
-          repository,
-        ]);
+      await initialize(repository);
       if (lockedCurrent.editing) {
         const base = await read(repository, lockedCurrent.editing.baseVersionId);
         if (contentDigest(base.content) === contentDigest(lockedCurrent)) return base.version;
@@ -287,13 +307,7 @@ export async function designHistoryOperation(
       return lockedCurrent;
     if (lockedCurrent.revisionId !== request.baseRevisionId) throw Error('DESIGN_CONFLICT');
     // No changes to current storage until the protective history entry is durable and reachable.
-    const currentBlob = (
-      await git(repository, ['hash-object', '--stdin'], canonicalContentBytes(lockedCurrent))
-    ).trim();
-    const reachable = (await head(repository))
-      ? await git(repository, ['rev-list', '--objects', historyRef])
-      : '';
-    if (!reachable.split('\n').some((line) => line.split(' ')[0] === currentBlob))
+    if (!(await holds(repository, lockedCurrent)))
       await append(repository, lockedCurrent, 'before-restore', assertHeld);
     await assertHeld();
     return designOperation(
@@ -306,5 +320,21 @@ export async function designHistoryOperation(
       },
       { editing: { baseVersionId: request.commitId, actionId } }
     );
+  });
+}
+
+/** Keeps an Agent turn's frozen baseline restorable unless history already holds it. */
+export async function recordBeforeAgentVersion(
+  dataRoot: string,
+  artworkId: string,
+  baseline: import('./store').DesignPayload,
+  options: { lock?: DesignLockTiming } = {}
+): Promise<DesignVersion | undefined> {
+  if (!baseline.doc.elements.length) return undefined;
+  const repository = await openRepository(dataRoot, designId.parse(artworkId));
+  return withDesignLock(repository, options.lock ?? {}, async (assertHeld) => {
+    await initialize(repository);
+    if (await holds(repository, baseline)) return undefined;
+    return append(repository, baseline, 'before-agent', assertHeld);
   });
 }

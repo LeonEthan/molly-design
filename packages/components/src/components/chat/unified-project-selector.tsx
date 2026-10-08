@@ -312,8 +312,8 @@ export function UnifiedProjectSelectorView({
     return selectUnifiedProjectOptionsForRender(options, deferredQuery, renderLimit);
   }, [deferredQuery, options, renderLimit]);
 
-  const clearLabel = t('chat.projectPicker.clear', "Don't work in a project");
-  const placeholder = t('chat.projectPicker.placeholder', 'Select a project');
+  const clearLabel = t('chat.projectPicker.clear', 'No project');
+  const placeholder = t('chat.projectPicker.placeholder', 'Choose a project');
   const triggerIcon =
     selectedOption?.icon ??
     (value.kind === 'github' ? (
@@ -483,7 +483,7 @@ export function UnifiedProjectSelectorView({
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={onAddLocalProject}>
             <FolderPlus className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <span>{t('chat.contextSwitch.addProject', 'Add a folder')}</span>
+            <span>{t('chat.contextSwitch.addProject', 'Add a project folder')}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

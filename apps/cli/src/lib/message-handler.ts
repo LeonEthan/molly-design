@@ -256,6 +256,7 @@ import {
 } from '@/design/skills';
 import { readMachineImageConnection } from '@/design/image-connection';
 import { DesignTurnInputError, materializeDesignTurnInput } from '@/design/turn-input';
+import { recordBeforeAgentVersion } from '@/design/history';
 import { DesignRenderHost } from '@/design/render-host';
 import { DesignCanvasHost } from '@/design/canvas-host';
 import { DesignSyncService } from '@/design/sync-service';
@@ -2557,11 +2558,12 @@ export class MessageHandler {
     }
 
     if (args.userTurnId) {
+      const artworkId = meta.design.artworkId;
       const manifest = await materializeDesignTurnInput({
         workdir: designWorkspace.inputWorkdir,
         artifactWorkdir: designWorkspace.artifactWorkdir,
         turnId: args.userTurnId,
-        artworkId: meta.design.artworkId,
+        artworkId,
         prompt: args.promptText,
         skillSourceIdentity: sourceIdentity,
         skillDrift,
@@ -2569,6 +2571,13 @@ export class MessageHandler {
           bytes: downloaded.bytes,
           mimeType: downloaded.mimeType,
         })),
+        onFrozen: (baseline) =>
+          void recordBeforeAgentVersion(getMollyDataDir(), artworkId, baseline).catch(
+            (error: unknown) =>
+              this.logger.warn(
+                `[${args.sessionId}] design restore point before the turn failed: ${error instanceof Error ? error.message : String(error)}`
+              )
+          ),
       });
       this.logger.debug(
         `[${args.sessionId}] design turn input frozen for turn ${args.userTurnId}: baseline=${manifest.baselineRevisionId.slice(0, 12)} references=${manifest.references.length}`

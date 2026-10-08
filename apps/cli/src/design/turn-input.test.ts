@@ -127,6 +127,23 @@ describe('materializeDesignTurnInput', () => {
     }
   });
 
+  it('hands the baseline to the restore point only when a turn first freezes', async () => {
+    const { root, sessionId, workdir } = await setupDesign();
+    const baselines: string[] = [];
+    const options = {
+      workdir,
+      artworkId: sessionId,
+      turnId: 'restore-point',
+      prompt: 'Tighten the headline',
+      skillSourceIdentity: 'a'.repeat(64),
+      dataRoot: root,
+      onFrozen: (baseline: { revisionId: string }) => baselines.push(baseline.revisionId),
+    };
+    const manifest = await materializeDesignTurnInput(options);
+    await materializeDesignTurnInput(options);
+    expect(baselines).toEqual([manifest.baselineRevisionId]);
+  });
+
   it('keeps the frozen marker but blocks recovery after canonical changes', async () => {
     const { root, sessionId, workdir } = await setupDesign();
     const original = await designOperation(root, { operation: 'read', sessionId });

@@ -38,6 +38,40 @@ function useCanvasSizePresets() {
   ];
 }
 
+const MM_PER_INCH = 25.4;
+
+/** Print sheets at 300 DPI; A3 drops to 240 DPI to stay within the 4096 px canvas limit. */
+function usePrintSizePresets() {
+  const { t } = useTranslation();
+  const sheet = (label: string, width: number, height: number, unit: 'mm' | 'in', dpi: number) => {
+    const inches = unit === 'in' ? 1 : 1 / MM_PER_INCH;
+    return {
+      label,
+      detail:
+        unit === 'in'
+          ? t('design.printSizeDetailInches', '{{width}} × {{height}} in · {{dpi}} DPI', {
+              width,
+              height,
+              dpi,
+            })
+          : t('design.printSizeDetail', '{{width}} × {{height}} mm · {{dpi}} DPI', {
+              width,
+              height,
+              dpi,
+            }),
+      width: Math.round(width * inches * dpi),
+      height: Math.round(height * inches * dpi),
+    };
+  };
+  return [
+    sheet(t('design.sizeA4', 'A4'), 210, 297, 'mm', 300),
+    sheet(t('design.sizeA5', 'A5'), 148, 210, 'mm', 300),
+    sheet(t('design.sizeA3', 'A3'), 297, 420, 'mm', 240),
+    sheet(t('design.sizeLetter', 'US Letter'), 8.5, 11, 'in', 300),
+    sheet(t('design.sizeBusinessCard', 'Business card'), 90, 54, 'mm', 300),
+  ];
+}
+
 /** Home-page format choice: the same presets as the composer chip, drawn at true ratio. */
 export function CanvasFormatTiles({
   mode,
@@ -148,9 +182,12 @@ export function CanvasSizeSelector({
   const validHeight = isValidDimension(draftHeight);
   const invalidDraft = (draft.width !== '' && !validWidth) || (draft.height !== '' && !validHeight);
   const presets = useCanvasSizePresets();
+  const printPresets = usePrintSizePresets();
   const customSelected =
     mode === 'custom' &&
-    !presets.some((preset) => preset.width === width && preset.height === height);
+    ![...presets, ...printPresets].some(
+      (preset) => preset.width === width && preset.height === height
+    );
   const label = mode === 'auto' ? t('design.autoSize', 'Auto size') : `${width} × ${height}`;
   const TriggerIcon = mode === 'auto' ? Maximize : width === height ? Square : Rectangle;
   const select = (size: CanvasSize) => {
@@ -193,7 +230,7 @@ export function CanvasSizeSelector({
         sideOffset={8}
         collisionPadding={12}
         aria-label={t('design.size', 'Canvas size')}
-        className="w-72 max-w-[calc(100vw-24px)] select-none rounded-xl border-0 p-1.5"
+        className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-80 max-w-[calc(100vw-24px)] select-none overflow-y-auto rounded-xl border-0 p-1.5"
         style={menuSurfaceStyle}
         onOpenAutoFocus={(event) => {
           if (!(event.target instanceof HTMLElement)) return;
@@ -229,34 +266,43 @@ export function CanvasSizeSelector({
               </span>
               {mode === 'auto' ? <Check aria-hidden className="size-4" /> : null}
             </Button>
-            <div className="px-3 pb-1 pt-3 text-[11px] text-muted-foreground">
-              {t('design.commonSizes', 'Common sizes')}
-            </div>
-            {presets.map((preset) => {
-              const selected =
-                mode === 'custom' && width === preset.width && height === preset.height;
-              return (
-                <Button
-                  key={preset.label}
-                  type="button"
-                  variant="ghost"
-                  aria-pressed={selected}
-                  className={rowClassName}
-                  onClick={() =>
-                    select({ mode: 'custom', width: preset.width, height: preset.height })
-                  }
-                >
-                  <SizeOutline width={preset.width} height={preset.height} />
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span>{preset.label}</span>
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {preset.width} × {preset.height}
-                    </span>
-                  </span>
-                  {selected ? <Check aria-hidden className="size-4" /> : null}
-                </Button>
-              );
-            })}
+            {(
+              [
+                [t('design.commonSizes', 'Common sizes'), presets],
+                [t('design.printSizes', 'Print'), printPresets],
+              ] as const
+            ).map(([heading, group]) => (
+              <div key={heading}>
+                <div className="px-3 pb-1 pt-3 text-[11px] text-muted-foreground">{heading}</div>
+                {group.map((preset) => {
+                  const selected =
+                    mode === 'custom' && width === preset.width && height === preset.height;
+                  return (
+                    <Button
+                      key={preset.label}
+                      type="button"
+                      variant="ghost"
+                      aria-pressed={selected}
+                      className={rowClassName}
+                      onClick={() =>
+                        select({ mode: 'custom', width: preset.width, height: preset.height })
+                      }
+                    >
+                      <SizeOutline width={preset.width} height={preset.height} />
+                      <span className="flex flex-1 flex-col gap-0.5">
+                        <span>{preset.label}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {'detail' in preset
+                            ? `${preset.detail} · ${preset.width} × ${preset.height}`
+                            : `${preset.width} × ${preset.height}`}
+                        </span>
+                      </span>
+                      {selected ? <Check aria-hidden className="size-4" /> : null}
+                    </Button>
+                  );
+                })}
+              </div>
+            ))}
             <div className="my-1.5 h-px bg-foreground/[0.06]" />
             <Button
               type="button"

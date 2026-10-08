@@ -595,7 +595,7 @@ function ProjectAddMenu({
           <DropdownMenuItem onSelect={() => onAddLocalProject()}>
             <FolderPlus className="h-4 w-4" />
             <span className="flex min-w-0 flex-col">
-              <span>{t('chat.contextSwitch.addProject', 'Add a folder')}</span>
+              <span>{t('chat.contextSwitch.addProject', 'Add a project folder')}</span>
               <span className="text-xs text-muted-foreground">
                 {t(
                   'chat.contextSwitch.addLocalProjectHint',

@@ -17,7 +17,8 @@ Index and rationale: [README.md](README.md).
   are machine-independent. Machine changes filter local projects/configs and clear
   incompatible local projects without replacement.
 - Desktop landing format tiles under the heading and the footer size chip share one
-  canvas draft and preset list (`canvas-size-selector.tsx`).
+  canvas draft and screen preset list (`canvas-size-selector.tsx`); only the chip
+  adds print sheets, converted to pixels at a DPI that keeps both sides within 4096 px.
 - Desktop landing footer starts with canvas size beside the attachment entry;
   the remaining footer order is run config → permission → usage. Provider interaction mode
   belongs inside run config; the standalone button is explicit permission mode,
@@ -37,7 +38,8 @@ Index and rationale: [README.md](README.md).
 
 - Custom canvas dimensions enter both artwork creation and the durable first-turn
   text from one submission snapshot. Auto adds no fixed-size instruction; retries
-  rebuild from the untouched draft. Keep automatic titles based on user-authored text.
+  rebuild from the untouched draft. A new design's draft title is "Untitled design",
+  never the prompt; the committed artwork `title` renames it.
   Presets use the same custom dimensions; custom popover edits apply only on confirmation.
 
 - The chat-route URL declares selection, never one-shot event nonces. Once it names

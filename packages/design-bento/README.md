@@ -129,6 +129,21 @@ and undo/redo dock buttons use native disabled state while readonly; entering
 readonly also closes the shape menu. Unlocking restores those existing controls.
 These styles belong to the local adapters, independent of the shell's CSS.
 
+The dock's Layers button opens a native side panel (`src/layers-panel.ts`). It lists
+the current elements top-most first, using text content or the element kind as the
+name; clicking selects, and Shift/⌘ adds or removes. For the selection it edits
+position, size (single selection), rotation, opacity, and, for text, line height and
+letter spacing, plus bring to front/forward and send backward/to back. Every edit
+goes through the same host-bound toolbar endpoint and selection epoch as the
+toolbar, so readonly and stale-selection checks still apply; while readonly the list
+stays browsable and the fields are disabled. The builder adapts the assembled
+`a1a2/boot.ts` to execute these commands with the kernel's existing `setRotation`,
+`setStyle`, `setText` and `setZOrder` (array order is stacking order), and to give
+the product session read access to elements and selection by ID. Bento's own
+property panel stays hidden: it edits the native view, which the mutation seal
+rejects. The document has no hidden or locked flag, so layers cannot be hidden or
+locked.
+
 The native selection box uses a muted blue-grey 1px outline. Corner and rotation
 handles paint 7px white circles; edge midpoints paint 14×5px capsules aligned
 with their edge. All use a 1px outline inside Moveable's original 14px hit targets.

@@ -14,8 +14,9 @@ Public terminal disposal must release its window and media-query listeners.
 Ownership and explanations: [README.md](README.md).
 
 - Sidebar rows represent Sessions, never Tasks.
-- Desktop sidebar filtering changes only organization (Workspace/Updated); archive and
-  sidebar lists show every permitted local Session without reading Lody team-scope preferences.
+- Desktop sidebar filtering changes only organization (By project/All designs, default
+  All designs); archive and sidebar lists show every permitted local Session without
+  reading Lody team-scope preferences.
 - Every desktop row supports session-mention drag and Mark as unread in the shared ⋯
   menu (Workspace, Local Project, Updated, and Pinned); hide Mark as unread on unread rows.
   Use `lib/session-mention-drag.ts` for drops on the conversation page or landing.

@@ -4,6 +4,7 @@ import { act, createElement, createRef, type RefObject } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentRoleId, SessionMeta, SessionInputBlock } from '@molly/shared';
+import { readDesignElementReferences } from '@molly/shared/design-element-reference';
 
 vi.mock('../src/components/mentions/mention-session-source', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -503,6 +504,124 @@ describe('SessionChatInputArea submission feedback', () => {
       expect(document.activeElement).toBe(textarea);
     }
   );
+
+  describe('canvas selection chip', () => {
+    const reference = {
+      artworkId: 'aacdd4fb-a160-4c25-9c15-02297145a521',
+      baselineRevisionId: 'a'.repeat(64),
+      elementIds: ['title', 'subtitle'],
+    };
+    const chip = () => container!.querySelector('[data-design-selection-ref]');
+    const removeButton = () =>
+      container!.querySelector<HTMLButtonElement>(
+        '[data-design-selection-ref] button[aria-label="Remove selection"]'
+      );
+    const sendButton = () =>
+      container!.querySelector<HTMLButtonElement>('button[aria-label="Send"]')!;
+
+    it('shows a removable chip above the input and leaves the typed draft alone', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ onSendMessage: async () => true, composerRef });
+      await act(async () => {
+        composerRef.current?.syncDesignSelection(reference, 'Selected elements (2)');
+      });
+      expect(chip()?.textContent).toContain('Selected elements (2)');
+      expect(textarea.value).toBe('focus regression draft');
+      await act(async () => removeButton()!.click());
+      expect(chip()).toBeNull();
+      expect(textarea.value).toBe('focus regression draft');
+    });
+
+    it('sends the selection with the message and clears the chip once accepted', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      let sent: SessionInputBlock[] | undefined;
+      await renderComposer({
+        composerRef,
+        onSendMessage: async (blocks) => {
+          sent = blocks;
+          return true;
+        },
+      });
+      await act(async () => {
+        composerRef.current?.syncDesignSelection(reference, 'Selected elements (2)');
+      });
+      await submit('button');
+      const text = sent?.find((block) => block.type === 'text');
+      expect(text).toMatchObject({ type: 'text' });
+      const body = (text as { text: string }).text;
+      expect(body.startsWith('focus regression draft ')).toBe(true);
+      expect(readDesignElementReferences(body)).toEqual([reference]);
+      expect((text as { spans?: { kind: string }[] }).spans?.[0]?.kind).toBe('design_element');
+      expect(chip()).toBeNull();
+    });
+
+    it('keeps the chip when the send is not accepted', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      await renderComposer({ composerRef, onSendMessage: async () => false });
+      await act(async () => {
+        composerRef.current?.syncDesignSelection(reference, 'Selected elements (2)');
+      });
+      await submit('button');
+      expect(chip()).not.toBeNull();
+    });
+
+    it('does not make a selection alone sendable', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const onSendMessage = vi.fn(async () => true);
+      await renderComposer({ composerRef, onSendMessage });
+      await act(async () => {
+        composerRef.current?.setInputText('');
+        composerRef.current?.syncDesignSelection(reference, 'Selected elements (2)');
+      });
+      expect(chip()).not.toBeNull();
+      expect(sendButton().disabled).toBe(true);
+    });
+
+    it('does not follow the user into another conversation', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      await renderComposer({
+        sessionId: 'chip-session-a',
+        composerRef,
+        onSendMessage: async () => true,
+      });
+      await act(async () => {
+        composerRef.current?.syncDesignSelection(reference, 'Selected elements (2)');
+      });
+      await renderComposer({
+        sessionId: 'chip-session-b',
+        composerRef,
+        onSendMessage: async () => true,
+      });
+      expect(chip()).toBeNull();
+    });
+
+    it('refuses to add an action prompt while text is being composed', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ onSendMessage: async () => true, composerRef });
+      await act(async () =>
+        textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }))
+      );
+      expect(() =>
+        composerRef.current?.referenceDesignSelection(reference, 'Selected elements (2)', 'Bolder.')
+      ).toThrow('Finish composing');
+      expect(textarea.value).toBe('focus regression draft');
+      expect(chip()).toBeNull();
+    });
+
+    it('adds an action prompt to the draft and selects the chip when asked to reference', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ onSendMessage: async () => true, composerRef });
+      await act(async () => {
+        composerRef.current?.referenceDesignSelection(
+          reference,
+          'Selected elements (2)',
+          'Make these bolder.'
+        );
+      });
+      expect(chip()).not.toBeNull();
+      expect(textarea.value).toBe('focus regression draft Make these bolder. ');
+    });
+  });
 
   it('does not let an old completion enable another session pending submission', async () => {
     const first = deferredBoolean();

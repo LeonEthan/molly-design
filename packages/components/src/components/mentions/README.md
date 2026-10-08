@@ -35,11 +35,15 @@ rules live in [AGENTS.md](AGENTS.md); this file maps their implementation.
   taken from the pinned VS Code source identified in its header; AGENTS.md states
   what must survive an update.
 
-`design-element-mention.ts` reuses imperative mention insertion and persisted ranges
-for canonical Bento selection. Expansion sends artwork, saved baseline and stable
-IDs as an ordinary prompt marker; the transcript reuses the frozen mention span.
-No display label resolves an element. The canvas toolbar is the selection source.
+`design-element-mention.ts` turns canonical Bento selection into an ordinary prompt
+marker at send. The composer shows the selection as a removable chip row
+(`chat/design-selection-chip.tsx`), never as text in the draft. At send the chip is
+appended after the typed text as a design-element mention, so expansion sends artwork,
+saved baseline and stable IDs through the same rewrite as a mention restored from an
+older draft, and the transcript reuses the frozen mention span. A chip alone does not
+send, and it travels only with a message that has text or attachments. No display
+label resolves an element. The canvas toolbar is the selection source.
 
-Canvas context actions may append an editable prompt through the existing mention
-insertion suffix. The prompt remains outside the persisted identity range and does
-not submit the conversation. Existing draft text and references remain intact.
+Canvas context actions select the chip and may append an editable prompt to the draft.
+The prompt stays ordinary text and does not submit the conversation. Existing draft
+text and references remain intact.

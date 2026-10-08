@@ -5,7 +5,7 @@ import {
   validateDesignElementReferences,
 } from '@molly/shared/design-element-reference';
 import {
-  buildDesignElementMentionInsertion,
+  appendDesignSelectionMention,
   buildDesignElementMentionRewrites,
 } from '../src/components/mentions/design-element-mention';
 import {
@@ -14,32 +14,29 @@ import {
 } from '../src/components/mentions/mention-persistence';
 
 describe('canonical element mentions', () => {
-  it('keeps an action prompt editable outside the persisted target range', () => {
+  it('appends a chip selection after the typed text and expands it at send', () => {
     const reference = {
       artworkId: 'art',
       baselineRevisionId: 'a'.repeat(64),
       elementIds: ['image-1', 'image-2'],
     };
-    const insertion = buildDesignElementMentionInsertion(
+    const appended = appendDesignSelectionMention(
+      'Edit each image. Changes: warm colors',
       reference,
-      'Selected images',
-      'Edit each image. Changes: '
+      'Selected images'
     );
-    const text = 'Existing draft ' + insertion.text + insertion.suffix + 'warm colors';
-    const ranges = [
-      {
-        start: 'Existing draft '.length,
-        end: 'Existing draft '.length + insertion.text.length,
-        value: insertion.value,
-        kind: insertion.kind,
-      },
-    ];
-    const restored = sanitizeMentionRanges(text, toPersistedMentionRanges(ranges));
-    const expanded = applyTextRewrites(text, buildDesignElementMentionRewrites(text, restored));
+    expect(appended.text).toBe('Edit each image. Changes: warm colors @Selected images');
+    const expanded = applyTextRewrites(
+      appended.text,
+      buildDesignElementMentionRewrites(appended.text, [appended.mention])
+    );
     expect(readDesignElementReferences(expanded.text)).toEqual([reference]);
-    expect(expanded.text).toContain('Existing draft ');
-    expect(expanded.text).toContain('Edit each image. Changes:  warm colors');
+    expect(expanded.text.startsWith('Edit each image. Changes: warm colors ')).toBe(true);
     expect(expanded.spans?.[0]?.label).toBe('@Selected images');
+    expect(appendDesignSelectionMention('', reference, 'Selected').text).toBe('@Selected');
+    expect(appendDesignSelectionMention('ends with space ', reference, 'Selected').text).toBe(
+      'ends with space @Selected'
+    );
   });
   it('restores the original identity and expands only its range alongside other content', () => {
     const reference = {
@@ -47,14 +44,9 @@ describe('canonical element mentions', () => {
       baselineRevisionId: 'a'.repeat(64),
       elementIds: ['title', 'subtitle'],
     };
-    const insertion = buildDesignElementMentionInsertion(reference, 'Selected');
-    const text = insertion.text + ' brighten, keep my attachment';
-    const mentions = sanitizeMentionRanges(
-      text,
-      toPersistedMentionRanges([
-        { start: 0, end: insertion.text.length, value: insertion.value, kind: insertion.kind },
-      ])
-    );
+    const appended = appendDesignSelectionMention('', reference, 'Selected');
+    const text = appended.text + ' brighten, keep my attachment';
+    const mentions = sanitizeMentionRanges(text, toPersistedMentionRanges([appended.mention]));
     const expanded = applyTextRewrites(text, buildDesignElementMentionRewrites(text, mentions));
     expect(readDesignElementReferences(expanded.text)).toEqual([reference]);
     expect(expanded.text.endsWith(' brighten, keep my attachment')).toBe(true);

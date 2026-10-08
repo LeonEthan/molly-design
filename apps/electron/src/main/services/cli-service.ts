@@ -345,7 +345,7 @@ export class CliService {
     phase: 'stopped',
     desiredState: 'stopped',
     updatedAtMs: Date.now(),
-    preventSleepEnabled: true
+    preventSleepEnabled: false
   }
   private cachedMachineId: string | null = null
   // Reused across requests: the clients cache the resolved socket path, so
@@ -357,7 +357,7 @@ export class CliService {
   private readonly localControlClient = makeLocalControlClientAuto({
     runFilePath: LOCAL_DAEMON_RUN_FILE
   })
-  private preventSleepEnabled = true
+  private preventSleepEnabled = false
   private powerSaveBlockerId: number | null = null
   private supervisor: CliSupervisor | null = null
   private readonly supervisorInstanceId = randomUUID()

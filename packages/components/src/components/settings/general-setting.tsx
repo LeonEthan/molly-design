@@ -104,7 +104,7 @@ export function GeneralSettingsComponent() {
     sessionSidebarCodeChangesOnlyAtom
   );
   const [queuedMessageBehavior, setQueuedMessageBehavior] = useAtom(queuedMessageBehaviorAtom);
-  const [preventSleepEnabled, setPreventSleepEnabled] = useState(true);
+  const [preventSleepEnabled, setPreventSleepEnabled] = useState(false);
   const isElectron = typeof window !== 'undefined' && window.__MOLLY_ELECTRON__ === true;
   const autoLaunch = useElectronAutoLaunch(isElectron);
   const electronPlatform = useMemo(() => {

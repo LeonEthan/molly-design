@@ -193,7 +193,9 @@ if (hasSingleInstanceLock) {
       productName: PRODUCT_NAME,
       openOrFocusMainWindow: () => openOrFocusMainWindow({ icon })
     })
-    const windowBadgeService = new WindowBadgeService()
+    const windowBadgeService = new WindowBadgeService({
+      onChange: (badge) => cliService.setRunActive(badge.working > 0)
+    })
     const publicBrowserService = new PublicBrowserService(() => getMainWindow())
     bindWindowBadgeToBrowserWindows(windowBadgeService)
 

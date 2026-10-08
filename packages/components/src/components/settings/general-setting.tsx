@@ -104,7 +104,7 @@ export function GeneralSettingsComponent() {
     sessionSidebarCodeChangesOnlyAtom
   );
   const [queuedMessageBehavior, setQueuedMessageBehavior] = useAtom(queuedMessageBehaviorAtom);
-  const [preventSleepEnabled, setPreventSleepEnabled] = useState(false);
+  const [preventSleepEnabled, setPreventSleepEnabled] = useState(true);
   const isElectron = typeof window !== 'undefined' && window.__MOLLY_ELECTRON__ === true;
   const autoLaunch = useElectronAutoLaunch(isElectron);
   const electronPlatform = useMemo(() => {
@@ -446,10 +446,10 @@ export function GeneralSettingsComponent() {
             </CompactRow>
             <div id="prevent-sleep" className="scroll-mt-24">
               <CompactRow
-                label={t('settings.general.preventSleep.label', 'Keep this computer awake')}
+                label={t('settings.general.preventSleep.label', 'Keep this computer awake while Molly works')}
                 helper={t(
                   'settings.general.preventSleep.helper',
-                  'Prevents sleep while Molly is open, even between design tasks.'
+                  'Prevents sleep only while a design task is running.'
                 )}
               >
                 <Switch

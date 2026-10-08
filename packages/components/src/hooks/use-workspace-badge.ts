@@ -8,10 +8,10 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
 import { findFreshSessionPresenceState } from '@molly/shared';
 import { useResolvedWorkspaceScope } from '@/hooks/use-resolved-workspace-scope';
 
-type WindowBadge = { unread: number; waiting: number };
+type WindowBadge = { unread: number; waiting: number; working: number };
 
 const DEBOUNCE_MS = 150;
-const ZERO: WindowBadge = { unread: 0, waiting: 0 };
+const ZERO: WindowBadge = { unread: 0, waiting: 0, working: 0 };
 
 /**
  * Compute the OS dock/taskbar badge for *this window*: how many sessions in
@@ -36,6 +36,7 @@ export function useWorkspaceBadge(): void {
     if (!userId || !currentWorkspaceId) return ZERO;
     let unread = 0;
     let waiting = 0;
+    let working = 0;
     for (const session of sessions) {
       if (session.userId !== userId) continue;
       const liveStatus = findFreshSessionPresenceState(
@@ -43,6 +44,7 @@ export function useWorkspaceBadge(): void {
         session.id,
         presenceNowMs
       )?.status;
+      if (liveStatus) working += 1;
       if (liveStatus?.type === 'requestPermission') {
         waiting += 1;
         continue;
@@ -54,22 +56,22 @@ export function useWorkspaceBadge(): void {
         unread += 1;
       }
     }
-    return { unread, waiting };
+    return { unread, waiting, working };
   }, [sessions, presenceNowMs, presenceStates, userId, currentWorkspaceId]);
 
-  const { unread, waiting } = badge;
+  const { unread, waiting, working } = badge;
   useEffect(() => {
     const services = getIpcServices();
     if (!isElectronRenderer() || !services) return undefined;
 
     const handle = window.setTimeout(() => {
-      void services.app.setWindowBadge({ unread, waiting });
+      void services.app.setWindowBadge({ unread, waiting, working });
     }, DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(handle);
     };
-  }, [unread, waiting]);
+  }, [unread, waiting, working]);
 
   // Clear our contribution when the hook unmounts (workspace switch / logout).
   useEffect(() => {

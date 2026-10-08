@@ -10,16 +10,18 @@ import { app, BrowserWindow } from 'electron'
 export type WindowBadge = {
   unread: number
   waiting: number
+  working: number
 }
 
 export type AggregatedBadge = {
   unread: number
   waiting: number
+  working: number
   /** True iff at least one window has any waiting-permission count. */
   bounce: boolean
 }
 
-const ZERO_BADGE: WindowBadge = { unread: 0, waiting: 0 }
+const ZERO_BADGE: WindowBadge = { unread: 0, waiting: 0, working: 0 }
 
 /**
  * Pure aggregator. Sums unread and waiting counts across all windows. We sum
@@ -33,11 +35,13 @@ const ZERO_BADGE: WindowBadge = { unread: 0, waiting: 0 }
 export function aggregateBadges(badges: Iterable<WindowBadge>): AggregatedBadge {
   let unread = 0
   let waiting = 0
+  let working = 0
   for (const b of badges) {
     unread += b.unread
     waiting += b.waiting
+    working += b.working
   }
-  return { unread, waiting, bounce: waiting > 0 }
+  return { unread, waiting, working, bounce: waiting > 0 }
 }
 
 export function badgeTotalCount(b: AggregatedBadge): number {
@@ -47,11 +51,11 @@ export function badgeTotalCount(b: AggregatedBadge): number {
 export function parseWindowBadge(raw: unknown): WindowBadge | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const r = raw as Record<string, unknown>
-  const unread = r.unread
-  const waiting = r.waiting
-  if (typeof unread !== 'number' || !Number.isInteger(unread) || unread < 0) return undefined
-  if (typeof waiting !== 'number' || !Number.isInteger(waiting) || waiting < 0) return undefined
-  return { unread, waiting }
+  const { unread, waiting, working } = r
+  for (const count of [unread, waiting, working]) {
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) return undefined
+  }
+  return { unread: unread as number, waiting: waiting as number, working: working as number }
 }
 
 type DockApi = Pick<NonNullable<typeof app.dock>, 'setBadge' | 'bounce'>
@@ -63,19 +67,22 @@ type WindowBadgeServiceOptions = {
   /** Allow tests to inject mock dock/app APIs. */
   getDock?: () => DockApi | undefined
   getApp?: () => AppApi
+  onChange?: (next: AggregatedBadge) => void
 }
 
 export class WindowBadgeService {
   private readonly badges = new Map<number, WindowBadge>()
-  private last: AggregatedBadge = { unread: 0, waiting: 0, bounce: false }
+  private last: AggregatedBadge = { unread: 0, waiting: 0, working: 0, bounce: false }
   private readonly platform: Platform
   private readonly getDock: () => DockApi | undefined
   private readonly getApp: () => AppApi
+  private readonly onChange: ((next: AggregatedBadge) => void) | undefined
 
   constructor(options: WindowBadgeServiceOptions = {}) {
     this.platform = options.platform ?? process.platform
     this.getDock = options.getDock ?? (() => app.dock)
     this.getApp = options.getApp ?? (() => app)
+    this.onChange = options.onChange
   }
 
   setBadge(windowId: number, badge: WindowBadge): void {
@@ -92,8 +99,9 @@ export class WindowBadgeService {
   /** Force-clear all state and the OS badge. Use on quit. */
   reset(): void {
     this.badges.clear()
-    this.last = { unread: 0, waiting: 0, bounce: false }
+    this.last = { unread: 0, waiting: 0, working: 0, bounce: false }
     this.write(this.last, false)
+    this.onChange?.(this.last)
   }
 
   /** Visible for tests. */
@@ -106,6 +114,7 @@ export class WindowBadgeService {
     const shouldBounce = next.bounce && !this.last.bounce
     this.last = next
     this.write(next, shouldBounce)
+    this.onChange?.(next)
   }
 
   private write(next: AggregatedBadge, bounce: boolean): void {

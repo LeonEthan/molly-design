@@ -32,6 +32,8 @@ it('prevents double-click editing while readonly and restores it when unlocked',
     commitPending: () => {},
     applyCommands: () => ({ ok: true }),
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
   });
   const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
   const text = document.createElement('div');
@@ -87,16 +89,22 @@ it('disables dock mutations and closes an open shape menu while readonly, then r
     pickImageFile: () => {
       content = 'image picker opened';
     },
+    elements: () => [],
+    select: () => {},
   });
   await ready;
   const api = (window as unknown as { molly: { setReadonly(value: boolean): void } }).molly;
   const dock = document.querySelector('.molly-dock')!;
   const buttons = [...dock.querySelectorAll<HTMLButtonElement>('button')];
-  const mutationButtons = buttons.filter((button) => !button.classList.contains('on'));
+  const layersButton = dock.querySelector<HTMLButtonElement>('[aria-label="Layers"]')!;
+  const mutationButtons = buttons.filter(
+    (button) => !button.classList.contains('on') && button !== layersButton
+  );
   const shape = dock.querySelector<HTMLButtonElement>('[aria-label="Shape"]')!;
   const popup = document.querySelector('.molly-shape-popup')!;
   expect(mutationButtons.every((button) => button.disabled)).toBe(true);
   expect(buttons[0].disabled).toBe(false);
+  expect(layersButton.disabled).toBe(false);
   for (const button of mutationButtons) button.click();
   expect(content).toBe('initial');
   expect(popup.classList.contains('open')).toBe(false);
@@ -140,6 +148,8 @@ it('preserves the full status message for accessible and hover text when the pil
     commitPending: () => {},
     applyCommands: () => ({ ok: true }),
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
   });
   const api = (
     window as unknown as { molly: { setReadonly(value: boolean, message?: string): void } }
@@ -172,6 +182,8 @@ it('speaks the shell language once labels arrive with the toolbar presentation',
     commitPending: () => {},
     applyCommands: () => ({ ok: true }),
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
   });
   const api = (
     window as unknown as {
@@ -234,6 +246,8 @@ it('preserves the native zoom controls and live percentage while replacing their
     commitPending: () => {},
     applyCommands: () => ({ ok: true }),
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
   });
   expect(out.getAttribute('aria-label')).toBe('Zoom out');
   expect(into.getAttribute('aria-label')).toBe('Zoom in');
@@ -386,6 +400,8 @@ it('rejects a delayed command or capture after selection changes, including retu
     setReadonly: () => {},
     commitPending: () => {},
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
     applyCommands: () => {
       values[selected] = 99;
       return { ok: true, applied: 1 };
@@ -436,6 +452,8 @@ it('reports the saved selection again after autosave so passive mirroring needs 
     setReadonly: () => {},
     commitPending: () => {},
     pickImageFile: () => {},
+    elements: () => [],
+    select: () => {},
     applyCommands: () => ({ ok: true }),
   });
   api = (window as unknown as { molly: typeof api }).molly;

@@ -243,9 +243,9 @@ export type SidebarUpdatedTaskListProps = {
 };
 
 const defaultLabels: SidebarUpdatedTaskListLabels = {
-  heading: 'Chats',
+  heading: 'Designs',
   emptyTitle: 'Nothing yet',
-  emptyDescription: 'Start a chat or open a worktree to see it here.',
+  emptyDescription: 'Start a design from Home to see it here.',
 };
 
 export const SidebarUpdatedTaskList = memo(function SidebarUpdatedTaskList({

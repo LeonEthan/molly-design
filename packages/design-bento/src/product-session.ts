@@ -19,6 +19,7 @@ import {
   undo2Icon,
   type UiIconNode,
 } from '@molly/shared/ui-icons';
+import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
 
 type Copy = readonly [key: string, fallback: string];
@@ -50,6 +51,7 @@ const COPY = {
   triangle: ['shapeTriangle', 'Triangle'],
   arrow: ['shapeArrow', 'Arrow'],
   line: ['shapeLine', 'Line'],
+  layers: ['layers', 'Layers'],
 } as const satisfies Record<string, Copy>;
 
 export const PRODUCT_SESSION_COPY_KEYS: readonly string[] = Object.values(COPY).map(([key]) => key);
@@ -65,6 +67,8 @@ export function createProductSession(options: {
   setDirty(dirty: boolean): void;
   applyCommands(payload: unknown): unknown;
   pickImageFile(onAsset: (assetKey: string, dataUri: string) => void): void;
+  elements(): readonly LayerElement[];
+  select(ids: string[]): void;
 }) {
   const editorInstanceId = new URLSearchParams(location.search).get('editorInstance') ?? '';
   const embedded = window.parent !== window && /^[a-f0-9-]{36}$/.test(editorInstanceId);
@@ -77,15 +81,20 @@ export function createProductSession(options: {
     if (expected !== undefined && expected !== selectionEpoch)
       throw Error('Selection changed; select the current elements again');
   };
-  const toolbar = createSelectionToolbar({
-    async request(input) {
-      const response = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(input),
-      });
-      return response.json();
-    },
+  const request = async (input: unknown) => {
+    const response = await fetch(`/ws/${encodeURIComponent(options.sessionId)}/toolbar`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    return response.json();
+  };
+  const toolbar = createSelectionToolbar({ request });
+  const layers = createLayersPanel({
+    request,
+    elements: options.elements,
+    select: options.select,
+    onToggle: (open) => layersButton.classList.toggle('on', open),
   });
   window.addEventListener('pagehide', () => toolbar.dispose(), { once: true });
   let editSeq = 0;
@@ -257,6 +266,8 @@ export function createProductSession(options: {
     },
     'create'
   );
+  dockSep();
+  const layersButton = dockButton(layers.icon, COPY.layers, () => layers.toggle());
   // The Editor mounts these buttons before attaching the product session.
   // Keep its listeners and live percentage label; replace only the two glyphs.
   const zoomButtons = Array.from(
@@ -338,6 +349,7 @@ export function createProductSession(options: {
     if (!pendingTextNode?.isConnected || !pendingTextNode.isContentEditable) pendingText = false;
     editSeq++;
     toolbar.refresh();
+    layers.refresh();
     mark('pending', COPY.unsaved);
     schedule();
   };
@@ -417,6 +429,7 @@ export function createProductSession(options: {
     // Block new input before committing the already-buffered text synchronously.
     readonly = value;
     toolbar.setReadonly(value);
+    layers.setReadonly(value);
     try {
       if (value) {
         clearTimeout(timer);
@@ -553,6 +566,7 @@ export function createProductSession(options: {
         labelDock();
         setStatusMessage(statusSource);
         toolbar.present(value);
+        layers.present(value.labels);
       },
       selection(expected?: number) {
         assertSelection(expected);
@@ -640,6 +654,7 @@ export function createProductSession(options: {
       selection = elements;
       lastSelectionSummary = summary;
       toolbar.update(summary as DesignSelectionSummary, selectedIds, selectionEpoch);
+      layers.update(selectedIds, selectionEpoch);
       emit('selection', { elements });
       reportSelection(summary);
     },

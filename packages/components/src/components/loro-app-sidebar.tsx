@@ -1908,7 +1908,7 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
   const allSidebarItems = useMemo<SidebarUpdatedItem[]>(() => {
     if (sessionsListLoading) return [];
 
-    const chatsLabel = t('sessions.sidebar.chats', 'Chats');
+    const chatsLabel = t('sessions.sidebar.chats', 'Designs');
     const localSectionLabel = t('sidebar.localProjects', 'Local Projects');
     const items: SidebarUpdatedItem[] = [];
 
@@ -2077,9 +2077,9 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
   const filterLabels = useMemo(
     () => ({
       triggerAriaLabel: t('sidebar.filter.trigger', 'Filter sidebar'),
-      organizeHeading: t('sidebar.filter.organizeHeading', 'Organize'),
-      organizeWorkspace: t('sidebar.filter.organizeWorkspace', 'Workspace'),
-      organizeUpdated: t('sidebar.filter.organizeUpdated', 'Updated'),
+      organizeHeading: t('sidebar.filter.organizeHeading', 'Show'),
+      organizeWorkspace: t('sidebar.filter.organizeWorkspace', 'By project'),
+      organizeUpdated: t('sidebar.filter.organizeUpdated', 'All designs'),
     }),
     [t]
   );
@@ -2468,6 +2468,14 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       connectionOffline: t('chat.mobileHome.connectionBanner.offline', 'Offline'),
       workspaceSyncing: t('sidebar.workspace.syncing', 'Syncing workspace…'),
       filter: filterLabels,
+      updated: {
+        heading: t('sidebar.updated.heading', 'Designs'),
+        emptyTitle: t('sidebar.updated.empty.title', 'Nothing yet'),
+        emptyDescription: t(
+          'sidebar.updated.empty.description',
+          'Start a design from Home to see it here.'
+        ),
+      },
     };
   }, [t, filterLabels]);
 

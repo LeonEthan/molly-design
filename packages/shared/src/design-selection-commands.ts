@@ -89,7 +89,19 @@ export const DesignCanvasCommandSchema = z
         bold: z.boolean().optional(),
         italic: z.boolean().optional(),
         alignH: z.enum(['left', 'center', 'right', 'justify']).optional(),
+        lineHeight: z.number().min(0.5).max(10).optional(),
+        letterSpacing: z.number().min(-1000).max(1000).optional(),
       })
+      .strict(),
+    z
+      .object({
+        verb: z.literal('transform'),
+        rotation: z.number().finite().min(-360).max(360).optional(),
+        opacity: z.number().min(0).max(1).optional(),
+      })
+      .strict(),
+    z
+      .object({ verb: z.literal('arrange'), to: z.enum(['front', 'forward', 'backward', 'back']) })
       .strict(),
     z.object({ verb: z.literal('fill'), fill: hexColor.nullable() }).strict(),
     z

@@ -17,10 +17,14 @@ export class WorkSessionPage {
     machineName?: string
   ): Promise<void> {
     this.projectRoot = rootPath;
-    await this.page.getByRole('button', { name: /^(Select a project|选择项目)$/u }).click();
-    await this.page.getByRole('menuitem', { name: /^(Add a folder|添加文件夹)$/u }).click();
+    await this.page.getByRole('button', { name: /^(Choose a project|选择项目)$/u }).click();
+    await this.page
+      .getByRole('menuitem', { name: /^(Add a project folder|添加项目文件夹)$/u })
+      .click();
 
-    const dialog = this.page.getByRole('dialog', { name: /^(Add a folder|添加文件夹)$/u });
+    const dialog = this.page.getByRole('dialog', {
+      name: /^(Add a project folder|添加项目文件夹)$/u,
+    });
     await expect(dialog).toBeVisible();
     const editPath = dialog.getByTitle(/^(Edit path|编辑路径)$/u);
     if (!(await editPath.isVisible())) {

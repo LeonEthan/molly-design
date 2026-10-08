@@ -192,12 +192,12 @@ export type SidebarOrganizeMode = 'workspace' | 'updated';
 
 /**
  * How the sidebar groups items.
- * - 'workspace' = group by Chats / Local Projects / GitHub Worktrees (default)
- * - 'updated'   = single flat list sorted by latest-update recency
+ * - 'workspace' = group by Designs / Projects
+ * - 'updated'   = one list of designs sorted by latest update (default)
  */
 export const sidebarOrganizeModeAtom = atomWithProductStorage<SidebarOrganizeMode>(
   'molly-sidebar-organize-mode',
-  'workspace'
+  'updated'
 );
 
 /**

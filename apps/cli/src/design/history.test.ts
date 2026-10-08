@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { afterEach, expect, test } from 'vitest';
-import { designHistoryOperation } from './history';
+import { designHistoryOperation, recordBeforeAgentVersion } from './history';
 import { designOperation } from './store';
 import { withDesignLock } from './lock';
 import { ARTWORK_ENTRY, collectAuthoring, intakeAuthoring } from '@molly/design-authoring';
@@ -355,4 +355,40 @@ test('retry after Git publication without base binding reuses the saved version'
   ]);
   await save('#ff0000');
   await expect(designHistoryOperation(root, request)).rejects.toThrow('DESIGN_CONFLICT');
+});
+
+test('an Agent turn keeps its non-empty baseline restorable once', async () => {
+  const { root, sessionId, initial } = await fixture();
+  expect(await recordBeforeAgentVersion(root, sessionId, initial)).toBeUndefined();
+  const edited = await designOperation(root, {
+    operation: 'save',
+    sessionId,
+    baseRevisionId: initial.revisionId,
+    content: {
+      doc: {
+        ...initial.doc,
+        elements: [
+          { id: 'target', kind: 'shape', bounds: [10, 10, 80, 80], zIndex: 0, shapeName: 'rect' },
+        ],
+      },
+      assets: {},
+    },
+  });
+  const restorePoint = await recordBeforeAgentVersion(root, sessionId, edited);
+  expect(restorePoint).toMatchObject({ number: 1, kind: 'before-agent' });
+  expect(await recordBeforeAgentVersion(root, sessionId, edited)).toBeUndefined();
+  if (!restorePoint) throw Error('Expected restore point');
+  const retained = await designHistoryOperation(root, {
+    operation: 'history-read',
+    sessionId,
+    commitId: restorePoint.commitId,
+  });
+  expect(retained).toMatchObject({ doc: edited.doc });
+  expect((await designOperation(root, { operation: 'read', sessionId })).editing).toBeUndefined();
+  const saved = await designHistoryOperation(root, {
+    operation: 'history-create',
+    sessionId,
+    baseRevisionId: edited.revisionId,
+  });
+  expect(saved).toMatchObject({ number: 2, kind: 'saved' });
 });

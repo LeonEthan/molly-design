@@ -69,7 +69,9 @@ operation identity live in the canonical envelope, outside BentoDoc/YAML; Git co
 record logical design origin while the managed ref remains linear. Source display
 may read frozen input provenance but never gains save authority. Freeze its referenced
 source identity separately from the full artifact digest; unused new media cannot
-make an inherited draft live. See [history](README.md#design-history).
+make an inherited draft live. A newly frozen turn baseline with elements becomes a
+`before-agent` entry unless history already holds its exact content; it never moves
+the selected base, and failure is logged without blocking the turn. See [history](README.md#design-history).
 
 Only a just-committed `design.yaml` `title` may rename the Session, and only over
 `draft`/`generated` sources; never override a user rename or request a title model.

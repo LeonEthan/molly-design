@@ -213,6 +213,11 @@ persist in the current envelope, outside BentoDoc/YAML. Git commit metadata reco
 logical design origin; physical history remains a linear managed ref. Save binds the
 new base with canonical CAS; unchanged content at the selected base is a no-op.
 Selecting history directly edits from that version without mutating the saved version.
+When a turn first freezes its input, the same repository records a non-empty
+baseline as a `before-agent` entry ("Before Molly's edit") unless an existing entry
+already holds that exact content. The entry is written from the frozen baseline
+after dispatch, does not change the selected base, and a failure is logged without
+blocking the turn; re-dispatching the same turn adds nothing.
 Restore protects unversioned current content in the same Git repository, then uses
 the normal store save/CAS and current YAML projection publication. A failed protective write
 cannot replace the current artwork; a canonical save followed by projection or

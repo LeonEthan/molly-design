@@ -7,11 +7,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const ipc = vi.hoisted(() => ({
   cache: new Map<string, string>(),
   handlers: new Set<(payload: { artworkId: string }) => void>(),
+  requested: new Set<string>(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({
     design: {
       thumbnail: async (artworkId: string) => {
+        ipc.requested.add(artworkId);
         const dataUrl = ipc.cache.get(artworkId);
         if (dataUrl === undefined) throw Error('No saved artwork');
         return dataUrl;
@@ -101,5 +103,21 @@ describe('HomeArtworkGallery', () => {
     ]);
     expect(titles()).toEqual(['Second']);
     expect(container?.textContent).toContain('latest 1 designs');
+  });
+
+  it('reads further down the list when the newest designs are blank', async () => {
+    const entries = ['b1', 'b2', 'b3', 'c1', 'c2', 'c3'].map((id, index) => {
+      ipc.cache.set(`deep-${id}`, id.startsWith('b') ? '' : `data:image/png;base64,${id}`);
+      return {
+        sessionId: `s-${id}`,
+        artworkId: `deep-${id}`,
+        title: id,
+        dateLabel: `Sep ${30 - index}`,
+      };
+    });
+    await mount(2, entries);
+    expect(titles().map((title) => title?.replace(/Sep \d+/, ''))).toEqual(['c1', 'c2']);
+    expect(container?.textContent).toContain('latest 2 designs');
+    expect(ipc.requested.has('deep-c3')).toBe(false);
   });
 });

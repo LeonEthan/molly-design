@@ -233,7 +233,6 @@ export function ChatLanding(props: ChatLandingProps) {
 }
 
 const HOME_GALLERY_LIMIT = 24;
-const HOME_GALLERY_CANDIDATES = HOME_GALLERY_LIMIT * 2;
 
 function WorkspaceChatLanding({
   workspaceSlug,
@@ -2085,7 +2084,6 @@ function WorkspaceChatLanding({
             : []
         )
         .sort((left, right) => right.recency - left.recency)
-        .slice(0, HOME_GALLERY_CANDIDATES)
         .map(({ session, artworkId, recency }) => ({
           sessionId: session.id,
           artworkId,

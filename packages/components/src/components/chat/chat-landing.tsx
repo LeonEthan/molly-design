@@ -2084,7 +2084,6 @@ function WorkspaceChatLanding({
             : []
         )
         .sort((left, right) => right.recency - left.recency)
-        .slice(0, HOME_GALLERY_LIMIT)
         .map(({ session, artworkId, recency }) => ({
           sessionId: session.id,
           artworkId,
@@ -2153,7 +2152,10 @@ function WorkspaceChatLanding({
           isElectron ? (
             <HomeArtworkGallery
               heading={t('home.yourWork')}
-              countLabel={t('home.yourWorkCount', { count: homeGalleryItems.length })}
+              limit={HOME_GALLERY_LIMIT}
+              countLabel={(count, truncated) =>
+                truncated ? t('home.yourWorkLatest', { count }) : t('home.yourWorkCount', { count })
+              }
               items={homeGalleryItems}
               onOpen={handleOpenArtwork}
             />

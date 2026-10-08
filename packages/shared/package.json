@@ -26,6 +26,10 @@
       "types": "./src/design-element-reference.ts",
       "import": "./src/design-element-reference.ts"
     },
+    "./design-blank-canvas": {
+      "types": "./src/design-blank-canvas.ts",
+      "import": "./src/design-blank-canvas.ts"
+    },
     "./design-selection-commands": {
       "types": "./src/design-selection-commands.ts",
       "import": "./src/design-selection-commands.ts"

@@ -392,3 +392,12 @@ test('an Agent turn keeps its non-empty baseline restorable once', async () => {
   });
   expect(saved).toMatchObject({ number: 2, kind: 'saved' });
 });
+
+test('a background-only baseline is not treated as a blank canvas', async () => {
+  const { root, sessionId, save } = await fixture();
+  const tinted = await save('#ff0000');
+  expect(tinted.doc.elements).toEqual([]);
+  expect(await recordBeforeAgentVersion(root, sessionId, tinted)).toMatchObject({
+    kind: 'before-agent',
+  });
+});

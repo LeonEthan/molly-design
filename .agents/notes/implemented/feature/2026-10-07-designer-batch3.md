@@ -22,7 +22,7 @@ The 2026-10-07 audit found that designers could not get back to how a design loo
   - Because the entry comes from the frozen baseline, it doesn't race the turn's later commit.
   - It is written in the background, so the prompt hot path isn't held up by Git.
 - **When it is skipped:**
-  - Blank canvases are skipped, so a new design doesn't start with a blank restore point.
+  - Blank canvases (no elements, default white fill) are skipped, so a new design doesn't start with a blank restore point. A background-only design is not blank (corrected in batch 4).
   - Content that history already holds is skipped.
 - **What stays unchanged:**
   - The entry doesn't move the selected base, so "Based on V1 · has changes" stays accurate.

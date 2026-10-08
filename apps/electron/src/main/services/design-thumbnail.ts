@@ -1,3 +1,4 @@
+import { isBlankCanvas } from '@molly/shared/design-blank-canvas'
 import { randomUUID } from 'node:crypto'
 import { mkdir, open, readFile, rename, rm, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -48,6 +49,7 @@ async function writeCached(artworkId: string, thumbnail: DesignThumbnail): Promi
 }
 
 const thumbnails = new DesignThumbnails({
+  isBlank: (saved) => isBlankCanvas(saved.doc),
   readSaved: (artworkId) => designRequest({ operation: 'read', sessionId: artworkId }),
   render: async (saved) => {
     const image = nativeImage.createFromBuffer(await renderSavedDesign(saved, 'png'))

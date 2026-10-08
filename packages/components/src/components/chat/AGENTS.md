@@ -20,7 +20,7 @@ Index and rationale: [README.md](README.md).
   canvas draft and screen preset list (`canvas-size-selector.tsx`); only the chip
   adds print sheets, converted to pixels at a DPI that keeps both sides within 4096 px.
 - The home "Your work" gallery lists only designs with something on the canvas. Electron caches
-  a canvas with no elements as an empty thumbnail (`''`, never a rendered white sheet), and
+  a canvas still in its starting state (no elements, default white fill) as an empty thumbnail (`''`, never a rendered white sheet), and
   the gallery skips those before applying its limit. It reads left to right, newest first
   (a grid, not CSS columns), and says "Latest N" when it is truncated; the sidebar keeps its neutral tile.
 - Desktop landing footer starts with canvas size beside the attachment entry;

@@ -7,7 +7,7 @@
  * renders only when it moved. Callers decide when to refresh (after an Agent turn and
  * when the person leaves the canvas), so editing never re-renders on every autosave.
  *
- * A canvas with no elements has nothing to show: it is cached as an empty image so rows
+ * A canvas still in its starting state (no elements, default fill) has nothing to show: it is cached as an empty image so rows
  * and the home gallery can tell "blank" from "not ready" without rendering a white sheet.
  *
  * Renders run one at a time: each is an offscreen Chromium page, and a sidebar full
@@ -16,16 +16,15 @@
 
 export type DesignThumbnail = { revisionId: string; dataUrl: string }
 
-export type SavedArtwork = { revisionId: string; doc: { elements: readonly unknown[] } }
-
-export type DesignThumbnailPorts<Saved extends SavedArtwork> = {
+export type DesignThumbnailPorts<Saved extends { revisionId: string }> = {
+  isBlank(saved: Saved): boolean
   readSaved(artworkId: string): Promise<Saved>
   render(saved: Saved): Promise<string>
   readCached(artworkId: string): Promise<DesignThumbnail | undefined>
   writeCached(artworkId: string, thumbnail: DesignThumbnail): Promise<void>
 }
 
-export class DesignThumbnails<Saved extends SavedArtwork> {
+export class DesignThumbnails<Saved extends { revisionId: string }> {
   private renders: Promise<unknown> = Promise.resolve()
   private readonly refreshing = new Map<string, Promise<string>>()
   private readonly waiting = new Map<string, Promise<string>>()
@@ -72,9 +71,9 @@ export class DesignThumbnails<Saved extends SavedArtwork> {
       this.ports.readCached(artworkId)
     ])
     if (cached?.revisionId === saved.revisionId) return cached.dataUrl
-    const dataUrl = saved.doc.elements.length
-      ? await this.serialized(() => this.ports.render(saved))
-      : ''
+    const dataUrl = this.ports.isBlank(saved)
+      ? ''
+      : await this.serialized(() => this.ports.render(saved))
     await this.ports.writeCached(artworkId, { revisionId: saved.revisionId, dataUrl })
     return dataUrl
   }

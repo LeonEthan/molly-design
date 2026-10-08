@@ -11,10 +11,8 @@ function harness(initialRevision = 'r1') {
     blank: false
   }
   const thumbnails = new DesignThumbnails({
-    readSaved: async () => ({
-      revisionId: state.revision,
-      doc: { elements: state.blank ? [] : [{ id: 'a' }] }
-    }),
+    isBlank: () => state.blank,
+    readSaved: async () => ({ revisionId: state.revision }),
     render: async (saved) => {
       if (state.gate) await state.gate
       if (saved.revisionId === 'broken') throw Error('render failed')
@@ -82,7 +80,7 @@ void test('a failed render is not cached and does not block the next artwork', a
   assert.equal(await thumbnails.get('art'), 'data:r3')
 })
 
-void test('a canvas with no elements is cached as blank without rendering', async () => {
+void test('a blank canvas is cached as blank without rendering', async () => {
   const { state, thumbnails } = harness()
   state.blank = true
   assert.equal(await thumbnails.get('art'), '')

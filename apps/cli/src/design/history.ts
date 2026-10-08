@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { lstat, mkdir } from 'node:fs/promises';
 import { devNull } from 'node:os';
 import path from 'node:path';
+import { isBlankCanvas } from '@molly/shared/design-blank-canvas';
 import { z } from 'zod';
 import { withDesignLock, type DesignLockTiming } from './lock';
 import {
@@ -330,7 +331,7 @@ export async function recordBeforeAgentVersion(
   baseline: import('./store').DesignPayload,
   options: { lock?: DesignLockTiming } = {}
 ): Promise<DesignVersion | undefined> {
-  if (!baseline.doc.elements.length) return undefined;
+  if (isBlankCanvas(baseline.doc)) return undefined;
   const repository = await openRepository(dataRoot, designId.parse(artworkId));
   return withDesignLock(repository, options.lock ?? {}, async (assertHeld) => {
     await initialize(repository);

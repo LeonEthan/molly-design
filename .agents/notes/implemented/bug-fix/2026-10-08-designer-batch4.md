@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#93](https://github.com/LeonEthan/molly-design/pull/93)
+
 ## Abstract
 
 The 2026-10-07 audit found that a first run that stopped or failed leaves an artwork with nothing on the canvas. Its sidebar thumbnail was a blank white sheet, and the home "Your work" gallery promoted it as a finished piece. Canvases with no elements now get an empty thumbnail instead of a rendered white image, and the gallery leaves those designs out and counts only what it shows. Other batch 4 items are listed under Not done.

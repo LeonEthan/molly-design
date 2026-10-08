@@ -1358,12 +1358,12 @@ export const SessionChatInputArea = memo(
         if (prompt) {
           const current = textareaRef.current?.value ?? userInput;
           const separator = current.length === 0 || /\s$/.test(current) ? '' : ' ';
-          setInputText(`${current}${separator}${prompt} `);
+          setUserInput(`${current}${separator}${prompt} `);
         }
         textareaRef.current?.focus();
         return true;
       },
-      [isArchived, session.id, setInputText, t, userInput]
+      [isArchived, session.id, setUserInput, t, userInput]
     );
 
     const insertSessionMention = useCallback(

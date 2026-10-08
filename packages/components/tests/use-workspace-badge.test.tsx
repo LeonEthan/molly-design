@@ -5,12 +5,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Provider, createStore } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const sessions = vi.hoisted(() => ({ list: [] as unknown[] }));
+const sessions = vi.hoisted(() => ({ list: [] as unknown[], all: [] as unknown[] }));
 const reports = vi.hoisted(() => ({ calls: [] as unknown[] }));
 
 vi.mock('../src/atoms/doc-meta', async () => {
   const { atom } = await import('jotai');
-  return { sessionListAtom: atom(() => sessions.list) };
+  return {
+    sessionListAtom: atom(() => sessions.list),
+    allActiveSessionsAtom: atom(() => sessions.all),
+  };
 });
 vi.mock('../src/atoms', async () => {
   const { atom } = await import('jotai');
@@ -86,6 +89,7 @@ describe('useWorkspaceBadge working count', () => {
       { id: 'idle-c', userId: 'user-1' },
       { id: 'other-owner-d', userId: 'user-2' },
     ];
+    sessions.all = sessions.list;
     const calls = await mount({
       a: presence('running-a', 'running'),
       b: presence('waiting-b', 'requestPermission'),
@@ -96,7 +100,18 @@ describe('useWorkspaceBadge working count', () => {
 
   it('does not count a run whose heartbeat has gone stale', async () => {
     sessions.list = [{ id: 'stale-e', userId: 'user-1' }];
+    sessions.all = sessions.list;
     const calls = await mount({ e: presence('stale-e', 'running', 10 * 60_000) });
     expect(calls.at(-1)).toMatchObject({ working: 0 });
+  });
+
+  it('counts a running child session whose parent is idle', async () => {
+    sessions.list = [{ id: 'parent-f', userId: 'user-1' }];
+    sessions.all = [
+      { id: 'parent-f', userId: 'user-1' },
+      { id: 'child-g', userId: 'user-1', parentSessionId: 'parent-f' },
+    ];
+    const calls = await mount({ g: presence('child-g', 'running') });
+    expect(calls.at(-1)).toMatchObject({ unread: 0, waiting: 0, working: 1 });
   });
 });

@@ -595,6 +595,34 @@ describe('SessionChatInputArea submission feedback', () => {
       expect(chip()).toBeNull();
     });
 
+    it('keeps a collapsed paste intact when an action prompt is appended', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      let sent: SessionInputBlock[] | undefined;
+      const textarea = await renderComposer({
+        composerRef,
+        onSendMessage: async (blocks) => {
+          sent = blocks;
+          return true;
+        },
+      });
+      const pasted = 'the original brief '.repeat(300);
+      await act(async () => {
+        textarea.dispatchEvent(createPasteEvent(pasted));
+      });
+      await act(async () => {
+        composerRef.current?.referenceDesignSelection(
+          reference,
+          'Selected elements (2)',
+          'Make these bolder.'
+        );
+      });
+      await submit('button');
+      const text = sent?.find((block) => block.type === 'text') as { text: string } | undefined;
+      expect(text?.text).toContain('the original brief the original brief');
+      expect(text?.text).toContain('Make these bolder.');
+      expect(text?.text).not.toContain('[Pasted');
+    });
+
     it('refuses to add an action prompt while text is being composed', async () => {
       const composerRef = createRef<SessionChatInputAreaHandle>();
       const textarea = await renderComposer({ onSendMessage: async () => true, composerRef });

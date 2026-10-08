@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useAtomValue } from 'jotai';
-import { sessionListAtom } from '@/atoms/doc-meta';
+import { allActiveSessionsAtom, sessionListAtom } from '@/atoms/doc-meta';
 import { userAtom } from '@/atoms';
 import { mollyPresenceNowMsAtom, mollyPresenceStatesAtom } from '@/atoms/presence';
 import { isElectronRenderer } from '@/lib/electron';
@@ -8,10 +8,11 @@ import { getIpcServices } from '@/lib/electron-ipc-client';
 import { findFreshSessionPresenceState } from '@molly/shared';
 import { useResolvedWorkspaceScope } from '@/hooks/use-resolved-workspace-scope';
 
-type WindowBadge = { unread: number; waiting: number; working: number };
+type WindowBadge = { unread: number; waiting: number };
+type WindowReport = WindowBadge & { working: number };
 
 const DEBOUNCE_MS = 150;
-const ZERO: WindowBadge = { unread: 0, waiting: 0, working: 0 };
+const ZERO: WindowReport = { unread: 0, waiting: 0, working: 0 };
 
 /**
  * Compute the OS dock/taskbar badge for *this window*: how many sessions in
@@ -26,6 +27,7 @@ const ZERO: WindowBadge = { unread: 0, waiting: 0, working: 0 };
  */
 export function useWorkspaceBadge(): void {
   const sessions = useAtomValue(sessionListAtom);
+  const allSessions = useAtomValue(allActiveSessionsAtom);
   const presenceStates = useAtomValue(mollyPresenceStatesAtom);
   const presenceNowMs = useAtomValue(mollyPresenceNowMsAtom);
   const user = useAtomValue(userAtom);
@@ -33,10 +35,9 @@ export function useWorkspaceBadge(): void {
   const userId = user?.id ?? null;
 
   const badge = useMemo<WindowBadge>(() => {
-    if (!userId || !currentWorkspaceId) return ZERO;
+    if (!userId || !currentWorkspaceId) return { unread: 0, waiting: 0 };
     let unread = 0;
     let waiting = 0;
-    let working = 0;
     for (const session of sessions) {
       if (session.userId !== userId) continue;
       const liveStatus = findFreshSessionPresenceState(
@@ -44,7 +45,6 @@ export function useWorkspaceBadge(): void {
         session.id,
         presenceNowMs
       )?.status;
-      if (liveStatus) working += 1;
       if (liveStatus?.type === 'requestPermission') {
         waiting += 1;
         continue;
@@ -56,10 +56,19 @@ export function useWorkspaceBadge(): void {
         unread += 1;
       }
     }
-    return { unread, waiting, working };
+    return { unread, waiting };
   }, [sessions, presenceNowMs, presenceStates, userId, currentWorkspaceId]);
 
-  const { unread, waiting, working } = badge;
+  const working = useMemo(() => {
+    if (!userId || !currentWorkspaceId) return 0;
+    return allSessions.filter(
+      (session) =>
+        session.userId === userId &&
+        findFreshSessionPresenceState(presenceStates, session.id, presenceNowMs) !== undefined
+    ).length;
+  }, [allSessions, presenceNowMs, presenceStates, userId, currentWorkspaceId]);
+
+  const { unread, waiting } = badge;
   useEffect(() => {
     const services = getIpcServices();
     if (!isElectronRenderer() || !services) return undefined;

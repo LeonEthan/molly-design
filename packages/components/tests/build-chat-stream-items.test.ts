@@ -245,6 +245,23 @@ describe('save receipts in the stream', () => {
     expect(messageOf(items, 'u1')).toMatchObject({ message: { designOutcome: committed } });
   });
 
+  it('keeps the receipt on the user turn while the reply is not hydrated, then hands it off', () => {
+    const history = [userTurn(), entry({ id: 'a1', role: 'assistant', items: [text('Done.')] })];
+    const full = createConversationViewFromHistory({
+      sessionId,
+      getHistory: () => history,
+      subscribe: () => () => {},
+    });
+    const replyNotLoaded = Object.create(full, {
+      turn: { value: (index: number) => (index === 1 ? undefined : full.turn(index)) },
+    });
+    const partial = buildChatStreamItemsFromView(replyNotLoaded, sessionId);
+    expect(messageOf(partial.items, 'u1')).toMatchObject({ message: { designOutcome: committed } });
+    const loaded = buildChatStreamItemsFromView(full, sessionId, partial.cache);
+    expect(messageOf(loaded.items, 'u1')).toMatchObject({ message: { designOutcome: undefined } });
+    expect(messageOf(loaded.items, 'a1')).toMatchObject({ message: { designOutcome: committed } });
+  });
+
   it('does not carry a receipt past the reply to a later turn', () => {
     const { items } = buildChatStreamItems(
       [

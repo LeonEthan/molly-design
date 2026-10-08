@@ -166,11 +166,16 @@ export function buildChatStreamItems(
    *  than an older turn's configuration. */
   let lastUserInputConfig: SessionHistoryParsed['inputConfig'] | undefined;
   /** A save receipt belongs under the reply, so a user turn hands its outcome
-   *  to the assistant entry that follows it. */
+   *  to the assistant entry that follows it, but only once that reply is
+   *  hydrated; until then the receipt stays on the user turn. */
   let outcomeForNextReply: SessionHistoryParsed['designOutcome'];
   const replyFollows = (turnIndex: number): boolean => {
     const next = view.index(turnIndex + 1);
-    return next?.role === 'assistant' && !isEmptyAssistantIndexRow(next);
+    return (
+      next?.role === 'assistant' &&
+      !isEmptyAssistantIndexRow(next) &&
+      view.turn(turnIndex + 1) !== undefined
+    );
   };
 
   for (let turnIndex = 0; turnIndex < view.turnCount; turnIndex += 1) {

@@ -3,6 +3,8 @@
 Status: implemented
 Translation: pending
 
+PR: [#92](https://github.com/LeonEthan/molly-design/pull/92)
+
 ## Abstract
 
 The 2026-10-07 audit found that designers could not get back to how a design looked before an AI edit, saw coding-style Projects/Chats sections and raw-prompt names, and had no layer list, precise properties or print sizes. With the owner's approval, each Agent turn now records a "Before Molly's edit" version in the existing Git history; the sidebar defaults to one design list; and new designs start as "Untitled design" until Molly names them. A native Layers panel, built on the existing validated command channel, adds stacking order, position, size, rotation, opacity and text spacing, and the size picker gains print sheets. Layers cannot be hidden or locked, because the document format has no such fields, and print sizes are pixel presets without bleed. The Spec records the revision and stays `draft`.

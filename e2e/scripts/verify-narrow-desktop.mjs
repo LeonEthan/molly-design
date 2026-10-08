@@ -40,8 +40,8 @@ try {
   await expect(closeSidebar).toBeVisible();
   await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Filter sidebar' }).click();
-  await expect(page.getByRole('menuitemradio', { name: 'Workspace', exact: true })).toBeVisible();
-  await expect(page.getByRole('menuitemradio', { name: 'Updated', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitemradio', { name: 'By project', exact: true })).toBeVisible();
+  await expect(page.getByRole('menuitemradio', { name: 'All designs', exact: true })).toBeVisible();
   await expect(page.getByRole('menuitemradio', { name: 'My Tasks', exact: true })).toHaveCount(0);
   await expect(page.getByRole('menuitemradio', { name: 'All Tasks', exact: true })).toHaveCount(0);
   await page.keyboard.press('Escape');

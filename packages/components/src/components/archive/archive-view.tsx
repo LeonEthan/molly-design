@@ -12,10 +12,6 @@ import {
   Clock,
   Folder,
   Github,
-  GitMerge,
-  GitPullRequest,
-  GitPullRequestClosed,
-  GitPullRequestDraft,
   Layers,
   List,
   MessageCircle,
@@ -23,7 +19,6 @@ import {
   Trash2,
   Undo2,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
@@ -45,7 +40,6 @@ import {
 import { Input } from '@/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { currentWorkspaceSlugAtom, userAtom } from '@/atoms';
-import { getAgentMetaByIdAtomFamily } from '@/atoms/agents';
 import { getMachineMetaMapAtom } from '@/atoms/machines';
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import {
@@ -53,18 +47,12 @@ import {
   useSessionActions,
 } from '@/hooks/use-session-actions';
 
-import { useOrganization } from '@/hooks/useOrganization';
 import { useVisibleArchivedSessionMetas } from '@/hooks/use-visible-session-metas';
-import { AgentIcon } from '@/components/icons/agent-icon';
-import { UserAvatar } from '@/components/user-avatar';
+import { SessionRowArtworkThumbnail } from '@/components/sidebar-row-shared';
 import { WebArchiveScreen } from './web-archive-screen';
 import {
   getMachineFlockLocalProjects,
-  getSessionLaunchConfigLegacyFields,
-  getSessionPullRequestLegacyFields,
-  parseGitHubPrNumber,
   type MachineId,
-  type PrStatus,
   type SessionId,
   type SessionMeta,
 } from '@molly/shared';
@@ -84,47 +72,6 @@ export type ArchivedSessionGroup = {
   };
   sessions: SessionMeta[];
   collapsed: boolean;
-};
-
-type PrStatusMeta = {
-  icon: LucideIcon;
-  className: string;
-  label: string;
-};
-
-function SessionAgentIcon({ session, className }: { session: SessionMeta; className?: string }) {
-  const agentConfig = useAtomValue(getAgentMetaByIdAtomFamily(session.agentConfigId));
-  return (
-    <AgentIcon
-      cliType={session.cliType}
-      agentType={session.agentType}
-      env={agentConfig?.env ?? getSessionLaunchConfigLegacyFields(session)?.env}
-      className={className}
-    />
-  );
-}
-
-const PR_STATUS_META: Record<PrStatus, PrStatusMeta> = {
-  open: {
-    icon: GitPullRequest,
-    className: 'text-github-open',
-    label: 'Open',
-  },
-  merged: {
-    icon: GitMerge,
-    className: 'text-github-merged',
-    label: 'Merged',
-  },
-  closed: {
-    icon: GitPullRequestClosed,
-    className: 'text-github-closed',
-    label: 'Closed',
-  },
-  draft: {
-    icon: GitPullRequestDraft,
-    className: 'text-github-draft',
-    label: 'Draft',
-  },
 };
 
 function formatRelativeTime(dateValue: number | string | undefined, now: Date): string {
@@ -300,63 +247,6 @@ function groupSessionsForArchive({
   return result;
 }
 
-type ArchivedSessionItemViewModel = {
-  title: string;
-  relativeTime: string;
-  branchName: string;
-  diffStats: NonNullable<SessionMeta['diffStats']>;
-  hasChanges: boolean;
-  prUrl: string | null;
-  prStatusMeta: PrStatusMeta | null;
-  PrIcon: LucideIcon | null;
-  prTooltipLabel: string;
-};
-
-function getArchivedSessionItemViewModel(
-  session: SessionMeta,
-  now: Date
-): ArchivedSessionItemViewModel {
-  const title = session.title?.trim() || 'Untitled session';
-  const relativeTime = formatRelativeTime(session.lastMessageAt, now);
-  const branchName = session.branchName?.trim() || '';
-  const diffStats = session.diffStats ?? { allChange: { add: 0, del: 0 } };
-  const hasChanges = diffStats.allChange.add !== 0 || diffStats.allChange.del !== 0;
-
-  const pullRequests = session.pullRequests ?? [];
-  const latestPr =
-    pullRequests.length > 0
-      ? pullRequests.some((pr) => getSessionPullRequestLegacyFields(pr).reportedAt)
-        ? [...pullRequests].sort((a, b) =>
-            (getSessionPullRequestLegacyFields(b).reportedAt ?? '').localeCompare(
-              getSessionPullRequestLegacyFields(a).reportedAt ?? ''
-            )
-          )[0]
-        : pullRequests[pullRequests.length - 1]
-      : null;
-  const prUrl = latestPr?.url?.trim() || null;
-  const prStatus = latestPr?.status ?? 'open';
-  const prNumber = prUrl ? parseGitHubPrNumber(prUrl) : null;
-  const prStatusMeta = prUrl ? PR_STATUS_META[prStatus] : null;
-  const PrIcon = prStatusMeta?.icon ?? null;
-  const prTooltipLabel = prNumber
-    ? `${prStatusMeta?.label} PR #${prNumber}`
-    : prStatusMeta?.label
-      ? `${prStatusMeta.label} PR`
-      : '';
-
-  return {
-    title,
-    relativeTime,
-    branchName,
-    diffStats,
-    hasChanges,
-    prUrl,
-    prStatusMeta,
-    PrIcon,
-    prTooltipLabel,
-  };
-}
-
 type ArchivedSessionItemBaseProps = {
   session: SessionMeta;
   depth: 0 | 1;
@@ -373,7 +263,6 @@ type ArchivedSessionItemBaseProps = {
   isSelected: boolean;
   onToggleSelect: (sessionId: SessionId) => void;
   onEnterMultiSelect: (sessionId: SessionId) => void;
-  owner?: { name?: string | null; image?: string | null } | null;
 };
 
 function DesktopArchivedSessionItem({
@@ -391,19 +280,9 @@ function DesktopArchivedSessionItem({
   isSelected,
   onToggleSelect,
   onEnterMultiSelect,
-  owner,
 }: ArchivedSessionItemBaseProps) {
-  const {
-    title,
-    relativeTime,
-    branchName,
-    diffStats,
-    hasChanges,
-    prUrl,
-    prStatusMeta,
-    PrIcon,
-    prTooltipLabel,
-  } = getArchivedSessionItemViewModel(session, now);
+  const title = sessionTitle(session);
+  const relativeTime = formatRelativeTime(session.lastMessageAt, now);
 
   const handleRowClick = useCallback(() => {
     if (isMultiSelectMode) {
@@ -448,8 +327,13 @@ function DesktopArchivedSessionItem({
         </div>
       )}
 
-      <div className="w-5 shrink-0 flex items-center justify-center">
-        <SessionAgentIcon session={session} className="h-3.5 w-3.5 text-muted-foreground" />
+      <div className="flex w-9 shrink-0 items-center justify-center">
+        {session.design?.artworkId ? (
+          <SessionRowArtworkThumbnail
+            artworkId={session.design.artworkId}
+            className="size-9 rounded-md bg-muted after:ring-foreground/10"
+          />
+        ) : null}
       </div>
 
       <div className="min-w-0 flex-1">
@@ -475,71 +359,9 @@ function DesktopArchivedSessionItem({
         </Tooltip>
       </div>
 
-      <div className="flex w-5 shrink-0 items-center justify-center">
-        {prUrl && PrIcon && prStatusMeta && (
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                className={cn(
-                  'inline-flex h-5 w-5 items-center justify-center rounded-sm',
-                  'transition-colors hover:bg-muted/30',
-                  prStatusMeta.className
-                )}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  window.open(prUrl, '_blank', 'noopener,noreferrer');
-                }}
-              >
-                <PrIcon className="h-3.5 w-3.5" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="top">{prTooltipLabel}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
-
-      <div className="hidden min-w-0 max-w-[12rem] shrink basis-40 sm:block">
-        {branchName ? (
-          <Tooltip delayDuration={300}>
-            <TooltipTrigger asChild>
-              <span className="block truncate text-xs text-muted-foreground">{branchName}</span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{branchName}</TooltipContent>
-          </Tooltip>
-        ) : null}
-      </div>
-
-      <span className="w-10 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+      <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
         {relativeTime}
       </span>
-
-      <div className="flex w-20 shrink-0 items-center justify-end gap-1.5 text-xs tabular-nums">
-        {hasChanges ? (
-          <>
-            <span className="text-code-added">+{diffStats.allChange.add}</span>
-            <span className="text-code-removed">-{diffStats.allChange.del}</span>
-          </>
-        ) : null}
-      </div>
-
-      <div className="w-5 shrink-0 flex items-center justify-center">
-        {owner && (
-          <Tooltip delayDuration={500}>
-            <TooltipTrigger asChild>
-              <span className="inline-flex shrink-0">
-                <UserAvatar
-                  user={owner}
-                  className="h-4 w-4"
-                  fallbackClassName="text-[8px] font-medium"
-                />
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="top">{owner.name ?? 'Unknown'}</TooltipContent>
-          </Tooltip>
-        )}
-      </div>
 
       <div
         className={cn(
@@ -620,7 +442,6 @@ export type ArchivedSessionGroupSectionProps = {
   onToggleSelect: (sessionId: SessionId) => void;
   onToggleGroupSelect: (groupKey: string, sessionIds: SessionId[]) => void;
   onEnterMultiSelect: (sessionId: SessionId) => void;
-  membersByUserId: Map<string, { name?: string | null; image?: string | null }>;
   /** Flat list mode: hide the project/repo section header. */
   hideGroupHeader?: boolean;
 };
@@ -642,7 +463,6 @@ export function ArchivedSessionGroupSection({
   onToggleSelect,
   onToggleGroupSelect,
   onEnterMultiSelect,
-  membersByUserId,
   hideGroupHeader = false,
 }: ArchivedSessionGroupSectionProps) {
   const isChat = group.kind === 'chat';
@@ -715,21 +535,12 @@ export function ArchivedSessionGroupSection({
               )}
             />
           </span>
-          {isLocal ? (
-            <span className="min-w-0 flex-1 truncate text-left">
-              <span className="flex min-w-0 items-baseline gap-2">
-                <span className="max-w-[40%] shrink-0 truncate">{group.local?.name ?? label}</span>
-                <span
-                  className="min-w-0 flex-1 truncate font-normal text-muted-foreground/60 [direction:rtl] [unicode-bidi:plaintext]"
-                  title={group.local?.title ?? undefined}
-                >
-                  {group.local?.path ?? label}
-                </span>
-              </span>
-            </span>
-          ) : (
-            <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          )}
+          <span
+            className="min-w-0 flex-1 truncate text-left"
+            title={isLocal ? (group.local?.title ?? group.local?.path ?? undefined) : undefined}
+          >
+            {isLocal ? (group.local?.name ?? label) : label}
+          </span>
           <span className="text-xs tabular-nums text-muted-foreground/60">
             ({group.sessions.length})
           </span>
@@ -762,7 +573,6 @@ export function ArchivedSessionGroupSection({
               isSelected={selectedIds.has(session.id)}
               onToggleSelect={onToggleSelect}
               onEnterMultiSelect={onEnterMultiSelect}
-              owner={membersByUserId.get(session.userId)}
             />
           ))}
         </div>
@@ -784,8 +594,7 @@ export function ArchiveView() {
   const [deleteConfirmSession, setDeleteConfirmSession] = useState<SessionMeta | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortMode, setSortMode] = useState<ArchiveSortMode>('newest');
-  const [groupMode, setGroupMode] = useState<ArchiveGroupMode>('project');
-  const { activeOrganization } = useOrganization();
+  const [groupMode, setGroupMode] = useState<ArchiveGroupMode>('flat');
   const machineMetaMap = useAtomValue(getMachineMetaMapAtom);
   const localMachineId = useAtomValue(localMachineIdAtom);
   const archivedLocalSessionMachineIds = useMemo(
@@ -811,23 +620,6 @@ export function ArchiveView() {
     'archive.localProject.restoreUnavailable',
     'Re-add this local project to restore its conversations.'
   );
-
-  // Build member lookup map for creator avatars
-  const membersByUserId = useMemo(() => {
-    const map = new Map<string, { name?: string | null; image?: string | null }>();
-    const members = activeOrganization?.members;
-    if (members) {
-      for (const member of members) {
-        if (member.user) {
-          map.set(member.userId, {
-            name: member.user.name,
-            image: member.user.image,
-          });
-        }
-      }
-    }
-    return map;
-  }, [activeOrganization?.members]);
 
   // Preserve historical archived sessions while respecting local-project ownership.
   const scopedArchivedSessions = useMemo(() => {
@@ -1286,7 +1078,7 @@ export function ArchiveView() {
   );
 
   const archiveContent = (
-    <div className="box-border w-full min-w-full px-4 py-4 sm:px-6">
+    <div className="mx-auto box-border w-full max-w-3xl px-4 py-4 sm:px-6">
       {archiveToolbar}
       {groupedSessions.length === 0 || filteredArchivedSessions.length === 0 ? (
         <div className="flex w-full flex-col items-center justify-center py-12 text-center">
@@ -1315,7 +1107,6 @@ export function ArchiveView() {
               onToggleSelect={handleToggleSelect}
               onToggleGroupSelect={handleToggleGroupSelect}
               onEnterMultiSelect={handleEnterMultiSelect}
-              membersByUserId={membersByUserId}
               hideGroupHeader={groupMode === 'flat'}
             />
           ))}

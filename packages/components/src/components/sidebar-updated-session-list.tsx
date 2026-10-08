@@ -746,6 +746,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
         <a
           href={href}
           aria-label={item.title}
+          title={item.title}
           className="absolute inset-0 z-10 rounded-lg focus:outline-hidden focus-visible:shadow-none"
           // The overlay anchor covers the row, so it is what a drag starts on;
           // left draggable it would drag its link instead.

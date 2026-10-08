@@ -1,6 +1,7 @@
 import {
   type ComponentPropsWithoutRef,
   type PointerEvent as ReactPointerEvent,
+  type ReactElement,
   type ReactNode,
   forwardRef,
   memo,
@@ -103,6 +104,9 @@ export type LoroSidebarChatItem = {
 
 export type LoroSidebarLabels = {
   home: string;
+  settings: string;
+  help: string;
+  archive: string;
   tasks: string;
   newTask: string;
   docs: string;
@@ -257,6 +261,9 @@ const COLLAPSE_DRAG_THRESHOLD = 160;
 
 const defaultLabels: LoroSidebarLabels = {
   home: 'Home',
+  settings: 'Settings',
+  help: 'Help',
+  archive: 'Archive',
   tasks: 'Tasks',
   newTask: 'New task',
   docs: 'Docs',
@@ -468,6 +475,15 @@ const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconB
     </Button>
   );
 });
+
+function FooterTooltip({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * The live binding for a command, formatted for this platform, or null when the
@@ -1150,37 +1166,49 @@ export const LoroSidebar = memo(function LoroSidebar({
         ) : null}
 
         <div className={getLoroSidebarFooterClassName()}>
-          <div className="flex items-center gap-1">
-            <IconButton label="Settings" onClick={onSettingsClicked}>
-              <Settings className="h-4 w-4" />
-            </IconButton>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <IconButton label="Help">
-                  <CircleHelp className="h-4 w-4" />
+          <TooltipProvider delayDuration={400}>
+            <div className="flex items-center gap-1">
+              <FooterTooltip label={mergedLabels.settings}>
+                <IconButton label={mergedLabels.settings} onClick={onSettingsClicked}>
+                  <Settings className="h-4 w-4" />
                 </IconButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="min-w-[140px]">
-                <DropdownMenuItem onSelect={() => onDocsClicked?.()}>
-                  <BookOpen className="h-4 w-4" />
-                  {mergedLabels.docs}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onJoinCommunityClicked?.()}>
-                  <Users className="h-4 w-4" />
-                  {mergedLabels.joinCommunity}
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onFeedbackClicked?.()}>
-                  <MessageSquareMore className="h-4 w-4" />
-                  {mergedLabels.feedback}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </FooterTooltip>
 
-            <IconButton label="Archive" active={activeNav === 'archive'} onClick={onArchiveClicked}>
-              <Archive className="h-4 w-4" />
-            </IconButton>
-          </div>
+              <DropdownMenu>
+                <FooterTooltip label={mergedLabels.help}>
+                  <DropdownMenuTrigger asChild>
+                    <IconButton label={mergedLabels.help}>
+                      <CircleHelp className="h-4 w-4" />
+                    </IconButton>
+                  </DropdownMenuTrigger>
+                </FooterTooltip>
+                <DropdownMenuContent side="top" align="start" className="min-w-[140px]">
+                  <DropdownMenuItem onSelect={() => onDocsClicked?.()}>
+                    <BookOpen className="h-4 w-4" />
+                    {mergedLabels.docs}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onJoinCommunityClicked?.()}>
+                    <Users className="h-4 w-4" />
+                    {mergedLabels.joinCommunity}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => onFeedbackClicked?.()}>
+                    <MessageSquareMore className="h-4 w-4" />
+                    {mergedLabels.feedback}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <FooterTooltip label={mergedLabels.archive}>
+                <IconButton
+                  label={mergedLabels.archive}
+                  active={activeNav === 'archive'}
+                  onClick={onArchiveClicked}
+                >
+                  <Archive className="h-4 w-4" />
+                </IconButton>
+              </FooterTooltip>
+            </div>
+          </TooltipProvider>
         </div>
       </div>
     </div>

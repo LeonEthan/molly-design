@@ -111,6 +111,7 @@ export function KeyboardShortcutsSetting() {
           ['delete', 'Backspace'],
           ['zoomIn', '$mod+='],
           ['zoomOut', '$mod+-'],
+          ['resetZoom', '$mod+0'],
           ['pan', 'Space'],
         ].map(([action, binding]) => (
           <CompactRow key={action} label={t(`settings.keyboardShortcuts.canvas.${action}`)}>

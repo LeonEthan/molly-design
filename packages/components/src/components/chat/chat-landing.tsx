@@ -233,6 +233,7 @@ export function ChatLanding(props: ChatLandingProps) {
 }
 
 const HOME_GALLERY_LIMIT = 24;
+const HOME_GALLERY_CANDIDATES = HOME_GALLERY_LIMIT * 2;
 
 function WorkspaceChatLanding({
   workspaceSlug,
@@ -2084,7 +2085,7 @@ function WorkspaceChatLanding({
             : []
         )
         .sort((left, right) => right.recency - left.recency)
-        .slice(0, HOME_GALLERY_LIMIT)
+        .slice(0, HOME_GALLERY_CANDIDATES)
         .map(({ session, artworkId, recency }) => ({
           sessionId: session.id,
           artworkId,
@@ -2153,7 +2154,10 @@ function WorkspaceChatLanding({
           isElectron ? (
             <HomeArtworkGallery
               heading={t('home.yourWork')}
-              countLabel={(count) => t('home.yourWorkCount', { count })}
+              limit={HOME_GALLERY_LIMIT}
+              countLabel={(count, truncated) =>
+                truncated ? t('home.yourWorkLatest', { count }) : t('home.yourWorkCount', { count })
+              }
               items={homeGalleryItems}
               onOpen={handleOpenArtwork}
             />

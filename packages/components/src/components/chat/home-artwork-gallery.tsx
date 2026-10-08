@@ -11,7 +11,8 @@ export type HomeArtworkGalleryItem = {
 
 export type HomeArtworkGalleryProps = {
   heading: string;
-  countLabel: (count: number) => string;
+  limit: number;
+  countLabel: (count: number, truncated: boolean) => string;
   items: readonly HomeArtworkGalleryItem[];
   onOpen: (sessionId: string) => void;
 };
@@ -67,25 +68,28 @@ function HomeArtworkCard({
 }
 
 /**
- * Recent artworks on the home page, drawn from the sidebar's thumbnail cache. Designs
- * with nothing on the canvas (a stopped or failed first run) are left out.
+ * Recent artworks on the home page, drawn from the sidebar's thumbnail cache, newest
+ * first and reading left to right. Designs with nothing on the canvas (a stopped or
+ * failed first run) are left out before the limit applies.
  */
 export function HomeArtworkGallery({
   heading,
+  limit,
   countLabel,
   items,
   onOpen,
 }: HomeArtworkGalleryProps) {
   const thumbnails = useDesignThumbnails(useMemo(() => items.map((item) => item.artworkId), [items]));
-  const shown = items.filter((item) => thumbnails.get(item.artworkId) !== '');
+  const withContent = items.filter((item) => thumbnails.get(item.artworkId) !== '');
+  const shown = withContent.slice(0, limit);
   if (shown.length === 0) return null;
   return (
     <section aria-label={heading} className="w-full">
       <header className="mb-6 flex items-end justify-between gap-6 border-b border-hairline pb-4">
         <h2 className="font-editorial text-[32px] leading-none text-foreground">{heading}</h2>
-        <span className="eyebrow pb-1 text-muted-foreground">{countLabel(shown.length)}</span>
+        <span className="eyebrow pb-1 text-muted-foreground">{countLabel(shown.length, withContent.length > shown.length)}</span>
       </header>
-      <div className="columns-[220px] gap-6">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-x-6">
         {shown.map((item, index) => (
           <HomeArtworkCard
             key={item.sessionId}

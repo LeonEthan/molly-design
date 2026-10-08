@@ -498,6 +498,7 @@
   "home.ideasLabel": "试试",
   "home.yourWorkCount": "{{count}} 件作品",
   "home.yourWorkCount_one": "{{count}} 件作品",
+  "home.yourWorkLatest": "最近 {{count}} 件",
   "home.idea1.label": "咖啡馆海报",
   "home.idea1.prompt": "为街角咖啡馆的秋季新品上市设计一张大胆的海报，暖色调，字体活泼",
   "home.idea2.label": "书籍封面",

@@ -46,7 +46,7 @@ describe('HomeArtworkGallery', () => {
     ipc.cache.clear();
   });
 
-  async function mount() {
+  async function mount(limit = 24, shownItems = items) {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -54,8 +54,10 @@ describe('HomeArtworkGallery', () => {
       root?.render(
         createElement(HomeArtworkGallery, {
           heading: 'Your work',
-          countLabel: (count: number) => `${count} designs`,
-          items,
+          limit,
+          countLabel: (count: number, truncated: boolean) =>
+            `${truncated ? 'latest ' : ''}${count} designs`,
+          items: shownItems,
           onOpen: () => {},
         })
       )
@@ -86,5 +88,18 @@ describe('HomeArtworkGallery', () => {
     await push('stopped');
     expect(titles()).toEqual(['Poster', 'Stopped run']);
     expect(container?.textContent).toContain('2 designs');
+  });
+
+  it('applies the limit after blank designs are left out and says when it truncates', async () => {
+    ipc.cache.set('limit-blank', '');
+    ipc.cache.set('limit-second', 'data:image/png;base64,BBBB');
+    ipc.cache.set('limit-third', 'data:image/png;base64,CCCC');
+    await mount(1, [
+      { sessionId: 's1', artworkId: 'limit-blank', title: 'Blank', dateLabel: 'Oct 7' },
+      { sessionId: 's2', artworkId: 'limit-second', title: 'Second', dateLabel: 'Oct 6' },
+      { sessionId: 's3', artworkId: 'limit-third', title: 'Third', dateLabel: 'Oct 5' },
+    ]);
+    expect(titles()).toEqual(['Second']);
+    expect(container?.textContent).toContain('latest 1 designs');
   });
 });

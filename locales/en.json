@@ -499,6 +499,7 @@
   "home.ideasLabel": "Try",
   "home.yourWorkCount": "{{count}} pieces",
   "home.yourWorkCount_one": "{{count}} piece",
+  "home.yourWorkLatest": "Latest {{count}}",
   "home.idea1.label": "Café poster",
   "home.idea1.prompt": "A bold poster for a neighbourhood café's autumn menu launch, warm colours and playful type",
   "home.idea2.label": "Book cover",

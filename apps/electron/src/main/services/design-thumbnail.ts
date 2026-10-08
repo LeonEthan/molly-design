@@ -4,6 +4,7 @@ import { mkdir, open, readFile, rename, rm, unlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, BrowserWindow, nativeImage } from 'electron'
 import { designRequest, renderSavedDesign } from './design-service'
+import type { DesignPayload } from '../../../../cli/src/design/store'
 import { DesignThumbnails, type DesignThumbnail } from './design-thumbnail-core'
 
 const THUMBNAIL_SHORT_EDGE_PX = 560
@@ -48,7 +49,7 @@ async function writeCached(artworkId: string, thumbnail: DesignThumbnail): Promi
   }
 }
 
-const thumbnails = new DesignThumbnails({
+const thumbnails = new DesignThumbnails<DesignPayload>({
   isBlank: (saved) => isBlankCanvas(saved.doc),
   readSaved: (artworkId) => designRequest({ operation: 'read', sessionId: artworkId }),
   render: async (saved) => {

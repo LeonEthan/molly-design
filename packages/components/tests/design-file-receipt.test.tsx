@@ -1,18 +1,16 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
-import { Provider, createStore } from 'jotai';
-import type { SessionId, WorkspaceId } from '@molly/shared';
-import { currentWorkspaceIdAtom } from '../src/atoms';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { DesignFileReceipt } from '../src/components/sessions/design-file-receipt';
+import {
+  DesignFileReceipt,
+  hasDesignFileReceipt,
+} from '../src/components/sessions/design-file-receipt';
 import { initI18n } from '../src/i18n';
 const resolveFile = vi.hoisted(() => vi.fn());
-const sourcePath = vi.hoisted(() => vi.fn());
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({
     design: { candidateFile: resolveFile },
-    machineRpc: { send: sourcePath },
   }),
 }));
 const artworkId = 'aacdd4fb-a160-4c25-9c15-02297145a521';
@@ -98,48 +96,12 @@ test('save receipt and rejection diagnostics survive, while execution-only state
   }
 });
 
-test('cancelled working files resolve the historical session and turn through ordinary machine RPC', async () => {
-  const store = createStore();
-  store.set(currentWorkspaceIdAtom, 'workspace-test' as WorkspaceId);
-  let opened: string | undefined;
-  sourcePath.mockImplementation(async (request) => {
-    expect(request).toEqual({
-      machineId: 'machine-test',
-      workspaceId: 'workspace-test',
-      ownerSessionId: 'history-session',
-      method: 'design/source-path',
-      params: { turnId: 'turn-1' },
-    });
-    return {
-      ok: true,
-      result: { type: 'design/source-path', ok: true, path: '/synthetic/original/design.yaml' },
-    };
-  });
-  await act(async () =>
-    root.render(
-      <Provider store={store}>
-        <DesignFileReceipt
-          sessionId={'history-session' as SessionId}
-          machineId="machine-test"
-          outcome={outcome('cancelled')}
-          onOpenFile={(path) => {
-            opened = path;
-          }}
-        />
-      </Provider>
-    )
-  );
-  expect(element.textContent).toContain('may have changed');
-  expect(element.textContent).not.toContain('Cancelled');
-  expect(element.querySelector('button')?.textContent).toBe('Open draft');
-  await act(async () => element.querySelector('button')?.click());
-  expect(opened).toBe('/synthetic/original/design.yaml');
-  opened = undefined;
-  sourcePath.mockResolvedValue({
-    ok: true,
-    result: { type: 'design/source-path', ok: false, error: 'Changed workspace' },
-  });
-  await act(async () => element.querySelector('button')?.click());
-  expect(opened).toBeUndefined();
-  expect(element.querySelector('[role="alert"]')).not.toBeNull();
+test('a cancelled or failed turn with no diagnostics shows no receipt and no working-file link', async () => {
+  for (const status of ['cancelled', 'failed', 'invalid']) {
+    expect(hasDesignFileReceipt(outcome(status))).toBe(false);
+    await act(async () => root.render(<DesignFileReceipt outcome={outcome(status)} />));
+    expect(element.textContent).toBe('');
+    expect(element.querySelector('button')).toBeNull();
+  }
+  expect(hasDesignFileReceipt(outcome('committed', { revisionId: 'b'.repeat(64) }))).toBe(true);
 });

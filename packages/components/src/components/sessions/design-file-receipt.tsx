@@ -1,43 +1,35 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  DesignSourcePathResultSchema,
-  sanitizeDesignTurnOutcome,
-  type SessionId,
-} from '@molly/shared';
-import { useAtomValue } from 'jotai';
-import { currentWorkspaceIdAtom } from '@/atoms';
+import { sanitizeDesignTurnOutcome } from '@molly/shared';
 import { getIpcServices } from '@/lib/electron-ipc-client';
 import { redactDesignText } from '@/lib/design-file-diagnostics';
+
+function visibleOutcome(rawOutcome: unknown) {
+  const outcome = sanitizeDesignTurnOutcome(rawOutcome);
+  if (!outcome) return null;
+  const hasCandidate = outcome.status === 'candidate' && outcome.candidateId !== undefined;
+  const hasDiagnostics = (outcome.diagnostics ?? []).length > 0;
+  return outcome.status === 'committed' || hasCandidate || hasDiagnostics ? outcome : null;
+}
+
+export function hasDesignFileReceipt(rawOutcome: unknown): boolean {
+  return visibleOutcome(rawOutcome) !== null;
+}
 
 /** Durable save facts and ordinary files; execution status belongs to the session. */
 export function DesignFileReceipt({
   outcome: rawOutcome,
-  sessionId,
-  machineId,
   onOpenFile,
 }: {
   outcome: unknown;
-  sessionId?: SessionId;
-  machineId?: string;
   onOpenFile?: (path: string) => void;
 }) {
   const { t } = useTranslation();
-  const outcome = sanitizeDesignTurnOutcome(rawOutcome);
-  const workspaceId = useAtomValue(currentWorkspaceIdAtom);
+  const outcome = visibleOutcome(rawOutcome);
   const [fileError, setFileError] = useState(false);
-  const candidateId = outcome?.status === 'candidate' ? outcome.candidateId : undefined;
-  const diagnostics = outcome?.diagnostics ?? [];
-  const hasDraft =
-    sessionId &&
-    machineId &&
-    outcome &&
-    ['candidate', 'invalid', 'failed', 'cancelled'].includes(outcome.status);
-  if (
-    !outcome ||
-    (outcome.status !== 'committed' && !candidateId && !hasDraft && diagnostics.length === 0)
-  )
-    return null;
+  if (!outcome) return null;
+  const candidateId = outcome.status === 'candidate' ? outcome.candidateId : undefined;
+  const diagnostics = outcome.diagnostics ?? [];
 
   const openFile = async () => {
     setFileError(false);
@@ -46,28 +38,6 @@ export function DesignFileReceipt({
       if (!service || !candidateId || !onOpenFile) throw Error('File unavailable');
       const file = await service.candidateFile(outcome.artworkId, candidateId);
       onOpenFile(file.path);
-    } catch {
-      setFileError(true);
-    }
-  };
-
-  const openDraft = async () => {
-    setFileError(false);
-    try {
-      const service = getIpcServices();
-      if (!service || !sessionId || !machineId || !workspaceId || !onOpenFile)
-        throw Error('File unavailable');
-      const response = await service.machineRpc.send({
-        machineId,
-        workspaceId,
-        ownerSessionId: sessionId,
-        method: 'design/source-path',
-        params: { turnId: outcome.turnId },
-      });
-      if (!response.ok) throw Error('File unavailable');
-      const source = DesignSourcePathResultSchema.parse(response.result);
-      if (!source.ok) throw Error(source.error);
-      onOpenFile(source.path);
     } catch {
       setFileError(true);
     }
@@ -86,19 +56,6 @@ export function DesignFileReceipt({
             className="underline"
             disabled={!onOpenFile}
             onClick={() => void openFile()}
-          >
-            {t('design.files.openDraft', 'Open draft')}
-          </button>
-        </p>
-      ) : null}
-      {hasDraft ? (
-        <p>
-          {t('design.files.workingFile', 'The working draft may have changed since this turn.')}{' '}
-          <button
-            type="button"
-            className="underline"
-            disabled={!onOpenFile || !workspaceId}
-            onClick={() => void openDraft()}
           >
             {t('design.files.openDraft', 'Open draft')}
           </button>

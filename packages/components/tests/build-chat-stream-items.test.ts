@@ -212,6 +212,80 @@ describe('buildChatStreamItems', () => {
   });
 });
 
+describe('save receipts in the stream', () => {
+  const committed = {
+    version: 1,
+    artworkId: 'aacdd4fb-a160-4c25-9c15-02297145a521',
+    turnId: 'u1',
+    timestamp: '2026-06-18T00:00:00.000Z',
+    status: 'committed',
+    revisionId: 'b'.repeat(64),
+  };
+  const userTurn = () => ({
+    ...entry({ id: 'u1', role: 'user', items: [text('shorten the tagline')] }),
+    designOutcome: committed,
+  });
+  const messageOf = (items: ReturnType<typeof buildChatStreamItems>['items'], id: string) =>
+    items.find((item) => item.type === 'message' && item.message.id === id);
+
+  it('moves the receipt from the user turn to the reply that follows it', () => {
+    const { items } = buildChatStreamItems(
+      [userTurn(), entry({ id: 'a1', role: 'assistant', items: [text('Done.')] })],
+      sessionId
+    );
+    expect(messageOf(items, 'u1')).toMatchObject({ message: { designOutcome: undefined } });
+    expect(messageOf(items, 'a1')).toMatchObject({ message: { designOutcome: committed } });
+  });
+
+  it('keeps the receipt on the user turn when no reply is rendered after it', () => {
+    const { items } = buildChatStreamItems(
+      [userTurn(), entry({ id: 'a1', role: 'assistant', items: [] })],
+      sessionId
+    );
+    expect(messageOf(items, 'u1')).toMatchObject({ message: { designOutcome: committed } });
+  });
+
+  it('keeps the receipt on the user turn while the reply is not hydrated, then hands it off', () => {
+    const history = [userTurn(), entry({ id: 'a1', role: 'assistant', items: [text('Done.')] })];
+    const full = createConversationViewFromHistory({
+      sessionId,
+      getHistory: () => history,
+      subscribe: () => () => {},
+    });
+    const replyNotLoaded = Object.create(full, {
+      turn: { value: (index: number) => (index === 1 ? undefined : full.turn(index)) },
+    });
+    const partial = buildChatStreamItemsFromView(replyNotLoaded, sessionId);
+    expect(messageOf(partial.items, 'u1')).toMatchObject({ message: { designOutcome: committed } });
+    const loaded = buildChatStreamItemsFromView(full, sessionId, partial.cache);
+    expect(messageOf(loaded.items, 'u1')).toMatchObject({ message: { designOutcome: undefined } });
+    expect(messageOf(loaded.items, 'a1')).toMatchObject({ message: { designOutcome: committed } });
+  });
+
+  it('does not carry a receipt past the reply to a later turn', () => {
+    const { items } = buildChatStreamItems(
+      [
+        userTurn(),
+        entry({ id: 'a1', role: 'assistant', items: [text('Done.')] }),
+        entry({ id: 'u2', role: 'user', items: [text('thanks')] }),
+        entry({ id: 'a2', role: 'assistant', items: [text('Welcome.')] }),
+      ],
+      sessionId
+    );
+    expect(messageOf(items, 'a2')).toMatchObject({ message: { designOutcome: undefined } });
+  });
+
+  it('refreshes the reply when its turn gains an outcome after being cached', () => {
+    const history = [
+      entry({ id: 'u1', role: 'user', items: [text('shorten the tagline')] }),
+      entry({ id: 'a1', role: 'assistant', items: [text('Done.')] }),
+    ];
+    const first = buildChatStreamItems(history, sessionId);
+    const second = buildChatStreamItems([userTurn(), history[1]], sessionId, first.cache);
+    expect(messageOf(second.items, 'a1')).toMatchObject({ message: { designOutcome: committed } });
+  });
+});
+
 describe('live create progress in the stream', () => {
   it('keeps a stable row id while invalidating changed progress content', () => {
     const progress = {

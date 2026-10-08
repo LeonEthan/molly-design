@@ -132,6 +132,15 @@ describe('CombinedMentionTextarea design-element mirror sync', () => {
     expect(text()).not.toContain('@Chip A');
   });
 
+  it('keeps a draft the user already typed, both when the selection mirrors in and when it retires', async () => {
+    await replaceText('make the headline bolder');
+    expect(await sync(badge, 'Chip D')).toBe(true);
+    expect(text()).toContain('make the headline bolder');
+    expect(text()).toContain('@Chip D');
+    expect(await sync(null, '')).toBe(true);
+    expect(text().trim()).toBe('make the headline bolder');
+  });
+
   it('replaces the mirrored chip when the selection identity changes at the same count', async () => {
     await sync(badge, 'Chip X');
     await sync(headline, 'Chip Y');

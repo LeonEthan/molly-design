@@ -3094,7 +3094,6 @@
   "design.files.notCommitted": "This change wasn't applied to the artwork.",
   "design.files.diagnostics": "The artwork was not updated:",
   "design.files.unavailable": "The draft could not be opened.",
-  "design.files.workingFile": "The working draft may have changed since this turn.",
   "design.files.openDraft": "Open draft",
   "design.versionsLoading": "Loading versions…",
   "design.versionsUnavailable": "Version history unavailable",

@@ -90,3 +90,61 @@ for (const inheritedPlatform of ['cloud', 'invalid']) {
     })
   }
 }
+
+function loadCliServiceWithSettings(savedSettings) {
+  const powerSave = { started: 0 }
+  const module = { exports: {} }
+  const anyFunction = new Proxy({}, { get: () => () => ({}) })
+  compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require', 'process'])(
+    module,
+    module.exports,
+    (name) => {
+      if (name === '../platform') return { mainPlatformKind: 'local' }
+      if (name === './shell-env') return { getUserShellEnvCached: async () => ({}) }
+      if (name === './system-proxy-env')
+        return { applyProxyEnvFallback() {}, resolveSystemProxyEnv: async () => ({}) }
+      if (name === 'electron')
+        return {
+          app: { isPackaged: false },
+          powerSaveBlocker: {
+            start() {
+              powerSave.started += 1
+              return 1
+            },
+            stop() {},
+            isStarted: () => true
+          }
+        }
+      if (name === 'node:fs')
+        return {
+          existsSync: () => savedSettings !== undefined,
+          readFileSync: () => JSON.stringify(savedSettings),
+          writeFileSync() {},
+          mkdirSync() {}
+        }
+      if (name === '@molly/shared/node/installation-profile')
+        return { getMollyDataDir: () => '/synthetic/resolved-molly' }
+      if (name.startsWith('@molly/')) return anyFunction
+      return require(name)
+    },
+    {
+      env: {},
+      resourcesPath: '/synthetic/resources',
+      execPath: '/synthetic/electron',
+      platform: 'darwin'
+    }
+  )
+  return { service: new module.exports.CliService(), powerSave }
+}
+
+void test('the computer is not kept awake until the user turns it on', () => {
+  const { service, powerSave } = loadCliServiceWithSettings(undefined)
+  assert.equal(service.getPreventSleepEnabled(), false)
+  assert.equal(powerSave.started, 0)
+})
+
+void test('an explicit saved choice to keep the computer awake is honoured', () => {
+  const { service, powerSave } = loadCliServiceWithSettings({ preventSleepEnabled: true })
+  assert.equal(service.getPreventSleepEnabled(), true)
+  assert.equal(powerSave.started, 1)
+})

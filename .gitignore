@@ -126,6 +126,10 @@ logs/
 /.lody-artifacts/
 /e2e/artifacts/
 
+# Local design evaluation runs: captured agent transcripts, third-party
+# reference material and local connection state must never be committed
+/e2e/design-eval/
+
 # OS
 .DS_Store
 Thumbs.db 

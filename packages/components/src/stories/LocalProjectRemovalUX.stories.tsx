@@ -343,7 +343,6 @@ function RemovedProjectArchive() {
               onToggleSelect={() => {}}
               onToggleGroupSelect={() => {}}
               onEnterMultiSelect={() => {}}
-              membersByUserId={new Map()}
             />
           </div>
         </WebArchiveScreen>

@@ -50,3 +50,21 @@ it('shows fixed canvas guidance before editable app commands with no rebinding c
   expect(sections[0].querySelectorAll('kbd').length).toBeGreaterThan(0);
   expect(host.textContent).toContain(en['commands.session.archiveCurrent']);
 });
+
+it('words app commands in plain sentence case without developer jargon', async () => {
+  await act(async () => root.render(<KeyboardShortcutsSetting />));
+  const text = host.textContent ?? '';
+  expect(text).toContain(en['settings.keyboardShortcuts.canvas.resetZoom']);
+  for (const jargon of ['Zen', 'Command Palette', 'thinking effort']) {
+    expect(text).not.toContain(jargon);
+  }
+  for (const key of [
+    'commands.session.new',
+    'commands.session.newTab',
+    'commands.session.cycleModel',
+    'commands.session.cycleThinkEffort',
+    'commands.session.toggleCurrentPinned',
+  ] as const) {
+    expect(en[key]).toBe(en[key].charAt(0) + en[key].slice(1).toLowerCase());
+  }
+});

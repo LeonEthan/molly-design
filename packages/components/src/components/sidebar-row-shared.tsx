@@ -274,7 +274,13 @@ export function SessionRowAuthorAvatar({
  * The artwork's last saved revision, so design sessions with similar titles are
  * told apart by eye. A neutral tile holds the place until the image is ready.
  */
-export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string }) {
+export function SessionRowArtworkThumbnail({
+  artworkId,
+  className,
+}: {
+  artworkId: string;
+  className?: string;
+}) {
   const src = useDesignThumbnail(artworkId);
   return (
     <span
@@ -282,7 +288,8 @@ export function SessionRowArtworkThumbnail({ artworkId }: { artworkId: string })
       data-session-row-thumbnail=""
       className={cn(
         'relative size-5 shrink-0 overflow-hidden rounded-[4px] bg-sidebar-foreground/[0.06]',
-        'after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-inset after:ring-sidebar-foreground/10'
+        'after:absolute after:inset-0 after:rounded-[inherit] after:ring-1 after:ring-inset after:ring-sidebar-foreground/10',
+        className
       )}
     >
       {src ? (

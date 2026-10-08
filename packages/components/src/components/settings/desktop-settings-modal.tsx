@@ -37,7 +37,7 @@ export function DesktopSettingsModal() {
     >
       <DialogContent
         noAnimation
-        overlayClassName="bg-black/25 dark:bg-black/45"
+        overlayClassName="bg-black/35 dark:bg-black/55"
         className="flex h-[min(90vh,950px)] w-[min(1100px,calc(100vw-48px))] max-w-[1100px] flex-col gap-0 overflow-hidden rounded-2xl border-border/50 bg-background p-0 sm:rounded-2xl sm:p-0"
       >
         <SettingsModalBody />

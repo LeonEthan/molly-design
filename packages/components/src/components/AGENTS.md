@@ -14,6 +14,8 @@ Public terminal disposal must release its window and media-query listeners.
 Ownership and explanations: [README.md](README.md).
 
 - Sidebar rows represent Sessions, never Tasks.
+- Archive rows show only a design thumbnail, title, age and restore/delete actions; agent, PR,
+  branch, diff and owner columns belong to the retired coding product. Default grouping is One list.
 - Desktop sidebar filtering changes only organization (By project/All designs, default
   All designs); archive and sidebar lists show every permitted local Session without
   reading Lody team-scope preferences.

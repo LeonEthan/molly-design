@@ -2452,6 +2452,9 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
   const labels: Partial<LoroSidebarLabels> = useMemo(() => {
     return {
       home: t('sidebar.home', 'Home'),
+      settings: t('settings.title', 'Settings'),
+      help: t('sidebar.help', 'Help'),
+      archive: t('archive.title', 'Archive'),
       newTask: t('tasks.newTask', 'New task'),
       docs: t('sidebar.docs', 'Docs'),
       joinCommunity: t('sidebar.joinCommunity', 'Join community'),

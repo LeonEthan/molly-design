@@ -1,4 +1,5 @@
-import { useDesignThumbnail } from '@/hooks/use-design-thumbnail';
+import { useDesignThumbnails } from '@/hooks/use-design-thumbnail';
+import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
 export type HomeArtworkGalleryItem = {
@@ -10,7 +11,7 @@ export type HomeArtworkGalleryItem = {
 
 export type HomeArtworkGalleryProps = {
   heading: string;
-  countLabel: string;
+  countLabel: (count: number) => string;
   items: readonly HomeArtworkGalleryItem[];
   onOpen: (sessionId: string) => void;
 };
@@ -19,14 +20,15 @@ const STAGGER_MS = 50;
 
 function HomeArtworkCard({
   item,
+  src,
   index,
   onOpen,
 }: {
   item: HomeArtworkGalleryItem;
+  src: string | undefined;
   index: number;
   onOpen: (sessionId: string) => void;
 }) {
-  const src = useDesignThumbnail(item.artworkId);
   return (
     <button
       type="button"
@@ -64,23 +66,34 @@ function HomeArtworkCard({
   );
 }
 
-/** Recent artworks on the home page, drawn from the sidebar's thumbnail cache. */
+/**
+ * Recent artworks on the home page, drawn from the sidebar's thumbnail cache. Designs
+ * with nothing on the canvas (a stopped or failed first run) are left out.
+ */
 export function HomeArtworkGallery({
   heading,
   countLabel,
   items,
   onOpen,
 }: HomeArtworkGalleryProps) {
-  if (items.length === 0) return null;
+  const thumbnails = useDesignThumbnails(useMemo(() => items.map((item) => item.artworkId), [items]));
+  const shown = items.filter((item) => thumbnails.get(item.artworkId) !== '');
+  if (shown.length === 0) return null;
   return (
     <section aria-label={heading} className="w-full">
       <header className="mb-6 flex items-end justify-between gap-6 border-b border-hairline pb-4">
         <h2 className="font-editorial text-[32px] leading-none text-foreground">{heading}</h2>
-        <span className="eyebrow pb-1 text-muted-foreground">{countLabel}</span>
+        <span className="eyebrow pb-1 text-muted-foreground">{countLabel(shown.length)}</span>
       </header>
       <div className="columns-[220px] gap-6">
-        {items.map((item, index) => (
-          <HomeArtworkCard key={item.sessionId} item={item} index={index} onOpen={onOpen} />
+        {shown.map((item, index) => (
+          <HomeArtworkCard
+            key={item.sessionId}
+            item={item}
+            src={thumbnails.get(item.artworkId)}
+            index={index}
+            onOpen={onOpen}
+          />
         ))}
       </div>
     </section>

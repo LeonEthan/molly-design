@@ -3,9 +3,18 @@ import test from 'node:test'
 import { DesignThumbnails } from './design-thumbnail-core.ts'
 
 function harness(initialRevision = 'r1') {
-  const state = { revision: initialRevision, cache: new Map(), rendered: [], gate: undefined }
+  const state = {
+    revision: initialRevision,
+    cache: new Map(),
+    rendered: [],
+    gate: undefined,
+    blank: false
+  }
   const thumbnails = new DesignThumbnails({
-    readSaved: async () => ({ revisionId: state.revision }),
+    readSaved: async () => ({
+      revisionId: state.revision,
+      doc: { elements: state.blank ? [] : [{ id: 'a' }] }
+    }),
     render: async (saved) => {
       if (state.gate) await state.gate
       if (saved.revisionId === 'broken') throw Error('render failed')
@@ -71,4 +80,15 @@ void test('a failed render is not cached and does not block the next artwork', a
   state.revision = 'r3'
   assert.equal(await thumbnails.get('other'), 'data:r3')
   assert.equal(await thumbnails.get('art'), 'data:r3')
+})
+
+void test('a canvas with no elements is cached as blank without rendering', async () => {
+  const { state, thumbnails } = harness()
+  state.blank = true
+  assert.equal(await thumbnails.get('art'), '')
+  assert.deepEqual(state.cache.get('art'), { revisionId: 'r1', dataUrl: '' })
+  assert.deepEqual(state.rendered, [])
+  state.blank = false
+  state.revision = 'r2'
+  assert.equal(await thumbnails.refresh('art'), 'data:r2')
 })

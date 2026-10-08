@@ -19,6 +19,9 @@ Index and rationale: [README.md](README.md).
 - Desktop landing format tiles under the heading and the footer size chip share one
   canvas draft and screen preset list (`canvas-size-selector.tsx`); only the chip
   adds print sheets, converted to pixels at a DPI that keeps both sides within 4096 px.
+- The home "Your work" gallery lists only designs with something on the canvas. Electron caches
+  a canvas with no elements as an empty thumbnail (`''`, never a rendered white sheet), and
+  the gallery skips those and counts only what it shows; the sidebar keeps its neutral tile.
 - Desktop landing footer starts with canvas size beside the attachment entry;
   the remaining footer order is run config → permission → usage. Provider interaction mode
   belongs inside run config; the standalone button is explicit permission mode,

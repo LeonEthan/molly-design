@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { getIpcServices, onIpcEvent } from '@/lib/electron-ipc-client';
 
 /**
@@ -12,6 +12,7 @@ import { getIpcServices, onIpcEvent } from '@/lib/electron-ipc-client';
 const thumbnails = new Map<string, string>();
 const listeners = new Map<string, Set<() => void>>();
 const current = new Set<string>();
+let revision = 0;
 
 function request(artworkId: string) {
   const design = getIpcServices()?.design;
@@ -20,6 +21,7 @@ function request(artworkId: string) {
   void design.thumbnail(artworkId).then(
     (dataUrl) => {
       thumbnails.set(artworkId, dataUrl);
+      revision += 1;
       for (const listener of listeners.get(artworkId) ?? []) listener();
     },
     () => current.delete(artworkId)
@@ -44,7 +46,10 @@ function followRefreshes() {
   });
 }
 
-/** The last saved revision of `artworkId` as an image URL, or undefined until one is ready. */
+/**
+ * The last saved revision of `artworkId` as an image URL, `''` once known to be blank
+ * (no elements), or undefined until one is ready.
+ */
 export function useDesignThumbnail(artworkId: string): string | undefined {
   const src = useSyncExternalStore(
     (listener) => subscribe(artworkId, listener),
@@ -55,4 +60,30 @@ export function useDesignThumbnail(artworkId: string): string | undefined {
     if (!current.has(artworkId)) request(artworkId);
   }, [artworkId]);
   return src;
+}
+
+/** Thumbnails for a set of artworks at once, keyed by id; see `useDesignThumbnail` for values. */
+export function useDesignThumbnails(artworkIds: readonly string[]): ReadonlyMap<string, string> {
+  const key = artworkIds.join(',');
+  const subscribeAll = useCallback(
+    (listener: () => void) => {
+      const releases = key ? key.split(',').map((artworkId) => subscribe(artworkId, listener)) : [];
+      return () => releases.forEach((release) => release());
+    },
+    [key]
+  );
+  const seen = useSyncExternalStore(subscribeAll, () => revision);
+  useEffect(() => {
+    followRefreshes();
+    for (const artworkId of key ? key.split(',') : []) if (!current.has(artworkId)) request(artworkId);
+  }, [key]);
+  return useMemo(() => {
+    void seen;
+    return new Map(
+      (key ? key.split(',') : []).flatMap((artworkId) => {
+        const src = thumbnails.get(artworkId);
+        return src === undefined ? [] : [[artworkId, src] as const];
+      })
+    );
+  }, [key, seen]);
 }

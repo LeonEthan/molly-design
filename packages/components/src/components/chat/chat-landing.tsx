@@ -2153,7 +2153,7 @@ function WorkspaceChatLanding({
           isElectron ? (
             <HomeArtworkGallery
               heading={t('home.yourWork')}
-              countLabel={t('home.yourWorkCount', { count: homeGalleryItems.length })}
+              countLabel={(count) => t('home.yourWorkCount', { count })}
               items={homeGalleryItems}
               onOpen={handleOpenArtwork}
             />

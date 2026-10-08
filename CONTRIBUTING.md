@@ -44,6 +44,12 @@ cd molly-design
 git submodule update --init packages/acp-extension-core packages/acp-extension-dsh
 ```
 
+Initialise the two submodules before the first `corepack pnpm install`: pnpm links them
+into the workspace only when their sources exist. A new `git worktree` starts with both
+checked out empty, so repeat the command there. If the build reports
+`Cannot find module 'acp-extension-core'`, initialise them and run
+`corepack pnpm install` again.
+
 ## Source dependencies
 
 | Source                                        | Why it remains                                                           | Maintenance boundary                                                                                                                                                      |

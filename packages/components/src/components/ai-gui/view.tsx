@@ -507,6 +507,7 @@ export interface SessionChatStreamViewProps {
 const SessionChatActionContext = createContext<{
   sendMessage?: (message: ClientToServer) => void;
   openHtmlFile?: (file: SessionFilePayload) => boolean;
+  openFilePath?: (path: string) => void;
 }>({});
 const SessionImagePreviewContext = createContext<{
   openImagePreview: (imageKey: string) => void;
@@ -1712,8 +1713,9 @@ export const SessionChatStreamView = forwardRef<
       () => ({
         ...(sendMessage ? { sendMessage } : {}),
         ...(onOpenHtmlFile ? { openHtmlFile: onOpenHtmlFile } : {}),
+        ...(onFilePathClick ? { openFilePath: onFilePathClick } : {}),
       }),
-      [onOpenHtmlFile, sendMessage]
+      [onFilePathClick, onOpenHtmlFile, sendMessage]
     );
     const hasOnlyEmptyItem = items.length === 1 && items[0]?.type === 'empty';
 
@@ -2812,6 +2814,7 @@ const UserMessageRowView = ({
 }) => {
   const { t } = useTranslation();
 
+  const fileActions = useContext(SessionChatActionContext);
   // The RPC fast-path ACK overlays "delivered" before the entry's CRDT status
   // flip syncs back (the machine may run the whole turn before it can see the
   // entry to flip it).
@@ -3014,6 +3017,7 @@ const UserMessageRowView = ({
             </div>
           </div>
         </div>
+        <DesignFileReceipt outcome={message.designOutcome} onOpenFile={fileActions.openFilePath} />
         {/* While editing, the row's own actions (edit/pin/copy) would compete with
             the editor's Cancel / Save & resend — hide them until it closes. */}
         {hasTextContent && !isEditing ? (

@@ -31,8 +31,6 @@ type CachedChatStreamMessageItem = {
   readonly rawModelInfo: unknown;
   readonly rawFileDiff: unknown;
   readonly rawPlan: unknown;
-  /** Durable design facts and diagnostics must reflect a newly recorded outcome. */
-  readonly rawDesignOutcome: unknown;
   /** Preceding user-turn config attached for assistant header display. */
   readonly rawTurnInputConfig: unknown;
 };
@@ -61,7 +59,8 @@ function canReuseCachedMessageItem(
   sessionId: SessionId,
   turnIndex: number,
   /** Resolved config we would attach to this message (user's own or inherited). */
-  expectedInputConfig: SessionHistoryParsed['inputConfig']
+  expectedInputConfig: SessionHistoryParsed['inputConfig'],
+  expectedDesignOutcome: SessionHistoryParsed['designOutcome']
 ): cached is CachedChatStreamMessageItem {
   return (
     cached !== undefined &&
@@ -81,7 +80,7 @@ function canReuseCachedMessageItem(
     cached.rawFileDiff === entry.fileDiff &&
     cached.item.message.finished === entry.finished &&
     cached.rawPlan === entry.plan &&
-    cached.rawDesignOutcome === entry.designOutcome &&
+    cached.item.message.designOutcome === expectedDesignOutcome &&
     cached.rawTurnInputConfig === expectedInputConfig
   );
 }
@@ -101,7 +100,6 @@ function createCachedMessageItem(
     rawModelInfo: entry.modelInfo,
     rawFileDiff: entry.fileDiff,
     rawPlan: entry.plan,
-    rawDesignOutcome: entry.designOutcome,
     rawTurnInputConfig: message.inputConfig,
   };
 }
@@ -167,11 +165,20 @@ export function buildChatStreamItems(
    *  non-hydrated user turn resets it: the header then shows nothing rather
    *  than an older turn's configuration. */
   let lastUserInputConfig: SessionHistoryParsed['inputConfig'] | undefined;
+  /** A save receipt belongs under the reply, so a user turn hands its outcome
+   *  to the assistant entry that follows it. */
+  let outcomeForNextReply: SessionHistoryParsed['designOutcome'];
+  const replyFollows = (turnIndex: number): boolean => {
+    const next = view.index(turnIndex + 1);
+    return next?.role === 'assistant' && !isEmptyAssistantIndexRow(next);
+  };
 
   for (let turnIndex = 0; turnIndex < view.turnCount; turnIndex += 1) {
     const row = view.index(turnIndex);
     if (!row) continue;
     const entry = view.turn(turnIndex);
+    const handedOutcome = outcomeForNextReply;
+    outcomeForNextReply = undefined;
 
     if (!entry) {
       if (row.role === 'user') lastUserInputConfig = undefined;
@@ -185,6 +192,16 @@ export function buildChatStreamItems(
     if (entry.role === 'user') {
       lastUserInputConfig = entry.inputConfig;
     }
+    const userOutcomeMovesToReply = entry.role === 'user' && replyFollows(turnIndex);
+    if (userOutcomeMovesToReply) outcomeForNextReply = entry.designOutcome;
+    const expectedDesignOutcome =
+      entry.role === 'user'
+        ? userOutcomeMovesToReply
+          ? undefined
+          : entry.designOutcome
+        : entry.role === 'assistant'
+          ? (entry.designOutcome ?? handedOutcome)
+          : entry.designOutcome;
 
     const expectedInputConfig =
       entry.role === 'user'
@@ -194,7 +211,16 @@ export function buildChatStreamItems(
           : entry.inputConfig;
 
     const cached = previousCache?.get(entry.id);
-    if (canReuseCachedMessageItem(cached, entry, sessionId, turnIndex, expectedInputConfig)) {
+    if (
+      canReuseCachedMessageItem(
+        cached,
+        entry,
+        sessionId,
+        turnIndex,
+        expectedInputConfig,
+        expectedDesignOutcome
+      )
+    ) {
       if (seenIds.has(entry.id)) continue;
       seenIds.add(entry.id);
       cache.set(entry.id, cached);
@@ -216,7 +242,7 @@ export function buildChatStreamItems(
       fileDiff: entry.fileDiff,
       finished: entry.finished,
       plan: entry.plan,
-      designOutcome: entry.designOutcome,
+      designOutcome: expectedDesignOutcome,
       // User turns keep their own config; assistant turns inherit the
       // preceding user's so the header can list mode / effort / plan / fast.
       inputConfig: expectedInputConfig,

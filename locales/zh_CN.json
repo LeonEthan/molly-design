@@ -3092,7 +3092,6 @@
   "design.files.notCommitted": "本次修改未应用到画稿。",
   "design.files.diagnostics": "画稿未更新：",
   "design.files.unavailable": "无法打开草稿。",
-  "design.files.workingFile": "工作稿可能已在本回合之后修改。",
   "design.files.openDraft": "打开草稿",
   "design.versionsLoading": "正在读取版本…",
   "design.versionsUnavailable": "无法读取版本历史",

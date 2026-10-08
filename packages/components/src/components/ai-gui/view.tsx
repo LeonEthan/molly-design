@@ -70,7 +70,7 @@ import {
   SESSION_IMAGE_ALLOWED_MIME_TYPES,
 } from '@molly/shared';
 import { AskUserQuestionCard } from '@/components/sessions/ask-user-question-card';
-import { DesignFileReceipt } from '@/components/sessions/design-file-receipt';
+import { DesignFileReceipt, hasDesignFileReceipt } from '@/components/sessions/design-file-receipt';
 import { PermissionRequestCard } from '@/components/sessions/floating-permission-request';
 import { CommentReferenceCard } from './comment-reference-card';
 import { VisualAnnotationReferenceCard } from './visual-annotation-reference-card';
@@ -507,7 +507,6 @@ export interface SessionChatStreamViewProps {
 const SessionChatActionContext = createContext<{
   sendMessage?: (message: ClientToServer) => void;
   openHtmlFile?: (file: SessionFilePayload) => boolean;
-  openFilePath?: (path: string) => void;
 }>({});
 const SessionImagePreviewContext = createContext<{
   openImagePreview: (imageKey: string) => void;
@@ -827,6 +826,7 @@ const shouldRenderAssistantFooter = ({
   showDuration: boolean;
 }): boolean => {
   if ((assistantActions?.length ?? 0) > 0) return true;
+  if (hasDesignFileReceipt(message.designOutcome)) return true;
   if (message.finished !== true) return false;
   const visibleContentItems = renderEntries.map((entry) => entry.content);
   return (
@@ -1712,9 +1712,8 @@ export const SessionChatStreamView = forwardRef<
       () => ({
         ...(sendMessage ? { sendMessage } : {}),
         ...(onOpenHtmlFile ? { openHtmlFile: onOpenHtmlFile } : {}),
-        ...(onFilePathClick ? { openFilePath: onFilePathClick } : {}),
       }),
-      [onFilePathClick, onOpenHtmlFile, sendMessage]
+      [onOpenHtmlFile, sendMessage]
     );
     const hasOnlyEmptyItem = items.length === 1 && items[0]?.type === 'empty';
 
@@ -2813,7 +2812,6 @@ const UserMessageRowView = ({
 }) => {
   const { t } = useTranslation();
 
-  const fileActions = useContext(SessionChatActionContext);
   // The RPC fast-path ACK overlays "delivered" before the entry's CRDT status
   // flip syncs back (the machine may run the whole turn before it can see the
   // entry to flip it).
@@ -3016,14 +3014,6 @@ const UserMessageRowView = ({
             </div>
           </div>
         </div>
-        {sessionMeta?.design ? (
-          <DesignFileReceipt
-            sessionId={sessionId}
-            machineId={sessionMeta.machineId}
-            outcome={message.designOutcome}
-            onOpenFile={fileActions.openFilePath}
-          />
-        ) : null}
         {/* While editing, the row's own actions (edit/pin/copy) would compete with
             the editor's Cancel / Save & resend — hide them until it closes. */}
         {hasTextContent && !isEditing ? (
@@ -3682,6 +3672,7 @@ const AssistantTurnFooter = ({
   fileDiffOverride,
   assistantActions,
   onFileDiffClick,
+  onOpenFile,
   showDuration,
   isTurnHovered,
   onFork,
@@ -3694,6 +3685,7 @@ const AssistantTurnFooter = ({
   fileDiffOverride?: readonly AssistantEditedFileEntry[];
   assistantActions?: AssistantMessageAction[];
   onFileDiffClick?: (turnId: string, filePath: string) => void;
+  onOpenFile?: (filePath: string) => void;
   showDuration: boolean;
   isTurnHovered: boolean;
   onFork?: (turnId: string, destination?: SessionForkDestination) => void;
@@ -3743,6 +3735,7 @@ const AssistantTurnFooter = ({
 
   return (
     <div className="flex flex-col gap-1">
+      <DesignFileReceipt outcome={message.designOutcome} onOpenFile={onOpenFile} />
       {showFinishedMetadata && fileDiffs.length > 0 ? (
         <AssistantEditedFiles
           files={fileDiffs}
@@ -4083,6 +4076,7 @@ const AssistantChatItem = memo(function AssistantChatItem({
             fileDiffOverride={fileDiffOverride}
             assistantActions={assistantActions}
             onFileDiffClick={onFileDiffClick}
+            onOpenFile={onFilePathClick}
             showDuration={content.showDuration}
             isTurnHovered={isTurnHovered}
             onFork={onFork}

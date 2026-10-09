@@ -47,3 +47,7 @@ Two DeepSeek flash runs of the Luckin redesign case on commit 9c4eb5fe, with the
 - **Run 2 (gate failed).** Options used the source plus one or two inspiration images. The Agent read "保持海报尺寸不变" (keep the poster size) as the untouched 800×600 default canvas instead of the attached 1126×1500 poster, so the options and the result are landscape. Within that canvas the reproduction is faithful, all copy lines are present, and it corrected drink labels the option had swapped. 7 image edits.
 
 Open follow-ups: the size to keep in a redesign is the supplied artwork's when the open canvas is an untouched default; option images could be copied to short names before embedding so paths are not retyped; the plate still loses the wordmark on the held cup.
+
+## Follow-up: canvas size and option names
+
+After the rerun, with owner approval: stage 1 settles the canvas size from the brief in order (a stated size or format; the artwork the request refers to, so a redesign keeps the redesigned work's size and a bounded edit keeps the current canvas; where the work will be seen) and asks when none settles a size that changes the composition. An empty canvas with no elements is a placeholder whose size means nothing; this covers briefs with no attached artwork, which a rule tied to attachments would not. The options message states the chosen size. Options shown to the user are copied to short names such as `media/option-a.png` before embedding, so the model never retypes a hashed path.

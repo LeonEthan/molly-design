@@ -90,14 +90,18 @@ by this package's build-time source manifest.
 
 The main graphic-design Skill owns the required nine-stage generative layered
 workflow ([Spec](../../specs/generative-layered-design-workflow.md)), its explicit
-task branches, reference-based research exception and completion claims.
-References supply techniques at the relevant step. Agents choose methods and
+task branches, reference-based research exception, design defaults (breakable
+starting points that double as the review checklist) and reporting rules, each
+stated once. References supply techniques at the relevant step and link back
+rather than restating rules; `artwork-format.md` lists what each element kind
+leaves editable. Agents choose methods and
 iterations within user constraints, follow stage dependencies, and return to
 native rendering and image reading after visual changes. The application does
 not enforce creative stages or review counts. Missing tools are described
 individually. `finalize` is optional and never a turn/commit gate; native review
 and the application's later save receipt remain separate observations.
-Skill prose and the bundled example teach `design.yaml` (`format: molly-canvas/1`) / `media/` with Bento `id` / `kind`. The image skill describes text generation and JSON data-URL edits with workspace
+Skill prose and the bundled examples (`examples/minimal`, and `examples/layered` with a
+transparent subject, scrim and grouped text) teach `design.yaml` (`format: molly-canvas/1`) / `media/` with Bento `id` / `kind`. The image skill describes text generation and JSON data-URL edits with workspace
 references, an optional mask and optional transparency/output format. Both use the user’s required model without a
 product default and return assets without committing artwork.
 
@@ -105,8 +109,10 @@ The browser research reference distinguishes inline observation screenshots from
 saved image assets. Replies cite observed source pages or confirmed local file
 paths; a screenshot response alone does not establish a saved reference file.
 
-The CLI staging/materialization integration test reads the delivered files, runs
-the bundled intake helper without finalize, and preserves user-edited materials
+The CLI staging/materialization integration test reads the delivered files,
+checks structure (stage headings, resolvable links and anchors, reachable
+references, rules stated once) rather than exact sentences, runs the bundled
+intake helper on both examples without finalize, and preserves user-edited materials
 on repeated sync.
 
 ## Build and test

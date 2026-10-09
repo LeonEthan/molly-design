@@ -1,0 +1,54 @@
+format: molly-canvas/1
+title: Harvest market poster
+size: [640, 800]
+elements:
+  - id: backdrop
+    kind: image
+    bounds: [0, 0, 640, 800]
+    src: media/backdrop.png
+    fit: cover
+  - id: subject
+    kind: image
+    bounds: [176, 96, 288, 288]
+    src: media/subject.png
+    fit: contain
+    shadow:
+      blur: 24
+      color: '#1A2B2240'
+      offset: [0, 12]
+  - id: copy-scrim
+    kind: shape
+    bounds: [0, 500, 640, 300]
+    shapeName: rect
+    fill:
+      type: gradient
+      gradientType: linear
+      angle: 180
+      stops:
+        - position: 0
+          color: '#0B1A1400'
+        - position: 1
+          color: '#0B1A14CC'
+  - id: headline
+    kind: text
+    groupId: copy
+    bounds: [48, 568, 544, 104]
+    text:
+      fontSize: 64
+      color: '#FFF8EC'
+      wrap: true
+      paragraphs:
+        - runs:
+            - text: 'Harvest market'
+              bold: true
+  - id: details
+    kind: text
+    groupId: copy
+    bounds: [48, 684, 544, 64]
+    text:
+      fontSize: 24
+      color: '#E9D8B8'
+      wrap: true
+      paragraphs:
+        - runs:
+            - text: 'Saturday 9–2 · Riverside Square'

@@ -1,108 +1,69 @@
 # Reconstructing a design from a reference image
 
-Read this reference only when the user supplies an image and asks for a
-reconstruction. The goal is a high-fidelity editable reconstruction within the
-platform's Active Profile, not an unconditional promise of pixel identity, and
-never the source image pasted back as a background.
-
-Also use [general-poster.md](general-poster.md) for composition judgment and
-[graphic-canvas-profile.md](graphic-canvas-profile.md) before choosing native
-element semantics. Follow the reconstruction branch and research rule in
-[the main Skill](../SKILL.md#required-workflow). Use
-[layered-workflow.md](layered-workflow.md) for complete raster-object techniques
-with the prescribed reference as the selected composition.
+Read this when the user supplies an image and asks for a reconstruction. The goal
+is a high-fidelity editable rebuild, not a promise of pixel identity, and never
+the source image pasted back as a background. The reconstruction branch and
+research rule are in [the main Skill](../SKILL.md#required-workflow); the
+reference serves as the selected composition. Use
+[layered-workflow.md](layered-workflow.md) for complete raster layers and
+[artwork-format.md](artwork-format.md#what-is-editable-today) for which element
+kinds to use.
 
 ## Establish reference geometry
 
-Read the reference's pixel dimensions first. Set canvas `size` to those pixels and
-keep the same aspect ratio unless the user requests a different output. Every
-element's closed rectangle stays inside that canvas: a block flush with the bottom
-edge uses `y = canvasH - h`. Molly admits dimensions from 1 through 4096
-inclusive. If the exact dimensions exceed that limit, rescale proportionally and
-report the change; never upscale a reference past the limit or substitute a habitual
-preset.
+Read the reference's pixel dimensions first. Set canvas `size` to those pixels
+unless the user asks for a different output. If a dimension exceeds 4096, scale
+proportionally and report the change; never upscale past the limit or substitute
+a habitual preset.
 
 ## Reference analysis helpers
 
-Choose available image-reading and analysis methods to suit the reference. The
-optional reference pack can supply dimensions, a coordinate grid, enlarged bands,
-and palette swatches. From this skill's directory:
+Use whatever image-reading and analysis tools suit the reference. The optional
+reference pack supplies dimensions, a coordinate grid, enlarged bands and palette
+swatches. From this skill's directory:
 
 ```sh
 node scripts/reference-pack.mjs pack <reference-image> <work>/inspect
 node scripts/reference-pack.mjs crop <reference-image> <x,y,w,h> <project>/media/<name>.png
 ```
 
-The pack writes `meta.json`, `grid.png`, `bands.png`, and `palette.png` for
-supported PNG input. Crops check image bounds and re-encode the selected region as
-PNG. These are aids; neither their use nor a particular number of inspections is
-required. Further measurement, sampling, or cropping may be useful at any point.
+The pack writes `meta.json`, `grid.png`, `bands.png` and `palette.png`; crops check
+image bounds and re-encode the region as PNG. The script handles non-interlaced
+8-bit gray/RGB/RGBA/palette PNG; for JPEG/GIF/BMP/WEBP it reports dimensions only,
+so make a PNG analysis copy or use your other image tools. Keep the original asset.
 
-This dependency-free script supports non-interlaced 8-bit gray/RGB/RGBA/palette
-PNG raster operations. JPEG/GIF/BMP/WEBP report dimensions only; other PNG
-encodings or formats may require a supported analysis copy for
-grid/bands/palette/crop. This script's limits do not limit the Agent's other image
-tools. Keep original assets and use other available tools directly when useful;
-report consequential uncertainty.
-
-Unclear wording, unavailable fonts, hidden geometry, and ambiguous layers are
-fidelity limits: preserve known content and report consequential assumptions.
+Unclear wording, unavailable fonts, hidden geometry and ambiguous layers are
+fidelity limits: preserve what you know and report consequential assumptions.
 
 ## Reconstruct as editable objects
 
-Map each visible object to a semantic element only when the Active Profile
-declares the needed render behavior and edit level:
+- Rebuild legible text as `kind: text`.
+- Redraw flat blocks, rules and simple geometry as `shape` or `line`.
+- Rebuild real tables as `table`, real data graphics as `chart` and simple
+  symbols as `icon` when the offline set has a match.
+- Rebuild photographs, product shots, textures and scenes as separate image
+  layers. With image tools, regenerate each object completely from the reference,
+  because a crop keeps holes where other objects overlapped it. Without them,
+  use tight crops and report the holes and merged objects this leaves.
+- Use a separately supplied delivery asset (logo, product photo) as supplied.
+- Keep raster aspect ratios faithful.
 
-- rebuild legible text as `kind: text`; use separate elements only where the
-  active text model requires it;
-- redraw flat blocks, rules, and simple geometry with supported editable
-  primitives (`kind: shape` or `kind: line`);
-- rebuild photographs, product shots, textures, scenes, and other genuinely
-  raster objects as separate image layers under `media/`. With image tools,
-  regenerate each object completely from the reference (see
-  [layered-workflow.md](layered-workflow.md)), because a crop keeps holes where
-  other objects overlapped it. Without them, extract tight crops and report the
-  holes and merged objects this leaves;
-- use a supplied delivery asset (a logo or product photo provided separately)
-  as supplied rather than regenerating it;
-- keep raster aspect ratios faithful and use supported `fit` or `crop` behavior;
-- do not claim native icons, tables, charts, masks, or other compound semantics
-  merely because some external catalogue documents them.
-
-A layer may contain photographic content. Do not use a large crop or layer
-containing rebuildable text or flat graphics to simulate editability. If the required
-semantic element is not Active, choose an explicitly supported editable
-decomposition or report the limitation.
+Never use a large crop or layer containing rebuildable text or flat graphics to
+fake editability. If something cannot be rebuilt with the kinds available, report
+it.
 
 ## Fidelity targets
 
-Match the observable reference as closely as the evidence and Active Profile
-permit:
+Match the observable reference as closely as the evidence permits:
 
-- canvas ratio, margins, element bounds, alignment, and z-order;
-- sampled colors, repeated palette roles, and background treatment;
-- type scale, weight, alignment, case, line breaks, and density;
-- image selection, crop, subject scale, and placement relative to text;
-- borders, shadows, radii, paths, and other effects only where supported end to
-  end.
+- canvas ratio, margins, element bounds, alignment and z-order;
+- sampled colors, palette roles and background treatment;
+- type scale, weight, alignment, case, line breaks and density;
+- image selection, crop, subject scale and placement relative to text;
+- borders, shadows, radii and paths.
 
-Do not invent off-style decoration to fill uncertain regions. Keep a concise
-record of material deviations that affect fidelity or editability.
-
-## Visual fidelity
-
-The optional `scripts/finalize.mjs` helper checks structure and assets; it does not establish
-visual fidelity. When rendering with `molly_render_preview`, open the resulting
-PNG with an actual image-reading tool. Useful questions include:
-
-- Is there unintended stretching, blur, clipping, or crop drift?
-- Is text readable, with key subjects, logos, and facts visible?
-- Are alignment, spacing, layering, and color consistent with the reference?
-- Are missing objects and material fidelity differences understood?
-
-Choose useful inspection methods and iterations within the user's constraints.
-Follow the main workflow's native review and repair loop after visual changes.
-If `molly_render_preview` is absent, only that tool is unavailable; assess other
-image-reading and rendering capabilities actually available to your Agent.
-Report actual inspection and remaining source-evidence or capability limits
-honestly.
+A faithful reconstruction follows the reference, even where it departs from the
+[design defaults](../SKILL.md#design-defaults). Do not invent off-style decoration
+to fill uncertain regions. In review, look for stretching, blur, clipping, crop
+drift, unreadable text and missing objects, and keep a short record of material
+deviations for the report.

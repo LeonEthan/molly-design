@@ -9,27 +9,25 @@ metadata:
 
 ## Definition
 
-Create one static graphic canvas as editable source for Molly's Bento-derived
-editor and renderer. The deliverable is a self-contained YAML artwork project;
-a composition draft, reference image or flattened render cannot replace it.
-
-Write in the design authoring directory supplied with the turn:
+Create one static graphic canvas that a person can keep editing in Molly. The
+deliverable is a self-contained YAML artwork project in the design authoring
+directory supplied with the turn:
 
 ```text
 design.yaml          # molly-canvas/1: size, background, elements
 media/               # local raster and font assets
 ```
 
-This directory may differ from Agent cwd. Molly collects these files after your
-turn and independently checks whether it can save the editable artwork. The separate
-`design-current/` path is application input, never a submitted draft; it may be
-absent until synchronized. You do not write `design.json` yourself. Leftover
-`.pptd` files are not an authoring entry.
+This directory may differ from Agent cwd. A composition draft, reference image or
+flattened render never replaces the project. The separate `design-current/` path
+is application input, not a draft you submit; you never write `design.json`, and
+leftover `.pptd` files are not an authoring entry. Molly collects and checks the
+project after your turn ends.
 
 ## Preparation and task branch
 
-Read the user's supplied content and references, locate the authoring directory,
-and establish which task applies:
+Read the user's content and references, locate the authoring directory, and pick
+the branch:
 
 | Task                                       | Composition and layer baseline                                                                                      |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
@@ -37,219 +35,202 @@ and establish which task applies:
 | User-prescribed template or reconstruction | Inspect the specified reference and use it as the selected composition; rebuild the needed editable elements.       |
 | Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the composition and layer baseline. |
 
-All branches follow the workflow below, including its single research rule.
-Using a user-prescribed result fulfills that stage's branch action; it does not
-authorize omitting other stages. A bounded edit does not regenerate every layer.
-A style reference offered as inspiration for a new composition remains a
-new-design task.
+Every branch follows all nine stages; a prescribed composition fulfils stage 3,
+it does not skip the others. A bounded edit does not regenerate every layer. A
+style reference offered as inspiration for a new composition is still a new
+design.
 
 Determine capabilities from the tools actually available, including MCP tools
-that are callable only from `codemode` scripts. Before image calls, read the
-`imagegen` Skill for the configured model, inputs and paid-call behavior. Follow
-the user's budget and scope throughout drafting and repair. When a required
-action is blocked, state the limitation and what remains incomplete; tool
-absence or a budget limit does not establish that the action was completed.
-Assess other available capabilities without claiming they are equivalent.
+callable only from `codemode` scripts. Before image calls, read the `imagegen`
+Skill. Stay within the user's budget and scope. When an action is blocked by a
+missing tool, network or budget, say what remains incomplete; a missing tool
+never counts as a completed step, and other available tools are not
+automatically equivalent.
 
-Keep temporary scripts, dependency environments and caches in the session workspace
-outside the collected artwork directory, or in the shell's supplied `$TMPDIR`.
-`$TMPDIR`, including files Pi saves for truncated tool output and images shown
-from `codemode` scripts, is removed when the Agent's worker exits; copy anything
-a later turn or the artwork needs into the workspace.
-Prefer shipped helpers. Read a helper's `--help` before constructing its command;
-use documented field lookups rather than searching the bundled library source.
-Correct argument errors before attributing failures to the sandbox. Do not use
-global or `pip install --user` installs for artwork preparation.
+Keep temporary scripts, environments and caches outside the authoring directory:
+in the session workspace or the shell's `$TMPDIR`. `$TMPDIR` (including files Pi
+saves for truncated output and images shown from `codemode`) is removed when the
+worker exits, so copy anything a later turn needs into the workspace. Prefer the
+shipped helpers and read a helper's `--help` before building its command. Fix
+argument errors before blaming the sandbox. Never install globally or with
+`pip install --user`.
 
 ## Required workflow
 
-Follow these nine stages and their dependencies. Choose techniques and useful
-iterations within the user's constraints. Repairs return to the affected stage;
-after visual changes, repeat native review and consistency checking. The helper
-scripts are optional methods, not application submission or turn-ending gates.
+Follow these nine stages and their dependencies. Choose techniques and iterations
+within the user's constraints. A repair returns to the stage it affects; after
+any visual change, render and review again. Helper scripts are optional methods,
+never gates.
 
 ### 1. Understand intent
 
-Establish purpose, audience, output size, exact copy, supplied assets and design
-constraints. Separate verified facts from assumptions. Read
-[references/general-poster.md](references/general-poster.md) for a new design or
-an overall composition pass. Read
-[references/replication.md](references/replication.md) for reconstruction.
+Establish purpose, audience, output size, exact copy, supplied assets and
+constraints. Separate verified facts from assumptions; ask only about blocking
+gaps. Distinguish **delivery assets** (a supplied logo or product photo that must
+appear as supplied) from **design references** that only guide appearance.
 
-Distinguish **delivery assets**, such as a supplied logo or product photo that
-must appear as supplied after any requested edit, from **design references**
-that guide appearance. Resolve blocking missing facts with the user; state
-nonblocking assumptions. Continue with an identified task branch and the content
-and visual constraints that the result must preserve.
+Read [references/general-poster.md](references/general-poster.md) for a new design
+or a composition pass, and [references/replication.md](references/replication.md)
+for a reconstruction.
 
 ### 2. Inspect references and research
 
-Before selecting or creating the composition, inspect design-site visuals such
-as Pinterest unless **all** of these conditions hold:
+**Research rule.** Before choosing or creating a composition, inspect relevant
+design-site visuals such as Pinterest. Skip this only when the user told you to
+follow a concrete template or reference without new inspiration, you have
+inspected that target and it answers the visual decisions, and the user did not
+also ask for research. The same rule applies to new designs, reconstructions and
+local edits.
 
-- the user explicitly identifies a concrete template or reference target;
-- the user's instruction calls for following that target without additional
-  design inspiration;
-- you have actually inspected the target and it supports the requested visual
-  decisions;
-- the user has not also requested research.
+| Request                                                   | Research?                |
+| --------------------------------------------------------- | ------------------------ |
+| "Reproduce this template, replace only the copy"          | No, after you inspect it |
+| "Use this mood but redesign the composition"              | Yes                      |
+| A topic, style word, logo, product photo or your own idea | Yes                      |
+| An attachment you have not opened                         | Yes                      |
+| The currently open artwork, by itself                     | Yes                      |
 
-“Reproduce this template and replace only the copy” expresses the exception;
-no special phrase is needed. A topic, broad style label, logo, product photo,
-unexamined attachment, currently open artwork or your own concept does not
-establish it. “Use this mood but redesign the composition” still requires
-research. Local edits and reconstruction use this same rule.
-
-When research is required, read
-[references/browser-research.md](references/browser-research.md), browse relevant
-visuals, and connect the observed layout, typography or palette to the design
-direction. Search snippets alone do not constitute visual research. Briefly
-identify the sources and useful observations, or the inspected user target and
-why the explicit exception applies. Keep the user's direction as the basis.
-
-Respect an explicit user prohibition on networking and report the resulting
-research limitation. Tool absence or network failure is a blocker, not a
-reference-based exception. Necessary factual verification, including dates,
-remains separate from inspiration research.
+When research applies, read
+[references/browser-research.md](references/browser-research.md), look at the
+actual images (search snippets are not visual research), and connect what you saw
+in layout, type or palette to the direction. The user's own direction stays the
+basis. If the user forbids networking, respect it and report the gap; a missing
+browser or network failure is a blocker, not an exception. Fact checks such as
+event dates are separate from inspiration research.
 
 ### 3. Select a composition
 
-For an open brief, generate and inspect several full-canvas drafts that differ
-in composition or concept within the user's budget. Select one and explain its
-message, hierarchy, room for copy and suitability for independent layers. For a
-prescribed template, reconstruction or bounded edit, inspect and adopt the
-specified composition rather than generating unrelated alternatives.
-
-Read [references/layered-workflow.md](references/layered-workflow.md) when
-generating drafts or image layers. Continue with an inspected composition that
-guides the editable reconstruction; the draft itself never becomes the artwork
-or a near-complete background.
+For an open brief, generate and inspect several full-canvas drafts that differ in
+composition or concept, within budget, and choose one for its message, hierarchy,
+room for copy and how well it splits into layers. For a template, reconstruction
+or bounded edit, adopt the prescribed composition instead of inventing
+alternatives. Read [references/layered-workflow.md](references/layered-workflow.md)
+when generating drafts or layers. A draft guides the rebuild; it never becomes
+the artwork or a near-complete background.
 
 ### 4. Prepare complete layers
 
-Read [references/graphic-canvas-profile.md](references/graphic-canvas-profile.md)
-before choosing element semantics or promising editability. Plan layers by what
-a person should be able to edit independently. Regenerate the needed raster
-objects from the selected composition, including hidden portions; inspect each
-result for completeness. Foreground objects that need transparent isolation
-must have real alpha. Backgrounds can remain opaque.
-
-Retain supplied delivery assets, supported native shapes and unaffected existing
-layers. Use the techniques in the layered reference for isolation, alpha and
-bounds checks. Continue with the required complete assets and supported editable
-elements, reporting any missing parts or capability limits.
+Plan layers by what a person would edit independently. Regenerate the needed
+raster objects completely from the chosen composition, including hidden parts,
+and inspect each one. Foreground objects that need isolation must have real
+alpha; backgrounds can remain opaque. Keep supplied delivery assets as supplied,
+use native shapes for flat geometry, and keep unaffected existing layers. Report
+missing parts.
 
 ### 5. Recompose the artwork
 
-Before writing, read [references/artwork-format.md](references/artwork-format.md)
-and [examples/minimal/design.yaml](examples/minimal/design.yaml). Assemble
-`design.yaml` with stable `id` / `kind`, actual geometry, correct stacking and
-local `media/` references. Preserve fields and unaffected elements when editing.
-Check that every referenced asset is present and within admission limits.
-
-You may write `design.yaml` directly. The format reference explains optional
-field lookup, validation and migration helpers. Continue with a complete editable
-project; parsing alone does not establish rendering or a saved artwork.
+Read [references/artwork-format.md](references/artwork-format.md) before writing;
+it also lists what is editable today. Copy field shapes from
+[examples/minimal/design.yaml](examples/minimal/design.yaml) and the layered
+[examples/layered/design.yaml](examples/layered/design.yaml). Write `design.yaml`
+with stable `id` / `kind`, real geometry, correct stacking and local `media/`
+references. When editing, preserve existing fields and unaffected elements.
 
 ### 6. Check text representation
 
-For each piece of copy, choose native text, supported vector geometry or raster
-lettering deliberately. Keep ordinary copy editable; report any edit limitation.
-Register actual custom-font files and matching descriptors using the format
-reference. Preserve the selected font's complete glyph coverage so later text
-edits remain supported; use [font preparation](references/font-preparation.md)
-when a font needs conversion. On the first renderable draft, test key fonts through the native
-renderer before investing in detailed typography. Font presence or successful
-structural validation does not establish font loading.
+Decide for each piece of copy between native text, vector geometry and raster
+lettering; ordinary copy stays native text. Register real font files as the format
+reference describes, keep each face's complete glyph set, and check Chinese,
+Japanese or Korean copy against the font section there. Render the first usable
+draft early to confirm key fonts load before detailed typography.
 
 ### 7. Review and adjust
 
-Render the current draft with `molly_render_preview` and open the returned PNG
-with an actual image-reading tool. Inspect the whole composition and relevant
-details for hierarchy, placement, occlusion, edges, typography and readability.
-Correct the source or affected assets, then render and read the updated version.
-Continue only with a review of the current visual state or an explicit account
-of the blocked review.
+Render the current draft with `molly_render_preview` and open the PNG with an
+actual image-reading tool. Look at the whole canvas and the details, and go
+through [Design defaults](#design-defaults) as the review checklist. Fix the
+source or the affected asset, then render and read again. Repeat until the
+current render passes or you can name what is still wrong.
 
-If `molly_render_preview` is absent, only that tool is unavailable; assess the
-actual rendering and image-reading capabilities. External approximations may
-help diagnosis but do not establish that Bento renders the artwork. Use known
-asset or font diagnostics to fix the cause before another preview; an unknown
-tool error is not evidence of a desktop connection failure.
+If `molly_render_preview` is absent, only that tool is unavailable: use the
+rendering and image-reading tools you do have, and report that Molly's renderer
+was not checked. Another renderer does not prove how Molly draws the work. Fix
+known asset or font errors before rendering again; an unknown tool error is not
+evidence of a desktop connection failure.
 
 ### 8. Check consistency
 
-Compare the current result with user copy, facts, delivery assets, reference
-constraints and intent. Check that local edits preserved unaffected work.
-Resolve deviations through the affected earlier stage; visual corrections
-require another current native preview. Account for every required item and
-state remaining fidelity, fact or editability limitations.
+Compare the current render with the user's copy, facts, delivery assets,
+reference constraints and intent, and check that a local edit kept everything
+else. Compare it with the composition you chose or were given: if you will call
+the result a redesign or a new layout, the layout must visibly differ from the
+starting artwork. Fix deviations at the stage that caused them and review the
+new render.
 
 ### 9. Polish and report
 
-Make final refinements within scope and review the resulting current version.
-Keep the complete authoring files in the supplied directory. Name the artwork in
-the `design.yaml` `title`: two to five words in the user's language naming the
-subject and format, such as “Autumn jazz night poster”. Keep an existing title
-unless the subject changed. Molly may show it as the conversation name; a name
-the user set always wins.
+Make final refinements within scope and review that version. Keep the complete
+project in the authoring directory. Set the `design.yaml` `title` to two to five
+words in the user's language naming the subject and format, such as "Autumn jazz
+night poster"; keep an existing title unless the subject changed. Molly may show
+it as the conversation name, and a name the user set always wins. Then reply as
+[Reporting](#reporting) describes.
 
-Then reply as described in [Reply to the designer](#reply-to-the-designer).
-Human judgment establishes visual quality; Agent review is advisory. Describe
-your own image inspection as Agent review, never human or manual acceptance
-unless a person actually performed and reported that check.
+## Design defaults
 
-## Reply to the designer
+Starting points tied to failures seen in real runs. Follow them unless the brief,
+a prescribed reference or a stated design reason calls for something else; say so
+briefly when you depart from one in a new design. Use them as the stage 7
+checklist.
 
-Write in the user's language and size the reply to the request. A bounded edit
-(a line of copy, a colour, a move, a resize) gets one or two sentences saying what
-changed, and nothing more. A new design or a redesign may add a short note on the
-direction when it helps the user judge the result. Mention editability when
-requested or when it differs from what the user would expect. Offer next tweaks
-only when requested or when a concrete decision remains.
+- **Focal subject.** One element is clearly largest. A hero subject usually spans
+  about 35–60% of the canvas's short edge; larger than that, it crowds the copy
+  and margins.
+- **Copy never covers what matters.** Keep text off faces, hands, products and
+  logos, and off the subject's key detail. Move or resize the copy or subject
+  instead of overlapping them.
+- **Margins.** Keep text and key content at least 5% of the short edge from every
+  canvas edge (about 8% for print). Full-bleed imagery may run to the edge.
+- **Type scale.** Use at most three text sizes for a poster: headline, support,
+  detail. Each step down is roughly 0.5–0.65 of the one above; body or detail text
+  stays readable at the real output size.
+- **Text over images.** Place copy on a calm area of the image, or add a scrim (a
+  gradient or translucent shape behind the text) or a solid block. Check contrast
+  in the render, not by assumption.
+- **Alignment.** Choose one alignment axis for a text group and keep its edges on
+  it. Group related copy with `groupId` so it moves together.
+- **Reading order.** The render should read in the intended order at thumbnail
+  size: subject, headline, then details.
 
-Do not narrate the steps you took (rendering, previewing, checking, saving), and
-do not announce that nothing is wrong: if there is no limit to report, say nothing
-about limits. Do not say that you previewed, checked or confirmed the result
-unless the check found a problem or could not be done, and do not list what stayed
-unchanged. Mention a side effect only when it changes how the result looks, such
-as a size reduced to fit.
+## Reporting
 
-For a bounded edit, a good reply is a single short sentence: “Done: the headline
-now reads “Jazz Evening”, a little smaller so it fits.” When there is nothing to
-add, “Done.” is enough.
+Write in the user's language and size the reply to the request.
 
-Always report unmet requirements, material assumptions, blocked steps and
-concerns from your review, including flattened or otherwise limited content.
-Keep this explanation proportionate to the issue; brevity never hides a limit.
+- **Bounded edit:** one or two sentences saying what changed, for example "Done:
+  the headline now reads "Jazz Evening", a little smaller so it fits." When there
+  is nothing to add, "Done." is enough.
+- **New design or redesign:** embed the chosen draft (and the alternatives you
+  want the user to see) with Markdown image syntax, using the `absolutePath`
+  returned by `molly_image`, for example `![Draft A](/abs/media/a.png)`; wrap
+  paths containing spaces in angle brackets. Give one line on why you chose it,
+  name the research sources briefly, and add a short note on the direction only
+  when it helps the user judge the result.
+- **Always report**, proportionately: unmet requirements, material assumptions,
+  blocked steps, departures from the design defaults, flattened or otherwise
+  non-editable content, and concerns from your review.
 
-Name research sources briefly. Leave out file paths, YAML fields, element IDs,
-tool and script names, commands and diagnostic codes unless the user asks or a
-limit cannot be explained without them; describe them in plain words instead.
-The exception is a Markdown image embed that shows a draft to the user: it must
-include the draft path, preferably the `absolutePath` from `molly_image`, as
-`references/layered-workflow.md` requires. Paths still stay out of ordinary prose.
-Do not list every workflow stage or check.
+Do not narrate your steps, list stages or checks, list what stayed unchanged, or
+say that something was previewed or confirmed unless the check found a problem or
+could not be done. Mention editability only when asked or when it differs from
+what the user would expect. Offer next tweaks only when asked or when a concrete
+decision remains. Leave out file paths, YAML fields, element IDs, tool and script
+names, commands and diagnostic codes unless the user asks or a limit cannot be
+explained without them; the draft image embeds above are the only paths in a
+normal reply.
 
-## Completion reporting
-
-Claim only what you observed, in plain words, and state the gap when you could not
-preview or verify something that matters to the user. A successful check needs no
-mention. Do not separate prepared files, a previewed draft and a saved artwork
-unless the difference matters to the user. Molly's final
-collection runs after your turn ends: do not wait for that same turn's save
-receipt or anticipate its success. A normal turn may still be collected under
-existing schema, asset and version rules when you report a visual limitation.
-Human edit/save/reopen/export is a separate acceptance observation, not something
-implied by your preview.
+Never claim a check, rendering or save that did not happen. Your image
+inspection is Agent review, not human acceptance; human judgment decides visual
+quality. Molly collects and saves the project after your turn ends, so do not wait
+for or predict that save, and do not describe a successful structural check as a
+saved or rendered artwork. A turn with a reported visual limitation can still be
+collected normally.
 
 ## Boundaries
 
 - One static canvas per project, with explicit dimensions from 1 through 4096.
-  Preserve the requested ratio when proportionally reducing a larger source.
-- Active support means the edit/render/save lifecycle declared by the canvas
-  profile. Use admitted semantics and local assets; report unsupported behavior.
+  Preserve the requested ratio when reducing a larger source.
 - Presentation narratives, slide decks, masters, speaker notes, transitions,
-  animation and PPT/PPTX import or export are outside this skill.
-- Image operation parameters and provider behavior belong to `imagegen`;
-  this entry owns the design workflow and its task branches.
+  animation and PPT/PPTX import or export are outside this skill, as are audio,
+  video, scripts, web embeds, remote assets and remote fonts.
+- Image parameters and provider behavior belong to `imagegen`; this Skill owns the
+  design workflow and its task branches.

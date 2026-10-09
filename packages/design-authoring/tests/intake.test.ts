@@ -3,7 +3,7 @@
  */
 
 import { deflateSync } from 'node:zlib';
-import { copyFileSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -225,41 +225,35 @@ describe('intakeAuthoring', () => {
   });
 });
 
-describe('bundled minimal example', () => {
-  it('is valid YAML artwork that intakeAuthoring accepts', () => {
-    const exampleRoot = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'skills',
-      'graphic-design',
-      'examples',
-      'minimal'
-    );
+describe('bundled examples', () => {
+  const examplesRoot = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'skills',
+    'graphic-design',
+    'examples'
+  );
+
+  it.each([
+    ['minimal', ['design.yaml', 'media/swatch.png'], ['image', 'shape', 'text']],
+    [
+      'layered',
+      ['design.yaml', 'media/backdrop.png', 'media/subject.png'],
+      ['image', 'image', 'shape', 'text', 'text'],
+    ],
+  ])('%s is valid YAML artwork that intakeAuthoring accepts', (name, files, kinds) => {
     const dir = mkdtempSync(path.join(tmpdir(), 'molly-example-'));
-    mkdirSync(path.join(dir, 'pages'));
-    mkdirSync(path.join(dir, 'media'));
-    copyFileSync(path.join(exampleRoot, 'design.yaml'), path.join(dir, 'design.yaml'));
-    copyFileSync(
-      path.join(exampleRoot, 'media', 'swatch.png'),
-      path.join(dir, 'media', 'swatch.png')
-    );
+    cpSync(path.join(examplesRoot, name), dir, { recursive: true });
     const snapshot = collectAuthoring(dir);
-    expect([...snapshot.keys()].sort()).toEqual(['design.yaml', 'media/swatch.png']);
-    const manifest = new TextDecoder().decode(snapshot.get('design.yaml'));
-    const page = manifest;
-    expect(manifest).not.toMatch(/version:\s*v[23]/);
+    expect([...snapshot.keys()].sort()).toEqual(files);
+    const page = new TextDecoder().decode(snapshot.get('design.yaml'));
+    expect(page).not.toMatch(/version:\s*v[23]/);
     expect(page).not.toMatch(/\belementId\b|\belementType\b/);
-    expect(page).toMatch(/\bid:\s/);
-    expect(page).toMatch(/\bkind:\s/);
     const result = intakeAuthoring('design.yaml', snapshot);
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
-    expect(result.document.elements.length).toBeGreaterThan(0);
-    expect(
-      result.document.elements.every(
-        (el) => typeof el.id === 'string' && typeof el.kind === 'string'
-      )
-    ).toBe(true);
+    expect(result.document.elements.map((el) => el.kind).sort()).toEqual(kinds);
+    expect(result.document.elements.every((el) => typeof el.id === 'string')).toBe(true);
   });
 });
 

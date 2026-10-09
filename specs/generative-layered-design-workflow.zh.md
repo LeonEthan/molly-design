@@ -1,7 +1,7 @@
 # 生成式分层设计：任务与方案
 
-Status: approved
-Approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
+Status: draft
+Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
 Previous workflow approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
 Previous approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
@@ -25,7 +25,7 @@ Translation: current
 6. **文字处理检查**：判断哪些文字采用可编辑文本，哪些适合保留为图片或矢量。
 7. **整体审视与调整**：通过 Bento 渲染当前构图并实际读取返回图片，重新生成或编辑需要调整的图层。视觉修改后须再次原生预览；外部近似合成仅作辅助证据。
 8. **一致性检查**：核对用户素材、文案和设计意图，使用图片模型或画稿编辑修正偏差。
-9. **最终检查与打磨**：完善整体效果，如实说明已完成检查和剩余偏差，区分已准备的创作文件、已原生审视的当前草稿，以及由应用确认保存的作品。
+9. **最终检查与打磨**：完善整体效果，回复篇幅与需求相称。不得声称未发生的检查、渲染或保存。始终说明未满足的要求、受阻步骤和剩余偏差；仅当差异对用户重要时，才区分已准备的创作文件、已原生审视的当前草稿和由应用确认保存的作品。
 
 开放需求执行全部九个阶段。用户指定模板或复刻时，已查看的参考承担选定构图的作用；局部修改以用户指定的现稿作为构图与图层基线。这些是明确的分支动作，不是宽泛的阶段豁免。各分支使用相同调研规则，保留未受影响的工作，并在修改后回到原生审视。
 
@@ -36,7 +36,7 @@ Translation: current
 - 参考图复刻同样采用完整图层再生成，可直接以参考图代替草稿探索；局部修改围绕用户要求展开。
 - 创作检查、原生预览与最终收集应对受支持素材采用一致的准入判断。对已知的内置素材大小、格式、字体加载和渲染错误提供安全且可指导修复的诊断；通用外部错误不能被当作桌面连接失败的证据。在精细排版前，利用首个可渲染草稿检查自定义字体。不增加静默字体转换或替换。
 - 原生审视和最终保存是不同的观察。收集发生在 Agent 自然结束之后，因此 Agent 如实说明已经验证的事项，不等待或预先断言本轮稍后产生的保存回执。部分结果仍可按现有结构、素材与版本规则被收集；视觉限制不是应用保存门禁。不能因外部合成图看起来可接受就把原生审视失败改称成功。
-- 区分交付素材与参考图，按独立编辑价值决定分层粒度。保真、补全、阴影与蒸汽如何分层等开放问题由 Agent 判断，不穷举固定规则，也不增加重绘素材申请流程。
+- 区分交付素材与参考图，按独立编辑价值决定分层粒度。保真、补全、阴影与蒸汽如何分层等开放问题由 Agent 判断，不穷举固定规则，也不增加重绘素材申请流程。Skill 可以推荐源自实际失败的可打破设计默认值（主体比例、边距、字号层级、文案位置及图上文字可读性），并将其作为审视清单；Agent 可以说明理由后偏离，应用不强制执行任何一项。
 - 提供并排、叠层、局部差异和明暗底色等对比经验，且须能用随包工具执行：原生渲染加读图，以及下文的 Node 辅助脚本。指引不得依赖 Python 等用户机器上可能缺失的运行时。视觉质量由人判断，不以像素分数替代。
 - **工具错误沿用 Pi 原生行为。** 图片调用失败或结果未知时，作为普通工具错误返回 Agent，由 Agent 决定下一步。应用不为工具错误额外增加停止运行、重试栅栏或自行重试。崩溃或重启后恢复运行时仍不重放已发出的调用；这属于会话恢复，而非工具错误处理。
 - **不弹出权限提示。** 代码能力是核心设计能力。自 2026-10-01 起，内置 Molly 运行沿用 Pi 不做权限检查的默认行为，并以确定性的 `cc-safety-net` 底线不弹提示地拦截已知破坏性命令（[harness Spec](molly-embedded-pi-harness.zh.md)）。设计师无需选择权限模式；逐次询问模式保持退役（[#10](https://github.com/LeonEthan/molly-design/issues/10)）。先前的自动审批模式已被取代。
@@ -78,6 +78,7 @@ Translation: current
 
 - [PR #17 概要](https://github.com/LeonEthan/molly-design/pull/17)记录最初获批范围。真实图片接口、透明裁剪、桌面编辑及内置 Kimi 实验的详细记录仅留本地；后续验收摘要见下文。
 - [设计平台合同](graphic-design-platform.zh.md)：编辑、持久化和 Agent 生命周期边界。
+- [2026-10-09 Skill 优化记录](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.zh.md)说明本次草案修订：回复篇幅相称与设计默认值。尚未经设计质量评测运行验证。
 - 仅保留本地的验证记录分别说明实施前检查、已落地修改及之后的验收运行。接口测试通过不代表端到端或视觉验收通过。
 
 最新完整运行完成设计网站调研、分层创作、两次原生预览读图和应用保存，人工审批提示为零。

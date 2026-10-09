@@ -1,7 +1,7 @@
 # Generative layered design: task and plan
 
-Status: approved
-Approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
+Status: draft
+Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
 Previous workflow approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
 Previous approval: [2026-09-25 owner approval](../.github/spec-approvals.md#2026-09-25-generative-layered-design)
@@ -25,7 +25,7 @@ This revision requires the Agent to follow the Skill workflow, using the user's 
 6. **Text handling check:** decide which text becomes editable text and which is better represented as an image or vector.
 7. **Holistic review and adjustment:** render the current composition through Bento and actually inspect the returned image, then regenerate or edit layers that need adjustment. Visual changes require another native preview; external approximations are supplementary evidence.
 8. **Consistency check:** compare against supplied materials, copy and intent; correct deviations with the image model or artwork edits.
-9. **Final review and polish:** refine the result and accurately report completed checks and remaining deviations. Distinguish prepared authoring files, a natively reviewed current draft, and an artwork whose save is confirmed by the application.
+9. **Final review and polish:** refine the result and report in proportion to the request. Never claim a check, render or save that did not happen. Always report unmet requirements, blocked steps and remaining deviations; distinguish prepared authoring files, a natively reviewed current draft and an application-confirmed save only when that difference matters to the user.
 
 Open briefs follow all nine stages. For a user-prescribed template or reconstruction, the inspected reference serves as the selected composition; bounded edits use the prescribed existing artwork as the composition and layer baseline. These are explicit branch actions, not blanket stage exemptions. Each branch uses the same research rule, preserves unaffected work and returns to native review after changes.
 
@@ -36,7 +36,7 @@ Open briefs follow all nine stages. For a user-prescribed template or reconstruc
 - Reference reconstruction also regenerates complete layers; the supplied image can replace draft exploration. Local edits remain focused on the user's request.
 - Authoring checks, native preview and final collection must agree on supported asset admission. Known built-in asset-size, format, font-load and rendering failures provide safe, actionable diagnostics; a generic external error must not be treated as proof of a desktop connection failure. Check custom fonts on the first renderable draft before detailed typography. No silent font conversion or substitution is added.
 - Native review and final saving are different observations. Collection follows the Agent's natural end, so the Agent reports what it has verified without waiting for or anticipating that turn's later save receipt. A partial result may still be collected under existing schema, asset and version rules; a visual limitation is not an application save gate. Never relabel a failed native review as successful because an external composition looks acceptable.
-- Distinguish delivery assets from design references and choose layer granularity by independent editing value. Leave fidelity, completion, shadow/steam grouping and other open choices to the Agent, without exhaustive case rules or an asset-redraw approval process.
+- Distinguish delivery assets from design references and choose layer granularity by independent editing value. Leave fidelity, completion, shadow/steam grouping and other open choices to the Agent, without exhaustive case rules or an asset-redraw approval process. The Skill may recommend breakable design defaults drawn from observed failures (focal scale, margins, type scale, copy placement and legibility over images) and use them as the review checklist; the Agent may depart from them with a reason, and the application enforces none.
 - Teach side-by-side, overlay, local-difference and light/dark-background comparisons that are executable with shipped tools: native render plus image reading, and the Node helper below. Guidance must not depend on Python or other runtimes absent from a user's machine. Human judgment establishes visual quality; pixel scores do not replace it.
 - **Tool errors follow Pi's native behavior.** A failed or uncertain image call returns to the Agent as an ordinary tool error, and the Agent decides what to do next. The application adds no run stop, retry fence or retry of its own for tool errors. Restoring a crashed or restarted run still never replays an already-dispatched call; that is session recovery, not tool-error handling.
 - **No permission prompts.** Code execution is a core design capability. Since 2026-10-01 built-in Molly runs use Pi's default of no permission checks, with the deterministic `cc-safety-net` floor that blocks known destructive commands without prompting ([harness Spec](molly-embedded-pi-harness.md#models-credentials-and-permissions)). Designers do not choose a permission mode; the per-call Ask mode stays retired ([#10](https://github.com/LeonEthan/molly-design/issues/10)). The earlier auto-review mode is superseded.
@@ -82,6 +82,7 @@ Turn-length, token and cost optimization; automatic denoising or placement; dedi
 
 - The [PR #17 summary](https://github.com/LeonEthan/molly-design/pull/17) records the approved initial scope. Detailed image API, transparent-trim, desktop-editing and embedded-Kimi experiments remain in local-only records; later acceptance is summarized below.
 - [Design platform contract](graphic-design-platform.md): editing, persistence and Agent lifecycle boundaries.
+- The [2026-10-09 skill refresh note](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.md) records this draft revision: proportionate reporting and design defaults. It is not yet validated by design-quality evaluation runs.
 - Local-only validation records separate pre-implementation inspection, landed changes and acceptance runs. Passing interface tests does not establish end-to-end or visual acceptance.
 
 The latest complete run performed design-site research, layered authoring, two

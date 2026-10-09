@@ -116,6 +116,61 @@ it('keeps duplicate model IDs separated by connection and leaves first use unsel
   expect(projectEmbeddedHarnessCatalog(catalog, []).models).toEqual([result.models[0]]);
 });
 
+it('clean-install Kimi All offers every catalog model with its thinking ladder', () => {
+  const kimiCatalog: HarnessModelCatalog = {
+    version: 1,
+    engineVersion: '1.0.4',
+    models: [
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'k3',
+        name: 'Kimi K3',
+        input: ['text', 'image'],
+        contextWindow: 1_048_576,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'k3-256k',
+        name: 'Kimi K3-256K',
+        input: ['text', 'image'],
+        contextWindow: 262_144,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'kimi-for-coding',
+        name: 'kimi-for-coding',
+        input: ['text', 'image'],
+        contextWindow: 1_048_576,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'kimi-for-coding-highspeed',
+        name: 'Kimi For Coding HighSpeed',
+        input: ['text', 'image'],
+        contextWindow: 262_144,
+        thinking: ['off', 'minimal', 'low', 'medium', 'high'],
+      },
+    ],
+  };
+  // All (no connection.models) must project the full native catalog — the
+  // home picker collapse to a single k3 entry only happens when Choose saves
+  // a restricted models list.
+  const all = projectEmbeddedHarnessCatalog(kimiCatalog, [connection]);
+  expect(
+    all.models.slice(1).map((model) => decodeMollyModelOption(model.modelId)?.modelId)
+  ).toEqual(['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed']);
+  expect(all.modelReasoningEfforts[all.models[1]!.modelId]).toEqual(['low', 'high', 'max']);
+  const restricted = projectEmbeddedHarnessCatalog(kimiCatalog, [
+    { ...connection, models: ['k3'] },
+  ]);
+  expect(
+    restricted.models.slice(1).map((model) => decodeMollyModelOption(model.modelId)?.modelId)
+  ).toEqual(['k3']);
+});
+
 it("offers only a native connection's chosen models, and every model when none were chosen", () => {
   const wide: HarnessModelCatalog = {
     ...catalog,

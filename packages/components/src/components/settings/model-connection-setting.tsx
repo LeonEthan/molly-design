@@ -267,11 +267,12 @@ export function ModelConnectionForm({
     setPickingProvider(false);
   };
   const startChoosing = () => {
+    // Listed IDs only inform the checklist (not-listed tags). Never pre-select
+    // from the key-check listing: a membership key that reports one model (Kimi
+    // Code often lists only `k3`) would otherwise collapse the home picker to
+    // that single catalog entry after Save.
     const ids = (providerModels ?? []).map((model) => model.modelId);
-    const fromListing = listed ? ids.filter((modelId) => listed.has(modelId)) : [];
-    setSelectedModels(
-      selectedModels.length > 0 ? selectedModels : fromListing.length > 0 ? fromListing : ids
-    );
+    setSelectedModels(selectedModels.length > 0 ? selectedModels : ids);
     setChooseModels(true);
   };
   const catalogIds = providerModels ? new Set(providerModels.map((model) => model.modelId)) : null;

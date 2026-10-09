@@ -53,6 +53,8 @@ Preserve historical catalog fields when editing unrelated values.
   Checks list models or validate the key, never send a model request or DashScope call, and
   report unsupported services as uncheckable. Native connections offer All or a chosen
   `models` list; listed IDs inform the choice and suggest image models, never select them.
+  Opening Choose pre-checks the full packaged catalog for that preset, not the key-check
+  listing — a membership key that reports one model must not shrink the home picker.
 - AI models (`agents` tab) mounts the design setup strip (`design-readiness.tsx`), the
   local encrypted model-connection form, the image connection, and the read-only legacy
   inventory only when this machine has legacy rows. The strip derives each chip from what

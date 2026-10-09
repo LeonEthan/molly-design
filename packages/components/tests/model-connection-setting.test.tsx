@@ -548,7 +548,7 @@ describe('free key check and model choice', () => {
       node.textContent?.startsWith(label)
     )!;
 
-  it('checks a typed key once it settles, then offers the chosen models only', async () => {
+  it('checks a typed key once it settles; Choose preselects the whole catalog, not the listing', async () => {
     const requests: CheckModelConnection[] = [];
     const writes: SaveModelConnection[] = [];
     await act(async () =>
@@ -575,12 +575,84 @@ describe('free key check and model choice', () => {
     await openMoreOptions();
     expect(radio('All 2').getAttribute('aria-checked')).toBe('true');
     await act(async () => radio(en['settings.models.picker.choose']).click());
+    // Listing informs with a not-listed tag; it must not shrink the preselection.
     expect(host.textContent).toContain(en['settings.models.picker.notListed']);
     const boxes = [...host.querySelectorAll<HTMLButtonElement>('button[role="checkbox"]')];
-    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['true', 'false']);
+    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual(['true', 'true']);
     await submit();
-    expect(writes[0]).toMatchObject({ providerPresetId: 'openai', models: ['gpt-x'] });
+    expect(writes[0]).toMatchObject({
+      providerPresetId: 'openai',
+      models: ['gpt-x', 'gpt-x-mini'],
+    });
     expect(host.innerHTML).not.toContain('SYNTHETIC_KEY');
+  });
+
+  it('does not collapse Choose to the single Kimi membership listing', async () => {
+    const kimiCatalog: HarnessModelCatalog['models'] = [
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'k3',
+        name: 'Kimi K3',
+        input: ['text', 'image'],
+        contextWindow: 1_048_576,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'k3-256k',
+        name: 'Kimi K3-256K',
+        input: ['text', 'image'],
+        contextWindow: 262_144,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'kimi-for-coding',
+        name: 'kimi-for-coding',
+        input: ['text', 'image'],
+        contextWindow: 1_048_576,
+        thinking: ['low', 'high', 'max'],
+      },
+      {
+        providerPresetId: 'kimi-coding',
+        modelId: 'kimi-for-coding-highspeed',
+        name: 'Kimi For Coding HighSpeed',
+        input: ['text', 'image'],
+        contextWindow: 262_144,
+        thinking: ['off'],
+      },
+    ];
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          catalog: kimiCatalog,
+          onSave: async (input) => void writes.push(input),
+          onCancel: () => undefined,
+          onCheck: async () => ({ ok: true, models: ['k3'] }),
+        })
+      )
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
+    await settle();
+    expect(host.textContent).toContain('Key check passed · 1 model listed');
+    await openMoreOptions();
+    expect(radio('All 4').getAttribute('aria-checked')).toBe('true');
+    await act(async () => radio(en['settings.models.picker.choose']).click());
+    const boxes = [...host.querySelectorAll<HTMLButtonElement>('button[role="checkbox"]')];
+    expect(boxes).toHaveLength(4);
+    expect(boxes.map((box) => box.getAttribute('aria-checked'))).toEqual([
+      'true',
+      'true',
+      'true',
+      'true',
+    ]);
+    await submit();
+    expect(writes[0]).toMatchObject({
+      providerPresetId: 'kimi-coding',
+      models: ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'],
+    });
   });
 
   it('checks a saved key only against the provider and address it was saved for', async () => {

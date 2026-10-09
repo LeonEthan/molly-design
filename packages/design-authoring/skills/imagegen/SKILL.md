@@ -40,8 +40,10 @@ composition, intended use, and constraints.
 Both tools write returned bytes under `media/` in the supplied design authoring
 directory and return a typed result (`structuredContent`) with the artwork-relative
 `path`, `absolutePath`, `sha256`, `mimeType`, `width`, `height` and `bytes`. Reference the relative path from that directory's `design.yaml`. Open outputs with an actual image-reading tool to
-judge the result and decide whether further changes are useful. Report material
-limits and the resulting asset path.
+judge the result and decide whether further changes are useful. To show an output
+in your reply, embed it with Markdown image syntax using its `absolutePath`, for
+example `![Draft A](/abs/media/a.png)`; a path named only in text is not displayed
+in the chat. Report material limits and the resulting asset path.
 
 Prompt templates and taxonomy below are optional aids for image operations;
 they do not replace the design workflow or its research requirement.

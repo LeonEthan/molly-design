@@ -13,6 +13,8 @@ describe('parseMarkdownAgentImageHref', () => {
     ['./media/draft.png', './media/draft.png'],
     ['draft.png', 'draft.png'],
     ['C:\\work\\draft.png', 'C:/work/draft.png'],
+    ['file:///workspace/media/draft%20one.png', '/workspace/media/draft%20one.png'],
+    ['file:///C:/work/draft.png', 'C:/work/draft.png'],
   ])('recognizes %s without decoding its path twice', (src, expected) => {
     expect(parseMarkdownAgentImageHref(src)).toBe(expected);
   });
@@ -27,6 +29,7 @@ describe('parseMarkdownAgentImageHref', () => {
     'data:image/png;base64,AA==',
     'javascript:example/a.png',
     'molly-resource://file/opaque',
+    'file://example.com/a.png',
   ])('does not treat %s as an agent filesystem path', (src) => {
     expect(parseMarkdownAgentImageHref(src)).toBeNull();
   });

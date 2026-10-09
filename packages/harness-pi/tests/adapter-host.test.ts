@@ -857,29 +857,102 @@ describe('owned ACP host integration', () => {
     expect(history).not.toContain('Prefers serif type');
   });
 
-  it('accounts measured extraction usage before malformed JSON fails capture', async () => {
+  it('accounts measured extraction usage and fails soft with a logged code on prose output', async () => {
     const usage: Record<string, unknown>[] = [];
+    const operations: unknown[] = [];
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const f = await managed({
+        config: { personalMemory: true },
+        memoryResponse: 'No durable personal preferences were stated.',
+        peer: {
+          extMethod: async (_method, params) => {
+            operations.push(
+              z.object({ request: z.object({ operation: z.unknown() }) }).parse(params).request
+                .operation
+            );
+            return { revision: 'r1', enabled: true, entries: [] };
+          },
+          extNotification: async (method, params) => {
+            if (method === LODY_EXTENSION_METHODS.sessionUsageUpdate) usage.push(params);
+          },
+        },
+      });
+      const s = await f.open();
+      f.grant(s.snapshot);
+      const result = await s.prompt('I prefer serif type.');
+      expect(result._meta).toMatchObject({
+        mollyPersonalMemory: 'unchanged',
+        mollyPersonalMemoryDiagnostic: 'memory_extraction_not_json',
+        mollyNativeOutcome: { status: 'completed' },
+      });
+      expect(operations).toEqual([{ action: 'read' }]);
+      expect(stderr).toHaveBeenCalledWith(
+        'molly_personal_memory_diagnostic memory_extraction_not_json\n'
+      );
+      expect(JSON.stringify(stderr.mock.calls)).not.toContain('durable personal');
+      expect(usage.at(-1)).toMatchObject({
+        modelUsage: { [`${providerId}/model`]: { inputTokens: 26, outputTokens: 6 } },
+        usage: { costUSD: 0.015 },
+      });
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it('captures preferences from a fenced JSON extraction reply', async () => {
+    const operations: unknown[] = [];
     const f = await managed({
       config: { personalMemory: true },
-      memoryResponse: 'invalid JSON',
+      memoryResponse: 'Sure:\n```json\n{"changes":[{"text":"Prefers serif type"},]}\n```',
       peer: {
-        extMethod: async () => ({ revision: 'r1', enabled: true, entries: [] }),
-        extNotification: async (method, params) => {
-          if (method === LODY_EXTENSION_METHODS.sessionUsageUpdate) usage.push(params);
+        extMethod: async (_method, params) => {
+          operations.push(
+            z.object({ request: z.object({ operation: z.unknown() }) }).parse(params).request
+              .operation
+          );
+          return { revision: 'r1', enabled: true, entries: [] };
         },
       },
     });
     const s = await f.open();
     f.grant(s.snapshot);
     const result = await s.prompt('I prefer serif type.');
-    expect(result._meta).toMatchObject({
-      mollyPersonalMemory: 'capture_failed',
-      mollyNativeOutcome: { status: 'completed' },
-    });
-    expect(usage.at(-1)).toMatchObject({
-      modelUsage: { [`${providerId}/model`]: { inputTokens: 26, outputTokens: 6 } },
-      usage: { costUSD: 0.015 },
-    });
+    expect(result._meta?.mollyPersonalMemory).toBe('saved');
+    expect(result._meta?.mollyPersonalMemoryDiagnostic).toBeUndefined();
+    expect(operations).toEqual([
+      { action: 'read' },
+      { action: 'capture', revision: 'r1', changes: [{ text: 'Prefers serif type' }] },
+    ]);
+  });
+
+  it('reports capture_failed with the peer error code when the store rejects a capture', async () => {
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const f = await managed({
+        config: { personalMemory: true },
+        peer: {
+          extMethod: async (_method, params) => {
+            const { operation } = z
+              .object({ request: z.object({ operation: z.object({ action: z.string() }) }) })
+              .parse(params).request;
+            if (operation.action === 'capture') throw new Error('memory_stale');
+            return { revision: 'r1', enabled: true, entries: [] };
+          },
+        },
+      });
+      const s = await f.open();
+      f.grant(s.snapshot);
+      const result = await s.prompt('I prefer serif type.');
+      expect(result._meta).toMatchObject({
+        mollyPersonalMemory: 'capture_failed',
+        mollyPersonalMemoryDiagnostic: 'memory_stale',
+        mollyNativeOutcome: { status: 'completed' },
+      });
+      expect(stderr).toHaveBeenCalledWith('molly_personal_memory_diagnostic memory_stale\n');
+    } finally {
+      stderr.mockRestore();
+    }
   });
 
   it('accounts an extraction result before cancellation and preserves the completed main receipt', async () => {

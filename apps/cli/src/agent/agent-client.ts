@@ -2703,6 +2703,13 @@ export class AgentClient implements acp.Client {
         trackedPromptCompletion = { sessionId, promise: completion };
         this.activePromptCompletion = trackedPromptCompletion;
         const result = await completion;
+        const memoryDiagnostic = result._meta?.mollyPersonalMemoryDiagnostic;
+        if (typeof memoryDiagnostic === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(memoryDiagnostic))
+          this.logger.warn(
+            `[${this.options.sessionId}] personal memory ${String(
+              result._meta?.mollyPersonalMemory ?? 'unknown'
+            )}: ${memoryDiagnostic}`
+          );
         if (
           result._meta?.mollyPersonalMemory === 'capture_failed' ||
           result._meta?.mollyPersonalMemory === 'recall_failed'

@@ -7,7 +7,7 @@ Translation: current
 
 ## Abstract
 
-The first runs of [user-chosen designs](2026-10-09-user-chosen-designs.md) gave faithful reproductions but three gaps: the design options came from the source poster and a prompt only, because the Skill forbade passing found references to the image model; copy was dropped or altered because the Agent read it off the design image; and artistic product names were flattened into plain fonts. This correction lets the Agent pass one or two inspiration images it chose from research as `edit` inputs next to the source image, takes all wording from the brief or source with a line-by-line check, and turns any lettering a font cannot reproduce into an image layer isolated from the design, whatever its size. The Spec stays in draft for owner approval; the effect on quality depends on the rerun recorded below.
+The first runs of [user-chosen designs](2026-10-09-user-chosen-designs.md) gave faithful reproductions but three gaps: the design options came from the source poster and a prompt only, because the Skill forbade passing found references to the image model; copy was dropped or altered because the Agent read it off the design image; and artistic product names were flattened into plain fonts. This correction lets the Agent pass one or two inspiration images it chose from research as `edit` inputs next to the source image, takes all wording from the brief or source with a line-by-line check, and turns any lettering a font cannot reproduce into an image layer isolated from the design, whatever its size. The Spec stays in draft for owner approval. In two DeepSeek reruns every option used inspiration inputs and the reproductions stayed close to the chosen design; one run passed its gate and the other produced a landscape canvas.
 
 ## Problem and evidence
 
@@ -38,3 +38,12 @@ The eval runner's process counter now counts only image calls the Agent made, no
 - DashScope accepts at most three input images, leaving room for one or two references beside a source.
 - Lettering layers change wording only by regenerating them.
 - Plate defects seen in the runs (a person kept in the plate, a lost wordmark, seams) are not addressed here.
+
+## Rerun
+
+Two DeepSeek flash runs of the Luckin redesign case on commit 9c4eb5fe, with the runner choosing the Agent's recommendation. Visual quality is the owner's judgment; these are observations.
+
+- **Run 1 (gate passed).** Four inspiration images saved; each option was an `edit` from the source poster plus a different inspiration image, giving clearly different airy, deep-cobalt and blue-and-yellow options. The editable version of option A matches it closely, with every source line present including the disclaimer. Option A drew the drink names in plain bold type on navy badges, so native text was the faithful choice. 11 image edits. Option B's embed in the reply mixed two file hashes and showed "File was not found".
+- **Run 2 (gate failed).** Options used the source plus one or two inspiration images. The Agent read "保持海报尺寸不变" (keep the poster size) as the untouched 800×600 default canvas instead of the attached 1126×1500 poster, so the options and the result are landscape. Within that canvas the reproduction is faithful, all copy lines are present, and it corrected drink labels the option had swapped. 7 image edits.
+
+Open follow-ups: the size to keep in a redesign is the supplied artwork's when the open canvas is an untouched default; option images could be copied to short names before embedding so paths are not retyped; the plate still loses the wordmark on the held cup.

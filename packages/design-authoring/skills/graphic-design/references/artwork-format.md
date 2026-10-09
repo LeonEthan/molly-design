@@ -167,6 +167,12 @@ compress the complete face to WOFF first, then choose another complete face or
 agree the limitation with the user; never subset it. If you leave CJK text on
 fallback, report that its typeface depends on the viewer's computer.
 
+Check more than letters: the face must include the punctuation and symbols the
+language uses (Chinese full-width commas, full stops, book-title marks and
+quotation marks, Japanese brackets), and the copy should use that language's
+punctuation rather than Latin substitutes. Avoid starting a line with closing
+punctuation; adjust the break or the box width in the render.
+
 ## Examples
 
 - [../examples/minimal/design.yaml](../examples/minimal/design.yaml): a solid

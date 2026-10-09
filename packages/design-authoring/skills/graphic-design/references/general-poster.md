@@ -12,6 +12,8 @@ Useful context includes:
 - the user's design thinking, inspiration, references and the direction to keep;
 - what a viewer should notice first, then understand, then remember or do;
 - who is looking, from how far, for how long, and on which medium;
+- where it will sit and what surrounds it: a feed of other posts, a wall of other
+  posters, a product page. The work is read among those neighbours, not alone;
 - the requested size, orientation, tone, assets and output format;
 - which images, numbers, names and other facts are supplied or can be checked.
 
@@ -19,6 +21,10 @@ If useful, keep a short working note of the core message, the largest object, th
 reading path, color roles and the failure to avoid (illegible type, fake evidence,
 a crowded wall of equal boxes). It is not a second source of truth for the files.
 Carry the references and research observations into the composition.
+
+Look for what is specific to this brief (its subject, history, audience,
+competitors and medium) before choosing a style. An appropriate answer to this
+problem matters more than a fashionable look.
 
 ## Size the canvas for the actual output
 
@@ -37,7 +43,10 @@ pages are not solutions: this product is one static canvas.
 - Give one object the largest scale; secondary items serve it rather than compete
   at the same size.
 - Make the reading path obvious with scale, contrast, alignment, grouping and
-  leftover space. Labels and boxes are tools, not a default grid.
+  deliberate empty space. Labels and boxes are tools, not a default grid.
+- Use a simple grid when it helps: set the margins, then columns that suit the
+  content and image proportions. A grid prevents arbitrary placement; it is a
+  tool, not a goal, and a strong composition may break it on purpose.
 - Plan where the copy sits before generating imagery: reserve a calm area, or plan
   a scrim or block, so the headline never has to sit on a face or product.
 - Let a strong photograph or graphic occupy real area when it carries the message.
@@ -49,6 +58,21 @@ pages are not solutions: this product is one static canvas.
 Compare directions by whether a thumbnail still names the subject, whether the
 facts stay readable at the real output size, and whether the result stays
 editable in Molly.
+
+## Choose type with a reason
+
+- Use one or two families and spend the effort on size contrast, weight, spacing
+  and alignment rather than on many faces. More faces rarely add value.
+- Be able to say why this face: it does the job well, it belongs to the brand or
+  client, it fits the subject's period or culture, or it is quiet enough not to
+  compete with the image. An association you feel may not be the viewer's.
+- Judge readability at the real viewing distance. A decorative display face that
+  fails in a small text block can work as a large headline; small detail text
+  needs a plain, sturdy face.
+- Spacing changes expression: tight letter and line spacing makes words read as
+  dense lines, loose spacing makes them airy. Set it deliberately for headlines.
+- For CJK copy, check the face covers the language's punctuation and characters,
+  as [artwork-format.md](artwork-format.md#fonts) describes.
 
 ## Keep facts and images honest
 

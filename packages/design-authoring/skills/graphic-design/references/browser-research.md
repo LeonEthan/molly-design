@@ -12,8 +12,16 @@ Keep the actual inspected reference URLs and briefly connect the observed choice
 to the design. A search-results URL alone does not identify individual references;
 if those pages could not be opened, report exactly which visible results you used.
 Save an image only when it is needed as an asset or edit reference; observation
-alone does not require downloading it. Borrow ideas while respecting source
-artwork and asset permissions.
+alone does not require downloading it.
+
+Learn from references; do not copy one. Look at several sources, including
+older or historical work when it fits the subject, and take principles (a
+layout structure, a type treatment, a palette relationship) rather than a
+specific artwork. Work drawn from only one or two references reads as a blend
+of them: before building, check that the chosen direction is not recognizably
+one source with new copy. Respect source artwork and asset permissions; being
+legal is not the same as being fair to the original designer. When the user
+prescribes a template to reproduce, following it is their decision.
 
 Use the `molly_browser` tools only when they are available: callable from
 `codemode` scripts (find them with `searchTools`). They control the Session's

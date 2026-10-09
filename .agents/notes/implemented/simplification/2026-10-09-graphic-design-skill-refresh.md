@@ -30,6 +30,21 @@ The owner approved all eight suggestions and three decisions on 2026-10-09:
 7. **Research rule** stated once with a table of examples. Its meaning is unchanged, including that the currently open artwork alone does not establish the exception.
 8. **Structural tests**: stage headings, every relative link and heading anchor resolves, every reference is reachable, key rules appear exactly once, both examples pass intake from the materialized tree.
 
+## Follow-up: lessons from published design practice
+
+A second pass the same day compared the defaults with a practice summary of thirteen design texts (the Vignelli Canon, Bierut, Rand, Hische, Lupton, Sagmeister and others; quotations not independently re-checked). It showed that the first defaults treated margins and type too mechanically and carried unsourced numbers (subject 35–60% of the short edge, 5% margins, 0.5–0.65 size steps). Those numbers are removed, and the defaults now say they are working habits rather than laws:
+
+- margins keep a clearance floor, then are chosen for tone (tight for tension, wide for calm);
+- one or two text sizes with a strong jump (around 2×), weight before a third size, no shouting with size and bold;
+- white space is structure, and the golden ratio and rule of thirds are not composition rules;
+- stage 1 asks where the work is seen and what surrounds it;
+- reports present the one chosen direction, adding alternatives only on request or when two are genuinely close;
+- `general-poster.md` adds what is specific to the brief, an optional grid, and choosing type with a reason and for viewing distance;
+- `browser-research.md` asks for several (including historical) sources and a check that the direction is not one source with new copy;
+- the CJK section also checks punctuation and line-start rules.
+
+Book sequencing, double-sided print, type history and designer authorship were judged out of scope for a single static canvas. These changes are also unevaluated.
+
 ## Alternatives considered
 
 - Keeping the Spec's three-way report and reverting the short replies: rejected because the short replies were deliberate product fixes, and the honesty guarantee survives without forced narration.

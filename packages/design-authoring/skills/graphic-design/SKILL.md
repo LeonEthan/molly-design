@@ -64,10 +64,12 @@ never gates.
 
 ### 1. Understand intent
 
-Establish purpose, audience, output size, exact copy, supplied assets and
-constraints. Separate verified facts from assumptions; ask only about blocking
-gaps. Distinguish **delivery assets** (a supplied logo or product photo that must
-appear as supplied) from **design references** that only guide appearance.
+Establish purpose, audience, where the work will be seen and what it competes
+with there (a feed, a wall of posters, a product page), output size, exact copy,
+supplied assets and constraints. Separate verified facts from assumptions; ask
+only about blocking gaps. Distinguish **delivery assets** (a supplied logo or
+product photo that must appear as supplied) from **design references** that only
+guide appearance.
 
 Read [references/general-poster.md](references/general-poster.md) for a new design
 or a composition pass, and [references/replication.md](references/replication.md)
@@ -168,29 +170,39 @@ it as the conversation name, and a name the user set always wins. Then reply as
 
 ## Design defaults
 
-Starting points tied to failures seen in real runs. Follow them unless the brief,
-a prescribed reference or a stated design reason calls for something else; say so
-briefly when you depart from one in a new design. Use them as the stage 7
-checklist.
+Starting points, not laws: working habits of practising designers plus fixes for
+failures seen in real runs. Follow them unless the brief, a prescribed reference
+or a stated design reason calls for something else; say so briefly when you
+depart from one in a new design. Use them as the stage 7 checklist.
 
-- **Focal subject.** One element is clearly largest. A hero subject usually spans
-  about 35–60% of the canvas's short edge; larger than that, it crowds the copy
-  and margins.
+- **Focal subject.** One element is clearly largest, and the copy still has its
+  own area. If subject and headline compete for the same space, shrink or move
+  the subject rather than squeezing the copy.
 - **Copy never covers what matters.** Keep text off faces, hands, products and
   logos, and off the subject's key detail. Move or resize the copy or subject
   instead of overlapping them.
-- **Margins.** Keep text and key content at least 5% of the short edge from every
-  canvas edge (about 8% for print). Full-bleed imagery may run to the edge.
-- **Type scale.** Use at most three text sizes for a poster: headline, support,
-  detail. Each step down is roughly 0.5–0.65 of the one above; body or detail text
-  stays readable at the real output size.
+- **Margins set the mood.** Keep text and key content clear of the canvas edges
+  so nothing feels cut off; beyond that, choose deliberately: tight margins add
+  tension and energy, wide margins add calm. Full-bleed imagery may run to the
+  edge.
+- **Few sizes, strong contrast.** Prefer one or two text sizes with a clear jump
+  between them (the large one around twice the small); separate further levels
+  with weight before adding a third size. Do not make everything big and bold to
+  "shout": contrast and space carry hierarchy. Detail text stays readable at the
+  real viewing size and distance.
+- **White space is structure.** Use empty space to group, separate and rank
+  information, not as whatever is left over. A crowded canvas with no room to
+  breathe is a defect even when every element is legible.
 - **Text over images.** Place copy on a calm area of the image, or add a scrim (a
   gradient or translucent shape behind the text) or a solid block. Check contrast
   in the render, not by assumption.
 - **Alignment.** Choose one alignment axis for a text group and keep its edges on
   it. Group related copy with `groupId` so it moves together.
 - **Reading order.** The render should read in the intended order at thumbnail
-  size: subject, headline, then details.
+  size, in the place it will be seen: subject, headline, then details.
+
+Do not apply the golden ratio or rule of thirds as composition rules; place
+things by hierarchy, content and space.
 
 ## Reporting
 
@@ -199,12 +211,14 @@ Write in the user's language and size the reply to the request.
 - **Bounded edit:** one or two sentences saying what changed, for example "Done:
   the headline now reads "Jazz Evening", a little smaller so it fits." When there
   is nothing to add, "Done." is enough.
-- **New design or redesign:** embed the chosen draft (and the alternatives you
-  want the user to see) with Markdown image syntax, using the `absolutePath`
-  returned by `molly_image`, for example `![Draft A](/abs/media/a.png)`; wrap
-  paths containing spaces in angle brackets. Give one line on why you chose it,
-  name the research sources briefly, and add a short note on the direction only
-  when it helps the user judge the result.
+- **New design or redesign:** present the one direction you chose, not a pile of
+  options. Embed the chosen draft with Markdown image syntax, using the
+  `absolutePath` returned by `molly_image`, for example
+  `![Draft A](/abs/media/a.png)`; wrap paths containing spaces in angle brackets.
+  Show an alternative too only when the user asked for options or two drafts are
+  genuinely close. Give one line on why you chose it, name the research sources
+  briefly, and add a short note on the direction only when it helps the user
+  judge the result.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise
   non-editable content, and concerns from your review.

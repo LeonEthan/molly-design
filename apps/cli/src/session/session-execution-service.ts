@@ -693,8 +693,9 @@ export class SessionExecutionService {
    * Non-queue input that would dispatch without Continue: an undelivered steer
    * (`pending_apply`, which cancellation can requeue), a requeued steer
    * (`steerTurnStatuses` pending), restored history input, a metadata-only
-   * activation whose user entry has not synced yet, and an RPC turn offer still
-   * stashed before its history syncs. The stopped turn's own input is excluded.
+   * activation whose user entry has not synced yet, an RPC turn offer still
+   * stashed before its history syncs, and a steer awaiting its provider verdict.
+   * The stopped turn's own input is excluded.
    */
   private async hasUndispatchedNonQueueInput(
     sessionId: SessionId,
@@ -704,6 +705,7 @@ export class SessionExecutionService {
     const meta = await this.getSessionMeta(sessionId);
     const ownInput = this.ownInputFor(sessionId, turnId);
     if (this.deps.hasPendingRpcTurn?.(sessionId, ownInput)) return true;
+    if (this.hasUnresolvedSteer(sessionId, ownInput)) return true;
     if (
       Object.entries(meta?.steerTurnStatuses ?? {}).some(
         ([id, status]) => status === 'pending' && !ownInput.has(id)
@@ -744,6 +746,11 @@ export class SessionExecutionService {
     return ownInput;
   }
 
+  private hasUnresolvedSteer(sessionId: SessionId, exclude: ReadonlySet<string>): boolean {
+    const unresolved = this.unresolvedSteerTurns.get(sessionId);
+    return unresolved !== undefined && Array.from(unresolved).some((id) => !exclude.has(id));
+  }
+
   isDispatchPausedInMemory(sessionId: SessionId): boolean {
     return this.stopRequestedBySession.has(sessionId) || this.pendingStopRecovery.has(sessionId);
   }
@@ -764,6 +771,7 @@ export class SessionExecutionService {
   // this is pure per-session serialization, matching the old hand-rolled lock.
   private readonly steerMutationQueue = new ConcurrentQueue<SessionId>(Number.POSITIVE_INFINITY);
   private readonly steerStatusQueue = new ConcurrentQueue<SessionId>(Number.POSITIVE_INFINITY);
+  private readonly unresolvedSteerTurns = new Map<SessionId, Set<string>>();
   // Coalesce reads of the existing embedded catalog, with independent cancellation.
   private readonly inFlightAcpRefresh = new Map<string, InFlightAcpRefreshEntry>();
 
@@ -1014,30 +1022,38 @@ export class SessionExecutionService {
     timestamp: string;
     inputConfig: SessionTurnInputConfig;
   }): Promise<SessionSteerResponse> {
-    const result = await this.steerMutationQueue.enqueue<
-      SessionSteerResponse | { response: Promise<SessionSteerResponse> }
-    >(options.sessionId, async () => {
-      const releaseConflict = this.tryAcquireSessionRewriteConflictLease(options.sessionId);
-      if (!releaseConflict) {
-        // A rewrite (not user Stop) owns the session. Keep the steer in
-        // pending_apply; promoting it here would turn Edit & Resend or cleanup
-        // cancellation into a fresh user send.
-        return {
-          type: 'session/steer_response',
-          sessionId: options.sessionId,
-          userTurnId: options.userTurnId,
-          applied: false,
-          disposition: 'busy',
-          error: 'The session history is being replaced.',
-        };
-      }
-      try {
-        return await this.steerSessionLocked(options);
-      } finally {
-        releaseConflict();
-      }
-    });
-    return 'response' in result ? await result.response : result;
+    const unresolved = this.unresolvedSteerTurns.get(options.sessionId) ?? new Set<string>();
+    this.unresolvedSteerTurns.set(options.sessionId, unresolved.add(options.userTurnId));
+    try {
+      const result = await this.steerMutationQueue.enqueue<
+        SessionSteerResponse | { response: Promise<SessionSteerResponse> }
+      >(options.sessionId, async () => {
+        const releaseConflict = this.tryAcquireSessionRewriteConflictLease(options.sessionId);
+        if (!releaseConflict) {
+          // A rewrite (not user Stop) owns the session. Keep the steer in
+          // pending_apply; promoting it here would turn Edit & Resend or cleanup
+          // cancellation into a fresh user send.
+          return {
+            type: 'session/steer_response',
+            sessionId: options.sessionId,
+            userTurnId: options.userTurnId,
+            applied: false,
+            disposition: 'busy',
+            error: 'The session history is being replaced.',
+          };
+        }
+        try {
+          return await this.steerSessionLocked(options);
+        } finally {
+          releaseConflict();
+        }
+      });
+      return 'response' in result ? await result.response : result;
+    } finally {
+      const current = this.unresolvedSteerTurns.get(options.sessionId);
+      current?.delete(options.userTurnId);
+      if (current?.size === 0) this.unresolvedSteerTurns.delete(options.sessionId);
+    }
   }
 
   private async steerSessionLocked(options: {
@@ -5324,7 +5340,8 @@ export class SessionExecutionService {
         if (
           nonQueuePending ||
           sessionDoc.readMessageQueueSnapshot().length > 0 ||
-          this.deps.hasPendingRpcTurn?.(sessionId, this.ownInputFor(sessionId, turnId))
+          this.deps.hasPendingRpcTurn?.(sessionId, this.ownInputFor(sessionId, turnId)) ||
+          this.hasUnresolvedSteer(sessionId, this.ownInputFor(sessionId, turnId))
         ) {
           await persistPaused();
         } else if (this.stopRequestedBySession.get(sessionId) === turnId) {

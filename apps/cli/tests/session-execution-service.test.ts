@@ -8526,6 +8526,10 @@ type StopCase = {
   rpcStash?: string[];
   /** RPC turn ids that land once the resumed write is visible at the final queue snapshot. */
   rpcStashAfterResumedWrite?: string[];
+  /** Steer user turn ids still awaiting their provider verdict before Stop. */
+  unresolvedSteer?: string[];
+  /** Steer user turn ids that start awaiting a verdict once the resumed write is visible. */
+  unresolvedSteerAfterResumedWrite?: string[];
   /** Pending input is seen before the first write, so Stop never persists `resumed`. */
   neverPersistsResumed?: boolean;
   metaPatch?: Partial<SessionMeta>;
@@ -8648,6 +8652,31 @@ it.each<StopCase>([
     gated: true,
   },
   {
+    label: 'stop counts a steer awaiting its verdict without persisting resumed',
+    action: 'stop',
+    queue: [],
+    unresolvedSteer: ['steer-1'],
+    neverPersistsResumed: true,
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own unresolved steer',
+    action: 'stop',
+    queue: [],
+    unresolvedSteer: ['live'],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop observes a steer awaiting its verdict after its resumed write',
+    action: 'stop',
+    queue: [],
+    unresolvedSteerAfterResumedWrite: ['steer-late'],
+    state: 'paused',
+    gated: true,
+  },
+  {
     label: 'stop ignores an activation that is already handled',
     action: 'stop',
     queue: [],
@@ -8703,6 +8732,8 @@ it.each<StopCase>([
     queueAfterResumedMetaRead,
     rpcStash,
     rpcStashAfterResumedWrite,
+    unresolvedSteer,
+    unresolvedSteerAfterResumedWrite,
     neverPersistsResumed,
     metaPatch,
     initialPause,
@@ -8727,6 +8758,9 @@ it.each<StopCase>([
     };
     const turns = [{ id: 'live', role: 'user', status: 'processing' }, ...history];
     let service: SessionExecutionService | undefined;
+    const unresolvedSteerTurns = () =>
+      (service as unknown as { unresolvedSteerTurns: Map<SessionId, Set<string>> })
+        .unresolvedSteerTurns;
     const gateDuringResumedWrite: boolean[] = [];
     const sessionDoc = withHistoryPort({
       getHistory: () => turns as never,
@@ -8738,6 +8772,8 @@ it.each<StopCase>([
       readMessageQueueSnapshot: () => {
         if (rpcStashAfterResumedWrite && meta.dispatchPause?.state === 'resumed')
           currentStash = rpcStashAfterResumedWrite;
+        if (unresolvedSteerAfterResumedWrite && meta.dispatchPause?.state === 'resumed')
+          unresolvedSteerTurns().set(sessionId, new Set(unresolvedSteerAfterResumedWrite));
         return currentQueue;
       },
     });
@@ -8770,6 +8806,7 @@ it.each<StopCase>([
       } as unknown as LoroDocumentManager,
     });
     service = new SessionExecutionService(deps);
+    if (unresolvedSteer) unresolvedSteerTurns().set(sessionId, new Set(unresolvedSteer));
     const request = {
       type: 'session/cancel' as const,
       sessionId,
@@ -8806,6 +8843,95 @@ it.each<StopCase>([
     }
   }
 );
+
+it('stop pauses while a steer still awaits its provider verdict', async () => {
+  const sessionId = 'stop-unresolved-steer' as SessionId;
+  let meta: Partial<SessionMeta> = { latestUserMsgId: 'A', processingUserMsgId: 'A' };
+  const repo = {
+    getDocMeta: async () => ({ meta }),
+    upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+      meta = { ...meta, ...patch };
+    },
+  };
+  const sessionDoc = new SessionDocument(
+    repo as never,
+    sessionId,
+    async () => {},
+    createSilentLogger()
+  );
+  composeTestSessionDoc(sessionDoc);
+  const submitted = createDeferred();
+  const verdict = createDeferred<import('../src/agent/agent-client').SteerOutcomeResult>();
+  const agentClient = {
+    isCreated: () => true,
+    cancel: async () => {},
+    pendingPromptCompletion: null,
+    getAcknowledgedSteerCapability: () => ({ configPolicy: 'active', upstreamTurn: 'same' }),
+    findSteerConfigMismatch: () => null,
+    steerPrompt: () => {
+      submitted.resolve();
+      return { completion: new Promise(() => {}), outcome: verdict.promise };
+    },
+  };
+  const deps = createBaseDeps({
+    workspaceDocument: {
+      repo,
+      getOrCreateSessionDoc: async () => sessionDoc,
+    } as unknown as LoroDocumentManager,
+  });
+  const service = new SessionExecutionService(deps);
+  service['turnRuntimeBySession'].set(sessionId, {
+    sessionId,
+    turnId: 'assistant:A',
+    userTurnId: 'A',
+    session: { sessionId, agentClient, acpSessionId: 'acp' },
+    promptStarted: true,
+    promptInFlight: true,
+    activePromptRun: { turnId: 'assistant:A' },
+    cancelRequested: false,
+  } as never);
+  const steering = service.steerSession({
+    sessionId,
+    expectedTurnId: 'assistant:A',
+    userTurnId: 'B',
+    userId: 'user',
+    timestamp: '2026-09-16T00:00:00Z',
+    inputConfig: { prompt: 'guide' },
+  });
+  await submitted.promise;
+
+  expect(
+    await service.cancelSession({
+      type: 'session/cancel',
+      sessionId,
+      turnId: 'assistant:A',
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      action: 'stop',
+    })
+  ).toEqual({ success: true });
+  expect(meta.dispatchPause).toEqual({ turnId: 'assistant:A', state: 'paused' });
+  expect(service.isDispatchPausedInMemory(sessionId)).toBe(true);
+
+  verdict.resolve({ outcome: 'not-applied', error: new Error('Synthetic verdict') });
+  await steering;
+});
+
+it('steerSession holds its user turn as unresolved only until the verdict settles', async () => {
+  const sessionId = 'steer-unresolved-release' as SessionId;
+  const service = new SessionExecutionService(createBaseDeps({}));
+  const steering = service.steerSession({
+    sessionId,
+    expectedTurnId: 'assistant:A',
+    userTurnId: 'B',
+    userId: 'user',
+    timestamp: '2026-09-16T00:00:00Z',
+    inputConfig: { prompt: 'guide' },
+  });
+  expect(service['unresolvedSteerTurns'].get(sessionId)).toEqual(new Set(['B']));
+  await expect(steering).resolves.toMatchObject({ applied: false, disposition: 'no-active-turn' });
+  expect(service['unresolvedSteerTurns'].has(sessionId)).toBe(false);
+});
 
 // Codex round 3, P1 #2: a user Stop with nothing queued writes `resumed`; if the
 // cancellation drain then fails, ownership and the canvas lock stay held, so the

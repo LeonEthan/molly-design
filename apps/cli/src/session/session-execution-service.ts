@@ -534,6 +534,7 @@ export type SessionExecutionServiceDeps = {
     runtimeOverrides?: BuiltinRuntimeOverrides
   ) => Promise<void>;
   processMessageQueue: (sessionId: SessionId) => Promise<void>;
+  hasPendingRpcTurn?: (sessionId: SessionId, excludeTurnIds: ReadonlySet<string>) => boolean;
   syncLiveActivitySummary?: (userId: string) => Promise<void>;
   collectMachineResources: () => Promise<MachineResourceInfo>;
   getMachineLifecycleCapability: () => MachineLifecycleCapability;
@@ -691,9 +692,9 @@ export class SessionExecutionService {
   /**
    * Non-queue input that would dispatch without Continue: an undelivered steer
    * (`pending_apply`, which cancellation can requeue), a requeued steer
-   * (`steerTurnStatuses` pending), restored history input, and a metadata-only
-   * activation whose user entry has not synced yet. The stopped turn's own
-   * input is excluded.
+   * (`steerTurnStatuses` pending), restored history input, a metadata-only
+   * activation whose user entry has not synced yet, and an RPC turn offer still
+   * stashed before its history syncs. The stopped turn's own input is excluded.
    */
   private async hasUndispatchedNonQueueInput(
     sessionId: SessionId,
@@ -701,10 +702,8 @@ export class SessionExecutionService {
   ): Promise<boolean> {
     const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
     const meta = await this.getSessionMeta(sessionId);
-    const ownInput = new Set<string>();
-    const activeUserTurnId = this.getActiveUserTurnId(sessionId);
-    if (activeUserTurnId) ownInput.add(activeUserTurnId);
-    if (turnId.startsWith('assistant:')) ownInput.add(turnId.slice('assistant:'.length));
+    const ownInput = this.ownInputFor(sessionId, turnId);
+    if (this.deps.hasPendingRpcTurn?.(sessionId, ownInput)) return true;
     if (
       Object.entries(meta?.steerTurnStatuses ?? {}).some(
         ([id, status]) => status === 'pending' && !ownInput.has(id)
@@ -735,6 +734,14 @@ export class SessionExecutionService {
     )
       return true;
     return !!meta && findNextDispatchableUserTurn(history, meta) !== null;
+  }
+
+  private ownInputFor(sessionId: SessionId, turnId: string): Set<string> {
+    const ownInput = new Set<string>();
+    const activeUserTurnId = this.getActiveUserTurnId(sessionId);
+    if (activeUserTurnId) ownInput.add(activeUserTurnId);
+    if (turnId.startsWith('assistant:')) ownInput.add(turnId.slice('assistant:'.length));
+    return ownInput;
   }
 
   isDispatchPausedInMemory(sessionId: SessionId): boolean {
@@ -5314,7 +5321,11 @@ export class SessionExecutionService {
         // fall between them.
         const nonQueuePending = await this.hasUndispatchedNonQueueInput(sessionId, turnId);
         const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
-        if (nonQueuePending || sessionDoc.readMessageQueueSnapshot().length > 0) {
+        if (
+          nonQueuePending ||
+          sessionDoc.readMessageQueueSnapshot().length > 0 ||
+          this.deps.hasPendingRpcTurn?.(sessionId, this.ownInputFor(sessionId, turnId))
+        ) {
           await persistPaused();
         } else if (this.stopRequestedBySession.get(sessionId) === turnId) {
           this.stopRequestedBySession.delete(sessionId);

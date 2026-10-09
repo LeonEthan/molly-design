@@ -771,6 +771,14 @@ export class SessionDispatchWatcher {
     return (this.rpcTurnStash.get(sessionId)?.size ?? 0) > 0 || this.accessFibers.has(sessionId);
   }
 
+  hasPendingRpcTurn(sessionId: SessionId, excludeTurnIds: ReadonlySet<string>): boolean {
+    const now = Date.now();
+    for (const [userTurnId, stashed] of this.rpcTurnStash.get(sessionId) ?? []) {
+      if (stashed.expiresAtMs > now && !excludeTurnIds.has(userTurnId)) return true;
+    }
+    return false;
+  }
+
   /** Drop expired stashed RPC turns across all sessions (bounded cleanup). */
   private sweepExpiredRpcTurns(): void {
     const now = Date.now();

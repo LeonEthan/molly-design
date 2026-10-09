@@ -8522,6 +8522,12 @@ type StopCase = {
   queueAfterWrite?: { $cid: string }[];
   /** Queue contents observed once a meta read sees the resumed write (final re-validation). */
   queueAfterResumedMetaRead?: { $cid: string }[];
+  /** RPC turn ids stashed before their history syncs. */
+  rpcStash?: string[];
+  /** RPC turn ids that land once the resumed write is visible at the final queue snapshot. */
+  rpcStashAfterResumedWrite?: string[];
+  /** Pending input is seen before the first write, so Stop never persists `resumed`. */
+  neverPersistsResumed?: boolean;
   metaPatch?: Partial<SessionMeta>;
   initialPause?: { turnId: string; state: 'paused' | 'resumed' };
   /** User history besides the stopped turn's own `live` input. */
@@ -8617,6 +8623,31 @@ it.each<StopCase>([
     gated: true,
   },
   {
+    label: 'stop counts a stashed RPC turn whose history has not synced',
+    action: 'stop',
+    queue: [],
+    rpcStash: ['rpc-1'],
+    neverPersistsResumed: true,
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own stashed RPC input',
+    action: 'stop',
+    queue: [],
+    rpcStash: ['live'],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop observes an RPC stash landing after its resumed write',
+    action: 'stop',
+    queue: [],
+    rpcStashAfterResumedWrite: ['rpc-late'],
+    state: 'paused',
+    gated: true,
+  },
+  {
     label: 'stop ignores an activation that is already handled',
     action: 'stop',
     queue: [],
@@ -8670,6 +8701,9 @@ it.each<StopCase>([
     queue,
     queueAfterWrite,
     queueAfterResumedMetaRead,
+    rpcStash,
+    rpcStashAfterResumedWrite,
+    neverPersistsResumed,
     metaPatch,
     initialPause,
     history = [],
@@ -8680,6 +8714,8 @@ it.each<StopCase>([
     const sessionId = `stop-${label.replaceAll(' ', '-')}` as SessionId;
     let active: string | undefined = 'assistant:live';
     let currentQueue = queue;
+    let currentStash = rpcStash ?? [];
+    let persistedResume = false;
     let meta: Partial<SessionMeta> = {
       id: sessionId,
       machineId: 'machine-1',
@@ -8699,7 +8735,11 @@ it.each<StopCase>([
       setStatus: async () => {},
       waitUntilSynced: async () => {},
       getMessageQueue: async () => currentQueue,
-      readMessageQueueSnapshot: () => currentQueue,
+      readMessageQueueSnapshot: () => {
+        if (rpcStashAfterResumedWrite && meta.dispatchPause?.state === 'resumed')
+          currentStash = rpcStashAfterResumedWrite;
+        return currentQueue;
+      },
     });
     const deps = createBaseDeps({
       getActiveTurnId: () => active,
@@ -8707,6 +8747,8 @@ it.each<StopCase>([
         active = undefined;
       },
       processMessageQueue: async () => {},
+      hasPendingRpcTurn: (_sessionId, excludeTurnIds) =>
+        currentStash.some((userTurnId) => !excludeTurnIds.has(userTurnId)),
       workspaceDocument: {
         repo: {
           getDocMeta: async () => {
@@ -8715,8 +8757,11 @@ it.each<StopCase>([
             return { meta };
           },
           upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
-            if (patch.dispatchPause?.state === 'resumed' && action === 'stop')
-              gateDuringResumedWrite.push(service!.isDispatchPausedInMemory(sessionId));
+            if (patch.dispatchPause?.state === 'resumed') {
+              persistedResume = true;
+              if (action === 'stop')
+                gateDuringResumedWrite.push(service!.isDispatchPausedInMemory(sessionId));
+            }
             meta = { ...meta, ...patch };
             if (patch.dispatchPause && queueAfterWrite) currentQueue = queueAfterWrite;
           },
@@ -8738,6 +8783,7 @@ it.each<StopCase>([
     expect(service.isDispatchPausedInMemory(sessionId)).toBe(gated);
     // `stop` must hold the promotion gate while its resumed write is in flight.
     expect(gateDuringResumedWrite.every(Boolean)).toBe(true);
+    if (neverPersistsResumed) expect(persistedResume).toBe(false);
     // Once the stopped owner ends, the dispatcher decides from this meta alone:
     // a paused Stop must not auto-dispatch the leftover input without Continue.
     if (state === 'paused' && history.length > 0) {

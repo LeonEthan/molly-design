@@ -688,6 +688,64 @@ describe('SessionDispatchWatcher', () => {
     }
   });
 
+  it('reports a stashed RPC turn as pending until it is excluded or expires', async () => {
+    const sessionId = 'session-rpc-pending' as SessionId;
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
+    const workspaceDocument = {
+      repo: {
+        getDocMeta: vi.fn(async () => undefined),
+        watch: vi.fn(() => ({ unsubscribe: vi.fn() })),
+      },
+      getOrCreateSessionDoc: vi.fn(async () =>
+        withSessionData({
+          getMetaState: vi.fn(async () => undefined),
+          mirror: { subscribe: vi.fn(() => vi.fn()) },
+        })
+      ),
+      onMetaRoomSynced: vi.fn(() => vi.fn()),
+    } as unknown as LoroDocumentManager;
+    const executionService = {
+      getExecutionSnapshot: vi.fn(() => ({
+        hasActiveTurn: false,
+        hasBlockingPendingCreate: false,
+        hasReusableSession: false,
+      })),
+      continueSession: vi.fn(async () => {}),
+      startSession: vi.fn(async () => {}),
+      cancelSession: vi.fn(async () => ({ success: true })),
+    } as unknown as SessionExecutionService;
+    const watcher = createWatcher({
+      logger: createSilentLogger(),
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      workspaceDocument,
+      executionService,
+      canUseMachine: createAllowMachineAccess(),
+    });
+
+    try {
+      await expect(
+        watcher.offerRpcTurn({
+          sessionId,
+          userTurnId: 'rpc-turn-pending',
+          userId: 'user-1',
+          timestamp: new Date().toISOString(),
+          inputConfig: { prompt: 'pending until history syncs' },
+        })
+      ).resolves.toBe('accepted');
+      expect(watcher.hasPendingRpcTurn(sessionId, new Set())).toBe(true);
+      expect(watcher.hasPendingRpcTurn(sessionId, new Set(['rpc-turn-pending']))).toBe(false);
+
+      const stashTtlMs =
+        (SessionDispatchWatcher as unknown as { RPC_TURN_STASH_TTL_MS: number })
+          .RPC_TURN_STASH_TTL_MS ?? 10 * 60_000;
+      nowSpy.mockReturnValue(stashTtlMs + 1);
+      expect(watcher.hasPendingRpcTurn(sessionId, new Set())).toBe(false);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('holds a stashed RPC turn while the missing-history marker names it, and never revives it once the turn is superseded', async () => {
     const continueSession = vi.fn(async () => {});
     const startSession = vi.fn(async () => {});

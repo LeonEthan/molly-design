@@ -3145,6 +3145,8 @@ export class MessageHandler {
           runtimeOverrides
         ),
       processMessageQueue: async (sessionId) => await this.processMessageQueue(sessionId),
+      hasPendingRpcTurn: (sessionId, excludeTurnIds) =>
+        this.sessionDispatchWatcher.hasPendingRpcTurn(sessionId, excludeTurnIds),
       syncLiveActivitySummary: async (userId) => {
         await this.syncLiveActivitySummary(userId);
       },

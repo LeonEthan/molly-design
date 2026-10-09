@@ -18,8 +18,13 @@ design.yaml          # molly-canvas/1: size, background, elements
 media/               # local raster and font assets
 ```
 
-This directory may differ from Agent cwd. A composition draft, reference image or
-flattened render never replaces the project. The separate `design-current/` path
+A new design happens in two steps. First the image model produces at least
+three complete **design options** and the user picks one; the chosen image is the
+design. Then you reproduce that design as the editable project, as faithfully as
+you can, and refine it with the user. The project is the deliverable: a design
+image, reference image or flattened render never replaces it.
+
+This directory may differ from Agent cwd. The separate `design-current/` path
 is application input, not a draft you submit; you never write `design.json`, and
 leftover `.pptd` files are not an authoring entry. Molly collects and checks the
 project after your turn ends.
@@ -29,16 +34,19 @@ project after your turn ends.
 Read the user's content and references, locate the authoring directory, and pick
 the branch:
 
-| Task                                       | Composition and layer baseline                                                                                      |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| New design from an open brief              | Research informs several composition drafts; choose one before building layers.                                     |
-| User-prescribed template or reconstruction | Inspect the specified reference and use it as the selected composition; rebuild the needed editable elements.       |
-| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the composition and layer baseline. |
+| Task                                       | Design and layer baseline                                                                                                                         |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New design from an open brief              | Offer at least three design options and stop for the user's choice; reproduce the chosen one.                                                     |
+| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Offer options as for an open brief.                     |
+| User-prescribed template or reconstruction | Inspect the specified reference and use it as the chosen design; reproduce the needed editable elements.                                          |
+| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the design and layer baseline. Only named, local changes qualify. |
 
-Every branch follows all nine stages; a prescribed composition fulfils stage 3,
-it does not skip the others. A bounded edit does not regenerate every layer. A
-style reference offered as inspiration for a new composition is still a new
-design.
+Every branch follows all nine stages; a prescribed design fulfils stage 3, it
+does not skip the others. "Redesign", "optimize" or "重新设计" asks for new
+options even when the user also asks to keep a face, a product, the colors or the
+size; those are delivery assets and constraints. A bounded edit is a named, local
+change (new date, larger logo, different headline) and does not regenerate every
+layer. A style reference offered as inspiration is still a new design.
 
 Determine capabilities from the tools actually available, including MCP tools
 callable only from `codemode` scripts. Before image calls, read the `imagegen`
@@ -117,38 +125,48 @@ direction stays the basis. If the user forbids networking, respect it and report
 the gap; a missing browser or network failure is a blocker, not an exception.
 Fact checks such as event dates are separate from inspiration research.
 
-### 3. Select a composition
+### 3. Offer designs and let the user choose
 
-For an open brief, first keep three to six references and note the one quality
-each contributes (the palette of one, the type of another, the crop and light of
-a third). Take qualities, never a reference's literal objects or finished
-layout; check each against the direction words.
+Keep three to six references and note the one quality each contributes (the
+palette of one, the type of another, the crop and light of a third). Take
+qualities, never a reference's literal objects or finished layout; check each
+against the direction words.
 
-Then draw drafts from image plus text by default: block out each composition
-with native shapes and placeholder copy in the extracted palette, render the
-blockout, and pass it to `molly_image` `edit` with the supplied delivery assets
-and a prompt built from the extracted decisions. The blockout is temporary and
-never the delivered artwork. Never pass found references
-such as someone else's poster as edit inputs. When the image model cannot edit,
-generate from text and report that. Draft several compositions that differ in
-concept, within budget; when there is room, make one deliberately unlike the most
-common look among the references. Choose one for its message, hierarchy, room for
-copy and how well it splits into layers.
+Then create at least three complete **design options** with the image model,
+each a finished poster at the canvas ratio: composition, imagery, light, the
+headline and key copy drawn in, and the finish you intend. They are the design,
+not sketches, so judge each against the [design defaults](#design-defaults)
+before showing it, and regenerate one that fails. Make the options differ in
+concept or composition, not just color; when there is room, make one
+deliberately unlike the most common look among the references. Pass supplied
+delivery assets (a product photo, a logo, a source poster being redesigned) as
+`edit` inputs so the options keep them; never pass found references such as
+someone else's poster. A rendered blockout can steer an option's layout when
+words are not enough. Techniques are in
+[references/layered-workflow.md](references/layered-workflow.md#design-options).
 
-For a template, reconstruction or bounded edit, adopt the prescribed composition
-instead of inventing alternatives. Read
-[references/layered-workflow.md](references/layered-workflow.md) when blocking out
-or generating drafts and layers. A draft guides the rebuild; it never becomes the
-artwork or a near-complete background.
+Show the options and **end the turn** so the user can choose, as
+[Reporting](#reporting) describes. Do not write or change `design.yaml` in that
+turn. Continue with stage 4 in the turn where the user names an option. If the
+user asked you to decide ("just pick one", "you choose"), take your
+recommendation and continue in the same turn.
+
+For a template, reconstruction or bounded edit, the prescribed artwork is the
+chosen design; do not offer options.
 
 ### 4. Prepare complete layers
 
-Plan layers by what a person would edit independently. Regenerate the needed
-raster objects completely from the chosen composition, including hidden parts,
-and inspect each one. Foreground objects that need isolation must have real
-alpha; backgrounds can remain opaque. Keep supplied delivery assets as supplied,
-use native shapes for flat geometry, and keep unaffected existing layers. Report
-missing parts.
+Reproduce the chosen design; do not reinterpret it. Plan layers by what a person
+would edit independently: usually a background plate, the main subject, a few
+secondary objects and the copy. Make the plate by editing the chosen design to
+remove the foreground objects and all text, keeping everything else as it is.
+Isolate each foreground object from the chosen design, complete including hidden
+parts, with real alpha. When the user requires a supplied face, product or logo
+to stay exact and the design altered it, isolate it from the source instead and
+place it where the design has it. Use native shapes for flat geometry, keep
+unaffected existing layers, inspect each layer and report missing parts. The
+recipe is in
+[references/layered-workflow.md](references/layered-workflow.md#reproducing-the-chosen-design).
 
 ### 5. Recompose the artwork
 
@@ -157,17 +175,21 @@ it also lists what is editable today. Copy field shapes from
 [examples/minimal/design.yaml](examples/minimal/design.yaml) and the layered
 [examples/layered/design.yaml](examples/layered/design.yaml). Write `design.yaml`
 with stable `id` / `kind`, real geometry, correct stacking and local `media/`
-references. When editing, preserve existing fields and unaffected elements.
+references. Measure positions and sizes from the chosen design. When editing,
+preserve existing fields and unaffected elements.
 
 ### 6. Check text representation
 
-Choose a representation for each piece of copy:
+Match the copy drawn in the chosen design: position, size, weight, color,
+spacing and alignment, and the closest available letterforms. Choose a
+representation for each piece of copy:
 
 - **Native text** (`kind: text`) with a standard or registered font is the
   default: body copy, dates, times, prices, addresses, lists, small labels and
   anything the user is likely to reword. Native text also handles color,
   gradient, shadow, weight and spacing, so try it first for a styled headline.
-- **Image lettering** (an `image` element generated with `molly_image`) suits
+- **Image lettering** (an `image` element isolated from the chosen design or
+  generated with `molly_image`) suits
   artistic text that fonts cannot express: hand lettering, calligraphy, 3D or
   dimensional type, textured or illustrated letters, type woven into the
   scene, or a logotype-style title. Use it for a few large display words, not
@@ -181,16 +203,18 @@ limit to report. Techniques are in
 
 Register real font files as the format reference describes, keep each face's
 complete glyph set, and check Chinese, Japanese or Korean copy against the font
-section there. Render the first usable draft early to confirm key fonts load
+section there. Render the first usable version early to confirm key fonts load
 before detailed typography.
 
 ### 7. Review and adjust
 
-Render the current draft with `molly_render_preview` and open the PNG with an
-actual image-reading tool. Look at the whole canvas and the details, and go
-through [Design defaults](#design-defaults) as the review checklist. Fix the
-source or the affected asset, then render and read again. Repeat until the
-current render passes or you can name what is still wrong.
+Render the current project with `molly_render_preview` and open the PNG with an
+actual image-reading tool. The chosen design is the target: compare the render
+with it side by side and as an overlay, and fix differences in position, scale,
+color, type and finish. Then check [Design defaults](#design-defaults) for what
+the reproduction introduced, such as text over a busy area. Fix the source or the
+affected asset, then render and read again. Repeat until the render matches the
+design or you can name what still differs.
 
 If `molly_render_preview` is absent, only that tool is unavailable: use the
 rendering and image-reading tools you do have, and report that Molly's renderer
@@ -202,12 +226,11 @@ evidence of a desktop connection failure.
 
 Compare the current render with the user's copy, facts, delivery assets,
 reference constraints and intent, and check that a local edit kept everything
-else. Compare it with the composition you chose or were given: if you will call
-the result a redesign or a new layout, the layout must visibly differ from the
-starting artwork. For a new direction, check that the render answers every
-direction word, that nothing borrowed reads too literally, and that palette and
-type match the decisions taken from the references; a departure should be
-deliberate. Fix deviations at the stage that caused them and review the new
+else. Copy drawn in a design option can be misspelled; the user's exact copy
+wins. Compare the render with the chosen design one last time: it should read as
+the same design, not a rearrangement of its parts. For a new direction, check
+that it answers every direction word and that nothing borrowed reads too
+literally. Fix deviations at the stage that caused them and review the new
 render.
 
 ### 9. Polish and report
@@ -224,7 +247,8 @@ it as the conversation name, and a name the user set always wins. Then reply as
 Starting points, not laws: working habits of practising designers plus fixes for
 failures seen in real runs. Follow them unless the brief, a prescribed reference
 or a stated design reason calls for something else; say so briefly when you
-depart from one in a new design. Use them as the stage 7 checklist.
+depart from one in a new design. Judge design options against them in stage 3,
+and check the reproduction in stage 7.
 
 - **Focal subject.** One element is clearly largest, and the copy still has its
   own area. If subject and headline compete for the same space, shrink or move
@@ -260,14 +284,15 @@ things by hierarchy, content and space.
 
 ## When the user rejects a direction
 
-Before redesigning, check the rejection against the direction words:
+When the user rejects every option or the finished design, check the rejection
+against the direction words before offering new options:
 
 - **The words still hold:** your visual reading of them missed. Keep the words,
-  interpret them differently from stage 3, and say what changed.
+  offer new options that interpret them differently, and say what changed.
 - **The words no longer hold:** the brief has moved. Return to stage 1 and ask
   what dissatisfies the user, as one question, before writing new words.
 
-Either way the new version must visibly differ, as stage 8 checks.
+Either way the new options must visibly differ from the rejected ones.
 
 ## Reporting
 
@@ -276,14 +301,14 @@ Write in the user's language and size the reply to the request.
 - **Bounded edit:** one or two sentences saying what changed, for example "Done:
   the headline now reads "Jazz Evening", a little smaller so it fits." When there
   is nothing to add, "Done." is enough.
-- **New design or redesign:** present the one direction you chose, not a pile of
-  options. Embed the chosen draft with Markdown image syntax, using the
+- **Design options:** embed every option with Markdown image syntax, using the
   `absolutePath` returned by `molly_image`, for example
-  `![Draft A](/abs/media/a.png)`; wrap paths containing spaces in angle brackets.
-  Show an alternative too only when the user asked for options or two drafts are
-  genuinely close. Give one line naming the direction and why you chose it,
-  name the research sources briefly, and add a short note on the direction only when it helps the user
-  judge the result.
+  `![A](/abs/media/a.png)`; wrap paths containing spaces in angle brackets. Label
+  them A, B, C with one line each on the idea, say which you recommend and why in
+  one line, name the research sources briefly, and ask the user to choose. Note
+  copy the image model drew wrong; it will be exact in the editable version.
+- **Editable version of the chosen design:** one or two sentences, plus what
+  differs from the chosen design and why.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise
   non-editable content (including image lettering, whose wording changes only by
@@ -295,7 +320,7 @@ could not be done. Mention editability only when asked or when it differs from
 what the user would expect. Offer next tweaks only when asked or when a concrete
 decision remains. Leave out file paths, YAML fields, element IDs, tool and script
 names, commands and diagnostic codes unless the user asks or a limit cannot be
-explained without them; the draft image embeds above are the only paths in a
+explained without them; the option image embeds above are the only paths in a
 normal reply.
 
 Never claim a check, rendering or save that did not happen. Your image

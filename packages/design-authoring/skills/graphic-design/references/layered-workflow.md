@@ -1,55 +1,69 @@
 # Layered design techniques
 
-Techniques for composition drafts, complete raster layers and visual comparison.
+Techniques for design options, reproducing the chosen design as layers, and
+visual comparison.
 [The main Skill workflow](../SKILL.md#required-workflow) owns stage order, task
 branches, research, review and reporting.
 
-## Blockouts, prompts and draft comparison
+## Design options
 
-Text alone describes layout, proportion and texture poorly, so draw drafts from
-an image plus text. For each composition you want to try:
+Each option is a finished design the user may choose, so prompt for the whole
+poster: subject, concept, composition, palette, light, texture, the qualities
+taken from the references, and the exact headline and key copy in quotation
+marks with where and how large they sit. Choose a `size` whose aspect ratio
+matches the canvas (the imagegen skill has the size rules); matching the canvas
+pixel dimensions makes later measuring and comparison easier.
 
-1. **Block it out.** `molly_render_preview` renders only the authoring
-   directory's `design.yaml`, so the blockout lives there for now. If an
-   artwork is already there, copy `design.yaml` to the session workspace first.
-   At the canvas size, write native rectangles or ellipses for the subject and
-   secondary objects at their intended size, placeholder headline and detail
-   text where the copy will sit, and fills in the palette taken from the
-   references. Supplied delivery assets can go in as `image` elements. Render it
-   and copy the PNG to the session workspace; this costs no image call and also
-   shows early whether fonts load. Replace the blockout with the real
-   composition (or the restored artwork) before the turn ends, because Molly
-   collects whatever `design.yaml` holds then.
-2. **Prompt.** Describe the whole canvas: subject, concept, style, palette,
-   lighting, texture and the qualities you took from the references. Say that
-   the input image is a layout guide only (where things sit and how large they
-   are), not a style to copy, that shapes become the described objects, and that
-   placeholder text areas stay calm for copy added later.
-3. **Edit.** Call `molly_image` `edit` with the rendered blockout as the first
-   image and supplied delivery assets after it, within the provider's input
-   limits. Never pass found references such as other designers' work.
+- **From supplied material:** call `molly_image` `edit` with the delivery assets
+  (a product photo, a logo, or the source poster for a redesign) as inputs, so
+  the options keep them. Say what must stay recognizable and what is new.
+- **From an open brief:** `generate` from the prompt, or `edit` from a rendered
+  blockout when words cannot pin down the layout.
+- **Never** pass found references such as other designers' work as inputs.
 
-Vary the blockouts, not just the prompt wording, so drafts differ in
-composition or concept. If the configured model cannot edit or rejects the
-inputs, fall back to `generate` with the same prompt plus a written layout, and
-report that the drafts came from text alone. Without `molly_render_preview`
-there is no blockout render: use `edit` with the delivery assets alone if there
-are any, otherwise `generate`. A flat blockout can make drafts
-look stiff; if it does, loosen the prompt's layout wording rather than adding
-more shapes.
+A blockout is a rough composition in native shapes and placeholder copy at the
+canvas size, rendered with `molly_render_preview`. That tool renders only the
+authoring directory's `design.yaml`, so copy any existing `design.yaml` to the
+session workspace first and restore it before the turn ends; the options turn
+leaves the project as it was. In the prompt, call the blockout a layout guide
+only, not a style to copy. A flat blockout can make options look stiff; loosen
+the layout wording rather than adding shapes.
 
-Choose a `size` whose aspect ratio matches the canvas (the imagegen skill has the
-size rules); matching pixel dimensions makes later comparison easier.
+Make the options genuinely different in concept or composition: subject scale
+and position, where the headline sits, the kind of image, the type treatment.
+Read every option with an image-reading tool before showing it. Regenerate one
+that fails the [design defaults](../SKILL.md#design-defaults) or drops a delivery
+asset; show the user only options you would be willing to build. If the
+configured model cannot edit, use `generate` and say so.
 
-Read every draft with an image-reading tool and choose one for its message,
-hierarchy, room for type and how well it will split into layers. Leave room for
-the copy the [design defaults](../SKILL.md#design-defaults) expect: a calm area
-for the headline, clear of the subject's face or key detail. How to show drafts
-to the user is in [Reporting](../SKILL.md#reporting).
+Image models often misspell copy, especially Chinese, Japanese or Korean.
+Wrong copy in an option is acceptable when the layout and style are right,
+because the editable version sets the exact copy; mention it when you show the
+options.
 
-Text rendered inside drafts is usually approximate. Decide per piece of copy
-whether it becomes native text or an image lettering layer (main Skill stage 6),
-and leave the draft's text out of background and object layers either way.
+## Reproducing the chosen design
+
+The chosen design is the target; the editable project should look like it.
+
+1. **Measure it.** Note the canvas position and size of every object and text
+   block in the chosen image (the `pack` grid helps), and its colors, type
+   weights and alignment.
+2. **Background plate.** `edit` the chosen design with a prompt that removes the
+   foreground objects and every piece of text and fills what they covered,
+   changing nothing else, as an opaque image at the canvas size. Compare it with
+   the design: light, color and texture should be unchanged.
+3. **Objects.** For each object worth editing on its own, `edit` the chosen
+   design to isolate that object exactly as it appears, complete including
+   hidden parts, on a transparent background. When the user requires a supplied
+   face, product or logo to stay exact and the design altered it, isolate it
+   from the source image instead.
+4. **Text.** Set the copy as native text matched to the measurements, or keep a
+   piece of artistic lettering as an image isolated from the design (see
+   [Lettering layers](#lettering-layers)); either way the user's exact copy
+   wins over what the model drew.
+5. **Assemble and compare.** Place each layer at its measured position, render,
+   and compare the render with the chosen design as described under
+   [Comparing native previews](#comparing-native-previews).
 
 ## Complete objects and independent layers
 
@@ -60,18 +74,18 @@ moves together (an object and its contact shadow) and split what a user would
 adjust separately. Grouping shadows, steam, glow and similar effects is a
 judgment call; note the choice.
 
-Regenerate each raster object completely from the chosen draft; a crop keeps
+Isolate each raster object completely from the chosen design; a crop keeps
 holes where other objects overlapped it. For a foreground object that needs
-transparent isolation, call `molly_image` `edit` with the draft as the first image
-and:
+transparent isolation, call `molly_image` `edit` with the design as the first
+image and:
 
-- a prompt that names only this element, asks it to match the draft's appearance,
+- a prompt that names only this element, asks it to match the design's appearance,
   and asks for the complete element, including parts hidden behind other objects,
   isolated on a transparent background;
 - `background: "transparent"` and `output_format: "png"`.
 
-For a generated background, edit the draft into the empty scene with every
-foreground element removed, as an opaque image at the canvas ratio. Add supplied
+For the background plate, edit the design into the empty scene with every
+foreground element and all text removed, as an opaque image at the canvas ratio. Add supplied
 delivery assets or earlier layers as extra `images` when they help the model keep
 style or scale consistent.
 
@@ -100,7 +114,7 @@ see-through when stacked. Judge this in a render.
 Generate each piece of artistic lettering as its own transparent layer, so it
 can be moved, resized and replaced without touching the scene:
 
-- Call `molly_image` `generate`, or `edit` with the chosen draft as the first
+- Call `molly_image` `generate`, or `edit` with the chosen design as the first
   image when the lettering must match it, with `background: "transparent"` and
   `output_format: "png"`.
 - Put the exact copy in the prompt in quotation marks and ask for it verbatim,
@@ -129,16 +143,16 @@ explicit `zIndex` alone did not change render order in testing.
 background, a transparent subject, a scrim and grouped copy in order.
 
 Generated layers drift: expect each to come back at a different size or position
-than in the draft, sometimes by a large factor. Place each layer from the draft,
-not from the coordinates in your prompt. Measure the element in the draft (the
+than in the design, sometimes by a large factor. Place each layer from the design,
+not from the coordinates in your prompt. Measure the element in the design (the
 `pack` grid helps), then set `bounds` so the visible object lands there, keeping
 the asset's aspect ratio (`fit: contain`, or bounds with the asset's ratio).
 
 ## Comparing native previews
 
-Compare the current native preview with the chosen composition: position, scale,
+Compare the current native preview with the chosen design: position, scale,
 overlap, color, hierarchy and type fit. For a closer look at two same-size images
-(the draft and a render, or two versions of a layer):
+(the chosen design and a render, or two versions of a layer):
 
 ```sh
 node scripts/reference-pack.mjs compare <a.png> <b.png> <work>/compare
@@ -149,5 +163,5 @@ over white and black, which shows halos, fringes and faint pixels. For a local
 detail, `crop` the same box from both images first and compare the crops.
 
 Fix what you find by adjusting `bounds` or order in YAML, or by editing or
-regenerating the layer. Unused drafts and layers can stay in `media/`; only assets
+regenerating the layer. Unused options and layers can stay in `media/`; only assets
 referenced from `design.yaml` enter the artwork.

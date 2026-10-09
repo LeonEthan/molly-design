@@ -61,6 +61,10 @@ Three mood-board texts were compared with the workflow: the uisdc guide (2022, C
 
 Not adopted: a mood board the user must approve before design (Goodspeed ties pre-approval to derivative work, and it adds a blocking step), a mood-board file or image deliverable, and boards built from generated images.
 
+## Follow-up: corrected by user-chosen designs
+
+Stage 3 above still treated the image as a draft that the Agent chooses and rebuilds loosely. The owner's original intent was that the image is the design, the user chooses among at least three, and the project reproduces it faithfully; [user-chosen designs](../feature/2026-10-09-user-chosen-designs.md) records that correction. Blockouts remain only as an optional layout aid.
+
 ## Alternatives considered
 
 - Keeping the Spec's three-way report and reverting the short replies: rejected because the short replies were deliberate product fixes, and the honesty guarantee survives without forced narration.

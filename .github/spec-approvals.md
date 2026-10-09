@@ -48,6 +48,17 @@ records, and approve the current English and Chinese layered-design Spec
 revisions. This is approval of the stated workflow and boundaries, not proof
 that every future design run or distribution configuration will succeed.
 
+## 2026-10-08 sign-in-first website accounts
+
+The owner approved the English and Chinese `graphic-design-platform` revision
+introduced by [PR #106](https://github.com/LeonEthan/molly-design/pull/106) on
+2026-10-08. It makes signing in on the website's own page inside Molly the
+primary account path, guides that sign-in just in time from the AI models setup
+strip and the Browser sidebar, documents that Google sign-in does not work in the
+embedded browser, and keeps browser import as a collapsed option that lists other
+browsers' profiles only when opened. This approves that revision only; the
+Spec's other draft revisions remain unapproved, so its status stays draft.
+
 ## 2026-10-01 native Pi packages without permission checks
 
 The owner approved the current English and Chinese revisions of

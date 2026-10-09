@@ -49,4 +49,4 @@ The #99 copy also told users to choose "Always Allow" for `/usr/bin/security`. T
 - No real-account sign-in was tested: email/password, the QR scan and LINE are unverified.
 - The session-sidebar button is covered by component tests, not a live session.
 - Import, Keychain behavior and PR #99 are unchanged; #99 stays on hold.
-- The Spec revision is draft and awaits owner approval.
+- The owner approved this Spec revision on 2026-10-08 ([record](../../../../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)); the Spec stays draft for its other unapproved revisions.

@@ -1,6 +1,7 @@
 # Molly 平面设计工作台
 
 Status: draft
+Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Previous approval: [2026-09-15](../.github/spec-approvals.md#2026-09-15-and-2026-09-16-design-revisions)
 Previous approval: [2026-09-16](../.github/spec-approvals.md#2026-09-15-and-2026-09-16-design-revisions)

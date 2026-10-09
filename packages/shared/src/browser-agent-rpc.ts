@@ -159,6 +159,12 @@ export const AgentBrowserRpcResultSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('browser/host-status'), connected: z.boolean() }).strict(),
   z
     .object({
+      type: z.literal('browser/pause-all'),
+      paused: z.array(AgentBrowserHostLeaseSchema).max(64),
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal('browser/host'),
       requests: z.array(AgentBrowserHostWorkSchema).max(8),
       revoke: z.array(AgentBrowserHostLeaseSchema).max(8),

@@ -53,6 +53,8 @@ safety. Removal requires a reviewed replacement write boundary (PR #460).
   fall back to a remote RPC path.
 - The local desktop waits for the first CLI startup setting snapshot before creating
   its workspace runtime. It mounts the local data plane only.
+- Local data-plane status listeners attach before subscription. Live status events
+  supersede the bootstrap snapshot; disposed connections ignore pending replies.
 - Workspace-level rooms, including Task rooms and the Task Index, mount on the
   local transport even when metadata has no machine owner.
 - Presence from the local daemon is authoritative, including absence. The local

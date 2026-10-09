@@ -3417,6 +3417,10 @@ export class SessionExecutionService {
     return runtime?.canvasPrepared ? runtime.canvasTurnId : undefined;
   }
 
+  activeTurnSessionIds(): SessionId[] {
+    return [...this.turnRuntimeBySession.keys()];
+  }
+
   getActiveInvocationContext(sessionId: SessionId):
     | {
         requesterUserId: string;

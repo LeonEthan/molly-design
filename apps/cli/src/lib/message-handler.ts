@@ -5829,6 +5829,15 @@ export class MessageHandler {
           revoke,
         };
       }
+      case 'browser/pause-all': {
+        const paused = this.executionService.activeTurnSessionIds().flatMap((sessionId) => {
+          const runId = this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId;
+          if (!runId) return [];
+          this.browserTakeovers.set(sessionId, runId);
+          return [{ sessionId, browserId: `session-browser-${sessionId}`, runId }];
+        });
+        return { type: 'browser/pause-all' as const, paused };
+      }
       case 'browser/cancel': {
         const sessionId = request.ownerSessionId as SessionId;
         const saved = this.browserRuns.get(sessionId);

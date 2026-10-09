@@ -19,6 +19,7 @@ import {
 } from '@/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { WithInfo } from './info-tip';
+import { WebsiteSignInDialog } from './website-sign-in-dialog';
 
 type Site = ElectronBrowserAccountSiteInput['site'];
 type Source = ElectronBrowserImportSources['sources'][number];
@@ -50,17 +51,12 @@ export function BrowserAccountsSetting() {
   const [failedSource, setFailedSource] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ site: Site; imported: number } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [signInSite, setSignInSite] = useState<Site | null>(null);
 
-  const refresh = useCallback(async () => {
+  const listSources = useCallback(async () => {
     const bridge = getPublicBrowserBridge();
     if (!bridge) throw new Error(t('settings.browserAccounts.unavailable'));
-    const nextSummary = await bridge.getAccountSummary();
-    setSummary(nextSummary);
-    if (!nextSummary.importAvailable) {
-      setSources({ sources: [], unreadable: [] });
-      setChoice('');
-      return;
-    }
     const next = await bridge.getImportSources();
     setSources(next);
     setChoice((current) =>
@@ -72,8 +68,25 @@ export function BrowserAccountsSetting() {
     );
   }, [t]);
 
+  /** Listing touches other browsers' data folders, so it waits until the person opens import. */
+  const refresh = useCallback(
+    async (withSources: boolean) => {
+      const bridge = getPublicBrowserBridge();
+      if (!bridge) throw new Error(t('settings.browserAccounts.unavailable'));
+      const nextSummary = await bridge.getAccountSummary();
+      setSummary(nextSummary);
+      if (!nextSummary.importAvailable) {
+        setSources({ sources: [], unreadable: [] });
+        setChoice('');
+        return;
+      }
+      if (withSources) await listSources();
+    },
+    [listSources, t]
+  );
+
   useEffect(() => {
-    void refresh().catch((failure) => setError(errorMessage(failure)));
+    void refresh(false).catch((failure) => setError(errorMessage(failure)));
   }, [refresh]);
 
   const selected = sources?.sources.flatMap((source) =>
@@ -88,7 +101,7 @@ export function BrowserAccountsSetting() {
     setImportFailed(false);
     try {
       await action();
-      await refresh();
+      await refresh(importOpen);
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -141,6 +154,17 @@ export function BrowserAccountsSetting() {
       await bridge.clearAccountCookies(site);
       if (result?.site === site) setResult(null);
     });
+
+  const changeImportOpen = (open: boolean) => {
+    setImportOpen(open);
+    if (open && summary?.importAvailable) void run(listSources);
+  };
+
+  const changeSignInOpen = (open: boolean) => {
+    if (open) return;
+    setSignInSite(null);
+    void run(async () => {});
+  };
 
   const importLabel = (site: Site) =>
     importingSite === site
@@ -206,48 +230,12 @@ export function BrowserAccountsSetting() {
               </Button>
             </header>
             <div className="space-y-3 border-t border-border/40 px-5 py-4">
-              <p className="text-xs font-medium text-foreground">
-                <WithInfo
-                  text={t('settings.browserAccounts.importTitle')}
-                  info={t('settings.browserAccounts.importTitleInfo')}
-                />
+              <p className="text-xs text-muted-foreground">
+                {t('settings.browserAccounts.signInLead', { site: siteNames[site] })}
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                {summary.importAvailable && sources && sources.sources.length > 0 ? (
-                  <Select value={choice} onValueChange={setChoice} disabled={busy}>
-                    <SelectTrigger
-                      aria-label={t('settings.browserAccounts.chooseSource')}
-                      className="h-8 w-auto min-w-0 flex-1 sm:max-w-[280px]"
-                    >
-                      <SelectValue placeholder={t('settings.browserAccounts.chooseSource')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sources.sources.map((source) => (
-                        <SelectGroup key={source.browserId}>
-                          <SelectLabel>{source.browserName}</SelectLabel>
-                          {source.profiles.map((profile) => (
-                            <SelectItem
-                              key={profile.id}
-                              value={choiceKey(source.browserId, profile.id)}
-                            >
-                              {t('settings.browserAccounts.sourceOption', {
-                                browser: source.browserName,
-                                profile: profile.name,
-                              })}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy || !summary.importAvailable || !selected}
-                  onClick={() => void importSite(site)}
-                >
-                  {importLabel(site)}
+                <Button type="button" size="sm" disabled={busy} onClick={() => setSignInSite(site)}>
+                  {t('settings.browserAccounts.signIn', { site: siteNames[site] })}
                 </Button>
                 {cookieCount > 0 ? (
                   <Button
@@ -262,76 +250,145 @@ export function BrowserAccountsSetting() {
                   </Button>
                 ) : null}
               </div>
-              {!summary.importAvailable ? (
-                <p className="text-xs text-muted-foreground">
-                  {summary.importUnavailableReason
-                    ? t(
-                        `settings.browserAccounts.importUnavailableReasons.${summary.importUnavailableReason}`
-                      )
-                    : t('settings.browserAccounts.importUnavailable')}
-                </p>
-              ) : sources && sources.sources.length === 0 && sources.unreadable.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {t('settings.browserAccounts.noSources')}
-                </p>
-              ) : null}
-              {importFailed && error ? (
-                <div role="alert" className="space-y-1 text-xs text-destructive">
-                  <p>{t('settings.browserAccounts.importFailedFor', { source: failedSource })}</p>
-                  <p className="break-words">{error}</p>
-                  <p>{t('settings.browserAccounts.retryHint')}</p>
-                </div>
-              ) : null}
-              {sources && sources.unreadable.length > 0 ? (
-                selected ? (
-                  <Collapsible>
-                    <CollapsibleTrigger asChild>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="group gap-1.5 px-0 text-xs text-muted-foreground"
-                      >
-                        <ChevronDown
-                          aria-hidden
-                          className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
-                        />
-                        {t('settings.browserAccounts.otherSourceIssues')}
-                      </Button>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent className="pt-2 text-xs text-muted-foreground">
-                      {t('settings.browserAccounts.unreadableSources', {
-                        browsers: sources.unreadable.join(', '),
-                      })}
-                    </CollapsibleContent>
-                  </Collapsible>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    {t('settings.browserAccounts.unreadableSources', {
-                      browsers: sources.unreadable.join(', '),
-                    })}
-                  </p>
-                )
-              ) : null}
               {import.meta.env.DEV && !summary.persistent ? (
                 <p className="text-xs text-muted-foreground">
                   {t('settings.browserAccounts.developmentMemory')}
                 </p>
               ) : null}
-              {importingSite === site ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {t('settings.browserAccounts.authorizationHint')}
-                </p>
-              ) : null}
-              {result?.site === site ? (
-                <p role="status" className="text-xs text-muted-foreground">
-                  {t('settings.browserAccounts.imported', { total: result.imported })}
-                </p>
-              ) : null}
             </div>
+            <Collapsible
+              open={importOpen}
+              onOpenChange={changeImportOpen}
+              className="border-t border-border/40 px-5 py-3"
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="group gap-1.5 px-0 text-xs text-muted-foreground"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                  />
+                  {t('settings.browserAccounts.importToggle', { site: siteNames[site] })}
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 pt-2">
+                <p className="text-xs font-medium text-foreground">
+                  <WithInfo
+                    text={t('settings.browserAccounts.importTitle')}
+                    info={t('settings.browserAccounts.importTitleInfo')}
+                  />
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {summary.importAvailable && sources && sources.sources.length > 0 ? (
+                    <Select value={choice} onValueChange={setChoice} disabled={busy}>
+                      <SelectTrigger
+                        aria-label={t('settings.browserAccounts.chooseSource')}
+                        className="h-8 w-auto min-w-0 flex-1 sm:max-w-[280px]"
+                      >
+                        <SelectValue placeholder={t('settings.browserAccounts.chooseSource')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sources.sources.map((source) => (
+                          <SelectGroup key={source.browserId}>
+                            <SelectLabel>{source.browserName}</SelectLabel>
+                            {source.profiles.map((profile) => (
+                              <SelectItem
+                                key={profile.id}
+                                value={choiceKey(source.browserId, profile.id)}
+                              >
+                                {t('settings.browserAccounts.sourceOption', {
+                                  browser: source.browserName,
+                                  profile: profile.name,
+                                })}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || !summary.importAvailable || !selected}
+                    onClick={() => void importSite(site)}
+                  >
+                    {importLabel(site)}
+                  </Button>
+                </div>
+                {!summary.importAvailable ? (
+                  <p className="text-xs text-muted-foreground">
+                    {summary.importUnavailableReason
+                      ? t(
+                          `settings.browserAccounts.importUnavailableReasons.${summary.importUnavailableReason}`
+                        )
+                      : t('settings.browserAccounts.importUnavailable')}
+                  </p>
+                ) : sources && sources.sources.length === 0 && sources.unreadable.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.browserAccounts.noSources')}
+                  </p>
+                ) : null}
+                {importFailed && error ? (
+                  <div role="alert" className="space-y-1 text-xs text-destructive">
+                    <p>{t('settings.browserAccounts.importFailedFor', { source: failedSource })}</p>
+                    <p className="break-words">{error}</p>
+                    <p>{t('settings.browserAccounts.retryHint')}</p>
+                  </div>
+                ) : null}
+                {sources && sources.unreadable.length > 0 ? (
+                  selected ? (
+                    <Collapsible>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="group gap-1.5 px-0 text-xs text-muted-foreground"
+                        >
+                          <ChevronDown
+                            aria-hidden
+                            className="h-3.5 w-3.5 transition-transform group-data-[state=open]:rotate-180"
+                          />
+                          {t('settings.browserAccounts.otherSourceIssues')}
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="pt-2 text-xs text-muted-foreground">
+                        {t('settings.browserAccounts.unreadableSources', {
+                          browsers: sources.unreadable.join(', '),
+                        })}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.browserAccounts.unreadableSources', {
+                        browsers: sources.unreadable.join(', '),
+                      })}
+                    </p>
+                  )
+                ) : null}
+                {importingSite === site ? (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {t('settings.browserAccounts.authorizationHint')}
+                  </p>
+                ) : null}
+                {result?.site === site ? (
+                  <p role="status" className="text-xs text-muted-foreground">
+                    {t('settings.browserAccounts.imported', { total: result.imported })}
+                  </p>
+                ) : null}
+              </CollapsibleContent>
+            </Collapsible>
           </section>
         ))
       )}
+      {signInSite ? (
+        <WebsiteSignInDialog site={signInSite} open onOpenChange={changeSignInOpen} />
+      ) : null}
     </div>
   );
 }

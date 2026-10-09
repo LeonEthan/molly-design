@@ -40,6 +40,8 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   getPublicBrowserBridge: () =>
     fakes.ipcAvailable
       ? {
+          beginAccountSignIn: async () => ({ ok: true }),
+          destroy: async () => ({ ok: true }),
           getAccountSummary: async () => ({
             persistent: true,
             importAvailable: false,
@@ -212,7 +214,7 @@ describe('AI models page', () => {
     expect(chips()[0]).toBe('unset: Models· Off');
   });
 
-  it('moves to the image section in place and opens Website accounts for Pinterest', async () => {
+  it('moves to the image section in place and opens the Pinterest sign-in page', async () => {
     HTMLElement.prototype.scrollIntoView = () => undefined;
     await renderPage();
     const chip = (label: string) =>
@@ -223,7 +225,10 @@ describe('AI models page', () => {
     expect(document.activeElement?.textContent).toContain('Set up image generation');
     expect(document.activeElement?.textContent).not.toContain('Add model connection');
     await act(async () => chip('Pinterest').click());
-    expect(fakes.openedTab).toBe('browser-accounts');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'Sign in to Pinterest'
+    );
+    expect(fakes.openedTab).toBeUndefined();
   });
 
   it('shows no strip without the desktop services', async () => {

@@ -90,9 +90,10 @@ by this package's build-time source manifest.
 
 The main graphic-design Skill owns the required nine-stage generative layered
 workflow ([Spec](../../specs/generative-layered-design-workflow.md)), its explicit
-task branches, reference-based research exception, design defaults (breakable
-starting points that double as the review checklist) and reporting rules, each
-stated once. References supply techniques at the relevant step and link back
+task branches, direction words, research exception (prescribed targets and
+bounded edits that keep the direction), image-plus-text drafts from native
+blockouts, design defaults (breakable starting points that double as the review
+checklist), the rejected-direction rule and reporting rules, each stated once. References supply techniques at the relevant step and link back
 rather than restating rules; `artwork-format.md` lists what each element kind
 leaves editable. Agents choose methods and
 iterations within user constraints, follow stage dependencies, and return to

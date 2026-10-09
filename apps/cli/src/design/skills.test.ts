@@ -321,6 +321,8 @@ describe('packaged design materials', () => {
 
     const singleOwner = [
       /\*\*Research rule\.\*\*/g,
+      /\*\*Asking\.\*\*/g,
+      /^## When the user rejects a direction$/gm,
       /^## Reporting$/gm,
       /^## Design defaults$/gm,
       /If `molly_render_preview` is absent/g,

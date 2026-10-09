@@ -4,11 +4,40 @@ Techniques for composition drafts, complete raster layers and visual comparison.
 [The main Skill workflow](../SKILL.md#required-workflow) owns stage order, task
 branches, research, review and reporting.
 
-## Composition prompts and draft comparison
+## Blockouts, prompts and draft comparison
 
-Write a prompt for the whole canvas: subject, composition, style, palette,
-lighting and where the copy will sit. Use `molly_image` `generate` for
-composition drafts and vary composition or concept, not just surface detail.
+Text alone describes layout, proportion and texture poorly, so draw drafts from
+an image plus text. For each composition you want to try:
+
+1. **Block it out.** `molly_render_preview` renders only the authoring
+   directory's `design.yaml`, so the blockout lives there for now. If an
+   artwork is already there, copy `design.yaml` to the session workspace first.
+   At the canvas size, write native rectangles or ellipses for the subject and
+   secondary objects at their intended size, placeholder headline and detail
+   text where the copy will sit, and fills in the palette taken from the
+   references. Supplied delivery assets can go in as `image` elements. Render it
+   and copy the PNG to the session workspace; this costs no image call and also
+   shows early whether fonts load. Replace the blockout with the real
+   composition (or the restored artwork) before the turn ends, because Molly
+   collects whatever `design.yaml` holds then.
+2. **Prompt.** Describe the whole canvas: subject, concept, style, palette,
+   lighting, texture and the qualities you took from the references. Say that
+   the input image is a layout guide only (where things sit and how large they
+   are), not a style to copy, that shapes become the described objects, and that
+   placeholder text areas stay calm for copy added later.
+3. **Edit.** Call `molly_image` `edit` with the rendered blockout as the first
+   image and supplied delivery assets after it, within the provider's input
+   limits. Never pass found references such as other designers' work.
+
+Vary the blockouts, not just the prompt wording, so drafts differ in
+composition or concept. If the configured model cannot edit or rejects the
+inputs, fall back to `generate` with the same prompt plus a written layout, and
+report that the drafts came from text alone. Without `molly_render_preview`
+there is no blockout render: use `edit` with the delivery assets alone if there
+are any, otherwise `generate`. A flat blockout can make drafts
+look stiff; if it does, loosen the prompt's layout wording rather than adding
+more shapes.
+
 Choose a `size` whose aspect ratio matches the canvas (the imagegen skill has the
 size rules); matching pixel dimensions makes later comparison easier.
 

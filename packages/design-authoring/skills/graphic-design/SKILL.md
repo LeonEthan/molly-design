@@ -65,11 +65,25 @@ never gates.
 ### 1. Understand intent
 
 Establish purpose, audience, where the work will be seen and what it competes
-with there (a feed, a wall of posters, a product page), output size, exact copy,
-supplied assets and constraints. Separate verified facts from assumptions; ask
-only about blocking gaps. Distinguish **delivery assets** (a supplied logo or
-product photo that must appear as supplied) from **design references** that only
-guide appearance.
+with there (a feed, a wall of posters, a product page), the category it belongs
+to, the one message it must send, output size, exact copy, supplied assets and
+constraints. Separate verified facts from assumptions. Distinguish **delivery
+assets** (a supplied logo or product photo that must appear as supplied) from
+**design references** that only guide appearance.
+
+**Asking.** For a new design or redesign whose brief leaves a gap that would
+change the direction (audience, where it is seen, the message, must-have copy),
+ask with the `ask_user_question` tool when it is available: one call, one to four
+questions, each with concrete options and your recommended default first. One
+question may offer candidate direction words to pick or correct. Do not ask when
+the brief already answers these, for a bounded edit, or about details you can
+decide yourself. If the tool is unavailable or no answer can come, proceed on
+stated assumptions and report them.
+
+Then write a **direction sentence** (how the piece should feel and what it should
+say) and two to four **direction words**, for example "smoky, intimate, after
+hours". They are a working note, not a deliverable; stages 2, 3, 7 and 8 measure
+against them.
 
 Read [references/general-poster.md](references/general-poster.md) for a new design
 or a composition pass, and [references/replication.md](references/replication.md)
@@ -77,38 +91,55 @@ for a reconstruction.
 
 ### 2. Inspect references and research
 
-**Research rule.** Before choosing or creating a composition, inspect relevant
-design-site visuals such as Pinterest. Skip this only when the user told you to
-follow a concrete template or reference without new inspiration, you have
-inspected that target and it answers the visual decisions, and the user did not
-also ask for research. The same rule applies to new designs, reconstructions and
-local edits.
+**Research rule.** Research exists to set a direction. Before choosing or
+creating a composition, inspect relevant design-site visuals such as Pinterest
+and other sources. Skip this only when no new direction is being set: the user
+told you to follow a concrete template or reference without new inspiration and
+you have inspected it, or the request is a bounded edit that keeps the existing
+direction. Research anyway when the user asks for it. The same rule applies to
+new designs, reconstructions and edits.
 
-| Request                                                   | Research?                |
-| --------------------------------------------------------- | ------------------------ |
-| "Reproduce this template, replace only the copy"          | No, after you inspect it |
-| "Use this mood but redesign the composition"              | Yes                      |
-| A topic, style word, logo, product photo or your own idea | Yes                      |
-| An attachment you have not opened                         | Yes                      |
-| The currently open artwork, by itself                     | Yes                      |
+| Request                                                     | Research?                |
+| ----------------------------------------------------------- | ------------------------ |
+| "Reproduce this template, replace only the copy"            | No, after you inspect it |
+| "Change the date and make the headline a little smaller"    | No                       |
+| "Use this mood but redesign the composition"                | Yes                      |
+| "Make the open artwork feel more premium" (a new direction) | Yes                      |
+| A topic, style word, logo, product photo or your own idea   | Yes                      |
+| An attachment you have not opened                           | Yes                      |
 
 When research applies, read
-[references/browser-research.md](references/browser-research.md), look at the
-actual images (search snippets are not visual research), and connect what you saw
-in layout, type or palette to the direction. The user's own direction stays the
-basis. If the user forbids networking, respect it and report the gap; a missing
-browser or network failure is a blocker, not an exception. Fact checks such as
-event dates are separate from inspiration research.
+[references/browser-research.md](references/browser-research.md): search from
+the direction words, look at the actual images (search snippets are not visual
+research), include at least one source outside the category and current design
+feeds, and make one focused pass rather than browsing without end. The user's own
+direction stays the basis. If the user forbids networking, respect it and report
+the gap; a missing browser or network failure is a blocker, not an exception.
+Fact checks such as event dates are separate from inspiration research.
 
 ### 3. Select a composition
 
-For an open brief, generate and inspect several full-canvas drafts that differ in
-composition or concept, within budget, and choose one for its message, hierarchy,
-room for copy and how well it splits into layers. For a template, reconstruction
-or bounded edit, adopt the prescribed composition instead of inventing
-alternatives. Read [references/layered-workflow.md](references/layered-workflow.md)
-when generating drafts or layers. A draft guides the rebuild; it never becomes
-the artwork or a near-complete background.
+For an open brief, first keep three to six references and note the one quality
+each contributes (the palette of one, the type of another, the crop and light of
+a third). Take qualities, never a reference's literal objects or finished
+layout; check each against the direction words.
+
+Then draw drafts from image plus text by default: block out each composition
+with native shapes and placeholder copy in the extracted palette, render the
+blockout, and pass it to `molly_image` `edit` with the supplied delivery assets
+and a prompt built from the extracted decisions. The blockout is temporary and
+never the delivered artwork. Never pass found references
+such as someone else's poster as edit inputs. When the image model cannot edit,
+generate from text and report that. Draft several compositions that differ in
+concept, within budget; when there is room, make one deliberately unlike the most
+common look among the references. Choose one for its message, hierarchy, room for
+copy and how well it splits into layers.
+
+For a template, reconstruction or bounded edit, adopt the prescribed composition
+instead of inventing alternatives. Read
+[references/layered-workflow.md](references/layered-workflow.md) when blocking out
+or generating drafts and layers. A draft guides the rebuild; it never becomes the
+artwork or a near-complete background.
 
 ### 4. Prepare complete layers
 
@@ -173,8 +204,11 @@ Compare the current render with the user's copy, facts, delivery assets,
 reference constraints and intent, and check that a local edit kept everything
 else. Compare it with the composition you chose or were given: if you will call
 the result a redesign or a new layout, the layout must visibly differ from the
-starting artwork. Fix deviations at the stage that caused them and review the
-new render.
+starting artwork. For a new direction, check that the render answers every
+direction word, that nothing borrowed reads too literally, and that palette and
+type match the decisions taken from the references; a departure should be
+deliberate. Fix deviations at the stage that caused them and review the new
+render.
 
 ### 9. Polish and report
 
@@ -217,9 +251,23 @@ depart from one in a new design. Use them as the stage 7 checklist.
   it. Group related copy with `groupId` so it moves together.
 - **Reading order.** The render should read in the intended order at thumbnail
   size, in the place it will be seen: subject, headline, then details.
+- **Every motif has a reason.** A signature device (a reflection, a floating
+  product, a shelf arrangement, a gradient backdrop) must connect to the subject
+  or message, not appear because it is popular.
 
 Do not apply the golden ratio or rule of thirds as composition rules; place
 things by hierarchy, content and space.
+
+## When the user rejects a direction
+
+Before redesigning, check the rejection against the direction words:
+
+- **The words still hold:** your visual reading of them missed. Keep the words,
+  interpret them differently from stage 3, and say what changed.
+- **The words no longer hold:** the brief has moved. Return to stage 1 and ask
+  what dissatisfies the user, as one question, before writing new words.
+
+Either way the new version must visibly differ, as stage 8 checks.
 
 ## Reporting
 
@@ -233,8 +281,8 @@ Write in the user's language and size the reply to the request.
   `absolutePath` returned by `molly_image`, for example
   `![Draft A](/abs/media/a.png)`; wrap paths containing spaces in angle brackets.
   Show an alternative too only when the user asked for options or two drafts are
-  genuinely close. Give one line on why you chose it, name the research sources
-  briefly, and add a short note on the direction only when it helps the user
+  genuinely close. Give one line naming the direction and why you chose it,
+  name the research sources briefly, and add a short note on the direction only when it helps the user
   judge the result.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise

@@ -746,6 +746,105 @@ describe('SessionDispatchWatcher', () => {
     }
   });
 
+  it('does not report permanently suppressed RPC offers as pending for Stop', async () => {
+    const sessionId = 'session-rpc-suppressed-pending' as SessionId;
+    const suppressedTurnId = 'rpc-turn-missing';
+    const liveTurnId = 'rpc-turn-live';
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(0);
+    const workspaceDocument = {
+      repo: {
+        getDocMeta: vi.fn(async () => undefined),
+        watch: vi.fn(() => ({ unsubscribe: vi.fn() })),
+      },
+      getOrCreateSessionDoc: vi.fn(async () =>
+        withSessionData({
+          getMetaState: vi.fn(async () => undefined),
+          mirror: { subscribe: vi.fn(() => vi.fn()) },
+        })
+      ),
+      onMetaRoomSynced: vi.fn(() => vi.fn()),
+    } as unknown as LoroDocumentManager;
+    const watcher = createWatcher({
+      logger: createSilentLogger(),
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      workspaceDocument,
+      executionService: {
+        getExecutionSnapshot: vi.fn(() => ({
+          hasActiveTurn: false,
+          hasBlockingPendingCreate: false,
+          hasReusableSession: false,
+        })),
+        continueSession: vi.fn(async () => {}),
+        startSession: vi.fn(async () => {}),
+        cancelSession: vi.fn(async () => ({ success: true })),
+      } as unknown as SessionExecutionService,
+      canUseMachine: createAllowMachineAccess(),
+    });
+
+    try {
+      await expect(
+        watcher.offerRpcTurn({
+          sessionId,
+          userTurnId: suppressedTurnId,
+          userId: 'user-1',
+          timestamp: new Date().toISOString(),
+          inputConfig: { prompt: 'suppressed by missing marker' },
+        })
+      ).resolves.toBe('accepted');
+      await expect(
+        watcher.offerRpcTurn({
+          sessionId,
+          userTurnId: liveTurnId,
+          userId: 'user-1',
+          timestamp: new Date().toISOString(),
+          inputConfig: { prompt: 'still dispatchable' },
+        })
+      ).resolves.toBe('accepted');
+
+      // Without meta context the predicate cannot apply suppression (Stop always passes it).
+      expect(watcher.hasPendingRpcTurn(sessionId, new Set())).toBe(true);
+
+      const suppressedMeta = {
+        lastMissingHistoryUserMsgId: suppressedTurnId,
+      };
+      // Only the missing-marker offer remains after excluding the live one — must be false.
+      expect(
+        watcher.hasPendingRpcTurn(sessionId, new Set([liveTurnId]), {
+          meta: suppressedMeta,
+          history: [],
+        })
+      ).toBe(false);
+      // Live offer still counts.
+      expect(
+        watcher.hasPendingRpcTurn(sessionId, new Set(), {
+          meta: suppressedMeta,
+          history: [],
+        })
+      ).toBe(true);
+
+      // Terminal-in-history offer is also ignored.
+      expect(
+        watcher.hasPendingRpcTurn(sessionId, new Set([liveTurnId]), {
+          meta: { lastHandledUserMsgId: suppressedTurnId },
+          history: [
+            {
+              id: suppressedTurnId,
+              role: 'user',
+              timestamp: new Date().toISOString(),
+              items: [{ type: 'text', text: 'done' }],
+              fileDiff: [],
+              status: 'canceled',
+              read: true,
+            },
+          ],
+        })
+      ).toBe(false);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   it('holds a stashed RPC turn while the missing-history marker names it, and never revives it once the turn is superseded', async () => {
     const continueSession = vi.fn(async () => {});
     const startSession = vi.fn(async () => {});

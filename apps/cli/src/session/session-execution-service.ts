@@ -534,7 +534,14 @@ export type SessionExecutionServiceDeps = {
     runtimeOverrides?: BuiltinRuntimeOverrides
   ) => Promise<void>;
   processMessageQueue: (sessionId: SessionId) => Promise<void>;
-  hasPendingRpcTurn?: (sessionId: SessionId, excludeTurnIds: ReadonlySet<string>) => boolean;
+  hasPendingRpcTurn?: (
+    sessionId: SessionId,
+    excludeTurnIds: ReadonlySet<string>,
+    context?: {
+      meta?: Pick<SessionMeta, 'lastHandledUserMsgId' | 'lastMissingHistoryUserMsgId'>;
+      history?: SessionHistoryInput[];
+    }
+  ) => boolean;
   syncLiveActivitySummary?: (userId: string) => Promise<void>;
   collectMachineResources: () => Promise<MachineResourceInfo>;
   getMachineLifecycleCapability: () => MachineLifecycleCapability;
@@ -704,7 +711,14 @@ export class SessionExecutionService {
     const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
     const meta = await this.getSessionMeta(sessionId);
     const ownInput = this.ownInputFor(sessionId, turnId);
-    if (this.deps.hasPendingRpcTurn?.(sessionId, ownInput)) return true;
+    const pendingHistory = readSessionHistory(sessionDoc.sessionData.history);
+    if (
+      this.deps.hasPendingRpcTurn?.(sessionId, ownInput, {
+        meta: meta ?? undefined,
+        history: pendingHistory,
+      })
+    )
+      return true;
     if (this.hasUnresolvedSteer(sessionId, ownInput)) return true;
     if (
       Object.entries(meta?.steerTurnStatuses ?? {}).some(
@@ -712,7 +726,7 @@ export class SessionExecutionService {
       )
     )
       return true;
-    const fullHistory = readSessionHistory(sessionDoc.sessionData.history);
+    const fullHistory = pendingHistory;
     const activation = meta?.latestUserMsgId;
     if (
       typeof activation === 'string' &&
@@ -5294,7 +5308,14 @@ export class SessionExecutionService {
 
     // Claim cancellation synchronously before persisting its durable pause: the
     // dispatch fiber may resume while the repository flush is in flight.
+    const alreadyCancelled = this.isTurnCancelled(sessionId, turnId);
     this.markTurnCancelled(sessionId, turnId);
+    // User Stop must leave a durable cancel intent before this ACK returns: the
+    // RPC may succeed after only starting the background drain, and a crash in
+    // that window must not redispatch via processingUserMsgId crash recovery.
+    if (stopAction === 'stop') {
+      await this.upsertSessionMeta(sessionId, { lastCanceledTurn: turnId });
+    }
     const stoppingRuntime = this.getTurnRuntime(sessionId, turnId);
     if (stoppingRuntime && !stoppingRuntime.cancelRequested) {
       stoppingRuntime.pendingInputOnCancel = pendingInput;
@@ -5337,15 +5358,41 @@ export class SessionExecutionService {
         // fall between them.
         const nonQueuePending = await this.hasUndispatchedNonQueueInput(sessionId, turnId);
         const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
+        const gateMeta = await this.getSessionMeta(sessionId);
+        const gateHistory = readSessionHistory(sessionDoc.sessionData.history);
         if (
           nonQueuePending ||
           sessionDoc.readMessageQueueSnapshot().length > 0 ||
-          this.deps.hasPendingRpcTurn?.(sessionId, this.ownInputFor(sessionId, turnId)) ||
+          this.deps.hasPendingRpcTurn?.(sessionId, this.ownInputFor(sessionId, turnId), {
+            meta: gateMeta ?? undefined,
+            history: gateHistory,
+          }) ||
           this.hasUnresolvedSteer(sessionId, this.ownInputFor(sessionId, turnId))
         ) {
           await persistPaused();
         } else if (this.stopRequestedBySession.get(sessionId) === turnId) {
           this.stopRequestedBySession.delete(sessionId);
+        }
+      } else if (alreadyCancelled) {
+        // Watcher replay of lastCanceledTurn after a user `stop` that already
+        // emptied the queue to resumed: do not recreate Continue. First-time
+        // legacy cancel (including lost-ack over interrupt's resumed pause)
+        // still persists paused below — `alreadyCancelled` was false at claim,
+        // so this path adds no extra await on the common Stop race.
+        const current = await this.getSessionMeta(sessionId);
+        if (
+          current?.lastCanceledTurn === turnId &&
+          current.dispatchPause?.turnId === turnId &&
+          current.dispatchPause.state === 'resumed'
+        ) {
+          // Release the in-memory gate this claim just set — durable pause stays
+          // resumed and lastCanceledTurn is cleared so promotion is not stuck.
+          if (this.stopRequestedBySession.get(sessionId) === turnId) {
+            this.stopRequestedBySession.delete(sessionId);
+          }
+          await this.clearCancelRequest(sessionId);
+        } else {
+          await persistPaused();
         }
       } else {
         await persistPaused();

@@ -313,6 +313,11 @@ export function findNextDispatchableUserTurn(
     if (entry.id === meta.lastMissingHistoryUserMsgId) {
       continue;
     }
+    // Durable Stop intent (user stop or legacy cancel) must not redispatch as
+    // crash recovery via processingUserMsgId / latestUserMsgId while unsettled.
+    if (entry.id === meta.lastCanceledTurn) {
+      continue;
+    }
 
     // Path 1: New status field — explicit lifecycle state
     if (typeof entry.status === 'string') {

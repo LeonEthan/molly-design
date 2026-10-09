@@ -296,3 +296,35 @@ describe('SessionExecutionService history mutation ownership', () => {
     releaseNextQueue?.();
   });
 });
+
+
+describe('findNextDispatchableUserTurn durable Stop intent', () => {
+  const baseMeta = {
+    id: 'session-1' as SessionId,
+    machineId: 'machine-1' as MachineId,
+    userId: 'user-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    cliType: 'builtin' as const,
+    agentType: 'codex',
+    status: { type: 'idle' as const },
+  };
+
+  it('does not redispatch a processing turn named by lastCanceledTurn', () => {
+    const stopped = {
+      id: 'turn-stopped',
+      role: 'user' as const,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      items: [{ type: 'text' as const, text: 'stopped' }],
+      fileDiff: [],
+      status: 'processing' as const,
+      read: false,
+    };
+    expect(
+      findNextDispatchableUserTurn([stopped], {
+        ...baseMeta,
+        processingUserMsgId: 'turn-stopped',
+        lastCanceledTurn: 'turn-stopped',
+      })
+    ).toBeNull();
+  });
+});

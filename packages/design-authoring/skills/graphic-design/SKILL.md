@@ -29,20 +29,16 @@ project after your turn ends.
 Read the user's content and references, locate the authoring directory, and pick
 the branch:
 
-| Task                                       | Composition and layer baseline                                                                                                                         |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| New design from an open brief              | Research informs several composition drafts; choose one before building layers.                                                                        |
-| Redesign of a supplied or open artwork     | A new design: the source supplies content, copy and delivery assets, not the composition. Draft new compositions as for an open brief.                 |
-| User-prescribed template or reconstruction | Inspect the specified reference and use it as the selected composition; rebuild the needed editable elements.                                          |
-| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the composition and layer baseline. Only named, local changes qualify. |
+| Task                                       | Composition and layer baseline                                                                                      |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| New design from an open brief              | Research informs several composition drafts; choose one before building layers.                                     |
+| User-prescribed template or reconstruction | Inspect the specified reference and use it as the selected composition; rebuild the needed editable elements.       |
+| Bounded edit to an existing artwork        | Read the prescribed current artwork, preserve unaffected elements and use it as the composition and layer baseline. |
 
 Every branch follows all nine stages; a prescribed composition fulfils stage 3,
-it does not skip the others. "Redesign", "optimize", "make it better" or "重新设计"
-asks for a new composition even when the user also asks to keep a face, a
-product, the colors or the size; those are delivery assets and constraints. A
-bounded edit is a named, local change (new date, larger logo, different
-headline) and does not regenerate every layer. A style reference offered as
-inspiration for a new composition is still a new design.
+it does not skip the others. A bounded edit does not regenerate every layer. A
+style reference offered as inspiration for a new composition is still a new
+design.
 
 Determine capabilities from the tools actually available, including MCP tools
 callable only from `codemode` scripts. Before image calls, read the `imagegen`
@@ -123,7 +119,7 @@ Fact checks such as event dates are separate from inspiration research.
 
 ### 3. Select a composition
 
-For an open brief or a redesign, first keep three to six references and note the one quality
+For an open brief, first keep three to six references and note the one quality
 each contributes (the palette of one, the type of another, the crop and light of
 a third). Take qualities, never a reference's literal objects or finished
 layout; check each against the direction words.
@@ -134,25 +130,10 @@ blockout, and pass it to `molly_image` `edit` with the supplied delivery assets
 and a prompt built from the extracted decisions. The blockout is temporary and
 never the delivered artwork. Never pass found references
 such as someone else's poster as edit inputs. When the image model cannot edit,
-generate from text and report that. Draft at least two compositions that differ
-in concept, within budget; when there is room, make one deliberately unlike the
-most common look among the references. Choose one for its message, hierarchy,
-room for copy and how well it splits into layers.
-
-A new composition always starts from image-model drafts. Rearranging cut-outs or
-the source's existing layers is not composition selection, however many
-alternatives you try. If the budget, the user or a missing image tool prevents
-drafts, say in the report that the composition was not drafted.
-
-Drafts and final layers do different jobs. A draft settles composition, light
-and atmosphere, so it may redraw a face or a product approximately; place
-cut-outs of supplied subjects in the blockout so the draft keeps their likeness
-and scale. The final layers then keep identity: supplied faces, products and
-logos are isolated from the source, not redrawn from the draft, then placed and
-lit to match the chosen draft. The recipe is in
-[references/layered-workflow.md](references/layered-workflow.md#redesign-with-preserved-subjects).
-A request to keep a face or product identical limits the final layers, not the
-drafts.
+generate from text and report that. Draft several compositions that differ in
+concept, within budget; when there is room, make one deliberately unlike the most
+common look among the references. Choose one for its message, hierarchy, room for
+copy and how well it splits into layers.
 
 For a template, reconstruction or bounded edit, adopt the prescribed composition
 instead of inventing alternatives. Read
@@ -223,8 +204,7 @@ Compare the current render with the user's copy, facts, delivery assets,
 reference constraints and intent, and check that a local edit kept everything
 else. Compare it with the composition you chose or were given: if you will call
 the result a redesign or a new layout, the layout must visibly differ from the
-starting artwork and follow the chosen draft. A redesign whose layout matches
-no draft has skipped stage 3; go back to it. For a new direction, check that the render answers every
+starting artwork. For a new direction, check that the render answers every
 direction word, that nothing borrowed reads too literally, and that palette and
 type match the decisions taken from the references; a departure should be
 deliberate. Fix deviations at the stage that caused them and review the new

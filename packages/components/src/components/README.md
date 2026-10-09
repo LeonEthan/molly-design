@@ -58,6 +58,8 @@ permission, platform unavailability and Molly's own off switch.
 
 Advanced settings keep plain-language capability descriptions visible and move
 package/version/license/build metadata under Technical details. Website accounts
+lead with `WebsiteSignInDialog`, which reuses `PublicBrowserSurface` inside a dialog;
+the surface hides only under dialogs opened after its own. Website accounts
 keep import failures beside the source picker and name the failed browser profile;
 unreadable other browsers are expandable when a usable source is selected. When
 no source is usable, the diagnostic remains visible beside the disabled import

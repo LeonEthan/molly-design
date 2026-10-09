@@ -22,6 +22,11 @@ Preserve historical catalog fields when editing unrelated values.
 
 ## Layout and components
 
+- Website accounts lead with signing in on the site's page inside Molly
+  (`website-sign-in-dialog.tsx`, Molly's shared website profile); this reads no other
+  browser, so it raises no Keychain or Files and Folders prompt. Name Google
+  sign-in's alternatives. Import stays collapsed and lists browser profiles only
+  after the person opens it, never on page load.
 - Website-account import shows its pending authorization state and manual retry
   guidance; passwords belong only in the macOS system dialog. Use the shared site
   contract for supported imports; cookie counts do not attest website sign-in. Import

@@ -6,9 +6,9 @@ import {
   type ModelConnection,
   type ProtectedImageConnection,
 } from '@molly/shared/embedded-harness';
-import { useOpenSettings } from '@/hooks/use-open-settings';
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { cn } from '@/lib/utils';
+import { WebsiteSignInDialog } from './website-sign-in-dialog';
 
 export type DesignReadinessTarget = 'models' | 'image' | 'pinterest';
 
@@ -131,7 +131,7 @@ export function DesignReadinessView({
   );
 }
 
-function usePinterestCookieCount() {
+function usePinterestCookieCount(readGeneration: number) {
   const [count, setCount] = useState<number>();
   useEffect(() => {
     const bridge = getPublicBrowserBridge();
@@ -147,7 +147,7 @@ function usePinterestCookieCount() {
     return () => {
       live = false;
     };
-  }, []);
+  }, [readGeneration]);
   return count;
 }
 
@@ -159,17 +159,26 @@ export function DesignReadiness({
 }: Pick<DesignReadinessViewProps, 'connections' | 'imageConnection'> & {
   onReveal: (target: Exclude<DesignReadinessTarget, 'pinterest'>) => void;
 }) {
-  const pinterestCookieCount = usePinterestCookieCount();
-  const { openSettings } = useOpenSettings();
+  const [signInOpen, setSignInOpen] = useState(false);
+  const [readGeneration, setReadGeneration] = useState(0);
+  const pinterestCookieCount = usePinterestCookieCount(readGeneration);
   if (!getIpcServices()) return null;
   return (
-    <DesignReadinessView
-      connections={connections}
-      imageConnection={imageConnection}
-      pinterestCookieCount={pinterestCookieCount}
-      onShow={(target) =>
-        target === 'pinterest' ? openSettings('browser-accounts') : onReveal(target)
-      }
-    />
+    <>
+      <DesignReadinessView
+        connections={connections}
+        imageConnection={imageConnection}
+        pinterestCookieCount={pinterestCookieCount}
+        onShow={(target) => (target === 'pinterest' ? setSignInOpen(true) : onReveal(target))}
+      />
+      <WebsiteSignInDialog
+        site="pinterest.com"
+        open={signInOpen}
+        onOpenChange={(open) => {
+          setSignInOpen(open);
+          if (!open) setReadGeneration((current) => current + 1);
+        }}
+      />
+    </>
   );
 }

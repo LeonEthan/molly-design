@@ -28,7 +28,7 @@ const publicBrowserSurfaceRender = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (key: string, fallback?: unknown) => (typeof fallback === 'string' ? fallback : key),
   }),
 }));
 
@@ -44,13 +44,7 @@ vi.mock('../src/components/sessions/public-browser-surface', () => ({
 }));
 
 vi.mock('../src/components/sessions/managed-preview-surface', () => ({
-  ManagedPreviewSurface: ({
-    viewerUrl,
-    logicalUrl,
-  }: {
-    viewerUrl: string;
-    logicalUrl: string;
-  }) => {
+  ManagedPreviewSurface: ({ viewerUrl, logicalUrl }: { viewerUrl: string; logicalUrl: string }) => {
     return createElement('div', {
       'data-testid': 'managed-preview',
       'data-viewer-url': viewerUrl,
@@ -347,6 +341,36 @@ describe('SessionBrowserPanel controller', () => {
     expect(annotationButton?.disabled).toBe(true);
   });
 
+  it('offers sign-in on the page first for a supported account site', async () => {
+    window.__MOLLY_ELECTRON__ = true;
+    const rendered = await renderPanel(createRuntime().runtime);
+    await enterAddress(rendered, 'https://www.pinterest.com/ideas/');
+    const surface = publicBrowserSurfaceRender.mock.lastCall?.[0] as {
+      onStateChange: (state: ElectronPublicBrowserState) => void;
+    };
+    await act(async () =>
+      surface.onStateChange({
+        browserId: `session-browser-${session.id}`,
+        phase: 'ready',
+        url: 'https://www.pinterest.com/ideas/',
+        canGoBack: false,
+        canGoForward: false,
+      })
+    );
+    const buttons = [...rendered.querySelectorAll('button')].map((button) => button.textContent);
+    expect(buttons.indexOf('Sign in on this page')).toBeGreaterThanOrEqual(0);
+    expect(rendered.textContent).not.toContain('settings.browserAccounts.signInGoogleHint');
+
+    const signIn = [...rendered.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Sign in on this page'
+    )!;
+    await act(async () => signIn.click());
+    expect(rendered.querySelector('[data-testid="public-browser"]')?.getAttribute('data-url')).toBe(
+      'https://www.pinterest.com/login/'
+    );
+    expect(rendered.textContent).toContain('settings.browserAccounts.signInGoogleHint');
+  });
+
   it('reattaches a public browser without navigating again after remount', async () => {
     const testRuntime = createRuntime();
     const rendered = await renderPanel(testRuntime.runtime);
@@ -553,5 +577,4 @@ describe('SessionBrowserPanel controller', () => {
       resumed.querySelector('[data-testid="managed-preview"]')?.getAttribute('data-viewer-url')
     ).toBe(localEndpoint.viewerUrl);
   });
-
 });

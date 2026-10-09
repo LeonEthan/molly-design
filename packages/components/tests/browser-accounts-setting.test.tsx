@@ -11,6 +11,7 @@ const bridge = vi.hoisted(() => ({
   getAccountSummary: vi.fn(),
   getImportSources: vi.fn(),
   importBrowserAccount: vi.fn(),
+  destroy: vi.fn(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
 
@@ -23,6 +24,17 @@ beforeEach(async () => {
   document.body.append(host);
   root = createRoot(host);
 });
+const buttonWithText = (text: string) =>
+  [...document.querySelectorAll('button')].find((button) => button.textContent === text);
+
+async function openImport() {
+  const toggle = buttonWithText(
+    zh['settings.browserAccounts.importToggle'].replace('{{site}}', 'Pinterest')
+  );
+  if (!toggle) throw new Error('Missing import toggle');
+  await act(async () => toggle.click());
+}
+
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
@@ -53,6 +65,7 @@ it('enables memory-only development import with pending authorization and explic
   });
   bridge.importBrowserAccount.mockImplementation(() => request.promise);
   await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
   expect(host.textContent).toContain('Pinterest');
   expect(host.textContent).not.toContain('Amazon');
   expect(ElectronBrowserAccountSiteInputSchema.safeParse({ site: 'amazon.com' }).success).toBe(
@@ -101,6 +114,7 @@ it('keeps a visible disabled import button for unsigned macOS packages', async (
     sites: [{ site: 'pinterest.com', cookieCount: 0 }],
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
   const importButton = Array.from(host.querySelectorAll('button')).find(
     (button) => button.textContent === zh['settings.browserAccounts.importFromBrowser']
   );
@@ -135,6 +149,7 @@ it('distinguishes unreadable profiles from absent sources and restores import af
     return { imported: 1 };
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
   expect(host.textContent).not.toContain(zh['settings.browserAccounts.noSources']);
   expect(host.textContent).toContain(
     zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
@@ -171,6 +186,7 @@ it('reports absent sources only after a completed readable empty listing', async
   });
   bridge.getImportSources.mockResolvedValue({ sources: [], unreadable: [] });
   await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
   expect(host.textContent).toContain(zh['settings.browserAccounts.noSources']);
   expect(host.querySelector('[role="combobox"]')).toBeNull();
 });
@@ -197,6 +213,7 @@ it('imports from the browser profile Molly found, naming any it could not read',
     return { imported: 3 };
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
   expect(host.textContent).not.toContain('Microsoft Edge');
   const details = [...host.querySelectorAll('button')].find(
     (button) => button.textContent === zh['settings.browserAccounts.otherSourceIssues']
@@ -213,4 +230,48 @@ it('imports from the browser profile Molly found, naming any it could not read',
   );
   await act(async () => importButton?.click());
   expect(requests).toEqual([['arc', 'Default', 'pinterest.com', false]]);
+});
+
+it('leads with sign-in inside Molly and leaves other browsers unread until import opens', async () => {
+  const listings: unknown[] = [];
+  const destroyed: unknown[] = [];
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: true,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.getImportSources.mockImplementation(async () => {
+    listings.push('listed');
+    return { sources: [], unreadable: ['Google Chrome'] };
+  });
+  bridge.destroy.mockImplementation(async (browserId: string) => {
+    destroyed.push(browserId);
+    return { ok: true };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  expect(listings).toEqual([]);
+  expect(host.textContent).not.toContain('Google Chrome');
+
+  const signIn = buttonWithText(
+    zh['settings.browserAccounts.signIn'].replace('{{site}}', 'Pinterest')
+  );
+  if (!signIn) throw new Error('Missing sign-in action');
+  await act(async () => signIn.click());
+  const dialog = document.querySelector('[role="dialog"]');
+  expect(dialog?.textContent).toContain(
+    zh['settings.browserAccounts.signInTitle'].replace('{{site}}', 'Pinterest')
+  );
+  expect(dialog?.textContent).toContain(
+    zh['settings.browserAccounts.signInGoogleHint'].replaceAll('{{site}}', 'Pinterest')
+  );
+  await act(async () => buttonWithText(zh['settings.browserAccounts.signInDone'])?.click());
+  expect(document.querySelector('[role="dialog"]')).toBeNull();
+  expect(destroyed).toEqual(['website-sign-in-pinterest.com']);
+  expect(listings).toEqual([]);
+
+  await openImport();
+  expect(listings).toEqual(['listed']);
+  expect(host.textContent).toContain(
+    zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
+  );
 });

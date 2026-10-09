@@ -42,6 +42,7 @@ import {
 } from './session-browser-resume-state';
 import { clearManagedPreviewFrame } from './managed-preview-frame-cache';
 import { SessionBrowserToolbar } from './session-browser-toolbar';
+import { websiteName, websiteSignInUrl } from '../settings/website-sign-in-dialog';
 
 type SessionBrowserPanelProps = {
   session: SessionMeta;
@@ -692,6 +693,9 @@ function SessionBrowserPanelController({
     setSettingsTab('browser-accounts');
     setSettingsOpen(true);
   };
+  const openSiteSignIn = (site: NonNullable<typeof importSite>) => {
+    void openAddress(parseBrowserAddress(websiteSignInUrl(site)));
+  };
   const changeAgentBrowserControl = async (take: boolean) => {
     const bridge = getPublicBrowserBridge();
     if (!bridge) return;
@@ -772,20 +776,30 @@ function SessionBrowserPanelController({
         <div className="border-b px-3 py-2 text-xs">
           <p className="mb-2 text-muted-foreground">
             {t(
-              'sessions.browser.accountChoices',
-              'Use this site anonymously, sign in on the page, or import its Chrome cookies in Molly settings. The Agent pauses while you take control.'
+              'sessions.browser.signInPrompt',
+              'Use this site anonymously, or sign in so the Agent can browse it as you. Molly keeps its own sign-in, so macOS asks for no Keychain or file access. The Agent pauses while you sign in.'
             )}
           </p>
           <div className="flex flex-wrap gap-2">
-            {getPlatform() === 'mac' ? (
-              <Button type="button" variant="outline" size="sm" onClick={openAccountSettings}>
-                {t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => openSiteSignIn(importSite)}
+            >
+              {t('sessions.browser.signIn', 'Sign in on this page')}
+            </Button>
             <Button type="button" variant="ghost" size="sm" onClick={openAccountSettings}>
-              {t('sessions.browser.manageAccounts', 'Manage website accounts')}
+              {getPlatform() === 'mac'
+                ? t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')
+                : t('sessions.browser.manageAccounts', 'Manage website accounts')}
             </Button>
           </div>
+          {currentAddress?.logicalUrl.startsWith(websiteSignInUrl(importSite)) ? (
+            <p className="mt-2 text-muted-foreground">
+              {t('settings.browserAccounts.signInGoogleHint', { site: websiteName(importSite) })}
+            </p>
+          ) : null}
           {publicState?.accountImport?.site === importSite ? (
             <p className="mt-2 text-muted-foreground">
               {t(

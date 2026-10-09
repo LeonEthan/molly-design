@@ -57,6 +57,8 @@ const meta = {
             if (name === 'Import Failed')
               throw new Error('Browser authorization or cookie reading timed out.');
             return new Promise(() => {});
+          case 'publicBrowser.destroy':
+            return { ok: true };
           default:
             throw new Error(`Unexpected story IPC: ${channel}`);
         }
@@ -70,10 +72,27 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+const openImport = async (canvasElement: HTMLElement) => {
+  const canvas = within(canvasElement);
+  await userEvent.click(await canvas.findByRole('button', { name: /Import it|从浏览器导入/ }));
+  return canvas;
+};
+const importOpen: Story = {
+  play: async ({ canvasElement }) => void (await openImport(canvasElement)),
+};
+
 export const Ready: Story = {};
-export const AwaitingAuthorization: Story = {
+export const SignInDialog: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
+    await userEvent.click(
+      await canvas.findByRole('button', { name: /^(Sign in to Pinterest|登录 Pinterest)$/ })
+    );
+  },
+};
+export const AwaitingAuthorization: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = await openImport(canvasElement);
     await userEvent.click(
       await canvas.findByRole('button', { name: /Import from Google Chrome|从 Google Chrome 导入/ })
     );
@@ -82,7 +101,7 @@ export const AwaitingAuthorization: Story = {
 };
 export const ImportFailed: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
+    const canvas = await openImport(canvasElement);
     await userEvent.click(
       await canvas.findByRole('button', { name: /Import from Google Chrome|从 Google Chrome 导入/ })
     );
@@ -91,6 +110,6 @@ export const ImportFailed: Story = {
 };
 export const CookiesSaved: Story = {};
 export const DevelopmentBuild: Story = {};
-export const UnsignedPackage: Story = {};
-export const UnreadableBrowser: Story = {};
-export const UnreadableProfiles: Story = {};
+export const UnsignedPackage: Story = importOpen;
+export const UnreadableBrowser: Story = importOpen;
+export const UnreadableProfiles: Story = importOpen;

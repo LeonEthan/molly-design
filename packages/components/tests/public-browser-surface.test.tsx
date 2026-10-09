@@ -81,3 +81,38 @@ it('keeps the native page visible across state-driven renders and hides it on de
   await act(async () => resolveBounds?.({ ok: true, state: { ...state } }));
   expect(visibility.at(-1)).toBe(false);
 });
+
+it('stays visible inside its own dialog above earlier dialogs and hides under a later one', async () => {
+  const openDialog = () => {
+    const dialog = document.createElement('div');
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('data-state', 'open');
+    document.body.appendChild(dialog);
+    return dialog;
+  };
+  const settingsDialog = openDialog();
+  const signInDialog = openDialog();
+  signInDialog.appendChild(container);
+  await act(async () =>
+    root.render(
+      createElement(PublicBrowserSurface, {
+        browserId: state.browserId,
+        url: state.url!,
+        navigationRequestId: null,
+        active: true,
+        onStateChange: () => {},
+      })
+    )
+  );
+  expect(visibility.at(-1)).toBe(true);
+
+  const confirmDialog = openDialog();
+  await act(async () => {});
+  expect(visibility.at(-1)).toBe(false);
+
+  await act(async () => confirmDialog.remove());
+  expect(visibility.at(-1)).toBe(true);
+  document.body.appendChild(container);
+  settingsDialog.remove();
+  signInDialog.remove();
+});

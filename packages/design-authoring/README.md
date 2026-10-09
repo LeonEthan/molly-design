@@ -92,8 +92,10 @@ The main graphic-design Skill owns the required nine-stage generative layered
 workflow ([Spec](../../specs/generative-layered-design-workflow.md)), its explicit
 task branches, direction words, research exception (prescribed targets and
 bounded edits that keep the direction), at least three image-model design
-options that the user chooses between before the chosen design is reproduced
-faithfully in editable form, design defaults (breakable starting points that double as the review
+options made from the source image and a few chosen inspiration images, which
+the user chooses between before the chosen design is reproduced faithfully in
+editable form (copy from the source, lettering a font cannot match as image
+layers), design defaults (breakable starting points that double as the review
 checklist), the rejected-direction rule and reporting rules, each stated once. References supply techniques at the relevant step and link back
 rather than restating rules; `artwork-format.md` lists what each element kind
 leaves editable. Agents choose methods and

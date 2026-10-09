@@ -20,14 +20,16 @@ results stay thin, say so in the report rather than browsing without end.
 
 ## Inspect and keep sources
 
-Open relevant results and inspect
-their actual visual content; screenshots or image reading are needed to judge
-appearance. Search snippets and page text alone do not establish visual research.
+Open relevant results individually and inspect their actual visual content;
+screenshots or image reading are needed to judge appearance. A grid of results
+is a starting point, not research. Search snippets and page text alone do not
+establish visual research.
 Keep the actual inspected reference URLs and briefly connect the observed choices
 to the design. A search-results URL alone does not identify individual references;
 if those pages could not be opened, report exactly which visible results you used.
-Save an image only when it is needed as a supplied asset or a prescribed
-template; observation alone does not require downloading it.
+Save with `save_image` the few inspiration images you may give the image model
+for the design options (usually one to three), plus any supplied asset or
+prescribed template; observation alone does not require downloading the rest.
 
 ## Keep a few references, each with a job
 
@@ -45,7 +47,9 @@ Take the quality, not the object: a reference with a purple cube may give the
 palette, not a cube. Drop anything attractive but off the direction words. Work
 drawn from only one or two references reads as a blend of them: before building,
 check that the chosen direction is not recognizably one source with new copy.
-Found references guide your prompts and blockouts; they are never `edit` inputs.
+A saved inspiration image can be an `edit` input for a design option, with the
+prompt naming the quality it lends and forbidding its objects, text and logos
+([Design options](layered-workflow.md#design-options)).
 Respect source artwork and asset permissions; being legal is not the same as
 being fair to the original designer. When the user prescribes a template to
 reproduce, following it is their decision.

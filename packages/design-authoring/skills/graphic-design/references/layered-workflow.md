@@ -14,12 +14,23 @@ marks with where and how large they sit. Choose a `size` whose aspect ratio
 matches the canvas (the imagegen skill has the size rules); matching the canvas
 pixel dimensions makes later measuring and comparison easier.
 
-- **From supplied material:** call `molly_image` `edit` with the delivery assets
-  (a product photo, a logo, or the source poster for a redesign) as inputs, so
-  the options keep them. Say what must stay recognizable and what is new.
-- **From an open brief:** `generate` from the prompt, or `edit` from a rendered
-  blockout when words cannot pin down the layout.
-- **Never** pass found references such as other designers' work as inputs.
+Call `molly_image` `edit` with the images in this order:
+
+1. **The source image**, when there is one: the delivery assets (a product photo,
+   a logo) or the source poster for a redesign. Say what must stay recognizable
+   and what is new.
+2. **One or two inspiration images** saved during research, chosen for this
+   option. Name each by its position and the quality it contributes ("image 2:
+   the warm low light and amber palette; image 3: the condensed type
+   treatment"), and say that its objects, people, text and logos must not
+   appear. Without a source image they come first, and the prompt states the
+   canvas size.
+3. **A rendered blockout**, optionally, when words cannot pin down the layout.
+
+The `imagegen` Skill lists each connection's input limit (DashScope accepts at
+most three images); drop the blockout or an inspiration image first. If the
+connection rejects several images, retry with fewer and say so. If the
+configured model cannot edit, `generate` from the prompt and say so.
 
 A blockout is a rough composition in native shapes and placeholder copy at the
 canvas size, rendered with `molly_render_preview`. That tool renders only the
@@ -31,10 +42,11 @@ the layout wording rather than adding shapes.
 
 Make the options genuinely different in concept or composition: subject scale
 and position, where the headline sits, the kind of image, the type treatment.
-Read every option with an image-reading tool before showing it. Regenerate one
-that fails the [design defaults](../SKILL.md#design-defaults) or drops a delivery
-asset; show the user only options you would be willing to build. If the
-configured model cannot edit, use `generate` and say so.
+Varying the inspiration images between options is one way to get there. Read
+every option with an image-reading tool before showing it. Regenerate one that
+fails the [design defaults](../SKILL.md#design-defaults), drops a delivery asset
+or reads as an inspiration image with new copy; show the user only options you
+would be willing to build.
 
 Image models often misspell copy, especially Chinese, Japanese or Korean.
 Wrong copy in an option is acceptable when the layout and style are right,
@@ -57,10 +69,10 @@ The chosen design is the target; the editable project should look like it.
    hidden parts, on a transparent background. When the user requires a supplied
    face, product or logo to stay exact and the design altered it, isolate it
    from the source image instead.
-4. **Text.** Set the copy as native text matched to the measurements, or keep a
-   piece of artistic lettering as an image isolated from the design (see
-   [Lettering layers](#lettering-layers)); either way the user's exact copy
-   wins over what the model drew.
+4. **Text.** Take the wording from the brief or source, line by line. Set
+   copy that a font can reproduce as native text matched to the measurements;
+   isolate lettering a font cannot reproduce as an image from the design (see
+   [Lettering layers](#lettering-layers)).
 5. **Assemble and compare.** Place each layer at its measured position, render,
    and compare the render with the chosen design as described under
    [Comparing native previews](#comparing-native-previews).
@@ -111,22 +123,27 @@ see-through when stacked. Judge this in a render.
 
 ## Lettering layers
 
-Generate each piece of artistic lettering as its own transparent layer, so it
-can be moved, resized and replaced without touching the scene:
+Make each piece of lettering that a font cannot reproduce its own transparent
+layer, so it can be moved, resized and replaced without touching the scene. A
+product name in drawn letters on a colored badge is lettering even at label
+size; a plain font on a flat shape would lose the design.
 
-- Call `molly_image` `generate`, or `edit` with the chosen design as the first
-  image when the lettering must match it, with `background: "transparent"` and
-  `output_format: "png"`.
+- Call `molly_image` `edit` with the chosen design as the first image, asking
+  for only this lettering exactly as it appears there, together with its badge
+  or backing shape when that belongs to it, with `background: "transparent"`
+  and `output_format: "png"`. Use `generate` only for new lettering with no
+  design to match.
 - Put the exact copy in the prompt in quotation marks and ask for it verbatim,
   with no extra characters. Describe the style (material, stroke, dimension,
   color, lighting) and say that nothing else should appear. Spell unusual words
   letter by letter; for Chinese, Japanese or Korean, list the exact characters.
 - Request enough pixels for the size it will be displayed at; lettering scaled
   up past its pixel size turns soft.
-- Read the result and compare it with the copy character by character. Image
-  models often drop, add, swap or invent characters, especially in CJK. A
-  wrong character is a failed layer: regenerate within the user's budget, or
-  set that copy as native text and report the change.
+- Read the result and compare it with the source copy character by character,
+  not with what the design drew. Image models often drop, add, swap or invent
+  characters, especially in CJK. A wrong character is a failed layer:
+  regenerate within the user's budget, or set that copy as native text and
+  report the change.
 - Check alpha and trim as for any foreground layer, then place it like other
   layers. Give it an `id` that names the copy, such as `title-lettering`.
 

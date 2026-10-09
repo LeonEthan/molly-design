@@ -41,3 +41,7 @@ The eval runner (local branch, not in the product) treats a turn that commits no
 - No run has used this workflow yet; fidelity of plates and isolations from a finished design is unverified, and copy drawn by the image model may be wrong.
 - A new design now takes two turns and at least three option calls before any layer work.
 - The Spec revision is a draft awaiting owner approval.
+
+## Later change
+
+[Inspiration images as inputs, source copy and lettering layers](2026-10-09-inspiration-inputs-and-lettering.md) corrects decision 1: inspiration images the Agent chooses from research may be `edit` inputs. It also takes copy from the source rather than the design and adds lettering layers.

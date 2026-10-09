@@ -74,8 +74,7 @@ never gates.
 
 Establish purpose, audience, where the work will be seen and what it competes
 with there (a feed, a wall of posters, a product page), the category it belongs
-to, the one message it must send, output size, exact copy, supplied assets and
-constraints. Separate verified facts from assumptions. Distinguish **delivery
+to, the one message it must send, output size, supplied assets and constraints. Separate verified facts from assumptions. Distinguish **delivery
 assets** (a supplied logo or product photo that must appear as supplied) from
 **design references** that only guide appearance.
 
@@ -120,7 +119,9 @@ When research applies, read
 [references/browser-research.md](references/browser-research.md): search from
 the direction words, look at the actual images (search snippets are not visual
 research), include at least one source outside the category and current design
-feeds, and make one focused pass rather than browsing without end. The user's own
+feeds, and make one focused pass rather than browsing without end. Open the
+individual images you might learn from, not only result grids, and save the few
+you may give the image model in stage 3. The user's own
 direction stays the basis. If the user forbids networking, respect it and report
 the gap; a missing browser or network failure is a blocker, not an exception.
 Fact checks such as event dates are separate from inspiration research.
@@ -138,11 +139,18 @@ headline and key copy drawn in, and the finish you intend. They are the design,
 not sketches, so judge each against the [design defaults](#design-defaults)
 before showing it, and regenerate one that fails. Make the options differ in
 concept or composition, not just color; when there is room, make one
-deliberately unlike the most common look among the references. Pass supplied
-delivery assets (a product photo, a logo, a source poster being redesigned) as
-`edit` inputs so the options keep them; never pass found references such as
-someone else's poster. A rendered blockout can steer an option's layout when
-words are not enough. Techniques are in
+deliberately unlike the most common look among the references.
+
+Create the options from images and text, not text alone, with `molly_image`
+`edit`. Pass the source image first when there is one: the supplied delivery
+assets (a product photo, a logo) or the source artwork being redesigned, so the
+options keep them. Add one or two of the inspiration images saved in stage 2,
+chosen by you for that option, and say in the prompt what each contributes
+("image 2: its light and palette") and that its objects, text and logos are not
+to be copied. Different options may use different inspiration images. Stay
+within the connection's input limit in the `imagegen` Skill. An option that is
+recognizably one reference with new copy fails. A rendered blockout can steer an
+option's layout when words are not enough. Techniques are in
 [references/layered-workflow.md](references/layered-workflow.md#design-options).
 
 Show the options and **end the turn** so the user can choose, as
@@ -180,23 +188,31 @@ preserve existing fields and unaffected elements.
 
 ### 6. Check text representation
 
-Match the copy drawn in the chosen design: position, size, weight, color,
-spacing and alignment, and the closest available letterforms. Choose a
-representation for each piece of copy:
+Take the wording from the brief or the source artwork, never from the design
+image: the image model drops and alters copy. List every line the source
+carries, fine print and disclaimers included, and place each one, including a
+line the design left out, where the design's hierarchy puts similar copy. Then
+match how the chosen design sets each piece: position, size, weight, color,
+spacing and alignment.
 
-- **Native text** (`kind: text`) with a standard or registered font is the
-  default: body copy, dates, times, prices, addresses, lists, small labels and
-  anything the user is likely to reword. Native text also handles color,
-  gradient, shadow, weight and spacing, so try it first for a styled headline.
-- **Image lettering** (an `image` element isolated from the chosen design or
-  generated with `molly_image`) suits
-  artistic text that fonts cannot express: hand lettering, calligraphy, 3D or
-  dimensional type, textured or illustrated letters, type woven into the
-  scene, or a logotype-style title. Use it for a few large display words, not
-  for long or small copy.
+Choose a representation for each piece by asking whether native text can
+reproduce the design's letterforms and finish faithfully:
 
-Every character of image lettering must be exact; check it letter by letter and
-regenerate or switch to native text if anything is wrong. The wording of image
+- **Native text** (`kind: text`) with a standard or registered font when it can:
+  body copy, dates, times, prices, addresses, lists, fine print, labels in an
+  ordinary typeface and anything the user is likely to reword. Native text
+  handles color, gradient, shadow, weight and spacing. Long or small copy stays
+  native even when styled; match it as closely as fonts allow.
+- **Image lettering** (an `image` element isolated from the chosen design) when
+  it cannot, at any size: drawn or custom letterforms, calligraphy, outlines
+  combined with fills, texture, 3D, letters fused with a badge or background
+  shape, warped or per-letter styling. Isolate it together with its badge when
+  the badge belongs to it. Do not flatten such lettering into a plain font for
+  the sake of editability.
+
+Every character of image lettering must match the source copy; check it letter
+by letter, regenerate a wrong one with the exact text, and if it still fails set
+that copy as native text and report the difference. The wording of image
 lettering can only change by regenerating it, which counts as an editability
 limit to report. Techniques are in
 [references/layered-workflow.md](references/layered-workflow.md#lettering-layers).
@@ -226,8 +242,8 @@ evidence of a desktop connection failure.
 
 Compare the current render with the user's copy, facts, delivery assets,
 reference constraints and intent, and check that a local edit kept everything
-else. Copy drawn in a design option can be misspelled; the user's exact copy
-wins. Compare the render with the chosen design one last time: it should read as
+else. Check the copy line by line against the brief or source: every line
+present and every character exact, lettering images included. Compare the render with the chosen design one last time: it should read as
 the same design, not a rearrangement of its parts. For a new direction, check
 that it answers every direction word and that nothing borrowed reads too
 literally. Fix deviations at the stage that caused them and review the new

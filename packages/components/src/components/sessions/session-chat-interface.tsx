@@ -57,6 +57,10 @@ import { useSessionMentionDropZone } from '@/hooks/use-session-mention-drag';
 import { SessionChatInputArea, type SessionChatInputAreaHandle } from './session-chat-input-area';
 import { useSessionMcpSelection } from '@/hooks/use-session-mcp-selection';
 import { MessageQueueDisplay, shouldRequestNativeQueueSteer } from './message-queue';
+import {
+  resolveUserSessionStopCancelOptions,
+  shouldShowDispatchPauseInterstitial,
+} from './session-stop-control';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from '@tanstack/react-router';
 import { toast } from 'sonner';
@@ -105,6 +109,9 @@ import {
   resolveBaseBranchPreference,
   resolveProjectGitHubRepo,
   machineSupportsDesignContinuationPreparation,
+  machineSupportsProtocolCapability,
+  MACHINE_PROTOCOL_CAPABILITIES,
+  SESSION_STOP_CONTROL_USER_STOP_VERSION,
 } from '@molly/shared';
 import { DesignContinuationDialog } from './design-continuation-dialog';
 
@@ -3497,7 +3504,15 @@ export const SessionChatInterface = memo(
 
       setInputActionState('ready');
       try {
-        await requestSessionCancel(session.id, turnIdToCancel);
+        const cancelOptions = resolveUserSessionStopCancelOptions({
+          supportsUserStop: machineSupportsProtocolCapability(
+            sessionMachine,
+            MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl,
+            SESSION_STOP_CONTROL_USER_STOP_VERSION
+          ),
+          hasQueuedInput: messageQueue.length > 0,
+        });
+        await requestSessionCancel(session.id, turnIdToCancel, cancelOptions);
       } catch (error) {
         console.error('Failed to request session cancel', error);
         toast.error(t('sessions.stopError'), { description: getErrorMessage(error) });
@@ -3513,8 +3528,10 @@ export const SessionChatInterface = memo(
       handleGoalCommand,
       isGoalActive,
       latestGoal,
+      messageQueue.length,
       requestSessionCancel,
       session.id,
+      sessionMachine,
       t,
       workspaceId,
     ]);
@@ -3978,40 +3995,43 @@ export const SessionChatInterface = memo(
                     sessionCompleted={session.status?.type === 'idle' && !isSessionWorking}
                   />
 
-                  {session.dispatchPause?.state === 'paused' ? (
-                    <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
-                      <span className="min-w-0 flex-1">
-                        {session.dispatchPause.error ??
-                          t(
-                            'sessions.dispatchPaused',
-                            'Molly stopped. Anything you queued will wait until you continue.'
-                          )}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          void requestSessionCancel(
-                            session.id,
-                            session.dispatchPause!.turnId
-                          ).catch((error) => toast.error(getErrorMessage(error)));
-                        }}
-                      >
-                        {t('sessions.retryStop', 'Stop again')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          void requestSessionCancel(session.id, session.dispatchPause!.turnId, {
-                            action: 'resume',
-                          }).catch((error) => toast.error(getErrorMessage(error)));
-                        }}
-                      >
-                        {t('sessions.continueQueue', 'Continue')}
-                      </Button>
-                    </div>
-                  ) : null}
+                  {(() => {
+                    const dispatchPause = session.dispatchPause;
+                    if (!shouldShowDispatchPauseInterstitial(dispatchPause)) return null;
+                    return (
+                      <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
+                        <span className="min-w-0 flex-1">
+                          {dispatchPause.error ??
+                            t(
+                              'sessions.dispatchPaused',
+                              'Molly stopped. Anything you queued will wait until you continue.'
+                            )}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            void requestSessionCancel(session.id, dispatchPause.turnId).catch(
+                              (error) => toast.error(getErrorMessage(error))
+                            );
+                          }}
+                        >
+                          {t('sessions.retryStop', 'Stop again')}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            void requestSessionCancel(session.id, dispatchPause.turnId, {
+                              action: 'resume',
+                            }).catch((error) => toast.error(getErrorMessage(error)));
+                          }}
+                        >
+                          {t('sessions.continueQueue', 'Continue')}
+                        </Button>
+                      </div>
+                    );
+                  })()}
                   <SessionInfoBar
                     status={statusStripState}
                     goal={latestGoal}

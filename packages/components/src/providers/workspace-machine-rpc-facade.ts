@@ -1,4 +1,8 @@
-import { machineSupportsProtocolCapability, MACHINE_PROTOCOL_CAPABILITIES } from '@molly/shared';
+import {
+  machineSupportsProtocolCapability,
+  MACHINE_PROTOCOL_CAPABILITIES,
+  SESSION_STOP_CONTROL_USER_STOP_VERSION,
+} from '@molly/shared';
 import type { LocalFilePreviewResource } from '@molly/shared/local-file-preview';
 import type { LocalProjectGitStateRpcResponse } from '@molly/loro-streams-rpc';
 import {
@@ -400,14 +404,19 @@ export function createWorkspaceMachineRpcFacade(deps: WorkspaceMachineRpcFacadeD
     machineId: MachineId,
     sessionId: SessionId,
     turnId: string,
-    options?: { timeoutMs?: number; subagentTaskId?: string; action?: 'resume' | 'interrupt' }
+    options?: {
+      timeoutMs?: number;
+      subagentTaskId?: string;
+      action?: 'resume' | 'interrupt' | 'stop';
+    }
   ): Promise<SessionCancelResponse | null> => {
     try {
       if (
         options?.action &&
         !machineSupportsProtocolCapability(
           { protocolCapabilities: await deps.getMachineProtocolCapabilities(machineId) },
-          MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl
+          MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl,
+          options.action === 'stop' ? SESSION_STOP_CONTROL_USER_STOP_VERSION : 1
         )
       )
         throw new Error(

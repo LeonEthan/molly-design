@@ -248,7 +248,6 @@ export const LoroMachineRestartRpcRequestSchema = BaseRpcRequestSchema.extend({
     .strict(),
 }).strict();
 
-
 export const LoroMachineAcpCapabilitiesRefreshRpcRequestSchema = BaseRpcRequestSchema.extend({
   method: z.literal('machine/acp-capabilities-refresh'),
   params: z
@@ -414,7 +413,7 @@ export const LoroSessionCancelRpcRequestSchema = BaseRpcRequestSchema.extend({
       sessionId: SessionIdSchema,
       turnId: z.string().trim().min(1),
       subagentTaskId: z.string().trim().min(1).optional(),
-      action: z.enum(['resume', 'interrupt']).optional(),
+      action: z.enum(['resume', 'interrupt', 'stop']).optional(),
     })
     .strict(),
 }).strict();
@@ -2554,7 +2553,7 @@ export class LoroStreamsMachineRpcClient {
     sessionId: SessionId;
     turnId: string;
     subagentTaskId?: string;
-    action?: 'resume' | 'interrupt';
+    action?: 'resume' | 'interrupt' | 'stop';
     timeoutMs?: number;
   }): Promise<SessionCancelResponse | null> {
     const result = await this.sendRequest({
@@ -3043,7 +3042,7 @@ export class LoroStreamsMachineRpcClient {
             sessionId: SessionId;
             turnId: string;
             subagentTaskId?: string;
-            action?: 'resume' | 'interrupt';
+            action?: 'resume' | 'interrupt' | 'stop';
           };
         }
       | {
@@ -3241,9 +3240,7 @@ export class LoroStreamsMachineRpcClient {
       pingContext:
         args.method === 'machine/ping' ? { requestId: args.params.requestId } : undefined,
       lifecycleContext:
-        args.method === 'machine/restart'
-          ? { requestId: args.params.requestId }
-          : undefined,
+        args.method === 'machine/restart' ? { requestId: args.params.requestId } : undefined,
       binaryContext:
         args.method === 'machine/acp-authenticate'
           ? { agentType: 'unknown', requestId: args.params.requestId }

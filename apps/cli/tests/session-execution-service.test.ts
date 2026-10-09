@@ -8520,6 +8520,9 @@ type StopCase = {
   queue: { $cid: string }[];
   /** Queue contents observed after the first durable dispatchPause write. */
   queueAfterWrite?: { $cid: string }[];
+  /** Queue contents observed once a meta read sees the resumed write (final re-validation). */
+  queueAfterResumedMetaRead?: { $cid: string }[];
+  metaPatch?: Partial<SessionMeta>;
   initialPause?: { turnId: string; state: 'paused' | 'resumed' };
   /** User history besides the stopped turn's own `live` input. */
   history?: { id: string; role: 'user'; status: string }[];
@@ -8603,6 +8606,34 @@ it.each<StopCase>([
     state: 'paused',
     gated: true,
   },
+  // Codex round 4, P1 #1: a metadata-only activation (history not yet synced)
+  // auto-dispatches once the owner ends, so user Stop must count it.
+  {
+    label: 'stop counts a metadata-only activation whose history has not synced',
+    action: 'stop',
+    queue: [],
+    metaPatch: { latestUserMsgId: 'meta-only' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores an activation that is already handled',
+    action: 'stop',
+    queue: [],
+    metaPatch: { latestUserMsgId: 'done-1', lastHandledUserMsgId: 'done-1' },
+    state: 'resumed',
+    gated: false,
+  },
+  // Codex round 4, P1 #2: an enqueue landing while the final re-validation
+  // awaits meta must still be observed before the gate is released.
+  {
+    label: 'stop observes an enqueue during its final meta read',
+    action: 'stop',
+    queue: [],
+    queueAfterResumedMetaRead: [{ $cid: 'q-late' }],
+    state: 'paused',
+    gated: true,
+  },
   {
     label: 'stop ignores its own input and settled history',
     action: 'stop',
@@ -8638,6 +8669,8 @@ it.each<StopCase>([
     action,
     queue,
     queueAfterWrite,
+    queueAfterResumedMetaRead,
+    metaPatch,
     initialPause,
     history = [],
     steerTurnStatuses,
@@ -8654,6 +8687,7 @@ it.each<StopCase>([
       latestUserMsgId: 'live',
       ...(initialPause ? { dispatchPause: initialPause } : {}),
       ...(steerTurnStatuses ? { steerTurnStatuses } : {}),
+      ...metaPatch,
     };
     const turns = [{ id: 'live', role: 'user', status: 'processing' }, ...history];
     let service: SessionExecutionService | undefined;
@@ -8665,6 +8699,7 @@ it.each<StopCase>([
       setStatus: async () => {},
       waitUntilSynced: async () => {},
       getMessageQueue: async () => currentQueue,
+      readMessageQueueSnapshot: () => currentQueue,
     });
     const deps = createBaseDeps({
       getActiveTurnId: () => active,
@@ -8674,7 +8709,11 @@ it.each<StopCase>([
       processMessageQueue: async () => {},
       workspaceDocument: {
         repo: {
-          getDocMeta: async () => ({ meta }),
+          getDocMeta: async () => {
+            if (queueAfterResumedMetaRead && meta.dispatchPause?.state === 'resumed')
+              currentQueue = queueAfterResumedMetaRead;
+            return { meta };
+          },
           upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
             if (patch.dispatchPause?.state === 'resumed' && action === 'stop')
               gateDuringResumedWrite.push(service!.isDispatchPausedInMemory(sessionId));
@@ -8738,6 +8777,7 @@ it('Stop cancelSession: failed drain after an empty-queue stop persists a visibl
       setStatus: async () => {},
       waitUntilSynced: async () => {},
       getMessageQueue: async () => [],
+      readMessageQueueSnapshot: () => [],
     });
     const deps = createBaseDeps({
       getActiveTurnId: () => turnId,

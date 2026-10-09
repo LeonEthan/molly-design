@@ -680,13 +680,26 @@ export class SessionExecutionService {
 
   /**
    * Whether anything would dispatch once the stopped owner ends, without
-   * Continue: the message queue, but also an undelivered steer (`pending_apply`,
-   * which cancellation can requeue), a requeued steer (`steerTurnStatuses`
-   * pending) and restored history input. The stopped turn's own input is excluded.
+   * Continue: the message queue (see `hasUndispatchedNonQueueInput`).
    */
   private async hasUndispatchedInput(sessionId: SessionId, turnId: string): Promise<boolean> {
+    if (await this.hasUndispatchedNonQueueInput(sessionId, turnId)) return true;
     const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
-    if ((await sessionDoc.getMessageQueue()).length > 0) return true;
+    return sessionDoc.readMessageQueueSnapshot().length > 0;
+  }
+
+  /**
+   * Non-queue input that would dispatch without Continue: an undelivered steer
+   * (`pending_apply`, which cancellation can requeue), a requeued steer
+   * (`steerTurnStatuses` pending), restored history input, and a metadata-only
+   * activation whose user entry has not synced yet. The stopped turn's own
+   * input is excluded.
+   */
+  private async hasUndispatchedNonQueueInput(
+    sessionId: SessionId,
+    turnId: string
+  ): Promise<boolean> {
+    const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
     const meta = await this.getSessionMeta(sessionId);
     const ownInput = new Set<string>();
     const activeUserTurnId = this.getActiveUserTurnId(sessionId);
@@ -698,9 +711,20 @@ export class SessionExecutionService {
       )
     )
       return true;
-    const history = readSessionHistory(sessionDoc.sessionData.history).filter(
-      (entry) => entry.role !== 'user' || !ownInput.has(entry.id)
-    );
+    const fullHistory = readSessionHistory(sessionDoc.sessionData.history);
+    const activation = meta?.latestUserMsgId;
+    if (
+      typeof activation === 'string' &&
+      activation !== '' &&
+      !ownInput.has(activation) &&
+      activation !== meta?.processingUserMsgId &&
+      activation !== meta?.lastHandledUserMsgId &&
+      activation !== meta?.lastMissingHistoryUserMsgId &&
+      activation !== meta?.settledActivationUserMsgId &&
+      !fullHistory.some((entry) => entry.role === 'user' && entry.id === activation)
+    )
+      return true;
+    const history = fullHistory.filter((entry) => entry.role !== 'user' || !ownInput.has(entry.id));
     if (
       history.some(
         (entry) =>
@@ -5283,12 +5307,18 @@ export class SessionExecutionService {
         await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
       } else if (stopAction === 'stop' && !(await this.hasUndispatchedInput(sessionId, turnId))) {
         await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
-        // Re-validate after the durable write: an enqueue that landed meanwhile
-        // keeps the Stop contract (paused until Continue). The gate is released
-        // synchronously after the final read, so no promotion can interleave.
-        if (await this.hasUndispatchedInput(sessionId, turnId)) await persistPaused();
-        else if (this.stopRequestedBySession.get(sessionId) === turnId)
+        // Re-validate after the durable write: input that landed meanwhile keeps
+        // the Stop contract (paused until Continue). Linearization point: all
+        // async reads finish first, then the synchronous queue snapshot and the
+        // gate release share one continuation, so no enqueue or promotion can
+        // fall between them.
+        const nonQueuePending = await this.hasUndispatchedNonQueueInput(sessionId, turnId);
+        const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
+        if (nonQueuePending || sessionDoc.readMessageQueueSnapshot().length > 0) {
+          await persistPaused();
+        } else if (this.stopRequestedBySession.get(sessionId) === turnId) {
           this.stopRequestedBySession.delete(sessionId);
+        }
       } else {
         await persistPaused();
       }

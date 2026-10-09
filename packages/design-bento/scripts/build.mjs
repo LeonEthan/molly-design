@@ -43,6 +43,21 @@ try {
   // The vendored Bento tree (bento/) already carries the applied Molly patches.
   // Assemble in a temporary copy so npm's isolated closure never touches it.
   cpSync(join(root, 'bento'), tree, { recursive: true });
+  const htmlFile = join(tree, 'slides/index.html');
+  const entryHtml = readFileSync(htmlFile, 'utf8');
+  const splashPattern = /    <!-- splash:[\s\S]*?<\/style>/;
+  if (!splashPattern.test(entryHtml)) throw Error('Pinned startup splash changed');
+  const wordmark = (file) =>
+    `data:image/svg+xml;base64,${readFileSync(resolve(root, '../components/src/assets', file)).toString('base64')}`;
+  const splash = readFileSync(join(root, 'src/splash.html'), 'utf8')
+    .replaceAll('__MOLLY_WORDMARK__', wordmark('molly-wordmark.svg'))
+    .replaceAll('__MOLLY_WORDMARK_DARK__', wordmark('molly-wordmark-dark.svg'));
+  writeFileSync(
+    htmlFile,
+    entryHtml
+      .replace(splashPattern, () => splash)
+      .replace('<title>bento/slides</title>', '<title>Molly Design</title>')
+  );
   const destination = join(tree, 'slides/src/a1a2/packages');
   cpSync(join(root, 'vendor/packages'), destination, { recursive: true });
   for (const file of Object.keys(manifest.files).filter(
@@ -167,7 +182,10 @@ try {
       throw Error('Pinned canvas command executor changed; review layer and property commands');
     adaptedBoot = adaptedBoot.replace(anchor, replacement);
   }
-  writeFileSync(bootFile, `import { prepareImageSampling } from '../image-sampling.ts'\n` + adaptedBoot);
+  writeFileSync(
+    bootFile,
+    `import { prepareImageSampling } from '../image-sampling.ts'\n` + adaptedBoot
+  );
   const renderFile = join(tree, 'slides/src/render.ts');
   const ordinaryImage = `      const img = document.createElement('img')
       const imgSrc = assetSrc(doc, el.src)
@@ -312,8 +330,7 @@ try {
   const editor = readFileSync(editorFile, 'utf8');
   const editorAnchor = 'export class Editor {';
   if (!editor.includes(editorAnchor)) throw Error('Pinned editor API changed');
-  const slideNavWiring =
-    '    this.canvas.onSlideNav = (dir) => this.store.goToLinear(dir)\n';
+  const slideNavWiring = '    this.canvas.onSlideNav = (dir) => this.store.goToLinear(dir)\n';
   if (editor.split(slideNavWiring).length !== 2) throw Error('Pinned canvas wiring changed');
   writeFileSync(
     editorFile,
@@ -336,7 +353,7 @@ try {
       )
   );
   const mainFile = join(tree, 'slides/src/main.ts');
-  const main = readFileSync(mainFile, 'utf8');
+  const main = readFileSync(mainFile, 'utf8').replaceAll('bento-splash', 'molly-splash');
   const mainAnchor = '  format: doc.format,';
   if (!main.includes(mainAnchor)) throw Error('Pinned scripting API changed');
   writeFileSync(

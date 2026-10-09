@@ -56,6 +56,7 @@ it('renders an agent local image through the session file resource resolver', as
 });
 
 it('shows a failed local read without giving the raw path to an image element', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   await render({
     text: '![Reference](sandbox:/workspace/missing.png)',
     resolveAgentImageUrl: async () => {
@@ -64,6 +65,12 @@ it('shows a failed local read without giving the raw path to an image element', 
   });
   expect(container?.textContent).toContain('Reference: File not found');
   expect(container?.querySelector('img')).toBeNull();
+  expect(warn).toHaveBeenCalledWith(
+    expect.any(String),
+    '/workspace/missing.png',
+    expect.any(Error)
+  );
+  warn.mockRestore();
 });
 
 it('resolves file URLs through the session file resource resolver', async () => {

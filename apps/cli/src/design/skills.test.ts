@@ -285,6 +285,13 @@ describe('packaged design materials', () => {
       expect(existsSync(path.resolve(graphic, target.split('#')[0])), target).toBe(true);
     }
     expect(graphicText).toContain('references/layered-workflow.md');
+    expect(graphicText).toContain('Markdown image syntax');
+    expect(graphicText).toContain('absolutePath');
+    expect(graphicText).toContain('![Draft');
+    expect(entryText).toContain(
+      'The exception is a Markdown image embed that shows a draft to the user: it must include the draft path,'
+    );
+    expect(entryText).toContain('Paths still stay out of ordinary prose.');
     expect(text).toContain('actual image-reading tool');
     expect(text).toContain('mcp__molly_image__generate');
     expect(text).toContain('Molly has no default model');

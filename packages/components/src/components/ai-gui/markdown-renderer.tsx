@@ -1105,6 +1105,11 @@ function LocalMarkdownImage({
         if (active) setResult({ request, url });
       })
       .catch((error: unknown) => {
+        console.warn(
+          '[Molly] Markdown image failed to resolve; showing a placeholder.',
+          request.path,
+          error
+        );
         if (active)
           setResult({ request, error: error instanceof Error ? error.message : unavailable });
       });
@@ -1127,7 +1132,10 @@ function LocalMarkdownImage({
       src={current.url}
       alt={alt ?? ''}
       className={cn('my-2 max-h-[32rem] max-w-full rounded-md object-contain', rest.className)}
-      onError={() => setResult({ request, error: unavailable })}
+      onError={() => {
+        console.warn('[Molly] Markdown image failed to load; showing a placeholder.', path);
+        setResult({ request, error: unavailable });
+      }}
     />
   );
 }

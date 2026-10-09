@@ -226,6 +226,9 @@ Keep this explanation proportionate to the issue; brevity never hides a limit.
 Name research sources briefly. Leave out file paths, YAML fields, element IDs,
 tool and script names, commands and diagnostic codes unless the user asks or a
 limit cannot be explained without them; describe them in plain words instead.
+The exception is a Markdown image embed that shows a draft to the user: it must
+include the draft path, preferably the `absolutePath` from `molly_image`, as
+`references/layered-workflow.md` requires. Paths still stay out of ordinary prose.
 Do not list every workflow stage or check.
 
 ## Completion reporting

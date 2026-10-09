@@ -236,6 +236,7 @@ describe('SessionBrowserPanel controller', () => {
     container?.remove();
     container = undefined;
     delete window.__MOLLY_ELECTRON__;
+    delete window.ipc;
     clearSessionBrowserResumeState(session.id);
     clearSessionBrowserResumeState(secondSession.id);
     vi.restoreAllMocks();
@@ -341,8 +342,17 @@ describe('SessionBrowserPanel controller', () => {
     expect(annotationButton?.disabled).toBe(true);
   });
 
-  it('offers sign-in on the page first for a supported account site', async () => {
+  it('pauses Agent pages, then offers sign-in on the page for a supported account site', async () => {
     window.__MOLLY_ELECTRON__ = true;
+    const invoked: string[] = [];
+    window.ipc = {
+      invoke: async (channel: string) => {
+        invoked.push(channel);
+        return channel === 'publicBrowser.getState' ? null : { ok: true };
+      },
+      on: () => () => {},
+      send: () => {},
+    };
     const rendered = await renderPanel(createRuntime().runtime);
     await enterAddress(rendered, 'https://www.pinterest.com/ideas/');
     const surface = publicBrowserSurfaceRender.mock.lastCall?.[0] as {
@@ -364,7 +374,9 @@ describe('SessionBrowserPanel controller', () => {
     const signIn = [...rendered.querySelectorAll('button')].find(
       (button) => button.textContent === 'Sign in on this page'
     )!;
+    expect(invoked).not.toContain('publicBrowser.pauseAgentsForAccountSignIn');
     await act(async () => signIn.click());
+    expect(invoked).toContain('publicBrowser.pauseAgentsForAccountSignIn');
     expect(rendered.querySelector('[data-testid="public-browser"]')?.getAttribute('data-url')).toBe(
       'https://www.pinterest.com/login/'
     );

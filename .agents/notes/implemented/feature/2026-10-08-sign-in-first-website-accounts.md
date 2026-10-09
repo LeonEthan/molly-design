@@ -22,6 +22,12 @@ The #99 copy also told users to choose "Always Allow" for `/usr/bin/security`. T
   - a session's Browser sidebar shows **Sign in on this page** on Pinterest pages. It navigates that page to the login URL, so the existing human-takeover pause applies.
 - Import stays available as a collapsed "Already signed in … Import it" section and lists profiles only after the person opens it.
 
+## Agent pause (PR review fix)
+
+Codex's GitHub security review of #106 found a P1. The sign-in page shares the website profile with every Agent page, so an Agent run that was still active could act with the new Pinterest session while the human was signing in. Import and cookie clearing already paused every active Agent page (`pauseAgentsForAccountChange`); the first version of sign-in did not.
+
+Both sign-in entry points now call that same pause through a new `publicBrowser.pauseAgentsForAccountSignIn` IPC method before the login page loads. The dialog shows a pausing state and does not open the page if the pause fails. Main already syncs its takeover state to the CLI on every host poll, so paused pages stay paused until someone clicks **Resume Agent** in that session.
+
 ## Reuse
 
 - **Browser view:** reused `PublicBrowserSurface` with one adaptation. It used to hide whenever any dialog was open; now it hides only under dialogs opened after the one containing it, since Radix portals stacked dialogs to `body` in opening order. Without this, a surface inside a dialog would never show.

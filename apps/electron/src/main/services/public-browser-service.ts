@@ -458,7 +458,8 @@ export class PublicBrowserService {
     return [...this.humanTakeovers.values()]
   }
 
-  private pauseAgentsForAccountChange(): void {
+  /** Account changes, including a human sign-in, reach every Agent page through the shared profile. */
+  pauseAgentsForAccountChange(): void {
     for (const scope of this.agent.activeScopes()) this.takeAgentControl(scope.browserId)
   }
 

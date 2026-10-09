@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ElectronBrowserAccountSiteInput } from '@molly/shared/electron-ipc';
 import { PublicBrowserSurface } from '@/components/sessions/public-browser-surface';
@@ -24,6 +24,13 @@ export const websiteName = (site: Site): string => siteDetails[site].name;
 
 const signInBrowserId = (site: Site) => `website-sign-in-${site}`;
 
+/** Every Agent page shares the signed-in profile, so they stay paused until resumed by hand. */
+export async function pauseAgentsForSignIn(): Promise<void> {
+  const bridge = getPublicBrowserBridge();
+  if (!bridge) throw new Error('The Molly desktop browser is unavailable.');
+  await bridge.pauseAgentsForAccountSignIn();
+}
+
 type WebsiteSignInDialogProps = {
   site: Site;
   open: boolean;
@@ -38,6 +45,24 @@ export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInD
   const { t } = useTranslation();
   const name = websiteName(site);
   const ignoreState = useCallback(() => {}, []);
+  const [agentPause, setAgentPause] = useState<'pending' | 'paused' | 'failed'>('pending');
+  useEffect(() => {
+    if (!open) return undefined;
+    let live = true;
+    setAgentPause('pending');
+    pauseAgentsForSignIn().then(
+      () => {
+        if (live) setAgentPause('paused');
+      },
+      (error: unknown) => {
+        console.error('Failed to pause Agent browsing before sign-in', error);
+        if (live) setAgentPause('failed');
+      }
+    );
+    return () => {
+      live = false;
+    };
+  }, [open]);
   const changeOpen = (next: boolean) => {
     if (!next)
       void getPublicBrowserBridge()
@@ -54,7 +79,17 @@ export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInD
             {t('settings.browserAccounts.signInDescription', { site: name })}
           </DialogDescription>
         </DialogHeader>
-        {open ? (
+        {open && agentPause === 'failed' ? (
+          <p role="alert" className="flex-1 text-sm text-destructive">
+            {t('settings.browserAccounts.signInPauseFailed')}
+          </p>
+        ) : null}
+        {open && agentPause === 'pending' ? (
+          <p role="status" className="flex-1 text-sm text-muted-foreground">
+            {t('settings.browserAccounts.signInPausing')}
+          </p>
+        ) : null}
+        {open && agentPause === 'paused' ? (
           <PublicBrowserSurface
             browserId={signInBrowserId(site)}
             url={websiteSignInUrl(site)}

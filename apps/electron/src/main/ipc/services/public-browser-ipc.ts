@@ -165,6 +165,13 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
+  async pauseAgentsForAccountSignIn() {
+    assertTrustedSender()
+    getIpcServiceDeps().publicBrowserService.pauseAgentsForAccountChange()
+    return { ok: true }
+  }
+
+  @IpcMethod()
   async takeAgentControl(raw: ElectronPublicBrowserIdInput) {
     assertTrustedSender()
     const { browserId } = ElectronPublicBrowserIdInputSchema.parse(raw)

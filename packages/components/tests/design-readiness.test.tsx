@@ -40,6 +40,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   getPublicBrowserBridge: () =>
     fakes.ipcAvailable
       ? {
+          pauseAgentsForAccountSignIn: async () => ({ ok: true }),
           getAccountSummary: async () => ({
             persistent: true,
             importAvailable: false,

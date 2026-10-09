@@ -58,6 +58,7 @@ const meta = {
               throw new Error('Browser authorization or cookie reading timed out.');
             return new Promise(() => {});
           case 'publicBrowser.destroy':
+          case 'publicBrowser.pauseAgentsForAccountSignIn':
             return { ok: true };
           default:
             throw new Error(`Unexpected story IPC: ${channel}`);

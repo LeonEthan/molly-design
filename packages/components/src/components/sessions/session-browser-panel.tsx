@@ -42,7 +42,11 @@ import {
 } from './session-browser-resume-state';
 import { clearManagedPreviewFrame } from './managed-preview-frame-cache';
 import { SessionBrowserToolbar } from './session-browser-toolbar';
-import { websiteName, websiteSignInUrl } from '../settings/website-sign-in-dialog';
+import {
+  pauseAgentsForSignIn,
+  websiteName,
+  websiteSignInUrl,
+} from '../settings/website-sign-in-dialog';
 
 type SessionBrowserPanelProps = {
   session: SessionMeta;
@@ -693,8 +697,14 @@ function SessionBrowserPanelController({
     setSettingsTab('browser-accounts');
     setSettingsOpen(true);
   };
-  const openSiteSignIn = (site: NonNullable<typeof importSite>) => {
-    void openAddress(parseBrowserAddress(websiteSignInUrl(site)));
+  const openSiteSignIn = async (site: NonNullable<typeof importSite>) => {
+    try {
+      await pauseAgentsForSignIn();
+    } catch (pauseError) {
+      setError(errorMessage(pauseError));
+      return;
+    }
+    await openAddress(parseBrowserAddress(websiteSignInUrl(site)));
   };
   const changeAgentBrowserControl = async (take: boolean) => {
     const bridge = getPublicBrowserBridge();
@@ -785,7 +795,7 @@ function SessionBrowserPanelController({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => openSiteSignIn(importSite)}
+              onClick={() => void openSiteSignIn(importSite)}
             >
               {t('sessions.browser.signIn', 'Sign in on this page')}
             </Button>

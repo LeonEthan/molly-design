@@ -212,3 +212,20 @@ for (const { name, options, reason, persistent } of [
     assert.deepEqual(await context.service.getAccountSummary(), before)
   })
 }
+
+void test('an account sign-in pauses every active Agent page until it is resumed', () => {
+  const { service } = fixture()
+  const scopes = [
+    { sessionId: 'session-a', browserId: 'session-browser-session-a', runId: 'run-a' },
+    { sessionId: 'session-b', browserId: 'session-browser-session-b', runId: 'run-b' }
+  ]
+  service.agent.activeScopes = () => scopes
+  service.pauseAgentsForAccountChange()
+  assert.deepEqual(
+    scopes.map((scope) => service.takeoverScope(scope.browserId)),
+    scopes
+  )
+  service.resumeAgentControl('session-browser-session-a', 'run-a')
+  assert.equal(service.takeoverScope('session-browser-session-a'), null)
+  assert.deepEqual(service.takeoverScope('session-browser-session-b'), scopes[1])
+})

@@ -82,7 +82,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   Cookie import is macOS-only, requires secure storage and explicit source Chromium
   profile/site selection. Unpackaged development may import into memory; packaged
   imports require stable signing. Main uses the pinned site-only native reader, keeps
-  values out of renderer/Agent responses, and pauses Agents before writing. No extension
+  values out of renderer/Agent responses, and pauses Agents before writing or website sign-in. No extension
   or daemon import RPC participates. Verify the packaged `EnableCookieEncryption` fuse
   before signing. Cookie writes do not prove website sign-in.
 - Image preview export (`services/image-export-service.ts`) keeps the native

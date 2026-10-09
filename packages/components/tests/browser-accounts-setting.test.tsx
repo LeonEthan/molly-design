@@ -12,6 +12,7 @@ const bridge = vi.hoisted(() => ({
   getImportSources: vi.fn(),
   importBrowserAccount: vi.fn(),
   destroy: vi.fn(),
+  pauseAgentsForAccountSignIn: vi.fn(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
 
@@ -248,6 +249,8 @@ it('leads with sign-in inside Molly and leaves other browsers unread until impor
     destroyed.push(browserId);
     return { ok: true };
   });
+  const pause = Promise.withResolvers<{ ok: true }>();
+  bridge.pauseAgentsForAccountSignIn.mockImplementation(() => pause.promise);
   await act(async () => root.render(<BrowserAccountsSetting />));
   expect(listings).toEqual([]);
   expect(host.textContent).not.toContain('Google Chrome');
@@ -257,6 +260,11 @@ it('leads with sign-in inside Molly and leaves other browsers unread until impor
   );
   if (!signIn) throw new Error('Missing sign-in action');
   await act(async () => signIn.click());
+  expect(document.querySelector('[role="dialog"] [role="status"]')?.textContent).toBe(
+    zh['settings.browserAccounts.signInPausing']
+  );
+  await act(async () => pause.resolve({ ok: true }));
+  expect(document.querySelector('[role="dialog"] [role="status"]')).toBeNull();
   const dialog = document.querySelector('[role="dialog"]');
   expect(dialog?.textContent).toContain(
     zh['settings.browserAccounts.signInTitle'].replace('{{site}}', 'Pinterest')
@@ -274,4 +282,23 @@ it('leads with sign-in inside Molly and leaves other browsers unread until impor
   expect(host.textContent).toContain(
     zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
   );
+});
+
+it('keeps the sign-in page closed when Agent browsing cannot be paused', async () => {
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: true,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.pauseAgentsForAccountSignIn.mockRejectedValue(new Error('Synthetic pause failure'));
+  bridge.destroy.mockResolvedValue({ ok: true });
+  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await act(async () =>
+    buttonWithText(zh['settings.browserAccounts.signIn'].replace('{{site}}', 'Pinterest'))?.click()
+  );
+  expect(document.querySelector('[role="dialog"] [role="alert"]')?.textContent).toBe(
+    zh['settings.browserAccounts.signInPauseFailed']
+  );
+  expect(document.querySelector('[role="dialog"] [role="status"]')).toBeNull();
 });

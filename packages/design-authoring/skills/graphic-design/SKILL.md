@@ -130,11 +130,28 @@ references. When editing, preserve existing fields and unaffected elements.
 
 ### 6. Check text representation
 
-Decide for each piece of copy between native text, vector geometry and raster
-lettering; ordinary copy stays native text. Register real font files as the format
-reference describes, keep each face's complete glyph set, and check Chinese,
-Japanese or Korean copy against the font section there. Render the first usable
-draft early to confirm key fonts load before detailed typography.
+Choose a representation for each piece of copy:
+
+- **Native text** (`kind: text`) with a standard or registered font is the
+  default: body copy, dates, times, prices, addresses, lists, small labels and
+  anything the user is likely to reword. Native text also handles color,
+  gradient, shadow, weight and spacing, so try it first for a styled headline.
+- **Image lettering** (an `image` element generated with `molly_image`) suits
+  artistic text that fonts cannot express: hand lettering, calligraphy, 3D or
+  dimensional type, textured or illustrated letters, type woven into the
+  scene, or a logotype-style title. Use it for a few large display words, not
+  for long or small copy.
+
+Every character of image lettering must be exact; check it letter by letter and
+regenerate or switch to native text if anything is wrong. The wording of image
+lettering can only change by regenerating it, which counts as an editability
+limit to report. Techniques are in
+[references/layered-workflow.md](references/layered-workflow.md#lettering-layers).
+
+Register real font files as the format reference describes, keep each face's
+complete glyph set, and check Chinese, Japanese or Korean copy against the font
+section there. Render the first usable draft early to confirm key fonts load
+before detailed typography.
 
 ### 7. Review and adjust
 
@@ -221,7 +238,8 @@ Write in the user's language and size the reply to the request.
   judge the result.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise
-  non-editable content, and concerns from your review.
+  non-editable content (including image lettering, whose wording changes only by
+  regenerating it), and concerns from your review.
 
 Do not narrate your steps, list stages or checks, list what stayed unchanged, or
 say that something was previewed or confirmed unless the check found a problem or

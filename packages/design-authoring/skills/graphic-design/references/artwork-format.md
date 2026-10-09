@@ -48,15 +48,15 @@ person can select, move, resize, rotate, reorder, group and delete any element;
 the other edits differ by kind. Describe editability in these terms and promise
 no more than this table.
 
-| `kind`  | Use it for                               | The editor also offers                                |
-| ------- | ---------------------------------------- | ----------------------------------------------------- |
-| `text`  | All ordinary copy                        | Wording, size, color, weight, alignment, font         |
-| `shape` | Flat blocks, rules, badges, scrims       | Fill, border, preset or custom path                   |
-| `line`  | Rules, connectors, arrows, curves        | Points, curve mode, arrowheads, stroke                |
-| `image` | Photos, generated layers, textures       | Replace the image, fit; treat crop as limited (below) |
-| `icon`  | Glyph-style symbols from the offline set | Choice of icon and its color                          |
-| `table` | Real tabular content                     | Cell text, fills, borders, alignment, merges          |
-| `chart` | Real data: bar, line, area, pie and more | Chart data, series, legend and labels                 |
+| `kind`  | Use it for                                             | The editor also offers                                |
+| ------- | ------------------------------------------------------ | ----------------------------------------------------- |
+| `text`  | All ordinary copy                                      | Wording, size, color, weight, alignment, font         |
+| `shape` | Flat blocks, rules, badges, scrims                     | Fill, border, preset or custom path                   |
+| `line`  | Rules, connectors, arrows, curves                      | Points, curve mode, arrowheads, stroke                |
+| `image` | Photos, generated layers, textures, artistic lettering | Replace the image, fit; treat crop as limited (below) |
+| `icon`  | Glyph-style symbols from the offline set               | Choice of icon and its color                          |
+| `table` | Real tabular content                                   | Cell text, fills, borders, alignment, merges          |
+| `chart` | Real data: bar, line, area, pie and more               | Chart data, series, legend and labels                 |
 
 Use `table` and `chart` when the content really is tabular or numeric data; a
 picture of a chart is not editable data. Image `crop` has a known rendering issue
@@ -84,8 +84,10 @@ For the validator-derived field list of one kind, run
 names; the notes below explain their values.
 
 - `text`: structured `text.paragraphs[].runs[]`, never HTML `content`. Text style
-  (`fontSize`, `color`, `align`, `wrap`, `fontFamily`) goes inside `text`;
-  run-specific overrides such as `bold` go on the run.
+  (`fontSize`, `color`, `align`, `wrap`, `fontFamily`, `letterSpacing`, and a
+  `gradient` fill object for the letters) goes inside `text`; run-specific
+  overrides such as `bold` go on the run. A drop shadow is the element's
+  `shadow`. Check styled text in a render.
 - `shape`: `shapeName` (`rect`, `roundRect`, `ellipse`, `oval`, `triangle`, `arrow`,
   or `custom` with `viewBox` and `path`), plus `fill` / `border`.
 - `line`: `viewBox: [width, height]` is a pair of positive numbers (for example

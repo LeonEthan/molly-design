@@ -79,7 +79,8 @@ editable in Molly.
 - Choose pictures whose subject is obvious, whose edges leave room to crop, and
   that belong to this brief. Inspect the pixels before locking crop and type.
 - Photographs, materials, people and places belong in raster assets. Names,
-  quantities and structure belong in editable type, geometry, tables and charts.
+  quantities and structure belong in editable type, geometry, tables and charts;
+  artistic display lettering may be an image layer.
 - Use images you own, have a license for, can cite, or generated for this task. Do
   not invent official marks, institutions, issue numbering, watermarks, archival
   stamps or scientific proof.

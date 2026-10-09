@@ -18,8 +18,9 @@ the copy the [design defaults](../SKILL.md#design-defaults) expect: a calm area
 for the headline, clear of the subject's face or key detail. How to show drafts
 to the user is in [Reporting](../SKILL.md#reporting).
 
-Text rendered inside drafts is usually approximate. Plan the real copy as
-editable text unless lettering is part of the imagery.
+Text rendered inside drafts is usually approximate. Decide per piece of copy
+whether it becomes native text or an image lettering layer (main Skill stage 6),
+and leave the draft's text out of background and object layers either way.
 
 ## Complete objects and independent layers
 
@@ -64,6 +65,31 @@ a margin, dropping faint pixels outside it, so check soft effects afterwards.
 
 Generated solids can have alpha 253–254 rather than 255 and stay slightly
 see-through when stacked. Judge this in a render.
+
+## Lettering layers
+
+Generate each piece of artistic lettering as its own transparent layer, so it
+can be moved, resized and replaced without touching the scene:
+
+- Call `molly_image` `generate`, or `edit` with the chosen draft as the first
+  image when the lettering must match it, with `background: "transparent"` and
+  `output_format: "png"`.
+- Put the exact copy in the prompt in quotation marks and ask for it verbatim,
+  with no extra characters. Describe the style (material, stroke, dimension,
+  color, lighting) and say that nothing else should appear. Spell unusual words
+  letter by letter; for Chinese, Japanese or Korean, list the exact characters.
+- Request enough pixels for the size it will be displayed at; lettering scaled
+  up past its pixel size turns soft.
+- Read the result and compare it with the copy character by character. Image
+  models often drop, add, swap or invent characters, especially in CJK. A
+  wrong character is a failed layer: regenerate within the user's budget, or
+  set that copy as native text and report the change.
+- Check alpha and trim as for any foreground layer, then place it like other
+  layers. Give it an `id` that names the copy, such as `title-lettering`.
+
+If lettering must sit on a surface in the scene (a shop sign, a label), it can
+stay in that object's image instead; it is then part of the picture and its
+wording cannot change separately.
 
 ## Positioning and stacking
 

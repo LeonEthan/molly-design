@@ -45,6 +45,10 @@ A second pass the same day compared the defaults with a practice summary of thir
 
 Book sequencing, double-sided print, type history and designer authorship were judged out of scope for a single static canvas. These changes are also unevaluated.
 
+## Follow-up: flexible text representation
+
+At the owner's request, stage 6 no longer says ordinary copy must always be native text without saying when an image is better. Native text with a standard or registered font stays the default for body copy, facts and anything likely to be reworded, and is tried first for styled headlines (intake admits text `gradient`, `letterSpacing` and element `shadow`; their rendering was not checked here). Artistic text that fonts cannot express (hand lettering, calligraphy, dimensional or illustrated type, type woven into the scene) may be an `image` element generated with `molly_image`. Because image models often misspell, especially in CJK, every character must be checked; a wrong character means regenerating or falling back to native text. The wording of image lettering changes only by regenerating it, which is reported as an editability limit. `layered-workflow.md` gains a lettering-layer technique. This stays within the approved Spec's stage 6 ("which text becomes editable text and which is better represented as an image or vector"), so the Spec is unchanged.
+
 ## Alternatives considered
 
 - Keeping the Spec's three-way report and reverting the short replies: rejected because the short replies were deliberate product fixes, and the honesty guarantee survives without forced narration.

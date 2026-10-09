@@ -48,8 +48,10 @@ fidelity limits: preserve what you know and report consequential assumptions.
 - Use a separately supplied delivery asset (logo, product photo) as supplied.
 - Keep raster aspect ratios faithful.
 
-Never use a large crop or layer containing rebuildable text or flat graphics to
-fake editability. If something cannot be rebuilt with the kinds available, report
+Rebuild ordinary text as native text. Artistic lettering in the reference
+(calligraphy, 3D or illustrated type) may become an image lettering layer, as
+the main Skill's stage 6 describes. Never use a large crop or layer that bundles
+ordinary text or flat graphics together to fake editability. If something cannot be rebuilt with the kinds available, report
 it.
 
 ## Fidelity targets

@@ -790,7 +790,10 @@ export class SessionDispatchWatcher {
     const history = context?.history ?? [];
     for (const [userTurnId, stashed] of this.rpcTurnStash.get(sessionId) ?? []) {
       if (stashed.expiresAtMs <= now || excludeTurnIds.has(userTurnId)) continue;
-      if (meta && this.isStashedRpcTurnPermanentlySuppressed(sessionId, userTurnId, meta, history)) {
+      if (
+        meta &&
+        this.isStashedRpcTurnPermanentlySuppressed(sessionId, userTurnId, meta, history)
+      ) {
         continue;
       }
       return true;
@@ -862,7 +865,10 @@ export class SessionDispatchWatcher {
         history
       );
       // Missing-marker stays stashed but never dispatches; terminal entries are dropped.
-      if (stashed.expiresAtMs <= now || (suppressed && userTurnId !== meta.lastMissingHistoryUserMsgId)) {
+      if (
+        stashed.expiresAtMs <= now ||
+        (suppressed && userTurnId !== meta.lastMissingHistoryUserMsgId)
+      ) {
         stash.delete(userTurnId);
         continue;
       }

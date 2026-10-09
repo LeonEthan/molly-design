@@ -9,6 +9,7 @@ import {
 } from '@molly/shared';
 import {
   findNextDispatchableUserTurn,
+  isDurableStopForUserTurn,
   resolveSessionDispatchAction,
   shouldWatchSession,
 } from './session-dispatch-logic';
@@ -297,6 +298,14 @@ describe('SessionExecutionService history mutation ownership', () => {
   });
 });
 
+describe('isDurableStopForUserTurn', () => {
+  it('matches only the derived assistant turn id', () => {
+    expect(isDurableStopForUserTurn('turn-stopped', 'assistant:turn-stopped')).toBe(true);
+    expect(isDurableStopForUserTurn('turn-stopped', 'turn-stopped')).toBe(false);
+    expect(isDurableStopForUserTurn('turn-stopped', 'assistant:other')).toBe(false);
+    expect(isDurableStopForUserTurn('turn-stopped', undefined)).toBe(false);
+  });
+});
 
 describe('findNextDispatchableUserTurn durable Stop intent', () => {
   const baseMeta = {
@@ -309,22 +318,61 @@ describe('findNextDispatchableUserTurn durable Stop intent', () => {
     status: { type: 'idle' as const },
   };
 
-  it('does not redispatch a processing turn named by lastCanceledTurn', () => {
-    const stopped = {
-      id: 'turn-stopped',
-      role: 'user' as const,
-      timestamp: '2026-01-01T00:00:00.000Z',
-      items: [{ type: 'text' as const, text: 'stopped' }],
-      fileDiff: [],
-      status: 'processing' as const,
-      read: false,
-    };
+  const stoppedUser = {
+    id: 'turn-stopped',
+    role: 'user' as const,
+    timestamp: '2026-01-01T00:00:00.000Z',
+    items: [{ type: 'text' as const, text: 'stopped' }],
+    fileDiff: [],
+    status: 'processing' as const,
+    read: false,
+  };
+
+  it('does not redispatch a processing turn when lastCanceledTurn is the assistant id', () => {
     expect(
-      findNextDispatchableUserTurn([stopped], {
+      findNextDispatchableUserTurn([stoppedUser], {
+        ...baseMeta,
+        processingUserMsgId: 'turn-stopped',
+        lastCanceledTurn: 'assistant:turn-stopped',
+      })
+    ).toBeNull();
+  });
+
+  it('does not redispatch via latestUserMsgId when lastCanceledTurn is the assistant id', () => {
+    const pending = { ...stoppedUser, status: 'pending' as const };
+    expect(
+      findNextDispatchableUserTurn([pending], {
+        ...baseMeta,
+        latestUserMsgId: 'turn-stopped',
+        lastCanceledTurn: 'assistant:turn-stopped',
+      })
+    ).toBeNull();
+  });
+
+  it('still redispatches when lastCanceledTurn only equals the user turn id', () => {
+    // Production markers store assistant:<userTurnId>. A bare user id must not
+    // suppress dispatch — that was the pre-fix false match that never fired.
+    expect(
+      findNextDispatchableUserTurn([stoppedUser], {
         ...baseMeta,
         processingUserMsgId: 'turn-stopped',
         lastCanceledTurn: 'turn-stopped',
       })
-    ).toBeNull();
+    ).toEqual(stoppedUser);
+  });
+
+  it('still redispatches a different turn while a Stop marker names another assistant', () => {
+    const other = {
+      ...stoppedUser,
+      id: 'turn-other',
+      items: [{ type: 'text' as const, text: 'other' }],
+    };
+    expect(
+      findNextDispatchableUserTurn([stoppedUser, other], {
+        ...baseMeta,
+        processingUserMsgId: 'turn-other',
+        lastCanceledTurn: 'assistant:turn-stopped',
+      })
+    ).toEqual(other);
   });
 });

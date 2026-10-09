@@ -1,6 +1,7 @@
 # Desktop Onboarding
 
 - Electron opens `/onboarding` in the primary product renderer. Do not add a second window, renderer entry, provider tree, or runtime lease for onboarding.
+- Bind the implicit local workspace into workspace-context atoms on `/onboarding` (same contract as `/$workspaceName`). Local builds skip the multi-workspace screen, and without that binding `RuntimeProvider` stays idle so the Connect-a-model step cannot see the flock-published built-in Molly catalog.
 - The Electron main process owns the durable completion marker. Product navigation starts immediately alongside that write and never waits for its IPC; renderer storage owns only resumable phase and draft state, and is cleared after both product navigation and the completion IPC succeed.
 - Build the flow from platform capabilities. Local builds must not import or call cloud auth, workspace, or GitHub implementations.
 - Model setup reuses the encrypted Settings form. Only an explicitly selected, published built-in Molly on this machine can continue; legacy/registry/custom targets and launch overrides are ineligible. No CLI prefetch, installation, authentication or automatic setup is mounted.

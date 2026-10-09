@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import { ElectronBrowserAccountSiteInputSchema } from '@molly/shared/electron-ipc';
+import {
+  ElectronBrowserAccountSiteInputSchema,
+  type ElectronBrowserAccountSiteInput,
+} from '@molly/shared/electron-ipc';
 import {
   BrowserAddressError,
   formatPreviewTargetUrl,
@@ -42,11 +45,7 @@ import {
 } from './session-browser-resume-state';
 import { clearManagedPreviewFrame } from './managed-preview-frame-cache';
 import { SessionBrowserToolbar } from './session-browser-toolbar';
-import {
-  pauseAgentsForSignIn,
-  websiteName,
-  websiteSignInUrl,
-} from '../settings/website-sign-in-dialog';
+import { WebsiteSignInDialog } from '../settings/website-sign-in-dialog';
 
 type SessionBrowserPanelProps = {
   session: SessionMeta;
@@ -126,6 +125,9 @@ function SessionBrowserPanelController({
   const [managedNavigationPhase, setManagedNavigationPhase] =
     useState<ManagedNavigationPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signInSite, setSignInSite] = useState<ElectronBrowserAccountSiteInput['site'] | null>(
+    null
+  );
   const [resumeAddress, setResumeAddress] = useState<BrowserAddress | null>(null);
   const navigationSequenceRef = useRef(0);
   const restoreAttemptKeyRef = useRef<string | null>(null);
@@ -697,14 +699,10 @@ function SessionBrowserPanelController({
     setSettingsTab('browser-accounts');
     setSettingsOpen(true);
   };
-  const openSiteSignIn = async (site: NonNullable<typeof importSite>) => {
-    try {
-      await pauseAgentsForSignIn();
-    } catch (pauseError) {
-      setError(errorMessage(pauseError));
-      return;
-    }
-    await openAddress(parseBrowserAddress(websiteSignInUrl(site)));
+  const changeSignInOpen = (open: boolean) => {
+    if (open) return;
+    setSignInSite(null);
+    handleReload();
   };
   const changeAgentBrowserControl = async (take: boolean) => {
     const bridge = getPublicBrowserBridge();
@@ -796,9 +794,9 @@ function SessionBrowserPanelController({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => void openSiteSignIn(importSite)}
+              onClick={() => setSignInSite(importSite)}
             >
-              {t('sessions.browser.signIn', 'Sign in on this page')}
+              {t('sessions.browser.signIn', 'Sign in')}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={openAccountSettings}>
               {getPlatform() === 'mac'
@@ -806,11 +804,6 @@ function SessionBrowserPanelController({
                 : t('sessions.browser.manageAccounts', 'Manage website accounts')}
             </Button>
           </div>
-          {currentAddress?.logicalUrl.startsWith(websiteSignInUrl(importSite)) ? (
-            <p className="mt-2 text-muted-foreground">
-              {t('settings.browserAccounts.signInGoogleHint', { site: websiteName(importSite) })}
-            </p>
-          ) : null}
           {publicState?.accountImport?.site === importSite ? (
             <p className="mt-2 text-muted-foreground">
               {t(
@@ -895,6 +888,9 @@ function SessionBrowserPanelController({
           </p>
         </div>
       )}
+      {signInSite ? (
+        <WebsiteSignInDialog site={signInSite} open onOpenChange={changeSignInOpen} />
+      ) : null}
     </div>
   );
 }

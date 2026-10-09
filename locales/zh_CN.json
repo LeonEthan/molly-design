@@ -1612,7 +1612,7 @@
   "sessions.browser.resumeAgent": "恢复 Agent",
   "sessions.browser.importChrome": "在 Molly 设置中从 Chrome 导入",
   "sessions.browser.signInPrompt": "可以匿名使用此网站，也可以登录，让 Agent 以你的账号浏览。登录状态由 Molly 自行保存，macOS 不会请求钥匙串或文件访问权限。你登录期间 Agent 会暂停。",
-  "sessions.browser.signIn": "在此页面登录",
+  "sessions.browser.signIn": "登录",
   "sessions.browser.manageAccounts": "管理网站账号",
   "sessions.browser.cookiesImported": "Molly 现保存此网站 {{count}} 个 Cookie。请在网站页面确认登录状态。",
   "sessions.preview.annotation.addComment": "添加评论",

@@ -263,3 +263,16 @@ void test('an account sign-in fails when active runs cannot be paused', async ()
   await assert.rejects(service.pauseAgentsForAccountChange(), /runtime is unavailable/)
   assert.deepEqual(service.takeoverScope(leased.browserId), leased)
 })
+
+void test('a website sign-in holds runs that start until its page closes', async () => {
+  const { service } = fixture()
+  const later = { sessionId: 'session-e', browserId: 'session-browser-session-e', runId: 'run-e' }
+  await assert.rejects(service.beginAccountSignIn('session-browser-session-e'), /Invalid/)
+  await service.beginAccountSignIn('website-sign-in-pinterest.com')
+  await assert.rejects(service.executeAgentCommand(later, { kind: 'snapshot' }), /signs in/)
+  service.destroy('website-sign-in-pinterest.com')
+  await assert.rejects(
+    service.executeAgentCommand(later, { kind: 'snapshot' }),
+    /main Electron window is not available/
+  )
+})

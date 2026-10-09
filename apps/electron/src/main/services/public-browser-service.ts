@@ -133,6 +133,8 @@ export class PublicBrowserService {
   private readonly configuredSessions = new WeakSet<Electron.Session>()
   private readonly humanTakeovers = new Map<string, AgentBrowserScope>()
   private readonly closedAgentPages = new Map<string, string>()
+  private readonly signInPages = new Set<string>()
+  private readonly reloadWatchedWindows = new WeakSet<BrowserWindow>()
   private accountMutation: Promise<void> = Promise.resolve()
 
   constructor(
@@ -349,6 +351,7 @@ export class PublicBrowserService {
   }
 
   destroy(browserId: string): ElectronPublicBrowserResult {
+    this.signInPages.delete(browserId)
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     const scope = this.takeAgentControl(browserId) ?? this.humanTakeovers.get(browserId)
@@ -393,6 +396,8 @@ export class PublicBrowserService {
     if (!/^session-browser-[a-zA-Z0-9_-]{1,128}$/.test(scope.browserId)) {
       throw new Error('Invalid session browser identity.')
     }
+    if (this.signInPages.size > 0)
+      throw new Error('Agent browsing is paused while the user signs in to a website.')
     const closedRun = this.closedAgentPages.get(scope.browserId)
     if (closedRun === scope.runId)
       throw new Error('This browser page was closed. Start a new task to browse again.')
@@ -493,6 +498,24 @@ export class PublicBrowserService {
       if (record) this.publish(record, { agentControl: 'human-takeover' })
       else this.publishPageless(this.pagelessState(scope.browserId, 'human-takeover'))
     }
+  }
+
+  /**
+   * Holds every Agent page operation until `destroy` closes the sign-in page, so runs that start
+   * during sign-in cannot use the profile while the human enters credentials.
+   */
+  async beginAccountSignIn(browserId: string): Promise<void> {
+    if (!/^website-sign-in-[a-z0-9.-]{1,64}$/.test(browserId))
+      throw new Error('Invalid website sign-in page.')
+    this.signInPages.add(browserId)
+    const window = this.getMainWindow()
+    if (window && !window.isDestroyed() && !this.reloadWatchedWindows.has(window)) {
+      this.reloadWatchedWindows.add(window)
+      window.webContents.on('did-start-navigation', (details) => {
+        if (details.isMainFrame && !details.isSameDocument) this.signInPages.clear()
+      })
+    }
+    await this.pauseAgentsForAccountChange()
   }
 
   private async runAccountMutation<T>(work: () => Promise<T>): Promise<T> {

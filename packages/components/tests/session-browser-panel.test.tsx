@@ -342,7 +342,7 @@ describe('SessionBrowserPanel controller', () => {
     expect(annotationButton?.disabled).toBe(true);
   });
 
-  it('pauses Agent pages, then offers sign-in on the page for a supported account site', async () => {
+  it('signs in to a supported account site in the sign-in dialog, not the Agent page', async () => {
     window.__MOLLY_ELECTRON__ = true;
     const invoked: string[] = [];
     window.ipc = {
@@ -367,20 +367,31 @@ describe('SessionBrowserPanel controller', () => {
         canGoForward: false,
       })
     );
-    const buttons = [...rendered.querySelectorAll('button')].map((button) => button.textContent);
-    expect(buttons.indexOf('Sign in on this page')).toBeGreaterThanOrEqual(0);
-    expect(rendered.textContent).not.toContain('settings.browserAccounts.signInGoogleHint');
-
     const signIn = [...rendered.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Sign in on this page'
-    )!;
-    expect(invoked).not.toContain('publicBrowser.pauseAgentsForAccountSignIn');
-    await act(async () => signIn.click());
-    expect(invoked).toContain('publicBrowser.pauseAgentsForAccountSignIn');
-    expect(rendered.querySelector('[data-testid="public-browser"]')?.getAttribute('data-url')).toBe(
-      'https://www.pinterest.com/login/'
+      (button) => button.textContent === 'Sign in'
     );
-    expect(rendered.textContent).toContain('settings.browserAccounts.signInGoogleHint');
+    expect(signIn).toBeDefined();
+    expect(invoked).not.toContain('publicBrowser.beginAccountSignIn');
+    await act(async () => {
+      signIn?.click();
+      await flushMicrotasks();
+    });
+    expect(invoked).toContain('publicBrowser.beginAccountSignIn');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(
+      rendered.querySelector(`[data-testid="public-browser"]`)?.getAttribute('data-url')
+    ).toBe('https://www.pinterest.com/ideas/');
+
+    const done = [...document.querySelectorAll('[role="dialog"] button')].find(
+      (button) => button.textContent === 'settings.browserAccounts.signInDone'
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      done?.click();
+      await flushMicrotasks();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(invoked).toContain('publicBrowser.destroy');
+    expect(invoked).toContain('publicBrowser.reload');
   });
 
   it('offers Resume Agent for a run paused before it opened a page', async () => {

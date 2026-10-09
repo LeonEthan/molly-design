@@ -19,7 +19,7 @@ The #99 copy also told users to choose "Always Allow" for `/usr/bin/security`. T
 - Guidance is just-in-time rather than a first-launch onboarding step, matching the Spec's "no mandatory setup up front":
   - the Settings → AI models Pinterest chip opens the dialog;
   - Website accounts leads with **Sign in to Pinterest**;
-  - a session's Browser sidebar shows **Sign in on this page** on Pinterest pages. It navigates that page to the login URL, so the existing human-takeover pause applies.
+  - a session's Browser sidebar shows **Sign in** on Pinterest pages. It opens the same dialog and reloads the session page when the dialog closes. (It first navigated the session's own page to the login URL; see the third review fix below.)
 - Import stays available as a collapsed "Already signed in … Import it" section and lists profiles only after the person opens it.
 
 ## Agent pause (PR review fix)
@@ -36,6 +36,13 @@ A second Codex review then found that this pause only covered runs that already 
 - If the daemon cannot be reached, the pause fails. Sign-in, import and cookie clearing all stop instead of continuing unfenced.
 
 Import and cookie clearing use the same method, so they gained the same fence.
+
+A third Codex review found that the run-level pause was still a one-off snapshot. A run that started after the pause but while the sign-in page was open, whether queued, automated or in another session, was not covered. A follow-up run in an already-paused session also cleared the old run's takeover. The sign-in now holds a fence for its whole lifetime:
+
+- The dialog calls `publicBrowser.beginAccountSignIn(website-sign-in-<site>)`. Main adds a fence, then runs the same pause. While any fence is held, every Agent page operation is rejected with "Agent browsing is paused while the user signs in to a website."
+- Destroying the sign-in page, which the dialog does on close or unmount, removes the fence. A reload of the app window clears all fences, so a lost dialog cannot block Agents for the rest of the session.
+- The session sidebar now opens the same dialog instead of navigating the session's own page. In-page sign-in had no clear end, so there was nothing to hold a fence against; the dialog gives one surface with a defined open and close.
+- Runs that start after the dialog closes browse normally with the new sign-in, which is the purpose of signing in.
 
 ## Reuse
 

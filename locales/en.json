@@ -1613,7 +1613,7 @@
   "sessions.browser.resumeAgent": "Resume Agent",
   "sessions.browser.importChrome": "Import from Chrome in Molly settings",
   "sessions.browser.signInPrompt": "Use this site anonymously, or sign in so the Agent can browse it as you. Molly keeps its own sign-in, so macOS asks for no Keychain or file access. The Agent pauses while you sign in.",
-  "sessions.browser.signIn": "Sign in on this page",
+  "sessions.browser.signIn": "Sign in",
   "sessions.browser.manageAccounts": "Manage website accounts",
   "sessions.browser.cookiesImported": "Molly now stores {{count}} cookies for this site. Check the website to verify sign-in.",
   "sessions.preview.annotation.addComment": "Add comment",

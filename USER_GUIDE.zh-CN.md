@@ -73,7 +73,7 @@ ad-hoc 本地构建没有稳定签名身份，重新构建后 macOS 可能再次
 
 在设计会话中，Agent 的 `molly_browser` 工具组只操作 Molly 侧栏里的内置网页。首次访问站点时会走现有工具批准提示；可只批准一次，也可将该站点的浏览、点击、输入和选图保存授权给当前任务。进入其他站点须再次批准。打开 Browser 侧栏可看到 Agent 使用的同一页面；点 **接管页面** 后 Agent 暂停读取和操作，你可自行登录或完成 MFA，再点 **恢复 Agent**。已派发的点击不因接管而撤销。
 
-使用 Pinterest 账号最简单的方式是在 Molly 内登录：**设置 → 网站账号 → 登录 Pinterest**、设置 → AI 模型中的 Pinterest 项，或会话浏览器侧栏中的 **在此页面登录**。登录状态保存在 Molly 自己的浏览器配置中，不读取其他浏览器，因此 macOS 不会弹出钥匙串或文件访问授权。Molly 浏览器无法使用 Google 登录；如果你用 Google 登录 Pinterest，请用 Pinterest App 扫描页面上的二维码、通过“Forgot your password?”设置 Pinterest 密码，或按下文从浏览器导入。
+使用 Pinterest 账号最简单的方式是在 Molly 内登录：**设置 → 网站账号 → 登录 Pinterest**、设置 → AI 模型中的 Pinterest 项，或会话浏览器侧栏中的 **登录**。它们都会在对话框中打开 Pinterest 登录页，对话框打开期间 Agent 浏览会等待。登录状态保存在 Molly 自己的浏览器配置中，不读取其他浏览器，因此 macOS 不会弹出钥匙串或文件访问授权。Molly 浏览器无法使用 Google 登录；如果你用 Google 登录 Pinterest，请用 Pinterest App 扫描页面上的二维码、通过“Forgot your password?”设置 Pinterest 密码，或按下文从浏览器导入。
 
 如需导入，在网站账号中展开 **已在 Chrome 等浏览器中登录 Pinterest？从浏览器导入**；展开后 Molly 才会列出其他浏览器的用户配置。在具备安全存储能力的 macOS 上，可使用未打包开发版或签名身份稳定的打包版。开发版导入只保留到 Molly 退出；未签名或 ad-hoc 打包版仍不能导入。打开 **设置 → 网站账号**，选择已登录的浏览器用户配置（Chrome、Edge、Brave、Arc、Vivaldi、Opera 或 Chromium），再点击 Pinterest 的 **从该浏览器导入**。macOS 可能弹出访问该浏览器 Safe Storage 的系统授权；请在系统弹框中输入 Mac 登录密码，并保持 Molly 打开。首次读取允许最多 5 分钟处理授权；若提示超时，先完成尚未关闭的系统弹框，再手动重试，已有 Molly Cookie 保持不变。Molly 只读取所选网站的 Cookie；如果该网站已在 Molly 打开，导入后会自动重载。若来源或 Molly 该站点已有 Cookie 包含尚不支持的分区身份，Molly 会在修改 Cookie 前停止整次导入；此时可直接在 Molly 登录。请以网站自身界面确认账号，Cookie 数量不证明登录成功。**清除 Molly Cookie** 不清理来源浏览器、其他站点存储，也不保证服务端退出。此流程不安装浏览器扩展，也不让 Agent 操作你的浏览器标签页。
 

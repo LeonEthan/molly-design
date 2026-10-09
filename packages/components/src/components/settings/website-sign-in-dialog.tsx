@@ -24,13 +24,6 @@ export const websiteName = (site: Site): string => siteDetails[site].name;
 
 const signInBrowserId = (site: Site) => `website-sign-in-${site}`;
 
-/** Every Agent page shares the signed-in profile, so they stay paused until resumed by hand. */
-export async function pauseAgentsForSignIn(): Promise<void> {
-  const bridge = getPublicBrowserBridge();
-  if (!bridge) throw new Error('The Molly desktop browser is unavailable.');
-  await bridge.pauseAgentsForAccountSignIn();
-}
-
 type WebsiteSignInDialogProps = {
   site: Site;
   open: boolean;
@@ -40,6 +33,8 @@ type WebsiteSignInDialogProps = {
 /**
  * Signs in on Molly's own website profile, shared with Agent browser pages. Reading no
  * other browser's data keeps this path free of Keychain and Files and Folders prompts.
+ * Main holds Agent browsing from opening until this page is destroyed, and pauses
+ * runs that were already active until they are resumed by hand.
  */
 export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInDialogProps) {
   const { t } = useTranslation();
@@ -49,8 +44,13 @@ export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInD
   useEffect(() => {
     if (!open) return undefined;
     let live = true;
+    const browserId = signInBrowserId(site);
+    const bridge = getPublicBrowserBridge();
     setAgentPause('pending');
-    pauseAgentsForSignIn().then(
+    (bridge
+      ? bridge.beginAccountSignIn(browserId)
+      : Promise.reject(new Error('The Molly desktop browser is unavailable.'))
+    ).then(
       () => {
         if (live) setAgentPause('paused');
       },
@@ -61,17 +61,13 @@ export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInD
     );
     return () => {
       live = false;
-    };
-  }, [open]);
-  const changeOpen = (next: boolean) => {
-    if (!next)
-      void getPublicBrowserBridge()
-        ?.destroy(signInBrowserId(site))
+      void bridge
+        ?.destroy(browserId)
         .catch((error: unknown) => console.error('Failed to close the sign-in page', error));
-    onOpenChange(next);
-  };
+    };
+  }, [open, site]);
   return (
-    <Dialog open={open} onOpenChange={changeOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[min(820px,calc(100vh-4rem))] max-w-[min(960px,calc(100vw-4rem))] flex-col">
         <DialogHeader>
           <DialogTitle>{t('settings.browserAccounts.signInTitle', { site: name })}</DialogTitle>
@@ -103,7 +99,7 @@ export function WebsiteSignInDialog({ site, open, onOpenChange }: WebsiteSignInD
           <p className="text-xs text-muted-foreground">
             {t('settings.browserAccounts.signInGoogleHint', { site: name })}
           </p>
-          <Button type="button" size="sm" onClick={() => changeOpen(false)}>
+          <Button type="button" size="sm" onClick={() => onOpenChange(false)}>
             {t('settings.browserAccounts.signInDone')}
           </Button>
         </DialogFooter>

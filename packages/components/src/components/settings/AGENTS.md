@@ -24,8 +24,8 @@ Preserve historical catalog fields when editing unrelated values.
 
 - Website accounts lead with signing in on the site's page inside Molly
   (`website-sign-in-dialog.tsx`, Molly's shared website profile); this reads no other
-  browser, so it raises no Keychain or Files and Folders prompt. Pause every Agent
-  page (main's account-change pause) before loading a sign-in page. Name Google
+  browser, so it raises no Keychain or Files and Folders prompt. Every sign-in entry opens
+  this dialog; main pauses active runs and holds all Agent page work until it closes. Name Google
   sign-in's alternatives. Import stays collapsed and lists browser profiles only
   after the person opens it, never on page load.
 - Website-account import shows its pending authorization state and manual retry

@@ -12,7 +12,7 @@ const bridge = vi.hoisted(() => ({
   getImportSources: vi.fn(),
   importBrowserAccount: vi.fn(),
   destroy: vi.fn(),
-  pauseAgentsForAccountSignIn: vi.fn(),
+  beginAccountSignIn: vi.fn(),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
 
@@ -250,7 +250,7 @@ it('leads with sign-in inside Molly and leaves other browsers unread until impor
     return { ok: true };
   });
   const pause = Promise.withResolvers<{ ok: true }>();
-  bridge.pauseAgentsForAccountSignIn.mockImplementation(() => pause.promise);
+  bridge.beginAccountSignIn.mockImplementation(() => pause.promise);
   await act(async () => root.render(<BrowserAccountsSetting />));
   expect(listings).toEqual([]);
   expect(host.textContent).not.toContain('Google Chrome');
@@ -263,6 +263,7 @@ it('leads with sign-in inside Molly and leaves other browsers unread until impor
   expect(document.querySelector('[role="dialog"] [role="status"]')?.textContent).toBe(
     zh['settings.browserAccounts.signInPausing']
   );
+  expect(bridge.beginAccountSignIn).toHaveBeenCalledWith('website-sign-in-pinterest.com');
   await act(async () => pause.resolve({ ok: true }));
   expect(document.querySelector('[role="dialog"] [role="status"]')).toBeNull();
   const dialog = document.querySelector('[role="dialog"]');
@@ -290,7 +291,7 @@ it('keeps the sign-in page closed when Agent browsing cannot be paused', async (
     importAvailable: true,
     sites: [{ site: 'pinterest.com', cookieCount: 0 }],
   });
-  bridge.pauseAgentsForAccountSignIn.mockRejectedValue(new Error('Synthetic pause failure'));
+  bridge.beginAccountSignIn.mockRejectedValue(new Error('Synthetic pause failure'));
   bridge.destroy.mockResolvedValue({ ok: true });
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   await act(async () => root.render(<BrowserAccountsSetting />));

@@ -11,6 +11,11 @@ const bridge = vi.hoisted(() => ({
   getAccountSummary: vi.fn(),
   getImportSources: vi.fn(),
   importBrowserAccount: vi.fn(),
+  openBrowserDataPrivacySettings: vi.fn(async () => ({
+    opened: true,
+    platform: 'darwin',
+    target: 'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders',
+  })),
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
 
@@ -113,6 +118,7 @@ it('keeps a visible disabled import button for unsigned macOS packages', async (
 it('distinguishes unreadable profiles from absent sources and restores import after manual refresh', async () => {
   let accessible = false;
   const imports: unknown[][] = [];
+  const privacyOpens: unknown[] = [];
   bridge.getAccountSummary.mockResolvedValue({
     persistent: false,
     importAvailable: true,
@@ -130,6 +136,10 @@ it('distinguishes unreadable profiles from absent sources and restores import af
       : [],
     unreadable: accessible ? [] : ['Google Chrome'],
   }));
+  bridge.openBrowserDataPrivacySettings = vi.fn(async () => {
+    privacyOpens.push('opened');
+    return { opened: true, platform: 'darwin', target: 'x-apple.systempreferences:test' };
+  });
   bridge.importBrowserAccount.mockImplementation(async (...args: unknown[]) => {
     imports.push(args);
     return { imported: 1 };
@@ -139,11 +149,13 @@ it('distinguishes unreadable profiles from absent sources and restores import af
   expect(host.textContent).toContain(
     zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
   );
-  expect(
-    Array.from(host.querySelectorAll('button')).find(
-      (button) => button.textContent === zh['settings.browserAccounts.importFromBrowser']
-    )?.disabled
-  ).toBe(true);
+  const privacyButton = Array.from(host.querySelectorAll('button')).find(
+    (button) => button.textContent === zh['settings.browserAccounts.openFilesAndFolders']
+  );
+  expect(privacyButton?.disabled).toBe(false);
+  await act(async () => privacyButton?.click());
+  expect(privacyOpens).toEqual(['opened']);
+  expect(bridge.openBrowserDataPrivacySettings).toHaveBeenCalledTimes(1);
 
   accessible = true;
   const refresh = host.querySelector<HTMLButtonElement>(

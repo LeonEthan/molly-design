@@ -53,6 +53,13 @@ const meta = {
               ],
               unreadable: name === 'Unreadable Browser' ? ['Microsoft Edge'] : [],
             };
+          case 'publicBrowser.openBrowserDataPrivacySettings':
+            return {
+              opened: true,
+              platform: 'darwin',
+              target:
+                'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders',
+            };
           case 'publicBrowser.importBrowserAccount':
             if (name === 'Import Failed')
               throw new Error('Browser authorization or cookie reading timed out.');

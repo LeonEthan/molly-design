@@ -38,6 +38,12 @@ function preferredChoice(sources: Source[]): string {
   return '';
 }
 
+function needsBrowserDataPrivacySettings(
+  sources: ElectronBrowserImportSources | null
+): boolean {
+  return !!sources && sources.sources.length === 0 && sources.unreadable.length > 0;
+}
+
 /** Source browser, profile and website are chosen in Molly; cookie values never enter the renderer. */
 export function BrowserAccountsSetting() {
   const { t } = useTranslation();
@@ -142,12 +148,36 @@ export function BrowserAccountsSetting() {
       if (result?.site === site) setResult(null);
     });
 
+  const openPrivacySettings = () =>
+    run(async () => {
+      const bridge = getPublicBrowserBridge();
+      if (!bridge) throw new Error(t('settings.browserAccounts.unavailable'));
+      // Re-list first so macOS registers Molly in Files and Folders before the pane opens.
+      try {
+        await bridge.getImportSources();
+      } catch {
+        // Listing can still fail until the user grants access; keep opening Settings.
+      }
+      const opened = await bridge.openBrowserDataPrivacySettings();
+      if (!opened.opened) {
+        throw new Error(
+          opened.error?.trim()
+            ? opened.error
+            : t('settings.browserAccounts.openFilesAndFoldersFailed')
+        );
+      }
+    });
+
+  const privacyRecovery = needsBrowserDataPrivacySettings(sources);
+
   const importLabel = (site: Site) =>
     importingSite === site
       ? t('settings.browserAccounts.importing')
-      : selected
-        ? t('settings.browserAccounts.importFrom', { browser: selected.source.browserName })
-        : t('settings.browserAccounts.importFromBrowser');
+      : privacyRecovery
+        ? t('settings.browserAccounts.openFilesAndFolders')
+        : selected
+          ? t('settings.browserAccounts.importFrom', { browser: selected.source.browserName })
+          : t('settings.browserAccounts.importFromBrowser');
 
   return (
     <div className="space-y-4">
@@ -244,8 +274,14 @@ export function BrowserAccountsSetting() {
                 <Button
                   type="button"
                   size="sm"
-                  disabled={busy || !summary.importAvailable || !selected}
-                  onClick={() => void importSite(site)}
+                  disabled={
+                    busy ||
+                    !summary.importAvailable ||
+                    (!selected && !privacyRecovery)
+                  }
+                  onClick={() =>
+                    void (privacyRecovery ? openPrivacySettings() : importSite(site))
+                  }
                 >
                   {importLabel(site)}
                 </Button>

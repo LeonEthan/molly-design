@@ -135,7 +135,10 @@ export class PublicBrowserService {
   private readonly closedAgentPages = new Map<string, string>()
   private accountMutation: Promise<void> = Promise.resolve()
 
-  constructor(private readonly getMainWindow: () => BrowserWindow | null) {}
+  constructor(
+    private readonly getMainWindow: () => BrowserWindow | null,
+    private readonly pauseActiveRuns: () => Promise<AgentBrowserScope[]>
+  ) {}
 
   create(
     browserId: string,
@@ -363,7 +366,23 @@ export class PublicBrowserService {
 
   getState(browserId: string): ElectronPublicBrowserState | null {
     const record = this.records.get(browserId)
-    return record ? toState(record) : null
+    if (record) return toState(record)
+    return this.humanTakeovers.has(browserId)
+      ? this.pagelessState(browserId, 'human-takeover')
+      : null
+  }
+
+  private pagelessState(
+    browserId: string,
+    agentControl: ElectronPublicBrowserState['agentControl']
+  ): ElectronPublicBrowserState {
+    return { browserId, phase: 'idle', canGoBack: false, canGoForward: false, agentControl }
+  }
+
+  private publishPageless(state: ElectronPublicBrowserState): void {
+    const window = this.getMainWindow()
+    if (window && !window.isDestroyed())
+      window.webContents.send(ELECTRON_PUBLIC_BROWSER_STATE_CHANNEL, state)
   }
 
   async executeAgentCommand(
@@ -447,6 +466,7 @@ export class PublicBrowserService {
       this.humanTakeovers.delete(browserId)
       const record = this.records.get(browserId)
       if (record) this.publish(record, { agentControl: 'human' })
+      else this.publishPageless(this.pagelessState(browserId, 'human'))
     }
   }
 
@@ -459,8 +479,20 @@ export class PublicBrowserService {
   }
 
   /** Account changes, including a human sign-in, reach every Agent page through the shared profile. */
-  pauseAgentsForAccountChange(): void {
-    for (const scope of this.agent.activeScopes()) this.takeAgentControl(scope.browserId)
+  async pauseAgentsForAccountChange(): Promise<void> {
+    const takeLeasedPages = () => {
+      for (const scope of this.agent.activeScopes()) this.takeAgentControl(scope.browserId)
+    }
+    takeLeasedPages()
+    const paused = await this.pauseActiveRuns()
+    takeLeasedPages()
+    for (const scope of paused) {
+      if (this.humanTakeovers.get(scope.browserId)?.runId === scope.runId) continue
+      this.humanTakeovers.set(scope.browserId, scope)
+      const record = this.records.get(scope.browserId)
+      if (record) this.publish(record, { agentControl: 'human-takeover' })
+      else this.publishPageless(this.pagelessState(scope.browserId, 'human-takeover'))
+    }
   }
 
   private async runAccountMutation<T>(work: () => Promise<T>): Promise<T> {
@@ -530,7 +562,7 @@ export class PublicBrowserService {
         replaceExisting,
         readSource: () => readBrowserSiteCookies(browserId, profileId, site),
         beforeWrite: async () => {
-          this.pauseAgentsForAccountChange()
+          await this.pauseAgentsForAccountChange()
           // Read partition metadata in the destination session. Electron's
           // cookies.get() omits it, so it cannot establish a lossless backup.
           // A blank, short-lived view avoids interfering with any Agent page.
@@ -572,7 +604,7 @@ export class PublicBrowserService {
       if (!ACCOUNT_IMPORT_SITES.includes(site as AccountImportSite)) {
         throw new Error('Site cookie clearing currently supports Pinterest only.')
       }
-      this.pauseAgentsForAccountChange()
+      await this.pauseAgentsForAccountChange()
       const browserSession = session.fromPartition(publicBrowserPartition())
       const cookies = await browserSession.cookies.get({ domain: site })
       let removed = 0

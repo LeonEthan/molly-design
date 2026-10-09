@@ -54,7 +54,13 @@ const sourceCookie = {
   expirationDate: 4_000_000_000
 }
 
-function fixture({ platform = 'darwin', packaged = false, signed = false, secure = true } = {}) {
+function fixture({
+  platform = 'darwin',
+  packaged = false,
+  signed = false,
+  secure = true,
+  pauseActiveRuns = async () => []
+} = {}) {
   const sessions = new Map()
   const acquisitions = []
   const electron = {
@@ -118,7 +124,7 @@ function fixture({ platform = 'darwin', packaged = false, signed = false, secure
     { platform }
   )
   return {
-    service: new module.exports.PublicBrowserService(() => null),
+    service: new module.exports.PublicBrowserService(() => null, pauseActiveRuns),
     partition: module.exports.publicBrowserPartition,
     sessions,
     acquisitions
@@ -213,14 +219,14 @@ for (const { name, options, reason, persistent } of [
   })
 }
 
-void test('an account sign-in pauses every active Agent page until it is resumed', () => {
+void test('an account sign-in pauses every active Agent page until it is resumed', async () => {
   const { service } = fixture()
   const scopes = [
     { sessionId: 'session-a', browserId: 'session-browser-session-a', runId: 'run-a' },
     { sessionId: 'session-b', browserId: 'session-browser-session-b', runId: 'run-b' }
   ]
   service.agent.activeScopes = () => scopes
-  service.pauseAgentsForAccountChange()
+  await service.pauseAgentsForAccountChange()
   assert.deepEqual(
     scopes.map((scope) => service.takeoverScope(scope.browserId)),
     scopes
@@ -228,4 +234,32 @@ void test('an account sign-in pauses every active Agent page until it is resumed
   service.resumeAgentControl('session-browser-session-a', 'run-a')
   assert.equal(service.takeoverScope('session-browser-session-a'), null)
   assert.deepEqual(service.takeoverScope('session-browser-session-b'), scopes[1])
+})
+
+void test('an account sign-in also pauses active runs that have not opened a page yet', async () => {
+  const unleased = {
+    sessionId: 'session-c',
+    browserId: 'session-browser-session-c',
+    runId: 'run-c'
+  }
+  const { service } = fixture({ pauseActiveRuns: async () => [unleased] })
+  await service.pauseAgentsForAccountChange()
+  assert.deepEqual(service.takeoverScope(unleased.browserId), unleased)
+  assert.equal(service.getState(unleased.browserId).agentControl, 'human-takeover')
+  await assert.rejects(service.executeAgentCommand(unleased, { kind: 'snapshot' }), /taken control/)
+  service.resumeAgentControl(unleased.browserId, unleased.runId)
+  assert.equal(service.takeoverScope(unleased.browserId), null)
+  assert.equal(service.getState(unleased.browserId), null)
+})
+
+void test('an account sign-in fails when active runs cannot be paused', async () => {
+  const leased = { sessionId: 'session-d', browserId: 'session-browser-session-d', runId: 'run-d' }
+  const { service } = fixture({
+    pauseActiveRuns: async () => {
+      throw new Error('Local Molly runtime is unavailable.')
+    }
+  })
+  service.agent.activeScopes = () => [leased]
+  await assert.rejects(service.pauseAgentsForAccountChange(), /runtime is unavailable/)
+  assert.deepEqual(service.takeoverScope(leased.browserId), leased)
 })

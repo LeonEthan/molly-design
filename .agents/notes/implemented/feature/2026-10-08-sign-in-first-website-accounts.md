@@ -28,6 +28,15 @@ Codex's GitHub security review of #106 found a P1. The sign-in page shares the w
 
 Both sign-in entry points now call that same pause through a new `publicBrowser.pauseAgentsForAccountSignIn` IPC method before the login page loads. The dialog shows a pausing state and does not open the page if the pause fails. Main already syncs its takeover state to the CLI on every host poll, so paused pages stay paused until someone clicks **Resume Agent** in that session.
 
+A second Codex review then found that this pause only covered runs that already held a page lease. A run that had not yet asked for a page, or whose request was still queued in the daemon, could start browsing during sign-in. The pause now fences at the run layer:
+
+- A new main-only daemon RPC, `browser/pause-all`, takes over every session with an active turn, whether or not it has a page lease, and returns those runs.
+- Main records each returned run as a human takeover, so its later page requests are rejected and the session shows **Resume Agent**. It also revokes current leases both before and after the RPC, which catches a lease created while the RPC was in flight.
+- A paused run may have no page yet. Main still reports its takeover state for that session, and the session's Browser panel shows **Resume Agent** without a loaded page. Creating a blank page for each paused run was rejected because pages are capped at eight and extra hidden pages would evict real ones.
+- If the daemon cannot be reached, the pause fails. Sign-in, import and cookie clearing all stop instead of continuing unfenced.
+
+Import and cookie clearing use the same method, so they gained the same fence.
+
 ## Reuse
 
 - **Browser view:** reused `PublicBrowserSurface` with one adaptation. It used to hide whenever any dialog was open; now it hides only under dialogs opened after the one containing it, since Radix portals stacked dialogs to `body` in opening order. Without this, a surface inside a dialog would never show.

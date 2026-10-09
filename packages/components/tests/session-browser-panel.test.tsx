@@ -383,6 +383,34 @@ describe('SessionBrowserPanel controller', () => {
     expect(rendered.textContent).toContain('settings.browserAccounts.signInGoogleHint');
   });
 
+  it('offers Resume Agent for a run paused before it opened a page', async () => {
+    window.__MOLLY_ELECTRON__ = true;
+    const invoked: string[] = [];
+    window.ipc = {
+      invoke: async (channel: string) => {
+        invoked.push(channel);
+        return channel === 'publicBrowser.getState'
+          ? {
+              browserId: `session-browser-${session.id}`,
+              phase: 'idle',
+              canGoBack: false,
+              canGoForward: false,
+              agentControl: 'human-takeover',
+            }
+          : { ok: true };
+      },
+      on: () => () => {},
+      send: () => {},
+    };
+    const rendered = await renderPanel(createRuntime().runtime);
+    const resume = [...rendered.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Resume Agent'
+    );
+    expect(resume).toBeDefined();
+    await act(async () => resume?.click());
+    expect(invoked).toContain('publicBrowser.resumeAgentControl');
+  });
+
   it('reattaches a public browser without navigating again after remount', async () => {
     const testRuntime = createRuntime();
     const rendered = await renderPanel(testRuntime.runtime);

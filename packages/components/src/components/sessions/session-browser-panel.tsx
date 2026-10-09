@@ -764,7 +764,8 @@ function SessionBrowserPanelController({
           </Button>
         </div>
       ) : null}
-      {currentAddress?.engine === 'public-web' && publicState?.agentControl === 'human-takeover' ? (
+      {currentAddress?.engine !== 'managed-preview' &&
+      publicState?.agentControl === 'human-takeover' ? (
         <div className="border-b px-3 py-2 text-xs">
           <span className="mr-2">
             {t(

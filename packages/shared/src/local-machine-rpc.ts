@@ -402,6 +402,10 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
     params: z.object({}).strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
+    method: z.literal('browser/pause-all'),
+    params: z.object({}).strict(),
+  }).strict(),
+  BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('browser/host'),
     params: z
       .object({

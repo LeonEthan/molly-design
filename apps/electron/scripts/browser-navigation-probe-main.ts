@@ -57,7 +57,10 @@ async function main(): Promise<void> {
   const host = new BrowserWindow({ width: 1000, height: 800, show: false })
   await host.loadURL('data:text/html,<h1>PRIVATE_APP_SENTINEL</h1>')
   host.showInactive()
-  const browser = new PublicBrowserService(() => host)
+  const browser = new PublicBrowserService(
+    () => host,
+    async () => []
+  )
   const scope = {
     sessionId: 'native-probe',
     browserId: 'session-browser-native-probe',

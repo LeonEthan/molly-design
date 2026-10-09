@@ -167,7 +167,7 @@ export class PublicBrowserIpc extends IpcService {
   @IpcMethod()
   async pauseAgentsForAccountSignIn() {
     assertTrustedSender()
-    getIpcServiceDeps().publicBrowserService.pauseAgentsForAccountChange()
+    await getIpcServiceDeps().publicBrowserService.pauseAgentsForAccountChange()
     return { ok: true }
   }
 

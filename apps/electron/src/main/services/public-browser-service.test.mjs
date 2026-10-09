@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
@@ -59,6 +60,7 @@ function fixture({
   packaged = false,
   signed = false,
   secure = true,
+  getMainWindow = () => null,
   pauseActiveRuns = async () => []
 } = {}) {
   const sessions = new Map()
@@ -71,6 +73,8 @@ function fixture({
         if (!sessions.has(partition)) {
           const rows = []
           sessions.set(partition, {
+            setPermissionCheckHandler() {},
+            setPermissionRequestHandler() {},
             cookies: {
               get: async () => [...rows],
               set: async (cookie) => {
@@ -89,15 +93,27 @@ function fixture({
     },
     WebContentsView: class {
       constructor({ webPreferences }) {
-        this.webContents = {
+        let destroyed = false
+        this.webContents = Object.assign(new EventEmitter(), {
+          session:
+            webPreferences.session ?? electron.session.fromPartition(webPreferences.partition),
           debugger: {
             attach() {},
             sendCommand: async () => ({ cookies: await webPreferences.session.cookies.get({}) })
           },
-          isDestroyed: () => false,
-          close() {}
-        }
+          getURL: () => '',
+          getTitle: () => '',
+          navigationHistory: { canGoBack: () => false, canGoForward: () => false },
+          setWindowOpenHandler() {},
+          isDestroyed: () => destroyed,
+          close() {
+            destroyed = true
+            this.emit('destroyed')
+          }
+        })
       }
+      setBounds() {}
+      setVisible() {}
     }
   }
   const module = { exports: {} }
@@ -124,7 +140,7 @@ function fixture({
     { platform }
   )
   return {
-    service: new module.exports.PublicBrowserService(() => null, pauseActiveRuns),
+    service: new module.exports.PublicBrowserService(getMainWindow, pauseActiveRuns),
     partition: module.exports.publicBrowserPartition,
     sessions,
     acquisitions
@@ -265,14 +281,148 @@ void test('an account sign-in fails when active runs cannot be paused', async ()
 })
 
 void test('a website sign-in holds runs that start until its page closes', async () => {
-  const { service } = fixture()
+  let window = browserWindow()
+  const { service } = fixture({ getMainWindow: () => window })
   const later = { sessionId: 'session-e', browserId: 'session-browser-session-e', runId: 'run-e' }
   await assert.rejects(service.beginAccountSignIn('session-browser-session-e'), /Invalid/)
   await service.beginAccountSignIn('website-sign-in-pinterest.com')
   await assert.rejects(service.executeAgentCommand(later, { kind: 'snapshot' }), /signs in/)
   service.destroy('website-sign-in-pinterest.com')
+  window = null
   await assert.rejects(
     service.executeAgentCommand(later, { kind: 'snapshot' }),
     /main Electron window is not available/
   )
+})
+
+function browserWindow() {
+  const children = new Set()
+  return Object.assign(new EventEmitter(), {
+    isDestroyed: () => false,
+    getContentSize: () => [1000, 800],
+    webContents: Object.assign(new EventEmitter(), { send() {} }),
+    contentView: {
+      addChildView: (view) => children.add(view),
+      removeChildView: (view) => children.delete(view)
+    },
+    children
+  })
+}
+
+const laterScope = { sessionId: 'later', browserId: 'session-browser-later', runId: 'later-run' }
+const signInId = 'website-sign-in-pinterest.com'
+const browserBounds = { x: 0, y: 0, width: 800, height: 600 }
+
+void test('renderer reload closes sign-in views before releasing Agent browsing', async () => {
+  const window = browserWindow()
+  const { service } = fixture({ getMainWindow: () => window })
+  await service.beginAccountSignIn(signInId)
+  assert.equal(service.create(signInId, browserBounds).ok, true)
+  const [signInView] = window.children
+  assert.equal(service.create(laterScope.browserId, browserBounds).ok, true)
+  const reply = { kind: 'snapshot', snapshot: 'Synthetic retained session page' }
+  service.agent.execute = async () => reply
+
+  for (const details of [
+    { isMainFrame: false, isSameDocument: false },
+    { isMainFrame: true, isSameDocument: true }
+  ]) {
+    window.webContents.emit('did-start-navigation', details)
+    assert.equal(signInView.webContents.isDestroyed(), false)
+    await assert.rejects(service.executeAgentCommand(laterScope, { kind: 'snapshot' }), /signs in/)
+  }
+
+  let whileClosing
+  signInView.webContents.once('destroyed', () => {
+    whileClosing = service.executeAgentCommand(laterScope, { kind: 'snapshot' })
+  })
+  window.webContents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+  await assert.rejects(whileClosing, /signs in/)
+  assert.equal(signInView.webContents.isDestroyed(), true)
+  assert.equal(window.children.has(signInView), false)
+  assert.equal(service.getState(signInId), null)
+  assert.notEqual(service.getState(laterScope.browserId), null)
+  assert.deepEqual(await service.executeAgentCommand(laterScope, { kind: 'snapshot' }), reply)
+  assert.equal(service.create(signInId, browserBounds).ok, false)
+  await service.beginAccountSignIn(signInId)
+  assert.equal(service.create(signInId, browserBounds).ok, true)
+})
+
+for (const cleanup of ['reload', 'closed', 'destroyAll']) {
+  void test(`${cleanup} retires a pending sign-in without restoring it when pause finishes`, async () => {
+    const window = browserWindow()
+    const pause = Promise.withResolvers()
+    let currentWindow = window
+    const { service } = fixture({
+      getMainWindow: () => currentWindow,
+      pauseActiveRuns: () => pause.promise
+    })
+    const opening = service.beginAccountSignIn(signInId)
+    await assert.rejects(service.executeAgentCommand(laterScope, { kind: 'snapshot' }), /signs in/)
+    if (cleanup === 'reload') {
+      window.webContents.emit('did-start-navigation', { isMainFrame: true, isSameDocument: false })
+    } else if (cleanup === 'closed') window.emit('closed')
+    else service.destroyAll()
+    pause.resolve([])
+    await opening
+    assert.equal(service.create(signInId, browserBounds).ok, false)
+    currentWindow = null
+    await assert.rejects(
+      service.executeAgentCommand(laterScope, { kind: 'snapshot' }),
+      /main Electron window is not available/
+    )
+  })
+}
+
+void test('navigation in a previous window does not retire the current sign-in', async () => {
+  const previousWindow = browserWindow()
+  const currentWindow = browserWindow()
+  let window = previousWindow
+  const { service } = fixture({ getMainWindow: () => window })
+  await service.beginAccountSignIn(signInId)
+  service.destroy(signInId)
+  window = currentWindow
+  await service.beginAccountSignIn(signInId)
+  previousWindow.webContents.emit('did-start-navigation', {
+    isMainFrame: true,
+    isSameDocument: false
+  })
+  previousWindow.emit('closed')
+  await assert.rejects(service.executeAgentCommand(laterScope, { kind: 'snapshot' }), /signs in/)
+  assert.equal(service.create(signInId, browserBounds).ok, true)
+})
+
+void test('Agent browsing waits for native destruction even after the sign-in is detached', async () => {
+  const window = browserWindow()
+  const { service } = fixture({ getMainWindow: () => window })
+  await service.beginAccountSignIn(signInId)
+  assert.equal(service.create(signInId, browserBounds).ok, true)
+  const [view] = window.children
+  const finishClose = view.webContents.close.bind(view.webContents)
+  view.webContents.close = () => {}
+  service.destroy(signInId)
+  assert.equal(window.children.has(view), false)
+  assert.equal(view.webContents.isDestroyed(), false)
+  await assert.rejects(service.executeAgentCommand(laterScope, { kind: 'snapshot' }), /signs in/)
+  await service.beginAccountSignIn(signInId)
+  assert.equal(service.create(signInId, browserBounds).ok, true)
+  finishClose()
+  await assert.rejects(service.executeAgentCommand(laterScope, { kind: 'snapshot' }), /signs in/)
+  service.destroy(signInId)
+  assert.equal(service.create(laterScope.browserId, browserBounds).ok, true)
+  const reply = { kind: 'snapshot', snapshot: 'Synthetic session after native destruction' }
+  service.agent.execute = async () => reply
+  assert.deepEqual(await service.executeAgentCommand(laterScope, { kind: 'snapshot' }), reply)
+})
+
+void test('rejected sign-in bounds do not leave an orphaned native hold after close', async () => {
+  const window = browserWindow()
+  const { service } = fixture({ getMainWindow: () => window })
+  await service.beginAccountSignIn(signInId)
+  assert.equal(service.create(signInId, { ...browserBounds, width: 2000 }).ok, false)
+  service.destroy(signInId)
+  assert.equal(service.create(laterScope.browserId, browserBounds).ok, true)
+  const reply = { kind: 'snapshot', snapshot: 'Synthetic session after rejected sign-in creation' }
+  service.agent.execute = async () => reply
+  assert.deepEqual(await service.executeAgentCommand(laterScope, { kind: 'snapshot' }), reply)
 })

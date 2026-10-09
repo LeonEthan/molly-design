@@ -8,15 +8,24 @@ export function createLocalLoroDataPlaneConnection(): {
   if (!getIpcServices()) return null;
 
   let connected = false;
+  let receivedStatus = false;
+  let disposed = false;
   const statusListeners = new Set<(connected: boolean) => void>();
   const setConnected = (next: boolean) => {
-    if (connected === next) return;
+    if (disposed || connected === next) return;
     connected = next;
     for (const listener of statusListeners) listener(next);
   };
+  const unsubscribeStatus = onIpcEvent('loro.status', (next) => {
+    receivedStatus = true;
+    setConnected(next);
+  });
   sendIpc('loro.subscribe', null);
-  const unsubscribeStatus = onIpcEvent('loro.status', setConnected);
-  void getIpcServices()!.loro.isConnected().then(setConnected);
+  void getIpcServices()!
+    .loro.isConnected()
+    .then((snapshot) => {
+      if (!receivedStatus) setConnected(snapshot);
+    });
 
   return {
     connection: {
@@ -30,6 +39,7 @@ export function createLocalLoroDataPlaneConnection(): {
       isConnected: () => connected,
     },
     dispose: () => {
+      disposed = true;
       unsubscribeStatus();
       statusListeners.clear();
     },

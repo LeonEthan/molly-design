@@ -135,7 +135,10 @@ renderable in a hidden host window and reattach when the panel opens. The macOS
 Settings > Website accounts leads with signing in on Pinterest's page inside Molly, which reads no
 other browser. Its collapsed import section lists supported local Chromium browser profiles only when opened and uses the pinned
 `rookie-cookies` binding in Electron main to import cookies for a user-selected
-Pinterest account (the first-release import scope). The importer checks detailed Cookie identities against
+Pinterest account (the first-release import scope). Sign-in blocks Agent browsing until
+its native page is destroyed. Reloading the owning app window closes its sign-in
+pages and cancels pending opens while retaining ordinary Session pages.
+The importer checks detailed Cookie identities against
 the extraction report and rejects unsupported partitions before changing Molly
 cookies, including when the destination already contains site CHIPS cookies.
 The pinned reader reports excluded Chromium service directories as discovery errors;

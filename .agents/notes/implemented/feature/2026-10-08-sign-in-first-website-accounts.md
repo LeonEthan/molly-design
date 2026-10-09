@@ -40,9 +40,21 @@ Import and cookie clearing use the same method, so they gained the same fence.
 A third Codex review found that the run-level pause was still a one-off snapshot. A run that started after the pause but while the sign-in page was open, whether queued, automated or in another session, was not covered. A follow-up run in an already-paused session also cleared the old run's takeover. The sign-in now holds a fence for its whole lifetime:
 
 - The dialog calls `publicBrowser.beginAccountSignIn(website-sign-in-<site>)`. Main adds a fence, then runs the same pause. While any fence is held, every Agent page operation is rejected with "Agent browsing is paused while the user signs in to a website."
-- Destroying the sign-in page, which the dialog does on close or unmount, removes the fence. A reload of the app window clears all fences, so a lost dialog cannot block Agents for the rest of the session.
+- Closing or unmounting the dialog destroys its sign-in page. Agent browsing stays blocked until native destruction completes; see the reload correction below.
 - The session sidebar now opens the same dialog instead of navigating the session's own page. In-page sign-in had no clear end, so there was nothing to hold a fence against; the dialog gives one surface with a defined open and close.
 - Runs that start after the dialog closes browse normally with the new sign-in, which is the purpose of signing in.
+
+## Renderer reload correction (2026-10-09)
+
+[PR #106's fourth review](https://github.com/LeonEthan/molly-design/pull/106#discussion_r4227663875) found that clearing the fence on renderer navigation left its native sign-in view alive. React cleanup does not own document navigation, so the old page could still accept credentials after Agent access resumed.
+
+Main now associates pending sign-ins with their owning window and reuses `destroy` for full renderer navigation and window destruction. It removes and closes the owner's sign-in views while retaining ordinary Session pages. Same-document and subframe navigation preserve the dialog. Window cleanup is registered before the pause RPC, so it also cancels sign-ins that have not created a view yet, and late creation is rejected. `destroyAll` includes those pending opens.
+
+The existing window observer and record disposal were reused with adaptation. Merely clearing the IDs or hiding the native view was rejected because neither establishes the end of its credential surface. Live sign-in WebContents retain a separate transient hold through their `destroyed` event, including asynchronous close and a reopened dialog with the same ID. This adds no storage or RPC.
+
+Deterministic main-service regressions cover navigation filtering, native disposal before release, pending pause completion after cleanup, old-window events, and delayed destruction during a new sign-in. The native browser probe passes 14 checks and confirms that Electron's `close()` returns before `destroyed`; it also verifies renderer navigation and the retained Session page.
+
+The independent read-only Codex review (`gpt-6-astra`, high) found one additional P1 in the initial repair: allocating tracked contents before bounds validation could orphan a hold when the window shrank. The final repair validates bounds before native allocation. A new regression verifies that closing a rejected sign-in allows Agent browsing again; all 18 main-service tests pass. The follow-up read-only review found no remaining P0/P1 and passed 30 service/controller/state tests. Full repository checks, documentation checks, formatting, and the native probe pass. This implements the existing sign-in guarantee without changing Spec intent.
 
 ## Reuse
 

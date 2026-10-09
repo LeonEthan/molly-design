@@ -133,8 +133,8 @@ export class PublicBrowserService {
   private readonly configuredSessions = new WeakSet<Electron.Session>()
   private readonly humanTakeovers = new Map<string, AgentBrowserScope>()
   private readonly closedAgentPages = new Map<string, string>()
-  private readonly signInPages = new Set<string>()
-  private readonly reloadWatchedWindows = new WeakSet<BrowserWindow>()
+  private readonly signInPages = new Map<string, BrowserWindow>()
+  private readonly signInContents = new Set<Electron.WebContents>()
   private accountMutation: Promise<void> = Promise.resolve()
 
   constructor(
@@ -148,6 +148,9 @@ export class PublicBrowserService {
     visible = true
   ): ElectronPublicBrowserResult {
     try {
+      if (browserId.startsWith('website-sign-in-') && !this.signInPages.has(browserId)) {
+        return { ok: false, error: 'The website sign-in has already closed.' }
+      }
       const existing = this.records.get(browserId)
       if (existing && !existing.window.isDestroyed() && !existing.view.webContents.isDestroyed()) {
         existing.bounds = normalizeBounds(existing.window, bounds)
@@ -169,6 +172,7 @@ export class PublicBrowserService {
       if (!window || window.isDestroyed()) {
         return { ok: false, error: 'The main Electron window is not available.' }
       }
+      const normalizedBounds = normalizeBounds(window, bounds)
 
       const capacityFailure = this.evictHiddenRecordAtCapacity()
       if (capacityFailure) return { ok: false, error: capacityFailure }
@@ -183,11 +187,15 @@ export class PublicBrowserService {
           spellcheck: false
         }
       })
+      if (this.signInPages.has(browserId)) {
+        this.signInContents.add(view.webContents)
+        view.webContents.once('destroyed', () => this.signInContents.delete(view.webContents))
+      }
       const record: PublicBrowserRecord = {
         browserId,
         view,
         window,
-        bounds: normalizeBounds(window, bounds),
+        bounds: normalizedBounds,
         state: {
           browserId,
           phase: 'idle',
@@ -209,10 +217,7 @@ export class PublicBrowserService {
       } else {
         this.moveToCaptureWindow(record)
       }
-      if (!this.observedWindows.has(window)) {
-        this.observedWindows.add(window)
-        window.once('closed', () => this.destroyWindowRecords(window))
-      }
+      this.observeWindow(window)
       this.publish(record)
       return { ok: true, state: record.state }
     } catch (error) {
@@ -351,19 +356,23 @@ export class PublicBrowserService {
   }
 
   destroy(browserId: string): ElectronPublicBrowserResult {
-    this.signInPages.delete(browserId)
     const record = this.records.get(browserId)
-    if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
+    if (!record) {
+      this.signInPages.delete(browserId)
+      return { ok: false, error: 'Public browser surface has not been created.' }
+    }
     const scope = this.takeAgentControl(browserId) ?? this.humanTakeovers.get(browserId)
     if (scope) this.closedAgentPages.set(browserId, scope.runId)
     this.disposeRecord(record)
+    this.signInPages.delete(browserId)
     return { ok: true, state: record.state }
   }
 
   destroyAll(): void {
     this.revokeAllAgentCommands()
     this.humanTakeovers.clear()
-    for (const browserId of [...this.records.keys()]) this.destroy(browserId)
+    for (const browserId of new Set([...this.records.keys(), ...this.signInPages.keys()]))
+      this.destroy(browserId)
     this.closedAgentPages.clear()
   }
 
@@ -396,7 +405,7 @@ export class PublicBrowserService {
     if (!/^session-browser-[a-zA-Z0-9_-]{1,128}$/.test(scope.browserId)) {
       throw new Error('Invalid session browser identity.')
     }
-    if (this.signInPages.size > 0)
+    if (this.signInPages.size > 0 || this.signInContents.size > 0)
       throw new Error('Agent browsing is paused while the user signs in to a website.')
     const closedRun = this.closedAgentPages.get(scope.browserId)
     if (closedRun === scope.runId)
@@ -507,14 +516,11 @@ export class PublicBrowserService {
   async beginAccountSignIn(browserId: string): Promise<void> {
     if (!/^website-sign-in-[a-z0-9.-]{1,64}$/.test(browserId))
       throw new Error('Invalid website sign-in page.')
-    this.signInPages.add(browserId)
     const window = this.getMainWindow()
-    if (window && !window.isDestroyed() && !this.reloadWatchedWindows.has(window)) {
-      this.reloadWatchedWindows.add(window)
-      window.webContents.on('did-start-navigation', (details) => {
-        if (details.isMainFrame && !details.isSameDocument) this.signInPages.clear()
-      })
-    }
+    if (!window || window.isDestroyed())
+      throw new Error('The main Electron window is not available.')
+    this.signInPages.set(browserId, window)
+    this.observeWindow(window)
     await this.pauseAgentsForAccountChange()
   }
 
@@ -754,7 +760,23 @@ export class PublicBrowserService {
     return null
   }
 
+  private observeWindow(window: BrowserWindow): void {
+    if (this.observedWindows.has(window)) return
+    this.observedWindows.add(window)
+    window.once('closed', () => this.destroyWindowRecords(window))
+    window.webContents.on('did-start-navigation', (details) => {
+      if (details.isMainFrame && !details.isSameDocument) this.destroyWindowSignIns(window)
+    })
+  }
+
+  private destroyWindowSignIns(window: BrowserWindow): void {
+    for (const [browserId, owner] of this.signInPages) {
+      if (owner === window) this.destroy(browserId)
+    }
+  }
+
   private destroyWindowRecords(window: BrowserWindow): void {
+    this.destroyWindowSignIns(window)
     for (const record of [...this.records.values()]) {
       if (record.window === window) this.destroy(record.browserId)
     }

@@ -57,6 +57,10 @@ import { useSessionMentionDropZone } from '@/hooks/use-session-mention-drag';
 import { SessionChatInputArea, type SessionChatInputAreaHandle } from './session-chat-input-area';
 import { useSessionMcpSelection } from '@/hooks/use-session-mcp-selection';
 import { MessageQueueDisplay, shouldRequestNativeQueueSteer } from './message-queue';
+import {
+  resolveUserSessionStopCancelOptions,
+  shouldShowDispatchPauseInterstitial,
+} from './session-stop-control';
 import { useTranslation } from 'react-i18next';
 import { useRouter } from '@tanstack/react-router';
 import { toast } from 'sonner';
@@ -3497,7 +3501,11 @@ export const SessionChatInterface = memo(
 
       setInputActionState('ready');
       try {
-        await requestSessionCancel(session.id, turnIdToCancel);
+        await requestSessionCancel(
+          session.id,
+          turnIdToCancel,
+          resolveUserSessionStopCancelOptions()
+        );
       } catch (error) {
         console.error('Failed to request session cancel', error);
         toast.error(t('sessions.stopError'), { description: getErrorMessage(error) });
@@ -3978,7 +3986,7 @@ export const SessionChatInterface = memo(
                     sessionCompleted={session.status?.type === 'idle' && !isSessionWorking}
                   />
 
-                  {session.dispatchPause?.state === 'paused' ? (
+                  {shouldShowDispatchPauseInterstitial(session.dispatchPause) ? (
                     <div role="status" className="flex items-center gap-2 px-3 py-2 text-sm">
                       <span className="min-w-0 flex-1">
                         {session.dispatchPause.error ??

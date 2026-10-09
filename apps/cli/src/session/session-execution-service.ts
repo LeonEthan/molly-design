@@ -85,7 +85,10 @@ import type { LoroDocumentManager, SessionDocument } from '@/lib/loro/doc';
 import { subscribeSessionChanges } from '@/lib/loro/doc';
 import { buildPrompt, normalizeSessionInputBlocks } from './session-execution-helpers';
 import type { MemoryPressureEvictionResult } from '@/lib/session-gc-manager';
-import { resolveResumableAcpSessionId } from './session-dispatch-logic';
+import {
+  findNextDispatchableUserTurn,
+  resolveResumableAcpSessionId,
+} from './session-dispatch-logic';
 import { resolveSessionLaunchConfig } from './session-launch-config-resolver';
 import type { MachineAccessVerification } from './session-access-retry';
 import {
@@ -675,9 +678,39 @@ export class SessionExecutionService {
 
   private readonly stopRequestedBySession = new Map<SessionId, string>();
 
-  private async hasQueuedInput(sessionId: SessionId): Promise<boolean> {
+  /**
+   * Whether anything would dispatch once the stopped owner ends, without
+   * Continue: the message queue, but also an undelivered steer (`pending_apply`,
+   * which cancellation can requeue), a requeued steer (`steerTurnStatuses`
+   * pending) and restored history input. The stopped turn's own input is excluded.
+   */
+  private async hasUndispatchedInput(sessionId: SessionId, turnId: string): Promise<boolean> {
     const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
-    return (await sessionDoc.getMessageQueue()).length > 0;
+    if ((await sessionDoc.getMessageQueue()).length > 0) return true;
+    const meta = await this.getSessionMeta(sessionId);
+    const ownInput = new Set<string>();
+    const activeUserTurnId = this.getActiveUserTurnId(sessionId);
+    if (activeUserTurnId) ownInput.add(activeUserTurnId);
+    if (turnId.startsWith('assistant:')) ownInput.add(turnId.slice('assistant:'.length));
+    if (
+      Object.entries(meta?.steerTurnStatuses ?? {}).some(
+        ([id, status]) => status === 'pending' && !ownInput.has(id)
+      )
+    )
+      return true;
+    const history = readSessionHistory(sessionDoc.sessionData.history).filter(
+      (entry) => entry.role !== 'user' || !ownInput.has(entry.id)
+    );
+    if (
+      history.some(
+        (entry) =>
+          entry.role === 'user' &&
+          entry.status === 'pending_apply' &&
+          entry.inputConfig?._lodyDeliveryKind !== 'steer'
+      )
+    )
+      return true;
+    return !!meta && findNextDispatchableUserTurn(history, meta) !== null;
   }
 
   isDispatchPausedInMemory(sessionId: SessionId): boolean {
@@ -1803,22 +1836,34 @@ export class SessionExecutionService {
   }
 
   private observeStopClosureWait(runtime: TurnRuntimeState, wait: Promise<void>): void {
-    void wait
-      .catch(async (error: unknown) => {
-        const meta = await this.getSessionMeta(runtime.sessionId);
-        if (
-          this.getTurnRuntime(runtime.sessionId, runtime.turnId) !== runtime ||
-          meta?.dispatchPause?.turnId !== runtime.turnId ||
-          meta.dispatchPause.state !== 'paused'
-        )
-          return;
-        await this.upsertSessionMeta(runtime.sessionId, {
-          dispatchPause: { ...meta.dispatchPause, error: formatErrorMessage(error) },
-        });
-      })
-      .catch((error: unknown) => {
-        this.deps.logger.error('Failed to record native Stop recovery diagnostic', error);
+    void wait.catch((error: unknown) => this.recordStopFailure(runtime, error));
+  }
+
+  /**
+   * A failed Stop retains execution ownership (and the canvas lock), so it must
+   * leave a visible recovery point. A user Stop with nothing queued wrote
+   * `resumed`, which the renderer never surfaces; promote it to `paused` with
+   * the diagnostic so Continue/retry stays reachable.
+   */
+  private async recordStopFailure(runtime: TurnRuntimeState, error: unknown): Promise<void> {
+    try {
+      const meta = await this.getSessionMeta(runtime.sessionId);
+      if (
+        this.getTurnRuntime(runtime.sessionId, runtime.turnId) !== runtime ||
+        meta?.dispatchPause?.turnId !== runtime.turnId
+      )
+        return;
+      this.stopRequestedBySession.set(runtime.sessionId, runtime.turnId);
+      await this.upsertSessionMeta(runtime.sessionId, {
+        dispatchPause: {
+          ...meta.dispatchPause,
+          state: 'paused',
+          error: formatErrorMessage(error),
+        },
       });
+    } catch (failure) {
+      this.deps.logger.error('Failed to record Stop recovery diagnostic', failure);
+    }
   }
 
   private terminatePendingSessionWhenReady(options: {
@@ -1877,21 +1922,7 @@ export class SessionExecutionService {
         this.deps.logger.error(
           `[${session.sessionId}] Stop failed; execution ownership retained: ${formatErrorMessage(error)}`
         );
-        void this.getSessionMeta(session.sessionId)
-          .then(async (meta) => {
-            if (
-              runtime &&
-              this.getTurnRuntime(runtime.sessionId, runtime.turnId) === runtime &&
-              meta?.dispatchPause?.turnId === runtime.turnId
-            ) {
-              await this.upsertSessionMeta(session.sessionId, {
-                dispatchPause: { ...meta.dispatchPause, error: formatErrorMessage(error) },
-              });
-            }
-          })
-          .catch((failure) =>
-            this.deps.logger.error('Failed to record Stop recovery diagnostic', failure)
-          );
+        if (runtime) void this.recordStopFailure(runtime, error);
       },
     });
     const drain = owner.completion;
@@ -5229,7 +5260,6 @@ export class SessionExecutionService {
       // `stop` holds the in-memory gate until its queue decision is final, so
       // promotion cannot run between the queue read and the durable write.
       if (stopAction !== 'interrupt') this.stopRequestedBySession.set(sessionId, turnId);
-      const meta = await this.getSessionMeta(sessionId);
       const live =
         this.turnRuntimeBySession.get(sessionId)?.turnId ??
         this.currentTurnBySession.get(sessionId) ??
@@ -5242,19 +5272,21 @@ export class SessionExecutionService {
       const persistPaused = async () => {
         // A matching `resumed` pause (an earlier interrupt/stop on this live turn,
         // e.g. a lost-ack replay) must still become a visible pause; never leave
-        // the in-memory gate set while disk says resumed.
-        if (meta?.dispatchPause?.turnId !== turnId || meta.dispatchPause.state !== 'paused') {
+        // the in-memory gate set while disk says resumed. Compare against the
+        // current meta: this may run after this request's own resumed write.
+        const current = await this.getSessionMeta(sessionId);
+        if (current?.dispatchPause?.turnId !== turnId || current.dispatchPause.state !== 'paused') {
           await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'paused' } });
         }
       };
       if (stopAction === 'interrupt') {
         await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
-      } else if (stopAction === 'stop' && !(await this.hasQueuedInput(sessionId))) {
+      } else if (stopAction === 'stop' && !(await this.hasUndispatchedInput(sessionId, turnId))) {
         await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
         // Re-validate after the durable write: an enqueue that landed meanwhile
         // keeps the Stop contract (paused until Continue). The gate is released
         // synchronously after the final read, so no promotion can interleave.
-        if (await this.hasQueuedInput(sessionId)) await persistPaused();
+        if (await this.hasUndispatchedInput(sessionId, turnId)) await persistPaused();
         else if (this.stopRequestedBySession.get(sessionId) === turnId)
           this.stopRequestedBySession.delete(sessionId);
       } else {

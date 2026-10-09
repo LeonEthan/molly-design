@@ -4,6 +4,7 @@ import { SessionDocument } from '../src/lib/loro/doc';
 import { composeTestSessionDoc } from './session-doc-fixture';
 import { applyAcpSessionRunConfig } from '../src/session/acp-session-config-applier';
 import { withHistoryPort } from './history-port-fixture';
+import { resolveSessionDispatchAction } from '../src/session/session-dispatch-logic';
 import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8520,6 +8521,9 @@ type StopCase = {
   /** Queue contents observed after the first durable dispatchPause write. */
   queueAfterWrite?: { $cid: string }[];
   initialPause?: { turnId: string; state: 'paused' | 'resumed' };
+  /** User history besides the stopped turn's own `live` input. */
+  history?: { id: string; role: 'user'; status: string }[];
+  steerTurnStatuses?: Record<string, 'pending'>;
   state: 'paused' | 'resumed';
   gated: boolean;
 };
@@ -8564,6 +8568,60 @@ it.each<StopCase>([
     state: 'paused',
     gated: true,
   },
+  // Codex round 3, P1 #1: input outside the queue still dispatches after the
+  // stopped owner ends, so user Stop must count it and stay paused.
+  {
+    label: 'stop counts a requeued undelivered steer',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'steer-1', role: 'user', status: 'pending' }],
+    steerTurnStatuses: { 'steer-1': 'pending' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts a requeued steer whose history has not synced',
+    action: 'stop',
+    queue: [],
+    steerTurnStatuses: { 'steer-1': 'pending' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts an in-flight steer that cancellation can requeue',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'steer-1', role: 'user', status: 'pending_apply' }],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts restored pending history input',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'restored-1', role: 'user', status: 'pending' }],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own input and settled history',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'done-1', role: 'user', status: 'handled' }],
+    state: 'resumed',
+    gated: false,
+  },
+  // Codex round 3, P1 #3: the late-enqueue rewrite must compare against the
+  // current meta, not the pre-write snapshot that still said paused.
+  {
+    label: 'stop retry over a paused turn re-pauses after a late enqueue',
+    action: 'stop',
+    queue: [],
+    queueAfterWrite: [{ $cid: 'q-late' }],
+    initialPause: { turnId: 'assistant:live', state: 'paused' },
+    state: 'paused',
+    gated: true,
+  },
   { label: 'legacy optionless stays paused', queue: [], state: 'paused', gated: true },
   // P1 #2: lost-ack replay after an effective stop/interrupt must persist a visible pause.
   {
@@ -8575,20 +8633,33 @@ it.each<StopCase>([
   },
 ])(
   'Stop cancelSession: $label',
-  async ({ action, queue, queueAfterWrite, initialPause, state, gated }) => {
-    const sessionId =
-      `stop-${action ?? 'legacy'}-${state}-${queue.length}-${queueAfterWrite ? 'late' : 'x'}-${initialPause ? 'replay' : 'x'}` as SessionId;
+  async ({
+    label,
+    action,
+    queue,
+    queueAfterWrite,
+    initialPause,
+    history = [],
+    steerTurnStatuses,
+    state,
+    gated,
+  }) => {
+    const sessionId = `stop-${label.replaceAll(' ', '-')}` as SessionId;
     let active: string | undefined = 'assistant:live';
     let currentQueue = queue;
     let meta: Partial<SessionMeta> = {
       id: sessionId,
       machineId: 'machine-1',
+      processingUserMsgId: 'live',
+      latestUserMsgId: 'live',
       ...(initialPause ? { dispatchPause: initialPause } : {}),
+      ...(steerTurnStatuses ? { steerTurnStatuses } : {}),
     };
+    const turns = [{ id: 'live', role: 'user', status: 'processing' }, ...history];
     let service: SessionExecutionService | undefined;
     const gateDuringResumedWrite: boolean[] = [];
     const sessionDoc = withHistoryPort({
-      getHistory: () => [],
+      getHistory: () => turns as never,
       updateHistory: async () => {},
       getMetaState: async () => meta,
       setStatus: async () => {},
@@ -8628,5 +8699,107 @@ it.each<StopCase>([
     expect(service.isDispatchPausedInMemory(sessionId)).toBe(gated);
     // `stop` must hold the promotion gate while its resumed write is in flight.
     expect(gateDuringResumedWrite.every(Boolean)).toBe(true);
+    // Once the stopped owner ends, the dispatcher decides from this meta alone:
+    // a paused Stop must not auto-dispatch the leftover input without Continue.
+    if (state === 'paused' && history.length > 0) {
+      const after = resolveSessionDispatchAction(
+        {
+          meta: {
+            ...meta,
+            processingUserMsgId: undefined,
+            lastHandledUserMsgId: 'live',
+          } as SessionMeta,
+          history: [{ id: 'live', role: 'user', status: 'canceled' }, ...history] as never,
+          hasActiveTurn: false,
+          hasBlockingPendingCreate: false,
+          hasReusableSession: true,
+          hasRewriteBarrier: false,
+        },
+        'machine-1' as never
+      );
+      expect(after).toEqual({ type: 'noop', reason: 'dispatch-paused' });
+    }
   }
 );
+
+// Codex round 3, P1 #2: a user Stop with nothing queued writes `resumed`; if the
+// cancellation drain then fails, ownership and the canvas lock stay held, so the
+// failure must become a visible `paused` recovery point (not a hidden error).
+it('Stop cancelSession: failed drain after an empty-queue stop persists a visible pause', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const sessionId = 'stop-drain-failure' as SessionId;
+    const turnId = 'assistant:live';
+    let meta: Partial<SessionMeta> = { id: sessionId, machineId: 'machine-1' };
+    const sessionDoc = withHistoryPort({
+      getHistory: () => [],
+      updateHistory: async () => {},
+      getMetaState: async () => meta,
+      setStatus: async () => {},
+      waitUntilSynced: async () => {},
+      getMessageQueue: async () => [],
+    });
+    const deps = createBaseDeps({
+      getActiveTurnId: () => turnId,
+      processMessageQueue: async () => {},
+      workspaceDocument: {
+        repo: {
+          getDocMeta: async () => ({ meta }),
+          upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+            meta = { ...meta, ...patch };
+          },
+        },
+        getOrCreateSessionDoc: async () => sessionDoc,
+      } as unknown as LoroDocumentManager,
+    });
+    const service = new SessionExecutionService(deps);
+    const runtime = {
+      sessionId,
+      turnId,
+      userTurnId: 'live',
+      promptInFlight: true,
+      promptStarted: true,
+      session: {
+        sessionId,
+        acpSessionId: 'acp-live' as ACPSessionId,
+        agentClient: {
+          isCreated: () => true,
+          cancel: async () => {},
+          // The provider never settles the cancelled prompt.
+          pendingPromptCompletion: new Promise<void>(() => {}),
+        },
+        terminate: async () => {
+          throw new Error('terminate failed');
+        },
+      },
+    };
+    (
+      service as unknown as { turnRuntimeBySession: Map<SessionId, typeof runtime> }
+    ).turnRuntimeBySession.set(sessionId, runtime);
+
+    expect(
+      await service.cancelSession({
+        type: 'session/cancel',
+        sessionId,
+        turnId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        action: 'stop',
+      })
+    ).toEqual({ success: true });
+    expect(meta.dispatchPause).toEqual({ turnId, state: 'resumed' });
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.waitFor(() =>
+      expect(meta.dispatchPause).toEqual({
+        turnId,
+        state: 'paused',
+        error: expect.stringContaining('terminate failed'),
+      })
+    );
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});

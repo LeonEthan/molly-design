@@ -91,9 +91,10 @@ Explicit Stop saves an exact-turn dispatch pause. Queued inputs stay intact unti
 unknown steer delivery stays non-dispatchable even then. Stop escalation retains the original
 native request and can be retried after failure. Canvas release follows native settlement and
 the original artifact tail. `sessionStopControl: 1` negotiates these controls; v2 adds user
-`stop`, which resumes dispatch only when the owner's queue is empty (checked under the
-in-memory gate, re-checked after the write). `interrupt` is interrupt-and-send and always
-resumes. Native subtask cancellation is a separate exact-task action.
+`stop`, which resumes dispatch only when nothing else would dispatch: an empty queue, no
+undelivered or requeued steer, and no pending history input (checked under the in-memory gate,
+re-checked against fresh meta after the write). A failed Stop drain persists a visible `paused`
+recovery point. `interrupt` is interrupt-and-send and always resumes. Native subtask cancellation is a separate exact-task action.
 
 History uses the shared validated writer and session-data reader. Queue promotion writes
 history and activation before removing its source, so an interrupted metadata write can be

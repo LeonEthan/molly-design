@@ -72,3 +72,19 @@ edits that keep the direction, draws drafts from rendered native blockouts plus
 delivery assets rather than found references, and adds the rejected-direction
 rule. This approves the stated intent; design-quality evaluation runs are
 recorded separately.
+
+## 2026-10-09 user-chosen designs
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-09, after reviewing branch
+`feat/graphic-design-skill-refresh` (commits `57a78f1e` through `f737eb3d`).
+The revision has the image model create at least three complete design options
+that the user chooses between at the end of the turn, then reproduces the chosen
+design faithfully as editable layers; treats a redesign as a new design; creates
+options from the source image plus a few inspiration images the Agent chose from
+research; takes all wording from the brief or source with a line-by-line check
+and turns lettering a font cannot reproduce into image layers; and settles the
+canvas size from the brief, treating an empty canvas as a placeholder. It
+replaces the earlier "draws drafts from rendered native blockouts plus delivery
+assets rather than found references" intent. This approves the stated intent;
+design-quality evaluation runs are recorded separately.

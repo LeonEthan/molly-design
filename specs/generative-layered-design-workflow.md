@@ -1,6 +1,7 @@
 # Generative layered design: task and plan
 
-Status: draft
+Status: approved
+Approval: [2026-10-09 user-chosen designs approval](../.github/spec-approvals.md#2026-10-09-user-chosen-designs)
 Previous approval: [2026-10-09 owner approval](../.github/spec-approvals.md#2026-10-09-graphic-design-skill-refresh)
 Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)

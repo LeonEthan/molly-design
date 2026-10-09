@@ -7,7 +7,7 @@ Translation: current
 
 ## Abstract
 
-The owner's intent for generative layered design was that the image model creates the design, the user chooses among at least three complete designs, and `design.yaml` only reproduces the chosen design in editable form. The written record said instead that the Agent picks the best "draft" and rebuilds the artwork with the draft as loose guidance, so the Agent redesigned during the rebuild, and eval outputs looked like rearranged cut-outs on templates. This correction makes the Skill offer at least three complete design options, end the turn for the user's choice, and then reproduce the chosen design faithfully: a background plate edited from the design, objects isolated from it, and copy matched to it. The workflow Spec returns to draft for owner approval; whether output quality improves is not yet measured.
+The owner's intent for generative layered design was that the image model creates the design, the user chooses among at least three complete designs, and `design.yaml` only reproduces the chosen design in editable form. The written record said instead that the Agent picks the best "draft" and rebuilds the artwork with the draft as loose guidance, so the Agent redesigned during the rebuild, and eval outputs looked like rearranged cut-outs on templates. This correction makes the Skill offer at least three complete design options, end the turn for the user's choice, and then reproduce the chosen design faithfully: a background plate edited from the design, objects isolated from it, and copy matched to it. The owner approved the workflow Spec revision on [2026-10-09](../../../../.github/spec-approvals.md#2026-10-09-user-chosen-designs); output quality is judged separately in evaluation runs.
 
 ## Problem and evidence
 
@@ -40,7 +40,7 @@ The eval runner (local branch, not in the product) treats a turn that commits no
 
 - No run has used this workflow yet; fidelity of plates and isolations from a finished design is unverified, and copy drawn by the image model may be wrong.
 - A new design now takes two turns and at least three option calls before any layer work.
-- The Spec revision is a draft awaiting owner approval.
+- The Spec revision was approved by the owner on [2026-10-09](../../../../.github/spec-approvals.md#2026-10-09-user-chosen-designs).
 
 ## Later change
 

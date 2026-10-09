@@ -111,6 +111,7 @@ import {
   machineSupportsDesignContinuationPreparation,
   machineSupportsProtocolCapability,
   MACHINE_PROTOCOL_CAPABILITIES,
+  SESSION_STOP_CONTROL_USER_STOP_VERSION,
 } from '@molly/shared';
 import { DesignContinuationDialog } from './design-continuation-dialog';
 
@@ -3504,9 +3505,10 @@ export const SessionChatInterface = memo(
       setInputActionState('ready');
       try {
         const cancelOptions = resolveUserSessionStopCancelOptions({
-          supportsSessionStopControl: machineSupportsProtocolCapability(
+          supportsUserStop: machineSupportsProtocolCapability(
             sessionMachine,
-            MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl
+            MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl,
+            SESSION_STOP_CONTROL_USER_STOP_VERSION
           ),
           hasQueuedInput: messageQueue.length > 0,
         });

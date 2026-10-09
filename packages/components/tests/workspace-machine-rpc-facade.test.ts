@@ -38,6 +38,25 @@ describe('createWorkspaceMachineRpcFacade', () => {
       error: 'This machine does not support individual subagent cancellation.',
     });
   });
+  it('never sends user stop to a daemon below sessionStopControl v2', async () => {
+    const facade = createWorkspaceMachineRpcFacade({
+      workspaceId,
+      getMachineProtocolCapabilities: async () => ({ sessionStopControl: 1 }),
+      targetRouter: {
+        getPlaneForMachine: () => 'remote',
+        resolvePlaneForMachine: async () => 'remote',
+      },
+      getMachineRpcClient: async () => {
+        throw new Error('Unexpected RPC');
+      },
+    });
+    expect(
+      await facade.requestSessionCancel(remoteMachineId, sessionId, 'turn-1', { action: 'stop' })
+    ).toMatchObject({
+      success: false,
+      error: 'This machine does not support explicit Stop recovery. Update the local runtime.',
+    });
+  });
   it('uses the local-only IPC preview method without creating a cloud client', async () => {
     const invoke = vi.fn(async () => ({
       status: 'ok' as const,

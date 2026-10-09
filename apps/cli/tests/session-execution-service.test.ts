@@ -8513,46 +8513,120 @@ it.each([
   }
 );
 
-it.each([
-  { label: 'empty queue keeps interrupt→resumed', queue: [] as { $cid: string }[], action: 'interrupt' as const, state: 'resumed' as const },
-  { label: 'non-empty queue demotes interrupt→paused', queue: [{ $cid: 'q1' }], action: 'interrupt' as const, state: 'paused' as const },
-  { label: 'legacy optionless stays paused', queue: [] as { $cid: string }[], action: undefined, state: 'paused' as const },
-])('Stop cancelSession: $label', async ({ queue, action, state }) => {
-  const sessionId = `stop-demote-${state}-${queue.length}` as SessionId;
-  let active: string | undefined = 'assistant:live';
-  let meta: Partial<SessionMeta> = { id: sessionId, machineId: 'machine-1' };
-  const sessionDoc = withHistoryPort({
-    getHistory: () => [],
-    updateHistory: async () => {},
-    getMetaState: async () => meta,
-    setStatus: async () => {},
-    waitUntilSynced: async () => {},
-    getMessageQueue: async () => queue,
-  });
-  const deps = createBaseDeps({
-    getActiveTurnId: () => active,
-    clearActiveTurnId: () => {
-      active = undefined;
-    },
-    processMessageQueue: async () => {},
-    workspaceDocument: {
-      repo: {
-        getDocMeta: async () => ({ meta }),
-        upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
-          meta = { ...meta, ...patch };
-        },
+type StopCase = {
+  label: string;
+  action?: 'interrupt' | 'stop';
+  queue: { $cid: string }[];
+  /** Queue contents observed after the first durable dispatchPause write. */
+  queueAfterWrite?: { $cid: string }[];
+  initialPause?: { turnId: string; state: 'paused' | 'resumed' };
+  state: 'paused' | 'resumed';
+  gated: boolean;
+};
+
+it.each<StopCase>([
+  // P1 #1: interrupt-and-send (steer fallback) always resumes so the selected
+  // queued input promotes; it never parks behind a Continue-gated pause.
+  {
+    label: 'interrupt with queued input stays resumed',
+    action: 'interrupt',
+    queue: [{ $cid: 'q1' }],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'interrupt with empty queue resumes',
+    action: 'interrupt',
+    queue: [],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop with empty queue resumes and releases the gate',
+    action: 'stop',
+    queue: [],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop with queued input pauses until Continue',
+    action: 'stop',
+    queue: [{ $cid: 'q1' }],
+    state: 'paused',
+    gated: true,
+  },
+  // P1 #3: an enqueue that lands while the resumed write is in flight keeps Stop paused.
+  {
+    label: 'stop re-validates the queue after its durable write',
+    action: 'stop',
+    queue: [],
+    queueAfterWrite: [{ $cid: 'q-late' }],
+    state: 'paused',
+    gated: true,
+  },
+  { label: 'legacy optionless stays paused', queue: [], state: 'paused', gated: true },
+  // P1 #2: lost-ack replay after an effective stop/interrupt must persist a visible pause.
+  {
+    label: 'legacy replay over a matching resumed pause persists paused',
+    queue: [],
+    initialPause: { turnId: 'assistant:live', state: 'resumed' },
+    state: 'paused',
+    gated: true,
+  },
+])(
+  'Stop cancelSession: $label',
+  async ({ action, queue, queueAfterWrite, initialPause, state, gated }) => {
+    const sessionId =
+      `stop-${action ?? 'legacy'}-${state}-${queue.length}-${queueAfterWrite ? 'late' : 'x'}-${initialPause ? 'replay' : 'x'}` as SessionId;
+    let active: string | undefined = 'assistant:live';
+    let currentQueue = queue;
+    let meta: Partial<SessionMeta> = {
+      id: sessionId,
+      machineId: 'machine-1',
+      ...(initialPause ? { dispatchPause: initialPause } : {}),
+    };
+    let service: SessionExecutionService | undefined;
+    const gateDuringResumedWrite: boolean[] = [];
+    const sessionDoc = withHistoryPort({
+      getHistory: () => [],
+      updateHistory: async () => {},
+      getMetaState: async () => meta,
+      setStatus: async () => {},
+      waitUntilSynced: async () => {},
+      getMessageQueue: async () => currentQueue,
+    });
+    const deps = createBaseDeps({
+      getActiveTurnId: () => active,
+      clearActiveTurnId: () => {
+        active = undefined;
       },
-      getOrCreateSessionDoc: async () => sessionDoc,
-    } as unknown as LoroDocumentManager,
-  });
-  const request = {
-    type: 'session/cancel' as const,
-    sessionId,
-    turnId: 'assistant:live',
-    machineId: 'machine-1',
-    workspaceId: 'workspace-1' as WorkspaceId,
-    ...(action ? { action } : {}),
-  };
-  expect(await new SessionExecutionService(deps).cancelSession(request)).toEqual({ success: true });
-  expect(meta.dispatchPause).toEqual({ turnId: 'assistant:live', state });
-});
+      processMessageQueue: async () => {},
+      workspaceDocument: {
+        repo: {
+          getDocMeta: async () => ({ meta }),
+          upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+            if (patch.dispatchPause?.state === 'resumed' && action === 'stop')
+              gateDuringResumedWrite.push(service!.isDispatchPausedInMemory(sessionId));
+            meta = { ...meta, ...patch };
+            if (patch.dispatchPause && queueAfterWrite) currentQueue = queueAfterWrite;
+          },
+        },
+        getOrCreateSessionDoc: async () => sessionDoc,
+      } as unknown as LoroDocumentManager,
+    });
+    service = new SessionExecutionService(deps);
+    const request = {
+      type: 'session/cancel' as const,
+      sessionId,
+      turnId: 'assistant:live',
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      ...(action ? { action } : {}),
+    };
+    expect(await service.cancelSession(request)).toEqual({ success: true });
+    expect(meta.dispatchPause).toEqual({ turnId: 'assistant:live', state });
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(gated);
+    // `stop` must hold the promotion gate while its resumed write is in flight.
+    expect(gateDuringResumedWrite.every(Boolean)).toBe(true);
+  }
+);

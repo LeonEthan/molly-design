@@ -1,19 +1,20 @@
 /**
  * User Stop cancel options.
  *
- * Prefer `interrupt` so Stop hard-stops without the dispatch-pause Continue
- * interstitial. Two gates keep that from breaking older daemons or the queue:
- * - Older daemons without `sessionStopControl: 1` reject action-bearing cancel;
- *   fall back to optionless cancel (legacy pause).
- * - `interrupt` writes `dispatchPause.state = 'resumed'`, which lets the watcher
- *   promote queued input. When the queue is non-empty, use legacy cancel so the
- *   queue stays paused until Continue. Renderer emptiness can race an enqueue;
- *   the owner also demotes interrupt→pause when getMessageQueue() is non-empty.
+ * User Stop sends `stop` so it hard-stops without the dispatch-pause Continue
+ * interstitial. `stop` is distinct from `interrupt` (interrupt-and-send, which
+ * always resumes dispatch so the selected queued input promotes).
+ * - Daemons below `sessionStopControl: 2` do not know `stop`; fall back to
+ *   optionless cancel (legacy pause).
+ * - The owner decides `stop` atomically against its own queue: empty queue →
+ *   `dispatchPause.state = 'resumed'`; queued input → `paused` until Continue.
+ *   The renderer queue check below is only a fast path; renderer emptiness can
+ *   race an in-flight enqueue.
  *
  * Recovery fences that still write `dispatchPause.state = 'paused'` keep the
  * interstitial via `shouldShowDispatchPauseInterstitial`.
  */
-export type UserSessionStopCancelOptions = { action: 'interrupt' };
+export type UserSessionStopCancelOptions = { action: 'stop' };
 
 export type DispatchPauseSnapshot = {
   turnId: string;
@@ -22,13 +23,13 @@ export type DispatchPauseSnapshot = {
 };
 
 export function resolveUserSessionStopCancelOptions(input: {
-  supportsSessionStopControl: boolean;
+  supportsUserStop: boolean;
   hasQueuedInput: boolean;
 }): UserSessionStopCancelOptions | undefined {
-  if (!input.supportsSessionStopControl || input.hasQueuedInput) {
+  if (!input.supportsUserStop || input.hasQueuedInput) {
     return undefined;
   }
-  return { action: 'interrupt' };
+  return { action: 'stop' };
 }
 
 /**

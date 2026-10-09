@@ -464,9 +464,7 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('mcp/catalog-entry'),
-    params: z
-      .object({ serverId: z.string().min(1).max(200) })
-      .strict(),
+    params: z.object({ serverId: z.string().min(1).max(200) }).strict(),
   }).strict(),
   BaseLocalMachineRpcRequestSchema.extend({
     method: z.literal('harness/host'),
@@ -565,7 +563,7 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
         sessionId: SessionIdSchema,
         turnId: z.string().trim().min(1),
         subagentTaskId: z.string().trim().min(1).optional(),
-        action: z.enum(['resume', 'interrupt']).optional(),
+        action: z.enum(['resume', 'interrupt', 'stop']).optional(),
       })
       .strict(),
   }).strict(),

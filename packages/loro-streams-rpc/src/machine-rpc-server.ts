@@ -334,7 +334,7 @@ type RpcServerDeps = {
     sessionId: SessionId;
     turnId: string;
     subagentTaskId?: string;
-    action?: 'resume' | 'interrupt';
+    action?: 'resume' | 'interrupt' | 'stop';
   }) => Promise<SessionCancelResponse>;
   getSessionLiveStatus?: (args: {
     sessionId: SessionId;

@@ -675,6 +675,11 @@ export class SessionExecutionService {
 
   private readonly stopRequestedBySession = new Map<SessionId, string>();
 
+  private async hasQueuedInput(sessionId: SessionId): Promise<boolean> {
+    const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
+    return (await sessionDoc.getMessageQueue()).length > 0;
+  }
+
   isDispatchPausedInMemory(sessionId: SessionId): boolean {
     return this.stopRequestedBySession.has(sessionId) || this.pendingStopRecovery.has(sessionId);
   }
@@ -5105,19 +5110,10 @@ export class SessionExecutionService {
       await this.deps.processMessageQueue(sessionId);
       return { success: true };
     }
-    // Atomic with Stop: renderer queue emptiness can race an in-flight enqueue.
-    // Demote interrupt → legacy pause when the owner still holds queued input so
-    // dispatch stays paused until Continue (Stop contract).
-    let stopAction = message.action;
-    if (stopAction === 'interrupt') {
-      const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
-      const queue =
-        typeof (sessionDoc as { getMessageQueue?: () => Promise<unknown[]> }).getMessageQueue ===
-        'function'
-          ? await (sessionDoc as { getMessageQueue: () => Promise<unknown[]> }).getMessageQueue()
-          : [];
-      if (queue.length > 0) stopAction = undefined;
-    }
+    // `interrupt` is interrupt-and-send: dispatch resumes so queued input
+    // promotes. `stop` is user Stop: the owner decides resumed vs paused against
+    // its own queue below. Everything else is a legacy pause until Continue.
+    const stopAction = message.action;
 
     const retainedRecovery = this.pendingStopRecovery.get(sessionId);
     if (retainedRecovery?.turnId === turnId && !this.turnRuntimeBySession.has(sessionId)) {
@@ -5230,6 +5226,8 @@ export class SessionExecutionService {
       stoppingRuntime.steerWaitController?.abort();
     }
     if (options.pauseDispatch !== false) {
+      // `stop` holds the in-memory gate until its queue decision is final, so
+      // promotion cannot run between the queue read and the durable write.
       if (stopAction !== 'interrupt') this.stopRequestedBySession.set(sessionId, turnId);
       const meta = await this.getSessionMeta(sessionId);
       const live =
@@ -5241,10 +5239,26 @@ export class SessionExecutionService {
           this.stopRequestedBySession.delete(sessionId);
         return { success: true };
       }
-      if (meta?.dispatchPause?.turnId !== turnId || stopAction === 'interrupt') {
-        await this.upsertSessionMeta(sessionId, {
-          dispatchPause: { turnId, state: stopAction === 'interrupt' ? 'resumed' : 'paused' },
-        });
+      const persistPaused = async () => {
+        // A matching `resumed` pause (an earlier interrupt/stop on this live turn,
+        // e.g. a lost-ack replay) must still become a visible pause; never leave
+        // the in-memory gate set while disk says resumed.
+        if (meta?.dispatchPause?.turnId !== turnId || meta.dispatchPause.state !== 'paused') {
+          await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'paused' } });
+        }
+      };
+      if (stopAction === 'interrupt') {
+        await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
+      } else if (stopAction === 'stop' && !(await this.hasQueuedInput(sessionId))) {
+        await this.upsertSessionMeta(sessionId, { dispatchPause: { turnId, state: 'resumed' } });
+        // Re-validate after the durable write: an enqueue that landed meanwhile
+        // keeps the Stop contract (paused until Continue). The gate is released
+        // synchronously after the final read, so no promotion can interleave.
+        if (await this.hasQueuedInput(sessionId)) await persistPaused();
+        else if (this.stopRequestedBySession.get(sessionId) === turnId)
+          this.stopRequestedBySession.delete(sessionId);
+      } else {
+        await persistPaused();
       }
     }
     if (stopAction === 'interrupt') this.stopRequestedBySession.delete(sessionId);

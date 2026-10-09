@@ -349,7 +349,7 @@ export type SessionActions = {
   requestSessionCancel: (
     sessionId: SessionId,
     turnId: string,
-    options?: { action?: 'resume' | 'interrupt' }
+    options?: { action?: 'resume' | 'interrupt' | 'stop' }
   ) => Promise<void>;
   requestSessionSteer: (
     sessionId: SessionId,
@@ -768,18 +768,24 @@ export function useSessionActions(): SessionActions {
   );
 
   const requestSessionCancel = useCallback(
-    async (sessionId: SessionId, turnId: string, options?: { action?: 'resume' | 'interrupt' }) => {
+    async (
+      sessionId: SessionId,
+      turnId: string,
+      options?: { action?: 'resume' | 'interrupt' | 'stop' }
+    ) => {
       if (!runtime) throw new Error('Runtime not ready');
       const roomId = getSessionRoomId(sessionId);
       const existing = await runtime.repo.getDocMeta(roomId);
       if (isLoroRepoDocDeleted(existing)) throw new Error('Session was deleted');
       const meta = existing?.meta as SessionMeta | undefined;
       // Optionless Stop writes durable cancel before RPC so a disconnected owner
-      // can still finish Stop via the watcher. Interrupt must not: a successful
-      // interrupt leaves dispatchPause=resumed, and a later optionless replay
-      // would overwrite that with paused (Continue interstitial again). On
-      // interrupt RPC failure only, fall back to lastCanceledTurn so Stop still
-      // completes after reconnect (legacy pause path).
+      // can still finish Stop via the watcher. User `stop` must not: a successful
+      // stop leaves dispatchPause=resumed. On `stop` RPC failure (including a lost
+      // ack after the owner already stopped), fall back to lastCanceledTurn; the
+      // owner replays it as a legacy Stop that persists a visible pause (or
+      // no-ops once the turn has ended), so the session never stays gated without
+      // Continue. Interrupt-and-send has no durable fallback: it must never park
+      // the selected input behind a pause.
       if (!options?.action) {
         await runtime.writer.upsertDocMeta(roomId, {
           lastCanceledTurn: turnId,
@@ -796,7 +802,7 @@ export function useSessionActions(): SessionActions {
             response?.error ?? 'Stop control was not acknowledged; reconnect and retry.'
           );
       } catch (error) {
-        if (options?.action === 'interrupt') {
+        if (options?.action === 'stop') {
           await runtime.writer.upsertDocMeta(roomId, {
             lastCanceledTurn: turnId,
           } as Partial<SessionMeta>);

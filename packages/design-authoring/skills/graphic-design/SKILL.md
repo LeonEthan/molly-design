@@ -166,8 +166,9 @@ option's layout when words are not enough. Techniques are in
 [references/layered-workflow.md](references/layered-workflow.md#design-options).
 
 Show the options and **end the turn** so the user can choose, as
-[Reporting](#reporting) describes. Do not write or change `design.yaml` in that
-turn. Continue with stage 4 in the turn where the user names an option. If the
+[Reporting](#reporting) describes. Never ask for the choice with
+`ask_user_question`; the reply shows the options at full size. Do not write or
+change `design.yaml` in that turn. Continue with stage 4 in the turn where the user names an option. If the
 user asked you to decide ("just pick one", "you choose"), take your
 recommendation and continue in the same turn.
 

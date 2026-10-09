@@ -112,10 +112,12 @@ of perpetual cloud-upload progress. The landing and session composers retain the
 existing image drafts, picker, paste/drop and retry behavior; local uploads need no
 product authentication or configured image-generation MCP.
 
-Assistant Markdown images accept ordinary local paths and `sandbox:/` path references.
-`MarkdownBlock` supplies `useSessionMarkdownImageResolver`, which uses the existing
-owning-session file preview RPC and Electron resource URL. `markdown-renderer.tsx`
-keeps the image inline, reports read errors, and discards results from an old path
-or resolver. Its resolver context reaches images through Streamdown's memoized
-blocks even when the Markdown text stays unchanged. An inline tool image does not
-establish a local file at a path later named by the Agent.
+Assistant Markdown images accept ordinary local paths, `sandbox:/` path references and
+absolute `file://` URIs. `MarkdownBlock` supplies `useSessionMarkdownImageResolver`,
+which uses the existing owning-session file preview RPC and Electron resource URL.
+`markdown-renderer.tsx` keeps the image inline, reports read errors, and discards
+results from an old path or resolver. Other images (remote URLs, or any source the
+renderer CSP blocks) that fail to load show a visible placeholder and log a warning
+instead of a blank bubble. Its resolver context reaches images through Streamdown's
+memoized blocks even when the Markdown text stays unchanged. An inline tool image
+does not establish a local file at a path later named by the Agent.

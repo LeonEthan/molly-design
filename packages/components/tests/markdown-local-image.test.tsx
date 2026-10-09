@@ -66,6 +66,31 @@ it('shows a failed local read without giving the raw path to an image element', 
   expect(container?.querySelector('img')).toBeNull();
 });
 
+it('resolves file URLs through the session file resource resolver', async () => {
+  const paths: string[] = [];
+  await render({
+    text: '![Draft](file:///workspace/artwork/media/draft.png)',
+    resolveAgentImageUrl: async (path) => {
+      paths.push(path);
+      return 'molly-resource://file/draft';
+    },
+  });
+  expect(paths).toEqual(['/workspace/artwork/media/draft.png']);
+  expect(container?.querySelector('img')?.getAttribute('src')).toBe('molly-resource://file/draft');
+});
+
+it('replaces a failed remote image with a visible placeholder and logs the source', async () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  await render({ text: '![Remote](https://example.com/image.png)' });
+  await act(async () => {
+    container?.querySelector('img')?.dispatchEvent(new Event('error'));
+  });
+  expect(container?.textContent).toContain('Remote: Unable to load image');
+  expect(container?.querySelector('img')).toBeNull();
+  expect(warn).toHaveBeenCalledWith(expect.any(String), 'https://example.com/image.png');
+  warn.mockRestore();
+});
+
 it('requires session resolution for local images but preserves ordinary remote images', async () => {
   await render({
     text: '![Local](sandbox:/workspace/draft.png)\n\n![Remote](https://example.com/image.png)',

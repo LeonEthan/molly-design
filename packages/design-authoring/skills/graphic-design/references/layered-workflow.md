@@ -15,8 +15,12 @@ rules); matching pixel dimensions makes later comparison easier.
 
 Read every draft with an image-reading tool. Choose one draft and say why:
 message, hierarchy, room for type, and how well it will split into layers. Tell
-the user which draft you chose; they can ask for another. A draft is a
-reference for the next stages. It never becomes the artwork or its background.
+the user which draft you chose; they can ask for another. Embed each draft you
+present in your reply with Markdown image syntax, using the `absolutePath` from
+its `molly_image` result as the path, for example `![Draft A](/abs/media/a.png)`.
+A draft named only in text is not shown in the chat. Use angle brackets around
+the path when it contains spaces. A draft is a reference for the next stages. It
+never becomes the artwork or its background.
 
 Rendered text inside drafts is usually approximate. Plan the real copy as
 editable text unless lettering is part of the imagery.

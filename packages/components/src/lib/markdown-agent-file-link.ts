@@ -73,7 +73,10 @@ const parseLineNumber = (value: string | undefined): number | undefined => {
 
 export function parseMarkdownAgentImageHref(src: string | undefined): string | null {
   if (!src) return null;
-  const path = src.trim().replace(/^sandbox:(?=\/(?!\/))/iu, '');
+  const path = src
+    .trim()
+    .replace(/^sandbox:(?=\/(?!\/))/iu, '')
+    .replace(/^file:\/\/\/?(?=[a-z]:[\\/]|\/)/iu, '');
   if (/^[a-z][a-z\d+.-]*:/iu.test(path) && !WINDOWS_ABSOLUTE_PATH_PATTERN.test(path)) {
     return null;
   }

@@ -67,3 +67,25 @@ These instructions reduce the observed mistaken claim; they do not guarantee
 that a model will always follow them. The historical missing reference remains
 an explicit missing-file result. No paid Agent rerun is used to validate this
 wording change.
+
+## Draft images in chat follow-up (#104)
+
+Agent replies that announced "Draft A/B" usually named the drafts in prose without
+Markdown image syntax, so the chat bubble had nothing to render. The design skills
+now tell the Agent to embed each draft it presents with the `absolutePath` returned
+by `molly_image` (`graphic-design` layered-workflow reference and `imagegen`).
+This recommends a presentation step; it adds no enforcement, persistence, or
+automatic attachment of tool results to the chat history.
+
+The renderer also had two silent-blank paths. Markdown's URL sanitizer emptied
+`file://` sources before they reached the resolver, so those images never loaded.
+Non-resolvable sources such as remote URLs fell through to a bare `<img>` that the
+renderer CSP could block without any placeholder. `file://` absolute paths now
+resolve through the same owning-session file preview as `sandbox:/` references,
+and a failed bare image shows the existing "Unable to load image" placeholder and
+logs a warning with its source. Unit tests cover the path mapping, the resolver
+route for `file://`, and the placeholder after an image error event.
+
+Limits: no paid Agent turn was run to confirm the Agent now embeds drafts, and the
+packaged Electron build was not inspected here. Earlier replies remain as they
+were; the chat does not retroactively attach their tool results.

@@ -126,6 +126,19 @@ it.each([
   );
 });
 
+it('reads file URLs through the same owning-session preview', async () => {
+  await renderImage('file:///workspace/artwork/media/draft%20literal.png');
+
+  expect(state.request).toEqual([
+    'machine-artwork',
+    { sessionId, path: '/workspace/artwork/media/draft literal.png' },
+    { ownerSessionId: 'session-artwork' },
+  ]);
+  expect(container.querySelector('img')?.getAttribute('src')).toBe(
+    'molly-resource://file/opaque-draft'
+  );
+});
+
 it('decodes the Markdown path once before requesting the image resource', async () => {
   await renderImage('sandbox:/workspace/artwork/media/draft%20literal%2520name.png');
 

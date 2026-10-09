@@ -41,6 +41,36 @@ more shapes.
 Choose a `size` whose aspect ratio matches the canvas (the imagegen skill has the
 size rules); matching pixel dimensions makes later comparison easier.
 
+## Redesign with preserved subjects
+
+When a user asks to redesign a poster but keep its spokesperson, products or
+logo, the source gives you those subjects and the copy; the composition is new.
+
+1. **Isolate the subjects first.** Call `edit` with the source poster as the
+   first image and a prompt that isolates one subject exactly as it appears
+   (same face, pose, clothing, product, label) on a transparent background.
+   Compare each result with the source at full size; a changed face or label is a
+   failed isolation. These isolations are the delivery assets for every later
+   step.
+2. **Block out new compositions with them.** Put the isolated subjects in each
+   blockout as `image` elements at their new size and position, with shapes for
+   the background, stage or props and placeholder copy. Make the blockouts
+   genuinely different: subject scale, side, crop, where the headline sits.
+3. **Draft from each blockout.** `edit` with the rendered blockout first and the
+   isolated subjects after it, asking for a finished poster with this layout,
+   the brand palette and the new light and atmosphere. The draft may redraw the
+   face approximately; that is expected and does not reach the artwork.
+4. **Choose one draft and rebuild it.** Generate the background, stage, light
+   and decorative layers from the chosen draft as for any composition, with the
+   subjects removed. Place the isolated subjects where the draft has them, and
+   match the draft's light with a shadow, glow or scrim rather than by redrawing
+   the subject. A display headline drawn in the draft may become image lettering
+   (main Skill stage 6).
+5. **Compare the render with the chosen draft**, not only with the source.
+
+This takes the isolation calls plus one call per draft and per generated layer;
+plan it against the user's budget before starting.
+
 Read every draft with an image-reading tool and choose one for its message,
 hierarchy, room for type and how well it will split into layers. Leave room for
 the copy the [design defaults](../SKILL.md#design-defaults) expect: a calm area

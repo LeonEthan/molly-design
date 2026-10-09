@@ -61,6 +61,21 @@ Three mood-board texts were compared with the workflow: the uisdc guide (2022, C
 
 Not adopted: a mood board the user must approve before design (Goodspeed ties pre-approval to derivative work, and it adds a blocking step), a mood-board file or image deliverable, and boards built from generated images.
 
+## Follow-up: redesigns start from drafts
+
+The first eval runs of the direction-first Skill (Luckin redesign case, kimi-k3 · Max) completed, and the owner judged the results mediocre. In the run that kept full evidence, the Agent researched on Pinterest, then made three `edit` calls to isolate the spokesperson, coffees and signature, one `generate` call for an empty background, and no blockout or composition draft; the layout came from rearranging cut-outs. The branch table had no row for "redesign this poster", and a supplied poster with "keep the face, coffees and size" read as reconstruction or a bounded edit, both of which adopt the given composition. The request to keep the face identical also discouraged any image-model draft.
+
+With owner approval:
+
+1. A **redesign** row in the branch table: the source supplies content, copy and delivery assets, not the composition. "Redesign", "optimize" or "重新设计" asks for a new composition even with keep-the-face constraints; a bounded edit is a named, local change.
+2. **Drafts are required for a new composition**, at least two within budget. Rearranging cut-outs or existing layers is not composition selection; a composition that could not be drafted is reported.
+3. **Drafts and final layers do different jobs.** Drafts settle composition, light and atmosphere and may approximate a face or product; isolated subjects sit in the blockout so drafts keep likeness and scale. Final layers keep identity by isolating supplied subjects from the source and placing them as the chosen draft shows. `layered-workflow.md` gains a "Redesign with preserved subjects" recipe.
+4. **Stage 8** checks that a claimed redesign follows the chosen draft; a layout matching no draft has skipped stage 3.
+5. The recipe allows a display headline drawn in the draft to become image lettering, answering the owner's earlier note that the accepted baseline's system-font type looked rigid.
+6. The eval runner records process counts (image generate and edit calls, render previews, browser and question calls) from the Pi session in `run.json` for the owner's review. They are evidence, not a gate.
+
+The Spec returns to draft for the redesign branch and the draft/identity split.
+
 ## Alternatives considered
 
 - Keeping the Spec's three-way report and reverting the short replies: rejected because the short replies were deliberate product fixes, and the honesty guarantee survives without forced narration.
@@ -72,4 +87,5 @@ Not adopted: a mood board the user must approve before design (Goodspeed ties pr
 - No Agent run has used the new material. Before/after quality needs 2–3 serial design-eval cases including the Luckin twin, judged blind by the owner, with an approved image budget.
 - The layered example passes intake; it has not been rendered through `molly_render_preview`.
 - The editability table follows the frozen matrix and the editor's panels; per-kind edit operations were not re-verified end to end in this change.
+- Redesign drafting adds roughly two to four image calls per run; whether it improves the owner's verdict is measured only by the following eval runs.
 - Installed-build question interaction is still unverified (`USER_GUIDE.md`). Blockout-conditioned drafts are untested with a real image model; a flat blockout may make drafts stiff.

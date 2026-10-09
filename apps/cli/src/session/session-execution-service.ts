@@ -5105,6 +5105,20 @@ export class SessionExecutionService {
       await this.deps.processMessageQueue(sessionId);
       return { success: true };
     }
+    // Atomic with Stop: renderer queue emptiness can race an in-flight enqueue.
+    // Demote interrupt → legacy pause when the owner still holds queued input so
+    // dispatch stays paused until Continue (Stop contract).
+    let stopAction = message.action;
+    if (stopAction === 'interrupt') {
+      const sessionDoc = await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId);
+      const queue =
+        typeof (sessionDoc as { getMessageQueue?: () => Promise<unknown[]> }).getMessageQueue ===
+        'function'
+          ? await (sessionDoc as { getMessageQueue: () => Promise<unknown[]> }).getMessageQueue()
+          : [];
+      if (queue.length > 0) stopAction = undefined;
+    }
+
     const retainedRecovery = this.pendingStopRecovery.get(sessionId);
     if (retainedRecovery?.turnId === turnId && !this.turnRuntimeBySession.has(sessionId)) {
       try {
@@ -5216,7 +5230,7 @@ export class SessionExecutionService {
       stoppingRuntime.steerWaitController?.abort();
     }
     if (options.pauseDispatch !== false) {
-      if (message.action !== 'interrupt') this.stopRequestedBySession.set(sessionId, turnId);
+      if (stopAction !== 'interrupt') this.stopRequestedBySession.set(sessionId, turnId);
       const meta = await this.getSessionMeta(sessionId);
       const live =
         this.turnRuntimeBySession.get(sessionId)?.turnId ??
@@ -5227,13 +5241,13 @@ export class SessionExecutionService {
           this.stopRequestedBySession.delete(sessionId);
         return { success: true };
       }
-      if (meta?.dispatchPause?.turnId !== turnId || message.action === 'interrupt') {
+      if (meta?.dispatchPause?.turnId !== turnId || stopAction === 'interrupt') {
         await this.upsertSessionMeta(sessionId, {
-          dispatchPause: { turnId, state: message.action === 'interrupt' ? 'resumed' : 'paused' },
+          dispatchPause: { turnId, state: stopAction === 'interrupt' ? 'resumed' : 'paused' },
         });
       }
     }
-    if (message.action === 'interrupt') this.stopRequestedBySession.delete(sessionId);
+    if (stopAction === 'interrupt') this.stopRequestedBySession.delete(sessionId);
     this.markTurnCancelled(sessionId, turnId);
     const runtime = this.getTurnRuntime(sessionId, turnId);
     if (runtime) {

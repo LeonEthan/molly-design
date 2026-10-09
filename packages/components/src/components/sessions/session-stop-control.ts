@@ -7,7 +7,8 @@
  *   fall back to optionless cancel (legacy pause).
  * - `interrupt` writes `dispatchPause.state = 'resumed'`, which lets the watcher
  *   promote queued input. When the queue is non-empty, use legacy cancel so the
- *   queue stays paused until Continue.
+ *   queue stays paused until Continue. Renderer emptiness can race an enqueue;
+ *   the owner also demotes interrupt→pause when getMessageQueue() is non-empty.
  *
  * Recovery fences that still write `dispatchPause.state = 'paused'` keep the
  * interstitial via `shouldShowDispatchPauseInterstitial`.

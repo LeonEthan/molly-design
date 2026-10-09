@@ -774,20 +774,35 @@ export function useSessionActions(): SessionActions {
       const existing = await runtime.repo.getDocMeta(roomId);
       if (isLoroRepoDocDeleted(existing)) throw new Error('Session was deleted');
       const meta = existing?.meta as SessionMeta | undefined;
+      // Optionless Stop writes durable cancel before RPC so a disconnected owner
+      // can still finish Stop via the watcher. Interrupt must not: a successful
+      // interrupt leaves dispatchPause=resumed, and a later optionless replay
+      // would overwrite that with paused (Continue interstitial again). On
+      // interrupt RPC failure only, fall back to lastCanceledTurn so Stop still
+      // completes after reconnect (legacy pause path).
       if (!options?.action) {
         await runtime.writer.upsertDocMeta(roomId, {
           lastCanceledTurn: turnId,
         } as Partial<SessionMeta>);
       }
       if (!meta?.machineId) throw new Error('The owning machine is unavailable');
-      const response = await runtime.requestSessionCancel(meta.machineId, sessionId, turnId, {
-        timeoutMs: 5_000,
-        action: options?.action,
-      });
-      if (!response?.success)
-        throw new Error(
-          response?.error ?? 'Stop control was not acknowledged; reconnect and retry.'
-        );
+      try {
+        const response = await runtime.requestSessionCancel(meta.machineId, sessionId, turnId, {
+          timeoutMs: 5_000,
+          action: options?.action,
+        });
+        if (!response?.success)
+          throw new Error(
+            response?.error ?? 'Stop control was not acknowledged; reconnect and retry.'
+          );
+      } catch (error) {
+        if (options?.action === 'interrupt') {
+          await runtime.writer.upsertDocMeta(roomId, {
+            lastCanceledTurn: turnId,
+          } as Partial<SessionMeta>);
+        }
+        throw error;
+      }
     },
     [runtime]
   );

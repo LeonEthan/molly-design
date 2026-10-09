@@ -76,6 +76,8 @@ export function withHistoryPort<T extends object>(fixture: T): T & { sessionData
   Object.assign(storage, {
     peekReadyMessageQueue:
       (storage as { peekReadyMessageQueue?: unknown }).peekReadyMessageQueue ?? (async () => null),
+    getMessageQueue:
+      (storage as { getMessageQueue?: unknown }).getMessageQueue ?? (async () => []),
     getMetaState: (storage as { getMetaState?: unknown }).getMetaState ?? (async () => undefined),
   });
   storage.subscribeAll ??= (listener) => storage.mirror?.subscribe(listener) ?? (() => {});

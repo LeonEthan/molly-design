@@ -8512,3 +8512,47 @@ it.each([
     }
   }
 );
+
+it.each([
+  { label: 'empty queue keeps interrupt→resumed', queue: [] as { $cid: string }[], action: 'interrupt' as const, state: 'resumed' as const },
+  { label: 'non-empty queue demotes interrupt→paused', queue: [{ $cid: 'q1' }], action: 'interrupt' as const, state: 'paused' as const },
+  { label: 'legacy optionless stays paused', queue: [] as { $cid: string }[], action: undefined, state: 'paused' as const },
+])('Stop cancelSession: $label', async ({ queue, action, state }) => {
+  const sessionId = `stop-demote-${state}-${queue.length}` as SessionId;
+  let active: string | undefined = 'assistant:live';
+  let meta: Partial<SessionMeta> = { id: sessionId, machineId: 'machine-1' };
+  const sessionDoc = withHistoryPort({
+    getHistory: () => [],
+    updateHistory: async () => {},
+    getMetaState: async () => meta,
+    setStatus: async () => {},
+    waitUntilSynced: async () => {},
+    getMessageQueue: async () => queue,
+  });
+  const deps = createBaseDeps({
+    getActiveTurnId: () => active,
+    clearActiveTurnId: () => {
+      active = undefined;
+    },
+    processMessageQueue: async () => {},
+    workspaceDocument: {
+      repo: {
+        getDocMeta: async () => ({ meta }),
+        upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+          meta = { ...meta, ...patch };
+        },
+      },
+      getOrCreateSessionDoc: async () => sessionDoc,
+    } as unknown as LoroDocumentManager,
+  });
+  const request = {
+    type: 'session/cancel' as const,
+    sessionId,
+    turnId: 'assistant:live',
+    machineId: 'machine-1',
+    workspaceId: 'workspace-1' as WorkspaceId,
+    ...(action ? { action } : {}),
+  };
+  expect(await new SessionExecutionService(deps).cancelSession(request)).toEqual({ success: true });
+  expect(meta.dispatchPause).toEqual({ turnId: 'assistant:live', state });
+});

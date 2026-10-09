@@ -1,6 +1,7 @@
 # 生成式分层设计：任务与方案
 
-Status: draft
+Status: approved
+Approval: [2026-10-09 owner approval](../.github/spec-approvals.md#2026-10-09-graphic-design-skill-refresh)
 Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
 Previous workflow approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
@@ -79,7 +80,7 @@ Translation: current
 
 - [PR #17 概要](https://github.com/LeonEthan/molly-design/pull/17)记录最初获批范围。真实图片接口、透明裁剪、桌面编辑及内置 Kimi 实验的详细记录仅留本地；后续验收摘要见下文。
 - [设计平台合同](graphic-design-platform.zh.md)：编辑、持久化和 Agent 生命周期边界。
-- [2026-10-09 Skill 优化记录](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.zh.md)说明本次草案修订：回复篇幅相称、设计默认值、结构化意图提问、方向词、有界调研及局部修改豁免、基于原生草模的图加文草稿，以及否定方向时的处理规则。尚未经设计质量评测运行验证。
+- [2026-10-09 Skill 优化记录](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.zh.md)说明本次修订：回复篇幅相称、设计默认值、结构化意图提问、方向词、有界调研及局部修改豁免、基于原生草模的图加文草稿，以及否定方向时的处理规则。负责人已于 2026-10-09 批准；尚未经设计质量评测运行验证。
 - 仅保留本地的验证记录分别说明实施前检查、已落地修改及之后的验收运行。接口测试通过不代表端到端或视觉验收通过。
 
 最新完整运行完成设计网站调研、分层创作、两次原生预览读图和应用保存，人工审批提示为零。

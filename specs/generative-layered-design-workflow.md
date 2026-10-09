@@ -1,6 +1,7 @@
 # Generative layered design: task and plan
 
-Status: draft
+Status: approved
+Approval: [2026-10-09 owner approval](../.github/spec-approvals.md#2026-10-09-graphic-design-skill-refresh)
 Previous approval: [2026-10-01 owner approval](../.github/spec-approvals.md#2026-10-01-native-pi-packages-without-permission-checks)
 Previous revision approval: [2026-09-26 closeout approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-closeout)
 Previous workflow approval: [2026-09-26 workflow rewrite approval](../.github/spec-approvals.md#2026-09-26-generative-layered-design-workflow-rewrite)
@@ -83,7 +84,7 @@ Turn-length, token and cost optimization; automatic denoising or placement; dedi
 
 - The [PR #17 summary](https://github.com/LeonEthan/molly-design/pull/17) records the approved initial scope. Detailed image API, transparent-trim, desktop-editing and embedded-Kimi experiments remain in local-only records; later acceptance is summarized below.
 - [Design platform contract](graphic-design-platform.md): editing, persistence and Agent lifecycle boundaries.
-- The [2026-10-09 skill refresh note](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.md) records this draft revision: proportionate reporting, design defaults, structured intent questions, direction words, bounded research with the bounded-edit exemption, image-plus-text drafts from native blockouts, and the rejected-direction rule. It is not yet validated by design-quality evaluation runs.
+- The [2026-10-09 skill refresh note](../.agents/notes/implemented/simplification/2026-10-09-graphic-design-skill-refresh.md) records this revision: proportionate reporting, design defaults, structured intent questions, direction words, bounded research with the bounded-edit exemption, image-plus-text drafts from native blockouts, and the rejected-direction rule. The owner approved it on 2026-10-09; it is not yet validated by design-quality evaluation runs.
 - Local-only validation records separate pre-implementation inspection, landed changes and acceptance runs. Passing interface tests does not establish end-to-end or visual acceptance.
 
 The latest complete run performed design-site research, layered authoring, two

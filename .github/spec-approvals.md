@@ -58,3 +58,17 @@ with unmodified Pi packages in Molly's own Pi profile, run tools without
 permission checks behind the `cc-safety-net` floor, and store selected model keys
 in that profile for sub-agents. This approves the stated intent, not runtime
 behavior beyond the evidence recorded in the PR.
+
+## 2026-10-09 graphic-design skill refresh
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-09, after reviewing the
+graphic-design skill refresh on branch `feat/graphic-design-skill-refresh`
+(commits `de0c1e3a` through `1cbda76b`). The revision makes reporting
+proportionate, adds breakable design defaults as the review checklist, asks
+direction-changing questions once through the structured question tool, writes
+direction words as the working yardstick, bounds research and exempts bounded
+edits that keep the direction, draws drafts from rendered native blockouts plus
+delivery assets rather than found references, and adds the rejected-direction
+rule. This approves the stated intent; design-quality evaluation runs are
+recorded separately.

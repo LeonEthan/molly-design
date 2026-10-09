@@ -102,6 +102,7 @@ export function WebChatLandingScreen({
             'input-scrollbar flex min-h-0 flex-1 flex-col items-center overflow-y-auto overflow-x-hidden px-[clamp(24px,5cqw,64px)]'
           )}
         >
+          <div aria-hidden className="grow-[2]" />
           <div className="relative flex w-full max-w-[820px] shrink-0 flex-col items-center justify-center gap-6 pb-6 pt-12">
             <div className="flex flex-col items-center gap-4 text-center">
               {eyebrow ? (
@@ -145,6 +146,7 @@ export function WebChatLandingScreen({
           {gallery != null ? (
             <div className="relative w-full max-w-[1240px] shrink-0 pb-12 pt-6">{gallery}</div>
           ) : null}
+          <div aria-hidden className="grow-[3]" />
         </div>
       </FocusScope>
     </div>

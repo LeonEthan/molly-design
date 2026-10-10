@@ -281,23 +281,32 @@ export function ModelConnectionForm({
   authFlowRef.current = authFlow;
   const onOpenAiAuthRef = useRef(onOpenAiAuth);
   onOpenAiAuthRef.current = onOpenAiAuth;
-  useEffect(
-    () => () => {
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
       const current = authFlowRef.current;
       if (current.phase === 'waiting') void onOpenAiAuthRef.current?.cancel(current.sessionId);
-    },
-    []
-  );
+    };
+  }, []);
 
   const beginSignIn = useCallback(async () => {
     if (!onOpenAiAuth) return;
     const started = await onOpenAiAuth.begin();
     if (!('sessionId' in started)) {
-      setAuthFlow({ phase: 'failed', reason: started.reason });
+      if (mountedRef.current) setAuthFlow({ phase: 'failed', reason: started.reason });
+      return;
+    }
+    // The form may have been closed while the browser was still launching; the flow
+    // this orphaned component started must not continue.
+    if (!mountedRef.current) {
+      void onOpenAiAuth.cancel(started.sessionId);
       return;
     }
     setAuthFlow({ phase: 'waiting', sessionId: started.sessionId });
     const result = await onOpenAiAuth.complete(started.sessionId);
+    if (!mountedRef.current) return;
     if (result.ok) {
       // The flow saved the connection; the parent list refresh replaces this form.
       cancelForm();

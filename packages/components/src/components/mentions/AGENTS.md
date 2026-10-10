@@ -7,15 +7,16 @@ Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md)
 ## Triggers, menu, and candidates
 
 - `@` reaches every mention type through the two-level menu. Skills keep their
-  direct `$` menu, `/` still opens commands directly, and `#` opens no menu but
-  keeps its hydrator, so a pasted `#123` still expands before send.
+  direct `$` menu and `/` still opens commands directly. Issue/PR discovery,
+  hydration and expansion are retired; pasted `#123` is plain text. Persisted
+  mention ranges and frozen transcript spans retain their historical marks.
 - `enableAtMentions` is the ONE list of what `@` reaches, gating both trigger
   registration and mounting `<Mention>`; every source with its own `enabled`
   rule (sessions: having any) belongs there too. Placeholder hints advertise `$`
   only under the conditions that enable Skill mentions.
 - Desktop menus render through `MentionContent`, capped at
   `var(--mention-input-width)`.
-- `insertText` must keep its type's prompt form (`@path`, `#123`, `$token`,
+- `insertText` must keep its type's prompt form (`@path`, `$token`,
   `/cmd`): reaching a type through `@` must not change what the agent receives.
   Directory candidates carry BOTH `navigateText` (`@dir/`, descend) and
   `insertText` (`@dir`, commit).
@@ -23,9 +24,7 @@ Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md)
   must never rank the file index, and a bare `@` must call none. `limit` is a
   hint; `selectMentionMenuView` enforces the cap. Every category caps its
   candidates.
-- Issues and PRs rank over their own slice of the shared cache, partitioned once
-  by `useMentionCategories`.
-- File, Session, Issue, and PR candidates use the vendored VS Code
+- File and Session candidates use the vendored VS Code
   `scoreFuzzy` with non-contiguous matching, wrapped by any source-specific
   ordering. Skills and commands keep their own ranking.
 - A candidate describes its side panel through the neutral
@@ -40,10 +39,8 @@ Product-level mention sources on `src/ui/mention`. Files: [README.md](README.md)
   and aggregate views. Both share the menu's once-per-menu-open latch, the menu
   owns no source-specific rule, and categories on one source share its
   `sourceKey`.
-- Activation means "make sure this is loaded", not "revalidate": Issues/PRs gate
-  on `ISSUE_PR_FRESH_FOR_MS`, and only explicit gestures pass `refresh({ force:
-true })`. The fetch timestamp rides on the cached entry (survives IndexedDB).
-  An unasked source reports `loading`, never `ready` with zero rows.
+- An unasked source reports `loading`, never `ready` with zero rows. Files and
+  skills use local project/provider sources; GitHub API discovery is retired.
 
 ## Hydration and drafts
 

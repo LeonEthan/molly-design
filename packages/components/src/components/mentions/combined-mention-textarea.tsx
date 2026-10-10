@@ -1,12 +1,6 @@
 import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
-import {
-  buildItemSuggestions,
-  IssuePrMentionHydrator,
-  IssuePrMentionTitleHint,
-  useKnownIssuePrItems,
-} from '@/components/mentions/issue-pr-hash-mention';
 import { hydrateFileMentionsFromText } from '@/components/mentions/file-at-mention';
 import {
   buildSessionMentionInsertion,
@@ -51,8 +45,6 @@ import { Textarea, type TextareaProps } from '@/ui/textarea';
 import { parseMentionNamespaceSearch } from '@/ui/mention/mention-trigger';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
 
-type MentionFileSourceKind = 'github' | 'local' | 'worktree';
-
 // ============================================================================
 // Two-level `@` menu
 // ============================================================================
@@ -72,12 +64,8 @@ function isLazySourceLoading(status: string, hasData: boolean) {
  */
 function TwoLevelMentionMenu({
   fileData,
-  fileSourceKind,
   enableFileMentions,
   onLazyDirectoryOpen,
-  enableIssueMentions,
-  repoFullName,
-  issuePrData,
   enableSkillMentions,
   skillItems,
   skillState,
@@ -91,12 +79,8 @@ function TwoLevelMentionMenu({
   commandsEnabled,
 }: {
   fileData: MentionFileDataState;
-  fileSourceKind: MentionFileSourceKind;
   enableFileMentions: boolean;
   onLazyDirectoryOpen?: (directoryId: string) => void;
-  enableIssueMentions: boolean;
-  repoFullName?: string;
-  issuePrData: ReturnType<typeof useKnownIssuePrItems>['issuePrData'];
   enableSkillMentions: boolean;
   skillItems: SkillMentionItem[];
   skillState: { status: string; error?: string };
@@ -146,11 +130,6 @@ function TwoLevelMentionMenu({
       enableFileMentions ? buildMentionFileIndex(fileData.entry, buildLazyDirectoryToken) : null,
     [enableFileMentions, fileData.entry]
   );
-  const issuePrSuggestions = React.useMemo(
-    () =>
-      enableIssueMentions && issuePrData.entry ? buildItemSuggestions(issuePrData.entry.items) : [],
-    [enableIssueMentions, issuePrData.entry]
-  );
   const fileSource = React.useMemo<MentionCategorySources['file']>(
     () => ({
       enabled: enableFileMentions,
@@ -165,47 +144,11 @@ function TwoLevelMentionMenu({
           ? (fileData.error ?? t('mention.file.loadError', 'Failed to load files.'))
           : undefined,
       notice: fileData.entry?.truncated
-        ? fileSourceKind === 'github'
-          ? t(
-              'mention.file.truncatedGithub',
-              'Repo is very large; GitHub returned a truncated file list.'
-            )
-          : t(
-              'mention.file.truncatedLocal',
-              'Project is very large; local file list was truncated.'
-            )
+        ? t('mention.file.truncatedLocal', 'Project is very large; local file list was truncated.')
         : undefined,
       index: fileIndex,
     }),
-    [enableFileMentions, fileData, fileIndex, fileSourceKind, t]
-  );
-
-  // `refresh` is async, but `onActivate` is fire-and-forget (`() => void`).
-  // Wrap once so the promise is explicitly discarded while keeping a stable
-  // identity — the source memo lists it as a dependency.
-  const refreshIssuePr = issuePrData.refresh;
-  const activateIssuePr = React.useCallback(() => {
-    void refreshIssuePr();
-  }, [refreshIssuePr]);
-
-  const issuePrSource = React.useMemo<MentionCategorySources['issuePr']>(
-    () => ({
-      enabled: enableIssueMentions,
-      status:
-        issuePrData.status === 'error'
-          ? 'error'
-          : isLazySourceLoading(issuePrData.status, Boolean(issuePrData.entry))
-            ? 'loading'
-            : 'ready',
-      message: !repoFullName
-        ? t('mention.issuePr.selectRepo', 'Select a repo to mention issues/PRs.')
-        : issuePrData.status === 'error'
-          ? (issuePrData.error ?? t('mention.issuePr.loadError', 'Failed to load issues and PRs.'))
-          : undefined,
-      onActivate: activateIssuePr,
-      suggestions: issuePrSuggestions,
-    }),
-    [activateIssuePr, enableIssueMentions, issuePrData, issuePrSuggestions, repoFullName, t]
+    [enableFileMentions, fileData, fileIndex, t]
   );
 
   const skillSource = React.useMemo<MentionCategorySources['skill']>(
@@ -300,12 +243,11 @@ function TwoLevelMentionMenu({
     React.useMemo(
       () => ({
         file: fileSource,
-        issuePr: issuePrSource,
         skill: skillSource,
         session: sessionSource,
         command: commandSource,
       }),
-      [commandSource, fileSource, issuePrSource, sessionSource, skillSource]
+      [commandSource, fileSource, sessionSource, skillSource]
     )
   );
 
@@ -592,49 +534,24 @@ export const CombinedMentionTextarea = React.forwardRef<
     },
     ref
   ) => {
-    const githubRepoFullName =
-      mentionSource?.kind === 'github'
-        ? mentionSource.repoFullName
-        : mentionSource?.kind === 'local'
-          ? mentionSource.githubRepoFullName
-          : mentionSource?.kind === 'provider'
-            ? mentionSource.githubRepoFullName
-            : undefined;
-    const githubRepoIsPublic =
-      mentionSource?.kind === 'github' || mentionSource?.kind === 'provider'
-        ? mentionSource.isPublic
-        : undefined;
-    const usesWorktreeSource =
-      mentionSource?.kind === 'provider' ||
-      Boolean(mentionSource?.localWorktree?.sessionId && mentionSource?.localWorktree?.repoKey);
-    const fileSourceKind: MentionFileSourceKind = usesWorktreeSource
-      ? 'worktree'
-      : mentionSource?.kind === 'local'
-        ? 'local'
-        : 'github';
     const enableFileMentions =
       mentionSource?.kind === 'provider'
         ? Boolean(mentionSource.provider || mentionSource.providerPending)
         : mentionSource?.kind === 'local'
           ? Boolean(mentionSource.localProjectId)
-          : Boolean(githubRepoFullName);
-    const enableIssueMentions = Boolean(githubRepoFullName);
+          : false;
     // The machine the chat runs on (selected agent's machine). Lets the `$` menu
     // list that machine's global skills even when the chat has no local project
-    // (GitHub / plain-agent chats) — see useMentionProjectSkills.
+    // — see useMentionProjectSkills.
     const skillGlobalMachineId = skillAgent?.machineId;
     const hasProjectSkillSource =
       mentionSource?.kind === 'local'
         ? Boolean(
             mentionSource.localProjectId && mentionSource.workspaceId && mentionSource.machineId
           )
-        : mentionSource?.kind === 'github'
-          ? Boolean(mentionSource.repoFullName)
-          : mentionSource?.kind === 'provider'
-            ? Boolean(mentionSource.githubRepoFullName)
-            : false;
+        : false;
     // Enable `$` when there are project skills OR a known machine whose global
-    // skills we can list (so GitHub / plain-agent chats still offer skills).
+    // skills we can list (so project-less chats still offer skills).
     const enableSkillMentions = hasProjectSkillSource || Boolean(skillGlobalMachineId);
     // Only scan/fetch skills once they are actually asked for, so the composer
     // doesn't kick a skills RPC on every mount. Two things ask: the menu, when a
@@ -677,10 +594,6 @@ export const CombinedMentionTextarea = React.forwardRef<
       () =>
         getAllowedSkillMentionDirs({ cliType: skillAgentCliType, agentType: skillAgentAgentType }),
       [skillAgentAgentType, skillAgentCliType]
-    );
-    const { knownItems: knownIssuePrItems, issuePrData } = useKnownIssuePrItems(
-      githubRepoFullName,
-      githubRepoIsPublic
     );
 
     const [uncontrolledMentionValues, setUncontrolledMentionValues] = React.useState<string[]>([]);
@@ -769,10 +682,9 @@ export const CombinedMentionTextarea = React.forwardRef<
       externalMentions.length > 0 || Boolean(onExternalMentionsChange) || Boolean(onMentionClick);
     // One list of what `@` can reach, so registering the trigger and mounting
     // the mention tree can never disagree about a type. They drifted once
-    // already: a composer with only issues rendered a plain textarea.
+    // already: a composer with only one source type rendered a plain textarea.
     const enableSessionMentions = sessionItems.length > 0;
-    const enableAtMentions =
-      enableFileMentions || enableIssueMentions || enableSkillMentions || enableSessionMentions;
+    const enableAtMentions = enableFileMentions || enableSkillMentions || enableSessionMentions;
     const enableMentions =
       enableAtMentions ||
       enableCommandMentions ||
@@ -859,20 +771,6 @@ export const CombinedMentionTextarea = React.forwardRef<
               enabled={skillsActive}
             />
           ) : null}
-          {enableIssueMentions ? (
-            <>
-              <IssuePrMentionHydrator
-                text={value}
-                knownItems={knownIssuePrItems}
-                enabled={enableIssueMentions}
-              />
-              <IssuePrMentionTitleHint
-                repoFullName={githubRepoFullName}
-                knownItems={knownIssuePrItems}
-                enabled={enableIssueMentions}
-              />
-            </>
-          ) : null}
         </React.Fragment>
         <MentionLabel className="sr-only">{label}</MentionLabel>
         <MentionInput
@@ -894,12 +792,8 @@ export const CombinedMentionTextarea = React.forwardRef<
         />
         <TwoLevelMentionMenu
           fileData={fileData}
-          fileSourceKind={fileSourceKind}
           enableFileMentions={enableFileMentions}
           onLazyDirectoryOpen={handleLazyDirectoryOpen}
-          enableIssueMentions={enableIssueMentions}
-          repoFullName={githubRepoFullName}
-          issuePrData={issuePrData}
           enableSkillMentions={enableSkillMentions}
           skillItems={skillItems}
           skillState={skillState}

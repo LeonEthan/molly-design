@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execFileSync } from 'child_process';
-import { pathToFileURL } from 'url';
 import { RepoId } from '@molly/shared';
 import { WorktreeManager } from '../src/session/worktree/worktree-manager';
 import { createLogger } from '../src/utils/logger';
@@ -22,17 +21,20 @@ export interface WorktreeManagerTestFixture {
   testDir: string;
   repoId: RepoId;
   manager: WorktreeManager;
+  localRepoDir: string;
 }
 
 export const useWorktreeManagerTestFixture = (
-  setFixture: (fixture: WorktreeManagerTestFixture) => void
+  setFixture: (fixture: WorktreeManagerTestFixture) => void,
+  historical = false
 ): void => {
   let testDir: string;
   let originalLocksDir: string | undefined;
 
   beforeEach(() => {
     testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lody-worktree-test-'));
-    const repoId = `test-repo-${Date.now()}` as RepoId;
+    const repoId = 'test-repo' as RepoId;
+    const localRepoDir = createLocalRepo(path.join(testDir, 'fixture'));
 
     originalLocksDir = process.env.MOLLY_LOCKS_DIR;
     process.env.MOLLY_LOCKS_DIR = path.join(testDir, 'locks');
@@ -40,6 +42,7 @@ export const useWorktreeManagerTestFixture = (
     const manager = new WorktreeManager({
       repoId,
       logger: testLogger,
+      source: { kind: 'local-shared', originalRootPath: localRepoDir },
     });
 
     // @ts-expect-error - accessing private property for testing
@@ -53,7 +56,8 @@ export const useWorktreeManagerTestFixture = (
     // @ts-expect-error - accessing private property for testing
     manager.cacheDir = path.join(testDir, repoId, 'cache');
 
-    setFixture({ testDir, repoId, manager });
+    if (historical) seedHistoricalRepo(manager, localRepoDir);
+    setFixture({ testDir, repoId, manager, localRepoDir });
   });
 
   afterEach(() => {
@@ -103,14 +107,6 @@ export const gitCommit = (cwd: string, message: string): string => {
 };
 
 /**
- * Converts a local path into a properly escaped file URL.
- */
-export const toFileUrl = (localPath: string): string => {
-  const normalized = path.resolve(localPath);
-  return pathToFileURL(normalized).toString();
-};
-
-/**
  * Creates a bare "remote" repo plus a working repo, pushes an initial commit, and returns both paths.
  */
 export const createRemoteRepo = (
@@ -140,4 +136,22 @@ export const createLocalRepo = (rootDir: string): string => {
   fs.writeFileSync(path.join(sourceDir, 'README.md'), '# local\n', 'utf8');
   gitCommit(sourceDir, 'init');
   return sourceDir;
+};
+
+export const seedHistoricalRepo = (manager: WorktreeManager, sourceDir: string): string => {
+  const bareDir = path.join(manager.getRepoHostPath(), 'bare.git');
+  fs.mkdirSync(manager.getRepoHostPath(), { recursive: true });
+  runGit(sourceDir, ['clone', '--bare', '--', sourceDir, bareDir]);
+  manager.updateSource({ kind: 'github' });
+  return bareDir;
+};
+
+export const restoreHistoricalWorktree = (
+  manager: WorktreeManager,
+  sessionId: import('@molly/shared').SessionId
+) => {
+  const branch = `session/${sessionId.slice(0, 8)}`;
+  const bareDir = path.join(manager.getRepoHostPath(), 'bare.git');
+  runGit(bareDir, ['branch', branch, 'main']);
+  return manager.createWorktree(sessionId, undefined, branch);
 };

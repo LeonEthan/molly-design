@@ -6,23 +6,6 @@ Repo checkouts, worktrees, branch allocation, and setup scripts for sessions.
 [../AGENTS.md](../AGENTS.md) and [apps/cli/AGENTS.md](../../../AGENTS.md) apply. Background
 and file responsibilities: [../README.md](../README.md).
 
-## Git credential broker
-
-- INVARIANT: host-side git must receive its credential broker as an explicit argument
-  (`WorktreeManager.ensureRepo({ brokerAuth })`), never from ambient `process.env`. Every
-  workspace's `GitCredentialBroker` writes the same process-global `MOLLY_GIT_CRED_BROKER_*`
-  pair and the shared `~/.lody/broker.json`, and `ensureStarted()` early-returns, so the
-  ambient value belongs to whichever workspace started or recovered its broker LAST and the
-  correct workspace never takes the pointer back. A session in workspace A would then
-  authenticate through B's token manager and fail with `repo_not_linked` →
-  `terminal prompts disabled`.
-- Keep `brokerAuth` a per-call argument: `getWorktreeManager` caches by `repoId` alone, so two
-  workspaces sharing a repo share one manager instance. The helper's connection-refused
-  fallback is scoped by `MOLLY_GIT_CRED_BROKER_STATE_FILE`
-  (per-workspace `broker-<workspaceId>.json`) for the same reason. Diagnostics must probe the
-  same broker the failing command used, or they report a misroute as the caller's workspace
-  lacking the repo link. Regression test: `worktree-manager-broker-auth.test.ts`.
-
 ## Worktrees, branches, and setup
 
 - Do not run post-turn automatic commit/push, PR discovery or Agent-driven branch renaming,
@@ -35,7 +18,19 @@ and file responsibilities: [../README.md](../README.md).
   metadata before dispatch, has no ACP session id, and must retain an explicitly requested branch.
   ACP restore and legacy direct-session reinitialization must never switch back to the Session's
   recorded branch.
-- A fresh local/GitHub worktree always owns a newly allocated branch from its selected base
+- New independent project sessions use local projects or chat. GitHub creation, speculative preparation,
+  new-worktree forks and automatic clone/fetch are retired. Historical GitHub sessions reuse
+  existing local bare repositories and their recorded branches; missing/invalid state fails
+  without replacement initialization, base-branch fallback or deletion of surviving files.
+  Accepted first creates with a durable pending turn and no prior workspace/runtime evidence
+  may allocate from their exact cached base; preserve the legacy omitted-base default (`main`).
+  Existing recorded branches never fall back. Child Sessions validate the same-machine root
+  parent's repository and recorded worktree, then share it without allocating a child worktree.
+  Preserve historical decoding, setup/cleanup and accepted-operation recovery.
+  Legacy marker `source.repoUrl` is retired transport metadata: compare GitHub
+  identity by repo id and base branch so dropping the URL never disposes retained work.
+  A conflicting historical marker fails without disposal or replacement creation.
+- A fresh local worktree always owns a newly allocated branch from its selected base
   ref; suffix collisions instead of attaching to an existing ref. Reattaching an existing
   branch is reserved for an explicit `restoreBranchName` from the same Session.
 - Worktree setup scripts are per worktree-directory lifetime: session runtime restore after

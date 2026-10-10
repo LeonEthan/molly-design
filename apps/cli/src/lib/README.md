@@ -55,9 +55,9 @@ cross-module explanations under tracked `.agents/docs/`.
 - `local-project-removal.ts` — local project deletion, session archiving, and optional
   Lody-created worktree cleanup.
 - `provider-setup-manager.ts` — durable default managed-builtin agent config creation.
-- Product-managed Agent GitHub token injection and shell shims are retired. Host-side
-  Git credential helpers and legacy worktree recovery retain their existing contracts;
-  removal of the unused shim source does not clean user credentials or generated files.
+- Product-managed GitHub credential injection, shell shims and host-side Git
+  credential helpers are retired. Historical worktrees use existing local state
+  ([session lifecycle](../session/README.md#historical-github-projects)).
 
 ## Subdirectories
 

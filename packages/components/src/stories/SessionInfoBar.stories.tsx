@@ -4,30 +4,13 @@ import { fn } from 'storybook/test';
 import {
   getServerNow,
   SESSION_GOAL_COMMANDS,
-  type GitHubMergeMethod,
   type PendingScheduledTask,
   type SessionGoalCommand,
   type SessionGoalMessage,
-  type SessionPullRequestMeta,
 } from '@molly/shared';
 import { SessionInfoBar } from '@/components/sessions/session-info-bar';
-import type { ContextChipAction, PrCiRun } from '@/components/sessions/session-info-chips';
+import type { ContextChipAction } from '@/components/sessions/session-info-chips';
 import type { SessionStatusStripState } from '@/components/sessions/session-status-strip';
-
-const openPr: SessionPullRequestMeta = {
-  url: 'https://github.com/loro-dev/lody/pull/2857',
-  status: 'open',
-} as SessionPullRequestMeta;
-
-const draftPr: SessionPullRequestMeta = {
-  url: 'https://github.com/loro-dev/lody/pull/2857',
-  status: 'draft',
-} as SessionPullRequestMeta;
-
-const mergedPr: SessionPullRequestMeta = {
-  url: 'https://github.com/loro-dev/lody/pull/12345',
-  status: 'merged',
-} as SessionPullRequestMeta;
 
 const LONG_PROJECT =
   'some-organization-with-a-really-long-name/incredibly-long-repository-name-that-should-truncate-gracefully';
@@ -71,82 +54,42 @@ const makeCron = (
   timeZone: 'Asia/Shanghai',
 });
 
-const CI_PASSING: PrCiRun[] = [
-  { name: 'check', status: 'success', durationMs: 62_000, url: 'https://example.com' },
-  { name: 'build', status: 'success', durationMs: 4 * 60_000, url: 'https://example.com' },
-  { name: 'unit-tests', status: 'success', durationMs: 8 * 60_000, url: 'https://example.com' },
-  { name: 'e2e', status: 'success', durationMs: 14 * 60_000, url: 'https://example.com' },
-];
-
-const CI_FAILING: PrCiRun[] = [
-  { name: 'check', status: 'success', durationMs: 55_000, url: 'https://example.com' },
-  { name: 'lint', status: 'failure', durationMs: 30_000, url: 'https://example.com' },
-  { name: 'build', status: 'success', durationMs: 3 * 60_000, url: 'https://example.com' },
-  { name: 'e2e', status: 'failure', durationMs: 11 * 60_000, url: 'https://example.com' },
-  { name: 'deploy-preview', status: 'skipped' },
-];
-
-const CI_RUNNING: PrCiRun[] = [
-  { name: 'check', status: 'success', durationMs: 58_000, url: 'https://example.com' },
-  { name: 'build', status: 'success', durationMs: 3 * 60_000, url: 'https://example.com' },
-  { name: 'unit-tests', status: 'running', url: 'https://example.com' },
-  { name: 'e2e', status: 'queued' },
-  { name: 'deploy-preview', status: 'queued' },
-];
-
 function StoryHarness({
   status = null,
   goal = null,
   goalPending = null,
   scheduledTasks,
-  prCiRuns,
   projectName = 'loro-dev/lody',
   branch = 'feat/presence-machine-online-session-status',
   workspaceLocation = null,
-  pr = openPr,
   width = 760,
   initialStage,
   withPreview = false,
   actionLabels,
-  mergeAction = false,
   syncing = false,
 }: {
   status?: SessionStatusStripState | null;
   goal?: SessionGoalMessage | null;
   goalPending?: SessionGoalCommand | null;
   scheduledTasks?: PendingScheduledTask[];
-  prCiRuns?: PrCiRun[];
   projectName?: string | null;
   branch?: string | null;
   workspaceLocation?: {
     kind: 'worktree' | 'folder' | 'github-worktree';
     path?: string | null;
   } | null;
-  pr?: SessionPullRequestMeta | null;
   width?: number;
   initialStage?: 'status' | 'goal' | 'schedule' | 'context';
   withPreview?: boolean;
   actionLabels?: string[];
-  mergeAction?: boolean;
   syncing?: boolean;
 }) {
   const [currentGoal, setCurrentGoal] = useState(goal);
-  const [mergeMethod, setMergeMethod] = useState<GitHubMergeMethod>('merge');
-  const contextActions: ContextChipAction[] | undefined = mergeAction
-    ? [
-        {
-          kind: 'merge',
-          id: 'merge',
-          method: mergeMethod,
-          onMerge: fn(),
-          onSelectMethod: setMergeMethod,
-        },
-      ]
-    : actionLabels?.map((label) => ({
-        id: label.toLowerCase().replaceAll(' ', '-'),
-        label,
-        onClick: fn(),
-      }));
+  const contextActions: ContextChipAction[] | undefined = actionLabels?.map((label) => ({
+    id: label.toLowerCase().replaceAll(' ', '-'),
+    label,
+    onClick: fn(),
+  }));
   return (
     <div className="flex max-w-full flex-col" style={{ width }}>
       {/* Room above the bar so chip popovers (side=top) stay visible. */}
@@ -159,14 +102,10 @@ function StoryHarness({
         onGoalCommand={fn()}
         onGoalDismiss={() => setCurrentGoal(null)}
         scheduledTasks={scheduledTasks}
-        prCiRuns={prCiRuns}
-        onOpenPrCiRun={fn()}
         initialStage={initialStage}
         projectName={projectName}
         branch={branch}
         workspaceLocation={workspaceLocation}
-        pr={pr}
-        onOpenPr={fn()}
         contextActions={contextActions}
         onOpenBrowser={withPreview ? fn() : undefined}
         syncing={syncing}
@@ -200,8 +139,6 @@ export const ContextWithMachineRemoved: Story = {
   args: { status: { kind: 'machine-removed' } },
 };
 
-export const NoPr: Story = { args: { pr: null } };
-
 const worktreeLocation = {
   kind: 'worktree' as const,
   path: '/Users/zx/.lody/worktrees/loro-dev-lody/feat-presence',
@@ -215,28 +152,12 @@ const githubWorktreeLocation = {
 /** Worktree session without a PR: the leading glyph is the worktree copy control. */
 export const WorktreeNoPr: Story = {
   name: 'Worktree (no PR)',
-  args: { workspaceLocation: worktreeLocation, pr: null },
+  args: { workspaceLocation: worktreeLocation },
 };
 
 /** A changed local worktree without a PR collects its GitHub actions in the context stage. */
-export const WorktreeChangedCreatePr: Story = {
-  name: 'Worktree changed (Create PR)',
-  args: {
-    workspaceLocation: worktreeLocation,
-    pr: null,
-    actionLabels: ['Create PR', 'Commit & Push'],
-  },
-};
 
 /** A changed worktree with only one available action renders Create PR without a dropdown. */
-export const WorktreeChangedCreatePrOnly: Story = {
-  name: 'Worktree changed (Create PR only)',
-  args: {
-    workspaceLocation: worktreeLocation,
-    pr: null,
-    actionLabels: ['Create PR'],
-  },
-};
 
 /** A lone action stays directly visible and does not add an empty overflow trigger. */
 export const SingleAction: Story = {
@@ -245,16 +166,12 @@ export const SingleAction: Story = {
 
 /** Worktree session with a PR: the leading icon shows PR state, so the worktree
  *  copy control rides in the leading slot after the PR/CI. */
-export const WorktreeWithPr: Story = {
-  name: 'Worktree (with PR)',
-  args: { workspaceLocation: worktreeLocation },
-};
 
 /** Local-folder session without a PR: the leading glyph is a folder copy control
  *  (symmetric with the worktree case). */
 export const LocalFolderNoPr: Story = {
   name: 'Local folder (no PR)',
-  args: { workspaceLocation: folderLocation, pr: null, projectName: 'lody' },
+  args: { workspaceLocation: folderLocation, projectName: 'lody' },
 };
 
 /** GitHub session without a PR: since a GitHub project is always a worktree, the
@@ -262,32 +179,19 @@ export const LocalFolderNoPr: Story = {
  *  redundant worktree mark. */
 export const GitHubWorktreeNoPr: Story = {
   name: 'GitHub worktree (no PR)',
-  args: { workspaceLocation: githubWorktreeLocation, pr: null, projectName: 'loro-dev/lody' },
+  args: { workspaceLocation: githubWorktreeLocation, projectName: 'loro-dev/lody' },
 };
 
 /** GitHub session with a PR: the leading icon shows PR state, so the GitHub
  *  copy-path control rides in the leading slot after the PR/CI. */
-export const GitHubWorktreeWithPr: Story = {
-  name: 'GitHub worktree (with PR)',
-  args: { workspaceLocation: githubWorktreeLocation, projectName: 'loro-dev/lody' },
-};
 
 /** Local-folder session with a PR: the folder copy control rides in the leading slot. */
-export const LocalFolderWithPr: Story = {
-  name: 'Local folder (with PR)',
-  args: { workspaceLocation: folderLocation, projectName: 'lody' },
-};
-
-export const MergedPrLargeDiff: Story = {
-  args: { pr: mergedPr },
-};
 
 export const StatusOnlyNoContext: Story = {
   args: {
     status: { kind: 'machine-offline', machineName: 'zx MacBook-Pro.local' },
     projectName: null,
     branch: null,
-    pr: null,
   },
 };
 
@@ -339,31 +243,6 @@ export const ScheduleMultiple: Story = {
 
 /* ── PR CI chip ──────────────────────────────────────────────────────── */
 
-export const CiPassing: Story = { args: { prCiRuns: CI_PASSING } };
-
-export const Mergeable: Story = {
-  args: { prCiRuns: CI_PASSING, mergeAction: true },
-};
-
-export const DraftReadyForReview: Story = {
-  args: {
-    pr: draftPr,
-    prCiRuns: CI_PASSING,
-    actionLabels: ['Ready for review'],
-  },
-};
-
-export const CiFailing: Story = { args: { prCiRuns: CI_FAILING } };
-
-export const CiFailingWithActions: Story = {
-  args: {
-    prCiRuns: CI_FAILING,
-    actionLabels: ['Commit & Push', 'Fix CI Errors'],
-  },
-};
-
-export const CiRunning: Story = { args: { prCiRuns: CI_RUNNING } };
-
 /* ── Everything at once / squeeze ────────────────────────────────────── */
 
 export const EverythingAtOnce: Story = {
@@ -371,7 +250,7 @@ export const EverythingAtOnce: Story = {
     status: { kind: 'machine-offline', machineName: 'zx MacBook-Pro.local' },
     goal: makeGoal(),
     scheduledTasks: [makeWakeup(12 * 60_000), makeCron('0 9 * * *', true)],
-    prCiRuns: CI_FAILING,
+
     withPreview: true,
   },
 };
@@ -399,7 +278,7 @@ export const MobileNarrowEverything: Story = {
     status: { kind: 'machine-offline', machineName: 'zx MacBook-Pro.local' },
     goal: makeGoal(),
     scheduledTasks: [makeWakeup(12 * 60_000)],
-    prCiRuns: CI_FAILING,
+
     actionLabels: ['Commit & Push', 'Fix CI Errors'],
     withPreview: true,
   },
@@ -411,7 +290,6 @@ export const GoalAndScheduleNoContext: Story = {
     scheduledTasks: [makeWakeup(12 * 60_000)],
     projectName: null,
     branch: null,
-    pr: null,
   },
 };
 
@@ -428,7 +306,7 @@ export const SyncingEverythingNarrow: Story = {
     status: { kind: 'machine-offline', machineName: 'zx MacBook-Pro.local' },
     goal: makeGoal(),
     scheduledTasks: [makeWakeup(12 * 60_000)],
-    prCiRuns: CI_FAILING,
+
     withPreview: true,
   },
 };
@@ -439,7 +317,7 @@ export const SyncOnly: Story = {
   args: {
     projectName: null,
     branch: null,
-    pr: null,
+
     syncing: true,
   },
 };
@@ -449,7 +327,6 @@ export const EmptyNotSyncingHidden: Story = {
   args: {
     projectName: null,
     branch: null,
-    pr: null,
   },
 };
 
@@ -509,8 +386,6 @@ function PeekPlayground() {
         scheduledTasks={tasks}
         projectName="loro-dev/lody"
         branch="feat/presence-machine-online-session-status"
-        pr={openPr}
-        onOpenPr={fn()}
       />
       <div className="h-14 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         (composer placeholder)

@@ -54,8 +54,6 @@ export interface SessionConfig {
   // Worktree fields
   /** Repository identifier for worktree management */
   repoId?: RepoId;
-  /** GitHub repository URL for cloning */
-  githubRepoUrl?: string;
   /** GitHub worktree setup config passed from workspace-scoped repo settings. */
   worktreeSetup?: WorktreeSetupScriptConfig;
   /** GitHub worktree cleanup config passed from workspace-scoped repo settings. */

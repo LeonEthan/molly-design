@@ -1,147 +1,20 @@
 import type { ChatLandingHintType } from './chat-landing-view';
-import type { SessionContextType } from './context-switch';
 
-type ChatLandingProjectRefLike =
-  | {
-      kind: 'github';
-      repoFullName?: string | null;
-    }
-  | {
-      kind: 'local';
-      localProjectId?: string | null;
-    }
-  | {
-      kind?: string | null;
-      repoFullName?: string | null;
-      localProjectId?: string | null;
-    };
+export type SessionContextType = 'local' | 'chat';
+
+type ChatLandingProjectRefLike = {
+  kind?: string | null;
+  localProjectId?: string | null;
+};
 
 export type ChatLandingProjectSession = {
   machineId: string;
   project?: ChatLandingProjectRefLike | null;
-  repoFullName?: string | null;
   lastMessageAt?: number | null;
 };
 
 export type ChatLandingProjectRecency = {
-  byRepo: ReadonlyMap<string, number>;
   byProject: ReadonlyMap<string, number>;
-};
-
-export type SharingReviewActionTarget = 'machines' | 'projects' | null;
-
-export function getSharingReviewActionTarget({
-  privateMachineCount,
-  privateProjectCount,
-}: {
-  privateMachineCount: number;
-  privateProjectCount: number;
-}): SharingReviewActionTarget {
-  if (privateMachineCount > 0) return 'machines';
-  if (privateProjectCount > 0) return 'projects';
-  return null;
-}
-
-export function shouldRetrySharingReviewConflict({
-  writerId,
-  attempt,
-  serverWriterId,
-  serverAttempt,
-  isLatestAttempt,
-}: {
-  writerId: string;
-  attempt: number;
-  serverWriterId: string | null;
-  serverAttempt: number | null;
-  isLatestAttempt: boolean;
-}): boolean {
-  return (
-    isLatestAttempt &&
-    serverWriterId === writerId &&
-    serverAttempt !== null &&
-    serverAttempt < attempt
-  );
-}
-
-export function getSharingReviewSourcesReady({
-  docMetaCacheReady,
-  visibleMachinesLoading,
-  visibleLocalProjectsLoading,
-  repositoriesReady,
-  isMetaRoomFirstSyncPending,
-}: {
-  docMetaCacheReady: boolean;
-  visibleMachinesLoading: boolean;
-  visibleLocalProjectsLoading: boolean;
-  repositoriesReady: boolean;
-  isMetaRoomFirstSyncPending: boolean;
-}): boolean {
-  return (
-    docMetaCacheReady &&
-    !visibleMachinesLoading &&
-    !visibleLocalProjectsLoading &&
-    repositoriesReady &&
-    !isMetaRoomFirstSyncPending
-  );
-}
-
-export function getSharingReviewSourceRevision(parts: readonly string[]): string {
-  let first = 0x811c9dc5;
-  let second = 0x9e3779b9;
-  for (const part of parts) {
-    const framed = `${part.length}:${part};`;
-    for (let index = 0; index < framed.length; index += 1) {
-      const code = framed.charCodeAt(index);
-      first = Math.imul(first ^ code, 0x01000193);
-      second = Math.imul(second ^ code, 0x85ebca6b);
-    }
-  }
-  first = Math.imul(first ^ (first >>> 16), 0x85ebca6b);
-  second = Math.imul(second ^ (second >>> 13), 0xc2b2ae35);
-  return `v1-${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0)
-    .toString(16)
-    .padStart(8, '0')}`;
-}
-
-export function getSharingReviewTeamLooksEmpty({
-  sourcesReady,
-  machineCount,
-  localProjectCount,
-  activeSessionCount,
-  archivedSessionCount,
-  githubRepositoryCount,
-}: {
-  sourcesReady: boolean;
-  machineCount: number;
-  localProjectCount: number;
-  activeSessionCount: number;
-  archivedSessionCount: number;
-  githubRepositoryCount: number;
-}): boolean {
-  return (
-    sourcesReady &&
-    machineCount === 0 &&
-    localProjectCount === 0 &&
-    activeSessionCount === 0 &&
-    archivedSessionCount === 0 &&
-    githubRepositoryCount === 0
-  );
-}
-
-export function getSharingReviewTeamHasNoVisibleLocalResources({
-  sourcesReady,
-  machineCount,
-  localProjectCount,
-}: {
-  sourcesReady: boolean;
-  machineCount: number;
-  localProjectCount: number;
-}): boolean {
-  return sourcesReady && machineCount === 0 && localProjectCount === 0;
-}
-
-type ChatLandingRepositorySortItem = {
-  fullName: string;
 };
 
 type ChatLandingLocalProjectSortItem = {
@@ -223,13 +96,6 @@ function getFiniteTimestamp(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-function getSessionGitHubRepoFullName(session: ChatLandingProjectSession): string | null {
-  if (session.project?.kind === 'github') {
-    return session.project.repoFullName?.trim() || null;
-  }
-  return session.repoFullName?.trim() || null;
-}
-
 function getSessionLocalProjectKey(session: ChatLandingProjectSession): string | null {
   if (session.project?.kind !== 'local') {
     return null;
@@ -265,26 +131,11 @@ function compareNullableTimestampDesc(left: number | undefined, right: number | 
 export function getChatLandingProjectRecency(
   sessions: Iterable<ChatLandingProjectSession>
 ): ChatLandingProjectRecency {
-  const byRepo = new Map<string, number>();
   const byProject = new Map<string, number>();
   for (const session of sessions) {
-    recordLatestTimestamp(byRepo, getSessionGitHubRepoFullName(session), session.lastMessageAt);
     recordLatestTimestamp(byProject, getSessionLocalProjectKey(session), session.lastMessageAt);
   }
-  return { byRepo, byProject };
-}
-
-export function compareChatLandingRepositoryByRecency(
-  left: ChatLandingRepositorySortItem,
-  right: ChatLandingRepositorySortItem,
-  latestMessageAtByRepo: ReadonlyMap<string, number>
-): number {
-  const timestampComparison = compareNullableTimestampDesc(
-    latestMessageAtByRepo.get(left.fullName),
-    latestMessageAtByRepo.get(right.fullName)
-  );
-  if (timestampComparison !== 0) return timestampComparison;
-  return left.fullName.localeCompare(right.fullName);
+  return { byProject };
 }
 
 export function compareChatLandingLocalProjectByRecency(
@@ -455,10 +306,9 @@ export function getChatLandingVisibleComposerStatus<TMessage>({
 }
 
 export type ChatLandingPreSelectionIntent = {
-  context: 'local' | 'github' | 'chat' | undefined;
+  context: SessionContextType | undefined;
   machine: string | undefined;
   project: string | undefined;
-  repo: string | undefined;
 };
 
 /** Identity of one URL-named selection (pre-selection intent or mirrored state). */
@@ -466,28 +316,22 @@ export function buildChatLandingPreSelectionKey({
   context,
   machine,
   project,
-  repo,
 }: ChatLandingPreSelectionIntent): string {
-  return `${context}|${machine}|${project}|${repo}`;
+  return `${context}|${machine}|${project}`;
 }
 
 /** Search-parameter contract of the `/$workspaceName/chat` route. */
 export type ChatLandingSearch = {
-  context?: 'local' | 'github' | 'chat';
+  context?: SessionContextType;
   machine?: string;
   project?: string;
-  repo?: string;
 };
 
 export function parseChatLandingSearch(search: Record<string, unknown>): ChatLandingSearch {
   return {
-    context:
-      search.context === 'local' || search.context === 'github' || search.context === 'chat'
-        ? search.context
-        : undefined,
+    context: search.context === 'local' || search.context === 'chat' ? search.context : undefined,
     machine: typeof search.machine === 'string' ? search.machine : undefined,
     project: typeof search.project === 'string' ? search.project : undefined,
-    repo: typeof search.repo === 'string' ? search.repo : undefined,
   };
 }
 
@@ -528,10 +372,9 @@ export function getSelectedLocalProjectKey(
 }
 
 export type ChatLandingEffectiveSelection = {
-  contextType: 'local' | 'github' | 'chat';
+  contextType: SessionContextType;
   machineId: string | null;
   localProjectId: string | null;
-  repoFullName: string | null;
 };
 
 /**
@@ -543,16 +386,12 @@ export function getChatLandingSelectionSearch({
   contextType,
   machineId,
   localProjectId,
-  repoFullName,
 }: ChatLandingEffectiveSelection): ChatLandingSearch {
   if (contextType === 'chat') {
     return { context: 'chat' };
   }
   if (contextType === 'local' && machineId && localProjectId) {
     return { context: 'local', machine: machineId, project: localProjectId };
-  }
-  if (contextType === 'github' && repoFullName) {
-    return { context: 'github', repo: repoFullName };
   }
   return {};
 }

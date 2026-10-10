@@ -17,22 +17,17 @@ type LocalProjectSelection = { machineId: MachineId; localProjectId: LocalProjec
 type UseChatLandingDefaultsArgs = {
   workspaceId: string | null;
   shouldRestoreContextType: boolean;
-  contextType: 'local' | 'github' | 'chat';
-  setContextType: (contextType: 'local' | 'github' | 'chat') => void;
+  contextType: 'local' | 'chat';
+  setContextType: (contextType: 'local' | 'chat') => void;
   executorConfigs: AgentConfigMeta[];
   machines: Map<string, MachineViewMeta>;
   /** Pre-filtered map of machines that are reachable AND own at least one agent config. */
   selectableMachines: Map<MachineId, MachineViewMeta>;
   visibleMachinesLoading: boolean;
   docMetaCacheReady: boolean;
-  repositories?: Array<{ fullName: string }>;
   selectedAgent: AgentSelection | null;
   setSelectedAgent: (selection: AgentSelection | null) => void;
   selectedMachineId: MachineId | null;
-  selectedRepo?: string;
-  setSelectedRepo: (repo?: string) => void;
-  selectedBranch: string | null;
-  setSelectedBranch: (branch: string | null) => void;
   selectedLocalProject: LocalProjectSelection | null;
   setSelectedLocalProject: (selection: LocalProjectSelection | null) => void;
   /**
@@ -64,14 +59,9 @@ export function useChatLandingDefaults({
   selectableMachines,
   visibleMachinesLoading,
   docMetaCacheReady,
-  repositories,
   selectedAgent,
   setSelectedAgent,
   selectedMachineId,
-  selectedRepo,
-  setSelectedRepo,
-  selectedBranch,
-  setSelectedBranch,
   selectedLocalProject,
   setSelectedLocalProject,
   selectedAgentRoleId,
@@ -103,14 +93,12 @@ export function useChatLandingDefaults({
     }
   }
   const [canPersist, setCanPersist] = useState(false);
-  const [repoDefaultsReady, setRepoDefaultsReady] = useState(false);
 
   useLayoutEffect(() => {
     if (initializedWorkspaceIdRef.current === workspaceId) return;
     initializedWorkspaceIdRef.current = workspaceId;
     initializedRef.current = false;
     setCanPersist(false);
-    setRepoDefaultsReady(false);
   }, [workspaceId]);
 
   // Load initial defaults (agent/machine/repo/local-project)
@@ -128,9 +116,6 @@ export function useChatLandingDefaults({
       contextType === 'local'
         ? (selectedLocalProject?.machineId ?? selectedMachineId ?? storedLocalMachineId ?? null)
         : null;
-    const hasStoredRepo = Boolean(stored?.repoFullName);
-    const isRepoReady = !hasStoredRepo || repositories !== undefined;
-    setRepoDefaultsReady(isRepoReady);
 
     // Apply local project selection
     if (!selectedLocalProject && storedLocalMachineId && storedLocalProjectId) {
@@ -159,22 +144,6 @@ export function useChatLandingDefaults({
         setSelectedAgent(resolvedSelection);
         agentRestored = true;
       }
-    }
-
-    // Apply repo selection
-    if (!selectedRepo && stored?.repoFullName && repositories) {
-      if (repositories.some((r) => r.fullName === stored.repoFullName)) {
-        setSelectedRepo(stored.repoFullName);
-      }
-    }
-
-    if (!selectedBranch && stored?.branch) {
-      setSelectedBranch(stored.branch);
-    }
-
-    // Wait for repositories to be loaded if needed
-    if (!isRepoReady) {
-      return;
     }
 
     // Wait for machine metadata before finalizing initialization when we need to
@@ -212,15 +181,10 @@ export function useChatLandingDefaults({
     machines,
     visibleMachinesLoading,
     docMetaCacheReady,
-    repositories,
     selectedAgent,
     selectedMachineId,
-    selectedRepo,
-    selectedBranch,
     selectedLocalProject,
     setSelectedAgent,
-    setSelectedRepo,
-    setSelectedBranch,
     setSelectedLocalProject,
   ]);
 
@@ -241,8 +205,6 @@ export function useChatLandingDefaults({
       contextType,
       agentId: selectedAgent?.agentId ?? previous?.agentId ?? null,
       machineId: selectedAgent?.machineId ?? previous?.machineId ?? null,
-      repoFullName: selectedRepo ?? null,
-      branch: selectedBranch ?? null,
       localMachineId: selectedLocalProject?.machineId ?? null,
       localProjectId: selectedLocalProject?.localProjectId ?? null,
       localBranch: previous?.localBranch ?? null,
@@ -254,8 +216,6 @@ export function useChatLandingDefaults({
     canPersist,
     contextType,
     selectedAgent,
-    selectedRepo,
-    selectedBranch,
     selectedLocalProject,
     selectedAgentRoleId,
   ]);
@@ -322,5 +282,5 @@ export function useChatLandingDefaults({
     workspaceId,
   ]);
 
-  return { defaultsReady: canPersist, repoDefaultsReady };
+  return { defaultsReady: canPersist };
 }

@@ -579,29 +579,6 @@ function TourWindow({
                             status={null}
                             projectName={identity.projectName}
                             branch={session.branchName}
-                            prCiRuns={
-                              tracks.pr >= 2
-                                ? [
-                                    { name: 'typecheck', status: 'success' as const },
-                                    { name: 'test', status: 'success' as const },
-                                  ]
-                                : undefined
-                            }
-                            contextActions={
-                              tracks.pr >= 1
-                                ? undefined
-                                : revealedChanges.length > 0
-                                  ? [
-                                      {
-                                        kind: 'standard',
-                                        id: 'create-pr',
-                                        label: 'Create PR',
-                                        onClick: () => undefined,
-                                      } as never,
-                                    ]
-                                  : undefined
-                            }
-                            onOpenPr={() => onSidePanelTabSelect('pr')}
                             syncing={
                               configurationState?.agentStatus === 'preparing' ||
                               configurationState?.agentStatus === 'verifying' ||

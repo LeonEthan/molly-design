@@ -4744,6 +4744,17 @@ export class SessionExecutionService {
       (await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId));
 
     const existingMeta = await sessionDoc.getMetaState();
+    if (
+      project?.kind === 'github' &&
+      (existingMeta?.id !== sessionId ||
+        existingMeta.machineId !== this.deps.machineId ||
+        existingMeta.project?.kind !== 'github' ||
+        existingMeta.project.repoFullName !== project.repoFullName ||
+        existingMeta.project.branch?.trim() !== project.branch?.trim() ||
+        existingMeta.parentSessionId !== message.parentSessionId)
+    ) {
+      throw new Error('GitHub repository projects are retired; use a local project.');
+    }
     // A persisted ACP session id proves that this direct local Session has run
     // before. It can later be re-initialized when that ACP session is no longer
     // resumable. Its stored branch was only a snapshot from the original
@@ -4764,8 +4775,9 @@ export class SessionExecutionService {
     }
     const githubRepoFullName = resolveProjectGitHubRepo(project);
     const shouldPrepareWorktree =
-      (project?.kind === 'github' && !!githubRepoFullName) ||
-      (project?.kind === 'local' && project.useWorktree === true);
+      !message.parentSessionId &&
+      ((project?.kind === 'github' && !!githubRepoFullName) ||
+        (project?.kind === 'local' && project.useWorktree === true));
     let branch = project?.branch?.trim() || undefined;
     const fromFeedbackPostId =
       message.meta?.fromFeedbackPostId?.trim() ||
@@ -4811,6 +4823,7 @@ export class SessionExecutionService {
       env,
       githubRepo: githubRepoFullName,
       branch,
+      restoreBranchName: project?.kind === 'github' ? existingMeta?.branchName : undefined,
       project,
       worktreeSetup: message.worktreeSetup,
       worktreeCleanup: message.worktreeCleanup,

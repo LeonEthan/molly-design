@@ -1256,53 +1256,48 @@ describe('session command helpers', () => {
     }
   });
 
-  it('binds the workspace GitHub repository of a local project to its session', () => {
+  it('keeps a local worktree branch without a GitHub project binding', () => {
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState(),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         useWorktree: true,
       })
-    ).toEqual({ branch: 'main', githubRepoFullName: 'loro-dev/lody' });
+    ).toEqual({ branch: 'main' });
   });
 
-  it('binds the GitHub repository of a direct local session without capturing its branch', () => {
+  it('leaves direct local session branch and repository selection empty', () => {
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState(),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
       })
-    ).toEqual({ githubRepoFullName: 'loro-dev/lody' });
+    ).toEqual({});
   });
 
-  it('records the workspace spelling of an origin that differs only in case', () => {
+  it('does not turn GitHub origin metadata into a remote project', () => {
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState({ githubRepoFullName: 'Loro-Dev/Lody' }),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         useWorktree: true,
       })
-    ).toEqual({ branch: 'main', githubRepoFullName: 'loro-dev/lody' });
+    ).toEqual({ branch: 'main' });
   });
 
-  it('keeps a local session local when its origin is not a workspace repository', () => {
+  it('keeps local worktree behavior independent of origin metadata', () => {
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState(),
-        workspaceRepositories: [{ fullName: 'loro-dev/other' }],
         useWorktree: true,
       })
     ).toEqual({ branch: 'main' });
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState({ githubRepoFullName: null }),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         useWorktree: true,
       })
     ).toEqual({ branch: 'main' });
   });
 
-  it('resolves a requested branch selector alongside the repository identity', () => {
+  it('resolves an explicitly requested local branch selector', () => {
     const remoteSelector = createLocalProjectBranchSelector({
       kind: 'remote',
       remoteName: 'origin',
@@ -1314,14 +1309,12 @@ describe('session command helpers', () => {
           branches: ['main', remoteSelector],
           currentBranch: 'main',
         }),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         requestedBranch: 'feature/session',
       })
-    ).toEqual({ branch: remoteSelector, githubRepoFullName: 'loro-dev/lody' });
+    ).toEqual({ branch: remoteSelector });
     expect(() =>
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState(),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         requestedBranch: 'feature/missing',
       })
     ).toThrow('Local project branch not found: feature/missing');
@@ -1331,27 +1324,23 @@ describe('session command helpers', () => {
     expect(
       resolveLocalProjectCreateGitContext({
         gitState: { git: false },
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
       })
     ).toEqual({});
     expect(() =>
       resolveLocalProjectCreateGitContext({
         gitState: { git: false },
-        workspaceRepositories: [],
         useWorktree: true,
       })
     ).toThrow(/--worktree/);
     expect(() =>
       resolveLocalProjectCreateGitContext({
         gitState: { git: false },
-        workspaceRepositories: [],
         requestedBranch: 'main',
       })
     ).toThrow(/not a git repository/);
     expect(() =>
       resolveLocalProjectCreateGitContext({
         gitState: createLocalProjectGitState({ branches: [], currentBranch: null }),
-        workspaceRepositories: [{ fullName: 'loro-dev/lody' }],
         useWorktree: true,
       })
     ).toThrow(/does not have a branch to use as a worktree base/);

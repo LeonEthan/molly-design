@@ -245,14 +245,29 @@ Recovery must never enumerate session rooms or open docs to find candidates: eac
 the room and pulls its stream, so a full scan is O(all historical sessions) of Streams
 subscriptions at every daemon start (see [../lib/loro/AGENTS.md](../lib/loro/AGENTS.md)).
 
-### GitHub credentials
+### Historical GitHub projects
 
-Local session startup preserves ambient user credentials and does not fetch a
-product-managed GitHub token. The Agent `gh` shim and shell startup wrappers are
-retired. Host-side Git helper contracts in `../lib/git-credential-helper-script.ts`
-and `WorktreeManager` remain separate from Agent credential injection; their
-explicit per-call broker arguments are governed by [worktree/AGENTS.md](worktree/AGENTS.md).
-Existing user credentials and previously generated files remain on disk.
+New independent sessions use local projects or chat. MCP keeps `worktree: true` for local
+projects; GitHub repository creation, speculative preparation, new-worktree forks,
+repository discovery and automatic clone/fetch are retired. Session and Operation
+tools remain available, including recovery of recorded accepted operations.
+
+Accepted GitHub create Operations replay through the internal fixed-target recovery
+argument. A pending first create with no prior workspace/runtime evidence can allocate
+its first worktree from the locally cached accepted base (legacy omission means `main`).
+It never fetches or falls back to another base. Historical parents can create children;
+both new and pending children validate and share the parent's recorded worktree.
+No child-owned branch or replacement parent workspace is allocated.
+
+`WorktreeManager` validates existing managed bare repositories before historical
+restore. It reuses an existing worktree or restores its recorded branch. Missing
+repositories or branches fail without replacement initialization or removal of
+surviving files. Local shared worktrees retain creation, branch allocation, setup,
+archive and cleanup behavior. Historical session metadata and Files remain readable.
+
+Local session startup preserves ambient user credentials. Molly no longer supplies
+a GitHub credential helper, token broker arguments or Agent shell wrappers. Existing
+user credentials and previously generated files remain on disk.
 
 ### Commit identity
 
@@ -261,8 +276,7 @@ The turn's `userName`/`userEmail` become `GIT_AUTHOR_*`/`GIT_COMMITTER_*` in the
 `bindReadySession`), so a session started by user A commits as A. The cloud composition root
 owns the hosted user-resolution operation because the daemon does not own an end-user browser
 session; the local access port resolves only its synthetic owner and never performs network
-I/O. PR and push identity itself comes from the requester-bound GitHub token, not from git
-config.
+I/O. Agent-issued remote Git commands use the user's own credential environment.
 
 ### Speculative preparation
 

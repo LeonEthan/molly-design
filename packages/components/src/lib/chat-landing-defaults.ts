@@ -11,7 +11,10 @@ export const chatLandingDefaultsSchema = z.object({
   localMachineId: z.string().nullable().optional(),
   localProjectId: z.string().nullable().optional(),
   localBranch: z.string().nullable().optional(),
-  contextType: z.enum(['local', 'github', 'chat']).nullable().optional(),
+  contextType: z.preprocess(
+    (value) => (value === 'github' ? 'chat' : value),
+    z.enum(['local', 'chat']).nullable().optional()
+  ),
   /** Last Agent Role the composer was configured as, by stable Role id. */
   agentRoleId: z.string().nullable().optional(),
 });

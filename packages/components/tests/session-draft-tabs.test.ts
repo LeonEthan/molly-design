@@ -69,6 +69,23 @@ afterEach(() => {
 });
 
 describe('session draft tabs', () => {
+  it('restores retired PR tabs as Files without discarding draft tab identity', () => {
+    installWindowStorage();
+    localStorage.setItem(
+      'molly:last-active-tab:session-1',
+      JSON.stringify({
+        sessionTabId: 'draft:existing',
+        viewerTab: null,
+        sidePanel: { open: true, tab: 'pr', tabs: ['pr', 'files'] },
+      })
+    );
+    expect(readStoredLastActiveTabState('session-1')).toMatchObject({
+      sessionTabId: 'draft:existing',
+      viewerTab: null,
+      sidePanel: { open: true, tab: 'files', tabs: ['files'] },
+    });
+  });
+
   it('creates draft ids with the expected prefix', () => {
     const draft = createDraftSessionTab({
       cliType: 'builtin',

@@ -1,10 +1,17 @@
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { getMollyDataDir } from '@molly/shared/node/installation-profile';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MachineId, RepoId, SessionId, WorkspaceId } from '@molly/shared';
 import type { Logger } from '@/utils/logger';
-import type { WorktreeInfo, WorktreeManager } from './worktree-manager';
+import { getWorktreeManager, type WorktreeInfo, type WorktreeManager } from './worktree-manager';
+import {
+  createLocalRepo,
+  restoreHistoricalWorktree,
+  seedHistoricalRepo,
+} from '../../../tests/worktree-manager-test-helpers';
 import {
   claimSpeculativeWorktreeForDurableSession,
   completeSpeculativeWorktreeSetup,
@@ -85,6 +92,64 @@ describe('speculative worktree ownership', () => {
     vi.unstubAllEnvs();
     rmSync(tempHome, { recursive: true, force: true });
   });
+
+  it.each(['main', 'different-base'])(
+    'preserves legacy GitHub markers and files when claiming %s',
+    async (baseBranch) => {
+      const sessionId = 'legacy-marker-session' as SessionId;
+      const repoId = `legacy-marker-${baseBranch}` as RepoId;
+      const logger = createLogger();
+      const manager = getWorktreeManager({ repoId, source: { kind: 'github' }, logger });
+      seedHistoricalRepo(manager, createLocalRepo(tempHome));
+      const info = await restoreHistoricalWorktree(manager, sessionId);
+      const notesPath = path.join(info.hostPath, 'notes.txt');
+      writeFileSync(notesPath, 'unsaved historical work');
+      const markerRoot = path.join(getMollyDataDir('local'), 'session-preparations', 'worktrees');
+      mkdirSync(markerRoot, { recursive: true });
+      const markerPath = path.join(
+        markerRoot,
+        `${createHash('sha256').update(sessionId).digest('hex')}.json`
+      );
+      writeFileSync(
+        markerPath,
+        JSON.stringify({
+          version: 1,
+          preparationId: 'legacy-preparation',
+          sessionId,
+          workspaceId: 'workspace-1',
+          machineId: 'machine-1',
+          repoId,
+          source: { kind: 'github', repoUrl: 'https://github.com/owner/repo.git' },
+          baseBranch: 'main',
+          ownsWorktree: true,
+          phase: 'durable-pending-setup',
+          createdAtMs: 0,
+        })
+      );
+      const claim = {
+        sessionId,
+        workspaceId: 'workspace-1' as WorkspaceId,
+        machineId: 'machine-1' as MachineId,
+        target: { repoId, source: { kind: 'github' as const }, baseBranch },
+        logger,
+      };
+      if (baseBranch !== 'main') {
+        await expect(claimSpeculativeWorktreeForDurableSession(claim)).rejects.toThrow(
+          'does not match the durable target'
+        );
+        expect(readFileSync(notesPath, 'utf8')).toBe('unsaved historical work');
+        expect((await manager.getWorktreeInfo(sessionId)).branch).toBe(info.branch);
+        expect(JSON.parse(readFileSync(markerPath, 'utf8')).baseBranch).toBe('main');
+        return;
+      }
+      expect(await claimSpeculativeWorktreeForDurableSession(claim)).toBe('claimed');
+      expect(readFileSync(notesPath, 'utf8')).toBe('unsaved historical work');
+      expect((await manager.getWorktreeInfo(sessionId)).branch).toBe(info.branch);
+      await completeSpeculativeWorktreeSetup(claim);
+      expect(await claimSpeculativeWorktreeForDurableSession(claim)).toBe('no-marker');
+      expect(readFileSync(notesPath, 'utf8')).toBe('unsaved historical work');
+    }
+  );
 
   it('removes a newly-created worktree when an unclaimed preparation is disposed', async () => {
     const sessionId = 'session-owned' as SessionId;

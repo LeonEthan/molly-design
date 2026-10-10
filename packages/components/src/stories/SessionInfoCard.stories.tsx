@@ -1,35 +1,15 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { fn } from 'storybook/test';
 
 import {
   SessionInfoCard,
   SessionInfoHoverCard,
   type SessionInfoCardProps,
 } from '@/components/session-info-hover-card';
-import type { PrCiRun } from '@/components/sessions/session-info-chips';
 
 const now = new Date('2026-07-13T21:00:00Z');
 const minutesAgo = (m: number) => new Date(now.getTime() - m * 60_000);
 const hoursAgo = (h: number) => minutesAgo(h * 60);
 const daysAgo = (d: number) => hoursAgo(d * 24);
-
-const ciPassing: PrCiRun[] = [
-  { name: 'build', status: 'success', durationMs: 46_000 },
-  { name: 'test (unit)', status: 'success', durationMs: 132_000 },
-  { name: 'lint', status: 'success', durationMs: 18_000 },
-];
-
-const ciRunning: PrCiRun[] = [
-  { name: 'build', status: 'success', durationMs: 44_000 },
-  { name: 'test (e2e)', status: 'running' },
-  { name: 'deploy preview', status: 'queued' },
-];
-
-const ciFailing: PrCiRun[] = [
-  { name: 'build', status: 'success', durationMs: 41_000 },
-  { name: 'test (unit)', status: 'failure', durationMs: 87_000 },
-  { name: 'lint', status: 'skipped' },
-];
 
 const meta = {
   title: 'Sessions/SessionInfoCard',
@@ -39,7 +19,6 @@ const meta = {
     title: 'Fix data persistence race',
     latestMessageAt: hoursAgo(2),
     now,
-    onOpenPullRequest: fn(),
   },
 } satisfies Meta<typeof SessionInfoCard>;
 
@@ -52,55 +31,12 @@ const githubArgs = {
   repoFullName: 'loro-dev/lody',
   machineName: 'Studio Mac',
   branchName: 'feat/persistence-race',
-  prStatus: 'open',
-  prNumber: 128,
-  prUrl: 'https://github.com/loro-dev/lody/pull/128',
   addedLines: 312,
   deletedLines: 47,
 } satisfies Partial<SessionInfoCardProps>;
 
-export const GithubOpenWithCiPassing: Story = {
-  args: { ...githubArgs, prCiRuns: ciPassing },
-};
-
-export const GithubOpenWithCiRollup: Story = {
-  args: { ...githubArgs, prCiState: 's' },
-};
-
-export const TeamWithAuthor: Story = {
-  name: 'Team scope (with Author row)',
-  args: {
-    ...githubArgs,
-    author: { name: 'Alex Rivera', image: null },
-    prCiRuns: ciPassing,
-  },
-};
-
-export const GithubMergedWithCiRunning: Story = {
-  args: {
-    ...githubArgs,
-    title: 'Ship presence heartbeat',
-    prStatus: 'merged',
-    prNumber: 99,
-    latestMessageAt: minutesAgo(8),
-    prCiRuns: ciRunning,
-  },
-};
-
-export const GithubClosedWithCiFailing: Story = {
-  args: {
-    ...githubArgs,
-    title: 'Spike: fabric shader LOD',
-    prStatus: 'closed',
-    prNumber: 74,
-    latestMessageAt: daysAgo(3),
-    prCiRuns: ciFailing,
-  },
-};
-
-export const GithubNoCiFeed: Story = {
-  name: 'GitHub (no CI feed yet)',
-  args: { ...githubArgs, prCiRuns: undefined },
+export const HistoricalGithubWorktree: Story = {
+  args: { ...githubArgs },
 };
 
 export const LocalWorktree: Story = {
@@ -139,7 +75,6 @@ export const LongBranchName: Story = {
   args: {
     ...githubArgs,
     branchName: 'feature/extremely-long-branch-name-that-should-truncate-inside-the-card',
-    prCiRuns: ciPassing,
   },
 };
 
@@ -150,7 +85,7 @@ export const LongBranchName: Story = {
 export const HoverInteraction: Story = {
   render: (args) => (
     <div className="w-64 rounded-lg border border-border p-2">
-      <SessionInfoHoverCard {...args} {...githubArgs} prCiRuns={ciPassing}>
+      <SessionInfoHoverCard {...args} {...githubArgs}>
         <div
           role="button"
           tabIndex={0}

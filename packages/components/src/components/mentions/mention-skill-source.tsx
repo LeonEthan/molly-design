@@ -282,11 +282,8 @@ function hasProjectSkillSource(source: MentionProjectSource | undefined): boolea
   if (source?.kind === 'local') {
     return Boolean(source.localProjectId && source.workspaceId && source.machineId);
   }
-  if (source?.kind === 'github') {
-    return Boolean(source.repoFullName);
-  }
   if (source?.kind === 'provider') {
-    return Boolean(source.githubRepoFullName);
+    return Boolean(source.localProject);
   }
   return false;
 }
@@ -358,69 +355,33 @@ export function mergeMentionSkillState(
   return { status: 'ready' };
 }
 
-/**
- * Resolves the current chat's skills for the mention.
- *
- * - Project scope: the local project root (machine RPC) or the GitHub default
- *   branch (API), from the mention `source`.
- * - Global scope: the skills of the machine the chat runs on (`globalMachineId`,
- *   e.g. `session.machineId` / the selected agent's machine). Surfaced for ALL
- *   chat kinds so a GitHub-project or plain-agent chat still offers the machine's
- *   global skills — not just local-project chats. For a `local` source we skip
- *   the separate global fetch because its own scan already includes that
- *   machine's globals (avoids double-listing).
- *
- * Gated by `enabled` so we only scan/fetch once the user actually engages a
- * skill-menu route (or a draft already contains a `$` token), mirroring the
- * display tab's lazy SWR.
- */
 export function useMentionProjectSkills(
   source: MentionProjectSource | undefined,
   enabled: boolean,
   globalMachineId?: string | null
 ) {
   const workspaceId = useAtomValue(currentWorkspaceIdAtom);
-  const kind = source?.kind;
-  const localWorkspaceId = source?.kind === 'local' ? source.workspaceId : undefined;
-  const machineId = source?.kind === 'local' ? source.machineId : undefined;
-  const localProjectId = source?.kind === 'local' ? source.localProjectId : undefined;
-  const repoFullName =
-    source?.kind === 'github'
-      ? source.repoFullName
-      : source?.kind === 'provider'
-        ? source.githubRepoFullName
-        : undefined;
-
+  const localWorkspaceId = source?.kind === 'local' ? source.workspaceId : workspaceId;
+  const machineId = source?.kind === 'local' ? source.machineId : source?.localProject?.machineId;
+  const localProjectId =
+    source?.kind === 'local' ? source.localProjectId : source?.localProject?.localProjectId;
   const skillsSource = React.useMemo<ProjectSkillsSource | null>(() => {
-    if (!enabled) {
-      return null;
-    }
-    if (kind === 'local') {
-      if (!localWorkspaceId || !machineId || !localProjectId) {
-        return null;
-      }
-      return { kind: 'local', workspaceId: localWorkspaceId, machineId, localProjectId };
-    }
-    if (!repoFullName || !workspaceId) {
-      return null;
-    }
-    return { kind: 'github', workspaceId, repoFullName };
-  }, [enabled, kind, localWorkspaceId, machineId, localProjectId, repoFullName, workspaceId]);
+    if (!enabled || !localWorkspaceId || !machineId || !localProjectId) return null;
+    return { kind: 'local', workspaceId: localWorkspaceId, machineId, localProjectId };
+  }, [enabled, localWorkspaceId, machineId, localProjectId]);
 
   const globalSkillsSource = React.useMemo<ProjectSkillsSource | null>(() => {
     if (!enabled) {
       return null;
     }
     // A local source's own scan already lists its machine's global skills.
-    if (kind === 'local') {
-      return null;
-    }
+    if (skillsSource) return null;
     const normalizedMachineId = globalMachineId?.trim();
     if (!normalizedMachineId || !workspaceId) {
       return null;
     }
     return { kind: 'global', workspaceId, machineId: normalizedMachineId };
-  }, [enabled, kind, globalMachineId, workspaceId]);
+  }, [enabled, skillsSource, globalMachineId, workspaceId]);
 
   const projectSkillState = useProjectSkills(skillsSource);
   const globalSkillState = useProjectSkills(globalSkillsSource);

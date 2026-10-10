@@ -8,8 +8,6 @@ import {
   getRegisteredSystemSkillDirs,
   getServerNow,
   getSkillScanCandidateDirs,
-  githubFetchDefaultBranchHead,
-  githubFetchProjectSkillsAtCommit,
   type AgentConfigMeta,
   type LocalProjectId,
   type MachineId,
@@ -19,14 +17,12 @@ import {
 import { getAllAgentConfigAtom, runtimeAtom, userAtom } from '@/atoms';
 import { createLocalProjectSkillsTransport } from '@/lib/local-project-skills-provider';
 import {
-  getGitHubProjectSkillsCacheKey,
   getLocalProjectSkillsCacheKey,
   getMachineGlobalSkillsCacheKey,
   readProjectSkillsCacheEntry,
   writeProjectSkillsCacheEntry,
   type ProjectSkillsCacheEntry,
 } from '@/lib/project-skills-cache';
-import { withGitHubTokenRetry } from '@/lib/github-token';
 
 export type ProjectSkillsSource =
   | {
@@ -36,13 +32,8 @@ export type ProjectSkillsSource =
       localProjectId: string;
     }
   | {
-      kind: 'github';
-      workspaceId: string;
-      repoFullName: string;
-    }
-  | {
-      // Machine-global skills only (no project/repo) — for GitHub or plain-agent
-      // chats that still run on a known machine.
+      // Machine-global skills only (no project) — for chats that still run on a
+      // known machine.
       kind: 'global';
       workspaceId: string;
       machineId: string;
@@ -72,11 +63,6 @@ type NormalizedProjectSkillsSource =
       workspaceId: string;
       machineId: string;
       localProjectId: string;
-    }
-  | {
-      kind: 'github';
-      workspaceId: string;
-      repoFullName: string;
     }
   | {
       kind: 'global';
@@ -123,26 +109,14 @@ function normalizeSource(
     };
   }
 
-  if (source.kind === 'global') {
-    const machineId = source.machineId.trim();
-    if (!machineId) {
-      return null;
-    }
-    return {
-      kind: 'global',
-      workspaceId,
-      machineId,
-    };
-  }
-
-  const repoFullName = source.repoFullName.trim();
-  if (!repoFullName) {
+  const machineId = source.machineId.trim();
+  if (!machineId) {
     return null;
   }
   return {
-    kind: 'github',
+    kind: 'global',
     workspaceId,
-    repoFullName,
+    machineId,
   };
 }
 
@@ -153,9 +127,7 @@ function getAgentConfigsForSource(
   if (!source) {
     return [];
   }
-  return source.kind === 'github'
-    ? [...agentConfigs]
-    : agentConfigs.filter((config) => config.machineId === source.machineId);
+  return agentConfigs.filter((config) => config.machineId === source.machineId);
 }
 
 function getRegisteredDirsForSource(
@@ -163,13 +135,10 @@ function getRegisteredDirsForSource(
   agentConfigs: readonly AgentConfigMeta[]
 ): RegisteredSkillDirsByScope {
   const configs = getAgentConfigsForSource(source, agentConfigs);
-  // System and global skills both ride the machine home scan, so they surface
-  // for the same source kinds.
-  const includesGlobal = source?.kind === 'local' || source?.kind === 'global';
   return {
-    project: source?.kind === 'global' ? new Set() : getRegisteredSkillDirs(configs),
-    global: includesGlobal ? getRegisteredGlobalSkillDirs(configs) : new Set(),
-    system: includesGlobal ? getRegisteredSystemSkillDirs(configs) : new Set(),
+    project: source?.kind === 'local' ? getRegisteredSkillDirs(configs) : new Set(),
+    global: getRegisteredGlobalSkillDirs(configs),
+    system: getRegisteredSystemSkillDirs(configs),
   };
 }
 
@@ -224,10 +193,8 @@ export function useProjectSkills(
   const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   const inputKind = sourceInput?.kind ?? null;
   const inputWorkspaceId = sourceInput?.workspaceId ?? '';
-  const inputMachineId =
-    sourceInput?.kind === 'local' || sourceInput?.kind === 'global' ? sourceInput.machineId : '';
+  const inputMachineId = sourceInput?.machineId ?? '';
   const inputLocalProjectId = sourceInput?.kind === 'local' ? sourceInput.localProjectId : '';
-  const inputRepoFullName = sourceInput?.kind === 'github' ? sourceInput.repoFullName : '';
   const source = useMemo(() => {
     if (inputKind === 'local') {
       return normalizeSource({
@@ -244,15 +211,8 @@ export function useProjectSkills(
         machineId: inputMachineId,
       });
     }
-    if (inputKind === 'github') {
-      return normalizeSource({
-        kind: 'github',
-        workspaceId: inputWorkspaceId,
-        repoFullName: inputRepoFullName,
-      });
-    }
     return null;
-  }, [inputKind, inputLocalProjectId, inputMachineId, inputRepoFullName, inputWorkspaceId]);
+  }, [inputKind, inputLocalProjectId, inputMachineId, inputWorkspaceId]);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const [state, setState] = useState<ProjectSkillsInternalState>(EMPTY_INTERNAL_STATE);
   const scanDirs = useMemo(() => getSkillScanCandidateDirs(), []);
@@ -280,18 +240,7 @@ export function useProjectSkills(
         source.localProjectId
       );
     }
-    if (source.kind === 'global') {
-      return getMachineGlobalSkillsCacheKey(
-        requestedByUserId,
-        source.workspaceId,
-        source.machineId
-      );
-    }
-    return getGitHubProjectSkillsCacheKey(
-      requestedByUserId,
-      source.workspaceId,
-      source.repoFullName
-    );
+    return getMachineGlobalSkillsCacheKey(requestedByUserId, source.workspaceId, source.machineId);
   }, [requestedByUserId, source]);
 
   useEffect(() => {
@@ -315,8 +264,8 @@ export function useProjectSkills(
       }
 
       // SWR cache hit: the source is unchanged, so keep the cached groups and
-      // only bump fetchedAt. Shared by the local (content fingerprint) and
-      // GitHub (commit sha) freshness checks below.
+      // only bump fetchedAt. Shared by the project and global content-fingerprint
+      // checks below.
       const reuseCachedEntry = async (entry: ProjectSkillsCacheEntry): Promise<void> => {
         const refreshed: ProjectSkillsCacheEntry = { ...entry, fetchedAt: getServerNow() };
         await writeProjectSkillsCacheEntry(refreshed);
@@ -372,71 +321,32 @@ export function useProjectSkills(
           return;
         }
 
-        if (source.kind === 'global') {
-          if (!runtime || !requestedByUserId) {
-            throw new Error('Local project control is unavailable.');
-          }
-          const transport = createLocalProjectSkillsTransport({
-            workspaceId: source.workspaceId as WorkspaceId,
-            machineId: source.machineId as MachineId,
-            requestedByUserId,
-            requestLocalProjectControl: (request, requestOptions) =>
-              runtime.requestLocalProjectControl(request, requestOptions),
-          });
-          const globalResult = await transport.listGlobalSkills();
-          if (cancelled) {
-            return;
-          }
-
-          const contentFingerprint = `global:${globalResult.contentFingerprint ?? ''}`;
-          if (cached && cached.contentFingerprint === contentFingerprint) {
-            await reuseCachedEntry(cached);
-            return;
-          }
-
-          const nextEntry: ProjectSkillsCacheEntry = {
-            key: sourceCacheKey,
-            groups: globalResult.groups,
-            source: 'global',
-            contentFingerprint,
-            knownDirsVersion: KNOWN_SKILL_DIRS_VERSION,
-            fetchedAt: getServerNow(),
-          };
-          await writeProjectSkillsCacheEntry(nextEntry);
-          if (!cancelled) {
-            setState(stateFromCache(nextEntry, 'ready'));
-          }
-          return;
+        if (!runtime || !requestedByUserId) {
+          throw new Error('Local project control is unavailable.');
         }
-
-        const head = await withGitHubTokenRetry(source.workspaceId, source.repoFullName, (token) =>
-          githubFetchDefaultBranchHead(token, source.repoFullName)
-        );
+        const transport = createLocalProjectSkillsTransport({
+          workspaceId: source.workspaceId as WorkspaceId,
+          machineId: source.machineId as MachineId,
+          requestedByUserId,
+          requestLocalProjectControl: (request, requestOptions) =>
+            runtime.requestLocalProjectControl(request, requestOptions),
+        });
+        const globalResult = await transport.listGlobalSkills();
         if (cancelled) {
           return;
         }
 
-        if (cached && cached.commitSha === head.headSha) {
+        const contentFingerprint = `global:${globalResult.contentFingerprint ?? ''}`;
+        if (cached && cached.contentFingerprint === contentFingerprint) {
           await reuseCachedEntry(cached);
-          return;
-        }
-
-        const result = await withGitHubTokenRetry(
-          source.workspaceId,
-          source.repoFullName,
-          (token) =>
-            githubFetchProjectSkillsAtCommit(token, source.repoFullName, head.headSha, scanDirs)
-        );
-        if (cancelled) {
           return;
         }
 
         const nextEntry: ProjectSkillsCacheEntry = {
           key: sourceCacheKey,
-          groups: result.groups,
-          source: 'github',
-          commitSha: head.headSha,
-          contentFingerprint: result.contentFingerprint,
+          groups: globalResult.groups,
+          source: 'global',
+          contentFingerprint,
           knownDirsVersion: KNOWN_SKILL_DIRS_VERSION,
           fetchedAt: getServerNow(),
         };

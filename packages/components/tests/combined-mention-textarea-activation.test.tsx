@@ -209,19 +209,19 @@ describe('CombinedMentionTextarea mention enablement and activation', () => {
         title: 'Current parser work',
         slug: 'current-parser-work',
         activityAt: 2,
-        projectKey: 'github:lodyai/lody',
+        projectKey: 'local:m1:p1',
       },
       {
         sessionId: 'other',
         title: 'Other parser work',
         slug: 'other-parser-work',
         activityAt: 1,
-        projectKey: 'github:lodyai/other',
+        projectKey: 'local:m1:p2',
       }
     );
     await render({
       value: '',
-      mentionSource: { kind: 'github', repoFullName: ' LodyAI/Lody ' },
+      mentionSource: { kind: 'provider', localProject: { machineId: 'm1', localProjectId: 'p1' } },
     });
     await typeInto('@session:parser');
 
@@ -270,11 +270,11 @@ describe('CombinedMentionTextarea mention enablement and activation', () => {
       title: 'Cross project session',
       slug: 'cross-project-session',
       activityAt: 1,
-      projectKey: 'github:lodyai/other',
+      projectKey: 'local:m1:p2',
     });
     await render({
       value: '',
-      mentionSource: { kind: 'github', repoFullName: 'lodyai/lody' },
+      mentionSource: { kind: 'provider', localProject: { machineId: 'm1', localProjectId: 'p1' } },
     });
 
     expect(commands.execute('mention.toggleSessionProjectScope')).toBe(false);

@@ -4,8 +4,6 @@ import {
   Boxes,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
-  GitPullRequest,
   MessageSquare,
   Terminal,
   UserRoundCog,
@@ -89,10 +87,6 @@ function CandidateIcon({
       return <FileIcon filePath={path ?? ''} className={className} />;
     case 'dir':
       return <FolderIcon folderPath={path ?? ''} className={className} />;
-    case 'issue':
-      return <CircleDot className={className} />;
-    case 'pr':
-      return <GitPullRequest className={className} />;
     case 'skill':
       return <Boxes className={className} />;
     case 'command':

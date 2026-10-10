@@ -1,30 +1,14 @@
 import {
-  resolveProjectGitHubRepo,
   type MachineId,
   type SessionId,
   type SessionMeta,
   type WorktreeCleanupScriptConfig,
-  type WorktreeSetupScriptConfig,
   type WorkspaceId,
 } from '@molly/shared';
 import type { LoroDocumentManager } from '@/lib/loro/doc';
 import type { Logger } from '@/utils/logger';
 import { readLegacySessionLaunchConfig } from '../session-launch-config-resolver';
 import { readLocalProjectWorktreeCleanup } from './worktree-setup-config-store';
-
-export type GitHubRepoWorktreeConfig = {
-  worktreeSetup?: WorktreeSetupScriptConfig;
-  worktreeCleanup?: WorktreeCleanupScriptConfig;
-};
-
-export async function resolveGitHubRepoWorktreeConfig(_input: {
-  token: string;
-  workspaceId: WorkspaceId;
-  repoFullName: string | undefined;
-  logger: Logger;
-}): Promise<GitHubRepoWorktreeConfig | null> {
-  return null;
-}
 
 export async function resolveSessionWorktreeCleanupConfig(input: {
   token: string;
@@ -43,15 +27,7 @@ export async function resolveSessionWorktreeCleanupConfig(input: {
     return null;
   }
 
-  const repoFullName =
-    resolveProjectGitHubRepo(sessionMeta?.project) ?? sessionMeta?.repoFullName;
   return (
-    (await resolveGitHubRepoWorktreeConfig({
-      token: input.token,
-      workspaceId: input.workspaceId,
-      repoFullName,
-      logger: input.logger,
-    }))?.worktreeCleanup ??
     (
       await readLegacySessionLaunchConfig({
         repo: input.workspaceDocument.repo,
@@ -61,7 +37,6 @@ export async function resolveSessionWorktreeCleanupConfig(input: {
         sessionMeta,
         logger: input.logger,
       })
-    )?.worktreeCleanup ??
-    null
+    )?.worktreeCleanup ?? null
   );
 }

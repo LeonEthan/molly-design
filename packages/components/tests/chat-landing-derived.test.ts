@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildChatLandingPreSelectionKey,
   compareChatLandingLocalProjectByRecency,
-  compareChatLandingRepositoryByRecency,
   getChatLandingSelectionSearch,
   getChatLandingSelectionSyncDecision,
   getChatLandingHasAnyOnlineMachine,
@@ -13,183 +12,16 @@ import {
   getChatLandingSelectedMachineProjectStatus,
   getChatLandingSubmitDisabled,
   getChatLandingVisibleComposerStatus,
-  getSharingReviewActionTarget,
-  getSharingReviewSourceRevision,
-  getSharingReviewSourcesReady,
-  getSharingReviewTeamHasNoVisibleLocalResources,
-  getSharingReviewTeamLooksEmpty,
   getSelectedLocalProjectKey,
   isChatLandingMachineReachable,
   parseChatLandingSearch,
-  shouldRetrySharingReviewConflict,
 } from '../src/components/chat/chat-landing-derived';
 
 const onlineMachineIds = new Set(['github-runner']);
 const isMachineOnline = (machineId: string) => onlineMachineIds.has(machineId);
 
-describe('sharing review readiness and action', () => {
-  const readySources = {
-    docMetaCacheReady: true,
-    visibleMachinesLoading: false,
-    visibleLocalProjectsLoading: false,
-    repositoriesReady: true,
-    isMetaRoomFirstSyncPending: false,
-  };
-
-  it('waits for the first remote metadata sync before reconciling', () => {
-    expect(getSharingReviewSourcesReady(readySources)).toBe(true);
-    expect(
-      getSharingReviewSourcesReady({ ...readySources, isMetaRoomFirstSyncPending: true })
-    ).toBe(false);
-  });
-
-  it('routes machine privacy to Machines and leaves observer-only notices informational', () => {
-    expect(getSharingReviewActionTarget({ privateMachineCount: 1, privateProjectCount: 1 })).toBe(
-      'machines'
-    );
-    expect(getSharingReviewActionTarget({ privateMachineCount: 0, privateProjectCount: 1 })).toBe(
-      'projects'
-    );
-    expect(
-      getSharingReviewActionTarget({ privateMachineCount: 0, privateProjectCount: 0 })
-    ).toBeNull();
-  });
-
-  it('retries only a latest conflict against an older attempt from this writer', () => {
-    expect(
-      shouldRetrySharingReviewConflict({
-        writerId: 'writer-a',
-        attempt: 2,
-        serverWriterId: 'writer-a',
-        serverAttempt: 1,
-        isLatestAttempt: true,
-      })
-    ).toBe(true);
-    expect(
-      shouldRetrySharingReviewConflict({
-        writerId: 'writer-a',
-        attempt: 2,
-        serverWriterId: 'writer-b',
-        serverAttempt: 3,
-        isLatestAttempt: true,
-      })
-    ).toBe(false);
-    expect(
-      shouldRetrySharingReviewConflict({
-        writerId: 'writer-a',
-        attempt: 2,
-        serverWriterId: 'writer-a',
-        serverAttempt: 1,
-        isLatestAttempt: false,
-      })
-    ).toBe(false);
-    expect(
-      shouldRetrySharingReviewConflict({
-        writerId: 'writer-a',
-        attempt: 2,
-        serverWriterId: 'writer-a',
-        serverAttempt: 2,
-        isLatestAttempt: true,
-      })
-    ).toBe(false);
-  });
-});
-
-describe('getSharingReviewSourceRevision', () => {
-  it('returns a fixed-length deterministic revision that includes tail changes', () => {
-    const manyProjects = Array.from({ length: 300 }, (_, index) => `project-${index}`).join(',');
-    const first = getSharingReviewSourceRevision(['members:a,b', `projects:${manyProjects}:a`]);
-    const repeated = getSharingReviewSourceRevision(['members:a,b', `projects:${manyProjects}:a`]);
-    const tailChanged = getSharingReviewSourceRevision([
-      'members:a,b',
-      `projects:${manyProjects}:b`,
-    ]);
-
-    expect(first).toHaveLength(19);
-    expect(repeated).toBe(first);
-    expect(tailChanged).not.toBe(first);
-  });
-});
-
-describe('getSharingReviewTeamLooksEmpty', () => {
-  const emptyState = {
-    sourcesReady: true,
-    machineCount: 0,
-    localProjectCount: 0,
-    activeSessionCount: 0,
-    archivedSessionCount: 0,
-    githubRepositoryCount: 0,
-  };
-
-  it('waits for all sources before reporting an empty team workspace', () => {
-    expect(getSharingReviewTeamLooksEmpty({ ...emptyState, sourcesReady: false })).toBe(false);
-    expect(getSharingReviewTeamLooksEmpty(emptyState)).toBe(true);
-  });
-
-  it('counts GitHub repositories and archived sessions as visible content', () => {
-    expect(getSharingReviewTeamLooksEmpty({ ...emptyState, githubRepositoryCount: 1 })).toBe(false);
-    expect(getSharingReviewTeamLooksEmpty({ ...emptyState, archivedSessionCount: 1 })).toBe(false);
-  });
-});
-
-describe('getSharingReviewTeamHasNoVisibleLocalResources', () => {
-  it('reports missing team-local resources after their sources are ready', () => {
-    expect(
-      getSharingReviewTeamHasNoVisibleLocalResources({
-        sourcesReady: false,
-        machineCount: 0,
-        localProjectCount: 0,
-      })
-    ).toBe(false);
-    expect(
-      getSharingReviewTeamHasNoVisibleLocalResources({
-        sourcesReady: true,
-        machineCount: 0,
-        localProjectCount: 0,
-      })
-    ).toBe(true);
-  });
-
-  it('still reports missing local resources when GitHub content makes the workspace non-empty', () => {
-    expect(
-      getSharingReviewTeamLooksEmpty({
-        sourcesReady: true,
-        machineCount: 0,
-        localProjectCount: 0,
-        activeSessionCount: 0,
-        archivedSessionCount: 0,
-        githubRepositoryCount: 1,
-      })
-    ).toBe(false);
-    expect(
-      getSharingReviewTeamHasNoVisibleLocalResources({
-        sourcesReady: true,
-        machineCount: 0,
-        localProjectCount: 0,
-      })
-    ).toBe(true);
-  });
-
-  it('stops reporting once a machine or local project is visible', () => {
-    expect(
-      getSharingReviewTeamHasNoVisibleLocalResources({
-        sourcesReady: true,
-        machineCount: 1,
-        localProjectCount: 0,
-      })
-    ).toBe(false);
-    expect(
-      getSharingReviewTeamHasNoVisibleLocalResources({
-        sourcesReady: true,
-        machineCount: 0,
-        localProjectCount: 1,
-      })
-    ).toBe(false);
-  });
-});
-
 describe('getChatLandingProjectRecency', () => {
-  it('aggregates latest lastMessageAt by GitHub repo and local project key', () => {
+  it('aggregates latest lastMessageAt by local project key while ignoring historical GitHub sessions', () => {
     const recency = getChatLandingProjectRecency([
       {
         machineId: 'machine-1',
@@ -218,8 +50,6 @@ describe('getChatLandingProjectRecency', () => {
       },
     ]);
 
-    expect(recency.byRepo.get('owner/beta')).toBe(250);
-    expect(recency.byRepo.get('owner/legacy')).toBe(150);
     expect(recency.byProject.get('machine-1:project-1')).toBe(100);
     expect(recency.byProject.get('machine-2:project-1')).toBe(300);
   });
@@ -237,44 +67,7 @@ describe('getChatLandingProjectRecency', () => {
       },
     ]);
 
-    expect(recency.byRepo.has('owner/alpha')).toBe(false);
     expect(recency.byProject.has('machine-1:project-1')).toBe(false);
-  });
-});
-
-describe('compareChatLandingRepositoryByRecency', () => {
-  it('sorts repos by newest lastMessageAt and falls back to full name', () => {
-    const latest = new Map([
-      ['owner/beta', 200],
-      ['owner/alpha', 300],
-    ]);
-    const repos = [
-      { fullName: 'owner/gamma' },
-      { fullName: 'owner/beta' },
-      { fullName: 'owner/alpha' },
-      { fullName: 'owner/delta' },
-    ];
-
-    expect(
-      repos.sort((left, right) => compareChatLandingRepositoryByRecency(left, right, latest))
-    ).toEqual([
-      { fullName: 'owner/alpha' },
-      { fullName: 'owner/beta' },
-      { fullName: 'owner/delta' },
-      { fullName: 'owner/gamma' },
-    ]);
-  });
-
-  it('sorts equal timestamps alphabetically', () => {
-    const latest = new Map([
-      ['owner/beta', 200],
-      ['owner/alpha', 200],
-    ]);
-    const repos = [{ fullName: 'owner/beta' }, { fullName: 'owner/alpha' }];
-
-    expect(
-      repos.sort((left, right) => compareChatLandingRepositoryByRecency(left, right, latest))
-    ).toEqual([{ fullName: 'owner/alpha' }, { fullName: 'owner/beta' }]);
   });
 });
 
@@ -676,7 +469,6 @@ describe('buildChatLandingPreSelectionKey', () => {
     context: 'local' as const,
     machine: 'machine-1',
     project: 'local-project-1',
-    repo: undefined,
   };
 
   it('is stable while the URL names the same target', () => {
@@ -699,14 +491,12 @@ describe('parseChatLandingSearch', () => {
         context: 'local',
         machine: 'machine-1',
         project: 'local-project-1',
-        repo: 'owner/repo',
         resetDraftKey: 'r1',
       })
     ).toEqual({
       context: 'local',
       machine: 'machine-1',
       project: 'local-project-1',
-      repo: 'owner/repo',
     });
   });
 
@@ -722,7 +512,6 @@ describe('parseChatLandingSearch', () => {
       context: undefined,
       machine: undefined,
       project: undefined,
-      repo: undefined,
     });
   });
 });
@@ -757,7 +546,6 @@ describe('getChatLandingSelectionSearch', () => {
         contextType: 'local',
         machineId: 'machine-1',
         localProjectId: 'local-project-1',
-        repoFullName: null,
       })
     ).toEqual({ context: 'local', machine: 'machine-1', project: 'local-project-1' });
   });
@@ -768,20 +556,8 @@ describe('getChatLandingSelectionSearch', () => {
         contextType: 'chat',
         machineId: 'machine-1',
         localProjectId: null,
-        repoFullName: null,
       })
     ).toEqual({ context: 'chat' });
-  });
-
-  it('names a complete github selection', () => {
-    expect(
-      getChatLandingSelectionSearch({
-        contextType: 'github',
-        machineId: null,
-        localProjectId: null,
-        repoFullName: 'owner/repo',
-      })
-    ).toEqual({ context: 'github', repo: 'owner/repo' });
   });
 
   it('maps incomplete selections to a URL that names nothing', () => {
@@ -790,15 +566,13 @@ describe('getChatLandingSelectionSearch', () => {
         contextType: 'local',
         machineId: 'machine-1',
         localProjectId: null,
-        repoFullName: null,
       })
     ).toEqual({});
     expect(
       getChatLandingSelectionSearch({
-        contextType: 'github',
+        contextType: 'local',
         machineId: null,
         localProjectId: null,
-        repoFullName: null,
       })
     ).toEqual({});
   });

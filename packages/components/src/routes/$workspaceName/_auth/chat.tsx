@@ -33,7 +33,6 @@ function ChatRoute() {
       preSelectedContext={search.context}
       preSelectedMachine={search.machine}
       preSelectedProject={search.project}
-      preSelectedRepo={search.repo}
       onSelectionUrlSync={handleSelectionUrlSync}
     />
   );

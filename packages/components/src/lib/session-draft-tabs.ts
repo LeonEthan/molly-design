@@ -55,7 +55,10 @@ const persistedViewerTabSchema = z.discriminatedUnion('type', [
     label: z.string(),
   }),
 ]);
-const persistedSidePanelTabSchema = z.enum(['files', 'changes', 'pr', 'browser', 'design']);
+const persistedSidePanelTabSchema = z.preprocess(
+  (value) => (value === 'pr' ? 'files' : value),
+  z.enum(['files', 'changes', 'browser', 'design'])
+);
 const persistedSidePanelStateSchema = z
   .object({
     open: z.boolean(),

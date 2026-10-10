@@ -41,12 +41,7 @@ import {
   Settings,
   Users,
 } from 'lucide-react';
-import {
-  SessionList,
-  type SessionListProps,
-  type SessionListPullRequestOpen,
-  type SessionListRow,
-} from './session-list';
+import { SessionList, type SessionListProps, type SessionListRow } from './session-list';
 import {
   SidebarUpdatedSessionList,
   type SidebarUpdatedBucketKey,
@@ -213,8 +208,7 @@ export interface LoroSidebarProps {
   /** Copy session URL for an Updated row. Mirrors `sessionListProps.onCopySessionUrl`. */
   onCopyUpdatedItemUrl?: (id: string) => void;
   /** Share an Updated row with the team. Mirrors `sessionListProps.onShareSessionWithTeam`. */
-  /** Open PR for a github Updated row. Mirrors `sessionListProps.onOpenPullRequest`. */
-  onOpenUpdatedItemPullRequest?: (request: SessionListPullRequestOpen) => void;
+
   getUpdatedItemHref?: (id: string) => string | undefined;
 
   labels?: Partial<LoroSidebarLabels>;
@@ -578,7 +572,7 @@ export const LoroSidebar = memo(function LoroSidebar({
   onRenameUpdatedItem,
   onToggleUpdatedItemPinned,
   onCopyUpdatedItemUrl,
-  onOpenUpdatedItemPullRequest,
+
   getUpdatedItemHref,
   labels,
   onWorkspaceSelected,
@@ -948,7 +942,6 @@ export const LoroSidebar = memo(function LoroSidebar({
                   onRenameItem={onRenameUpdatedItem}
                   onTogglePinItem={onToggleUpdatedItemPinned}
                   onCopyItemUrl={onCopyUpdatedItemUrl}
-                  onOpenPullRequest={onOpenUpdatedItemPullRequest}
                   getItemHref={getUpdatedItemHref}
                   headerAction={sectionHeaderFilterPlaceholder ?? undefined}
                 />
@@ -984,7 +977,6 @@ export const LoroSidebar = memo(function LoroSidebar({
                     onRenameItem={onRenameUpdatedItem}
                     onTogglePinItem={onToggleUpdatedItemPinned}
                     onCopyItemUrl={onCopyUpdatedItemUrl}
-                    onOpenPullRequest={onOpenUpdatedItemPullRequest}
                     getItemHref={getUpdatedItemHref}
                     headerAction={
                       hasPinnedItems ? undefined : (sectionHeaderFilterPlaceholder ?? undefined)

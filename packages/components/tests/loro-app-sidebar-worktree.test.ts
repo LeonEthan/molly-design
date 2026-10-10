@@ -131,7 +131,7 @@ describe('LocalProjectItem session-type icon', () => {
     expect(plainIcon).toBeNull();
   });
 
-  it('renders the PR status icon for a resting local session linked to a GitHub PR', () => {
+  it('keeps legacy PR metadata from adding retired row badges', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -214,7 +214,7 @@ describe('LocalProjectItem session-type icon', () => {
 
     const rowWithPr = container.querySelector('[data-sidebar-session-id="session-with-pr"]');
     const rowWithoutPr = container.querySelector('[data-sidebar-session-id="session-without-pr"]');
-    expect(rowWithPr?.querySelector('.lucide-git-pull-request')).not.toBeNull();
+    expect(rowWithPr?.querySelector('.lucide-git-pull-request')).toBeNull();
     expect(rowWithoutPr?.querySelector('.lucide-git-pull-request')).toBeNull();
 
     // An unread row spends its end slot on the status mark instead — the PR icon

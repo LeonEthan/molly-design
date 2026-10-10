@@ -2,57 +2,27 @@ import { describe, expect, it } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import { SessionId } from '@molly/shared';
-import {
-  buildGitHubCredentialConfigArgs,
-  WorktreeManager,
-} from '../src/session/worktree/worktree-manager';
+import { WorktreeManager } from '../src/session/worktree/worktree-manager';
 import {
   createLocalRepo,
   createRemoteRepo,
   gitCommit,
   runGit,
-  toFileUrl,
+  seedHistoricalRepo,
+  restoreHistoricalWorktree,
   useWorktreeManagerTestFixture,
 } from './worktree-manager-test-helpers';
 
 describe('WorktreeManager', () => {
   let testDir: string;
   let manager: WorktreeManager;
+  let localRepoDir: string;
 
   useWorktreeManagerTestFixture((fixture) => {
-    ({ testDir, manager } = fixture);
+    ({ testDir, manager, localRepoDir } = fixture);
   });
 
   describe('ensureRepo', () => {
-    it('should create a bare repository when no repoUrl is provided', async () => {
-      await manager.ensureRepo();
-
-      // @ts-expect-error - accessing private property for testing
-      expect(fs.existsSync(manager.bareGitDir)).toBe(true);
-
-      // @ts-expect-error - accessing private property for testing
-      const gitDir = manager.bareGitDir;
-      const isGitRepo = fs.existsSync(path.join(gitDir, 'HEAD'));
-      expect(isGitRepo).toBe(true);
-    });
-
-    it('should create worktrees and cache directories', async () => {
-      await manager.ensureRepo();
-
-      // @ts-expect-error - accessing private property for testing
-      expect(fs.existsSync(manager.worktreesDir)).toBe(true);
-      // @ts-expect-error - accessing private property for testing
-      expect(fs.existsSync(manager.cacheDir)).toBe(true);
-    });
-
-    it('should be idempotent', async () => {
-      await manager.ensureRepo();
-      await manager.ensureRepo();
-
-      // @ts-expect-error - accessing private property for testing
-      expect(fs.existsSync(manager.bareGitDir)).toBe(true);
-    });
-
     it('should prepare a shared local source without creating a bare clone', async () => {
       const sourceDir = createLocalRepo(testDir);
       manager.updateSource({
@@ -73,19 +43,6 @@ describe('WorktreeManager', () => {
     });
   });
 
-  describe('git credential config', () => {
-    it('clears inherited helpers before installing the Molly helper', () => {
-      expect(buildGitHubCredentialConfigArgs('!node "/tmp/lody-helper.cjs"')).toEqual([
-        '-c',
-        'credential.helper=',
-        '-c',
-        'credential.helper=!node "/tmp/lody-helper.cjs"',
-        '-c',
-        'credential.useHttpPath=true',
-      ]);
-    });
-  });
-
   describe('createWorktree', () => {
     it('should create a worktree for a session', async () => {
       await manager.ensureRepo();
@@ -94,7 +51,7 @@ describe('WorktreeManager', () => {
       const info = await manager.createWorktree(sessionId);
 
       expect(info.sessionId).toBe(sessionId);
-      expect(info.branch).toBe(`session/${sessionId.slice(0, 8)}`);
+      expect(info.branch).toBe(`molly/${sessionId.slice(0, 12)}`);
       expect(fs.existsSync(info.hostPath)).toBe(true);
     });
 
@@ -102,7 +59,8 @@ describe('WorktreeManager', () => {
       await manager.ensureRepo();
 
       const sessionId = 'gitdir01-session-gitdir' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      seedHistoricalRepo(manager, localRepoDir);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
       const gitFile = fs.readFileSync(path.join(info.hostPath, '.git'), 'utf8');
       expect(gitFile).toMatch(/^gitdir:\s*\.\./m);
       expect(gitFile).not.toMatch(/^gitdir:\s*\//m);
@@ -156,99 +114,6 @@ describe('WorktreeManager', () => {
       expect(info1.hostPath).not.toBe(info2.hostPath);
       expect(fs.existsSync(info1.hostPath)).toBe(true);
       expect(fs.existsSync(info2.hostPath)).toBe(true);
-    });
-
-    it('should fetch origin/main and base new worktrees on latest commit', async () => {
-      const { sourceDir, remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      await manager.ensureRepo();
-      const initial = runGit(sourceDir, ['rev-parse', 'HEAD']);
-
-      fs.writeFileSync(path.join(sourceDir, 'change.txt'), 'v2\n', 'utf8');
-      const latest = gitCommit(sourceDir, 'update');
-      runGit(sourceDir, ['push']);
-
-      const sessionId = 'rmain002-remote-main-2' as SessionId;
-      const info = await manager.createWorktree(sessionId);
-      expect(info.headSha).toBe(latest);
-      expect(info.headSha).not.toBe(initial);
-    });
-
-    it('should fall back to origin/master when origin/main does not exist', async () => {
-      const { sourceDir, remoteBareDir } = createRemoteRepo(testDir, 'master');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      const latest = runGit(sourceDir, ['rev-parse', 'HEAD']);
-      const sessionId = 'rmaster1-remote-master-1' as SessionId;
-      const info = await manager.createWorktree(sessionId);
-      expect(info.headSha).toBe(latest);
-    });
-
-    it('should handle empty remote repo by creating initial commit', async () => {
-      const remoteBareDir = path.join(testDir, 'remote-empty.git');
-      runGit(testDir, ['init', '--bare', remoteBareDir]);
-
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      const sessionId = 'rempty01-remote-empty-1' as SessionId;
-      const info = await manager.createWorktree(sessionId);
-
-      expect(info.sessionId).toBe(sessionId);
-      expect(info.branch).toBe(`session/${sessionId.slice(0, 8)}`);
-      expect(fs.existsSync(info.hostPath)).toBe(true);
-      expect(info.headSha).not.toBeNull();
-    });
-
-    it('should create a session branch based on the specified common branch', async () => {
-      const { sourceDir, remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      runGit(sourceDir, ['checkout', '-b', 'develop']);
-      fs.writeFileSync(path.join(sourceDir, 'develop.txt'), 'develop\n', 'utf8');
-      const developHead = gitCommit(sourceDir, 'develop');
-      runGit(sourceDir, ['push', '-u', 'origin', 'develop']);
-      runGit(sourceDir, ['checkout', 'main']);
-
-      const sessionId = 'rbranch01-remote-develop-1' as SessionId;
-      const info = await manager.createWorktree(sessionId, 'develop');
-      expect(info.headSha).toBe(developHead);
-      expect(info.branch).toBe(`session/${sessionId.slice(0, 8)}`);
-    });
-
-    it('should create a fresh session branch from a specified non-default base', async () => {
-      const { sourceDir, remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      runGit(sourceDir, ['checkout', '-b', 'feature/reuse-existing-branch']);
-      fs.writeFileSync(path.join(sourceDir, 'feature.txt'), 'feature\n', 'utf8');
-      const featureHead = gitCommit(sourceDir, 'feature');
-      runGit(sourceDir, ['push', '-u', 'origin', 'feature/reuse-existing-branch']);
-      runGit(sourceDir, ['checkout', 'main']);
-
-      const sessionId = 'rbranch02-remote-feature-1' as SessionId;
-      const info = await manager.createWorktree(sessionId, 'feature/reuse-existing-branch');
-      expect(info.headSha).toBe(featureHead);
-      expect(info.branch).toBe(`session/${sessionId.slice(0, 8)}`);
-      expect(info.branch).not.toBe('feature/reuse-existing-branch');
-    });
-
-    it('should suffix a stale generated session branch even when a tag shares its name', async () => {
-      await manager.ensureRepo();
-      const sessionId = 'collision-session-branch' as SessionId;
-      const staleBranch = `session/${sessionId.slice(0, 8)}`;
-      // @ts-expect-error - accessing private property for testing
-      runGit(manager.bareGitDir, ['branch', staleBranch, 'main']);
-      // @ts-expect-error - accessing private property for testing
-      runGit(manager.bareGitDir, ['tag', staleBranch, 'main']);
-
-      const info = await manager.createWorktree(sessionId);
-
-      expect(info.branch).toBe(`${staleBranch}-2`);
-      // @ts-expect-error - accessing private property for testing
-      expect(
-        runGit(manager.bareGitDir, ['show-ref', '--verify', `refs/heads/${staleBranch}`])
-      ).toContain(`refs/heads/${staleBranch}`);
     });
 
     it('should create a shared-local worktree on a molly session branch', async () => {
@@ -401,61 +266,57 @@ describe('WorktreeManager', () => {
       expect(info.headSha).toBe(restoredHead);
     });
 
-    it('should restore an existing worktree when origin is unreachable', async () => {
-      const { remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
+    it('restores historical files and the recorded branch without refreshing origin', async () => {
+      const bareDir = seedHistoricalRepo(manager, localRepoDir);
+      const sessionId = 'historic-session' as SessionId;
+      const created = await restoreHistoricalWorktree(manager, sessionId);
+      fs.writeFileSync(path.join(created.hostPath, 'notes.txt'), 'keep me');
+      const recordedHead = gitCommit(created.hostPath, 'session notes');
+      fs.writeFileSync(path.join(localRepoDir, 'later.txt'), 'later');
+      gitCommit(localRepoDir, 'origin advances');
+      fs.rmSync(localRepoDir, { recursive: true, force: true });
 
-      const sessionId = 'roffl01-existing-worktree' as SessionId;
-      const created = await manager.createWorktree(sessionId);
-
-      fs.rmSync(remoteBareDir, { recursive: true, force: true });
-
-      const restored = await manager.createWorktree(sessionId);
-      expect(restored.hostPath).toBe(created.hostPath);
-      expect(restored.branch).toBe(created.branch);
-      expect(restored.headSha).toBe(created.headSha);
-    });
-
-    it('should restore from an existing branch when origin is unreachable', async () => {
-      const { remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      const sessionId = 'roffl02-existing-branch' as SessionId;
-      const created = await manager.createWorktree(sessionId);
-
-      // Remove the worktree but keep the session branch, then kill origin.
-      // @ts-expect-error - accessing private property for testing
-      runGit(manager.bareGitDir, ['worktree', 'remove', '--force', created.hostPath]);
-      fs.rmSync(remoteBareDir, { recursive: true, force: true });
-
+      expect((await manager.createWorktree(sessionId)).headSha).toBe(recordedHead);
+      runGit(bareDir, ['worktree', 'remove', created.hostPath]);
       const restored = await manager.createWorktree(sessionId, undefined, created.branch);
       expect(restored.branch).toBe(created.branch);
-      expect(restored.headSha).toBe(created.headSha);
-      expect(fs.existsSync(restored.hostPath)).toBe(true);
+      expect(restored.headSha).toBe(recordedHead);
+      expect(fs.readFileSync(path.join(restored.hostPath, 'notes.txt'), 'utf8')).toBe('keep me');
     });
 
-    it('should still require a reachable origin when cutting a fresh worktree', async () => {
-      const { remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-      await manager.ensureRepo();
+    it('rejects a fresh historical worktree even when a cached main branch exists', async () => {
+      seedHistoricalRepo(manager, localRepoDir);
+      const sessionId = 'retired-new-session' as SessionId;
+      await expect(manager.createWorktree(sessionId)).rejects.toThrow(
+        /New GitHub worktrees are retired/
+      );
+      expect(manager.hasWorktree(sessionId)).toBe(false);
+    });
 
-      fs.rmSync(remoteBareDir, { recursive: true, force: true });
+    it('does not initialize or clone a missing historical repository', async () => {
+      manager.updateSource({ kind: 'github', repoUrl: localRepoDir });
+      await expect(manager.ensureRepo()).rejects.toThrow(/missing/);
+      expect(fs.existsSync(path.join(manager.getRepoHostPath(), 'bare.git'))).toBe(false);
+    });
 
-      await expect(manager.createWorktree('roffl03-fresh-cut' as SessionId)).rejects.toThrow(
-        /Failed to fetch from origin/
+    it('keeps surviving files when the historical repository is missing', async () => {
+      const bareDir = seedHistoricalRepo(manager, localRepoDir);
+      const sessionId = 'surviving-session' as SessionId;
+      const created = await restoreHistoricalWorktree(manager, sessionId);
+      fs.writeFileSync(path.join(created.hostPath, 'notes.txt'), 'do not delete');
+      fs.rmSync(bareDir, { recursive: true, force: true });
+      await expect(manager.createWorktree(sessionId)).rejects.toThrow(/missing/);
+      await expect(manager.removeWorktree(sessionId, true)).rejects.toThrow(/missing/);
+      expect(fs.readFileSync(path.join(created.hostPath, 'notes.txt'), 'utf8')).toBe(
+        'do not delete'
       );
     });
 
-    it('should fail closed when an explicit restore branch is missing', async () => {
-      await manager.ensureRepo();
-
+    it('fails closed when the recorded historical branch is missing', async () => {
+      seedHistoricalRepo(manager, localRepoDir);
       await expect(
-        manager.createWorktree(
-          'restore-missing-branch' as SessionId,
-          undefined,
-          'feat/missing-restore'
-        )
-      ).rejects.toThrow('Session restore branch not found: feat/missing-restore');
+        manager.createWorktree('missing-branch' as SessionId, undefined, 'session/lost')
+      ).rejects.toThrow('Session restore branch not found: session/lost');
     });
   });
 });

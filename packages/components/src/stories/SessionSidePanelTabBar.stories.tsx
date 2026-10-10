@@ -15,7 +15,6 @@ const ALL_PANELS: SessionSidePanelOption[] = [
   { id: 'files', label: 'Files', kind: 'files' },
   { id: 'changes', label: 'All Changes', kind: 'changes' },
   { id: 'browser', label: 'Browser', kind: 'browser' },
-  { id: 'pr', label: 'PR', kind: 'pr' },
 ];
 const INITIAL_TABS: SessionSidePanelTabItem[] = [
   { ...ALL_PANELS[1]!, closeable: true },

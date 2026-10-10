@@ -1162,11 +1162,10 @@ const SessionDetail = ({
     return 'idle';
   }, [activeSession, activeSessionLiveStatus]);
   useTabStatus(tabStatus);
-  const { latestPr, repoFullName } = useMemo(
+  const { repoFullName } = useMemo(
     () => getSessionGitHubState(activeTabSession, workspaceOwnerSession),
     [activeTabSession, workspaceOwnerSession]
   );
-  const latestPrNumber = getPullRequestNumber(latestPr);
 
   const writeSessionUrlTab = useCallback(
     (nextTab: string | undefined, { push = false }: { push?: boolean } = {}) => {
@@ -1223,35 +1222,6 @@ const SessionDetail = ({
       writeSessionUrlTab(formatExplicitSessionTabSearch(tabId), options);
     },
     [writeSessionUrlTab]
-  );
-
-  const replaceSessionUrlPr = useCallback(
-    (nextPrNumber: number | undefined, { push = false }: { push?: boolean } = {}) => {
-      if (!workspaceSlug) {
-        return;
-      }
-
-      void router.navigate({
-        to: '/$workspaceName/sessions/$sessionId',
-        params: { workspaceName: workspaceSlug, sessionId },
-        search: (prev) => {
-          if (prev.pr === nextPrNumber) {
-            return prev;
-          }
-          if (nextPrNumber === undefined) {
-            if (prev.pr === undefined) {
-              return prev;
-            }
-            const next = { ...prev };
-            delete next.pr;
-            return next;
-          }
-          return { ...prev, pr: nextPrNumber };
-        },
-        replace: !push,
-      });
-    },
-    [router, sessionId, workspaceSlug]
   );
 
   const replaceSessionUrlBrowser = useCallback(
@@ -1913,12 +1883,6 @@ const SessionDetail = ({
   );
 
   useEffect(() => {
-    if (activeSidebarTab === 'pr') {
-      setActiveSidebarTab(null);
-    }
-  }, [activeSidebarTab, latestPr, repoFullName]);
-
-  useEffect(() => {
     if (activeSidebarTab === 'browser' && !activeBrowserSession) {
       setActiveSidebarTab(null);
     }
@@ -2355,11 +2319,8 @@ const SessionDetail = ({
     (tabId: SidebarTab) => {
       desktopTabFocusRegionRef.current = 'side-panel';
       activateSidebarTab(tabId);
-      if (tabId === 'pr' && latestPrNumber != null) {
-        replaceSessionUrlPr(latestPrNumber, { push: true });
-      }
     },
-    [activateSidebarTab, latestPrNumber, replaceSessionUrlPr]
+    [activateSidebarTab]
   );
 
   // Fixed panels are persistable side-panel tabs; Side Chat is an action that
@@ -2503,9 +2464,6 @@ const SessionDetail = ({
           setActiveSidebarTab(fallbackSidebarTabId);
         }
       }
-      if (tabId === 'pr') {
-        replaceSessionUrlPr(undefined);
-      }
       if (tabId === 'browser') {
         setBrowserCandidateNavigationRequest(null);
       }
@@ -2513,7 +2471,6 @@ const SessionDetail = ({
     [
       activeSidebarTab,
       activeViewerTabId,
-      replaceSessionUrlPr,
       selectSidePanelTab,
       sidePanelTabIds,
       visibleOpenedSidebarTabs,

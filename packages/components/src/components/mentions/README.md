@@ -15,13 +15,13 @@ rules live in [AGENTS.md](AGENTS.md); this file maps their implementation.
   funnel, both through `hooks/use-fire-once` rather than private refs.
   `category_enter` is reported from the resolved view, not a row callback: a
   navigation item never fires `onMentionSelect`, and the keyboard route counts.
-- `file-at-mention.tsx` and `mention-project-file-source.ts` provide file path
-  indexing and `@` candidates.
+- `file-at-mention.ts` and `mention-project-file-source.ts` provide file path
+  indexing and `@` candidates from local projects or existing file providers.
 - `mention-session-source.ts` owns session slugs, candidates, the slug → id cache,
   hydration, the drop-time insertion, and the before-send expansion. Transfer
   format and the self-drop check live in `lib/session-mention-drag.ts`.
-- `issue-pr-hash-mention.tsx` provides cached GitHub issue/PR lookup, ranking,
-  hydration, and post-insert title hints.
+- GitHub issue/PR lookup and `#` suggestions are retired. Persisted mention ranges
+  and frozen transcript spans remain readable without live GitHub hydration.
 - `mention-skill-source.tsx` provides `$` skill discovery, provider directory
   filtering, hydration, and the before-send prompt expansion.
 - `mention-expansion.ts` composes every before-send transform into one hook.

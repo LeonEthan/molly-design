@@ -23,12 +23,14 @@ reasoning behind those rules.
 - `chat-landing-selectors.tsx`, `unified-project-selector.tsx` — wrappers over the
   shared selector primitives for project controls and selector styling.
   New local design submissions use the selected folder directly without Git discovery;
-  old branch and worktree preferences do not steer new designs.
+  old branch and worktree preferences do not steer new designs. GitHub repository
+  selection and connection are retired; old saved GitHub defaults open as chat,
+  preserving the prompt and compatible Agent selection.
 - `attachment-add-menu.tsx` — the composer's single "+" menu, including the
   per-turn MCP selection.
 - `comment-reference-*` and `visual-annotation-reference-*` — attachment chip
   state and rendering for references attached to outgoing messages.
-- `context-switch.tsx`, `machine-pairing-dialog.tsx`, `web-chat-landing-screen.tsx`
+- `machine-pairing-dialog.tsx`, `web-chat-landing-screen.tsx`
   — landing chrome and host-specific entry points.
   The hero's scroll viewport reuses `getSessionChatInputAreaShellClassName()` so
   the landing and conversation keep the same composer spacing.

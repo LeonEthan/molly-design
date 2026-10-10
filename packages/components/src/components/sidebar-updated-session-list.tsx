@@ -55,7 +55,7 @@ import type {
   SessionPullRequestCiState,
   SessionPullRequestReadiness,
 } from '@molly/shared';
-import type { SessionListPullRequestOpen, SessionListRowOwner } from '@/components/session-list';
+import type { SessionListRowOwner } from '@/components/session-list';
 import {
   RenameSessionDialogView,
   type RenameSessionDialogTarget,
@@ -142,7 +142,6 @@ export type SidebarUpdatedSessionListLabels = {
 
 export type SidebarUpdatedContextMenuLabels = {
   moreActions: string;
-  openPr: string;
   rename: string;
   pin: string;
   unpin: string;
@@ -294,7 +293,7 @@ export type SidebarUpdatedSessionListProps = {
    * with a `prUrl`. Mirrors `SessionList.onOpenPullRequest` so both organize
    * modes route PR opens through the same internal navigation path.
    */
-  onOpenPullRequest?: (request: SessionListPullRequestOpen) => void;
+
   /**
    * When provided, rows render as anchors so middle/Cmd-click open in a new tab.
    * Returning undefined for an id keeps that row as a plain button.
@@ -373,7 +372,6 @@ export const SidebarUpdatedSessionList = memo(function SidebarUpdatedSessionList
   const contextMenuLabels: SidebarUpdatedContextMenuLabels = useMemo(
     () => ({
       moreActions: t('sessions.moreActions', 'More actions'),
-      openPr: t('sessions.contextMenu.openPr', 'Open Pull Request'),
       rename: t('sessions.contextMenu.rename', 'Rename'),
       pin: t('sessions.contextMenu.pin', 'Pin Session'),
       unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
@@ -582,7 +580,7 @@ type UpdatedItemRowProps = {
   onRename?: (id: string, nextTitle: string) => void | Promise<void>;
   onTogglePin?: (id: string, nextPinned: boolean) => void;
   onCopyUrl?: (id: string) => void;
-  onOpenPullRequest?: (request: SessionListPullRequestOpen) => void;
+
   onBeginRename: (id: string, currentTitle: string) => void;
   openedByTree?: SessionRowOpenedByTreeSlot;
   contextMenuLabels: SidebarUpdatedContextMenuLabels;

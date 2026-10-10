@@ -71,7 +71,6 @@ describe('UnifiedProjectSelectorView options', () => {
             onChange={vi.fn()}
             localProjects={localProjects}
             onAddLocalProject={vi.fn()}
-            onConnectGitRepo={vi.fn()}
             renderLimit={20}
           />
         </TooltipProvider>
@@ -124,9 +123,7 @@ describe('UnifiedProjectSelectorView options', () => {
             value={{ kind: 'none' }}
             onChange={vi.fn()}
             localProjects={localProjects}
-            repositories={[{ fullName: 'loro-dev/lody' }]}
             onAddLocalProject={vi.fn()}
-            onConnectGitRepo={vi.fn()}
           />
         </TooltipProvider>
       );
@@ -143,21 +140,21 @@ describe('UnifiedProjectSelectorView options', () => {
       );
     });
 
-    expect(document.body.textContent).toContain('loro-dev/lody');
+    expect(document.body.textContent).toContain('Project 1');
+    expect(document.body.textContent).not.toContain('Connect Git');
   });
 
-  it('includes recently used GitHub repositories in the bounded mixed list', async () => {
+  it('puts recently used local projects first in the bounded list', async () => {
     await act(async () => {
       root.render(
         <TooltipProvider>
           <UnifiedProjectSelectorView
             value={{ kind: 'none' }}
             onChange={vi.fn()}
-            localProjects={localProjects}
-            repositories={[{ fullName: 'loro-dev/lody' }]}
-            latestMessageAtByRepo={new Map([['loro-dev/lody', 100]])}
             onAddLocalProject={vi.fn()}
-            onConnectGitRepo={vi.fn()}
+            localProjects={localProjects.map((project, index) =>
+              index === 29 ? { ...project, lastUsedAt: 100 } : project
+            )}
             renderLimit={20}
           />
         </TooltipProvider>
@@ -182,48 +179,7 @@ describe('UnifiedProjectSelectorView options', () => {
         item.textContent?.startsWith('Project ') || item.textContent?.includes('loro-dev/lody')
     );
     expect(projectItems).toHaveLength(20);
-    expect(projectItems[0]?.textContent).toContain('loro-dev/lody');
-    expect(projectItems.some((item) => item.textContent?.startsWith('Project 20'))).toBe(false);
-  });
-
-  it('reserves a source slot for a GitHub repository with no usage history', async () => {
-    await act(async () => {
-      root.render(
-        <TooltipProvider>
-          <UnifiedProjectSelectorView
-            value={{ kind: 'none' }}
-            onChange={vi.fn()}
-            localProjects={localProjects}
-            repositories={[{ fullName: 'loro-dev/new-repository' }]}
-            latestMessageAtByRepo={new Map()}
-            onAddLocalProject={vi.fn()}
-            onConnectGitRepo={vi.fn()}
-            renderLimit={20}
-          />
-        </TooltipProvider>
-      );
-    });
-
-    const trigger = container.querySelector<HTMLButtonElement>('button');
-    await act(async () => {
-      trigger?.dispatchEvent(
-        new TestPointerEvent('pointerdown', {
-          bubbles: true,
-          button: 0,
-          pointerType: 'mouse',
-        })
-      );
-    });
-
-    const projectItems = Array.from(
-      document.querySelectorAll<HTMLElement>('[role="menuitem"]')
-    ).filter(
-      (item) =>
-        item.textContent?.startsWith('Project ') ||
-        item.textContent?.includes('loro-dev/new-repository')
-    );
-    expect(projectItems).toHaveLength(20);
-    expect(projectItems.at(-1)?.textContent).toContain('loro-dev/new-repository');
+    expect(projectItems[0]?.textContent).toContain(localProjects[29]!.name);
     expect(projectItems.some((item) => item.textContent?.startsWith('Project 20'))).toBe(false);
   });
 });

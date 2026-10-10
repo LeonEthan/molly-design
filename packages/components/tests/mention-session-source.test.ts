@@ -150,9 +150,6 @@ describe('session mention project scope', () => {
         })
       )
     ).toBe('github:lodyai/lody');
-    expect(getMentionSourceProjectKey({ kind: 'github', repoFullName: ' lodyai/LODY ' })).toBe(
-      'github:lodyai/lody'
-    );
   });
 
   it('falls back to the legacy repo and groups projectless chats together', () => {

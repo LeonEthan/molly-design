@@ -79,7 +79,7 @@ Edit `AGENTS.md`; `CLAUDE.md` symlinks here.
 - `Session.createAgent` acquires the shared ACP start gate before spawn. ACP terminal creation
   passes the protocol's executable and argv straight to `SessionSandbox.spawn`, never a rebuilt
   shell command.
-- Child tabs reuse parent workspaces. `MachineMeta` publishes `dotlodyPath`, never
+- Child tabs reuse validated parent workspaces, including historical GitHub. `MachineMeta` publishes `dotlodyPath`, never
   per-session paths; frontends derive them.
 - `sandbox.spawn` returning output uses `captureOutput: true`, capped at 4 MiB; ACP stdio does not.
 - Shutdown is two-phase: `cleanUp({ keepWorkspaceDocumentOpen: true })`, then plain `cleanUp()`

@@ -51,6 +51,7 @@ import {
   type SessionTurnInputConfig,
   type SessionId,
   type SessionMeta,
+  type StoredMollyOperation,
   type WorkspaceId,
   shouldQueueMachineDeleteSession,
 } from '@molly/shared';
@@ -1865,15 +1866,6 @@ async function resolveAgentConfigForCreate(args: {
   );
 }
 
-async function assertGitHubRepoAccess(_args: {
-  auth: AuthContext;
-  workspaceId: WorkspaceId;
-  repoFullName: string;
-  requesterUserId: string;
-}): Promise<void> {
-  throw new Error('Hosted GitHub workspace projects are unavailable in local Molly.');
-}
-
 export async function readLocalProjectGitStateOnMachine(args: {
   auth: AuthContext;
   workspaceId: WorkspaceId;
@@ -1899,47 +1891,10 @@ export async function readLocalProjectGitStateOnMachine(args: {
   return { success: false, error: 'Remote hosts are unavailable in local Molly.' };
 }
 
-/**
- * Create-time projection of a local project's git state onto the `ProjectRef`
- * fields the daemon and every GitHub surface later read.
- */
-type LocalProjectCreateGitContext = {
-  branch?: string;
-  githubRepoFullName?: string;
-};
+type LocalProjectCreateGitContext = { branch?: string };
 
-/**
- * A local project's `origin` only becomes a Session's repository identity when
- * the workspace actually enables that repository, which is exactly what desktop
- * creation does (`chat-landing.tsx`). Matching is case-insensitive and returns
- * the workspace's spelling so the persisted `repoFullName` is the same string
- * every repository lookup uses.
- */
-function selectWorkspaceRepoFullName(
-  githubRepoFullName: string | null | undefined,
-  workspaceRepositories: readonly { fullName: string }[]
-): string | undefined {
-  const repoFullName = normalizeCliValue(githubRepoFullName);
-  if (!repoFullName) {
-    return undefined;
-  }
-  const normalized = repoFullName.toLowerCase();
-  return workspaceRepositories.find((repo) => repo.fullName.toLowerCase() === normalized)?.fullName;
-}
-
-/**
- * Pure part of local create resolution: branch selection and GitHub identity
- * read off one git-state snapshot.
- *
- * Identity is resolved for direct and worktree local sessions alike, because a
- * Session's repository is a property of the project rather than of the workdir
- * mode; without it `createSessionResult` persists no `repoFullName` and the
- * client hides `Create PR` / `Commit & Push` and skips post-turn PR detection.
- * An unauthorized or absent `origin` simply leaves the Session local.
- */
 export function resolveLocalProjectCreateGitContext(args: {
   gitState: LocalProjectGitState;
-  workspaceRepositories: readonly { fullName: string }[];
   requestedBranch?: string;
   useWorktree?: boolean;
 }): LocalProjectCreateGitContext {
@@ -1953,16 +1908,11 @@ export function resolveLocalProjectCreateGitContext(args: {
     }
     return {};
   }
-  const githubRepoFullName = selectWorkspaceRepoFullName(
-    args.gitState.githubRepoFullName,
-    args.workspaceRepositories
-  );
-  const identity = githubRepoFullName ? { githubRepoFullName } : {};
   // Keep direct local sessions branchless. The target daemon must use the
   // directory as it exists at dispatch time rather than switching back to a
   // branch observed by this remote preflight.
   if (!requestedBranch && args.useWorktree !== true) {
-    return identity;
+    return {};
   }
   if (args.gitState.branches.length === 0) {
     if (requestedBranch) {
@@ -1981,19 +1931,7 @@ export function resolveLocalProjectCreateGitContext(args: {
   if (!selected) {
     throw new Error(`Local project branch not found: ${branch}`);
   }
-  return { branch: selected, ...identity };
-}
-
-/**
- * Repository identity is best effort: a workspace whose repository list cannot
- * be read still creates the local Session, just without GitHub actions.
- */
-async function listWorkspaceGitHubRepositoriesBestEffort(_args: {
-  auth: AuthContext;
-  workspaceId: WorkspaceId;
-  requesterUserId: string;
-}): Promise<{ fullName: string }[]> {
-  return [];
+  return { branch: selected };
 }
 
 async function resolveLocalProjectCreateGitContextOnMachine(args: {
@@ -2015,15 +1953,8 @@ async function resolveLocalProjectCreateGitContextOnMachine(args: {
     }
     return {};
   }
-  // Only a project that actually reports a GitHub `origin` needs the workspace
-  // repository list, so a purely local project stays off the network.
-  const workspaceRepositories =
-    response.state.git && normalizeCliValue(response.state.githubRepoFullName)
-      ? await listWorkspaceGitHubRepositoriesBestEffort(args)
-      : [];
   return resolveLocalProjectCreateGitContext({
     gitState: response.state,
-    workspaceRepositories,
     ...(args.requestedBranch ? { requestedBranch: args.requestedBranch } : {}),
     ...(args.useWorktree !== undefined ? { useWorktree: args.useWorktree } : {}),
   });
@@ -2074,7 +2005,7 @@ async function resolveLocalProjectRefOnMachineOrThrow(
     );
   }
   const project = matches[0]!;
-  const { branch, githubRepoFullName } = await resolveLocalProjectCreateGitContextOnMachine({
+  const { branch } = await resolveLocalProjectCreateGitContextOnMachine({
     auth,
     workspaceId,
     machineId,
@@ -2088,7 +2019,6 @@ async function resolveLocalProjectRefOnMachineOrThrow(
     kind: 'local',
     localProjectId: project.id,
     ...(branch ? { branch } : {}),
-    ...(githubRepoFullName ? { githubRepoFullName } : {}),
     ...(useWorktree === true ? { useWorktree: true } : {}),
   };
 }
@@ -2153,10 +2083,10 @@ async function resolveCreateContext(args: {
   options: CreateOptions;
   requester: ResolvedSessionRequester;
   skipMachineAvailabilityCheck?: boolean;
+  acceptedGitHubProject?: Extract<ProjectRef, { kind: 'github' }>;
 }): Promise<ResolvedCreateContext> {
   const workspaceId = args.workspace.id as WorkspaceId;
   const agentSelector = resolveCreateAgentSelector(args.options);
-  const requesterUserId = args.requester.userId;
   const parentSelector = normalizeCliValue(args.options.parent);
   const currentSessionId = resolveCreateCurrentSessionId(args.options);
   if (parentSelector && args.options.useCurrentSessionAsParent === true) {
@@ -2171,6 +2101,9 @@ async function resolveCreateContext(args: {
   }
 
   const normalizedRepo = normalizeCliValue(args.options.repo);
+  if (normalizedRepo && !args.acceptedGitHubProject) {
+    throw new Error('GitHub repository projects are retired; use a local project.');
+  }
   const normalizedLocalProject = normalizeCliValue(args.options.localProject);
   const requestedBranch = normalizeCliValue(args.options.branch);
   if (
@@ -2231,32 +2164,19 @@ async function resolveCreateContext(args: {
   if (args.options.worktree === true && !normalizedLocalProject) {
     throw new Error('Pass --worktree together with --local-project.');
   }
-  if (requestedBranch && !normalizedRepo && !normalizedLocalProject) {
-    throw new Error('Pass --branch together with --repo or --local-project.');
+  if (requestedBranch && !normalizedLocalProject && !args.acceptedGitHubProject) {
+    throw new Error('Pass --branch together with --local-project.');
   }
   if (parentSession) {
     project = resolveParentProjectRef(parentSession);
-    const parentRepoFullName = project?.kind === 'github' ? project.repoFullName : undefined;
-    if (parentRepoFullName) {
-      await assertGitHubRepoAccess({
-        auth: args.auth,
-        workspaceId,
-        repoFullName: parentRepoFullName,
-        requesterUserId,
-      });
+    if (
+      project?.kind === 'github' &&
+      (!parentSession.isWorktree || !parentSession.branchName?.trim())
+    ) {
+      throw new Error('Historical GitHub parent has no recorded worktree.');
     }
-  } else if (normalizedRepo) {
-    await assertGitHubRepoAccess({
-      auth: args.auth,
-      workspaceId,
-      repoFullName: normalizedRepo,
-      requesterUserId,
-    });
-    const branch = resolveBaseBranchPreference({
-      preferredBranch: requestedBranch,
-      fallbackBranch: 'main',
-    });
-    project = { kind: 'github', repoFullName: normalizedRepo, branch };
+  } else if (args.acceptedGitHubProject) {
+    project = args.acceptedGitHubProject;
   } else if (normalizedLocalProject) {
     project = await resolveLocalProjectRefOnMachineOrThrow(
       args.manager,
@@ -2417,6 +2337,55 @@ export function buildLegacyMachineRestoreQueueCleanupPatch(
   };
 }
 
+type AcceptedSessionCreateRecovery = {
+  operation: StoredMollyOperation;
+  itemIndex: number;
+};
+
+function resolveAcceptedGitHubProject(
+  recovery: AcceptedSessionCreateRecovery | undefined,
+  options: CreateOptions,
+  workspaceId: string,
+  machineId: string,
+  requesterUserId: string
+): Extract<ProjectRef, { kind: 'github' }> | undefined {
+  if (!normalizeCliValue(options.repo) || !recovery) return undefined;
+  const { operation, itemIndex } = recovery;
+  const item = operation.items[itemIndex];
+  if (
+    operation.state !== 'active' ||
+    !['session_create', 'session_create_many'].includes(operation.kind) ||
+    operation.workspaceId !== workspaceId ||
+    operation.ownerMachineId !== machineId ||
+    operation.requesterUserId !== requesterUserId ||
+    operation.requesterSessionId !== options.currentSessionId ||
+    item?.status !== 'active' ||
+    item.target.sessionId !== options.sessionId ||
+    item.target.userTurnId !== options.userTurnId ||
+    (operation.kind === 'session_create' && itemIndex !== 0)
+  )
+    throw new Error('Accepted GitHub create target does not match recovery.');
+  const root = z.record(z.string(), z.unknown()).parse(operation.canonicalCommand);
+  const command = z
+    .object({
+      workContext: z.object({
+        kind: z.literal('github'),
+        repo: z.string().trim().min(1),
+        branch: z.string().trim().min(1).optional(),
+      }),
+    })
+    .parse(
+      operation.kind === 'session_create_many' && Array.isArray(root.items)
+        ? root.items[itemIndex]
+        : root
+    );
+  const { repo, branch } = command.workContext;
+  if (repo !== normalizeCliValue(options.repo) || branch !== normalizeCliValue(options.branch)) {
+    throw new Error('Accepted GitHub create project does not match recovery.');
+  }
+  return { kind: 'github', repoFullName: repo, branch: branch ?? 'main' };
+}
+
 export async function createSessionResult(
   auth: AuthContext,
   workspace: WorkspaceSummary,
@@ -2428,7 +2397,8 @@ export async function createSessionResult(
     outputMode: StructuredSessionOutputMode;
     timeoutMs: number;
     onEvent?: (event: SessionTurnOutputEvent) => void;
-  }
+  },
+  recovery?: AcceptedSessionCreateRecovery
 ): Promise<{
   sessionId: SessionId;
   machineId: MachineId;
@@ -2469,7 +2439,21 @@ export async function createSessionResult(
     requesterUserId,
     options.sessionOwnerUserId
   );
-  const resolved = await resolveCreateContext({ auth, workspace, manager, options, requester });
+  const acceptedGitHubProject = resolveAcceptedGitHubProject(
+    recovery,
+    options,
+    workspace.id,
+    auth.machineId,
+    requesterUserId
+  );
+  const resolved = await resolveCreateContext({
+    auth,
+    workspace,
+    manager,
+    options,
+    requester,
+    acceptedGitHubProject,
+  });
   const {
     targetMachine,
     agentConfig,
@@ -2488,6 +2472,18 @@ export async function createSessionResult(
 
   const sessionId = options.sessionId ?? (uuidV4() as SessionId);
   const sessionRoomId = getSessionRoomId(sessionId);
+  if (acceptedGitHubProject) {
+    const existing = await manager.repo.getDocMeta(sessionRoomId);
+    const meta = existing?.meta as SessionMeta | undefined;
+    if (
+      isLoroRepoDocDeleted(existing) ||
+      (meta &&
+        (meta.machineId !== targetMachine.id ||
+          !isDeepStrictEqual(meta.project, project) ||
+          meta.parentSessionId !== parentSessionId))
+    )
+      throw new Error('Accepted GitHub create conflicts with existing Session metadata.');
+  }
   const sessionDoc = await manager.getOrCreateSessionDoc(sessionId);
   const repoFullName = resolveProjectGitHubRepo(project);
   const baseBranch = project?.kind === 'local' ? undefined : project?.branch?.trim();

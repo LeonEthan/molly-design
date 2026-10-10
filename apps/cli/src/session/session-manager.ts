@@ -55,16 +55,14 @@ import { TerminalManager } from './terminal-manager';
 import { resolveACPProcessLaunchAsync } from '@/agent/setting';
 import type { HarnessCredentialBroker } from '@/agent/harness-credential-broker';
 import { decodeMollyModelOption, type ModelConnection } from '@molly/shared/embedded-harness';
-import { buildGitHubCloneUrl, deriveRepoIdFromGitHubRepo, redactUrlAuth } from '@/utils/github';
+import { deriveRepoIdFromGitHubRepo } from '@/utils/github';
 import type { CloudPort } from '@molly/platform';
 import type { RateLimit, SessionUsageUpdate } from 'acp-extension-core';
 import { getWorktreeManager } from './worktree/worktree-manager';
 import type {
-  GitCredentialBrokerAuth,
   WorktreeInfo,
   WorktreeManager,
   WorktreeManagerConfig,
-  WorktreeManagerSource,
 } from './worktree/worktree-manager';
 import { readLocalProjectWorktreeSetup } from './worktree/worktree-setup-config-store';
 import { resolveTerminalWorkdirFromMetadata } from '@/lib/terminal-workdir-resolver';
@@ -88,7 +86,6 @@ import {
 import { formatErrorMessage } from '@/utils/format-error';
 import { getEffectiveMemoryLimitBytes } from '@/utils/memory';
 import { withSlowOperationWarning } from '@/utils/slow-operation-warning';
-import { resolveGitHubRepoWorktreeConfig } from './worktree/worktree-config-resolver';
 import type { AcpCapabilitiesResult } from '@/agent/acp-capability-normalization';
 import { resolveWorkspaceLocalProjectRootPathWithRetry } from '@/lib/local-project-meta';
 import { readTimeoutEnv } from '@/lib/loro/timeout-utils';
@@ -112,34 +109,6 @@ import {
   type PreparedWorktree,
   type SpeculativeWorktreeTarget,
 } from './worktree/speculative-worktree';
-
-// Some call paths provide only githubRepoUrl; derive owner/repo so we still
-// bootstrap the broker + git env injection (avoids prompt-disabled failures).
-const tryDeriveGitHubRepoFromUrl = (rawUrl?: string): string | null => {
-  if (!rawUrl) return null;
-  try {
-    const url = new URL(rawUrl);
-    const host = url.hostname.toLowerCase();
-    if (host !== 'github.com' && host !== 'www.github.com') {
-      return null;
-    }
-    if (url.protocol !== 'https:') {
-      return null;
-    }
-    const cleanedPath = url.pathname
-      .replace(/^\/+/, '')
-      .replace(/\/+$/, '')
-      .replace(/\.git$/i, '');
-    const parts = cleanedPath.split('/').filter(Boolean);
-    if (parts.length < 2) return null;
-    const owner = parts[0];
-    const repo = parts[1];
-    if (!owner || !repo) return null;
-    return `${owner}/${repo}`;
-  } catch {
-    return null;
-  }
-};
 
 const SESSION_PREPARATION_HARD_TTL_MS = 120_000;
 const MAX_CONCURRENT_SESSION_PREPARATIONS = 1;
@@ -291,11 +260,6 @@ export interface ISession {
    * Takes effect on all subsequent exec() calls (each exec spawns a new process).
    */
   updateEnv(env: Record<string, string | undefined>): void;
-  /**
-   * Whether we injected a managed GitHub token as GH_TOKEN at session startup.
-   * When false, the user has their own auth and we should not overwrite it.
-   */
-  ghTokenInjected: boolean;
 }
 
 export type SessionMonitorRuntimeInfo = {
@@ -634,7 +598,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         config.project !== undefined ||
         config.repoId !== undefined ||
         config.githubRepo !== undefined ||
-        config.githubRepoUrl !== undefined ||
         config.branch !== undefined ||
         config.restoreBranchName !== undefined ||
         config.worktreeStartPoint !== undefined ||
@@ -814,6 +777,9 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     signal: AbortSignal
   ): Promise<PreparedSessionRuntime> {
     signal.throwIfAborted();
+    if (spec.project?.kind === 'github') {
+      throw new Error('GitHub repository projects are retired; use a local project.');
+    }
     const { sessionId } = spec;
     const preparationSessionMeta = {
       id: sessionId,
@@ -923,10 +889,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       project: spec.project as ProjectRef | undefined,
       assumeDocExisting: true,
       env: { ...agentConfig.env },
-      githubRepo:
-        spec.project?.kind === 'github'
-          ? spec.project.repoFullName
-          : spec.project?.githubRepoFullName,
+      githubRepo: spec.project?.githubRepoFullName,
       branch: spec.project?.branch,
       workdir: spec.project?.kind === 'local' ? provisionalWorkdir : undefined,
       userName: user.name,
@@ -938,7 +901,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       config.configOptionValues,
       config.modelSelection
     );
-    const ghTokenInjected = await this.prepareGitHubRepoSessionConfig(config);
+    this.resolveHistoricalRepoId(config);
     signal.throwIfAborted();
     const launch = await resolveACPProcessLaunchAsync({
       cliType: config.agentCliType,
@@ -1045,7 +1008,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       }
       session = new Session(config, this.logger, provisionalWorkdir, sandbox);
       sandbox = null;
-      session.ghTokenInjected = ghTokenInjected;
       this.preparationSessions.set(sessionId, session);
       await this.rebalanceSessionSandboxes();
       signal.throwIfAborted();
@@ -1073,8 +1035,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
                 managerConfig: worktreeTarget.managerConfig,
                 baseBranch: config.branch,
                 restoreBranchName: config.restoreBranchName,
-                resolveBrokerAuth: () =>
-                  this.resolveHostGitBrokerAuth(worktreeTarget.target.source),
                 logger: this.logger,
               })
             : Promise.resolve(null);
@@ -1220,7 +1180,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         'session.createSessionInner.prepared',
         sessionId
       );
-      session.ghTokenInjected = prepared.session.ghTokenInjected;
       session.updateGitIdentity(config.userName, config.userEmail, config.requesterUserId);
       const acpSessionId = await prepared.agentResult;
       const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(sessionId);
@@ -1379,7 +1338,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     config: SessionConfig,
     agentStart?: AgentStartConfig
   ): Promise<ISession> {
-    const ghTokenInjected = await this.prepareGitHubRepoSessionConfig(config);
+    this.resolveHistoricalRepoId(config);
     const requestedResumeSessionId = agentStart?.resumeSessionId;
     const requestedForkSessionId = agentStart?.forkSessionId;
     const requestedForkSessionTurnId = agentStart?.forkSessionTurnId;
@@ -1391,9 +1350,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         config.assumeDocExisting ? 'yes' : 'no'
       } resumeWorkdir=${config.resume ? 'yes' : 'no'} acpResumeSessionId=${
         requestedResumeSessionId ?? 'none'
-      } acpForkSessionId=${requestedForkSessionId ?? 'none'} repoId=${
-        config.repoId ?? 'none'
-      } repoUrl=${config.githubRepoUrl ? redactUrlAuth(config.githubRepoUrl) : 'none'})`
+      } acpForkSessionId=${requestedForkSessionId ?? 'none'} repoId=${config.repoId ?? 'none'})`
     );
     await this.workspaceDocument.getOrCreateSessionDoc(config.sessionId!);
     this.logger.debug(`[${config.sessionId}] Session will enter create inner`);
@@ -1403,7 +1360,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       'session.createSessionInner',
       config.sessionId!
     );
-    session.ghTokenInjected = ghTokenInjected;
     const sessionId = config.sessionId!;
     this.logger.debug(`[${sessionId}] Session workdir resolved: ${session.getWorkdir()}`);
     session.updateGitIdentity(config.userName, config.userEmail, config.requesterUserId);
@@ -1504,23 +1460,12 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     return session;
   }
 
-  private async prepareGitHubRepoSessionConfig(config: SessionConfig): Promise<boolean> {
-    const githubRepo = config.githubRepo ?? tryDeriveGitHubRepoFromUrl(config.githubRepoUrl);
-    if (!config.githubRepo && githubRepo) config.githubRepo = githubRepo;
-    if (!githubRepo) return false;
-    if (config.project?.kind === 'github' || !config.project) {
-      config.repoId = deriveRepoIdFromGitHubRepo(githubRepo);
-      config.githubRepoUrl = buildGitHubCloneUrl(githubRepo);
+  private resolveHistoricalRepoId(config: SessionConfig): void {
+    const repo =
+      config.project?.kind === 'github' ? config.project.repoFullName : config.githubRepo;
+    if (repo && (config.project?.kind === 'github' || !config.project)) {
+      config.repoId = deriveRepoIdFromGitHubRepo(repo);
     }
-    // Product-managed GitHub credentials are unavailable in this local build.
-    // Ambient/user-provided Git credentials remain untouched.
-    return false;
-  }
-
-  private async resolveHostGitBrokerAuth(
-    _source: WorktreeManagerSource | undefined
-  ): Promise<GitCredentialBrokerAuth | undefined> {
-    return undefined;
   }
 
   private async resolveSharedWorkdir(
@@ -1529,6 +1474,41 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
   ): Promise<string | undefined> {
     if (!config.parentSessionId) {
       return config.workdir;
+    }
+
+    if (config.project?.kind === 'github') {
+      const record = await this.workspaceDocument.repo.getDocMeta(
+        getSessionRoomId(config.parentSessionId)
+      );
+      const parentMeta = record?.meta as SessionMeta | undefined;
+      const parentRepo =
+        parentMeta?.project?.kind === 'github'
+          ? parentMeta.project.repoFullName
+          : parentMeta?.project === undefined
+            ? parentMeta?.repoFullName
+            : undefined;
+      if (
+        !parentMeta ||
+        isLoroRepoDocDeleted(record) ||
+        parentMeta.machineId !== this.machineId ||
+        parentMeta.parentSessionId ||
+        parentRepo !== config.project.repoFullName ||
+        !parentMeta.isWorktree ||
+        !parentMeta.branchName?.trim() ||
+        !repoId
+      )
+        throw new Error('Historical GitHub parent has no matching recorded worktree.');
+      const manager = getWorktreeManager({
+        repoId,
+        source: { kind: 'github' },
+        logger: this.logger,
+      });
+      const worktree = await manager.createWorktree(
+        config.parentSessionId,
+        parentMeta.baseBranch,
+        parentMeta.branchName
+      );
+      return worktree.hostPath;
     }
 
     const parentSession = this.sessions.get(config.parentSessionId);
@@ -1611,25 +1591,19 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       return parentWorkdir;
     }
 
-    if (!repoId || !config.githubRepoUrl) {
+    if (!repoId) {
       return undefined;
     }
 
     const worktreeManager = getWorktreeManager({
       repoId,
-      repoUrl: config.githubRepoUrl,
       logger: this.logger,
     });
     if (!worktreeManager.hasWorktree(config.parentSessionId)) {
       this.logger.debug(
         `[${config.sessionId}] Shared parent worktree missing for ${config.parentSessionId}; creating it now`
       );
-      await worktreeManager.ensureRepo({
-        brokerAuth: await this.resolveHostGitBrokerAuth({
-          kind: 'github',
-          repoUrl: config.githubRepoUrl,
-        }),
-      });
+      await worktreeManager.ensureRepo();
       const sharedWorktree = await worktreeManager.createWorktree(
         config.parentSessionId,
         parentMeta?.baseBranch?.trim() || config.branch,
@@ -1670,7 +1644,6 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
         }
       : {
           kind: 'github' as const,
-          repoUrl: config.githubRepoUrl,
         };
     const managerConfig: Omit<WorktreeManagerConfig, 'logger'> = { repoId, source };
     return {
@@ -1728,18 +1701,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       return await readLocalProjectWorktreeSetup(config.project.localProjectId);
     }
     if (config.project?.kind === 'github') {
-      return (
-        config.worktreeSetup ??
-        (
-          await resolveGitHubRepoWorktreeConfig({
-            token: this.token,
-            workspaceId: this.workspaceId,
-            repoFullName: config.githubRepo,
-            logger: this.logger,
-          })
-        )?.worktreeSetup ??
-        null
-      );
+      return config.worktreeSetup ?? null;
     }
     return null;
   }
@@ -1752,6 +1714,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     let workdir: string | undefined = config.workdir;
     const repoId = config.repoId;
     const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(config.sessionId!);
+    const existingMeta =
+      config.project?.kind === 'github' ? await sessionDoc.getMetaState() : undefined;
     if (config.githubRepo) {
       await sessionDoc.setRepoFullName(config.githubRepo);
     }
@@ -1762,6 +1726,23 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     // Child sessions reuse the parent's workdir — skip worktree creation
     if (worktreeTarget) {
       const worktreeManager = worktreeTarget.manager;
+      const acceptedGitHubBaseBranch =
+        config.project?.kind === 'github' &&
+        existingMeta?.project?.kind === 'github' &&
+        existingMeta.project.repoFullName === config.project.repoFullName &&
+        existingMeta.project.branch === config.project.branch &&
+        existingMeta.id === config.sessionId &&
+        existingMeta.machineId === this.machineId &&
+        !existingMeta.parentSessionId &&
+        !existingMeta.branchName &&
+        !existingMeta.isWorktree &&
+        !existingMeta.acpSessionId &&
+        !config.resume &&
+        !!existingMeta.latestUserMsgId &&
+        !existingMeta.lastHandledUserMsgId &&
+        !config.restoreBranchName
+          ? existingMeta.project.branch?.trim()
+          : undefined;
       this.logger.debug(
         `[${config.sessionId}] Preparing worktree (repoId=${worktreeTarget.managerConfig.repoId} sessionId=${config.sessionId}) in host`
       );
@@ -1791,14 +1772,13 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       const worktreeInfo =
         preparedWorktreeUsable ??
         (await (async () => {
-          await worktreeManager.ensureRepo({
-            brokerAuth: await this.resolveHostGitBrokerAuth(worktreeTarget.target.source),
-          });
+          await worktreeManager.ensureRepo();
           return await worktreeManager.createWorktree(
             config.sessionId!,
             config.branch,
             config.restoreBranchName,
-            config.worktreeStartPoint
+            config.worktreeStartPoint,
+            acceptedGitHubBaseBranch
           );
         })());
       if (!config.deferWorktreeMetaPersistence) {
@@ -1979,7 +1959,7 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
 
   async cleanupForkWorktree(config: SessionConfig): Promise<void> {
     if (config.project?.kind === 'github' && !config.repoId) {
-      await this.prepareGitHubRepoSessionConfig(config);
+      this.resolveHistoricalRepoId(config);
     }
     const target = this.resolveSessionWorktreeTarget(config);
     if (!target || !config.sessionId) return;

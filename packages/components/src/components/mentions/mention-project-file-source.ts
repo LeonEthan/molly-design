@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai';
 import type { LocalProjectId, MachineId, SessionId, WorkspaceId } from '@molly/shared';
 
 import { runtimeAtom, userAtom } from '@/atoms';
-import { buildPathSuggestions, useRepoFilePaths } from '@/components/mentions/file-at-mention';
+import { buildPathSuggestions } from '@/components/mentions/file-at-mention';
 import type {
   FileWorkspaceProvider,
   FileWorkspaceProviderEntry,
@@ -24,17 +24,10 @@ import { localMachineIdAtom } from '@/atoms/local-probe';
 
 export type MentionProjectSource =
   | {
-      kind: 'github';
-      repoFullName?: string;
-      isPublic?: boolean;
-      localWorktree?: { machineId: MachineId; repoKey: string; sessionId: SessionId };
-    }
-  | {
       kind: 'local';
       machineId: MachineId;
       workspaceId: WorkspaceId;
       localProjectId: LocalProjectId;
-      githubRepoFullName?: string;
       localWorktree?: { machineId: MachineId; repoKey: string; sessionId: SessionId };
     }
   | {
@@ -44,8 +37,6 @@ export type MentionProjectSource =
       providerMessage?: string;
       /** Project identity retained when a live provider serves a local Session workspace. */
       localProject?: { machineId: MachineId; localProjectId: LocalProjectId };
-      githubRepoFullName?: string;
-      isPublic?: boolean;
     };
 
 export type MentionLazyDirectoryEntry = {
@@ -183,7 +174,6 @@ export function useMentionProjectFiles(source?: MentionProjectSource) {
   const requestedByUserId = useAtomValue(userAtom)?.id ?? null;
   const localDaemonMachineId = useAtomValue(localMachineIdAtom);
   const sourceKind = source?.kind;
-  const repoFullName = source?.kind === 'github' ? source.repoFullName : undefined;
   const localWorkspaceId = source?.kind === 'local' ? source.workspaceId : undefined;
   const localMachineId = source?.kind === 'local' ? source.machineId : undefined;
   const localProjectId = source?.kind === 'local' ? source.localProjectId : undefined;
@@ -191,13 +181,9 @@ export function useMentionProjectFiles(source?: MentionProjectSource) {
   const providerPending = source?.kind === 'provider' ? source.providerPending : false;
   const providerMessage = source?.kind === 'provider' ? source.providerMessage : undefined;
   const localWorktreeSessionId =
-    (source?.kind === 'github' || source?.kind === 'local') && source.localWorktree
-      ? source.localWorktree.sessionId
-      : undefined;
+    source?.kind === 'local' && source.localWorktree ? source.localWorktree.sessionId : undefined;
   const localWorktreeRepoKey =
-    (source?.kind === 'github' || source?.kind === 'local') && source.localWorktree
-      ? source.localWorktree.repoKey
-      : undefined;
+    source?.kind === 'local' && source.localWorktree ? source.localWorktree.repoKey : undefined;
   const useLocalWorktreeSource = Boolean(localWorktreeSessionId && localWorktreeRepoKey);
   const localSource = React.useMemo<LocalProjectFilePathsSource | undefined>(() => {
     if (useLocalWorktreeSource && localWorktreeRepoKey && localWorktreeSessionId) {
@@ -226,7 +212,6 @@ export function useMentionProjectFiles(source?: MentionProjectSource) {
     useLocalWorktreeSource,
   ]);
 
-  const githubFileData = useRepoFilePaths(repoFullName);
   const localFileData = useLocalProjectFilePaths(localSource);
   const [providerFileData, setProviderFileData] = React.useState<MentionFileDataState>({
     entry: null,
@@ -329,22 +314,8 @@ export function useMentionProjectFiles(source?: MentionProjectSource) {
     if (sourceKind === 'provider') {
       return providerFileData;
     }
-    if (sourceKind === 'local' || useLocalWorktreeSource) {
-      return localFileData;
-    }
-
-    return {
-      entry: githubFileData.entry
-        ? {
-            paths: githubFileData.entry.paths,
-            truncated: githubFileData.entry.truncated,
-            fetchedAt: githubFileData.entry.fetchedAt,
-          }
-        : null,
-      status: githubFileData.status,
-      error: githubFileData.error,
-    };
-  }, [githubFileData, localFileData, providerFileData, sourceKind, useLocalWorktreeSource]);
+    return localFileData;
+  }, [localFileData, providerFileData, sourceKind]);
 
   // Expanding every indexed path into its suggestion tokens is O(repo file
   // count) and its only consumer is draft hydration, which no-ops on an empty

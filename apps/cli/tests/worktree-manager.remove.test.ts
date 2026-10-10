@@ -5,10 +5,10 @@ import { RepoId, SessionId } from '@molly/shared';
 import { WorktreeManager } from '../src/session/worktree/worktree-manager';
 import {
   createLocalRepo,
-  createRemoteRepo,
   gitCommit,
   runGit,
-  toFileUrl,
+  restoreHistoricalWorktree,
+  seedHistoricalRepo,
   useWorktreeManagerTestFixture,
 } from './worktree-manager-test-helpers';
 
@@ -16,17 +16,18 @@ describe('WorktreeManager', () => {
   let testDir: string;
   let repoId: RepoId;
   let manager: WorktreeManager;
+  let localRepoDir: string;
 
   useWorktreeManagerTestFixture((fixture) => {
-    ({ testDir, repoId, manager } = fixture);
-  });
+    ({ testDir, repoId, manager, localRepoDir } = fixture);
+  }, true);
 
   describe('removeWorktree', () => {
     it('should remove an existing worktree', async () => {
       await manager.ensureRepo();
 
       const sessionId = 'remove01-session-remove' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
 
       expect(fs.existsSync(info.hostPath)).toBe(true);
 
@@ -58,10 +59,11 @@ describe('WorktreeManager', () => {
       // @ts-expect-error - accessing private property for testing
       manager.cacheDir = path.join(linkedRepoDir, 'cache');
 
+      seedHistoricalRepo(manager, localRepoDir);
       await manager.ensureRepo();
 
       const sessionId = 'symlink1-session-remove' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
 
       expect(info.hostPath).toBe(path.join(fs.realpathSync.native(linkedWorktreesDir), sessionId));
 
@@ -80,7 +82,7 @@ describe('WorktreeManager', () => {
       await manager.ensureRepo();
 
       const sessionId = 'dirty001-session-dirty' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
 
       fs.writeFileSync(path.join(info.hostPath, 'dirty.txt'), 'dirty content');
 
@@ -94,7 +96,7 @@ describe('WorktreeManager', () => {
       await manager.ensureRepo();
 
       const sessionId = 'delete001-session-archived' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
       fs.writeFileSync(path.join(info.hostPath, 'notes.txt'), 'backup\n', 'utf8');
 
       const renamedBranch = 'feat/archive-delete-test';
@@ -110,14 +112,8 @@ describe('WorktreeManager', () => {
     });
 
     it('should preserve a legacy reused non-default base branch when removing the worktree', async () => {
-      const { sourceDir, remoteBareDir } = createRemoteRepo(testDir, 'main');
-      manager.updateRepoUrl(toFileUrl(remoteBareDir));
-
-      runGit(sourceDir, ['checkout', '-b', 'feature/preserve-on-delete']);
-      fs.writeFileSync(path.join(sourceDir, 'preserve.txt'), 'preserve\n', 'utf8');
-      gitCommit(sourceDir, 'preserve');
-      runGit(sourceDir, ['push', '-u', 'origin', 'feature/preserve-on-delete']);
-      runGit(sourceDir, ['checkout', 'main']);
+      const bareDir = path.join(manager.getRepoHostPath(), 'bare.git');
+      runGit(bareDir, ['branch', 'feature/preserve-on-delete', 'main']);
 
       const sessionId = 'preserve1-session-base-branch' as SessionId;
       await manager.ensureRepo();
@@ -185,7 +181,7 @@ describe('WorktreeManager', () => {
       await manager.ensureRepo();
 
       const sessionId = 'archive01-session-restore' as SessionId;
-      const info = await manager.createWorktree(sessionId);
+      const info = await restoreHistoricalWorktree(manager, sessionId);
 
       fs.writeFileSync(path.join(info.hostPath, '.gitignore'), 'dist/\n', 'utf8');
       gitCommit(info.hostPath, 'add ignore rules');

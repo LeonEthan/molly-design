@@ -27,20 +27,13 @@ import {
 
 import { getAllAgentConfigAtom } from '@/atoms';
 import { docMetaCacheReadyAtom } from '@/atoms/doc-meta';
-import {
-  extractIssuePRMentionsFromText,
-  useKnownIssuePrItems,
-} from '@/components/mentions/issue-pr-hash-mention';
 import { useSessionMcpSelection } from '@/hooks/use-session-mcp-selection';
 import { canShowSubscriptionRateLimits } from '@/lib/session-usage';
 import { canShowCodexResetForecast } from '@/lib/codex-reset-forecast';
 import { useResolvedTheme } from '../../theme-provider';
 import { SessionChatInputArea, type SessionChatInputAreaHandle } from './session-chat-input-area';
 import { useSessionAcpSelectorContext } from '@/hooks/use-session-acp-selector-context';
-import {
-  resolveSessionLocalProjectRootPath,
-  resolveSessionRepoFullName,
-} from '@/lib/session-local-file-source';
+import { resolveSessionLocalProjectRootPath } from '@/lib/session-local-file-source';
 import { type DraftSessionTab } from '@/lib/session-draft-tabs';
 import { agentDefaultsCache } from '@/lib/local-storage-cache';
 import {
@@ -129,12 +122,6 @@ export const DraftSessionChatInterface = memo(
       // workspace default selection — the same set the promoted child composer
       // resolves for an empty session doc.
       const mcpSelection = useSessionMcpSelection(undefined, {});
-      // Same resolution the composer uses: a local project may carry its repo
-      // only in project.githubRepoFullName, not in repoFullName.
-      const parentRepoFullName = resolveSessionRepoFullName(parentSession);
-      const { knownItems: knownIssuePrItems } = useKnownIssuePrItems(
-        parentRepoFullName || undefined
-      );
       const {
         doc: parentSessionDoc,
         history: parentConversation,
@@ -397,13 +384,6 @@ export const DraftSessionChatInterface = memo(
               modeId: selectedModeId,
               modelId: selectedModelId,
               configOptionValues: dispatchConfigOptionValues,
-              issuePRMentions: prompt
-                ? extractIssuePRMentionsFromText(
-                    prompt,
-                    knownIssuePrItems,
-                    parentRepoFullName || undefined
-                  )
-                : undefined,
               mcpServerIds: mcpSelection.selectedIds,
               agentRoleId: null,
             }),
@@ -418,9 +398,9 @@ export const DraftSessionChatInterface = memo(
           draft.id,
           draft.sessionId,
           dispatchConfigOptionValues,
-          knownIssuePrItems,
+
           mcpSelection.selectedIds,
-          parentRepoFullName,
+
           selectedModeId,
           selectedModelId,
         ]

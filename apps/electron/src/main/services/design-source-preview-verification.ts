@@ -393,15 +393,41 @@ export async function verifySourcePreview(
     await attachDesign(owner, artworkId, bounds)
   }
 
-  // Closing while the next native document is loading must retire the staging view too.
   const addView = owner.contentView.addChildView.bind(owner.contentView)
+  const closedStaging = Promise.withResolvers<void>()
   owner.contentView.addChildView = (view, index) => {
-    if (view instanceof WebContentsView && view !== canonical)
-      view.webContents.once('did-start-loading', () => closeSourcePreview(host))
+    if (view instanceof WebContentsView && view !== canonical) {
+      const contents = view.webContents
+      const load = contents.loadURL.bind(contents)
+      contents.loadURL = async (...args) => {
+        try {
+          await load(...args)
+        } finally {
+          await closedStaging.promise
+        }
+      }
+      contents.once('destroyed', () => {
+        setImmediate(() => {
+          try {
+            assert.equal(view.webContents, undefined)
+            closeSourcePreview(host)
+            hideSourcePreview(host)
+            closeSourcePreview(host)
+            closedStaging.resolve()
+          } catch (error) {
+            closedStaging.reject(error)
+          }
+        })
+      })
+      contents.once('did-start-loading', () => hideSourcePreview(host))
+    }
     addView(view, index)
   }
   try {
-    const cancelled = await refreshSourcePreview(owner, artworkId, host, async () => source)
+    const [cancelled] = await Promise.all([
+      refreshSourcePreview(owner, artworkId, host, async () => source),
+      closedStaging.promise
+    ])
     assert.equal(cancelled.status, 'superseded')
     assert.deepEqual(
       owner.contentView.children.filter((view) => view instanceof WebContentsView),
@@ -418,6 +444,7 @@ export async function verifySourcePreview(
         initialWaiting: true,
         firstWriteBindsLateInput: true,
         closedStagingViewRetired: true,
+        repeatedCloseAfterNativeDestruction: true,
         preparedNativeFrames: handoffFrames,
         previewToEditorRetainsOutgoingUntilPrepared: editorPrepared,
         viewportFitted: fitEvidence,

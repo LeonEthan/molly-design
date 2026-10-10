@@ -114,8 +114,9 @@ export function hideSourcePreview(hostId: string, cancel = true) {
   boundsByHost.delete(hostId)
   for (const view of staging.get(hostId) ?? []) {
     view.setVisible(false)
-    if (cancel && !view.webContents.isDestroyed())
-      view.webContents.close({ waitForBeforeUnload: false })
+    const contents = view.webContents
+    if (cancel && contents && !contents.isDestroyed())
+      contents.close({ waitForBeforeUnload: false })
   }
   const view = views.get(hostId)?.view
   if (view) {
@@ -132,8 +133,6 @@ export function closeSourcePreview(hostId: string) {
   if (!previous) return
   views.delete(hostId)
   if (!previous.owner.isDestroyed()) previous.owner.contentView.removeChildView(previous.view)
-  if (!previous.view.webContents.isDestroyed())
-    previous.view.webContents.close({ waitForBeforeUnload: false })
   previous.dispose()
 }
 
@@ -465,7 +464,6 @@ async function renderSourcePreview(
       })`)
       if (!current() || owner.isDestroyed()) {
         if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
-        if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
         resource.dispose()
         return { status: 'superseded' as const }
       }
@@ -480,7 +478,6 @@ async function renderSourcePreview(
       }
       if (!current() || owner.isDestroyed()) {
         if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
-        if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
         resource.dispose()
         return { status: 'superseded' as const }
       }
@@ -490,7 +487,6 @@ async function renderSourcePreview(
       else view.setVisible(false)
       if (previous && views.get(hostId) === previous) {
         owner.contentView.removeChildView(previous.view)
-        previous.view.webContents.close({ waitForBeforeUnload: false })
         previous.dispose()
       }
       if (!boundsByHost.has(hostId)) view.setVisible(false)
@@ -506,7 +502,6 @@ async function renderSourcePreview(
       return { status: 'ready' as const, source, sourceIdentity: built.sourceIdentity }
     } catch (error) {
       if (!owner.isDestroyed()) owner.contentView.removeChildView(view)
-      if (!view.webContents.isDestroyed()) view.webContents.close({ waitForBeforeUnload: false })
       resource.dispose()
       throw error
     } finally {

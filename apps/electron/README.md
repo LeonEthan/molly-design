@@ -86,6 +86,10 @@ never share a lease. Hidden editors retain their original contents and lease.
 Each lease clears its document protocol callback during disposal, so a native
 callback retained after unregistering cannot keep the editor or artwork alive.
 The focused regression is `pnpm --filter @molly/e2e canvas:resources`.
+Source-preview cleanup reuses that lease disposal after native contents have
+disappeared. Repeated hide/close during cancellation is covered by
+`design-source-preview.test.mjs` and the built-in P1 native probe; see the
+[Issue #111 fix and verification](../../.agents/notes/implemented/bug-fix/2026-10-09-source-preview-disposal.zh.md).
 Remaining process-memory trends need allocation and lifetime evidence: Chromium
 also retains bounded storage caches and delayed frame resources; a post-GC
 private-memory increase alone does not establish another canvas leak.

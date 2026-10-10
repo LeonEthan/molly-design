@@ -2,6 +2,7 @@ import {
   AgentBrowserRpcResultSchema,
   BROWSER_HOST_POLL_INTERVAL_MS,
   BROWSER_HOST_TTL_MS,
+  type AgentBrowserHostLease,
   type AgentBrowserHostReport,
   type AgentBrowserHostWork
 } from '@molly/shared/browser-agent-rpc'
@@ -123,6 +124,27 @@ export class PublicBrowserAgentHost {
     }
     if (this.running) this.reports.push(report)
   }
+}
+
+/** Fences every active run in the daemon, including runs that have not yet asked for a page. */
+export async function pauseActiveBrowserRuns(
+  cliService: CliService
+): Promise<AgentBrowserHostLease[]> {
+  const machineId = await cliService.getLocalMachineId()
+  const snapshot = await readLocalPlatformSnapshot()
+  if (!machineId || !snapshot) throw new Error('Local Molly runtime is unavailable.')
+  const response = await cliService.sendLocalMachineRpc({
+    machineId,
+    workspaceId: snapshot.workspace.workspaceId,
+    method: 'browser/pause-all',
+    params: {}
+  })
+  if (!response.ok) throw new Error(response.error)
+  const parsed = AgentBrowserRpcResultSchema.safeParse(response.result)
+  if (!parsed.success || parsed.data.type !== 'browser/pause-all') {
+    throw new Error('Molly could not pause active Agent runs.')
+  }
+  return parsed.data.paused
 }
 
 export function startPublicBrowserAgentHost(

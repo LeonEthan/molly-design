@@ -38,21 +38,6 @@ const context = {
 }
 const details = (cookies = [cookie]) =>
   cookies.map((entry) => ({ cookie: entry, context: { ...context } }))
-const snapshot = ({
-  browserId = 'chrome',
-  profileId = 'synthetic-profile',
-  detailed = details(),
-  warnings = []
-} = {}) => ({
-  cookies: detailed.map((entry) => entry.cookie),
-  detailedCookies: detailed,
-  warnings,
-  browserId,
-  profileId,
-  header() {
-    throw new Error('header() is unused in Molly import tests')
-  }
-})
 const convert = (input = report(), detailed = [details()]) =>
   cookiesFromBrowserReport(input, 'synthetic-profile', 'pinterest.com', detailed)
 const report = (overrides = {}) => ({
@@ -105,7 +90,19 @@ void test('partial decrypts and off-site cookies never reach Molly', () => {
   )
 })
 
-void test('a single profile read imports the requested website without a second Keychain query', async () => {
+void test('an excluded service directory does not block the successfully read selected profile', async () => {
+  const input = report({
+    status: 'partial',
+    issues: [
+      {
+        code: 'profile_excluded_service_directory',
+        stage: 'discovery',
+        severity: 'error',
+        profileId: null
+      }
+    ]
+  })
+  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
   const store = cookieStore()
   assert.equal(
     await importBrowserAccountCookies({
@@ -114,7 +111,8 @@ void test('a single profile read imports the requested website without a second 
       replaceExisting: true,
       readSource: () =>
         readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
-          read: async () => snapshot()
+          browserReport: async () => input,
+          chromiumBasedDetailed: async () => details()
         }),
       beforeWrite: async () => {}
     }),
@@ -123,12 +121,28 @@ void test('a single profile read imports the requested website without a second 
   assert.equal(store.state[0].value, cookie.value)
 })
 
-void test('decrypt warnings from a single profile read never reach Molly', async () => {
-  for (const warning of [
-    { code: 'decrypt_failed', count: 1, countersSaturated: false, message: 'row decrypt failed' },
-    { code: 'provider_failed', count: 1, countersSaturated: false, message: 'key provider failed' },
-    { code: 'other', count: 1, countersSaturated: false, message: 'Could not decrypt cookie' }
-  ]) {
+void test('discovery exclusion never hides selected-profile, source, or other request failures', async () => {
+  const excludedDirectory = {
+    code: 'profile_excluded_service_directory',
+    stage: 'discovery',
+    severity: 'error',
+    profileId: null
+  }
+  for (const scenario of ['profile', 'source', 'scoped', 'unknown', 'decrypt', 'missing-scope']) {
+    const input = report()
+    input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
+    const issue = { ...excludedDirectory }
+    if (scenario === 'scoped') issue.profileId = 'synthetic-profile'
+    if (scenario === 'unknown') issue.code = 'unknown-request-failure'
+    if (scenario === 'decrypt') {
+      issue.code = 'decrypt_failed'
+      issue.stage = 'decrypt'
+      issue.severity = 'warning'
+    }
+    if (scenario === 'missing-scope') delete issue.profileId
+    if (scenario === 'profile') input.profiles[0].issues.push(issue)
+    else if (scenario === 'source') input.profiles[0].sources[0].issues.push(issue)
+    else input.issues.push(issue)
     const store = cookieStore()
     const before = structuredClone(store.state)
     await assert.rejects(
@@ -138,12 +152,13 @@ void test('decrypt warnings from a single profile read never reach Molly', async
         replaceExisting: true,
         readSource: () =>
           readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
-            read: async () => snapshot({ warnings: [warning] })
+            browserReport: async () => input,
+            chromiumBasedDetailed: async () => details()
           }),
         beforeWrite: async () => {}
       }),
       /could not be fully decrypted/,
-      warning.code
+      scenario
     )
     assert.deepEqual(store.state, before)
   }
@@ -334,19 +349,19 @@ void test('first Keychain authorization can take two minutes without losing exis
   const store = cookieStore()
   const before = structuredClone(store.state)
   const started = Promise.withResolvers()
+  const input = report()
+  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
   const reader = {
-    read: ({ timeoutMs }) =>
-      new Promise((resolve, reject) => {
-        const timeout = setTimeout(
-          () => reject(Object.assign(new Error('timed out'), { stopReason: 'timed_out' })),
-          timeoutMs
-        )
+    browserReport: ({ timeoutMs }) =>
+      new Promise((resolve) => {
+        const timeout = setTimeout(() => resolve(report({ termination: 'timed_out' })), timeoutMs)
         setTimeout(() => {
           clearTimeout(timeout)
-          resolve(snapshot())
+          resolve(input)
         }, 120_000)
         started.resolve()
-      })
+      }),
+    chromiumBasedDetailed: async () => details()
   }
   const importing = importBrowserAccountCookies({
     store,
@@ -365,10 +380,8 @@ void test('first Keychain authorization can take two minutes without losing exis
 })
 
 void test('native authorization timeouts give a safe manual retry and preserve the destination', async () => {
-  for (const read of [
-    async () => {
-      throw Object.assign(new Error('synthetic timeout'), { stopReason: 'timed_out' })
-    },
+  for (const browserReport of [
+    async () => report({ termination: 'timed_out' }),
     async () => {
       throw Object.assign(new Error('/private/profile/secret'), { stopReason: 'timed_out' })
     }
@@ -381,7 +394,12 @@ void test('native authorization timeouts give a safe manual retry and preserve t
         site: 'pinterest.com',
         replaceExisting: true,
         readSource: () =>
-          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', { read }),
+          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
+            browserReport,
+            chromiumBasedDetailed: async () => {
+              throw new Error('A timed out read must stop here.')
+            }
+          }),
         beforeWrite: async () => {
           throw new Error('A timed out read must not mutate cookies.')
         }
@@ -517,20 +535,20 @@ void test('import sources list installed Chromium browsers and name the unreadab
   assert.equal(JSON.stringify(listed).includes('/private'), false)
 })
 
-void test('import reads a browser profile once so macOS Keychain prompts only once', async () => {
-  const calls = []
+void test('the chosen browser reads its own report and cookie database', async () => {
+  const browsers = []
+  const input = report()
+  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
   const cookies = await readBrowserSiteCookies('arc', 'synthetic-profile', 'pinterest.com', {
-    read: async (options) => {
-      calls.push(options)
-      return snapshot({ browserId: 'arc' })
+    browserReport: async ({ browserId }) => {
+      browsers.push(browserId)
+      return input
+    },
+    chromiumBasedDetailed: async (_path, _domains, browserId) => {
+      browsers.push(browserId)
+      return details()
     }
   })
   assert.equal(cookies.length, 1)
-  assert.equal(calls.length, 1)
-  assert.deepEqual(calls[0], {
-    browser: 'arc',
-    profile: 'synthetic-profile',
-    timeoutMs: 5 * 60_000,
-    appBound: 'disabled'
-  })
+  assert.deepEqual(browsers, ['arc', 'arc'])
 })

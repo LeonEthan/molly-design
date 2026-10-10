@@ -945,7 +945,8 @@ const writeTextToClipboard = async (text: string): Promise<boolean> => {
 };
 
 const markdownUrlTransform: UrlTransform = (value, key, node) =>
-  isMarkdownAgentFileHref(value) || (key === 'src' && parseTaskImageMarkdownUrl(value))
+  isMarkdownAgentFileHref(value) ||
+  (key === 'src' && (parseTaskImageMarkdownUrl(value) || parseMarkdownAgentImageHref(value)))
     ? value
     : defaultUrlTransform(value, key, node);
 
@@ -1104,6 +1105,11 @@ function LocalMarkdownImage({
         if (active) setResult({ request, url });
       })
       .catch((error: unknown) => {
+        console.warn(
+          '[Molly] Markdown image failed to resolve; showing a placeholder.',
+          request.path,
+          error
+        );
         if (active)
           setResult({ request, error: error instanceof Error ? error.message : unavailable });
       });
@@ -1126,16 +1132,21 @@ function LocalMarkdownImage({
       src={current.url}
       alt={alt ?? ''}
       className={cn('my-2 max-h-[32rem] max-w-full rounded-md object-contain', rest.className)}
-      onError={() => setResult({ request, error: unavailable })}
+      onError={() => {
+        console.warn('[Molly] Markdown image failed to load; showing a placeholder.', path);
+        setResult({ request, error: unavailable });
+      }}
     />
   );
 }
 
 function TaskMarkdownImage(props: MarkdownImageProps) {
   const { node: _node, src, alt, ...rest } = props;
+  const { t } = useTranslation();
   const taskImageId = src ? parseTaskImageMarkdownUrl(src) : null;
   const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
   const resolvedUrl = useTaskImageUrl(taskImageId && tasksEnabled ? src : undefined);
+  const [failedSrc, setFailedSrc] = useState<string>();
 
   if (taskImageId && !tasksEnabled) return null;
 
@@ -1149,12 +1160,25 @@ function TaskMarkdownImage(props: MarkdownImageProps) {
     );
   }
 
+  if (src !== undefined && failedSrc === src) {
+    const unavailable = t('sessions.imageLoadUnavailable', 'Unable to load image');
+    return (
+      <span role="img" aria-label={alt ?? ''} className="my-2 block text-sm text-muted-foreground">
+        {alt ? `${alt}: ${unavailable}` : unavailable}
+      </span>
+    );
+  }
+
   return (
     <img
       {...rest}
       src={taskImageId ? resolvedUrl : src}
       alt={alt ?? ''}
       className={cn('my-2 max-h-[32rem] max-w-full rounded-md object-contain', rest.className)}
+      onError={() => {
+        console.warn('[Molly] Markdown image failed to load; showing a placeholder.', src);
+        setFailedSrc(src);
+      }}
     />
   );
 }

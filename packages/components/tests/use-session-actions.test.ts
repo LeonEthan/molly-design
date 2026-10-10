@@ -1466,7 +1466,94 @@ describe('useSessionActions', () => {
     );
     expect(deleteDoc).toHaveBeenCalledWith(getSessionRoomId(sessionId));
   });
+
+
+  it('persists lastCanceledTurn after a successful user stop ACK for native settlement', async () => {
+    const sessionId = 'session-stop-ack' as SessionId;
+    const turnId = 'assistant:user-stop-1';
+    const machineId = 'machine-1' as MachineId;
+    const upsertDocMeta = vi.fn(async () => undefined);
+    const requestSessionCancel = vi.fn(async () => ({
+      type: 'session/cancel_response' as const,
+      sessionId,
+      success: true,
+    }));
+    const runtime = createRuntime({
+      repo: {
+        getDocMeta: vi.fn(async () => ({
+          meta: {
+            id: sessionId,
+            machineId,
+            userId: 'user-1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            cliType: 'builtin',
+            agentType: 'codex',
+            status: { type: 'idle' },
+          },
+        })),
+        upsertDocMeta,
+      } as unknown as WorkspaceRuntime['repo'],
+    }) as WorkspaceRuntime & {
+      requestSessionCancel: WorkspaceRuntime['requestSessionCancel'];
+    };
+    runtime.requestSessionCancel = requestSessionCancel as WorkspaceRuntime['requestSessionCancel'];
+    const actions = await renderActions(runtime);
+
+    await expect(
+      actions.requestSessionCancel(sessionId, turnId, { action: 'stop' })
+    ).resolves.toBeUndefined();
+
+    expect(requestSessionCancel).toHaveBeenCalledWith(
+      machineId,
+      sessionId,
+      turnId,
+      expect.objectContaining({ action: 'stop' })
+    );
+    // Intent is recorded after ACK success (not only on RPC failure).
+    expect(upsertDocMeta).toHaveBeenCalledWith(getSessionRoomId(sessionId), {
+      lastCanceledTurn: turnId,
+    });
+  });
+
+  it('does not persist lastCanceledTurn for interrupt-and-send', async () => {
+    const sessionId = 'session-interrupt-no-cancel' as SessionId;
+    const turnId = 'assistant:user-interrupt-1';
+    const machineId = 'machine-1' as MachineId;
+    const upsertDocMeta = vi.fn(async () => undefined);
+    const requestSessionCancel = vi.fn(async () => ({
+      type: 'session/cancel_response' as const,
+      sessionId,
+      success: true,
+    }));
+    const runtime = createRuntime({
+      repo: {
+        getDocMeta: vi.fn(async () => ({
+          meta: {
+            id: sessionId,
+            machineId,
+            userId: 'user-1',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            cliType: 'builtin',
+            agentType: 'codex',
+            status: { type: 'idle' },
+          },
+        })),
+        upsertDocMeta,
+      } as unknown as WorkspaceRuntime['repo'],
+    }) as WorkspaceRuntime & {
+      requestSessionCancel: WorkspaceRuntime['requestSessionCancel'];
+    };
+    runtime.requestSessionCancel = requestSessionCancel as WorkspaceRuntime['requestSessionCancel'];
+    const actions = await renderActions(runtime);
+
+    await expect(
+      actions.requestSessionCancel(sessionId, turnId, { action: 'interrupt' })
+    ).resolves.toBeUndefined();
+    expect(upsertDocMeta).not.toHaveBeenCalled();
+  });
+
 });
+
 
 describe('resolveSessionChatType', () => {
   it('distinguishes side chats from regular sessions', () => {

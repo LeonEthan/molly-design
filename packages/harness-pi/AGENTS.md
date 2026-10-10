@@ -52,6 +52,10 @@ Read [README](README.md) before changing session construction, packages or the b
   retain its validated receipt after cancellation. Cancellation fences saves. Append measured extraction usage to
   native history before abort/response validation; retain failed publication for the
   next cumulative flush without repeating inference or a usage delta.
+  Extraction fails soft: fenced or near-JSON replies are tolerated; prose, unfinished or
+  failed replies save nothing (`unchanged`). Only a rejected read or store write reports
+  `recall_failed`/`capture_failed`. Every failure leaves a static code on stderr and in
+  `_meta.mollyPersonalMemoryDiagnostic`, never model output.
 - Tests use the real SDK with synthetic providers in owned temporary profiles. No paid
   inference, captured transcripts or machine-local records.
 

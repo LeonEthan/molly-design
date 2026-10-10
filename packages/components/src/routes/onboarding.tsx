@@ -8,8 +8,13 @@ import { currentWorkspaceSlugAtom } from '@/atoms/workspace-context';
 import { OnboardingOverlay, type DesktopOnboardingCompletion } from '@/components/onboarding';
 import { enterDesktopProduct } from '@/components/onboarding/desktop-onboarding-completion';
 import { useOnboardingThemeLifecycle } from '@/components/onboarding/use-onboarding-theme-lifecycle';
+import { useWorkspaceContextAtoms } from '@/hooks/use-workspace-context-atoms';
 import { isElectronRenderer } from '@/lib/electron';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import {
+  getLocalWorkspaceSlug,
+  useLocalPlatformWorkspacesState,
+} from '../providers/local-platform-provider';
 
 export const Route = createFileRoute('/onboarding')({
   component: DesktopOnboardingRoute,
@@ -23,6 +28,17 @@ function DesktopOnboardingRoute() {
 function DesktopOnboardingExperience() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  // Local installs skip the multi-workspace screen, so nothing else publishes
+  // the implicit workspace into the atoms RuntimeProvider keys off. Without
+  // this binding the Connect-a-model step never sees the flock-published
+  // built-in Molly catalog even after a successful key check.
+  const workspacesState = useLocalPlatformWorkspacesState();
+  const workspace =
+    workspacesState.status === 'ready' ? (workspacesState.workspaces[0] ?? null) : null;
+  useWorkspaceContextAtoms(
+    workspace ? getLocalWorkspaceSlug(workspace) : null,
+    workspace ? { status: 'member', organizationId: workspace.id } : undefined
+  );
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const setPhase = useSetAtom(desktopOnboardingPhaseAtom);
   const setDraft = useSetAtom(desktopOnboardingDraftAtom);

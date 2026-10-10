@@ -132,21 +132,32 @@ checked-in bundle. Normal builds need no upstream download. The MCP catalog stay
 private to main; Molly exposes its existing restricted action union. No external
 browser or CDP listener is started. Hidden Agent pages stay
 renderable in a hidden host window and reattach when the panel opens. The macOS
-Settings > Website accounts lists supported local Chromium browser profiles and uses the pinned
+Settings > Website accounts leads with signing in on Pinterest's page inside Molly, which reads no
+other browser. Its collapsed import section lists supported local Chromium browser profiles only when opened and uses the pinned
 `rookie-cookies` binding in Electron main to import cookies for a user-selected
-Pinterest account (the first-release import scope). The importer checks detailed Cookie identities against
+Pinterest account (the first-release import scope). Sign-in blocks Agent browsing until
+its native page is destroyed. Reloading the owning app window closes its sign-in
+pages and cancels pending opens while retaining ordinary Session pages.
+The importer checks detailed Cookie identities against
 the extraction report and rejects unsupported partitions before changing Molly
 cookies, including when the destination already contains site CHIPS cookies.
 The pinned reader reports excluded Chromium service directories as discovery errors;
 that specific unscoped diagnostic does not block a successfully read selected profile.
 Selected-profile/source errors and all other request errors still stop import.
-Import uses one `read()` so macOS Keychain (`/usr/bin/security` → Chrome/Edge/Brave
-Safe Storage) is queried once per import; Always Allow should then stick. The system
-dialog may name `security` rather than Molly. Browser-data permission is separate:
-macOS can attribute development access to the terminal or coding agent that launched
-Molly. Settings offers Open Files and Folders settings when profiles are unreadable;
-allow the chosen browser under Molly, then refresh. Failed listing does not establish
-absent profiles. The initial native read allows five minutes for human
+The user may need to approve macOS Keychain access during import. The site-scoped
+report and detailed reader remain separate native reads; this can repeat Keychain
+authorization, and Molly does not recommend granting `/usr/bin/security` permanent
+access. Browser-data
+permission is separate: macOS can attribute development access to the terminal or
+coding agent that launched Molly. A coding agent can be the responsible app even
+when its terminal already has browser access. Allow the chosen browser under the
+responsible app in Files & Folders, then refresh Molly, or fully quit and launch
+`pnpm start:local` directly from an already authorized terminal. Failed listing
+does not establish absent profiles. The collapsed import section offers **Open Files
+and Folders settings** whenever any browser is unreadable, including alongside
+readable profiles. Clicking it re-lists profiles before opening the macOS privacy
+pane; it does not grant permission or import cookies.
+The initial native report allows five minutes for human
 authorization; Settings shows a pending hint and manual retry guidance. Read
 failures leave existing Molly cookies unchanged. The pinned detailed-reader API
 has no timeout parameter; five minutes is not an overall import deadline.

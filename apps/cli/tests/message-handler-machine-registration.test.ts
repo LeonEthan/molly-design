@@ -172,7 +172,7 @@ describe('MessageHandler machine registration', () => {
     // version reach every client, so adding one must be acknowledged here.
     expect(registeredMeta.protocolCapabilities).toEqual({
       personalPreferences: 1,
-      sessionStopControl: 1,
+      sessionStopControl: 2,
       acpAuthenticationInteractions: 2,
       localProjectRemoval: 1,
       localFileResources: 1,

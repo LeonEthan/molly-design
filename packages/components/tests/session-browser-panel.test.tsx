@@ -28,7 +28,7 @@ const publicBrowserSurfaceRender = vi.hoisted(() => vi.fn());
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (_key: string, fallback?: string) => fallback ?? _key,
+    t: (key: string, fallback?: unknown) => (typeof fallback === 'string' ? fallback : key),
   }),
 }));
 
@@ -44,13 +44,7 @@ vi.mock('../src/components/sessions/public-browser-surface', () => ({
 }));
 
 vi.mock('../src/components/sessions/managed-preview-surface', () => ({
-  ManagedPreviewSurface: ({
-    viewerUrl,
-    logicalUrl,
-  }: {
-    viewerUrl: string;
-    logicalUrl: string;
-  }) => {
+  ManagedPreviewSurface: ({ viewerUrl, logicalUrl }: { viewerUrl: string; logicalUrl: string }) => {
     return createElement('div', {
       'data-testid': 'managed-preview',
       'data-viewer-url': viewerUrl,
@@ -242,6 +236,7 @@ describe('SessionBrowserPanel controller', () => {
     container?.remove();
     container = undefined;
     delete window.__MOLLY_ELECTRON__;
+    delete window.ipc;
     clearSessionBrowserResumeState(session.id);
     clearSessionBrowserResumeState(secondSession.id);
     vi.restoreAllMocks();
@@ -345,6 +340,86 @@ describe('SessionBrowserPanel controller', () => {
       'button[aria-label="Annotation is available only for local and private-network pages"]'
     ) as HTMLButtonElement | null;
     expect(annotationButton?.disabled).toBe(true);
+  });
+
+  it('signs in to a supported account site in the sign-in dialog, not the Agent page', async () => {
+    window.__MOLLY_ELECTRON__ = true;
+    const invoked: string[] = [];
+    window.ipc = {
+      invoke: async (channel: string) => {
+        invoked.push(channel);
+        return channel === 'publicBrowser.getState' ? null : { ok: true };
+      },
+      on: () => () => {},
+      send: () => {},
+    };
+    const rendered = await renderPanel(createRuntime().runtime);
+    await enterAddress(rendered, 'https://www.pinterest.com/ideas/');
+    const surface = publicBrowserSurfaceRender.mock.lastCall?.[0] as {
+      onStateChange: (state: ElectronPublicBrowserState) => void;
+    };
+    await act(async () =>
+      surface.onStateChange({
+        browserId: `session-browser-${session.id}`,
+        phase: 'ready',
+        url: 'https://www.pinterest.com/ideas/',
+        canGoBack: false,
+        canGoForward: false,
+      })
+    );
+    const signIn = [...rendered.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Sign in'
+    );
+    expect(signIn).toBeDefined();
+    expect(invoked).not.toContain('publicBrowser.beginAccountSignIn');
+    await act(async () => {
+      signIn?.click();
+      await flushMicrotasks();
+    });
+    expect(invoked).toContain('publicBrowser.beginAccountSignIn');
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(
+      rendered.querySelector(`[data-testid="public-browser"]`)?.getAttribute('data-url')
+    ).toBe('https://www.pinterest.com/ideas/');
+
+    const done = [...document.querySelectorAll('[role="dialog"] button')].find(
+      (button) => button.textContent === 'settings.browserAccounts.signInDone'
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      done?.click();
+      await flushMicrotasks();
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(invoked).toContain('publicBrowser.destroy');
+    expect(invoked).toContain('publicBrowser.reload');
+  });
+
+  it('offers Resume Agent for a run paused before it opened a page', async () => {
+    window.__MOLLY_ELECTRON__ = true;
+    const invoked: string[] = [];
+    window.ipc = {
+      invoke: async (channel: string) => {
+        invoked.push(channel);
+        return channel === 'publicBrowser.getState'
+          ? {
+              browserId: `session-browser-${session.id}`,
+              phase: 'idle',
+              canGoBack: false,
+              canGoForward: false,
+              agentControl: 'human-takeover',
+            }
+          : { ok: true };
+      },
+      on: () => () => {},
+      send: () => {},
+    };
+    const rendered = await renderPanel(createRuntime().runtime);
+    const resume = [...rendered.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Resume Agent'
+    );
+    expect(resume).toBeDefined();
+    await act(async () => resume?.click());
+    expect(invoked).toContain('publicBrowser.resumeAgentControl');
   });
 
   it('reattaches a public browser without navigating again after remount', async () => {
@@ -553,5 +628,4 @@ describe('SessionBrowserPanel controller', () => {
       resumed.querySelector('[data-testid="managed-preview"]')?.getAttribute('data-viewer-url')
     ).toBe(localEndpoint.viewerUrl);
   });
-
 });

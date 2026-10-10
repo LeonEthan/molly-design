@@ -1,0 +1,60 @@
+<div id="molly-splash" aria-hidden="true">
+  <img class="molly-splash-wordmark" src="__MOLLY_WORDMARK__" alt="Molly Design" />
+  <div class="molly-splash-progress"></div>
+</div>
+<style>
+  #molly-splash {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483647;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 28px;
+    background: #f1eee7;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  #molly-splash.done {
+    opacity: 0;
+  }
+  .molly-splash-wordmark {
+    width: 176px;
+    max-width: 60vw;
+    height: auto;
+  }
+  .molly-splash-progress {
+    width: 24px;
+    height: 2px;
+    border-radius: 1px;
+    background: #e4553d;
+    animation: molly-splash-pulse 1.2s ease-in-out infinite alternate;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) #molly-splash {
+      background: #070708;
+    }
+    :root:not([data-theme='light']) .molly-splash-wordmark {
+      content: url('__MOLLY_WORDMARK_DARK__');
+    }
+  }
+  :root[data-theme='dark'] #molly-splash {
+    background: #070708;
+  }
+  :root[data-theme='dark'] .molly-splash-wordmark {
+    content: url('__MOLLY_WORDMARK_DARK__');
+  }
+  @keyframes molly-splash-pulse {
+    to {
+      opacity: 0.3;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #molly-splash {
+      transition: none;
+    }
+    .molly-splash-progress {
+      animation: none;
+    }
+  }
+</style>

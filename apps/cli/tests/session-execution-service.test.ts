@@ -4,6 +4,7 @@ import { SessionDocument } from '../src/lib/loro/doc';
 import { composeTestSessionDoc } from './session-doc-fixture';
 import { applyAcpSessionRunConfig } from '../src/session/acp-session-config-applier';
 import { withHistoryPort } from './history-port-fixture';
+import { resolveSessionDispatchAction } from '../src/session/session-dispatch-logic';
 import { describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8512,3 +8513,505 @@ it.each([
     }
   }
 );
+
+type StopCase = {
+  label: string;
+  action?: 'interrupt' | 'stop';
+  queue: { $cid: string }[];
+  /** Queue contents observed after the first durable dispatchPause write. */
+  queueAfterWrite?: { $cid: string }[];
+  /** Queue contents observed once a meta read sees the resumed write (final re-validation). */
+  queueAfterResumedMetaRead?: { $cid: string }[];
+  /** RPC turn ids stashed before their history syncs. */
+  rpcStash?: string[];
+  /** RPC turn ids that land once the resumed write is visible at the final queue snapshot. */
+  rpcStashAfterResumedWrite?: string[];
+  /** Steer user turn ids still awaiting their provider verdict before Stop. */
+  unresolvedSteer?: string[];
+  /** Steer user turn ids that start awaiting a verdict once the resumed write is visible. */
+  unresolvedSteerAfterResumedWrite?: string[];
+  /** Pending input is seen before the first write, so Stop never persists `resumed`. */
+  neverPersistsResumed?: boolean;
+  metaPatch?: Partial<SessionMeta>;
+  initialPause?: { turnId: string; state: 'paused' | 'resumed' };
+  /** User history besides the stopped turn's own `live` input. */
+  history?: { id: string; role: 'user'; status: string }[];
+  steerTurnStatuses?: Record<string, 'pending'>;
+  state: 'paused' | 'resumed';
+  gated: boolean;
+};
+
+it.each<StopCase>([
+  // P1 #1: interrupt-and-send (steer fallback) always resumes so the selected
+  // queued input promotes; it never parks behind a Continue-gated pause.
+  {
+    label: 'interrupt with queued input stays resumed',
+    action: 'interrupt',
+    queue: [{ $cid: 'q1' }],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'interrupt with empty queue resumes',
+    action: 'interrupt',
+    queue: [],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop with empty queue resumes and releases the gate',
+    action: 'stop',
+    queue: [],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop with queued input pauses until Continue',
+    action: 'stop',
+    queue: [{ $cid: 'q1' }],
+    state: 'paused',
+    gated: true,
+  },
+  // P1 #3: an enqueue that lands while the resumed write is in flight keeps Stop paused.
+  {
+    label: 'stop re-validates the queue after its durable write',
+    action: 'stop',
+    queue: [],
+    queueAfterWrite: [{ $cid: 'q-late' }],
+    state: 'paused',
+    gated: true,
+  },
+  // Codex round 3, P1 #1: input outside the queue still dispatches after the
+  // stopped owner ends, so user Stop must count it and stay paused.
+  {
+    label: 'stop counts a requeued undelivered steer',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'steer-1', role: 'user', status: 'pending' }],
+    steerTurnStatuses: { 'steer-1': 'pending' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts a requeued steer whose history has not synced',
+    action: 'stop',
+    queue: [],
+    steerTurnStatuses: { 'steer-1': 'pending' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts an in-flight steer that cancellation can requeue',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'steer-1', role: 'user', status: 'pending_apply' }],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts restored pending history input',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'restored-1', role: 'user', status: 'pending' }],
+    state: 'paused',
+    gated: true,
+  },
+  // Codex round 4, P1 #1: a metadata-only activation (history not yet synced)
+  // auto-dispatches once the owner ends, so user Stop must count it.
+  {
+    label: 'stop counts a metadata-only activation whose history has not synced',
+    action: 'stop',
+    queue: [],
+    metaPatch: { latestUserMsgId: 'meta-only' },
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts a stashed RPC turn whose history has not synced',
+    action: 'stop',
+    queue: [],
+    rpcStash: ['rpc-1'],
+    neverPersistsResumed: true,
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own stashed RPC input',
+    action: 'stop',
+    queue: [],
+    rpcStash: ['live'],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop observes an RPC stash landing after its resumed write',
+    action: 'stop',
+    queue: [],
+    rpcStashAfterResumedWrite: ['rpc-late'],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop counts a steer awaiting its verdict without persisting resumed',
+    action: 'stop',
+    queue: [],
+    unresolvedSteer: ['steer-1'],
+    neverPersistsResumed: true,
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own unresolved steer',
+    action: 'stop',
+    queue: [],
+    unresolvedSteer: ['live'],
+    state: 'resumed',
+    gated: false,
+  },
+  {
+    label: 'stop observes a steer awaiting its verdict after its resumed write',
+    action: 'stop',
+    queue: [],
+    unresolvedSteerAfterResumedWrite: ['steer-late'],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores an activation that is already handled',
+    action: 'stop',
+    queue: [],
+    metaPatch: { latestUserMsgId: 'done-1', lastHandledUserMsgId: 'done-1' },
+    state: 'resumed',
+    gated: false,
+  },
+  // Codex round 4, P1 #2: an enqueue landing while the final re-validation
+  // awaits meta must still be observed before the gate is released.
+  {
+    label: 'stop observes an enqueue during its final meta read',
+    action: 'stop',
+    queue: [],
+    queueAfterResumedMetaRead: [{ $cid: 'q-late' }],
+    state: 'paused',
+    gated: true,
+  },
+  {
+    label: 'stop ignores its own input and settled history',
+    action: 'stop',
+    queue: [],
+    history: [{ id: 'done-1', role: 'user', status: 'handled' }],
+    state: 'resumed',
+    gated: false,
+  },
+  // Codex round 3, P1 #3: the late-enqueue rewrite must compare against the
+  // current meta, not the pre-write snapshot that still said paused.
+  {
+    label: 'stop retry over a paused turn re-pauses after a late enqueue',
+    action: 'stop',
+    queue: [],
+    queueAfterWrite: [{ $cid: 'q-late' }],
+    initialPause: { turnId: 'assistant:live', state: 'paused' },
+    state: 'paused',
+    gated: true,
+  },
+  { label: 'legacy optionless stays paused', queue: [], state: 'paused', gated: true },
+  // P1 #2: lost-ack replay after an effective stop/interrupt must persist a visible pause.
+  {
+    label: 'legacy replay over a matching resumed pause persists paused',
+    queue: [],
+    initialPause: { turnId: 'assistant:live', state: 'resumed' },
+    state: 'paused',
+    gated: true,
+  },
+])(
+  'Stop cancelSession: $label',
+  async ({
+    label,
+    action,
+    queue,
+    queueAfterWrite,
+    queueAfterResumedMetaRead,
+    rpcStash,
+    rpcStashAfterResumedWrite,
+    unresolvedSteer,
+    unresolvedSteerAfterResumedWrite,
+    neverPersistsResumed,
+    metaPatch,
+    initialPause,
+    history = [],
+    steerTurnStatuses,
+    state,
+    gated,
+  }) => {
+    const sessionId = `stop-${label.replaceAll(' ', '-')}` as SessionId;
+    let active: string | undefined = 'assistant:live';
+    let currentQueue = queue;
+    let currentStash = rpcStash ?? [];
+    let persistedResume = false;
+    let meta: Partial<SessionMeta> = {
+      id: sessionId,
+      machineId: 'machine-1',
+      processingUserMsgId: 'live',
+      latestUserMsgId: 'live',
+      ...(initialPause ? { dispatchPause: initialPause } : {}),
+      ...(steerTurnStatuses ? { steerTurnStatuses } : {}),
+      ...metaPatch,
+    };
+    const turns = [{ id: 'live', role: 'user', status: 'processing' }, ...history];
+    let service: SessionExecutionService | undefined;
+    const unresolvedSteerTurns = () =>
+      (service as unknown as { unresolvedSteerTurns: Map<SessionId, Set<string>> })
+        .unresolvedSteerTurns;
+    const gateDuringResumedWrite: boolean[] = [];
+    const sessionDoc = withHistoryPort({
+      getHistory: () => turns as never,
+      updateHistory: async () => {},
+      getMetaState: async () => meta,
+      setStatus: async () => {},
+      waitUntilSynced: async () => {},
+      getMessageQueue: async () => currentQueue,
+      readMessageQueueSnapshot: () => {
+        if (rpcStashAfterResumedWrite && meta.dispatchPause?.state === 'resumed')
+          currentStash = rpcStashAfterResumedWrite;
+        if (unresolvedSteerAfterResumedWrite && meta.dispatchPause?.state === 'resumed')
+          unresolvedSteerTurns().set(sessionId, new Set(unresolvedSteerAfterResumedWrite));
+        return currentQueue;
+      },
+    });
+    const deps = createBaseDeps({
+      getActiveTurnId: () => active,
+      clearActiveTurnId: () => {
+        active = undefined;
+      },
+      processMessageQueue: async () => {},
+      hasPendingRpcTurn: (_sessionId, excludeTurnIds) =>
+        currentStash.some((userTurnId) => !excludeTurnIds.has(userTurnId)),
+      workspaceDocument: {
+        repo: {
+          getDocMeta: async () => {
+            if (queueAfterResumedMetaRead && meta.dispatchPause?.state === 'resumed')
+              currentQueue = queueAfterResumedMetaRead;
+            return { meta };
+          },
+          upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+            if (patch.dispatchPause?.state === 'resumed') {
+              persistedResume = true;
+              if (action === 'stop')
+                gateDuringResumedWrite.push(service!.isDispatchPausedInMemory(sessionId));
+            }
+            meta = { ...meta, ...patch };
+            if (patch.dispatchPause && queueAfterWrite) currentQueue = queueAfterWrite;
+          },
+        },
+        getOrCreateSessionDoc: async () => sessionDoc,
+      } as unknown as LoroDocumentManager,
+    });
+    service = new SessionExecutionService(deps);
+    if (unresolvedSteer) unresolvedSteerTurns().set(sessionId, new Set(unresolvedSteer));
+    const request = {
+      type: 'session/cancel' as const,
+      sessionId,
+      turnId: 'assistant:live',
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      ...(action ? { action } : {}),
+    };
+    expect(await service.cancelSession(request)).toEqual({ success: true });
+    expect(meta.dispatchPause).toEqual({ turnId: 'assistant:live', state });
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(gated);
+    // `stop` must hold the promotion gate while its resumed write is in flight.
+    expect(gateDuringResumedWrite.every(Boolean)).toBe(true);
+    if (neverPersistsResumed) expect(persistedResume).toBe(false);
+    // Once the stopped owner ends, the dispatcher decides from this meta alone:
+    // a paused Stop must not auto-dispatch the leftover input without Continue.
+    if (state === 'paused' && history.length > 0) {
+      const after = resolveSessionDispatchAction(
+        {
+          meta: {
+            ...meta,
+            processingUserMsgId: undefined,
+            lastHandledUserMsgId: 'live',
+          } as SessionMeta,
+          history: [{ id: 'live', role: 'user', status: 'canceled' }, ...history] as never,
+          hasActiveTurn: false,
+          hasBlockingPendingCreate: false,
+          hasReusableSession: true,
+          hasRewriteBarrier: false,
+        },
+        'machine-1' as never
+      );
+      expect(after).toEqual({ type: 'noop', reason: 'dispatch-paused' });
+    }
+  }
+);
+
+it('stop pauses while a steer still awaits its provider verdict', async () => {
+  const sessionId = 'stop-unresolved-steer' as SessionId;
+  let meta: Partial<SessionMeta> = { latestUserMsgId: 'A', processingUserMsgId: 'A' };
+  const repo = {
+    getDocMeta: async () => ({ meta }),
+    upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+      meta = { ...meta, ...patch };
+    },
+  };
+  const sessionDoc = new SessionDocument(
+    repo as never,
+    sessionId,
+    async () => {},
+    createSilentLogger()
+  );
+  composeTestSessionDoc(sessionDoc);
+  const submitted = createDeferred();
+  const verdict = createDeferred<import('../src/agent/agent-client').SteerOutcomeResult>();
+  const agentClient = {
+    isCreated: () => true,
+    cancel: async () => {},
+    pendingPromptCompletion: null,
+    getAcknowledgedSteerCapability: () => ({ configPolicy: 'active', upstreamTurn: 'same' }),
+    findSteerConfigMismatch: () => null,
+    steerPrompt: () => {
+      submitted.resolve();
+      return { completion: new Promise(() => {}), outcome: verdict.promise };
+    },
+  };
+  const deps = createBaseDeps({
+    workspaceDocument: {
+      repo,
+      getOrCreateSessionDoc: async () => sessionDoc,
+    } as unknown as LoroDocumentManager,
+  });
+  const service = new SessionExecutionService(deps);
+  service['turnRuntimeBySession'].set(sessionId, {
+    sessionId,
+    turnId: 'assistant:A',
+    userTurnId: 'A',
+    session: { sessionId, agentClient, acpSessionId: 'acp' },
+    promptStarted: true,
+    promptInFlight: true,
+    activePromptRun: { turnId: 'assistant:A' },
+    cancelRequested: false,
+  } as never);
+  const steering = service.steerSession({
+    sessionId,
+    expectedTurnId: 'assistant:A',
+    userTurnId: 'B',
+    userId: 'user',
+    timestamp: '2026-09-16T00:00:00Z',
+    inputConfig: { prompt: 'guide' },
+  });
+  await submitted.promise;
+
+  expect(
+    await service.cancelSession({
+      type: 'session/cancel',
+      sessionId,
+      turnId: 'assistant:A',
+      machineId: 'machine-1',
+      workspaceId: 'workspace-1' as WorkspaceId,
+      action: 'stop',
+    })
+  ).toEqual({ success: true });
+  expect(meta.dispatchPause).toEqual({ turnId: 'assistant:A', state: 'paused' });
+  expect(service.isDispatchPausedInMemory(sessionId)).toBe(true);
+
+  verdict.resolve({ outcome: 'not-applied', error: new Error('Synthetic verdict') });
+  await steering;
+});
+
+it('steerSession holds its user turn as unresolved only until the verdict settles', async () => {
+  const sessionId = 'steer-unresolved-release' as SessionId;
+  const service = new SessionExecutionService(createBaseDeps({}));
+  const steering = service.steerSession({
+    sessionId,
+    expectedTurnId: 'assistant:A',
+    userTurnId: 'B',
+    userId: 'user',
+    timestamp: '2026-09-16T00:00:00Z',
+    inputConfig: { prompt: 'guide' },
+  });
+  expect(service['unresolvedSteerTurns'].get(sessionId)).toEqual(new Set(['B']));
+  await expect(steering).resolves.toMatchObject({ applied: false, disposition: 'no-active-turn' });
+  expect(service['unresolvedSteerTurns'].has(sessionId)).toBe(false);
+});
+
+// Codex round 3, P1 #2: a user Stop with nothing queued writes `resumed`; if the
+// cancellation drain then fails, ownership and the canvas lock stay held, so the
+// failure must become a visible `paused` recovery point (not a hidden error).
+it('Stop cancelSession: failed drain after an empty-queue stop persists a visible pause', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const sessionId = 'stop-drain-failure' as SessionId;
+    const turnId = 'assistant:live';
+    let meta: Partial<SessionMeta> = { id: sessionId, machineId: 'machine-1' };
+    const sessionDoc = withHistoryPort({
+      getHistory: () => [],
+      updateHistory: async () => {},
+      getMetaState: async () => meta,
+      setStatus: async () => {},
+      waitUntilSynced: async () => {},
+      getMessageQueue: async () => [],
+      readMessageQueueSnapshot: () => [],
+    });
+    const deps = createBaseDeps({
+      getActiveTurnId: () => turnId,
+      processMessageQueue: async () => {},
+      workspaceDocument: {
+        repo: {
+          getDocMeta: async () => ({ meta }),
+          upsertDocMeta: async (_room: string, patch: Partial<SessionMeta>) => {
+            meta = { ...meta, ...patch };
+          },
+        },
+        getOrCreateSessionDoc: async () => sessionDoc,
+      } as unknown as LoroDocumentManager,
+    });
+    const service = new SessionExecutionService(deps);
+    const runtime = {
+      sessionId,
+      turnId,
+      userTurnId: 'live',
+      promptInFlight: true,
+      promptStarted: true,
+      session: {
+        sessionId,
+        acpSessionId: 'acp-live' as ACPSessionId,
+        agentClient: {
+          isCreated: () => true,
+          cancel: async () => {},
+          // The provider never settles the cancelled prompt.
+          pendingPromptCompletion: new Promise<void>(() => {}),
+        },
+        terminate: async () => {
+          throw new Error('terminate failed');
+        },
+      },
+    };
+    (
+      service as unknown as { turnRuntimeBySession: Map<SessionId, typeof runtime> }
+    ).turnRuntimeBySession.set(sessionId, runtime);
+
+    expect(
+      await service.cancelSession({
+        type: 'session/cancel',
+        sessionId,
+        turnId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        action: 'stop',
+      })
+    ).toEqual({ success: true });
+    expect(meta.dispatchPause).toEqual({ turnId, state: 'resumed' });
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.waitFor(() =>
+      expect(meta.dispatchPause).toEqual({
+        turnId,
+        state: 'paused',
+        error: expect.stringContaining('terminate failed'),
+      })
+    );
+    expect(service.isDispatchPausedInMemory(sessionId)).toBe(true);
+  } finally {
+    vi.useRealTimers();
+  }
+});

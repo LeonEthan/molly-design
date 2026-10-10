@@ -771,6 +771,52 @@ export class SessionDispatchWatcher {
     return (this.rpcTurnStash.get(sessionId)?.size ?? 0) > 0 || this.accessFibers.has(sessionId);
   }
 
+  /**
+   * True when a stashed RPC offer would still be returned by {@link peekStashedRpcTurn}
+   * (live, not excluded, and not permanently suppressed). Stop must ignore offers that
+   * peek retains only for the missing-history marker or drops as already terminal —
+   * otherwise Continue appears for work that can never run.
+   */
+  hasPendingRpcTurn(
+    sessionId: SessionId,
+    excludeTurnIds: ReadonlySet<string>,
+    context?: {
+      meta?: Pick<SessionMeta, 'lastHandledUserMsgId' | 'lastMissingHistoryUserMsgId'>;
+      history?: SessionHistoryInput[];
+    }
+  ): boolean {
+    const now = Date.now();
+    const meta = context?.meta;
+    const history = context?.history ?? [];
+    for (const [userTurnId, stashed] of this.rpcTurnStash.get(sessionId) ?? []) {
+      if (stashed.expiresAtMs <= now || excludeTurnIds.has(userTurnId)) continue;
+      if (
+        meta &&
+        this.isStashedRpcTurnPermanentlySuppressed(sessionId, userTurnId, meta, history)
+      ) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
+  /** Same suppression predicates as {@link peekStashedRpcTurn}: terminal or missing-marker. */
+  private isStashedRpcTurnPermanentlySuppressed(
+    sessionId: SessionId,
+    userTurnId: string,
+    meta: Pick<SessionMeta, 'lastHandledUserMsgId' | 'lastMissingHistoryUserMsgId'>,
+    history: SessionHistoryInput[]
+  ): boolean {
+    if (userTurnId === meta.lastMissingHistoryUserMsgId) return true;
+    return (
+      meta.lastHandledUserMsgId === userTurnId ||
+      this.deps.executionService.getTerminalUserTurnStatusWithoutEntry?.(sessionId, userTurnId) !==
+        undefined ||
+      !isActivationAwaitingHistory(history, userTurnId)
+    );
+  }
+
   /** Drop expired stashed RPC turns across all sessions (bounded cleanup). */
   private sweepExpiredRpcTurns(): void {
     const now = Date.now();
@@ -812,18 +858,21 @@ export class SessionDispatchWatcher {
     }
     const now = Date.now();
     for (const [userTurnId, stashed] of stash) {
-      const isTerminal =
-        meta.lastHandledUserMsgId === userTurnId ||
-        this.deps.executionService.getTerminalUserTurnStatusWithoutEntry?.(
-          sessionId,
-          userTurnId
-        ) !== undefined ||
-        !isActivationAwaitingHistory(history, userTurnId);
-      if (stashed.expiresAtMs <= now || isTerminal) {
+      const suppressed = this.isStashedRpcTurnPermanentlySuppressed(
+        sessionId,
+        userTurnId,
+        meta,
+        history
+      );
+      // Missing-marker stays stashed but never dispatches; terminal entries are dropped.
+      if (
+        stashed.expiresAtMs <= now ||
+        (suppressed && userTurnId !== meta.lastMissingHistoryUserMsgId)
+      ) {
         stash.delete(userTurnId);
         continue;
       }
-      if (userTurnId === meta.lastMissingHistoryUserMsgId) {
+      if (suppressed) {
         continue;
       }
       this.turnSourceHints.set(`${sessionId}:${userTurnId}`, 'rpc');

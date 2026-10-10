@@ -58,9 +58,9 @@ Files: [README.md](README.md). Scopes:
   surface bridge stable across renders; same-page state must preserve address drafts.
   Agent navigation stays native, including loopback, without site/public-IP scopes.
 
-- Keep Stop reachable during permissions/questions. Gate paused Stop again/Continue
-  on `sessionStopControl: 1`; unknown steer has no resend. Only execution/artifact
-  completion releases canvas.
+- Keep Stop reachable during permissions/questions. User Stop sends `stop`
+  (`sessionStopControl: 2`), never `interrupt`; unknown steer has no resend.
+  Only execution/artifact completion releases canvas.
 
 ## Conversation surface
 

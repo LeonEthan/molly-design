@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import { ElectronBrowserAccountSiteInputSchema } from '@molly/shared/electron-ipc';
+import {
+  ElectronBrowserAccountSiteInputSchema,
+  type ElectronBrowserAccountSiteInput,
+} from '@molly/shared/electron-ipc';
 import {
   BrowserAddressError,
   formatPreviewTargetUrl,
@@ -42,6 +45,7 @@ import {
 } from './session-browser-resume-state';
 import { clearManagedPreviewFrame } from './managed-preview-frame-cache';
 import { SessionBrowserToolbar } from './session-browser-toolbar';
+import { WebsiteSignInDialog } from '../settings/website-sign-in-dialog';
 
 type SessionBrowserPanelProps = {
   session: SessionMeta;
@@ -121,6 +125,9 @@ function SessionBrowserPanelController({
   const [managedNavigationPhase, setManagedNavigationPhase] =
     useState<ManagedNavigationPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [signInSite, setSignInSite] = useState<ElectronBrowserAccountSiteInput['site'] | null>(
+    null
+  );
   const [resumeAddress, setResumeAddress] = useState<BrowserAddress | null>(null);
   const navigationSequenceRef = useRef(0);
   const restoreAttemptKeyRef = useRef<string | null>(null);
@@ -692,6 +699,11 @@ function SessionBrowserPanelController({
     setSettingsTab('browser-accounts');
     setSettingsOpen(true);
   };
+  const changeSignInOpen = (open: boolean) => {
+    if (open) return;
+    setSignInSite(null);
+    handleReload();
+  };
   const changeAgentBrowserControl = async (take: boolean) => {
     const bridge = getPublicBrowserBridge();
     if (!bridge) return;
@@ -750,7 +762,8 @@ function SessionBrowserPanelController({
           </Button>
         </div>
       ) : null}
-      {currentAddress?.engine === 'public-web' && publicState?.agentControl === 'human-takeover' ? (
+      {currentAddress?.engine !== 'managed-preview' &&
+      publicState?.agentControl === 'human-takeover' ? (
         <div className="border-b px-3 py-2 text-xs">
           <span className="mr-2">
             {t(
@@ -772,18 +785,23 @@ function SessionBrowserPanelController({
         <div className="border-b px-3 py-2 text-xs">
           <p className="mb-2 text-muted-foreground">
             {t(
-              'sessions.browser.accountChoices',
-              'Use this site anonymously, sign in on the page, or import its Chrome cookies in Molly settings. The Agent pauses while you take control.'
+              'sessions.browser.signInPrompt',
+              'Use this site anonymously, or sign in so the Agent can browse it as you. Molly keeps its own sign-in, so macOS asks for no Keychain or file access. The Agent pauses while you sign in.'
             )}
           </p>
           <div className="flex flex-wrap gap-2">
-            {getPlatform() === 'mac' ? (
-              <Button type="button" variant="outline" size="sm" onClick={openAccountSettings}>
-                {t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')}
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSignInSite(importSite)}
+            >
+              {t('sessions.browser.signIn', 'Sign in')}
+            </Button>
             <Button type="button" variant="ghost" size="sm" onClick={openAccountSettings}>
-              {t('sessions.browser.manageAccounts', 'Manage website accounts')}
+              {getPlatform() === 'mac'
+                ? t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')
+                : t('sessions.browser.manageAccounts', 'Manage website accounts')}
             </Button>
           </div>
           {publicState?.accountImport?.site === importSite ? (
@@ -870,6 +888,9 @@ function SessionBrowserPanelController({
           </p>
         </div>
       )}
+      {signInSite ? (
+        <WebsiteSignInDialog site={signInSite} open onOpenChange={changeSignInOpen} />
+      ) : null}
     </div>
   );
 }

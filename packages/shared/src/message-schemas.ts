@@ -638,7 +638,7 @@ export const SessionCancelRequestSchema = z
     workspaceId: WorkspaceIdSchema,
     turnId: z.string(),
     subagentTaskId: z.string().trim().min(1).optional(),
-    action: z.enum(['resume', 'interrupt']).optional(),
+    action: z.enum(['resume', 'interrupt', 'stop']).optional(),
   })
   .strict();
 

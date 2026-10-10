@@ -4,16 +4,57 @@
 requirement and its explicit exception. Use this reference to perform required
 research or inspect a user-specified website.
 
+## Search from the direction
+
+Build queries from the direction words, their synonyms and the pictures they
+call up, not only from the category: for a quiet herbal brand, "apothecary
+shelf", "morning steam" or "pressed botanicals" find more than "tea poster".
 Choose queries that help decide composition, palette, type treatment or image
-style while preserving the user's direction. Open relevant results and inspect
-their actual visual content; screenshots or image reading are needed to judge
-appearance. Search snippets and page text alone do not establish visual research.
+style while preserving the user's direction. Include at least one source outside
+the category and outside current design feeds: historical posters, fine art,
+architecture, packaging from another field. If every result looks alike, the
+search is too narrow; widen it once.
+
+Make one focused pass of a few queries, then move on to choosing. If the
+results stay thin, say so in the report rather than browsing without end.
+
+## Inspect and keep sources
+
+Open relevant results individually and inspect their actual visual content;
+screenshots or image reading are needed to judge appearance. A grid of results
+is a starting point, not research. Search snippets and page text alone do not
+establish visual research.
 Keep the actual inspected reference URLs and briefly connect the observed choices
 to the design. A search-results URL alone does not identify individual references;
 if those pages could not be opened, report exactly which visible results you used.
-Save an image only when it is needed as an asset or edit reference; observation
-alone does not require downloading it. Borrow ideas while respecting source
-artwork and asset permissions.
+Save with `save_image` the few inspiration images you may give the image model
+for the design options (usually one to three), plus any supplied asset or
+prescribed template; observation alone does not require downloading the rest.
+
+## Keep a few references, each with a job
+
+Learn from references; do not copy one. From what you inspected, keep three to
+six that answer the direction words and note what each contributes, one quality
+per reference:
+
+- palette: three to five recurring colors;
+- type direction: serif, grotesque, humanist or display, and why it fits;
+- imagery: photograph or illustration, lighting, crop;
+- texture or material;
+- a layout structure.
+
+Take the quality, not the object: a reference with a purple cube may give the
+palette, not a cube. Drop anything attractive but off the direction words. Work
+drawn from only one or two references reads as a blend of them: before building,
+check that the chosen direction is not recognizably one source with new copy.
+A saved inspiration image can be an `edit` input for a design option, with the
+prompt naming the quality it lends and forbidding its objects, text and logos
+([Design options](layered-workflow.md#design-options)).
+Respect source artwork and asset permissions; being legal is not the same as
+being fair to the original designer. When the user prescribes a template to
+reproduce, following it is their decision.
+
+## Browser tools
 
 Use the `molly_browser` tools only when they are available: callable from
 `codemode` scripts (find them with `searchTools`). They control the Session's
@@ -34,6 +75,8 @@ A blocked attempt does not establish completed visual research.
 Use the reported page and image URLs from `save_image` as source information
 for your response, and its relative path in `design.yaml`. Native page downloads
 do not publish design assets or supply a saved design-relative path.
+
+## Sign-in
 
 The first release lets the user import Pinterest cookies from Chrome in Settings.
 For other sites, the user can take over the built-in page to

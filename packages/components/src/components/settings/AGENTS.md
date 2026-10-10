@@ -22,6 +22,12 @@ Preserve historical catalog fields when editing unrelated values.
 
 ## Layout and components
 
+- Website accounts lead with signing in on the site's page inside Molly
+  (`website-sign-in-dialog.tsx`, Molly's shared website profile); this reads no other
+  browser, so it raises no Keychain or Files and Folders prompt. Every sign-in entry opens
+  this dialog; main pauses active runs and holds all Agent page work until it closes. Name Google
+  sign-in's alternatives. Import stays collapsed and lists browser profiles only
+  after the person opens it, never on page load.
 - Website-account import shows its pending authorization state and manual retry
   guidance; passwords belong only in the macOS system dialog. Use the shared site
   contract for supported imports; cookie counts do not attest website sign-in. Import
@@ -53,6 +59,8 @@ Preserve historical catalog fields when editing unrelated values.
   Checks list models or validate the key, never send a model request or DashScope call, and
   report unsupported services as uncheckable. Native connections offer All or a chosen
   `models` list; listed IDs inform the choice and suggest image models, never select them.
+  Opening Choose pre-checks the full packaged catalog for that preset, not the key-check
+  listing — a membership key that reports one model must not shrink the home picker.
 - AI models (`agents` tab) mounts the design setup strip (`design-readiness.tsx`), the
   local encrypted model-connection form, the image connection, and the read-only legacy
   inventory only when this machine has legacy rows. The strip derives each chip from what

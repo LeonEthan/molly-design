@@ -2,7 +2,6 @@ import { shell } from 'electron'
 import type { OpenSystemNotificationSettingsResult } from '@molly/shared/electron-ipc'
 import { formatUnknownError } from '../utils'
 
-/** macOS System Settings deep links for Privacy → Files and Folders (Ventura+ first). */
 export function browserDataPrivacySettingsUrls(platform: NodeJS.Platform): string[] {
   if (platform !== 'darwin') return []
   return [
@@ -11,11 +10,6 @@ export function browserDataPrivacySettingsUrls(platform: NodeJS.Platform): strin
   ]
 }
 
-/**
- * Opens the macOS Files and Folders privacy pane so the user can allow Molly
- * to read installed browser profiles. Apps only appear in that list after they
- * have attempted access; callers should re-list profiles before opening.
- */
 export async function openBrowserDataPrivacySettings(options?: {
   platform?: NodeJS.Platform
   openExternal?: (url: string) => Promise<void>

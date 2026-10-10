@@ -31,6 +31,19 @@ const readBounds = (element: HTMLElement): ElectronPublicBrowserBounds | null =>
 const formatBridgeError = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+const openDialogSelector =
+  '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]';
+
+/** Radix portals stacked dialogs to body in opening order, so only later dialogs cover the host's own. */
+function isCoveredByOpenDialog(host: HTMLElement | null): boolean {
+  const hostDialog = host?.closest('[role="dialog"], [role="alertdialog"]') ?? null;
+  return Array.from(document.querySelectorAll(openDialogSelector)).some(
+    (dialog) =>
+      dialog !== hostDialog &&
+      !(hostDialog && dialog.compareDocumentPosition(hostDialog) & Node.DOCUMENT_POSITION_FOLLOWING)
+  );
+}
+
 export function PublicBrowserSurface({
   browserId,
   url,
@@ -54,13 +67,7 @@ export function PublicBrowserSurface({
 
   useEffect(() => {
     if (!electron) return undefined;
-    const update = () => {
-      setBlockingOverlayOpen(
-        document.querySelector(
-          '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]'
-        ) !== null
-      );
-    };
+    const update = () => setBlockingOverlayOpen(isCoveredByOpenDialog(hostRef.current));
     update();
     const observer = new MutationObserver(update);
     observer.observe(document.body, {

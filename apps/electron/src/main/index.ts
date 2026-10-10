@@ -7,7 +7,10 @@ import {
 } from './services/design-service'
 import { startDesignCanvasHost } from './services/design-canvas-host-service'
 import { startDesignRenderHost } from './services/design-render-host-service'
-import { startPublicBrowserAgentHost } from './services/public-browser-agent-host-service'
+import {
+  pauseActiveBrowserRuns,
+  startPublicBrowserAgentHost
+} from './services/public-browser-agent-host-service'
 import { startHarnessCredentialHost } from './services/harness-credential-host'
 import { verifyDesignSample } from './services/design-sample-verification'
 import { registerDesignSampleScheme } from './services/design-sample-service'
@@ -196,7 +199,10 @@ if (hasSingleInstanceLock) {
     const windowBadgeService = new WindowBadgeService({
       onChange: (badge) => cliService.setRunActive(badge.working > 0)
     })
-    const publicBrowserService = new PublicBrowserService(() => getMainWindow())
+    const publicBrowserService = new PublicBrowserService(
+      () => getMainWindow(),
+      () => pauseActiveBrowserRuns(cliService)
+    )
     bindWindowBadgeToBrowserWindows(windowBadgeService)
 
     electronApp.setAppUserModelId(desktopInstallationProfile.desktopAppId)

@@ -266,6 +266,24 @@ export function resolveSessionCancelAction(
 // ── Turn finding ────────────────────────────────────────────────────────────
 
 /**
+ * `SessionMeta.lastCanceledTurn` is the assistant turn id the client/owner
+ * asked to stop. Production assistant entry ids are derived as
+ * `assistant:<userTurnId>` (see SessionExecutionService /
+ * MessageHandler.getAssistantEntryIdForUserTurn). Compare against that derived
+ * id so a crash between Stop ACK and native settlement cannot redispatch the
+ * stopped user prompt via processingUserMsgId recovery.
+ */
+export function isDurableStopForUserTurn(
+  userTurnId: string,
+  lastCanceledTurn: string | undefined
+): boolean {
+  if (typeof lastCanceledTurn !== 'string' || lastCanceledTurn.length === 0) {
+    return false;
+  }
+  return lastCanceledTurn === `assistant:${userTurnId}`;
+}
+
+/**
  * Find the first user turn in history that needs to be dispatched.
  *
  * A user turn is considered "dispatchable" if any of these conditions is true:
@@ -283,6 +301,10 @@ export function resolveSessionCancelAction(
  *
  * 4. **Meta pointer: latestUserMsgId ≠ lastHandledUserMsgId**: Legacy dispatch
  *    mechanism.
+ *
+ * A turn whose derived assistant id (`assistant:<userTurnId>`) equals
+ * `lastCanceledTurn` is excluded from every path: durable user Stop must not
+ * redispatch as crash recovery while cancellation is still settling.
  *
  * A turn matching `lastMissingHistoryUserMsgId` is excluded from every path:
  * recovery already surfaced its delivery failure, so a late payload must not be
@@ -311,6 +333,12 @@ export function findNextDispatchableUserTurn(
     // `settledActivationUserMsgId` needs no twin exclusion here: a settled turn
     // is terminal in history by construction, so no path below can return it.
     if (entry.id === meta.lastMissingHistoryUserMsgId) {
+      continue;
+    }
+    // Durable Stop intent (user stop or legacy cancel) must not redispatch as
+    // crash recovery via processingUserMsgId / latestUserMsgId while unsettled.
+    // lastCanceledTurn stores the assistant turn id (`assistant:<userTurnId>`).
+    if (isDurableStopForUserTurn(entry.id, meta.lastCanceledTurn)) {
       continue;
     }
 

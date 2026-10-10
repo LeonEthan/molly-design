@@ -41,6 +41,12 @@ When adding another consumer, mirror one of these three rewrites instead of edit
 the pinned vendor file.
 The fixture image is synthetic RGBA data. All fonts, icons and images are offline.
 
+The builder replaces Bento's startup splash with `src/splash.html`, embedding the
+existing light/dark Molly wordmark SVGs from the shell's assets. It paints before
+the bundle loads and dismisses at the existing ready boundary; reduced motion
+disables its loading pulse. The pinned upstream HTML and license notices remain
+source evidence.
+
 The builder emits `apps/electron/resources/design/editor.html`, sample JSON,
 licenses and `build.json` with source and output hashes. No sibling checkout or
 absolute source path is needed. The renderer uses the locked Electron 39.5.1
@@ -190,6 +196,9 @@ center in canvas coordinates; passing that value restores the camera within nati
 zoom/scroll bounds. `window.bento.fit()` reuses native fit and centering. Electron
 fits new document instances and resized containers before publishing prepared pixels;
 unchanged retained instances keep manual zoom across hide/show.
+The product scroll viewport ends above the dock, sharing its height and bottom
+offset CSS variables. Native fit keeps its existing 32px margin within that area,
+so fitted artwork clears the dock even when the narrow-window layout raises it.
 It does not persist document state or know about Agent execution or Git history.
 
 ## Build and upgrade

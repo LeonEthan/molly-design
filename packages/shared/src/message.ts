@@ -133,7 +133,12 @@ export interface SessionCancelRequest {
   turnId: string;
   /** When present, cancel only this native subagent; never cancel the parent turn. */
   subagentTaskId?: string;
-  action?: 'resume' | 'interrupt';
+  /**
+   * `resume`: Continue a paused dispatch. `interrupt`: interrupt-and-send; dispatch
+   * resumes so queued input promotes. `stop` (sessionStopControl >= 2): user hard
+   * Stop; the owner resumes dispatch only when its queue is empty, else pauses.
+   */
+  action?: 'resume' | 'interrupt' | 'stop';
 }
 
 export interface SessionCancelResponse {

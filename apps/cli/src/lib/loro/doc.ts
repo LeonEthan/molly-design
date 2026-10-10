@@ -2739,11 +2739,12 @@ export class SessionDocument implements LoroDocument<Omit<SessionDocMeta, 'histo
     await this.agentWrites.setTurnField(id, 'plan', setFieldTo(entries));
   }
 
+  readMessageQueueSnapshot(): MessageQueueItem[] {
+    return (this.mirror?.getState().mq ?? []) as MessageQueueItem[];
+  }
+
   async getMessageQueue(): Promise<MessageQueueItem[]> {
-    if (!this.mirror) {
-      return [];
-    }
-    return (this.mirror.getState().mq ?? []) as MessageQueueItem[];
+    return this.readMessageQueueSnapshot();
   }
 
   async peekReadyMessageQueue(): Promise<MessageQueueItem | null> {

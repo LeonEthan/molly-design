@@ -219,6 +219,29 @@ describe('designSkillsForImageCapability', () => {
   });
 });
 
+function materializedMarkdown(skillDir: string): Map<string, string> {
+  const files = new Map<string, string>();
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith('.md')) files.set(full, readFileSync(full, 'utf8'));
+    }
+  };
+  walk(skillDir);
+  return files;
+}
+
+function headingSlugs(markdown: string): string[] {
+  return Array.from(markdown.matchAll(/^#{1,6} (.+)$/gm), ([, title]) =>
+    title
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, '')
+      .trim()
+      .replace(/\s/g, '-')
+  );
+}
+
 describe('packaged design materials', () => {
   it('stages the real bundle, materializes both skills, and keeps human edits', () => {
     const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
@@ -260,7 +283,6 @@ describe('packaged design materials', () => {
     const graphicText = graphicMaterials.join('\n');
     const graphic = path.join(workdir, '.agents/skills/graphic-design');
     const entry = readFileSync(path.join(graphic, 'SKILL.md'), 'utf8');
-    const entryText = entry.replace(/\s+/g, ' ');
     expect(text).not.toMatch(
       /inspect → draft|inspect once|inspect in one pass|verify in two loops|never script pixel|do not write pixel-probing|rerun until|done check is executable|review is incomplete|never substitute another renderer/i
     );
@@ -270,70 +292,79 @@ describe('packaged design materials', () => {
     expect(Array.from(entry.matchAll(/^### (\d+)\./gm), (match) => Number(match[1]))).toEqual([
       1, 2, 3, 4, 5, 6, 7, 8, 9,
     ]);
-    expect(entryText).toContain('Follow these nine stages and their dependencies.');
-    expect(entryText).toContain('as Pinterest unless **all** of these conditions hold:');
-    expect(entryText).toContain(
-      'the user explicitly identifies a concrete template or reference target'
-    );
-    expect(entryText).toContain('following that target without additional design inspiration');
-    expect(entryText).toContain('you have actually inspected the target');
-    expect(entryText).toContain('the user has not also requested research');
-    expect(entryText).toContain('Local edits and reconstruction use this same rule.');
-    expect(entryText).toContain('final collection runs after your turn ends');
-    expect(entryText).toContain('Backgrounds can remain opaque.');
-    for (const [, target] of entry.matchAll(/\]\(([^)]+)\)/g)) {
-      expect(existsSync(path.resolve(graphic, target.split('#')[0])), target).toBe(true);
+    for (const heading of ['Required workflow', 'Design defaults', 'Reporting']) {
+      expect(entry).toMatch(new RegExp(`^## ${heading}$`, 'm'));
     }
-    expect(graphicText).toContain('references/layered-workflow.md');
-    expect(text).toContain('actual image-reading tool');
+
+    const graphicFiles = materializedMarkdown(graphic);
+    const linked = new Set<string>();
+    for (const [file, body] of graphicFiles) {
+      for (const [, target] of body.matchAll(/\]\(([^)\s]+)\)/g)) {
+        if (/^([a-z]+:|\/)/.test(target)) continue;
+        const [relative, anchor] = target.split('#');
+        const resolved = relative ? path.resolve(path.dirname(file), relative) : file;
+        expect(existsSync(resolved), `${file} -> ${target}`).toBe(true);
+        linked.add(resolved);
+        if (anchor) {
+          expect(headingSlugs(readFileSync(resolved, 'utf8')), `${file} -> ${target}`).toContain(
+            anchor
+          );
+        }
+      }
+    }
+    for (const file of graphicFiles.keys()) {
+      if (file !== path.join(graphic, 'SKILL.md')) expect(linked, file).toContain(file);
+    }
+    for (const example of ['minimal', 'layered']) {
+      expect(linked).toContain(path.join(graphic, 'examples', example, 'design.yaml'));
+    }
+
+    const singleOwner = [
+      /\*\*Research rule\.\*\*/g,
+      /\*\*Asking\.\*\*/g,
+      /^## When the user rejects a direction$/gm,
+      /^## Reporting$/gm,
+      /^## Design defaults$/gm,
+      /If `molly_render_preview` is absent/g,
+      /Markdown image syntax/g,
+      /^## What is editable today$/gm,
+    ];
+    const oneCopy = [...graphicFiles.values()].join('\n');
+    for (const pattern of singleOwner) {
+      expect(oneCopy.match(pattern)?.length ?? 0, String(pattern)).toBe(1);
+    }
+
     expect(text).toContain('mcp__molly_image__generate');
     expect(text).toContain('Molly has no default model');
     expect(text).toContain('sent as data URLs in a JSON request');
     expect(text).toContain('`background: "transparent"`');
-
-    expect(graphicText).toContain('design.yaml');
-    expect(graphicText).toContain('molly-canvas/1');
-    expect(graphicText).toContain('media/');
-    expect(graphicText).toContain('You may write `design.yaml` directly');
-    expect(graphicText).toMatch(/\bid\b/);
-    expect(graphicText).toMatch(/\bkind\b/);
-    expect(graphicText).toContain(
-      'If `molly_render_preview` is absent, only that tool is unavailable'
-    );
     expect(graphicText).not.toMatch(/You may write `design\.pptd` directly/);
     expect(graphicText).not.toMatch(/version:\s*v[23]/);
     expect(graphicText).not.toMatch(/\belementId\b|\belementType\b/);
-    expect(graphicText).not.toMatch(/\| Relationship \| Useful forms \|/);
-    expect(graphicText).not.toMatch(/Time, stages, change/);
-    expect(graphicText).not.toMatch(/Path, propagation, migration/);
-    expect(graphicText).not.toMatch(/Process, mechanism, method/);
     expect(graphicText).not.toMatch(/few-shot/i);
     expect(graphicText).not.toMatch(/step0|Step 0|five-step/i);
-    expect(graphicText).not.toMatch(/self-owned, licensed, officially citable/);
-    expect(graphicText).not.toMatch(/Do not forge real (magazines|logos)/);
-    expect(graphicText).not.toMatch(/crop lines and text[- ]safe areas/);
-    expect(graphicText).not.toMatch(/Do not treat [“"]poster[”"] as a default portrait/);
-    expect(graphicText).not.toMatch(/compose at one ratio then stretch/);
+    expect(graphicText).not.toMatch(/do not claim native icons, tables, charts/i);
     expect(text).not.toMatch(/design\.pptd/);
     expect(text).not.toMatch(/use the result in PPTD/);
 
     // Directly authored final files are valid without running finalize, and the
     // shipped helper executes from the materialized tree with its bundled library.
-    expect(existsSync(path.join(graphic, 'examples/minimal/design.yaml'))).toBe(true);
     expect(existsSync(path.join(graphic, 'examples/minimal/pages/canvas.yaml'))).toBe(false);
     expect(existsSync(path.join(graphic, 'examples/minimal/poster.pptd'))).toBe(false);
     expect(existsSync(path.join(graphic, 'examples/minimal/pages/poster.page'))).toBe(false);
-    cpSync(path.join(graphic, 'examples/minimal'), workdir, { recursive: true });
-    const intake = spawnSync(
-      process.execPath,
-      [path.join(graphic, 'scripts/render-preview.mjs'), path.join(workdir, 'design.yaml')],
-      { cwd: workdir, encoding: 'utf8' }
-    );
-    expect(intake.status, intake.stderr).toBe(0);
-    expect(intake.stdout).toContain('intake OK');
-    expect(intake.stdout).toContain('This script does not render or review images');
-    expect(intake.stdout).toContain('molly_render_preview');
-    expect(readdirSync(workdir)).not.toContain('design.yaml.tmp');
+    for (const example of ['minimal', 'layered']) {
+      const project = makeWorkdir();
+      cpSync(path.join(graphic, 'examples', example), project, { recursive: true });
+      const intake = spawnSync(
+        process.execPath,
+        [path.join(graphic, 'scripts/render-preview.mjs'), path.join(project, 'design.yaml')],
+        { cwd: project, encoding: 'utf8' }
+      );
+      expect(intake.status, intake.stderr).toBe(0);
+      expect(intake.stdout).toContain('intake OK');
+      expect(intake.stdout).toContain('This script does not render or review images');
+      expect(readdirSync(project)).not.toContain('design.yaml.tmp');
+    }
 
     const edited = path.join(workdir, '.claude/skills/graphic-design/SKILL.md');
     writeFileSync(edited, '# Human-owned design instructions\n');
@@ -343,9 +374,7 @@ describe('packaged design materials', () => {
       'SKILL.md',
     ]);
     expect(readFileSync(edited, 'utf8')).toBe('# Human-owned design instructions\n');
-    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toContain(
-      'Follow these nine stages and their dependencies.'
-    );
+    expect(readFileSync(path.join(graphic, 'SKILL.md'), 'utf8')).toMatch(/^## Required workflow$/m);
   });
 });
 

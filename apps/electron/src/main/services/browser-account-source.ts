@@ -2,9 +2,7 @@ import type {
   ExtractionReportObject,
   CookieObject,
   DetailedCookieObject,
-  SourceExtractionObject,
-  ReadResult,
-  ReadWarningObject
+  SourceExtractionObject
 } from 'rookie-cookies'
 import { z } from 'zod'
 import type { BrowserImportCookie } from '@molly/shared/browser-import-cookie'
@@ -106,28 +104,34 @@ const contextSchema = z
   })
   .strict()
 
-function assertNoDecryptWarnings(warnings: readonly ReadWarningObject[]): void {
-  if (
-    warnings.some(
-      (warning) =>
-        warning.code === 'decrypt_failed' ||
-        warning.code === 'provider_failed' ||
-        /decrypt/i.test(warning.message)
-    )
-  )
-    throw new Error('This browser profile’s cookies could not be fully decrypted.')
-}
-
-/** Convert one detailed snapshot; cookie values must already be decrypted. */
-export function cookiesFromDetailedCookies(
-  detailed: readonly DetailedCookieObject[],
-  site: Site
+export function cookiesFromBrowserReport(
+  report: ExtractionReportObject,
+  profileId: string,
+  site: Site,
+  detailedSources: DetailedCookieObject[][]
 ): BrowserImportCookie[] {
-  if (detailed.length === 0)
+  const sources = selectedSources(report, profileId)
+  if (sources.length !== detailedSources.length)
+    throw new Error('Browser cookie details are incomplete. No cookies were imported.')
+  const cookies = detailedSources.flat()
+  if (cookies.length === 0)
     throw new Error('No cookies for this website were found in that browser profile.')
-  if (detailed.length > 200) throw new Error('This website has more than 200 browser cookies.')
+  if (cookies.length > 200) throw new Error('This website has more than 200 browser cookies.')
+  // The report preserves extraction diagnostics, but its cookies omit CHIPS.
+  // Compare multisets, not just counts: the two reads must describe the same
+  // cookies, including duplicate entries. Neither values nor paths leave main.
+  for (const [index, source] of sources.entries()) {
+    const reported = source.cookies
+      .map((cookie) => JSON.stringify(convertCookie(cookie, site)))
+      .sort()
+    const detailed = detailedSources[index]
+      .map(({ cookie }) => JSON.stringify(convertCookie(cookie, site)))
+      .sort()
+    if (reported.length !== detailed.length || reported.some((value, i) => value !== detailed[i]))
+      throw new Error('The browser’s cookies changed or could not be fully read. Retry the import.')
+  }
   const identities = new Set<string>()
-  const convertedCookies = detailed.map(({ cookie, context }) => {
+  const convertedCookies = cookies.map(({ cookie, context }) => {
     const checked = contextSchema.safeParse(context)
     if (!checked.success)
       throw new Error(
@@ -162,36 +166,6 @@ export function cookiesFromDetailedCookies(
   if (Buffer.byteLength(JSON.stringify(convertedCookies), 'utf8') > 512 * 1024)
     throw new Error('This website’s browser cookies exceed the import size limit.')
   return convertedCookies
-}
-
-/**
- * Legacy dual-read converter kept for unit tests of report diagnostics.
- * Production import uses a single `read()` so macOS Keychain is queried once.
- */
-export function cookiesFromBrowserReport(
-  report: ExtractionReportObject,
-  profileId: string,
-  site: Site,
-  detailedSources: DetailedCookieObject[][]
-): BrowserImportCookie[] {
-  const sources = selectedSources(report, profileId)
-  if (sources.length !== detailedSources.length)
-    throw new Error('Browser cookie details are incomplete. No cookies were imported.')
-  const cookies = detailedSources.flat()
-  // The report preserves extraction diagnostics, but its cookies omit CHIPS.
-  // Compare multisets, not just counts: the two reads must describe the same
-  // cookies, including duplicate entries. Neither values nor paths leave main.
-  for (const [index, source] of sources.entries()) {
-    const reported = source.cookies
-      .map((cookie) => JSON.stringify(convertCookie(cookie, site)))
-      .sort()
-    const detailed = detailedSources[index]
-      .map(({ cookie }) => JSON.stringify(convertCookie(cookie, site)))
-      .sort()
-    if (reported.length !== detailed.length || reported.some((value, i) => value !== detailed[i]))
-      throw new Error('The browser’s cookies changed or could not be fully read. Retry the import.')
-  }
-  return cookiesFromDetailedCookies(cookies, site)
 }
 
 /** A rejected listing means an installed browser Molly could not enumerate, not an absent one. */
@@ -230,17 +204,15 @@ export async function readBrowserSiteCookies(
   browserId: AccountImportBrowserId,
   profileId: string,
   site: Site,
-  reader?: Pick<typeof import('rookie-cookies'), 'read'>
+  reader?: Pick<typeof import('rookie-cookies'), 'browserReport' | 'chromiumBasedDetailed'>
 ): Promise<BrowserImportCookie[]> {
-  // One `read()` hits macOS Keychain once via `/usr/bin/security`. The older
-  // browserReport + chromiumBasedDetailed path queried Safe Storage twice and
-  // re-prompted even after Always Allow.
-  const { read } = reader ?? (await import('rookie-cookies'))
-  let snapshot: ReadResult
+  const { browserReport, chromiumBasedDetailed } = reader ?? (await import('rookie-cookies'))
+  let report: ExtractionReportObject
   try {
-    snapshot = await read({
-      browser: browserId,
-      profile: profileId,
+    report = await browserReport({
+      browserId,
+      profileId,
+      domains: [site],
       // This native deadline includes the user's first macOS Keychain approval.
       // Keep the wait bounded without racing an uncancellable native read.
       timeoutMs: 5 * 60_000,
@@ -261,13 +233,19 @@ export async function readBrowserSiteCookies(
       'Molly could not read the selected browser profile. Check macOS access and retry.'
     )
   }
-  if (snapshot.profileId !== null && snapshot.profileId !== profileId)
-    throw new Error('The selected browser profile is no longer available.')
-  if (snapshot.browserId !== null && snapshot.browserId !== browserId)
-    throw new Error('Molly could not read this browser profile’s cookies.')
-  assertNoDecryptWarnings(snapshot.warnings)
-  const forSite = snapshot.detailedCookies.filter(({ cookie }) =>
-    hostMatchesSite(cookie.domain.replace(/^\./, ''), site)
-  )
-  return cookiesFromDetailedCookies(forSite, site)
+  const sources = selectedSources(report, profileId)
+  const detailedSources: DetailedCookieObject[][] = []
+  for (const { source } of sources) {
+    if (source.pathLossy || !source.path)
+      throw new Error('Molly cannot safely read this browser cookie source.')
+    try {
+      // Pinned 0.6.0 compatibility API: unlike read()/fromPath(), this Unix
+      // entry point keeps domain filtering AND partition metadata. The path
+      // comes only from the validated native profile report, never the UI.
+      detailedSources.push(await chromiumBasedDetailed(source.path, [site], browserId))
+    } catch {
+      throw new Error('Molly could not read browser cookie details. No cookies were imported.')
+    }
+  }
+  return cookiesFromBrowserReport(report, profileId, site, detailedSources)
 }

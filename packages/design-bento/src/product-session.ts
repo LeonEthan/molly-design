@@ -118,7 +118,8 @@ export function createProductSession(options: {
   document.body.dataset.readonly = 'true';
   const style = document.createElement('style');
   style.textContent = `
-:root{color-scheme:light dark}
+:root{color-scheme:light dark;--molly-dock-bottom:18px;--molly-dock-height:52px}
+.ed-scroll{bottom:calc(var(--molly-dock-bottom) + var(--molly-dock-height))}
 /* Atelier palette (2026-10-04 redesign): the artwork rests on a quiet light
    table one step off the shell ground; chrome is warm ink with hairlines. */
 :root,:root[data-theme="light"]{--ink:#141413;--ink-2:#2b2b29;--chrome:#ebe7df;--chrome-2:#e2ded5;--line:#dcd8cf;--muted:#6b6963;--surface:#fcfbf8;--grid-dot:#d3cec4;--slide-shadow:0 1px 2px rgb(20 20 19 / .08),0 28px 60px -22px rgb(20 20 19 / .32)}
@@ -144,7 +145,7 @@ export function createProductSession(options: {
 #autosave-status .dot{width:5px;height:5px;border-radius:50%;background:#14ae5c;flex:none}
 #autosave-status[data-state="saving"] .dot,#autosave-status[data-state="pending"] .dot,#autosave-status[data-state="editing"] .dot,#autosave-status[data-state="loading"] .dot{background:#888}
 #autosave-status[data-state="error"] .dot,#autosave-status[data-state="conflict"] .dot{background:#f24822}
-.molly-dock{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 8px;box-shadow:0 18px 40px -20px rgb(0 0 0 / .35)}
+.molly-dock{position:fixed;left:50%;bottom:var(--molly-dock-bottom);height:var(--molly-dock-height);transform:translateX(-50%);z-index:2147483000;display:flex;align-items:center;gap:4px;max-width:calc(100vw - 24px);box-sizing:border-box;overflow-x:auto;scrollbar-width:none;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:6px 8px;box-shadow:0 18px 40px -20px rgb(0 0 0 / .35)}
 .molly-dock button{width:38px;height:38px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;border:none;border-radius:50%;background:transparent;color:inherit;cursor:pointer;font:400 18px system-ui;padding:0}
 .molly-dock button:hover{background:var(--chrome-2)}
 .molly-dock button.on{background:var(--ink);color:var(--surface)}
@@ -161,7 +162,7 @@ export function createProductSession(options: {
 /* Keep zoom and save feedback reachable when all three bottom surfaces cannot
    fit on one row. Extremely narrow docks scroll without shrinking the targets. */
 /* With the dock raised, reserve 140px for zoom plus edge insets and a gap. */
-@media(max-width:640px){.molly-dock{bottom:64px}.molly-shape-popup,.ed-toast{bottom:130px}#autosave-status{max-width:calc(100vw - 180px)}}
+@media(max-width:640px){:root{--molly-dock-bottom:64px}.molly-shape-popup,.ed-toast{bottom:130px}#autosave-status{max-width:calc(100vw - 180px)}}
 `;
   document.head.append(style);
   const dock = document.createElement('div');
@@ -553,7 +554,7 @@ export function createProductSession(options: {
   mark('loading', COPY.loading);
   void document.fonts.ready.then(() => {
     ready = true;
-    document.getElementById('bento-splash')?.remove();
+    document.getElementById('molly-splash')?.remove();
     if (state === 'loading') mark('saved', COPY.saved);
     else mark(state, statusSource);
     window.dispatchEvent(new Event('molly:ready'));

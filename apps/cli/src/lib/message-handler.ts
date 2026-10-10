@@ -3145,6 +3145,8 @@ export class MessageHandler {
           runtimeOverrides
         ),
       processMessageQueue: async (sessionId) => await this.processMessageQueue(sessionId),
+      hasPendingRpcTurn: (sessionId, excludeTurnIds) =>
+        this.sessionDispatchWatcher.hasPendingRpcTurn(sessionId, excludeTurnIds),
       syncLiveActivitySummary: async (userId) => {
         await this.syncLiveActivitySummary(userId);
       },
@@ -5826,6 +5828,15 @@ export class MessageHandler {
           requests: this.browserHost.exchange(request.params.reports, isActive),
           revoke,
         };
+      }
+      case 'browser/pause-all': {
+        const paused = this.executionService.activeTurnSessionIds().flatMap((sessionId) => {
+          const runId = this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId;
+          if (!runId) return [];
+          this.browserTakeovers.set(sessionId, runId);
+          return [{ sessionId, browserId: `session-browser-${sessionId}`, runId }];
+        });
+        return { type: 'browser/pause-all' as const, paused };
       }
       case 'browser/cancel': {
         const sessionId = request.ownerSessionId as SessionId;

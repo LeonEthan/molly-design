@@ -2,6 +2,7 @@
 
 Status: implemented
 Translation: pending
+PR: [#112](https://github.com/LeonEthan/molly-design/pull/112)
 
 ## 摘要
 
@@ -21,6 +22,7 @@ Issue [#111](https://github.com/LeonEthan/molly-design/issues/111) 报告源预�
 - `node --experimental-strip-types --test apps/electron/src/main/services/design-source-preview.test.mjs`：修复前 4 项失败，其中导航路径复现 `Cannot read properties of undefined (reading 'isDestroyed')` 及原始调用链；修复后扩展为 9 项并全部通过。测试使用显式加载/解析信号，覆盖尚未创建、已销毁、重复关闭、导航、渲染进程退出、窗口关闭、迟到结果、临时隐藏和兄弟消费者。
 - 复用已有 P1 原生探针：在真实预览加载被取消后，等待原生销毁回调返回，同时用显式 Promise 暂停加载清理，再重复 hide/close。检查空 getter、无异常、取消结果及 canonical 视图保留；报告新增 `repeatedCloseAfterNativeDestruction`。
 - `pnpm check`、`pnpm build`、更新探针后的 `pnpm --dir apps/electron build:app`、`pnpm format`、`pnpm run docs check` 均通过。Electron 两组测试共 295 项通过；文档检查仅保留原有 AGENTS 文件大小警告，无 SHA 保护主题变化。测试脚本加入常规 Electron 测试入口，重新解析 lockfile 未产生依赖变化。
+- PR 基于更新后的 main，测试列表冲突保留上游浏览器隐私设置测试并追加本次预览测试；变基后的 `pnpm check`、`pnpm format` 和文档检查再次通过。上述构建及原生证据采集于变基前，未据无关浏览器改动扩大原生验收范围。
 - 开发版原生 P1 退出 0，`result.json`、`source-preview-result.json`、`version-result.json` 均 passed，新增重复关闭断言为 true。首次手工启动误传了 main 文件路径，使 `app.getAppPath()` 指向 `out/main`，设计 worker 未启动；改用 Electron 应用目录后通过，没有为此更改产品代码。证据目录 `m111-p1-evV1hW`，初次失败保留在 `m111-p1-xORWe2`。
 - `pnpm --filter @molly/e2e canvas:resources` 退出 0：串行分区 1、同时存活独立分区 3、残留 editor HTML Buffer 0。证据目录 `molly-canvas-resources-6fQdGs`。
 - 只读 Codex CLI 第二意见（`gpt-6-astra` / high）未发现 P0/P1；其执行的 21 项聚焦测试、Electron 主进程类型检查和文档检查通过。审查进程未运行原生探针；上述原生证据来自本次主执行流程。

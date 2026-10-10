@@ -227,3 +227,5 @@ Codex CLI `gpt-6-astra` / high / read-only 的独立设计意见建议上述一�
 复用现有桌面 `postinstall.mjs` 调用固定依赖自带的安装器，再执行原来的 native dependency 准备，保留跳过桌面准备与缺少 Electron 依赖时的退出路径。安装器复用已有版本与下载校验；失败终止安装。检查过在各 E2E workflow 单独加下载步骤的方案，但它会重复准备逻辑并遗漏其他源码启动入口，因此选择修复已有 setup 层；没有新增下载器或在测试场景中联网。
 
 本地继续只做类型、格式、静态和文档检查，不运行测试或浏览器探针。修复后的测试结果以 PR 对应提交的 GitHub Actions 记录为准；桌面 smoke 也不构成 WebMCP 站点兼容性或安装包验收。
+
+第二轮 CI 中 CLI 的 2948 项与组件包的 3012 项测试通过，随后 Electron 测试暴露测试构建遗漏：新的 driver 在运行时读取 `@molly/shared/browser-agent-rpc`，而两个既有 CJS 测试 bundle 将该 ESM-only 子入口外置，触发 `ERR_PACKAGE_PATH_NOT_EXPORTED`。沿用这些 fixture 已有的共享源码 alias，把浏览器合同及其间接引用的 DSH capabilities 一并编译进 bundle；保留真实 schema 和现有行为断言，不修改共享包的公开导出合同。本地仅编译这两条依赖图并检查外置模块能否由 CJS 解析，没有加载 fixture 或执行测试。

@@ -22,6 +22,12 @@ const compiled = await build({
   format: 'cjs',
   packages: 'external',
   alias: {
+    'acp-extension-dsh/capabilities': fileURLToPath(
+      new URL('../../../../../packages/acp-extension-dsh/src/capabilities.ts', import.meta.url)
+    ),
+    '@molly/shared/browser-agent-rpc': fileURLToPath(
+      new URL('../../../../../packages/shared/src/browser-agent-rpc.ts', import.meta.url)
+    ),
     '@molly/shared/browser-url': fileURLToPath(
       new URL('../../../../../packages/shared/src/browser-url.ts', import.meta.url)
     )

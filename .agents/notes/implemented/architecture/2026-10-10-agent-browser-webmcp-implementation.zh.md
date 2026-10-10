@@ -217,3 +217,13 @@ Codex CLI `gpt-6-astra` / high / read-only 的独立设计意见建议上述一�
 修复验证：原生 macOS arm64 release 重新编译与资源哈希校验、Electron 主进程/renderer 类型检查及完整应用构建、全量 lint、public boundary、文档检查和 diff 空白检查通过。实际构建源码与审阅的九个补丁文件逐字节一致。lint 为 0 错误，保留原有 12023 项警告；文档检查为 0 错误，保留原有 16 项文件体积提醒。本轮未运行测试、浏览器探针或真实网站操作，没有构建 DMG、签名或发布；源码复审与编译不作为这些运行验收的替代证据。
 
 准备 PR 时补跑完整工作区 `pnpm typecheck`，发现组件包引用 Electron 代码时 WebSocket 验证回调缺少上下文参数类型；补充 `IncomingMessage` 显式类型后全部通过。新增原生资源和源码缓存排除出 Electron 格式化范围；`pnpm format` 与 `pnpm check:quick` 均通过，没有带入无关格式化改动。继续按用户要求跳过包含测试的完整 `pnpm check`，以完整工作区类型检查、lint、i18n、导入及 public/platform boundary 检查覆盖其非测试部分。
+
+## PR CI 修正（2026-10-10）
+
+[PR #117](https://github.com/LeonEthan/molly-design/pull/117) 的首轮 CI 暴露两处遗漏：机器注册测试的完整能力清单未包含 `browserAgent: 2`；桌面 smoke 构建成功，但三个场景均在启动前因 Electron `path.txt` 缺失失败。
+
+能力测试继续使用独立、完整的字面值断言，只补上已实现的协议版本。Electron 安装问题由升级跨越的[官方安装行为变更](https://www.electronjs.org/blog/electron-42-0#electron-no-longer-downloads-itself-via-postinstall-script)引起：42 起 npm 包不再通过自己的 postinstall 下载二进制；固定的 44.7.0 包提供 `install-electron`，而 E2E harness 直接读取已准备好的路径。
+
+复用现有桌面 `postinstall.mjs` 调用固定依赖自带的安装器，再执行原来的 native dependency 准备，保留跳过桌面准备与缺少 Electron 依赖时的退出路径。安装器复用已有版本与下载校验；失败终止安装。检查过在各 E2E workflow 单独加下载步骤的方案，但它会重复准备逻辑并遗漏其他源码启动入口，因此选择修复已有 setup 层；没有新增下载器或在测试场景中联网。
+
+本地继续只做类型、格式、静态和文档检查，不运行测试或浏览器探针。修复后的测试结果以 PR 对应提交的 GitHub Actions 记录为准；桌面 smoke 也不构成 WebMCP 站点兼容性或安装包验收。

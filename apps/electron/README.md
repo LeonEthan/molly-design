@@ -13,6 +13,13 @@ Molly desktop application built with Electron, React, and TypeScript.
 Follow the root [contributor setup](../../CONTRIBUTING.md#get-the-code); install
 from the repository root, including its three required source submodules.
 
+The desktop postinstall prepares the pinned Electron binary with Electron's own
+installer before rebuilding native dependencies. Electron 42 and later no longer
+download the binary during dependency installation; source-based E2E launches
+need it prepared before running scenarios. `MOLLY_SKIP_ELECTRON_POSTINSTALL=1`
+skips desktop preparation. If install scripts were skipped, run
+`pnpm --dir apps/electron exec install-electron` before launching the E2E harness.
+
 ### Open-source desktop development
 
 From the repository root, build the embedded CLI and OSS renderer, then launch

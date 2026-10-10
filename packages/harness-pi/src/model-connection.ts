@@ -59,6 +59,16 @@ export function configureModelConnection(
         },
       })),
     });
+  else if (connection.authType === 'openai_oauth')
+    // OAuth connections run against the ChatGPT codex backend, not the public API host.
+    // The account header arrives with the credential grant; registration is stable here
+    // so the host's provider fingerprint does not change at grant time.
+    runtime.registerProvider(providerId, {
+      baseUrl: 'https://chatgpt.com/backend-api/codex',
+      api: 'openai-codex-responses',
+      authHeader: true,
+      headers: { originator: 'molly' },
+    });
   else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
     runtime.registerProvider(providerId, { baseUrl: connection.baseUrl });
   const model = runtime.getModel(providerId, selection.modelId);

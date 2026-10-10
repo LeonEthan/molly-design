@@ -35,6 +35,8 @@ export const WorkerCredentialGrantSchema = z
     runtimeEpoch: z.string().uuid(),
     runId: z.string().min(1).max(200),
     apiKey: z.string().min(1).max(16_384),
+    /** Present when the grant is an OAuth access token; the codex backend requires it. */
+    oauthAccountId: z.string().min(1).max(200).optional(),
   })
   .strict();
 

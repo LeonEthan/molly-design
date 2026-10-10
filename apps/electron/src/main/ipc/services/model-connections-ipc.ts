@@ -9,6 +9,7 @@ import {
   DeleteImageConnectionSchema,
   SaveMcpCredentialSettingsSchema,
   DeleteMcpCredentialSchema,
+  OpenAiAuthSessionSchema,
   type CheckImageConnection,
   type CheckModelConnection,
   type DiscoverModelConnection,
@@ -17,9 +18,11 @@ import {
   type SaveModelConnection,
   type DeleteImageConnection
 } from '@molly/shared/embedded-harness'
+import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
+import { OpenAiAuthService, revokeOAuthTokens } from '../../services/openai-oauth'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -35,6 +38,13 @@ async function localWorkspaceId(): Promise<string> {
   const platform = await readLocalPlatformSnapshot()
   if (!platform) throw new Error('local_workspace_unavailable')
   return platform.workspace.workspaceId
+}
+
+let openAiAuthService: OpenAiAuthService | undefined
+function getOpenAiAuthService(): OpenAiAuthService {
+  return (openAiAuthService ??= new OpenAiAuthService(getModelConnectionStore(), fetch, (url) =>
+    shell.openExternal(url)
+  ))
 }
 
 export class ModelConnectionsIpc extends IpcService {
@@ -153,6 +163,40 @@ export class ModelConnectionsIpc extends IpcService {
     const parsed = DiscoverModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection_discovery')
     return discoverModelConnection(getModelConnectionStore(), parsed.data)
+  }
+
+  /**
+   * Explicit Settings action: open the OpenAI account sign-in flow. One flow at a time;
+   * beginning cancels any prior pending flow. The renderer only receives the URL to open.
+   */
+  @IpcMethod()
+  async beginOpenAiAuth() {
+    const result = await getOpenAiAuthService().begin()
+    return OpenAiAuthSessionSchema.safeParse(result).success
+      ? result
+      : { ok: false as const, reason: 'unavailable' as const }
+  }
+
+  /** Resolves when the flow completes (browser callback), times out or is cancelled. */
+  @IpcMethod()
+  async completeOpenAiAuth(input: { sessionId: string }) {
+    return getOpenAiAuthService().complete(input.sessionId)
+  }
+
+  @IpcMethod()
+  async cancelOpenAiAuth(input: { sessionId: string }) {
+    getOpenAiAuthService().cancel(input.sessionId)
+  }
+
+  /** Sign-out: best-effort revoke at OpenAI, then delete the local connection and tokens. */
+  @IpcMethod()
+  async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
+    const parsed = DeleteModelConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_model_connection')
+    const store = getModelConnectionStore()
+    const saved = await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
+    if (saved) await revokeOAuthTokens(fetch, saved.oauth)
+    return store.delete(parsed.data)
   }
 
   @IpcMethod()

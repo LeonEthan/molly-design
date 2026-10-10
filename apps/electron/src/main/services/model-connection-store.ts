@@ -33,6 +33,20 @@ export interface CredentialCipher {
   getSelectedStorageBackend(): string
 }
 
+/** OAuth token triple for an OpenAI sign-in; refresh rotates, so the whole set is replaced. */
+const OAuthTokenSetSchema = z
+  .object({
+    accessToken: z.string().min(1).max(16_384),
+    refreshToken: z.string().min(1).max(16_384),
+    /** Epoch milliseconds when the access token expires (JWT exp). */
+    accessTokenExpiresAt: z.number().int().positive(),
+    /** Refresh was rejected; the row stays but runs refuse until the user signs in again. */
+    denied: z.boolean().optional(),
+    accountId: z.string().max(200).optional()
+  })
+  .strict()
+export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
+
 const StoreSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -41,9 +55,14 @@ const StoreSchema = z
         z
           .object({
             connection: ModelConnectionSchema,
-            apiKey: z.string().min(1).max(16_384)
+            apiKey: z.string().min(1).max(16_384).optional(),
+            oauth: OAuthTokenSetSchema.optional()
           })
           .strict()
+          .refine(
+            (entry) => (entry.apiKey !== undefined) !== (entry.oauth !== undefined),
+            'exactly one credential kind'
+          )
       )
       .max(256),
     image: z
@@ -164,9 +183,16 @@ export class ModelConnectionStore {
     }
   }
 
+  /** Public snapshot: renderer sees the denial flag, never the tokens. */
   snapshot(): Promise<{ connections: ModelConnection[] }> {
     return this.serial(async () => ({
-      connections: (await this.read()).entries.map((entry) => entry.connection)
+      connections: (await this.read()).entries.map((entry) => {
+        if (!entry.oauth) return entry.connection
+        return {
+          ...entry.connection,
+          oauth: { ...entry.connection.oauth, ...(entry.oauth.denied ? { denied: true } : {}) }
+        }
+      })
     }))
   }
 
@@ -390,7 +416,8 @@ export class ModelConnectionStore {
         throw new Error('model_connection_revision_conflict')
       if (!previous && store.entries.length >= 256) throw new Error('model_connection_limit')
       const apiKey = data.apiKey ?? previous?.apiKey
-      if (!apiKey) throw new Error('model_connection_credential_required')
+      if (data.authType !== 'openai_oauth' && !apiKey)
+        throw new Error('model_connection_credential_required')
       // A changed destination must receive explicit renewed credential consent.
       if (
         previous &&
@@ -409,12 +436,22 @@ export class ModelConnectionStore {
         providerPresetId: data.providerPresetId,
         baseUrl: data.baseUrl,
         enabled: data.enabled,
+        ...(data.authType ? { authType: data.authType } : {}),
+        // OAuth account metadata is main-owned: renderer edits preserve it verbatim.
+        ...(previous?.connection.oauth ? { oauth: previous.connection.oauth } : {}),
         ...(data.customModels ? { customModels: data.customModels } : {}),
         ...(data.models ? { models: data.models } : {})
       })
+      const oauth = data.authType === 'openai_oauth' ? previous?.oauth : undefined
+      if (previous && data.authType === 'openai_oauth' && !oauth)
+        throw new Error('model_connection_oauth_required')
+      if (previous && previous.oauth && data.authType !== 'openai_oauth')
+        throw new Error('model_connection_oauth_requires_reauth')
+      const credential =
+        data.authType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }
       store.entries = previous
-        ? store.entries.map((entry) => (entry === previous ? { connection, apiKey } : entry))
-        : [...store.entries, { connection, apiKey }]
+        ? store.entries.map((entry) => (entry === previous ? credential : entry))
+        : [...store.entries, credential]
       await this.write(store)
       return connection
     })
@@ -441,7 +478,21 @@ export class ModelConnectionStore {
   ): Promise<{ connection: ModelConnection; apiKey: string } | null> {
     return this.serial(async () => {
       const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
-      return entry && entry.connection.revision === revision ? entry : null
+      if (!entry || entry.connection.revision !== revision || entry.apiKey === undefined)
+        return null
+      return { connection: entry.connection, apiKey: entry.apiKey }
+    })
+  }
+
+  /** Main-only: the OAuth token set of this exact revision, on or off. */
+  oauthForCheck(
+    connectionId: string,
+    revision: number
+  ): Promise<{ connection: ModelConnection; oauth: OAuthTokenSet } | null> {
+    return this.serial(async () => {
+      const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
+      if (!entry || entry.connection.revision !== revision || !entry.oauth) return null
+      return { connection: entry.connection, oauth: entry.oauth }
     })
   }
 
@@ -459,13 +510,71 @@ export class ModelConnectionStore {
   acquireForRun(
     connectionId: string,
     revision: number
-  ): Promise<{ connection: ModelConnection; apiKey: string }> {
+  ): Promise<
+    | { connection: ModelConnection; apiKey: string }
+    | { connection: ModelConnection; oauth: OAuthTokenSet }
+  > {
     return this.serial(async () => {
       const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
       if (!entry || !entry.connection.enabled || entry.connection.revision !== revision) {
         throw new Error('model_connection_unavailable')
       }
-      return entry
+      if (entry.oauth) {
+        if (entry.oauth.denied) throw new Error('model_connection_oauth_denied')
+        return { connection: entry.connection, oauth: entry.oauth }
+      }
+      if (entry.apiKey === undefined) throw new Error('model_connection_unavailable')
+      return { connection: entry.connection, apiKey: entry.apiKey }
     })
+  }
+
+  /** Completes an OAuth sign-in: creates the connection and its token set atomically. */
+  saveOAuthConnection(
+    input: SaveModelConnection,
+    tokens: OAuthTokenSet,
+    account: { email?: string; plan?: string; accountId?: string }
+  ): Promise<ModelConnection> {
+    const parsed = SaveModelConnectionSchema.safeParse(input)
+    if (!parsed.success || parsed.data.authType !== 'openai_oauth')
+      return Promise.reject(new Error('invalid_model_connection'))
+    return this.serial(async () => {
+      const store = await this.read()
+      if (store.entries.length >= 256) throw new Error('model_connection_limit')
+      const connection = ModelConnectionSchema.parse({
+        schemaVersion: 1,
+        id: randomUUID(),
+        revision: 1,
+        credentialRef: randomUUID(),
+        displayName: parsed.data.displayName,
+        providerPresetId: parsed.data.providerPresetId,
+        baseUrl: parsed.data.baseUrl,
+        enabled: parsed.data.enabled,
+        authType: 'openai_oauth',
+        oauth: account,
+        ...(parsed.data.models ? { models: parsed.data.models } : {})
+      })
+      store.entries = [...store.entries, { connection, oauth: tokens }]
+      await this.write(store)
+      return connection
+    })
+  }
+
+  /** Completes an OAuth sign-in: writes the token set onto the saved connection. */
+  saveOAuthTokens(connectionId: string, expectedRevision: number, tokens: OAuthTokenSet) {
+    return this.serial(async () => {
+      const store = await this.read()
+      const entry = store.entries.find((item) => item.connection.id === connectionId)
+      if (!entry || entry.connection.revision !== expectedRevision)
+        throw new Error('model_connection_revision_conflict')
+      if (entry.connection.authType !== 'openai_oauth')
+        throw new Error('model_connection_oauth_requires_reauth')
+      entry.oauth = tokens
+      await this.write(store)
+    })
+  }
+
+  /** Rotates a refreshed token set in place; fails rather than resurrecting a dead entry. */
+  rotateOAuthTokens(connectionId: string, connectionRevision: number, tokens: OAuthTokenSet) {
+    return this.saveOAuthTokens(connectionId, connectionRevision, tokens)
   }
 }

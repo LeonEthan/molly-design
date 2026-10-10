@@ -121,6 +121,43 @@ const legacyImage = {
   updatedAt: 1
 }
 
+void test('oauth connection round-trips its token set without exposing it in the snapshot', async (t) => {
+  const { store } = await fixture(t)
+  const saved = await store.saveOAuthConnection(
+    {
+      providerPresetId: 'openai',
+      displayName: 'OpenAI · designer@example.com',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'SYNTHETIC_ACCESS_TOKEN',
+      refreshToken: 'SYNTHETIC_REFRESH_TOKEN',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      accountId: 'acct-1'
+    },
+    { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' }
+  )
+  const snapshot = await store.snapshot()
+  assert.equal(snapshot.connections[0].authType, 'openai_oauth')
+  assert.equal(snapshot.connections[0].oauth?.email, 'designer@example.com')
+  assert.equal(JSON.stringify(snapshot).includes('SYNTHETIC_ACCESS_TOKEN'), false)
+  assert.equal(JSON.stringify(snapshot).includes('SYNTHETIC_REFRESH_TOKEN'), false)
+  const acquired = await store.acquireForRun(saved.id, saved.revision)
+  assert.equal('oauth' in acquired, true)
+  if ('oauth' in acquired) assert.equal(acquired.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
+  // Rotating with a stale revision refuses.
+  await assert.rejects(
+    store.rotateOAuthTokens(saved.id, saved.revision + 9, {
+      accessToken: 'a2',
+      refreshToken: 'r2',
+      accessTokenExpiresAt: Date.now() + 3_600_000
+    }),
+    /revision_conflict/
+  )
+})
+
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {
   const { directory, store } = await fixture(t)
   const customModels = [

@@ -13,7 +13,7 @@ Users need a Molly they can install, configure and keep creating with — not an
 
 ## Solution
 
-After installing Molly, the user only configures a model connection, an API key and an explicit model to start designing — no separate Agent CLI or global Node/npm install. Image generation and editing continue to use the user-configured image MCP/BYOK; without an image connection, text, shapes, manual editing and rendering remain usable. Different sessions may choose different model connections, but all new executions use the same version of the embedded Pi harness.
+After installing Molly, the user only configures a model connection, a credential (an API key or an OpenAI account sign-in) and an explicit model to start designing — no separate Agent CLI or global Node/npm install. Image generation and editing continue to use the user-configured image MCP/BYOK; without an image connection, text, shapes, manual editing and rendering remain usable. Different sessions may choose different model connections, but all new executions use the same version of the embedded Pi harness.
 
 This draft follows the "Molly embedded Pi harness transformation plan" v1.0 (2026-09-19), and redefines the remaining delivery scope per the 2026-09-20 convergence requirement: the installer, one complete design journey, key interactions, old-data continuation and delivery notes. Items explicitly deferred below are no longer completion conditions for this round; the original plan's historical goals and executed evidence are preserved, and deferral is not recorded as completed implementation. The implementation plan holds the implementation and check evidence. Task status and automated checks do not replace human approval; this revision's approval is recorded in the header.
 

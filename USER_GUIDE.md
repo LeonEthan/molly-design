@@ -25,20 +25,23 @@ app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → AI models → Models, pick the provider/product tile and paste
-   its API key. Molly suggests the provider's default endpoint and a connection
-   name; change either one, or choose **Use a custom endpoint**. With the default,
-   each model uses its provider's own address (OpenRouter's Claude models
-   included); a custom endpoint receives every model's requests. Once the key
-   settles, Molly checks it for free against the provider's model list (OpenRouter:
-   its key endpoint) and shows the result; it sends no model request, so billing
-   and access to a particular model stay unverified, and some services can't be
-   checked this way. Under **Models in the conversation picker** keep **All** or
-   **Choose** the models you want to pick from; models the provider didn't list
-   for your key are marked. Enter keys only in the local settings field, never in
-   a conversation or artwork file. Saving encrypts the connection and doesn't
-   change an existing session's selection; **Delete** removes a connection after
-   you confirm.
+1. Open Settings → AI models → Models, pick the provider/product tile. For OpenAI you can
+   either **Sign in with ChatGPT** (uses your Plus/Pro subscription through the public Codex
+   sign-in — Molly opens a browser, the account stays on this computer, sign-out revokes it)
+   or paste an API key. Other providers take a key. Molly suggests the provider's default
+   endpoint and a connection name; change either one, or choose **Use a custom endpoint**.
+   With the default, each model uses its provider's own address (OpenRouter's Claude models
+   included); a custom endpoint receives every model's requests. Once the key settles, Molly
+   checks it for free against the provider's model list (OpenRouter: its key endpoint) and
+   shows the result; it sends no model request, so billing and access to a particular model
+   stay unverified, and some services can't be checked this way. Under **Models in the
+   conversation picker** keep **All** or **Choose** the models you want to pick from; models
+   the provider didn't list for your key are marked and sorted last. Enter keys only in the
+   local settings field, never in a conversation or artwork file. Saving encrypts the
+   connection and doesn't change an existing session's selection; **Delete** removes a
+   connection after you confirm. The ChatGPT sign-in is a Codex-compatible integration, not
+   an OpenAI-issued one for Molly; it runs on the Codex backend with its own catalog and
+   limits, and may change with OpenAI policy.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid

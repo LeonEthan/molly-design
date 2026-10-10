@@ -79,19 +79,13 @@
   └─ OpenAI-compatible → 端点 +（可选）key → 自动发现（流程 2）
 ```
 
-**OAuth 子流程（主进程实现，见 repo-touchpoints §7.1）：**
-
-1. 点「登录」→ main 起 127.0.0.1:1455 一次性回调服务（占用则 1457），
-   `shell.openExternal` 打开 `auth.openai.com/oauth/authorize?...&originator=molly`。
-2. 表单进入等待态（spinner +「在浏览器中完成登录」+ 取消按钮 + 120s 超时）。
-3. 回调收 code+state → 校验 state → PKCE 换 token → token set 写入 vault
-   （entry 增加独立 token 字段；不塞进 16384 上限的 apiKey 字段——复核意见 3）。
-4. 用 id_token claims 显示账号（email + plan 类型），自动设 displayName =
-   「OpenAI · <email>」。
-5. 模型列表：优先拉 `chatgpt.com/backend-api/codex/models`（Zed 已验证该端点按账号返回
-   可见模型），失败则静态清单兜底。
-6. 登出 = best-effort 调 `/oauth/revoke` + 删本地凭据；refresh 轮换语义，失败即标
-   「需要重新登录」（复用现有 badge 体系新增一种状态）。
+**OAuth 子流程（已实现）**：main 起 127.0.0.1:1455（占用回退 1457）一次性回调服务 →
+`shell.openExternal` 打开 `auth.openai.com/oauth/authorize?...&originator=molly` → PKCE 换
+token → token set 原子写入 vault（`saveOAuthConnection`）→ 用 id_token claims 显示账号。
+授予前 main 侧刷新 access token（`usableOAuthAccessToken`），仍以单字符串 + 可选
+`oauthAccountId` 下发；worker 对 OAuth 连接注册 codex 后端（`openai-codex-responses`）并
+把 `ChatGPT-Account-Id` 原地写入已注册的 provider headers（不重注册，避免触发 model-change
+守卫）。登出 = best-effort revoke + 删除连接。refresh 轮换语义，denied 即要求重新登录。
 
 **风险护栏（必须随功能落地）：**
 
@@ -154,11 +148,11 @@ Google 形态保持特例。
 
 ### 分期
 
-| 期 | 内容 | 改动面 |
+| 期 | 内容 | 状态 |
 |---|---|---|
-| 1 | 解析器放宽 + usageInStreaming 移除 + 自动发现勾选流程（结果写 customModels） | 表单 + connection-check + i18n；schema 一处放宽（需同步重建打包 catalog，复核意见 2） |
-| 2 | picker 治理 + 空态/错误/onboarding 收尾 | 仅 components |
-| 3 | OpenAI OAuth（含 spec 回 draft 评审、ToS 人工精读、AGENTS.md 凭据规则补写） | repo-touchpoints §7.1 的 8 处 |
+| 1 | 解析器放宽 + usageInStreaming 移除 + 自动发现勾选流程（结果写 customModels） | ✅ 已交付（`113ca444`） |
+| 2 | picker 治理 + 空态/错误/onboarding 收尾 | ✅ 已交付（`3f54a361`） |
+| 3 | OpenAI OAuth（spec 回 draft 评审、ToS 人工精读） | ✅ 已交付（本提交）——ToS 人工精读仍是发布前人工闸门 |
 
 期 1 独立价值最大（直接解决「手填 9 字段」），期 3 风险最高（政策敞口），隔开交付。
 

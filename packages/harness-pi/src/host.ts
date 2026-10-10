@@ -392,6 +392,13 @@ export class PiAcpHost {
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey)
       throw new Error('pi_acp_host_credential_changed');
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
+    if (this.config.connection.authType === 'openai_oauth' && grant.oauthAccountId) {
+      // The codex backend needs the account header with every request. Re-registering
+      // would replace the provider config object and trip the model-change guard, so the
+      // account id is written into the registered headers in place.
+      const config = this.runtime!.getRegisteredProviderConfig(this.providerId!);
+      if (config?.headers) config.headers['ChatGPT-Account-Id'] = grant.oauthAccountId;
+    }
     this.grantedKey = grant.apiKey;
     signal.throwIfAborted();
     let memory: string | undefined;

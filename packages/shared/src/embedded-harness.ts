@@ -675,6 +675,21 @@ export function getModelConnectionConfigurationIssue(input: {
   return undefined;
 }
 
+export const ModelConnectionAuthTypeSchema = z.enum(['api_key', 'openai_oauth']);
+export type ModelConnectionAuthType = z.infer<typeof ModelConnectionAuthTypeSchema>;
+
+/** Public OAuth account metadata; tokens stay in the main vault. */
+export const ModelConnectionOAuthSchema = z
+  .object({
+    email: z.string().trim().min(1).max(300).optional(),
+    plan: z.string().trim().min(1).max(60).optional(),
+    accountId: z.string().trim().min(1).max(200).optional(),
+    /** Refresh was rejected; the user must sign in again. */
+    denied: z.boolean().optional(),
+  })
+  .strict();
+export type ModelConnectionOAuth = z.infer<typeof ModelConnectionOAuthSchema>;
+
 const ModelConnectionFieldsSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -685,6 +700,9 @@ const ModelConnectionFieldsSchema = z
     baseUrl: ModelEndpointSchema,
     credentialRef: identifier,
     enabled: z.boolean(),
+    /** Absent means an API key connection. OAuth exists only for the OpenAI preset. */
+    authType: ModelConnectionAuthTypeSchema.optional(),
+    oauth: ModelConnectionOAuthSchema.optional(),
     customModels: CompatibleModelsSchema.optional(),
     /** Native catalog models offered in the conversation picker; absent offers all of them. */
     models: z
@@ -698,18 +716,29 @@ const ModelConnectionFieldsSchema = z
 export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
   (value) => value.customModels === undefined || value.providerPresetId === 'openai-compatible',
   'Custom models require an OpenAI-compatible connection'
-).refine(
-  (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
-  'OpenAI-compatible connections offer exactly their declared models'
-);
+)
+  .refine(
+    (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
+    'OpenAI-compatible connections offer exactly their declared models'
+  )
+  .refine(
+    (value) => value.authType !== 'openai_oauth' || value.providerPresetId === 'openai',
+    'OAuth sign-in exists only for the OpenAI preset'
+  )
+  .refine(
+    (value) => value.oauth === undefined || value.authType === 'openai_oauth',
+    'OAuth account metadata requires an OAuth connection'
+  );
 export type ModelConnection = z.infer<typeof ModelConnectionSchema>;
 
-/** The renderer can replace a secret, but cannot select or read a credential reference. */
+/** The renderer can replace a secret, but cannot select or read a credential reference.
+ *  OAuth account metadata is also main-owned: the form never writes it. */
 export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   schemaVersion: true,
   id: true,
   revision: true,
   credentialRef: true,
+  oauth: true,
 })
   .extend({
     id: z.string().uuid().optional(),
@@ -731,8 +760,33 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   .refine(
     (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
     'OpenAI-compatible connections offer exactly their declared models'
+  )
+  .refine(
+    (value) =>
+      value.authType !== 'openai_oauth' || (value.providerPresetId === 'openai' && !value.apiKey),
+    'OAuth sign-in exists only for the OpenAI preset and never carries an API key'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
+
+/**
+ * The main-side OAuth session handle. `sessionId` is opaque to the renderer; the browser
+ * URL is the only thing it may open. Completing the flow saves the connection.
+ */
+export const OpenAiAuthSessionSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    authorizeUrl: z.string().url().max(4096),
+    expiresAt: z.number().int().positive(),
+  })
+  .strict();
+export type OpenAiAuthSession = z.infer<typeof OpenAiAuthSessionSchema>;
+
+export type OpenAiAuthCompleteResult =
+  | { ok: true; connection: ModelConnection }
+  | {
+      ok: false;
+      reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response';
+    };
 
 /** Public image metadata only. The credential and legacy backup stay in the main vault. */
 export const ProtectedImageConnectionSchema = z
@@ -961,7 +1015,14 @@ export const HarnessCredentialReportSchema = z
     imageConnectionId: z.string().uuid().optional(),
     imageConnectionRevision: revision.optional(),
     result: z.discriminatedUnion('ok', [
-      z.object({ ok: z.literal(true), apiKey: z.string().min(1).max(16_384) }).strict(),
+      z
+        .object({
+          ok: z.literal(true),
+          apiKey: z.string().min(1).max(16_384),
+          /** OAuth connections carry the ChatGPT account the codex backend requires. */
+          oauthAccountId: z.string().min(1).max(200).optional(),
+        })
+        .strict(),
       z.object({ ok: z.literal(false), error: z.literal('credential_unavailable') }).strict(),
     ]),
   })

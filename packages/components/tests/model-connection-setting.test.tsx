@@ -774,6 +774,73 @@ describe('connection management', () => {
     expect(host.querySelector('[id$="-name"]')).not.toBeNull();
   });
 
+  it('offers ChatGPT sign-in for OpenAI and shows the signed-in account instead of a key field', async () => {
+    const oauthConnection: ModelConnection = {
+      ...stored,
+      providerPresetId: 'openai',
+      authType: 'openai_oauth',
+      oauth: { email: 'designer@example.com', plan: 'plus' },
+    };
+    const signOuts: unknown[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: oauthConnection,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async (input: unknown) => {
+              signOuts.push(input);
+            },
+          },
+        })
+      )
+    );
+    expect(host.textContent).toContain('designer@example.com');
+    expect(host.textContent).toContain(
+      en['settings.models.oauth.plan'].replace('{{plan}}', 'plus')
+    );
+    expect(host.querySelector('input[type=password]')).toBeNull();
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.oauth.signOut'])!
+        .click()
+    );
+    expect(signOuts).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
+  });
+
+  it('shows a failure reason and keeps the key path when sign-in fails', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async () => ({
+              sessionId: '00000000-0000-4000-8000-0000000000aa',
+              authorizeUrl: 'https://auth.openai.com/oauth/authorize?synthetic',
+              expiresAt: Date.now() + 60_000,
+            }),
+            complete: async () => ({ ok: false as const, reason: 'denied' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.oauth.signIn'])!
+        .click()
+    );
+    expect(host.textContent).toContain(en['settings.models.oauth.failed.denied']);
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+  });
+
   it('starts a new connection from a provider shortcut when none exist', async () => {
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
     await act(async () => root.render(createElement(ModelConnectionSetting)));

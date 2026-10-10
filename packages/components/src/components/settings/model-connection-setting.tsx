@@ -153,6 +153,22 @@ export type ModelConnectionDiscover = (
   input: DiscoverModelConnection
 ) => Promise<DiscoverModelConnectionResult>;
 
+/** Renderer-side handle for the main-owned sign-in flow. */
+export type OpenAiAuthFlow = {
+  begin: () => Promise<
+    | { sessionId: string; authorizeUrl: string; expiresAt: number }
+    | { ok: false; reason: 'unavailable' }
+  >;
+  complete: (
+    sessionId: string
+  ) => Promise<
+    | { ok: true; connection: ModelConnection }
+    | { ok: false; reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response' }
+  >;
+  cancel: (sessionId: string) => Promise<void>;
+  signOut: (input: { id: string; expectedRevision: number }) => Promise<void>;
+};
+
 function ProviderPicker({
   value,
   disabled,
@@ -202,6 +218,7 @@ export function ModelConnectionForm({
   onCancel,
   onCheck,
   onDiscover,
+  onOpenAiAuth,
   onDelete,
 }: {
   stored?: ModelConnection;
@@ -215,6 +232,8 @@ export function ModelConnectionForm({
   onCancel: () => void;
   onCheck?: ModelConnectionCheck;
   onDiscover?: ModelConnectionDiscover;
+  /** Main-owned OpenAI sign-in flow; present only where the desktop bridge exists. */
+  onOpenAiAuth?: OpenAiAuthFlow;
   onDelete?: () => void;
 }) {
   const { t } = useTranslation();
@@ -240,6 +259,38 @@ export function ModelConnectionForm({
       (provider === 'openai-compatible' ? [] : [compatibleModelDraft()])
   );
   const [discovery, setDiscovery] = useState<DiscoveryState>({ phase: 'idle' });
+  const [authFlow, setAuthFlow] = useState<
+    | { phase: 'idle' }
+    | { phase: 'waiting'; sessionId: string }
+    | { phase: 'failed'; reason: 'denied' | 'timed_out' | 'unreachable' | 'invalid_response' | 'unavailable' }
+  >({ phase: 'idle' });
+  const isOAuthConnection = stored?.authType === 'openai_oauth';
+
+  const beginSignIn = useCallback(async () => {
+    if (!onOpenAiAuth) return;
+    const started = await onOpenAiAuth.begin();
+    if (!('sessionId' in started)) {
+      setAuthFlow({ phase: 'failed', reason: started.reason });
+      return;
+    }
+    setAuthFlow({ phase: 'waiting', sessionId: started.sessionId });
+    const result = await onOpenAiAuth.complete(started.sessionId);
+    if (result.ok) {
+      // The flow saved the connection; the parent list refresh replaces this form.
+      onCancel();
+      return;
+    }
+    if (result.reason === 'cancelled') {
+      setAuthFlow({ phase: 'idle' });
+      return;
+    }
+    setAuthFlow({ phase: 'failed', reason: result.reason });
+  }, [onOpenAiAuth, onCancel]);
+
+  const cancelSignIn = useCallback(() => {
+    if (authFlow.phase === 'waiting') void onOpenAiAuth?.cancel(authFlow.sessionId);
+    setAuthFlow({ phase: 'idle' });
+  }, [authFlow, onOpenAiAuth]);
   const configurationIssue = getModelConnectionConfigurationIssue({
     providerPresetId: provider,
     baseUrl: endpoint,
@@ -388,6 +439,105 @@ export function ModelConnectionForm({
       </div>
       {provider !== '' ? (
         <>
+          {provider === 'openai' && onOpenAiAuth ? (
+            <div className="space-y-2">
+              {isOAuthConnection && stored?.oauth ? (
+                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm">
+                        {stored.oauth.email ?? stored.displayName}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {stored.oauth.denied
+                          ? t('settings.models.oauth.denied')
+                          : stored.oauth.plan
+                            ? t('settings.models.oauth.plan', { plan: stored.oauth.plan })
+                            : t('settings.models.oauth.signedIn')}
+                      </p>
+                    </div>
+                    {stored.oauth.denied ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => {
+                          if (!onOpenAiAuth || !stored) return;
+                          void onOpenAiAuth
+                            .signOut({ id: stored.id, expectedRevision: stored.revision })
+                            .then(() => onCancel());
+                        }}
+                      >
+                        {t('settings.models.oauth.signInAgain')}
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => {
+                          if (!onOpenAiAuth || !stored) return;
+                          void onOpenAiAuth
+                            .signOut({ id: stored.id, expectedRevision: stored.revision })
+                            .then(() => onCancel());
+                        }}
+                      >
+                        {t('settings.models.oauth.signOut')}
+                      </Button>
+                    )}
+                  </div>
+                  {stored.oauth.denied ? (
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.models.oauth.deniedDetail')}
+                    </p>
+                  ) : null}
+                </div>
+              ) : authFlow.phase === 'waiting' ? (
+                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.models.oauth.waiting')}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={cancelSignIn}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void beginSignIn()}
+                  >
+                    {t('settings.models.oauth.signIn')}
+                  </Button>
+                  {authFlow.phase === 'failed' ? (
+                    <p role="alert" className="text-xs text-destructive">
+                      {t(`settings.models.oauth.failed.${authFlow.reason}`)}
+                    </p>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.models.oauth.hint')}
+                  </p>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {t('settings.models.oauth.orKey')}
+              </p>
+            </div>
+          ) : null}
+          {!(provider === 'openai' && onOpenAiAuth && isOAuthConnection) ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
@@ -411,6 +561,7 @@ export function ModelConnectionForm({
               </p>
             ) : null}
           </div>
+          ) : null}
           {showEndpointField ? (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -659,6 +810,15 @@ export function ModelConnectionSetting({
     },
     [ipc]
   );
+  const onOpenAiAuth = useMemo<OpenAiAuthFlow | undefined>(() => {
+    if (!ipc) return undefined;
+    return {
+      begin: () => ipc.modelConnections.beginOpenAiAuth(),
+      complete: (sessionId) => ipc.modelConnections.completeOpenAiAuth({ sessionId }),
+      cancel: (sessionId) => ipc.modelConnections.cancelOpenAiAuth({ sessionId }),
+      signOut: (input) => ipc.modelConnections.signOutOpenAiAuth(input),
+    };
+  }, [ipc]);
   const recordCheck = (connection: ModelConnection, state: ConnectionCheckState) =>
     setChecks((current) => ({
       ...current,
@@ -757,6 +917,7 @@ export function ModelConnectionSetting({
                     onCancel={() => setEditing(null)}
                     onCheck={onCheck}
                     onDiscover={onDiscover}
+                    onOpenAiAuth={onOpenAiAuth}
                     onDelete={() => void remove(connection)}
                   />
                 </div>
@@ -793,6 +954,7 @@ export function ModelConnectionSetting({
                 onCancel={() => setEditing(null)}
                 onCheck={onCheck}
                 onDiscover={onDiscover}
+                onOpenAiAuth={onOpenAiAuth}
               />
             </div>
           ) : ready && connections.length === 0 ? (

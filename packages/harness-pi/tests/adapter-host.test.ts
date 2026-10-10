@@ -347,6 +347,40 @@ describe('owned ACP host integration', () => {
     expect(f.observed).toEqual([]);
   });
 
+  it('points an OpenAI OAuth connection at the codex backend with the account header', async () => {
+    const f = await managed({
+      config: {
+        connection: {
+          schemaVersion: 1,
+          id: 'connection',
+          revision: 1,
+          providerPresetId: 'openai',
+          displayName: 'OpenAI OAuth',
+          baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS.openai,
+          credentialRef: 'protected-reference',
+          enabled: true,
+          authType: 'openai_oauth',
+          oauth: { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' },
+        },
+        selection: { connectionId: 'connection', modelId: 'gpt-5', thinking: 'minimal' },
+      },
+    });
+    const s = await f.open();
+    const runtime = f.runtime();
+    const before = runtime.getRegisteredProviderConfig('openai') as {
+      baseUrl?: string;
+      api?: string;
+      headers?: Record<string, string>;
+    };
+    expect(before.baseUrl).toBe('https://chatgpt.com/backend-api/codex');
+    expect(before.api).toBe('openai-codex-responses');
+    expect(before.headers?.originator).toBe('molly');
+    f.grant(s.snapshot, 'SYNTHETIC_OAUTH_TOKEN', 'acct-1');
+    await s.prompt().catch(() => undefined);
+    const after = runtime.getRegisteredProviderConfig('openai') as typeof before;
+    expect(after.headers?.['ChatGPT-Account-Id']).toBe('acct-1');
+  });
+
   it.each(['model', 'endpoint'] as const)(
     'refuses a native extension changing the selected %s before inference',
     async (kind) => {

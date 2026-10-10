@@ -6,6 +6,7 @@ import {
 import type { CliService } from './cli-service'
 import { readLocalPlatformSnapshot } from '../platform'
 import { getModelConnectionStore } from './model-connections'
+import { usableOAuthAccessToken } from './openai-oauth-refresh'
 
 /** Reuses the owner-only daemon control socket; no listener or renderer secret-read API. */
 export function startHarnessCredentialHost(cliService: CliService): () => void {
@@ -80,17 +81,34 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
         if (stopped) return
         const snapshot = request.snapshot
         const imageConnection = request.imageConnection
-        const credentialResult = await (
-          imageConnection
-            ? store.acquireImageForRun(imageConnection.id, imageConnection.revision)
-            : store.acquireForRun(snapshot.connection.id, snapshot.connection.revision)
-        )
-          .then(({ connection, apiKey }) =>
-            JSON.stringify(connection) === JSON.stringify(imageConnection ?? snapshot.connection)
+        const credentialResult = await (async () => {
+          if (imageConnection) {
+            const { connection, apiKey } = await store.acquireImageForRun(
+              imageConnection.id,
+              imageConnection.revision
+            )
+            return JSON.stringify(connection) === JSON.stringify(imageConnection)
               ? { ok: true as const, apiKey }
               : { ok: false as const, error: 'credential_unavailable' as const }
+          }
+          const acquired = await store.acquireForRun(
+            snapshot.connection.id,
+            snapshot.connection.revision
           )
-          .catch(() => ({ ok: false as const, error: 'credential_unavailable' as const }))
+          if (JSON.stringify(acquired.connection) !== JSON.stringify(snapshot.connection))
+            return { ok: false as const, error: 'credential_unavailable' as const }
+          if ('oauth' in acquired) {
+            const usable = await usableOAuthAccessToken(store, snapshot.connection, acquired.oauth)
+            return usable.ok
+              ? {
+                  ok: true as const,
+                  apiKey: usable.accessToken,
+                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
+                }
+              : { ok: false as const, error: 'credential_unavailable' as const }
+          }
+          return { ok: true as const, apiKey: acquired.apiKey }
+        })().catch(() => ({ ok: false as const, error: 'credential_unavailable' as const }))
         reports.push({
           requestId: request.requestId,
           runId: snapshot.runId,

@@ -261,14 +261,15 @@ export class EmbeddedHarnessControl {
         active: () => !this.retired && this.busy && !controller.signal.aborted,
         revoke: retire,
       });
-      const apiKey = await lease.credential;
+      const grant = await lease.credential;
       controller.signal.throwIfAborted();
       await this.write(
         WorkerCredentialGrantSchema.parse({
           type: 'credential',
           runtimeEpoch: snapshot.runtimeEpoch,
           runId: snapshot.runId,
-          apiKey,
+          apiKey: grant.apiKey,
+          ...(grant.oauthAccountId ? { oauthAccountId: grant.oauthAccountId } : {}),
         })
       );
       controller.signal.throwIfAborted();

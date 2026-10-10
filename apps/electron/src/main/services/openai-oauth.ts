@@ -72,6 +72,23 @@ function tokenSetFromCredential(credential: Credential): OAuthTokenSet {
   }
 }
 
+/** Best-effort account id from the access token JWT (chatgpt_account_id claim). */
+function accountIdFromAccessToken(accessToken: string): string | undefined {
+  const parts = accessToken.split('.')
+  if (parts.length !== 3) return undefined
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8')) as {
+      chatgpt_account_id?: unknown
+    }
+    return typeof payload.chatgpt_account_id === 'string' &&
+      payload.chatgpt_account_id.length <= 200
+      ? payload.chatgpt_account_id
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export class OpenAiAuthService {
   private pending: PendingFlow | undefined
 
@@ -121,7 +138,9 @@ export class OpenAiAuthService {
       settle = resolve
     })
     const expiryTimer = setTimeout(() => {
-      abort.abort()
+      // Cancel through the shared path so ownership is cleared; a save queued behind
+      // the timeout must not persist.
+      if (this.pending?.sessionId === sessionId) this.cancelPending()
       settle({ ok: false, reason: 'timed_out' })
     }, FLOW_TIMEOUT_MS)
     expiryTimer.unref?.()
@@ -140,7 +159,8 @@ export class OpenAiAuthService {
 
     const authorizeUrl = await urlReady.catch(() => undefined)
     if (!authorizeUrl) {
-      this.cancelPending()
+      // Clean up only this flow; a replacement may already own the slot.
+      if (this.pending?.sessionId === sessionId) this.cancelPending()
       return { ok: false, reason: 'unavailable' }
     }
     await this.openExternal(authorizeUrl)
@@ -167,7 +187,7 @@ export class OpenAiAuthService {
           authType: 'openai_oauth'
         },
         tokens,
-        {}
+        { accountId: accountIdFromAccessToken(tokens.accessToken) }
       )
       // The write may have queued behind a cancellation.
       if (this.pending?.sessionId !== sessionId) {

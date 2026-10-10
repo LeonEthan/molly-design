@@ -576,7 +576,10 @@ export class ModelConnectionStore {
         oauth: account,
         ...(parsed.data.models ? { models: parsed.data.models } : {})
       })
-      store.entries = [...store.entries, { connection, oauth: { ...tokens } }]
+      store.entries = [
+        ...store.entries,
+        { connection, oauth: { ...tokens, ...(account.accountId ? { accountId: account.accountId } : {}) } }
+      ]
       await this.write(store)
       return connection
     })

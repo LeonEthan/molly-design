@@ -391,8 +391,9 @@ export class PiAcpHost {
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
-      // A rotation mints a new grant id; the old worker retires and the run replays on a
-      // fresh worker with the new token. Anything else changing the key is a hard failure.
+      // A rotation mints a new grant id. Retire so the run replays on a fresh worker with
+      // the new token (the session layer replaces a retired worker on its next turn);
+      // any other key change is a hard failure.
       const rotated =
         grant.oauthGrantId !== undefined && grant.oauthGrantId !== this.grantedOAuthGrantId;
       if (rotated) this.retire();

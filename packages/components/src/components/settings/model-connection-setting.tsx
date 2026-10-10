@@ -266,6 +266,17 @@ export function ModelConnectionForm({
   >({ phase: 'idle' });
   const isOAuthConnection = stored?.authType === 'openai_oauth';
 
+  const cancelSignIn = useCallback(() => {
+    if (authFlow.phase === 'waiting') void onOpenAiAuth?.cancel(authFlow.sessionId);
+    setAuthFlow({ phase: 'idle' });
+  }, [authFlow, onOpenAiAuth]);
+
+  // Cancelling or unmounting the form cancels any pending sign-in flow it started.
+  const cancelForm = useCallback(() => {
+    cancelSignIn();
+    onCancel();
+  }, [cancelSignIn, onCancel]);
+
   const beginSignIn = useCallback(async () => {
     if (!onOpenAiAuth) return;
     const started = await onOpenAiAuth.begin();
@@ -277,7 +288,7 @@ export function ModelConnectionForm({
     const result = await onOpenAiAuth.complete(started.sessionId);
     if (result.ok) {
       // The flow saved the connection; the parent list refresh replaces this form.
-      onCancel();
+      cancelForm();
       return;
     }
     if (result.reason === 'cancelled') {
@@ -285,12 +296,7 @@ export function ModelConnectionForm({
       return;
     }
     setAuthFlow({ phase: 'failed', reason: result.reason });
-  }, [onOpenAiAuth, onCancel]);
-
-  const cancelSignIn = useCallback(() => {
-    if (authFlow.phase === 'waiting') void onOpenAiAuth?.cancel(authFlow.sessionId);
-    setAuthFlow({ phase: 'idle' });
-  }, [authFlow, onOpenAiAuth]);
+  }, [onOpenAiAuth, cancelForm]);
   const configurationIssue = getModelConnectionConfigurationIssue({
     providerPresetId: provider,
     baseUrl: endpoint,
@@ -301,10 +307,12 @@ export function ModelConnectionForm({
   const showEndpointField =
     provider !== '' && (customEndpointOpen || !isDefaultEndpoint(endpoint, provider));
   const native = provider !== '' && provider !== 'openai-compatible';
-  const providerModels = useMemo(
-    () => (native ? catalog?.filter((model) => model.providerPresetId === provider) : undefined),
-    [catalog, native, provider]
-  );
+  const providerModels = useMemo(() => {
+    if (!native) return undefined;
+    // An OAuth connection runs on the codex backend; govern that catalog, not the public one.
+    const effective = isOAuthConnection ? 'openai-codex' : provider;
+    return catalog?.filter((model) => model.providerPresetId === effective);
+  }, [catalog, native, provider, isOAuthConnection]);
   const typedKey = apiKey.trim();
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
@@ -730,7 +738,7 @@ export function ModelConnectionForm({
           </Button>
         ) : null}
         <div className="ml-auto flex gap-2">
-          <Button variant="outline" type="button" disabled={busy} onClick={onCancel}>
+          <Button variant="outline" type="button" disabled={busy} onClick={cancelForm}>
             {t('common.cancel')}
           </Button>
           <Button type="submit" disabled={busy || !parsed.success || (requiresKey && !typedKey)}>

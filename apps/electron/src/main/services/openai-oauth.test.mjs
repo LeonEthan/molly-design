@@ -52,8 +52,7 @@ void test('refreshOAuthTokens rotates the whole set and maps 400/401 to denied',
 void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one', async () => {
   const future = Date.now() + 60 * 60_000
   const store = {
-    rotateOAuthTokens: async () => undefined,
-    saveOAuthTokens: async () => undefined
+    rotateOAuthTokens: async () => undefined
   }
   const fresh = await usableOAuthAccessToken(
     store,
@@ -68,11 +67,10 @@ void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one
   let rotatedWith
   const stale = await usableOAuthAccessToken(
     {
-      rotateOAuthTokens: async (_id, _revision, tokens) => {
+      rotateOAuthTokens: async (_id, tokens) => {
         rotatedWith = { ...tokens, grantId: 'grant-2' }
         return rotatedWith
-      },
-      saveOAuthTokens: async () => undefined
+      }
     },
     { id: 'c1', revision: 2 },
     { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1, accountId: 'acct' },
@@ -96,10 +94,10 @@ void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one
   let denialMarked = false
   const denied = await usableOAuthAccessToken(
     {
-      saveOAuthTokens: async (_id, _revision, tokens) => {
+      rotateOAuthTokens: async (_id, tokens) => {
         if (tokens.denied) denialMarked = true
-      },
-      rotateOAuthTokens: async () => undefined
+        return { ...tokens, grantId: 'grant-denied' }
+      }
     },
     { id: 'c1', revision: 1 },
     { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1 },

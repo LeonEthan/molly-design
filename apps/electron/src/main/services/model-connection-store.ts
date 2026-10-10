@@ -572,32 +572,12 @@ export class ModelConnectionStore {
     })
   }
 
-  /** Completes an OAuth sign-in: writes the token set onto the saved connection. */
-  saveOAuthTokens(connectionId: string, expectedRevision: number, tokens: OAuthTokenSet) {
+  /** Rotates a token set onto the current row; returns it with its new grant id. */
+  rotateOAuthTokens(connectionId: string, tokens: OAuthTokenSet): Promise<OAuthTokenSet> {
     return this.serial(async () => {
       const store = await this.read()
       const entry = store.entries.find((item) => item.connection.id === connectionId)
-      if (!entry || entry.connection.revision !== expectedRevision)
-        throw new Error('model_connection_revision_conflict')
-      if (entry.connection.authType !== 'openai_oauth')
-        throw new Error('model_connection_oauth_requires_reauth')
-      entry.oauth = tokens
-      await this.write(store)
-    })
-  }
-
-  /** Rotates a refreshed token set in place; returns the stored set with its new grant id. */
-  rotateOAuthTokens(
-    connectionId: string,
-    connectionRevision: number,
-    tokens: OAuthTokenSet
-  ): Promise<OAuthTokenSet> {
-    return this.serial(async () => {
-      const store = await this.read()
-      const entry = store.entries.find((item) => item.connection.id === connectionId)
-      if (!entry || entry.connection.revision !== connectionRevision)
-        throw new Error('model_connection_revision_conflict')
-      if (entry.connection.authType !== 'openai_oauth')
+      if (!entry || entry.connection.authType !== 'openai_oauth')
         throw new Error('model_connection_oauth_requires_reauth')
       // Rotation invalidates any grant minted from the previous token set.
       entry.oauth = { ...tokens, grantId: randomUUID() }

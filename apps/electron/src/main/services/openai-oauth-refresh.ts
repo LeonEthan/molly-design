@@ -34,14 +34,17 @@ export async function usableOAuthAccessToken(
     if (refreshed.reason === 'denied') {
       // Persist the denial so the row can prompt sign-in instead of hammering refresh.
       await store
-        .saveOAuthTokens(connection.id, connection.revision, { ...tokens, denied: true })
+        .rotateOAuthTokens(connection.id, { ...tokens, denied: true })
         .catch(() => undefined)
     }
     return { ok: false, reason: refreshed.reason }
   }
   let rotated: OAuthTokenSet
+  // Refresh rotates the refresh token the moment OpenAI answers; if the connection was
+  // edited meanwhile, persist onto the current row so the renewed token is not dropped
+  // while its predecessor is already burned.
   try {
-    rotated = await store.rotateOAuthTokens(connection.id, connection.revision, refreshed.tokens)
+    rotated = await store.rotateOAuthTokens(connection.id, refreshed.tokens)
   } catch {
     return { ok: false, reason: 'changed' }
   }

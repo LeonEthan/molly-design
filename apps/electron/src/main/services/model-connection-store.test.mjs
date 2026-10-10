@@ -147,19 +147,19 @@ void test('oauth connection round-trips its token set without exposing it in the
   const acquired = await store.acquireForRun(saved.id, saved.revision)
   assert.equal('oauth' in acquired, true)
   if ('oauth' in acquired) assert.equal(acquired.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
-  // Rotating with a stale revision refuses.
+  // Rotation on a connection that is not OAuth refuses.
   await assert.rejects(
-    store.rotateOAuthTokens(saved.id, saved.revision + 9, {
+    store.rotateOAuthTokens('nonexistent', {
       accessToken: 'SYNTHETIC_ACCESS_TOKEN_X',
       refreshToken: 'SYNTHETIC_REFRESH_TOKEN_X',
       accessTokenExpiresAt: Date.now() + 3_600_000
     }),
-    /revision_conflict/
+    /oauth_requires_reauth/
   )
   // Rotation changes the grant id so a grant minted from the previous token cannot replay.
   const first = await store.acquireForRun(saved.id, saved.revision)
   if (!('oauth' in first)) throw new Error('expected oauth')
-  const rotated = await store.rotateOAuthTokens(saved.id, saved.revision, {
+  const rotated = await store.rotateOAuthTokens(saved.id, {
     accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
     refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
     accessTokenExpiresAt: Date.now() + 3_600_000,

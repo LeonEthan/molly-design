@@ -197,6 +197,7 @@ type Pending = {
   redirectUri: string
   server: http.Server
   expiresAt: number
+  expiryTimer: ReturnType<typeof setTimeout>
   promise: Promise<OpenAiAuthCompleteResult>
   resolve: (result: OpenAiAuthCompleteResult) => void
 }
@@ -255,6 +256,7 @@ export class OpenAiAuthService {
       redirectUri,
       server,
       expiresAt,
+      expiryTimer: setTimeout(() => this.cancelPending('timed_out'), OAUTH_TIMEOUT_MS),
       promise,
       resolve: resolvePromise
     }
@@ -286,7 +288,8 @@ export class OpenAiAuthService {
     response: http.ServerResponse
   ): Promise<void> {
     const pending = this.pending
-    if (!pending) {
+    if (!pending || Date.now() > pending.expiresAt) {
+      if (pending) this.cancelPending('timed_out')
       response.statusCode = 410
       response.end('This sign-in session has ended. Return to Molly.')
       return
@@ -390,6 +393,7 @@ export class OpenAiAuthService {
     const pending = this.pending
     if (!pending) return
     this.pending = null
+    clearTimeout(pending.expiryTimer)
     pending.server.close()
     pending.resolve({ ok: false, reason })
   }

@@ -20,7 +20,13 @@ import en from '../../../locales/en.json';
 import zh from '../../../locales/zh_CN.json';
 
 const { connectionIpc } = vi.hoisted(() => ({
-  connectionIpc: { getSnapshot: vi.fn(), save: vi.fn(), delete: vi.fn() },
+  connectionIpc: {
+    getSnapshot: vi.fn(),
+    save: vi.fn(),
+    delete: vi.fn(),
+    getModelCatalog: vi.fn().mockRejectedValue(new Error('no catalog')),
+    getModelMetadataSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
+  },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({ modelConnections: connectionIpc }),
@@ -736,6 +742,36 @@ describe('connection management', () => {
     expect(deleted).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
     expect(host.textContent).not.toContain('Synthetic');
     expect(host.textContent).toContain(en['settings.models.empty']);
+  });
+
+  it('shows the picker choice outside More options and summarizes the chosen subset', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({
+      connections: [{ ...stored, models: ['gpt-5', 'gpt-5-mini'] }],
+    });
+    connectionIpc.getModelCatalog.mockResolvedValue({
+      models: ['gpt-5', 'gpt-5-mini', 'gpt-4o'].map((modelId) => ({
+        providerPresetId: 'openai',
+        modelId,
+        name: modelId,
+        input: ['text'],
+        contextWindow: 128000,
+        thinking: ['off'],
+      })),
+    });
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    expect(host.textContent).toContain(
+      en['settings.models.summary.countOf'].replace('{{count}}', '2').replace('{{total}}', '3')
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((node) => node.textContent === en['common.edit'])!
+        .click()
+    );
+    // First-class section: visible without opening More options.
+    expect(host.textContent).toContain(en['settings.models.picker.title']);
+    expect(host.querySelector('[id$="-name"]')).toBeNull();
+    await openMoreOptions();
+    expect(host.querySelector('[id$="-name"]')).not.toBeNull();
   });
 
   it('starts a new connection from a provider shortcut when none exist', async () => {

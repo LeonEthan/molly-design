@@ -466,6 +466,49 @@ export function ModelConnectionForm({
               {t(issueKeys[configurationIssue])}
             </p>
           )}
+          {native && (providerModels || stored?.models) ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label>{t('settings.models.picker.title')}</Label>
+                {providerModels ? (
+                  <SegmentedControl
+                    ariaLabel={t('settings.models.picker.title')}
+                    size="sm"
+                    value={chooseModels ? 'choose' : 'all'}
+                    disabled={busy}
+                    options={[
+                      {
+                        value: 'all',
+                        label: t('settings.models.picker.all', {
+                          count: providerModels.length,
+                        }),
+                      },
+                      { value: 'choose', label: t('settings.models.picker.choose') },
+                    ]}
+                    onChange={(value) =>
+                      value === 'all' ? setChooseModels(false) : startChoosing()
+                    }
+                  />
+                ) : null}
+              </div>
+              {providerModels && chooseModels ? (
+                <ModelChecklist
+                  models={providerModels}
+                  selected={selectedModels}
+                  listed={listed}
+                  disabled={busy}
+                  onChange={setSelectedModels}
+                />
+              ) : null}
+              <p className="text-xs text-muted-foreground">
+                {!providerModels
+                  ? t('settings.models.picker.unavailable')
+                  : chooseModels && models?.length === 0
+                    ? t('settings.models.picker.chooseOne')
+                    : t('settings.models.picker.hint')}
+              </p>
+            </div>
+          ) : null}
           <Collapsible>
             <CollapsibleTrigger asChild>
               <Button
@@ -497,49 +540,6 @@ export function ModelConnectionForm({
                   {t('settings.models.nameHint')}
                 </p>
               </div>
-              {native && (providerModels || stored?.models) ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <Label>{t('settings.models.picker.title')}</Label>
-                    {providerModels ? (
-                      <SegmentedControl
-                        ariaLabel={t('settings.models.picker.title')}
-                        size="sm"
-                        value={chooseModels ? 'choose' : 'all'}
-                        disabled={busy}
-                        options={[
-                          {
-                            value: 'all',
-                            label: t('settings.models.picker.all', {
-                              count: providerModels.length,
-                            }),
-                          },
-                          { value: 'choose', label: t('settings.models.picker.choose') },
-                        ]}
-                        onChange={(value) =>
-                          value === 'all' ? setChooseModels(false) : startChoosing()
-                        }
-                      />
-                    ) : null}
-                  </div>
-                  {providerModels && chooseModels ? (
-                    <ModelChecklist
-                      models={providerModels}
-                      selected={selectedModels}
-                      listed={listed}
-                      disabled={busy}
-                      onChange={setSelectedModels}
-                    />
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">
-                    {!providerModels
-                      ? t('settings.models.picker.unavailable')
-                      : chooseModels && models?.length === 0
-                        ? t('settings.models.picker.chooseOne')
-                        : t('settings.models.picker.hint')}
-                  </p>
-                </div>
-              ) : null}
             </CollapsibleContent>
           </Collapsible>
           {provider === 'openai-compatible' && (
@@ -765,6 +765,13 @@ export function ModelConnectionSetting({
                   key={connection.id}
                   connection={connection}
                   check={rowCheck(connection)}
+                  catalogCount={
+                    connection.providerPresetId === 'openai-compatible'
+                      ? undefined
+                      : catalog?.filter(
+                          (model) => model.providerPresetId === connection.providerPresetId
+                        ).length
+                  }
                   busy={busy}
                   onEdit={() => setEditing(connection)}
                   onToggle={(input) => void persist(input)}
@@ -789,8 +796,11 @@ export function ModelConnectionSetting({
               />
             </div>
           ) : ready && connections.length === 0 ? (
-            <div className="space-y-3 px-5 pb-5 pt-1">
-              <p className="text-xs text-muted-foreground">{t('settings.models.empty')}</p>
+            <div className="space-y-4 px-5 pb-5 pt-1">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{t('settings.models.emptyTitle')}</p>
+                <p className="text-xs text-muted-foreground">{t('settings.models.empty')}</p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {QUICK_PROVIDERS.map((preset) => (
                   <Button
@@ -850,6 +860,7 @@ const toggledConnection = (connection: ModelConnection) =>
 export function ModelConnectionRow({
   connection,
   check,
+  catalogCount,
   busy = false,
   onEdit,
   onToggle,
@@ -858,6 +869,8 @@ export function ModelConnectionRow({
 }: {
   connection: ModelConnection;
   check?: ConnectionCheckState;
+  /** Packaged catalog size for this connection's preset; lets the row say "8 of 57". */
+  catalogCount?: number;
   busy?: boolean;
   onEdit: () => void;
   onToggle: (input: SaveModelConnection) => void;
@@ -867,10 +880,16 @@ export function ModelConnectionRow({
   const { t } = useTranslation();
   const provider = t(providerLabelKeys[connection.providerPresetId]);
   const toggled = toggledConnection(connection);
-  const modelCount = connection.customModels?.length ?? connection.models?.length;
+  const chosenCount = connection.customModels?.length ?? connection.models?.length;
   const where = isDefaultEndpoint(connection.baseUrl, connection.providerPresetId)
     ? provider
     : `${provider} · ${endpointLabel(connection.baseUrl)}`;
+  const summary =
+    chosenCount === undefined
+      ? t('settings.models.summary.all')
+      : catalogCount !== undefined && connection.customModels === undefined
+        ? t('settings.models.summary.countOf', { count: chosenCount, total: catalogCount })
+        : t('settings.models.summary.count', { count: chosenCount });
   return (
     <div className="flex items-center gap-3 px-5 py-3.5">
       <ProviderMark preset={connection.providerPresetId} />
@@ -880,10 +899,7 @@ export function ModelConnectionRow({
           <ConnectionCheckBadge state={check} />
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          {where} ·{' '}
-          {modelCount === undefined
-            ? t('settings.models.summary.all')
-            : t('settings.models.summary.count', { count: modelCount })}
+          {where} · {summary}
         </p>
       </div>
       <Switch

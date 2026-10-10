@@ -1008,6 +1008,7 @@ function validElementPayload(element: BentoElementV4, canvas: BentoDocV4["canvas
       return srcOk && (element.fit === undefined || FIT_MODES.has(element.fit)) &&
         (element.crop === undefined || (Array.isArray(element.crop) && element.crop.length === 4 && validFourEdgeCrop(element.crop))) &&
         (element.cropShape === undefined || validShapeDef(element.cropShape)) &&
+        (element.textCopy === undefined || (typeof element.textCopy === "string" && element.textCopy.length > 0 && element.textCopy.length <= 2000)) &&
         (element.border === undefined || validBorder(element.border));
     }
     case "icon":

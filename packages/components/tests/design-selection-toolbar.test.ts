@@ -270,6 +270,54 @@ it('disables the font trigger without font choices and opens no popup', () => {
   expect(queryByRole(document.body, 'dialog')).toBeNull();
 });
 
+it('sends edit-wording with new copy and never submits an IME composition Enter', () => {
+  select('image', { textCopy: '诺贝尔文学奖' });
+  click('Edit wording');
+  const field = document.querySelector<HTMLInputElement>(
+    '.molly-selection-popup input[type=text]'
+  )!;
+  expect(field.value).toBe('诺贝尔文学奖');
+  field.value = '安妮·卡森';
+  // An Enter that only confirms an IME candidate (composition active / keyCode
+  // 229) must not submit, close the popup or prevent the composition default.
+  const composing = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    isComposing: true,
+    keyCode: 229,
+    bubbles: true,
+    cancelable: true,
+  });
+  field.dispatchEvent(composing);
+  expect(requests).toEqual([]);
+  expect(composing.defaultPrevented).toBe(false);
+  expect(document.querySelector('.molly-selection-popup')).not.toBeNull();
+  field.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+  );
+  expect(requests).toEqual([
+    { type: 'action', action: 'edit-wording', selectionEpoch: 1, wording: '安妮·卡森' },
+  ]);
+});
+
+it('hides edit-wording for plain images and multi-selections', () => {
+  select('image');
+  expect(queryByRole(document.body, 'button', { name: 'Edit wording' })).toBeNull();
+  toolbar.update(
+    {
+      count: 2,
+      kinds: ['image'],
+      elements: [
+        { id: 'one', kind: 'image', textCopy: 'A' },
+        { id: 'two', kind: 'image', textCopy: 'B' },
+      ],
+    },
+    ['one', 'two'],
+    2
+  );
+  vi.advanceTimersByTime(20);
+  expect(queryByRole(document.body, 'button', { name: 'Edit wording' })).toBeNull();
+});
+
 it('uses generic actions for mixed and oversized selections and hides on readonly/empty', () => {
   toolbar.update({ count: 9, kinds: ['text'] }, ['one'], 1);
   vi.advanceTimersByTime(20);

@@ -466,7 +466,11 @@ export function DesignCanvas({
         );
       onReferenceSelection?.(reference, prompt);
     });
-  const selectionAction = (action: DesignSelectionAction, reference: DesignElementReference) => {
+  const selectionAction = (
+    action: DesignSelectionAction,
+    reference: DesignElementReference,
+    wording?: string
+  ) => {
     switch (action) {
       case 'reference':
         return referenceSelection(undefined, undefined, reference);
@@ -506,6 +510,20 @@ export function DesignCanvas({
           undefined,
           reference
         );
+      case 'edit-wording':
+        return referenceSelection(
+          t(
+            'design.editWordingPrompt',
+            'The selected image is lettering whose current wording is shown in the canvas. Regenerate only that image so it reads: '
+          ) +
+            JSON.stringify(wording ?? '') +
+            t(
+              'design.editWordingPromptTail',
+              '. Keep the lettering style, colors, badge and size as they are; replace only the image asset and update the element\'s textCopy to the new wording. Preserve the rest of the artwork.'
+            ),
+          'image',
+          reference
+        );
     }
   };
   const actionCallback = useRef(selectionAction);
@@ -519,7 +537,7 @@ export function DesignCanvas({
           active &&
           !readonlyView
         )
-          actionCallback.current(event.action, event.reference);
+          actionCallback.current(event.action, event.reference, event.wording);
       }),
     [hostId, artworkId, active, readonlyView]
   );

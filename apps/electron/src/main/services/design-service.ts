@@ -246,14 +246,21 @@ export async function surface(
           const reference = await getDesignSelection(
             id,
             hostId,
-            input.action === 'edit' || input.action === 'generate' ? 'image' : undefined,
+            input.action === 'edit' ||
+              input.action === 'generate' ||
+              input.action === 'edit-wording'
+              ? 'image'
+              : undefined,
             { selectionEpoch: input.selectionEpoch, assertCurrent }
           )
           assertCurrent()
           record!.owner.webContents.send('design.selectionAction', {
             hostId,
             action: input.action,
-            reference
+            reference,
+            ...(input.type === 'action' && input.wording !== undefined
+              ? { wording: input.wording }
+              : {})
           })
           return Response.json({ ok: true }, { headers })
         } catch (error) {

@@ -128,6 +128,28 @@ layer, so it can be moved, resized and replaced without touching the scene. A
 product name in drawn letters on a colored badge is lettering even at label
 size; a plain font on a flat shape would lose the design.
 
+One layer carries one piece of copy that reads as a unit — a headline, a name,
+a label. Never merge separate lines or unrelated pieces (a title plus its date
+line, a name plus its Latin transcription) into one image; each piece gets its
+own layer so it can be reworded, moved or replaced alone.
+
+Every lettering layer carries `textCopy` with the exact wording the picture
+shows:
+
+```yaml
+- id: title-lettering
+  kind: image
+  bounds: [120, 480, 400, 96]
+  src: media/title-lettering.png
+  fit: contain
+  textCopy: '诺贝尔文学奖'
+```
+
+`textCopy` is what the editor shows when the person asks to reword the layer
+and what a later turn regenerates from; write the exact copy, never a
+paraphrase. A wrong or missing `textCopy` is a defect of the layer. A layer
+whose picture holds no wording (a photo, a texture) has no `textCopy`.
+
 - Call `molly_image` `edit` with the chosen design as the first image, asking
   for only this lettering exactly as it appears there, together with its badge
   or backing shape when that belongs to it, with `background: "transparent"`

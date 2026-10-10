@@ -349,6 +349,12 @@ const elements: BentoElementV4[] = [
     cropShape: { shapeName: 'ellipse' },
     border,
   },
+  {
+    ...base('image-lettering'),
+    kind: 'image',
+    src: image,
+    textCopy: 'Drawn lettering 诺贝尔',
+  },
   { ...base('icon'), kind: 'icon', iconName: 'fas:star', fill: imageFill, border },
   {
     ...base('table'),
@@ -644,15 +650,15 @@ describe('version, compatibility and fail-closed inputs', () => {
     ['elements', 0, 'shadow', 0, 'unknown'],
     ['elements', 1, 'fill', 'stops', 0, 'unknown'],
     ['elements', 3, 'cropShape', 'unknown'],
-    ['elements', 5, 'table', 'unknown'],
-    ['elements', 5, 'table', 'rows', 0, 0, 'unknown'],
-    ['elements', 5, 'table', 'style', 'firstRowStyle', 'unknown'],
-    ['elements', 6, 'chart', 'unknown'],
-    ['elements', 6, 'chart', 'data', 'unknown'],
-    ['elements', 6, 'chart', 'series', 0, 'unknown'],
-    ['elements', 6, 'chart', 'series', 0, 'encode', 'unknown'],
-    ['elements', 6, 'chart', 'title', 'unknown'],
-    ['elements', 6, 'chart', 'legend', 'unknown'],
+    ['elements', 6, 'table', 'unknown'],
+    ['elements', 6, 'table', 'rows', 0, 0, 'unknown'],
+    ['elements', 6, 'table', 'style', 'firstRowStyle', 'unknown'],
+    ['elements', 7, 'chart', 'unknown'],
+    ['elements', 7, 'chart', 'data', 'unknown'],
+    ['elements', 7, 'chart', 'series', 0, 'unknown'],
+    ['elements', 7, 'chart', 'series', 0, 'encode', 'unknown'],
+    ['elements', 7, 'chart', 'title', 'unknown'],
+    ['elements', 7, 'chart', 'legend', 'unknown'],
   ];
   it.each(invalidPaths.map((p) => [p.join('.'), p] as const))(
     'rejects unknown nested field %s',
@@ -707,10 +713,10 @@ describe('version, compatibility and fail-closed inputs', () => {
         p.elements[3].crop = [1, 0, 1, 0];
       },
       (p: any) => {
-        p.elements[5].table.rows[0][0].colSpan = 3;
+        p.elements[6].table.rows[0][0].colSpan = 3;
       },
       (p: any) => {
-        p.elements[6].chart.series[0].encode.y = 'missing';
+        p.elements[7].chart.series[0].encode.y = 'missing';
       },
     ])
       expect(

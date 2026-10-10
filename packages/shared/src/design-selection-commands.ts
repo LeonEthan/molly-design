@@ -57,6 +57,10 @@ export const DesignSelectedElementSchema = z
     // image
     fit: z.enum(['fill', 'contain', 'cover']).optional(),
     crop: DesignImageCropSchema.optional(),
+    // Image lettering: the exact wording the picture carries. Present only on
+    // image elements that are rendered lettering; lets the toolbar offer an
+    // edit-wording entry (regeneration through the Agent) for those layers.
+    textCopy: z.string().min(1).max(2000).optional(),
     // line arrowheads
     arrowStart: z.enum(['arrow', 'stealth', 'diamond', 'oval']).nullable().optional(),
     arrowEnd: z.enum(['arrow', 'stealth', 'diamond', 'oval']).nullable().optional(),
@@ -172,6 +176,9 @@ export const DesignSelectionActionSchema = z.enum([
   'edit',
   'style',
   'regenerate',
+  // Reword an image-lettering layer: the prompt carries the current wording and
+  // asks the Agent to regenerate the picture with new copy. Image-only action.
+  'edit-wording',
 ]);
 export type DesignSelectionAction = z.infer<typeof DesignSelectionActionSchema>;
 export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
@@ -187,6 +194,9 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
       type: z.literal('action'),
       selectionEpoch: z.number().int().nonnegative(),
       action: DesignSelectionActionSchema,
+      // edit-wording carries the user's new wording for the lettering layer;
+      // it is prompt text, never a direct document mutation.
+      wording: z.string().min(1).max(2000).optional(),
     })
     .strict(),
 ]);

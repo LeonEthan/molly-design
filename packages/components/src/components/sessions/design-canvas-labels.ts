@@ -8,6 +8,8 @@ export const DESIGN_CANVAS_LABEL_KEYS = [
   'editSelectedImages',
   'adjustSelectedStyle',
   'regenerateSelection',
+  'editWording',
+  'regenerateWording',
   'textColor',
   'fontFamily',
   'fontSize',

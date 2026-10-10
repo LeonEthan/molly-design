@@ -349,6 +349,12 @@ const elements: BentoElementV4[] = [
     cropShape: { shapeName: 'ellipse' },
     border,
   },
+  {
+    ...base('image-lettering'),
+    kind: 'image',
+    src: image,
+    textCopy: 'Drawn lettering 诺贝尔',
+  },
   { ...base('icon'), kind: 'icon', iconName: 'fas:star', fill: imageFill, border },
   {
     ...base('table'),
@@ -644,15 +650,15 @@ describe('version, compatibility and fail-closed inputs', () => {
     ['elements', 0, 'shadow', 0, 'unknown'],
     ['elements', 1, 'fill', 'stops', 0, 'unknown'],
     ['elements', 3, 'cropShape', 'unknown'],
-    ['elements', 5, 'table', 'unknown'],
-    ['elements', 5, 'table', 'rows', 0, 0, 'unknown'],
-    ['elements', 5, 'table', 'style', 'firstRowStyle', 'unknown'],
-    ['elements', 6, 'chart', 'unknown'],
-    ['elements', 6, 'chart', 'data', 'unknown'],
-    ['elements', 6, 'chart', 'series', 0, 'unknown'],
-    ['elements', 6, 'chart', 'series', 0, 'encode', 'unknown'],
-    ['elements', 6, 'chart', 'title', 'unknown'],
-    ['elements', 6, 'chart', 'legend', 'unknown'],
+    ['elements', 6, 'table', 'unknown'],
+    ['elements', 6, 'table', 'rows', 0, 0, 'unknown'],
+    ['elements', 6, 'table', 'style', 'firstRowStyle', 'unknown'],
+    ['elements', 7, 'chart', 'unknown'],
+    ['elements', 7, 'chart', 'data', 'unknown'],
+    ['elements', 7, 'chart', 'series', 0, 'unknown'],
+    ['elements', 7, 'chart', 'series', 0, 'encode', 'unknown'],
+    ['elements', 7, 'chart', 'title', 'unknown'],
+    ['elements', 7, 'chart', 'legend', 'unknown'],
   ];
   it.each(invalidPaths.map((p) => [p.join('.'), p] as const))(
     'rejects unknown nested field %s',
@@ -707,10 +713,10 @@ describe('version, compatibility and fail-closed inputs', () => {
         p.elements[3].crop = [1, 0, 1, 0];
       },
       (p: any) => {
-        p.elements[5].table.rows[0][0].colSpan = 3;
+        p.elements[6].table.rows[0][0].colSpan = 3;
       },
       (p: any) => {
-        p.elements[6].chart.series[0].encode.y = 'missing';
+        p.elements[7].chart.series[0].encode.y = 'missing';
       },
     ])
       expect(
@@ -728,7 +734,7 @@ common.elementId common.elementType common.bounds common.zOrder common.rotation 
 text.plain text.paragraphs text.lineBreak text.runs.color text.runs.fontSize text.runs.fontFamily text.runs.backgroundColor text.bold text.italic text.underline text.strikethrough text.superscript text.subscript text.hyperlink text.lists text.listItemStyles text.latex text.color text.fontSize text.backgroundColor text.lineHeight text.lineHeightPx text.letterSpacing text.marginTop text.align text.paragraphAlign text.paragraphLineHeight text.paragraphMargin text.textDirection text.wrap text.gradient text.shadow
 font.familyUniform font.familyLatinEa font.registration font.fallback font.measurement
 shape.preset shape.adjustments shape.customPath line.points line.curve line.arrow
-image.src image.fit image.crop image.cropShape image.pipeline icon.name
+image.src image.fit image.crop image.cropShape image.pipeline image.textCopy icon.name
 table.grid table.cellText table.cellTextStyleRef table.cellTextProps table.cellFill table.cellBorder table.cellAlign table.merge table.styleRef table.styleSlots table.bodyStylesCycle table.rowOverColumn
 chart.data chart.encode chart.seriesDefaults chart.typeMixing chart.axisBasic chart.axisLabel chart.axisLineGrid chart.axisSecondary chart.spokeAxis chart.barLayout chart.title chart.legend chart.dataLabels chart.bar chart.line chart.area chart.scatter chart.bubble chart.candlestick chart.pie chart.radar chart.waterfall chart.heatmap chart.treemap chart.sunburst chart.sankey chart.palette
 fill.solid fill.gradientLinear fill.gradientRadial fill.image`

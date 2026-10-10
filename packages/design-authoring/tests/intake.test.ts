@@ -180,6 +180,36 @@ describe('intakeAuthoring', () => {
     expect(result.diagnostics.some((d) => d.code === 'MOLLY-E003')).toBe(true);
   });
 
+  it('admits image lettering with textCopy and rejects non-string textCopy', () => {
+    const withCopy = VALID_PAGE.replace(
+      'src: media/pic.png\n    fit: cover',
+      "src: media/pic.png\n    fit: cover\n    textCopy: '诺贝尔文学奖'"
+    );
+    const ok = intakeAuthoring(
+      'design.yaml',
+      snapshotWith({ 'design.yaml': enc.encode(withCopy) })
+    );
+    expect(ok.status, JSON.stringify(ok)).toBe('ok');
+    if (ok.status === 'ok') {
+      const photo = ok.document.elements.find((el) => el.id === 'photo');
+      expect(photo?.kind === 'image' && photo.textCopy).toBe('诺贝尔文学奖');
+    }
+    const badCopy = VALID_PAGE.replace(
+      'src: media/pic.png\n    fit: cover',
+      'src: media/pic.png\n    fit: cover\n    textCopy: 42'
+    );
+    expect(
+      intakeAuthoring('design.yaml', snapshotWith({ 'design.yaml': enc.encode(badCopy) })).status
+    ).toBe('invalid');
+    const emptyCopy = VALID_PAGE.replace(
+      'src: media/pic.png\n    fit: cover',
+      "src: media/pic.png\n    fit: cover\n    textCopy: ''"
+    );
+    expect(
+      intakeAuthoring('design.yaml', snapshotWith({ 'design.yaml': enc.encode(emptyCopy) })).status
+    ).toBe('invalid');
+  });
+
   it('rejects unknown fields with MOLLY-E001', () => {
     const result = intakeAuthoring(
       'design.yaml',

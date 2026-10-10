@@ -112,7 +112,7 @@ export async function bootA1a2Workspace(wsId: string): Promise<A1a2Session> {
           ...(element.kind === 'shape' || element.kind === 'line'
             ? { borderColor: element.border?.color ?? null, borderWidth: element.border?.width }
             : {}),
-          ...(element.kind === 'image' ? { fit: element.fit, crop: element.crop } : {}),
+          ...(element.kind === 'image' ? { fit: element.fit, crop: element.crop, textCopy: element.textCopy } : {}),
           ...(element.kind === 'line'
             ? { arrowStart: element.arrow?.[0] ?? null, arrowEnd: element.arrow?.[1] ?? null }
             : {}),

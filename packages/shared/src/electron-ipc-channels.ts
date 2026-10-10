@@ -30,6 +30,8 @@ export type IpcPushMap = {
     hostId: string;
     action: DesignSelectionAction;
     reference: DesignElementReference;
+    /** New wording for the edit-wording action; absent for other actions. */
+    wording?: string;
   };
   'design.selection': {
     hostId: string;

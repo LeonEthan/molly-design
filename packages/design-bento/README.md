@@ -108,7 +108,12 @@ Electron captures those IDs, flushes, and pairs them with the saved canonical
 revision before inserting a normal composer mention. Bento has no conversation or
 reference lifecycle; source previews cannot supply element references.
 Bento also reports a zod-validated typed selection summary (count, kinds, bounded
-per-element current values and fonts) over the same bridge, which still feeds the shell's passive composer selection. The native toolbar consumes
+per-element current values and fonts) over the same bridge, which still feeds the shell's passive composer selection. Image
+elements that carry `textCopy` (lettering layers) additionally surface the
+"Edit wording" action: it collects new wording in a popup and hands an
+`edit-wording` request with the wording to the shell, where it becomes an
+ordinary Agent prompt; the canvas itself never mutates or regenerates the
+image. The native toolbar consumes
 that summary immediately and reads selected stage DOM bounds locally, so its position
 and fixed pixel size follow zoom, scrolling, resizing and reprojection. Dragging,
 readonly and fully offscreen selections hide it. Popups share the native view and

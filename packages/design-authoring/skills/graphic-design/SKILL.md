@@ -228,13 +228,19 @@ reproduce the design's letterforms and finish faithfully:
   combined with fills, texture, 3D, letters fused with a badge or background
   shape, warped or per-letter styling. Isolate it together with its badge when
   the badge belongs to it. Do not flatten such lettering into a plain font for
-  the sake of editability.
+  the sake of editability. One image lettering layer carries one piece of copy
+  that reads as a unit (a headline, a name, a label): never merge separate
+  lines or unrelated pieces into one layer, and never fuse body copy into a
+  headline's layer. Every image lettering layer must carry `textCopy` with the
+  exact wording the picture shows, so the editor can offer to reword it and a
+  later turn can regenerate it without re-reading pixels.
 
 Every character of image lettering must match the source copy; check it letter
 by letter, regenerate a wrong one with the exact text, and if it still fails set
 that copy as native text and report the difference. The wording of image
-lettering can only change by regenerating it, which counts as an editability
-limit to report. Techniques are in
+lettering changes by regenerating it; because the layer carries `textCopy`, the
+person can ask for that rewording directly from the canvas, so report image
+lettering as regenerable wording rather than as frozen pixels. Techniques are in
 [references/layered-workflow.md](references/layered-workflow.md#lettering-layers).
 
 Register real font files as the format reference describes, keep each face's

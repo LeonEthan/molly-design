@@ -20,6 +20,7 @@ import {
   referenceIcon,
   regenerateIcon,
   renderUiIconSvg,
+  typeIcon,
   type UiIconNode,
 } from '@molly/shared/ui-icons';
 
@@ -85,6 +86,7 @@ const icons = {
   edit: pencilIcon,
   style: paletteIcon,
   regenerate: regenerateIcon,
+  wording: typeIcon,
   bold: boldIcon,
   italic: italicIcon,
 };
@@ -681,9 +683,59 @@ export function createSelectionToolbar(options: {
           (fit) => command({ verb: 'image-fit', fit: fit as 'fill' | 'contain' | 'cover' })
         );
         crop(c);
+        // Image lettering: the picture carries wording (textCopy). Offer a
+        // wording popup that asks the Agent to regenerate this one layer with
+        // new copy; the picture itself never becomes text.
+        if (c.textCopy !== undefined && summary.count === 1) wording(c);
       }
     }
     schedule();
+  }
+  function wording(current: DesignSelectedElement & { textCopy?: string }) {
+    const name = label('editWording', 'Edit wording');
+    const trigger = button(bar, icons.wording, name, () =>
+      openPopup(trigger, name, (node) => {
+        const wrap = document.createElement('label');
+        wrap.className = 'field';
+        wrap.style.width = '100%';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = current.textCopy ?? '';
+        input.maxLength = 2000;
+        input.style.width = '220px';
+        input.setAttribute('aria-label', name);
+        wrap.append(input);
+        node.append(wrap);
+        const apply = () => {
+          const value = input.value.trim();
+          if (!value || value === current.textCopy) return;
+          void request({
+            type: 'action',
+            selectionEpoch: epoch,
+            action: 'edit-wording',
+            wording: value,
+          });
+        };
+        input.onkeydown = (event) => {
+          // Enter during an active IME composition confirms the candidate; it
+          // never submits.
+          if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) {
+            event.preventDefault();
+            apply();
+          }
+        };
+        const submit = button(
+          node,
+          label('regenerateWording', 'Regenerate'),
+          label('regenerateWording', 'Regenerate'),
+          apply
+        );
+        submit.style.width = '100%';
+        window.setTimeout(() => input.focus(), 0);
+      })
+    );
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
   }
   function shield(node: HTMLElement) {
     // Stop canvas bubble listeners; its capture-phase exclusions are assembled in build.mjs.

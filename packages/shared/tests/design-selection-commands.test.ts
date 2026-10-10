@@ -50,6 +50,39 @@ describe('DesignSelectionSummarySchema', () => {
     ).toBe(false);
   });
 
+  it('carries image lettering textCopy and bounds its length', () => {
+    const summary = DesignSelectionSummarySchema.parse({
+      count: 1,
+      kinds: ['image'],
+      elements: [{ id: 'title', kind: 'image', textCopy: '诺贝尔文学奖' }],
+    });
+    expect(summary.elements?.[0]?.textCopy).toBe('诺贝尔文学奖');
+    expect(
+      DesignSelectionSummarySchema.safeParse({
+        count: 1,
+        kinds: ['image'],
+        elements: [{ id: 'title', kind: 'image', textCopy: '' }],
+      }).success
+    ).toBe(false);
+    expect(
+      DesignSelectionSummarySchema.safeParse({
+        count: 1,
+        kinds: ['image'],
+        elements: [{ id: 'title', kind: 'image', textCopy: 'x'.repeat(2001) }],
+      }).success
+    ).toBe(false);
+    // textCopy is a per-kind display hint: the summary schema admits it on any
+    // element (the producer only sets it on images); the canonical kernel owns
+    // the kind-level constraint.
+    expect(
+      DesignSelectionSummarySchema.safeParse({
+        count: 1,
+        kinds: ['text'],
+        elements: [{ ...textElement, textCopy: 'stray' }],
+      }).success
+    ).toBe(true);
+  });
+
   it('accepts a count-only summary without elements or fonts', () => {
     expect(DesignSelectionSummarySchema.parse({ count: 0, kinds: [] }).count).toBe(0);
   });
@@ -180,6 +213,27 @@ describe('native toolbar boundary', () => {
       { type: 'action', action: 'reference', selectionEpoch: -1 },
       { type: 'command', selectionEpoch: 2, command: { verb: 'position', x: -1, y: 0 } },
       { type: 'action', action: 'reference', selectionEpoch: 2, hostId: 'untrusted' },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+  it('carries the new wording for edit-wording and nothing else', () => {
+    expect(
+      DesignToolbarRequestSchema.parse({
+        type: 'action',
+        action: 'edit-wording',
+        selectionEpoch: 3,
+        wording: '安妮·卡森 著',
+      })
+    ).toEqual({
+      type: 'action',
+      action: 'edit-wording',
+      selectionEpoch: 3,
+      wording: '安妮·卡森 著',
+    });
+    for (const input of [
+      { type: 'action', action: 'edit-wording', selectionEpoch: 3, wording: '' },
+      { type: 'action', action: 'edit-wording', selectionEpoch: 3, wording: 7 },
+      { type: 'action', action: 'edit-wording', selectionEpoch: 3, wording: 'x'.repeat(2001) },
     ])
       expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
   });

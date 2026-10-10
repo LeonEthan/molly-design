@@ -272,6 +272,12 @@ export interface BentoImageElementV4 extends BentoElementBaseV4 {
   /** 遮罩 ShapeDef（image.cropShape 行；svg clip-path/mask 承载）。 */
   cropShape?: BentoCropShapeDefV4;
   border?: BentoBorder;
+  /**
+   * Molly 扩展：图片承载的文字内容（image lettering）。存在即标记该图片
+   * 是一段文字的艺术化渲染；编辑器凭它提供"编辑文字"入口（重新生成图片），
+   * Agent 凭它在改字时保持内容精确。非文字图片不写此字段。
+   */
+  textCopy?: string;
 }
 
 export interface BentoIconElementV4 extends BentoElementBaseV4 {
@@ -613,7 +619,7 @@ export const BENTO_DOC_V4_FIELDS = {
     text: ["text"],
     shape: ["shapeName", "adjustments", "viewBox", "path", "fill", "border"],
     line: ["viewBox", "points", "curve", "arrow", "border"],
-    image: ["src", "fit", "crop", "cropShape", "border"],
+    image: ["src", "fit", "crop", "cropShape", "border", "textCopy"],
     icon: ["iconName", "fill", "border"],
     table: ["table", "fill", "border"],
     chart: ["chart", "fill", "border"],

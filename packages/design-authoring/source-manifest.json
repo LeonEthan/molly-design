@@ -47,9 +47,6 @@
     "skills/graphic-design/references/replication.md": {
       "derivation": "original"
     },
-    "skills/graphic-design/references/graphic-canvas-profile.md": {
-      "derivation": "original"
-    },
     "skills/graphic-design/references/artwork-format.md": {
       "derivation": "original"
     },
@@ -66,6 +63,9 @@
       "derivation": "verbatim",
       "upstreamSha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249",
       "sha256": "922bc87ec53020f538d101e622731de31eb835e4d3b8f14aecc6dca88cb06249"
+    },
+    "skills/graphic-design/examples/layered/design.yaml": {
+      "derivation": "original"
     },
     "skills/imagegen/LICENSE.txt": {
       "upstreamPath": "skills/imagegen/LICENSE.txt",
@@ -118,9 +118,9 @@
     "skills/graphic-design/references/general-poster.md": "Original composition guide for the YAML canvas",
     "skills/graphic-design/references/layered-workflow.md": "Original generative layered workflow guide",
     "skills/graphic-design/references/replication.md": "Original reconstruction guide for the YAML canvas",
-    "skills/graphic-design/references/graphic-canvas-profile.md": "Original Active Profile discipline for YAML/Bento authoring",
     "skills/graphic-design/references/artwork-format.md": "Original YAML artwork format guide",
     "skills/graphic-design/examples/minimal/design.yaml": "Original YAML manifest example admitted by intake",
+    "skills/graphic-design/examples/layered/design.yaml": "Original layered YAML example (background, transparent subject, scrim, grouped text) admitted by intake",
     "skills/imagegen/references/prompting.md": "T09: model-neutral prompting and generate/edit capability description",
     "src/projection-capabilities.ts": "Derived YAML representation mapping for every active row of the unchanged frozen v1 matrix",
     "src/validate.ts": "YAML file/snapshot boundary; unused PPTD v2 validator removed",

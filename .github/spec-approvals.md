@@ -69,3 +69,33 @@ with unmodified Pi packages in Molly's own Pi profile, run tools without
 permission checks behind the `cc-safety-net` floor, and store selected model keys
 in that profile for sub-agents. This approves the stated intent, not runtime
 behavior beyond the evidence recorded in the PR.
+
+## 2026-10-09 graphic-design skill refresh
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-09, after reviewing the
+graphic-design skill refresh on branch `feat/graphic-design-skill-refresh`
+(commits `de0c1e3a` through `1cbda76b`). The revision makes reporting
+proportionate, adds breakable design defaults as the review checklist, asks
+direction-changing questions once through the structured question tool, writes
+direction words as the working yardstick, bounds research and exempts bounded
+edits that keep the direction, draws drafts from rendered native blockouts plus
+delivery assets rather than found references, and adds the rejected-direction
+rule. This approves the stated intent; design-quality evaluation runs are
+recorded separately.
+
+## 2026-10-09 user-chosen designs
+
+The owner approved the current English and Chinese revisions of
+`generative-layered-design-workflow` on 2026-10-09, after reviewing branch
+`feat/graphic-design-skill-refresh` (commits `57a78f1e` through `f737eb3d`).
+The revision has the image model create at least three complete design options
+that the user chooses between at the end of the turn, then reproduces the chosen
+design faithfully as editable layers; treats a redesign as a new design; creates
+options from the source image plus a few inspiration images the Agent chose from
+research; takes all wording from the brief or source with a line-by-line check
+and turns lettering a font cannot reproduce into image layers; and settles the
+canvas size from the brief, treating an empty canvas as a placeholder. It
+replaces the earlier "draws drafts from rendered native blockouts plus delivery
+assets rather than found references" intent. This approves the stated intent;
+design-quality evaluation runs are recorded separately.

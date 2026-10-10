@@ -44,10 +44,10 @@ const OAuthTokenSetSchema = z
     denied: z.boolean().optional(),
     accountId: z.string().max(200).optional(),
     /**
-     * Changes on every rotation so a queued grant carrying the previous token cannot be
-     * honored after the vault moved on.
+     * Monotonic per-connection counter incremented on every rotation, so a grant minted
+     * from an older token set is rejected rather than replayed after the vault moved on.
      */
-    grantId: z.string().uuid().optional()
+    grantSeq: z.number().int().positive().optional()
   })
   .strict()
 export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
@@ -563,10 +563,7 @@ export class ModelConnectionStore {
         oauth: account,
         ...(parsed.data.models ? { models: parsed.data.models } : {})
       })
-      store.entries = [
-        ...store.entries,
-        { connection, oauth: { ...tokens, grantId: randomUUID() } }
-      ]
+      store.entries = [...store.entries, { connection, oauth: { ...tokens, grantSeq: 1 } }]
       await this.write(store)
       return connection
     })
@@ -579,8 +576,8 @@ export class ModelConnectionStore {
       const entry = store.entries.find((item) => item.connection.id === connectionId)
       if (!entry || entry.connection.authType !== 'openai_oauth')
         throw new Error('model_connection_oauth_requires_reauth')
-      // Rotation invalidates any grant minted from the previous token set.
-      entry.oauth = { ...tokens, grantId: randomUUID() }
+      // Rotation supersedes any grant minted from a previous token set.
+      entry.oauth = { ...tokens, grantSeq: (entry.oauth?.grantSeq ?? 0) + 1 }
       await this.write(store)
       return entry.oauth
     })

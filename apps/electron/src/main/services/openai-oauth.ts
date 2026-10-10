@@ -301,6 +301,7 @@ export class OpenAiAuthService {
       return
     }
     const finish = (result: OpenAiAuthCompleteResult) => {
+      clearTimeout(pending.expiryTimer)
       pending.server.close()
       // Clear only when this flow still owns the slot; a replacement may already be pending.
       if (this.pending === pending) this.pending = null
@@ -314,11 +315,17 @@ export class OpenAiAuthService {
       )
       finish({ ok: false, reason })
     }
+    // An unsolicited callback (no state, or another flow's state) never consumes this flow.
+    const state = url.searchParams.get('state')
+    if (state !== pending.state) {
+      response.statusCode = 403
+      response.end()
+      return
+    }
     const error = url.searchParams.get('error')
     if (error) return fail('denied')
     const code = url.searchParams.get('code')
-    const state = url.searchParams.get('state')
-    if (!code || !state || state !== pending.state) return fail('invalid_response')
+    if (!code) return fail('invalid_response')
     const exchanged = await exchangeCode(this.fetchFn, {
       code,
       verifier: pending.verifier,

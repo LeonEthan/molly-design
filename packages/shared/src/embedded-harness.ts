@@ -1023,7 +1023,7 @@ export const HarnessCredentialReportSchema = z
           /** OAuth connections carry the ChatGPT account the codex backend requires. */
           oauthAccountId: z.string().min(1).max(200).optional(),
           /** Changes on every rotation; a worker rejects a grant minted before the current one. */
-          oauthGrantId: z.string().uuid().optional(),
+          oauthGrantSeq: z.number().int().positive().optional(),
         })
         .strict(),
       z.object({ ok: z.literal(false), error: z.literal('credential_unavailable') }).strict(),

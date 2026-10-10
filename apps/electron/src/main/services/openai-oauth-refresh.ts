@@ -19,7 +19,7 @@ export async function usableOAuthAccessToken(
   tokens: OAuthTokenSet,
   fetchFn: typeof fetch = fetch
 ): Promise<
-  | { ok: true; accessToken: string; accountId?: string; grantId?: string }
+  | { ok: true; accessToken: string; accountId?: string; grantSeq?: number }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
 > {
   if (!oauthNeedsRefresh(tokens))
@@ -27,7 +27,7 @@ export async function usableOAuthAccessToken(
       ok: true,
       accessToken: tokens.accessToken,
       ...(tokens.accountId ? { accountId: tokens.accountId } : {}),
-      ...(tokens.grantId ? { grantId: tokens.grantId } : {})
+      ...(tokens.grantSeq ? { grantSeq: tokens.grantSeq } : {})
     }
   const refreshed = await refreshOAuthTokens(fetchFn, tokens)
   if (!refreshed.ok) {
@@ -52,6 +52,6 @@ export async function usableOAuthAccessToken(
     ok: true,
     accessToken: rotated.accessToken,
     ...(rotated.accountId ? { accountId: rotated.accountId } : {}),
-    ...(rotated.grantId ? { grantId: rotated.grantId } : {})
+    ...(rotated.grantSeq ? { grantSeq: rotated.grantSeq } : {})
   }
 }

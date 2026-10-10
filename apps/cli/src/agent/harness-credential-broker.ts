@@ -29,10 +29,10 @@ type Lease = {
   revoke: () => void;
   signal: AbortSignal;
   abort: () => void;
-  resolve: (grant: { apiKey: string; oauthAccountId?: string; oauthGrantId?: string }) => void;
+  resolve: (grant: { apiKey: string; oauthAccountId?: string; oauthGrantSeq?: number }) => void;
   reject: (error: Error) => void;
   acquired: boolean;
-  credential?: Promise<{ apiKey: string; oauthAccountId?: string; oauthGrantId?: string }>;
+  credential?: Promise<{ apiKey: string; oauthAccountId?: string; oauthGrantSeq?: number }>;
 };
 
 /** No caller-supplied credentialRef API. Only the Session dispatcher creates leases. */
@@ -203,7 +203,7 @@ export class HarnessCredentialBroker {
     const credential = new Promise<{
       apiKey: string;
       oauthAccountId?: string;
-      oauthGrantId?: string;
+      oauthGrantSeq?: number;
     }>((resolve, reject) => {
       const abort = () => {
         this.leases.delete(request.requestId);
@@ -324,7 +324,7 @@ export class HarnessCredentialBroker {
         lease.resolve({
           apiKey: report.result.apiKey,
           ...(report.result.oauthAccountId ? { oauthAccountId: report.result.oauthAccountId } : {}),
-          ...(report.result.oauthGrantId ? { oauthGrantId: report.result.oauthGrantId } : {}),
+          ...(report.result.oauthGrantSeq ? { oauthGrantSeq: report.result.oauthGrantSeq } : {}),
         });
       }
     }

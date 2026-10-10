@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ModelConnectionSchema,
@@ -276,6 +276,18 @@ export function ModelConnectionForm({
     cancelSignIn();
     onCancel();
   }, [cancelSignIn, onCancel]);
+
+  const authFlowRef = useRef(authFlow);
+  authFlowRef.current = authFlow;
+  const onOpenAiAuthRef = useRef(onOpenAiAuth);
+  onOpenAiAuthRef.current = onOpenAiAuth;
+  useEffect(
+    () => () => {
+      const current = authFlowRef.current;
+      if (current.phase === 'waiting') void onOpenAiAuthRef.current?.cancel(current.sessionId);
+    },
+    []
+  );
 
   const beginSignIn = useCallback(async () => {
     if (!onOpenAiAuth) return;

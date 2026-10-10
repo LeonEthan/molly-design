@@ -38,7 +38,7 @@ export const WorkerCredentialGrantSchema = z
     /** Present when the grant is an OAuth access token; the codex backend requires it. */
     oauthAccountId: z.string().min(1).max(200).optional(),
     /** Changes on every rotation; the worker rejects a grant minted before the current one. */
-    oauthGrantId: z.string().uuid().optional(),
+    oauthGrantSeq: z.number().int().positive().optional(),
   })
   .strict();
 

@@ -199,6 +199,7 @@ export function enrichDiscoveredModel(
     toolCalls: metadata?.toolCalls ?? false,
     maxTokensField: defaultMaxTokensField(model.modelId),
     discovered: true,
+    rowId: `model:${model.modelId}`,
   };
   return { draft, incomplete: !isComplete(draft) };
 }

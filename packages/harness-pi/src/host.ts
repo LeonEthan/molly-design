@@ -76,7 +76,7 @@ export class PiAcpHost {
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
   private grantedKey?: string;
-  private grantedOAuthGrantId?: string;
+  private grantedOAuthGrantSeq?: number;
   private sessionStarted = false;
 
   constructor(
@@ -391,19 +391,23 @@ export class PiAcpHost {
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
-      // A rotation mints a new grant id. Retire so the run replays on a fresh worker with
-      // the new token (the session layer replaces a retired worker on its next turn);
-      // any other key change is a hard failure.
+      // Only a rotation (a strictly newer grant sequence) may replace the key in place;
+      // anything else is a hard failure.
       const rotated =
-        grant.oauthGrantId !== undefined && grant.oauthGrantId !== this.grantedOAuthGrantId;
-      if (rotated) this.retire();
-      throw new Error('pi_acp_host_credential_changed');
+        grant.oauthGrantSeq !== undefined &&
+        this.grantedOAuthGrantSeq !== undefined &&
+        grant.oauthGrantSeq > this.grantedOAuthGrantSeq;
+      if (!rotated) throw new Error('pi_acp_host_credential_changed');
     }
-    if (this.grantedOAuthGrantId !== undefined && this.grantedOAuthGrantId !== grant.oauthGrantId)
+    if (
+      grant.oauthGrantSeq !== undefined &&
+      this.grantedOAuthGrantSeq !== undefined &&
+      grant.oauthGrantSeq < this.grantedOAuthGrantSeq
+    )
       throw new Error('pi_acp_host_credential_changed');
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
     this.grantedKey = grant.apiKey;
-    this.grantedOAuthGrantId = grant.oauthGrantId;
+    this.grantedOAuthGrantSeq = grant.oauthGrantSeq;
     signal.throwIfAborted();
     let memory: string | undefined;
     let memoryDiagnostic: string | undefined;

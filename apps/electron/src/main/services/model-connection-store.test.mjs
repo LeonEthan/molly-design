@@ -167,8 +167,8 @@ void test('oauth connection round-trips its token set without exposing it in the
   })
   const second = await store.acquireForRun(saved.id, saved.revision)
   if (!('oauth' in second)) throw new Error('expected oauth')
-  assert.notEqual(second.oauth.grantId, first.oauth.grantId)
-  assert.equal(rotated.grantId, second.oauth.grantId)
+  assert.notEqual(second.oauth.grantSeq, first.oauth.grantSeq)
+  assert.equal(rotated.grantSeq, second.oauth.grantSeq)
 })
 
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {

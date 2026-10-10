@@ -144,8 +144,7 @@ export async function checkModelConnection(
     const oauth = await store.oauthForCheck(input.stored.id, input.stored.revision)
     if (oauth) {
       if (oauth.connection.baseUrl !== input.baseUrl) return { ok: false, reason: 'needs_key' }
-      // An OAuth access token is valid only for the codex backend, and the account's
-      // visible catalog requires the account header; the public API host would 401 it.
+      // The official flow's access token talks to api.openai.com directly.
       return checkOpenAiOAuthConnection(oauth.oauth, transport)
     }
     const saved = await store.credentialForCheck(input.stored.id, input.stored.revision)
@@ -165,7 +164,7 @@ export async function checkModelConnection(
   )
 }
 
-const CODEX_MODELS_URL = 'https://chatgpt.com/backend-api/codex/models'
+const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models'
 
 async function checkOpenAiOAuthConnection(
   tokens: { accessToken: string; accountId?: string },
@@ -173,12 +172,10 @@ async function checkOpenAiOAuthConnection(
 ): Promise<ConnectionCheckResult> {
   let response: Response
   try {
-    response = await transport(CODEX_MODELS_URL, {
+    response = await transport(OPENAI_MODELS_URL, {
       headers: {
         accept: 'application/json',
-        authorization: `Bearer ${tokens.accessToken}`,
-        originator: 'molly',
-        ...(tokens.accountId ? { 'chatgpt-account-id': tokens.accountId } : {})
+        authorization: `Bearer ${tokens.accessToken}`
       },
       redirect: 'error',
       signal: AbortSignal.timeout(15_000)
@@ -199,11 +196,7 @@ async function checkOpenAiOAuthConnection(
     const text = await readBounded(response)
     if (text === null) return { ok: false, reason: 'invalid_response' }
     const data = JSON.parse(text)
-    // The codex catalog shape is not an OpenAI list; accept any documented model array.
-    const raw = data as { models?: unknown }
-    const entries: unknown[] | null = Array.isArray(raw.models)
-      ? raw.models
-      : listEntries('openai', data)
+    const entries: unknown[] | null = listEntries('openai', data)
     if (!entries) return { ok: true }
     const models = entries
       .map((entry: unknown) => {

@@ -135,7 +135,8 @@ void test('oauth connection round-trips its token set without exposing it in the
       accessToken: 'SYNTHETIC_ACCESS_TOKEN',
       refreshToken: 'SYNTHETIC_REFRESH_TOKEN',
       accessTokenExpiresAt: Date.now() + 3_600_000,
-      accountId: 'acct-1'
+      accountId: 'acct-1',
+      clientId: 'dynamic-client-1'
     },
     { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' }
   )
@@ -154,7 +155,8 @@ void test('oauth connection round-trips its token set without exposing it in the
       accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
       refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
       accessTokenExpiresAt: Date.now() + 3_600_000,
-      accountId: 'acct-1'
+      accountId: 'acct-1',
+      clientId: 'dynamic-client-1'
     }
   })
   assert.equal(next?.accessToken, 'SYNTHETIC_ACCESS_TOKEN_2')

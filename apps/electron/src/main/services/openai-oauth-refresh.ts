@@ -51,10 +51,11 @@ export async function usableOAuthAccessToken(
     modify: async (_id, fn) => {
       const next = await store.mutateOAuth(connectionId, async (current) => {
         // The row may have been reconnected while the exchange was in flight; only
-        // persist onto the token set this exchange was made from.
-        if (!current || current.refreshToken !== tokens.refreshToken) return undefined
+        // persist onto the token set this exchange was made from. Returning the
+        // current set leaves the row unchanged and reports the stored credential.
+        if (!current || current.refreshToken !== tokens.refreshToken) return current
         const refreshed = await fn(toCredential(current))
-        return refreshed ? toTokenSet(refreshed, current.accountId) : undefined
+        return refreshed ? (toTokenSet(refreshed, current.accountId) ?? current) : current
       })
       return next ? toCredential(next) : undefined
     },
@@ -80,7 +81,7 @@ export async function usableOAuthAccessToken(
         .mutateOAuth(connectionId, async (current) =>
           current && current.refreshToken === tokens.refreshToken
             ? { ...current, denied: true }
-            : undefined
+            : current
         )
         .catch(() => undefined)
       return { ok: false, reason: 'denied' }

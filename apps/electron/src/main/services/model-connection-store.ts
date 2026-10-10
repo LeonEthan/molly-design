@@ -134,8 +134,17 @@ export class ModelConnectionStore {
       // Pre-migration vaults stored a grantSeq counter on OAuth rows; strip it so the
       // strict schema does not reject the whole vault.
       if (raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown[] }).entries))
-        for (const entry of (raw as { entries: { oauth?: { grantSeq?: unknown } }[] }).entries)
-          if (entry?.oauth && entry.oauth.grantSeq !== undefined) delete entry.oauth.grantSeq
+        for (const entry of (
+          raw as {
+            entries: { oauth?: { grantSeq?: unknown; clientId?: unknown; denied?: boolean } }[]
+          }
+        ).entries) {
+          if (!entry?.oauth) continue
+          if (entry.oauth.grantSeq !== undefined) delete entry.oauth.grantSeq
+          // Codex-era rows predate dynamic client registration; their refresh grants
+          // cannot be exchanged by the official flow, so they need a fresh sign-in.
+          if (typeof entry.oauth.clientId !== 'string') entry.oauth.denied = true
+        }
       const parsed = StoreSchema.parse(raw)
       if (
         new Set(parsed.entries.map((entry) => entry.connection.id)).size !== parsed.entries.length
@@ -585,7 +594,8 @@ export class ModelConnectionStore {
    * Serialized read-modify-write of one connection's OAuth token set; the pi-ai
    * CredentialStore refresh runs inside this lock so a concurrent login cannot drop
    * a rotated token. Scoped by connection id: mutating the wrong row would leave the
-   * expiring connection dead.
+   * expiring connection dead. Returning the current set leaves the row unchanged;
+   * returning undefined refuses the mutation without deleting the row.
    */
   mutateOAuth(
     connectionId: string,
@@ -596,7 +606,8 @@ export class ModelConnectionStore {
       const entry = store.entries.find((item) => item.connection.id === connectionId)
       if (!entry || entry.connection.authType !== 'openai_oauth') return undefined
       const next = await fn(entry.oauth)
-      if (!next) return undefined
+      if (next === undefined) return entry.oauth
+      if (next === entry.oauth) return entry.oauth
       entry.oauth = next
       await this.write(store)
       return entry.oauth

@@ -98,9 +98,13 @@ export class OpenAiAuthService {
       },
       // The settings form has no paste-a-redirect-URL affordance; pi-ai races this
       // prompt against the loopback callback, so it must stay pending until the
-      // flow's abort signal settles it.
+      // flow's abort signal settles it — including a cancellation that already landed.
       prompt: (authPrompt) =>
         new Promise<string>((_resolve, reject) => {
+          if (authPrompt.signal?.aborted) {
+            reject(new Error('manual_code_dismissed'))
+            return
+          }
           authPrompt.signal?.addEventListener(
             'abort',
             () => reject(new Error('manual_code_dismissed')),
@@ -128,7 +132,7 @@ export class OpenAiAuthService {
         const credential = await models.login('openai', 'oauth', interaction, {
           getDeviceId: () => this.store.deviceId()
         })
-        settle(await this.finishLogin(credential))
+        settle(await this.finishLogin(sessionId, credential))
       } catch (error) {
         settle({ ok: false, reason: abort.signal.aborted ? 'cancelled' : mapLoginError(error) })
       }
@@ -143,10 +147,16 @@ export class OpenAiAuthService {
     return { sessionId, authorizeUrl, expiresAt: Date.now() + FLOW_TIMEOUT_MS }
   }
 
-  private async finishLogin(credential: Credential): Promise<OpenAiAuthCompleteResult> {
+  private async finishLogin(
+    sessionId: string,
+    credential: Credential
+  ): Promise<OpenAiAuthCompleteResult> {
     const tokens = tokenSetFromCredential(credential)
     if (!tokens.accessToken || !tokens.refreshToken)
       return { ok: false, reason: 'invalid_response' }
+    // The flow may have been cancelled while the exchange was in flight; a cancelled
+    // flow must not save an account.
+    if (this.pending?.sessionId !== sessionId) return { ok: false, reason: 'cancelled' }
     try {
       const connection = await this.store.saveOAuthConnection(
         {
@@ -159,6 +169,13 @@ export class OpenAiAuthService {
         tokens,
         {}
       )
+      // The write may have queued behind a cancellation.
+      if (this.pending?.sessionId !== sessionId) {
+        await this.store
+          .delete({ id: connection.id, expectedRevision: connection.revision })
+          .catch(() => undefined)
+        return { ok: false, reason: 'cancelled' }
+      }
       return { ok: true, connection }
     } catch {
       return { ok: false, reason: 'unreachable' }

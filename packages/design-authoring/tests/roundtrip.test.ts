@@ -734,7 +734,7 @@ common.elementId common.elementType common.bounds common.zOrder common.rotation 
 text.plain text.paragraphs text.lineBreak text.runs.color text.runs.fontSize text.runs.fontFamily text.runs.backgroundColor text.bold text.italic text.underline text.strikethrough text.superscript text.subscript text.hyperlink text.lists text.listItemStyles text.latex text.color text.fontSize text.backgroundColor text.lineHeight text.lineHeightPx text.letterSpacing text.marginTop text.align text.paragraphAlign text.paragraphLineHeight text.paragraphMargin text.textDirection text.wrap text.gradient text.shadow
 font.familyUniform font.familyLatinEa font.registration font.fallback font.measurement
 shape.preset shape.adjustments shape.customPath line.points line.curve line.arrow
-image.src image.fit image.crop image.cropShape image.pipeline icon.name
+image.src image.fit image.crop image.cropShape image.pipeline image.textCopy icon.name
 table.grid table.cellText table.cellTextStyleRef table.cellTextProps table.cellFill table.cellBorder table.cellAlign table.merge table.styleRef table.styleSlots table.bodyStylesCycle table.rowOverColumn
 chart.data chart.encode chart.seriesDefaults chart.typeMixing chart.axisBasic chart.axisLabel chart.axisLineGrid chart.axisSecondary chart.spokeAxis chart.barLayout chart.title chart.legend chart.dataLabels chart.bar chart.line chart.area chart.scatter chart.bubble chart.candlestick chart.pie chart.radar chart.waterfall chart.heatmap chart.treemap chart.sunburst chart.sankey chart.palette
 fill.solid fill.gradientLinear fill.gradientRadial fill.image`

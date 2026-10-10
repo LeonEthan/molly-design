@@ -247,10 +247,17 @@ subscriptions at every daemon start (see [../lib/loro/AGENTS.md](../lib/loro/AGE
 
 ### Historical GitHub projects
 
-New sessions use local projects or chat. MCP keeps `worktree: true` for local
+New independent sessions use local projects or chat. MCP keeps `worktree: true` for local
 projects; GitHub repository creation, speculative preparation, new-worktree forks,
 repository discovery and automatic clone/fetch are retired. Session and Operation
 tools remain available, including recovery of recorded accepted operations.
+
+Accepted GitHub create Operations replay through the internal fixed-target recovery
+argument. A pending first create with no prior workspace/runtime evidence can allocate
+its first worktree from the locally cached accepted base (legacy omission means `main`).
+It never fetches or falls back to another base. Historical parents can create children;
+both new and pending children validate and share the parent's recorded worktree.
+No child-owned branch or replacement parent workspace is allocated.
 
 `WorktreeManager` validates existing managed bare repositories before historical
 restore. It reuses an existing worktree or restores its recorded branch. Missing

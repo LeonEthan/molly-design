@@ -4746,10 +4746,12 @@ export class SessionExecutionService {
     const existingMeta = await sessionDoc.getMetaState();
     if (
       project?.kind === 'github' &&
-      (existingMeta?.project?.kind !== 'github' ||
+      (existingMeta?.id !== sessionId ||
+        existingMeta.machineId !== this.deps.machineId ||
+        existingMeta.project?.kind !== 'github' ||
         existingMeta.project.repoFullName !== project.repoFullName ||
-        !existingMeta.isWorktree ||
-        !existingMeta.branchName?.trim())
+        existingMeta.project.branch?.trim() !== project.branch?.trim() ||
+        existingMeta.parentSessionId !== message.parentSessionId)
     ) {
       throw new Error('GitHub repository projects are retired; use a local project.');
     }
@@ -4773,8 +4775,9 @@ export class SessionExecutionService {
     }
     const githubRepoFullName = resolveProjectGitHubRepo(project);
     const shouldPrepareWorktree =
-      (project?.kind === 'github' && !!githubRepoFullName) ||
-      (project?.kind === 'local' && project.useWorktree === true);
+      !message.parentSessionId &&
+      ((project?.kind === 'github' && !!githubRepoFullName) ||
+        (project?.kind === 'local' && project.useWorktree === true));
     let branch = project?.branch?.trim() || undefined;
     const fromFeedbackPostId =
       message.meta?.fromFeedbackPostId?.trim() ||

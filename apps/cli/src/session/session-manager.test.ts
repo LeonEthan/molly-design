@@ -1,7 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildSessionPreparationClaimKey,
@@ -37,6 +37,11 @@ import {
 import { createLocalCloudPort } from '@molly/platform';
 import * as agentSettings from '../agent/setting';
 import { HarnessCredentialBroker } from '../agent/harness-credential-broker';
+import { deriveRepoIdFromGitHubRepo } from '../utils/github';
+import {
+  seedHistoricalRepo,
+  restoreHistoricalWorktree,
+} from '../../tests/worktree-manager-test-helpers';
 
 vi.mock('./worktree/worktree-setup-runner', () => ({
   runWorktreeSetup: vi.fn(async () => undefined),
@@ -273,6 +278,140 @@ describe('SessionManager child session workdir resolution', () => {
     expect(session.getWorkdir()).toBe(expectedWorkdir);
     expect(existsSync(expectedWorkdir)).toBe(true);
   });
+
+  function historicalFixture() {
+    const project = {
+      kind: 'github' as const,
+      repoFullName: `synthetic/${path.basename(tempHome)}`,
+      branch: 'main',
+    };
+    const repoId = deriveRepoIdFromGitHubRepo(project.repoFullName);
+    const logger = createLogger();
+    const worktrees = getWorktreeManager({ repoId, source: { kind: 'github' }, logger });
+    const source = createLocalRepo(tempHome);
+    const bareDir = seedHistoricalRepo(worktrees, source);
+    rmSync(source, { recursive: true, force: true });
+    const meta: SessionMeta = {
+      id: 'historical-root' as SessionId,
+      machineId: 'machine-1',
+      userId: 'user-1',
+      cliType: 'builtin',
+      agentType: 'molly',
+      createdAt: '2026-10-01T00:00:00.000Z',
+      project,
+      latestUserMsgId: 'synthetic-accepted-first-turn',
+    };
+    const doc = createSessionDoc(meta);
+    doc.setBranchName.mockImplementation(async (branch) => {
+      meta.branchName = branch;
+    });
+    doc.setIsWorktree.mockImplementation(async (value) => {
+      meta.isWorktree = value;
+    });
+    const docs = new Map<SessionId, FakeSessionDoc>([[meta.id, doc]]);
+    const workspace = createWorkspaceDocument(docs);
+    vi.mocked(workspace.repo.getDocMeta).mockImplementation(async (roomId) =>
+      roomId === `session-${meta.id}`
+        ? ({ meta } as Awaited<ReturnType<typeof workspace.repo.getDocMeta>>)
+        : null
+    );
+    const manager = new SessionManager(logger, 'token', 'machine-1', 'workspace-1', workspace, {
+      sessionSandboxFactory: async () => createNoopSessionSandbox(),
+      cloudPort: createTestCloudPort(),
+    });
+    const config = createSessionConfig({
+      sessionId: meta.id,
+      project,
+      repoId,
+      branch: project.branch,
+    });
+    return { manager, worktrees, meta, docs, config, bareDir };
+  }
+
+  it('recovers an accepted first GitHub worktree from its cached base and preserves it on retry', async () => {
+    const state = historicalFixture();
+    const session = await createSessionInner(state.manager, state.config);
+    const workdir = session.getWorkdir();
+    expect(workdir).toBe(state.worktrees.getWorktreeHostPath(state.meta.id));
+    expect(readFileSync(path.join(workdir, 'README.md'), 'utf8')).toBe('# local\n');
+    expect(state.meta.isWorktree).toBe(true);
+    expect(state.meta.branchName).toBe(
+      (await state.worktrees.getWorktreeInfo(state.meta.id)).branch
+    );
+    writeFileSync(path.join(workdir, 'notes.txt'), 'uncommitted recovery work');
+    const retry = await createSessionInner(state.manager, {
+      ...state.config,
+      restoreBranchName: state.meta.branchName,
+    });
+    expect(retry.getWorkdir()).toBe(workdir);
+    expect(readFileSync(path.join(workdir, 'notes.txt'), 'utf8')).toBe('uncommitted recovery work');
+  });
+
+  it.each(['missing-base', 'established-without-branch', 'missing-recorded-branch'] as const)(
+    'does not replace a historical root with %s',
+    async (condition) => {
+      const state = historicalFixture();
+      if (condition === 'missing-base') runGit(state.bareDir, ['branch', '-D', 'main']);
+      if (condition === 'established-without-branch') state.meta.isWorktree = true;
+      if (condition === 'missing-recorded-branch') {
+        state.meta.branchName = 'session/lost';
+        state.config.restoreBranchName = state.meta.branchName;
+      }
+      await expect(createSessionInner(state.manager, state.config)).rejects.toThrow();
+      expect(state.worktrees.hasWorktree(state.meta.id)).toBe(false);
+    }
+  );
+
+  it.each(['live', 'unloaded', 'removed-directory'] as const)(
+    'shares the %s historical parent worktree without creating a child worktree',
+    async (condition) => {
+      const state = historicalFixture();
+      const info = await restoreHistoricalWorktree(state.worktrees, state.meta.id);
+      state.meta.isWorktree = true;
+      state.meta.branchName = info.branch;
+      if (condition === 'live')
+        await createSessionInner(state.manager, {
+          ...state.config,
+          restoreBranchName: info.branch,
+        });
+      if (condition === 'removed-directory')
+        runGit(state.bareDir, ['worktree', 'remove', info.hostPath]);
+      const childId = 'historical-child' as SessionId;
+      const child = await createSessionInner(state.manager, {
+        ...state.config,
+        sessionId: childId,
+        parentSessionId: state.meta.id,
+      });
+      expect(child.getWorkdir()).toBe(info.hostPath);
+      expect(readFileSync(path.join(child.getWorkdir(), 'README.md'), 'utf8')).toBe('# local\n');
+      expect(state.worktrees.hasWorktree(childId)).toBe(false);
+      expect((await state.worktrees.getWorktreeInfo(state.meta.id)).branch).toBe(info.branch);
+    }
+  );
+
+  it.each(['different-repo', 'different-machine', 'missing-branch'] as const)(
+    'rejects a %s parent before sharing even a live workspace',
+    async (condition) => {
+      const state = historicalFixture();
+      const info = await restoreHistoricalWorktree(state.worktrees, state.meta.id);
+      state.meta.isWorktree = true;
+      state.meta.branchName = info.branch;
+      await createSessionInner(state.manager, { ...state.config, restoreBranchName: info.branch });
+      if (condition === 'different-repo')
+        state.meta.project = { kind: 'github', repoFullName: 'different/repo', branch: 'main' };
+      if (condition === 'different-machine') state.meta.machineId = 'different-machine';
+      if (condition === 'missing-branch') state.meta.branchName = undefined;
+      await expect(
+        createSessionInner(state.manager, {
+          ...state.config,
+          sessionId: 'rejected-child',
+          parentSessionId: state.meta.id,
+        })
+      ).rejects.toThrow('no matching recorded worktree');
+      expect(state.worktrees.hasWorktree('rejected-child')).toBe(false);
+      expect((await state.worktrees.getWorktreeInfo(state.meta.id)).branch).toBe(info.branch);
+    }
+  );
 
   it('persists a canonical parent base before recreating its local worktree', async () => {
     const sourceDir = createLocalRepo(tempHome);

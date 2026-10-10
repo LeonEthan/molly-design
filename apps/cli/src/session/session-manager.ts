@@ -1476,6 +1476,41 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
       return config.workdir;
     }
 
+    if (config.project?.kind === 'github') {
+      const record = await this.workspaceDocument.repo.getDocMeta(
+        getSessionRoomId(config.parentSessionId)
+      );
+      const parentMeta = record?.meta as SessionMeta | undefined;
+      const parentRepo =
+        parentMeta?.project?.kind === 'github'
+          ? parentMeta.project.repoFullName
+          : parentMeta?.project === undefined
+            ? parentMeta?.repoFullName
+            : undefined;
+      if (
+        !parentMeta ||
+        isLoroRepoDocDeleted(record) ||
+        parentMeta.machineId !== this.machineId ||
+        parentMeta.parentSessionId ||
+        parentRepo !== config.project.repoFullName ||
+        !parentMeta.isWorktree ||
+        !parentMeta.branchName?.trim() ||
+        !repoId
+      )
+        throw new Error('Historical GitHub parent has no matching recorded worktree.');
+      const manager = getWorktreeManager({
+        repoId,
+        source: { kind: 'github' },
+        logger: this.logger,
+      });
+      const worktree = await manager.createWorktree(
+        config.parentSessionId,
+        parentMeta.baseBranch,
+        parentMeta.branchName
+      );
+      return worktree.hostPath;
+    }
+
     const parentSession = this.sessions.get(config.parentSessionId);
     if (parentSession) {
       const parentWorkdir = parentSession.getWorkdir();
@@ -1679,6 +1714,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     let workdir: string | undefined = config.workdir;
     const repoId = config.repoId;
     const sessionDoc = await this.workspaceDocument.getOrCreateSessionDoc(config.sessionId!);
+    const existingMeta =
+      config.project?.kind === 'github' ? await sessionDoc.getMetaState() : undefined;
     if (config.githubRepo) {
       await sessionDoc.setRepoFullName(config.githubRepo);
     }
@@ -1689,6 +1726,23 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
     // Child sessions reuse the parent's workdir — skip worktree creation
     if (worktreeTarget) {
       const worktreeManager = worktreeTarget.manager;
+      const acceptedGitHubBaseBranch =
+        config.project?.kind === 'github' &&
+        existingMeta?.project?.kind === 'github' &&
+        existingMeta.project.repoFullName === config.project.repoFullName &&
+        existingMeta.project.branch === config.project.branch &&
+        existingMeta.id === config.sessionId &&
+        existingMeta.machineId === this.machineId &&
+        !existingMeta.parentSessionId &&
+        !existingMeta.branchName &&
+        !existingMeta.isWorktree &&
+        !existingMeta.acpSessionId &&
+        !config.resume &&
+        !!existingMeta.latestUserMsgId &&
+        !existingMeta.lastHandledUserMsgId &&
+        !config.restoreBranchName
+          ? existingMeta.project.branch?.trim()
+          : undefined;
       this.logger.debug(
         `[${config.sessionId}] Preparing worktree (repoId=${worktreeTarget.managerConfig.repoId} sessionId=${config.sessionId}) in host`
       );
@@ -1723,7 +1777,8 @@ export class SessionManager extends EventEmitter<SessionManagerEvents> {
             config.sessionId!,
             config.branch,
             config.restoreBranchName,
-            config.worktreeStartPoint
+            config.worktreeStartPoint,
+            acceptedGitHubBaseBranch
           );
         })());
       if (!config.deferWorktreeMetaPersistence) {

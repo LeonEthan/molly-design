@@ -9,7 +9,7 @@ Translation: current
 
 [English](graphic-design-platform.md)
 
-新会话仅接受本地项目或普通会话；GitHub 仓库选择、克隆、自动 fetch、Issue/PR 提及及 PR 标签页和徽章退出。保留本地 worktree 创建、设置与清理，以及 `molly_session_*` / `molly_operation_*` 子代理编排工具。历史 GitHub 会话和文件保持可读；运行恢复只使用已有本地仓库和记录分支，缺失时明确报错，不创建替代仓库或删除幸存文件。Files、旧回合 diff 和浏览器预览继续保留。
+新建独立会话仅接受本地项目或普通会话；GitHub 仓库选择、克隆、自动 fetch、Issue/PR 提及及 PR 标签页和徽章退出。保留本地 worktree 创建、设置与清理，以及 `molly_session_*` / `molly_operation_*` 子代理编排工具。历史 GitHub 会话和文件保持可读，子会话继续共享经过校验的父工作区。已接受创建任务保留固定目标恢复；尚未形成工作区的首次创建可使用已接受基准分支的本地缓存，已建立的工作区只恢复记录分支。所需本地仓库或分支缺失时明确报错，不创建替代仓库或删除幸存文件。Files、旧回合 diff 和浏览器预览继续保留。
 
 2026-09-21 起退役 Linux 桌面支持。正式发布范围仍为 macOS arm64；Intel macOS 与 Windows 保留本地实验构建。下文 Linux 构建证据保留为历史事实；Ubuntu CI 与跨平台 Bento 资源检查不表示桌面支持。
 

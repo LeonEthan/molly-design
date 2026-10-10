@@ -619,7 +619,8 @@ export class WorktreeManager {
     sessionId: SessionId,
     baseBranch?: string,
     restoreBranchName?: string,
-    exactStartPoint?: string
+    exactStartPoint?: string,
+    acceptedGitHubBaseBranch?: string
   ): Promise<WorktreeInfo> {
     return withRepoLock(this.repoId, async () => {
       assertSafeSessionId(sessionId);
@@ -686,7 +687,10 @@ export class WorktreeManager {
             gitAdminCwd
           );
         } else {
-          const resolvedBase = await this.resolveBaseRef(baseBranch);
+          const resolvedBase =
+            this.source.kind === 'github' && acceptedGitHubBaseBranch
+              ? await this.resolveAcceptedGitHubBaseRef(acceptedGitHubBaseBranch)
+              : await this.resolveBaseRef(baseBranch);
           this.logger.debug(
             `[${this.repoId}] Creating new worktree (sessionId=${sessionId} base=${resolvedBase}): ${worktreePath}`
           );
@@ -706,6 +710,16 @@ export class WorktreeManager {
       );
       return info;
     });
+  }
+
+  private async resolveAcceptedGitHubBaseRef(branch: string): Promise<string> {
+    const refs = branch.startsWith('refs/')
+      ? [branch]
+      : [`refs/remotes/origin/${branch}`, `refs/heads/${branch}`];
+    for (const ref of refs) {
+      if (await this.hasCommitish(ref)) return ref;
+    }
+    throw new Error(`Accepted GitHub create base branch is unavailable locally: ${branch}`);
   }
 
   /**

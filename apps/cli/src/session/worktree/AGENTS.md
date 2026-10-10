@@ -18,13 +18,18 @@ and file responsibilities: [../README.md](../README.md).
   metadata before dispatch, has no ACP session id, and must retain an explicitly requested branch.
   ACP restore and legacy direct-session reinitialization must never switch back to the Session's
   recorded branch.
-- New project sessions use local projects or chat. GitHub creation, speculative preparation,
+- New independent project sessions use local projects or chat. GitHub creation, speculative preparation,
   new-worktree forks and automatic clone/fetch are retired. Historical GitHub sessions reuse
   existing local bare repositories and their recorded branches; missing/invalid state fails
   without replacement initialization, base-branch fallback or deletion of surviving files.
+  Accepted first creates with a durable pending turn and no prior workspace/runtime evidence
+  may allocate from their exact cached base; preserve the legacy omitted-base default (`main`).
+  Existing recorded branches never fall back. Child Sessions validate the same-machine root
+  parent's repository and recorded worktree, then share it without allocating a child worktree.
   Preserve historical decoding, setup/cleanup and accepted-operation recovery.
   Legacy marker `source.repoUrl` is retired transport metadata: compare GitHub
   identity by repo id and base branch so dropping the URL never disposes retained work.
+  A conflicting historical marker fails without disposal or replacement creation.
 - A fresh local worktree always owns a newly allocated branch from its selected base
   ref; suffix collisions instead of attaching to an existing ref. Reattaching an existing
   branch is reserved for an explicit `restoreBranchName` from the same Session.

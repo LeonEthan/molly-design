@@ -308,6 +308,11 @@ export async function claimSpeculativeWorktreeForDurableSession(args: {
       return 'no-marker';
     }
     if (!markerMatchesTarget(marker, args.target)) {
+      if (marker.source.kind === 'github' || args.target.source.kind === 'github') {
+        throw new Error(
+          'Historical GitHub worktree preparation does not match the durable target.'
+        );
+      }
       await disposeMarker(marker, args.logger);
       return 'mismatch';
     }

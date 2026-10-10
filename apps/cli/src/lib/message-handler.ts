@@ -2893,7 +2893,9 @@ export class MessageHandler {
         this.workspaceDocument,
         prompt,
         options,
-        dispatchConfig
+        dispatchConfig,
+        undefined,
+        { operation, itemIndex: index }
       );
       return;
     }

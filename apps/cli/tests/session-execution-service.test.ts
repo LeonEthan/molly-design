@@ -4635,111 +4635,135 @@ describe('SessionExecutionService', () => {
     expect(runtimeStarted).toBe(false);
   });
 
-  it('creates and starts a new session turn', async () => {
-    const sessionDoc = withHistoryPort({
-      getMetaState: vi.fn(async () => undefined),
-      getHistory: vi.fn(() => []),
-      setStatus: vi.fn(async () => {}),
-      setProject: vi.fn(async () => {}),
-      setBaseBranch: vi.fn(async () => {}),
-      updateHistory: vi.fn(async () => {}),
-      roomId: 'session-session-2',
-    });
-    const agentClient = {
-      isCreated: vi.fn(() => true),
-      cancel: vi.fn(async () => {}),
-      prompt: vi.fn(async () => ({})),
-      currentModel: undefined,
-    };
-    const createdSession = {
-      sessionId: 'session-2' as SessionId,
-      acpSessionId: 'acp-2' as ACPSessionId,
-      agentClient,
-      terminalManager: {} as unknown,
-      getWorkdir: () => '/tmp',
-      getHostWorkdir: () => '/tmp',
-      getParentSessionId: () => undefined,
-      exec: vi.fn(async () => ''),
-      terminate: vi.fn(async () => {}),
-      updateGitIdentity: vi.fn(),
-      createAgent: vi.fn(async () => 'acp-2'),
-      applyExecutionPlaneLimits: vi.fn(async () => {}),
-    };
-    const sessionManager = {
-      getSession: vi.fn(() => null),
-      getPendingSession: vi.fn(() => null),
-      createSession: vi.fn(async () => createdSession as unknown),
-      setSessionError: vi.fn(),
-      terminateSession: vi.fn(),
-      refreshGhTokenForSession: vi.fn(async () => {}),
-    } as unknown as SessionManager;
-    const upsertDocMeta = vi.fn(async () => {});
-    const deps = createBaseDeps({
-      sessionManager,
-      workspaceDocument: {
-        repo: {
-          upsertDocMeta,
-          getDocMeta: vi.fn(async () => undefined),
-        },
-        getOrCreateSessionDoc: vi.fn(async () => sessionDoc),
-        updateAcpCapabilities: vi.fn(async () => {}),
-      } as unknown as LoroDocumentManager,
-      buildAcpPromptBlocks: vi.fn(async () => [{ type: 'text', text: 'built prompt' }] as any),
-    });
+  it.each(['chat', 'historical-github-child'] as const)(
+    'creates and starts a %s session turn',
+    async (kind) => {
+      const project =
+        kind === 'historical-github-child'
+          ? { kind: 'github' as const, repoFullName: 'owner/repo', branch: 'main' }
+          : undefined;
+      const parentSessionId = 'parent-session-2' as SessionId;
+      const parentMeta = project
+        ? {
+            id: parentSessionId,
+            machineId: 'machine-1',
+            project,
+            isWorktree: true,
+            branchName: 'session/parent-branch',
+          }
+        : undefined;
+      const sessionDoc = withHistoryPort({
+        getMetaState: vi.fn(async () =>
+          project
+            ? { id: 'session-2', machineId: 'machine-1', project, parentSessionId }
+            : undefined
+        ),
+        getHistory: vi.fn(() => []),
+        setStatus: vi.fn(async () => {}),
+        setProject: vi.fn(async () => {}),
+        setBaseBranch: vi.fn(async () => {}),
+        updateHistory: vi.fn(async () => {}),
+        roomId: 'session-session-2',
+      });
+      const agentClient = {
+        isCreated: vi.fn(() => true),
+        cancel: vi.fn(async () => {}),
+        prompt: vi.fn(async () => ({})),
+        currentModel: undefined,
+      };
+      const createdSession = {
+        sessionId: 'session-2' as SessionId,
+        acpSessionId: 'acp-2' as ACPSessionId,
+        agentClient,
+        terminalManager: {} as unknown,
+        getWorkdir: () => '/tmp',
+        getHostWorkdir: () => '/tmp',
+        getParentSessionId: () => undefined,
+        exec: vi.fn(async () => ''),
+        terminate: vi.fn(async () => {}),
+        updateGitIdentity: vi.fn(),
+        createAgent: vi.fn(async () => 'acp-2'),
+        applyExecutionPlaneLimits: vi.fn(async () => {}),
+      };
+      const sessionManager = {
+        getSession: vi.fn(() => null),
+        getPendingSession: vi.fn(() => null),
+        createSession: vi.fn(async () => createdSession as unknown),
+        setSessionError: vi.fn(),
+        terminateSession: vi.fn(),
+        refreshGhTokenForSession: vi.fn(async () => {}),
+      } as unknown as SessionManager;
+      const upsertDocMeta = vi.fn(async () => {});
+      const deps = createBaseDeps({
+        sessionManager,
+        workspaceDocument: {
+          repo: {
+            upsertDocMeta,
+            getDocMeta: vi.fn(async (roomId: string) =>
+              roomId === `session-${parentSessionId}` ? { meta: parentMeta } : undefined
+            ),
+          },
+          getOrCreateSessionDoc: vi.fn(async () => sessionDoc),
+          updateAcpCapabilities: vi.fn(async () => {}),
+        } as unknown as LoroDocumentManager,
+        buildAcpPromptBlocks: vi.fn(async () => [{ type: 'text', text: 'built prompt' }] as any),
+      });
 
-    const service = new SessionExecutionService(deps);
-    await service.startSession({
-      type: 'session/create',
-      sessionId: 'session-2' as SessionId,
-      machineId: 'machine-1',
-      workspaceId: 'workspace-1' as WorkspaceId,
-      acpSessionConfig: { prompt: 'hello', cliType: 'builtin', agentType: 'codex' },
-      userTurnId: 'turn-create-1',
-      userId: 'user-2',
-      userName: 'User 2',
-      userEmail: 'user2@example.com',
-      parentSessionId: 'parent-session-2' as SessionId,
-    });
+      const service = new SessionExecutionService(deps);
+      await service.startSession({
+        type: 'session/create',
+        sessionId: 'session-2' as SessionId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        project,
+        acpSessionConfig: { prompt: 'hello', cliType: 'builtin', agentType: 'codex' },
+        userTurnId: 'turn-create-1',
+        userId: 'user-2',
+        userName: 'User 2',
+        userEmail: 'user2@example.com',
+        parentSessionId: 'parent-session-2' as SessionId,
+      });
 
-    expect(sessionManager.createSession).toHaveBeenCalledTimes(1);
-    expect(sessionManager.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        parentSessionId: 'parent-session-2',
-        requesterUserId: 'user-2',
-      })
-    );
-    expect(sessionDoc.setStatus.mock.calls.map(([status]) => status).slice(0, 3)).toEqual([
-      SessionStatusFactory.initializing(),
-      SessionStatusFactory.running(),
-      SessionStatusFactory.idle(),
-    ]);
-    expect(agentClient.prompt).toHaveBeenCalledWith(
-      'acp-2',
-      [{ type: 'text', text: 'built prompt' }],
-      { signal: expect.any(AbortSignal) }
-    );
-    expect(deps.turnFinalization.notifySessionCompleted).toHaveBeenCalledWith(
-      'session-2',
-      'user-2',
-      'turn-1'
-    );
-    expect(deps.startSessionActivePresence).toHaveBeenCalledTimes(1);
-    expect(deps.startSessionActivePresence).toHaveBeenCalledWith('session-2', 'initializing');
-    expect(deps.clearSessionActivePresence).toHaveBeenCalledTimes(1);
-    expect(sessionDoc.setStatus).toHaveBeenCalledWith(
-      SessionStatusFactory.initializing(),
-      expect.objectContaining({
-        latestUserMsgId: 'turn-create-1',
-      })
-    );
-    expect(upsertDocMeta).toHaveBeenCalledWith('session-session-2', {
-      processingUserMsgId: 'turn-create-1',
-    });
-    expect(upsertDocMeta).toHaveBeenCalledWith('session-session-2', {
-      lastHandledUserMsgId: 'turn-create-1',
-      processingUserMsgId: undefined,
-    });
-  });
+      expect(sessionManager.createSession).toHaveBeenCalledTimes(1);
+      expect(sessionManager.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          parentSessionId: 'parent-session-2',
+          requesterUserId: 'user-2',
+        })
+      );
+      expect(sessionDoc.setStatus.mock.calls.map(([status]) => status).slice(0, 3)).toEqual([
+        SessionStatusFactory.initializing(),
+        SessionStatusFactory.running(),
+        SessionStatusFactory.idle(),
+      ]);
+      expect(agentClient.prompt).toHaveBeenCalledWith(
+        'acp-2',
+        [{ type: 'text', text: 'built prompt' }],
+        { signal: expect.any(AbortSignal) }
+      );
+      expect(deps.turnFinalization.notifySessionCompleted).toHaveBeenCalledWith(
+        'session-2',
+        'user-2',
+        'turn-1'
+      );
+      expect(deps.startSessionActivePresence).toHaveBeenCalledTimes(1);
+      expect(deps.startSessionActivePresence).toHaveBeenCalledWith('session-2', 'initializing');
+      expect(deps.clearSessionActivePresence).toHaveBeenCalledTimes(1);
+      expect(sessionDoc.setStatus).toHaveBeenCalledWith(
+        SessionStatusFactory.initializing(),
+        expect.objectContaining({
+          latestUserMsgId: 'turn-create-1',
+        })
+      );
+      expect(upsertDocMeta).toHaveBeenCalledWith('session-session-2', {
+        processingUserMsgId: 'turn-create-1',
+      });
+      expect(upsertDocMeta).toHaveBeenCalledWith('session-session-2', {
+        lastHandledUserMsgId: 'turn-create-1',
+        processingUserMsgId: undefined,
+      });
+    }
+  );
 
   it('checks out the requested local project branch on the target machine before creating a session', async () => {
     const rootPath = createGitLocalProject();
@@ -5140,7 +5164,9 @@ describe('SessionExecutionService', () => {
   it('records an actionable diagnostic when Git is unavailable while restoring a historical GitHub worktree', async () => {
     const sessionDoc = withHistoryPort({
       getMetaState: vi.fn(async () => ({
-        project: { kind: 'github', repoFullName: 'owner/repo' },
+        id: 'session-github-git-missing',
+        machineId: 'machine-1',
+        project: { kind: 'github', repoFullName: 'owner/repo', branch: 'main' },
         isWorktree: true,
         branchName: 'session/historical',
       })),

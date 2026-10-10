@@ -8,10 +8,16 @@ import {
   type MachineId,
   type SessionId,
   type SessionMeta,
+  type SessionHistoryInput,
+  type StoredMollyOperation,
+  type MollyOperationItemResult,
 } from '@molly/shared';
 import { encodeMollyModelOption } from '@molly/shared/embedded-harness';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoroDocumentManager } from '@/lib/loro/doc';
+import * as commandRuntime from '@/lib/command-runtime';
+import { MessageHandler } from '@/lib/message-handler';
+import { withHistoryPort } from '../../tests/history-port-fixture';
 import {
   selectDefaultAgentConfigForCreate,
   buildCliHistoryInputConfig,
@@ -159,9 +165,179 @@ beforeEach(() => {
   ])
     vi.stubEnv(name, '');
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+describe.each(['session_create', 'session_create_many'] as const)(
+  '%s accepted GitHub recovery',
+  (kind) => {
+    function recoveryFixture(explicitBase = true) {
+      const context = fixture();
+      const targetId = 'synthetic-recovered-target' as SessionId;
+      const targetRoom = getSessionRoomId(targetId);
+      let meta: SessionMeta | undefined;
+      let history: SessionHistoryInput[] = [];
+      const readMeta = context.manager.repo.getDocMeta.bind(context.manager.repo);
+      vi.spyOn(context.manager.repo, 'getDocMeta').mockImplementation(async (id) =>
+        id === targetRoom
+          ? meta
+            ? ({ meta } as Awaited<ReturnType<typeof readMeta>>)
+            : null
+          : readMeta(id)
+      );
+      vi.spyOn(context.manager.repo, 'upsertDocMeta').mockImplementation(async (id, patch) => {
+        if (id !== targetRoom) throw new Error('Unexpected recovery metadata target');
+        meta = { ...meta, ...patch } as SessionMeta;
+      });
+      const doc = withHistoryPort({
+        getHistory: () => history,
+        updateHistory: async (update: (value: SessionHistoryInput[]) => SessionHistoryInput[]) => {
+          history = update(history);
+        },
+        waitUntilSynced: async () => true,
+      });
+      vi.spyOn(context.manager, 'getOrCreateSessionDoc').mockImplementation(async (id) => {
+        if (id !== targetId) throw new Error('Recovery must not inherit mutable requester history');
+        return doc as unknown as Awaited<ReturnType<LoroDocumentManager['getOrCreateSessionDoc']>>;
+      });
+      Object.assign(context.manager, { waitUntilMetaSynced: async () => true });
+      vi.spyOn(commandRuntime, 'dispatchLocalControl').mockResolvedValue([
+        { type: 'machine/status_response', machineId, success: true },
+      ]);
+      const item: Extract<MollyOperationItemResult, { status: 'active' }> = {
+        status: 'active',
+        target: { sessionId: targetId, userTurnId: 'synthetic-fixed-turn' },
+        inputDurable: false,
+      };
+      const command = {
+        agentConfigId: config.id,
+        prompt: 'Synthetic accepted prompt',
+        workContext: {
+          kind: 'github',
+          repo: 'synthetic/repo',
+          ...(explicitBase ? { branch: 'main' } : {}),
+        },
+      };
+      const operation: StoredMollyOperation = {
+        workspaceId: workspace.id,
+        ownerMachineId: machineId,
+        requesterSessionId: context.session.id,
+        requesterUserId: auth.userId,
+        operationId: 'synthetic-accepted-operation',
+        kind,
+        fingerprint: 'synthetic-fingerprint',
+        canonicalCommand: kind === 'session_create_many' ? { items: [command] } : command,
+        frozenContinuationConfig: {
+          sourceTurnId: 'synthetic-source-turn',
+          inputConfig: { cliType: 'builtin', agentType: 'molly' },
+          targetDispatchConfigs: [
+            { ...dispatch, modelSelection, mcpServerIds: [], inheritSessionDefaults: false },
+          ],
+        },
+        initiatorChainDepth: 2,
+        createdAt: '2026-10-01T00:00:00.000Z',
+        deadlineAt: '2026-10-01T01:00:00.000Z',
+        state: 'active',
+        items: [item],
+      };
+      const materializer = MessageHandler.prototype as unknown as {
+        materializeOperationTarget(
+          operation: StoredMollyOperation,
+          target: typeof item,
+          index: number
+        ): Promise<void>;
+      };
+      const host = { ...auth, workspaceId: workspace.id, workspaceDocument: context.manager };
+      return {
+        recover: () => materializer.materializeOperationTarget.call(host, operation, item, 0),
+        item,
+        operation,
+        command,
+        meta: () => meta,
+        history: () => history,
+        setMeta: (value: SessionMeta) => {
+          meta = value;
+        },
+        requester: context.session,
+      };
+    }
+
+    it.each([true, false])(
+      'materializes the accepted fixed target and frozen input (explicit base: %s)',
+      async (explicitBase) => {
+        const state = recoveryFixture(explicitBase);
+        await state.recover();
+        expect(state.meta()).toMatchObject({
+          id: state.item.target.sessionId,
+          latestUserMsgId: state.item.target.userTurnId,
+          project: { kind: 'github', repoFullName: 'synthetic/repo', branch: 'main' },
+        });
+        expect(state.history()).toMatchObject([
+          {
+            id: state.item.target.userTurnId,
+            userId: auth.userId,
+            items: [{ type: 'text', text: 'Synthetic accepted prompt' }],
+            inputConfig: { modelSelection, mcpServerIds: [], chainDepth: 3 },
+          },
+        ]);
+        expect(state.history()).toHaveLength(1);
+      }
+    );
+
+    it('rejects a target that differs from the stored accepted item', async () => {
+      const state = recoveryFixture();
+      state.operation.items = [
+        { ...state.item, target: { ...state.item.target, sessionId: 'different-target' } },
+      ];
+      await expect(state.recover()).rejects.toThrow('does not match recovery');
+      expect(state.meta()).toBeUndefined();
+      expect(state.history()).toEqual([]);
+    });
+
+    it('preserves conflicting existing target metadata without dispatch', async () => {
+      const state = recoveryFixture();
+      const existing: SessionMeta = {
+        ...state.requester,
+        id: state.item.target.sessionId,
+        project: { kind: 'github', repoFullName: 'different/repo', branch: 'main' },
+      };
+      state.setMeta(existing);
+      await expect(state.recover()).rejects.toThrow('conflicts with existing Session metadata');
+      expect(state.meta()).toEqual(existing);
+      expect(state.history()).toEqual([]);
+    });
+  }
+);
 
 describe('embedded Session pre-accept validation through the real catalog', () => {
+  it('allows child sessions to inherit a retained GitHub parent workspace', async () => {
+    const context = fixture();
+    context.session.project = { kind: 'github', repoFullName: 'synthetic/repo', branch: 'main' };
+    context.session.isWorktree = true;
+    context.session.branchName = 'session/synthetic-parent';
+    await expect(
+      context.validate(
+        { ...dispatch, inheritSessionDefaults: false },
+        {
+          currentSessionId: context.session.id,
+          useCurrentSessionAsParent: true,
+        }
+      )
+    ).resolves.toMatchObject({ ...dispatch, inheritSessionDefaults: false });
+  });
+
+  it('rejects explicit new GitHub projects even with caller-supplied target ids', async () => {
+    await expect(
+      fixture().validate(dispatch, {
+        repo: 'synthetic/repo',
+        sessionId: 'synthetic-target',
+        userTurnId: 'synthetic-turn',
+      })
+    ).rejects.toThrow('GitHub repository projects are retired');
+  });
+
   it('retains a structured-only model selection through acceptance and history conversion', async () => {
     const selected = { ...modelSelection };
     const accepted = await fixture().validate({ modelSelection: selected });

@@ -270,6 +270,7 @@ export class EmbeddedHarnessControl {
           runId: snapshot.runId,
           apiKey: grant.apiKey,
           ...(grant.oauthAccountId ? { oauthAccountId: grant.oauthAccountId } : {}),
+          ...(grant.oauthGrantId ? { oauthGrantId: grant.oauthGrantId } : {}),
         })
       );
       controller.signal.throwIfAborted();

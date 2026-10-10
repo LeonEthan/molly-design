@@ -387,7 +387,9 @@ export function ModelConnectionForm({
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
           customModels: customModels.map((model) => {
-            const { discovered: _, ...rest } = model;
+            const { discovered: _, rowId: _rowId, ...rest } = model;
+            void _;
+            void _rowId;
             return {
               ...rest,
               contextWindow: Number(model.contextWindow),

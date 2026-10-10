@@ -362,23 +362,26 @@ describe('owned ACP host integration', () => {
           authType: 'openai_oauth',
           oauth: { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' },
         },
-        selection: { connectionId: 'connection', modelId: 'gpt-5', thinking: 'minimal' },
+        selection: { connectionId: 'connection', modelId: 'gpt-5.5', thinking: 'minimal' },
       },
     });
     const s = await f.open();
     const runtime = f.runtime();
-    const before = runtime.getRegisteredProviderConfig('openai') as {
+    const codex = runtime.getRegisteredProviderConfig('openai-codex') as {
       baseUrl?: string;
       api?: string;
       headers?: Record<string, string>;
     };
-    expect(before.baseUrl).toBe('https://chatgpt.com/backend-api/codex');
-    expect(before.api).toBe('openai-codex-responses');
-    expect(before.headers?.originator).toBe('molly');
+    expect(codex.baseUrl).toBe('https://chatgpt.com/backend-api/codex');
+    expect(codex.api).toBe('openai-codex-responses');
+    expect(codex.headers?.originator).toBe('molly');
+    expect(codex.headers?.['ChatGPT-Account-Id']).toBe('acct-1');
+    // The public preset stays on its own transport.
+    expect(runtime.getRegisteredProviderConfig('openai')).not.toEqual(
+      expect.objectContaining({ baseUrl: 'https://chatgpt.com/backend-api/codex' })
+    );
     f.grant(s.snapshot, 'SYNTHETIC_OAUTH_TOKEN', 'acct-1');
     await s.prompt().catch(() => undefined);
-    const after = runtime.getRegisteredProviderConfig('openai') as typeof before;
-    expect(after.headers?.['ChatGPT-Account-Id']).toBe('acct-1');
   });
 
   it.each(['model', 'endpoint'] as const)(

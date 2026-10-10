@@ -299,7 +299,8 @@ export class OpenAiAuthService {
     }
     const finish = (result: OpenAiAuthCompleteResult) => {
       pending.server.close()
-      this.pending = null
+      // Clear only when this flow still owns the slot; a replacement may already be pending.
+      if (this.pending === pending) this.pending = null
       pending.resolve(result)
     }
     const fail = (reason: 'denied' | 'timed_out' | 'invalid_response' | 'unreachable') => {
@@ -320,6 +321,13 @@ export class OpenAiAuthService {
       verifier: pending.verifier,
       redirectUri: pending.redirectUri
     })
+    // The user may have cancelled while the exchange was in flight; a replacement flow
+    // (or none) now owns `this.pending`, and this callback must not touch it.
+    if (this.pending !== pending) {
+      response.statusCode = 410
+      response.end('This sign-in session has ended. Return to Molly.')
+      return
+    }
     if (!exchanged.ok) return fail(exchanged.reason)
     const claims = readIdTokenClaims(exchanged.tokens.idToken)
     const input: SaveModelConnection = {

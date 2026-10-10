@@ -42,7 +42,12 @@ const OAuthTokenSetSchema = z
     accessTokenExpiresAt: z.number().int().positive(),
     /** Refresh was rejected; the row stays but runs refuse until the user signs in again. */
     denied: z.boolean().optional(),
-    accountId: z.string().max(200).optional()
+    accountId: z.string().max(200).optional(),
+    /**
+     * Changes on every rotation so a queued grant carrying the previous token cannot be
+     * honored after the vault moved on.
+     */
+    grantId: z.string().uuid().optional()
   })
   .strict()
 export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
@@ -553,7 +558,10 @@ export class ModelConnectionStore {
         oauth: account,
         ...(parsed.data.models ? { models: parsed.data.models } : {})
       })
-      store.entries = [...store.entries, { connection, oauth: tokens }]
+      store.entries = [
+        ...store.entries,
+        { connection, oauth: { ...tokens, grantId: randomUUID() } }
+      ]
       await this.write(store)
       return connection
     })
@@ -573,8 +581,23 @@ export class ModelConnectionStore {
     })
   }
 
-  /** Rotates a refreshed token set in place; fails rather than resurrecting a dead entry. */
-  rotateOAuthTokens(connectionId: string, connectionRevision: number, tokens: OAuthTokenSet) {
-    return this.saveOAuthTokens(connectionId, connectionRevision, tokens)
+  /** Rotates a refreshed token set in place; returns the stored set with its new grant id. */
+  rotateOAuthTokens(
+    connectionId: string,
+    connectionRevision: number,
+    tokens: OAuthTokenSet
+  ): Promise<OAuthTokenSet> {
+    return this.serial(async () => {
+      const store = await this.read()
+      const entry = store.entries.find((item) => item.connection.id === connectionId)
+      if (!entry || entry.connection.revision !== connectionRevision)
+        throw new Error('model_connection_revision_conflict')
+      if (entry.connection.authType !== 'openai_oauth')
+        throw new Error('model_connection_oauth_requires_reauth')
+      // Rotation invalidates any grant minted from the previous token set.
+      entry.oauth = { ...tokens, grantId: randomUUID() }
+      await this.write(store)
+      return entry.oauth
+    })
   }
 }

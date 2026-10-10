@@ -150,12 +150,25 @@ void test('oauth connection round-trips its token set without exposing it in the
   // Rotating with a stale revision refuses.
   await assert.rejects(
     store.rotateOAuthTokens(saved.id, saved.revision + 9, {
-      accessToken: 'a2',
-      refreshToken: 'r2',
+      accessToken: 'SYNTHETIC_ACCESS_TOKEN_X',
+      refreshToken: 'SYNTHETIC_REFRESH_TOKEN_X',
       accessTokenExpiresAt: Date.now() + 3_600_000
     }),
     /revision_conflict/
   )
+  // Rotation changes the grant id so a grant minted from the previous token cannot replay.
+  const first = await store.acquireForRun(saved.id, saved.revision)
+  if (!('oauth' in first)) throw new Error('expected oauth')
+  const rotated = await store.rotateOAuthTokens(saved.id, saved.revision, {
+    accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
+    refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
+    accessTokenExpiresAt: Date.now() + 3_600_000,
+    accountId: 'acct-1'
+  })
+  const second = await store.acquireForRun(saved.id, saved.revision)
+  if (!('oauth' in second)) throw new Error('expected oauth')
+  assert.notEqual(second.oauth.grantId, first.oauth.grantId)
+  assert.equal(rotated.grantId, second.oauth.grantId)
 })
 
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {

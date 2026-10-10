@@ -19,14 +19,15 @@ export async function usableOAuthAccessToken(
   tokens: OAuthTokenSet,
   fetchFn: typeof fetch = fetch
 ): Promise<
-  | { ok: true; accessToken: string; accountId?: string }
+  | { ok: true; accessToken: string; accountId?: string; grantId?: string }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
 > {
   if (!oauthNeedsRefresh(tokens))
     return {
       ok: true,
       accessToken: tokens.accessToken,
-      ...(tokens.accountId ? { accountId: tokens.accountId } : {})
+      ...(tokens.accountId ? { accountId: tokens.accountId } : {}),
+      ...(tokens.grantId ? { grantId: tokens.grantId } : {})
     }
   const refreshed = await refreshOAuthTokens(fetchFn, tokens)
   if (!refreshed.ok) {
@@ -38,14 +39,16 @@ export async function usableOAuthAccessToken(
     }
     return { ok: false, reason: refreshed.reason }
   }
+  let rotated: OAuthTokenSet
   try {
-    await store.rotateOAuthTokens(connection.id, connection.revision, refreshed.tokens)
+    rotated = await store.rotateOAuthTokens(connection.id, connection.revision, refreshed.tokens)
   } catch {
     return { ok: false, reason: 'changed' }
   }
   return {
     ok: true,
-    accessToken: refreshed.tokens.accessToken,
-    ...(refreshed.tokens.accountId ? { accountId: refreshed.tokens.accountId } : {})
+    accessToken: rotated.accessToken,
+    ...(rotated.accountId ? { accountId: rotated.accountId } : {}),
+    ...(rotated.grantId ? { grantId: rotated.grantId } : {})
   }
 }

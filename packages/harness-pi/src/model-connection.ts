@@ -28,7 +28,7 @@ export function configureModelConnection(
   if (compatible && !declared) throw new Error('harness_model_not_in_catalog');
   if (compatible && !declared?.thinking.includes(selection.thinking))
     throw new Error('harness_thinking_level_unsupported');
-  const providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
+  let providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
   if (compatible)
     runtime.registerProvider(providerId, {
       baseUrl: connection.baseUrl,
@@ -59,17 +59,24 @@ export function configureModelConnection(
         },
       })),
     });
-  else if (connection.authType === 'openai_oauth')
-    // OAuth connections run against the ChatGPT codex backend, not the public API host.
-    // The account header arrives with the credential grant; registration is stable here
-    // so the host's provider fingerprint does not change at grant time.
-    runtime.registerProvider(providerId, {
+  else if (connection.authType === 'openai_oauth') {
+    // OAuth connections run against the ChatGPT codex backend with its own provider id,
+    // catalog and transport; the public OpenAI preset's models stay untouched. The account
+    // id is public connection metadata, so the header is stable from registration time.
+    const codexProviderId = 'openai-codex';
+    runtime.registerProvider(codexProviderId, {
       baseUrl: 'https://chatgpt.com/backend-api/codex',
       api: 'openai-codex-responses',
       authHeader: true,
-      headers: { originator: 'molly' },
+      headers: {
+        originator: 'molly',
+        ...(connection.oauth?.accountId
+          ? { 'ChatGPT-Account-Id': connection.oauth.accountId }
+          : {}),
+      },
     });
-  else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
+    providerId = codexProviderId;
+  } else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
     runtime.registerProvider(providerId, { baseUrl: connection.baseUrl });
   const model = runtime.getModel(providerId, selection.modelId);
   if (!model) throw new Error('harness_model_not_in_catalog');

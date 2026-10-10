@@ -103,7 +103,8 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
               ? {
                   ok: true as const,
                   apiKey: usable.accessToken,
-                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
+                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {}),
+                  ...(usable.grantId ? { oauthGrantId: usable.grantId } : {})
                 }
               : { ok: false as const, error: 'credential_unavailable' as const }
           }

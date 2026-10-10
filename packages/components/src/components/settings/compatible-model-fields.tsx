@@ -20,11 +20,21 @@ export type CompatibleModelDraft = Omit<CompatibleModelDefinition, 'contextWindo
   maxTokens: string;
   /** Present on rows created by discovery; drives the "needs details" marker until complete. */
   discovered?: boolean;
+  /** Stable React key assigned at creation; the editable modelId must not re-key the row. */
+  rowId?: string;
 };
 
+let nextDraftRowId = 0;
+
 export function compatibleModelDraft(model?: CompatibleModelDefinition): CompatibleModelDraft {
+  const rowId = model?.modelId ? `model:${model.modelId}` : `draft:${nextDraftRowId++}`;
   return model
-    ? { ...model, contextWindow: String(model.contextWindow), maxTokens: String(model.maxTokens) }
+    ? {
+        ...model,
+        contextWindow: String(model.contextWindow),
+        maxTokens: String(model.maxTokens),
+        rowId,
+      }
     : {
         modelId: '',
         name: '',
@@ -34,6 +44,7 @@ export function compatibleModelDraft(model?: CompatibleModelDefinition): Compati
         thinking: ['off'],
         toolCalls: false,
         maxTokensField: 'max_tokens',
+        rowId,
       };
 }
 
@@ -395,7 +406,7 @@ export function CompatibleModelFields({
       ) : null}
       {models.map((model, index) => (
         <fieldset
-          key={model.modelId || `new-${index}`}
+          key={model.rowId ?? `row-${index}`}
           disabled={busy}
           className="space-y-3 rounded-lg border p-3"
         >

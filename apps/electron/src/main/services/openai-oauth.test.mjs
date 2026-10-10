@@ -68,8 +68,9 @@ void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one
   let rotatedWith
   const stale = await usableOAuthAccessToken(
     {
-      rotateOAuthTokens: async (id, revision, tokens) => {
-        rotatedWith = { id, revision, tokens }
+      rotateOAuthTokens: async (_id, _revision, tokens) => {
+        rotatedWith = { ...tokens, grantId: 'grant-2' }
+        return rotatedWith
       },
       saveOAuthTokens: async () => undefined
     },
@@ -82,7 +83,7 @@ void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one
   )
   assert.equal(stale.ok, true)
   if (stale.ok) assert.equal(stale.accessToken, 'a2')
-  assert.deepEqual(rotatedWith.id, 'c1')
+  if (stale.ok) assert.equal(stale.grantId, 'grant-2')
 
   const dead = await usableOAuthAccessToken(
     store,

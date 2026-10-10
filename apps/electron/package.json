@@ -28,17 +28,16 @@
     "verify:sparkle-update": "node scripts/verify-sparkle-update.mjs",
     "build:unpack": "pnpm run build && node scripts/package-electron.mjs --dir",
     "build:win": "pnpm run build && node scripts/package-electron.mjs --win",
-    "build:mac": "pnpm run build && node scripts/package-electron.mjs --mac"
+    "build:mac": "pnpm run build && node scripts/package-electron.mjs --mac",
+    "build:browser-driver": "node scripts/agent-browser-resources.mjs"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
-    "@modelcontextprotocol/sdk": "1.29.0",
     "@molly/cli-supervisor": "workspace:*",
     "@molly/ignore": "workspace:*",
     "@molly/platform": "workspace:*",
     "@molly/shared": "workspace:*",
-    "@playwright/mcp": "0.0.82",
     "@tanstack/react-router": "catalog:",
     "conf": "^15.1.0",
     "effect": "catalog:",
@@ -47,10 +46,10 @@
     "electron-updater": "^6.3.9",
     "image-dimensions": "^2.5.1",
     "jotai": "catalog:",
-    "playwright": "1.64.0-alpha-1789764292000",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "rookie-cookies": "0.6.0"
+    "rookie-cookies": "0.6.0",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
@@ -65,8 +64,9 @@
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.1",
-    "electron": "39.5.1",
+    "electron": "44.7.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "eslint": "^9.39.1",

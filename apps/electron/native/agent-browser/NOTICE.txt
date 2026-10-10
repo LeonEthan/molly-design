@@ -1,0 +1,10 @@
+Molly embeds a downstream build of agent-browser 0.39.0 (Apache-2.0).
+Upstream source: https://github.com/vercel-labs/agent-browser/tree/44af39842650f0bb9c1afb7354df9a82921d4f09
+The Molly source repository includes its Rust host patch and pinned build inputs
+under apps/electron/native/agent-browser. The packaged manifest identifies this
+build; it is not the unchanged upstream release binary.
+
+The binary also includes unmodified axe-core JavaScript. Its MPL-2.0 license and
+third-party notices are provided as LICENSE-axe-core.txt and
+LICENSE-axe-core-THIRD-PARTY.txt. Corresponding source distributed by upstream:
+https://github.com/vercel-labs/agent-browser/tree/44af39842650f0bb9c1afb7354df9a82921d4f09/cli/src/native/a11y

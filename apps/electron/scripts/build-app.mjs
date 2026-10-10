@@ -1,3 +1,4 @@
+import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -9,6 +10,8 @@ const inheritedNodeOptions = process.env.NODE_OPTIONS?.trim() ?? ''
 const nodeOptions = /--max[-_]old[-_]space[-_]size(?:=|\s|$)/u.test(inheritedNodeOptions)
   ? inheritedNodeOptions
   : `${inheritedNodeOptions} --max-old-space-size=8192`.trim()
+
+await buildAgentBrowser()
 
 const designBuild = spawnSync(
   process.execPath,

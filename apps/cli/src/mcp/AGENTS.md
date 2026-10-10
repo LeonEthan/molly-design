@@ -45,10 +45,10 @@ Parent instructions apply.
   Molly desktop. Both gates are the daemon's: send `ownerSessionId`, and treat a missing gate as
   unregistered — absent from `tools/list`, never advertised-then-refused. Contract:
   `packages/shared/AGENTS.md`.
-- `molly_browser` (`/mcp/molly_browser`, one tool per action): gate list/call on
-  active local design run; bind page/media to Session; validate the strict action
-  union before dispatch. No per-site scopes; cancellation rejects late results
-  without replay or a run-wide freeze. See browser docs in the local agent records.
+- `molly_browser`: gate list/call on active local design run and compatible host
+  capability/TTL. Bind page/media to Session; validate the strict action union.
+  Preserve untrusted WebMCP summaries on errors and images. Cancel rejects late
+  results without replay or run-wide freeze. See the browser implementation docs.
 - `molly_render_preview` forwards asset diagnostics only from the validated local
   RPC field, as fixed text and private MCP metadata. Never infer trusted metadata
   from error strings; invalid fields follow the existing refusal path.

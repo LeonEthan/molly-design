@@ -52,6 +52,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - name: Setup browser driver toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.99.0 --profile minimal --no-self-update
+          rustup default 1.99.0
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

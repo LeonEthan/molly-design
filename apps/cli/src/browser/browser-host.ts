@@ -3,6 +3,8 @@ import type {
   AgentBrowserHostWork,
   AgentBrowserHostReply,
   AgentBrowserScope,
+  BrowserHostCapabilities,
+  BrowserWebMcpSummary,
 } from '@molly/shared/browser-agent-rpc';
 import {
   BROWSER_HOST_TTL_MS,
@@ -20,7 +22,7 @@ type Entry = {
 
 export type BrowserHostOutcome =
   | { ok: true; reply: AgentBrowserHostReply }
-  | { ok: false; error: string };
+  | { ok: false; error: string; webmcp?: BrowserWebMcpSummary };
 
 /**
  * One-shot handoff over the existing owner-only machine socket. Every queued operation
@@ -29,6 +31,7 @@ export type BrowserHostOutcome =
 export class BrowserHost {
   private readonly entries = new Map<string, Entry>();
   private readonly revokedPages = new Map<string, AgentBrowserScope>();
+  private capabilities: BrowserHostCapabilities | null = null;
   private lastSeenAt: number | undefined;
 
   constructor(
@@ -44,8 +47,12 @@ export class BrowserHost {
     return this.lastSeenAt !== undefined && this.now() - this.lastSeenAt <= BROWSER_HOST_TTL_MS;
   }
 
+  getCapabilities(): BrowserHostCapabilities | null {
+    return this.isConnected() ? this.capabilities : null;
+  }
+
   enqueue(work: AgentBrowserHostWork): Promise<BrowserHostOutcome> {
-    if (!this.isConnected()) {
+    if (!this.getCapabilities()) {
       return Promise.resolve({ ok: false, error: 'The Molly desktop browser is not connected.' });
     }
     if (this.entries.has(work.requestId)) {
@@ -91,10 +98,12 @@ export class BrowserHost {
 
   exchange(
     reports: readonly AgentBrowserHostReport[],
-    isActive: (scope: AgentBrowserScope) => boolean
+    isActive: (scope: AgentBrowserScope) => boolean,
+    capabilities: BrowserHostCapabilities | null = null
   ): AgentBrowserHostWork[] {
     const wasConnected = this.isConnected();
     this.lastSeenAt = this.now();
+    this.capabilities = capabilities;
     for (const report of reports) {
       const entry = this.entries.get(report.requestId);
       if (!entry || !entry.handedOut) continue;
@@ -104,7 +113,11 @@ export class BrowserHost {
           ? { ok: false, error: 'Browser run ended before its result could be returned.' }
           : report.ok
             ? { ok: true, reply: report.reply }
-            : { ok: false, error: report.error }
+            : {
+                ok: false,
+                error: report.error,
+                ...(report.webmcp ? { webmcp: report.webmcp } : {}),
+              }
       );
     }
     const work: AgentBrowserHostWork[] = [];
@@ -114,7 +127,7 @@ export class BrowserHost {
         .map((entry) => entry.work.scope.browserId)
     );
     for (const entry of [...this.entries.values()]) {
-      if (!isActive(entry.work.scope)) {
+      if (!capabilities || !isActive(entry.work.scope)) {
         this.settle(entry.work.requestId, {
           ok: false,
           error: 'Browser run ended before dispatch.',

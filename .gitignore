@@ -171,3 +171,5 @@ apps/electron/resources/cli/
 
 # Generated pinned Bento bundle
 apps/electron/resources/design/
+apps/electron/resources/agent-browser/
+apps/electron/.cache/agent-browser/

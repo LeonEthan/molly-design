@@ -1,3 +1,4 @@
+import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
@@ -40,6 +41,8 @@ function run(command, args, env = process.env) {
 function runScript(script) {
   run(process.execPath, [packageManagerEntry, 'run', script])
 }
+
+await buildAgentBrowser()
 
 run(process.execPath, [packageManagerEntry, '--dir', '../cli', 'run', 'dev:build'], localEnv)
 runScript('sync:cli:dev')

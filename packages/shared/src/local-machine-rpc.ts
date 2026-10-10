@@ -2,6 +2,7 @@ import { PersonalMemoryOperationSchema, PersonalMemorySnapshotSchema } from './p
 import { LocalFileResolutionSchema } from './local-file-preview';
 import {
   AgentBrowserCommandSchema,
+  BrowserHostCapabilitiesSchema,
   AgentBrowserHostLeaseSchema,
   AgentBrowserHostReportSchema,
   AgentBrowserRpcResultSchema,
@@ -409,6 +410,7 @@ export const LocalMachineRpcRequestSchema = z.discriminatedUnion('method', [
     method: z.literal('browser/host'),
     params: z
       .object({
+        capabilities: BrowserHostCapabilitiesSchema.nullable().optional(),
         reports: z.array(AgentBrowserHostReportSchema).max(8),
         leases: z.array(AgentBrowserHostLeaseSchema).max(8),
         takeovers: z.array(AgentBrowserHostLeaseSchema).max(8),

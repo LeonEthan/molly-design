@@ -131,6 +131,17 @@ if (hasSingleInstanceLock) {
 
 if (hasSingleInstanceLock) {
   recordE2EBootDiagnostic('waiting-for-app-ready')
+  app.commandLine.appendSwitch(
+    'enable-features',
+    [
+      ...new Set([
+        ...app.commandLine.getSwitchValue('enable-features').split(',').filter(Boolean),
+        'WebMCPTesting',
+        'DevToolsWebMCPSupport'
+      ])
+    ].join(',')
+  )
+
   const appReady = app.whenReady().then(async () => {
     const p1Probe = process.argv.find((argument) => argument.startsWith('--molly-p1-verify='))
     if (p1Probe) {

@@ -1,3 +1,4 @@
+import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -92,23 +93,10 @@ export default async function afterPack(context) {
     console.log('[browser-profile] verified packaged Chrome reader binding')
   }
 
-  if (
-    (platform === process.platform || (platform === 'mas' && process.platform === 'darwin')) &&
-    archName === process.arch
-  ) {
-    const driverProbe = spawnSync(
-      binaryPath,
-      [
-        '-e',
-        "const {createRequire}=require('node:module'); const r=createRequire(process.argv[1]); const license=require('node:fs').readFileSync(require('node:path').join(require('node:path').dirname(process.argv[1]),'browser-cdp-NOTICE.txt'),'utf8'); if(!license.includes('Microsoft Corporation') || typeof r('@playwright/mcp').createConnection!=='function' || typeof r('playwright').chromium.connectOverCDP!=='function') process.exit(2)",
-        path.join(resourcesDir, 'app.asar', 'package.json')
-      ],
-      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: 15_000 }
-    )
-    if (driverProbe.error || driverProbe.status !== 0)
-      throw new Error('[browser-driver] packaged Playwright MCP could not load')
-    console.log('[browser-driver] verified packaged Playwright MCP and transport API')
-  }
+  verifyAgentBrowser(path.join(resourcesDir, 'app.asar.unpacked', 'resources', 'agent-browser'), {
+    platform: platform === 'mas' ? 'darwin' : platform,
+    arch: archName
+  })
 
   // Verify the bytes actually collected by Builder, on cross-host targets too.
   const designProbe = spawnSync(

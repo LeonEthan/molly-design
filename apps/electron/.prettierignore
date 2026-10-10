@@ -7,6 +7,8 @@ tsconfig.*.json
 
 resources/design
 resources/cli
+resources/agent-browser
+.cache/agent-browser
 .sparkle-local
 
 # Generated unchanged MIT upstream adapter; regenerate with sync-browser-cdp.mjs.

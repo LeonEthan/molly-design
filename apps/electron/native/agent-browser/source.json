@@ -1,0 +1,7 @@
+{
+  "version": "0.39.0",
+  "revision": "44af39842650f0bb9c1afb7354df9a82921d4f09",
+  "archiveSha256": "4098d7e8cbcc816cbafeb6f36a7af7d7767e2ea9147f09a3f20ae071dae8b5e1",
+  "rust": "1.99.0",
+  "protocol": 2
+}

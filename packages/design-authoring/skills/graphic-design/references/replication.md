@@ -42,8 +42,9 @@ fidelity limits: preserve what you know and report consequential assumptions.
 - Rebuild real tables as `table`, real data graphics as `chart` and simple
   symbols as `icon` when the offline set has a match.
 - Rebuild photographs, product shots, textures and scenes as separate image
-  layers. With image tools, regenerate each object completely from the reference,
-  because a crop keeps holes where other objects overlapped it. Without them,
+  layers. With image tools, extract each object from the reference via `edit`,
+  exactly as it appears, completing only genuinely hidden parts; a crop keeps
+  holes where other objects overlapped it. Without them,
   use tight crops and report the holes and merged objects this leaves.
 - Use a separately supplied delivery asset (logo, product photo) as supplied.
 - Keep raster aspect ratios faithful.

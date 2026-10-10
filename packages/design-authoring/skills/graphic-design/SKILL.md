@@ -50,8 +50,8 @@ layer. A style reference offered as inspiration is still a new design.
 
 Determine capabilities from the tools actually available, including MCP tools
 callable only from `codemode` scripts. Before image calls, read the `imagegen`
-Skill. Stay within the user's budget and scope. When an action is blocked by a
-missing tool, network or budget, say what remains incomplete; a missing tool
+Skill. Stay within the user's scope. When an action is blocked by a
+missing tool or network, say what remains incomplete; a missing tool
 never counts as a completed step, and other available tools are not
 automatically equivalent.
 
@@ -177,13 +177,20 @@ chosen design; do not offer options.
 
 ### 4. Prepare complete layers
 
-Reproduce the chosen design; do not reinterpret it. Plan layers by what a person
+Reproduce the chosen design; do not reinterpret it. Extract, never re-create:
+every raster layer comes from the chosen design's own pixels through `edit`;
+never `generate` a layer for an element the design already shows. A layer the
+model re-imagined is a failed layer: re-extract it or report the departure.
+When no image-editing tool is available, use tight crops from the design and
+report the holes and merged objects this leaves.
+Plan layers by what a person
 would edit independently: usually a background plate, the main subject, a few
 secondary objects and the copy. Make the plate by editing the chosen design to
-remove the foreground objects and all text, keeping everything else as it is.
-Isolate each foreground object from the chosen design, complete including hidden
-parts, with real alpha. When the user requires a supplied face, product or logo
-to stay exact and the design altered it, isolate it from the source instead and
+remove the foreground objects and all text, keeping every other pixel as it is.
+Extract each foreground object from the chosen design exactly as it appears,
+completing only genuinely hidden parts, with real alpha, at no fewer pixels than
+it occupies on the canvas. When the user requires a supplied face, product or logo
+to stay exact and the design altered it, extract it from the source instead and
 place it where the design has it. Use native shapes for flat geometry, keep
 unaffected existing layers, inspect each layer and report missing parts. The
 recipe is in
@@ -338,7 +345,8 @@ Write in the user's language and size the reply to the request.
   one line, name the research sources briefly, and ask the user to choose. Note
   copy the image model drew wrong; it will be exact in the editable version.
 - **Editable version of the chosen design:** one or two sentences, plus what
-  differs from the chosen design and why.
+  differs from the chosen design and why, naming each raster layer that visibly
+  departs from it.
 - **Always report**, proportionately: unmet requirements, material assumptions,
   blocked steps, departures from the design defaults, flattened or otherwise
   non-editable content (including image lettering, whose wording changes only by

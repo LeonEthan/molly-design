@@ -56,24 +56,38 @@ options.
 ## Reproducing the chosen design
 
 The chosen design is the target; the editable project should look like it.
+Extract, never re-create: every raster layer comes from the chosen design's own
+pixels through `edit`, with the design as the first image. Never `generate` a
+layer for an element the design already shows; a layer the model re-imagined is
+a failed layer, so re-extract it or report the departure.
 
 1. **Measure it.** Note the canvas position and size of every object and text
    block in the chosen image (the `pack` grid helps), and its colors, type
    weights and alignment.
 2. **Background plate.** `edit` the chosen design with a prompt that removes the
-   foreground objects and every piece of text and fills what they covered,
-   changing nothing else, as an opaque image at the canvas size. Compare it with
-   the design: light, color and texture should be unchanged.
+   foreground objects and every piece of text and fills what they covered, as an
+   opaque image at the canvas size. Ask for every other pixel to stay unchanged,
+   light, color, texture and grain included; when the connection accepts a mask,
+   mask only the removed regions. Compare the plate with the design outside
+   those regions: it should read as the same pixels.
 3. **Objects.** For each object worth editing on its own, `edit` the chosen
-   design to isolate that object exactly as it appears, complete including
-   hidden parts, on a transparent background. When the user requires a supplied
-   face, product or logo to stay exact and the design altered it, isolate it
-   from the source image instead.
+   design to extract that object exactly as it appears — same strokes, colors,
+   texture and proportions, never redrawn or restyled — completing only the
+   parts other objects genuinely hide, on a transparent background. Request at
+   least the pixel size the element occupies on the canvas; a smaller layer
+   turns soft at its measured size. When the user requires a supplied face,
+   product or logo to stay exact and the design altered it, extract it from the
+   source image instead.
 4. **Text.** Take the wording from the brief or source, line by line. Set
    copy that a font can reproduce as native text matched to the measurements;
    isolate lettering a font cannot reproduce as an image from the design (see
    [Lettering layers](#lettering-layers)).
-5. **Assemble and compare.** Place each layer at its measured position, render,
+5. **Check each layer.** Before assembling, crop the element's region from the
+   chosen design and `compare` the extracted layer with it. `compare` needs
+   same-size images, so when the layer came back at a different size, read the
+   crop and the layer side by side instead. Re-extract a layer that visibly
+   drifts, now rather than after assembly, or report the departure.
+6. **Assemble and compare.** Place each layer at its measured position, render,
    and compare the render with the chosen design as described under
    [Comparing native previews](#comparing-native-previews).
 
@@ -91,13 +105,17 @@ holes where other objects overlapped it. For a foreground object that needs
 transparent isolation, call `molly_image` `edit` with the design as the first
 image and:
 
-- a prompt that names only this element, asks it to match the design's appearance,
-  and asks for the complete element, including parts hidden behind other objects,
-  isolated on a transparent background;
+- a prompt that names only this element and asks for it exactly as it appears
+  there — same strokes, colors, texture and proportions, never redrawn or
+  restyled — completing only the parts other objects genuinely hide, isolated on
+  a transparent background, at no fewer pixels than the element occupies on the
+  canvas;
 - `background: "transparent"` and `output_format: "png"`.
 
 For the background plate, edit the design into the empty scene with every
-foreground element and all text removed, as an opaque image at the canvas ratio. Add supplied
+foreground element and all text removed, as an opaque image at the canvas ratio,
+asking for every other pixel to stay unchanged — light, color, texture and grain
+included. When the connection accepts a mask, mask only the removed regions. Add supplied
 delivery assets or earlier layers as extra `images` when they help the model keep
 style or scale consistent.
 
@@ -111,7 +129,7 @@ node scripts/reference-pack.mjs trim <layer.png> <project>/media/<name>.png
 
 `alpha` reports whether the layer has real transparency and where its visible
 pixels are. An isolated foreground with no transparent pixels, or a painted
-checkerboard, did not come back transparent: correct it within budget or report
+checkerboard, did not come back transparent: correct it or report
 it. `trim` removes fully transparent padding without changing kept pixels and
 reports the crop offset, keeping click targets close to the visible object. Faint
 alpha pixels can keep the bounds large: `alpha --threshold N` shows where more
@@ -142,7 +160,7 @@ size; a plain font on a flat shape would lose the design.
 - Read the result and compare it with the source copy character by character,
   not with what the design drew. Image models often drop, add, swap or invent
   characters, especially in CJK. A wrong character is a failed layer:
-  regenerate within the user's budget, or set that copy as native text and
+  regenerate it, or set that copy as native text and
   report the change.
 - Check alpha and trim as for any foreground layer, then place it like other
   layers. Give it an `id` that names the copy, such as `title-lettering`.

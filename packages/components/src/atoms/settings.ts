@@ -125,18 +125,6 @@ export const queuedMessageBehaviorAtom = atom(
   }
 );
 
-// Auto-archive a session when its linked PR is merged. Per-user, browser-local.
-export const autoArchiveOnPrMergedAtom = atomWithProductStorage<boolean>(
-  'molly-auto-archive-on-pr-merged',
-  false
-);
-
-// Auto-archive a session when its linked PR is closed (without merge). Per-user, browser-local.
-export const autoArchiveOnPrClosedAtom = atomWithProductStorage<boolean>(
-  'molly-auto-archive-on-pr-closed',
-  false
-);
-
 export const DEVELOPER_MODE_STORAGE_KEY = 'molly-developer-mode-enabled';
 
 // getOnInit samples storage when the atom module loads so a cold SPA boot

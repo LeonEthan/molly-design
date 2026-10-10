@@ -8,8 +8,7 @@ telemetry, or managed-runtime downloads, as routed by the root instructions.
 ## Composition and capabilities
 
 - Settings must represent real platform support: local hides cloud usage and
-  PR-driven auto-archive, and omits machine selection when `remoteMachines` is
-  absent. Gate entries and their background work through capabilities rather
+  omits machine selection when `remoteMachines` is absent. Gate entries and their background work through capabilities rather
   than build-kind or environment checks.
 - Shared packages stay platform-neutral. The public Electron composition
   selects `local` explicitly; private Web/mobile entries and cloud composition

@@ -3,11 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { describe, expect, it, vi } from 'vitest';
-import {
-  SESSION_FILE_MAX_COUNT,
-  getSessionRoomId,
-  type SessionId,
-} from '@molly/shared';
+import { SESSION_FILE_MAX_COUNT, getSessionRoomId, type SessionId } from '@molly/shared';
 import {
   LocalDaemonAvailabilityError,
   WORKSPACE_SYNC_UNAVAILABLE_MESSAGE,

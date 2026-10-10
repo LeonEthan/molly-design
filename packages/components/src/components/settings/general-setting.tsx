@@ -16,7 +16,6 @@ import {
 import { useAtom } from 'jotai';
 import { CompactRow, CompactSection } from './compact-layout';
 import { settingContainerClass } from '.';
-import { AutoArchiveSection } from './auto-archive-setting';
 
 import { QueuedMessageBehaviorControl } from './queued-message-behavior-control';
 import { useAppCapability } from '@/lib/app-platform';
@@ -471,7 +470,6 @@ export function GeneralSettingsComponent() {
           </CompactSection>
         )}
 
-        {githubIntegrationAvailable ? <AutoArchiveSection /> : null}
       </div>
     </>
   );

@@ -114,29 +114,24 @@ describe('chat landing defaults storage', () => {
     });
   });
 
-  it('isolates defaults between workspaces', () => {
+  it('maps retired GitHub defaults to chat without losing the saved agent', () => {
     installWindowStorage();
-
-    writeChatLandingDefaults('workspace-a', {
-      contextType: 'github',
-      repoFullName: 'loro-dev/lody',
-      branch: 'main',
-    });
-    writeChatLandingDefaults('workspace-b', {
-      contextType: 'github',
-      repoFullName: 'foo/bar',
-      branch: 'develop',
-    });
-
-    expect(readChatLandingDefaults('workspace-a')).toEqual({
-      contextType: 'github',
-      repoFullName: 'loro-dev/lody',
-      branch: 'main',
+    localStorage.setItem(
+      getChatLandingDefaultsStorageKey('workspace-a'),
+      JSON.stringify({
+        contextType: 'github',
+        agentId: 'agent-a',
+        repoFullName: 'owner/repo',
+      })
+    );
+    writeChatLandingDefaults('workspace-b', { contextType: 'local', localProjectId: 'project-b' });
+    expect(readChatLandingDefaults('workspace-a')).toMatchObject({
+      contextType: 'chat',
+      agentId: 'agent-a',
     });
     expect(readChatLandingDefaults('workspace-b')).toEqual({
-      contextType: 'github',
-      repoFullName: 'foo/bar',
-      branch: 'develop',
+      contextType: 'local',
+      localProjectId: 'project-b',
     });
   });
 

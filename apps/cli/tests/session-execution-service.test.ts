@@ -4601,6 +4601,40 @@ describe('SessionExecutionService', () => {
     });
   });
 
+  it('rejects new GitHub projects before starting runtime execution', async () => {
+    let runtimeStarted = false;
+    const sessionDoc = withHistoryPort({
+      getMetaState: async () => undefined,
+      getHistory: () => [],
+      roomId: 'session-retired-github',
+    });
+    const deps = createBaseDeps({
+      sessionManager: {
+        createSession: async () => {
+          runtimeStarted = true;
+        },
+      } as unknown as SessionManager,
+      workspaceDocument: {
+        getOrCreateSessionDoc: async () => sessionDoc,
+      } as unknown as LoroDocumentManager,
+    });
+    const service = new SessionExecutionService(deps);
+    await expect(
+      service.startSession({
+        type: 'session/create',
+        sessionId: 'retired-github' as SessionId,
+        machineId: 'machine-1',
+        workspaceId: 'workspace-1' as WorkspaceId,
+        project: { kind: 'github', repoFullName: 'owner/repo' },
+        acpSessionConfig: { prompt: 'hello', cliType: 'builtin', agentType: 'codex' },
+        userId: 'user-1',
+        userName: 'User',
+        userEmail: 'user@example.com',
+      })
+    ).rejects.toThrow('GitHub repository projects are retired');
+    expect(runtimeStarted).toBe(false);
+  });
+
   it('creates and starts a new session turn', async () => {
     const sessionDoc = withHistoryPort({
       getMetaState: vi.fn(async () => undefined),
@@ -4659,7 +4693,6 @@ describe('SessionExecutionService', () => {
       sessionId: 'session-2' as SessionId,
       machineId: 'machine-1',
       workspaceId: 'workspace-1' as WorkspaceId,
-      project: { kind: 'github', repoFullName: 'owner/repo', branch: 'main' },
       acpSessionConfig: { prompt: 'hello', cliType: 'builtin', agentType: 'codex' },
       userTurnId: 'turn-create-1',
       userId: 'user-2',
@@ -4677,8 +4710,8 @@ describe('SessionExecutionService', () => {
     );
     expect(sessionDoc.setStatus.mock.calls.map(([status]) => status).slice(0, 3)).toEqual([
       SessionStatusFactory.initializing(),
-      SessionStatusFactory.initializing('git-clone'),
       SessionStatusFactory.running(),
+      SessionStatusFactory.idle(),
     ]);
     expect(agentClient.prompt).toHaveBeenCalledWith(
       'acp-2',
@@ -4697,7 +4730,6 @@ describe('SessionExecutionService', () => {
       SessionStatusFactory.initializing(),
       expect.objectContaining({
         latestUserMsgId: 'turn-create-1',
-        baseBranch: 'main',
       })
     );
     expect(upsertDocMeta).toHaveBeenCalledWith('session-session-2', {
@@ -5105,9 +5137,13 @@ describe('SessionExecutionService', () => {
     expect(fs.readFileSync(path.join(rootPath, 'dirty.txt'), 'utf8')).toBe('dirty\n');
   });
 
-  it('records an actionable diagnostic when Git is unavailable for a GitHub worktree', async () => {
+  it('records an actionable diagnostic when Git is unavailable while restoring a historical GitHub worktree', async () => {
     const sessionDoc = withHistoryPort({
-      getMetaState: vi.fn(async () => undefined),
+      getMetaState: vi.fn(async () => ({
+        project: { kind: 'github', repoFullName: 'owner/repo' },
+        isWorktree: true,
+        branchName: 'session/historical',
+      })),
       getHistory: vi.fn(() => []),
       setStatus: vi.fn(async () => {}),
       setBaseBranch: vi.fn(async () => {}),
@@ -5118,7 +5154,7 @@ describe('SessionExecutionService', () => {
       Object.assign(new Error('spawn git ENOENT'), { code: 'ENOENT' })
     );
     const createSession = vi.fn(async () => {
-      throw new Error('[github---owner---repo] Failed to clone bare repository', {
+      throw new Error('[github---owner---repo] Failed to validate historical repository', {
         cause: gitError,
       });
     });
@@ -5158,7 +5194,7 @@ describe('SessionExecutionService', () => {
     expect(deps.recordChatFailure).toHaveBeenCalledWith(
       sessionDoc,
       'turn_pre_prompt_failed',
-      '[github---owner---repo] Failed to clone bare repository',
+      '[github---owner---repo] Failed to validate historical repository',
       'git_executable_not_found'
     );
     expect(deps.buildAcpPromptBlocks).not.toHaveBeenCalled();

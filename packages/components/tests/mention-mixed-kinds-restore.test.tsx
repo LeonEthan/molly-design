@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 
-import React, { act } from 'react';
+import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 let knownFileTokens = new Set<string>();
 let knownSkillTokens = new Set<string>();
 let sessionItems: Array<{ sessionId: string; title: string; slug: string }> = [];
-let issueItems = new Map<number, { type: 'issue' | 'pr'; title: string; url?: string }>();
 
 vi.mock('../src/components/mentions/mention-project-file-source', async (importOriginal) => ({
   ...(await importOriginal<object>()),
@@ -30,14 +29,6 @@ vi.mock('../src/components/mentions/mention-skill-source', async (importOriginal
 vi.mock('../src/components/mentions/mention-session-source', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useSessionMentionItems: () => sessionItems,
-}));
-
-vi.mock('../src/components/mentions/issue-pr-hash-mention', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  useKnownIssuePrItems: () => ({
-    knownItems: issueItems,
-    issuePrData: { entry: null, status: 'ready' as const, refresh: async () => undefined },
-  }),
 }));
 
 import { CombinedMentionTextarea } from '../src/components/mentions/combined-mention-textarea';
@@ -77,7 +68,6 @@ describe('a draft with several kinds of mention keeps all of them', () => {
     sessionItems = [
       { sessionId: 'sess_fix', title: 'Fix CI', slug: 'fix-ci', activityAt: 1 } as never,
     ];
-    issueItems = new Map([[123, { type: 'issue' as const, title: 'Bug' }]]);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -119,6 +109,16 @@ describe('a draft with several kinds of mention keeps all of them', () => {
     let reported: PersistedMentionRange[] = [];
     await render({
       value: text,
+      persisted: text.includes('#123')
+        ? [
+            {
+              start: text.indexOf('#123'),
+              end: text.indexOf('#123') + 4,
+              value: '#123',
+              kind: 'issue',
+            },
+          ]
+        : undefined,
       onRanges: ((r: never) => {
         reported = toPersistedMentionRanges(r);
       }) as never,
@@ -143,7 +143,7 @@ describe('a draft with several kinds of mention keeps all of them', () => {
     await roundTrip('see @fix-ci and $review', ['session', 'skill']);
   });
 
-  it('keeps a session mention beside an issue mention', async () => {
+  it('keeps a session mention beside a frozen historical issue mention', async () => {
     await roundTrip('see @fix-ci and #123', ['issue', 'session']);
   });
 

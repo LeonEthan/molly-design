@@ -3,7 +3,6 @@
 import { act, createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createRoot, type Root } from 'react-dom/client';
-import type { SessionPullRequestMeta } from '@molly/shared';
 import { writeTextToClipboard } from '../src/lib/clipboard';
 import { ContextChip } from '../src/components/sessions/session-info-chips';
 
@@ -55,11 +54,7 @@ describe('ContextChip actions', () => {
     container = undefined;
   });
 
-  it('keeps historical PR and branch targets without an All Changes action', async () => {
-    const opened: string[] = [];
-    const onOpenPr = () => {
-      opened.push('legacy-pr');
-    };
+  it('keeps branch copying without retired PR actions', async () => {
     const branch = 'fix/acp-capability-authority';
 
     container = document.createElement('div');
@@ -71,11 +66,6 @@ describe('ContextChip actions', () => {
           mode: 'stage',
           projectName: 'loro-dev/lody',
           branch,
-          pr: {
-            url: 'https://github.com/loro-dev/lody/pull/2894',
-            status: 'open',
-          } as SessionPullRequestMeta,
-          onOpenPr,
         })
       );
     });
@@ -84,19 +74,14 @@ describe('ContextChip actions', () => {
     const prButton = buttons.find((button) => button.textContent?.includes('#2894'));
     const branchButton = buttons.find((button) => button.textContent?.includes(branch));
 
-    expect(prButton).toBeInstanceOf(HTMLButtonElement);
+    expect(prButton).toBeUndefined();
     expect(branchButton).toBeInstanceOf(HTMLButtonElement);
     expect(
       buttons.find((button) => button.getAttribute('aria-label') === 'All Changes')
     ).toBeUndefined();
 
-    await act(async () => prButton?.click());
-    expect(opened).toEqual(['legacy-pr']);
-    expect(writeTextToClipboard).not.toHaveBeenCalled();
-
     await act(async () => branchButton?.click());
     expect(writeTextToClipboard).toHaveBeenCalledWith(branch);
-    expect(opened).toEqual(['legacy-pr']);
   });
 
   it('renders the highest-priority action directly and folds the rest into a menu', async () => {
@@ -208,67 +193,5 @@ describe('ContextChip actions', () => {
     expect(container.querySelector('button[aria-label="Worktree"]')).toBeInstanceOf(
       HTMLButtonElement
     );
-  });
-
-  it('renders the compact merge split button and switches methods without merging', async () => {
-    const onMerge = vi.fn();
-    const onSelectMethod = vi.fn();
-
-    container = document.createElement('div');
-    document.body.appendChild(container);
-    root = createRoot(container);
-    await act(async () => {
-      root?.render(
-        createElement(ContextChip, {
-          mode: 'stage',
-          projectName: 'loro-dev/lody',
-          pr: {
-            url: 'https://github.com/loro-dev/lody/pull/2894',
-            status: 'open',
-          } as SessionPullRequestMeta,
-          actions: [
-            {
-              kind: 'merge',
-              id: 'merge',
-              method: 'merge',
-              onMerge,
-              onSelectMethod,
-            },
-          ],
-        })
-      );
-    });
-
-    const mergeControl = container.querySelector('[data-pr-merge-control]');
-    const buttons = Array.from(mergeControl?.querySelectorAll<HTMLButtonElement>('button') ?? []);
-    const mergeButton = buttons.find((button) =>
-      button.textContent?.includes('Merge pull request')
-    );
-    const methodButton = buttons.find(
-      (button) => button.getAttribute('aria-label') === 'Choose merge method'
-    );
-    expect(mergeControl?.className).toContain('border-status-success/35');
-    expect(mergeButton).toBeInstanceOf(HTMLButtonElement);
-    expect(methodButton).toBeInstanceOf(HTMLButtonElement);
-
-    await act(async () => mergeButton?.click());
-    expect(onMerge).toHaveBeenCalledWith('merge');
-
-    await act(async () => {
-      methodButton?.dispatchEvent(
-        new TestPointerEvent('pointerdown', {
-          bubbles: true,
-          button: 0,
-          pointerType: 'mouse',
-        })
-      );
-    });
-    const squashItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
-      (item) => item.textContent?.includes('Squash and merge')
-    );
-    expect(squashItem).toBeInstanceOf(HTMLElement);
-    await act(async () => squashItem?.click());
-    expect(onSelectMethod).toHaveBeenCalledWith('squash');
-    expect(onMerge).toHaveBeenCalledTimes(1);
   });
 });

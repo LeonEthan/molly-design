@@ -47,7 +47,6 @@ import {
   type SessionHistoryParsed,
   type SessionId,
   type SessionMeta,
-  type SessionPullRequestMeta,
   type WorkspaceId,
 } from '@molly/shared';
 
@@ -251,10 +250,6 @@ const buildSession = (state: PageState, frame: DeviceFrame): SessionMeta => {
 };
 
 // PR number derives from the URL (legacy `number` writes are deprecated).
-const storyPullRequest: SessionPullRequestMeta = {
-  url: 'https://github.com/loro-dev/lody/pull/2830',
-  status: 'open',
-};
 
 const buildMessage = (
   input: Partial<SessionHistoryParsed> & Pick<SessionHistoryParsed, 'items'>
@@ -883,8 +878,6 @@ function StoryInfoBar({ session }: { session: SessionMeta }) {
       ]}
       projectName={session.repoFullName}
       branch={session.branchName}
-      pr={storyPullRequest}
-      onOpenPr={action}
     />
   );
 }

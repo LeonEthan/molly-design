@@ -233,13 +233,6 @@ const SessionWorkContextInputSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('chat') }).strict(),
   z
     .object({
-      kind: z.literal('github'),
-      repo: z.string().trim().min(1).describe('GitHub repo full name, such as owner/repo.'),
-      branch: z.string().trim().min(1).optional().describe('Optional Git branch.'),
-    })
-    .strict(),
-  z
-    .object({
       kind: z.literal('local'),
       projectId: z
         .string()
@@ -293,14 +286,6 @@ const SessionCreateOptionsToolInputSchema = z
       .min(1)
       .optional()
       .describe('Optional machine id to filter local projects and agent configs.'),
-    repoQuery: z
-      .string()
-      .trim()
-      .min(1)
-      .optional()
-      .describe(
-        'Case-insensitive substring filter for GitHub repos. Repositories are omitted until this is supplied.'
-      ),
     agentConfigQuery: z
       .string()
       .trim()
@@ -1229,12 +1214,8 @@ const buildMcpCreateOptions = (
   if (workContext.kind === 'chat') {
     return options;
   }
-  if (workContext.kind === 'github') {
-    options.repo = workContext.repo;
-  } else {
-    options.localProject = workContext.projectId;
-    options.worktree = workContext.worktree;
-  }
+  options.localProject = workContext.projectId;
+  options.worktree = workContext.worktree;
   options.branch = workContext.branch;
   return options;
 };
@@ -2411,7 +2392,6 @@ const buildSessionCreateOptions = async (
         )
       )
     );
-    const repoQuery = normalizeCliValue(input.repoQuery)?.toLowerCase();
     return {
       ok: true,
       current: await buildSessionCurrentInfo(manager, workspaceId, currentSession),
@@ -2427,10 +2407,6 @@ const buildSessionCreateOptions = async (
         summarizeAgentConfig(config, acpCapabilities[getAcpCapabilityCacheKey(config.id)])
       ),
       localProjects: summarizedLocalProjects,
-      githubRepos: {
-        queryRequired: repoQuery === undefined,
-        items: [],
-      },
     };
   });
 };
@@ -3636,7 +3612,7 @@ export function buildMollyMcpServer(
     {
       title: 'List session create options',
       description:
-        'Discover stable ids and current-session metadata for creating a Molly session. The default response is intentionally sparse: online machines, the current/default agent config, the current local project, and no GitHub repositories. Use agentConfigQuery, localProjectQuery, or repoQuery to request bounded matches. Each agent config reports the runConfig accepted by molly_session_create.',
+        'Discover stable ids and current-session metadata for creating a Molly session. The default response is intentionally sparse: online machines, the current/default agent config, the current local project. Use agentConfigQuery or localProjectQuery to request bounded matches. Each agent config reports the runConfig accepted by molly_session_create.',
       inputSchema: SessionCreateOptionsToolInputSchema,
     },
     async (args: SessionCreateOptionsToolInput) => {

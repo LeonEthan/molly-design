@@ -130,15 +130,8 @@ const meta = {
   args: {
     value: { kind: 'local', machineId, localProjectId: 'lody' as LocalProjectId },
     localProjects,
-    repositories: [
-      {
-        fullName: 'loro-dev/loro-mirror',
-        description: 'High-performance CRDT state synchronization',
-      },
-    ],
     onChange: fn(),
     onAddLocalProject: fn(),
-    onConnectGitRepo: fn(),
     renderLimit: UNIFIED_PROJECT_OPTION_RENDER_LIMIT,
   },
 } satisfies Meta<typeof UnifiedProjectSelectorView>;

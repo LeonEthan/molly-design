@@ -1674,7 +1674,7 @@ export const SessionChatInputArea = memo(
                   localProjectId: session.project.localProjectId,
                 }
               : undefined,
-          githubRepoFullName: repoFullName || undefined,
+
           isPublic: isRepoPublic,
         };
       }
@@ -1693,7 +1693,7 @@ export const SessionChatInputArea = memo(
           machineId: session.machineId,
           workspaceId: localProject.workspaceId,
           localProjectId: localProject.localProjectId,
-          githubRepoFullName: repoFullName || undefined,
+
           localWorktree: {
             machineId: session.machineId,
             repoKey: sessionLocalFileSource.repoKey,
@@ -1708,23 +1708,6 @@ export const SessionChatInputArea = memo(
           machineId: session.machineId,
           workspaceId: sessionLocalFileSource.workspaceId,
           localProjectId: sessionLocalFileSource.localProjectId,
-          githubRepoFullName: repoFullName || undefined,
-        };
-      }
-
-      if (repoFullName) {
-        return {
-          kind: 'github',
-          repoFullName,
-          isPublic: isRepoPublic,
-          localWorktree:
-            sessionLocalFileSource?.kind === 'session-worktree'
-              ? {
-                  machineId: session.machineId,
-                  repoKey: sessionLocalFileSource.repoKey,
-                  sessionId: sessionLocalFileSource.sessionId,
-                }
-              : undefined,
         };
       }
 
@@ -1734,7 +1717,6 @@ export const SessionChatInputArea = memo(
       codeCollabMentionFiles.provider,
       codeCollabMentionFilesPending,
       isRepoPublic,
-      repoFullName,
       effectiveWorkspaceId,
       session.machineId,
       session.project,

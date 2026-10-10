@@ -57,8 +57,10 @@ Parent instructions apply.
   the prompt. Completion is delivered automatically — no public wait tool — and legacy `wait=true`
   is a temporary adapter new callers must not use.
 - `molly_session_create_options` publishes valid run-config values per agent config and stays
-  sparse by default (online Machines, one agent config, the current local project, no GitHub
-  fetch), expanding only through explicit query inputs.
+  sparse by default (online Machines, one agent config, the current local project),
+  expanding only through explicit query inputs. New `workContext` accepts chat or
+  local projects, including local `worktree: true`; historical GitHub metadata stays
+  readable but is not a creation input.
 - `session_list` defaults to 20 (maximum 100) and `session_history` to 10 (maximum 50 and 128 KiB);
   keep the MCP surface bounded though the CLI retains `session history --all`. `session_list`
   and `session_status_many` derive busy/idle from the same history, durable queue, presence, and

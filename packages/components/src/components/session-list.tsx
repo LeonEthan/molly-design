@@ -20,7 +20,6 @@ import {
   Archive,
   ChevronDown,
   GitBranch,
-  GitPullRequest,
   GripVertical,
   Link2,
   Mail,
@@ -76,13 +75,11 @@ import { useStableNow } from '@/hooks/use-stable-now';
 import { formatCompactRelativeTime, type RelativeTimeValue } from '@/lib/format-relative-time';
 import {
   GitHubOwnerIcon,
-  SessionPrIcon,
   SessionRowArtworkThumbnail,
   SessionRowAuthorAvatar,
   SessionRowLeadingSlot,
   SidebarRowArchiveButton,
   SidebarRowEndSlot,
-  SessionMergeablePill,
   SessionOpenedByTreeRow,
   SessionRowOpenedByMenuItems,
   SidebarListSkeleton,
@@ -162,13 +159,6 @@ export type SessionListRepoMove = {
   nextRepos: SessionListRepoState[];
 };
 
-export type SessionListPullRequestOpen = {
-  sessionId: string;
-  repoFullName: string | null;
-  prUrl: string;
-  prNumber: number | null;
-};
-
 export type SessionListProps = {
   sessions: SessionListRow[];
   repos: SessionListRepoState[];
@@ -196,7 +186,6 @@ export type SessionListProps = {
   onCopySessionUrl?: (sessionId: string) => void;
   onNew?: (repoFullName?: string) => void;
   onMoveRepo?: (move: SessionListRepoMove) => void;
-  onOpenPullRequest?: (request: SessionListPullRequestOpen) => void;
   /** Navigate to new session page with the given repo pre-selected (or chat mode if undefined) */
   onNavigateToNewSession?: (repoFullName?: string) => void;
   /**
@@ -282,23 +271,6 @@ export function sessionGroupOverflowsPreview(group: SessionRowGroup): boolean {
 function normalizeRepoFullName(value: SessionListRow['repoFullName']): string | null {
   const trimmed = typeof value === 'string' ? value.trim() : '';
   return trimmed ? trimmed : null;
-}
-
-function normalizePrUrl(value: SessionListRow['prUrl']): string | null {
-  const trimmed = typeof value === 'string' ? value.trim() : '';
-  return trimmed ? trimmed : null;
-}
-
-function parseGitHubPrNumber(url: string): number | null {
-  try {
-    const parsed = new URL(url);
-    const match = parsed.pathname.match(/\/pull\/(\d+)(?:\/|$)/);
-    if (!match) return null;
-    const value = Number(match[1]);
-    return Number.isFinite(value) ? value : null;
-  } catch {
-    return null;
-  }
 }
 
 function toDate(value: SessionListRow['latestMessageAt']): Date | null {
@@ -489,7 +461,6 @@ type SessionGroupSectionProps = {
   onCopySessionUrl?: (sessionId: string) => void;
   onNew?: (repoFullName?: string) => void;
   onNavigateToNewSession?: (repoFullName?: string) => void;
-  onOpenPullRequest?: (request: SessionListPullRequestOpen) => void;
   onToggleFullList?: (groupKey: string) => void;
   /** Opener session ids whose opened Sessions are hidden. */
   collapsedOpenedBySessionIds: Record<string, boolean>;
@@ -511,7 +482,6 @@ type SessionGroupSectionProps = {
 };
 
 export type ContextMenuLabels = {
-  openPr: string;
   rename: string;
   pin: string;
   unpin: string;
@@ -538,7 +508,6 @@ const SessionGroupSection = memo(function SessionGroupSection({
   onCopySessionUrl,
   onNew,
   onNavigateToNewSession,
-  onOpenPullRequest,
   onToggleFullList,
   collapsedOpenedBySessionIds,
   onToggleOpenedBySessions,
@@ -763,26 +732,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
               normalizeSessionRowId(session.openedByRowSessionId) ?? openerSessionId;
             const isSelected = session.sessionId === selectedSessionId;
             const showSelectedState = isSelected;
-            const prUrl = normalizePrUrl(session.prUrl);
-            const prNumber =
-              typeof session.prNumber === 'number' && Number.isFinite(session.prNumber)
-                ? session.prNumber
-                : prUrl
-                  ? parseGitHubPrNumber(prUrl)
-                  : null;
-            const prStatus = session.prStatus ?? 'open';
-            const hasPr = Boolean(prUrl);
             const hasChanges = session.addedLines !== 0 || session.deletedLines !== 0;
-            // A merged/closed PR can leave a stale "clean/mergeable" record
-            // in `pullRequestState` (the webhook sets status='merged' but
-            // can't clear that field, and the poller stops observing terminal
-            // PRs). Gate the pill on the PR still being live.
-            const isMergeable =
-              hasPr &&
-              session.prReadiness === 'y' &&
-              prStatus !== 'merged' &&
-              prStatus !== 'closed';
-            const showMergeablePill = isMergeable && !isSelected;
             const canArchive = typeof onArchiveSession === 'function';
             const canMarkUnread =
               typeof onMarkSessionUnread === 'function' && !session.hasUnreadMessages;
@@ -845,8 +795,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
               canMarkUnread ||
               onCopySessionUrl ||
               session.branchName ||
-              canGoToOpener ||
-              (onOpenPullRequest && prUrl)
+              canGoToOpener
             );
             const hasMenuActions = hasStandardMenuActions || canToggleOpenedSessions;
             const row = (
@@ -955,7 +904,6 @@ const SessionGroupSection = memo(function SessionGroupSection({
                     ) : null}
                     {renderTitle()}
                   </div>
-                  {/* Keep PR at the right edge, with All Changes totals immediately before it. */}
                   <SidebarRowEndSlot
                     isWaitingPermission={session.isWaitingPermission}
                     isWorking={session.isWorking}
@@ -968,23 +916,18 @@ const SessionGroupSection = memo(function SessionGroupSection({
                             className="text-xs text-muted-foreground"
                           />
                         </span>
-                      ) : hasPr || hasChanges || showMergeablePill ? (
+                      ) : hasChanges ? (
                         <span
                           className={cn(
                             'flex select-none items-center gap-1.5 text-[11px] tabular-nums text-sidebar-foreground-muted/80',
                             useAnchor && 'z-20'
                           )}
                         >
-                          {showMergeablePill ? (
-                            <SessionMergeablePill />
-                          ) : hasChanges && !isMergeable ? (
+                          {hasChanges ? (
                             <span className="flex items-center gap-1">
                               <span className="text-code-added">+{session.addedLines}</span>
                               <span className="text-code-removed">-{session.deletedLines}</span>
                             </span>
-                          ) : null}
-                          {hasPr ? (
-                            <SessionPrIcon prStatus={prStatus} prCiState={session.prCiState} />
                           ) : null}
                         </span>
                       ) : undefined
@@ -1024,31 +967,6 @@ const SessionGroupSection = memo(function SessionGroupSection({
                     }
                     goToOpenerLabel={contextMenuLabels.goToOpenerSession}
                   />
-                  {onOpenPullRequest && prUrl ? (
-                    <>
-                      <ContextMenuItem
-                        onSelect={() => {
-                          onOpenPullRequest({
-                            sessionId: session.sessionId,
-                            repoFullName: group.repoFullName,
-                            prUrl,
-                            prNumber,
-                          });
-                        }}
-                      >
-                        <GitPullRequest />
-                        {contextMenuLabels.openPr}
-                      </ContextMenuItem>
-                      {onRenameSession ||
-                      onTogglePinSession ||
-                      onArchiveSession ||
-                      canMarkUnread ||
-                      onCopySessionUrl ||
-                      session.branchName ? (
-                        <ContextMenuSeparator />
-                      ) : null}
-                    </>
-                  ) : null}
                   {onRenameSession ? (
                     <ContextMenuItem
                       onSelect={() => {
@@ -1133,21 +1051,6 @@ const SessionGroupSection = memo(function SessionGroupSection({
                 repoFullName={group.repoFullName}
                 machineName={session.machineName}
                 branchName={session.branchName}
-                prStatus={hasPr ? prStatus : undefined}
-                prCiState={session.prCiState}
-                prNumber={prNumber}
-                prUrl={prUrl}
-                onOpenPullRequest={
-                  onOpenPullRequest && prUrl
-                    ? () =>
-                        onOpenPullRequest({
-                          sessionId: session.sessionId,
-                          repoFullName: group.repoFullName,
-                          prUrl,
-                          prNumber,
-                        })
-                    : undefined
-                }
                 addedLines={hasChanges ? session.addedLines : undefined}
                 deletedLines={hasChanges ? session.deletedLines : undefined}
               >
@@ -1289,7 +1192,6 @@ export const SessionList = memo(function SessionList({
   onCopySessionUrl,
   onNew,
   onMoveRepo,
-  onOpenPullRequest,
   onNavigateToNewSession,
   getSessionHref,
   headerAction,
@@ -1300,7 +1202,6 @@ export const SessionList = memo(function SessionList({
   const archiveConfirmLabel = t('common.confirm', 'Confirm');
   const contextMenuLabels: ContextMenuLabels = useMemo(
     () => ({
-      openPr: t('sessions.contextMenu.openPr', 'Open Pull Request'),
       rename: t('sessions.contextMenu.rename', 'Rename'),
       pin: t('sessions.contextMenu.pin', 'Pin Session'),
       unpin: t('sessions.contextMenu.unpin', 'Unpin Session'),
@@ -1432,7 +1333,6 @@ export const SessionList = memo(function SessionList({
                     onCopySessionUrl={onCopySessionUrl}
                     onNew={onNew}
                     onNavigateToNewSession={onNavigateToNewSession}
-                    onOpenPullRequest={onOpenPullRequest}
                     onToggleFullList={handleToggleFullList}
                     collapsedOpenedBySessionIds={collapsedOpenedBySessionIds}
                     onToggleOpenedBySessions={handleToggleOpenedBySessions}
@@ -1463,7 +1363,6 @@ export const SessionList = memo(function SessionList({
                   onCopySessionUrl={onCopySessionUrl}
                   onNew={onNew}
                   onNavigateToNewSession={onNavigateToNewSession}
-                  onOpenPullRequest={onOpenPullRequest}
                   onToggleFullList={handleToggleFullList}
                   collapsedOpenedBySessionIds={collapsedOpenedBySessionIds}
                   onToggleOpenedBySessions={handleToggleOpenedBySessions}

@@ -7,7 +7,6 @@ import {
   selectMentionMenuView,
   toCommandCandidate,
   toFileCandidate,
-  toIssuePrCandidate,
   toSkillCandidate,
   type MentionCandidate,
   type MentionCategory,
@@ -44,25 +43,6 @@ const FILES: MentionCandidate[] = [
     kind: 'file',
     path: 'src/components/mentions/mention-registry.ts',
     token: 'src/components/mentions/mention-registry.ts',
-  }),
-];
-
-const ISSUES: MentionCandidate[] = [
-  toIssuePrCandidate({
-    number: 3312,
-    title: 'Mention menu cannot be scrolled on mobile',
-    type: 'issue',
-    token: '#3312',
-    label: '3312',
-    searchableNumber: '3312',
-  }),
-  toIssuePrCandidate({
-    number: 3298,
-    title: 'Switching sessions janks the composer',
-    type: 'issue',
-    token: '#3298',
-    label: '3298',
-    searchableNumber: '3298',
   }),
 ];
 
@@ -132,8 +112,6 @@ function category(
 
 const CATEGORIES: MentionCategory[] = [
   category('file', 'file', 'Files', 'file', FILES),
-  category('issue', 'issue', 'Issues', 'issue', ISSUES),
-  category('pr', 'pr', 'Pull Requests', 'pr', []),
   category('skill', 'skill', 'Skills', 'skill', SKILLS),
   category('command', 'cmd', 'Commands', 'command', COMMANDS),
 ];
@@ -275,7 +253,7 @@ export const AggregateSearch: Story = {
 
 /** `@issue:` — the second level, scoped to one category. */
 export const IssueCategory: Story = {
-  args: { search: 'issue:' },
+  args: { search: 'file:' },
 };
 
 export const SessionCurrentProject: Story = {
@@ -315,9 +293,9 @@ export const CommandCategory: Story = {
 
 export const CategoryLoading: Story = {
   args: {
-    search: 'issue:',
+    search: 'file:',
     categories: CATEGORIES.map((entry) =>
-      entry.id === 'issue'
+      entry.id === 'file'
         ? { ...entry, status: 'loading' as const, getCandidates: () => [] }
         : entry
     ),
@@ -326,13 +304,13 @@ export const CategoryLoading: Story = {
 
 export const CategoryError: Story = {
   args: {
-    search: 'issue:',
+    search: 'file:',
     categories: CATEGORIES.map((entry) =>
-      entry.id === 'issue'
+      entry.id === 'file'
         ? {
             ...entry,
             status: 'error' as const,
-            message: 'Failed to load issues and PRs.',
+            message: 'Failed to load files.',
             getCandidates: () => [],
           }
         : entry
@@ -348,7 +326,7 @@ export const FileCategoryTruncated: Story = {
       entry.id === 'file'
         ? {
             ...entry,
-            notice: 'Repo is very large; GitHub returned a truncated file list.',
+            notice: 'The project file list was truncated.',
           }
         : entry
     ),

@@ -13,7 +13,6 @@ import {
   type LocalProjectMeta,
   type LocalProjectWorktreeCleanupPreflightResult,
   type MachineId,
-  type PrStatus,
   type SessionId,
   type SessionMeta,
   type SessionStatus,
@@ -112,7 +111,6 @@ import { FocusScope, useListKeyboardNavigation } from '@/ui/focus-scope';
 import {
   SessionList,
   shallowEqualExceptKeys,
-  type SessionListPullRequestOpen,
   type SessionListRepoMove,
   type SessionListRepoState,
 } from '@/components/session-list';
@@ -156,7 +154,6 @@ import { useOnlineMachineIds } from '@/hooks/use-machine-online-status';
 import { writePreferredWorkspaceSlug } from '@/lib/workspace';
 import {
   SessionOpenedByTreeRow,
-  SessionPrIcon,
   SessionRowArtworkThumbnail,
   SessionRowAuthorAvatar,
   SessionRowLeadingSlot,
@@ -552,12 +549,6 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
   const showInlineArchive = true;
   const showWorktreeIcon = session.isWorktree === true;
   const isPinned = Boolean(session.isPinned);
-  // Local-project sessions linked to a GitHub repo can carry a PR — the repo
-  // identity lives on `session.project`, resolved the same way as the info
-  // bar's `getSessionGitHubState`. Surface it like the GitHub rows do.
-  const prInfo = getLatestPullRequestInfo(session);
-  const prStatus: PrStatus = prInfo.status ?? 'open';
-  const showPr = Boolean(prInfo.url);
   const prRepoFullName = resolveProjectGitHubRepo(session.project) ?? null;
   const [renameTarget, setRenameTarget] = useState<RenameSessionDialogTarget | null>(null);
   const canRename = typeof onRename === 'function';
@@ -656,10 +647,9 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
           isWorking={isWorking}
           hasUnreadMessages={hasUnreadMessages}
           restIcon={
-            showPr || showWorktreeIcon ? (
+            showWorktreeIcon ? (
               <span className="flex items-center gap-2">
                 <SessionRowWorktreeIndicator isWorktree={showWorktreeIcon} />
-                {showPr ? <SessionPrIcon prStatus={prStatus} prCiState={prInfo.ciState} /> : null}
               </span>
             ) : undefined
           }
@@ -762,10 +752,6 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
         folderName={projectName}
         machineName={machineName}
         branchName={session.branchName}
-        prStatus={showPr ? prStatus : undefined}
-        prCiState={prInfo.ciState}
-        prNumber={prInfo.number}
-        prUrl={prInfo.url}
       >
         {menuRow}
       </SessionInfoHoverCard>
@@ -1762,20 +1748,15 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     [router, selectedSessionId, workspaceSlug]
   );
 
-  const handleNavigateToNewSession = useCallback(
-    (repoFullName?: string) => {
-      if (!workspaceSlug) return;
+  const handleNavigateToNewSession = useCallback(() => {
+    if (!workspaceSlug) return;
 
-      void router.navigate({
-        to: '/$workspaceName/chat',
-        params: { workspaceName: workspaceSlug },
-        search: repoFullName
-          ? { context: 'github' as const, repo: repoFullName }
-          : { context: 'chat' as const },
-      });
-    },
-    [router, workspaceSlug]
-  );
+    void router.navigate({
+      to: '/$workspaceName/chat',
+      params: { workspaceName: workspaceSlug },
+      search: { context: 'chat' as const },
+    });
+  }, [router, workspaceSlug]);
 
   const handleRequestRemoval = useCallback(
     (info: LocalProjectRemovalRequest) => {
@@ -2290,23 +2271,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     return (sessionId: string) => `/${workspaceSlug}/sessions/${sessionId}`;
   }, [workspaceSlug]);
 
-  const handleOpenTaskPullRequest = useCallback(
-    (request: SessionListPullRequestOpen) => {
-      if (!workspaceSlug) return;
-
-      const prNumber =
-        typeof request.prNumber === 'number' && Number.isFinite(request.prNumber)
-          ? request.prNumber
-          : null;
-      void router.navigate({
-        to: '/$workspaceName/sessions/$sessionId',
-        params: { workspaceName: workspaceSlug, sessionId: request.sessionId as SessionId },
-        search: prNumber ? { pr: prNumber } : {},
-      });
-    },
-    [router, workspaceSlug]
-  );
-
   const handleHomeClicked = useCallback(() => {
     if (!workspaceSlug) return;
 
@@ -2557,7 +2521,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       onCopySessionUrl: handleCopySessionUrl,
       onToggleRepoCollapsed: handleToggleRepoCollapsed,
       onMoveRepo: handleMoveRepo,
-      onOpenPullRequest: handleOpenTaskPullRequest,
       onNavigateToNewSession: handleNavigateToNewSession,
       getSessionHref,
     }),
@@ -2572,7 +2535,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       handleTogglePinSession,
       handleMoveRepo,
       handleNavigateToNewSession,
-      handleOpenTaskPullRequest,
       handleNavigateToSession,
       handleToggleRepoCollapsed,
       workspaceRepoSessions,
@@ -2603,7 +2565,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     },
     [setUpdatedBucketShowFullState]
   );
-  const handleOpenUpdatedItemPullRequest = handleOpenTaskPullRequest;
 
   const handleCreateWorkspaceClicked = useCallback(() => {
     void router.navigate({ to: '/workspace/create', search: { allowExisting: true } });
@@ -2833,7 +2794,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         onRenameUpdatedItem={handleRenameSession}
         onToggleUpdatedItemPinned={handleTogglePinSession}
         onCopyUpdatedItemUrl={handleCopySessionUrl}
-        onOpenUpdatedItemPullRequest={handleOpenUpdatedItemPullRequest}
         getUpdatedItemHref={getSessionHref}
         defaultWidth={sidebarLastWidth > 0 ? sidebarLastWidth : undefined}
         onWidthChange={setSidebarLastWidth}

@@ -1,12 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { useRef, useState } from 'react';
-import { Bot, Github, Monitor } from 'lucide-react';
+import { Bot, FolderOpen, Monitor } from 'lucide-react';
 import { fn } from 'storybook/test';
 
 import { ChatLandingView } from '@/components/chat/chat-landing-view';
 import { useChatLandingKeyboardNav } from '@/hooks/use-chat-landing-keyboard-nav';
-import { ContextSwitch } from '@/components/chat/context-switch';
-import type { SessionContextType } from '@/components/chat/context-switch';
 import { getSelectorTagClassName } from '@/components/chat/chat-landing-selectors';
 import { AcpBottomBarModeSelector, AcpFooterSelectorGroup } from '@/components/shared';
 import type { OptionSelectorOption } from '@/components/shared/option-selector';
@@ -63,18 +61,18 @@ const agentOptions: OptionSelectorOption<string>[] = [
   },
 ];
 
-const repoOptions: OptionSelectorOption<string>[] = [
+const projectOptions: OptionSelectorOption<string>[] = [
   {
     value: 'loro-dev/lody',
     label: 'loro-dev/lody',
     description: 'Realtime collaboration engine',
-    startContent: <Github className="h-4 w-4 opacity-70" />,
+    startContent: <FolderOpen className="h-4 w-4 opacity-70" />,
   },
   {
     value: 'loro-dev/doha',
     label: 'loro-dev/doha',
     description: 'Desktop shell',
-    startContent: <Github className="h-4 w-4 opacity-70" />,
+    startContent: <FolderOpen className="h-4 w-4 opacity-70" />,
   },
   // Pad past the virtualization threshold (60) so the dropdown shows a search input AND
   // virtualizes its list.
@@ -82,7 +80,7 @@ const repoOptions: OptionSelectorOption<string>[] = [
     value: `loro-dev/sample-${i + 1}`,
     label: `loro-dev/sample-${i + 1}`,
     description: 'Sample repository',
-    startContent: <Github className="h-4 w-4 opacity-70" />,
+    startContent: <FolderOpen className="h-4 w-4 opacity-70" />,
   })),
 ];
 
@@ -266,10 +264,9 @@ function DemoLanding({
     useState<PastedTextDraft[]>(initialPastedTextDrafts);
   const [selectedMachine, setSelectedMachine] = useState<string | null>('machine-1');
   const [selectedAgent, setSelectedAgent] = useState<string | null>('agent-1');
-  const [selectedRepo, setSelectedRepo] = useState<string | null>('loro-dev/lody');
+  const [selectedProject, setSelectedProject] = useState<string | null>('loro-dev/lody');
   const [selectedModel, setSelectedModel] = useState<string | null>(defaultModel);
   const [selectedMode, setSelectedMode] = useState<string | null>('default');
-  const [contextType, setContextType] = useState<SessionContextType>('local');
   const [configValues, setConfigValues] = useState<Record<string, AcpConfigOptionValue>>({
     reasoning_effort: 'medium',
     'fast-mode': 'off',
@@ -282,14 +279,14 @@ function DemoLanding({
   const topSelectorNode = (
     <div className="flex items-center gap-1">
       <OptionSelector
-        value={selectedRepo}
-        options={repoOptions}
-        onSelect={(option) => setSelectedRepo(option.value)}
-        placeholder="Select repo"
-        placeholderIcon={Github}
+        value={selectedProject}
+        options={projectOptions}
+        onSelect={(option) => setSelectedProject(option.value)}
+        placeholder="Select project"
+        placeholderIcon={FolderOpen}
         tone={tone}
         searchable
-        searchPlaceholder="Search repos"
+        searchPlaceholder="Search projects"
         className="h-6 gap-1 rounded-md border-none bg-transparent px-1 [&_span]:text-[11px] [&_span]:leading-tight"
         contentClassName="w-72"
       />
@@ -385,9 +382,6 @@ function DemoLanding({
             onPastedTextDraftsChange={setPastedTextDrafts}
             topSelector={topSelectorNode}
             footerSelector={footerSelectorNode}
-            contextSwitch={
-              <ContextSwitch value={contextType} onChange={setContextType} tone={tone} />
-            }
             bottomBar={bottomBarNode}
             onSubmit={handleSubmit}
             hintType={hintType}
@@ -412,7 +406,6 @@ function DemoLanding({
       onPastedTextDraftsChange={setPastedTextDrafts}
       topSelector={topSelectorNode}
       footerSelector={footerSelectorNode}
-      contextSwitch={<ContextSwitch value={contextType} onChange={setContextType} tone={tone} />}
       bottomBar={bottomBarNode}
       onSubmit={handleSubmit}
       hintType={hintType}

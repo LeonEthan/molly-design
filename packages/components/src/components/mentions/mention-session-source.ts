@@ -95,11 +95,10 @@ export function getMentionSourceProjectKey(
   if (source?.kind === 'local') {
     return `local:${source.machineId}:${source.localProjectId}`;
   }
-  if (source?.kind === 'github') return githubProjectKey(source.repoFullName);
   if (source?.kind === 'provider') {
     return source.localProject
       ? `local:${source.localProject.machineId}:${source.localProject.localProjectId}`
-      : githubProjectKey(source.githubRepoFullName);
+      : 'chat';
   }
   return 'chat';
 }
@@ -376,5 +375,10 @@ export function hydrateSessionMentionsFromText(
   slugToId: ReadonlyMap<string, string>,
   knownFileTokens?: ReadonlySet<string>
 ): HydratedMentions {
-  return hydrateSlugMentionsFromText({ text, slugToValue: slugToId, kind: 'session', knownFileTokens });
+  return hydrateSlugMentionsFromText({
+    text,
+    slugToValue: slugToId,
+    kind: 'session',
+    knownFileTokens,
+  });
 }

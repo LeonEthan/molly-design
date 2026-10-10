@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { LockKeyhole, MonitorPlay } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { PendingScheduledTask, SessionGoalCommand, SessionGoalMessage } from '@molly/shared';
-import type { SessionPullRequestMeta } from '@molly/shared';
 import { sanitizeGoalObjective } from '@molly/shared';
 import { ConversationColumn } from '@/components/shared/conversation-column';
 import { cn } from '@/lib/utils';
@@ -15,7 +14,6 @@ import {
   useScheduledTaskSignature,
   type GoalChipCommandHandler,
   type ContextChipAction,
-  type PrCiRun,
   type WorkspaceLocationKind,
 } from './session-info-chips';
 import type { SessionStatusStripState } from './session-status-strip';
@@ -35,16 +33,12 @@ export type SessionInfoBarProps = {
   /** Pending cron/wakeup tasks (derived from history); countdown chip. */
   scheduledTasks?: readonly PendingScheduledTask[];
   /** CI check runs for the session's PR; cluster-only verdict chip (click = popover). */
-  prCiRuns?: readonly PrCiRun[];
-  onOpenPrCiRun?: (run: PrCiRun) => void;
   projectName?: string | null;
   branch?: string | null;
   /** The session's on-disk location (worktree vs local folder) + its resolved
    *  path; drives the context chip's leading glyph and its click-to-copy. Omit
    *  for remote/repo-only sessions with no local path. */
   workspaceLocation?: { kind: WorkspaceLocationKind; path?: string | null } | null;
-  pr?: SessionPullRequestMeta | null;
-  onOpenPr?: () => void;
   /** Agent-driven PR/worktree actions shown inside the context stage. */
   contextActions?: readonly ContextChipAction[];
   /** Open the session Browser panel. Renders a
@@ -60,36 +54,6 @@ export type SessionInfoBarProps = {
   initialStage?: InfoBarItemKey;
 };
 
-/**
- * Desktop-only info bar glued above the composer, following the
- * "canonical cluster + fixed stage" model:
- *
- *   [☁][⏰][◎]  │  ⑂#2857 loro-dev/lody · branch · ±diff [CI] ↗
- *    cluster (collapsed,   stage (THE active item: icon marker,
- *    fixed canonical order) summary = detail, CI pill when PR)
- *
- * - The cluster keeps a constant order (status > goal > schedule > context);
- *   items return to their own slot when they leave the stage — no MRU-style
- *   reshuffling, spatial memory stays intact. The CI verdict is NOT a cluster
- *   item: it rides inside the context item as a "CI" pill and is therefore
- *   only visible when the PR is expanded on the stage.
- * - Invariants: with no items the bar hides entirely; with items, exactly
- *   ONE is always expanded on the stage (the rightmost item IS the expanded
- *   one — there is no fully-collapsed state). Clicking a cluster chip
- *   promotes it; the STAGE ICON is an inert marker (clicking it must never
- *   relayout or collapse); clicking the stage SUMMARY (with its resting ↗)
- *   opens the item's detail surface — popover, or the PR tab for context.
- *   The CI chip opts out: always collapsed, one click toggles its check-run
- *   popover.
- * - Focus is recency-driven: when an item appears or meaningfully changes
- *   (goal created/paused, schedule added, PR created, offline began) it
- *   takes the stage. Stage content only leaves by promoting another item or
- *   by its own data disappearing.
- * - Stage selection is session-view local and intentionally not persisted.
- *
- * The message queue intentionally stays OUT of the bar — pending sends need
- * persistent visibility and direct manipulation next to the composer.
- */
 export function SessionInfoBar({
   status,
   goal,
@@ -98,13 +62,9 @@ export function SessionInfoBar({
   onGoalCommand,
   onGoalDismiss,
   scheduledTasks,
-  prCiRuns,
-  onOpenPrCiRun,
   projectName,
   branch,
   workspaceLocation,
-  pr,
-  onOpenPr,
   contextActions,
   onOpenBrowser,
   privateAccessStatus,
@@ -112,7 +72,7 @@ export function SessionInfoBar({
   initialStage,
 }: SessionInfoBarProps) {
   const { t } = useTranslation();
-  const hasContext = !!pr || !!projectName || !!branch || !!contextActions?.length;
+  const hasContext = !!projectName || !!branch || !!contextActions?.length;
   const goalObjective = goal ? sanitizeGoalObjective(goal.objective) : '';
   const hasGoal = !!goal && !!goalObjective;
   const scheduleSignature = useScheduledTaskSignature(scheduledTasks);
@@ -126,8 +86,7 @@ export function SessionInfoBar({
     context: hasContext,
   };
   const defaultKey =
-    (['context', 'status', 'goal', 'schedule'] as const).find((key) => present[key]) ??
-    null;
+    (['context', 'status', 'goal', 'schedule'] as const).find((key) => present[key]) ?? null;
 
   const [stage, setStage] = useState<InfoBarItemKey | null>(initialStage ?? defaultKey);
 
@@ -140,7 +99,6 @@ export function SessionInfoBar({
   const goalSignature = hasGoal && goal ? `${goal.status}:${goalObjective}` : null;
   const contextSignature = hasContext
     ? [
-        pr?.url ?? '',
         projectName ?? '',
         branch ?? '',
         contextActions?.map((action) => action.id).join(',') ?? '',
@@ -173,7 +131,7 @@ export function SessionInfoBar({
       status: statusSignature,
       goal: goalSignature,
       schedule: scheduleSignature,
-        context: contextSignature,
+      context: contextSignature,
     };
   }, [statusSignature, goalSignature, scheduleSignature, contextSignature]);
 
@@ -219,11 +177,7 @@ export function SessionInfoBar({
             projectName={projectName}
             branch={branch}
             workspaceLocation={workspaceLocation}
-            pr={pr}
-            onOpenPr={onOpenPr}
             actions={contextActions}
-            prCiRuns={prCiRuns}
-            onOpenPrCiRun={onOpenPrCiRun}
             {...itemMode}
           />
         ) : null;

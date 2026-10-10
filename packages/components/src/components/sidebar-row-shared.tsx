@@ -1,25 +1,12 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
-import {
-  Check,
-  ChevronDown,
-  CircleDot,
-  CornerLeftUp,
-  Github,
-  Hand,
-  Loader2,
-  MoreHorizontal,
-  X,
-  type LucideIcon,
-} from 'lucide-react';
-import type { PrStatus, SessionPullRequestCiState } from '@molly/shared';
+import { ChevronDown, CornerLeftUp, Github, Hand, Loader2, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDesignThumbnail } from '@/hooks/use-design-thumbnail';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 import { ContextMenuItem, ContextMenuSeparator } from '@/ui/context-menu';
 import { Skeleton } from '@/ui/skeleton';
-import { PR_STATUS_META } from '@/components/sessions/pull-request-badge';
 import { SidebarConfirmArchiveButton } from '@/components/sidebar-confirm-archive-button';
 import { CachedAvatarImg } from '@/components/cached-avatar-img';
 import { UserAvatar } from '@/components/user-avatar';
@@ -50,87 +37,6 @@ import { getGitHubOwnerAvatarUrl } from '@/lib/github-avatar';
  * row's rightmost mark never shifts. The leading slot (①) is therefore free to
  * ALWAYS draw the opened-by tree: a running or unread child keeps its ├/└ and an
  * active opener keeps its disclosure.
- */
-export type SidebarRowKind = 'github' | 'local' | 'chat';
-
-type PrCiVerdict = 'success' | 'failure' | 'pending' | 'expected';
-
-/**
- * PR + CI use the original 14px PR / 10px verdict-slot geometry. The circular
- * mask removes the PR stroke beneath the verdict without painting a
- * sidebar-colored backdrop, so the cutout stays transparent on hover and
- * selected-row surfaces. The base keeps its PR-status tone; only the verdict
- * uses the CI-state tone. Running uses a static dot and a tighter cutout.
- */
-function MaskedPrCiIcon({
-  BaseIcon,
-  VerdictIcon,
-  baseToneClassName,
-  verdict,
-  className,
-}: {
-  BaseIcon: LucideIcon;
-  VerdictIcon: LucideIcon | null;
-  baseToneClassName: string;
-  verdict: PrCiVerdict;
-  className?: string;
-}) {
-  const maskId = `pr-ci-${verdict}-${useId().replaceAll(':', '')}`;
-  const isRunning = verdict === 'pending';
-  const verdictToneClassName =
-    verdict === 'success'
-      ? 'text-status-success'
-      : verdict === 'failure'
-        ? 'text-destructive'
-        : 'text-status-warning';
-
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={cn('h-4 w-4 shrink-0', className)}
-      data-pr-ci-verdict={verdict}
-      aria-hidden="true"
-    >
-      <mask
-        id={maskId}
-        x="0"
-        y="0"
-        width="16"
-        height="16"
-        maskUnits="userSpaceOnUse"
-        maskContentUnits="userSpaceOnUse"
-      >
-        <rect width="16" height="16" fill="white" />
-        <circle cx="12" cy="12" r={isRunning ? 3.75 : 5} fill="black" />
-      </mask>
-
-      <g mask={`url(#${maskId})`}>
-        <BaseIcon width={14} height={14} strokeWidth={2.25} className={baseToneClassName} />
-      </g>
-      <g transform="translate(7 7)" data-pr-ci-verdict-slot="">
-        {isRunning ? (
-          <circle cx="5" cy="5" r="2.5" fill="currentColor" className={verdictToneClassName} />
-        ) : VerdictIcon ? (
-          <VerdictIcon width={10} height={10} strokeWidth={3} className={verdictToneClassName} />
-        ) : null}
-      </g>
-    </svg>
-  );
-}
-
-/**
- * ③ The 14px status mark, rendered at the row's TRAILING edge inside
- * {@link SidebarRowEndSlot}. Single-mark priority:
- * `waitingPermission > isWorking > hasUnread`. Returns `null` when the session is
- * idle and read, which is what lets the end slot fall back to its resting metric
- * cluster (diff / worktree / PR) — a row shows one or the other, never both.
- *
- * It lives at the end rather than at the leading edge so the opened-by tree can
- * own the leading slot unconditionally: before this, an active child had to drop
- * its ├/└ connectors and the nesting silently disappeared exactly on the rows a
- * user watches most.
  */
 function SessionRowStatusIndicator({
   isWaitingPermission,
@@ -181,72 +87,7 @@ function hasSessionRowStatus({
   return Boolean(isWaitingPermission || isWorking || hasUnreadMessages);
 }
 
-export function SessionPrIcon({
-  prStatus,
-  prCiState,
-  className,
-}: {
-  prStatus: PrStatus;
-  prCiState?: SessionPullRequestCiState | null;
-  className?: string;
-}) {
-  const meta = PR_STATUS_META[prStatus] ?? PR_STATUS_META.open;
-  const BaseIcon = meta.icon;
-  const verdict: PrCiVerdict | null =
-    prCiState === 's'
-      ? 'success'
-      : prCiState === 'f' || prCiState === 'e'
-        ? 'failure'
-        : prCiState === 'p'
-          ? 'pending'
-          : prCiState === 'x'
-            ? 'expected'
-            : null;
-  const VerdictIcon =
-    verdict === 'success'
-      ? Check
-      : verdict === 'failure'
-        ? X
-        : verdict === 'expected'
-          ? CircleDot
-          : null;
-
-  if (verdict && (VerdictIcon || verdict === 'pending')) {
-    return (
-      <MaskedPrCiIcon
-        BaseIcon={BaseIcon}
-        VerdictIcon={VerdictIcon}
-        baseToneClassName={meta.iconColorClassName}
-        verdict={verdict}
-        className={className}
-      />
-    );
-  }
-  return (
-    <BaseIcon
-      className={cn('h-3.5 w-3.5 shrink-0', meta.iconColorClassName, className)}
-      strokeWidth={2.25}
-      aria-hidden="true"
-    />
-  );
-}
-
-/**
- * Passive readiness marker for an inactive session row. It intentionally owns
- * the former diff-stat slot: once a PR is ready, the next useful sidebar fact
- * is that it can be merged, not how many lines it changes.
- */
-export function SessionMergeablePill() {
-  const { t } = useTranslation();
-  return (
-    <span
-      data-session-mergeable-pill=""
-      className="inline-flex h-5 shrink-0 items-center rounded-full border border-status-success/45 bg-status-success/[0.06] px-1.5 text-[10px] font-medium leading-none tracking-[0.01em] text-status-success"
-    >
-      {t('sessions.pr.mergeable', 'Mergeable')}
-    </span>
-  );
-}
+export type SidebarRowKind = 'github' | 'local' | 'chat';
 
 /**
  * ② The session author's avatar, shown at the leading edge of the title so a

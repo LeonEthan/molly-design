@@ -215,7 +215,6 @@ describe('session MCP input schemas', () => {
       SessionCreateOptionsToolInputSchema.safeParse({
         agentConfigQuery: 'codex',
         localProjectQuery: 'lody',
-        repoQuery: 'loro-dev',
       }).success
     ).toBe(true);
     expect(SessionCreateOptionsToolInputSchema.safeParse({ machine: 'local' }).success).toBe(false);
@@ -253,8 +252,9 @@ describe('session MCP input schemas', () => {
     ).toBe(false);
     expect(
       SessionCreateToolInputSchema.safeParse({
+        operationId: 'reject-github',
         prompt: 'review this',
-        workContext: { kind: 'github', repo: 'loro-dev/lody', worktree: true },
+        workContext: { kind: 'github', repo: 'loro-dev/lody' },
       }).success
     ).toBe(false);
     expect(
@@ -312,13 +312,6 @@ describe('session MCP input schemas', () => {
           expect.objectContaining({
             type: 'object',
             properties: expect.objectContaining({ kind: { const: 'chat', type: 'string' } }),
-          }),
-          expect.objectContaining({
-            type: 'object',
-            properties: expect.objectContaining({
-              kind: { const: 'github', type: 'string' },
-              repo: expect.objectContaining({ type: 'string' }),
-            }),
           }),
           expect.objectContaining({
             type: 'object',

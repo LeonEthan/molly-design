@@ -8,7 +8,6 @@ import type { MachineId, RepoId, SessionId, WorkspaceId } from '@molly/shared';
 import type { Logger } from '@/utils/logger';
 import {
   getWorktreeManager,
-  type GitCredentialBrokerAuth,
   type WorktreeInfo,
   type WorktreeManager,
   type WorktreeManagerConfig,
@@ -171,7 +170,6 @@ function buildTarget(args: {
     repoId: args.managerConfig.repoId,
     source: args.managerConfig.source ?? {
       kind: 'github',
-      repoUrl: args.managerConfig.repoUrl,
     },
     ...(args.baseBranch ? { baseBranch: args.baseBranch } : {}),
   };
@@ -184,7 +182,8 @@ function markerMatchesTarget(
   return (
     marker.repoId === target.repoId &&
     marker.baseBranch === target.baseBranch &&
-    isDeepStrictEqual(marker.source, target.source)
+    ((marker.source.kind === 'github' && target.source.kind === 'github') ||
+      isDeepStrictEqual(marker.source, target.source))
   );
 }
 
@@ -197,14 +196,6 @@ export async function materializeSpeculativeWorktree(args: {
   managerConfig: Omit<WorktreeManagerConfig, 'logger'>;
   baseBranch?: string;
   restoreBranchName?: string;
-  /**
-   * Resolves the credential broker of the workspace this preparation belongs to.
-   * Host git must not fall back to the process-global broker pointer, which in a
-   * multi-workspace fleet belongs to whichever workspace started its broker last.
-   *
-   * Lazy so a preparation that is never started does not start a broker.
-   */
-  resolveBrokerAuth?: () => Promise<GitCredentialBrokerAuth | undefined>;
   logger: Logger;
 }): Promise<PreparedWorktree> {
   const target = buildTarget(args);
@@ -246,7 +237,7 @@ export async function materializeSpeculativeWorktree(args: {
     await writeMarker(marker);
 
     try {
-      await args.manager.ensureRepo({ brokerAuth: await args.resolveBrokerAuth?.() });
+      await args.manager.ensureRepo();
       return await args.manager.createWorktree(
         args.sessionId,
         args.baseBranch,

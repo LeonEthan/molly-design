@@ -5,12 +5,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Logger } from '@/utils/logger';
 import { withFileLock } from '@/utils/file-lock';
-import { redactUrlAuth } from '@/utils/github';
-import {
-  buildCredentialHelperValueForHost,
-  ensureCredentialHelperScript,
-  getCredentialHelperHostPath,
-} from '@/lib/git-credential-helper-script';
 import { formatErrorMessage } from '@/utils/format-error';
 import { ensureMollyDataDir, getMollyDataDir } from '@molly/shared/node/installation-profile';
 import { mapGitSpawnError } from './git-process-error';
@@ -88,39 +82,8 @@ export type WorktreeManagerSource =
 export interface WorktreeManagerConfig {
   repoId: RepoId;
   source?: WorktreeManagerSource;
-  repoUrl?: string;
   logger: Logger;
 }
-
-type RepoFetchMode = 'skip' | 'best-effort' | 'required';
-
-/**
- * Broker coordinates for authenticated host-side git, supplied by the caller.
- *
- * INVARIANT: host git must never resolve the credential broker from ambient
- * `process.env`. Every workspace runtime in a fleet process owns its own
- * `GitCredentialBroker` bound to its own workspace-scoped `GitHubTokenManager`,
- * and they all write the same process-global `MOLLY_GIT_CRED_BROKER_*` variables,
- * so the ambient value belongs to whichever workspace started or recovered its
- * broker last. A session in workspace A would then authenticate through
- * workspace B's token manager and get `repo_not_linked` for a repo A has linked.
- *
- * This must stay a per-call argument rather than manager state: `getWorktreeManager`
- * caches by `repoId` alone, so two workspaces sharing a repo share one instance.
- */
-export type GitCredentialBrokerAuth = {
-  workspaceId: string;
-  url: string;
-  token: string;
-};
-
-const buildBrokerAuthEnv = (auth: GitCredentialBrokerAuth | undefined): NodeJS.ProcessEnv =>
-  auth
-    ? {
-        MOLLY_GIT_CRED_BROKER_URL: auth.url,
-        MOLLY_GIT_CRED_BROKER_TOKEN: auth.token,
-      }
-    : {};
 
 export type RemoveWorktreeOptions = {
   baseBranchName?: string;
@@ -143,111 +106,6 @@ async function withRepoLock<T>(repoId: RepoId, fn: () => Promise<T>): Promise<T>
   });
 }
 
-const maskGitUrl = (raw?: string): string | undefined => {
-  if (!raw) return raw;
-  try {
-    return redactUrlAuth(raw);
-  } catch {
-    return raw;
-  }
-};
-
-const isSshGitUrl = (raw?: string): boolean =>
-  !!raw && (/^git@/i.test(raw) || /^ssh:\/\//i.test(raw));
-
-// Keep host normalization aligned with the credential helper to avoid "detected as GitHub
-// here but skipped by helper" mismatches (e.g. www.github.com).
-const normalizeGitHubHost = (rawHost: string): string => {
-  const normalized = rawHost.trim().toLowerCase();
-  if (normalized === 'www.github.com') return 'github.com';
-  return normalized;
-};
-
-// Parse GitHub HTTPS remote and derive a stable owner/repo for broker lookup.
-// This is only used for diagnostics; it intentionally ignores query/fragment pieces.
-const parseGitHubHttpsRemote = (
-  rawUrl?: string
-): { host: string; normalizedHost: string; repoFullName: string } | null => {
-  if (!rawUrl) return null;
-  try {
-    const url = new URL(rawUrl);
-    if (url.protocol !== 'https:') return null;
-
-    const host = url.hostname.toLowerCase();
-    const normalizedHost = normalizeGitHubHost(host);
-    if (normalizedHost !== 'github.com') return null;
-
-    const cleanedPath = url.pathname
-      .replace(/^\/+/, '')
-      .replace(/\/+$/, '')
-      .replace(/\.git$/i, '');
-    const parts = cleanedPath.split('/').filter(Boolean);
-    if (parts.length < 2) return null;
-    const owner = parts[0];
-    const repo = parts[1];
-    if (!owner || !repo) return null;
-    return { host, normalizedHost, repoFullName: `${owner}/${repo}` };
-  } catch {
-    return null;
-  }
-};
-
-// Detect git's "prompt disabled" failure mode, which is what we want to diagnose.
-// We keep this loose to catch variations across git versions.
-const isTerminalPromptsDisabledErrorMessage = (message: string): boolean => {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('terminal prompts disabled') ||
-    normalized.includes("could not read username for 'https://") ||
-    normalized.includes('could not read username for "https://')
-  );
-};
-
-// Clear inherited helpers before installing Molly's helper. Without the empty
-// helper entry, git can fall through to host helpers such as osxkeychain, which
-// may block indefinitely in non-interactive clone/fetch paths.
-export const buildGitHubCredentialConfigArgs = (helperValue: string): string[] => [
-  '-c',
-  'credential.helper=',
-  '-c',
-  `credential.helper=${helperValue}`,
-  '-c',
-  'credential.useHttpPath=true',
-];
-
-type HelperDebugEntry = {
-  ts?: string;
-  pid?: number;
-  event?: string;
-  data?: Record<string, unknown>;
-};
-
-const parseHelperDebugEntry = (value: unknown): HelperDebugEntry | null => {
-  if (!value || typeof value !== 'object') return null;
-  const obj = value as Record<string, unknown>;
-  const data = obj.data;
-  return {
-    ts: typeof obj.ts === 'string' ? obj.ts : undefined,
-    pid: typeof obj.pid === 'number' ? obj.pid : undefined,
-    event: typeof obj.event === 'string' ? obj.event : undefined,
-    data: data && typeof data === 'object' ? (data as Record<string, unknown>) : undefined,
-  };
-};
-
-// We only read the last helper debug entry to keep logs small while still giving
-// a clear reason (e.g. missing env, unsupported host, fetch_error).
-const readLastJsonLine = (filePath: string): HelperDebugEntry | null => {
-  try {
-    const content = fs.readFileSync(filePath, 'utf8');
-    const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
-    const last = lines[lines.length - 1];
-    if (!last) return null;
-    return parseHelperDebugEntry(JSON.parse(last) as unknown);
-  } catch {
-    return null;
-  }
-};
-
 /**
  * WorktreeManager handles git worktree operations for a single repository.
  * Each fresh session gets its own worktree directory and a newly allocated branch.
@@ -256,7 +114,6 @@ const readLastJsonLine = (filePath: string): HelperDebugEntry | null => {
 export class WorktreeManager {
   private readonly repoId: RepoId;
   private source: WorktreeManagerSource;
-  private repoUrl?: string;
   private readonly logger: Logger;
 
   /** Base directory on host: <active installation data root>/repos */
@@ -272,8 +129,7 @@ export class WorktreeManager {
 
   constructor(config: WorktreeManagerConfig) {
     this.repoId = config.repoId;
-    this.source = config.source ?? { kind: 'github', repoUrl: config.repoUrl };
-    this.repoUrl = this.source.kind === 'github' ? this.source.repoUrl : undefined;
+    this.source = config.source ?? { kind: 'github' };
     this.logger = config.logger;
 
     this.baseDir = path.join(getMollyDataDir(), 'repos');
@@ -283,29 +139,8 @@ export class WorktreeManager {
     this.cacheDir = path.join(this.repoDir, 'cache');
   }
 
-  updateRepoUrl(repoUrl?: string): void {
-    if (!repoUrl) return;
-    this.updateSource({ kind: 'github', repoUrl });
-  }
-
   updateSource(source?: WorktreeManagerSource): void {
-    if (!source) return;
-    this.source = source;
-    if (source.kind === 'local-shared') {
-      this.repoUrl = undefined;
-      this.logger.debug(`[${this.repoId}] Updated local shared source: ${source.originalRootPath}`);
-      return;
-    }
-    const repoUrl = source.repoUrl;
-    if (!repoUrl) return;
-    if (this.repoUrl === repoUrl) return;
-    this.repoUrl = repoUrl;
-    this.logger.debug(`[${this.repoId}] Updated repo url: ${maskGitUrl(repoUrl)}`);
-    if (isSshGitUrl(repoUrl)) {
-      this.logger.debug(
-        `[${this.repoId}] Repo URL uses SSH; credential.helper provides HTTPS credentials only (ensure SSH keys/agent are available)`
-      );
-    }
+    if (source) this.source = source;
   }
 
   private runGit(args: string[], cwd: string, env?: NodeJS.ProcessEnv): Promise<string> {
@@ -376,30 +211,6 @@ export class WorktreeManager {
     });
   }
 
-  private buildGitAuthArgs(): string[] {
-    if (!this.repoUrl) {
-      return [];
-    }
-
-    // Only enable the GitHub credential helper for GitHub HTTPS remotes.
-    // For non-GitHub/local remotes, avoid touching installation-owned credential state.
-    try {
-      const url = new URL(this.repoUrl);
-      const host = normalizeGitHubHost(url.hostname.toLowerCase());
-      const isGitHubHost = host === 'github.com';
-      const isHttps = url.protocol === 'https:';
-      if (!isGitHubHost || !isHttps) {
-        return [];
-      }
-    } catch {
-      return [];
-    }
-
-    ensureCredentialHelperScript(this.repoId);
-    const helperValue = buildCredentialHelperValueForHost(this.repoId);
-    return buildGitHubCredentialConfigArgs(helperValue);
-  }
-
   private isLocalSharedSource(): boolean {
     return this.source.kind === 'local-shared';
   }
@@ -464,226 +275,6 @@ export class WorktreeManager {
     }
   }
 
-  // When git fails with "terminal prompts disabled" during host-side clone/fetch,
-  // it usually means the helper/broker chain did not return credentials.
-  // We emit a structured warning with:
-  // - broker reachability/status (204 => no token)
-  // - helper probe results + last debug entry
-  // This keeps failures debuggable without logging sensitive tokens.
-  private async diagnoseGitHubGitAuthFailure(options: {
-    operation: string;
-    errorMessage: string;
-    brokerAuth?: GitCredentialBrokerAuth;
-  }): Promise<void> {
-    if (!isTerminalPromptsDisabledErrorMessage(options.errorMessage)) {
-      return;
-    }
-
-    const remote = parseGitHubHttpsRemote(this.repoUrl);
-    const helperPath = getCredentialHelperHostPath(this.repoId);
-    // Probe the SAME broker the failing git command used. Reading process.env here
-    // would probe whichever workspace wrote the global pointer last, which is exactly
-    // the misrouting this argument exists to prevent — the resulting `repo_not_linked`
-    // then looks like the caller's workspace lacks the link when it does not.
-    const brokerUrl = options.brokerAuth?.url;
-    const brokerToken = options.brokerAuth?.token;
-
-    // Write helper debug JSONL under the repo mount so it persists and is easy to retrieve.
-    const debugFile = path.join(this.repoDir, `git-cred-helper-${Date.now()}-${process.pid}.jsonl`);
-
-    const diagnostics: Record<string, unknown> = {
-      repoId: this.repoId,
-      operation: options.operation,
-      // Names the workspace whose broker/token manager was actually used, so a
-      // multi-workspace misroute is visible in the log instead of inferred.
-      brokerWorkspaceId: options.brokerAuth?.workspaceId ?? null,
-      repoUrl: maskGitUrl(this.repoUrl),
-      isSshRepoUrl: isSshGitUrl(this.repoUrl),
-      remoteHost: remote?.host ?? null,
-      remoteHostNormalized: remote?.normalizedHost ?? null,
-      repoFullName: remote?.repoFullName ?? null,
-      hasBrokerUrl: !!brokerUrl,
-      hasBrokerToken: !!brokerToken,
-      helperPath,
-      helperExists: fs.existsSync(helperPath),
-      helperDebugFile: debugFile,
-    };
-
-    // Broker probe is best-effort; it helps differentiate "broker reachable but 204"
-    // from "broker not reachable", without invoking git itself.
-    // When the broker returns 403, it includes structured error info from the backend.
-    const fetchImpl = globalThis.fetch;
-    if (remote?.repoFullName && brokerUrl && brokerToken && typeof fetchImpl === 'function') {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      try {
-        const res = await fetchImpl(`${brokerUrl}/git-credential`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${brokerToken}`,
-          },
-          body: JSON.stringify({ repoFullName: remote.repoFullName }),
-          signal: controller.signal,
-        });
-
-        // Try to parse structured error response from broker (403 with JSON body)
-        let errorInfo: { error?: string; message?: string } | null = null;
-        if (res.status === 403) {
-          try {
-            errorInfo = (await res.json()) as { error?: string; message?: string };
-          } catch {
-            // Ignore JSON parse errors
-          }
-        } else {
-          res.body?.cancel().catch(() => {});
-        }
-
-        diagnostics.brokerProbe = {
-          ok: res.ok,
-          status: res.status,
-          ...(errorInfo?.error && { errorCode: errorInfo.error }),
-          ...(errorInfo?.message && { errorMessage: errorInfo.message }),
-        };
-      } catch (error) {
-        diagnostics.brokerProbe = {
-          ok: false,
-          error: formatErrorMessage(error),
-        };
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    } else {
-      diagnostics.brokerProbe = { ok: false, skipped: true };
-    }
-
-    if (!remote?.repoFullName) {
-      this.logger.debug(
-        `[${this.repoId}] Git auth failed with terminal prompts disabled, but repo URL is not a GitHub HTTPS remote`,
-        diagnostics
-      );
-      return;
-    }
-
-    try {
-      fs.mkdirSync(this.repoDir, { recursive: true });
-      const env: NodeJS.ProcessEnv = {
-        ...process.env,
-        ...buildBrokerAuthEnv(options.brokerAuth),
-        MOLLY_GIT_CRED_HELPER_DEBUG: 'true',
-        MOLLY_GIT_CRED_HELPER_DEBUG_FILE: debugFile,
-      };
-
-      const probe = await this.runCredentialHelperProbe({
-        helperPath,
-        host: remote.host,
-        repoFullName: remote.repoFullName,
-        env,
-      });
-
-      diagnostics.helperProbe = {
-        exitCode: probe.exitCode,
-        returnedCredentials: probe.returnedCredentials,
-        stderrNonEmpty: probe.stderrNonEmpty,
-        lastDebugEntry: readLastJsonLine(debugFile),
-      };
-    } catch (error) {
-      diagnostics.helperProbe = {
-        ok: false,
-        error: formatErrorMessage(error),
-        lastDebugEntry: readLastJsonLine(debugFile),
-      };
-    }
-
-    this.logger.debug(`[${this.repoId}] GitHub HTTPS auth diagnostics`, diagnostics);
-  }
-
-  // Run the helper directly (outside of git) to isolate whether the helper
-  // itself can return credentials for the given repo.
-  private async runCredentialHelperProbe(options: {
-    helperPath: string;
-    host: string;
-    repoFullName: string;
-    env: NodeJS.ProcessEnv;
-  }): Promise<{ exitCode: number | null; returnedCredentials: boolean; stderrNonEmpty: boolean }> {
-    const input = `protocol=https\nhost=${options.host}\npath=/${options.repoFullName}.git\n\n`;
-    return await new Promise((resolve, reject) => {
-      const child = spawn('node', [options.helperPath, 'get'], {
-        env: options.env,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
-
-      let stdout = '';
-      let stderr = '';
-
-      // Use setEncoding to handle UTF-8 multibyte boundaries correctly
-      child.stdout?.setEncoding('utf8');
-      child.stderr?.setEncoding('utf8');
-
-      child.stdout?.on('data', (chunk: string) => {
-        stdout += chunk;
-      });
-      child.stderr?.on('data', (chunk: string) => {
-        stderr += chunk;
-      });
-
-      child.on('error', (error) => reject(error));
-      child.on('close', (code) => {
-        const returnedCredentials =
-          stdout.includes('username=') && stdout.includes('\npassword=') && stdout.includes('\n\n');
-        resolve({ exitCode: code, returnedCredentials, stderrNonEmpty: stderr.trim().length > 0 });
-      });
-
-      if (child.stdin) {
-        child.stdin.write(input);
-        child.stdin.end();
-      }
-    });
-  }
-
-  /**
-   * Ensures the bare repo has a valid `origin` remote and a fetchspec that brings in branch heads.
-   *
-   * In a bare clone, git may fetch branch heads into `refs/heads/*` instead of remote-tracking refs.
-   * We rely on `origin/<branch>` refs for base-ref selection, so we ensure a fetchspec for those.
-   */
-  private async ensureOriginRemoteConfigured(): Promise<void> {
-    if (!this.repoUrl) return;
-
-    try {
-      await this.runGit(['remote', 'get-url', 'origin'], this.bareGitDir);
-    } catch {
-      await this.runGit(['remote', 'add', 'origin', this.repoUrl], this.bareGitDir);
-    }
-
-    let fetchSpec = '';
-    try {
-      fetchSpec = await this.runGit(
-        ['config', '--get-all', 'remote.origin.fetch'],
-        this.bareGitDir
-      );
-    } catch {
-      fetchSpec = '';
-    }
-
-    const fetchSpecs = fetchSpec
-      .split(/\r?\n/)
-      .map((spec) => spec.trim())
-      .filter(Boolean);
-
-    const hasRemoteTrackingFetchSpec = fetchSpecs.some((spec) =>
-      spec.includes('refs/remotes/origin/')
-    );
-
-    if (!hasRemoteTrackingFetchSpec) {
-      await this.runGit(
-        ['config', '--add', 'remote.origin.fetch', '+refs/heads/*:refs/remotes/origin/*'],
-        this.bareGitDir
-      );
-    }
-  }
-
   /**
    * Git worktrees created from a bare repo write an absolute `gitdir:` pointer into `<worktree>/.git`.
    * That absolute host path can break if the repo is moved across mount points. To make the worktree
@@ -737,273 +328,21 @@ export class WorktreeManager {
     }
   }
 
-  /**
-   * Ensures the bare repo exists and is optionally up-to-date with origin.
-   *
-   * - `skip`: do not fetch (used for repos without a remote).
-   * - `best-effort`: fetch if possible, but do not fail callers.
-   * - `required`: fetch must succeed; otherwise throw (used when cutting a new worktree).
-   */
-  private async ensureRepoLocked(
-    fetchMode: RepoFetchMode = 'best-effort',
-    brokerAuth?: GitCredentialBrokerAuth
-  ): Promise<void> {
-    // Both branches below build every path they hand git out of this root, so prove it
-    // is reachable once, here, and report it as Molly's own directory when it is not.
+  private async ensureRepoLocked(): Promise<void> {
     ensureMollyDataDir();
-
     if (this.source.kind === 'local-shared') {
       await this.ensureLocalSharedRepoLocked();
       return;
     }
-
-    // Ensure directories exist
-    fs.mkdirSync(this.worktreesDir, { recursive: true });
-    fs.mkdirSync(this.cacheDir, { recursive: true });
-
     if (!fs.existsSync(this.bareGitDir)) {
-      if (!this.repoUrl) {
-        // Create an empty bare repository
-        this.logger.debug(`[${this.repoId}] Creating empty bare repository`);
-        fs.mkdirSync(this.bareGitDir, { recursive: true });
-        await this.runGit(['init', '--bare'], this.bareGitDir);
-        // Create initial commit so we have a main branch
-        await this.createInitialCommit();
-        return;
-      }
-
-      // Clone bare repository
-      this.logger.debug(`[${this.repoId}] Cloning bare repository: ${maskGitUrl(this.repoUrl)}`);
-      const cloneUrl = this.repoUrl;
-      try {
-        await this.runGit(
-          [...this.buildGitAuthArgs(), 'clone', '--bare', cloneUrl, this.bareGitDir],
-          this.baseDir,
-          buildBrokerAuthEnv(brokerAuth)
-        );
-      } catch (error) {
-        const message = formatErrorMessage(error);
-        await this.diagnoseGitHubGitAuthFailure({
-          operation: 'clone',
-          errorMessage: message,
-          brokerAuth,
-        });
-        throw new Error(`[${this.repoId}] Failed to clone bare repository: ${message}`, {
-          cause: error,
-        });
-      }
-
-      this.logger.debug(`[${this.repoId}] Bare repository ready: ${this.bareGitDir}`);
-      await this.ensureOriginRemoteConfigured();
-
-      // If the remote repo is empty (no commits/branches), create an initial commit
-      // so that worktree creation has a valid base ref to work with.
-      if (await this.isRepoEmpty()) {
-        this.logger.debug(`[${this.repoId}] Remote repository is empty, creating initial commit`);
-        await this.createInitialCommit();
-      }
-      return;
-    }
-
-    if (!this.repoUrl || fetchMode === 'skip') {
-      return;
-    }
-
-    await this.ensureOriginRemoteConfigured();
-    this.logger.debug(`[${this.repoId}] Fetching latest changes from origin (mode=${fetchMode})`);
-    try {
-      await this.runGit(
-        [...this.buildGitAuthArgs(), 'fetch', 'origin', '--prune'],
-        this.bareGitDir,
-        buildBrokerAuthEnv(brokerAuth)
+      throw new Error(
+        `[${this.repoId}] Historical repository is missing; GitHub cloning is retired.`
       );
-      let originHead: string | null = null;
-      let originMain: string | null = null;
-      let originMaster: string | null = null;
-      try {
-        originHead = await this.runGit(['rev-parse', 'origin/HEAD'], this.bareGitDir);
-      } catch {
-        originHead = null;
-      }
-      try {
-        originMain = await this.runGit(['rev-parse', 'origin/main'], this.bareGitDir);
-      } catch {
-        originMain = null;
-      }
-      try {
-        originMaster = await this.runGit(['rev-parse', 'origin/master'], this.bareGitDir);
-      } catch {
-        originMaster = null;
-      }
-      this.logger.debug(
-        `[${this.repoId}] Fetch completed (origin/HEAD=${originHead ?? 'unknown'} origin/main=${
-          originMain ?? 'unknown'
-        } origin/master=${originMaster ?? 'unknown'})`
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      await this.diagnoseGitHubGitAuthFailure({
-        operation: 'fetch',
-        errorMessage: message,
-        brokerAuth,
-      });
-      if (fetchMode === 'required') {
-        throw new Error(`[${this.repoId}] Failed to fetch from origin: ${message}`, {
-          cause: error,
-        });
-      }
-      this.logger.debug(`[${this.repoId}] Failed to fetch from origin: ${message}`);
     }
-  }
-
-  /**
-   * Resolve host (outside-container) global git identity.
-   * Prefer env vars (from session config), then `git config --global` values.
-   * Returns undefined for name/email if not found.
-   */
-  private async resolveHostGitIdentity(): Promise<{
-    name: string | undefined;
-    email: string | undefined;
-  }> {
-    // First check env vars (injected from session config)
-    // Git uses GIT_AUTHOR_* and GIT_COMMITTER_* environment variables
-    const envName = process.env.GIT_AUTHOR_NAME ?? process.env.GIT_COMMITTER_NAME;
-    const envEmail = process.env.GIT_AUTHOR_EMAIL ?? process.env.GIT_COMMITTER_EMAIL;
-
-    if (envName && envEmail) {
-      return { name: envName, email: envEmail };
+    const isBare = await this.runGit(['rev-parse', '--is-bare-repository'], this.bareGitDir);
+    if (isBare !== 'true') {
+      throw new Error(`[${this.repoId}] Historical repository is not a bare repository.`);
     }
-
-    // Fall back to host git config
-    let hostName = '';
-    let hostEmail = '';
-
-    try {
-      hostName = await this.runGit(['config', '--global', 'user.name'], process.cwd());
-    } catch {
-      hostName = '';
-    }
-
-    try {
-      hostEmail = await this.runGit(['config', '--global', 'user.email'], process.cwd());
-    } catch {
-      hostEmail = '';
-    }
-
-    return {
-      name: envName || hostName || undefined,
-      email: envEmail || hostEmail || undefined,
-    };
-  }
-
-  /**
-   * Checks whether the bare repo has any commits at all.
-   * Uses `git show-ref --heads` which lists local branch refs; exits non-zero when none exist.
-   */
-  private async isRepoEmpty(): Promise<boolean> {
-    try {
-      const refs = await this.runGit(['show-ref', '--heads'], this.bareGitDir);
-      return !refs.trim();
-    } catch {
-      // git show-ref exits with code 1 when no refs are found
-      return true;
-    }
-  }
-
-  /**
-   * Creates an initial empty commit on the `main` branch in the bare repo.
-   * Used when the remote repo is empty (no commits/branches) so that
-   * worktree creation has a valid base ref.
-   */
-  private async createInitialCommit(): Promise<void> {
-    const tempDir = path.join(this.repoDir, '.temp-init');
-    fs.mkdirSync(tempDir, { recursive: true });
-    try {
-      await this.runGit(['init'], tempDir);
-
-      const { name, email } = await this.resolveHostGitIdentity();
-      const commitEnv: Record<string, string | undefined> = {
-        ...process.env,
-      };
-      const commitName = name || 'Molly';
-      const commitEmail = email || 'molly@localhost';
-      commitEnv.GIT_AUTHOR_NAME = commitName;
-      commitEnv.GIT_COMMITTER_NAME = commitName;
-      commitEnv.GIT_AUTHOR_EMAIL = commitEmail;
-      commitEnv.GIT_COMMITTER_EMAIL = commitEmail;
-
-      await this.runGit(
-        ['-c', 'commit.gpgsign=false', 'commit', '--allow-empty', '-m', 'Initial commit'],
-        tempDir,
-        commitEnv
-      );
-      await this.runGit(['push', this.bareGitDir, 'HEAD:main'], tempDir);
-    } finally {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  }
-
-  private async resolveDefaultBranch(): Promise<string> {
-    const cwd = this.getGitAdminCwd();
-    if (this.isLocalSharedSource()) {
-      try {
-        const branch = await this.runGit(['branch', '--show-current'], cwd);
-        return branch || 'HEAD';
-      } catch {
-        return 'HEAD';
-      }
-    }
-    try {
-      const head = await this.runGit(['symbolic-ref', '--short', 'HEAD'], cwd);
-      return head || 'main';
-    } catch {
-      return 'main';
-    }
-  }
-
-  private async resolveDefaultRemoteRef(): Promise<string | null> {
-    if (!this.repoUrl) {
-      return null;
-    }
-
-    try {
-      const ref = await this.runGit(['rev-parse', '--abbrev-ref', 'origin/HEAD'], this.bareGitDir);
-      if (!ref || ref === 'origin/HEAD') {
-        return 'origin/HEAD';
-      }
-      return ref;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Picks a primary base ref from the fetched remote refs.
-   *
-   * Preference order:
-   * - `origin/main`
-   * - `origin/master`
-   * - `origin/HEAD` (symbolic ref if configured)
-   */
-  private async resolvePrimaryRemoteBaseRef(): Promise<string | null> {
-    if (!this.repoUrl) {
-      return null;
-    }
-
-    if (await this.hasCommitish('origin/main')) {
-      return 'origin/main';
-    }
-
-    if (await this.hasCommitish('origin/master')) {
-      return 'origin/master';
-    }
-
-    const originHead = await this.resolveDefaultRemoteRef();
-    if (originHead && (await this.hasCommitish(originHead))) {
-      return originHead;
-    }
-
-    return null;
   }
 
   private async hasCommitish(rev: string): Promise<boolean> {
@@ -1035,40 +374,7 @@ export class WorktreeManager {
       throw new Error(`[${this.repoId}] Local repository has no commit to use as a worktree base`);
     }
 
-    const candidates: string[] = [];
-
-    if (preferredBranch) {
-      if (this.repoUrl) {
-        candidates.push(`origin/${preferredBranch}`);
-      }
-      candidates.push(preferredBranch);
-    } else if (this.repoUrl) {
-      const primary = await this.resolvePrimaryRemoteBaseRef();
-      if (primary) {
-        candidates.push(primary);
-      }
-      candidates.push('origin/main', 'origin/master');
-    }
-
-    const defaultBranch = await this.resolveDefaultBranch();
-    if (this.repoUrl) {
-      candidates.push(`origin/${defaultBranch}`);
-      const defaultRemote = await this.resolveDefaultRemoteRef();
-      if (defaultRemote) {
-        candidates.push(defaultRemote);
-      }
-    }
-
-    candidates.push(defaultBranch);
-    candidates.push('main', 'master');
-
-    for (const candidate of candidates) {
-      if (await this.hasCommitish(candidate)) {
-        return candidate;
-      }
-    }
-
-    return preferredBranch ?? defaultBranch;
+    throw new Error('New GitHub worktrees are retired; restore the recorded session branch.');
   }
 
   /**
@@ -1098,11 +404,11 @@ export class WorktreeManager {
   }
 
   /**
-   * Ensure the base repository is cloned/fetched
+   * Validate the local repository used by the worktree
    */
-  async ensureRepo(options?: { brokerAuth?: GitCredentialBrokerAuth }): Promise<void> {
+  async ensureRepo(): Promise<void> {
     return withRepoLock(this.repoId, async () => {
-      await this.ensureRepoLocked('best-effort', options?.brokerAuth);
+      await this.ensureRepoLocked();
     });
   }
 
@@ -1319,6 +625,7 @@ export class WorktreeManager {
       assertSafeSessionId(sessionId);
       const worktreePath = this.getWorktreeHostPath(sessionId);
       const gitAdminCwd = this.getGitAdminCwd();
+      await this.ensureRepoLocked();
 
       // Check if worktree already exists. Restoring an on-disk worktree only
       // reads local git state, so it must not depend on origin being reachable.
@@ -1337,14 +644,6 @@ export class WorktreeManager {
       }
 
       const existingBranchName = await this.resolveRestoreBranchName(restoreBranchName);
-
-      // Cutting a fresh branch needs up-to-date origin refs for its base, so the
-      // fetch is required there. Restoring from an existing local branch only
-      // needs local refs; fetch best-effort so an unreachable origin (offline,
-      // dead proxy) does not block the restore.
-      await this.ensureRepoLocked(
-        this.repoUrl ? (existingBranchName ? 'best-effort' : 'required') : 'skip'
-      );
 
       if (existingBranchName) {
         if (exactStartPoint) {
@@ -1572,6 +871,10 @@ export class WorktreeManager {
     if (!fs.existsSync(worktreePath)) {
       this.logger.debug(`[${this.repoId}] Worktree for session ${sessionId} does not exist`);
       return resolvedBranchName;
+    }
+
+    if (!this.isLocalSharedSource()) {
+      await this.ensureRepoLocked();
     }
 
     if (!options.force) {
@@ -1808,7 +1111,6 @@ export function getWorktreeManager(config: WorktreeManagerConfig): WorktreeManag
     worktreeManagers.set(config.repoId, manager);
   } else {
     manager.updateSource(config.source);
-    manager.updateRepoUrl(config.repoUrl);
   }
   return manager;
 }

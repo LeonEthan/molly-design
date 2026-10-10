@@ -168,7 +168,6 @@ describe('Molly startup design continuation binding', () => {
     { project: { kind: 'github', repoFullName: 'synthetic/old' } },
     { repoId: 'old-repo' as never },
     { githubRepo: 'synthetic/old' },
-    { githubRepoUrl: 'https://example.test/old.git' },
     { branch: 'old-main' },
     { restoreBranchName: 'old-worktree' },
     { worktreeStartPoint: 'a'.repeat(40) },

@@ -18,12 +18,10 @@ import {
   User,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { PrStatus, SessionPullRequestCiState } from '@molly/shared';
 import { cn } from '@/lib/utils';
 import { writeTextToClipboard } from '@/lib/clipboard';
 import { CachedAvatarImg } from '@/components/cached-avatar-img';
 import { menuSurfaceStyle } from '@/ui/menu-styles';
-import { type PrCiRun } from '@/components/sessions/session-info-chips';
 import { GitHubOwnerIcon, type SidebarRowKind } from '@/components/sidebar-row-shared';
 import { WorktreeIcon } from '@/components/icons/worktree-icon';
 import { useStableNow } from '@/hooks/use-stable-now';
@@ -154,18 +152,8 @@ export type SessionInfoCardProps = {
   /** Name of the machine the session runs on. */
   machineName?: string | null;
   branchName?: string | null;
-  /** Legacy caller compatibility only; PR/CI metadata is not presented. */
-  prStatus?: PrStatus | null;
-  /** Compact CI rollup written by the CLI poller for the selected PR. */
-  prCiState?: SessionPullRequestCiState | null;
-  prNumber?: number | null;
-  prUrl?: string | null;
-  /** CI check runs for the PR. Undefined until a real CI feed exists (see info-bar). */
-  prCiRuns?: readonly PrCiRun[];
   addedLines?: number;
   deletedLines?: number;
-  /** Legacy callback accepted for compatibility; no PR action is rendered. */
-  onOpenPullRequest?: () => void;
   className?: string;
 };
 

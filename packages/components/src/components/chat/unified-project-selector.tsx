@@ -1,10 +1,8 @@
 import { useDeferredValue, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { LocalProjectId, MachineId } from '@molly/shared';
-import { Check, CircleSlash2, FolderOpen, FolderPlus, Github, Search, X } from 'lucide-react';
+import { Check, CircleSlash2, FolderOpen, FolderPlus, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useVisibleLocalProjects } from '@/hooks/use-visible-local-projects';
-import { CachedAvatarImg } from '@/components/cached-avatar-img';
-import { getGitHubOwnerAvatarUrl } from '@/lib/github-avatar';
 import type { VisibleLocalProjectIndex } from '@/lib/visible-local-project-index';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from '@/ui/icons';
@@ -18,25 +16,6 @@ import {
 import { Input } from '@/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip';
 
-function GitHubOwnerAvatarIcon({ repoFullName }: { repoFullName: string }) {
-  const ownerHandle = (repoFullName.split('/')[0] ?? '').trim();
-  const [failed, setFailed] = useState(false);
-
-  if (!ownerHandle || failed) {
-    return <Github className="h-4 w-4 shrink-0 opacity-70" />;
-  }
-
-  return (
-    <CachedAvatarImg
-      src={getGitHubOwnerAvatarUrl(ownerHandle)}
-      alt=""
-      aria-hidden="true"
-      className="h-4 w-4 shrink-0 rounded-sm object-cover"
-      onError={() => setFailed(true)}
-    />
-  );
-}
-
 export interface LocalProjectSelection {
   machineId: MachineId;
   localProjectId: LocalProjectId;
@@ -44,8 +23,7 @@ export interface LocalProjectSelection {
 
 export type UnifiedProjectSelection =
   | { kind: 'none' }
-  | ({ kind: 'local' } & LocalProjectSelection)
-  | { kind: 'github'; repoFullName: string };
+  | ({ kind: 'local' } & LocalProjectSelection);
 
 type UnifiedProjectOption = {
   value: string;
@@ -101,54 +79,16 @@ function selectUnifiedProjectOptionsForRender<
   }
   if (limit === undefined || visible.length <= limit) return visible;
 
-  const selectedIndexes = new Set(Array.from({ length: limit }, (_, index) => index));
-  if (!normalizedQuery) {
-    const selectedKindCounts = new Map<string, number>();
-    for (const index of selectedIndexes) {
-      const kind = visible[index]?.selection.kind;
-      if (kind) selectedKindCounts.set(kind, (selectedKindCounts.get(kind) ?? 0) + 1);
-    }
-
-    const firstIndexByKind = new Map<string, number>();
-    visible.forEach((option, index) => {
-      if (!firstIndexByKind.has(option.selection.kind)) {
-        firstIndexByKind.set(option.selection.kind, index);
-      }
-    });
-    for (const [missingKind, missingIndex] of firstIndexByKind) {
-      if ((selectedKindCounts.get(missingKind) ?? 0) > 0) continue;
-      const replaceIndex = Array.from(selectedIndexes)
-        .reverse()
-        .find((index) => {
-          const selectedKind = visible[index]?.selection.kind;
-          return selectedKind && (selectedKindCounts.get(selectedKind) ?? 0) > 1;
-        });
-      if (replaceIndex === undefined) continue;
-      const replacedKind = visible[replaceIndex]?.selection.kind;
-      selectedIndexes.delete(replaceIndex);
-      selectedIndexes.add(missingIndex);
-      if (replacedKind) {
-        selectedKindCounts.set(replacedKind, (selectedKindCounts.get(replacedKind) ?? 1) - 1);
-      }
-      selectedKindCounts.set(missingKind, 1);
-    }
-  }
-
-  return Array.from(selectedIndexes)
-    .sort((left, right) => left - right)
-    .map((index) => visible[index]!);
+  return visible.slice(0, limit);
 }
 
 interface UnifiedProjectSelectorProps {
   value: UnifiedProjectSelection;
   onChange: (selection: UnifiedProjectSelection) => void;
   selectedMachineId: MachineId | null;
-  repositories?: ReadonlyArray<{ fullName: string; description?: string | null }>;
   className?: string;
-  latestMessageAtByRepo?: ReadonlyMap<string, number>;
   latestMessageAtByLocalProject?: ReadonlyMap<string, number>;
   onAddLocalProject: () => void;
-  onConnectGitRepo?: () => void;
 }
 
 export function buildUnifiedLocalProjectOptions({
@@ -210,8 +150,6 @@ function getSelectionValue(selection: UnifiedProjectSelection): string | null {
   switch (selection.kind) {
     case 'local':
       return `local:${selection.machineId}:${selection.localProjectId}`;
-    case 'github':
-      return `github:${selection.repoFullName}`;
     case 'none':
       return null;
   }
@@ -222,12 +160,9 @@ export function UnifiedProjectSelector({
   value,
   onChange,
   selectedMachineId,
-  repositories,
   className,
-  latestMessageAtByRepo,
   latestMessageAtByLocalProject,
   onAddLocalProject,
-  onConnectGitRepo,
 }: UnifiedProjectSelectorProps) {
   const visibleLocalProjects = useVisibleLocalProjects();
   const localProjects = useMemo(
@@ -245,11 +180,8 @@ export function UnifiedProjectSelector({
       value={value}
       onChange={onChange}
       localProjects={localProjects}
-      repositories={repositories}
       className={className}
-      latestMessageAtByRepo={latestMessageAtByRepo}
       onAddLocalProject={onAddLocalProject}
-      onConnectGitRepo={onConnectGitRepo}
     />
   );
 }
@@ -258,9 +190,7 @@ export function UnifiedProjectSelectorView({
   value,
   onChange,
   localProjects,
-  repositories,
   className,
-  latestMessageAtByRepo,
   onAddLocalProject,
   contentSide = 'top',
   triggerVariant = 'chip',
@@ -290,18 +220,8 @@ export function UnifiedProjectSelectorView({
         lastUsedAt: project.lastUsedAt,
       });
     }
-    for (const repository of repositories ?? []) {
-      combined.push({
-        value: `github:${repository.fullName}`,
-        label: repository.fullName,
-        description: repository.description ?? undefined,
-        icon: <GitHubOwnerAvatarIcon repoFullName={repository.fullName} />,
-        selection: { kind: 'github', repoFullName: repository.fullName },
-        lastUsedAt: latestMessageAtByRepo?.get(repository.fullName),
-      });
-    }
     return combined.sort(compareUnifiedProjectOptions);
-  }, [latestMessageAtByRepo, localProjects, repositories]);
+  }, [localProjects]);
 
   const selectedValue = getSelectionValue(value);
   const selectedOption = useMemo(
@@ -314,20 +234,9 @@ export function UnifiedProjectSelectorView({
 
   const clearLabel = t('chat.projectPicker.clear', 'No project');
   const placeholder = t('chat.projectPicker.placeholder', 'Choose a project');
-  const triggerIcon =
-    selectedOption?.icon ??
-    (value.kind === 'github' ? (
-      <GitHubOwnerAvatarIcon repoFullName={value.repoFullName} />
-    ) : (
-      <FolderOpen className="h-4 w-4 opacity-70" />
-    ));
+  const triggerIcon = selectedOption?.icon ?? <FolderOpen className="h-4 w-4 opacity-70" />;
   const triggerLabel =
-    selectedOption?.label ??
-    (value.kind === 'github'
-      ? value.repoFullName
-      : value.kind === 'local'
-        ? value.localProjectId
-        : placeholder);
+    selectedOption?.label ?? (value.kind === 'local' ? value.localProjectId : placeholder);
 
   const isPropertyRow = triggerVariant === 'property-row';
 
@@ -421,12 +330,7 @@ export function UnifiedProjectSelectorView({
           <div className="scrollbar-pro max-h-[min(50vh,13rem)] overflow-y-auto">
             {filteredOptions.length > 0 ? (
               filteredOptions.map((option) => {
-                // Local projects show only the name; the path lives in a hover
-                // tooltip. GitHub repos keep their inline description line.
-                const localPath =
-                  option.selection.kind === 'local' ? option.description : undefined;
-                const inlineDescription =
-                  option.selection.kind === 'github' ? option.description : undefined;
+                const localPath = option.description;
                 const labelNode = (
                   <span className={cn('truncate', option.value === selectedValue && 'font-medium')}>
                     {option.label}
@@ -436,14 +340,9 @@ export function UnifiedProjectSelectorView({
                   <DropdownMenuItem
                     key={option.value}
                     onSelect={() => onChange(option.selection)}
-                    className={cn(
-                      'gap-2 py-1.5',
-                      inlineDescription ? 'items-start' : 'items-center'
-                    )}
+                    className="gap-2 py-1.5 items-center"
                   >
-                    <span className={cn('shrink-0', inlineDescription && 'mt-0.5')}>
-                      {option.icon}
-                    </span>
+                    <span className="shrink-0">{option.icon}</span>
                     <span className="flex min-w-0 flex-1 flex-col">
                       {localPath ? (
                         <Tooltip>
@@ -455,17 +354,9 @@ export function UnifiedProjectSelectorView({
                       ) : (
                         labelNode
                       )}
-                      {inlineDescription ? (
-                        <span className="line-clamp-2 text-xs leading-snug text-muted-foreground">
-                          {inlineDescription}
-                        </span>
-                      ) : null}
                     </span>
                     {option.value === selectedValue ? (
-                      <Check
-                        className={cn('h-3.5 w-3.5 shrink-0', inlineDescription && 'mt-0.5')}
-                        aria-hidden="true"
-                      />
+                      <Check className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     ) : null}
                   </DropdownMenuItem>
                 );

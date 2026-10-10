@@ -235,7 +235,6 @@ import {
 import { shouldMarkSessionRead } from '@/lib/session-read-receipt';
 import { recordSessionRenderTrace, shortTraceId } from '@/lib/session-render-trace';
 
-import { extractIssuePRMentionsFromText } from '@/components/mentions/issue-pr-hash-mention';
 import { SessionSearchProvider } from './session-search-context';
 import {
   buildSessionSearchResults,
@@ -1702,7 +1701,6 @@ export const SessionChatInterface = memo(
       () => getSessionGitHubState(session, workspaceSession),
       [session, workspaceSession]
     );
-    const knownIssuePrItems = useMemo(() => new Map(), []);
     const isRepoPublic = undefined;
 
     type InputActionState = 'ready' | 'dispatching';
@@ -2696,10 +2694,6 @@ export const SessionChatInterface = memo(
             options?.modelIdOverride !== undefined ? options.modelIdOverride : selectedModelId;
           const turnConfigOptionValues = options?.configOptionValuesOverride ?? configOptionValues;
           const derivedUserId = currentUser?.id ?? session.userId;
-          const prompt = extractPromptPreviewFromInputBlocks(inputBlocks);
-          const issuePRMentions = prompt
-            ? extractIssuePRMentionsFromText(prompt, knownIssuePrItems, repoFullName)
-            : undefined;
           const inputConfig = buildSessionTurnInputConfig({
             inputBlocks,
             agentConfigId: session.design ? session.agentConfigId : undefined,
@@ -2708,7 +2702,7 @@ export const SessionChatInterface = memo(
             modeId: turnModeId,
             modelId: turnModelId,
             configOptionValues: turnConfigOptionValues,
-            issuePRMentions,
+
             mcpServerIds: mcpSelection.selectedIds,
             agentRoleId: null,
             resume: session.acpSessionId ?? undefined,
@@ -2784,9 +2778,8 @@ export const SessionChatInterface = memo(
         currentUser?.id,
         guardNewBillableTurn,
         guideHistoryEntry,
-        knownIssuePrItems,
+
         mcpSelection.selectedIds,
-        repoFullName,
         requestSessionDispatch,
         scrollChatToBottom,
         selectedModeId,
@@ -2822,9 +2815,6 @@ export const SessionChatInterface = memo(
           const turnConfigOptionValues = options?.configOptionValuesOverride ?? configOptionValues;
           const derivedUserId = currentUser?.id ?? session.userId;
           const prompt = extractPromptPreviewFromInputBlocks(inputBlocks);
-          const issuePRMentions = prompt
-            ? extractIssuePRMentionsFromText(prompt, knownIssuePrItems, repoFullName)
-            : undefined;
           const inputConfig = buildSessionTurnInputConfig({
             inputBlocks,
             agentConfigId: session.design ? session.agentConfigId : undefined,
@@ -2833,7 +2823,7 @@ export const SessionChatInterface = memo(
             modeId: turnModeId,
             modelId: turnModelId,
             configOptionValues: turnConfigOptionValues,
-            issuePRMentions,
+
             mcpServerIds: mcpSelection.selectedIds,
             agentRoleId: null,
             resume: session.acpSessionId ?? undefined,
@@ -2879,10 +2869,9 @@ export const SessionChatInterface = memo(
         configOptionValues,
         currentUser?.id,
         guardNewBillableTurn,
-        knownIssuePrItems,
+
         mcpSelection.selectedIds,
         pushMessageQueue,
-        repoFullName,
         selectedModeId,
         selectedModelId,
         session.acpSessionId,

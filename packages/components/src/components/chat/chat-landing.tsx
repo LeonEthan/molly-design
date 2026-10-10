@@ -6,7 +6,6 @@ import { writeStoredLastActiveTabState } from '@/lib/session-draft-tabs';
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -25,14 +24,11 @@ import {
   getServerNow,
   normalizeSessionInputBlocks,
   type AgentConfigMeta,
-  githubFetchBranches,
   type LocalProjectId,
   type MachineId,
   type MachineViewMeta,
   type ProjectRef,
   type SessionId,
-  type WorktreeSetupScriptConfig,
-  type WorktreeCleanupScriptConfig,
   type WorkspaceId,
 } from '@molly/shared';
 import { RefreshCw, PanelLeft } from 'lucide-react';
@@ -77,11 +73,7 @@ import {
   readChatLandingDefaults,
   resolvePreferredChatLandingAgentSelection,
 } from '@/lib/chat-landing-defaults';
-import {
-  agentDefaultsCache,
-  githubBranchesCache,
-  persistAgentSessionDefaults,
-} from '@/lib/local-storage-cache';
+import { agentDefaultsCache, persistAgentSessionDefaults } from '@/lib/local-storage-cache';
 import { filterAcpSessionConfigOptionValues } from '@/lib/acp-session-config-selection';
 import {
   buildRecentRunConfigItems,
@@ -97,13 +89,6 @@ import { useAcpSelectorOptions } from '@/hooks/use-acp-selector-options';
 import { useAvailableCommands } from '@/hooks/use-available-commands';
 
 import { useResolvedTheme } from '../../theme-provider';
-import {
-  areChatLandingBranchListsEqual,
-  createChatLandingBranchSnapshot,
-  getGitHubBranchesCacheId,
-  resolveChatLandingBranchSelection,
-  type ChatLandingBranchSnapshot,
-} from '@/lib/chat-landing-branches';
 import { toIntlLocale } from '@/lib/intl-locale';
 import {
   arePastedTextDraftsEqual,
@@ -127,10 +112,6 @@ import { HomeArtworkGallery, type HomeArtworkGalleryItem } from './home-artwork-
 import { HomeIdeaChips } from './home-idea-chips';
 import { getSessionCreationNavigation } from './submission/use-composer-navigation-focus';
 import { getSelectorTagClassName } from './chat-landing-selectors';
-import {
-  extractIssuePRMentionsFromText,
-  useKnownIssuePrItems,
-} from '@/components/mentions/issue-pr-hash-mention';
 import { useMentionPromptExpansion } from '@/components/mentions/mention-expansion';
 import type { Mention as MentionRange } from '@/ui/mention/index';
 import {
@@ -147,7 +128,6 @@ import { useChatLandingDraftSession } from '@/hooks/use-chat-landing-draft-sessi
 import { useSessionPreparation } from '@/hooks/use-session-preparation';
 import { getCommandKeybindings, useCommand } from '@/lib/commands';
 import { isElectronRenderer } from '@/lib/electron';
-import { withGitHubTokenRetry } from '@/lib/github-token';
 import { useVisibleMachineMetas } from '@/hooks/use-visible-machine-metas';
 import { useVisibleLocalProjectsFromMachineIndex } from '@/hooks/use-visible-local-projects';
 import { useLocalProjectRemovalResultNotifications } from '@/hooks/use-remove-local-project';
@@ -160,7 +140,6 @@ import { getDownloadPageUrl, MOLLY_ISSUES_URL } from '@/lib/molly-urls';
 import { selectPastedClipboardFiles, splitImageAndFileAttachments } from '@/lib/file-drop';
 import { canShowSubscriptionRateLimits } from '@/lib/session-usage';
 import { canShowCodexResetForecast } from '@/lib/codex-reset-forecast';
-import { type SessionContextType } from './context-switch';
 import {
   UNIFIED_PROJECT_OPTION_RENDER_LIMIT,
   UnifiedProjectSelectorView,
@@ -197,16 +176,16 @@ import {
   getChatLandingSelectedMachineProjectStatus,
   getEmptyLocalProjectsMessageKey,
   getChatLandingSubmitDisabled,
+  type SessionContextType,
   getChatLandingVisibleComposerStatus,
   isChatLandingMachineReachable,
 } from './chat-landing-derived';
 
 interface ChatLandingProps {
   workspaceSlug: string;
-  preSelectedContext?: 'local' | 'github' | 'chat';
+  preSelectedContext?: SessionContextType;
   preSelectedMachine?: string;
   preSelectedProject?: string;
-  preSelectedRepo?: string;
 
   onSelectionUrlSync?: (search: ChatLandingSearch) => void;
 }
@@ -219,13 +198,6 @@ const CHAT_LANDING_MACHINE_FLOCK_FAMILIES = [
   'agentConfig',
   'providerSetup',
 ] as const;
-const EMPTY_FRESH_REPOSITORIES: { fullName: string; private: boolean }[] = [];
-const EMPTY_WORKSPACE_REPOSITORIES: {
-  repoFullName: string;
-  worktreeSetup?: WorktreeSetupScriptConfig;
-  worktreeCleanup?: WorktreeCleanupScriptConfig;
-}[] = [];
-const EMPTY_REPOSITORIES: { fullName: string }[] = [];
 
 export function ChatLanding(props: ChatLandingProps) {
   return <WorkspaceChatLanding key={props.workspaceSlug} {...props} />;
@@ -238,7 +210,6 @@ function WorkspaceChatLanding({
   preSelectedContext,
   preSelectedMachine,
   preSelectedProject,
-  preSelectedRepo,
   onSelectionUrlSync,
 }: ChatLandingProps) {
   const { t, i18n } = useTranslation();
@@ -287,11 +258,7 @@ function WorkspaceChatLanding({
     (machineId: string) => onlineMachineIds.has(machineId as MachineId),
     [onlineMachineIds]
   );
-  const freshRepositories = EMPTY_FRESH_REPOSITORIES;
-  const workspaceReposWithStatus = EMPTY_WORKSPACE_REPOSITORIES;
-  const repositories = EMPTY_REPOSITORIES;
   const isElectron = isElectronRenderer();
-  const hasGitHubRepos = false;
   const { startSession, requestSessionDispatch } = useSessionActions();
   const isLeftSidebarHidden = useAtomValue(navigationSidebarHiddenAtom);
   const showNavigationSidebar = useSetAtom(showNavigationSidebarAtom);
@@ -302,7 +269,7 @@ function WorkspaceChatLanding({
 
   const hasLocalProjects = visibleLocalProjectMap.size > 0;
 
-  // ── Context type (Local Projects vs GitHub Worktrees) ──
+  // ── Context type (local project vs no project) ──
   const [contextType, setContextType] = useState<SessionContextType>(
     () => preSelectedContext ?? readChatLandingDefaults(workspaceId)?.contextType ?? 'chat'
   );
@@ -411,30 +378,6 @@ function WorkspaceChatLanding({
     }
   }, []);
 
-  // ── GitHub context state ──
-  const [selectedRepo, setSelectedRepo] = useState<string | undefined>(undefined);
-  const selectedRepoWorktreeSetup = useMemo(() => {
-    if (!selectedRepo) return undefined;
-    return workspaceReposWithStatus?.find((repo) => repo.repoFullName === selectedRepo)
-      ?.worktreeSetup;
-  }, [selectedRepo, workspaceReposWithStatus]);
-  const selectedRepoWorktreeCleanup = useMemo(() => {
-    if (!selectedRepo) return undefined;
-    return workspaceReposWithStatus?.find((repo) => repo.repoFullName === selectedRepo)
-      ?.worktreeCleanup;
-  }, [selectedRepo, workspaceReposWithStatus]);
-  const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
-  const [repoBranches, setRepoBranches] = useState<string[]>([]);
-  const applyGitHubBranchSnapshot = useCallback((snapshot: ChatLandingBranchSnapshot) => {
-    setRepoBranches((prev) =>
-      areChatLandingBranchListsEqual(prev, snapshot.branches) ? prev : snapshot.branches
-    );
-    setSelectedBranch((prev) => {
-      const next = resolveChatLandingBranchSelection(snapshot, prev);
-      return next === prev ? prev : next;
-    });
-  }, []);
-
   // ── Local project context state ──
   const [selectedLocalProject, setSelectedLocalProject] = useState<LocalProjectSelection | null>(
     null
@@ -482,14 +425,7 @@ function WorkspaceChatLanding({
   const activeLocalProjectId = selectedLocalProject?.localProjectId ?? null;
   useEffect(() => {
     setComposerStatus(null);
-  }, [
-    activeLocalProjectId,
-    contextType,
-    selectedAgent?.agentId,
-    selectedBranch,
-    selectedMachineId,
-    selectedRepo,
-  ]);
+  }, [activeLocalProjectId, contextType, selectedAgent?.agentId, selectedMachineId]);
   const handleSelectedLocalProjectChange = useCallback(
     (nextProject: LocalProjectSelection | null) => {
       selectedLocalProjectRef.current = nextProject;
@@ -517,7 +453,7 @@ function WorkspaceChatLanding({
     [visibleLocalProjectMap]
   );
   const shouldRestoreContextType =
-    !preSelectedContext && !preSelectedMachine && !preSelectedProject && !preSelectedRepo;
+    !preSelectedContext && !preSelectedMachine && !preSelectedProject;
   const {
     sessionId: draftSessionId,
     ensureSessionId: ensureDraftSessionId,
@@ -625,7 +561,6 @@ function WorkspaceChatLanding({
     context: preSelectedContext,
     machine: preSelectedMachine,
     project: preSelectedProject,
-    repo: preSelectedRepo,
   });
   useEffect(() => {
     if (preSelectionAppliedRef.current === preSelectionKey) return;
@@ -649,16 +584,12 @@ function WorkspaceChatLanding({
           localProjectId: preSelectedProject as LocalProjectId,
         });
       }
-    } else if (preSelectedRepo) {
-      setContextType('github');
-      setSelectedRepo(preSelectedRepo);
     }
   }, [
     preSelectionKey,
     preSelectedContext,
     preSelectedMachine,
     preSelectedProject,
-    preSelectedRepo,
     handleSelectedLocalProjectChange,
   ]);
 
@@ -675,22 +606,19 @@ function WorkspaceChatLanding({
         contextType,
         machineId: selectedLocalProject?.machineId ?? null,
         localProjectId: selectedLocalProject?.localProjectId ?? null,
-        repoFullName: selectedRepo ?? null,
       }),
-    [contextType, selectedLocalProject, selectedRepo]
+    [contextType, selectedLocalProject]
   );
   const urlNamesSelection =
     preSelectedContext !== undefined ||
     preSelectedMachine !== undefined ||
-    preSelectedProject !== undefined ||
-    preSelectedRepo !== undefined;
+    preSelectedProject !== undefined;
   useEffect(() => {
     if (!onSelectionUrlSync) return;
     const selectionKey = buildChatLandingPreSelectionKey({
       context: selectionSearch.context,
       machine: selectionSearch.machine,
       project: selectionSearch.project,
-      repo: selectionSearch.repo,
     });
     const decision = getChatLandingSelectionSyncDecision({
       urlNamesSelection,
@@ -731,7 +659,7 @@ function WorkspaceChatLanding({
       return;
     toast.error(t('sidebar.localProjects.forbidden', 'Local project is not available'));
     handleSelectedLocalProjectChange(null);
-    setContextType(hasGitHubRepos ? 'github' : 'chat');
+    setContextType('chat');
   }, [
     contextType,
     docMetaCacheReady,
@@ -741,14 +669,12 @@ function WorkspaceChatLanding({
     visibleLocalProjectsLoading,
     visibleLocalMachineId,
     visibleLocalProjectMap,
-    hasGitHubRepos,
     t,
     handleSelectedLocalProjectChange,
   ]);
 
   // ── Auto-switch to available tab if current is disabled ──
   useEffect(() => {
-    if (repositories === undefined) return; // Wait for repos to load
     if (machines.size === 0) return; // Wait for machine data to load
     // `hasLocalProjects` derives from `useVisibleLocalProjects`; switching
     // before its query resolves would kick teammates whose only local access
@@ -757,15 +683,11 @@ function WorkspaceChatLanding({
     // Don't auto-switch away from a URL-pre-selected context
     if (preSelectedContext === 'local' && contextType === 'local') return;
     if (contextType === 'local' && !hasLocalProjects) {
-      setContextType(hasGitHubRepos ? 'github' : 'chat');
-    } else if (contextType === 'github' && !hasGitHubRepos) {
-      setContextType(hasLocalProjects ? 'local' : 'chat');
+      setContextType('chat');
     }
   }, [
     contextType,
     hasLocalProjects,
-    hasGitHubRepos,
-    repositories,
     machines.size,
     preSelectedContext,
     visibleLocalProjectsLoading,
@@ -949,7 +871,7 @@ function WorkspaceChatLanding({
             cliType: selectedConfig.cliType,
             agentType: selectedConfig.agentType,
             // The selected agent's machine — lets the `$` menu surface that
-            // machine's global skills even for GitHub / plain (chat) contexts.
+            // machine's global skills even for project-less chats.
             ...(selectedAgent?.machineId ? { machineId: selectedAgent.machineId } : {}),
           }
         : undefined,
@@ -1114,7 +1036,7 @@ function WorkspaceChatLanding({
   });
 
   // ── Defaults loading (all contexts) ──
-  const { defaultsReady, repoDefaultsReady } = useChatLandingDefaults({
+  const { defaultsReady } = useChatLandingDefaults({
     workspaceId,
     shouldRestoreContextType,
     contextType,
@@ -1124,26 +1046,13 @@ function WorkspaceChatLanding({
     selectableMachines,
     visibleMachinesLoading,
     docMetaCacheReady,
-    repositories,
     selectedAgent,
     setSelectedAgent,
     selectedMachineId,
-    selectedRepo,
-    setSelectedRepo,
-    selectedBranch,
-    setSelectedBranch,
     selectedLocalProject,
     setSelectedLocalProject: handleSelectedLocalProjectChange,
     selectedAgentRoleId: null,
   });
-
-  // ── Auto-select first repo when none selected ──
-  useEffect(() => {
-    if (!repoDefaultsReady) return;
-    if (contextType !== 'github' || selectedRepo) return;
-    const firstRepo = repositories?.[0];
-    if (firstRepo) setSelectedRepo(firstRepo.fullName);
-  }, [contextType, repoDefaultsReady, repositories, selectedRepo]);
 
   // ── Auto-select first local project when none selected ──
   useEffect(() => {
@@ -1219,57 +1128,6 @@ function WorkspaceChatLanding({
       setSelectedAgent(nextSelection);
     }
   }, [contextType, executorConfigs, machines, selectedAgent, selectedLocalProject, workspaceId]);
-
-  // ── GitHub branch loading ──
-  useLayoutEffect(() => {
-    if (contextType !== 'github') return undefined;
-    if (!workspaceId || !selectedRepo) {
-      setRepoBranches([]);
-      setSelectedBranch(null);
-
-      return undefined;
-    }
-
-    const cached = githubBranchesCache.get(getGitHubBranchesCacheId(workspaceId, selectedRepo));
-    if (cached) {
-      applyGitHubBranchSnapshot(cached);
-      return undefined;
-    }
-
-    setRepoBranches((prev) => (prev.length === 0 ? prev : []));
-    return undefined;
-  }, [applyGitHubBranchSnapshot, contextType, selectedRepo, workspaceId]);
-
-  useEffect(() => {
-    if (contextType !== 'github') return undefined;
-    if (!workspaceId || !selectedRepo) return undefined;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await withGitHubTokenRetry(workspaceId, selectedRepo, (token) =>
-          githubFetchBranches(token, selectedRepo)
-        );
-        const snapshot = createChatLandingBranchSnapshot(result.branches, result.defaultBranch);
-        githubBranchesCache.set(getGitHubBranchesCacheId(workspaceId, selectedRepo), {
-          ...snapshot,
-          updatedAt: Date.now(),
-        });
-        if (cancelled) return;
-        applyGitHubBranchSnapshot(snapshot);
-      } catch (error) {
-        if (cancelled) return;
-        console.warn('Failed to load repository branches', error);
-        setSelectedBranch((prev) => {
-          const trimmed = prev?.trim() || null;
-          return trimmed === prev ? prev : trimmed;
-        });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [applyGitHubBranchSnapshot, contextType, selectedRepo, workspaceId]);
 
   // ── Prompt keydown ──
   const handlePromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1469,13 +1327,6 @@ function WorkspaceChatLanding({
       setComposerError(t('chat.validation.missingContext'));
       return;
     }
-    const githubBranch = selectedBranch?.trim() || '';
-    // Only require branch selection when the repo actually has branches.
-    // Empty repos have no branches, but sessions can still be created.
-    if (contextType === 'github' && !githubBranch && repoBranches.length > 0) {
-      setComposerError(t('chat.validation.missingBranch'));
-      return;
-    }
     const sessionIdForStart = draftSessionId ?? ensureDraftSessionId();
     try {
       setSubmitting(true);
@@ -1488,7 +1339,6 @@ function WorkspaceChatLanding({
       }
 
       let project: ProjectRef | undefined;
-      let repoFullNameForMentions: string | undefined;
 
       if (contextType === 'local' && !selectedLocalProject) {
         setComposerError(t('chat.validation.missingProject', 'Please select a project'));
@@ -1501,18 +1351,9 @@ function WorkspaceChatLanding({
 
       if (contextType === 'local' && selectedLocalProject) {
         project = { kind: 'local', localProjectId: selectedLocalProject.localProjectId };
-      } else if (contextType === 'github' && selectedRepo) {
-        project = { kind: 'github', repoFullName: selectedRepo, branch: githubBranch };
-        repoFullNameForMentions = selectedRepo;
       }
 
-
       const promptPayload = buildAgentPrompt(promptText, selectedConfig.prompt ?? '');
-      const issuePRMentions = extractIssuePRMentionsFromText(
-        promptText,
-        knownIssuePrItems,
-        repoFullNameForMentions
-      );
       const inputConfig = buildSessionTurnInputConfig({
         inputBlocks,
         prompt: promptPayload,
@@ -1521,7 +1362,6 @@ function WorkspaceChatLanding({
         modeId: modeOptions.length > 0 ? (selectedModeId ?? undefined) : undefined,
         modelId: modelOptions.length > 0 ? (selectedModelId ?? undefined) : undefined,
         configOptionValues: dispatchConfigOptionValues,
-        issuePRMentions,
         mcpServerIds: mcpSelection.selectedIds,
         agentRoleId: null,
       });
@@ -1590,17 +1430,7 @@ function WorkspaceChatLanding({
           machineId: selectedAgent.machineId,
           agentConfigId: selectedAgent.agentId,
           env: selectedConfig.env,
-          repoFullName: repoFullNameForMentions,
           project,
-          worktreeSetup:
-            contextType === 'github' && selectedRepoWorktreeSetup
-              ? selectedRepoWorktreeSetup
-              : undefined,
-          worktreeCleanup:
-            contextType === 'github' && selectedRepoWorktreeCleanup
-              ? selectedRepoWorktreeCleanup
-              : undefined,
-          branchName: contextType === 'github' ? githubBranch : undefined,
           title: draftTitle,
           titleSource: draftTitle ? 'draft' : undefined,
         },
@@ -1708,20 +1538,12 @@ function WorkspaceChatLanding({
     if (contextType === 'local' && selectedLocalProject) {
       return { kind: 'local', ...selectedLocalProject };
     }
-    if (contextType === 'github' && selectedRepo) {
-      return { kind: 'github', repoFullName: selectedRepo };
-    }
     return { kind: 'none' };
-  }, [contextType, selectedLocalProject, selectedRepo]);
+  }, [contextType, selectedLocalProject]);
   const handleDesktopProjectChange = useCallback(
     (selection: UnifiedProjectSelection) => {
       if (selection.kind === 'none') {
         setContextType('chat');
-        return;
-      }
-      if (selection.kind === 'github') {
-        setSelectedRepo(selection.repoFullName);
-        setContextType('github');
         return;
       }
       handleSelectedLocalProjectChange({
@@ -1792,7 +1614,7 @@ function WorkspaceChatLanding({
     <ErrorBoundary
       name="ChatLandingTopSelector"
       variant="inline"
-      resetKeys={[workspaceId, selectedRepo, selectedLocalProject, selectedMachineId, contextType]}
+      resetKeys={[workspaceId, selectedLocalProject, selectedMachineId, contextType]}
       fallbackRender={({ resetErrorBoundary }) => (
         <Button
           type="button"
@@ -1820,8 +1642,6 @@ function WorkspaceChatLanding({
           value={desktopProjectSelection}
           onChange={handleDesktopProjectChange}
           localProjects={desktopLocalProjectOptions}
-          repositories={repositories}
-          latestMessageAtByRepo={projectRecency.byRepo}
           onAddLocalProject={handleAddLocalProject}
           renderLimit={UNIFIED_PROJECT_OPTION_RENDER_LIMIT}
         />
@@ -1910,11 +1730,6 @@ function WorkspaceChatLanding({
   };
 
   // ── Mention source ──
-  const isSelectedRepoPublic = useMemo(() => {
-    if (!selectedRepo) return undefined;
-    const repo = freshRepositories?.find((r) => r.fullName === selectedRepo);
-    return repo ? !repo.private : undefined;
-  }, [freshRepositories, selectedRepo]);
   const preparationMachineId = useMemo(() => {
     if (!selectedAgent) return null;
     const candidateMachineId =
@@ -1933,20 +1748,12 @@ function WorkspaceChatLanding({
   ]);
   const preparationProject = useMemo<ProjectRef | undefined>(() => {
     if (contextType === 'chat') return undefined;
-    if (contextType === 'github') {
-      const branch = selectedBranch?.trim();
-      if (!selectedRepo || !branch) return undefined;
-      return { kind: 'github', repoFullName: selectedRepo, branch };
-    }
     if (!selectedLocalProject || selectedLocalProject.machineId !== preparationMachineId) {
       return undefined;
     }
     return { kind: 'local', localProjectId: selectedLocalProject.localProjectId };
-  }, [contextType, preparationMachineId, selectedBranch, selectedLocalProject, selectedRepo]);
-  const preparationContextReady =
-    contextType === 'chat' ||
-    (contextType === 'github' && preparationProject?.kind === 'github') ||
-    (contextType === 'local' && preparationProject?.kind === 'local');
+  }, [contextType, preparationMachineId, selectedLocalProject]);
+  const preparationContextReady = contextType === 'chat' || preparationProject?.kind === 'local';
   const preparationRunConfig = useMemo(
     () =>
       buildSessionPreparationRunConfig({
@@ -1988,30 +1795,20 @@ function WorkspaceChatLanding({
   });
 
   const mentionSource = useMemo(() => {
-    if (contextType === 'chat') return undefined;
-    if (contextType === 'local' && selectedLocalProject && workspaceId) {
-      return {
-        kind: 'local' as const,
-        machineId: selectedLocalProject.machineId,
-        workspaceId,
-        localProjectId: selectedLocalProject.localProjectId,
-      };
-    }
-    return { kind: 'github' as const, repoFullName: selectedRepo, isPublic: isSelectedRepoPublic };
-  }, [contextType, isSelectedRepoPublic, selectedLocalProject, selectedRepo, workspaceId]);
+    if (contextType !== 'local' || !selectedLocalProject || !workspaceId) return undefined;
+    return {
+      kind: 'local' as const,
+      machineId: selectedLocalProject.machineId,
+      workspaceId,
+      localProjectId: selectedLocalProject.localProjectId,
+    };
+  }, [contextType, selectedLocalProject, workspaceId]);
   const expandSkillMentionsForPrompt = useMentionPromptExpansion({
     source: mentionSource,
     skillAgent,
     promptValue: prompt,
   });
   const promptPlaceholder = t('composer.promptPlaceholder.base', 'Describe a design or a change…');
-  const issuePrRepoFullName = contextType === 'github' ? selectedRepo : undefined;
-  const issuePrRepoIsPublic = contextType === 'github' ? isSelectedRepoPublic : undefined;
-
-  const { knownItems: knownIssuePrItems } = useKnownIssuePrItems(
-    issuePrRepoFullName,
-    issuePrRepoIsPublic
-  );
 
   const hasSendableContent = prompt.trim().length > 0 || hasUploadedImages || hasUploadedFiles;
   const submitDisabled = getChatLandingSubmitDisabled({

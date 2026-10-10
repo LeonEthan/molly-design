@@ -1,14 +1,5 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
-import {
-  FileDiff,
-  Files,
-  GitPullRequest,
-  Loader2,
-  MessageSquare,
-  MonitorPlay,
-  Plus,
-  X,
-} from 'lucide-react';
+import { FileDiff, Files, Loader2, MessageSquare, MonitorPlay, Plus, X } from 'lucide-react';
 import { FileIcon } from '@/components/icons/file-icons';
 import { ScrollArea } from '@/ui/scroll-area';
 import {
@@ -24,7 +15,7 @@ import { WINDOW_DRAG_EXEMPT_CLASS, useWindowDragRegionClass } from '@/ui/window-
 export type SessionSidePanelTabItem = {
   id: string;
   label: string;
-  kind: 'design' | 'files' | 'changes' | 'pr' | 'browser' | 'session' | 'file' | 'diff';
+  kind: 'design' | 'files' | 'changes' | 'browser' | 'session' | 'file' | 'diff';
   filePath?: string;
   closeable?: boolean;
   dirty?: boolean;
@@ -35,8 +26,8 @@ export type SessionSidePanelTabItem = {
 };
 
 export type SessionSidePanelOption = Omit<SessionSidePanelTabItem, 'id' | 'kind'> & {
-  id: 'design' | 'files' | 'changes' | 'pr' | 'browser' | 'side-session';
-  kind: 'design' | 'files' | 'changes' | 'pr' | 'browser' | 'session';
+  id: 'design' | 'files' | 'changes' | 'browser' | 'side-session';
+  kind: 'design' | 'files' | 'changes' | 'browser' | 'session';
 };
 
 const SIDE_SESSION_PANEL_PREFIX = 'side-session:';
@@ -155,8 +146,6 @@ function SidePanelTabIcon({ tab }: { tab: SessionSidePanelTabItem }) {
     case 'changes':
     case 'diff':
       return <FileDiff className="h-3.5 w-3.5 opacity-70" />;
-    case 'pr':
-      return <GitPullRequest className="h-3.5 w-3.5 opacity-70" />;
     case 'browser':
       return <MonitorPlay className="h-3.5 w-3.5 opacity-70" />;
     case 'session':

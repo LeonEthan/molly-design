@@ -21,9 +21,6 @@ export const deriveRepoIdFromGitHubRepo = (repo: string): RepoId => {
   return `github---${owner.toLowerCase()}---${repoName.toLowerCase()}` as RepoId;
 };
 
-export const buildGitHubCloneUrl = (repo: string): string =>
-  `https://github.com/${normalizeGitHubRepo(repo)}.git`;
-
 export const redactUrlAuth = (raw: string): string => {
   try {
     const url = new URL(raw);

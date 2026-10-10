@@ -1,12 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import {
   AlarmClock,
   ChevronDown,
-  CircleCheck,
-  CircleDot,
-  CircleMinus,
-  CircleX,
   Clock,
   Folder,
   GitBranch,
@@ -18,17 +14,12 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
-  getSessionPullRequestLegacyFields,
   isSessionGoalCleared,
   isSessionGoalResumable,
-  parseGitHubPrNumber,
   sanitizeGoalObjective,
-  type GitHubMergeMethod,
   type PendingScheduledTask,
-  type PrStatus,
   type SessionGoalCommand,
   type SessionGoalMessage,
-  type SessionPullRequestMeta,
 } from '@molly/shared';
 import { cn } from '@/lib/utils';
 import { Button } from '@/ui/button';
@@ -38,7 +29,6 @@ import { formatDurationCompact, type DurationUnitLabels } from '@/lib/format-dur
 import { ClusterChip, StageChip } from './info-chip';
 import { WorktreeIcon } from '@/components/icons/worktree-icon';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
-import { Popover, PopoverAnchor, PopoverContent } from '@/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,9 +37,7 @@ import {
 } from '@/ui/dropdown-menu';
 import { GoalActionButton, formatTokensCompact } from './session-goal-banner';
 import { ScheduledTaskList, useResolvedScheduledTasks } from './scheduled-tasks-panel';
-import { PR_STATUS_META } from './pull-request-badge';
 import { useSessionStatusPresentation, type SessionStatusStripState } from './session-status-strip';
-import { PrMergeButton } from './pr-merge-button';
 
 /**
  * Shared contract: the bar renders each item either collapsed in the cluster
@@ -328,26 +316,6 @@ export function ScheduleChip({
 
 /* ── PR / repo context ───────────────────────────────────────────────── */
 
-const PR_STATUS_TEXT: Record<PrStatus, string> = {
-  open: 'text-github-open',
-  merged: 'text-github-merged',
-  closed: 'text-github-closed',
-  draft: 'text-github-draft',
-};
-
-/**
- * The session's work context. Cluster = the PR status icon + "#1234" (the
- * icon alone conveys open/merged/closed — no state text); with no PR it
- * falls back to a branch icon. Stage adds project · branch · ±diff and the CI
- * verdict pill (only visible here, when the PR is expanded). Its controls are
- * intentionally separate: PR opens PR details, branch copies the branch name,
- * and ±diff opens All Changes.
- */
-// 'worktree' / 'folder' are the on-disk layout of a LOCAL project. A GitHub
-// project is always checked out as an isolated worktree, so its worktree-ness
-// carries no information; 'github-worktree' surfaces the GitHub identity instead
-// (a GitHub glyph rather than the redundant worktree mark), matching the sidebar
-// where the worktree badge is suppressed for GitHub sessions.
 export type WorkspaceLocationKind = 'worktree' | 'folder' | 'github-worktree';
 
 export type ContextChipStandardAction = {
@@ -358,39 +326,12 @@ export type ContextChipStandardAction = {
   disabled?: boolean;
 };
 
-export type ContextChipMergeAction = {
-  kind: 'merge';
-  id: 'merge';
-  method: GitHubMergeMethod;
-  isMerging?: boolean;
-  disabled?: boolean;
-  onMerge: (method: GitHubMergeMethod) => void | Promise<void>;
-  onSelectMethod: (method: GitHubMergeMethod) => void;
-};
-
-export type ContextChipAction = ContextChipStandardAction | ContextChipMergeAction;
+export type ContextChipAction = ContextChipStandardAction;
 
 function ContextChipActions({ actions }: { actions: readonly ContextChipAction[] }) {
   const { t } = useTranslation();
   const [primaryAction, ...overflowActions] = actions;
   if (!primaryAction) return null;
-
-  if (primaryAction.kind === 'merge') {
-    return (
-      <PrMergeButton
-        compact
-        method={primaryAction.method}
-        isMerging={primaryAction.isMerging}
-        disabled={primaryAction.disabled}
-        onMerge={primaryAction.onMerge}
-        onSelectMethod={primaryAction.onSelectMethod}
-      />
-    );
-  }
-
-  const standardOverflowActions = overflowActions.filter(
-    (action): action is ContextChipStandardAction => action.kind !== 'merge'
-  );
 
   return (
     <div className="flex shrink-0 items-center overflow-hidden rounded-md border border-foreground/[0.08] bg-foreground/[0.03] dark:border-transparent dark:bg-muted-foreground/[0.08]">
@@ -403,7 +344,7 @@ function ContextChipActions({ actions }: { actions: readonly ContextChipAction[]
       >
         <span className="truncate">{primaryAction.label}</span>
       </button>
-      {standardOverflowActions.length > 0 ? (
+      {overflowActions.length > 0 ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -416,7 +357,7 @@ function ContextChipActions({ actions }: { actions: readonly ContextChipAction[]
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end" sideOffset={6}>
-            {standardOverflowActions.map((action) => (
+            {overflowActions.map((action) => (
               <DropdownMenuItem
                 key={action.id}
                 disabled={action.disabled}
@@ -515,11 +456,7 @@ export function ContextChip({
   projectName,
   branch,
   workspaceLocation,
-  pr,
-  onOpenPr,
   actions,
-  prCiRuns,
-  onOpenPrCiRun,
   ...itemMode
 }: {
   projectName?: string | null;
@@ -529,25 +466,14 @@ export function ContextChip({
    *  it a click-to-copy control for `path`. Omit for remote/repo-only sessions
    *  that have no local path to surface (leading icon stays an inert branch). */
   workspaceLocation?: { kind: WorkspaceLocationKind; path?: string | null } | null;
-  pr?: SessionPullRequestMeta | null;
-  onOpenPr?: () => void;
   /** Agent-driven PR/worktree actions pinned after the context summary. */
   actions?: readonly ContextChipAction[];
   /** Open the complete working-tree diff. */
-  prCiRuns?: readonly PrCiRun[];
-  onOpenPrCiRun?: (run: PrCiRun) => void;
 } & InfoBarItemMode) {
   const { t } = useTranslation();
   const trimmedBranch = branch?.trim() || '';
-  if (!pr && !projectName && !trimmedBranch && !actions?.length) return null;
+  if (!projectName && !trimmedBranch && !actions?.length) return null;
 
-  const status: PrStatus | null = pr ? (pr.status ?? 'open') : null;
-  const statusMeta = status ? (PR_STATUS_META[status] ?? PR_STATUS_META.open) : null;
-  // The neutral leading glyph reflects the session's location/identity: the
-  // GitHub mark for a GitHub session (always a worktree, so its worktree-ness is
-  // noise), a worktree mark for a local worktree, a folder for a local folder,
-  // else a plain branch icon — matching the sidebar's GitHub-suppressed worktree
-  // badge so the identity reads the same everywhere.
   const LocationIcon =
     workspaceLocation?.kind === 'github-worktree'
       ? Github
@@ -556,19 +482,7 @@ export function ContextChip({
         : workspaceLocation?.kind === 'folder'
           ? Folder
           : GitBranch;
-  // Expanded icon reflects PR state (open/merged/closed) or the location when
-  // there is no PR; the COLLAPSED chip is always a neutral location icon so the
-  // cluster stays uniform-width (the "#1234" label lived only here and caused
-  // the layout jump on hand-off).
-  const StatusIcon = statusMeta?.icon ?? LocationIcon;
-  const statusText = status ? PR_STATUS_TEXT[status] : '';
-  const prNumber = pr
-    ? (getSessionPullRequestLegacyFields(pr).number ?? parseGitHubPrNumber(pr.url))
-    : null;
-  const value = pr ? (prNumber ? `#${prNumber}` : 'PR') : undefined;
-  const label = pr
-    ? t('sessions.pr.openTab', 'Open pull request')
-    : trimmedBranch || projectName || t('sessions.infoBar.context', 'Work context');
+  const label = trimmedBranch || projectName || t('sessions.infoBar.context', 'Work context');
 
   if (itemMode.mode === 'cluster') {
     return <ClusterChip icon={LocationIcon} label={label} onPromote={itemMode.onPromote} />;
@@ -583,33 +497,6 @@ export function ContextChip({
       }
     });
   };
-
-  const prControl = pr ? (
-    onOpenPr ? (
-      <button
-        type="button"
-        onClick={onOpenPr}
-        aria-label={t('sessions.pr.openTab', 'Open pull request')}
-        title={t('sessions.pr.openTab', 'Open pull request')}
-        className={cn(
-          'flex h-6 shrink-0 select-none items-center gap-1 rounded-md px-1 text-xs font-semibold transition-colors hover:bg-muted-foreground/10',
-          statusText
-        )}
-      >
-        <StatusIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        {value ? (
-          <span className="hidden shrink-0 tabular-nums @[420px]:inline">{value}</span>
-        ) : null}
-      </button>
-    ) : (
-      <span className={cn('flex h-6 shrink-0 items-center gap-1 px-1 font-semibold', statusText)}>
-        <StatusIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        {value ? (
-          <span className="hidden shrink-0 tabular-nums @[420px]:inline">{value}</span>
-        ) : null}
-      </span>
-    )
-  ) : undefined;
 
   const summary = (
     <span className="flex min-w-0 items-center gap-2 font-normal">
@@ -636,224 +523,16 @@ export function ContextChip({
 
   return (
     <StageChip
-      icon={StatusIcon}
-      // No PR: the leading icon IS the worktree/folder glyph, so make it the
-      // interactive copy control. When a PR takes the leading (status) icon, the
-      // control rides in the `leading` slot instead so both stay reachable.
-      iconOverride={pr ? prControl : (locationControl ?? undefined)}
+      icon={LocationIcon}
+      iconOverride={locationControl ?? undefined}
       label={label}
       textClassName="text-muted-foreground"
       summary={summary}
-      leading={
-        pr ? (
-          <>
-            {/* CI pill stays adjacent to the PR number; the location control
-                trails it, sitting right before the repo/branch summary. */}
-            <span className="hidden @[420px]:contents">
-              <PrCiPill runs={prCiRuns} onOpenRun={onOpenPrCiRun} />
-            </span>
-            {locationControl}
-          </>
-        ) : undefined
-      }
       trailing={actions?.length ? <ContextChipActions actions={actions} /> : undefined}
     />
   );
 }
 
-/* ── PR CI checks ────────────────────────────────────────────────────── */
-
-export type PrCiRunStatus = 'success' | 'failure' | 'running' | 'queued' | 'skipped';
-
-export type PrCiRun = {
-  name: string;
-  status: PrCiRunStatus;
-  durationMs?: number;
-  url?: string;
-};
-
-export type PrCiOverall = 'passing' | 'failing' | 'running';
-
-/** Failure dominates; anything still in flight means running; else passing. */
-export function summarizePrCiRuns(runs: readonly PrCiRun[]): PrCiOverall {
-  if (runs.some((run) => run.status === 'failure')) return 'failing';
-  if (runs.some((run) => run.status === 'running' || run.status === 'queued')) return 'running';
-  return 'passing';
-}
-
-export const PR_CI_RUN_ICON: Record<
-  PrCiRunStatus,
-  { Icon: typeof CircleCheck; className: string }
-> = {
-  success: { Icon: CircleCheck, className: 'text-status-success' },
-  failure: { Icon: CircleX, className: 'text-destructive' },
-  running: { Icon: CircleDot, className: 'text-status-warning' },
-  queued: { Icon: CircleDot, className: 'text-muted-foreground' },
-  skipped: { Icon: CircleMinus, className: 'text-muted-foreground/70' },
-};
-
-export function usePrCiPresentation(runs: readonly PrCiRun[]) {
-  const { t } = useTranslation();
-  const overall = summarizePrCiRuns(runs);
-  const settled = runs.filter((run) => run.status !== 'running' && run.status !== 'queued').length;
-  const overallLabel =
-    overall === 'passing'
-      ? t('sessions.prCi.passing', 'CI passed')
-      : overall === 'failing'
-        ? t('sessions.prCi.failing', 'CI failed')
-        : t('sessions.prCi.running', 'CI running');
-  const toneClassName =
-    overall === 'passing'
-      ? 'text-status-success'
-      : overall === 'failing'
-        ? 'text-destructive'
-        : 'text-status-warning';
-  const tintClassName =
-    overall === 'passing'
-      ? 'bg-status-success/12'
-      : overall === 'failing'
-        ? 'bg-destructive/12'
-        : 'bg-status-warning/12';
-  const VerdictIcon =
-    overall === 'passing' ? CircleCheck : overall === 'failing' ? CircleX : CircleDot;
-  return { overall, settled, overallLabel, toneClassName, tintClassName, VerdictIcon };
-}
-
-function PrCiPopoverBody({
-  runs,
-  onOpenRun,
-}: {
-  runs: readonly PrCiRun[];
-  onOpenRun?: (run: PrCiRun) => void;
-}) {
-  const { t } = useTranslation();
-  const durationUnitLabels: DurationUnitLabels = {
-    hour: t('time.unitShort.hour', 'h'),
-    minute: t('time.unitShort.minute', 'm'),
-    second: t('time.unitShort.second', 's'),
-  };
-  const { settled, overallLabel, toneClassName } = usePrCiPresentation(runs);
-  return (
-    <div className="flex flex-col gap-1.5 p-3">
-      <div className="flex items-center gap-1.5 text-xs">
-        <span className={cn('font-medium', toneClassName)}>{overallLabel}</span>
-        <span className="text-muted-foreground">
-          · {settled}/{runs.length}
-        </span>
-      </div>
-      <ul className="scrollbar-pro flex max-h-56 flex-col overflow-y-auto text-xs">
-        {runs.map((run) => {
-          const { Icon: RunIcon, className: runClassName } = PR_CI_RUN_ICON[run.status];
-          const duration =
-            run.durationMs != null && run.durationMs > 0
-              ? formatDurationCompact(run.durationMs, durationUnitLabels)
-              : null;
-          const row = (
-            <>
-              <RunIcon className={cn('h-3.5 w-3.5 shrink-0', runClassName)} aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-foreground">{run.name}</span>
-              {duration ? (
-                <span className="shrink-0 tabular-nums text-muted-foreground">{duration}</span>
-              ) : null}
-            </>
-          );
-          return (
-            <li key={run.name}>
-              {run.url && onOpenRun ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenRun(run)}
-                  className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-muted-foreground/10"
-                >
-                  {row}
-                </button>
-              ) : (
-                <span className="flex w-full items-center gap-2 px-1.5 py-1">{row}</span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
-
-/**
- * PR CI verdict as a compact "CI" text pill. It only appears INSIDE the PR
- * context when that item is expanded on the stage (never a standalone cluster
- * icon). The pill is tinted by verdict (green passing / red failing / amber
- * running, with "done/total" while running); a single click opens the
- * check-run list.
- */
-export function PrCiPill({
-  runs,
-  onOpenRun,
-}: {
-  runs: readonly PrCiRun[] | undefined;
-  /** Open a check run (e.g. its GitHub Actions page). */
-  onOpenRun?: (run: PrCiRun) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const anchorRef = useRef<HTMLButtonElement>(null);
-  const hasRuns = !!runs && runs.length > 0;
-  const presentation = usePrCiPresentation(hasRuns ? runs! : []);
-  if (!hasRuns) return null;
-
-  const { overall, settled, overallLabel, toneClassName, tintClassName, VerdictIcon } =
-    presentation;
-  const label = `${t('sessions.prCi.label', 'CI checks')} · ${overallLabel}`;
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverAnchor asChild>
-        <button
-          ref={anchorRef}
-          type="button"
-          aria-label={label}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          title={label}
-          onClick={() => setOpen((value) => !value)}
-          className={cn(
-            'flex h-5 shrink-0 select-none items-center gap-1 rounded px-1.5 text-[11px] font-semibold uppercase tracking-wide',
-            tintClassName,
-            toneClassName
-          )}
-        >
-          <VerdictIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
-          CI
-          {overall === 'running' ? (
-            <span className="tabular-nums">
-              {settled}/{runs!.length}
-            </span>
-          ) : null}
-          <ChevronDown
-            className={cn('h-3 w-3 shrink-0 opacity-60 transition-transform', open && 'rotate-180')}
-            aria-hidden="true"
-          />
-        </button>
-      </PopoverAnchor>
-      <PopoverContent
-        side="top"
-        align="start"
-        sideOffset={8}
-        aria-label={t('sessions.prCi.label', 'CI checks')}
-        onPointerDownOutside={(event) => {
-          const target = event.target as Node | null;
-          if (target && anchorRef.current?.contains(target)) {
-            event.preventDefault();
-          }
-        }}
-        className="w-96 max-w-[min(24rem,90vw)] border-border/60 p-0 shadow-xl"
-      >
-        <PrCiPopoverBody runs={runs!} onOpenRun={onOpenRun} />
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Stable identity signature for the schedule set (drives recency focus). */
 export function useScheduledTaskSignature(
   tasks: readonly PendingScheduledTask[] | undefined
 ): string | null {

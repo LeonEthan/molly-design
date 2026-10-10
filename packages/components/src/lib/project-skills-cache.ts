@@ -1,12 +1,11 @@
 import { KNOWN_SKILL_DIRS_VERSION, type ProjectSkillGroup } from '@molly/shared';
 
-export type ProjectSkillsCacheSource = 'local' | 'github' | 'global';
+export type ProjectSkillsCacheSource = 'local' | 'global';
 
 export type ProjectSkillsCacheEntry = {
   key: string;
   groups: ProjectSkillGroup[];
   source: ProjectSkillsCacheSource;
-  commitSha?: string;
   contentFingerprint?: string;
   knownDirsVersion: number;
   fetchedAt: number;
@@ -43,26 +42,11 @@ export function getLocalProjectSkillsCacheKey(
   ].join(':');
 }
 
-export function getGitHubProjectSkillsCacheKey(
-  userId: string,
-  workspaceId: string,
-  repoFullName: string
-): string {
-  return [
-    'user',
-    cacheKeyPart(userId, 'userId'),
-    'workspace',
-    cacheKeyPart(workspaceId, 'workspaceId'),
-    'github',
-    cacheKeyPart(repoFullName.toLowerCase(), 'repoFullName'),
-  ].join(':');
-}
-
 /**
  * Machine-global skills are keyed by `(user, workspace, machine)`: independent
- * of any project/repo, but still scoped to the current Molly auth principal.
- * Used so a GitHub or plain-agent chat can surface the running machine's global
- * skills without re-scanning per project.
+ * of any project, but still scoped to the current Molly auth principal.
+ * Used so a project-less chat can surface the running machine's global skills
+ * without re-scanning per project.
  */
 export function getMachineGlobalSkillsCacheKey(
   userId: string,

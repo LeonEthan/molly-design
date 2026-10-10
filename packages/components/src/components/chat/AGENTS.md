@@ -8,13 +8,14 @@ Index and rationale: [README.md](README.md).
 - `attachment-add-menu.tsx` owns the single composer "+" menu and per-turn MCP
   selection (`ChatComposer mcp` → `AttachmentAddMenuMcp`), never the footer row.
   MCP uses a hover submenu. Toggling keeps it open; an empty catalog hides the entry.
-- Desktop project pickers use DropdownMenu with local/GitHub projects by recency.
-  Pin no-project/add-local/connect-GitHub actions; mount at most 20 rows (most
+- Desktop project pickers use DropdownMenu with local projects by recency.
+  Pin no-project/add-local actions; mount at most 20 rows (most
   recent if empty, first matches from all options if searching). Scope order:
   machine → project. New local design sessions run directly in that directory;
   no branch discovery, worktree preference restore, or branch/worktree controls.
-  Existing worktree Sessions keep their runtime semantics. GitHub projects
-  are machine-independent. Machine changes filter local projects/configs and clear
+  Local worktree creation remains available through MCP; existing worktree Sessions
+  keep their runtime semantics. Historical GitHub defaults fall back to chat.
+  Machine changes filter local projects/configs and clear
   incompatible local projects without replacement.
 - Desktop landing format tiles under the heading and the footer size chip share one
   canvas draft and screen preset list (`canvas-size-selector.tsx`); only the chip

@@ -4744,6 +4744,15 @@ export class SessionExecutionService {
       (await this.deps.workspaceDocument.getOrCreateSessionDoc(sessionId));
 
     const existingMeta = await sessionDoc.getMetaState();
+    if (
+      project?.kind === 'github' &&
+      (existingMeta?.project?.kind !== 'github' ||
+        existingMeta.project.repoFullName !== project.repoFullName ||
+        !existingMeta.isWorktree ||
+        !existingMeta.branchName?.trim())
+    ) {
+      throw new Error('GitHub repository projects are retired; use a local project.');
+    }
     // A persisted ACP session id proves that this direct local Session has run
     // before. It can later be re-initialized when that ACP session is no longer
     // resumable. Its stored branch was only a snapshot from the original
@@ -4811,6 +4820,7 @@ export class SessionExecutionService {
       env,
       githubRepo: githubRepoFullName,
       branch,
+      restoreBranchName: project?.kind === 'github' ? existingMeta?.branchName : undefined,
       project,
       worktreeSetup: message.worktreeSetup,
       worktreeCleanup: message.worktreeCleanup,

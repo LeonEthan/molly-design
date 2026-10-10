@@ -8,10 +8,6 @@ import {
   type PathSuggestion,
 } from '@/components/mentions/file-at-mention';
 import {
-  getIssuePrSuggestions,
-  type ItemSuggestion as IssuePrSuggestion,
-} from '@/components/mentions/issue-pr-hash-mention';
-import {
   SKILL_MENTION_TRIGGER,
   selectSkillMentionCandidates,
   type SkillMentionItem,
@@ -30,24 +26,9 @@ export const MENTION_TRIGGER = '@';
 /** Per-category cap when one query is answered across every category. */
 export const AGGREGATE_LIMIT_PER_CATEGORY = 4;
 
-export type MentionCategoryId =
-  | 'file'
-  | 'issue'
-  | 'pr'
-  | 'skill'
-  | 'command'
-  | 'session'
-  | 'agent_role';
+export type MentionCategoryId = 'file' | 'skill' | 'command' | 'session' | 'agent_role';
 
-export type MentionIcon =
-  | 'file'
-  | 'dir'
-  | 'issue'
-  | 'pr'
-  | 'skill'
-  | 'command'
-  | 'session'
-  | 'agent_role';
+export type MentionIcon = 'file' | 'dir' | 'skill' | 'command' | 'session' | 'agent_role';
 
 export type MentionCategoryStatus = 'ready' | 'loading' | 'error';
 
@@ -168,7 +149,7 @@ export type MentionMenuView =
       categories: MentionCategory[];
       groups: MentionCandidateGroup[];
     }
-  /** `@issue:foo` — second level, scoped to one category. */
+  /** `@file:foo` — second level, scoped to one category. */
   | {
       level: 'category';
       category: MentionCategory;
@@ -347,33 +328,6 @@ export function buildFileCandidates(
   return applyLimit(getSuggestions(index, term), limit).map(toFileCandidate);
 }
 
-export function toIssuePrCandidate(item: IssuePrSuggestion): MentionCandidate {
-  return {
-    value: item.token,
-    label: item.label,
-    // `#123` keeps its GitHub meaning in the prompt.
-    insertText: item.token,
-    kind: item.type,
-    icon: item.type,
-    title: item.title,
-    trailing: item.token,
-  };
-}
-
-/**
- * Issues and PRs share one cache but rank separately, so each category ranks
- * over its own slice — the shared ranking caps its result set, and ranking the
- * merged list first would let one type starve the other. `scoped` is that
- * slice, partitioned once by the caller rather than per keystroke.
- */
-export function buildIssuePrCandidates(
-  scoped: IssuePrSuggestion[],
-  term: string,
-  limit?: number
-): MentionCandidate[] {
-  return applyLimit(getIssuePrSuggestions(scoped, term), limit).map(toIssuePrCandidate);
-}
-
 /** i18n'd labels for the skill detail panel, supplied by `useMentionCategories`. */
 export type SkillDetailLabels = {
   author: string;
@@ -512,9 +466,6 @@ export type MentionCategorySources = {
     index: FileSuggestionIndex | null;
     notice?: string;
   };
-  issuePr?: SourceState & {
-    suggestions: readonly IssuePrSuggestion[];
-  };
   skill?: SourceState & {
     items: readonly SkillMentionItem[];
     allowedDirs: ReadonlySet<string> | null;
@@ -537,18 +488,7 @@ export type MentionSourceKey = keyof MentionCategorySources;
  */
 export function useMentionCategories(sources: MentionCategorySources): MentionCategory[] {
   const { t } = useTranslation();
-  const { file, issuePr, skill, command, session } = sources;
-
-  // Partitioned once: the cache holds both types, and re-splitting it inside
-  // `getCandidates` would walk the whole list twice on every keystroke.
-  const issueSuggestions = React.useMemo(
-    () => (issuePr?.enabled ? issuePr.suggestions.filter((item) => item.type === 'issue') : []),
-    [issuePr]
-  );
-  const prSuggestions = React.useMemo(
-    () => (issuePr?.enabled ? issuePr.suggestions.filter((item) => item.type === 'pr') : []),
-    [issuePr]
-  );
+  const { file, skill, command, session } = sources;
   return React.useMemo(() => {
     const categories: MentionCategory[] = [];
 
@@ -561,25 +501,6 @@ export function useMentionCategories(sources: MentionCategorySources): MentionCa
         ...sourceCategoryFields('file', file),
         notice: file.notice,
         getCandidates: (term, limit) => buildFileCandidates(file.index, term, limit),
-      });
-    }
-
-    if (issuePr?.enabled) {
-      categories.push({
-        id: 'issue',
-        namespace: 'issue',
-        label: t('mention.category.issue.label', 'Issues'),
-        icon: 'issue',
-        ...sourceCategoryFields('issuePr', issuePr),
-        getCandidates: (term, limit) => buildIssuePrCandidates(issueSuggestions, term, limit),
-      });
-      categories.push({
-        id: 'pr',
-        namespace: 'pr',
-        label: t('mention.category.pr.label', 'Pull Requests'),
-        icon: 'pr',
-        ...sourceCategoryFields('issuePr', issuePr),
-        getCandidates: (term, limit) => buildIssuePrCandidates(prSuggestions, term, limit),
       });
     }
 
@@ -646,5 +567,5 @@ export function useMentionCategories(sources: MentionCategorySources): MentionCa
     }
 
     return categories;
-  }, [command, file, issuePr, issueSuggestions, prSuggestions, session, skill, t]);
+  }, [command, file, session, skill, t]);
 }

@@ -9,6 +9,8 @@ Translation: current
 
 [English](graphic-design-platform.md)
 
+新会话仅接受本地项目或普通会话；GitHub 仓库选择、克隆、自动 fetch、Issue/PR 提及及 PR 标签页和徽章退出。保留本地 worktree 创建、设置与清理，以及 `molly_session_*` / `molly_operation_*` 子代理编排工具。历史 GitHub 会话和文件保持可读；运行恢复只使用已有本地仓库和记录分支，缺失时明确报错，不创建替代仓库或删除幸存文件。Files、旧回合 diff 和浏览器预览继续保留。
+
 2026-09-21 起退役 Linux 桌面支持。正式发布范围仍为 macOS arm64；Intel macOS 与 Windows 保留本地实验构建。下文 Linux 构建证据保留为历史事实；Ubuntu CI 与跨平台 Bento 资源检查不表示桌面支持。
 
 产品只保留桌面交互，包括窄 Electron 窗口；移动端导航、触摸手势和键盘适配退出。新回合不采集代码 diff、派生 All Changes 或运行 PR/commit/push 后台工作。既有代码历史的 diff 可兼容读取，Files、附件预览、文本保存和冲突保护继续使用原有能力；设计版本仍由 Molly 管理的独立 Git 仓库保存。

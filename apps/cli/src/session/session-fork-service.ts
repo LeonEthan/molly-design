@@ -593,10 +593,7 @@ export class SessionForkService {
     }
 
     if (worktreeFork) {
-      if (
-        !source.project ||
-        (source.project.kind !== 'local' && source.project.kind !== 'github')
-      ) {
+      if (source.project?.kind !== 'local') {
         return sessionForkFailure(
           spec,
           'SOURCE_PROJECT_NOT_WORKTREE_CAPABLE',
@@ -663,13 +660,8 @@ export class SessionForkService {
         createdAt: nowIso,
         updatedAt: nowIso,
       };
-      const targetProject: ProjectRef =
-        source.project.kind === 'local' ? { ...source.project, useWorktree: true } : source.project;
-      const targetRepoFullName =
-        source.repoFullName ??
-        (targetProject.kind === 'github'
-          ? targetProject.repoFullName
-          : targetProject.githubRepoFullName);
+      const targetProject = { ...source.project, useWorktree: true };
+      const targetRepoFullName = source.repoFullName ?? targetProject.githubRepoFullName;
       const targetWorkdir =
         targetProject.kind === 'local'
           ? await this.deps.sessionManager.resolveLocalProjectRootPath(targetProject.localProjectId)

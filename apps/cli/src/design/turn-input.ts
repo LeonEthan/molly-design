@@ -133,7 +133,7 @@ export interface MaterializeDesignTurnInputOptions {
   dataRoot?: string;
 }
 
-const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
+const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,199}$/;
 
 /**
  * Whether a turn id may be turned into a path segment.
@@ -144,7 +144,7 @@ const TURN_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
  * error.
  */
 export function isDesignTurnId(value: string): boolean {
-  return TURN_ID_RE.test(value);
+  return value === value.trim() && TURN_ID_RE.test(value);
 }
 
 const sha256Hex = (bytes: Buffer | Uint8Array): string =>
@@ -166,7 +166,10 @@ export function designTurnInputDir(workdir: string, turnId: string): string {
       `refusing to materialize design turn input for unsafe turnId: ${JSON.stringify(turnId)}`
     );
   }
-  const dir = path.join(path.resolve(workdir), DESIGN_TURN_INPUT_DIRNAME, turnId);
+  const directoryName = turnId.includes(':')
+    ? path.join('.encoded', sha256Hex(Buffer.from(turnId, 'utf8')))
+    : turnId;
+  const dir = path.join(path.resolve(workdir), DESIGN_TURN_INPUT_DIRNAME, directoryName);
   if (!isWithin(path.resolve(workdir), dir)) {
     throw new DesignTurnInputError(`design turn input dir escapes the workdir: ${dir}`);
   }

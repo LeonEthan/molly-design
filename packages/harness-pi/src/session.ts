@@ -321,6 +321,12 @@ export class PiAcpSession {
       if (this.extensionFailed) throw new Error('pi_acp_extension_failed');
       if (run.controller.signal.aborted || run.stopReason === 'aborted')
         return { stopReason: 'cancelled' };
+      if (this.host && run.stopReason === 'error')
+        throw new RequestError(-32603, 'Model request failed.', {
+          code: 'harness_model_request_failed',
+          details:
+            'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+        });
       if (failed || run.stopReason === 'error') throw new Error('pi_acp_native_execution_failed');
       if (run.started && (!run.settled || run.tools.size))
         throw new Error('pi_acp_native_settlement_missing');

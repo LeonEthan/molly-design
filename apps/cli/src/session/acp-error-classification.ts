@@ -87,7 +87,12 @@ export const getACPErrorUserMessage = (error: ParsedACPError): string => {
   return firstDataMessage ?? error.message;
 };
 
+const isHarnessModelRequestFailedACPError = (error: ParsedACPError): boolean =>
+  error.code === ACP_ERROR_CODES.INTERNAL_ERROR &&
+  getStringField(error.data, 'code') === 'harness_model_request_failed';
+
 export const isUpstreamApiACPError = (error: ParsedACPError): boolean =>
+  isHarnessModelRequestFailedACPError(error) ||
   /API Error:\s*(?:500|502|503|529)\b/.test(getACPDiagnosticText(error, error));
 
 /**
@@ -252,7 +257,7 @@ export const shouldTerminateOnACPError = (
     return true;
   }
   if (failureReason === 'acp_upstream_api_error') {
-    return false;
+    return isHarnessModelRequestFailedACPError(error);
   }
   if (failureReason === 'acp_provider_overloaded') {
     return false;

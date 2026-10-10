@@ -34,7 +34,14 @@ are wired through `session/design-continuation-prepare` (see the session README)
 ordinary Agent switching is not a substitute for that migration flow.
 
 The existing chat `design-input/<turnId>/` remains the immutable manifest,
-reference-byte and receipt location. New manifests record `artifactWorkdir` and
+reference-byte and receipt location for ordinary turn IDs. Colon-bearing operation
+completion IDs use `design-input/.encoded/<sha256-of-turnId>/` so their durable
+identities do not become platform-specific filenames. The reserved directory cannot
+collide with ordinary turn names; manifests, receipts and history retain the exact
+original ID. Preparation, workspace resolution, live preview and final collection
+all resolve this location through `designTurnInputDir`, with the same 200-character
+identity bound and path-separator/control rejection. Existing ordinary and legacy
+draft paths stay unchanged. New manifests record `artifactWorkdir` and
 artwork identity as dispatch facts. Every consumer compares them to paths derived
 from the trusted live Session; manifest paths never authorize filesystem access.
 Legacy manifests without the field retain their known chat-root interpretation.

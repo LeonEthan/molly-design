@@ -18,6 +18,8 @@ Root and CLI instructions apply. `CLAUDE.md` links to this file.
   the new ownership manifest is absent. Preserve user-modified skill files.
 - New artwork workspaces use `.molly/artworks`; continue the exact legacy `.geon`
   workspace when present. Conflicting old/new directories fail without deleting drafts.
+- Resolve every frozen-input and receipt path through `designTurnInputDir`; preserve
+  the original turn identity in manifests/history and existing ordinary turn paths.
 - Public read-before-edit reminders and native tool behavior belong to adapters.
   Do not restore generation/read-proof ledgers, intercept ordinary tools, patch
   runtimes or infer a shell/custom-tool sandbox. Reminders confer no commit authority.

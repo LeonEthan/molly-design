@@ -15,6 +15,8 @@ import { designOperation, acknowledgeDesign } from './store';
 import {
   DESIGN_TURN_INPUT_DIRNAME,
   DesignTurnInputError,
+  designTurnInputDir,
+  isDesignTurnId,
   materializeDesignTurnInput,
 } from './turn-input';
 
@@ -24,6 +26,42 @@ afterEach(async () => {
 });
 
 const sha256Hex = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
+
+describe('design turn input paths', () => {
+  it('preserves ordinary paths and isolates portable completion paths from legacy turn names', () => {
+    const workdir = path.join(tmpdir(), 'synthetic-turn-paths');
+    const turnId = 'operation-completion:requester-1:research.round_1';
+    const digest = sha256Hex(Buffer.from(turnId));
+    const directory = designTurnInputDir(workdir, turnId);
+    expect(directory).toBe(path.join(workdir, 'design-input', '.encoded', digest));
+    expect(designTurnInputDir(workdir, turnId)).toBe(directory);
+    for (const ordinary of ['turn-1', turnId.replaceAll(':', '-'), digest, 't'.repeat(200)]) {
+      expect(designTurnInputDir(workdir, ordinary)).toBe(
+        path.join(workdir, 'design-input', ordinary)
+      );
+      expect(designTurnInputDir(workdir, ordinary)).not.toBe(directory);
+    }
+    expect(designTurnInputDir(workdir, `${turnId}-next`)).not.toBe(directory);
+  });
+
+  it.each([
+    '',
+    '.',
+    '..',
+    '.encoded',
+    '../escape',
+    '/absolute',
+    'operation-completion:requester:../escape',
+    'operation-completion:requester:..\\escape',
+    'turn\n',
+    'turn\r',
+    'turn\0',
+    't'.repeat(201),
+  ])('rejects unsafe identity %j before constructing its path', (turnId) => {
+    expect(isDesignTurnId(turnId)).toBe(false);
+    expect(() => designTurnInputDir(tmpdir(), turnId)).toThrow(DesignTurnInputError);
+  });
+});
 
 /** Minimal byte-correct PNG container (header + IHDR); the manifest records
  *  bytes, not decodability, so a real encoder is not needed. */

@@ -97,8 +97,8 @@ import { buildAssetDataUris } from './authoring-assets';
 import { DESIGN_BUSY, type DesignLockTiming } from './lock';
 import { designOperation } from './store';
 import {
-  DESIGN_TURN_INPUT_DIRNAME,
   DESIGN_TURN_MANIFEST_FILENAME,
+  designTurnInputDir,
   isDesignTurnId,
   readDesignTurnReceipt,
   writeDesignTurnReceipt,
@@ -187,7 +187,7 @@ async function readTurnManifest(workdir: string, turnId: string): Promise<Manife
   // (P2.2 refuses to materialize one), so there is nothing to read and no path
   // to build out of it.
   if (!isDesignTurnId(turnId)) return { kind: 'missing' };
-  const file = path.join(workdir, DESIGN_TURN_INPUT_DIRNAME, turnId, DESIGN_TURN_MANIFEST_FILENAME);
+  const file = path.join(designTurnInputDir(workdir, turnId), DESIGN_TURN_MANIFEST_FILENAME);
   let bytes: string;
   try {
     bytes = await readFile(file, 'utf8');

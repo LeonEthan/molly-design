@@ -5876,6 +5876,7 @@ describe('SessionExecutionService', () => {
   it.each([
     {
       name: 'ACP string error data',
+      embedded: false,
       error: Object.assign(new Error('Invalid params'), {
         code: -32602,
         data: 'No goal is currently set. Use `/goal <objective>` to create one.',
@@ -5887,13 +5888,28 @@ describe('SessionExecutionService', () => {
     },
     {
       name: 'remote compact transport error',
+      embedded: false,
       error: new Error(
         'Error running remote compact task: Connection failed: error sending request'
       ),
       expectedFailure: null,
     },
+    {
+      name: 'managed model request failure',
+      embedded: true,
+      error: new RequestError(-32603, 'Model request failed.', {
+        code: 'harness_model_request_failed',
+        details:
+          'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+      }),
+      expectedFailure: [
+        'acp_upstream_api_error',
+        'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+      ] as const,
+    },
   ])('settles context compaction after a provider prompt rejects ($name)', async (testCase) => {
     const upsertDocMeta = vi.fn(async () => {});
+    const events: string[] = [];
     let history: SessionHistoryInput[] = [
       {
         id: 'turn-1',
@@ -5922,17 +5938,21 @@ describe('SessionExecutionService', () => {
         }
       ),
     });
+    const rejectPrompt = async () => {
+      events.push('prompt');
+      throw testCase.error;
+    };
     const agentClient = {
       isCreated: vi.fn(() => true),
-      prompt: vi.fn(async () => {
-        throw testCase.error;
-      }),
+      prompt: rejectPrompt,
       currentModel: undefined,
     };
     const session = {
       sessionId: 'session-acp-data' as SessionId,
       acpSessionId: 'acp-data-1' as ACPSessionId,
       agentClient,
+      isEmbeddedHarness: () => testCase.embedded,
+      promptEmbeddedHarness: rejectPrompt,
       terminalManager: {} as unknown,
       getWorkdir: () => '/tmp',
       getHostWorkdir: () => '/tmp',
@@ -5948,7 +5968,9 @@ describe('SessionExecutionService', () => {
       getPendingSession: vi.fn(() => null),
       createSession: vi.fn(),
       setSessionError: vi.fn(),
-      terminateSession: vi.fn(),
+      terminateSession: async () => {
+        events.push('retired');
+      },
       refreshGhTokenForSession: vi.fn(async () => {}),
     } as unknown as SessionManager;
 
@@ -5982,7 +6004,11 @@ describe('SessionExecutionService', () => {
       machineId: 'machine-1',
       workspaceId: 'workspace-1' as WorkspaceId,
       project: { kind: 'github', repoFullName: 'owner/repo', branch: 'main' },
-      acpSessionConfig: { prompt: 'pause the goal', cliType: 'builtin', agentType: 'codex' },
+      acpSessionConfig: {
+        prompt: 'pause the goal',
+        cliType: 'builtin',
+        agentType: testCase.embedded ? 'molly' : 'codex',
+      },
       userTurnId: 'turn-acp-data',
       userId: 'user-1',
       userName: 'User',
@@ -5998,6 +6024,7 @@ describe('SessionExecutionService', () => {
       finished: true,
       items: [expect.objectContaining({ toolCallId: 'compact-1', status: 'failed' })],
     });
+    expect(events).toEqual(testCase.embedded ? ['prompt', 'retired'] : ['prompt']);
   });
 
   it('records a visible failure when a chat turn fails before prompt starts', async () => {

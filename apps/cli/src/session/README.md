@@ -22,6 +22,11 @@ marks the recovered input failed, finalizes its assistant entry, and pauses disp
 before releasing ownership. Queued inputs stay intact until explicit Continue; that
 action releases the queue and never retries the old turn. Pending inputs without a
 run fence remain executable. See the [recovery fix](../../../../.agents/notes/implemented/bug-fix/2026-09-28-interrupted-run-recovery.md).
+Native model failures carrying `harness_model_request_failed` use the existing
+upstream-service failure presentation with a static diagnostic. The managed host
+has retired its worker, so the session also terminates it before the next explicit
+input. Ordinary upstream ACP failures retain their existing reuse policy; neither
+classification authorizes replay of a Molly request.
 MCP is configured once at startup through Pi's native MCP extension;
 credentials bind the selected Session/worker epoch and catalog changes retire it.
 Model keys are granted per run and stored in Molly's Pi profile for sub-agents. Image tools save files directly; Session owns no

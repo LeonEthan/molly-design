@@ -22,6 +22,31 @@ import { managed } from './fixtures/managed';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 describe('owned ACP host integration', () => {
+  it('reports native model failures without exposing provider payloads or replaying the run', async () => {
+    const f = await managed({
+      productionProfile: true,
+      providerError:
+        '500: {"message":"HTTP/2 PROTOCOL_ERROR SYNTHETIC_PROVIDER_SECRET","type":"server_error","code":"internal_server_error"}',
+    });
+    const session = await f.open();
+    f.grant(session.snapshot);
+    const error = await session.prompt().catch((failure: unknown) => failure);
+    expect(error).toMatchObject({
+      code: -32603,
+      message: 'Model request failed.',
+      data: {
+        code: 'harness_model_request_failed',
+        details: expect.stringContaining('not retried automatically'),
+      },
+    });
+    expect(JSON.stringify(error)).not.toContain('SYNTHETIC_PROVIDER_SECRET');
+    expect(JSON.stringify(f.updates)).not.toContain('SYNTHETIC_PROVIDER_SECRET');
+    expect(f.observed).toHaveLength(1);
+    expect(f.pipe.destroyed).toBe(true);
+    await expect(session.prompt()).rejects.toMatchObject({ code: -32600 });
+    expect(f.observed).toHaveLength(1);
+  });
+
   it.each(['overflow', 'length'] as const)(
     'refuses automatic %s compaction recovery before another model request',
     async (failure) => {
@@ -55,7 +80,7 @@ describe('owned ACP host integration', () => {
       const session = await f.open();
       f.grant(session.snapshot);
       await expect(session.prompt('Synthetic request. '.repeat(8_000))).rejects.toThrow(
-        'pi_acp_host_execution_failed'
+        failure === 'overflow' ? 'Model request failed.' : 'pi_acp_host_execution_failed'
       );
       expect(f.observed).toHaveLength(1);
       expect(compactions).toEqual([{ reason: 'overflow', aborted: true, willRetry: false }]);

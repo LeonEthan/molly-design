@@ -97,6 +97,33 @@ describe('ACP error classification', () => {
     expect(shouldTerminateOnACPError(parsed, 'acp_upstream_api_error')).toBe(false);
   });
 
+  it('reports managed model failures as upstream errors and retires the failed worker', () => {
+    const details =
+      'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.';
+    const error = new RequestError(ACP_ERROR_CODES.INTERNAL_ERROR, 'Model request failed.', {
+      code: 'harness_model_request_failed',
+      details,
+    });
+
+    expect(mapACPErrorToFailureReason(error)).toBe('acp_upstream_api_error');
+    expect(getACPErrorUserMessage(error)).toBe(details);
+    expect(shouldTerminateOnACPError(error, 'acp_upstream_api_error')).toBe(true);
+    expect(
+      shouldRecoverStaleACPConnectionPrompt({
+        error,
+        alreadyAttempted: false,
+        hasPromptOutput: false,
+      })
+    ).toBe(false);
+  });
+
+  it('does not infer managed model failures from unstructured text', () => {
+    const error = new RequestError(ACP_ERROR_CODES.INTERNAL_ERROR, 'harness_model_request_failed');
+
+    expect(mapACPErrorToFailureReason(error)).toBe('acp_internal_error');
+    expect(shouldTerminateOnACPError(error, 'acp_upstream_api_error')).toBe(false);
+  });
+
   it('maps Codex model capacity to a resumable provider overload', () => {
     const parsed = parseACPError({
       code: ACP_ERROR_CODES.INTERNAL_ERROR,

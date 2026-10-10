@@ -66,7 +66,7 @@ export function designWorkspacePointer(workspace: DesignWorkspace, turnId?: stri
     `Design authoring directory: ${workspace.artifactWorkdir}. Write ${ARTWORK_ENTRY} (format: molly-canvas/1) and media/ here; render and final collection use this directory.`,
     `Saved current canvas projection: ${workspace.projectionWorkdir}/${ARTWORK_ENTRY}. Its .molly-current.json records the saved revision. This is application input, not an Agent draft or a submitted result. Copy it and its required media into the authoring directory only if you choose to work from it; preserve existing drafts.`,
     `Previous chat drafts remain accessible at ${workspace.inputWorkdir}; they are never relocated or overwritten.`,
-    `Frozen turn inputs and references: ${inputDirectory}. Earlier durable collection diagnostics are in ${path.join(workspace.inputWorkdir, 'design-input')}/<turnId>/receipt.json; on explicit continuation inspect the previous receipt and retained draft. Agent cwd remains ${workspace.workspaceRoot}.`,
+    `Frozen turn inputs and references: ${inputDirectory}. Earlier durable collection diagnostics are stored as receipt.json beside each manifest.json under ${path.join(workspace.inputWorkdir, 'design-input')}; the manifest records the original turnId. On explicit continuation inspect the previous receipt and retained draft. Agent cwd remains ${workspace.workspaceRoot}.`,
   ].join('\n');
 }
 

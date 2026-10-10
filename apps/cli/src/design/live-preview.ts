@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { lstat } from 'node:fs/promises';
 import { ARTWORK_ENTRY } from '@molly/design-authoring';
-import { readFrozenManifest, DESIGN_TURN_INPUT_DIRNAME } from './turn-input';
+import { designTurnInputDir, isDesignTurnId, readFrozenManifest } from './turn-input';
 import { readDesignArtifactDigest } from './artifact';
 import { buildPreviewPayload, type ObservedPreviewResult } from './render-preview';
 
@@ -13,10 +13,10 @@ export async function buildLivePreviewPayload(
   previousSourceIdentity?: string
 ): Promise<ObservedPreviewResult> {
   // A turn identity is a path component, never a filesystem capability.
-  if (!/^[A-Za-z0-9:_-]+$/.test(live.sourceTurnId)) throw Error('Invalid source turn');
+  if (!isDesignTurnId(live.sourceTurnId)) throw Error('Invalid source turn');
   const inputRoot = path.join(dataRoot, 'chats', live.sessionId);
   const manifest = await readFrozenManifest(
-    path.join(inputRoot, DESIGN_TURN_INPUT_DIRNAME, live.sourceTurnId),
+    designTurnInputDir(inputRoot, live.sourceTurnId),
     live.sourceTurnId
   );
   if (!manifest) return { status: 'refused', error: '', dependencies: [ARTWORK_ENTRY] };

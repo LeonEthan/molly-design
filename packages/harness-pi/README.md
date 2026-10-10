@@ -107,6 +107,12 @@ settlement and a final assistant entry; cancellation, truncation and handled com
 reported distinctly. Native usage is projected to Core usage notifications
 ([usage.ts](src/usage.ts)).
 
+Managed native model errors use the static ACP diagnostic `harness_model_request_failed`.
+The CLI presents the existing model-service error and retires the failed worker, preserving
+conversation and draft files for an explicit new message. Provider error bodies never enter
+this diagnostic; unknown host failures retain their generic static code. Neither path
+automatically repeats the dispatched request.
+
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.

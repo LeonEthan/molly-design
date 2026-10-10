@@ -26,6 +26,6 @@ Issue [#111](https://github.com/LeonEthan/molly-design/issues/111) 报告源预�
 - 开发版原生 P1 退出 0，`result.json`、`source-preview-result.json`、`version-result.json` 均 passed，新增重复关闭断言为 true。首次手工启动误传了 main 文件路径，使 `app.getAppPath()` 指向 `out/main`，设计 worker 未启动；改用 Electron 应用目录后通过，没有为此更改产品代码。证据目录 `m111-p1-evV1hW`，初次失败保留在 `m111-p1-xORWe2`。
 - `pnpm --filter @molly/e2e canvas:resources` 退出 0：串行分区 1、同时存活独立分区 3、残留 editor HTML Buffer 0。证据目录 `molly-canvas-resources-6fQdGs`。
 - 只读 Codex CLI 第二意见（`gpt-6-astra` / high）未发现 P0/P1；其执行的 21 项聚焦测试、Electron 主进程类型检查和文档检查通过。审查进程未运行原生探针；上述原生证据来自本次主执行流程。
-- 本地 arm64 测试 DMG 使用 `0.1.0-issue111`，不发布，明确关闭公证。首次打包因 `CSC_NAME` 含不被 builder 接受的证书类型前缀而退出，改用其要求的证书名称后，包内 CLI、图像解码、Bento、浏览器及 Pi 资源探针全部通过。Developer ID 签名正在等待系统钥匙串私钥授权，尚未生成可验收的签名 DMG；该安装验收保持未完成，不能据开发版通过关闭发布阻塞项。
+- 本地 arm64 测试 DMG 使用 `0.1.0-issue111`，不发布，明确关闭公证。首次打包因 `CSC_NAME` 含不被 builder 接受的证书类型前缀而退出，改用其要求的证书名称后，包内 CLI、图像解码、Bento、浏览器及 Pi 资源探针全部通过。Developer ID 签名曾等待系统钥匙串私钥授权，随后以 `timestamps differ by 1435 seconds - check your system clock` 失败退出；该报错本身不证明系统时钟配置有误。未生成可验收的签名 DMG，仍需重新打包并完成隔离安装验证，不能据开发版通过关闭发布阻塞项。
 
 本次没有付费模型或图片请求；不扩大为真实 Kimi 创作质量、全部设计流程或公证分发验收。

@@ -10,8 +10,11 @@ import {
   isProviderPresetDefaultEndpoint,
   type CheckModelConnection,
   type ConnectionCheckResult,
+  type DiscoverModelConnection,
+  type DiscoverModelConnectionResult,
   type HarnessModelCatalog,
   type ModelConnection,
+  type ModelMetadataSnapshot,
   type ProviderPresetId,
   type SaveModelConnection,
 } from '@molly/shared/embedded-harness';
@@ -33,7 +36,11 @@ import { Input } from '@/ui/input';
 import { Label } from '@/ui/label';
 import { Switch } from '@/ui/switch';
 import { CompactSection } from './compact-layout';
-import { CompatibleModelFields, compatibleModelDraft } from './compatible-model-fields';
+import {
+  CompatibleModelFields,
+  compatibleModelDraft,
+  type DiscoveryState,
+} from './compatible-model-fields';
 import {
   ConnectionCheckBadge,
   ConnectionCheckLine,
@@ -142,6 +149,9 @@ const issueKeys = {
 } as const;
 
 export type ModelConnectionCheck = (input: CheckModelConnection) => Promise<ConnectionCheckResult>;
+export type ModelConnectionDiscover = (
+  input: DiscoverModelConnection
+) => Promise<DiscoverModelConnectionResult>;
 
 function ProviderPicker({
   value,
@@ -186,20 +196,25 @@ export function ModelConnectionForm({
   stored,
   initialProvider,
   catalog,
+  metadataSnapshot = null,
   busy = false,
   onSave,
   onCancel,
   onCheck,
+  onDiscover,
   onDelete,
 }: {
   stored?: ModelConnection;
   initialProvider?: ProviderPresetId;
   /** Packaged catalog models for every native preset; undefined while unread or unavailable. */
   catalog?: readonly CatalogModel[];
+  /** Packaged models.dev projection for compatible discovery enrichment. */
+  metadataSnapshot?: ModelMetadataSnapshot | null;
   busy?: boolean;
   onSave: (input: SaveModelConnection, check?: ConnectionCheckState) => Promise<void>;
   onCancel: () => void;
   onCheck?: ModelConnectionCheck;
+  onDiscover?: ModelConnectionDiscover;
   onDelete?: () => void;
 }) {
   const { t } = useTranslation();
@@ -222,8 +237,9 @@ export function ModelConnectionForm({
   const [customModels, setCustomModels] = useState(
     () =>
       stored?.customModels?.map(compatibleModelDraft) ??
-      (stored?.providerPresetId === 'openai-compatible' ? [] : [compatibleModelDraft()])
+      (provider === 'openai-compatible' ? [] : [compatibleModelDraft()])
   );
+  const [discovery, setDiscovery] = useState<DiscoveryState>({ phase: 'idle' });
   const configurationIssue = getModelConnectionConfigurationIssue({
     providerPresetId: provider,
     baseUrl: endpoint,
@@ -252,6 +268,31 @@ export function ModelConnectionForm({
     return null;
   }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey]);
   const { state: check, recheck } = useConnectionCheck(checkRequest, onCheck);
+  const discoverable =
+    provider === 'openai-compatible' &&
+    !configurationIssue &&
+    ModelEndpointSchema.safeParse(endpoint).success &&
+    (typedKey.length > 0 || (stored !== undefined && !requiresKey));
+  const discover = useCallback(() => {
+    if (!onDiscover || !discoverable) return;
+    const input: DiscoverModelConnection = typedKey
+      ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
+      : {
+          providerPresetId: 'openai-compatible',
+          baseUrl: endpoint,
+          stored: { id: stored!.id, revision: stored!.revision },
+        };
+    setDiscovery({ phase: 'loading' });
+    void onDiscover(input).then(
+      (result) =>
+        setDiscovery(
+          result.ok
+            ? { phase: 'done', models: result.models, filteredNonChat: result.filteredNonChat }
+            : { phase: 'failed' }
+        ),
+      () => setDiscovery({ phase: 'failed' })
+    );
+  }, [discoverable, endpoint, onDiscover, stored, typedKey]);
   const listed =
     check.phase === 'done' && check.result.ok && check.result.models
       ? new Set(check.result.models)
@@ -265,6 +306,8 @@ export function ModelConnectionForm({
     setChooseModels(false);
     setSelectedModels([]);
     setPickingProvider(false);
+    setCustomModels([]);
+    setDiscovery({ phase: 'idle' });
   };
   const startChoosing = () => {
     // Listed IDs only inform the checklist (not-listed tags). Never pre-select
@@ -292,11 +335,14 @@ export function ModelConnectionForm({
     apiKey: typedKey || undefined,
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
-          customModels: customModels.map((model) => ({
-            ...model,
-            contextWindow: Number(model.contextWindow),
-            maxTokens: Number(model.maxTokens),
-          })),
+          customModels: customModels.map((model) => {
+            const { discovered: _, ...rest } = model;
+            return {
+              ...rest,
+              contextWindow: Number(model.contextWindow),
+              maxTokens: Number(model.maxTokens),
+            };
+          }),
         }
       : {}),
     ...(models ? { models } : {}),
@@ -498,7 +544,16 @@ export function ModelConnectionForm({
           </Collapsible>
           {provider === 'openai-compatible' && (
             <>
-              <CompatibleModelFields models={customModels} busy={busy} onChange={setCustomModels} />
+              <CompatibleModelFields
+                models={customModels}
+                busy={busy}
+                discovery={discovery}
+                snapshot={metadataSnapshot}
+                baseUrl={endpoint}
+                discoverable={discoverable}
+                onDiscover={onDiscover ? discover : undefined}
+                onChange={setCustomModels}
+              />
               {!parsed.success && (
                 <p role="status" className="text-xs text-muted-foreground">
                   {t('settings.models.customModelsInvalid')}
@@ -550,6 +605,7 @@ export function ModelConnectionSetting({
   const [error, setError] = useState(false);
   const [ready, setReady] = useState(false);
   const [catalog, setCatalog] = useState<HarnessModelCatalog['models']>();
+  const [metadataSnapshot, setMetadataSnapshot] = useState<ModelMetadataSnapshot | null>(null);
   const [checks, setChecks] = useState<
     Record<string, { revision: number; state: ConnectionCheckState }>
   >({});
@@ -579,6 +635,12 @@ export function ModelConnectionSetting({
         if (live) setCatalog(value.models);
       })
       .catch(() => undefined);
+    void Promise.resolve()
+      .then(() => ipc.modelConnections.getModelMetadataSnapshot())
+      .then((value) => {
+        if (live) setMetadataSnapshot(value);
+      })
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -587,6 +649,13 @@ export function ModelConnectionSetting({
     async (input) => {
       if (!ipc) return { ok: false, reason: 'unreachable' };
       return ipc.modelConnections.check(input);
+    },
+    [ipc]
+  );
+  const onDiscover = useCallback<ModelConnectionDiscover>(
+    async (input) => {
+      if (!ipc) return { ok: false, reason: 'unreachable' };
+      return ipc.modelConnections.discover(input);
     },
     [ipc]
   );
@@ -682,10 +751,12 @@ export function ModelConnectionSetting({
                     key={`${editing.id}:${editing.revision}`}
                     stored={editing}
                     catalog={catalog}
+                    metadataSnapshot={metadataSnapshot}
                     busy={busy}
                     onSave={save}
                     onCancel={() => setEditing(null)}
                     onCheck={onCheck}
+                    onDiscover={onDiscover}
                     onDelete={() => void remove(connection)}
                   />
                 </div>
@@ -709,10 +780,12 @@ export function ModelConnectionSetting({
                 key={`new:${editing.provider ?? ''}`}
                 initialProvider={editing.provider}
                 catalog={catalog}
+                metadataSnapshot={metadataSnapshot}
                 busy={busy}
                 onSave={save}
                 onCancel={() => setEditing(null)}
                 onCheck={onCheck}
+                onDiscover={onDiscover}
               />
             </div>
           ) : ready && connections.length === 0 ? (

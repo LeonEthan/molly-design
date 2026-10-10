@@ -132,7 +132,6 @@ void test('compatible model metadata persists with revision CAS and no public cr
       maxTokens: 4096,
       thinking: ['off', 'high'],
       toolCalls: true,
-      usageInStreaming: true,
       maxTokensField: 'max_tokens'
     }
   ]
@@ -499,7 +498,6 @@ void test('a chosen model list round-trips with the connection revision', async 
           maxTokens: 1024,
           thinking: ['off'],
           toolCalls: true,
-          usageInStreaming: true,
           maxTokensField: 'max_tokens'
         }
       ],

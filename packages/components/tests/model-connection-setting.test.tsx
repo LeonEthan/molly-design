@@ -75,6 +75,14 @@ async function change(field: HTMLInputElement, value: string) {
   });
 }
 
+async function pickDiscovered(text: string) {
+  await act(async () =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes(text))!
+      .click()
+  );
+}
+
 async function openMoreOptions() {
   const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent === en['settings.models.moreOptions']
@@ -96,7 +104,6 @@ describe('encrypted model connection form', () => {
         maxTokens: 4096,
         thinking: ['off', 'high'],
         toolCalls: true,
-        usageInStreaming: true,
         maxTokensField: 'max_tokens',
       },
     ];
@@ -166,7 +173,6 @@ describe('encrypted model connection form', () => {
         maxTokens: 4096,
         thinking: ['off'],
         toolCalls: true,
-        usageInStreaming: false,
         maxTokensField: 'max_tokens',
       },
     ]);
@@ -187,7 +193,6 @@ describe('encrypted model connection form', () => {
       maxTokens: 4096,
       thinking: ['off'],
       toolCalls: false,
-      usageInStreaming: false,
       maxTokensField: 'max_tokens',
     };
     await render(async () => undefined, {
@@ -745,5 +750,198 @@ describe('connection management', () => {
       en['settings.models.providers.anthropic']
     );
     expect(host.textContent).toContain('Sends requests to https://api.anthropic.com');
+  });
+
+  it('discovers compatible models from the service and saves the picked declarations', async () => {
+    const writes: SaveModelConnection[] = [];
+    const discovered = [
+      {
+        modelId: 'deepseek-chat',
+        name: 'DeepSeek Chat',
+        contextWindow: 65536,
+        maxTokens: 8192,
+      },
+      { modelId: 'vendor/raw' },
+    ];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async (input) => {
+            writes.push(input);
+          },
+          onCancel: () => undefined,
+          onDiscover: async () => ({ ok: true, models: discovered, filteredNonChat: 2 }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    const discoverButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === en['settings.models.discover.button']
+    )!;
+    await act(async () => discoverButton.click());
+    expect(host.textContent).toContain(
+      en['settings.models.discover.found'].replace('{{count}}', '2')
+    );
+    expect(host.textContent).toContain(
+      en['settings.models.discover.filtered'].replace('{{count}}', '2')
+    );
+    await pickDiscovered('deepseek-chat');
+    expect(host.textContent).toContain('DeepSeek Chat');
+    await pickDiscovered('vendor/raw');
+    expect(host.querySelector('fieldset input[id$="-modelId"]')).not.toBeNull();
+    const submit = host.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    expect(submit.disabled).toBe(true);
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(writes).toEqual([]);
+  });
+
+  it('saves discovered models once the incomplete declaration is completed', async () => {
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async (input) => {
+            writes.push(input);
+          },
+          onCancel: () => undefined,
+          onDiscover: async () => ({
+            ok: true,
+            models: [{ modelId: 'vendor/raw', name: 'Raw Model' }],
+            filteredNonChat: 0,
+          }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    await pickDiscovered('vendor/raw');
+    await change(
+      host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!,
+      '32768'
+    );
+    await change(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!, '4096');
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(writes[0]?.customModels).toEqual([
+      {
+        modelId: 'vendor/raw',
+        name: 'Raw Model',
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: false,
+        maxTokensField: 'max_tokens',
+      },
+    ]);
+  });
+
+  it('enriches discovery rows from the packaged metadata snapshot without overriding the service', async () => {
+    const snapshot = {
+      version: 1 as const,
+      source: 'models.dev' as const,
+      generatedAt: '2026-10-10T00:00:00Z',
+      providers: {
+        deepseek: {
+          models: {
+            'deepseek-reasoner': {
+              name: 'DeepSeek Reasoner',
+              contextWindow: 131072,
+              maxTokens: 65536,
+              reasoning: true,
+              toolCalls: true,
+            },
+          },
+        },
+      },
+    };
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: snapshot,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onDiscover: async () => ({
+            ok: true,
+            models: [{ modelId: 'deepseek-reasoner' }],
+            filteredNonChat: 0,
+          }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    expect(host.textContent).toContain('DeepSeek Reasoner');
+    expect(host.textContent).toContain(en['settings.models.picker.thinks']);
+    await pickDiscovered('deepseek-reasoner');
+    expect(
+      host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!.value
+    ).toBe('131072');
+    expect(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!.value).toBe(
+      '65536'
+    );
+    expect(host.querySelector<HTMLButtonElement>('fieldset button[id$="-thinking-high"]')!,).not.toBeNull();
+  });
+
+  it('keeps the manual declaration path when discovery fails', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onDiscover: async () => ({ ok: false, reason: 'unreachable' as const }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    expect(host.textContent).toContain(en['settings.models.discover.failed']);
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent === en['settings.models.addCustomModel']
+      )
+    ).toBe(true);
   });
 });

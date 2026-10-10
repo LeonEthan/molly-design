@@ -61,10 +61,8 @@ async function readBounded(response: Response): Promise<string | null> {
 }
 
 function listedModels(style: CheckStyle, data: unknown): string[] | null {
-  if (!data || typeof data !== 'object') return null
-  const entries =
-    style === 'google' ? (data as { models?: unknown }).models : (data as { data?: unknown }).data
-  if (!Array.isArray(entries)) return null
+  const entries = listEntries(style, data)
+  if (!entries) return null
   const ids = entries
     .map((entry: unknown) => {
       if (!entry || typeof entry !== 'object') return undefined
@@ -74,6 +72,24 @@ function listedModels(style: CheckStyle, data: unknown): string[] | null {
     })
     .filter((id): id is string => id !== undefined && id.length > 0 && id.length <= 200)
   return [...new Set(ids)].slice(0, MAX_LISTED_MODELS)
+}
+
+/**
+ * Locates the model entry array across the response shapes seen in the wild:
+ * `{object:"list", data:[...]}` (OpenAI standard), `{data:[...]}` (OpenRouter, no
+ * `object` marker), bare arrays (Together), and wrappers with extra keys
+ * (new-api mixes in `success:true`). Returns null when no array of objects exists.
+ */
+function listEntries(style: CheckStyle, data: unknown): unknown[] | null {
+  if (style === 'google') {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const entries = (data as { models?: unknown }).models
+    return Array.isArray(entries) ? entries : null
+  }
+  if (Array.isArray(data)) return data
+  if (!data || typeof data !== 'object') return null
+  const entries = (data as { data?: unknown }).data
+  return Array.isArray(entries) ? entries : null
 }
 
 /**

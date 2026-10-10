@@ -156,6 +156,13 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'model-catalog.json'),
     `${JSON.stringify(await createBundledModelCatalog())}\n`
   );
+  const { createModelMetadataSnapshot } = await import(
+    pathToFileURL(path.join(cliRoot, 'scripts/build-model-metadata-snapshot.mjs')).href
+  );
+  fs.writeFileSync(
+    path.join(directory, 'model-metadata-snapshot.json'),
+    `${JSON.stringify(await createModelMetadataSnapshot())}\n`
+  );
   const files = fileDigests(directory);
   const manifest = {
     schemaVersion: 1,

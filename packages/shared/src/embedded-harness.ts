@@ -420,7 +420,7 @@ export const ModelThinkingLevelSchema = z.enum([
   'max',
 ]);
 
-/** User-declared OpenAI Chat Completions metadata, not remote capability verification. */
+/** User-declared OpenAI Chat Completions metadata, enriched by discovery, not remote capability verification. */
 export const CompatibleModelDefinitionSchema = z
   .object({
     modelId: z.string().trim().min(1).max(200),
@@ -438,12 +438,28 @@ export const CompatibleModelDefinitionSchema = z
       .max(7)
       .refine((values) => new Set(values).size === values.length),
     toolCalls: z.boolean(),
-    usageInStreaming: z.boolean(),
     maxTokensField: z.enum(['max_tokens', 'max_completion_tokens']),
+    /**
+     * Retired 2026-10: streaming usage is always requested (`include_usage`), so the
+     * declaration no longer exists. Kept optional so connections saved before the
+     * removal still parse; the value is ignored everywhere and dropped on next save.
+     */
+    usageInStreaming: z.boolean().optional(),
   })
   .strict()
   .refine((value) => value.maxTokens <= value.contextWindow);
 export type CompatibleModelDefinition = z.infer<typeof CompatibleModelDefinitionSchema>;
+
+/** A model listed by a connection's own `GET /models`, with what the response itself told us. */
+export const DiscoveredModelSchema = z
+  .object({
+    modelId: z.string().trim().min(1).max(200),
+    name: z.string().trim().min(1).max(300).optional(),
+    contextWindow: z.number().int().positive().max(16_777_216).optional(),
+    maxTokens: z.number().int().positive().max(16_777_216).optional(),
+  })
+  .strict();
+export type DiscoveredModel = z.infer<typeof DiscoveredModelSchema>;
 
 const CompatibleModelsSchema = z
   .array(CompatibleModelDefinitionSchema)
@@ -536,6 +552,58 @@ export type ConnectionCheckFailure = z.infer<typeof ConnectionCheckFailureSchema
 export type ConnectionCheckResult =
   | { ok: true; models?: string[] }
   | { ok: false; reason: ConnectionCheckFailure; status?: number };
+
+/**
+ * Offline model metadata snapshot (models.dev, MIT), projected at build time into the
+ * harness resources. Keys are models.dev provider ids; enrichment for a compatible
+ * connection matches by modelId. Metadata fills discovery defaults; the user's saved
+ * declaration always wins.
+ */
+export const ModelMetadataSnapshotSchema = z
+  .object({
+    version: z.literal(1),
+    source: z.literal('models.dev'),
+    generatedAt: z.string().min(1).max(40),
+    providers: z.record(
+      z.string().min(1).max(100),
+      z.object({
+        models: z.record(
+          z.string().min(1).max(200),
+          z
+            .object({
+              name: z.string().min(1).max(300).optional(),
+              contextWindow: z.number().int().positive().max(16_777_216).optional(),
+              maxTokens: z.number().int().positive().max(16_777_216).optional(),
+              imageInput: z.boolean().optional(),
+              toolCalls: z.boolean().optional(),
+              reasoning: z.boolean().optional(),
+            })
+            .strict()
+        ),
+      })
+    ),
+  })
+  .strict();
+export type ModelMetadataSnapshot = z.infer<typeof ModelMetadataSnapshotSchema>;
+
+/** Settings discovery: list the models a chat-capable connection serves. Explicit user action. */
+export const DiscoverModelConnectionSchema = z
+  .object({
+    providerPresetId: ProviderPresetIdSchema,
+    baseUrl: ModelEndpointSchema,
+    apiKey: z.string().trim().min(1).max(16_384).optional(),
+    stored: z.object({ id: identifier, revision }).strict().optional(),
+  })
+  .strict()
+  .refine((value) => value.apiKey !== undefined || value.stored !== undefined);
+export type DiscoverModelConnection = z.infer<typeof DiscoverModelConnectionSchema>;
+export type DiscoverModelConnectionResult =
+  | { ok: true; models: DiscoveredModel[]; filteredNonChat: number }
+  | {
+      ok: false;
+      reason: 'unreachable' | 'invalid_response' | 'needs_key' | 'changed' | 'unsupported' | 'http_error';
+      status?: number;
+    };
 
 /** A typed key goes only to the destination being checked; a saved key only to its own. */
 export const CheckModelConnectionSchema = z

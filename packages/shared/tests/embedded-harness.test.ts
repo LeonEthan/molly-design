@@ -14,6 +14,28 @@ import {
 import { buildSessionTurnInputConfig } from '../src/session-input';
 
 describe('embedded harness boundaries', () => {
+  it('still parses a compatible model saved before usageInStreaming was retired', () => {
+    const legacy = {
+      modelId: 'vendor/model',
+      name: 'Declared model',
+      input: ['text'],
+      contextWindow: 32768,
+      maxTokens: 4096,
+      thinking: ['off'],
+      toolCalls: true,
+      usageInStreaming: false,
+      maxTokensField: 'max_tokens',
+    };
+    const parsed = SaveModelConnectionSchema.parse({
+      providerPresetId: 'openai-compatible',
+      displayName: 'Compatible',
+      baseUrl: 'https://example.invalid/v1',
+      enabled: true,
+      customModels: [legacy],
+    });
+    expect(parsed.customModels?.[0]?.modelId).toBe('vendor/model');
+  });
+
   it('bounds explicit compatible model definitions without accepting executable or secret fields', () => {
     const model = {
       modelId: 'vendor/model',
@@ -23,7 +45,6 @@ describe('embedded harness boundaries', () => {
       maxTokens: 4096,
       thinking: ['off', 'high'],
       toolCalls: true,
-      usageInStreaming: true,
       maxTokensField: 'max_tokens',
     };
     const fields = {

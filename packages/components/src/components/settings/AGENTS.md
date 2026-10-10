@@ -37,6 +37,10 @@ Preserve historical catalog fields when editing unrelated values.
 - Advanced compatible models use explicit bounded metadata on the connection row.
   Explain protocol/declared capabilities and missing tool support; saving is not a
   probe, model selection or price estimate. Native presets retain SDK catalogs.
+  Discovery is an explicit button: one `GET /models` to the typed or stored
+  destination, non-chat models filtered, drafts filled from the response and the
+  packaged models.dev snapshot — the user's saved declaration wins, and a manual
+  row remains when a service cannot be listed.
 
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,

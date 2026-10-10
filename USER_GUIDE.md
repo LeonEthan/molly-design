@@ -68,11 +68,16 @@ live session activation. The question add-on requires the desktop question
 interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
-For **OpenAI-compatible (advanced)**, add explicit model definitions in the connection
-form: IDs, token limits and the capabilities your service actually supports. This
-path uses standard Chat Completions streaming, not Responses or vendor-specific
-thinking formats. Turns containing tools require declared tool-call support. Saving
-does not verify these declarations or select a model; unknown prices remain unknown.
+For **OpenAI-compatible (advanced)**, enter the endpoint and key, then **Discover models
+from this service**: Molly asks the service for its model list, hides non-chat models,
+prefills what the response carries and completes known models from a packaged
+[models.dev](https://models.dev) snapshot. Pick the models to use; anything the service
+and snapshot both miss stays marked **needs details** for you to complete by hand —
+declarations are never probed or verified. Adding a model manually always works, including
+for services without a list endpoint (Azure deployments, z.ai). This path uses standard
+Chat Completions streaming, not Responses or vendor-specific thinking formats. Turns
+containing tools require declared tool-call support. Saving does not verify these
+declarations or select a model; unknown prices remain unknown.
 
 ## Try a design
 

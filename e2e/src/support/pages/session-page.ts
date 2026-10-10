@@ -42,7 +42,6 @@ export class SessionPage {
             // (harness_model_tools_unsupported). The scripted server simply
             // never emits tool_calls, so no tool ever executes.
             toolCalls: true,
-            usageInStreaming: false,
             maxTokensField: 'max_tokens',
           },
         ],

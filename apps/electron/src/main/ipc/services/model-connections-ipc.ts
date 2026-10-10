@@ -2,6 +2,7 @@ import { getIpcContext, IpcMethod, IpcService } from 'electron-ipc-decorator'
 import {
   CheckImageConnectionSchema,
   CheckModelConnectionSchema,
+  DiscoverModelConnectionSchema,
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
   SaveProtectedImageConnectionSchema,
@@ -10,6 +11,7 @@ import {
   DeleteMcpCredentialSchema,
   type CheckImageConnection,
   type CheckModelConnection,
+  type DiscoverModelConnection,
   type SaveMcpCredential,
   type SaveProtectedImageConnection,
   type SaveModelConnection,
@@ -17,6 +19,7 @@ import {
 } from '@molly/shared/embedded-harness'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
+import { discoverModelConnection } from '../../services/model-discovery'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -24,7 +27,8 @@ import { readLocalPlatformSnapshot } from '../../platform'
 import { resolveBundledCliEntry } from '../../services/cli-service'
 import {
   readBundledCapabilities,
-  readBundledModelCatalog
+  readBundledModelCatalog,
+  readBundledModelMetadataSnapshot
 } from '../../services/bundled-capabilities'
 
 async function localWorkspaceId(): Promise<string> {
@@ -143,9 +147,22 @@ export class ModelConnectionsIpc extends IpcService {
     return checkModelConnection(getModelConnectionStore(), parsed.data)
   }
 
+  /** Explicit Settings action: list the chat models a compatible connection serves. */
+  @IpcMethod()
+  async discover(input: DiscoverModelConnection) {
+    const parsed = DiscoverModelConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_model_connection_discovery')
+    return discoverModelConnection(getModelConnectionStore(), parsed.data)
+  }
+
   @IpcMethod()
   async getModelCatalog() {
     return readBundledModelCatalog(resolveBundledCliEntry())
+  }
+
+  @IpcMethod()
+  async getModelMetadataSnapshot() {
+    return readBundledModelMetadataSnapshot(resolveBundledCliEntry())
   }
 
   @IpcMethod()

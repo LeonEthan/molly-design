@@ -67,7 +67,6 @@ export async function managed(
           maxTokens: 4096,
           thinking: ['off'],
           toolCalls: true,
-          usageInStreaming: false,
           maxTokensField: 'max_tokens',
         },
       ],

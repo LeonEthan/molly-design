@@ -5,7 +5,8 @@ import {
   type ElectronPublicBrowserResult,
   type ElectronPublicBrowserState,
   type AccountImportBrowserId,
-  type ElectronBrowserAccountSummary
+  type ElectronBrowserAccountSummary,
+  type OpenSystemNotificationSettingsResult
 } from '@molly/shared/electron-ipc'
 import { parseBrowserAddress } from '@molly/shared/browser-url'
 import {
@@ -34,6 +35,7 @@ import {
   assertStoredCookiesUnpartitioned,
   importBrowserAccountCookies
 } from './browser-account-import'
+import { openBrowserDataPrivacySettings as openMacBrowserDataPrivacySettings } from './browser-data-privacy-settings'
 
 type PublicBrowserRecord = {
   browserId: string
@@ -550,6 +552,10 @@ export class PublicBrowserService {
     } catch {
       throw new Error('Molly could not list browser profiles on this Mac.')
     }
+  }
+
+  async openBrowserDataPrivacySettings(): Promise<OpenSystemNotificationSettingsResult> {
+    return await openMacBrowserDataPrivacySettings()
   }
 
   async getAccountSummary(): Promise<ElectronBrowserAccountSummary> {

@@ -144,13 +144,19 @@ cookies, including when the destination already contains site CHIPS cookies.
 The pinned reader reports excluded Chromium service directories as discovery errors;
 that specific unscoped diagnostic does not block a successfully read selected profile.
 Selected-profile/source errors and all other request errors still stop import.
-The user may need to approve macOS Keychain access during import. Browser-data
+The user may need to approve macOS Keychain access during import. The site-scoped
+report and detailed reader remain separate native reads; this can repeat Keychain
+authorization, and Molly does not recommend granting `/usr/bin/security` permanent
+access. Browser-data
 permission is separate: macOS can attribute development access to the terminal or
 coding agent that launched Molly. A coding agent can be the responsible app even
 when its terminal already has browser access. Allow the chosen browser under the
 responsible app in Files & Folders, then refresh Molly, or fully quit and launch
 `pnpm start:local` directly from an already authorized terminal. Failed listing
-does not establish absent profiles.
+does not establish absent profiles. The collapsed import section offers **Open Files
+and Folders settings** whenever any browser is unreadable, including alongside
+readable profiles. Clicking it re-lists profiles before opening the macOS privacy
+pane; it does not grant permission or import cookies.
 The initial native report allows five minutes for human
 authorization; Settings shows a pending hint and manual retry guidance. Read
 failures leave existing Molly cookies unchanged. The pinned detailed-reader API

@@ -155,6 +155,18 @@ export function BrowserAccountsSetting() {
       if (result?.site === site) setResult(null);
     });
 
+  const openPrivacySettings = () =>
+    run(async () => {
+      const bridge = getPublicBrowserBridge();
+      if (!bridge) throw new Error(t('settings.browserAccounts.unavailable'));
+      await listSources().catch(() => undefined);
+      const opened = await bridge.openBrowserDataPrivacySettings();
+      if (!opened.opened)
+        throw new Error(
+          opened.error?.trim() || t('settings.browserAccounts.openFilesAndFoldersFailed')
+        );
+    });
+
   const changeImportOpen = (open: boolean) => {
     setImportOpen(open);
     if (open && summary?.importAvailable) void run(listSources);
@@ -319,6 +331,17 @@ export function BrowserAccountsSetting() {
                   >
                     {importLabel(site)}
                   </Button>
+                  {summary.importAvailable && sources && sources.unreadable.length > 0 ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void openPrivacySettings()}
+                    >
+                      {t('settings.browserAccounts.openFilesAndFolders')}
+                    </Button>
+                  ) : null}
                 </div>
                 {!summary.importAvailable ? (
                   <p className="text-xs text-muted-foreground">

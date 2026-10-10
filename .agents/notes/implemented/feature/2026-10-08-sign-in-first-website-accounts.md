@@ -84,3 +84,7 @@ The independent read-only Codex review (`gpt-6-astra`, high) found one additiona
 - The session-sidebar button is covered by component tests, not a live session.
 - Import, Keychain behavior and PR #99 are unchanged; #99 stays on hold.
 - The owner approved this Spec revision on 2026-10-08 ([record](../../../../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)); the Spec stays draft for its other unapproved revisions.
+
+## PR #99 follow-up (2026-10-09)
+
+The [conflict resolution](../bug-fix/2026-10-09-browser-import-privacy-recovery.md) reduces #99 to Files and Folders recovery in the retained optional import section. It preserves this sign-in-first flow and main's site-scoped native reader. The unsafe single-read optimization and permanent `/usr/bin/security` authorization advice are removed from the merge result; repeated Keychain prompts remain possible. The earlier on-hold decision above records the original proposal, while the reduced recovery fix is now prepared separately for review.

@@ -158,6 +158,12 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
+  async openBrowserDataPrivacySettings() {
+    assertTrustedSender()
+    return await getIpcServiceDeps().publicBrowserService.openBrowserDataPrivacySettings()
+  }
+
+  @IpcMethod()
   async clearAccountCookies(raw: ElectronBrowserAccountSiteInput) {
     assertTrustedSender()
     const { site } = ElectronBrowserAccountSiteInputSchema.parse(raw)

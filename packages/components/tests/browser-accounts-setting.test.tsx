@@ -11,6 +11,7 @@ const bridge = vi.hoisted(() => ({
   getAccountSummary: vi.fn(),
   getImportSources: vi.fn(),
   importBrowserAccount: vi.fn(),
+  openBrowserDataPrivacySettings: vi.fn(),
   destroy: vi.fn(),
   beginAccountSignIn: vi.fn(),
 }));
@@ -24,6 +25,7 @@ beforeEach(async () => {
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
+  bridge.openBrowserDataPrivacySettings.mockResolvedValue({ opened: true, platform: 'darwin' });
 });
 const buttonWithText = (text: string) =>
   [...document.querySelectorAll('button')].find((button) => button.textContent === text);
@@ -128,6 +130,13 @@ it('keeps a visible disabled import button for unsigned macOS packages', async (
 it('distinguishes unreadable profiles from absent sources and restores import after manual refresh', async () => {
   let accessible = false;
   const imports: unknown[][] = [];
+  const privacyOpened = Promise.withResolvers<void>();
+  const privacyRequests: string[] = [];
+  bridge.openBrowserDataPrivacySettings.mockImplementation(async () => {
+    privacyRequests.push('settings');
+    await privacyOpened.promise;
+    return { opened: true, platform: 'darwin' };
+  });
   bridge.getAccountSummary.mockResolvedValue({
     persistent: false,
     importAvailable: true,
@@ -155,6 +164,15 @@ it('distinguishes unreadable profiles from absent sources and restores import af
   expect(host.textContent).toContain(
     zh['settings.browserAccounts.unreadableSources'].replace('{{browsers}}', 'Google Chrome')
   );
+  const privacyButton = buttonWithText(zh['settings.browserAccounts.openFilesAndFolders']);
+  if (!privacyButton) throw new Error('Missing privacy recovery');
+  expect(privacyButton.disabled).toBe(false);
+  await act(async () => privacyButton.click());
+  expect(privacyRequests).toEqual(['settings']);
+  expect(privacyButton.disabled).toBe(true);
+  expect(imports).toEqual([]);
+  await act(async () => privacyOpened.resolve());
+  expect(privacyButton.disabled).toBe(false);
   expect(
     Array.from(host.querySelectorAll('button')).find(
       (button) => button.textContent === zh['settings.browserAccounts.importFromBrowser']
@@ -177,6 +195,7 @@ it('distinguishes unreadable profiles from absent sources and restores import af
   expect(host.textContent).toContain(zh['settings.browserAccounts.developmentMemory']);
   expect(host.textContent).not.toContain(zh['settings.browserAccounts.noSources']);
   expect(imports).toEqual([]);
+  expect(buttonWithText(zh['settings.browserAccounts.openFilesAndFolders'])).toBeUndefined();
 });
 
 it('reports absent sources only after a completed readable empty listing', async () => {
@@ -194,6 +213,11 @@ it('reports absent sources only after a completed readable empty listing', async
 
 it('imports from the browser profile Molly found, naming any it could not read', async () => {
   const requests: unknown[][] = [];
+  const recovery: string[] = [];
+  bridge.openBrowserDataPrivacySettings.mockImplementation(async () => {
+    recovery.push('settings');
+    return { opened: true, platform: 'darwin' };
+  });
   bridge.getAccountSummary.mockResolvedValue({
     persistent: true,
     importAvailable: true,
@@ -216,6 +240,12 @@ it('imports from the browser profile Molly found, naming any it could not read',
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
   expect(host.textContent).not.toContain('Microsoft Edge');
+  const privacyButton = buttonWithText(zh['settings.browserAccounts.openFilesAndFolders']);
+  if (!privacyButton) throw new Error('Missing privacy recovery for other browsers');
+  expect(privacyButton.disabled).toBe(false);
+  await act(async () => privacyButton.click());
+  expect(recovery).toEqual(['settings']);
+  expect(requests).toEqual([]);
   const details = [...host.querySelectorAll('button')].find(
     (button) => button.textContent === zh['settings.browserAccounts.otherSourceIssues']
   )!;
@@ -231,6 +261,34 @@ it('imports from the browser profile Molly found, naming any it could not read',
   );
   await act(async () => importButton?.click());
   expect(requests).toEqual([['arc', 'Default', 'pinterest.com', false]]);
+});
+
+it('opens privacy settings after a failed re-list and reports a failed settings launch', async () => {
+  const events: string[] = [];
+  bridge.getAccountSummary.mockResolvedValue({
+    persistent: true,
+    importAvailable: true,
+    sites: [{ site: 'pinterest.com', cookieCount: 0 }],
+  });
+  bridge.getImportSources.mockResolvedValue({ sources: [], unreadable: ['Google Chrome'] });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  bridge.getImportSources.mockImplementation(async () => {
+    events.push('listing rejected');
+    throw new Error('Synthetic profile access denied');
+  });
+  bridge.openBrowserDataPrivacySettings.mockImplementation(async () => {
+    events.push('settings rejected');
+    return { opened: false, platform: 'darwin', error: 'Synthetic settings launch failure' };
+  });
+  const privacyButton = buttonWithText(zh['settings.browserAccounts.openFilesAndFolders']);
+  if (!privacyButton) throw new Error('Missing privacy recovery');
+  await act(async () => privacyButton.click());
+  expect(events).toEqual(['listing rejected', 'settings rejected']);
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe(
+    'Synthetic settings launch failure'
+  );
+  expect(privacyButton.disabled).toBe(false);
 });
 
 it('leads with sign-in inside Molly and leaves other browsers unread until import opens', async () => {

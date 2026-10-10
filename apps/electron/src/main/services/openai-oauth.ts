@@ -96,8 +96,17 @@ export class OpenAiAuthService {
       notify: (event) => {
         if (event.type === 'auth_url') notifyUrl?.(event.url)
       },
-      // The settings form has no paste-a-redirect-URL affordance yet.
-      prompt: () => Promise.reject(new Error('manual_code_unsupported'))
+      // The settings form has no paste-a-redirect-URL affordance; pi-ai races this
+      // prompt against the loopback callback, so it must stay pending until the
+      // flow's abort signal settles it.
+      prompt: (authPrompt) =>
+        new Promise<string>((_resolve, reject) => {
+          authPrompt.signal?.addEventListener(
+            'abort',
+            () => reject(new Error('manual_code_dismissed')),
+            { once: true }
+          )
+        })
     }
 
     const models = createModels({ credentials: scratchCredentialStore() })

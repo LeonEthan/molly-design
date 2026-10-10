@@ -1,64 +1,66 @@
-import { createModels } from '@earendil-works/pi-ai'
+import { createModels, type Credential, type CredentialStore } from '@earendil-works/pi-ai'
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
 import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store.ts'
 
+function toCredential(tokens: OAuthTokenSet): Credential {
+  return {
+    type: 'oauth',
+    access: tokens.accessToken,
+    refresh: tokens.refreshToken,
+    expires: tokens.accessTokenExpiresAt,
+    ...(tokens.clientId ? { clientId: tokens.clientId } : {})
+  } as Credential
+}
+
+function toTokenSet(credential: Credential, accountId?: string): OAuthTokenSet | undefined {
+  const raw = credential as {
+    access?: unknown
+    refresh?: unknown
+    expires?: unknown
+    clientId?: unknown
+  }
+  if (typeof raw.access !== 'string' || !raw.access) return undefined
+  if (typeof raw.refresh !== 'string' || !raw.refresh) return undefined
+  if (typeof raw.expires !== 'number') return undefined
+  return {
+    accessToken: raw.access,
+    refreshToken: raw.refresh,
+    accessTokenExpiresAt: raw.expires,
+    ...(typeof raw.clientId === 'string' ? { clientId: raw.clientId } : {}),
+    ...(accountId ? { accountId } : {})
+  }
+}
+
 /**
  * Returns an access token valid for the next run. The pi-ai provider owns the refresh:
- * its CredentialStore adapter serializes the exchange inside the vault lock, so a
- * concurrent login cannot drop the rotated refresh token. A refresh rejection marks the
- * row denied so the settings UI can prompt sign-in instead of hammering the endpoint.
+ * its CredentialStore adapter serializes the exchange inside the vault lock scoped to
+ * this connection, so a concurrent login cannot drop a rotated refresh token and a
+ * failed refresh can only mark this same row denied when its tokens are still in place.
  */
 export async function usableOAuthAccessToken(
   store: ModelConnectionStore,
+  connectionId: string,
   tokens: OAuthTokenSet
 ): Promise<
   | { ok: true; accessToken: string; accountId?: string }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
 > {
-  const models = createModels({
-    credentials: {
-      read: async () => ({
-        type: 'oauth',
-        access: tokens.accessToken,
-        refresh: tokens.refreshToken,
-        expires: tokens.accessTokenExpiresAt,
-        ...(tokens.clientId ? { clientId: tokens.clientId } : {})
-      }),
-      list: async () => [{ providerId: 'openai', type: 'oauth' as const }],
-      modify: (_id, fn): Promise<import('@earendil-works/pi-ai').Credential | undefined> =>
-        store
-          .mutateOAuth(async (current) => {
-            const next = await fn(
-              current
-                ? ({
-                    type: 'oauth',
-                    access: current.accessToken,
-                    refresh: current.refreshToken,
-                    expires: current.accessTokenExpiresAt,
-                    ...(current.clientId ? { clientId: current.clientId } : {})
-                  } as import('@earendil-works/pi-ai').Credential)
-                : undefined
-            )
-            if (!next) return undefined
-            const raw = next as {
-              access?: string
-              refresh?: string
-              expires?: number
-              clientId?: string
-            }
-            if (!raw.access || !raw.refresh || typeof raw.expires !== 'number') return undefined
-            return {
-              accessToken: raw.access,
-              refreshToken: raw.refresh,
-              accessTokenExpiresAt: raw.expires,
-              ...(raw.clientId ? { clientId: raw.clientId } : {}),
-              ...(tokens.accountId ? { accountId: tokens.accountId } : {})
-            }
-          })
-          .then(() => undefined),
-      delete: async () => {}
-    }
-  })
+  const credentials: CredentialStore = {
+    read: async () => toCredential(tokens),
+    list: async () => [{ providerId: 'openai', type: 'oauth' as const }],
+    modify: async (_id, fn) => {
+      const next = await store.mutateOAuth(connectionId, async (current) => {
+        // The row may have been reconnected while the exchange was in flight; only
+        // persist onto the token set this exchange was made from.
+        if (!current || current.refreshToken !== tokens.refreshToken) return undefined
+        const refreshed = await fn(toCredential(current))
+        return refreshed ? toTokenSet(refreshed, current.accountId) : undefined
+      })
+      return next ? toCredential(next) : undefined
+    },
+    delete: async () => {}
+  }
+  const models = createModels({ credentials })
   models.setProvider(openaiProvider())
   try {
     const auth = await models.getAuth('openai')
@@ -72,8 +74,14 @@ export async function usableOAuthAccessToken(
   } catch (error) {
     const message = error instanceof Error ? error.message : ''
     if (/invalid_grant|denied|unauthorized/i.test(message)) {
+      // Mark denied only when the vault still holds the grant that failed; a
+      // replacement login queued during the exchange must not be denied by it.
       await store
-        .mutateOAuth(async (current) => (current ? { ...current, denied: true } : undefined))
+        .mutateOAuth(connectionId, async (current) =>
+          current && current.refreshToken === tokens.refreshToken
+            ? { ...current, denied: true }
+            : undefined
+        )
         .catch(() => undefined)
       return { ok: false, reason: 'denied' }
     }

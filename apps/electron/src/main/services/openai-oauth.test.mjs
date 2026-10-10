@@ -13,7 +13,7 @@ function fakeStore(initial) {
   let current = initial
   return {
     oauth: () => current,
-    async mutateOAuth(fn) {
+    async mutateOAuth(_connectionId, fn) {
       const next = await fn(current)
       if (next) current = next
       return current
@@ -27,7 +27,7 @@ void test('usableOAuthAccessToken returns a fresh token without touching the vau
     refreshToken: 'SYNTHETIC_REFRESH',
     accessTokenExpiresAt: Date.now() + 3_600_000
   })
-  const usable = await usableOAuthAccessToken(store, store.oauth())
+  const usable = await usableOAuthAccessToken(store, 'conn-1', store.oauth())
   assert.equal(usable.ok, true)
   if (usable.ok) assert.equal(usable.accessToken, 'SYNTHETIC_FRESH')
 })
@@ -40,7 +40,7 @@ void test('a denied refresh marks the vault row denied without dropping tokens',
   })
   // No network in tests: the refresh attempt fails, and any "denied"-shaped failure
   // must leave the row intact for the settings UI to prompt sign-in.
-  const usable = await usableOAuthAccessToken(store, store.oauth())
+  const usable = await usableOAuthAccessToken(store, 'conn-1', store.oauth())
   assert.equal(usable.ok, false)
   assert.equal(store.oauth()?.refreshToken, 'SYNTHETIC_REFRESH')
 })

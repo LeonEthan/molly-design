@@ -130,9 +130,13 @@ export class ModelConnectionStore {
     try {
       const stat = await handle.stat()
       if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('invalid_vault')
-      const parsed = StoreSchema.parse(
-        JSON.parse(this.cipher.decryptString(await handle.readFile()))
-      )
+      const raw: unknown = JSON.parse(this.cipher.decryptString(await handle.readFile()))
+      // Pre-migration vaults stored a grantSeq counter on OAuth rows; strip it so the
+      // strict schema does not reject the whole vault.
+      if (raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown[] }).entries))
+        for (const entry of (raw as { entries: { oauth?: { grantSeq?: unknown } }[] }).entries)
+          if (entry?.oauth && entry.oauth.grantSeq !== undefined) delete entry.oauth.grantSeq
+      const parsed = StoreSchema.parse(raw)
       if (
         new Set(parsed.entries.map((entry) => entry.connection.id)).size !== parsed.entries.length
       ) {
@@ -569,42 +573,33 @@ export class ModelConnectionStore {
     })
   }
 
-  /** The OAuth token set of the single OpenAI OAuth connection, if any (main-process only). */
-  oauthCurrent(): Promise<OAuthTokenSet | undefined> {
+  /** The OAuth token set of one connection (main-process only). */
+  oauthFor(connectionId: string): Promise<OAuthTokenSet | undefined> {
     return this.serial(async () => {
       const store = await this.read()
-      return store.entries.find((item) => item.connection.authType === 'openai_oauth')?.oauth
+      return store.entries.find((item) => item.connection.id === connectionId)?.oauth
     })
   }
 
   /**
-   * Serialized read-modify-write of the OAuth token set; the pi-ai CredentialStore
-   * refresh runs inside this lock so a concurrent login cannot drop a rotated token.
+   * Serialized read-modify-write of one connection's OAuth token set; the pi-ai
+   * CredentialStore refresh runs inside this lock so a concurrent login cannot drop
+   * a rotated token. Scoped by connection id: mutating the wrong row would leave the
+   * expiring connection dead.
    */
   mutateOAuth(
+    connectionId: string,
     fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>
   ): Promise<OAuthTokenSet | undefined> {
     return this.serial(async () => {
       const store = await this.read()
-      const entry = store.entries.find((item) => item.connection.authType === 'openai_oauth')
-      if (!entry) return undefined
+      const entry = store.entries.find((item) => item.connection.id === connectionId)
+      if (!entry || entry.connection.authType !== 'openai_oauth') return undefined
       const next = await fn(entry.oauth)
       if (!next) return undefined
       entry.oauth = next
       await this.write(store)
       return entry.oauth
-    })
-  }
-
-  /** Removes the OAuth token set (the connection row is deleted separately by sign-out). */
-  clearOAuth(): Promise<void> {
-    return this.serial(async () => {
-      const store = await this.read()
-      const entry = store.entries.find((item) => item.connection.authType === 'openai_oauth')
-      if (entry) {
-        entry.oauth = undefined
-        await this.write(store)
-      }
     })
   }
 

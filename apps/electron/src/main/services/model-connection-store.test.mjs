@@ -148,7 +148,7 @@ void test('oauth connection round-trips its token set without exposing it in the
   assert.equal('oauth' in acquired, true)
   if ('oauth' in acquired) assert.equal(acquired.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
   // The pi-ai credential store adapter mutates the token set under the vault lock.
-  const next = await store.mutateOAuth(async (current) => {
+  const next = await store.mutateOAuth(saved.id, async (current) => {
     assert.equal(current?.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
     return {
       accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',

@@ -100,7 +100,6 @@ async function withServer(
     sessionId: SESSION_ID,
     localControlSocketPath: options.localControlSocketPath ?? '/tmp/lody-control.sock',
     workdir: '/tmp/workspace',
-    taskToolsEnabled: false,
   };
   await runWithMcpSessionContext(context, async () => {
     await server.connect(serverTransport);

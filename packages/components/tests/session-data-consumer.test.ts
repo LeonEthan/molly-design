@@ -87,10 +87,6 @@ describe('renderer session writer over the in-storage SessionData', () => {
       { outcome: 'cancelled' },
       { turnId: 'assistant-1' }
     );
-    await writer.resolveSessionTaskProposal(sessionId, 'proposal-1', 'proposal-1', {
-      outcome: 'created',
-      taskId: 'task-1',
-    });
 
     const stored = storage.readStored();
     expect(stored.map((turn) => turn.id)).toEqual([
@@ -105,9 +101,6 @@ describe('renderer session writer over the in-storage SessionData', () => {
     expect(answered?.type === 'tool_call' && answered.permissionRequest?.outcome?.outcome).toBe(
       'cancelled'
     );
-    const proposal = stored.find((turn) => turn.id === 'proposal-1')!.items?.[0];
-    expect(proposal?.type === 'system_notice' && proposal.meta?.outcome).toBe('created');
-    expect(proposal?.type === 'system_notice' && proposal.meta?.taskId).toBe('task-1');
   });
 
   it('surfaces a rejected domain command instead of silently dropping the write', async () => {
@@ -121,12 +114,5 @@ describe('renderer session writer over the in-storage SessionData', () => {
       } as SessionHistory)
     ).rejects.toThrow('Invalid history write');
     expect(storage.readStored()).toEqual([]);
-
-    // A proposal a peer removed is a best-effort no-op, not a failure.
-    await expect(
-      writer.resolveSessionTaskProposal(sessionId, 'missing-entry', 'proposal-1', {
-        outcome: 'dismissed',
-      })
-    ).resolves.toBeUndefined();
   });
 });

@@ -40,7 +40,6 @@ export type TurnIndexInputConfig = Pick<
   | 'agentType'
   | 'mcpServerIds'
   | 'configOptionValues'
-  | 'taskToolsEnabled'
 >;
 
 /**

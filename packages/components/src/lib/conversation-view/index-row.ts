@@ -30,7 +30,6 @@ export function pickIndexInputConfig(value: unknown): TurnIndexInputConfig | und
     ...normalizeSessionTurnInputConfig({
       mcpServerIds: value.mcpServerIds,
       configOptionValues: value.configOptionValues,
-      taskToolsEnabled: value.taskToolsEnabled,
     }),
   };
 }

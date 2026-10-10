@@ -59,11 +59,6 @@ import type { CloudPort } from '@molly/platform';
 import type { MachineProcessLifecycleAction } from '@/lib/machine-lifecycle';
 import { traceAsync } from '@/utils/trace-span';
 import { MemoryPressureSampler } from '@/monitor/memory-pressure-sampler';
-import {
-  createTaskAutomationWorkspace,
-  type TaskAutomationWorkspaceHandle,
-} from '@/lib/task-automation/task-automation-workspace';
-import { startDelegatedTask } from '@/lib/task-automation/task-automation-start';
 import { WorkspaceWatchCoordinator } from '@/lib/code-collab/workspace-watch-coordinator';
 import { findWorkspacesBySelector, formatWorkspaceCandidate } from '@/lib/workspace-selector';
 import { listAliveSessionMetas } from '@/lib/command-runtime';
@@ -82,7 +77,6 @@ type WorkspaceListItem = {
 type WorkspaceRuntimeState = {
   workspace: WorkspaceListItem;
   lody: Molly;
-  taskAutomation: TaskAutomationWorkspaceHandle | null;
 };
 
 export class MollyFleet {
@@ -263,7 +257,6 @@ export class MollyFleet {
     for (const runtime of runtimes) {
       try {
         await runtime.lody.cleanup();
-        await runtime.taskAutomation?.dispose();
       } catch (error) {
         this.logger.debug(
           `[fleet] Failed to cleanup workspace runtime ${runtime.workspace.id}: ${formatErrorMessage(
@@ -389,50 +382,7 @@ export class MollyFleet {
           return;
         }
 
-        const startedMolly = lody;
-        // Delegated automation: this machine drains the queues of the agents that
-        // live here, so entrusted work continues while nobody is looking.
-        const taskAutomation = createTaskAutomationWorkspace({
-          documentManager: startedMolly.documentManager,
-          workspaceId: workspace.id as WorkspaceId,
-          machineId: this.machineId,
-          userId: this.userId,
-          logger: workspaceLogger,
-          startTask: async (taskId, agentConfigId) => {
-            const { createSessionResult } = await import('@/commands/session');
-            return await startDelegatedTask(
-              {
-                auth: {
-                  token: this.cliToken,
-                  userId: this.userId,
-                  userName: '',
-                  userEmail: '',
-                  machineId: this.machineId,
-                  machineName: this.machineName,
-                },
-                workspace,
-                manager: startedMolly.documentManager,
-                logger: workspaceLogger,
-                createSession: async (args) =>
-                  createSessionResult(
-                    args.auth,
-                    args.workspace,
-                    args.manager,
-                    args.prompt,
-                    args.options as Parameters<typeof createSessionResult>[4],
-                    args.dispatchConfig
-                  ),
-              },
-              taskId,
-              agentConfigId
-            );
-          },
-        });
-        this.runtimes.set(workspace.id, {
-          workspace,
-          lody: startedMolly,
-          taskAutomation,
-        });
+        this.runtimes.set(workspace.id, { workspace, lody });
         this.logger.debug(`[fleet] Connected workspace: ${workspaceLabel} (${workspace.id})`);
         this.logger.debug(
           `[startup] Workspace runtime ready workspaceId=${workspace.id} durationMs=${

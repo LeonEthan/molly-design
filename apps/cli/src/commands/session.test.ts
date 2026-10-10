@@ -69,7 +69,6 @@ import {
   validateTurnConfigOptionValues,
   validateTurnModeAndModel,
   withBuiltinDefaultTurnMode,
-  writeDispatchPointer,
 } from './session';
 
 describe('CLI turn MCP selection', () => {
@@ -106,124 +105,6 @@ describe('CLI turn MCP selection', () => {
       expect(input.mcpServerIds).not.toContain('later-selection');
     }
   );
-});
-
-describe('Task status repair dispatch commit', () => {
-  it.each(['preparation', 'dispatch'] as const)(
-    'preserves the publication boundary on %s persistence failure',
-    async (failure) => {
-      let live: Partial<SessionMeta> = {};
-      let durable: Partial<SessionMeta> = {};
-      const receipt: NonNullable<SessionMeta['taskAutomationStatusRepair']> = {
-        version: 1,
-        dispatchState: 'dispatched',
-        taskId: 'task-1',
-        agentConfigId: 'molly-1',
-        ownerId: 'user-1',
-        taskStateHash: 'a'.repeat(64),
-        userTurnId: 'turn-1',
-      };
-      const result = writeDispatchPointer({
-        manager: {
-          repo: {
-            upsertDocMeta: async (_id, patch) => {
-              live = { ...live, ...patch };
-            },
-            flush: async () => {
-              if (failure === 'preparation' || live.latestUserMsgId !== undefined)
-                throw new Error('synthetic disk failure');
-              durable = structuredClone(live);
-            },
-          },
-        },
-        sessionId: 'session-1',
-        userTurnId: 'turn-1',
-        taskAutomationStatusRepair: receipt,
-      });
-      if (failure === 'preparation') {
-        await expect(result).rejects.toThrow('synthetic disk failure');
-        expect(live.latestUserMsgId).toBeUndefined();
-        expect(durable).toEqual({});
-      } else {
-        await expect(result).resolves.toBe(false);
-        expect(live.latestUserMsgId).toBe('turn-1');
-        expect(durable).toEqual({
-          taskAutomationStatusRepair: { ...receipt, dispatchState: 'prepared' },
-        });
-      }
-    }
-  );
-
-  it('persists preparation before publishing the exact turn, then persists dispatch', async () => {
-    const writes: unknown[] = [];
-    const receipt = {
-      version: 1 as const,
-      dispatchState: 'dispatched' as const,
-      taskId: 'task-1',
-      agentConfigId: 'molly-1',
-      ownerId: 'user-1',
-      taskStateHash: 'a'.repeat(64),
-      userTurnId: 'turn-1',
-    };
-    await writeDispatchPointer({
-      manager: {
-        repo: {
-          upsertDocMeta: async (roomId, patch) => {
-            writes.push({ roomId, patch });
-          },
-          flush: async () => {
-            writes.push('flush');
-          },
-        },
-      },
-      sessionId: 'session-1',
-      userTurnId: 'turn-1',
-      taskAutomationStatusRepair: receipt,
-    });
-    expect(writes).toEqual([
-      {
-        roomId: getSessionRoomId('session-1'),
-        patch: { taskAutomationStatusRepair: { ...receipt, dispatchState: 'prepared' } },
-      },
-      'flush',
-      {
-        roomId: getSessionRoomId('session-1'),
-        patch: {
-          latestUserMsgId: 'turn-1',
-          lastMissingHistoryUserMsgId: undefined,
-          taskAutomationStatusRepair: receipt,
-        },
-      },
-      'flush',
-    ]);
-  });
-  it('refuses a mismatched turn before publication', async () => {
-    await expect(
-      writeDispatchPointer({
-        manager: {
-          repo: {
-            upsertDocMeta: async () => {
-              throw new Error('must not publish');
-            },
-            flush: async () => {
-              throw new Error('must not flush');
-            },
-          },
-        },
-        sessionId: 'session-1',
-        userTurnId: 'turn-2',
-        taskAutomationStatusRepair: {
-          version: 1,
-          dispatchState: 'dispatched',
-          taskId: 'task-1',
-          agentConfigId: 'molly-1',
-          ownerId: 'user-1',
-          taskStateHash: 'a'.repeat(64),
-          userTurnId: 'turn-1',
-        },
-      })
-    ).rejects.toThrow('task_automation_repair_turn_mismatch');
-  });
 });
 
 const createSessionMeta = (overrides: Partial<SessionMeta> = {}): SessionMeta => ({

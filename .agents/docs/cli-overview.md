@@ -4,7 +4,7 @@ Background for `apps/cli`. Binding rules stay in [apps/cli/AGENTS.md](../../apps
 and the scoped files under it; this page explains why those rules exist and how the pieces fit
 together.
 
-Session/Task MCP tool contracts are owned by
+Session MCP tool contracts are owned by
 [src/mcp/AGENTS.md](../../apps/cli/src/mcp/AGENTS.md), including callers outside that
 directory. Cross-entry model validation, Session provenance, and feedback privacy
 remain in the CLI parent rules.
@@ -18,8 +18,8 @@ are merged before model-specific validation; unsupported inherited fields are re
 not silently discarded. MCP option discovery excludes retired targets. Chat validates
 both the stored Session engine identity and the current exact configuration before
 writing history. It resolves and validates the target's last selected model/thinking
-before Operation acceptance, freezing the exact configuration ID and the invoking
-Turn's Task gate alongside the effective controls in `targetDispatchConfigs`. MCP
+before Operation acceptance, freezing the exact configuration ID alongside the effective controls in
+`targetDispatchConfigs`. MCP
 creates (including Role creates) freeze the invoking Turn's MCP ids, not mutable
 requester history or Role fields. Chat freezes the target's latest explicit MCP
 selection with its model defaults; an explicit `[]` overrides inheritance. Both

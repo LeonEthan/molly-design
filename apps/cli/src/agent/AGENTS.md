@@ -33,10 +33,7 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   allowlist, never inheritance: keep `MOLLY_AUTH_URL`, `MOLLY_AUTH_SITE_URL`, and
   `MOLLY_SERVER_URL` so cloud MCP orchestration uses the daemon's deployment, let local platform
   assembly clear them before agent startup, and never add CLI credentials or secrets.
-- Pass the same MCP config on initial and replacement DeepSeek Harness sessions, and preserve
-  the driving Turn's `taskToolsEnabled` bit (HTTP header or stdio allowlisted env) across
-  replacement and restored sessions; missing/false keeps the server mounted but drops every
-  `lody_task_*` tool.
+- Pass the same MCP config on initial and replacement DeepSeek Harness sessions.
 - Load workspace MCP before `initialize`; apply capabilities at `newSession`.
   Molly watches the frozen catalog, retires changed workers, and rechecks after approval.
 - Managed questions belong to the pending native prompt's run/epoch. Reuse durable

@@ -51,7 +51,7 @@ Root `AGENTS.md` applies; this file adds CLI context. Build, runtime, and adapte
 
 ## Cross-entry agent contracts
 
-Before changing MCP tools, their callers, or delegated Task automation, read
+Before changing MCP tools or their callers, read
 [src/mcp/AGENTS.md](src/mcp/AGENTS.md) for Session acceptance, reply bounds, and
 execution/consent rules. These rules also bind CLI callers outside that directory.
 

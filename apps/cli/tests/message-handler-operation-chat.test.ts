@@ -13,7 +13,6 @@ const frozen = {
   agentConfigId: 'synthetic-exact-target',
   modelId: 'synthetic-frozen-model',
   configOptionValues: { reasoning_effort: 'high' },
-  taskToolsEnabled: false,
   mcpServerIds: ['synthetic-frozen-mcp'],
   inheritSessionDefaults: false as const,
 };
@@ -56,7 +55,7 @@ function operation(kind: 'session_chat' | 'session_chat_many'): StoredMollyOpera
     fingerprint: 'synthetic-fingerprint',
     canonicalCommand: kind === 'session_chat' ? command : { items: [command] },
     frozenContinuationConfig: {
-      inputConfig: { cliType: 'builtin', agentType: 'molly', taskToolsEnabled: true },
+      inputConfig: { cliType: 'builtin', agentType: 'molly' },
       sourceTurnId: 'synthetic-source-turn',
       targetDispatchConfigs: [frozen],
     },

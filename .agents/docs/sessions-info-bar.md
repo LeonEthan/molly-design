@@ -10,9 +10,8 @@ this page is the full text of the rules summarised there.
 - `info-chip.tsx` + `session-info-chips.tsx` + `session-info-bar.tsx`: the
   info bar follows the "canonical cluster + fixed stage" model. Cluster =
   collapsed items as uniform icon chips in CONSTANT order (status > goal >
-  schedule > task > context/PR; items return to their own slot — never
-  MRU-reshuffle). The `task` chip appears only on a Session linked to a Task and
-  is the way back to it; a new item picks a fixed slot in that list rather than
+  schedule > context/PR; items return to their own slot — never
+  MRU-reshuffle). A new item picks a fixed slot in that list rather than
   appending, and must never reorder the others. Note the separate, deliberately
   different order in `session-info-bar.tsx` for choosing which item opens on the
   stage (context first, as the most informative default) — that is stage

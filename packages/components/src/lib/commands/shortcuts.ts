@@ -27,9 +27,7 @@ export type ShortcutCommandId =
   | 'session.cycleProvider'
   | 'session.cycleModel'
   | 'session.cycleThinkEffort'
-  | 'mention.toggleSessionProjectScope'
-  | 'tasks.quickAdd'
-  | 'tasks.open';
+  | 'mention.toggleSessionProjectScope';
 
 type CommandKeybindings = Array<string | KeyBinding>;
 
@@ -86,8 +84,6 @@ export const COMMAND_SHORTCUTS: Record<ShortcutCommandId, CommandKeybindings> = 
   'session.cycleModel': [],
   'session.cycleThinkEffort': [],
   'mention.toggleSessionProjectScope': [],
-  'tasks.quickAdd': ['$mod+Alt+t'],
-  'tasks.open': [],
 };
 
 export function getCommandKeybindings(id: ShortcutCommandId): CommandKeybindings {

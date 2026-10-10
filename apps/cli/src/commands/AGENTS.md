@@ -41,8 +41,7 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
 ## Local command boundary
 
 - Public commands do not expose cloud workspace sync, remote machine operations, hosted export,
-  account management, or feedback submission. Local Task discovery still combines the physical
-  document existence index with visible Task Index rows and honors tombstones.
+  account management, or feedback submission.
 
 ## `molly app`
 
@@ -67,7 +66,7 @@ Command entrypoints, the daemon runner, and session dispatch from the CLI/MCP bo
 - Create requires same-machine Molly and a current runtime catalog; validate merged
   controls without dropping unsupported fields. Requester defaults and Role IDs bind
   exact targets. Chat validates target history defaults and freezes its exact config,
-  model/thinking, MCP selection and invoking Task gate before acceptance; replay uses
+  model/thinking and MCP selection before acceptance; replay uses
   that snapshot. MCP creates freeze the invoking Turn's selected ids, including `[]`;
   Roles do not own MCP choices. Semantic model conversion preserves non-model controls.
   Structured model selections validate their ACP aliases before inheritance; freeze

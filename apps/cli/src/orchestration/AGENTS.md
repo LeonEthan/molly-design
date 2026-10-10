@@ -82,7 +82,7 @@ Root and `apps/cli/AGENTS.md` apply; `specs/session-orchestration.md` owns behav
   Machine Flock document is uncertainty, not permanent deletion/configuration
   absence. Keep the item/Delivery pending until positive evidence or deadline.
 - Retired/mismatched Delivery targets or invalid frozen Molly selections settle without
-  execution. Dispatch preserves the frozen target ID and MCP/Task selection.
+  execution. Dispatch preserves the frozen target ID and MCP selection.
 - Deadlines finish the root with item `TARGET_TIMEOUT` results but never cancel
   target Turns. Operation cancel is the only best-effort remote-cancel path.
 - A pending Delivery still undeliverable 8h after its Operation's deadline is

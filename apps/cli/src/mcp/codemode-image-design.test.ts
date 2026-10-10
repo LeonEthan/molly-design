@@ -178,7 +178,6 @@ it.each(['generate', 'edit'] as const)(
       sessionId,
       localControlSocketPath: undefined,
       workdir: f.cwd,
-      taskToolsEnabled: false,
     };
     const [bridge, serverTransport] = InMemoryTransport.createLinkedPair();
     const pending = new Map<RequestId, ReturnType<typeof deferred<JSONRPCMessage>>>();

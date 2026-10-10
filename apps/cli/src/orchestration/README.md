@@ -32,6 +32,6 @@ spend no execution attempt. Transient catalog visibility still remains pending u
 establishes absence; old storage layout alone does not make an eligible Molly config invalid.
 
 Continuation carries the frozen target ID, model selection, MCP IDs (including an explicit
-empty list) and Task-tool gate into the execution service. It does not reread defaults or
+empty list) into the execution service. It does not reread defaults or
 choose a replacement model. The execution service and protected host independently check
 current runtime/credential availability; this offline gate does not prove provider access.

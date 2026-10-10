@@ -205,29 +205,17 @@ export const normalizeMessageContent = (value: unknown): MessageContent | null =
 };
 
 /**
- * Whether a history item renders as a row in the system-message group.
- *
- * Four item types render as system rows. The one conditional case is the
- * agent's task proposal: the Tasks MCP surface is not gated (the beta gate is
- * frontend-only), so an agent can propose a task into a workspace whose user
- * never enabled Tasks. Such a proposal is dropped entirely rather than falling
- * through to the generic notice, which would describe a feature that is not
- * there.
- *
- * Kept here, named and pure, because the call site expresses it as a filter
- * predicate where a mis-inverted boolean would silently stop rendering
- * worktree-script and operation-completion notices for every user — a failure
- * nothing else would catch.
+ * Whether a history item renders as a row in the system-message group. Task
+ * proposals stay in stored history after Tasks was retired, but never render.
  */
 export const shouldRenderSystemRowItem = <T extends { type: string }>(
-  item: T,
-  tasksEnabled: boolean
+  item: T
 ): item is Extract<
   T,
   { type: 'system_notice' | 'worktree_script' | 'operation_completion' | 'operation_progress' }
 > => {
   if (item.type === 'system_notice' && 'name' in item && item.name === 'task_proposal') {
-    return tasksEnabled;
+    return false;
   }
   return (
     item.type === 'system_notice' ||

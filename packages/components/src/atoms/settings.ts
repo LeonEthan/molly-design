@@ -1,5 +1,4 @@
 import { atomWithProductStorage } from '@/lib/atom-with-product-storage';
-import { mollyStorage } from '@/lib/product-storage';
 import { atom } from 'jotai';
 
 import type { MachineId, SupportedLanguage } from '@molly/shared';
@@ -138,31 +137,7 @@ export const autoArchiveOnPrClosedAtom = atomWithProductStorage<boolean>(
   false
 );
 
-/** localStorage keys for developer-only beta gates — keep in sync with the atoms below. */
 export const DEVELOPER_MODE_STORAGE_KEY = 'molly-developer-mode-enabled';
-export const TASKS_BETA_STORAGE_KEY = 'molly-tasks-beta-enabled';
-
-/**
- * Synchronous read of the Tasks feature gate from localStorage.
- *
- * `atomWithProductStorage` without a settled store can still report its default on the
- * first paint (and `getOnInit` only samples storage once at module load, so a
- * test or late write is invisible). Route guards that redirect on `false` must
- * use this on that first frame so a bookmarked `/tasks/$taskId` is not bounced
- * to chat before hydration finishes.
- */
-export function readTasksFeatureEnabledFromStorage(): boolean {
-  if (typeof window === 'undefined') {
-    return false;
-  }
-  try {
-    const developerMode = JSON.parse(mollyStorage.getItem(DEVELOPER_MODE_STORAGE_KEY) ?? 'false');
-    const tasksBeta = JSON.parse(mollyStorage.getItem(TASKS_BETA_STORAGE_KEY) ?? 'false');
-    return developerMode === true && tasksBeta === true;
-  } catch {
-    return false;
-  }
-}
 
 // getOnInit samples storage when the atom module loads so a cold SPA boot
 // (the deep-link case) already has the right init value.
@@ -171,29 +146,6 @@ export const developerModeEnabledAtom = atomWithProductStorage<boolean>(
   false,
   undefined,
   { getOnInit: true }
-);
-
-// Opt-in for the Tasks beta. Reachable only from the beta section of Settings,
-// which itself only renders while Developer mode is on.
-export const tasksBetaEnabledAtom = atomWithProductStorage<boolean>(
-  TASKS_BETA_STORAGE_KEY,
-  false,
-  undefined,
-  { getOnInit: true }
-);
-
-/**
- * The single gate every Tasks surface reads — sidebar entry, routes, commands,
- * quick-add, index sync, status watcher, session task chip, and the agent's task
- * proposal card. When it is false the feature must be indistinguishable from one
- * that was never built.
- *
- * Developer mode is part of the condition, not merely the way to reach the
- * switch: turning Developer mode off has to hide Tasks again, and it does so
- * without discarding the opt-in, so turning it back on restores the choice.
- */
-export const tasksFeatureEnabledAtom = atom(
-  (get) => get(developerModeEnabledAtom) && get(tasksBetaEnabledAtom)
 );
 
 /** localStorage keys for the experimental features gate. */

@@ -91,24 +91,6 @@ never pushed to renderers as local room health.
   single publish commit, cancellation, when the queue may start in cloud versus OSS
   local mode, and the rule that a setup row never carries authorization URLs, codes,
   tokens, or raw provider output.
-- `task-doc.ts`: only creation passes `initialState` to the Mirror
-  (`seedEmptyDocument`); every other path must treat an absent document as absent, or
-  `readTask` answers with a placeholder meta and TASK_NOT_FOUND stops existing. Each
-  write republishes the index row from the document's post-write state. Persisted Task
-  documents get a repo `e/task-<id>` existence entry and no duplicated `m/*` business
-  meta. **Never write the agent field here**: it is the automation consent, so
-  `applyAgentTaskUpdate` covers every other scalar without an `agent` branch. Anything
-  needing every visible Task uses `listWorkspaceTaskIds`, which merges existence with
-  index rows, repairs a missing projection, and never revives an index tombstone.
-  `status`/`ownerId`/`projects` writes here can make a task automation-eligible and
-  start a session. Contract: specs/tasks.md.
-- `task-automation/`: Molly-only dispatch rechecks consent and freezes explicit
-  model/thinking with Task tools; baseline includes retired records to prevent replay.
-  Hold Agent slots through dispatch, settlement and in-progress work. Repair writes
-  only, preserving later decisions and flushing identical index rows. Boot/meta-sync
-  filters Session receipts before opening Tasks, never history. State hashes guard
-  repair; failures or prepared-only evidence hold new dispatch. Clear receipts after Task/index durability or
-  a superseding decision, never recreate a Session.
 - Historical design file reads reuse workspace metadata for unloaded/archived
   Sessions, never deleted Sessions or Agent startup. Keep Code Collab archive
   restrictions for other consumers.

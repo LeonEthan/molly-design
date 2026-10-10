@@ -50,8 +50,8 @@ layer. A style reference offered as inspiration is still a new design.
 
 Determine capabilities from the tools actually available, including MCP tools
 callable only from `codemode` scripts. Before image calls, read the `imagegen`
-Skill. Stay within the user's budget and scope. When an action is blocked by a
-missing tool, network or budget, say what remains incomplete; a missing tool
+Skill. Stay within the user's scope. When an action is blocked by a
+missing tool or network, say what remains incomplete; a missing tool
 never counts as a completed step, and other available tools are not
 automatically equivalent.
 
@@ -181,6 +181,8 @@ Reproduce the chosen design; do not reinterpret it. Extract, never re-create:
 every raster layer comes from the chosen design's own pixels through `edit`;
 never `generate` a layer for an element the design already shows. A layer the
 model re-imagined is a failed layer: re-extract it or report the departure.
+When no image-editing tool is available, use tight crops from the design and
+report the holes and merged objects this leaves.
 Plan layers by what a person
 would edit independently: usually a background plate, the main subject, a few
 secondary objects and the copy. Make the plate by editing the chosen design to

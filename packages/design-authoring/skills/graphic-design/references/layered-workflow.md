@@ -83,8 +83,10 @@ a failed layer, so re-extract it or report the departure.
    isolate lettering a font cannot reproduce as an image from the design (see
    [Lettering layers](#lettering-layers)).
 5. **Check each layer.** Before assembling, crop the element's region from the
-   chosen design and `compare` the extracted layer with it; re-extract a layer
-   that visibly drifts now, not after assembly.
+   chosen design and `compare` the extracted layer with it. `compare` needs
+   same-size images, so when the layer came back at a different size, read the
+   crop and the layer side by side instead. Re-extract a layer that visibly
+   drifts, now rather than after assembly, or report the departure.
 6. **Assemble and compare.** Place each layer at its measured position, render,
    and compare the render with the chosen design as described under
    [Comparing native previews](#comparing-native-previews).
@@ -127,7 +129,7 @@ node scripts/reference-pack.mjs trim <layer.png> <project>/media/<name>.png
 
 `alpha` reports whether the layer has real transparency and where its visible
 pixels are. An isolated foreground with no transparent pixels, or a painted
-checkerboard, did not come back transparent: correct it within budget or report
+checkerboard, did not come back transparent: correct it or report
 it. `trim` removes fully transparent padding without changing kept pixels and
 reports the crop offset, keeping click targets close to the visible object. Faint
 alpha pixels can keep the bounds large: `alpha --threshold N` shows where more
@@ -158,7 +160,7 @@ size; a plain font on a flat shape would lose the design.
 - Read the result and compare it with the source copy character by character,
   not with what the design drew. Image models often drop, add, swap or invent
   characters, especially in CJK. A wrong character is a failed layer:
-  regenerate within the user's budget, or set that copy as native text and
+  regenerate it, or set that copy as native text and
   report the change.
 - Check alpha and trim as for any foreground layer, then place it like other
   layers. Give it an `id` that names the copy, such as `title-lettering`.

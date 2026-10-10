@@ -57,11 +57,20 @@ prescribes decomposing the chosen design):
    they appear, completing only genuinely hidden parts, at no fewer pixels
    than the element occupies on the canvas.
 3. A new per-layer check crops the element's region from the chosen design and
-   `compare`s it with the extracted layer before assembly.
-4. `SKILL.md` stage 4 carries the same principle, and the Reporting rule for
-   the editable version now names each raster layer that visibly departs.
+   `compare`s it with the extracted layer before assembly (same-size
+   `compare`, or a side-by-side read when the layer came back at a different
+   size).
+4. `SKILL.md` stage 4 carries the same principle, keeps the tight-crop fallback
+   with reported holes when no image-editing tool is available, and the
+   Reporting rule for the editable version now names each raster layer that
+   visibly departs.
 5. `replication.md` replaces "regenerate each object completely" with the same
    extraction wording.
+6. At the maintainer's direction, budget-limit phrasing ("within the user's
+   budget", "within budget") is removed from both skills; factual billing
+   notes ("each call may be billed") stay. A review suggestion to gate
+   re-extraction on an authorized budget was declined for the same reason —
+   the "report the departure" alternative remains the honest exit.
 
 Deliberately not done: no pixel-level cutout/segmentation script (generative
 extraction is now sufficient and a script adds a dependency and maintenance

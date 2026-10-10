@@ -50,8 +50,6 @@ import { docMetaCacheScopeAtom } from '@/atoms/doc-meta';
 import { useWorkspaceRouteTargetSlug } from '../providers/workspace-route-target';
 import { resolveWorkspaceDataScope } from '@/lib/workspace-data-scope';
 
-import { tasksFeatureEnabledAtom } from '@/atoms/settings';
-import { taskQuickAddOpenAtom, taskQuickAddStatusAtom } from '@/atoms/tasks';
 import { mollyConnectionUiStateAtom } from '@/atoms/control-connection';
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import { getLocalProjectVisibilityKey } from '@/lib/visible-local-project-index';
@@ -459,16 +457,6 @@ function isHomeRoute(pathname: string, workspaceSlug: string | null): boolean {
       : pathname;
 
   return normalizedPath.startsWith('/chat');
-}
-
-function isTasksRoute(pathname: string, workspaceSlug: string | null): boolean {
-  const workspacePrefix = workspaceSlug ? `/${workspaceSlug}` : '';
-  const normalizedPath =
-    workspaceSlug && pathname.startsWith(workspacePrefix)
-      ? pathname.slice(workspacePrefix.length) || '/'
-      : pathname;
-
-  return normalizedPath.startsWith('/tasks');
 }
 
 function isArchiveRoute(pathname: string, workspaceSlug: string | null): boolean {
@@ -1355,7 +1343,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
 
   const activeNav = useMemo(() => {
     if (isArchiveRoute(location.pathname, workspaceSlug)) return 'archive';
-    if (isTasksRoute(location.pathname, workspaceSlug)) return 'tasks';
     if (
       isHomeRoute(location.pathname, workspaceSlug) &&
       !selectedSessionId &&
@@ -2346,38 +2333,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
     });
   }, [activeNav, router, workspaceSlug]);
 
-  const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
-
-  const handleTasksClicked = useCallback(() => {
-    if (!workspaceSlug) return;
-
-    if (activeNav === 'tasks') {
-      if (typeof window !== 'undefined' && window.history.length > 1) {
-        window.history.back();
-        return;
-      }
-      void router.navigate({
-        to: '/$workspaceName/chat',
-        params: { workspaceName: workspaceSlug },
-      });
-      return;
-    }
-    void router.navigate({
-      to: '/$workspaceName/tasks',
-      params: { workspaceName: workspaceSlug },
-    });
-  }, [activeNav, router, workspaceSlug]);
-
-  // Capture without navigating: the dialog is global (MainLayout), so the `+`
-  // works from anywhere the sidebar is. Status is reset because the board's
-  // per-column `+` leaves its own status behind in that atom.
-  const openTaskQuickAdd = useSetAtom(taskQuickAddOpenAtom);
-  const setTaskQuickAddStatus = useSetAtom(taskQuickAddStatusAtom);
-  const handleNewTaskClicked = useCallback(() => {
-    setTaskQuickAddStatus(null);
-    openTaskQuickAdd(true);
-  }, [openTaskQuickAdd, setTaskQuickAddStatus]);
-
   const handleDocsClicked = useCallback(() => {
     if (typeof window === 'undefined') return;
 
@@ -2455,7 +2410,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
       settings: t('settings.title', 'Settings'),
       help: t('sidebar.help', 'Help'),
       archive: t('archive.title', 'Archive'),
-      newTask: t('tasks.newTask', 'New task'),
       docs: t('sidebar.docs', 'Docs'),
       joinCommunity: t('sidebar.joinCommunity', 'Join community'),
       feedback: t('sidebar.feedback', 'Feedback'),
@@ -2888,9 +2842,6 @@ export function LoroAppSidebar({ className }: LoroAppSidebarProps) {
         onCreateWorkspaceClicked={handleCreateWorkspaceClicked}
         onHomeClicked={handleHomeClicked}
         onArchiveClicked={handleArchiveClicked}
-        onTasksClicked={handleTasksClicked}
-        onNewTaskClicked={handleNewTaskClicked}
-        showTasks={tasksEnabled}
         onDocsClicked={handleDocsClicked}
         onJoinCommunityClicked={handleJoinCommunityClicked}
         onFeedbackClicked={handleFeedbackClicked}

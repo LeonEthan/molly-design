@@ -606,8 +606,6 @@ export interface AgentClientOptions {
   };
   /** Config selected before ACP session establishment. */
   configOptionValues?: SessionTurnInputConfig['configOptionValues'];
-  /** Whether this Agent session mounts the built-in Molly Task MCP tools. */
-  taskToolsEnabled?: boolean;
   /**
    * Overrides terminal capability advertisement. Builtin Grok defaults to false so its
    * adapter uses the native local runner; other agents default to true.
@@ -892,7 +890,6 @@ export class AgentClient implements acp.Client {
           workspaceId: this.options.workspaceId,
           machineId: this.options.machineId,
           workdir,
-          taskToolsEnabled: this.options.taskToolsEnabled === true,
         });
         return [
           { type: 'http', name: 'molly', url: endpoint.url, headers },
@@ -918,10 +915,6 @@ export class AgentClient implements acp.Client {
       { name: 'MOLLY_MCP_MACHINE_ID', value: this.options.machineId },
       { name: 'MOLLY_MCP_SOCKET_PATH', value: getLocalControlSocketPath() },
       { name: 'MOLLY_MCP_WORKDIR', value: workdir },
-      {
-        name: 'MOLLY_MCP_TASK_TOOLS_ENABLED',
-        value: this.options.taskToolsEnabled === true ? '1' : '0',
-      },
     ];
 
     if (this.options.designHookLaunchId)

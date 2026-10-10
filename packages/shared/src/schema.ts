@@ -26,7 +26,6 @@ import {
   Role,
   SessionTurnInputConfig,
   SessionId,
-  TaskId,
   WorktreeCleanupScriptConfig,
   WorktreeSetupScriptConfig,
 } from '.';
@@ -541,8 +540,6 @@ const acpSessionConfigSchema = schema
       configOptionValues: schema.Any({ required: false }),
       /** Workspace MCP catalog ids selected for this session (string[]). */
       mcpServerIds: schema.Any({ required: false }),
-      /** Whether the built-in Molly Task MCP tools are mounted for this Turn. */
-      taskToolsEnabled: schema.Boolean({ required: false }),
       /** Agent Role selected for this Turn; null is explicit None. */
       agentRoleId: agentRoleIdSchema,
       agentRoleRevision: schema.Number({ required: false }),
@@ -872,16 +869,6 @@ export type PendingScheduledTask = {
 };
 
 export type SessionMeta = {
-  /** Status-only repair: persist preparation before publishing dispatch; never replay authority. */
-  taskAutomationStatusRepair?: {
-    version: 1;
-    dispatchState: 'prepared' | 'dispatched';
-    taskId: TaskId;
-    agentConfigId: string;
-    ownerId: string;
-    taskStateHash: string;
-    userTurnId: string;
-  };
   /** Local editable artwork association; the workspace owns canonical bytes. */
   design?: { artworkId: string; path: 'design.json' };
   /** Explicit cross-engine continuation provenance; never a native resume identity. */
@@ -1010,12 +997,6 @@ export type SessionMeta = {
   messageQueueUpdatedAt?: number;
   /** Last queue update signal the owning CLI checked when no dispatchable turn was found. */
   messageQueueCheckedAt?: number;
-  /**
-   * Task this session belongs to, for navigation back to it. The association
-   * itself, with its provenance, lives in the task document; this is only a
-   * pointer, and a session belongs to at most one task.
-   */
-  taskId?: TaskId;
   /**
    * When the session started waiting on a human answer, cleared when the request
    * resolves. A list-rendering summary of the durable truth in history (a

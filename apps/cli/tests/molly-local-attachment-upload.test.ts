@@ -149,7 +149,6 @@ async function uploadFixture() {
         sessionId,
         localControlSocketPath: socketPath,
         workdir,
-        taskToolsEnabled: false,
       },
       () => client.callTool({ name, arguments: { paths } })
     );

@@ -137,7 +137,6 @@ const createSessionConfig = (
   agentCliType: 'builtin',
   agentType: 'codex',
   mcpServerIds: [],
-  taskToolsEnabled: false,
   assumeDocExisting: true,
   userName: 'Test User',
   userEmail: 'test@example.com',
@@ -153,12 +152,11 @@ const createPreparedTestCompatibility = (
   runConfig: normalizeSessionPreparationRunConfigForDedup({
     mcpServerIds,
     configOptionValues,
-    taskToolsEnabled: false,
   }),
 });
 
 type PreparedTestResource = SessionPreparationResource & {
-  config: Pick<SessionConfig, 'mcpServerIds' | 'configOptionValues' | 'taskToolsEnabled'>;
+  config: Pick<SessionConfig, 'mcpServerIds' | 'configOptionValues'>;
   compatibility: ReturnType<typeof createPreparedTestCompatibility>;
   readCurrentLaunchConfig?: () => {
     config: SessionLaunchConfig | undefined;
@@ -1099,7 +1097,6 @@ describe('SessionManager preparation compatibility', () => {
       config: {
         mcpServerIds: [],
         configOptionValues: { permission_mode: 'always-approve' },
-        taskToolsEnabled: false,
       },
       compatibility: createPreparedTestCompatibility({}, [], { permission_mode: 'always-approve' }),
       initialized: Promise.resolve(),
@@ -1161,7 +1158,7 @@ describe('SessionManager preparation compatibility', () => {
     const sessionId = 'missing-agent-config-cold-fallback' as SessionId;
     const cleanup = deferred<void>();
     const prepared = {
-      config: { mcpServerIds: [], taskToolsEnabled: false },
+      config: { mcpServerIds: [] },
       compatibility: createPreparedTestCompatibility({}),
       initialized: Promise.resolve(),
       sessionReady: Promise.resolve(),
@@ -1213,7 +1210,7 @@ describe('SessionManager preparation compatibility', () => {
     const agentConfigId = 'agent-1' as AgentConfigId;
     const cleanup = deferred<void>();
     const prepared = {
-      config: { mcpServerIds: [], taskToolsEnabled: false },
+      config: { mcpServerIds: [] },
       compatibility: createPreparedTestCompatibility({}),
       initialized: Promise.resolve(),
       sessionReady: Promise.resolve(),
@@ -1284,7 +1281,7 @@ describe('SessionManager preparation compatibility', () => {
     const sessionId = 'empty-launch-config' as SessionId;
     const agentConfigId = 'agent-1' as AgentConfigId;
     const prepared = {
-      config: { mcpServerIds: [], taskToolsEnabled: false },
+      config: { mcpServerIds: [] },
       compatibility: createPreparedTestCompatibility({ env: {} }),
       initialized: Promise.resolve(),
       sessionReady: Promise.resolve(),
@@ -1347,7 +1344,7 @@ describe('SessionManager preparation compatibility', () => {
     const preparedConfig = buildSessionLaunchConfig({ env: { PREPARED: '1' } });
     let currentConfig = preparedConfig;
     const prepared = {
-      config: { mcpServerIds: [], taskToolsEnabled: false },
+      config: { mcpServerIds: [] },
       compatibility: createPreparedTestCompatibility(preparedConfig ?? {}),
       readCurrentLaunchConfig: () => ({ config: currentConfig, source: 'agent-config' }),
       initialized: Promise.resolve(),

@@ -5,7 +5,6 @@ import { Loader2, CheckCircle2, AlertCircle, Download, ExternalLink } from 'luci
 import type { ElectronUpdaterPhase } from '@molly/shared';
 import { Button } from '@/ui/button';
 import { Switch } from '@/ui/switch';
-import { BetaFeaturesSection } from './beta-features-setting';
 import { CompactRow, CompactSection } from './compact-layout';
 import { settingContainerClass } from '.';
 import { useElectronUpdaterState } from '@/hooks/use-electron-updater-state';
@@ -241,7 +240,6 @@ export function AboutSettingsComponent() {
           </CompactRow>
         )}
       </CompactSection>
-      <BetaFeaturesSection />
     </div>
   );
 }

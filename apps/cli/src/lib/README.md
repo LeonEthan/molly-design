@@ -58,9 +58,6 @@ cross-module explanations under tracked `.agents/docs/`.
 - Product-managed Agent GitHub token injection and shell shims are retired. Host-side
   Git credential helpers and legacy worktree recovery retain their existing contracts;
   removal of the unused shim source does not clean user credentials or generated files.
-- `task-doc.ts` — every CLI-side read/write of a Task document, plus
-  `listWorkspaceTaskIds` and the index-only listing (`listTasksFromIndex` / pure
-  `selectTaskIndexRows`). Normative contract: specs/tasks.md.
 
 ## Subdirectories
 
@@ -74,33 +71,6 @@ cross-module explanations under tracked `.agents/docs/`.
 - PR polling and automatic code review/merge were retired from Molly; no scheduler,
   credential harvest, or dedicated scheduling database is opened. Existing records remain on disk.
 
-- `task-automation/` — delegated task automation: `planTaskAutomation` is a pure
-  policy holding every gate that keeps it from spending tokens by surprise, the
-  scheduler is a thin orchestrator, and the per-workspace handle watches the task
-  index and re-evaluates on `onStreamsOnline` so work held while offline still
-  starts. The scheduler excludes retired/overridden engines without rewriting Task
-  records; its boot baseline still includes those records. `task-automation-start.ts`
-  re-reads the entrusted target, owner and status, validates the persisted Molly
-  model projection, and passes those exact controls to Session creation with Task
-  tools enabled. Command acceptance then validates the current target/model catalog.
-  Once dispatch returns, the scheduler owns a separate status-only settlement callback.
-  A failed local write retains the Agent slot and started-task identity; an owned retry
-  timer and ordinary index/reconnect evaluations retry only that callback. The guarded
-  Task mutation preserves subsequent completion, reassignment and owner changes. Index
-  publication flushes unchanged rows too, because equal memory state does not prove an
-  earlier flush succeeded. `task-automation-recovery.ts` reconstructs status-only work
-  from the receipt published with the Session's first dispatch pointer. A prepared
-  receipt is flushed before publication, then the dispatched receipt is flushed;
-  prepared-only recovery retains an unknown outcome without executing anything.
-  Post-publication persistence errors retain the Session. Recovery filters
-  Session metadata by machine/user before opening only referenced existing Tasks;
-  no Session histories are opened. A canonical hash of Task meta/body/timeline
-  excludes dispatch-owned link bookkeeping and preserves later decisions. Task/index
-  durability precedes clearing and flushing the receipt; retries flush pending clears
-  even if memory already reports no receipt. Boot and the rate-limited metadata catch-up
-  edge trigger recovery; unavailable/corrupt evidence holds new automation and owns
-  a 30-second retry. Disposal cancels the retry and drains owned recovery. Legacy
-  dispatches without receipts are not guessed or replayed; the boot baseline remains.
 - `git/`, `notifications/`, `session-export/`, `usage/` — supporting
   services.
 

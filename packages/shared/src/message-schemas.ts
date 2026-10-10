@@ -370,7 +370,6 @@ export const ACPSessionConfigSchema = z
     modelSelection: ModelSelectionSchema.optional(),
     configOptionValues: AcpConfigOptionValuesSchema.optional(),
     mcpServerIds: z.array(z.string()).optional(),
-    taskToolsEnabled: z.boolean().optional(),
     agentRoleId: z.string().trim().min(1).nullable().optional(),
     agentRoleRevision: z.number().int().nonnegative().optional(),
     issuePRMentions: z.array(IssuePRMentionSchema).optional(),
@@ -477,11 +476,6 @@ export const normalizeSessionTurnInputConfig = (
   const mcpServerIds = normalizeMcpServerIdSelection(record.mcpServerIds);
   if (mcpServerIds) {
     normalized.mcpServerIds = mcpServerIds;
-  }
-
-  const taskToolsEnabled = maybeParseField(z.boolean(), record.taskToolsEnabled);
-  if (taskToolsEnabled !== undefined) {
-    normalized.taskToolsEnabled = taskToolsEnabled;
   }
 
   if (record.agentRoleId === null) {
@@ -929,7 +923,6 @@ export const SessionPreparationRunConfigSchema = z
       .array(z.string())
       .transform((ids) => normalizeMcpServerIdSelection(ids) ?? [])
       .optional(),
-    taskToolsEnabled: z.boolean().optional(),
   })
   .strict();
 

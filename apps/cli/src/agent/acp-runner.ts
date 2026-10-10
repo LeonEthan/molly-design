@@ -46,7 +46,6 @@ export type CreateAcpClientOptions = {
     agentType: string;
   };
   configOptionValues?: AgentClientOptions['configOptionValues'];
-  taskToolsEnabled?: boolean;
   resumeSessionId?: ACPSessionId;
   forkSessionId?: ACPSessionId;
   /** Provider-native turn id selected as the source boundary for a turn-addressed fork. */
@@ -95,7 +94,6 @@ export const createAcpClient = async (options: CreateAcpClientOptions) => {
     terminalManager: options.terminalManager,
     agentConfig: options.agentConfig,
     configOptionValues: options.configOptionValues,
-    taskToolsEnabled: options.taskToolsEnabled,
     terminalEnabled: options.terminalEnabled,
     onStartupStage: options.onStartupStage,
     onUpdateMessage: options.onUpdateMessage,

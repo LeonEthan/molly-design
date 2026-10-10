@@ -491,7 +491,6 @@ describe('AgentClient session preparation gate', () => {
       machineId: 'machine-1' as MachineId,
       terminalManager: {} as never,
       agentConfig: { cliType: 'builtin', agentType: 'deepseek' },
-      taskToolsEnabled: true,
       onUpdateMessage: vi.fn(),
       onRequestPermission: vi.fn(),
     });
@@ -510,7 +509,6 @@ describe('AgentClient session preparation gate', () => {
             { name: 'MOLLY_MCP_WORKSPACE_ID', value: 'workspace-1' },
             { name: 'MOLLY_MCP_MACHINE_ID', value: 'machine-1' },
             { name: 'MOLLY_MCP_WORKDIR', value: '/workdir' },
-            { name: 'MOLLY_MCP_TASK_TOOLS_ENABLED', value: '1' },
           ]),
         }),
       ],

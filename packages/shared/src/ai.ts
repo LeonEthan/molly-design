@@ -1654,8 +1654,6 @@ export type ACPSessionConfig = {
   configOptionValues?: Record<string, AcpConfigOptionValue>;
   /** Workspace MCP catalog ids selected for this session. */
   mcpServerIds?: McpServerId[];
-  /** Whether the built-in Molly Task MCP tools are available to this Turn's Agent session. */
-  taskToolsEnabled?: boolean;
   /**
    * Agent Role identity selected in the composer for this Turn. Null is an
    * explicit None selection; absence is legacy/unknown. This is provenance for

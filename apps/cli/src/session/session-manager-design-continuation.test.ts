@@ -117,7 +117,6 @@ function fixture() {
     agentType: 'molly',
     assumeDocExisting: true,
     mcpServerIds: [],
-    taskToolsEnabled: false,
     userName: 'Synthetic',
     userEmail: 'synthetic@example.test',
   };

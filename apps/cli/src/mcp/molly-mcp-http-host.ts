@@ -23,7 +23,6 @@ import {
   MCP_HTTP_IMAGE_PATH,
   MCP_HTTP_PREFERRED_PORT_ENV,
   MCP_HTTP_SESSION_ID_HEADER,
-  MCP_HTTP_TASK_TOOLS_ENABLED_HEADER,
   MCP_HTTP_TOKEN_ENV,
   MCP_HTTP_WORKDIR_B64_HEADER,
   MCP_HTTP_WORKSPACE_ID_HEADER,
@@ -201,15 +200,8 @@ const parseSessionContextHeaders = (req: http.IncomingMessage): McpSessionContex
   const rawSessionId = singleHeader(req, MCP_HTTP_SESSION_ID_HEADER);
   const workspaceId = singleHeader(req, MCP_HTTP_WORKSPACE_ID_HEADER);
   const machineId = singleHeader(req, MCP_HTTP_MACHINE_ID_HEADER);
-  const taskToolsEnabled = singleHeader(req, MCP_HTTP_TASK_TOOLS_ENABLED_HEADER);
   const workdirB64 = singleHeader(req, MCP_HTTP_WORKDIR_B64_HEADER);
-  if (
-    !rawSessionId ||
-    !workspaceId ||
-    !machineId ||
-    (taskToolsEnabled !== '0' && taskToolsEnabled !== '1') ||
-    !workdirB64
-  ) {
+  if (!rawSessionId || !workspaceId || !machineId || !workdirB64) {
     return null;
   }
   const sessionId = SessionIdSchema.safeParse(rawSessionId);
@@ -230,7 +222,6 @@ const parseSessionContextHeaders = (req: http.IncomingMessage): McpSessionContex
     designHookLaunchId: singleHeader(req, MCP_HTTP_DESIGN_LAUNCH_ID_HEADER) ?? undefined,
     workspaceId,
     machineId,
-    taskToolsEnabled: taskToolsEnabled === '1',
     workdir,
     localControlSocketPath: getLocalControlSocketPath(),
   };
@@ -336,7 +327,6 @@ async function handleRequest(
             resolveBrowserHost: async () => await resolveBrowserHost(context),
           })
         : buildMollyMcpServer({
-            taskToolsEnabled: context.taskToolsEnabled,
             designResubmit: await resolveDesignResubmit(context),
             renderHost: await resolveRenderHost(context, logger),
             resolveRenderHost: async () => await resolveRenderHost(context, logger),

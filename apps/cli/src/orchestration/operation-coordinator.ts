@@ -1209,7 +1209,6 @@ export class MollyOperationCoordinator {
             : {}),
           ...(frozen.configOptionValues ? { configOptionValues: frozen.configOptionValues } : {}),
           ...(frozen.mcpServerIds !== undefined ? { mcpServerIds: [...frozen.mcpServerIds] } : {}),
-          taskToolsEnabled: frozen.taskToolsEnabled === true,
           ...(meta.acpSessionId ? { resume: meta.acpSessionId } : {}),
           chainDepth: operation.initiatorChainDepth + 1,
         },

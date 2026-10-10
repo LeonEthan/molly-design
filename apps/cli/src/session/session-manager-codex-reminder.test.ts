@@ -31,7 +31,6 @@ const config = {
   agentCliType: 'builtin',
   agentType: 'codex',
   mcpServerIds: [],
-  taskToolsEnabled: false,
 } as unknown as SessionConfig;
 
 function manager(design: boolean) {

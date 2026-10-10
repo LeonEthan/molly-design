@@ -818,7 +818,6 @@ describe('LodyOperationCoordinator', () => {
         agentType: 'molly',
         modelSelection,
         mcpServerIds: ['synthetic-server'],
-        taskToolsEnabled: true,
       },
     });
     const targetHistory = harness.histories.get(harness.targetSessionId)!;
@@ -848,19 +847,17 @@ describe('LodyOperationCoordinator', () => {
         agentType: 'molly',
         modelSelection,
         mcpServerIds: ['synthetic-server'],
-        taskToolsEnabled: true,
       },
     });
   });
 
-  it('preserves an explicitly empty frozen MCP selection and disabled Task tools', async () => {
+  it('preserves an explicitly empty frozen MCP selection', async () => {
     const harness = await makeHarness({
       deadlineAt: '2026-07-19T23:59:59.000Z',
       inputConfig: {
         cliType: 'builtin',
         agentType: 'molly',
         mcpServerIds: [],
-        taskToolsEnabled: false,
         modelSelection: { connectionId: 'synthetic', modelId: 'synthetic', thinking: 'off' },
       },
     });
@@ -871,7 +868,6 @@ describe('LodyOperationCoordinator', () => {
       acpSessionConfig: {
         agentConfigId: 'synthetic-molly',
         mcpServerIds: [],
-        taskToolsEnabled: false,
       },
     });
   });

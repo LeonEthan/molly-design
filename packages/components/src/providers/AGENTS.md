@@ -55,8 +55,8 @@ safety. Removal requires a reviewed replacement write boundary (PR #460).
   its workspace runtime. It mounts the local data plane only.
 - Local data-plane status listeners attach before subscription. Live status events
   supersede the bootstrap snapshot; disposed connections ignore pending replies.
-- Workspace-level rooms, including Task rooms and the Task Index, mount on the
-  local transport even when metadata has no machine owner.
+- Workspace-level rooms mount on the local transport even when metadata has no
+  machine owner.
 - Presence from the local daemon is authoritative, including absence. The local
   presence feed is considered synced when it produces its first snapshot.
 - Doc-metadata bootstrap and the live repo watch overlap by design: merge per field with

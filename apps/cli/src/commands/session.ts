@@ -51,7 +51,6 @@ import {
   type SessionTurnInputConfig,
   type SessionId,
   type SessionMeta,
-  type TaskId,
   type WorkspaceId,
   shouldQueueMachineDeleteSession,
 } from '@molly/shared';
@@ -80,7 +79,6 @@ import {
   type WorkspaceSummary,
 } from '@/lib/workspace';
 import { readMachineLocalProjects } from '@/lib/local-project-meta';
-import { linkTaskSessionFromCli } from '@/lib/task-doc';
 import { listMergedAgentConfigs } from '@/lib/agent-config-machine-flock';
 import { getLogger } from '@/utils/logger';
 import { formatErrorMessage } from '@/utils/format-error';
@@ -161,16 +159,6 @@ export type CreateOptions = CommonOptions &
     /** Agent Role provenance frozen when the create Operation is accepted. */
     agentRoleId?: string;
     agentRoleRevision?: number;
-    /**
-     * Task this session belongs to. Inherited from the invoking session when it
-     * is itself working on a task, so an agent spawning helpers keeps the whole
-     * fan-out attached to the same task.
-     */
-    taskId?: string;
-    /** Provenance for the task link; automation starts are runs, spawns inherit. */
-    taskLinkOrigin?: 'run' | 'agent-spawn';
-    /** Internal delegated automation snapshot; never a prompt or execution override. */
-    taskAutomationStateHash?: string;
     /** Durable batch Operations intentionally bypass cooperative session quotas. */
     bypassSessionQuota?: boolean;
     /**
@@ -259,7 +247,6 @@ type ResolvedCreateContext = {
   parentSessionId?: SessionId;
   openedBySessionId?: SessionId;
   openedByRootSessionId?: SessionId;
-  taskId?: TaskId;
 };
 
 type SessionActivityTimestampManager = {
@@ -1034,7 +1021,6 @@ export function buildCliHistoryInputConfig(args: {
   modelId?: string;
   modelSelection?: SessionTurnInputConfig['modelSelection'];
   configOptionValues?: Record<string, string | boolean>;
-  taskToolsEnabled?: boolean;
   mcpServerIds?: SessionTurnInputConfig['mcpServerIds'];
   resume?: ACPSessionConfig['resume'];
   chainDepth?: number;
@@ -1051,7 +1037,6 @@ export function buildCliHistoryInputConfig(args: {
       args.configOptionValues && Object.keys(args.configOptionValues).length > 0
         ? args.configOptionValues
         : undefined,
-    taskToolsEnabled: args.taskToolsEnabled === true,
     ...(args.mcpServerIds !== undefined ? { mcpServerIds: [...args.mcpServerIds] } : {}),
     resume: args.resume,
     chainDepth: args.chainDepth,
@@ -1067,8 +1052,6 @@ export type ResolvedTurnDispatchConfig = {
   modelId?: string;
   modelSelection?: SessionTurnInputConfig['modelSelection'];
   configOptionValues?: Record<string, string | boolean>;
-  /** Frozen capability gate for the built-in Molly Task MCP tools. */
-  taskToolsEnabled?: boolean;
   /** Prevent replay from re-reading mutable Session defaults. */
   inheritSessionDefaults?: false;
   /**
@@ -1117,7 +1100,6 @@ export function applyAgentRunConfigSelection(
   return {
     config: {
       ...rest,
-      ...(rest.taskToolsEnabled !== undefined ? { taskToolsEnabled: rest.taskToolsEnabled } : {}),
       ...((resolved.modeId ?? rest.modeId) ? { modeId: resolved.modeId ?? rest.modeId } : {}),
       ...((resolved.modelId ?? rest.modelId) ? { modelId: resolved.modelId ?? rest.modelId } : {}),
       ...(Object.keys(configOptionValues).length > 0 ? { configOptionValues } : {}),
@@ -1214,7 +1196,6 @@ function mergeTurnDispatchConfig(
     modeId: explicitConfig.modeId ?? fallbackConfig?.modeId,
     modelId: explicitConfig.modelId ?? fallbackConfig?.modelId,
     configOptionValues: explicitConfig.configOptionValues ?? fallbackConfig?.configOptionValues,
-    taskToolsEnabled: explicitConfig.taskToolsEnabled ?? fallbackConfig?.taskToolsEnabled,
   };
 }
 
@@ -1336,7 +1317,6 @@ export function filterCompatibleInheritedTurnConfig(
     ...(config.modeId && supportedModes.has(config.modeId) ? { modeId: config.modeId } : {}),
     ...(config.modelId && supportedModels.has(config.modelId) ? { modelId: config.modelId } : {}),
     ...(configOptionValues ? { configOptionValues } : {}),
-    ...(config.taskToolsEnabled !== undefined ? { taskToolsEnabled: config.taskToolsEnabled } : {}),
     ...(config.mcpServerIds !== undefined ? { mcpServerIds: [...config.mcpServerIds] } : {}),
   };
 }
@@ -1381,9 +1361,6 @@ export function resolveTurnDispatchConfigFromInputConfig(
     ...(inputConfig.modelSelection ? { modelSelection: { ...inputConfig.modelSelection } } : {}),
     ...(inputConfig.configOptionValues
       ? { configOptionValues: inputConfig.configOptionValues }
-      : {}),
-    ...(inputConfig.taskToolsEnabled !== undefined
-      ? { taskToolsEnabled: inputConfig.taskToolsEnabled }
       : {}),
     ...(inputConfig.mcpServerIds !== undefined
       ? { mcpServerIds: [...inputConfig.mcpServerIds] }
@@ -1581,46 +1558,14 @@ async function assertMachineAccess(args: {
  * separate, best-effort step — see {@link confirmDispatchSyncedBestEffort}.
  */
 export async function writeDispatchPointer(args: {
-  manager: { repo: Pick<LoroDocumentManager['repo'], 'upsertDocMeta' | 'flush'> };
+  manager: { repo: Pick<LoroDocumentManager['repo'], 'upsertDocMeta'> };
   sessionId: SessionId;
   userTurnId: string;
-  taskAutomationStatusRepair?: SessionMeta['taskAutomationStatusRepair'];
-}): Promise<boolean> {
-  if (
-    args.taskAutomationStatusRepair &&
-    args.taskAutomationStatusRepair.userTurnId !== args.userTurnId
-  )
-    throw new Error('task_automation_repair_turn_mismatch');
-  if (args.taskAutomationStatusRepair) {
-    if (args.taskAutomationStatusRepair.dispatchState !== 'dispatched')
-      throw new Error('task_automation_repair_state_invalid');
-    // upsert publishes in-memory events before its debounced disk flush. Leave
-    // a durable prepared record before any observer can execute the pointer.
-    await args.manager.repo.upsertDocMeta(getSessionRoomId(args.sessionId), {
-      taskAutomationStatusRepair: { ...args.taskAutomationStatusRepair, dispatchState: 'prepared' },
-    });
-    await args.manager.repo.flush();
-  }
+}): Promise<void> {
   await args.manager.repo.upsertDocMeta(getSessionRoomId(args.sessionId), {
     latestUserMsgId: args.userTurnId,
     lastMissingHistoryUserMsgId: undefined,
-    ...(args.taskAutomationStatusRepair
-      ? { taskAutomationStatusRepair: args.taskAutomationStatusRepair }
-      : {}),
   } satisfies Partial<SessionMeta>);
-  // Publication is already irreversible: a failed flush cannot become a
-  // pre-dispatch exception that causes deletion or a second Session/model run.
-  if (args.taskAutomationStatusRepair) {
-    try {
-      await args.manager.repo.flush();
-    } catch {
-      getLogger('session').warn(
-        'Task dispatch was published but disk persistence is unconfirmed; retain its Session and never redispatch.'
-      );
-      return false;
-    }
-  }
-  return true;
 }
 
 /**
@@ -2245,11 +2190,6 @@ async function resolveCreateContext(args: {
     : undefined;
   assertSupportedParentDepth(parentSession);
 
-  // An explicit taskId wins; otherwise inherit from the session that asked for
-  // this one, which is what keeps agent-spawned work on the same task.
-  const taskId = (normalizeCliValue(args.options.taskId) ?? currentSession?.taskId) as
-    | TaskId
-    | undefined;
   const targetMachine = await resolveTargetMachineForCreate({
     manager: args.manager,
     workspaceId,
@@ -2344,7 +2284,6 @@ async function resolveCreateContext(args: {
     ...(project ? { project } : {}),
     ...(parentSessionId ? { parentSessionId } : {}),
     ...resolveOpenedBySessionRelation(currentSession),
-    ...(taskId ? { taskId } : {}),
   };
 }
 
@@ -2502,13 +2441,6 @@ export async function createSessionResult(
   openedByRootSessionId?: SessionId;
   completionPromise?: Promise<Awaited<ReturnType<typeof waitForTurnCompletion>>>;
 }> {
-  if (
-    options.taskAutomationStateHash !== undefined &&
-    (!options.taskId ||
-      options.taskLinkOrigin !== 'run' ||
-      !/^[a-f0-9]{64}$/u.test(options.taskAutomationStateHash))
-  )
-    throw new Error('task_automation_state_hash_invalid');
   const envOverrides = parseEnvAssignments(options.env);
   if (Object.keys(envOverrides).length > 0) {
     throw new Error(
@@ -2545,7 +2477,6 @@ export async function createSessionResult(
     parentSessionId,
     openedBySessionId,
     openedByRootSessionId,
-    taskId,
   } = resolved;
   const effectiveDispatchConfig = await resolveEffectiveSessionDispatchConfig({
     manager,
@@ -2582,7 +2513,6 @@ export async function createSessionResult(
     ...(options.agentRoleRevision !== undefined
       ? { agentRoleRevision: options.agentRoleRevision }
       : {}),
-    ...(taskId ? { taskId } : {}),
     // `agentRoleId`/`agentRoleRevision` are declared on `SessionMeta` now, so
     // the provenance fields no longer need a local intersection here.
   } satisfies SessionMeta);
@@ -2609,7 +2539,6 @@ export async function createSessionResult(
         modelId: modelId ?? undefined,
         modelSelection: effectiveDispatchConfig.modelSelection,
         configOptionValues: effectiveDispatchConfig.configOptionValues,
-        taskToolsEnabled: taskId ? true : effectiveDispatchConfig.taskToolsEnabled,
         mcpServerIds: effectiveDispatchConfig.mcpServerIds,
         chainDepth: options.chainDepth,
       }),
@@ -2636,19 +2565,6 @@ export async function createSessionResult(
       manager,
       sessionId,
       userTurnId,
-      ...(taskId && options.taskAutomationStateHash
-        ? {
-            taskAutomationStatusRepair: {
-              version: 1 as const,
-              dispatchState: 'dispatched' as const,
-              taskId,
-              agentConfigId: agentConfig.id,
-              ownerId: requesterUserId,
-              taskStateHash: options.taskAutomationStateHash,
-              userTurnId,
-            },
-          }
-        : {}),
     });
     dispatched = true;
     await confirmDispatchSyncedBestEffort({
@@ -2656,30 +2572,6 @@ export async function createSessionResult(
       sessionDoc,
       reason: `session.create:${sessionId}`,
     });
-    if (taskId) {
-      // AFTER the fast path on purpose: this opens and syncs the task document,
-      // which is a network round trip, and the prompt must not wait on it
-      // (context/cli-prompt-hot-path.md). Best effort too — it runs past the
-      // dispatch point of no rollback, so a failure must never unwind a running
-      // session, and the reverse pointer on session meta is already durable.
-      // Still awaited rather than fired: this command's workspace transport is
-      // torn down on return, so an un-awaited write could be dropped.
-      await linkTaskSessionFromCli(
-        manager,
-        workspace.id as WorkspaceId,
-        taskId,
-        {
-          sessionId,
-          // A Run from the app authors its own session and links it there, so a
-          // taskId arriving here is either delegated automation (an explicit
-          // run) or an agent spawning helpers.
-          origin: options.taskLinkOrigin ?? 'agent-spawn',
-          ...(openedBySessionId ? { parentSessionId: openedBySessionId } : {}),
-        },
-        { agentConfigId: agentConfig.id }
-      ).catch(() => undefined);
-    }
-
     return {
       sessionId,
       machineId: targetMachine.id,
@@ -2690,7 +2582,6 @@ export async function createSessionResult(
       ...(parentSessionId ? { parentSessionId } : {}),
       ...(openedBySessionId ? { openedBySessionId } : {}),
       ...(openedByRootSessionId ? { openedByRootSessionId } : {}),
-      ...(taskId ? { taskId } : {}),
       completionPromise,
     };
   } catch (error) {
@@ -2855,7 +2746,6 @@ export async function sendSessionChatResult(
       modelId: effectiveDispatchConfig.modelId,
       modelSelection: effectiveDispatchConfig.modelSelection,
       configOptionValues: effectiveDispatchConfig.configOptionValues,
-      taskToolsEnabled: effectiveDispatchConfig.taskToolsEnabled,
       mcpServerIds: effectiveDispatchConfig.mcpServerIds,
       resume: session.acpSessionId ?? undefined,
       chainDepth: orchestration?.chainDepth,

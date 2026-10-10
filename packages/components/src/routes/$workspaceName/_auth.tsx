@@ -4,7 +4,6 @@ import { ElectronSessionCompletionNotifier } from '@/components/electron-session
 import { ElectronMenuHandler } from '@/components/electron-menu-handler';
 import { AppCommands } from '@/components/app-commands';
 import { CommandPalette } from '@/components/commands/command-palette';
-import { AutoArchivePrWatcher } from '@/components/auto-archive-pr-watcher';
 import { RouteSuspense } from '@/components/route-suspense';
 import { writeLastAppRoutePath } from '@/lib/last-app-route';
 import { useWorkspaceBadge } from '@/hooks/use-workspace-badge';
@@ -35,7 +34,6 @@ function LocalPlatformLayoutContent() {
         <ElectronMenuHandler />
         <AppCommands />
         <CommandPalette />
-        <AutoArchivePrWatcher />
       </LazyMainLayout>
     </RouteSuspense>
   );

@@ -361,17 +361,16 @@ describe('embedded chat config acceptance', () => {
     }
   );
 
-  it('freezes the target history model, thinking, exact config and invoking tool gate', async () => {
-    const history = [historyTurn({ ...dispatch, taskToolsEnabled: true })];
+  it('freezes the target history model, thinking and exact config', async () => {
+    const history = [historyTurn(dispatch)];
     const target = fixture(config, capability, history);
     target.session.agentType = 'molly';
-    const accepted = await target.validateChat({ taskToolsEnabled: false });
+    const accepted = await target.validateChat({});
     expect(accepted.dispatchConfig).toEqual({
       ...dispatch,
       modelSelection,
       modeId: undefined,
       agentConfigId: config.id,
-      taskToolsEnabled: false,
       inheritSessionDefaults: false,
     });
     history[0] = historyTurn({ modelId: 'changed-after-acceptance' });

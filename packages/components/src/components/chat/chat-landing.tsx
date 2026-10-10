@@ -48,7 +48,6 @@ import {
   runtimeInitializingAtom,
   navigationSidebarHiddenAtom,
   showNavigationSidebarAtom,
-  tasksFeatureEnabledAtom,
   userAtom,
 } from '@/atoms';
 import { docMetaCacheReadyAtom } from '@/atoms/doc-meta';
@@ -248,7 +247,6 @@ function WorkspaceChatLanding({
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const currentUser = useAtomValue(userAtom);
   const userId = currentUser?.id;
-  const tasksFeatureEnabled = useAtomValue(tasksFeatureEnabledAtom);
   const promptEnterKeyHint = 'send' as const;
   const resolvedTheme = useResolvedTheme();
   const isDark = resolvedTheme === 'dark';
@@ -1525,7 +1523,6 @@ function WorkspaceChatLanding({
         configOptionValues: dispatchConfigOptionValues,
         issuePRMentions,
         mcpServerIds: mcpSelection.selectedIds,
-        taskToolsEnabled: tasksFeatureEnabled,
         agentRoleId: null,
       });
       const pendingHistoryEntry = buildPendingUserHistoryEntry({
@@ -1957,7 +1954,6 @@ function WorkspaceChatLanding({
         modelId: modelOptions.length > 0 ? selectedModelId : null,
         configOptionValues: dispatchConfigOptionValues,
         mcpServerIds: mcpSelection.selectedIds,
-        taskToolsEnabled: tasksFeatureEnabled,
       }),
     [
       dispatchConfigOptionValues,
@@ -1966,7 +1962,6 @@ function WorkspaceChatLanding({
       modelOptions.length,
       selectedModeId,
       selectedModelId,
-      tasksFeatureEnabled,
     ]
   );
   const { handoffToSession: handoffSessionPreparation } = useSessionPreparation({

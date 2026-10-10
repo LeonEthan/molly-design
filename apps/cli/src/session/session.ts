@@ -718,7 +718,6 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
             agentType: callbacks.agentType,
           },
           configOptionValues: this.config.configOptionValues,
-          taskToolsEnabled: this.config.taskToolsEnabled,
           workspaceId: this.config.workspaceId,
           machineId: this.config.machineId as MachineId,
           resumeSessionId: callbacks.resumeSessionId,

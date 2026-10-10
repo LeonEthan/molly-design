@@ -124,8 +124,6 @@ import {
   userAtom,
 } from '@/atoms';
 import { currentWorkspaceSlugAtom } from '@/atoms';
-import { taskIndexRowsAtom } from '@/atoms/tasks';
-import { tasksFeatureEnabledAtom } from '@/atoms/settings';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
 import { browserOnlineAtom } from '@/atoms/control-connection';
 import {
@@ -1458,7 +1456,6 @@ export const SessionChatInterface = memo(
     const localeObj = i18n.language?.startsWith('zh') ? zhCN : enUS;
     const workspaceId = useAtomValue(currentWorkspaceIdAtom);
     const currentUser = useAtomValue(userAtom);
-    const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
     const { openSettings } = useOpenSettings();
     const conversationFontSize = useAtomValue(conversationFontSizeAtom);
 
@@ -2713,7 +2710,6 @@ export const SessionChatInterface = memo(
             configOptionValues: turnConfigOptionValues,
             issuePRMentions,
             mcpServerIds: mcpSelection.selectedIds,
-            taskToolsEnabled: tasksEnabled,
             agentRoleId: null,
             resume: session.acpSessionId ?? undefined,
           });
@@ -2807,7 +2803,6 @@ export const SessionChatInterface = memo(
         touchSessionActivity,
         updateHistoryEntry,
         t,
-        tasksEnabled,
       ]
     );
 
@@ -2840,7 +2835,6 @@ export const SessionChatInterface = memo(
             configOptionValues: turnConfigOptionValues,
             issuePRMentions,
             mcpServerIds: mcpSelection.selectedIds,
-            taskToolsEnabled: tasksEnabled,
             agentRoleId: null,
             resume: session.acpSessionId ?? undefined,
           });
@@ -2855,7 +2849,6 @@ export const SessionChatInterface = memo(
             configOptionValues: inputConfig.configOptionValues ?? undefined,
             issuePRMentions: inputConfig.issuePRMentions ?? undefined,
             mcpServerIds: [...mcpSelection.selectedIds],
-            taskToolsEnabled: inputConfig.taskToolsEnabled,
             agentRoleId: inputConfig.agentRoleId,
             agentRoleRevision: inputConfig.agentRoleRevision,
             resume: inputConfig.resume ?? undefined,
@@ -2900,7 +2893,6 @@ export const SessionChatInterface = memo(
         session.userId,
         sessionProject,
         t,
-        tasksEnabled,
       ]
     );
 
@@ -3248,32 +3240,8 @@ export const SessionChatInterface = memo(
       [conversationView]
     );
 
-    // The task this session belongs to. Titles come from the workspace task
-    // index, which is already loaded for the sidebar count, so the chip costs no
-    // extra read.
     const router = useRouter();
     const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
-    const sessionTaskId = session.taskId;
-    const taskIndexRows = useAtomValue(taskIndexRowsAtom);
-    // A session keeps its `taskId` even for a user who never enabled the Tasks
-    // beta (an agent or another device can set it), so the chip is gated too —
-    // otherwise it would be a visible door to a feature that is supposed to be
-    // absent, and the index it reads from is not even synced.
-    const sessionTaskChip = useMemo(() => {
-      if (!tasksEnabled || !sessionTaskId) return null;
-      const row = taskIndexRows[sessionTaskId];
-      return { taskId: sessionTaskId as string, title: row?.title ?? '' };
-    }, [tasksEnabled, sessionTaskId, taskIndexRows]);
-    const handleOpenSessionTask = useCallback(
-      (taskId: string) => {
-        if (!workspaceSlug) return;
-        void router.navigate({
-          to: '/$workspaceName/tasks/$taskId',
-          params: { workspaceName: workspaceSlug, taskId },
-        });
-      },
-      [router, workspaceSlug]
-    );
 
     // Presentation-only "opened by" provenance (MCP `molly_session_create`).
     // Read from the already-loaded session meta cache, so it costs no extra
@@ -4043,8 +4011,6 @@ export const SessionChatInterface = memo(
                     }
                     onGoalCommand={handleGoalCardCommand}
                     onGoalDismiss={handleDismissGoalBanner}
-                    task={sessionTaskChip}
-                    onOpenTask={handleOpenSessionTask}
                     scheduledTasks={pendingScheduledTasks}
                     projectName={repoFullName || resolvedLocalProjectMeta?.name || null}
                     branch={session.branchName?.trim() || null}

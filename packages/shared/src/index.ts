@@ -1,7 +1,6 @@
 import { CliType } from './ai';
-import type { AgentConfigId, MachineId, SessionId, TaskId, WorkspaceId } from './ids';
+import type { AgentConfigId, MachineId, SessionId, WorkspaceId } from './ids';
 import { PREVIEW_COMMENT_DOC_PREFIX, getLoroPreviewCommentStreamId } from './preview-comment-types';
-import { TASK_DOC_PREFIX, getLoroTaskStreamId } from './task-types';
 import type { StreamsCrdtShardUrlsOptions } from '@loro-dev/streams-crdt';
 
 export type {
@@ -15,7 +14,6 @@ export type {
   RepoId,
   ReviewRunId,
   SessionId,
-  TaskId,
   WorkspaceId,
 } from './ids';
 export * from './message';
@@ -29,7 +27,6 @@ export * from './acp-startup-budget';
 export * from './image-file-types';
 export * from './custom-acp-command';
 export * from './session-image';
-export * from './task-image';
 export * from './avatar';
 export * from './community';
 export * from './session-file';
@@ -84,10 +81,6 @@ export * from './comment-reference-format';
 export * from './session-comment-types';
 export * from './preview-comment-types';
 export * from './preview-comment-schema';
-export * from './task-types';
-export * from './task-schema';
-export * from './task-index';
-export * from './task-order';
 export * from './review';
 export * from './review-prompts';
 export * from './preview-comment-mutation';
@@ -376,6 +369,10 @@ export const SESSION_DOC_PREFIX = 'session-';
 // persisted room ids still share the session prefix and must never be projected
 // as sessions.
 const LEGACY_SESSION_COMMENT_DOC_PREFIX = 'session-comment-';
+// Compatibility tombstone: Tasks were retired in 2026, but persisted task docs
+// keep their workspace stream routing.
+const LEGACY_TASK_DOC_PREFIX = 'task-';
+const LEGACY_TASK_STREAM_SEGMENT = 'tk';
 export const MACHINE_DOC_PREFIX = 'machine-';
 export const getAgentConfigRoomId = (agentConfigId: AgentConfigId) =>
   `${AGENT_CONFIG_DOC_PREFIX}${agentConfigId}`;
@@ -414,8 +411,8 @@ export const getLoroStreamIdForDocId = (workspaceId: WorkspaceId, docId: string)
   if (docId.startsWith(SESSION_DOC_PREFIX)) {
     return getLoroSessionStreamId(workspaceId, docId.slice(SESSION_DOC_PREFIX.length) as SessionId);
   }
-  if (docId.startsWith(TASK_DOC_PREFIX)) {
-    return getLoroTaskStreamId(workspaceId, docId.slice(TASK_DOC_PREFIX.length) as TaskId);
+  if (docId.startsWith(LEGACY_TASK_DOC_PREFIX)) {
+    return `${workspaceId}:${LEGACY_TASK_STREAM_SEGMENT}:${docId.slice(LEGACY_TASK_DOC_PREFIX.length)}`;
   }
   return docId;
 };

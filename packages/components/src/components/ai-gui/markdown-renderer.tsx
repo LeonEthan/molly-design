@@ -45,10 +45,8 @@ import {
   ZoomIn,
   ZoomOut,
 } from '@/ui/icons';
-import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import { parseTaskImageMarkdownUrl } from '@molly/shared';
-import { DEFAULT_CONVERSATION_FONT_SIZE, tasksFeatureEnabledAtom } from '@/atoms/settings';
+import { DEFAULT_CONVERSATION_FONT_SIZE } from '@/atoms/settings';
 import { MonochromeFileIcon } from '@/components/icons/file-icons';
 import {
   isMarkdownAgentFileHref,
@@ -71,7 +69,6 @@ import {
 import { findSessionSearchOccurrences } from '@/lib/session-chat-search';
 import { useResolvedTheme } from '../../theme-provider';
 import type { ConversationFontSize } from '@/atoms/settings';
-import { useTaskImageUrl } from '@/hooks/use-task-image';
 import { MarkdownDiffBlock } from './markdown-diff-block';
 import { createMarkdownMermaidConfig, createMarkdownMermaidPlugin } from './markdown-mermaid';
 import { MermaidDiagramViewer, type MermaidDiagramSelection } from './mermaid-diagram-viewer';
@@ -946,7 +943,7 @@ const writeTextToClipboard = async (text: string): Promise<boolean> => {
 
 const markdownUrlTransform: UrlTransform = (value, key, node) =>
   isMarkdownAgentFileHref(value) ||
-  (key === 'src' && (parseTaskImageMarkdownUrl(value) || parseMarkdownAgentImageHref(value)))
+  (key === 'src' && parseMarkdownAgentImageHref(value))
     ? value
     : defaultUrlTransform(value, key, node);
 
@@ -1068,7 +1065,7 @@ const createMarkdownComponents = ({
   },
   img: (props: MarkdownImageProps) => {
     const path = parseMarkdownAgentImageHref(props.src);
-    return path ? <LocalMarkdownImage {...props} path={path} /> : <TaskMarkdownImage {...props} />;
+    return path ? <LocalMarkdownImage {...props} path={path} /> : <RemoteMarkdownImage {...props} />;
   },
   // <picture> just passes through its children (the <img> fallback);
   // <source> is suppressed since it's only meaningful inside a real browser <picture>.
@@ -1140,25 +1137,10 @@ function LocalMarkdownImage({
   );
 }
 
-function TaskMarkdownImage(props: MarkdownImageProps) {
+function RemoteMarkdownImage(props: MarkdownImageProps) {
   const { node: _node, src, alt, ...rest } = props;
   const { t } = useTranslation();
-  const taskImageId = src ? parseTaskImageMarkdownUrl(src) : null;
-  const tasksEnabled = useAtomValue(tasksFeatureEnabledAtom);
-  const resolvedUrl = useTaskImageUrl(taskImageId && tasksEnabled ? src : undefined);
   const [failedSrc, setFailedSrc] = useState<string>();
-
-  if (taskImageId && !tasksEnabled) return null;
-
-  if (taskImageId && !resolvedUrl) {
-    return (
-      <span
-        role="img"
-        aria-label={alt || 'Task image'}
-        className="my-2 block h-24 w-full max-w-sm animate-pulse rounded-md bg-muted"
-      />
-    );
-  }
 
   if (src !== undefined && failedSrc === src) {
     const unavailable = t('sessions.imageLoadUnavailable', 'Unable to load image');
@@ -1172,7 +1154,7 @@ function TaskMarkdownImage(props: MarkdownImageProps) {
   return (
     <img
       {...rest}
-      src={taskImageId ? resolvedUrl : src}
+      src={src}
       alt={alt ?? ''}
       className={cn('my-2 max-h-[32rem] max-w-full rounded-md object-contain', rest.className)}
       onError={() => {

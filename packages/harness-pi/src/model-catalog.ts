@@ -19,10 +19,8 @@ export async function createBundledModelCatalog() {
     allowModelNetwork: false,
     refreshOnCreate: false,
   });
-  return HarnessModelCatalogSchema.parse({
-    version: 1,
-    engineVersion: PI_ENGINE_VERSION,
-    models: Object.entries(MOLLY_PROVIDER_IDS).flatMap(([providerPresetId, providerId]) =>
+  const catalogModels = Object.entries(MOLLY_PROVIDER_IDS).flatMap(
+    ([providerPresetId, providerId]) =>
       runtime.getModels(providerId).map((model) => ({
         providerPresetId,
         modelId: model.id,
@@ -31,6 +29,19 @@ export async function createBundledModelCatalog() {
         contextWindow: model.contextWindow,
         thinking: getSupportedThinkingLevels(model),
       }))
-    ),
+  );
+  // The codex backend an OAuth connection runs on has its own catalog and transport.
+  const codexModels = runtime.getModels('openai-codex').map((model) => ({
+    providerPresetId: 'openai-codex' as const,
+    modelId: model.id,
+    name: model.name,
+    input: model.input,
+    contextWindow: model.contextWindow,
+    thinking: getSupportedThinkingLevels(model),
+  }));
+  return HarnessModelCatalogSchema.parse({
+    version: 1,
+    engineVersion: PI_ENGINE_VERSION,
+    models: [...catalogModels, ...codexModels],
   });
 }

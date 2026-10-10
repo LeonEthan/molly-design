@@ -636,7 +636,8 @@ export const HarnessModelCatalogSchema = z
       .array(
         z
           .object({
-            providerPresetId: ProviderPresetIdSchema,
+            // `openai-codex` is the codex-backend catalog an OAuth connection offers.
+            providerPresetId: z.union([ProviderPresetIdSchema, z.literal('openai-codex')]),
             modelId: z.string().min(1).max(200),
             name: z.string().min(1).max(300),
             input: z.array(z.enum(['text', 'image'])),

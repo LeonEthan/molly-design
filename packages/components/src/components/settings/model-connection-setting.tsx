@@ -816,9 +816,20 @@ export function ModelConnectionSetting({
     if (!ipc) return undefined;
     return {
       begin: () => ipc.modelConnections.beginOpenAiAuth(),
-      complete: (sessionId) => ipc.modelConnections.completeOpenAiAuth({ sessionId }),
+      complete: async (sessionId) => {
+        const result = await ipc.modelConnections.completeOpenAiAuth({ sessionId });
+        if (result.ok) {
+          // The flow saved the connection in main; refresh the list so it appears now.
+          const snapshot = await ipc.modelConnections.getSnapshot();
+          setConnections(ModelConnectionSchema.array().parse(snapshot.connections));
+        }
+        return result;
+      },
       cancel: (sessionId) => ipc.modelConnections.cancelOpenAiAuth({ sessionId }),
-      signOut: (input) => ipc.modelConnections.signOutOpenAiAuth(input),
+      signOut: async (input) => {
+        await ipc.modelConnections.signOutOpenAiAuth(input);
+        setConnections((current) => current.filter((entry) => entry.id !== input.id));
+      },
     };
   }, [ipc]);
   const recordCheck = (connection: ModelConnection, state: ConnectionCheckState) =>

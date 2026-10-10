@@ -337,6 +337,11 @@ export class OpenAiAuthService {
       enabled: true,
       authType: 'openai_oauth'
     }
+    if (this.pending !== pending) {
+      response.statusCode = 410
+      response.end('This sign-in session has ended. Return to Molly.')
+      return
+    }
     let connection: ModelConnection
     try {
       connection = await this.store.saveOAuthConnection(
@@ -353,6 +358,15 @@ export class OpenAiAuthService {
       )
     } catch {
       return fail('invalid_response')
+    }
+    if (this.pending !== pending) {
+      // Cancelled while the vault wrote; remove the just-saved account rather than leaving it.
+      await this.store
+        .delete({ id: connection.id, expectedRevision: connection.revision })
+        .catch(() => undefined)
+      response.statusCode = 410
+      response.end('This sign-in session has ended. Return to Molly.')
+      return
     }
     response.statusCode = 200
     response.setHeader('content-type', 'text/html; charset=utf-8')

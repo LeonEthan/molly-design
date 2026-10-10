@@ -76,6 +76,7 @@ export class PiAcpHost {
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
   private grantedKey?: string;
+  private grantedOAuthGrantId?: string;
   private sessionStarted = false;
 
   constructor(
@@ -389,10 +390,19 @@ export class PiAcpHost {
     if (grant.runId !== snapshot.runId || grant.runtimeEpoch !== this.config.runtimeEpoch)
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
-    if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey)
+    if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
+      // A rotation mints a new grant id; the old worker retires and the run replays on a
+      // fresh worker with the new token. Anything else changing the key is a hard failure.
+      const rotated =
+        grant.oauthGrantId !== undefined && grant.oauthGrantId !== this.grantedOAuthGrantId;
+      if (rotated) this.retire();
+      throw new Error('pi_acp_host_credential_changed');
+    }
+    if (this.grantedOAuthGrantId !== undefined && this.grantedOAuthGrantId !== grant.oauthGrantId)
       throw new Error('pi_acp_host_credential_changed');
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
     this.grantedKey = grant.apiKey;
+    this.grantedOAuthGrantId = grant.oauthGrantId;
     signal.throwIfAborted();
     let memory: string | undefined;
     let memoryDiagnostic: string | undefined;

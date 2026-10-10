@@ -147,28 +147,20 @@ void test('oauth connection round-trips its token set without exposing it in the
   const acquired = await store.acquireForRun(saved.id, saved.revision)
   assert.equal('oauth' in acquired, true)
   if ('oauth' in acquired) assert.equal(acquired.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
-  // Rotation on a connection that is not OAuth refuses.
-  await assert.rejects(
-    store.rotateOAuthTokens('nonexistent', {
-      accessToken: 'SYNTHETIC_ACCESS_TOKEN_X',
-      refreshToken: 'SYNTHETIC_REFRESH_TOKEN_X',
-      accessTokenExpiresAt: Date.now() + 3_600_000
-    }),
-    /oauth_requires_reauth/
-  )
-  // Rotation changes the grant id so a grant minted from the previous token cannot replay.
-  const first = await store.acquireForRun(saved.id, saved.revision)
-  if (!('oauth' in first)) throw new Error('expected oauth')
-  const rotated = await store.rotateOAuthTokens(saved.id, {
-    accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
-    refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
-    accessTokenExpiresAt: Date.now() + 3_600_000,
-    accountId: 'acct-1'
+  // The pi-ai credential store adapter mutates the token set under the vault lock.
+  const next = await store.mutateOAuth(async (current) => {
+    assert.equal(current?.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
+    return {
+      accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
+      refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      accountId: 'acct-1'
+    }
   })
+  assert.equal(next?.accessToken, 'SYNTHETIC_ACCESS_TOKEN_2')
   const second = await store.acquireForRun(saved.id, saved.revision)
   if (!('oauth' in second)) throw new Error('expected oauth')
-  assert.notEqual(second.oauth.grantSeq, first.oauth.grantSeq)
-  assert.equal(rotated.grantSeq, second.oauth.grantSeq)
+  assert.equal(second.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN_2')
 })
 
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {

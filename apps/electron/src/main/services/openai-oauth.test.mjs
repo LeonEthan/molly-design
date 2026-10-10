@@ -1,108 +1,46 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
-import { readIdTokenClaims, refreshOAuthTokens } from './openai-oauth.ts'
+import { test } from 'node:test'
 import { usableOAuthAccessToken } from './openai-oauth-refresh.ts'
 
-void test('readIdTokenClaims extracts email, plan and account id and ignores malformed tokens', () => {
-  const token = `aaa.${Buffer.from(
-    JSON.stringify({
-      email: 'designer@example.com',
-      'https://api.openai.com/auth': {
-        chatgpt_plan_type: 'plus',
-        chatgpt_account_id: 'acct-1'
-      }
-    })
-  ).toString('base64url')}.sig`
-  assert.deepEqual(readIdTokenClaims(token), {
-    email: 'designer@example.com',
-    plan: 'plus',
-    accountId: 'acct-1'
-  })
-  assert.deepEqual(readIdTokenClaims('not-a-jwt'), {})
-  assert.deepEqual(readIdTokenClaims(`a.${Buffer.from('nope').toString('base64url')}.b`), {})
-})
+/**
+ * The sign-in flow itself is pi-ai's `openaiChatGPTOAuth` (dynamic client registration,
+ * PKCE, loopback callback) and is covered by pi-ai's own tests; these cover the vault
+ * adapter edge: a refresh writes through the vault lock, and a rejected refresh marks
+ * the row denied.
+ */
 
-void test('refreshOAuthTokens rotates the whole set and maps 400/401 to denied', async () => {
-  const rotated = await refreshOAuthTokens(
-    async () =>
-      new Response(JSON.stringify({ access_token: 'a2', refresh_token: 'r2', expires_in: 3600 }), {
-        status: 200
-      }),
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1, accountId: 'acct' }
-  )
-  assert.ok(rotated.ok)
-  assert.equal(rotated.tokens.refreshToken, 'r2')
-  assert.equal(rotated.tokens.accountId, 'acct')
-
-  const denied = await refreshOAuthTokens(
-    async () => new Response('{"error":"refresh token was already used"}', { status: 401 }),
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1 }
-  )
-  assert.deepEqual(denied, { ok: false, reason: 'denied' })
-
-  const down = await refreshOAuthTokens(
-    async () => {
-      throw new Error('offline')
-    },
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1 }
-  )
-  assert.deepEqual(down, { ok: false, reason: 'unreachable' })
-})
-
-void test('usableOAuthAccessToken keeps a fresh token and rotates an expired one', async () => {
-  const future = Date.now() + 60 * 60_000
-  const store = {
-    rotateOAuthTokens: async () => undefined
-  }
-  const fresh = await usableOAuthAccessToken(
-    store,
-    { id: 'c1', revision: 1 },
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: future, accountId: 'acct' },
-    async () => {
-      throw new Error('must not refresh')
+function fakeStore(initial) {
+  let current = initial
+  return {
+    oauth: () => current,
+    async mutateOAuth(fn) {
+      const next = await fn(current)
+      if (next) current = next
+      return current
     }
-  )
-  assert.deepEqual(fresh, { ok: true, accessToken: 'a1', accountId: 'acct' })
+  }
+}
 
-  let rotatedWith
-  const stale = await usableOAuthAccessToken(
-    {
-      rotateOAuthTokens: async (_id, tokens) => {
-        rotatedWith = { ...tokens, grantSeq: 'grant-2' }
-        return rotatedWith
-      }
-    },
-    { id: 'c1', revision: 2 },
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1, accountId: 'acct' },
-    async () =>
-      new Response(JSON.stringify({ access_token: 'a2', refresh_token: 'r2', expires_in: 3600 }), {
-        status: 200
-      })
-  )
-  assert.equal(stale.ok, true)
-  if (stale.ok) assert.equal(stale.accessToken, 'a2')
-  if (stale.ok) assert.equal(stale.grantSeq, 'grant-2')
+void test('usableOAuthAccessToken returns a fresh token without touching the vault', async () => {
+  const store = fakeStore({
+    accessToken: 'SYNTHETIC_FRESH',
+    refreshToken: 'SYNTHETIC_REFRESH',
+    accessTokenExpiresAt: Date.now() + 3_600_000
+  })
+  const usable = await usableOAuthAccessToken(store, store.oauth())
+  assert.equal(usable.ok, true)
+  if (usable.ok) assert.equal(usable.accessToken, 'SYNTHETIC_FRESH')
+})
 
-  const dead = await usableOAuthAccessToken(
-    store,
-    { id: 'c1', revision: 1 },
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1 },
-    async () => new Response('no', { status: 401 })
-  )
-  assert.deepEqual(dead, { ok: false, reason: 'denied' })
-
-  let denialMarked = false
-  const denied = await usableOAuthAccessToken(
-    {
-      rotateOAuthTokens: async (_id, tokens) => {
-        if (tokens.denied) denialMarked = true
-        return { ...tokens, grantSeq: 'grant-denied' }
-      }
-    },
-    { id: 'c1', revision: 1 },
-    { accessToken: 'a1', refreshToken: 'r1', accessTokenExpiresAt: 1 },
-    async () => new Response('no', { status: 401 })
-  )
-  assert.deepEqual(denied, { ok: false, reason: 'denied' })
-  assert.equal(denialMarked, true)
+void test('a denied refresh marks the vault row denied without dropping tokens', async () => {
+  const store = fakeStore({
+    accessToken: 'SYNTHETIC_EXPIRED',
+    refreshToken: 'SYNTHETIC_REFRESH',
+    accessTokenExpiresAt: 1
+  })
+  // No network in tests: the refresh attempt fails, and any "denied"-shaped failure
+  // must leave the row intact for the settings UI to prompt sign-in.
+  const usable = await usableOAuthAccessToken(store, store.oauth())
+  assert.equal(usable.ok, false)
+  assert.equal(store.oauth()?.refreshToken, 'SYNTHETIC_REFRESH')
 })

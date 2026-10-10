@@ -22,7 +22,7 @@ import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
-import { OpenAiAuthService, revokeOAuthTokens } from '../../services/openai-oauth'
+import { OpenAiAuthService } from '../../services/openai-oauth'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -42,7 +42,7 @@ async function localWorkspaceId(): Promise<string> {
 
 let openAiAuthService: OpenAiAuthService | undefined
 function getOpenAiAuthService(): OpenAiAuthService {
-  return (openAiAuthService ??= new OpenAiAuthService(getModelConnectionStore(), fetch, (url) =>
+  return (openAiAuthService ??= new OpenAiAuthService(getModelConnectionStore(), (url) =>
     shell.openExternal(url)
   ))
 }
@@ -188,14 +188,13 @@ export class ModelConnectionsIpc extends IpcService {
     getOpenAiAuthService().cancel(input.sessionId)
   }
 
-  /** Sign-out: best-effort revoke at OpenAI, then delete the local connection and tokens. */
+  /** Sign-out: deletes the local connection and its tokens. */
   @IpcMethod()
   async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
     const store = getModelConnectionStore()
-    const saved = await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
-    if (saved) await revokeOAuthTokens(fetch, saved.oauth)
+    await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
     return store.delete(parsed.data)
   }
 

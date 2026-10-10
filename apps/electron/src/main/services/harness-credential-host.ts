@@ -98,13 +98,12 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
           if (JSON.stringify(acquired.connection) !== JSON.stringify(snapshot.connection))
             return { ok: false as const, error: 'credential_unavailable' as const }
           if ('oauth' in acquired) {
-            const usable = await usableOAuthAccessToken(store, snapshot.connection, acquired.oauth)
+            const usable = await usableOAuthAccessToken(store, acquired.oauth)
             return usable.ok
               ? {
                   ok: true as const,
                   apiKey: usable.accessToken,
-                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {}),
-                  ...(usable.grantSeq ? { oauthGrantSeq: usable.grantSeq } : {})
+                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
                 }
               : { ok: false as const, error: 'credential_unavailable' as const }
           }

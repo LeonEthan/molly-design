@@ -1,57 +1,82 @@
-import { refreshOAuthTokens } from './openai-oauth.ts'
+import { createModels } from '@earendil-works/pi-ai'
+import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
 import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store.ts'
 
-const REFRESH_SKEW_MS = 5 * 60_000
-
-export function oauthNeedsRefresh(tokens: OAuthTokenSet, now = Date.now()): boolean {
-  return tokens.accessTokenExpiresAt - now <= REFRESH_SKEW_MS
-}
-
 /**
- * Returns an access token valid for at least the next run: the stored one when fresh,
- * otherwise a refreshed and rotated set. `denied` means the refresh token is dead and the
- * user must sign in again; `unreachable` means a transient network problem. Neither falls
- * back to anything.
+ * Returns an access token valid for the next run. The pi-ai provider owns the refresh:
+ * its CredentialStore adapter serializes the exchange inside the vault lock, so a
+ * concurrent login cannot drop the rotated refresh token. A refresh rejection marks the
+ * row denied so the settings UI can prompt sign-in instead of hammering the endpoint.
  */
 export async function usableOAuthAccessToken(
   store: ModelConnectionStore,
-  connection: { id: string; revision: number },
-  tokens: OAuthTokenSet,
-  fetchFn: typeof fetch = fetch
+  tokens: OAuthTokenSet
 ): Promise<
-  | { ok: true; accessToken: string; accountId?: string; grantSeq?: number }
+  | { ok: true; accessToken: string; accountId?: string }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
 > {
-  if (!oauthNeedsRefresh(tokens))
+  const models = createModels({
+    credentials: {
+      read: async () => ({
+        type: 'oauth',
+        access: tokens.accessToken,
+        refresh: tokens.refreshToken,
+        expires: tokens.accessTokenExpiresAt,
+        ...(tokens.clientId ? { clientId: tokens.clientId } : {})
+      }),
+      list: async () => [{ providerId: 'openai', type: 'oauth' as const }],
+      modify: (_id, fn): Promise<import('@earendil-works/pi-ai').Credential | undefined> =>
+        store
+          .mutateOAuth(async (current) => {
+            const next = await fn(
+              current
+                ? ({
+                    type: 'oauth',
+                    access: current.accessToken,
+                    refresh: current.refreshToken,
+                    expires: current.accessTokenExpiresAt,
+                    ...(current.clientId ? { clientId: current.clientId } : {})
+                  } as import('@earendil-works/pi-ai').Credential)
+                : undefined
+            )
+            if (!next) return undefined
+            const raw = next as {
+              access?: string
+              refresh?: string
+              expires?: number
+              clientId?: string
+            }
+            if (!raw.access || !raw.refresh || typeof raw.expires !== 'number') return undefined
+            return {
+              accessToken: raw.access,
+              refreshToken: raw.refresh,
+              accessTokenExpiresAt: raw.expires,
+              ...(raw.clientId ? { clientId: raw.clientId } : {}),
+              ...(tokens.accountId ? { accountId: tokens.accountId } : {})
+            }
+          })
+          .then(() => undefined),
+      delete: async () => {}
+    }
+  })
+  models.setProvider(openaiProvider())
+  try {
+    const auth = await models.getAuth('openai')
+    const apiKey = typeof auth?.auth.apiKey === 'string' ? auth.auth.apiKey : undefined
+    if (!apiKey) return { ok: false, reason: 'unreachable' }
     return {
       ok: true,
-      accessToken: tokens.accessToken,
-      ...(tokens.accountId ? { accountId: tokens.accountId } : {}),
-      ...(tokens.grantSeq ? { grantSeq: tokens.grantSeq } : {})
+      accessToken: apiKey,
+      ...(tokens.accountId ? { accountId: tokens.accountId } : {})
     }
-  const refreshed = await refreshOAuthTokens(fetchFn, tokens)
-  if (!refreshed.ok) {
-    if (refreshed.reason === 'denied') {
-      // Persist the denial so the row can prompt sign-in instead of hammering refresh.
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ''
+    if (/invalid_grant|denied|unauthorized/i.test(message)) {
       await store
-        .rotateOAuthTokens(connection.id, { ...tokens, denied: true })
+        .mutateOAuth(async (current) => (current ? { ...current, denied: true } : undefined))
         .catch(() => undefined)
+      return { ok: false, reason: 'denied' }
     }
-    return { ok: false, reason: refreshed.reason }
-  }
-  let rotated: OAuthTokenSet
-  // Refresh rotates the refresh token the moment OpenAI answers; if the connection was
-  // edited meanwhile, persist onto the current row so the renewed token is not dropped
-  // while its predecessor is already burned.
-  try {
-    rotated = await store.rotateOAuthTokens(connection.id, refreshed.tokens)
-  } catch {
-    return { ok: false, reason: 'changed' }
-  }
-  return {
-    ok: true,
-    accessToken: rotated.accessToken,
-    ...(rotated.accountId ? { accountId: rotated.accountId } : {}),
-    ...(rotated.grantSeq ? { grantSeq: rotated.grantSeq } : {})
+    return { ok: false, reason: 'unreachable' }
   }
 }

@@ -347,7 +347,7 @@ describe('owned ACP host integration', () => {
     expect(f.observed).toEqual([]);
   });
 
-  it('points an OpenAI OAuth connection at the codex backend with the account header', async () => {
+  it('runs an OpenAI OAuth connection on the public OpenAI preset', async () => {
     const f = await managed({
       config: {
         connection: {
@@ -362,24 +362,13 @@ describe('owned ACP host integration', () => {
           authType: 'openai_oauth',
           oauth: { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' },
         },
-        selection: { connectionId: 'connection', modelId: 'gpt-5.5', thinking: 'minimal' },
+        selection: { connectionId: 'connection', modelId: 'gpt-5.2', thinking: 'low' },
       },
     });
     const s = await f.open();
-    const runtime = f.runtime();
-    const codex = runtime.getRegisteredProviderConfig('openai-codex') as {
-      baseUrl?: string;
-      api?: string;
-      headers?: Record<string, string>;
-    };
-    expect(codex.baseUrl).toBe('https://chatgpt.com/backend-api/codex');
-    expect(codex.api).toBe('openai-codex-responses');
-    expect(codex.headers?.originator).toBe('molly');
-    expect(codex.headers?.['ChatGPT-Account-Id']).toBe('acct-1');
-    // The public preset stays on its own transport.
-    expect(runtime.getRegisteredProviderConfig('openai')).not.toEqual(
-      expect.objectContaining({ baseUrl: 'https://chatgpt.com/backend-api/codex' })
-    );
+    // The official flow talks to api.openai.com directly on the public preset;
+    // no codex backend provider is registered.
+    expect(f.runtime().getRegisteredProviderConfig('openai-codex')).toBeUndefined();
     f.grant(s.snapshot, 'SYNTHETIC_OAUTH_TOKEN', 'acct-1');
     await s.prompt().catch(() => undefined);
   });

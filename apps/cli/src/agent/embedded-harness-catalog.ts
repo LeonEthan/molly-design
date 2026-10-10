@@ -35,11 +35,8 @@ export function projectEmbeddedHarnessCatalog(
           }))
         : catalog.models;
     const offered = connection.models ? new Set(connection.models) : undefined;
-    // OAuth connections run on the codex backend; offer its catalog, not the public preset's.
-    const effectivePreset =
-      connection.authType === 'openai_oauth' ? 'openai-codex' : connection.providerPresetId;
     for (const model of connectionModels) {
-      if (model.providerPresetId !== effectivePreset) continue;
+      if (model.providerPresetId !== connection.providerPresetId) continue;
       if (offered && !offered.has(model.modelId)) continue;
       const modelId = encodeMollyModelOption(connection.id, model.modelId);
       models.push({

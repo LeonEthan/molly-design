@@ -60,22 +60,10 @@ export function configureModelConnection(
       })),
     });
   else if (connection.authType === 'openai_oauth') {
-    // OAuth connections run against the ChatGPT codex backend with its own provider id,
-    // catalog and transport; the public OpenAI preset's models stay untouched. The account
-    // id is public connection metadata, so the header is stable from registration time.
-    const codexProviderId = 'openai-codex';
-    runtime.registerProvider(codexProviderId, {
-      baseUrl: 'https://chatgpt.com/backend-api/codex',
-      api: 'openai-codex-responses',
-      authHeader: true,
-      headers: {
-        originator: 'molly',
-        ...(connection.oauth?.accountId
-          ? { 'ChatGPT-Account-Id': connection.oauth.accountId }
-          : {}),
-      },
-    });
-    providerId = codexProviderId;
+    // The official "Sign in with ChatGPT" flow issues an access token that talks directly
+    // to api.openai.com; pi-ai detects the non-`sk-` token on the OpenAI preset and omits
+    // the request fields ChatGPT sign-in rejects.
+    providerId = 'openai';
   } else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
     runtime.registerProvider(providerId, { baseUrl: connection.baseUrl });
   const model = runtime.getModel(providerId, selection.modelId);

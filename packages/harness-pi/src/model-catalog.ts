@@ -30,18 +30,9 @@ export async function createBundledModelCatalog() {
         thinking: getSupportedThinkingLevels(model),
       }))
   );
-  // The codex backend an OAuth connection runs on has its own catalog and transport.
-  const codexModels = runtime.getModels('openai-codex').map((model) => ({
-    providerPresetId: 'openai-codex' as const,
-    modelId: model.id,
-    name: model.name,
-    input: model.input,
-    contextWindow: model.contextWindow,
-    thinking: getSupportedThinkingLevels(model),
-  }));
   return HarnessModelCatalogSchema.parse({
     version: 1,
     engineVersion: PI_ENGINE_VERSION,
-    models: [...catalogModels, ...codexModels],
+    models: catalogModels,
   });
 }

@@ -330,10 +330,8 @@ export function ModelConnectionForm({
   const native = provider !== '' && provider !== 'openai-compatible';
   const providerModels = useMemo(() => {
     if (!native) return undefined;
-    // An OAuth connection runs on the codex backend; govern that catalog, not the public one.
-    const effective = isOAuthConnection ? 'openai-codex' : provider;
-    return catalog?.filter((model) => model.providerPresetId === effective);
-  }, [catalog, native, provider, isOAuthConnection]);
+    return catalog?.filter((model) => model.providerPresetId === provider);
+  }, [catalog, native, provider]);
   const typedKey = apiKey.trim();
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)

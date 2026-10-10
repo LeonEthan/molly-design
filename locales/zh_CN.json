@@ -100,7 +100,7 @@
   "settings.models.oauth.signInAgain": "重新登录",
   "settings.models.oauth.denied": "登录已失效",
   "settings.models.oauth.deniedDetail": "OpenAI 拒绝了保存的登录。重新登录以继续使用此账号，或删除连接并改用 API key。",
-  "settings.models.oauth.hint": "通过公开的 Codex 登录使用你的 ChatGPT 订阅。这不是 OpenAI 面向 Molly 的正式集成，可能随 OpenAI 政策变化。运行在 Codex 后端，模型目录与限额独立。",
+  "settings.models.oauth.hint": "通过 OpenAI 官方的“使用 ChatGPT 登录”流程使用你的 ChatGPT 订阅：首次登录时 OpenAI 会将 Molly 注册为客户端，请求直接发往 api.openai.com，使用标准的 OpenAI 模型目录。",
   "settings.models.oauth.orKey": "想按用量计费？改用下方 API key。",
   "settings.models.oauth.failed.denied": "OpenAI 未完成登录。请重试，或使用 API key。",
   "settings.models.oauth.failed.timed_out": "登录窗口已过期。请重试，或使用 API key。",

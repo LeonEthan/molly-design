@@ -29,10 +29,10 @@ type Lease = {
   revoke: () => void;
   signal: AbortSignal;
   abort: () => void;
-  resolve: (grant: { apiKey: string; oauthAccountId?: string; oauthGrantSeq?: number }) => void;
+  resolve: (grant: { apiKey: string; oauthAccountId?: string }) => void;
   reject: (error: Error) => void;
   acquired: boolean;
-  credential?: Promise<{ apiKey: string; oauthAccountId?: string; oauthGrantSeq?: number }>;
+  credential?: Promise<{ apiKey: string; oauthAccountId?: string }>;
 };
 
 /** No caller-supplied credentialRef API. Only the Session dispatcher creates leases. */
@@ -200,25 +200,23 @@ export class HarnessCredentialBroker {
       snapshot,
       ...(imageConnection ? { imageConnection } : {}),
     };
-    const credential = new Promise<{
-      apiKey: string;
-      oauthAccountId?: string;
-      oauthGrantSeq?: number;
-    }>((resolve, reject) => {
-      const abort = () => {
-        this.leases.delete(request.requestId);
-        reject(new Error('harness_run_retired'));
-      };
-      this.leases.set(request.requestId, {
-        request,
-        ...options,
-        abort,
-        resolve,
-        reject,
-        acquired: false,
-      });
-      options.signal.addEventListener('abort', abort, { once: true });
-    });
+    const credential = new Promise<{ apiKey: string; oauthAccountId?: string }>(
+      (resolve, reject) => {
+        const abort = () => {
+          this.leases.delete(request.requestId);
+          reject(new Error('harness_run_retired'));
+        };
+        this.leases.set(request.requestId, {
+          request,
+          ...options,
+          abort,
+          resolve,
+          reject,
+          acquired: false,
+        });
+        options.signal.addEventListener('abort', abort, { once: true });
+      }
+    );
     const release = () => {
       for (const lease of [...this.leases.values()]) {
         if (
@@ -324,7 +322,6 @@ export class HarnessCredentialBroker {
         lease.resolve({
           apiKey: report.result.apiKey,
           ...(report.result.oauthAccountId ? { oauthAccountId: report.result.oauthAccountId } : {}),
-          ...(report.result.oauthGrantSeq ? { oauthGrantSeq: report.result.oauthGrantSeq } : {}),
         });
       }
     }

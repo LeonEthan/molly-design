@@ -76,7 +76,6 @@ export class PiAcpHost {
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
   private grantedKey?: string;
-  private grantedOAuthGrantSeq?: number;
   private sessionStarted = false;
 
   constructor(
@@ -391,23 +390,12 @@ export class PiAcpHost {
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
-      // Only a rotation (a strictly newer grant sequence) may replace the key in place;
-      // anything else is a hard failure.
-      const rotated =
-        grant.oauthGrantSeq !== undefined &&
-        this.grantedOAuthGrantSeq !== undefined &&
-        grant.oauthGrantSeq > this.grantedOAuthGrantSeq;
-      if (!rotated) throw new Error('pi_acp_host_credential_changed');
-    }
-    if (
-      grant.oauthGrantSeq !== undefined &&
-      this.grantedOAuthGrantSeq !== undefined &&
-      grant.oauthGrantSeq < this.grantedOAuthGrantSeq
-    )
+      // The vault serializes OAuth refresh under its lock, so a key change can only mean
+      // the row was reconnected or deleted under this run; never swap credentials mid-run.
       throw new Error('pi_acp_host_credential_changed');
+    }
     await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
     this.grantedKey = grant.apiKey;
-    this.grantedOAuthGrantSeq = grant.oauthGrantSeq;
     signal.throwIfAborted();
     let memory: string | undefined;
     let memoryDiagnostic: string | undefined;

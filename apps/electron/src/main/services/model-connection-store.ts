@@ -43,11 +43,8 @@ const OAuthTokenSetSchema = z
     /** Refresh was rejected; the row stays but runs refuse until the user signs in again. */
     denied: z.boolean().optional(),
     accountId: z.string().max(200).optional(),
-    /**
-     * Monotonic per-connection counter incremented on every rotation, so a grant minted
-     * from an older token set is rejected rather than replayed after the vault moved on.
-     */
-    grantSeq: z.number().int().positive().optional()
+    /** Dynamic client id OpenAI issued for this login's refresh grant. */
+    clientId: z.string().max(200).optional()
   })
   .strict()
 export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
@@ -86,6 +83,9 @@ export class ModelConnectionStore {
   private readonly cipher: CredentialCipher
   private readonly platform: NodeJS.Platform
   private pending: Promise<unknown> = Promise.resolve()
+
+  /** Stable installation id sent to OpenAI as the agent host id on first login. */
+  private readonly installationId = randomUUID()
 
   constructor(
     directory: string,
@@ -563,23 +563,53 @@ export class ModelConnectionStore {
         oauth: account,
         ...(parsed.data.models ? { models: parsed.data.models } : {})
       })
-      store.entries = [...store.entries, { connection, oauth: { ...tokens, grantSeq: 1 } }]
+      store.entries = [...store.entries, { connection, oauth: { ...tokens } }]
       await this.write(store)
       return connection
     })
   }
 
-  /** Rotates a token set onto the current row; returns it with its new grant id. */
-  rotateOAuthTokens(connectionId: string, tokens: OAuthTokenSet): Promise<OAuthTokenSet> {
+  /** The OAuth token set of the single OpenAI OAuth connection, if any (main-process only). */
+  oauthCurrent(): Promise<OAuthTokenSet | undefined> {
     return this.serial(async () => {
       const store = await this.read()
-      const entry = store.entries.find((item) => item.connection.id === connectionId)
-      if (!entry || entry.connection.authType !== 'openai_oauth')
-        throw new Error('model_connection_oauth_requires_reauth')
-      // Rotation supersedes any grant minted from a previous token set.
-      entry.oauth = { ...tokens, grantSeq: (entry.oauth?.grantSeq ?? 0) + 1 }
+      return store.entries.find((item) => item.connection.authType === 'openai_oauth')?.oauth
+    })
+  }
+
+  /**
+   * Serialized read-modify-write of the OAuth token set; the pi-ai CredentialStore
+   * refresh runs inside this lock so a concurrent login cannot drop a rotated token.
+   */
+  mutateOAuth(
+    fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>
+  ): Promise<OAuthTokenSet | undefined> {
+    return this.serial(async () => {
+      const store = await this.read()
+      const entry = store.entries.find((item) => item.connection.authType === 'openai_oauth')
+      if (!entry) return undefined
+      const next = await fn(entry.oauth)
+      if (!next) return undefined
+      entry.oauth = next
       await this.write(store)
       return entry.oauth
     })
+  }
+
+  /** Removes the OAuth token set (the connection row is deleted separately by sign-out). */
+  clearOAuth(): Promise<void> {
+    return this.serial(async () => {
+      const store = await this.read()
+      const entry = store.entries.find((item) => item.connection.authType === 'openai_oauth')
+      if (entry) {
+        entry.oauth = undefined
+        await this.write(store)
+      }
+    })
+  }
+
+  /** Stable installation id sent to OpenAI as the agent host id on first login. */
+  deviceId(): string {
+    return this.installationId
   }
 }

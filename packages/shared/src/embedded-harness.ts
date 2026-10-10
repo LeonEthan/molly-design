@@ -636,8 +636,7 @@ export const HarnessModelCatalogSchema = z
       .array(
         z
           .object({
-            // `openai-codex` is the codex-backend catalog an OAuth connection offers.
-            providerPresetId: z.union([ProviderPresetIdSchema, z.literal('openai-codex')]),
+            providerPresetId: ProviderPresetIdSchema,
             modelId: z.string().min(1).max(200),
             name: z.string().min(1).max(300),
             input: z.array(z.enum(['text', 'image'])),
@@ -1023,7 +1022,6 @@ export const HarnessCredentialReportSchema = z
           /** OAuth connections carry the ChatGPT account the codex backend requires. */
           oauthAccountId: z.string().min(1).max(200).optional(),
           /** Changes on every rotation; a worker rejects a grant minted before the current one. */
-          oauthGrantSeq: z.number().int().positive().optional(),
         })
         .strict(),
       z.object({ ok: z.literal(false), error: z.literal('credential_unavailable') }).strict(),

@@ -32,6 +32,7 @@
     "build:browser-driver": "node scripts/agent-browser-resources.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "catalog:pi",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@molly/cli-supervisor": "workspace:*",

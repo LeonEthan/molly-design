@@ -19,6 +19,7 @@ const png = Buffer.from(
   'base64'
 )
 app.setPath('userData', join(PROBE_OUTPUT, 'profile'))
+app.commandLine.appendSwitch('enable-features', 'WebMCPTesting,DevToolsWebMCPSupport')
 app.on('window-all-closed', () => {})
 
 async function main(): Promise<void> {
@@ -69,12 +70,14 @@ async function main(): Promise<void> {
   }
   const created = browser.create(scope.browserId, { x: 0, y: 0, width: 900, height: 700 })
   assert.equal(created.ok, true)
+  let observationId = ''
   const execute = (command: AgentBrowserCommand) => browser.executeAgentCommand(scope, command)
   const snapshot = async (): Promise<string> => {
     const reply = await execute({ kind: 'snapshot' })
     assert.equal(reply.kind, 'snapshot')
     if (reply.kind !== 'snapshot') throw new Error('Missing native snapshot')
     assert.doesNotMatch(reply.snapshot, /PRIVATE_APP_SENTINEL/)
+    observationId = reply.observationId
     return reply.snapshot
   }
   const ref = (text: string, label: string): string => {
@@ -92,20 +95,31 @@ async function main(): Promise<void> {
   record('Native Agent localhost navigation and observation work through the page service')
   await view.webContents.executeJavaScript('document.querySelector("img").decode()')
   const initial = await snapshot()
-  await execute({ kind: 'type', ref: ref(initial, 'textbox "Search designs"'), text: 'poster' })
-  await execute({ kind: 'click', ref: ref(initial, 'button "Search"') })
+  await execute({
+    kind: 'type',
+    observationId,
+    ref: ref(initial, 'textbox "Search designs"'),
+    text: 'poster'
+  })
+  await execute({ kind: 'click', ref: ref(await snapshot(), 'button "Search"'), observationId })
   assert.match(await snapshot(), /Results for poster/)
-  record('Official MCP input and click retain page ownership and native readiness')
+  record('Native driver input and click retain page ownership and native readiness')
   await assert.rejects(
-    execute({ kind: 'type', ref: ref(await snapshot(), 'textbox "Password"'), text: 'fixture' }),
-    /password/
+    execute({
+      kind: 'type',
+      ref: ref(await snapshot(), 'textbox "Password"'),
+      observationId,
+      text: 'fixture'
+    }),
+    /password/i
   )
   record('Password typing remains a takeover-only operation')
   assert.equal(await view.webContents.executeJavaScript('typeof RTCPeerConnection'), 'function')
   record('WebRTC is available in the native page')
   const image = await execute({
     kind: 'save_image',
-    ref: ref(await snapshot(), 'img "Reference image"')
+    ref: ref(await snapshot(), 'img "Reference image"'),
+    observationId
   })
   assert.equal(image.kind, 'asset')
   if (image.kind !== 'asset') throw new Error('Missing selected image bytes')
@@ -116,7 +130,11 @@ async function main(): Promise<void> {
   if (capture.kind !== 'image') throw new Error('Missing native screenshot')
   assert.equal(Buffer.from(capture.base64, 'base64').subarray(0, 3).toString('hex'), 'ffd8ff')
   record('Native screenshot returns bounded JPEG bytes')
-  await execute({ kind: 'click', ref: ref(await snapshot(), 'link "Visit next site"') })
+  await execute({
+    kind: 'click',
+    ref: ref(await snapshot(), 'link "Visit next site"'),
+    observationId
+  })
   assert.match(await snapshot(), /Next site/)
   assert.equal(view.webContents.getURL(), `http://localhost:${port}/next`)
   record('A page link can cross the former top-level site boundary')

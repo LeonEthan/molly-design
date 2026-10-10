@@ -11,6 +11,7 @@ const requireElectron = createRequire(join(root, 'apps/electron/package.json'))
 const { build } = createRequire(join(root, 'apps/cli/package.json'))('esbuild')
 
 await symlink(join(root, 'apps/electron/node_modules'), join(work, 'node_modules'), 'dir')
+await symlink(join(root, 'apps/electron/resources'), join(work, 'resources'), 'dir')
 await build({
   entryPoints: [join(root, 'apps/electron/scripts/browser-navigation-probe-main.ts')],
   outfile: join(work, 'main.cjs'),

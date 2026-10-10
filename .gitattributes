@@ -2,3 +2,5 @@
 packages/design-authoring/** text=auto eol=lf
 packages/design-bento/** text=auto eol=lf
 packages/harness-pi/** text=auto eol=lf
+apps/electron/native/agent-browser/** text=auto eol=lf
+apps/electron/native/agent-browser/embedded.patch whitespace=-blank-at-eol

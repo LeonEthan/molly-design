@@ -20,6 +20,7 @@ files:
   # Keep this exclusion when the caller chooses a different output directory.
   - '!{.sparkle-local,dist}/**'
   - '!**/.vscode/*'
+  - '!{.cache,native}/**'
   - '!src/*'
   - '!scripts/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'

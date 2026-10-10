@@ -5,18 +5,19 @@ import type {
   AgentBrowserScope
 } from '@molly/shared/browser-agent-rpc'
 import { fetchSelectedBrowserImage } from './public-browser-asset-fetch'
-import { BrowserMcpDriver, browserMcpSnapshot } from './browser-mcp-driver'
+import { AgentBrowserDriver, BrowserAgentError } from './browser-agent-driver'
 import { isStableSignedMacApp } from './browser-account-signing'
 import { agentBrowserDocumentKey, hostMatchesSite } from './public-browser-agent-policy'
 
 type Lease = {
   scope: AgentBrowserScope
   contents: WebContents
-  driver?: BrowserMcpDriver
+  driver?: AgentBrowserDriver
   dispatchingInput: boolean
   blockHumanInput: (event: Electron.Event) => void
   imageCookieContext: string
   ready: boolean
+  documentRevision: number
   disposed: boolean
   abortController: AbortController
   waiters: Set<() => void>
@@ -31,7 +32,6 @@ type Lease = {
   onDestroyed: () => void
 }
 
-const MAX_SCREENSHOT_BYTES = 2 * 1024 * 1024
 const AGENT_BROWSER_PARTITION = 'persist:molly-public-browser-v1'
 const DEV_BROWSER_PARTITION = 'molly-public-browser-v1'
 
@@ -88,11 +88,13 @@ export class PublicBrowserAgentController {
         if (!lease.dispatchingInput) event.preventDefault()
       },
       ready: !contents.isLoadingMainFrame(),
+      documentRevision: 0,
       disposed: false,
       abortController: new AbortController(),
       waiters: new Set(),
       onDidStartNavigation: (_event, url, isInPlace, isMainFrame) => {
         if (isMainFrame && !isInPlace && !lease.disposed) {
+          lease.documentRevision++
           lease.ready = false
           this.updateImageCookieContext(lease, url)
         }
@@ -121,7 +123,7 @@ export class PublicBrowserAgentController {
       contents.on('dom-ready', lease.onDomReady)
       if (!contents.getURL()) await contents.loadURL('about:blank')
       this.assertSameLease(lease)
-      lease.driver = new BrowserMcpDriver(contents, {
+      lease.driver = new AgentBrowserDriver(contents, {
         assertActive: () => this.assertSameLease(lease),
         dispatchInput: (send) => {
           this.assertSameLease(lease)
@@ -213,18 +215,37 @@ export class PublicBrowserAgentController {
     }
     if (!lease) lease = await this.createLease(contents, scope)
     lease.scope = scope
-    if (command.kind !== 'navigate') await this.waitForDocument(lease)
+    const lifecycle = ['webmcp_result', 'webmcp_cancel', 'dialog'].includes(command.kind)
+    if (!lifecycle && command.kind !== 'navigate') await this.waitForDocument(lease)
     if (!lease.driver) throw new Error('Molly browser driver is unavailable.')
+    const documentRevision = lease.documentRevision
     const response = await lease.driver.execute(command).catch((error: unknown) => {
       this.assertSameLease(lease)
       throw error
     })
     this.assertSameLease(lease)
-    await this.waitForDocument(lease)
-    this.assertReadable(lease)
+    if (!lifecycle) {
+      try {
+        await this.waitForDocument(lease)
+        this.assertReadable(lease)
+      } catch (error) {
+        throw new BrowserAgentError(
+          error instanceof Error ? error.message : 'Browser operation failed.',
+          response.webmcp
+        )
+      }
+    }
     if (command.kind === 'save_image') {
-      if (response.kind !== 'image')
+      if (response.kind !== 'selected_image')
         throw new Error('Selected browser reference is not a loaded image.')
+      const assertSelectedDocument = (): void => {
+        if (lease.documentRevision !== documentRevision)
+          throw new BrowserAgentError(
+            'Page changed during image selection. Take a new snapshot.',
+            response.webmcp
+          )
+      }
+      assertSelectedDocument()
       const result = response.image
       const pageUrl = contents.getURL()
       if (agentBrowserDocumentKey(result.pageUrl) !== agentBrowserDocumentKey(pageUrl))
@@ -235,49 +256,25 @@ export class PublicBrowserAgentController {
         pageUrl,
         imageCookieContext: lease.imageCookieContext,
         signal: lease.abortController.signal
+      }).catch((error: unknown) => {
+        throw new BrowserAgentError(
+          error instanceof Error ? error.message : 'Browser image fetch failed.',
+          response.webmcp
+        )
       })
+      assertSelectedDocument()
       this.assertSameLease(lease)
       this.assertReadable(lease)
       return {
         kind: 'asset',
         base64: Buffer.from(asset.bytes).toString('base64'),
         pageUrl,
-        imageUrl: asset.finalUrl
+        imageUrl: asset.finalUrl,
+        ...(response.webmcp ? { webmcp: response.webmcp } : {})
       }
     }
-    if (response.kind !== 'tool') throw new Error('Browser driver returned an unexpected result.')
-    const result = response.result
-    if (command.kind === 'snapshot') {
-      return { kind: 'snapshot', ...pageState(contents), ...browserMcpSnapshot(result) }
-    }
-    if (command.kind === 'screenshot') {
-      const capture = result.content.find((part) => part.type === 'image')
-      if (
-        !capture ||
-        capture.type !== 'image' ||
-        capture.mimeType !== 'image/jpeg' ||
-        capture.data.length > 2_800_000
-      )
-        throw new Error('Browser screenshot is empty or exceeds the size limit.')
-      const bytes = Buffer.from(capture.data, 'base64')
-      if (
-        bytes.length === 0 ||
-        bytes.length > MAX_SCREENSHOT_BYTES ||
-        bytes.subarray(0, 3).toString('hex') !== 'ffd8ff'
-      )
-        throw new Error('Browser screenshot is empty or exceeds the size limit.')
-      return {
-        kind: 'image',
-        mimeType: 'image/jpeg',
-        base64: capture.data,
-        pageUrl: contents.getURL()
-      }
-    }
-    return { kind: 'page', ...pageState(contents) }
+    if (response.kind === 'selected_image')
+      throw new Error('Browser driver returned an unexpected result.')
+    return response
   }
 }
-
-const pageState = (contents: WebContents): { url: string; title: string } => ({
-  url: contents.getURL(),
-  title: contents.getTitle().slice(0, 500)
-})

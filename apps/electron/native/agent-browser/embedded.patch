@@ -1,0 +1,506 @@
+--- a/cli/src/connection.rs
++++ b/cli/src/connection.rs
+@@ -790,6 +790,13 @@
+ }
+ 
+ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
++    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        return if daemon_ready(session) {
++            Ok(DaemonResult { already_running: true, restarted: false })
++        } else {
++            Err("embedded_daemon_unavailable".to_string())
++        };
++    }
+     let mut restarted = false;
+ 
+     // Socket connectivity is the sole liveness check — no PID check — so
+@@ -1010,7 +1017,11 @@
+     }
+ }
+ 
+-pub fn send_command(cmd: Value, session: &str) -> Result<Response, String> {
++pub fn send_command(mut cmd: Value, session: &str) -> Result<Response, String> {
++    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        cmd["mollyToken"] = serde_json::json!(std::env::var("AGENT_BROWSER_EMBEDDED_TOKEN").map_err(|_| "embedded_token_missing".to_string())?);
++        return send_command_once(&cmd, session).map_err(|_| "outcome_unknown".to_string());
++    }
+     // Retry logic for transient errors (EAGAIN/EWOULDBLOCK/connection issues)
+     const MAX_RETRIES: u32 = 5;
+     const RETRY_DELAY_MS: u64 = 200;
+@@ -1068,6 +1079,7 @@
+ /// (exited or never started), as opposed to a live-but-busy daemon. The
+ /// remedy is a respawn through ensure_daemon, not a retry.
+ pub fn daemon_unreachable(error: &str) -> bool {
++    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() { return false; }
+     error.contains("Failed to connect")
+         || has_os_error(error, 2) // No such file or directory (socket gone)
+         || has_os_error(error, 61) // Connection refused (macOS)
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -1408,18 +1408,23 @@
+     }
+ 
+     let args: Vec<String> = env::args().skip(1).collect();
+-    let mut flags = parse_flags(&args);
++    let boundary = if env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        args.iter().position(|arg| arg == "--")
++    } else { None };
++    let flag_args = boundary.map(|index| &args[..index]).unwrap_or(&args);
++    let mut flags = parse_flags(flag_args);
+     if flags.restore_uses_session {
+         flags.restore = Some(flags.session.clone());
+     }
+     if let Some(ref namespace) = flags.namespace {
+         env::set_var("AGENT_BROWSER_NAMESPACE", namespace);
+     }
+-    let clean = clean_args(&args);
++    let clean = boundary.map(|index| args[index + 1..].to_vec())
++        .unwrap_or_else(|| clean_args(&args));
+     tls::configure_process(&flags);
+ 
+-    let has_help = args.iter().any(|a| a == "--help" || a == "-h");
+-    let has_version = args.iter().any(|a| a == "--version" || a == "-V");
++    let has_help = flag_args.iter().any(|a| a == "--help" || a == "-h");
++    let has_version = flag_args.iter().any(|a| a == "--version" || a == "-V");
+ 
+     if has_help {
+         if let Some(cmd) = clean.first() {
+--- a/cli/src/commands.rs
++++ b/cli/src/commands.rs
+@@ -2219,6 +2219,7 @@
+                 "id": id,
+                 "action": "webmcp_result",
+                 "invocationId": invocation_id,
++                "poll": std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some(),
+             });
+             let mut index = 2;
+             while index < rest.len() {
+@@ -2263,6 +2264,7 @@
+                 "id": id,
+                 "action": "webmcp_cancel",
+                 "invocationId": invocation_id,
++                "detach": std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some(),
+             }))
+         }
+         _ => Err(ParseError::UnknownSubcommand {
+@@ -2883,6 +2885,12 @@
+     ];
+ 
+     match rest.first().copied() {
++        Some("element-info") if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() => {
++            let selector = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
++                context: "get element-info".to_string(), usage: "get element-info <ref>",
++            })?;
++            Ok(json!({"id": id, "action": "elementinfo", "selector": selector}))
++        }
+         Some("text") => {
+             let sel = rest.get(1).ok_or_else(|| ParseError::MissingArguments {
+                 context: "get text".to_string(),
+--- a/cli/src/native/actions.rs
++++ b/cli/src/native/actions.rs
+@@ -1828,6 +1828,14 @@
+                                         self.webmcp.clear_page_scope(session_id);
+                                     } else {
+                                         self.webmcp.clear_page_tools(session_id);
++                                    }
++                                }
++                                if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some()
++                                    && frame.get("parentId").is_some()
++                                {
++                                    if let Some(frame_id) = frame.get("id").and_then(Value::as_str)
++                                    {
++                                        self.webmcp.clear_frame_scope(session_id, frame_id);
+                                     }
+                                 }
+                                 if let (Some(frame_id), Some(origin)) = (
+@@ -2156,10 +2164,16 @@
+                 }
+                 Err(broadcast::error::TryRecvError::Empty) => break,
+                 Err(broadcast::error::TryRecvError::Lagged(n)) => {
++                    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++                        self.webmcp.event_stream_lost = true;
++                    }
+                     eprintln!("[agent-browser] Warning: CDP event buffer overflowed, {} events dropped. Network requests may be missing from HAR output.", n);
+                     continue;
+                 }
+                 Err(broadcast::error::TryRecvError::Closed) => {
++                    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++                        self.webmcp.event_stream_lost = true;
++                    }
+                     self.event_rx = None;
+                     break;
+                 }
+@@ -3019,6 +3033,7 @@
+         "wait" => handle_wait(cmd, state).await,
+         "gettext" => handle_gettext(cmd, state).await,
+         "getattribute" => handle_getattribute(cmd, state).await,
++        "elementinfo" => handle_elementinfo(cmd, state).await,
+         "isvisible" => handle_isvisible(cmd, state).await,
+         "isenabled" => handle_isenabled(cmd, state).await,
+         "ischecked" => handle_ischecked(cmd, state).await,
+@@ -4026,6 +4041,9 @@
+     state: &mut DaemonState,
+     plugins: Vec<crate::plugins::PluginConfig>,
+ ) -> Result<(), String> {
++    if env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        return Err("embedded_connection_lost".to_string());
++    }
+     if env::var("AGENT_BROWSER_CDP").is_ok()
+         || env::var("AGENT_BROWSER_AUTO_CONNECT").is_ok()
+         || !env::var("AGENT_BROWSER_PROVIDER")
+@@ -4873,6 +4891,11 @@
+ }
+ 
+ async fn handle_launch_inner(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
++    if env::var_os("AGENT_BROWSER_EMBEDDED").is_some()
++        && cmd.get("cdpUrl").and_then(Value::as_str).is_none()
++    {
++        return Err("embedded_connection_required".to_string());
++    }
+     let effective_ca_cert = resolve_effective_ca_cert(cmd, state)?;
+     // Absent field falls back to the daemon's spawn-time env (mirrors
+     // hideScrollbars/webgpu), keeping the launch hash stable when follow-up
+@@ -6407,6 +6430,12 @@
+         .and_then(|v| v.as_str())
+         .ok_or("Missing 'key' parameter")?;
+ 
++    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        let focused = mgr.evaluate("(() => { let e = document.activeElement; while (e) { if (e.type === 'password') return true; if (e.shadowRoot?.activeElement) { e = e.shadowRoot.activeElement; continue; } if (e.tagName === 'IFRAME') { try { e = e.contentDocument.activeElement; continue; } catch { return true; } } return false; } return false; })()", None).await?;
++        if focused.as_bool() != Some(false) {
++            return Err("password_requires_human".to_string());
++        }
++    }
+     // Parse modifier+key chords like "Control+a", "Shift+Enter", "Control+Shift+a"
+     let (actual_key, modifiers) = parse_key_chord(key);
+ 
+@@ -6605,6 +6634,29 @@
+     }
+ 
+     if let Some(selector) = cmd.get("selector").and_then(|v| v.as_str()) {
++        if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some()
++            && super::element::parse_ref(selector).is_some()
++        {
++            tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), async {
++                loop {
++                    if super::element::is_element_visible(
++                        &mgr.client,
++                        &session_id,
++                        &state.ref_map,
++                        selector,
++                        &state.iframe_sessions,
++                    )
++                    .await?
++                    {
++                        return Ok::<(), String>(());
++                    }
++                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
++                }
++            })
++            .await
++            .map_err(|_| format!("Wait timed out after {}ms", timeout_ms))??;
++            return Ok(json!({ "waited": "ref", "ref": selector }));
++        }
+         let state_str = cmd
+             .get("state")
+             .and_then(|v| v.as_str())
+@@ -9359,6 +9411,7 @@
+ }
+ 
+ async fn collect_webmcp_tools(state: &mut DaemonState) -> Result<Vec<webmcp::ToolRecord>, String> {
++    let embedded = std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some();
+     state.drain_cdp_events_background().await?;
+     let (client, session_id, origin) = webmcp_page_context(state).await?;
+     let mut rx = client.subscribe();
+@@ -9390,10 +9443,12 @@
+             .webmcp
+             .update_frame_origin(&session_id, frame_id, frame_origin.as_str());
+     }
+-    client
+-        .send_command_no_params("WebMCP.enable", Some(&session_id))
+-        .await
+-        .map_err(|error| webmcp::unsupported_error(&error))?;
++    if !embedded || !matches!(state.webmcp.observations.get(&session_id), Some(Ok(()))) {
++        client
++            .send_command_no_params("WebMCP.enable", Some(&session_id))
++            .await
++            .map_err(|error| webmcp::unsupported_error(&error))?;
++    }
+ 
+     state.webmcp.observations.insert(session_id.clone(), Ok(()));
+ 
+@@ -9420,9 +9475,20 @@
+                 state.webmcp.apply_tools_removed(&session_id, &event.params);
+             }
+             Ok(Ok(_)) => continue,
++            Ok(Err(broadcast::error::RecvError::Lagged(_))) if embedded => {
++                state.webmcp.event_stream_lost = true;
++                return Err(webmcp::ERR_EVENT_STREAM_LOST.to_string());
++            }
++            Ok(Err(broadcast::error::RecvError::Closed)) if embedded => {
++                state.webmcp.event_stream_lost = true;
++                return Err(webmcp::ERR_EVENT_STREAM_LOST.to_string());
++            }
+             Ok(Err(broadcast::error::RecvError::Lagged(_))) => continue,
+             Ok(Err(broadcast::error::RecvError::Closed)) | Err(_) => break,
+         }
++    }
++    if embedded {
++        state.drain_cdp_events_background().await?;
+     }
+     let tools = state.webmcp.tools(&session_id)?;
+     let domain_filter = state.domain_filter.read().await.clone();
+@@ -9579,6 +9645,15 @@
+         .get("invocationId")
+         .and_then(Value::as_str)
+         .ok_or("Missing 'invocationId' parameter")?;
++    if cmd.get("poll").and_then(Value::as_bool).unwrap_or(false) {
++        state.drain_cdp_events_background().await?;
++        return state
++            .webmcp
++            .invocations
++            .get(invocation_id)
++            .map(|record| record.to_json())
++            .ok_or_else(|| webmcp::ERR_INVOCATION_NOT_FOUND.to_string());
++    }
+     wait_for_webmcp_invocation(state, invocation_id, state.timeout_ms(cmd)).await
+ }
+ 
+@@ -9596,6 +9671,9 @@
+         )
+     })?;
+     if record.is_terminal() {
++        if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++            return Ok(record.to_json());
++        }
+         return Err(format!(
+             "{}: WebMCP invocation '{}' is already {}",
+             webmcp::ERR_INVOCATION_NOT_ACTIVE,
+@@ -9603,7 +9681,16 @@
+             record.status
+         ));
+     }
+-    let (client, session_id, _) = webmcp_page_context(state).await?;
++    let (client, session_id) = if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        let browser = state.browser.as_ref().ok_or("Browser not launched")?;
++        (
++            browser.client.clone(),
++            browser.active_session_id()?.to_string(),
++        )
++    } else {
++        let (client, session_id, _) = webmcp_page_context(state).await?;
++        (client, session_id)
++    };
+     if let Err(error) = client
+         .send_command(
+             "WebMCP.cancelInvocation",
+@@ -9619,6 +9706,9 @@
+             }
+         }
+         return Err(webmcp::cancel_error(&error));
++    }
++    if cmd.get("detach").and_then(Value::as_bool).unwrap_or(false) {
++        return Ok(json!({"invocationId": invocation_id, "status": "cancel_requested"}));
+     }
+     wait_for_webmcp_invocation(state, invocation_id, state.timeout_ms(cmd)).await
+ }
+@@ -18322,3 +18412,19 @@
+         }
+     }
+ }
++
++async fn handle_elementinfo(cmd: &Value, state: &mut DaemonState) -> Result<Value, String> {
++    let mgr = state.browser.as_ref().ok_or("Browser not launched")?;
++    let selector = cmd
++        .get("selector")
++        .and_then(Value::as_str)
++        .ok_or("Missing selector")?;
++    super::element::get_element_info(
++        &mgr.client,
++        mgr.active_session_id()?,
++        &state.ref_map,
++        selector,
++        &state.iframe_sessions,
++    )
++    .await
++}
+--- a/cli/src/native/element.rs
++++ b/cli/src/native/element.rs
+@@ -464,6 +464,9 @@
+             // backend_node_id is stale; re-query the accessibility tree below
+         }
+ 
++        if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++            return Err(format!("Element ref {ref_id} is stale"));
++        }
+         // Fallback: re-query the accessibility tree to find a fresh node by role/name
+         let fresh_id = find_node_id_by_role_name(
+             client,
+@@ -708,6 +711,9 @@
+             // backend_node_id is stale; re-query the accessibility tree below
+         }
+ 
++        if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++            return Err(format!("Element ref {ref_id} is stale"));
++        }
+         // Fallback: re-query the accessibility tree to find a fresh node by role/name
+         let fresh_id = find_node_id_by_role_name(
+             client,
+@@ -1718,3 +1724,20 @@
+         assert_eq!(session, "parent-session");
+     }
+ }
++
++pub async fn get_element_info(
++    client: &CdpClient, session_id: &str, ref_map: &RefMap,
++    selector: &str, iframe_sessions: &HashMap<String, String>,
++) -> Result<Value, String> {
++    let (object_id, effective_session_id) = resolve_element_object_id(
++        client, session_id, ref_map, selector, iframe_sessions,
++    ).await?;
++    let result: EvaluateResult = client.send_command_typed(
++        "Runtime.callFunctionOn", &CallFunctionOnParams {
++            function_declaration: "function() { return { tag: this.tagName, inputType: this.type || '', imageUrl: this.currentSrc || '', pageUrl: this.ownerDocument.URL, loaded: this.complete === true && this.naturalWidth > 0 }; }".to_string(),
++            object_id: Some(object_id), arguments: None,
++            return_by_value: Some(true), await_promise: Some(false),
++        }, Some(&effective_session_id),
++    ).await?;
++    result.result.value.ok_or_else(|| "element_info_unavailable".to_string())
++}
+--- a/cli/src/native/interaction.rs
++++ b/cli/src/native/interaction.rs
+@@ -143,6 +143,19 @@
+     )
+     .await?;
+ 
++    if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        let info = super::element::get_element_info(
++            client,
++            session_id,
++            ref_map,
++            selector_or_ref,
++            iframe_sessions,
++        )
++        .await?;
++        if info.get("inputType").and_then(Value::as_str) == Some("password") {
++            return Err("password_requires_human".to_string());
++        }
++    }
+     // Focus the element
+     client
+         .send_command_typed::<_, Value>(
+@@ -564,6 +577,9 @@
+         )
+         .await?
+         {
++            if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++                return Err("checkbox_state_unconfirmed: Observe before continuing; do not repeat the click automatically".to_string());
++            }
+             js_click_checkbox(
+                 client,
+                 session_id,
+@@ -616,6 +632,9 @@
+         )
+         .await?
+         {
++            if std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++                return Err("checkbox_state_unconfirmed: Observe before continuing; do not repeat the click automatically".to_string());
++            }
+             js_click_checkbox(
+                 client,
+                 session_id,
+--- a/cli/src/native/daemon.rs
++++ b/cli/src/native/daemon.rs
+@@ -21,6 +21,15 @@
+ use crate::connection::INTERNAL_DAEMON_SHUTDOWN_ACTION;
+ 
+ pub async fn run_daemon(session: &str) {
++    if env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++        std::thread::spawn(|| {
++            use std::io::Read;
++            let mut stdin = std::io::stdin();
++            let mut byte = [0u8; 1];
++            while matches!(stdin.read(&mut byte), Ok(1)) {}
++            process::exit(0);
++        });
++    }
+     let socket_dir = get_daemon_socket_dir();
+     if !socket_dir.exists() {
+         let _ = fs::create_dir_all(&socket_dir);
+@@ -104,6 +113,7 @@
+         .ok()
+         .and_then(|s| s.parse::<u16>().ok())
+         .unwrap_or(0);
++    if env::var_os("AGENT_BROWSER_EMBEDDED").is_none() {
+     match StreamServer::start_without_client(
+         preferred_port,
+         session.to_string(),
+@@ -122,6 +132,7 @@
+         Err(e) => {
+             let _ = writeln!(std::io::stderr(), "Stream server failed to start: {}", e);
+         }
++    }
+     }
+ 
+     // Auto-shutdown the daemon after this many ms of inactivity (no commands
+@@ -573,6 +584,11 @@
+                     }
+                 };
+ 
++                if env::var_os("AGENT_BROWSER_EMBEDDED").is_some() {
++                    let token = env::var("AGENT_BROWSER_EMBEDDED_TOKEN").ok();
++                    if token.as_deref().filter(|value| !value.is_empty()) != cmd.get("mollyToken").and_then(Value::as_str)
++                        || token.is_none() { break; }
++                }
+                 idle_activity.mark();
+ 
+                 let action = cmd
+--- a/cli/src/native/snapshot.rs
++++ b/cli/src/native/snapshot.rs
+@@ -490,7 +490,10 @@
+ 
+     for (idx, node) in tree_nodes.iter().enumerate() {
+         let role = node.role.as_str();
+-        let mut should_ref = if INTERACTIVE_ROLES.contains(&role) {
++        let mut should_ref = if INTERACTIVE_ROLES.contains(&role)
++            || (std::env::var_os("AGENT_BROWSER_EMBEDDED").is_some()
++                && matches!(role, "image" | "img"))
++        {
+             true
+         } else if CONTENT_ROLES.contains(&role) {
+             !node.name.is_empty()
+--- a/cli/src/native/webmcp.rs
++++ b/cli/src/native/webmcp.rs
+@@ -23,6 +23,7 @@
+ pub const ERR_INVOKE_FAILED: &str = "webmcp_invoke_failed";
+ pub const ERR_CANCEL_FAILED: &str = "webmcp_cancel_failed";
+ pub const ERR_CONTEXT_CHANGED: &str = "webmcp_context_changed";
++pub const ERR_EVENT_STREAM_LOST: &str = "webmcp_event_stream_lost";
+ pub const ERR_TOO_MANY_INVOCATIONS: &str = "webmcp_too_many_invocations";
+ pub const ERR_OUTPUT_TOO_LARGE: &str = "webmcp_output_too_large";
+ 
+@@ -247,6 +248,7 @@
+ #[derive(Default)]
+ pub struct RuntimeState {
+     pub invocations: HashMap<String, InvocationRecord>,
++    pub event_stream_lost: bool,
+     order: VecDeque<String>,
+     early_responses: HashMap<String, InvocationCompletion>,
+     early_order: VecDeque<String>,
+@@ -410,6 +412,9 @@
+     }
+ 
+     pub fn tools(&self, session_id: &str) -> Result<Vec<ToolRecord>, String> {
++        if self.event_stream_lost {
++            return Err(ERR_EVENT_STREAM_LOST.to_string());
++        }
+         if let Some(error) = self.tool_errors.get(session_id) {
+             return Err(error.clone());
+         }
+@@ -500,6 +505,7 @@
+     }
+ 
+     pub fn clear_all(&mut self) {
++        self.event_stream_lost = false;
+         self.invocations.clear();
+         self.order.clear();
+         self.early_responses.clear();

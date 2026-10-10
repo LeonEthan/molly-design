@@ -1,11 +1,14 @@
 import {
   AgentBrowserRpcResultSchema,
+  BROWSER_AGENT_PROTOCOL_VERSION,
   BROWSER_HOST_POLL_INTERVAL_MS,
   BROWSER_HOST_TTL_MS,
   type AgentBrowserHostLease,
   type AgentBrowserHostReport,
   type AgentBrowserHostWork
 } from '@molly/shared/browser-agent-rpc'
+import { BrowserAgentError } from './browser-agent-driver'
+import { browserRuntimeCapabilities } from './browser-agent-runtime'
 import { readLocalPlatformSnapshot } from '../platform'
 import type { CliService } from './cli-service'
 import type { PublicBrowserService } from './public-browser-service'
@@ -59,6 +62,7 @@ export class PublicBrowserAgentHost {
         workspaceId: snapshot.workspace.workspaceId,
         method: 'browser/host',
         params: {
+          capabilities: await browserRuntimeCapabilities(),
           reports: sent,
           leases: this.browser
             .activeAgentScopes()
@@ -80,7 +84,11 @@ export class PublicBrowserAgentHost {
       })
       if (!response.ok) throw new Error(response.error)
       const parsed = AgentBrowserRpcResultSchema.safeParse(response.result)
-      if (!parsed.success || parsed.data.type !== 'browser/host') {
+      if (
+        !parsed.success ||
+        parsed.data.type !== 'browser/host' ||
+        parsed.data.version !== BROWSER_AGENT_PROTOCOL_VERSION
+      ) {
         throw new Error('Unexpected browser host answer.')
       }
       this.lastSuccessAt = this.now()
@@ -117,7 +125,12 @@ export class PublicBrowserAgentHost {
       const reply = await this.browser.executeAgentCommand(work.scope, work.command)
       report = { requestId: work.requestId, ok: true, reply }
     } catch (error) {
-      report = { requestId: work.requestId, ok: false, error: errorMessage(error) }
+      report = {
+        requestId: work.requestId,
+        ok: false,
+        error: errorMessage(error),
+        ...(error instanceof BrowserAgentError && error.webmcp ? { webmcp: error.webmcp } : {})
+      }
     } finally {
       this.inFlight.delete(work.requestId)
       this.busyPages.delete(work.scope.browserId)

@@ -78,11 +78,11 @@ dispatch owns runtime availability; schema presence does not enable execution.
 
 ## Browser RPC
 
-`browser/execute` uses the owner-only socket and binds run/launch/page.
-Recheck results; reject uncertain output without replaying actions or freezing
-the current run. Browser RPC carries no per-site authorization scope. Import browser accounts in
-Electron main only. Each `AgentBrowserActionInputSchemas` entry is one MCP tool;
-  validate with `AgentBrowserCommandSchema` before execution. Replies are typed.
+`browser/execute` binds run/launch/page on the owner-only socket. V2 tools require
+compatible host capability/TTL. Validate strict actions/replies; refs require
+observationId. Preserve untrusted WebMCP updates on success, errors and images;
+handles stay lease-bound. Unknown outcomes never replay or freeze the run.
+Account import stays in Electron main; RPC carries no site authorization scope.
 
 ## Installation identity
 

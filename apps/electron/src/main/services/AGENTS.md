@@ -112,12 +112,11 @@ action, and read failures preserve destination cookies.
 
 ## Agent browser driver
 
-Keep the official MCP server private to main and the Agent action union strict;
-never forward arbitrary tool names, code or filenames. Only the granted page and
-its descendants enter the CDP adapter. Revoke detaches before returning results.
-Input gating opens only for synchronous CDP dispatch, never across an await.
-Reuse the pinned adapter via its generator; do not edit generated upstream code.
-Navigation and image fetches use Chromium's session and user network, including
-proxy/TUN; retain readiness/timeouts without destination proofs or site scopes.
-Uncertain operations reject output without replay or run-wide freeze. Keep image
-body/redirect/Cookie bounds; native downloads never publish design assets.
+Keep agent-browser private behind the strict action union. Bind refs to observation,
+lease and document. Invalidate untrusted WebMCP handles on events; check once at dispatch.
+Use the pinned CDP adapter unchanged, with one token-gated loopback connection for
+the granted page and descendants. Revoke detaches synchronously before cleanup.
+Open the human-input gate only during synchronous CDP Input dispatch. Own each native
+daemon and its private config; unknown outcomes never replay. Polling never cancels
+WebMCP work. Retain Chromium network/proxy/TUN behavior and image body/redirect/Cookie
+bounds; native downloads never publish design assets. Result/cancel bypass DOM readiness.

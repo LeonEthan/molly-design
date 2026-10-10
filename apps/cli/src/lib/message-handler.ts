@@ -5796,7 +5796,11 @@ export class MessageHandler {
         return { type: 'mcp/catalog-entry' as const, connection: entry?.connection ?? null };
       }
       case 'browser/host-status': {
-        return { type: 'browser/host-status' as const, connected: this.browserHost.isConnected() };
+        return {
+          type: 'browser/host-status' as const,
+          connected: this.browserHost.isConnected(),
+          capabilities: this.browserHost.getCapabilities(),
+        };
       }
       case 'browser/host': {
         for (const takeover of request.params.takeovers) {
@@ -5827,7 +5831,12 @@ export class MessageHandler {
         ].slice(0, 8);
         return {
           type: 'browser/host' as const,
-          requests: this.browserHost.exchange(request.params.reports, isActive),
+          version: 2 as const,
+          requests: this.browserHost.exchange(
+            request.params.reports,
+            isActive,
+            request.params.capabilities ?? null
+          ),
           revoke,
         };
       }
@@ -5926,7 +5935,12 @@ export class MessageHandler {
           };
         }
         if (!outcome.ok) {
-          return { type: 'browser/execute' as const, ok: false as const, error: outcome.error };
+          return {
+            type: 'browser/execute' as const,
+            ok: false as const,
+            error: outcome.error,
+            ...(outcome.webmcp ? { webmcp: outcome.webmcp } : {}),
+          };
         }
         if (outcome.reply.kind === 'asset') {
           try {
@@ -5946,6 +5960,7 @@ export class MessageHandler {
               reply: {
                 kind: 'saved_image' as const,
                 pageUrl: outcome.reply.pageUrl,
+                ...(outcome.reply.webmcp ? { webmcp: outcome.reply.webmcp } : {}),
                 imageUrl: outcome.reply.imageUrl,
                 path: asset.path,
                 sha256: asset.sha256,
@@ -5960,6 +5975,7 @@ export class MessageHandler {
               type: 'browser/execute' as const,
               ok: false as const,
               error: formatErrorMessage(error).slice(0, 1_000),
+              ...(outcome.reply.webmcp ? { webmcp: outcome.reply.webmcp } : {}),
             };
           }
         }

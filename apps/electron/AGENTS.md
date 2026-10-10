@@ -35,10 +35,15 @@ contracts, and window/renderer integration rules live in
 
 ## Build toolchain
 
-- Electron 39's Chromium supports native top-level await. Keep renderer and module
+- Electron 44's Chromium supports native top-level await. Keep renderer and module
   worker builds on native TLA; do not add `vite-plugin-top-level-await` or an
   equivalent full-bundle AST compatibility rewrite. Reprocessing Rollup's complete
   output graph materially increases production renderer peak memory.
+
+The browser driver is built from `native/agent-browser/source.json` plus the tracked
+patch using pinned Rust. Stage one target binary, verify its seal after collection,
+and reseal signature-only changes before signing the root app. Keep compiler caches
+and native source outside the package. See [driver build](native/agent-browser/README.md).
 
 ## Embedded CLI and native dependencies
 

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Effect } from 'effect';
 import {
   AgentBrowserRpcResultSchema,
+  BROWSER_AGENT_PROTOCOL_VERSION,
+  type BrowserWebMcpSummary,
   type AgentBrowserCommand,
   type AgentBrowserReply,
 } from '@molly/shared/browser-agent-rpc';
@@ -27,7 +29,12 @@ export async function resolveBrowserHost(ctx: McpSessionContext): Promise<boolea
     );
     if (!answer.ok) return false;
     const parsed = AgentBrowserRpcResultSchema.safeParse(answer.result);
-    return parsed.success && parsed.data.type === 'browser/host-status' && parsed.data.connected;
+    return (
+      parsed.success &&
+      parsed.data.type === 'browser/host-status' &&
+      parsed.data.connected &&
+      parsed.data.capabilities?.version === BROWSER_AGENT_PROTOCOL_VERSION
+    );
   } catch {
     return false;
   }
@@ -37,7 +44,10 @@ export async function requestBrowserOperation(
   ctx: McpSessionContext,
   command: AgentBrowserCommand,
   signal: AbortSignal
-): Promise<{ ok: true; reply: AgentBrowserReply } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; reply: AgentBrowserReply }
+  | { ok: false; error: string; webmcp?: BrowserWebMcpSummary }
+> {
   const socketPath = ctx.localControlSocketPath;
   const launchId = ctx.designHookLaunchId;
   if (!socketPath || !launchId)
@@ -80,7 +90,11 @@ export async function requestBrowserOperation(
     }
     return parsed.data.ok
       ? { ok: true, reply: parsed.data.reply }
-      : { ok: false, error: parsed.data.error };
+      : {
+          ok: false,
+          error: parsed.data.error,
+          ...(parsed.data.webmcp ? { webmcp: parsed.data.webmcp } : {}),
+        };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   } finally {

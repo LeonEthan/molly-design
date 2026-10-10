@@ -59,15 +59,28 @@ this page is the full text of the rules summarised there.
   and selected-image `save_image`. Results are structured (`{ url, title }`, the snapshot
   with a `truncated` flag, the saved asset); screenshots stay inline MCP images. Usage
   mechanics live in the server instructions, read through Pi's `describeNamespace()`;
-  Official `@playwright/mcp` 0.0.82 owns snapshots, string refs (`e5` / `f1e5`),
-  actionability and input through its locked Playwright dependency. An attributed,
-  unchanged VS Code adapter connects only the granted WebContents and its worker/frame
-  descendants through an in-memory CDP transport. No browser is launched or listener opened.
-  Molly exposes only its strict action union; upstream arbitrary code, caller-supplied
-  evaluate, filenames and dynamic website tools are unavailable. Host-authored evaluate
-  only checks password fields, scrolls, or resolves the selected image's metadata.
-  The private MCP output directory is cleared after every operation and removed on revoke;
-  only bounded snapshot text or image bytes leave main, never upstream file links.
+  Pinned agent-browser owns snapshots, refs, interactions and WebMCP events.
+  Molly binds refs to a returned observationId and invalidates observations on navigation,
+  frame changes and mutations. The unchanged VS Code adapter exposes only the leased
+  WebContents and descendants through a token-gated loopback WebSocket. One owned native
+  daemon per lease uses private config/socket/output paths; its control messages require
+  a host token, and parent pipe closure terminates it. No additional browser is launched.
+  Native source, required host patches and build identity are tracked under Electron's
+  `native/agent-browser`. Browser protocol v2 is explicitly negotiated and expires with
+  host TTL. The strict action tools cover navigation, reading, forms, wait, frame and
+  dialogs. Four WebMCP tools list schemas on demand, invoke once, poll without cancellation
+  and request cooperative cancellation. Opaque website tool/invocation handles remain
+  scoped to the lease and document. Pending invocations block other page mutations except resolving an existing dialog; unrelated iframe activity does not release that guard.
+  Catalog and lifecycle events invalidate handles immediately, including identical
+  remove/re-register cycles. A single-use permit is checked by the existing CDP
+  interceptor immediately before invocation. Native listing keeps one successful
+  subscription and drains lifecycle events; a known event-stream gap requires a
+  fresh connection. This does not provide browser-side atomic registration identity.
+  Website summaries stay bounded untrusted data, including on screenshots and errors.
+  Accessibility image nodes receive upstream refs; the native selected-ref metadata
+  extension preserves loaded IMG/currentSrc checks. Element waits resolve those
+  refs in their owning frame with a deadline. Checkbox actions dispatch at most one
+  click and report unconfirmed state without retrying it.
   screenshots are bounded JPEG MCP images and need a model with image input;
   the Agent gets no arbitrary JavaScript, CDP target list, cookie values, external
   Chrome control, or Agent download-management API. The selected image path uses
@@ -85,7 +98,7 @@ this page is the full text of the rules summarised there.
   existing permission flow without per-site scopes; takeover revokes Agent observation and action
   until the user explicitly resumes. While Agent control is active, Electron blocks
   human mouse/keyboard events on that page. Only synchronous `Input.*` dispatch
-  opens that gate; it is closed again before any Playwright wait. Toolbar navigation
+  opens that gate; it is closed again before any asynchronous wait. Toolbar navigation
   takes over first. Detachment revokes pending output and preserves the human page.
   A dispatched operation whose result is unknown is never replayed automatically.
   Cancellation, timeout or disconnect rejects that operation's late result without
@@ -116,10 +129,10 @@ this page is the full text of the rules summarised there.
   cookies or guarantee server-side logout. The Browser sidebar links to Settings
   and leaves manual sign-in in the visible page. Image labels and refs follow the
   upstream accessibility snapshot; use screenshots for visual selection.
-  Pi converts known Molly browser failures into fixed safe codes; raw website or
-  transport error text remains hidden from the Agent. Destination and network-proof
-  failure states are no longer part of the browser contract. Page ownership and
-  cancellation checks remain independent of native loading success.
+  Host driver failures use fixed safe messages. MCP text/image blocks carry WebMCP
+  updates through the existing Pi adapter, including errors; no Pi fork is introduced.
+  Page ownership and cancellation checks remain independent of native loading success.
+  This migration has no new browser runtime, signed-package or real-site acceptance.
   The composer info-bar Browser action is an explicit candidate-navigation request, not merely a
   panel-open action. It opens the reported candidate even when another page is already visible.
   That click IS the approval for that exact target: a remote route creates (or replaces) its tunnel

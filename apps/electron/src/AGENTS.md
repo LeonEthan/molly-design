@@ -66,8 +66,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
 - The public browser retains hostname-based engine routing for manual browsing;
   `will-navigate` and `will-redirect` enforce it while the page is human-controlled.
   Agent navigation stays on its native browser page, including loopback URLs.
-  The Agent reader has a
-  separate lease in `public-browser-agent-controller.ts`: bind one Session page
+  agent-browser uses the lease in `public-browser-agent-controller.ts`: bind one Session page
   and active run, and revoke on takeover, cancellation or host loss. Browser
   navigation and asset transport reuse Chromium's session and the user's
   network, proxy and TUN configuration; there is no site scope or Molly

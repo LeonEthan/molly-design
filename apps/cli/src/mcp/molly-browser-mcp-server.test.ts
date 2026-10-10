@@ -13,6 +13,7 @@ import {
 } from '@/mcp/molly-browser-mcp-server';
 import { buildMollyMcpServer } from '@/mcp/molly-mcp-server';
 
+const observationId = '550e8400-e29b-41d4-a716-446655440000';
 const SHA = 'a'.repeat(64);
 
 const connect = async (config: MollyBrowserMcpServerConfig) => {
@@ -40,13 +41,27 @@ describe('molly_browser catalog', () => {
     const client = await connect({ browserHost: true });
     const tools = (await client.listTools()).tools;
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'back',
+      'check',
       'click',
+      'dialog',
+      'forward',
+      'frame',
       'navigate',
+      'press',
+      'read',
+      'reload',
       'save_image',
       'screenshot',
       'scroll',
+      'select',
       'snapshot',
       'type',
+      'wait',
+      'webmcp_cancel',
+      'webmcp_invoke',
+      'webmcp_list',
+      'webmcp_result',
     ]);
     const byName = new Map(tools.map((tool) => [tool.name, tool]));
     for (const tool of tools) {
@@ -55,7 +70,7 @@ describe('molly_browser catalog', () => {
       expect(tool.inputSchema).toHaveProperty('additionalProperties', false);
     }
     expect(byName.get('navigate')?.inputSchema.required).toEqual(['url']);
-    expect(byName.get('type')?.inputSchema.required).toEqual(['ref', 'text']);
+    expect(byName.get('type')?.inputSchema.required).toEqual(['ref', 'observationId', 'text']);
     expect(byName.get('snapshot')?.annotations).toMatchObject({ readOnlyHint: true });
     expect(byName.get('screenshot')?.annotations).toMatchObject({ readOnlyHint: true });
     expect(byName.get('click')?.annotations).toMatchObject({
@@ -66,9 +81,8 @@ describe('molly_browser catalog', () => {
     expect(byName.get('snapshot')?.outputSchema?.properties).toHaveProperty('truncated');
     expect(byName.get('save_image')?.outputSchema?.properties).toHaveProperty('path');
     expect(byName.get('screenshot')?.outputSchema).toBeUndefined();
-    for (const tool of tools) expect(tool.description).not.toMatch(/password|untrusted/i);
     const instructions = client.getInstructions() ?? '';
-    expect(instructions).toMatch(/most recent snapshot/);
+    expect(instructions).toMatch(/latest snapshot/);
     expect(instructions).toMatch(/take control/);
     expect(instructions).toMatch(/untrusted/);
   });
@@ -96,6 +110,7 @@ describe('molly_browser results', () => {
       kind: 'snapshot',
       url: 'https://example.com/gallery',
       title: 'Gallery',
+      observationId,
       snapshot: '- img "poster" [ref=e5]',
       truncated: false,
     } as const;
@@ -106,6 +121,7 @@ describe('molly_browser results', () => {
     expect(result.structuredContent).toEqual({
       url: 'https://example.com/gallery',
       title: 'Gallery',
+      observationId,
       snapshot: '- img "poster" [ref=e5]',
       truncated: false,
     });
@@ -121,9 +137,9 @@ describe('molly_browser results', () => {
       await connect(config)
     ).callTool({
       name: 'type',
-      arguments: { ref: 'e2', text: 'poster' },
+      arguments: { ref: 'e2', observationId, text: 'poster' },
     });
-    expect(sent).toEqual([{ kind: 'type', ref: 'e2', text: 'poster' }]);
+    expect(sent).toEqual([{ kind: 'type', ref: 'e2', observationId, text: 'poster' }]);
     expect(result.structuredContent).toEqual({ url: 'https://example.com/', title: 'Home' });
   });
 
@@ -143,7 +159,7 @@ describe('molly_browser results', () => {
       await connect(config)
     ).callTool({
       name: 'save_image',
-      arguments: { ref: 'f1e9' },
+      arguments: { ref: 'e9', observationId },
     });
     expect(result.structuredContent).toEqual(saved);
   });
@@ -166,7 +182,10 @@ describe('molly_browser results', () => {
   it('refuses without dispatch when the desktop disconnected after registration', async () => {
     const { sent, config } = answering({ kind: 'page', url: 'https://example.com/', title: '' });
     const client = await connect({ ...config, resolveBrowserHost: async () => false });
-    const result = await client.callTool({ name: 'click', arguments: { ref: 'e1' } });
+    const result = await client.callTool({
+      name: 'click',
+      arguments: { ref: 'e1', observationId },
+    });
     expect(result.isError).toBe(true);
     expect(result.content).toEqual([
       { type: 'text', text: 'The Molly desktop browser is not connected.' },
@@ -179,7 +198,10 @@ describe('molly_browser results', () => {
       browserHost: true,
       requestOperation: async () => ({ ok: false, error: 'Browser element changed.' }),
     });
-    const result = await client.callTool({ name: 'click', arguments: { ref: 'e1' } });
+    const result = await client.callTool({
+      name: 'click',
+      arguments: { ref: 'e1', observationId },
+    });
     expect(result.isError).toBe(true);
     expect(result.content).toEqual([{ type: 'text', text: 'Browser element changed.' }]);
   });
@@ -202,14 +224,16 @@ describe('embedded browser command boundary', () => {
   });
 
   it('accepts upstream references but rejects selectors, scripts and file output', () => {
-    expect(AgentBrowserCommandSchema.safeParse({ kind: 'click', ref: 'e5' }).success).toBe(true);
-    expect(AgentBrowserCommandSchema.safeParse({ kind: 'save_image', ref: 'f1e9' }).success).toBe(
-      true
-    );
+    expect(
+      AgentBrowserCommandSchema.safeParse({ kind: 'click', ref: 'e5', observationId }).success
+    ).toBe(true);
+    expect(
+      AgentBrowserCommandSchema.safeParse({ kind: 'save_image', ref: 'e9', observationId }).success
+    ).toBe(true);
     for (const command of [
       { kind: 'click', ref: 'button' },
       { kind: 'click', ref: 1, snapshotId: 'old' },
-      { kind: 'click', ref: 'e5', function: 'arbitrary()' },
+      { kind: 'click', ref: 'e5', observationId, function: 'arbitrary()' },
       { kind: 'screenshot', filename: '/tmp/output.png' },
       { kind: 'browser_run_code_unsafe', code: 'arbitrary()' },
       { kind: 'scroll', deltaY: '0); arbitrary()' },

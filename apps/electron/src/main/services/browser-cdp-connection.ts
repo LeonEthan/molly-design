@@ -1,11 +1,13 @@
 import type { WebContents } from 'electron'
-import { chromium, type Browser, type Page, type ConnectOverCDPTransport } from 'playwright'
+import { randomBytes } from 'node:crypto'
+import type { IncomingMessage } from 'node:http'
+import { WebSocket, WebSocketServer } from 'ws'
+import { z } from 'zod'
 import {
   CDPBrowserProxy,
   BrowserViewDebugger,
   BrowserViewCDPTarget,
   type TargetInfo,
-  type Request,
   type View,
   type Disposable
 } from './browser-cdp-upstream.js'
@@ -13,14 +15,15 @@ import {
 export type BrowserCdpGuards = {
   assertActive(): void
   detached(): void
+  contextChanged?(): void
   dispatchInput(send: () => Promise<unknown>): Promise<unknown>
 }
 
-/** Main-only transport to one granted WebContents and its descendants. No listener. */
 export class BrowserCdpConnection {
   private readonly targets = new Set<BrowserViewCDPTarget>()
   private readonly subscriptions: Disposable[] = []
-  private browser: Browser | undefined
+  private server: WebSocketServer | undefined
+  private client: WebSocket | undefined
   private debugger: BrowserViewDebugger | undefined
   private proxy: CDPBrowserProxy | undefined
   private closed = false
@@ -30,10 +33,10 @@ export class BrowserCdpConnection {
 
   constructor(
     private readonly contents: WebContents,
-    private readonly guards: BrowserCdpGuards
+    private readonly guards: BrowserCdpGuards & { assertWebMcpInvoke(params: unknown): void }
   ) {}
 
-  async connect(): Promise<{ browser: Browser; page: Page }> {
+  async connect(): Promise<string> {
     this.guards.assertActive()
     if (this.contents.debugger.isAttached()) throw new Error('Browser debugger is already in use.')
     this.contents.debugger.attach('1.3')
@@ -92,7 +95,10 @@ export class BrowserCdpConnection {
       if (targetInfo.targetId !== info.targetId)
         this.subscriptions.push(
           debuggerTransport.onTargetDestroyed((id) => {
-            if (id === info.targetId) this.targets.delete(target)
+            if (id === info.targetId) {
+              this.targets.delete(target)
+              this.guards.contextChanged?.()
+            }
           })
         )
       proxy.registerTarget(target)
@@ -106,6 +112,11 @@ export class BrowserCdpConnection {
       ),
       debuggerTransport.registerCommandInterceptor((method, params, session) => {
         this.guards.assertActive()
+        if (method === 'WebMCP.invokeTool') {
+          if (!session) throw new Error('Website tool context changed. List the tools again.')
+          this.guards.assertWebMcpInvoke(params)
+          return debuggerTransport.sendCommandRaw(method, params, session.sessionId)
+        }
         if (method.startsWith('Input.'))
           return this.guards.dispatchInput(() =>
             debuggerTransport.sendCommandRaw(method, params, session?.sessionId)
@@ -115,30 +126,107 @@ export class BrowserCdpConnection {
     )
     register(targetInfo)
     this.contents.debugger.on('detach', this.onDetach)
-    const transport: ConnectOverCDPTransport = {
-      send: (message) => {
-        this.guards.assertActive()
-        const request = message as Partial<Request>
-        if (typeof request.id !== 'number' || typeof request.method !== 'string')
-          throw new Error('Unexpected browser transport message.')
-        void proxy.sendMessage(request as Request)
-      },
-      close() {
-        this.onclose?.()
+    const token = randomBytes(32).toString('hex')
+    let claimed = false
+    const server = new WebSocketServer({
+      host: '127.0.0.1',
+      port: 0,
+      maxPayload: 4 * 1024 * 1024,
+      verifyClient: ({ req }: { req: IncomingMessage }) => {
+        if (this.closed || claimed || req.headers.origin || req.url !== `/${token}`) return false
+        claimed = true
+        return true
       }
-    }
-    this.subscriptions.push(proxy.onMessage((message) => transport.onmessage?.(message)))
-    this.browser = await chromium.connectOverCDP(transport, { timeout: 10_000 })
+    })
+    this.server = server
+    const requestSchema = z
+      .object({
+        id: z.number().int(),
+        method: z.string().max(200),
+        params: z.unknown().optional(),
+        sessionId: z.string().optional()
+      })
+      .strict()
+    server.on('connection', (client) => {
+      if (this.closed) {
+        client.terminate()
+        return
+      }
+      this.client = client
+      client.on('error', () => this.guards.detached())
+      client.on('close', () => {
+        if (!this.closed) this.guards.detached()
+      })
+      client.on('message', (bytes) => {
+        try {
+          this.guards.assertActive()
+          const request = requestSchema.parse(JSON.parse(bytes.toString()))
+          if (
+            [
+              'Browser.close',
+              'Target.createTarget',
+              'Target.closeTarget',
+              'Target.createBrowserContext',
+              'Target.disposeBrowserContext',
+              'Target.attachToBrowserTarget',
+              'Target.sendMessageToTarget'
+            ].includes(request.method)
+          ) {
+            client.send(
+              JSON.stringify({
+                id: request.id,
+                sessionId: request.sessionId,
+                error: { code: -32000, message: 'Only the granted Molly page is available.' }
+              })
+            )
+            return
+          }
+          void proxy.sendMessage(request)
+        } catch {
+          client.terminate()
+        }
+      })
+    })
+    this.subscriptions.push(
+      proxy.onMessage((message) => {
+        if (this.closed || this.client?.readyState !== WebSocket.OPEN) return
+        try {
+          this.guards.assertActive()
+          if (
+            [
+              'WebMCP.toolsAdded',
+              'WebMCP.toolsRemoved',
+              'Page.frameStartedNavigating',
+              'Page.frameNavigated',
+              'Page.frameDetached',
+              'Runtime.executionContextsCleared',
+              'Target.detachedFromTarget'
+            ].includes(message.method ?? '')
+          )
+            this.guards.contextChanged?.()
+          this.client.send(JSON.stringify(message))
+        } catch {
+          this.client.terminate()
+        }
+      })
+    )
+    await new Promise<void>((resolve, reject) => {
+      server.once('listening', resolve)
+      server.once('error', () => reject(new Error('Private browser transport is unavailable.')))
+    })
     this.guards.assertActive()
-    const page = this.browser.contexts()[0]?.pages()[0]
-    if (!page) throw new Error('Molly browser page is unavailable.')
-    return { browser: this.browser, page }
+    const address = server.address()
+    if (!address || typeof address === 'string')
+      throw new Error('Private browser transport is unavailable.')
+    return `ws://127.0.0.1:${address.port}/${token}`
   }
 
   /** Synchronous detachment prevents old operations from issuing more commands. */
   dispose(): void {
     if (this.closed) return
     this.closed = true
+    this.client?.terminate()
+    this.server?.close()
     this.contents.debugger.off('detach', this.onDetach)
     for (const target of this.targets) target.dispose()
     this.targets.clear()
@@ -146,6 +234,5 @@ export class BrowserCdpConnection {
     this.proxy?.dispose()
     for (const subscription of this.subscriptions) subscription.dispose()
     this.subscriptions.length = 0
-    void this.browser?.close().catch(() => undefined)
   }
 }

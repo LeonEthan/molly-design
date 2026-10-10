@@ -8,6 +8,7 @@
 export type MachineProtocolCapabilities = Record<string, number>;
 
 export const MACHINE_PROTOCOL_CAPABILITIES = {
+  browserAgent: 'browserAgent',
   personalPreferences: 'personalPreferences',
   sessionStopControl: 'sessionStopControl',
   subagentCancellation: 'subagentCancellation',
@@ -22,6 +23,7 @@ export const MACHINE_PROTOCOL_CAPABILITIES = {
   acpProtocolAuthentication: 'acpProtocolAuthentication',
 } as const;
 
+export const BROWSER_AGENT_MACHINE_PROTOCOL_VERSION = 2;
 export const PERSONAL_PREFERENCES_PROTOCOL_VERSION = 1;
 /** v1: `resume` / `interrupt` cancel actions. v2: adds owner-decided user `stop`. */
 export const SESSION_STOP_CONTROL_PROTOCOL_VERSION = 2;
@@ -76,6 +78,7 @@ export function machineSupportsSubagentCancellation(
  * in the "supported" direction and there is no version fallback to catch it.
  */
 export const CURRENT_MACHINE_PROTOCOL_CAPABILITIES: MachineProtocolCapabilities = {
+  [MACHINE_PROTOCOL_CAPABILITIES.browserAgent]: BROWSER_AGENT_MACHINE_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.personalPreferences]: PERSONAL_PREFERENCES_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.sessionStopControl]: SESSION_STOP_CONTROL_PROTOCOL_VERSION,
   [MACHINE_PROTOCOL_CAPABILITIES.subagentCancellation]: SUBAGENT_CANCELLATION_PROTOCOL_VERSION,

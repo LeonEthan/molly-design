@@ -1,3 +1,4 @@
+import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -53,10 +54,14 @@ function assertSignatureOnlyChange(original, signed, temporaryDirectory) {
 }
 
 /** Capture the verified pre-sign seal; return a synchronous pre-root reseal operation. */
-export function prepareEmbeddedHarnessSigning(directory) {
-  const manifest = verifyEmbeddedHarness(directory)
+export function prepareEmbeddedHarnessSigning(
+  directory,
+  verify = verifyEmbeddedHarness,
+  manifestName = MANIFEST
+) {
+  const manifest = verify(directory)
   const root = fs.realpathSync(directory)
-  const manifestPath = path.join(root, MANIFEST)
+  const manifestPath = path.join(root, manifestName)
   const manifestBytes = fs.readFileSync(manifestPath)
   const originals = new Map()
   for (const file of manifest.files) {
@@ -77,7 +82,7 @@ export function prepareEmbeddedHarnessSigning(directory) {
         if (entry.isDirectory()) checkResources(location)
         else {
           const relative = path.relative(root, location).split(path.sep).join('/')
-          if (!entry.isFile() || (relative !== MANIFEST && !listed.has(relative))) {
+          if (!entry.isFile() || (relative !== manifestName && !listed.has(relative))) {
             throw new Error(`Unlisted embedded harness resource: ${relative}`)
           }
         }
@@ -112,7 +117,7 @@ export function prepareEmbeddedHarnessSigning(directory) {
         buildId: sha256(JSON.stringify(files))
       }
       fs.writeFileSync(manifestPath, `${JSON.stringify(signedManifest, null, 2)}\n`)
-      verifyEmbeddedHarness(root)
+      verify(root)
     } finally {
       fs.rmSync(temporaryDirectory, { recursive: true, force: true })
     }
@@ -132,6 +137,19 @@ export default async function signEmbeddedHarness(options) {
     'harness'
   )
   const reseal = prepareEmbeddedHarnessSigning(directory)
+  const browserDirectory = path.join(
+    app,
+    'Contents',
+    'Resources',
+    'app.asar.unpacked',
+    'resources',
+    'agent-browser'
+  )
+  const resealBrowser = prepareEmbeddedHarnessSigning(
+    browserDirectory,
+    verifyAgentBrowser,
+    'manifest.json'
+  )
   let rootReached = false
   await signAsync({
     ...options,
@@ -142,6 +160,7 @@ export default async function signEmbeddedHarness(options) {
       if (path.resolve(file) === app) {
         if (rootReached) throw new Error('Embedded harness root signing repeated')
         reseal()
+        resealBrowser()
         rootReached = true
       }
       return perFileOptions
@@ -149,4 +168,5 @@ export default async function signEmbeddedHarness(options) {
   })
   if (!rootReached) throw new Error('Embedded harness root app was not signed')
   verifyEmbeddedHarness(directory)
+  verifyAgentBrowser(browserDirectory)
 }

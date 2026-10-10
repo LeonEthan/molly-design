@@ -1,3 +1,4 @@
+import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { installEmbeddedSqliteBinding, installEmbeddedSharpBinding } from './cli-native-deps.mjs'
 
 // electron-builder Arch enum (electron-builder/out/index Arch).
@@ -21,6 +22,7 @@ export default async function beforePack(context) {
         `universal builds would need one binding per slice.`
     )
   }
+  await buildAgentBrowser({ platform, arch: archName })
   installEmbeddedSqliteBinding({ platform, arch: archName })
   installEmbeddedSharpBinding({ platform, arch: archName })
 }

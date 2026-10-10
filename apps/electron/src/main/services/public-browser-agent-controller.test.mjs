@@ -11,7 +11,7 @@ const compiled = await build({
   stdin: {
     contents: `
       export { PublicBrowserAgentController } from './public-browser-agent-controller.ts'
-      export { BrowserMcpDriver } from './browser-mcp-driver.ts'
+      export { AgentBrowserDriver } from './browser-agent-driver.ts'
     `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
     loader: 'ts'
@@ -22,6 +22,12 @@ const compiled = await build({
   format: 'cjs',
   packages: 'external',
   alias: {
+    'acp-extension-dsh/capabilities': fileURLToPath(
+      new URL('../../../../../packages/acp-extension-dsh/src/capabilities.ts', import.meta.url)
+    ),
+    '@molly/shared/browser-agent-rpc': fileURLToPath(
+      new URL('../../../../../packages/shared/src/browser-agent-rpc.ts', import.meta.url)
+    ),
     '@molly/shared/browser-url': fileURLToPath(
       new URL('../../../../../packages/shared/src/browser-url.ts', import.meta.url)
     )
@@ -33,7 +39,7 @@ compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require'])(
   module.exports,
   (name) => (name === 'electron' ? { app: { isPackaged: false } } : require(name))
 )
-const { PublicBrowserAgentController, BrowserMcpDriver } = module.exports
+const { PublicBrowserAgentController, AgentBrowserDriver } = module.exports
 const fixtures = new Map()
 let nextContentsId = 0
 
@@ -45,13 +51,10 @@ const deferred = () => {
   return { promise, resolve }
 }
 
-BrowserMcpDriver.prototype.connect = async function () {
+AgentBrowserDriver.prototype.connect = async function () {
   const contents = Reflect.get(Reflect.get(this, 'connection'), 'contents')
   const fixture = fixtures.get(contents.id)
-  Reflect.set(this, 'client', {
-    callTool: (command) => fixture.perform(command),
-    close: async () => {}
-  })
+  Reflect.set(Reflect.get(this, 'runtime'), 'call', (args) => fixture.perform(args))
   fixture.connected.resolve()
 }
 
@@ -77,10 +80,11 @@ class BrowserFixture {
       loadURL: async (nextUrl) => this.navigate(nextUrl)
     })
     fixtures.set(this.contents.id, this)
-    this.perform = async ({ name, arguments: args }) => {
-      if (name === 'browser_navigate') this.navigate(args.url)
+    this.perform = async ([name, destination]) => {
+      if (name === 'open') this.navigate(destination)
       return {
-        content: [{ type: 'text', text: '### Snapshot\n```yaml\n- heading "Native page"\n```' }]
+        success: true,
+        data: name === 'snapshot' ? { snapshot: '- heading "Native page"' } : {}
       }
     }
   }
@@ -104,7 +108,9 @@ class BrowserFixture {
 
 void test('Agent can observe an existing native page without approved sites or response proofs', async () => {
   const fixture = new BrowserFixture()
-  assert.deepEqual(await fixture.execute({ kind: 'snapshot' }), {
+  const { observationId, ...reply } = await fixture.execute({ kind: 'snapshot' })
+  assert.match(observationId, /^[a-f0-9-]{36}$/)
+  assert.deepEqual(reply, {
     kind: 'snapshot',
     url: 'http://192.168.1.10/design',
     title: 'Native title',
@@ -148,7 +154,8 @@ void test('revocation rejects a late operation result and keeps the human page',
     started.resolve()
     await release.promise
     return {
-      content: [{ type: 'text', text: '### Snapshot\n```yaml\n- heading "Late page"\n```' }]
+      success: true,
+      data: { snapshot: '- heading "Late page"' }
     }
   }
   const result = fixture.execute({ kind: 'snapshot' })
@@ -216,11 +223,11 @@ void test('navigation failure retains its loading error and permits another obse
   const fixture = new BrowserFixture()
   const snapshot = fixture.perform
   fixture.perform = async () => ({
-    isError: true,
-    content: [{ type: 'text', text: 'Timeout 15000ms exceeded during navigation.' }]
+    success: false,
+    error: 'Timeout 15000ms exceeded during navigation.'
   })
   await assert.rejects(fixture.execute({ kind: 'navigate', url: 'https://198.18.0.119/' }), {
-    message: 'Browser page is still loading; observe again after it settles.'
+    message: 'Browser operation failed; its effects may be incomplete. Observe before continuing.'
   })
   fixture.perform = snapshot
   assert.match((await fixture.execute({ kind: 'snapshot' })).snapshot, /Native page/)
@@ -229,12 +236,13 @@ void test('navigation failure retains its loading error and permits another obse
 
 void test('long snapshots are cut to a bounded body and flagged as truncated', async () => {
   const fixture = new BrowserFixture()
-  const body = '- text "x"\n'.repeat(2_000)
+  const body = '- text "x"\n'.repeat(6_000)
   fixture.perform = async () => ({
-    content: [{ type: 'text', text: `### Snapshot\n\`\`\`yaml\n${body}\n\`\`\`` }]
+    success: true,
+    data: { snapshot: body }
   })
   const result = await fixture.execute({ kind: 'snapshot' })
   assert.equal(result.truncated, true)
-  assert.equal(result.snapshot, body.slice(0, 16_000))
+  assert.equal(result.snapshot, body.slice(0, 50_000))
   fixture.controller.revoke(fixture.contents)
 })

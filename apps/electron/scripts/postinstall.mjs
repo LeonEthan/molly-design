@@ -28,6 +28,18 @@ if (!canResolve('electron')) {
   process.exit(0)
 }
 
+const electronInstall = spawnSync(process.execPath, [require.resolve('electron/install.js')], {
+  stdio: 'inherit'
+})
+
+if (electronInstall.error) {
+  throw electronInstall.error
+}
+
+if (electronInstall.status !== 0) {
+  process.exit(electronInstall.status ?? 1)
+}
+
 const binName = process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder'
 const electronBuilderBin = path.join(process.cwd(), 'node_modules', '.bin', binName)
 

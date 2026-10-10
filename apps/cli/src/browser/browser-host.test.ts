@@ -5,7 +5,20 @@ import {
   BROWSER_HOST_TTL_MS,
   AgentBrowserScopeSchema,
   type AgentBrowserHostWork,
+  type AgentBrowserHostReport,
+  type AgentBrowserScope,
 } from '@molly/shared/browser-agent-rpc';
+
+const exchange = (
+  host: BrowserHost,
+  reports: readonly AgentBrowserHostReport[],
+  active: (scope: AgentBrowserScope) => boolean
+) =>
+  host.exchange(reports, active, {
+    version: 2,
+    driver: 'agent-browser',
+    driverRevision: 'fixture',
+  });
 
 const scope = AgentBrowserScopeSchema.parse({
   sessionId: 'session-1',
@@ -24,13 +37,14 @@ describe('BrowserHost', () => {
 
   it('dispatches one operation per page and refuses a late result after run revocation', async () => {
     const host = new BrowserHost(() => Date.now());
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     const first = host.enqueue(work('first'));
     await expect(host.enqueue(work('first'))).resolves.toMatchObject({ ok: false });
     const second = host.enqueue(work('second'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['first']);
-    expect(host.exchange([], () => true)).toEqual([]);
-    host.exchange(
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['first']);
+    expect(exchange(host, [], () => true)).toEqual([]);
+    exchange(
+      host,
       [
         {
           requestId: 'first',
@@ -52,12 +66,12 @@ describe('BrowserHost', () => {
 
   it('revoke on cancellation and does not re-dispatch the same action', async () => {
     const host = new BrowserHost(() => Date.now());
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     const result = host.enqueue(work('first'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['first']);
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['first']);
     host.cancel('first', scope);
     expect(host.takeRevocations().map((item) => item.browserId)).toEqual([scope.browserId]);
-    expect(host.exchange([], () => true)).toEqual([]);
+    expect(exchange(host, [], () => true)).toEqual([]);
     await expect(result).resolves.toMatchObject({
       ok: false,
       error: expect.stringContaining('cancelled'),
@@ -66,19 +80,20 @@ describe('BrowserHost', () => {
 
   it('returns an unknown outcome on timeout without replaying dispatched work', async () => {
     const host = new BrowserHost(() => Date.now());
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     const result = host.enqueue(work('first'));
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     await vi.advanceTimersByTimeAsync(BROWSER_HOST_OPERATION_TIMEOUT_MS);
     await expect(result).resolves.toMatchObject({
       ok: false,
       error: expect.stringContaining('outcome is unknown'),
     });
     expect(host.takeRevocations().map((item) => item.browserId)).toEqual([scope.browserId]);
-    expect(host.exchange([], () => true)).toEqual([]);
+    expect(exchange(host, [], () => true)).toEqual([]);
     const next = host.enqueue(work('next'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
-    host.exchange(
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['next']);
+    exchange(
+      host,
       [
         {
           requestId: 'first',
@@ -101,19 +116,20 @@ describe('BrowserHost', () => {
 
   it('revokes a dispatched page when the desktop host disconnects', async () => {
     const host = new BrowserHost(() => Date.now());
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     const result = host.enqueue(work('first'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['first']);
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['first']);
     await vi.advanceTimersByTimeAsync(BROWSER_HOST_TTL_MS + 1);
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     await expect(result).resolves.toMatchObject({
       ok: false,
       error: expect.stringContaining('outcome is unknown'),
     });
     expect(host.takeRevocations()).toEqual([scope]);
     const next = host.enqueue(work('next'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['next']);
-    host.exchange(
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['next']);
+    exchange(
+      host,
       [
         {
           requestId: 'next',
@@ -131,16 +147,17 @@ describe('BrowserHost', () => {
 
   it('allows a new same-run action after cancellation without replaying the cancelled work', async () => {
     const host = new BrowserHost(() => Date.now());
-    host.exchange([], () => true);
+    exchange(host, [], () => true);
     const cancelled = host.enqueue(work('cancelled'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['cancelled']);
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['cancelled']);
     host.cancel('cancelled', scope);
     await expect(cancelled).resolves.toMatchObject({ ok: false });
     expect(host.takeRevocations()).toEqual([scope]);
     const followup = host.enqueue(work('followup'));
-    expect(host.exchange([], () => true).map((item) => item.requestId)).toEqual(['followup']);
-    expect(host.exchange([], () => true)).toEqual([]);
-    host.exchange(
+    expect(exchange(host, [], () => true).map((item) => item.requestId)).toEqual(['followup']);
+    expect(exchange(host, [], () => true)).toEqual([]);
+    exchange(
+      host,
       [
         {
           requestId: 'followup',

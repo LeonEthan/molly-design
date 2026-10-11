@@ -9,6 +9,7 @@ import {
   DESIGN_SELECTION_BODY_LIMIT,
   DesignCanvasCommandResultSchema,
   DesignCanvasCommandSchema,
+  DesignNotesSchema,
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
   DesignToolbarPresentationSchema,
@@ -240,6 +241,17 @@ export async function surface(
               throw Error('Current artwork is not visible')
           }
           assertCurrent()
+          if (input.type === 'notes') {
+            const notes = await getDesignNotes(id, hostId, input.notesEpoch, assertCurrent)
+            assertCurrent()
+            record!.owner.webContents.send('design.selectionAction', {
+              hostId,
+              action: 'notes',
+              notes,
+              notesEpoch: input.notesEpoch
+            })
+            return Response.json({ ok: true }, { headers })
+          }
           if (input.type === 'command') {
             const result = await applyDesignCommand(
               id,
@@ -602,6 +614,69 @@ export async function getDesignSelection(
     onlySaved = false
   }: { selectionEpoch?: number; assertCurrent?: () => void; onlySaved?: boolean } = {}
 ) {
+  const read = `window.molly.selection(${JSON.stringify(selectionEpoch)})`
+  const [reference] = await captureDesignReferences(
+    id,
+    hostId,
+    async (record) => {
+      const selection: unknown = await record.view.webContents.executeJavaScript(read)
+      if (!Array.isArray(selection) || selection.length === 0)
+        throw Error('Select an element in the current artwork first')
+      return [
+        selection.map((element: unknown) =>
+          typeof element === 'object' && element !== null && 'id' in element
+            ? element.id
+            : undefined
+        )
+      ]
+    },
+    async (record) => {
+      if (selectionEpoch !== undefined) await record.view.webContents.executeJavaScript(read)
+    },
+    { kind, assertCurrent, onlySaved }
+  )
+  return reference
+}
+
+/** Pinned canvas notes, each paired with its own reference at one saved revision. */
+export async function getDesignNotes(
+  id: string,
+  hostId: string,
+  notesEpoch: number,
+  assertCurrent: () => void
+) {
+  const read = `window.molly.notes(${JSON.stringify(notesEpoch)})`
+  let prompts: string[] = []
+  const references = await captureDesignReferences(
+    id,
+    hostId,
+    async (record) => {
+      const value: unknown = await record.view.webContents.executeJavaScript(read)
+      const notes = DesignNotesSchema.parse(
+        typeof value === 'object' && value !== null && 'notes' in value ? value.notes : undefined
+      )
+      prompts = notes.map((note) => note.prompt)
+      return notes.map((note) => note.elementIds)
+    },
+    async (record) => {
+      await record.view.webContents.executeJavaScript(read)
+    },
+    { assertCurrent }
+  )
+  return references.map((reference, index) => ({ reference, prompt: prompts[index] }))
+}
+
+async function captureDesignReferences(
+  id: string,
+  hostId: string,
+  read: (record: RecordEntry) => Promise<unknown[][]>,
+  recheck: (record: RecordEntry) => Promise<void>,
+  {
+    kind,
+    assertCurrent,
+    onlySaved = false
+  }: { kind?: 'image'; assertCurrent?: () => void; onlySaved?: boolean }
+) {
   await queryCanvasState?.()
   if (designCanvasAccess.isReadonly(id))
     throw Error('Wait for execution to finish before referencing elements')
@@ -609,11 +684,7 @@ export async function getDesignSelection(
   if (!record || record.artworkId !== id || hosts.get(hostId) !== id)
     throw Error('Current artwork is not visible')
   assertCurrent?.()
-  const selection: unknown = await record.view.webContents.executeJavaScript(
-    `window.molly.selection(${JSON.stringify(selectionEpoch)})`
-  )
-  if (!Array.isArray(selection) || selection.length === 0)
-    throw Error('Select an element in the current artwork first')
+  const groups = await read(record)
   // A clean, saved selection needs no mutation barrier. Passive composer mirroring
   // must not briefly freeze the native toolbar and dismiss an open property popup.
   // Explicit actions flush dirty siblings. Passive mirrors wait for the ordinary
@@ -633,20 +704,23 @@ export async function getDesignSelection(
     throw Error('Artwork changed while selecting; select the current elements again')
   const state = await record.view.webContents.executeJavaScript('window.molly.state()')
   const saved = await designRequest({ operation: 'read', sessionId: id })
-  const reference = DesignElementReferenceSchema.parse({
-    artworkId: id,
-    baselineRevisionId: state?.revisionId,
-    elementIds: selection.map((element: unknown) =>
-      typeof element === 'object' && element !== null && 'id' in element ? element.id : undefined
-    )
-  })
-  validateDesignElementReferences([reference], id, saved)
+  const references = groups.map((elementIds) =>
+    DesignElementReferenceSchema.parse({
+      artworkId: id,
+      baselineRevisionId: state?.revisionId,
+      elementIds
+    })
+  )
+  validateDesignElementReferences(references, id, saved)
   if (
     kind === 'image' &&
-    reference.elementIds.some(
-      (elementId) =>
-        saved.doc.elements.find((element: { id: string; kind: string }) => element.id === elementId)
-          ?.kind !== 'image'
+    references.some((reference) =>
+      reference.elementIds.some(
+        (elementId) =>
+          saved.doc.elements.find(
+            (element: { id: string; kind: string }) => element.id === elementId
+          )?.kind !== 'image'
+      )
     )
   )
     throw Error('Select only images in the current artwork for this action')
@@ -657,11 +731,26 @@ export async function getDesignSelection(
   )
     throw Error('Artwork changed while selecting; select the current elements again')
   assertCurrent?.()
-  if (selectionEpoch !== undefined)
-    await record.view.webContents.executeJavaScript(`window.molly.selection(${selectionEpoch})`)
+  await recheck(record)
   assertCurrent?.()
   if (designCanvasAccess.isReadonly(id)) throw Error('Canvas is read-only')
-  return reference
+  return references
+}
+
+/** Releases notes handed to the shell: sent ones are removed unless the pins changed since. */
+export async function settleDesignNotes(
+  id: string,
+  hostId: string,
+  notesEpoch: number,
+  sent: boolean
+) {
+  const record = records.get(hostId)
+  if (!record || record.artworkId !== id || hosts.get(hostId) !== id) return false
+  return (
+    (await record.view.webContents.executeJavaScript(
+      `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}) : false`
+    )) === true
+  )
 }
 
 /**

@@ -8,6 +8,7 @@ import type { DesignElementReference } from '@molly/shared/design-element-refere
 
 const ipc = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown) => void>(),
+  cleared: [] as unknown[][],
 }));
 
 vi.mock('@tanstack/react-router', () => ({
@@ -59,6 +60,10 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       cover: async () => null,
       presentToolbar: async () => {},
       highlight: async () => {},
+      settleNotes: async (...args: unknown[]) => {
+        ipc.cleared.push(args);
+        return true;
+      },
       hidePreview: async () => {},
       closePreview: async () => {},
       selectionSummary: async () => null,
@@ -120,6 +125,7 @@ afterEach(async () => {
   root = undefined;
   container.remove();
   ipc.handlers.clear();
+  ipc.cleared.length = 0;
   vi.unstubAllGlobals();
 });
 
@@ -183,5 +189,51 @@ describe('inline ask from the canvas selection', () => {
       });
     });
     expect(sent).toEqual([]);
+  });
+});
+
+describe('numbered notes from the canvas', () => {
+  const notes = [
+    { reference, prompt: 'Warmer headline' },
+    { reference: { ...reference, elementIds: ['photo'] }, prompt: 'Crop tighter' },
+  ];
+
+  it('sends every note in one turn, then clears the sent pins', async () => {
+    const sent: unknown[] = [];
+    await mount({
+      onSendNotes: async (value) => {
+        sent.push(value);
+        return true;
+      },
+      onReferenceSelection: () => {},
+    });
+    await emit({ action: 'notes', notes, notesEpoch: 4 });
+    expect(sent).toEqual([notes]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, true]]);
+  });
+
+  it('keeps the pins and says so when the turn is not accepted', async () => {
+    await mount({ onSendNotes: async () => false, onReferenceSelection: () => {} });
+    await emit({ action: 'notes', notes, notesEpoch: 4 });
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
+    expect(container.textContent).toContain('your notes are kept');
+  });
+
+  it('ignores notes that reference another artwork', async () => {
+    const sent: unknown[] = [];
+    await mount({
+      onSendNotes: async (value) => {
+        sent.push(value);
+        return true;
+      },
+      onReferenceSelection: () => {},
+    });
+    await emit({
+      action: 'notes',
+      notes: [notes[0], { ...notes[1], reference: { ...reference, artworkId: 'other-artwork' } }],
+      notesEpoch: 4,
+    });
+    expect(sent).toEqual([]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
   });
 });

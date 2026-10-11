@@ -20,7 +20,8 @@ host-bound toolbar endpoint and selection epoch. Keep readonly, hidden-view and
 stale-selection checks on the receiving path. Element outlines
 (`window.molly.highlight`) are transient screen feedback keyed by element id:
 they never mutate the document or intercept input, main validates them, and
-only `working` outlines carry over to new preview frames. Test visual changes with real
+only `working` outlines carry over to new preview frames. Note pins are
+screen-only state keyed by element id; requests carry only their epoch. Test visual changes with real
 Electron composite screenshots for each supported element kind in both themes.
 Canvas copy is never hardcoded in one language: key it into the shell's `design.*`
 locale entries, list the key in `DESIGN_CANVAS_LABEL_KEYS`, and let Electron

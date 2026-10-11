@@ -1338,6 +1338,9 @@ export type SessionChatInterfaceHandle = {
     label: string,
     prompt: string
   ) => Promise<boolean>;
+  sendDesignNotes: (
+    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]
+  ) => Promise<boolean>;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -3402,6 +3405,8 @@ export const SessionChatInterface = memo(
           inputAreaRef.current?.syncDesignSelection(reference, label) ?? false,
         sendDesignSelection: async (reference, label, prompt) =>
           (await inputAreaRef.current?.sendDesignSelection(reference, label, prompt)) ?? false,
+        sendDesignNotes: async (notes) =>
+          (await inputAreaRef.current?.sendDesignNotes(notes)) ?? false,
         insertSessionMention: (sessionId: string) => {
           return inputAreaRef.current?.insertSessionMention(sessionId) ?? false;
         },

@@ -29,6 +29,7 @@ import {
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import {
   getDesignSelection,
+  settleDesignNotes,
   highlightDesignElements,
   presentDesignToolbar,
   applyDesignCommand,
@@ -123,6 +124,18 @@ export class DesignIpc extends IpcService {
     owner()
     id.parse(sessionId)
     return currentDesignSelection(id.parse(hostId))
+  }
+  @IpcMethod() async settleNotes(
+    sessionId: string,
+    hostId: string,
+    notesEpoch: unknown,
+    sent: unknown
+  ) {
+    owner()
+    if (typeof notesEpoch !== 'number' || !Number.isSafeInteger(notesEpoch) || notesEpoch < 0)
+      throw Error('Invalid notes epoch')
+    if (typeof sent !== 'boolean') throw Error('Invalid notes outcome')
+    return settleDesignNotes(id.parse(sessionId), id.parse(hostId), notesEpoch, sent)
   }
   @IpcMethod() async presentToolbar(sessionId: string, hostId: string, presentation: unknown) {
     owner()

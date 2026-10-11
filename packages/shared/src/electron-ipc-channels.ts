@@ -40,6 +40,12 @@ export type IpcPushMap = {
         reference: DesignElementReference;
         prompt: string;
         send: boolean;
+      }
+    | {
+        hostId: string;
+        action: 'notes';
+        notes: { reference: DesignElementReference; prompt: string }[];
+        notesEpoch: number;
       };
   'design.selection': {
     hostId: string;

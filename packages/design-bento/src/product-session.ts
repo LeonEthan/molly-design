@@ -21,6 +21,7 @@ import {
   type UiIconNode,
 } from '@molly/shared/ui-icons';
 import { createElementHighlight } from './element-highlight';
+import { createNotePins } from './note-pins';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
 
@@ -91,7 +92,15 @@ export function createProductSession(options: {
     });
     return response.json();
   };
-  const toolbar = createSelectionToolbar({ request });
+  const pins = createNotePins({
+    request,
+    selectedIds: () => selectedIds,
+    elementIds: () => options.elements().map((element) => element.id),
+  });
+  const toolbar = createSelectionToolbar({
+    request,
+    addNote: (text) => pins.add(selectedIds, text),
+  });
   const layers = createLayersPanel({
     request,
     elements: options.elements,
@@ -103,6 +112,7 @@ export function createProductSession(options: {
     'pagehide',
     () => {
       toolbar.dispose();
+      pins.dispose();
       highlight.dispose();
     },
     { once: true }
@@ -440,6 +450,7 @@ export function createProductSession(options: {
     // Block new input before committing the already-buffered text synchronously.
     readonly = value;
     toolbar.setReadonly(value);
+    pins.setReadonly(value);
     layers.setReadonly(value);
     try {
       if (value) {
@@ -577,6 +588,7 @@ export function createProductSession(options: {
         labelDock();
         setStatusMessage(statusSource);
         toolbar.present(value);
+        pins.present(value);
         layers.present(value.labels);
       },
       highlight(groups: DesignHighlight) {
@@ -585,6 +597,12 @@ export function createProductSession(options: {
       selection(expected?: number) {
         assertSelection(expected);
         return selection;
+      },
+      notes(expected?: number) {
+        return pins.read(expected);
+      },
+      settleNotes(expected: number, sent: boolean) {
+        return pins.settle(expected, sent);
       },
       state() {
         return {

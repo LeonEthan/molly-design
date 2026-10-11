@@ -71,6 +71,12 @@ describe('VirtualFileTree row mounting', () => {
   });
 
   afterEach(async () => {
+    if (vi.isFakeTimers()) {
+      await act(async () => {
+        vi.runOnlyPendingTimers();
+      });
+      vi.useRealTimers();
+    }
     if (root) {
       await act(async () => root?.unmount());
     }
@@ -159,6 +165,7 @@ describe('VirtualFileTree row mounting', () => {
 
     expect(firstLabel()).toBe('file-0.ts');
 
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     for (const scrollTop of [ROW_HEIGHT_PX * 40, ROW_HEIGHT_PX * 120, ROW_HEIGHT_PX * 300]) {
       viewport.scrollTop = scrollTop;
       await act(async () => {

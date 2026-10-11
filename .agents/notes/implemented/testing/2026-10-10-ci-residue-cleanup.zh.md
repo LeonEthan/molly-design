@@ -2,6 +2,7 @@
 
 Status: implemented
 Translation: pending
+PR: [#123](https://github.com/LeonEthan/molly-design/pull/123)
 
 ## 摘要
 

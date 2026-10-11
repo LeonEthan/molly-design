@@ -8,17 +8,16 @@ Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, valid
 package and catalog digests, and returns public fields only. It neither imports the SDK
 nor opens the credential store; missing or incompatible resources mean unavailable.
 
-`model-connection-store` is main-only. Renderer IPC exposes save/delete/public
-metadata, never acquisition. Persist encrypted bytes only; unavailable OS storage
-and Linux plaintext backends fail closed. Endpoint changes require renewed
-credential input. Broker acquisition must bind an active run and worker epoch to
-the exact connection revision; the store itself is not a permission authority.
-Compatible model definitions share that encrypted row and revision; they are public
-capability declarations, never credential/header/script or per-model destination fields.
-Image credentials use the same vault. Acknowledge legacy removal only after encrypted
-backup durability; compare the exact current row before removal. History/backup
-residue remains disclosed, never claimed erased. Acquisition requires an active run, except
-explicit main-only settings checks of the saved destination.
+`model-connection-store` is main-only: IPC returns public metadata, never grants.
+Encrypt persisted bytes; unavailable OS storage and Linux plaintext backends fail closed.
+Endpoint/provider edits need renewed credentials. Bind broker grants to active run/epoch
+and exact row revision; the vault grants no authority. Model declarations share that row
+and revision, with no keys, headers, scripts or per-model destinations.
+OAuth refresh serializes per connection outside the vault lock and commits to the same
+grant only. Reauth preserves IDs; rollback checks revision. Keep the auth host ID here. Settings deletion/key conversion attempts revocation before removing grants.
+Image credentials share the vault; acknowledge legacy removal only after encrypted backup
+durability and an exact current-row check. Disclose history/backup residue. Acquisition
+needs an active run, except explicit main-only saved-destination checks.
 MCP values share this vault, bound to workspace, server, destination and revision;
 a changed URL or stdio command/args needs renewed input. Settings IPC derives
 the local workspace, returning no values. Acquisition needs the selected Session and

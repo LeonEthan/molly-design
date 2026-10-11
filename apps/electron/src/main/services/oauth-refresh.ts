@@ -43,17 +43,12 @@ function toTokenSet(credential: Credential, accountId?: string): OAuthTokenSet |
   }
 }
 
-/**
- * Returns an access token valid for the next run. The pi-ai provider owns the refresh:
- * its CredentialStore adapter serializes the exchange inside the vault lock scoped to
- * this connection, so a concurrent login cannot drop a rotated refresh token and a
- * failed refresh can only mark this same row denied when its tokens are still in place.
- */
 export async function usableOAuthAccessToken(
   store: ModelConnectionStore,
   connectionId: string,
   providerPresetId: OAuthProviderPresetId,
-  tokens: OAuthTokenSet
+  tokens: OAuthTokenSet,
+  connectionRevision?: number
 ): Promise<
   | { ok: true; accessToken: string; accountId?: string }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
@@ -64,14 +59,15 @@ export async function usableOAuthAccessToken(
     read: async () => toCredential(tokens),
     list: async () => [{ providerId: providerPresetId, type: 'oauth' as const }],
     modify: async (_id, fn) => {
-      const next = await store.mutateOAuth(connectionId, async (current) => {
-        // The row may have been reconnected while the exchange was in flight; only
-        // persist onto the token set this exchange was made from. Returning the
-        // current set leaves the row unchanged and reports the stored credential.
-        if (!current || current.refreshToken !== tokens.refreshToken) return current
-        const refreshed = await fn(toCredential(current))
-        return refreshed ? (toTokenSet(refreshed, current.accountId) ?? current) : current
-      })
+      const next = await store.mutateOAuth(
+        connectionId,
+        async (current) => {
+          if (!current || current.denied) return undefined
+          const refreshed = await fn(toCredential(current))
+          return refreshed ? (toTokenSet(refreshed, current.accountId) ?? current) : current
+        },
+        connectionRevision
+      )
       return next ? toCredential(next) : undefined
     },
     delete: async () => {}
@@ -97,9 +93,12 @@ export async function usableOAuthAccessToken(
   } catch (error) {
     // pi-ai wraps provider rejections in ModelsError; the real reason rides in cause.
     const chain: unknown[] = [error]
+    const seen = new Set<unknown>()
     let message = ''
     while (chain.length) {
       const current = chain.pop()
+      if (seen.has(current)) continue
+      seen.add(current)
       if (current instanceof Error) {
         message += ` ${current.message}`
         if (current.cause) chain.push(current.cause)
@@ -109,10 +108,15 @@ export async function usableOAuthAccessToken(
       // Mark denied only when the vault still holds the grant that failed; a
       // replacement login queued during the exchange must not be denied by it.
       await store
-        .mutateOAuth(connectionId, async (current) =>
-          current && current.refreshToken === tokens.refreshToken
-            ? { ...current, denied: true }
-            : current
+        .mutateOAuth(
+          connectionId,
+          async (current) =>
+            current &&
+            current.refreshToken === tokens.refreshToken &&
+            current.clientId === tokens.clientId
+              ? { ...current, denied: true }
+              : undefined,
+          connectionRevision
         )
         .catch(() => undefined)
       return { ok: false, reason: 'denied' }

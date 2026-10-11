@@ -269,7 +269,9 @@ export function ModelConnectionForm({
     | { phase: 'waiting'; sessionId: string; deviceCode?: { userCode: string; verificationUri: string } }
     | { phase: 'failed'; reason: 'denied' | 'timed_out' | 'unreachable' | 'invalid_response' | 'unavailable' }
   >({ phase: 'idle' });
-  const isOAuthConnection = stored?.authType === 'openai_oauth';
+  const authAttemptRef = useRef(0);
+  const isOAuthConnection =
+    stored?.authType === 'openai_oauth' && stored.providerPresetId === provider;
   // Presets with an official subscription sign-in flow.
   const oauthProvider =
     provider === 'openai' || provider === 'kimi-coding'
@@ -277,6 +279,7 @@ export function ModelConnectionForm({
       : undefined;
 
   const cancelSignIn = useCallback(() => {
+    authAttemptRef.current += 1;
     if (authFlow.phase === 'waiting') void onOpenAiAuth?.cancel(authFlow.sessionId);
     setAuthFlow({ phase: 'idle' });
   }, [authFlow, onOpenAiAuth]);
@@ -303,14 +306,16 @@ export function ModelConnectionForm({
 
   const beginSignIn = useCallback(async () => {
     if (!onOpenAiAuth || !oauthProvider) return;
+    const attempt = ++authAttemptRef.current;
     const started = await onOpenAiAuth.begin(oauthProvider);
     if (!('sessionId' in started)) {
-      if (mountedRef.current) setAuthFlow({ phase: 'failed', reason: started.reason });
+      if (mountedRef.current && attempt === authAttemptRef.current)
+        setAuthFlow({ phase: 'failed', reason: started.reason });
       return;
     }
     // The form may have been closed while the browser was still launching; the flow
     // this orphaned component started must not continue.
-    if (!mountedRef.current) {
+    if (!mountedRef.current || attempt !== authAttemptRef.current) {
       void onOpenAiAuth.cancel(started.sessionId);
       return;
     }
@@ -320,7 +325,7 @@ export function ModelConnectionForm({
       ...(started.deviceCode ? { deviceCode: started.deviceCode } : {})
     });
     const result = await onOpenAiAuth.complete(started.sessionId);
-    if (!mountedRef.current) return;
+    if (!mountedRef.current || attempt !== authAttemptRef.current) return;
     if (result.ok) {
       // The flow saved the connection; the parent list refresh replaces this form.
       cancelForm();
@@ -392,6 +397,7 @@ export function ModelConnectionForm({
       ? new Set(check.result.models)
       : undefined;
   const chooseProvider = (next: ProviderPresetId) => {
+    cancelSignIn();
     const choice = applyProviderChoice({ provider, name, endpoint }, next, labelOf);
     setProvider(choice.provider);
     setName(choice.name);

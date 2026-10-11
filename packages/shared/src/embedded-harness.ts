@@ -439,11 +439,6 @@ export const CompatibleModelDefinitionSchema = z
       .refine((values) => new Set(values).size === values.length),
     toolCalls: z.boolean(),
     maxTokensField: z.enum(['max_tokens', 'max_completion_tokens']),
-    /**
-     * Retired 2026-10: streaming usage is always requested (`include_usage`), so the
-     * declaration no longer exists. Kept optional so connections saved before the
-     * removal still parse; the value is ignored everywhere and dropped on next save.
-     */
     usageInStreaming: z.boolean().optional(),
   })
   .strict()

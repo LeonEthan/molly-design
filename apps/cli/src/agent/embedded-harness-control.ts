@@ -33,6 +33,7 @@ export class EmbeddedHarnessControl {
   private binding?: HarnessSessionBinding;
   private retired = false;
   private busy = false;
+  private oauthGranted = false;
   private mcpConnections: McpCredentialBinding[] = [];
   private activeController?: AbortController;
   private activeRun?: { runId: string; turnId: string };
@@ -185,7 +186,10 @@ export class EmbeddedHarnessControl {
     const selected = ModelSelectionSchema.parse(selection);
     const changed = this.catalogRequiresReplacement(selected.connectionId);
     return (
-      this.retired || JSON.stringify(selected) !== JSON.stringify(this.config.selection) || changed
+      this.retired ||
+      this.oauthGranted ||
+      JSON.stringify(selected) !== JSON.stringify(this.config.selection) ||
+      changed
     );
   }
 
@@ -263,6 +267,7 @@ export class EmbeddedHarnessControl {
       });
       const grant = await lease.credential;
       controller.signal.throwIfAborted();
+      this.oauthGranted = grant.oauthConnectionId !== undefined;
       await this.write(
         WorkerCredentialGrantSchema.parse({
           type: 'credential',

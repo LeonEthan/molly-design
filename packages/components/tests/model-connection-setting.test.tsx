@@ -812,6 +812,67 @@ describe('connection management', () => {
     expect(signOuts).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
   });
 
+  it('switches an OAuth account to another provider with its own sign-in and key field', async () => {
+    const providers: string[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: {
+            ...stored,
+            authType: 'openai_oauth',
+            oauth: { email: 'designer@example.com' },
+          },
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async (provider) => {
+              providers.push(provider);
+              return { ok: false as const, reason: 'unavailable' as const };
+            },
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await pickDiscovered(en['settings.models.changeProvider']);
+    await pickDiscovered(en['settings.models.kimiCode']);
+    expect(host.textContent).not.toContain('designer@example.com');
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
+    expect(providers).toEqual(['kimi-coding']);
+  });
+
+  it('cancels a late sign-in start after the user selects another provider', async () => {
+    let finishStart!: (value: { sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }) => void;
+    const started = new Promise<{ sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }>((resolve) => { finishStart = resolve; });
+    const cancelled: string[] = [];
+    await act(async () => root.render(createElement(ModelConnectionForm, {
+      initialProvider: 'kimi-coding',
+      onSave: async () => undefined,
+      onCancel: () => undefined,
+      onOpenAiAuth: {
+        begin: async () => started,
+        complete: async () => { throw new Error('stale flow must not be completed'); },
+        cancel: async (id) => { cancelled.push(id); },
+        signOut: async () => undefined,
+      },
+    })));
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
+    await pickDiscovered(en['settings.models.changeProvider']);
+    await pickDiscovered(en['settings.models.providers.anthropic']);
+    await act(async () => finishStart({
+      sessionId: '00000000-0000-4000-8000-0000000000bb',
+      expiresAt: 2_000_000_000_000,
+      deviceCode: { userCode: 'STALE-CODE', verificationUri: 'https://example.invalid' },
+    }));
+    expect(host.textContent).not.toContain('STALE-CODE');
+    expect(cancelled).toEqual(['00000000-0000-4000-8000-0000000000bb']);
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+  });
+
   it('shows a failure reason and keeps the key path when sign-in fails', async () => {
     await act(async () =>
       root.render(

@@ -73,7 +73,9 @@ models out of session construction. Connection configuration remains registered 
 No native login or `auth.json` / `models.json` publication serves child runtimes anymore.
 Workers sharing a Pi provider ID keep separate runtimes and cannot replace another
 connection's endpoint or key. A changed grant retires the worker before replacing its key;
-rotation needs a fresh worker and never automatically replays the fenced run. Existing
+rotation needs a fresh worker and never automatically replays the fenced run. The CLI replaces a used OAuth worker before its next prompt, restoring the same native
+history and granting the current token to a new epoch. This adds startup and MCP reconnection
+to each OAuth follow-up; API-key workers retain their ordinary reuse policy. Existing
 profile files are neither imported nor deleted; product history restores independently.
 This stops new profile credential copies, not prior copies or keys held by old processes.
 
@@ -86,7 +88,9 @@ processes, revoke old provider keys or erase old profiles. Detached-process sett
 not been validated by this retirement's synthetic checks.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
-including declared OpenAI-compatible models. Pi applies a provider endpoint override to every
+including declared OpenAI-compatible models. Compatible models preserve saved
+`usageInStreaming` values; an absent declaration omits `stream_options` so discovery
+does not presume endpoint support. Pi applies a provider endpoint override to every
 model of that provider, so a connection on its preset's default endpoint
 (`PROVIDER_PRESET_DEFAULT_BASE_URLS`) registers no override and each model keeps its own SDK
 endpoint: OpenRouter serves Anthropic-protocol models at `/api` and the rest at `/api/v1`.

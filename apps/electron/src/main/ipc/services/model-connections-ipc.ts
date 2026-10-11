@@ -22,7 +22,11 @@ import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
-import { OAuthSignInService, revokeOAuthGrant } from '../../services/oauth-signin'
+import { OAuthSignInService } from '../../services/oauth-signin'
+import {
+  saveModelConnection,
+  deleteModelConnection
+} from '../../services/model-connection-settings'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -195,11 +199,7 @@ export class ModelConnectionsIpc extends IpcService {
   async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    const store = getModelConnectionStore()
-    const saved = await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
-    if (saved)
-      await revokeOAuthGrant(saved.connection.providerPresetId, saved.oauth).catch(() => undefined)
-    return store.delete(parsed.data)
+    return deleteModelConnection(getModelConnectionStore(), parsed.data)
   }
 
   @IpcMethod()
@@ -216,13 +216,13 @@ export class ModelConnectionsIpc extends IpcService {
   async save(input: SaveModelConnection) {
     const parsed = SaveModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    return getModelConnectionStore().save(parsed.data)
+    return saveModelConnection(getModelConnectionStore(), parsed.data)
   }
 
   @IpcMethod()
   async delete(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    return getModelConnectionStore().delete(parsed.data)
+    return deleteModelConnection(getModelConnectionStore(), parsed.data)
   }
 }

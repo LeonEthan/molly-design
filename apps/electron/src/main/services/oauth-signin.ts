@@ -123,11 +123,19 @@ export class OAuthSignInService {
   private pending: PendingFlow | undefined
   /** Rows whose own flow was cancelled, with the row they replaced (for chain walks). */
   private readonly cancelledConnections = new Map<string, StoreEntry | undefined>()
+  private readonly store: ModelConnectionStore
+  private readonly openExternal: (url: string) => void | Promise<void>
+  private readonly modelsFactory: typeof createModels
 
   constructor(
-    private readonly store: ModelConnectionStore,
-    private readonly openExternal: (url: string) => void | Promise<void>
-  ) {}
+    store: ModelConnectionStore,
+    openExternal: (url: string) => void | Promise<void>,
+    modelsFactory: typeof createModels = createModels
+  ) {
+    this.store = store
+    this.openExternal = openExternal
+    this.modelsFactory = modelsFactory
+  }
 
   async begin(providerPresetId: OAuthProviderPresetId): Promise<OAuthSignInBeginResult> {
     this.cancelPending()
@@ -180,7 +188,7 @@ export class OAuthSignInService {
         })
     }
 
-    const models = createModels({ credentials: scratchCredentialStore(providerPresetId) })
+    const models = this.modelsFactory({ credentials: scratchCredentialStore(providerPresetId) })
     models.setProvider(descriptor.provider())
 
     let settle: (result: OAuthSignInCompleteResult) => void = () => {}
@@ -198,8 +206,9 @@ export class OAuthSignInService {
 
     void (async () => {
       try {
+        const deviceId = await this.store.deviceId()
         const credential = await models.login(providerPresetId, 'oauth', interaction, {
-          getDeviceId: () => this.store.deviceId()
+          getDeviceId: () => deviceId
         })
         settle(await this.finishLogin(sessionId, providerPresetId, credential))
       } catch (error) {
@@ -254,16 +263,26 @@ export class OAuthSignInService {
       // restore the oldest live predecessor in its replacement chain, so a cancelled
       // flow strands no grant and overlapping cancels walk back to the last live row.
       if (this.pending?.sessionId !== sessionId) {
-        this.cancelledConnections.set(saved.connection.id, saved.replaced)
+        const savedKey = JSON.stringify([saved.connection.id, saved.connection.revision])
+        this.cancelledConnections.set(savedKey, saved.replaced)
         let predecessor = saved.replaced
-        while (predecessor && this.cancelledConnections.has(predecessor.connection.id))
-          predecessor = this.cancelledConnections.get(predecessor.connection.id)
+        while (
+          predecessor &&
+          this.cancelledConnections.has(
+            JSON.stringify([predecessor.connection.id, predecessor.connection.revision])
+          )
+        )
+          predecessor = this.cancelledConnections.get(
+            JSON.stringify([predecessor.connection.id, predecessor.connection.revision])
+          )
         await this.store
-          .rollbackOAuthConnection(saved.connection.id, predecessor)
+          .rollbackOAuthConnection(saved.connection.id, saved.connection.revision, predecessor)
           .catch(() => undefined)
         return { ok: false, reason: 'cancelled' }
       }
-      this.cancelledConnections.delete(saved.connection.id)
+      this.cancelledConnections.delete(
+        JSON.stringify([saved.connection.id, saved.connection.revision])
+      )
       return { ok: true, connection: saved.connection }
     } catch {
       return { ok: false, reason: 'unreachable' }
@@ -295,36 +314,4 @@ function mapLoginError(error: unknown): 'denied' | 'unreachable' | 'invalid_resp
   if (/access_denied|denied|unauthorized|invalid_grant/i.test(message)) return 'denied'
   if (/fetch|network|ECONN|ENOTFOUND|timeout/i.test(message)) return 'unreachable'
   return 'invalid_response'
-}
-
-/** Best-effort RFC 7009 revocation per provider before local deletion; never throws. */
-const OAUTH_REVOKE_URLS: Partial<Record<string, string>> = {
-  openai: 'https://auth.openai.com/api/accounts/oauth/revoke',
-  'kimi-coding': 'https://auth.kimi.com/api/oauth/revoke'
-}
-
-export async function revokeOAuthGrant(
-  providerPresetId: string,
-  tokens: { refreshToken: string; clientId?: string },
-  fetchFn: typeof fetch = fetch
-): Promise<void> {
-  const url = OAUTH_REVOKE_URLS[providerPresetId]
-  if (!url) return
-  try {
-    await fetchFn(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/x-www-form-urlencoded',
-        accept: 'application/json'
-      },
-      body: new URLSearchParams({
-        token: tokens.refreshToken,
-        token_type_hint: 'refresh_token',
-        ...(tokens.clientId ? { client_id: tokens.clientId } : {})
-      }).toString(),
-      signal: AbortSignal.timeout(10_000)
-    })
-  } catch {
-    // Best-effort: local deletion proceeds regardless.
-  }
 }

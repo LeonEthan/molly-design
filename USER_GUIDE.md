@@ -26,9 +26,10 @@ app and automation interfaces unresponsive.
 ## Configure connections
 
 1. Open Settings → AI models → Models, pick the provider/product tile. For OpenAI you can
-   either **Sign in with ChatGPT** (uses your Plus/Pro subscription through the public Codex
-   sign-in — Molly opens a browser, the account stays on this computer, sign-out revokes it)
-   or paste an API key. Other providers take a key. Molly suggests the provider's default
+   either **Sign in with ChatGPT** through OpenAI's official dynamic-client flow
+   or paste an API key. Kimi Code also offers account sign-in: open the verification page
+   and enter the displayed device code. Tokens stay in the encrypted local vault.
+   Other providers take a key. Molly suggests the provider's default
    endpoint and a connection name; change either one, or choose **Use a custom endpoint**.
    With the default, each model uses its provider's own address (OpenRouter's Claude models
    included); a custom endpoint receives every model's requests. Once the key settles, Molly
@@ -39,9 +40,11 @@ app and automation interfaces unresponsive.
    the provider didn't list for your key are marked and sorted last. Enter keys only in the
    local settings field, never in a conversation or artwork file. Saving encrypts the
    connection and doesn't change an existing session's selection; **Delete** removes a
-   connection after you confirm. The ChatGPT sign-in is a Codex-compatible integration, not
-   an OpenAI-issued one for Molly; it runs on the Codex backend with its own catalog and
-   limits, and may change with OpenAI policy.
+   connection after you confirm. Sign-out, deletion and conversion to an API key attempt
+   provider revocation before local removal, even when the revocation endpoint is unavailable.
+   **Sign in again** preserves the connection used by existing sessions. ChatGPT sign-in
+   uses OpenAI's direct API token scope through the pinned pi-ai provider; live sign-in
+   and service behavior remain unverified in this build.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid

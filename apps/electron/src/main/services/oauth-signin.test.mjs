@@ -7,6 +7,9 @@ import { createCipheriv, createDecipheriv } from 'node:crypto'
 import { ModelConnectionStore } from './model-connection-store.ts'
 import { usableOAuthAccessToken } from './oauth-refresh.ts'
 import { OAuthSignInService } from './oauth-signin.ts'
+import { openAiSignInProvider, openOpenAiCallback } from './openai-signin.ts'
+import { generateKeyPair, SignJWT } from 'jose'
+import { EventEmitter } from 'node:events'
 
 function fakeStore(initial) {
   let current = initial
@@ -80,6 +83,219 @@ function deferred() {
   return { promise, resolve }
 }
 
+async function openAiLoginFixture(t, registration, patch = {}) {
+  t.mock.timers.enable({ apis: ['Date'], now: 2_000_000_000_000 })
+  const { publicKey, privateKey } = await generateKeyPair('RS256')
+  const ready = deferred()
+  const callback = deferred()
+  const requests = []
+  const discarded = []
+  const controller = new AbortController()
+  let closed = false
+  let authorize
+  const provider = openAiSignInProvider(
+    registration,
+    async (credential) => {
+      discarded.push(credential)
+    },
+    {
+      async listen() {
+        return {
+          redirectUri: 'http://127.0.0.1:54321/auth/callback',
+          result: callback.promise,
+          close() {
+            closed = true
+          }
+        }
+      },
+      keys: async () => {
+        if (patch.validation) {
+          patch.validation.started.resolve()
+          await patch.validation.release.promise
+        }
+        return publicKey
+      },
+      async fetch(url, init) {
+        const body = new URLSearchParams(init.body)
+        requests.push({ url, body, redirect: init.redirect })
+        const jwt = await new SignJWT({
+          nonce: authorize.searchParams.get('nonce'),
+          ...patch.claims
+        })
+          .setProtectedHeader({ alg: 'RS256' })
+          .setIssuer(patch.issuer ?? 'https://auth.openai.com')
+          .setAudience(patch.audience ?? body.get('client_id'))
+          .setSubject(patch.subject ?? 'synthetic-user')
+          .setIssuedAt()
+          .setExpirationTime(patch.expiration ?? '1h')
+          .sign(privateKey)
+        return new Response(
+          JSON.stringify({
+            access_token: 'SYNTHETIC_ACCESS',
+            refresh_token: 'SYNTHETIC_REFRESH',
+            id_token: jwt,
+            token_type: 'Bearer',
+            expires_in: 3600,
+            scope: patch.scope ?? 'openid chatgpt.tokens.use.direct'
+          })
+        )
+      },
+      ...patch.dependencies
+    }
+  )
+  const result = provider.auth.oauth.login(
+    {
+      signal: controller.signal,
+      prompt: async () => {
+        throw new Error('unexpected prompt')
+      },
+      notify(event) {
+        if (event.type === 'auth_url') {
+          authorize = new URL(event.url)
+          ready.resolve(authorize)
+        }
+      }
+    },
+    { getDeviceId: () => '00000000-0000-4000-8000-000000000001' }
+  )
+  void result.catch(() => undefined)
+  await ready.promise
+  return {
+    authorize,
+    result,
+    requests,
+    discarded,
+    controller,
+    closed: () => closed,
+    callback(parameters = {}) {
+      callback.resolve(
+        new URL(
+          `http://127.0.0.1/auth/callback?${new URLSearchParams({
+            code: 'synthetic-code',
+            state: authorize.searchParams.get('state'),
+            ...parameters
+          })}`
+        )
+      )
+    }
+  }
+}
+
+void test('OpenAI initial registration validates identity and retains its issued registration', async (t) => {
+  const f = await openAiLoginFixture(t)
+  assert.equal(f.authorize.searchParams.get('client_id'), 'dynamic_agent_client')
+  assert.equal(f.authorize.searchParams.get('agent_name_hint'), 'Molly')
+  assert.equal(
+    f.authorize.searchParams.get('ext_agent_host_id'),
+    'urn:uuid:00000000-0000-4000-8000-000000000001'
+  )
+  f.callback({ client_id: 'synthetic-issued-client' })
+  const credential = await f.result
+  assert.equal(credential.subject, 'synthetic-user')
+  assert.equal(credential.clientId, 'synthetic-issued-client')
+  assert.ok(credential.idToken)
+  assert.deepEqual(credential.scopes, ['openid', 'chatgpt.tokens.use.direct'])
+  assert.equal(f.requests[0].body.get('redirect_uri'), f.authorize.searchParams.get('redirect_uri'))
+  assert.equal(f.requests[0].redirect, 'error')
+  assert.equal(f.closed(), true)
+})
+
+void test('OpenAI reauthorization reuses its client and hint even when the callback omits client_id', async (t) => {
+  const f = await openAiLoginFixture(t, {
+    clientId: 'synthetic-issued-client',
+    idToken: 'SYNTHETIC_OLD_ID_TOKEN',
+    subject: 'synthetic-user'
+  })
+  assert.equal(f.authorize.searchParams.get('client_id'), 'synthetic-issued-client')
+  assert.equal(f.authorize.searchParams.get('id_token_hint'), 'SYNTHETIC_OLD_ID_TOKEN')
+  assert.equal(f.authorize.searchParams.has('agent_name_hint'), false)
+  f.callback()
+  assert.equal((await f.result).clientId, 'synthetic-issued-client')
+  assert.equal(f.requests[0].body.get('client_id'), 'synthetic-issued-client')
+  assert.equal(f.closed(), true)
+})
+
+for (const patch of [
+  { claims: { nonce: 'wrong' } },
+  { issuer: 'https://other.invalid' },
+  { audience: 'other-client' },
+  { subject: 'other-user' },
+  { expiration: 1 },
+  { scope: 'openid' }
+])
+  void test(`OpenAI refuses unbound identity or permission: ${JSON.stringify(patch)}`, async (t) => {
+    const f = await openAiLoginFixture(
+      t,
+      { clientId: 'synthetic-client', subject: 'synthetic-user' },
+      patch
+    )
+    f.callback()
+    await assert.rejects(f.result)
+    assert.equal(f.discarded[0]?.refresh, 'SYNTHETIC_REFRESH')
+    assert.equal(f.closed(), true)
+  })
+
+for (const parameters of [
+  { client_id: 'other-client' },
+  { state: 'wrong' },
+  { state: 'wrong', error: 'access_denied' },
+  { error: 'access_denied' }
+])
+  void test(`OpenAI refuses invalid callbacks before token exchange: ${JSON.stringify(parameters)}`, async (t) => {
+    const f = await openAiLoginFixture(t, { clientId: 'synthetic-client' })
+    f.callback(parameters)
+    await assert.rejects(f.result)
+    assert.deepEqual(f.requests, [])
+    assert.equal(f.closed(), true)
+  })
+
+void test('OpenAI cancellation during identity validation discards the late grant and closes the listener', async (t) => {
+  const validating = deferred()
+  const release = deferred()
+  const f = await openAiLoginFixture(t, undefined, { validation: { started: validating, release } })
+  f.callback({ client_id: 'synthetic-client' })
+  await validating.promise
+  f.controller.abort()
+  release.resolve()
+  await assert.rejects(f.result, { name: 'AbortError' })
+  assert.equal(f.discarded[0]?.refresh, 'SYNTHETIC_REFRESH')
+  assert.equal(f.closed(), true)
+})
+
+void test('the loopback listener ignores mismatched callbacks and consumes matching state once', async () => {
+  const controller = new AbortController()
+  let receive
+  const server = new EventEmitter()
+  server.listen = (_port, host, ready) => {
+    assert.equal(host, '127.0.0.1')
+    ready()
+  }
+  server.address = () => ({ port: 54321 })
+  let closed = false
+  server.close = () => {
+    closed = true
+  }
+  server.closeAllConnections = () => {}
+  const callback = await openOpenAiCallback('synthetic-state', controller.signal, (handler) => {
+    receive = handler
+    return server
+  })
+  const statuses = []
+  const response = {
+    writeHead(status) {
+      statuses.push(status)
+    },
+    end() {}
+  }
+  receive({ method: 'GET', url: '/auth/callback?state=wrong&error=access_denied' }, response)
+  receive({ method: 'GET', url: '/auth/callback?state=synthetic-state&code=first' }, response)
+  receive({ method: 'GET', url: '/auth/callback?state=synthetic-state&code=second' }, response)
+  assert.equal((await callback.result).searchParams.get('code'), 'first')
+  assert.deepEqual(statuses, [400, 200, 400])
+  controller.abort()
+  assert.equal(closed, true)
+})
+
 const apiInput = {
   displayName: 'Saved name',
   providerPresetId: 'openai',
@@ -128,6 +344,7 @@ async function signInFixture(t, revocation) {
   const store = new ModelConnectionStore(directory, cipher, 'darwin')
   const credential = deferred()
   const revocations = []
+  const registrations = []
   const service = new OAuthSignInService(
     store,
     () => undefined,
@@ -144,10 +361,89 @@ async function signInFixture(t, revocation) {
         await revocation(provider, tokens, store, () => {
           failNextWrite = true
         })
+    },
+    (registration, discard) => {
+      registrations.push(registration)
+      return openAiSignInProvider(registration, discard)
     }
   )
-  return { store, service, credential, revocations }
+  return { store, service, credential, revocations, registrations }
 }
+
+void test('edited OpenAI sign-in reads the saved registration and keeps its renewable session', async (t) => {
+  const { store, service, credential, revocations, registrations } = await signInFixture(t)
+  const tokens = {
+    ...oldTokens,
+    subject: 'synthetic-user',
+    idToken: 'SYNTHETIC_ID_TOKEN',
+    scopes: ['chatgpt.tokens.use.direct']
+  }
+  const { connection } = await store.saveOAuthConnection(oauthInput, tokens, {})
+  const begun = await service.begin({
+    provider: 'openai',
+    id: connection.id,
+    expectedRevision: connection.revision
+  })
+  assert.deepEqual(registrations, [tokens])
+  assert.equal('authorizeUrl' in begun, false)
+  credential.resolve({
+    ...newCredential,
+    clientId: tokens.clientId,
+    subject: tokens.subject,
+    idToken: 'SYNTHETIC_NEW_ID_TOKEN',
+    scopes: tokens.scopes
+  })
+  const completed = await service.complete(begun.sessionId)
+  assert.equal(completed.ok, true)
+  assert.deepEqual(revocations, [])
+  assert.equal((await store.oauthFor(connection.id)).idToken, 'SYNTHETIC_NEW_ID_TOKEN')
+  assert.equal(JSON.stringify(await store.snapshot()).includes('SYNTHETIC_NEW_ID_TOKEN'), false)
+})
+
+void test('abandoning OpenAI reauthorization cannot revoke the saved registration', async (t) => {
+  const { store, service, credential, revocations } = await signInFixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oldTokens, {})
+  const begun = await service.begin({
+    provider: 'openai',
+    id: connection.id,
+    expectedRevision: connection.revision
+  })
+  const completed = service.complete(begun.sessionId)
+  service.cancel(begun.sessionId)
+  credential.resolve({ ...newCredential, clientId: oldTokens.clientId })
+  assert.deepEqual(await completed, { ok: false, reason: 'cancelled' })
+  assert.deepEqual(await store.oauthFor(connection.id), oldTokens)
+  assert.deepEqual(revocations, [])
+})
+
+void test('OAuth refresh retains validated identity and hint while replacing token scopes', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: 2_000_000_000_000 })
+  const store = fakeStore({
+    ...oldTokens,
+    accessTokenExpiresAt: 1,
+    subject: 'synthetic-user',
+    idToken: 'SYNTHETIC_ID_TOKEN',
+    scopes: ['old-scope']
+  })
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () =>
+      new Response(
+        JSON.stringify({
+          access_token: 'SYNTHETIC_ROTATED_ACCESS',
+          refresh_token: 'SYNTHETIC_ROTATED_REFRESH',
+          expires_in: 3600,
+          scope: 'openid chatgpt.tokens.use.direct'
+        })
+      )
+  )
+  assert.equal((await usableOAuthAccessToken(store, 'conn', 'openai', store.oauth())).ok, true)
+  assert.equal(store.oauth().refreshToken, 'SYNTHETIC_ROTATED_REFRESH')
+  assert.equal(store.oauth().idToken, 'SYNTHETIC_ID_TOKEN')
+  assert.equal(store.oauth().subject, 'synthetic-user')
+  assert.deepEqual(store.oauth().scopes, ['openid', 'chatgpt.tokens.use.direct'])
+})
 
 void test('API-key sign-in replaces its exact edited row and preserves unrelated connections', async (t) => {
   const { store, service, credential, revocations } = await signInFixture(t)

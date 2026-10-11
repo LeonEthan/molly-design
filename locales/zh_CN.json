@@ -140,6 +140,8 @@
   "settings.models.useCustomEndpoint": "使用自定义地址",
   "settings.models.useDefaultEndpoint": "恢复默认地址",
   "settings.models.apiKey": "API Key",
+  "settings.models.keyOptional": "如果此服务不需要 API Key，可留空。",
+  "settings.models.useNoKey": "不使用 API Key",
   "settings.models.keyRequired": "请粘贴此服务地址对应的密钥。",
   "settings.models.unavailable": "当前界面无法访问本地加密凭据服务。",
   "settings.models.error": "无法读取或保存连接。请检查系统凭据存储；若有并发修改，请重新打开设置。不会回退为明文存储。",

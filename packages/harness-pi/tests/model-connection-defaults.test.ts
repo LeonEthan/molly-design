@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import {
   InMemoryCredentialStore,
   InMemoryModelsStore,
@@ -19,6 +19,8 @@ import { configureModelConnection } from '../src/model-connection';
 const nativePresets = ProviderPresetIdSchema.options.filter(
   (preset) => preset !== 'openai-compatible'
 );
+
+afterEach(() => vi.unstubAllEnvs());
 
 const offlineRuntime = () =>
   ModelRuntime.create({
@@ -140,6 +142,72 @@ it('refuses a model the connection no longer offers in the conversation picker',
   expect(() => configureModelConnection(runtime, narrowed, selecting(second!.id))).toThrow(
     'harness_model_not_in_catalog'
   );
+});
+
+it.each(['', 'SYNTHETIC_KEY'])('uses only the granted compatible credential: %s', async (key) => {
+  const credentials = new InMemoryCredentialStore();
+  vi.stubEnv('OPENAI_API_KEY', 'SYNTHETIC_AMBIENT_SECRET');
+  const runtime = await ModelRuntime.create({
+    credentials,
+    modelsStore: new InMemoryModelsStore(),
+    modelsPath: null,
+    allowModelNetwork: false,
+    refreshOnCreate: false,
+  });
+  const configured = configureModelConnection(
+    runtime,
+    {
+      ...connection('openai-compatible', 'http://127.0.0.1:1234/v1'),
+      customModels: [
+        {
+          modelId: 'synthetic',
+          name: 'Synthetic',
+          input: ['text'],
+          contextWindow: 4096,
+          maxTokens: 1024,
+          thinking: ['off'],
+          toolCalls: true,
+          maxTokensField: 'max_tokens',
+        },
+      ],
+    },
+    selecting('synthetic')
+  );
+  expect(await runtime.getAuth(configured.providerId)).toBeUndefined();
+  await credentials.modify(configured.providerId, async () => ({ type: 'api_key', key }));
+  const requests: { url: string; authorization: string | null }[] = [];
+  const model = runtime.getModel(configured.providerId, 'synthetic')!;
+  const result = await runtime
+    .streamSimple(
+      model,
+      {
+        messages: [{ role: 'user', content: 'synthetic prompt', timestamp: 1 }],
+      },
+      {
+        fetch: async (url, init) => {
+          requests.push({
+            url: String(url),
+            authorization: new Headers(init?.headers).get('authorization'),
+          });
+          return new Response(
+            `data: ${JSON.stringify({
+              id: 'synthetic',
+              choices: [{ index: 0, delta: { content: 'reply' }, finish_reason: 'stop' }],
+            })}\n\ndata: [DONE]\n\n`,
+            { headers: { 'content-type': 'text/event-stream' } }
+          );
+        },
+      }
+    )
+    .result();
+  expect(result.stopReason).toBe('stop');
+  expect(requests).toEqual([
+    {
+      url: 'http://127.0.0.1:1234/v1/chat/completions',
+      authorization: key ? `Bearer ${key}` : null,
+    },
+  ]);
+  expect(JSON.stringify(requests)).not.toContain('SYNTHETIC_AMBIENT_SECRET');
 });
 
 it.each([undefined, false, true])(

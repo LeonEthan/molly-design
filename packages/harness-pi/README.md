@@ -88,7 +88,11 @@ processes, revoke old provider keys or erase old profiles. Detached-process sett
 not been validated by this retirement's synthetic checks.
 
 [model-connection.ts](src/model-connection.ts) registers the selected connection in memory,
-including declared OpenAI-compatible models. Compatible models preserve saved
+including declared OpenAI-compatible models. Compatible connections accept an explicit
+empty key through the existing bound run grant. A credential-only native provider keeps the
+SDK catalog/transport and omits Authorization for an empty stored key; it never reads an
+ambient key. The SDK's nonempty placeholder is internal to request construction and never
+becomes a persisted or brokered credential. Compatible models preserve saved
 `usageInStreaming` values; an absent declaration omits `stream_options` so discovery
 does not presume endpoint support. Pi applies a provider endpoint override to every
 model of that provider, so a connection on its preset's default endpoint

@@ -316,7 +316,17 @@ export class HarnessCredentialBroker {
         report.imageConnectionRevision !== lease.request.imageConnection?.revision
       )
         continue;
-      if (!report.result.ok) {
+      const keylessAllowed =
+        !lease.request.imageConnection &&
+        snapshot.connection.providerPresetId === 'openai-compatible' &&
+        snapshot.connection.authType !== 'openai_oauth';
+      if (
+        !report.result.ok ||
+        (!report.result.apiKey &&
+          (!keylessAllowed ||
+            report.result.oauthAccountId !== undefined ||
+            report.result.oauthConnectionId !== undefined))
+      ) {
         lease.signal.removeEventListener('abort', lease.abort);
         lease.abort();
       } else {

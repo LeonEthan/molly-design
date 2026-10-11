@@ -4,27 +4,28 @@
 
 ## Model credentials
 
-Capability IPC validates fixed metadata beside the resolved CLI: package/catalog digests,
-public fields only. No SDK import/vault access; absent/incompatible resources are unavailable.
+Capability IPC verifies adjacent CLI package/catalog digests and public fields without
+SDK/vault access; absent/incompatible resources are unavailable.
 
-`model-connection-store`: main-only IPC save/delete/metadata, never grants.
-Encrypt persisted bytes; unavailable OS storage/Linux plaintext fail closed.
-Endpoint/provider edits need new credentials. Broker grants bind active run, worker epoch
-and exact row revision; the vault grants no authority. Declarations share row/revision;
-no keys, headers, scripts or per-model destinations.
+`model-connection-store`: main-only save/delete/metadata IPC, never grants.
+Encrypt bytes; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
+require explicit credentials; empty keys are compatible-only, omission preserves.
+Broker grants bind run/epoch/revision; the vault grants no authority. Declarations share
+row/revision; no keys, headers, scripts or model destinations.
 OAuth refresh/credential changes queue per row outside the vault lock; CAS the grant.
-Sign-in binds edited ID/revision, preserves IDs and rejects provider collisions.
-Cancel only before revocation/commit; never restore revoked grants. Persist the auth host ID.
-Attempt revocation before deletion, key conversion or replacement.
-Image grants share the vault. Legacy removal needs durable encrypted backup and exact
-current-row match; disclose history/backup residue. Acquisition needs an active run except
-explicit main-only saved-destination settings checks.
-MCP values in this vault bind workspace/server/destination/revision. URL or stdio
-command/args changes need renewed input. Settings IPC derives the local workspace;
-no values returned. Acquisition needs selected Session/worker epoch, except explicit
-Settings tool listing of the catalog row's exact binding, values only to CLI helper stdin.
-Saving enables nothing. Header framing/isolated-process env fields cannot be credentials.
-Reject writes past the vault read limit.
+Sign-in binds edited ID/revision, preserves IDs, rejects provider collisions.
+OpenAI: reuse client/host/subject; retain encrypted ID-token hints on refresh. Validate JWT
+signature/issuer/audience/expiry/nonce. Auth URLs stay in main.
+Cancel before revocation/commit; never restore revoked grants. Revoke discarded grants,
+except retained OpenAI registrations during cleanup/reauth.
+Image grants share the vault. Legacy removal needs durable encrypted backup and exact row
+match; disclose history/backup residue. Grants need active runs except main-only
+saved-destination checks.
+MCP binds workspace/server/destination/revision. Renew inputs on URL or stdio command/args
+edits. Settings derives local workspace; returns no values.
+Grants require selected Session/epoch, except explicit Settings tool listing of the
+exact catalog binding; values travel only to CLI helper stdin. Saving enables nothing.
+Header framing/isolated-process env fields cannot be credentials. Enforce vault size limits.
 
 ## Design canvas contracts
 

@@ -5,6 +5,7 @@ import type {
   HarnessMcpSession,
   McpCredentialBinding,
   HarnessMcpCredentialReport,
+  ModelConnection,
 } from '@molly/shared/embedded-harness';
 import { HarnessCredentialBroker } from './harness-credential-broker';
 
@@ -37,13 +38,13 @@ const snapshot: HarnessRunSnapshot = {
   toolsetHash: '0'.repeat(64),
   permissionProfileId: 'test',
 };
-function fixture(imageConnection?: ProtectedImageConnection) {
+function fixture(imageConnection?: ProtectedImageConnection, model: ModelConnection = connection) {
   const broker = new HarnessCredentialBroker();
-  broker.exchange({ version: 1, connections: [connection], reports: [], imageConnection });
+  broker.exchange({ version: 1, connections: [model], reports: [], imageConnection });
   const controller = new AbortController();
   const revoked: string[] = [];
   const lease = broker.acquire(
-    { ...snapshot, imageConnection },
+    { ...snapshot, connection: model, imageConnection },
     {
       signal: controller.signal,
       active: () => true,
@@ -52,7 +53,7 @@ function fixture(imageConnection?: ProtectedImageConnection) {
   );
   const requests = broker.exchange({
     version: 1,
-    connections: [connection],
+    connections: [model],
     reports: [],
     imageConnection,
   });
@@ -69,6 +70,28 @@ function fixture(imageConnection?: ProtectedImageConnection) {
 }
 
 describe('main to owned-worker credential handoff', () => {
+  it.each(['openai', 'openai-compatible'] as const)(
+    'checks empty grants against the bound %s connection',
+    async (providerPresetId) => {
+      const model = { ...connection, providerPresetId };
+      const f = fixture(undefined, model);
+      try {
+        const granted = f.lease.credential!;
+        const checked =
+          providerPresetId === 'openai-compatible'
+            ? expect(granted).resolves.toEqual({ apiKey: '' })
+            : expect(granted).rejects.toThrow();
+        f.broker.exchange({
+          version: 1,
+          connections: [model],
+          reports: [{ ...f.report, result: { ok: true, apiKey: '' } }],
+        });
+        await checked;
+      } finally {
+        f.broker.dispose();
+      }
+    }
+  );
   function mcpFixture() {
     const broker = new HarnessCredentialBroker();
     const bindings: McpCredentialBinding[] = [1, 2].map((index) => ({

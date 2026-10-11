@@ -14,11 +14,11 @@ export async function saveModelConnection(
   const parsed = SaveModelConnectionSchema.safeParse(input)
   if (!parsed.success) throw new Error('invalid_model_connection')
   const data = parsed.data
-  if (!data.apiKey || !data.id) return store.save(data)
+  if (data.apiKey === undefined || !data.id) return store.save(data)
   return store.save(data, async (saved) => {
     if (
       saved?.oauth &&
-      data.apiKey &&
+      data.apiKey !== undefined &&
       data.authType !== 'openai_oauth' &&
       saved.connection.providerPresetId !== data.providerPresetId
     ) {

@@ -28,7 +28,7 @@ const CHECK_REQUESTS: Record<CheckStyle, (base: string, apiKey: string) => Check
   }),
   openai: (base, apiKey) => ({
     url: `${base}/models`,
-    headers: { authorization: `Bearer ${apiKey}` }
+    headers: Object.fromEntries(apiKey ? [['authorization', `Bearer ${apiKey}`]] : [])
   })
 }
 

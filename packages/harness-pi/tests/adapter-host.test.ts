@@ -22,6 +22,15 @@ import { managed } from './fixtures/managed';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 describe('owned ACP host integration', () => {
+  it('accepts an empty grant for its bound compatible connection and completes inference', async () => {
+    const f = await managed();
+    const session = await f.open();
+    f.grant(session.snapshot, '');
+    expect((await session.prompt())._meta?.mollyNativeOutcome).toMatchObject({
+      status: 'completed',
+    });
+    expect((await f.runtime().getAuth(providerId))?.auth.headers?.Authorization).toBeNull();
+  });
   it('reports native model failures without exposing provider payloads or replaying the run', async () => {
     const f = await managed({
       productionProfile: true,

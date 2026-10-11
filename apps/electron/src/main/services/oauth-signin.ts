@@ -1,13 +1,3 @@
-/**
- * Subscription OAuth sign-in for model connections, driven by pi-ai's official provider
- * flows (OpenAI "Sign in with ChatGPT" dynamic client registration; Kimi Code RFC 8628
- * device authorization; more providers reuse the same shape).
- *
- * pi-ai owns the callback server / device polling, code exchange and (under the
- * vault-adapted CredentialStore lock in oauth-refresh.ts) refresh; this module owns the
- * flow ↔ renderer IPC shape and mapping the credential onto a vault connection row.
- * One flow at a time; beginning cancels any prior pending flow.
- */
 import { randomUUID } from 'node:crypto'
 import {
   createModels,
@@ -15,7 +5,6 @@ import {
   type Credential,
   type Provider
 } from '@earendil-works/pi-ai'
-import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
 import { kimiCodingProvider } from '@earendil-works/pi-ai/providers/kimi-coding'
 import {
   BeginOpenAiAuthSchema,
@@ -26,12 +15,11 @@ import {
 } from '@molly/shared/embedded-harness'
 import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store'
 import { revokeOAuthGrant } from './oauth-revocation.ts'
+import { openAiSignInProvider } from './openai-signin.ts'
 
 export type OAuthSignInBeginResult =
   | {
       sessionId: string
-      /** Browser-callback flows: the URL the renderer opens. */
-      authorizeUrl?: string
       /** Device-code flows: code the user enters at the verification page. */
       deviceCode?: { userCode: string; verificationUri: string }
       expiresAt: number
@@ -53,9 +41,9 @@ registerBunOAuthFlows()
 
 const OAUTH_PROVIDERS: Record<
   OAuthProviderPresetId,
-  { provider: () => Provider; displayName: string }
+  { provider?: () => Provider; displayName: string }
 > = {
-  openai: { provider: openaiProvider, displayName: 'OpenAI (ChatGPT)' },
+  openai: { displayName: 'OpenAI (ChatGPT)' },
   'kimi-coding': { provider: kimiCodingProvider, displayName: 'Kimi Code' }
 }
 
@@ -98,12 +86,20 @@ function tokenSetFromCredential(credential: Credential): OAuthTokenSet {
     refresh?: unknown
     expires?: unknown
     clientId?: unknown
+    idToken?: unknown
+    subject?: unknown
+    scopes?: unknown
   }
   return {
     accessToken: typeof raw.access === 'string' ? raw.access : '',
     refreshToken: typeof raw.refresh === 'string' ? raw.refresh : '',
     accessTokenExpiresAt: typeof raw.expires === 'number' ? raw.expires : 0,
-    clientId: typeof raw.clientId === 'string' ? raw.clientId : undefined
+    clientId: typeof raw.clientId === 'string' ? raw.clientId : undefined,
+    ...(typeof raw.idToken === 'string' ? { idToken: raw.idToken } : {}),
+    ...(typeof raw.subject === 'string' ? { subject: raw.subject } : {}),
+    ...(Array.isArray(raw.scopes) && raw.scopes.every((scope) => typeof scope === 'string')
+      ? { scopes: raw.scopes }
+      : {})
   }
 }
 
@@ -130,17 +126,20 @@ export class OAuthSignInService {
   private readonly openExternal: (url: string) => void | Promise<void>
   private readonly modelsFactory: typeof createModels
   private readonly revoke: typeof revokeOAuthGrant
+  private readonly openAiProvider: typeof openAiSignInProvider
 
   constructor(
     store: ModelConnectionStore,
     openExternal: (url: string) => void | Promise<void>,
     modelsFactory: typeof createModels = createModels,
-    revoke: typeof revokeOAuthGrant = revokeOAuthGrant
+    revoke: typeof revokeOAuthGrant = revokeOAuthGrant,
+    openAiProvider: typeof openAiSignInProvider = openAiSignInProvider
   ) {
     this.store = store
     this.openExternal = openExternal
     this.modelsFactory = modelsFactory
     this.revoke = revoke
+    this.openAiProvider = openAiProvider
   }
 
   async begin(input: BeginOpenAiAuth = {}): Promise<OAuthSignInBeginResult> {
@@ -197,9 +196,6 @@ export class OAuthSignInService {
         })
     }
 
-    const models = this.modelsFactory({ credentials: scratchCredentialStore(providerPresetId) })
-    models.setProvider(descriptor.provider())
-
     let settle: (result: OAuthSignInCompleteResult) => void = () => {}
     const result = new Promise<OAuthSignInCompleteResult>((resolve) => {
       settle = resolve
@@ -224,6 +220,35 @@ export class OAuthSignInService {
     void (async () => {
       try {
         const deviceId = await this.store.deviceId()
+        const edited = parsed.data.id
+          ? (await this.store.snapshot()).connections.find(
+              (connection) => connection.id === parsed.data.id
+            )
+          : undefined
+        if (parsed.data.id && (!edited || edited.revision !== parsed.data.expectedRevision))
+          throw new Error('model_connection_revision_conflict')
+        const prior =
+          providerPresetId === 'openai' && parsed.data.id
+            ? await this.store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision!)
+            : null
+        if (
+          providerPresetId === 'openai' &&
+          edited?.providerPresetId === 'openai' &&
+          edited.authType === 'openai_oauth' &&
+          !prior
+        )
+          throw new Error('model_connection_revision_conflict')
+        abort.signal.throwIfAborted()
+        const models = this.modelsFactory({ credentials: scratchCredentialStore(providerPresetId) })
+        const provider =
+          providerPresetId === 'openai'
+            ? this.openAiProvider(
+                prior?.connection.providerPresetId === 'openai' ? prior.oauth : undefined,
+                async (credential) =>
+                  this.discardGrant('openai', tokenSetFromCredential(credential))
+              )
+            : descriptor.provider!()
+        models.setProvider(provider)
         const credential = await models.login(providerPresetId, 'oauth', interaction, {
           getDeviceId: () => deviceId
         })
@@ -249,8 +274,21 @@ export class OAuthSignInService {
       if (this.pending?.sessionId === sessionId) this.cancelPending()
       return { ok: false, reason: 'unavailable' }
     }
-    if ('authorizeUrl' in first) await this.openExternal(first.authorizeUrl)
-    return { sessionId, ...first, expiresAt: Date.now() + FLOW_TIMEOUT_MS }
+    if (this.pending?.sessionId !== sessionId || abort.signal.aborted)
+      return { ok: false, reason: 'unavailable' }
+    if ('authorizeUrl' in first) {
+      try {
+        await this.openExternal(first.authorizeUrl)
+      } catch {
+        if (this.pending?.sessionId === sessionId) this.cancelPending()
+        return { ok: false, reason: 'unavailable' }
+      }
+    }
+    return {
+      sessionId,
+      ...('deviceCode' in first ? first : {}),
+      expiresAt: Date.now() + FLOW_TIMEOUT_MS
+    }
   }
 
   private async finishLogin(
@@ -278,13 +316,25 @@ export class OAuthSignInService {
           authType: 'openai_oauth'
         },
         tokens,
-        accountId ? { accountId } : {},
+        {
+          ...(accountId ? { accountId } : {}),
+          ...(credential.type === 'oauth' && typeof credential.email === 'string'
+            ? { email: credential.email }
+            : {})
+        },
         async (previous) => {
           if (this.pending !== pending || pending.abort.signal.aborted)
             throw new Error('oauth_cancelled')
           pending.committing = true
           clearTimeout(pending.expiryTimer)
           if (!previous?.oauth) return false
+          if (
+            providerPresetId === 'openai' &&
+            previous.connection.providerPresetId === 'openai' &&
+            tokens.clientId &&
+            previous.oauth.clientId === tokens.clientId
+          )
+            return false
           await this.revoke(previous.connection.providerPresetId, previous.oauth).catch(
             () => undefined
           )

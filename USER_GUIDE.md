@@ -44,8 +44,10 @@ app and automation interfaces unresponsive.
    provider revocation before local removal, even when the revocation endpoint is unavailable.
    Signing in from **Edit** updates that exact connection; a conflicting provider account
    must be handled separately. **Sign in again** preserves the connection used by existing
-   sessions. Cancel before account replacement begins; revocation and saving finish once started. ChatGPT sign-in
-   uses OpenAI's direct API token scope through the pinned pi-ai provider; live sign-in
+   sessions and the saved OpenAI client registration. Its verified account identity and encrypted
+   ID-token hint survive token refresh; reauthorization does not revoke that retained registration.
+   Cancel before account replacement begins; revocation and saving finish once started. ChatGPT sign-in
+   uses OpenAI's direct API token scope, with main-process authorization and pinned pi-ai refresh/inference; live sign-in
    and service behavior remain unverified in this build.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
@@ -76,12 +78,15 @@ live session activation. The question add-on requires the desktop question
 interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
-For **OpenAI-compatible (advanced)**, enter the endpoint and key, then **Discover models
+For **OpenAI-compatible (advanced)**, enter the endpoint and an API key if required, then **Discover models
 from this service**: Molly asks the service for its model list, hides non-chat models,
 prefills what the response carries and completes known models from a packaged
 [models.dev](https://models.dev) snapshot. Pick the models to use; anything the service
 and snapshot both miss stays marked **needs details** for you to complete by hand —
-declarations are never probed or verified. Adding a model manually always works, including
+declarations are never probed or verified. Ollama and LM Studio connections that require no
+key can be saved and used with the key field empty. Editing a saved connection keeps its
+key unless you replace it or explicitly choose **Use without an API key**; changing its
+destination requires fresh input or that explicit keyless choice. Adding a model manually always works, including
 for services without a list endpoint (Azure deployments, z.ai). This path uses standard
 Chat Completions streaming, not Responses or vendor-specific thinking formats. Turns
 containing tools require declared tool-call support. Saving does not verify these

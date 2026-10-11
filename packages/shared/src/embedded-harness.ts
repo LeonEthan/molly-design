@@ -758,9 +758,13 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   .extend({
     id: z.string().uuid().optional(),
     expectedRevision: z.number().int().positive().optional(),
-    apiKey: z.string().trim().min(1).max(16_384).optional(),
+    apiKey: z.string().trim().max(16_384).optional(),
   })
   .strict()
+  .refine(
+    (value) => value.apiKey !== '' || value.providerPresetId === 'openai-compatible',
+    'Only compatible connections support an empty key'
+  )
   .refine(
     (value) =>
       value.providerPresetId === 'openai-compatible'
@@ -780,7 +784,7 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
     (value) =>
       value.authType !== 'openai_oauth' ||
       ((OAUTH_PROVIDER_PRESETS as readonly string[]).includes(value.providerPresetId) &&
-        !value.apiKey),
+        value.apiKey === undefined),
     'OAuth sign-in exists only for presets with an official subscription flow and never carries an API key'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
@@ -1053,7 +1057,7 @@ export const HarnessCredentialReportSchema = z
       z
         .object({
           ok: z.literal(true),
-          apiKey: z.string().min(1).max(16_384),
+          apiKey: z.string().max(16_384),
           /** OAuth account identity when the provider exposes one. */
           oauthAccountId: z.string().min(1).max(200).optional(),
           /** OAuth grants carry their connection id so a rotation of the same row is accepted. */

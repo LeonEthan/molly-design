@@ -259,6 +259,7 @@ export function ModelConnectionForm({
   const [pickingProvider, setPickingProvider] = useState(!stored && !initialProvider);
   const [customEndpointOpen, setCustomEndpointOpen] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  const [useNoKey, setUseNoKey] = useState(false);
   const [chooseModels, setChooseModels] = useState(stored?.models !== undefined);
   const [selectedModels, setSelectedModels] = useState<string[]>(stored?.models ?? []);
   const enabled = stored?.enabled ?? true;
@@ -366,25 +367,27 @@ export function ModelConnectionForm({
     return catalog?.filter((model) => model.providerPresetId === provider);
   }, [catalog, native, provider]);
   const typedKey = apiKey.trim();
+  const keylessInput = provider === 'openai-compatible' && (!stored || useNoKey);
+  const missingRequiredKey = requiresKey && !typedKey && !keylessInput;
   const checkRequest = useMemo<CheckModelConnection | null>(() => {
     if (provider === '' || configurationIssue || !ModelEndpointSchema.safeParse(endpoint).success)
       return null;
     if (typedKey) return { providerPresetId: provider, baseUrl: endpoint, apiKey: typedKey };
-    if (stored && !requiresKey)
+    if (stored && !requiresKey && !useNoKey)
       return {
         providerPresetId: provider,
         baseUrl: endpoint,
         stored: { id: stored.id, revision: stored.revision },
       };
     return null;
-  }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey]);
+  }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey, useNoKey]);
   const { state: check, recheck } = useConnectionCheck(checkRequest, onCheck);
   // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
     provider === 'openai-compatible' &&
     !configurationIssue &&
     ModelEndpointSchema.safeParse(endpoint).success;
-  const discoveryKey = JSON.stringify([provider, endpoint, typedKey, stored?.id, stored?.revision]);
+  const discoveryKey = JSON.stringify([provider, endpoint, typedKey, useNoKey, stored?.id, stored?.revision]);
   const discoveryKeyRef = useRef(discoveryKey);
   discoveryKeyRef.current = discoveryKey;
   const discoveryAttemptRef = useRef(0);
@@ -397,7 +400,7 @@ export function ModelConnectionForm({
     if (!onDiscover || !discoverable) return;
     const input: DiscoverModelConnection = typedKey
       ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
-      : stored && !requiresKey
+      : stored && !requiresKey && !useNoKey
         ? {
             providerPresetId: 'openai-compatible',
             baseUrl: endpoint,
@@ -423,7 +426,7 @@ export function ModelConnectionForm({
         if (current()) setDiscovery({ phase: 'failed' });
       }
     );
-  }, [discoverable, discoveryKey, endpoint, onDiscover, requiresKey, stored, typedKey]);
+  }, [discoverable, discoveryKey, endpoint, onDiscover, requiresKey, stored, typedKey, useNoKey]);
   const listed =
     check.phase === 'done' && check.result.ok && check.result.models
       ? new Set(check.result.models)
@@ -435,6 +438,7 @@ export function ModelConnectionForm({
     setName(choice.name);
     setEndpoint(choice.endpoint);
     setApiKey('');
+    setUseNoKey(false);
     setChooseModels(false);
     setSelectedModels([]);
     setPickingProvider(false);
@@ -464,7 +468,7 @@ export function ModelConnectionForm({
     providerPresetId: provider,
     baseUrl: endpoint,
     enabled,
-    apiKey: typedKey || undefined,
+    apiKey: typedKey || (keylessInput ? '' : undefined),
     ...(provider === 'openai-compatible' && customModels.length > 0
       ? {
           customModels: customModels.map((model) => {
@@ -483,7 +487,7 @@ export function ModelConnectionForm({
   });
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (!parsed.success || (requiresKey && !typedKey) || busy) return;
+    if (!parsed.success || missingRequiredKey || busy) return;
     const input = parsed.data;
     setApiKey('');
     await onSave(input, check);
@@ -649,17 +653,30 @@ export function ModelConnectionForm({
                 id={`${id}-key`}
                 type="password"
                 value={apiKey}
-                disabled={busy}
+                disabled={busy || useNoKey}
                 autoComplete="off"
                 spellCheck={false}
-                placeholder={requiresKey ? undefined : t('settings.models.keyStoredPlaceholder')}
+                placeholder={requiresKey || useNoKey ? undefined : t('settings.models.keyStoredPlaceholder')}
                 onChange={(event) => setApiKey(event.target.value)}
                 aria-describedby={requiresKey ? `${id}-key-hint` : undefined}
               />
               <ConnectionCheckLine state={check} baseUrl={endpoint} onRecheck={recheck} />
-              {requiresKey ? (
+              {provider === 'openai-compatible' && stored ? (
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Switch
+                    checked={useNoKey}
+                    disabled={busy}
+                    onCheckedChange={(checked) => {
+                      setUseNoKey(checked);
+                      if (checked) setApiKey('');
+                    }}
+                  />
+                  {t('settings.models.useNoKey')}
+                </label>
+              ) : null}
+              {requiresKey || keylessInput ? (
                 <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
-                  {t('settings.models.keyRequired')}
+                  {t(keylessInput ? 'settings.models.keyOptional' : 'settings.models.keyRequired')}
                 </p>
               ) : null}
             </div>
@@ -833,7 +850,7 @@ export function ModelConnectionForm({
           <Button variant="outline" type="button" disabled={busy} onClick={cancelForm}>
             {t('common.cancel')}
           </Button>
-          <Button type="submit" disabled={busy || !parsed.success || (requiresKey && !typedKey)}>
+          <Button type="submit" disabled={busy || !parsed.success || missingRequiredKey}>
             {t('common.save')}
           </Button>
         </div>

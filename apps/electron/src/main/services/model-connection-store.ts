@@ -44,7 +44,10 @@ const OAuthTokenSetSchema = z
     denied: z.boolean().optional(),
     accountId: z.string().max(200).optional(),
     /** Dynamic client id OpenAI issued for this login's refresh grant. */
-    clientId: z.string().max(200).optional()
+    clientId: z.string().max(200).optional(),
+    idToken: z.string().min(1).max(16_384).optional(),
+    subject: z.string().min(1).max(200).optional(),
+    scopes: z.array(z.string().min(1).max(200)).max(64).optional()
   })
   .strict()
 export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
@@ -58,10 +61,14 @@ const StoreSchema = z
         z
           .object({
             connection: ModelConnectionSchema,
-            apiKey: z.string().min(1).max(16_384).optional(),
+            apiKey: z.string().max(16_384).optional(),
             oauth: OAuthTokenSetSchema.optional()
           })
           .strict()
+          .refine(
+            (entry) =>
+              entry.apiKey !== '' || entry.connection.providerPresetId === 'openai-compatible'
+          )
           .refine(
             (entry) => (entry.apiKey !== undefined) !== (entry.oauth !== undefined),
             'exactly one credential kind'
@@ -501,7 +508,7 @@ export class ModelConnectionStore {
     if (!parsed.success) return Promise.reject(new Error('invalid_model_connection'))
     const data = parsed.data
     return this.changeConnection(
-      data.apiKey ? data.id : undefined,
+      data.apiKey !== undefined ? data.id : undefined,
       (store) => {
         const previous = data.id
           ? store.entries.find((entry) => entry.connection.id === data.id)
@@ -524,12 +531,12 @@ export class ModelConnectionStore {
         if (providerChanged && effectiveAuthType === 'openai_oauth')
           throw new Error('model_connection_oauth_requires_reauth')
         const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
-        if (effectiveAuthType !== 'openai_oauth' && !apiKey)
+        if (effectiveAuthType !== 'openai_oauth' && apiKey === undefined)
           throw new Error('model_connection_credential_required')
         // A changed destination must receive explicit renewed credential consent.
         if (
           previous &&
-          !data.apiKey &&
+          data.apiKey === undefined &&
           (previous.connection.baseUrl !== data.baseUrl || providerChanged)
         ) {
           throw new Error('model_connection_destination_requires_credential')
@@ -728,9 +735,12 @@ export class ModelConnectionStore {
       (await this.read()).entries.some(
         (entry) =>
           entry.connection.providerPresetId === providerPresetId &&
-          entry.oauth?.accessToken === tokens.accessToken &&
-          entry.oauth.refreshToken === tokens.refreshToken &&
-          entry.oauth.clientId === tokens.clientId
+          entry.oauth !== undefined &&
+          ((providerPresetId === 'openai' &&
+            tokens.clientId !== undefined &&
+            entry.oauth.clientId === tokens.clientId) ||
+            (entry.oauth.refreshToken === tokens.refreshToken &&
+              entry.oauth.clientId === tokens.clientId))
       )
     )
   }

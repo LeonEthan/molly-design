@@ -20,26 +20,31 @@ function toCredential(tokens: OAuthTokenSet): Credential {
     access: tokens.accessToken,
     refresh: tokens.refreshToken,
     expires: tokens.accessTokenExpiresAt,
-    ...(tokens.clientId ? { clientId: tokens.clientId } : {})
+    ...(tokens.clientId ? { clientId: tokens.clientId } : {}),
+    ...(tokens.scopes ? { scopes: tokens.scopes } : {})
   } as Credential
 }
 
-function toTokenSet(credential: Credential, accountId?: string): OAuthTokenSet | undefined {
+function toTokenSet(credential: Credential, previous: OAuthTokenSet): OAuthTokenSet | undefined {
   const raw = credential as {
     access?: unknown
     refresh?: unknown
     expires?: unknown
     clientId?: unknown
+    scopes?: unknown
   }
   if (typeof raw.access !== 'string' || !raw.access) return undefined
   if (typeof raw.refresh !== 'string' || !raw.refresh) return undefined
   if (typeof raw.expires !== 'number') return undefined
   return {
+    ...previous,
     accessToken: raw.access,
     refreshToken: raw.refresh,
     accessTokenExpiresAt: raw.expires,
     ...(typeof raw.clientId === 'string' ? { clientId: raw.clientId } : {}),
-    ...(accountId ? { accountId } : {})
+    ...(Array.isArray(raw.scopes) && raw.scopes.every((scope) => typeof scope === 'string')
+      ? { scopes: raw.scopes }
+      : {})
   }
 }
 
@@ -64,7 +69,7 @@ export async function usableOAuthAccessToken(
         async (current) => {
           if (!current || current.denied) return undefined
           const refreshed = await fn(toCredential(current))
-          return refreshed ? (toTokenSet(refreshed, current.accountId) ?? current) : current
+          return refreshed ? (toTokenSet(refreshed, current) ?? current) : current
         },
         connectionRevision
       )

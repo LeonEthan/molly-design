@@ -1158,7 +1158,7 @@ describe('connection management', () => {
     }
   );
 
-  it('saves discovered models once the incomplete declaration is completed', async () => {
+  it.each(['sk-synthetic', ''])('saves discovered models with an optional key: %s', async (apiKey) => {
     const writes: SaveModelConnection[] = [];
     await act(async () =>
       root.render(
@@ -1181,7 +1181,7 @@ describe('connection management', () => {
       host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
       'https://gateway.invalid/v1'
     );
-    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    if (apiKey) await change(host.querySelector<HTMLInputElement>('input[type=password]')!, apiKey);
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
         .find((button) => button.textContent === en['settings.models.discover.button'])!
@@ -1193,6 +1193,7 @@ describe('connection management', () => {
       '32768'
     );
     await change(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!, '4096');
+    expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
     await act(async () =>
       host
         .querySelector('form')!
@@ -1210,6 +1211,7 @@ describe('connection management', () => {
         maxTokensField: 'max_tokens',
       },
     ]);
+    expect(writes[0]?.apiKey).toBe(apiKey);
   });
 
   it('enriches discovery rows from the packaged metadata snapshot without overriding the service', async () => {

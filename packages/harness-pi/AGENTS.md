@@ -15,6 +15,8 @@ Read [README](README.md) before changing session construction, packages or the b
   destructive-command floor with `CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1`. The managed package set is single-session: `pi-subagents`
   and its launch/configuration surfaces are retired (#72). Preserve shared task history.
   Never infer an answer from timeout, cancellation or a late reply; terminal-only UI stays unavailable.
+- Compatible empty keys use the same run grant; resolve only stored credentials, omit
+  Authorization and never fall back to ambient keys.
 - Model keys arrive on fd 3 per run and stay in the worker's in-memory credential store;
   model catalogs/configuration also stay in memory. The managed runtime neither reads
   nor publishes profile auth/model files. Reject a changed key before runtime mutation;

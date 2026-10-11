@@ -139,6 +139,8 @@
   "settings.models.useCustomEndpoint": "Use a custom endpoint",
   "settings.models.useDefaultEndpoint": "Use the default endpoint",
   "settings.models.apiKey": "API key",
+  "settings.models.keyOptional": "Leave empty if this service does not require an API key.",
+  "settings.models.useNoKey": "Use without an API key",
   "settings.models.keyRequired": "Paste a key for this service address.",
   "settings.models.unavailable": "This surface cannot access the local encrypted credential service.",
   "settings.models.error": "The connection could not be read or saved. Check system credential storage; reopen settings after a concurrent edit. No plaintext fallback is used.",

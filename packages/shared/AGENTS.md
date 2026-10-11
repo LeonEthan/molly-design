@@ -35,11 +35,9 @@ selection, or Role dispatch. These contracts bind producers and consumers.
 ## Embedded harness credentials
 
 `harness/host` v1 and `mcp/catalog-entry` are main-process-only; renderer Machine RPC rejects them.
-It carries ciphertext-store metadata and in-memory credential reports over the
-owner-only local control socket, never Loro. Only a dispatcher-owned active
+Encrypted-store metadata and credential reports use the owner-only socket, never Loro. Only an active dispatcher-owned
 model run/epoch lease or selected MCP session/epoch lease can consume a matching report
-(sole exception: explicit Settings tool listing, `ListMcpToolsSchema`, exact binding). RPC results contain pending work,
-not secrets. Never log exchange bodies or return validation inputs in errors.
+(sole exception: explicit Settings tool listing, `ListMcpToolsSchema`, exact binding). RPC replies contain pending work, not secrets. Never log bodies or validation inputs. Empty model grants require a compatible run binding.
 `embedded-harness` schemas separate connection references from model selection;
 no empty-model fallback, snapshot secrets or dispatched-work replay. A native
 connection's optional `models` narrows its picker; it never selects a model. Session

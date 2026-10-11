@@ -848,6 +848,96 @@ async function fixture(t, customCipher = cipher, platform = 'darwin') {
   return { directory, store: new ModelConnectionStore(directory, customCipher, platform) }
 }
 
+void test('keyless compatible connections persist and grant only their saved destination and revision', async (t) => {
+  const { directory, store } = await fixture(t)
+  const keyless = {
+    displayName: 'Local server',
+    providerPresetId: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    enabled: true,
+    apiKey: '',
+    customModels: [
+      {
+        modelId: 'local',
+        name: 'Local',
+        input: ['text'],
+        contextWindow: 8192,
+        maxTokens: 1024,
+        thinking: ['off'],
+        toolCalls: true,
+        maxTokensField: 'max_tokens'
+      }
+    ]
+  }
+  const saved = await store.save(keyless)
+  const reopened = new ModelConnectionStore(directory, cipher)
+  assert.deepEqual(await reopened.acquireForRun(saved.id, saved.revision), {
+    connection: saved,
+    apiKey: ''
+  })
+  const requests = []
+  const checked = await checkModelConnection(
+    reopened,
+    {
+      providerPresetId: keyless.providerPresetId,
+      baseUrl: keyless.baseUrl,
+      stored: { id: saved.id, revision: saved.revision }
+    },
+    async (url, init) => {
+      requests.push({ url, headers: init.headers })
+      return new Response(JSON.stringify({ data: [{ id: 'local' }] }))
+    }
+  )
+  assert.equal(checked.ok, true)
+  assert.deepEqual(requests, [
+    { url: 'http://127.0.0.1:1234/v1/models', headers: { accept: 'application/json' } }
+  ])
+  await assert.rejects(
+    reopened.save({
+      ...keyless,
+      id: saved.id,
+      expectedRevision: saved.revision,
+      apiKey: undefined,
+      baseUrl: 'http://127.0.0.1:4321/v1'
+    }),
+    /destination_requires_credential/
+  )
+  const moved = await reopened.save({
+    ...keyless,
+    id: saved.id,
+    expectedRevision: saved.revision,
+    baseUrl: 'http://127.0.0.1:4321/v1'
+  })
+  await assert.rejects(reopened.acquireForRun(saved.id, saved.revision), /unavailable/)
+  assert.equal((await reopened.acquireForRun(moved.id, moved.revision)).apiKey, '')
+  await assert.rejects(reopened.save({ ...input, apiKey: '' }), /invalid_model_connection/)
+  await assert.rejects(reopened.save({ ...input, apiKey: undefined }), /credential_required/)
+})
+
+void test('explicit keyless replacement queues and revokes the previous OAuth grant', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const revocations = []
+  const converted = await saveModelConnection(
+    store,
+    {
+      id: connection.id,
+      expectedRevision: connection.revision,
+      displayName: 'Local',
+      providerPresetId: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      enabled: false,
+      apiKey: ''
+    },
+    async (provider, tokens) => {
+      revocations.push([provider, tokens.refreshToken])
+    }
+  )
+  assert.deepEqual(revocations, [['openai', oauthTokens.refreshToken]])
+  assert.equal(await store.oauthFor(connection.id), undefined)
+  assert.equal((await store.credentialForCheck(converted.id, converted.revision)).apiKey, '')
+})
+
 void test('reuses its encrypted installation identity after reopening and unrelated saves', async (t) => {
   const { directory, store } = await fixture(t)
   const id = await store.deviceId()

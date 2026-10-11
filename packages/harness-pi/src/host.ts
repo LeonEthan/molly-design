@@ -392,6 +392,14 @@ export class PiAcpHost {
     const grant = WorkerCredentialGrantSchema.parse(await this.control.read(signal));
     if (grant.runId !== snapshot.runId || grant.runtimeEpoch !== this.config.runtimeEpoch)
       throw new Error('pi_acp_host_credential_mismatch');
+    if (
+      !grant.apiKey &&
+      (this.config.connection.providerPresetId !== 'openai-compatible' ||
+        this.config.connection.authType === 'openai_oauth' ||
+        grant.oauthConnectionId !== undefined ||
+        grant.oauthAccountId !== undefined)
+    )
+      throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
       // Rotation requires a fresh worker: reject any key change before runtime
@@ -409,6 +417,11 @@ export class PiAcpHost {
         access: grant.apiKey,
         refresh: 'worker-managed',
         expires: Date.now() + 365 * 24 * 3600_000,
+      }));
+    } else if (!grant.apiKey && this.config.connection.providerPresetId === 'openai-compatible') {
+      await this.credentialStore!.modify(this.providerId!, async () => ({
+        type: 'api_key',
+        key: grant.apiKey,
       }));
     } else {
       await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);

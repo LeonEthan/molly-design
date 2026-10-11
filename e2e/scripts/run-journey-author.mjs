@@ -150,7 +150,13 @@ export function validationCommandPlan(candidateId) {
     {
       name: 'submodules',
       command: 'git',
-      args: ['submodule', 'update', '--init', '--recursive'],
+      args: [
+        'submodule',
+        'update',
+        '--init',
+        'packages/acp-extension-core',
+        'packages/acp-extension-dsh',
+      ],
     },
     { name: 'install', command: 'pnpm', args: ['install', '--frozen-lockfile'] },
     { name: 'contract', command: 'pnpm', args: ['--filter', '@molly/e2e', 'check'] },
@@ -220,9 +226,14 @@ function assertSuccess(result, stage) {
   }
 }
 
-function parseRepository(remote) {
-  const match = remote.match(/(?:github\.com[/:])([^/]+\/[^/.]+)(?:\.git)?$/u);
-  return match?.[1] ?? 'LodyAI/Lody';
+export function parseRepository(remote) {
+  const match = remote.match(
+    /^(?:https:\/\/github\.com\/|git@github\.com:|ssh:\/\/git@github\.com\/)([A-Za-z0-9-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?$/u
+  );
+  if (!match) {
+    throw new Error('Journey authoring requires an origin remote in GitHub HTTPS or SSH format');
+  }
+  return match[1];
 }
 
 async function readStringList(path) {

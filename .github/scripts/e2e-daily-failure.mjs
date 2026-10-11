@@ -202,8 +202,9 @@ export async function prepareDailyFailureReport({
       '',
       `- Workflow run: ${runUrl}`,
       `- Failed scenarios indexed: ${failures.length}`,
-      `- Recording: ${batchNumber}/${groups.length}`,
+      `- Recordings available: ${videos.length}`,
     ];
+    if (videos.length > 0) lines.push(`- Recording: ${batchNumber}/${videos.length}`);
     for (const video of groups[index]) {
       lines.push('', `### \`${markdownText(video.stableId)}\``, '');
       lines.push(
@@ -221,7 +222,7 @@ export async function prepareDailyFailureReport({
     }
     lines.push(
       '',
-      'The Actions artifact retains the complete trace, screenshots, logs, and runtime evidence.'
+      `See the [Actions run](${runUrl}) for logs and any uploaded traces, screenshots, or runtime evidence.`
     );
     await writeFile(bodyPath, `${lines.join('\n')}\n`, { mode: 0o600 });
     batches.push({

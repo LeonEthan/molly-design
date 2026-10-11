@@ -13,6 +13,7 @@ import {
   createArtifactRoot,
   parseLocalAuthorOptions,
   parseLocalValidationOptions,
+  parseRepository,
   validateMain,
   validationCommandPlan,
 } from './run-journey-author.mjs';
@@ -114,6 +115,37 @@ void test('parses bounded local author options', () => {
   assert.throws(() => parseLocalAuthorOptions(['--publish']), /Unknown option/u);
 });
 
+void test('derives journey task repository metadata from GitHub HTTPS and SSH origins', () => {
+  for (const remote of [
+    'https://github.com/LeonEthan/molly-design.git',
+    'https://github.com/LeonEthan/molly-design',
+    'git@github.com:LeonEthan/molly-design.git',
+    'ssh://git@github.com/LeonEthan/molly-design.git',
+  ]) {
+    assert.equal(parseRepository(remote), 'LeonEthan/molly-design');
+  }
+  assert.equal(
+    parseRepository('git@github.com:contributor/public-fork.git'),
+    'contributor/public-fork'
+  );
+  assert.equal(parseRepository('https://github.com/owner/repo.name.git'), 'owner/repo.name');
+});
+
+void test('rejects unknown origin identity rather than authoring against a fallback repository', () => {
+  for (const remote of [
+    '',
+    '/tmp/local-repository',
+    '/tmp/github.com/LeonEthan/molly-design.git',
+    'https://gitlab.com/LeonEthan/molly-design.git',
+    'https://othergithub.com/LeonEthan/molly-design.git',
+    'https://github.com.invalid/LeonEthan/molly-design.git',
+    'git@github.com.invalid:LeonEthan/molly-design.git',
+    'https://github.com/LeonEthan/molly-design/tree/main',
+  ]) {
+    assert.throws(() => parseRepository(remote), /origin remote in GitHub HTTPS or SSH format/u);
+  }
+});
+
 void test('passes only local authentication prerequisites to Codex', () => {
   const environment = buildCodexEnvironment({
     HOME: '/maintainer',
@@ -201,4 +233,18 @@ void test('keeps three independent focused rounds between build and full regress
   );
   assert.ok(plan.slice(1, -1).every((stage) => stage.command === 'pnpm'));
   assert.equal(plan.find((stage) => stage.name === 'focused-1').args.at(-1), '@LODY-MCP-001');
+});
+
+void test('initializes only current desktop source submodules for candidate validation', () => {
+  const submodules = validationCommandPlan('LODY-MCP-001').find(
+    (stage) => stage.name === 'submodules'
+  );
+  assert.equal(submodules.command, 'git');
+  assert.deepEqual(submodules.args, [
+    'submodule',
+    'update',
+    '--init',
+    'packages/acp-extension-core',
+    'packages/acp-extension-dsh',
+  ]);
 });

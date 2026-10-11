@@ -22,12 +22,13 @@ const SCENARIOS = {
   },
   session: {
     id: 'LODY-SESSION-001',
-    question: 'Does stopping and deleting a real ACP Session release its Agent process?',
+    question:
+      'Does Stop cancel the held model request and permanent Session deletion return to editable local chat?',
   },
   work: {
     id: 'LODY-SESSION-002',
     question:
-      'Does deleting a worktree Session release its ACP process while preserving the worktree directory?',
+      'Does permanent Session deletion return to local chat while preserving its project folder?',
   },
 };
 
@@ -40,19 +41,20 @@ const SUBJECTS = {
   },
   'desktop-session-lifecycle': {
     tags: '@LODY-SESSION-001',
-    requirement: 'A stopped and deleted Session releases its deterministic ACP runtime.',
+    requirement:
+      'Stopping a Session cancels its scripted model request; archive and permanent deletion return to editable local chat.',
     scenarios: [SCENARIOS.session],
   },
   'desktop-work-lifecycle': {
     tags: '@LODY-SESSION-002',
     requirement:
-      'Permanent Work deletion releases the ACP process and preserves the generated worktree.',
+      'A completed Session can be archived and permanently deleted without removing its local project folder.',
     scenarios: [SCENARIOS.work],
   },
   'desktop-lifecycle': {
     tags: '@P0 or @P1',
     requirement:
-      'The real OSS desktop satisfies bootstrap, Session, and Work lifecycle acceptance checks.',
+      'The real OSS desktop satisfies bootstrap, Session cancellation/deletion, and local project preservation acceptance checks.',
     scenarios: Object.values(SCENARIOS),
   },
 };

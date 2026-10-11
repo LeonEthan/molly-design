@@ -1,19 +1,19 @@
 # Harness map
 
-| Component                          | Responsibility                                                           |
-| ---------------------------------- | ------------------------------------------------------------------------ |
-| `electron-harness.ts`              | Isolated Electron/CLI process lifecycle, logs, traces, and teardown      |
-| `hooks.ts`                         | Scenario evidence retention policy                                       |
-| `resource-probe.ts`                | Structured main, renderer, DOM, CPU, and memory snapshots                |
-| `canvas-resources-probe.ts`        | Native canvas Session recycling, isolation and heap-retention regression |
-| `world.ts`                         | Cucumber adapter for the shared harness                                  |
-| `world-utils.ts`                   | Stable artifact paths, port reservation, and cleanup assertions          |
-| `pages/onboarding-page.ts`         | First-run user interaction and local bootstrap contract                  |
-| `pages/session-page.ts`            | Deterministic ACP conversation and Stop lifecycle                        |
-| `pages/browser-navigation-page.ts` | Native local-page URL, title and accessibility snapshot verification     |
-| `pages/kimi-replication-page.ts`   | Explicit live Kimi golden replication, export and reopen acceptance      |
-| `pages/work-session-page.ts`       | Worktree Session, deletion, and cleanup contract                         |
-| `fixtures/work-session-fixture.ts` | Synthetic Git workspace and scripted ACP evidence                        |
+| Component                          | Responsibility                                                             |
+| ---------------------------------- | -------------------------------------------------------------------------- |
+| `electron-harness.ts`              | Isolated Electron/CLI process lifecycle, logs, traces, and teardown        |
+| `hooks.ts`                         | Scenario evidence retention policy                                         |
+| `resource-probe.ts`                | Structured main, renderer, DOM, CPU, and memory snapshots                  |
+| `canvas-resources-probe.ts`        | Native canvas Session recycling, isolation and heap-retention regression   |
+| `world.ts`                         | Cucumber adapter for the shared harness                                    |
+| `world-utils.ts`                   | Stable artifact paths, port reservation, and cleanup assertions            |
+| `pages/onboarding-page.ts`         | First-run user interaction and local bootstrap contract                    |
+| `pages/session-page.ts`            | Bundled Pi conversation and Stop through a scripted model wire             |
+| `pages/browser-navigation-page.ts` | Native local-page URL, title and accessibility snapshot verification       |
+| `pages/kimi-replication-page.ts`   | Explicit live Kimi golden replication, export and reopen acceptance        |
+| `pages/work-session-page.ts`       | Local project selection, Session deletion, and project-folder preservation |
+| `fixtures/work-session-fixture.ts` | Synthetic Git project and scripted model-server events                     |
 
 The harness passes only an explicit environment allowlist into Electron. Linux
 runs under `xvfb-run`, so both its `DISPLAY` endpoint and generated `XAUTHORITY`

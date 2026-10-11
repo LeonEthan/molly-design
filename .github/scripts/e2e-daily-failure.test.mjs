@@ -8,12 +8,12 @@ import { prepareDailyFailureReport } from './e2e-daily-failure.mjs';
 
 const RUN = {
   runId: '123456',
-  runUrl: 'https://github.com/LodyAI/Lody/actions/runs/123456',
+  runUrl: 'https://github.com/LeonEthan/molly-design/actions/runs/123456',
   headSha: 'a'.repeat(40),
 };
 
 async function withWorkspace(callback) {
-  const workspace = await mkdtemp(join(tmpdir(), 'lody-daily-failure-'));
+  const workspace = await mkdtemp(join(tmpdir(), 'molly-daily-failure-'));
   try {
     await callback(workspace);
   } finally {
@@ -57,6 +57,8 @@ void test('builds one inline player per failed scenario', async () => {
     for (const batch of result.batches) {
       const body = await readFile(join(workspace, batch.bodyPath), 'utf8');
       assert.match(body, new RegExp(`!\\[\\]\\(${batch.videos[0]}\\)`));
+      assert.match(body, /Recordings available: 2/u);
+      assert.ok(body.includes(`Recording: ${batch.number}/2`));
     }
   });
 });
@@ -124,6 +126,10 @@ void test('reports missing and oversized videos without attaching them', async (
       ['LODY-SESSION-001', 'LODY-WORK-001']
     );
     assert.equal(result.batches.length, 1);
+    const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
+    assert.match(body, /Recordings available: 0/u);
+    assert.doesNotMatch(body, /Recording: \d+\/\d+/u);
+    assert.doesNotMatch(body, /complete trace/u);
   });
 });
 
@@ -181,6 +187,9 @@ void test('creates a report for infrastructure failures without a failure index'
     assert.equal(result.omitted[0].reason, 'failure-index.json is missing');
     const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
     assert.match(body, /failure-index\.json is missing/u);
+    assert.match(body, /Recordings available: 0/u);
+    assert.ok(body.includes(`[Actions run](${RUN.runUrl})`));
+    assert.doesNotMatch(body, /complete trace/u);
   });
 });
 

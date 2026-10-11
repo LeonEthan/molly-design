@@ -23,19 +23,21 @@ Objects own user interaction, and hooks own evidence retention. The harness
 launches the built Electron package directory with Playwright Electron; it does not
 start a normal Chromium browser or an Electron Vite web server.
 
-The legacy worktree lifecycle fixture seeds Session metadata through `LoroRepo`
-and the existing local data-plane IPC, then dispatches `session/create` through
-local session control. Its user path still verifies archive/delete and
-clean-worktree release. New design sessions use a folder directly and have no
-worktree selector; the fixture must not restore that retired UI or weaken dirty
-worktree protection. The standalone `session create` CLI currently requires cloud
-auth configuration, so it is not the local fixture setup API.
+The lifecycle journeys use bundled Pi with a scripted OpenAI-compatible model
+server on an owned loopback port. They save the connection through the real
+settings IPC and select it through the current model menu. Stop must cancel the
+held request and hide the Stop button; archiving and permanently deleting the
+Session must return to editable local chat. The project journey adds a synthetic
+Git project through the current project picker, completes a reply, then verifies
+that the project folder remains after Session deletion.
 
-Each run uses fresh durable directories and a kernel-assigned loopback port.
+Each run uses fresh durable directories and a kernel-assigned loopback port on
+POSIX or a unique named pipe on Windows.
 The test-only port override is accepted only when `MOLLY_E2E=1`, so Electron and
 its bundled CLI cannot attach to the normal local daemon. Teardown first asks
-Electron to quit through its production shutdown barrier, then verifies the
-port can be rebound before deleting temporary state.
+Electron to quit through its production shutdown barrier, then verifies captured
+owned processes have exited and the endpoint is released before deleting temporary
+state. These shared teardown checks cover the Electron/CLI process tree.
 
 The browser-navigation journey sends `navigate` and `snapshot` through Pi's
 `codemode` tool using `tools.mcp__molly_browser__navigate({ url })` and
@@ -92,6 +94,8 @@ subjects are `desktop-local-bootstrap`, `desktop-session-lifecycle`,
 `desktop-work-lifecycle`, and `desktop-lifecycle`.
 Optional before/after JSON and a retained-path summary are copied into the
 round, then covered by its checksummed manifest.
+The historical `desktop-work-lifecycle` subject now checks local project-folder
+preservation; the subject name remains stable for existing commands.
 Scout operation, classification, and triage are specified in
 [the Scout contract](./SCOUT.md).
 
@@ -136,6 +140,8 @@ session, and the `workspace-write` sandbox. Trusted local code packages the
 allowlisted files into `candidate.patch` plus a readable `review/` tree. It does
 not execute or apply generated code. Evidence remains under the ignored
 `e2e/artifacts/journey-author/` directory.
+Candidate validation initializes only the ACP core and DSH source submodules in
+its detached worktree.
 
 After reviewing every generated file, the maintainer runs the validation
 command with `--approve-reviewed`. A second ephemeral worktree with a temporary
@@ -159,16 +165,19 @@ Evidence capture failures are appended to the scenario log and do not replace
 the original product failure. Teardown failures do fail the scenario because a
 surviving CLI or occupied endpoint invalidates the next result.
 
-Daily regression additionally records each scenario and retains only failed
-WebMs. Its read-only runner uploads the complete artifact; a trusted
-default-branch reconciler creates or reopens one Daily failure Issue and appends
+Daily and pull-request regression attempt to render failed-scenario WebMs from
+screenshots in the retained Playwright trace. Startup or capture failures can
+leave no frames or video. The read-only Daily runner uploads the collected evidence;
+its trusted default-branch reconciler creates or reopens one Daily failure Issue and appends
 every validated recording as its own independently retryable Actions artifact link.
 The Actions token cannot upload inline attachments; recordings remain in the run artifact. A
 later successful full Daily closes the Issue with the recovery run link; a
 successful manually dispatched smoke run cannot clear full-suite failure state.
 Pull-request failures follow the same evidence validation in a trusted
-default-branch reconciler. It skips stale heads and appends each failed journey
-as an independently retryable inline video comment on the matching open PR.
+default-branch reconciler. It skips stale heads and attaches available validated
+videos as independently retryable comments on the matching open PR. Reports count
+available recordings, identify missing recordings, and link the Actions run for
+logs and any other uploaded evidence.
 
 The current active coverage is tracked in [the coverage matrix](./COVERAGE.md).
 The suite checker parses Gherkin and enforces IDs, priorities, runtime ownership,

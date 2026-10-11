@@ -69,6 +69,10 @@ macOS signer fixture omits `resources/agent-browser/manifest.json`. The fixture 
 match `origin/main`; running that fixture alone reproduced the failure. The remaining
 Electron test stage passed 19/19 separately. `pnpm check:quick`, including public-boundary
 checks, `pnpm run docs check`, `pnpm format` and `git diff --check` passed.
+Docs governance also passed with `--base refs/remotes/origin/main`. CI checks the
+combined merge tree: the service `AGENTS.md` is 8,072 bytes on this branch and 8,092
+with the current main-branch rules. Editorial compression preserves its constraints
+and leaves room below the 8 KiB gate.
 
 `pnpm build` built the CLI/embedded harness but stopped at the existing browser-driver
 prerequisite: Rust 1.99.0 for `aarch64-apple-darwin` is unavailable. The separate OSS

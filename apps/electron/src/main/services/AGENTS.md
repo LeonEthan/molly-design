@@ -4,20 +4,21 @@
 
 ## Model credentials
 
-Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, validates
-package and catalog digests, and returns public fields only. It neither imports the SDK
-nor opens the credential store; missing or incompatible resources mean unavailable.
+Capability IPC reads fixed metadata beside the resolved CLI entry, validates package/catalog
+digests and returns public fields. No SDK import or vault access; missing/incompatible
+resources mean unavailable.
 
-`model-connection-store` is main-only: IPC returns public metadata, never grants.
-Encrypt persisted bytes; unavailable OS storage and Linux plaintext backends fail closed.
-Endpoint/provider edits need renewed credentials. Bind broker grants to active run/epoch
-and exact row revision; the vault grants no authority. Model declarations share that row
-and revision, with no keys, headers, scripts or per-model destinations.
-OAuth refresh serializes per connection outside the vault lock and commits to the same
-grant only. Reauth preserves IDs; rollback checks revision. Keep the auth host ID here. Settings deletion/key conversion attempts revocation before removing grants.
-Image credentials share the vault; acknowledge legacy removal only after encrypted backup
-durability and an exact current-row check. Disclose history/backup residue. Acquisition
-needs an active run, except explicit main-only saved-destination checks.
+`model-connection-store`: main-only IPC save/delete/public metadata, never grants.
+Persist encrypted bytes; unavailable OS storage/Linux plaintext fail closed.
+Endpoint/provider edits need new credentials. Broker grants bind active run, worker epoch
+and exact row revision; the vault grants no authority. Model declarations share row/revision,
+without keys, headers, scripts or per-model destinations.
+OAuth refresh queues per connection outside the vault lock; commit only to the same grant.
+Reauth keeps IDs; rollback checks revision. Persist the auth host ID in this vault.
+Attempt revocation before deletion/key conversion.
+Image grants share the vault. Legacy removal needs durable encrypted backup and exact
+current-row match; disclose history/backup residue. Acquisition needs an active run except
+explicit main-only saved-destination settings checks.
 MCP values share this vault, bound to workspace, server, destination and revision;
 a changed URL or stdio command/args needs renewed input. Settings IPC derives
 the local workspace, returning no values. Acquisition needs the selected Session and

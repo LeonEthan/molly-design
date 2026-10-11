@@ -1,3 +1,4 @@
+import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
@@ -150,6 +151,12 @@ export default async function signEmbeddedHarness(options) {
     verifyAgentBrowser,
     'manifest.json'
   )
+  const cookieReaderDirectory = path.join(path.dirname(browserDirectory), 'browser-cookie-reader')
+  const resealCookieReader = prepareEmbeddedHarnessSigning(
+    cookieReaderDirectory,
+    verifyBrowserCookieReader,
+    'manifest.json'
+  )
   let rootReached = false
   await signAsync({
     ...options,
@@ -161,6 +168,7 @@ export default async function signEmbeddedHarness(options) {
         if (rootReached) throw new Error('Embedded harness root signing repeated')
         reseal()
         resealBrowser()
+        resealCookieReader()
         rootReached = true
       }
       return perFileOptions
@@ -169,4 +177,5 @@ export default async function signEmbeddedHarness(options) {
   if (!rootReached) throw new Error('Embedded harness root app was not signed')
   verifyEmbeddedHarness(directory)
   verifyAgentBrowser(browserDirectory)
+  verifyBrowserCookieReader(cookieReaderDirectory)
 }

@@ -20,17 +20,15 @@ except through the user's "add rule". Failures show their reason, never an empty
 Preserve historical catalog fields when editing unrelated values.
 ## Layout and components
 
-- Website accounts lead with signing in on the site's page inside Molly
-  (`website-sign-in-dialog.tsx`, Molly's shared website profile); this reads no other
-  browser, so it raises no Keychain or Files and Folders prompt. Every sign-in entry
-  opens this dialog; main pauses active runs and holds all Agent page work until it
-  closes. Name Google sign-in's alternatives. Import stays collapsed and lists browser
-  profiles only after the person opens it, never on page load.
-- Website-account import shows its pending authorization state and manual retry guidance;
-  passwords belong only in the macOS system dialog. Use the shared site contract for
-  supported imports; cookie counts do not attest website sign-in. Import offers every
-  installed browser profile from `ACCOUNT_IMPORT_BROWSERS`, names unlistable browsers,
-  and keeps the button visible with the reason when a build cannot import.
+- Website account entry points reuse `BrowserAccountImportDialog`: one Import action,
+  one browser/profile picker, curated design/commerce websites collapsed and all
+  selected by default on each opening. Listing apps reads no profile; load only the
+  selected browser's profiles. No separate sign-in dialog or preview/confirm step.
+  Use the shared catalog; the renderer sends IDs, never paths/domains/cookie values.
+- Show authorization, explicit retry, unavailable-build reasons, cancelled reads,
+  finishing writes and skipped counts honestly. Passwords belong only in system
+  prompts; stored cookies do not establish sign-in. Clearing explicitly covers all
+  Molly website data. Keep human takeover/MFA controls and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing
   tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
   catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat

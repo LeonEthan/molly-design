@@ -1,3 +1,4 @@
+import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
 import fs from 'node:fs'
@@ -74,23 +75,35 @@ export default async function afterPack(context) {
   }
   console.log(`[browser-profile] verified encrypted-cookie fuse for ${platform}-${archName}`)
 
-  if (platform === 'darwin' && archName === 'arm64') {
-    const readerProbe = spawnSync(
-      binaryPath,
-      [
-        '-e',
-        "const reader = require(process.argv[1]); if (!reader.version().startsWith('0.6.0')) process.exit(2)",
-        path.join(resourcesDir, 'app.asar', 'node_modules', 'rookie-cookies')
-      ],
-      {
-        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-        encoding: 'utf8',
-        timeout: 15_000
-      }
+  if (platform === 'darwin' || platform === 'mas') {
+    const readerDirectory = path.join(
+      resourcesDir,
+      'app.asar.unpacked',
+      'resources',
+      'browser-cookie-reader'
     )
-    if (readerProbe.error || readerProbe.status !== 0)
-      throw new Error('[browser-profile] packaged Chrome reader could not load')
-    console.log('[browser-profile] verified packaged Chrome reader binding')
+    const readerManifest = verifyBrowserCookieReader(readerDirectory, {
+      platform: 'darwin',
+      arch: archName
+    })
+    if (process.platform === 'darwin' && process.arch === archName) {
+      const readerProbe = spawnSync(
+        binaryPath,
+        [
+          '-e',
+          `const reader = require(process.argv[1]); if (reader.version() !== ${JSON.stringify(readerManifest.version)}) process.exit(2)`,
+          path.join(readerDirectory, 'rookie-cookies.node')
+        ],
+        {
+          env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+          encoding: 'utf8',
+          timeout: 15_000
+        }
+      )
+      if (readerProbe.error || readerProbe.status !== 0)
+        throw new Error('[browser-profile] packaged Chrome reader could not load')
+      console.log('[browser-profile] verified packaged Chrome reader binding')
+    }
   }
 
   verifyAgentBrowser(path.join(resourcesDir, 'app.asar.unpacked', 'resources', 'agent-browser'), {

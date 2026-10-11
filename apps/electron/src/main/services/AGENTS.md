@@ -104,11 +104,10 @@ end worker input and await child exit before quitting. A closed worker never res
 
 ## Browser account imports
 
-Reject unsupported source or destination Cookie partitions before import mutations;
-never flatten identities for writes or rollback. Native reads stay site-scoped and
-Cookie values stay in main. Imports cover Pinterest from Chromium browsers. The native
-report deadline includes human Keychain approval; retries require a fresh user
-action, and read failures preserve destination cookies.
+One bounded profile read; filter curated IDs in main. Keep values/keys in main. Skip/count source CHIPS/expiry. Isolate pages, Workers and network;
+preflight quotas, merge exact identities, verify writes/rollback. Failed recovery
+holds browsing until explicit clearing. Revoke late reads, retain their native
+lease until settlement, drain writes on quit. Never auto-retry/resume.
 
 ## Agent browser driver
 

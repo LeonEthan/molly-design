@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Globe2, Loader2, ShieldAlert } from 'lucide-react';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue } from 'jotai';
 import { useTranslation } from 'react-i18next';
-import {
-  ElectronBrowserAccountSiteInputSchema,
-  type ElectronBrowserAccountSiteInput,
-} from '@molly/shared/electron-ipc';
 import {
   BrowserAddressError,
   formatPreviewTargetUrl,
@@ -22,16 +18,10 @@ import {
   type VisualAnnotationReferencePayload,
 } from '@molly/shared';
 
-import {
-  activeWorkspaceRuntimeAtom,
-  settingsActiveTabAtom,
-  settingsDialogOpenAtom,
-  userAtom,
-} from '@/atoms';
+import { activeWorkspaceRuntimeAtom, userAtom } from '@/atoms';
 import { Button } from '@/ui/button';
 import { isElectronRenderer } from '@/lib/electron';
 
-import { getPlatform } from '@/lib/commands/platform';
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { samePreviewTargetOrigin } from '@/lib/session-browser-url';
@@ -45,7 +35,7 @@ import {
 } from './session-browser-resume-state';
 import { clearManagedPreviewFrame } from './managed-preview-frame-cache';
 import { SessionBrowserToolbar } from './session-browser-toolbar';
-import { WebsiteSignInDialog } from '../settings/website-sign-in-dialog';
+import { BrowserAccountImportDialog } from '../settings/browser-account-import-dialog';
 
 type SessionBrowserPanelProps = {
   session: SessionMeta;
@@ -83,8 +73,6 @@ function SessionBrowserPanelController({
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const user = useAtomValue(userAtom);
 
-  const setSettingsTab = useSetAtom(settingsActiveTabAtom);
-  const setSettingsOpen = useSetAtom(settingsDialogOpenAtom);
   const sessionDoc = useSessionDoc(session.id);
   const legacyPreview = getSessionPreviewLegacyFields(session);
   const suggestedAddress = useMemo(() => {
@@ -125,9 +113,7 @@ function SessionBrowserPanelController({
   const [managedNavigationPhase, setManagedNavigationPhase] =
     useState<ManagedNavigationPhase | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [signInSite, setSignInSite] = useState<ElectronBrowserAccountSiteInput['site'] | null>(
-    null
-  );
+  const [importOpen, setImportOpen] = useState(false);
   const [resumeAddress, setResumeAddress] = useState<BrowserAddress | null>(null);
   const navigationSequenceRef = useRef(0);
   const restoreAttemptKeyRef = useRef<string | null>(null);
@@ -685,25 +671,6 @@ function SessionBrowserPanelController({
 
   const loading =
     currentAddress?.engine === 'public-web' ? publicState?.phase === 'loading' : managedLoading;
-  const publicHost =
-    currentAddress?.engine === 'public-web'
-      ? new URL(currentAddress.logicalUrl).hostname.toLowerCase()
-      : '';
-  const importSite = isElectronRenderer()
-    ? ElectronBrowserAccountSiteInputSchema.shape.site.options.find(
-        (site) => publicHost === site || publicHost.endsWith(`.${site}`)
-      )
-    : undefined;
-
-  const openAccountSettings = () => {
-    setSettingsTab('browser-accounts');
-    setSettingsOpen(true);
-  };
-  const changeSignInOpen = (open: boolean) => {
-    if (open) return;
-    setSignInSite(null);
-    handleReload();
-  };
   const changeAgentBrowserControl = async (take: boolean) => {
     const bridge = getPublicBrowserBridge();
     if (!bridge) return;
@@ -730,6 +697,7 @@ function SessionBrowserPanelController({
     <div className={cn('flex h-full min-h-0 flex-col bg-background', className)}>
       <SessionBrowserToolbar
         leadingSlot={leadingSlot}
+        onImportAccounts={isElectronRenderer() ? () => setImportOpen(true) : undefined}
         focusAddress={active && currentAddress === null}
         address={address}
         canGoBack={canGoBack}
@@ -779,40 +747,6 @@ function SessionBrowserPanelController({
           >
             {t('sessions.browser.resumeAgent', 'Resume Agent')}
           </Button>
-        </div>
-      ) : null}
-      {importSite ? (
-        <div className="border-b px-3 py-2 text-xs">
-          <p className="mb-2 text-muted-foreground">
-            {t(
-              'sessions.browser.signInPrompt',
-              'Use this site anonymously, or sign in so the Agent can browse it as you. Molly keeps its own sign-in, so macOS asks for no Keychain or file access. The Agent pauses while you sign in.'
-            )}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setSignInSite(importSite)}
-            >
-              {t('sessions.browser.signIn', 'Sign in')}
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={openAccountSettings}>
-              {getPlatform() === 'mac'
-                ? t('sessions.browser.importChrome', 'Import from Chrome in Molly settings')
-                : t('sessions.browser.manageAccounts', 'Manage website accounts')}
-            </Button>
-          </div>
-          {publicState?.accountImport?.site === importSite ? (
-            <p className="mt-2 text-muted-foreground">
-              {t(
-                'sessions.browser.cookiesImported',
-                'Molly now stores {{count}} cookies for this site. Check the website to verify sign-in.',
-                { count: publicState.accountImport.imported }
-              )}
-            </p>
-          ) : null}
         </div>
       ) : null}
       {error ? (
@@ -888,9 +822,7 @@ function SessionBrowserPanelController({
           </p>
         </div>
       )}
-      {signInSite ? (
-        <WebsiteSignInDialog site={signInSite} open onOpenChange={changeSignInOpen} />
-      ) : null}
+      <BrowserAccountImportDialog open={importOpen} onOpenChange={setImportOpen} />
     </div>
   );
 }

@@ -6,13 +6,15 @@ import {
   type ElectronPublicBrowserState,
   type AccountImportBrowserId,
   type ElectronBrowserAccountSummary,
+  type ElectronBrowserAccountImportInput,
+  type ElectronBrowserImportReport,
+  type ElectronBrowserImportSources,
+  type ElectronBrowserProfileChoice,
+  type ElectronBrowserImportCancelResult,
   type OpenSystemNotificationSettingsResult
 } from '@molly/shared/electron-ipc'
 import { parseBrowserAddress } from '@molly/shared/browser-url'
-import {
-  ACCOUNT_IMPORT_BROWSERS,
-  ElectronBrowserAccountSiteInputSchema
-} from '@molly/shared/electron-ipc'
+import { ACCOUNT_IMPORT_BROWSERS } from '@molly/shared/electron-ipc'
 import { formatUnknownError } from '../utils'
 import { isNavigationAbortError, mergePublicBrowserState } from './public-browser-state'
 import type {
@@ -25,16 +27,18 @@ import {
   canPersistPublicBrowserSession,
   publicBrowserPartition
 } from './public-browser-agent-controller'
-import { hostMatchesSite } from './public-browser-agent-policy'
 import {
   listImportSources,
-  readBrowserSiteCookies,
-  type BrowserImportSources
+  listImportProfiles,
+  readBrowserProfileCookies
 } from './browser-account-source'
+import { importBrowserAccountCookies, importedCookieIdentity } from './browser-account-import'
+import { isolateBrowserAccounts } from './browser-account-isolation'
+import { BrowserAccountError } from './browser-account-error'
 import {
-  assertStoredCookiesUnpartitioned,
-  importBrowserAccountCookies
-} from './browser-account-import'
+  BROWSER_ACCOUNT_SITES,
+  browserAccountSiteForDomain
+} from '@molly/shared/browser-account-sites'
 import { openBrowserDataPrivacySettings as openMacBrowserDataPrivacySettings } from './browser-data-privacy-settings'
 
 type PublicBrowserRecord = {
@@ -50,8 +54,6 @@ type PublicBrowserRecord = {
 }
 
 const MAX_PUBLIC_BROWSER_RECORDS = 8
-const ACCOUNT_IMPORT_SITES = ElectronBrowserAccountSiteInputSchema.shape.site.options
-type AccountImportSite = (typeof ACCOUNT_IMPORT_SITES)[number]
 
 type AccountImportReadinessError = {
   reason: NonNullable<ElectronBrowserAccountSummary['importUnavailableReason']>
@@ -135,9 +137,31 @@ export class PublicBrowserService {
   private readonly configuredSessions = new WeakSet<Electron.Session>()
   private readonly humanTakeovers = new Map<string, AgentBrowserScope>()
   private readonly closedAgentPages = new Map<string, string>()
-  private readonly signInPages = new Map<string, BrowserWindow>()
-  private readonly signInContents = new Set<Electron.WebContents>()
   private accountMutation: Promise<void> = Promise.resolve()
+  private accountOperation: {
+    id: string
+    controller: AbortController
+    writing: boolean
+    owner: BrowserWindow
+  } | null = null
+  private accountWriting = false
+  private readonly accountPages = new Map<
+    string,
+    {
+      browserId: string
+      bounds: ElectronPublicBrowserBounds
+      visible: boolean
+      url: string
+      owner: BrowserWindow
+    }
+  >()
+  private recoveryIsolation: Awaited<ReturnType<typeof isolateBrowserAccounts>> | undefined
+  private readonly humanAccountPages = new Set<string>()
+  private shuttingDown = false
+  private readonly importProfiles = new Map<
+    AccountImportBrowserId,
+    ElectronBrowserProfileChoice[]
+  >()
 
   constructor(
     private readonly getMainWindow: () => BrowserWindow | null,
@@ -150,9 +174,8 @@ export class PublicBrowserService {
     visible = true
   ): ElectronPublicBrowserResult {
     try {
-      if (browserId.startsWith('website-sign-in-') && !this.signInPages.has(browserId)) {
-        return { ok: false, error: 'The website sign-in has already closed.' }
-      }
+      if (this.accountWriting || this.shuttingDown)
+        return { ok: false, error: 'Website accounts are being updated.' }
       const existing = this.records.get(browserId)
       if (existing && !existing.window.isDestroyed() && !existing.view.webContents.isDestroyed()) {
         existing.bounds = normalizeBounds(existing.window, bounds)
@@ -189,10 +212,6 @@ export class PublicBrowserService {
           spellcheck: false
         }
       })
-      if (this.signInPages.has(browserId)) {
-        this.signInContents.add(view.webContents)
-        view.webContents.once('destroyed', () => this.signInContents.delete(view.webContents))
-      }
       const record: PublicBrowserRecord = {
         browserId,
         view,
@@ -230,6 +249,8 @@ export class PublicBrowserService {
   }
 
   async navigate(browserId: string, rawUrl: string): Promise<ElectronPublicBrowserResult> {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     const navigationSequence = ++record.navigationSequence
@@ -264,6 +285,8 @@ export class PublicBrowserService {
   }
 
   goBack(browserId: string): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     if (!record.view.webContents.navigationHistory.canGoBack()) {
@@ -279,6 +302,8 @@ export class PublicBrowserService {
   }
 
   goForward(browserId: string): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     if (!record.view.webContents.navigationHistory.canGoForward()) {
@@ -294,6 +319,8 @@ export class PublicBrowserService {
   }
 
   reload(browserId: string): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     this.takeAgentControl(browserId)
@@ -306,6 +333,8 @@ export class PublicBrowserService {
   }
 
   stop(browserId: string): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     this.takeAgentControl(browserId)
@@ -319,6 +348,8 @@ export class PublicBrowserService {
   }
 
   setBounds(browserId: string, bounds: ElectronPublicBrowserBounds): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     try {
@@ -341,6 +372,8 @@ export class PublicBrowserService {
   }
 
   setVisible(browserId: string, visible: boolean): ElectronPublicBrowserResult {
+    if (this.accountWriting || this.shuttingDown)
+      return { ok: false, error: 'Website accounts are being updated.' }
     const record = this.records.get(browserId)
     if (!record) return { ok: false, error: 'Public browser surface has not been created.' }
     if (visible) {
@@ -358,23 +391,24 @@ export class PublicBrowserService {
   }
 
   destroy(browserId: string): ElectronPublicBrowserResult {
+    this.accountPages.delete(browserId)
     const record = this.records.get(browserId)
     if (!record) {
-      this.signInPages.delete(browserId)
       return { ok: false, error: 'Public browser surface has not been created.' }
     }
+    if (this.humanAccountPages.has(browserId))
+      record.view.webContents.once('destroyed', () => this.humanAccountPages.delete(browserId))
     const scope = this.takeAgentControl(browserId) ?? this.humanTakeovers.get(browserId)
     if (scope) this.closedAgentPages.set(browserId, scope.runId)
     this.disposeRecord(record)
-    this.signInPages.delete(browserId)
     return { ok: true, state: record.state }
   }
 
   destroyAll(): void {
     this.revokeAllAgentCommands()
     this.humanTakeovers.clear()
-    for (const browserId of new Set([...this.records.keys(), ...this.signInPages.keys()]))
-      this.destroy(browserId)
+    this.humanAccountPages.clear()
+    for (const browserId of [...this.records.keys()]) this.destroy(browserId)
     this.closedAgentPages.clear()
   }
 
@@ -407,8 +441,10 @@ export class PublicBrowserService {
     if (!/^session-browser-[a-zA-Z0-9_-]{1,128}$/.test(scope.browserId)) {
       throw new Error('Invalid session browser identity.')
     }
-    if (this.signInPages.size > 0 || this.signInContents.size > 0)
-      throw new Error('Agent browsing is paused while the user signs in to a website.')
+    if (this.accountWriting || this.shuttingDown)
+      throw new Error('Website accounts are being updated.')
+    if (this.humanAccountPages.size > 0)
+      throw new Error('Agent browsing is paused while the user controls website accounts.')
     const closedRun = this.closedAgentPages.get(scope.browserId)
     if (closedRun === scope.runId)
       throw new Error('This browser page was closed. Start a new task to browse again.')
@@ -469,16 +505,27 @@ export class PublicBrowserService {
     return scope
   }
 
+  async takeHumanAccountControl(browserId: string): Promise<AgentBrowserScope | null> {
+    const scope = this.takeAgentControl(browserId) ?? this.humanTakeovers.get(browserId) ?? null
+    if (!scope) return null
+    this.humanAccountPages.add(browserId)
+    await this.pauseAgentsForAccountChange()
+    return scope
+  }
+
   takeoverScope(browserId: string): AgentBrowserScope | null {
     return this.humanTakeovers.get(browserId) ?? null
   }
 
   canResumeAgentControl(browserId: string, runId: string): boolean {
-    return this.closedAgentPages.get(browserId) !== runId
+    return (
+      !this.accountWriting && !this.shuttingDown && this.closedAgentPages.get(browserId) !== runId
+    )
   }
 
   resumeAgentControl(browserId: string, runId: string): void {
     if (this.humanTakeovers.get(browserId)?.runId === runId) {
+      this.humanAccountPages.delete(browserId)
       this.humanTakeovers.delete(browserId)
       const record = this.records.get(browserId)
       if (record) this.publish(record, { agentControl: 'human' })
@@ -511,47 +558,24 @@ export class PublicBrowserService {
     }
   }
 
-  /**
-   * Holds every Agent page operation until `destroy` closes the sign-in page, so runs that start
-   * during sign-in cannot use the profile while the human enters credentials.
-   */
-  async beginAccountSignIn(browserId: string): Promise<void> {
-    if (!/^website-sign-in-[a-z0-9.-]{1,64}$/.test(browserId))
-      throw new Error('Invalid website sign-in page.')
-    const window = this.getMainWindow()
-    if (!window || window.isDestroyed())
-      throw new Error('The main Electron window is not available.')
-    this.signInPages.set(browserId, window)
-    this.observeWindow(window)
-    await this.pauseAgentsForAccountChange()
-  }
-
-  private async runAccountMutation<T>(work: () => Promise<T>): Promise<T> {
-    const prior = this.accountMutation
-    let release: () => void = () => undefined
-    this.accountMutation = new Promise<void>((resolve) => {
-      release = resolve
-    })
-    await prior
-    try {
-      return await work()
-    } finally {
-      release()
-    }
-  }
-
   revokeAllAgentCommands(): void {
     for (const record of this.records.values()) this.revokeAgentCommand(record.browserId)
   }
 
-  async getImportSources(): Promise<BrowserImportSources> {
-    const readinessError = accountImportReadinessError()
-    if (readinessError) throw new Error(readinessError.message)
-    try {
-      return await listImportSources(ACCOUNT_IMPORT_BROWSERS)
-    } catch {
-      throw new Error('Molly could not list browser profiles on this Mac.')
-    }
+  async getImportSources(): Promise<ElectronBrowserImportSources> {
+    if (accountImportReadinessError()) throw new BrowserAccountError('unavailable')
+    return listImportSources(ACCOUNT_IMPORT_BROWSERS)
+  }
+
+  async getImportProfiles(
+    browserId: AccountImportBrowserId
+  ): Promise<ElectronBrowserProfileChoice[]> {
+    if (this.accountOperation || this.shuttingDown) throw new BrowserAccountError('busy')
+    if (!(await this.getImportSources()).sources.some((source) => source.browserId === browserId))
+      throw new BrowserAccountError('source-unavailable')
+    const profiles = await listImportProfiles(browserId)
+    this.importProfiles.set(browserId, profiles)
+    return profiles
   }
 
   async openBrowserDataPrivacySettings(): Promise<OpenSystemNotificationSettingsResult> {
@@ -559,115 +583,191 @@ export class PublicBrowserService {
   }
 
   async getAccountSummary(): Promise<ElectronBrowserAccountSummary> {
-    await this.accountMutation
-    const browserSession = session.fromPartition(publicBrowserPartition())
-    const sites = await Promise.all(
-      ACCOUNT_IMPORT_SITES.map(async (site) => {
-        const cookies = await browserSession.cookies.get({ domain: site })
-        return {
-          site,
-          cookieCount: cookies.filter((cookie) =>
-            hostMatchesSite((cookie.domain ?? '').replace(/^\./, ''), site)
-          ).length
-        }
-      })
-    )
     const reason = accountImportReadinessError()
+    const cookies = await session.fromPartition(publicBrowserPartition()).cookies.get({})
     return {
       persistent: canPersistPublicBrowserSession(),
       importAvailable: reason === null,
       ...(reason ? { importUnavailableReason: reason.reason } : {}),
-      sites
+      recoveryRequired: Boolean(this.recoveryIsolation),
+      cookieCount: cookies.length,
+      sites: BROWSER_ACCOUNT_SITES.map((site) => ({
+        siteId: site.id,
+        cookieCount: cookies.filter(
+          (cookie) => browserAccountSiteForDomain(cookie.domain ?? '')?.id === site.id
+        ).length
+      }))
+    }
+  }
+
+  cancelAccountImport(operationId: string): ElectronBrowserImportCancelResult {
+    const operation = this.accountOperation
+    if (!operation || operation.id !== operationId) return 'idle'
+    if (operation.writing) return 'finishing'
+    operation.controller.abort()
+    return 'cancelled'
+  }
+
+  private async withAccountOperation<T>(
+    id: string,
+    work: (operation: NonNullable<PublicBrowserService['accountOperation']>) => Promise<T>
+  ): Promise<T> {
+    if (this.accountOperation || this.shuttingDown || (this.accountWriting && id !== 'clear'))
+      throw new BrowserAccountError('busy')
+    const owner = this.getMainWindow()
+    if (!owner || owner.isDestroyed()) throw new BrowserAccountError('cancelled')
+    this.observeWindow(owner)
+    const operation = { id, owner, controller: new AbortController(), writing: false }
+    this.accountOperation = operation
+    let release: () => void = () => undefined
+    this.accountMutation = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    try {
+      return await work(operation)
+    } finally {
+      this.accountOperation = null
+      release()
+    }
+  }
+
+  private assertAccountOwner(
+    operation: NonNullable<PublicBrowserService['accountOperation']>
+  ): void {
+    if (
+      operation.controller.signal.aborted ||
+      operation.owner.isDestroyed() ||
+      this.getMainWindow() !== operation.owner ||
+      this.shuttingDown
+    )
+      throw new BrowserAccountError('cancelled')
+  }
+
+  private async changeAccounts<T>(
+    operation: NonNullable<PublicBrowserService['accountOperation']>,
+    work: (isolation: Awaited<ReturnType<typeof isolateBrowserAccounts>>) => Promise<T>
+  ): Promise<T> {
+    this.assertAccountOwner(operation)
+    operation.writing = true
+    this.accountWriting = true
+    let isolation: Awaited<ReturnType<typeof isolateBrowserAccounts>> | undefined
+    try {
+      await this.pauseAgentsForAccountChange()
+      this.assertAccountOwner(operation)
+      const closing: Promise<void>[] = []
+      for (const record of [...this.records.values()]) {
+        const contents = record.view.webContents
+        this.accountPages.set(record.browserId, {
+          browserId: record.browserId,
+          bounds: record.bounds,
+          visible: record.visible,
+          url: contents.getURL(),
+          owner: record.window
+        })
+        if (!contents.isDestroyed())
+          closing.push(new Promise<void>((resolve) => contents.once('destroyed', resolve)))
+        this.disposeRecord(record)
+      }
+      await Promise.all(closing)
+      const browserSession = session.fromPartition(publicBrowserPartition())
+      this.configureBrowserSession(browserSession)
+      await browserSession.closeAllConnections()
+      isolation = this.recoveryIsolation ?? (await isolateBrowserAccounts(browserSession))
+      this.assertAccountOwner(operation)
+      const result = await work(isolation)
+      this.recoveryIsolation = undefined
+      return result
+    } catch (error) {
+      if (
+        isolation &&
+        (operation.id === 'clear' ||
+          (error instanceof BrowserAccountError && error.code === 'restore-incomplete'))
+      )
+        this.recoveryIsolation = isolation
+      throw error
+    } finally {
+      if (isolation && this.recoveryIsolation !== isolation) await isolation.release()
+      this.accountWriting = Boolean(this.recoveryIsolation)
+      if (!this.accountWriting && !this.shuttingDown && !operation.controller.signal.aborted) {
+        for (const page of this.accountPages.values()) {
+          if (page.owner.isDestroyed() || page.owner !== this.getMainWindow()) continue
+          const result = this.create(page.browserId, page.bounds, page.visible)
+          if (result.ok && page.url && page.url !== 'about:blank')
+            void this.navigate(page.browserId, page.url)
+        }
+      }
+      if (!this.recoveryIsolation) this.accountPages.clear()
     }
   }
 
   async importBrowserAccount(
-    browserId: AccountImportBrowserId,
-    profileId: string,
-    site: AccountImportSite,
-    replaceExisting: boolean
-  ): Promise<number> {
-    const readinessError = accountImportReadinessError()
-    if (readinessError) throw new Error(readinessError.message)
-    return await this.runAccountMutation(async () => {
-      const browserSession = session.fromPartition(publicBrowserPartition())
-      const imported = await importBrowserAccountCookies({
-        store: browserSession.cookies,
-        site,
-        replaceExisting,
-        readSource: () => readBrowserSiteCookies(browserId, profileId, site),
-        beforeWrite: async () => {
-          await this.pauseAgentsForAccountChange()
-          // Read partition metadata in the destination session. Electron's
-          // cookies.get() omits it, so it cannot establish a lossless backup.
-          // A blank, short-lived view avoids interfering with any Agent page.
-          const probe = new WebContentsView({
-            webPreferences: {
-              session: browserSession,
-              sandbox: true,
-              contextIsolation: true,
-              nodeIntegration: false
-            }
-          })
-          let snapshot: unknown
-          try {
-            probe.webContents.debugger.attach('1.3')
-            snapshot = await probe.webContents.debugger.sendCommand('Network.getAllCookies')
-          } catch {
-            throw new Error(
-              'Molly could not verify existing cookie identities. No cookies were imported.'
-            )
-          } finally {
-            if (!probe.webContents.isDestroyed()) probe.webContents.close()
-          }
-          assertStoredCookiesUnpartitioned(snapshot, site)
+    input: ElectronBrowserAccountImportInput
+  ): Promise<ElectronBrowserImportReport> {
+    if (accountImportReadinessError()) throw new BrowserAccountError('unavailable')
+    if (
+      !this.importProfiles.get(input.browserId)?.some((profile) => profile.id === input.profileId)
+    )
+      throw new BrowserAccountError('source-unavailable')
+    return this.withAccountOperation(input.operationId, async (operation) => {
+      const source = await readBrowserProfileCookies(
+        input.browserId,
+        input.profileId,
+        input.siteIds,
+        operation.controller.signal
+      )
+      this.assertAccountOwner(operation)
+      if (source.cookies.length === 0) return source.report
+      return this.changeAccounts(operation, async ({ store }) => {
+        const retained = await importBrowserAccountCookies(store, source.cookies)
+        for (const cookie of source.cookies) {
+          if (retained.has(importedCookieIdentity(cookie))) continue
+          const siteId = browserAccountSiteForDomain(cookie.domain)!.id
+          const row = source.report.sites.find((site) => site.siteId === siteId)!
+          row.imported--
+          row.skippedExpired++
+          source.report.imported--
+          source.report.skippedExpired++
         }
+        return source.report
       })
-      for (const record of this.records.values()) {
-        const url = record.view.webContents.getURL()
-        if (url && hostMatchesSite(new URL(url).hostname, site)) {
-          this.publish(record, { accountImport: { site, imported, at: Date.now() } })
-          record.view.webContents.reload()
-        }
-      }
-      return imported
     })
   }
 
-  async clearAccountCookies(site: string): Promise<number> {
-    return await this.runAccountMutation(async () => {
-      if (!ACCOUNT_IMPORT_SITES.includes(site as AccountImportSite)) {
-        throw new Error('Site cookie clearing currently supports Pinterest only.')
-      }
-      await this.pauseAgentsForAccountChange()
-      const browserSession = session.fromPartition(publicBrowserPartition())
-      const cookies = await browserSession.cookies.get({ domain: site })
-      let removed = 0
-      for (const cookie of cookies) {
-        const host = (cookie.domain ?? '').replace(/^\./, '')
-        if (!hostMatchesSite(host, site)) continue
-        await browserSession.cookies.remove(
-          `${cookie.secure ? 'https' : 'http'}://${host}${cookie.path}`,
-          cookie.name
-        )
-        removed += 1
-      }
-      await browserSession.cookies.flushStore()
-      for (const record of this.records.values()) {
-        const url = record.view.webContents.getURL()
-        if (url && hostMatchesSite(new URL(url).hostname, site)) {
-          this.publish(record, { accountImport: undefined })
-          record.view.webContents.reload()
-        }
-      }
-      return removed
-    })
+  async clearAccountData(): Promise<number> {
+    return this.withAccountOperation('clear', async (operation) =>
+      this.changeAccounts(operation, async () => {
+        const browserSession = session.fromPartition(publicBrowserPartition())
+        const removed = (await browserSession.cookies.get({})).length
+        await browserSession.clearStorageData()
+        await browserSession.clearCache()
+        await browserSession.clearAuthCache()
+        await browserSession.cookies.flushStore()
+        if ((await browserSession.cookies.get({})).length !== 0)
+          throw new BrowserAccountError('restore-incomplete')
+        return removed
+      })
+    )
+  }
+
+  async shutdownForQuit(): Promise<void> {
+    this.shuttingDown = true
+    if (this.accountOperation?.writing) await this.accountMutation
+    else this.accountOperation?.controller.abort()
   }
 
   private configureSession(record: PublicBrowserRecord): void {
-    const browserSession = record.view.webContents.session
+    this.configureBrowserSession(record.view.webContents.session)
+  }
+
+  private configureBrowserSession(browserSession: Electron.Session): void {
     if (this.configuredSessions.has(browserSession)) return
     this.configuredSessions.add(browserSession)
+    browserSession.webRequest.onBeforeRequest((_details, callback) =>
+      callback({ cancel: this.accountWriting || this.shuttingDown })
+    )
+    browserSession.webRequest.onHeadersReceived((_details, callback) =>
+      callback({ cancel: this.accountWriting || this.shuttingDown })
+    )
     browserSession.setPermissionCheckHandler(() => false)
     browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
       callback(false)
@@ -769,20 +869,17 @@ export class PublicBrowserService {
   private observeWindow(window: BrowserWindow): void {
     if (this.observedWindows.has(window)) return
     this.observedWindows.add(window)
-    window.once('closed', () => this.destroyWindowRecords(window))
+    window.once('closed', () => {
+      if (this.accountOperation?.owner === window) this.accountOperation.controller.abort()
+      this.destroyWindowRecords(window)
+    })
     window.webContents.on('did-start-navigation', (details) => {
-      if (details.isMainFrame && !details.isSameDocument) this.destroyWindowSignIns(window)
+      if (details.isMainFrame && !details.isSameDocument && this.accountOperation?.owner === window)
+        this.accountOperation.controller.abort()
     })
   }
 
-  private destroyWindowSignIns(window: BrowserWindow): void {
-    for (const [browserId, owner] of this.signInPages) {
-      if (owner === window) this.destroy(browserId)
-    }
-  }
-
   private destroyWindowRecords(window: BrowserWindow): void {
-    this.destroyWindowSignIns(window)
     for (const record of [...this.records.values()]) {
       if (record.window === window) this.destroy(record.browserId)
     }

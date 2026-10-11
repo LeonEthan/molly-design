@@ -11,6 +11,8 @@ export const BrowserImportCookieSchema = z
     httpOnly: z.boolean(),
     session: z.boolean(),
     expirationDate: z.number().positive().optional(),
+    sourceScheme: z.enum(['Unset', 'NonSecure', 'Secure']),
+    sourcePort: z.number().int().min(-1).max(65535),
     sameSite: z.enum(['no_restriction', 'lax', 'strict', 'unspecified']),
   })
   .strict()

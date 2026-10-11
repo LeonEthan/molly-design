@@ -1,0 +1,133 @@
+--- a/rookie-rs/src/lib.rs
++++ b/rookie-rs/src/lib.rs
+@@ -104,6 +104,7 @@
+ #[cfg(unix)]
+ use std::path::PathBuf;
+ #[cfg(target_os = "macos")]
++#[path = "macos/native.rs"]
+ mod macos;
+ #[cfg(target_os = "windows")]
+ mod windows;
+--- a/rookie-rs/src/browser/chromium_platform_keys/macos.rs
++++ b/rookie-rs/src/browser/chromium_platform_keys/macos.rs
+@@ -115,7 +115,7 @@
+   }
+ 
+   fn deadline_enforcement(&self) -> DeadlineEnforcement {
+-    DeadlineEnforcement::Enforceable
++    DeadlineEnforcement::Cooperative
+   }
+ }
+ 
+--- a/bindings/node/src/lib.rs
++++ b/bindings/node/src/lib.rs
+@@ -489,7 +489,7 @@
+ 
+ #[napi]
+ pub fn version() -> Result<String> {
+-  Ok(rookie_cookies::version())
++  Ok("0.6.0+molly-native-keychain.1".to_owned())
+ }
+ 
+ fn cookies_to_js(cookies: Vec<Cookie>) -> Result<Vec<CookieObject>> {
+--- a/rookie-rs/src/browser/chromium.rs
++++ b/rookie-rs/src/browser/chromium.rs
+@@ -629,6 +629,15 @@
+   // exhausted. A later iteration, identity, or retry error therefore drops
+   // SecretString-backed records instead of abandoning public String values.
+   let mut staged_records = Vec::new();
++  let (molly_count, molly_total_bytes): (i64, i64) = connection.query_row(
++    "SELECT count(*), coalesce(sum(length(host_key) + length(path) + length(name) + length(value) + length(encrypted_value)), 0) FROM cookies",
++    [], |row| Ok((row.get(0)?, row.get(1)?)),
++  )?;
++  if molly_count > 50_000 || molly_total_bytes > 32 * 1024 * 1024 {
++    return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++  }
++  let mut molly_rows = 0usize;
++  let mut molly_bytes = 0usize;
+   let source = ChromiumReadOnlySource {
+     connection,
+     domains,
+@@ -637,6 +646,10 @@
+     encrypted_value_policy,
+   };
+   let mut sink = |event| -> Result<()> {
++    molly_rows += 1;
++    if molly_rows > 50_000 {
++      return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++    }
+     let decoded = match event {
+       ChromiumDecodeEvent::RowFailure(failure) => {
+         log::warn!("Failed to decode Chromium cookie row: {}", failure.error);
+@@ -668,6 +681,16 @@
+           last_row_error = Some(failure.error);
+           return Ok(());
+         }
++        let value_len = match &record.value {
++          super::cookie_record::CookieValue::Plain(value) => value.len(),
++          _ => 0,
++        };
++        molly_bytes = molly_bytes.saturating_add(
++          record.domain.raw().len() + record.path.len() + record.name.len() + value_len,
++        );
++        if molly_bytes > 32 * 1024 * 1024 {
++          return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++        }
+         staged_records.push(record);
+       }
+       Err(failure) => {
+--- /dev/null
++++ b/rookie-rs/src/macos/native.rs
+@@ -0,0 +1,52 @@
++use anyhow::{bail, Context, Result};
++use crate::common::deadline::BoundaryRuntime;
++use crate::common::secret::{SecretBytes, SecretString};
++use std::{ffi::c_void, ptr};
++use zeroize::Zeroize;
++
++#[link(name = "Security", kind = "framework")]
++unsafe extern "C" {
++  fn SecKeychainFindGenericPassword(
++    keychain: *const c_void, service_len: u32, service: *const u8,
++    account_len: u32, account: *const u8, password_len: *mut u32,
++    password: *mut *mut c_void, item: *mut *mut c_void,
++  ) -> i32;
++  fn SecKeychainItemFreeContent(attributes: *mut c_void, data: *mut c_void) -> i32;
++}
++
++struct KeychainContent { bytes: *mut c_void, len: u32 }
++
++impl Drop for KeychainContent {
++  fn drop(&mut self) {
++    if !self.bytes.is_null() {
++      // SAFETY: Security.framework owns this allocation until FreeContent; see Apple's SecKeychainFindGenericPassword contract.
++      unsafe {
++        std::slice::from_raw_parts_mut(self.bytes.cast::<u8>(), self.len as usize).zeroize();
++        SecKeychainItemFreeContent(ptr::null_mut(), self.bytes);
++      }
++    }
++  }
++}
++
++pub(crate) fn get_osx_keychain_password_with_runtime(
++  service: &str, account: &str, runtime: &BoundaryRuntime<'_>,
++) -> Result<SecretString> {
++  runtime.check()?;
++  let mut content = KeychainContent { bytes: ptr::null_mut(), len: 0 };
++  // SAFETY: length-delimited UTF-8 inputs and initialized output pointers follow Apple's SecKeychainFindGenericPassword contract.
++  let status = unsafe { SecKeychainFindGenericPassword(
++    ptr::null(), service.len().try_into()?, service.as_ptr(),
++    account.len().try_into()?, account.as_ptr(), &mut content.len,
++    &mut content.bytes, ptr::null_mut(),
++  ) };
++  runtime.check()?;
++  if status != 0 { bail!("macOS Keychain lookup failed (OSStatus {status})"); }
++  if content.bytes.is_null() || content.len == 0 || content.len > 4096 {
++    bail!("macOS Keychain returned an unsupported credential");
++  }
++  // SAFETY: Security.framework returned a non-null allocation of content.len bytes, owned by the guard above.
++  let secret = SecretBytes::new(unsafe {
++    std::slice::from_raw_parts(content.bytes.cast::<u8>(), content.len as usize).to_vec()
++  });
++  secret.into_secret_string().context("macOS Keychain credential is not UTF-8")
++}

@@ -342,56 +342,42 @@ describe('SessionBrowserPanel controller', () => {
     expect(annotationButton?.disabled).toBe(true);
   });
 
-  it('signs in to a supported account site in the sign-in dialog, not the Agent page', async () => {
+  it('opens the shared one-step import dialog from the browser menu', async () => {
     window.__MOLLY_ELECTRON__ = true;
-    const invoked: string[] = [];
     window.ipc = {
       invoke: async (channel: string) => {
-        invoked.push(channel);
+        if (channel === 'publicBrowser.getAccountSummary')
+          return {
+            persistent: true,
+            importAvailable: false,
+            importUnavailableReason: 'macos-required',
+            cookieCount: 0,
+            sites: [],
+          };
         return channel === 'publicBrowser.getState' ? null : { ok: true };
       },
       on: () => () => {},
-      send: () => {},
-    };
-    const rendered = await renderPanel(createRuntime().runtime);
-    await enterAddress(rendered, 'https://www.pinterest.com/ideas/');
-    const surface = publicBrowserSurfaceRender.mock.lastCall?.[0] as {
-      onStateChange: (state: ElectronPublicBrowserState) => void;
-    };
-    await act(async () =>
-      surface.onStateChange({
-        browserId: `session-browser-${session.id}`,
-        phase: 'ready',
-        url: 'https://www.pinterest.com/ideas/',
-        canGoBack: false,
-        canGoForward: false,
-      })
-    );
-    const signIn = [...rendered.querySelectorAll('button')].find(
-      (button) => button.textContent === 'Sign in'
-    );
-    expect(signIn).toBeDefined();
-    expect(invoked).not.toContain('publicBrowser.beginAccountSignIn');
+    } as unknown as NonNullable<typeof window.ipc>;
+    await renderPanel();
+    const menu = document.querySelector<HTMLButtonElement>(
+      '[aria-label="settings.browserImport.browserMenu"]'
+    )!;
+    expect(menu).toBeTruthy();
     await act(async () => {
-      signIn?.click();
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       await flushMicrotasks();
     });
-    expect(invoked).toContain('publicBrowser.beginAccountSignIn');
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(
-      rendered.querySelector(`[data-testid="public-browser"]`)?.getAttribute('data-url')
-    ).toBe('https://www.pinterest.com/ideas/');
-
-    const done = [...document.querySelectorAll('[role="dialog"] button')].find(
-      (button) => button.textContent === 'settings.browserAccounts.signInDone'
-    ) as HTMLButtonElement | undefined;
+    const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+      (entry) => entry.textContent === 'settings.browserAccounts.importFromBrowser'
+    );
+    expect(item).toBeTruthy();
     await act(async () => {
-      done?.click();
+      item!.click();
       await flushMicrotasks();
     });
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-    expect(invoked).toContain('publicBrowser.destroy');
-    expect(invoked).toContain('publicBrowser.reload');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      'settings.browserImport.title'
+    );
   });
 
   it('offers Resume Agent for a run paused before it opened a page', async () => {

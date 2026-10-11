@@ -326,8 +326,6 @@ if (hasSingleInstanceLock) {
       windowBadgeService.reset()
       loroDataPlaneRelay.destroy()
       appUpdaterService.stop()
-      publicBrowserService.destroyAll()
-
       if (cliShutdownComplete) {
         // Cleanup already ran on the first pass; let this quit proceed.
         cliService.killAllProcesses()
@@ -339,7 +337,11 @@ if (hasSingleInstanceLock) {
       // down, orphaning it holding the local ports and breaking the next
       // launch. shutdownForQuit() SIGTERMs, waits briefly, then SIGKILLs.
       event.preventDefault()
-      void Promise.allSettled([cliService.shutdownForQuit()]).finally(() => {
+      void Promise.allSettled([
+        cliService.shutdownForQuit(),
+        publicBrowserService.shutdownForQuit()
+      ]).finally(() => {
+        publicBrowserService.destroyAll()
         cliShutdownComplete = true
         app.quit()
       })

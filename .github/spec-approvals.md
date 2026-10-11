@@ -111,3 +111,11 @@ supported website, merges them into Molly's website profile, skips partitioned
 and expired cookies, and minimizes macOS prompts, with Keychain access requested
 under Molly's own identity. This approves that revision only; the Spec's other
 draft revisions remain unapproved, so its status stays draft.
+
+The owner subsequently approved implementation of the single-step revision: one
+combined browser/profile picker, a collapsed and fully selected curated catalog
+of 13 design and 14 commerce platforms, one Import action, and native Molly
+Keychain access in the same implementation. This supersedes the preview-token
+and deferred-Keychain steps in the original proposal. Conditional grant retention
+and unverified website compatibility remain explicit; unrelated Spec drafts and
+runtime acceptance are not approved by this decision.

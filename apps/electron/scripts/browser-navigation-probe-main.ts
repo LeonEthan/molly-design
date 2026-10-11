@@ -193,76 +193,8 @@ async function main(): Promise<void> {
     if (reply.kind !== 'snapshot') throw new Error('Missing retained Session snapshot')
     assert.match(reply.snapshot, /Retained Session page/)
   }
-  const signInId = 'website-sign-in-pinterest.com'
-  const createSignIn = async () => {
-    await browser.beginAccountSignIn(signInId)
-    assert.equal(browser.create(signInId, { x: 0, y: 0, width: 900, height: 700 }).ok, true)
-    const contents = records.get(signInId)!.view.webContents
-    await contents.loadURL('data:text/html,<h1>Synthetic website sign-in</h1>')
-    return contents
-  }
-  const signInContents = await createSignIn()
-  const originalSignInClose = signInContents.close.bind(signInContents)
-  let closeReturned = false
-  let destroyedAfterCloseReturned = false
-  signInContents.once('destroyed', () => {
-    destroyedAfterCloseReturned = closeReturned
-  })
-  signInContents.close = (options) => {
-    originalSignInClose(options)
-    closeReturned = true
-  }
-  const signInDestroyed = once(signInContents, 'destroyed')
-  await host.loadURL('data:text/html,<h1>Reloaded private app</h1>')
-  await signInDestroyed
-  assert.equal(signInContents.isDestroyed(), true)
-  assert.equal(browser.getState(signInId), null)
-  await retainedSnapshot('probe-after-sign-in-reload')
-  console.log(`SIGN_IN_CLOSE_OBSERVATION: ${JSON.stringify({ destroyedAfterCloseReturned })}`)
-  record(
-    'Host navigation destroys the native sign-in view and retains the Session page for a new run'
-  )
-
-  const delayedSignInContents = await createSignIn()
-  const originalDelayedClose = delayedSignInContents.close.bind(delayedSignInContents)
-  const delayedCloseRequested = Promise.withResolvers<void>()
-  delayedSignInContents.close = () => delayedCloseRequested.resolve()
-  const delayedSignInDestroyed = once(delayedSignInContents, 'destroyed')
-  await host.loadURL('data:text/html,<h1>Reloaded during delayed sign-in close</h1>')
-  await delayedCloseRequested.promise
-  assert.equal(delayedSignInContents.isDestroyed(), false)
-  await assert.rejects(
-    browser.executeAgentCommand(
-      { ...retainedScope, runId: 'probe-during-sign-in-close' },
-      { kind: 'snapshot' }
-    ),
-    /signs in/
-  )
-  delayedSignInContents.close = originalDelayedClose
-  originalDelayedClose()
-  await delayedSignInDestroyed
-  assert.equal(delayedSignInContents.isDestroyed(), true)
-  await retainedSnapshot('probe-after-delayed-sign-in-close')
-  record('Agent access remains held until the native sign-in WebContents destroyed event')
-
-  const pause = Promise.withResolvers<AgentBrowserScope[]>()
-  pausePending = pause.promise
-  const pendingSignIn = browser.beginAccountSignIn(signInId)
-  await assert.rejects(
-    browser.executeAgentCommand(
-      { ...retainedScope, runId: 'probe-during-sign-in-pause' },
-      { kind: 'snapshot' }
-    ),
-    /signs in/
-  )
-  await host.loadURL('data:text/html,<h1>Reloaded during pending sign-in pause</h1>')
-  pause.resolve([])
-  await pendingSignIn
-  pausePending = undefined
-  assert.equal(browser.create(signInId, { x: 0, y: 0, width: 900, height: 700 }).ok, false)
-  assert.equal(browser.getState(signInId), null)
-  await retainedSnapshot('probe-after-pending-sign-in-reload')
-  record('Host navigation retires a pending sign-in and rejects its late native view creation')
+  await retainedSnapshot('probe-retained-session')
+  record('Session page survives Agent completion for a later run')
   browser.destroyAll()
   host.destroy()
   server.closeAllConnections()

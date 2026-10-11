@@ -35,7 +35,11 @@ import { join } from 'node:path'
 import { DesignWorker, quitDesignWorker } from './design-worker'
 import type { DesignPayload, DesignRequest } from '../../../../cli/src/design/store'
 import type { DesignHistoryRequest, DesignVersion } from '../../../../cli/src/design/history'
-import { openDesignCanvasNeedsReload, selectCanvasInstance } from './design-canvas-sync-core'
+import {
+  openDesignCanvasNeedsReload,
+  selectCanvasInstance,
+  selectChangeBaseline
+} from './design-canvas-sync-core'
 import {
   DesignCanvasAccess,
   type CanvasInstance,
@@ -717,9 +721,12 @@ export async function readDesignCandidateFile(
  * no draft is discarded to make the saved revision visible. A canvas the user does not have on screen
  * stays closed: destroy is enough, and the next attach reads the store.
  */
-export async function syncDesignCanvasFromStore(id: string): Promise<DesignElementChanges | null> {
+export async function syncDesignCanvasFromStore(
+  id: string,
+  hostId?: string
+): Promise<DesignElementChanges | null> {
   const previous = syncing.get(id) ?? Promise.resolve(null)
-  const next = previous.catch(() => null).then(() => syncDesignCanvasFromStoreOnce(id))
+  const next = previous.catch(() => null).then(() => syncDesignCanvasFromStoreOnce(id, hostId))
   syncing.set(id, next)
   try {
     return await next
@@ -728,8 +735,11 @@ export async function syncDesignCanvasFromStore(id: string): Promise<DesignEleme
   }
 }
 
-/** Element changes compare the superseded canvas with the saved document it is replaced by. */
-async function syncDesignCanvasFromStoreOnce(id: string): Promise<DesignElementChanges | null> {
+/** Element changes compare the superseded canvas (see `selectChangeBaseline`) with the saved document. */
+async function syncDesignCanvasFromStoreOnce(
+  id: string,
+  hostId?: string
+): Promise<DesignElementChanges | null> {
   const saved = await designRequest({ operation: 'read', sessionId: id })
   if (
     !recordsFor(id).some((record) =>
@@ -737,14 +747,14 @@ async function syncDesignCanvasFromStoreOnce(id: string): Promise<DesignElementC
     )
   )
     return null
-  const before = await reloadDesignCanvas(id)
+  const before = await reloadDesignCanvas(id, hostId)
   const after = saved.doc as { elements?: unknown } | null
   return before && Array.isArray(after?.elements)
     ? diffDesignElements(before, after as { elements: { id: string }[] })
     : null
 }
 
-async function reloadDesignCanvas(id: string) {
+async function reloadDesignCanvas(id: string, hostId?: string) {
   const entries = [...records].filter(([, record]) => record.artworkId === id)
   // Check every instance before destroying any: exceptional dirty content is never discarded.
   for (const [, record] of entries) {
@@ -752,8 +762,9 @@ async function reloadDesignCanvas(id: string) {
     if (!state || state.dirty || state.saving || state.composing)
       throw Error('Canvas has unsaved edits; preserve or save them before reloading')
   }
-  const before = entries.length
-    ? await entries[0][1].view.webContents
+  const baseline = selectChangeBaseline(entries, hosts, id, hostId)
+  const before = baseline
+    ? await baseline[1].view.webContents
         .executeJavaScript('window.molly.snapshot().then((value) => value.doc)')
         .catch(() => null)
     : null
@@ -1075,12 +1086,21 @@ async function unfreezeDesigns() {
   )
 }
 
-/** Outlines are ephemeral feedback on the retained native view; they never touch the document. */
-export async function highlightDesignElements(id: string, hostId: string, groups: DesignHighlight) {
+/**
+ * Outlines are ephemeral feedback on the retained native view; they never touch the document.
+ * Resolves whether a ready canonical canvas received them.
+ */
+export async function highlightDesignElements(
+  id: string,
+  hostId: string,
+  groups: DesignHighlight
+): Promise<boolean> {
   const record = records.get(hostId)
-  if (!record || record.artworkId !== id) return
-  await record.view.webContents.executeJavaScript(
-    `window.molly?.highlight?.(${JSON.stringify(groups)})`
+  if (!record || record.artworkId !== id || record.view.webContents.isDestroyed()) return false
+  return (
+    (await record.view.webContents.executeJavaScript(
+      `typeof window.molly?.highlight === 'function' && (window.molly.highlight(${JSON.stringify(groups)}), true)`
+    )) === true
   )
 }
 

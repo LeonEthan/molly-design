@@ -350,11 +350,29 @@ export function DesignCanvas({
         .catch((cause) => console.error(cause)),
     [artworkId, hostId]
   );
+  const pendingSettledHighlight = useRef<DesignHighlight | null>(null);
+  const settle = useCallback(
+    async (groups: DesignHighlight) => {
+      pendingSettledHighlight.current = groups;
+      const delivered = await getIpcServices()
+        ?.design.highlight(artworkId, hostId, groups)
+        .catch((cause) => {
+          console.error(cause);
+          return false;
+        });
+      if (delivered && pendingSettledHighlight.current === groups)
+        pendingSettledHighlight.current = null;
+    },
+    [artworkId, hostId]
+  );
   const runningTurnId = active ? canvasState?.turnId : undefined;
+  const runningTurnIndexed =
+    !!runningTurnId && designHistory.some((entry) => entry.id === runningTurnId);
   useEffect(() => {
     if (!runningTurnId) return undefined;
     let cancelled = false;
     setOutsideChanges(null);
+    pendingSettledHighlight.current = null;
     void readDesignTurnElementIds(turnElements.current.view, runningTurnId).then((elementIds) => {
       if (!cancelled && elementIds.length) highlight([{ tone: 'working', elementIds }]);
     });
@@ -362,7 +380,7 @@ export function DesignCanvas({
       cancelled = true;
       highlight([{ tone: 'working', elementIds: [] }]);
     };
-  }, [runningTurnId, highlight]);
+  }, [runningTurnId, runningTurnIndexed, highlight]);
   useBlocker({
     enableBeforeUnload: false,
     shouldBlockFn: async ({ current, next }) => {
@@ -429,6 +447,8 @@ export function DesignCanvas({
                 DESIGN_CANVAS_LABEL_KEYS.map((key) => [key, t(`design.${key}`)])
               ),
             });
+            const settled = pendingSettledHighlight.current;
+            if (settled && current()) await settle(settled);
           }
           if (current()) {
             setAttachmentError('');
@@ -470,11 +490,12 @@ export function DesignCanvas({
     t,
     referenceActionsEnabled,
     attachAttempt,
+    settle,
   ]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
-    void syncOpenDesignCanvas(artworkId)
+    void syncOpenDesignCanvas(artworkId, hostId)
       .then(async (changes) => {
         if (cancelled) return;
         await refreshVersions();
@@ -483,10 +504,11 @@ export function DesignCanvas({
         const referenced = await readDesignTurnElementIds(view, committedTurnId);
         if (cancelled) return;
         const { inside, outside, removedOutside } = splitDesignChanges(changes, referenced);
-        highlight([
+        await settle([
           { tone: 'changed', elementIds: inside },
           { tone: 'outside', elementIds: outside },
         ]);
+        if (cancelled) return;
         setOutsideChanges(
           outside.length || removedOutside ? { ids: outside, removed: removedOutside } : null
         );
@@ -497,7 +519,7 @@ export function DesignCanvas({
     return () => {
       cancelled = true;
     };
-  }, [artworkId, committedReceipt, synced, refreshVersions, highlight]);
+  }, [artworkId, hostId, committedReceipt, synced, refreshVersions, settle]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -570,7 +592,7 @@ export function DesignCanvas({
             JSON.stringify(wording ?? '') +
             t(
               'design.editWordingPromptTail',
-              '. Keep the lettering style, colors, badge and size as they are; replace only the image asset and update the element\'s textCopy to the new wording. Preserve the rest of the artwork.'
+              ". Keep the lettering style, colors, badge and size as they are; replace only the image asset and update the element's textCopy to the new wording. Preserve the rest of the artwork."
             ),
           'image',
           reference
@@ -602,8 +624,7 @@ export function DesignCanvas({
           return;
         if (event.action === 'ask')
           actionCallback.current.askSelection(event.reference, event.prompt, event.send);
-        else
-          actionCallback.current.selectionAction(event.action, event.reference, event.wording);
+        else actionCallback.current.selectionAction(event.action, event.reference, event.wording);
       }),
     [hostId, artworkId, active, readonlyView]
   );

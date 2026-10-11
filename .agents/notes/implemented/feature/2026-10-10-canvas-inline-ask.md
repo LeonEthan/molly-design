@@ -51,6 +51,8 @@ reply of the same day.
   the composer's newline convention. Tab presets are deferred to phase E.
 - **Draft safety.** The unsent prompt is kept for the same selection epoch, so
   reopening after a failed request restores it; a new selection starts empty.
+  Archived Sessions get no reference callbacks, so Ask and the other selection
+  actions are disabled instead of accepting text the composer would refuse.
 - Readonly, hidden-view and stale-selection checks are unchanged: the toolbar
   is hidden while an Agent runs, and the CLI still validates artwork, revision
   and IDs before dispatch.

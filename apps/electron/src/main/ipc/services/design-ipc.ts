@@ -133,10 +133,11 @@ export class DesignIpc extends IpcService {
     const artwork = id.parse(sessionId)
     const host = id.parse(hostId)
     const groups = DesignHighlightSchema.parse(input)
-    await Promise.all([
+    const [canonical] = await Promise.all([
       highlightDesignElements(artwork, host, groups),
       highlightSourcePreview(host, groups)
     ])
+    return canonical
   }
   @IpcMethod() async applyCommand(sessionId: string, hostId: string, command: unknown) {
     owner()
@@ -152,9 +153,12 @@ export class DesignIpc extends IpcService {
    * matches the store; the renderer calls this from the committed outcome, not
    * on a timer.
    */
-  @IpcMethod() async syncFromStore(sessionId: string) {
+  @IpcMethod() async syncFromStore(sessionId: string, hostId?: string) {
     owner()
-    return syncDesignCanvasFromStore(id.parse(sessionId))
+    return syncDesignCanvasFromStore(
+      id.parse(sessionId),
+      hostId === undefined ? undefined : id.parse(hostId)
+    )
   }
   /** Existing historical content, addressed by artwork and its recorded digest. */
   @IpcMethod() async candidateFile(sessionId: string, rawCandidateId: string) {

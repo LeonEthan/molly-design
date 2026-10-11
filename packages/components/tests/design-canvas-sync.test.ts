@@ -129,7 +129,7 @@ describe('syncOpenDesignCanvas', () => {
     const syncFromStore = vi.fn().mockResolvedValue(undefined);
     getIpcServicesMock.mockReturnValue({ design: { syncFromStore } } as never);
     await syncOpenDesignCanvas(ARTWORK);
-    expect(syncFromStore).toHaveBeenCalledWith(ARTWORK);
+    expect(syncFromStore).toHaveBeenCalledWith(ARTWORK, undefined);
   });
 
   it('rejects when the reload fails so the canvas can surface it', async () => {

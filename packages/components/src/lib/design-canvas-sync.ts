@@ -49,10 +49,10 @@ export function latestCommittedDesignRevision(
  * no native editor to go stale. A real reload failure rejects so the canvas
  * can show it instead of leaving the editor on the superseded document.
  */
-export async function syncOpenDesignCanvas(artworkId: string) {
+export async function syncOpenDesignCanvas(artworkId: string, hostId?: string) {
   const design = getIpcServices()?.design;
   if (!design) return null;
-  return design.syncFromStore(artworkId);
+  return design.syncFromStore(artworkId, hostId);
 }
 
 function latestCommittedDesignOutcome(

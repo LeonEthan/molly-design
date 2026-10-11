@@ -16,10 +16,10 @@ Agent 回合结束后，画布不显示 Molly 动过哪些元素，也看不出�
 ## 决定
 
 - **复用阶梯。** 复用回合后的画布重载（`syncDesignCanvasFromStore`）、用户回合中冻结的元素引用、会话视图的按范围水合，以及工具栏的 executeJavaScript 呈现路径。否决：把每回合变更列表持久化到回合结果中（为派生视图新增持久状态）、在 CLI 中依据冻结清单计算差异（Electron 不得读取 CLI 工作区路径）、React 覆盖层（几何信息位于原生画布内）。
-- **差异。** `diffDesignElements`（`@molly/shared/design-selection-commands`）按 id 以不受键顺序影响的 JSON 比较元素：新增或修改的 id 记为 `changed`，消失的 id 记为 `removed`，仅层级顺序变化不算修改。Electron 在重载前（既有干净状态检查之后）对被替换画布做快照，并与已保存文档比较；`syncFromStore` 返回结果，未发生重载时返回 `null`。
+- **差异。** `diffDesignElements`（`@molly/shared/design-selection-commands`）按 id 以不受键顺序影响的 JSON 比较元素：新增或修改的 id 记为 `changed`，消失的 id 记为 `removed`，仅层级顺序变化不算修改。Electron 在重载前（既有干净状态检查之后）对被替换画布做快照，并与已保存文档比较；`syncFromStore` 返回结果，未发生重载时返回 `null`。比较基线是发起请求的宿主所在画布，否则是可见画布（`selectChangeBaseline`）；保留的隐藏同级实例可能停在更旧的修订，从不作为基线。
 - **归属。** 渲染进程读取已提交回合的元素引用（从助手 id 回溯到其用户回合），把修改分为范围内与范围外。没有引用的回合拥有全部修改，因此不显示提示。范围外被删除的元素计入提示，但无法画轮廓。
-- **轮廓。** 画布中的 `window.molly.highlight(groups)` 绘制三种色调：`working`（虚线，常驻）、`changed`（实线，2.4 秒后淡出）、`outside`（琥珀色虚线，6 秒后淡出）。一次调用只替换其列出的色调；空列表清除全部，因此清除工作中轮廓不会抹掉回合后的轮廓。主进程用 `DesignHighlightSchema` 校验；画布页面本身不依赖 zod。
-- **运行中回合。** `canvasState.turnId` 存在期间，被引用元素在规范视图及每个新预览帧上显示 `working` 轮廓（每帧都是新页面；预览服务在显示前重新应用已存的工作中轮廓）。
+- **轮廓。** 画布中的 `window.molly.highlight(groups)` 绘制三种色调：`working`（虚线，常驻）、`changed`（实线，2.4 秒后淡出）、`outside`（琥珀色虚线，6 秒后淡出）。一次调用只替换其列出的色调；空列表清除全部，因此清除工作中轮廓不会抹掉回合后的轮廓。主进程用 `DesignHighlightSchema` 校验；画布页面本身不依赖 zod。`highlight` 返回就绪的规范画布是否收到轮廓。若提交时屏幕上是实时源预览，规范画布稍后才挂载，渲染进程会保留回合后的轮廓，并在挂载后送达。
+- **运行中回合。** `canvasState.turnId` 存在期间，被引用元素在规范视图及每个新预览帧上显示 `working` 轮廓（每帧都是新页面；预览服务在显示前重新应用已存的工作中轮廓）。若画布打开时会话索引尚未包含该回合，则在回合进入索引后重新查找。
 
 ## 验证
 

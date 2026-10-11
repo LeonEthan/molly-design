@@ -32,3 +32,19 @@ export function selectCanvasInstance<T extends { artworkId: string }>(
     throw Error('Choose a specific canvas instance; all unsaved edits are retained')
   return matches[0]
 }
+
+/**
+ * The canvas a committed turn superseded: the requesting host's instance, else the
+ * visible one. A retained hidden sibling may hold an older revision and is never the baseline.
+ */
+export function selectChangeBaseline<T>(
+  entries: readonly (readonly [string, T])[],
+  visibleHosts: ReadonlyMap<string, string>,
+  artworkId: string,
+  hostId?: string
+): readonly [string, T] | undefined {
+  return (
+    entries.find(([key]) => key === hostId) ??
+    entries.find(([key]) => visibleHosts.get(key) === artworkId)
+  )
+}

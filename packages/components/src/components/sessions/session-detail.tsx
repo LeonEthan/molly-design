@@ -3358,48 +3358,56 @@ const SessionDetail = ({
         >
           <DesignCanvas
             toolbarHost={designOwnsSidePanel ? designToolbarHost : null}
-            onReferenceSelection={(reference, prompt) => {
-              const chat = chatRefsMap.current.get(activeTabSessionId);
-              if (
-                activeTabSessionId !== activeSession.id ||
-                !chat ||
-                !('referenceDesignSelection' in chat)
-              )
-                throw Error(
-                  t(
-                    'design.referenceConversationUnavailable',
-                    'Open this artwork’s conversation before referencing elements'
-                  )
-                );
-              chat.referenceDesignSelection(
-                reference,
-                t('design.selectedElements', 'Selected elements ({{count}})', {
-                  count: reference.elementIds.length,
-                }),
-                prompt
-              );
-            }}
-            onSendSelection={async (reference, prompt) => {
-              const chat = chatRefsMap.current.get(activeTabSessionId);
-              if (
-                activeTabSessionId !== activeSession.id ||
-                !chat ||
-                !('sendDesignSelection' in chat)
-              )
-                throw Error(
-                  t(
-                    'design.referenceConversationUnavailable',
-                    'Open this artwork’s conversation before referencing elements'
-                  )
-                );
-              await chat.sendDesignSelection(
-                reference,
-                t('design.selectedElements', 'Selected elements ({{count}})', {
-                  count: reference.elementIds.length,
-                }),
-                prompt
-              );
-            }}
+            onReferenceSelection={
+              activeSession.isArchived
+                ? undefined
+                : (reference, prompt) => {
+                    const chat = chatRefsMap.current.get(activeTabSessionId);
+                    if (
+                      activeTabSessionId !== activeSession.id ||
+                      !chat ||
+                      !('referenceDesignSelection' in chat)
+                    )
+                      throw Error(
+                        t(
+                          'design.referenceConversationUnavailable',
+                          'Open this artwork’s conversation before referencing elements'
+                        )
+                      );
+                    chat.referenceDesignSelection(
+                      reference,
+                      t('design.selectedElements', 'Selected elements ({{count}})', {
+                        count: reference.elementIds.length,
+                      }),
+                      prompt
+                    );
+                  }
+            }
+            onSendSelection={
+              activeSession.isArchived
+                ? undefined
+                : async (reference, prompt) => {
+                    const chat = chatRefsMap.current.get(activeTabSessionId);
+                    if (
+                      activeTabSessionId !== activeSession.id ||
+                      !chat ||
+                      !('sendDesignSelection' in chat)
+                    )
+                      throw Error(
+                        t(
+                          'design.referenceConversationUnavailable',
+                          'Open this artwork’s conversation before referencing elements'
+                        )
+                      );
+                    await chat.sendDesignSelection(
+                      reference,
+                      t('design.selectedElements', 'Selected elements ({{count}})', {
+                        count: reference.elementIds.length,
+                      }),
+                      prompt
+                    );
+                  }
+            }
             onSyncSelection={(reference, label) => {
               const chat = chatRefsMap.current.get(activeTabSessionId);
               if (

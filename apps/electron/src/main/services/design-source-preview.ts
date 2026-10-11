@@ -132,7 +132,8 @@ const applyHighlight = (view: WebContentsView, groups: DesignHighlight) =>
 export async function highlightSourcePreview(hostId: string, groups: DesignHighlight) {
   const working = groups.filter((group) => group.tone === 'working' && group.elementIds.length)
   if (working.length) highlights.set(hostId, working)
-  else highlights.delete(hostId)
+  else if (!groups.length || groups.some((group) => group.tone === 'working'))
+    highlights.delete(hostId)
   const view = views.get(hostId)?.view
   if (view && !view.webContents.isDestroyed()) await applyHighlight(view, groups)
 }

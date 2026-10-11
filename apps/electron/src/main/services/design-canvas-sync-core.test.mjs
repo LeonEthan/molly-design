@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { openDesignCanvasNeedsReload } from './design-canvas-sync-core.ts'
+import { openDesignCanvasNeedsReload, selectChangeBaseline } from './design-canvas-sync-core.ts'
 
 void test('an editor that already holds the store revision is left alone', () => {
   assert.equal(openDesignCanvasNeedsReload('rev-a', 'rev-a'), false)
@@ -543,4 +543,17 @@ void test('live watch can start before causal input exists and bind on first fil
     })),
     /source changed/
   )
+})
+
+void test('change baseline is the requesting host, else the visible canvas, never a hidden sibling', () => {
+  const entries = [
+    ['hidden-older', { artworkId: 'art' }],
+    ['visible', { artworkId: 'art' }],
+    ['requester', { artworkId: 'art' }]
+  ]
+  const visible = new Map([['visible', 'art']])
+  assert.equal(selectChangeBaseline(entries, visible, 'art', 'requester')?.[0], 'requester')
+  assert.equal(selectChangeBaseline(entries, visible, 'art', 'gone')?.[0], 'visible')
+  assert.equal(selectChangeBaseline(entries, visible, 'art')?.[0], 'visible')
+  assert.equal(selectChangeBaseline(entries.slice(0, 1), new Map(), 'art'), undefined)
 })

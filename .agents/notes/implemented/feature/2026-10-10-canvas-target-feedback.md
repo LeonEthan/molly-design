@@ -38,7 +38,10 @@ person had to compare by eye to see what moved.
   ids are `changed`, missing ids are `removed`, and stacking order alone is not
   a change. Electron snapshots the superseded canvas just before the reload
   (after the existing clean-state check) and diffs it with the saved document;
-  `syncFromStore` returns the result, or `null` when no reload happened.
+  `syncFromStore` returns the result, or `null` when no reload happened. The
+  baseline is the requesting host's canvas, else the visible one
+  (`selectChangeBaseline`); a retained hidden sibling may hold an older revision
+  and is never used.
 - **Attribution.** The renderer reads the committed turn's element references
   (walking back from an assistant id to its user turn) and splits changes into
   inside and outside. A turn without references owns every change, so no
@@ -49,11 +52,15 @@ person had to compare by eye to see what moved.
   `outside` (amber dashed, fades after 6 s). A call replaces only the tones it
   names; an empty list clears all, so clearing the working outline cannot erase
   the post-turn outlines. Main validates groups with `DesignHighlightSchema`;
-  the page itself takes no zod dependency.
+  the page itself takes no zod dependency. `highlight` resolves whether a ready
+  canonical canvas received the groups. When the live source preview was on
+  screen at commit, the canonical canvas attaches later, so the renderer keeps
+  the post-turn groups and delivers them after that attach.
 - **Running turn.** While `canvasState.turnId` is set, the referenced elements
   get a `working` outline on the canonical view and on every new preview frame
   (each frame is a fresh page; the preview service re-applies stored working
-  outlines before showing it).
+  outlines before showing it). If the canvas opens before the conversation index
+  holds that turn, the lookup runs again once the turn is indexed.
 
 ## Validation
 

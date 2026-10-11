@@ -594,8 +594,9 @@ export const DiscoverModelConnectionSchema = z
     apiKey: z.string().trim().min(1).max(16_384).optional(),
     stored: z.object({ id: identifier, revision }).strict().optional(),
   })
-  .strict()
-  .refine((value) => value.apiKey !== undefined || value.stored !== undefined);
+  .strict();
+// Keyless discovery is intentional: local servers (Ollama, LM Studio) serve /models
+// without an Authorization header.
 export type DiscoverModelConnection = z.infer<typeof DiscoverModelConnectionSchema>;
 export type DiscoverModelConnectionResult =
   | { ok: true; models: DiscoveredModel[]; filteredNonChat: number }

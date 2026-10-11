@@ -360,20 +360,22 @@ export function ModelConnectionForm({
     return null;
   }, [configurationIssue, endpoint, provider, requiresKey, stored, typedKey]);
   const { state: check, recheck } = useConnectionCheck(checkRequest, onCheck);
+  // Keyless endpoints (Ollama, LM Studio) can be discovered without a key or stored row.
   const discoverable =
     provider === 'openai-compatible' &&
     !configurationIssue &&
-    ModelEndpointSchema.safeParse(endpoint).success &&
-    (typedKey.length > 0 || (stored !== undefined && !requiresKey));
+    ModelEndpointSchema.safeParse(endpoint).success;
   const discover = useCallback(() => {
     if (!onDiscover || !discoverable) return;
     const input: DiscoverModelConnection = typedKey
       ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
-      : {
-          providerPresetId: 'openai-compatible',
-          baseUrl: endpoint,
-          stored: { id: stored!.id, revision: stored!.revision },
-        };
+      : stored
+        ? {
+            providerPresetId: 'openai-compatible',
+            baseUrl: endpoint,
+            stored: { id: stored.id, revision: stored.revision },
+          }
+        : { providerPresetId: 'openai-compatible', baseUrl: endpoint };
     setDiscovery({ phase: 'loading' });
     void onDiscover(input).then(
       (result) =>
@@ -484,7 +486,45 @@ export function ModelConnectionForm({
         <>
           {oauthProvider && onOpenAiAuth ? (
             <div className="space-y-2">
-              {isOAuthConnection && stored?.oauth ? (
+              {authFlow.phase === 'waiting' ? (
+                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
+                  {authFlow.deviceCode ? (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.models.oauth.deviceCodePrompt')}
+                      </p>
+                      <p className="select-all font-mono text-lg tracking-widest">
+                        {authFlow.deviceCode.userCode}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          window.open(authFlow.deviceCode!.verificationUri, '_blank')
+                        }
+                      >
+                        {t('settings.models.oauth.openVerification')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.models.oauth.waiting')}
+                    </p>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={cancelSignIn}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                  </div>
+                </div>
+              ) : isOAuthConnection && stored?.oauth ? (
                 <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
@@ -536,44 +576,6 @@ export function ModelConnectionForm({
                       {t('settings.models.oauth.deniedDetail')}
                     </p>
                   ) : null}
-                </div>
-              ) : authFlow.phase === 'waiting' ? (
-                <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
-                  {authFlow.deviceCode ? (
-                    <div className="space-y-1.5">
-                      <p className="text-xs text-muted-foreground">
-                        {t('settings.models.oauth.deviceCodePrompt')}
-                      </p>
-                      <p className="select-all font-mono text-lg tracking-widest">
-                        {authFlow.deviceCode.userCode}
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          window.open(authFlow.deviceCode!.verificationUri, '_blank')
-                        }
-                      >
-                        {t('settings.models.oauth.openVerification')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">
-                      {t('settings.models.oauth.waiting')}
-                    </p>
-                  )}
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={cancelSignIn}
-                    >
-                      {t('common.cancel')}
-                    </Button>
-                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">

@@ -442,20 +442,23 @@ export class ModelConnectionStore {
       if (!data.id && data.expectedRevision !== undefined)
         throw new Error('model_connection_revision_conflict')
       if (!previous && store.entries.length >= 256) throw new Error('model_connection_limit')
-      // Editing an OAuth connection keeps its stored auth type and token set; the form
-      // never sends either.
-      const effectiveAuthType =
-        data.authType ??
-        (previous?.connection.authType === 'openai_oauth' ? 'openai_oauth' : undefined)
-      const apiKey = data.apiKey ?? previous?.apiKey
+      // Editing an OAuth connection keeps its stored auth type and token set — but only
+      // while the provider stays put. A provider switch means a different credential
+      // shape: OAuth metadata is dropped and the submitted api key rules.
+      const providerChanged =
+        previous !== undefined && previous.connection.providerPresetId !== data.providerPresetId
+      const effectiveAuthType = providerChanged
+        ? data.authType
+        : (data.authType ??
+          (previous?.connection.authType === 'openai_oauth' ? 'openai_oauth' : undefined))
+      const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
       if (effectiveAuthType !== 'openai_oauth' && !apiKey)
         throw new Error('model_connection_credential_required')
       // A changed destination must receive explicit renewed credential consent.
       if (
         previous &&
         !data.apiKey &&
-        (previous.connection.baseUrl !== data.baseUrl ||
-          previous.connection.providerPresetId !== data.providerPresetId)
+        (previous.connection.baseUrl !== data.baseUrl || providerChanged)
       ) {
         throw new Error('model_connection_destination_requires_credential')
       }
@@ -469,15 +472,19 @@ export class ModelConnectionStore {
         baseUrl: data.baseUrl,
         enabled: data.enabled,
         ...(effectiveAuthType ? { authType: effectiveAuthType } : {}),
-        // OAuth account metadata is main-owned: renderer edits preserve it verbatim.
-        ...(previous?.connection.oauth ? { oauth: previous.connection.oauth } : {}),
+        // OAuth account metadata is main-owned and survives only same-provider edits.
+        ...(previous?.connection.oauth && !providerChanged
+          ? { oauth: previous.connection.oauth }
+          : {}),
         ...(data.customModels ? { customModels: data.customModels } : {}),
         ...(data.models ? { models: data.models } : {})
       })
       const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
       if (previous && effectiveAuthType === 'openai_oauth' && !oauth)
         throw new Error('model_connection_oauth_required')
-      if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth')
+      // Leaving OAuth for the same provider still requires a fresh sign-in; switching
+      // provider already dropped the grant above, so only the api-key path remains.
+      if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth' && !providerChanged)
         throw new Error('model_connection_oauth_requires_reauth')
       const credential =
         effectiveAuthType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }

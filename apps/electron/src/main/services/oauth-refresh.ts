@@ -95,7 +95,16 @@ export async function usableOAuthAccessToken(
       ...(tokens.accountId ? { accountId: tokens.accountId } : {})
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : ''
+    // pi-ai wraps provider rejections in ModelsError; the real reason rides in cause.
+    const chain: unknown[] = [error]
+    let message = ''
+    while (chain.length) {
+      const current = chain.pop()
+      if (current instanceof Error) {
+        message += ` ${current.message}`
+        if (current.cause) chain.push(current.cause)
+      }
+    }
     if (/invalid_grant|denied|unauthorized/i.test(message)) {
       // Mark denied only when the vault still holds the grant that failed; a
       // replacement login queued during the exchange must not be denied by it.

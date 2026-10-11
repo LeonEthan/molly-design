@@ -41,6 +41,13 @@ export type OAuthSignInCompleteResult =
 
 const FLOW_TIMEOUT_MS = 15 * 60_000
 
+// pi-ai's providers load OAuth flows through a bundler-opaque variable specifier, which
+// would leave them out of the packaged main bundle. Register the statically bundled
+// flows explicitly so the lazy loaders resolve without a runtime file lookup.
+import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth'
+
+registerBunOAuthFlows()
+
 const OAUTH_PROVIDERS: Record<
   OAuthProviderPresetId,
   { provider: () => Provider; displayName: string }

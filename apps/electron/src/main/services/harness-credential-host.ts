@@ -99,23 +99,38 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
           if (JSON.stringify(acquired.connection) !== JSON.stringify(snapshot.connection))
             return { ok: false as const, error: 'credential_unavailable' as const }
           if ('oauth' in acquired) {
-            const usable = await usableOAuthAccessToken(
+            // The exchange cadence is ~1s; a refresh round-trip must not block it, or the
+            // worker's lease expires while the host is still waiting on the provider.
+            // Answer this request on the next tick with the refreshed token.
+            void usableOAuthAccessToken(
               store,
               snapshot.connection.id,
               snapshot.connection.providerPresetId as OAuthProviderPresetId,
               acquired.oauth
             )
-            return usable.ok
-              ? {
-                  ok: true as const,
-                  apiKey: usable.accessToken,
-                  oauthConnectionId: snapshot.connection.id,
-                  ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
-                }
-              : { ok: false as const, error: 'credential_unavailable' as const }
+              .then((usable) =>
+                reports.push({
+                  requestId: request.requestId,
+                  runId: snapshot.runId,
+                  runtimeEpoch: snapshot.runtimeEpoch,
+                  connectionId: snapshot.connection.id,
+                  connectionRevision: snapshot.connection.revision,
+                  result: usable.ok
+                    ? {
+                        ok: true as const,
+                        apiKey: usable.accessToken,
+                        oauthConnectionId: snapshot.connection.id,
+                        ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
+                      }
+                    : { ok: false as const, error: 'credential_unavailable' as const }
+                })
+              )
+              .catch(() => undefined)
+            return undefined
           }
           return { ok: true as const, apiKey: acquired.apiKey }
         })().catch(() => ({ ok: false as const, error: 'credential_unavailable' as const }))
+        if (!credentialResult) continue
         reports.push({
           requestId: request.requestId,
           runId: snapshot.runId,

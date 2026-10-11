@@ -67,7 +67,6 @@ export async function managed(
           maxTokens: 4096,
           thinking: ['off'],
           toolCalls: true,
-          usageInStreaming: false,
           maxTokensField: 'max_tokens',
         },
       ],
@@ -167,9 +166,9 @@ export async function managed(
       protocolVersion: 1,
       ...(options.peer?.request ? { clientCapabilities: { elicitation: { form: {} } } } : {}),
     });
-  function grant(snapshot: HarnessRunSnapshot, key = 'SYNTHETIC_SECRET') {
+  function grant(snapshot: HarnessRunSnapshot, key = 'SYNTHETIC_SECRET', oauthAccountId?: string) {
     pipe.write(
-      `${JSON.stringify({ type: 'credential', runtimeEpoch: snapshot.runtimeEpoch, runId: snapshot.runId, apiKey: key })}\n`
+      `${JSON.stringify({ type: 'credential', runtimeEpoch: snapshot.runtimeEpoch, runId: snapshot.runId, apiKey: key, ...(oauthAccountId ? { oauthAccountId } : {}) })}\n`
     );
   }
   async function open() {

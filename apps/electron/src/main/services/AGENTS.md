@@ -4,28 +4,28 @@
 
 ## Model credentials
 
-Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, validates
-package and catalog digests, and returns public fields only. It neither imports the SDK
-nor opens the credential store; missing or incompatible resources mean unavailable.
+Capability IPC verifies adjacent CLI package/catalog digests and public fields without
+SDK/vault access; absent/incompatible resources are unavailable.
 
-`model-connection-store` is main-only. Renderer IPC exposes save/delete/public
-metadata, never acquisition. Persist encrypted bytes only; unavailable OS storage
-and Linux plaintext backends fail closed. Endpoint changes require renewed
-credential input. Broker acquisition must bind an active run and worker epoch to
-the exact connection revision; the store itself is not a permission authority.
-Compatible model definitions share that encrypted row and revision; they are public
-capability declarations, never credential/header/script or per-model destination fields.
-Image credentials use the same vault. Acknowledge legacy removal only after encrypted
-backup durability; compare the exact current row before removal. History/backup
-residue remains disclosed, never claimed erased. Acquisition requires an active run, except
-explicit main-only settings checks of the saved destination.
-MCP values share this vault, bound to workspace, server, destination and revision;
-a changed URL or stdio command/args needs renewed input. Settings IPC derives
-the local workspace, returning no values. Acquisition needs the selected Session and
-worker epoch, except explicit Settings tool listing of the catalog row's exact binding,
-values going only to the CLI helper's stdin. Saving enables nothing. Header framing
-and isolated-process env fields cannot be credentials. Reject writes past the
-vault read limit.
+`model-connection-store`: main-only metadata IPC, never grants.
+Encrypt; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
+require explicit credentials; empty keys are compatible-only, omission preserves.
+Grants bind run/epoch/revision; vault grants no authority. Declarations share row/revision;
+no keys, headers, scripts or model destinations.
+OAuth refresh/mutations queue per row; I/O outside vault lock, CAS the grant.
+Sign-in binds ID/revision, preserves IDs; provider collisions fail.
+OpenAI: reuse client/host/subject; validate JWT signature/issuer/audience/expiry/nonce.
+Auth URLs stay in main; encrypted hints survive refresh, not sign-out.
+Sign-out keeps disabled, token-free registration; Delete forgets it. Add cannot overwrite it.
+Cancel before revocation/commit; never restore revoked grants. Revoke unretained
+provider/client/refresh-token grants; report unconfirmed sign-out revocation.
+Image grants share the vault. Legacy removal needs durable encrypted backup/exact row;
+disclose history/backup residue. Grants need active runs except main-only saved checks.
+MCP binds workspace/server/destination/revision. URL/stdio command/args edits need new inputs.
+Settings derives local workspace; returns no values.
+Grants require selected Session/epoch, except explicit Settings tool listing of the
+exact catalog binding; values travel only to CLI helper stdin. Saving enables nothing.
+Header framing/isolated env fields cannot be credentials; enforce vault size limits.
 
 ## Design canvas contracts
 

@@ -2,21 +2,34 @@ import { getIpcContext, IpcMethod, IpcService } from 'electron-ipc-decorator'
 import {
   CheckImageConnectionSchema,
   CheckModelConnectionSchema,
+  DiscoverModelConnectionSchema,
   SaveModelConnectionSchema,
   DeleteModelConnectionSchema,
   SaveProtectedImageConnectionSchema,
   DeleteImageConnectionSchema,
   SaveMcpCredentialSettingsSchema,
   DeleteMcpCredentialSchema,
+  OpenAiAuthSessionSchema,
+  BeginOpenAiAuthSchema,
+  type BeginOpenAiAuth,
   type CheckImageConnection,
   type CheckModelConnection,
+  type DiscoverModelConnection,
   type SaveMcpCredential,
   type SaveProtectedImageConnection,
   type SaveModelConnection,
   type DeleteImageConnection
 } from '@molly/shared/embedded-harness'
+import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
+import { discoverModelConnection } from '../../services/model-discovery'
+import { OAuthSignInService } from '../../services/oauth-signin'
+import {
+  saveModelConnection,
+  deleteModelConnection,
+  signOutModelConnection
+} from '../../services/model-connection-settings'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -24,13 +37,21 @@ import { readLocalPlatformSnapshot } from '../../platform'
 import { resolveBundledCliEntry } from '../../services/cli-service'
 import {
   readBundledCapabilities,
-  readBundledModelCatalog
+  readBundledModelCatalog,
+  readBundledModelMetadataSnapshot
 } from '../../services/bundled-capabilities'
 
 async function localWorkspaceId(): Promise<string> {
   const platform = await readLocalPlatformSnapshot()
   if (!platform) throw new Error('local_workspace_unavailable')
   return platform.workspace.workspaceId
+}
+
+let openAiAuthService: OAuthSignInService | undefined
+function getOAuthSignInService(): OAuthSignInService {
+  return (openAiAuthService ??= new OAuthSignInService(getModelConnectionStore(), (url) =>
+    shell.openExternal(url)
+  ))
 }
 
 export class ModelConnectionsIpc extends IpcService {
@@ -143,22 +164,63 @@ export class ModelConnectionsIpc extends IpcService {
     return checkModelConnection(getModelConnectionStore(), parsed.data)
   }
 
+  /** Explicit Settings action: list the chat models a compatible connection serves. */
+  @IpcMethod()
+  async discover(input: DiscoverModelConnection) {
+    const parsed = DiscoverModelConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_model_connection_discovery')
+    return discoverModelConnection(getModelConnectionStore(), parsed.data)
+  }
+
+  @IpcMethod()
+  async beginOpenAiAuth(input: BeginOpenAiAuth = {}) {
+    const parsed = BeginOpenAiAuthSchema.safeParse(input)
+    if (!parsed.success) return { ok: false as const, reason: 'unavailable' as const }
+    const result = await getOAuthSignInService().begin(parsed.data)
+    return OpenAiAuthSessionSchema.safeParse(result).success
+      ? result
+      : { ok: false as const, reason: 'unavailable' as const }
+  }
+
+  /** Resolves when the flow completes (browser callback), times out or is cancelled. */
+  @IpcMethod()
+  async completeOpenAiAuth(input: { sessionId: string }) {
+    return getOAuthSignInService().complete(input.sessionId)
+  }
+
+  @IpcMethod()
+  async cancelOpenAiAuth(input: { sessionId: string }) {
+    getOAuthSignInService().cancel(input.sessionId)
+  }
+
+  @IpcMethod()
+  async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
+    const parsed = DeleteModelConnectionSchema.safeParse(input)
+    if (!parsed.success) throw new Error('invalid_model_connection')
+    return signOutModelConnection(getModelConnectionStore(), parsed.data)
+  }
+
   @IpcMethod()
   async getModelCatalog() {
     return readBundledModelCatalog(resolveBundledCliEntry())
   }
 
   @IpcMethod()
+  async getModelMetadataSnapshot() {
+    return readBundledModelMetadataSnapshot(resolveBundledCliEntry())
+  }
+
+  @IpcMethod()
   async save(input: SaveModelConnection) {
     const parsed = SaveModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    return getModelConnectionStore().save(parsed.data)
+    return saveModelConnection(getModelConnectionStore(), parsed.data)
   }
 
   @IpcMethod()
   async delete(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    return getModelConnectionStore().delete(parsed.data)
+    return deleteModelConnection(getModelConnectionStore(), parsed.data)
   }
 }

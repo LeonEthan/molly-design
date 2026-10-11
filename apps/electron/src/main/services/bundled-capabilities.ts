@@ -5,7 +5,8 @@ import { z } from 'zod'
 import {
   HarnessIdentitySchema,
   HarnessModelCatalogSchema,
-  MOLLY_PI_PACKAGES
+  MOLLY_PI_PACKAGES,
+  ModelMetadataSnapshotSchema
 } from '@molly/shared/embedded-harness'
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/)
@@ -81,5 +82,16 @@ export async function readBundledModelCatalog(cliEntry: string | null) {
     return HarnessModelCatalogSchema.parse(JSON.parse(bytes.toString('utf8')))
   } catch {
     throw new Error('bundled_model_catalog_unavailable')
+  }
+}
+
+/** The packaged, checksummed offline model metadata snapshot (models.dev projection). */
+export async function readBundledModelMetadataSnapshot(cliEntry: string | null) {
+  try {
+    const { readVerified } = await openVerifiedHarness(cliEntry)
+    const bytes = await readVerified('model-metadata-snapshot.json', 16 * 1024 * 1024)
+    return ModelMetadataSnapshotSchema.parse(JSON.parse(bytes.toString('utf8')))
+  } catch {
+    throw new Error('bundled_model_metadata_unavailable')
   }
 }

@@ -50,14 +50,20 @@ export function ModelChecklist({
   const [query, setQuery] = useState('');
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    return needle
+    const filtered = needle
       ? models.filter(
           (model) =>
             model.name.toLowerCase().includes(needle) ||
             model.modelId.toLowerCase().includes(needle)
         )
-      : models;
-  }, [models, query]);
+      : [...models];
+    // Models the provider listed for this key float first; the tag still marks the rest.
+    if (listed)
+      filtered.sort(
+        (a, b) => Number(listed.has(b.modelId)) - Number(listed.has(a.modelId))
+      );
+    return filtered;
+  }, [models, query, listed]);
   const chosen = new Set(selected);
   const toggle = (modelId: string, on: boolean) =>
     onChange(

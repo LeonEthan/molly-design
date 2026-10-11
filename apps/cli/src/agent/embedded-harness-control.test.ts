@@ -99,7 +99,7 @@ function fixture(
     nativeSessionFile: '/private/molly-test/native.jsonl',
   } as const;
   control.bind(binding);
-  function grant() {
+  function grant(oauth = false) {
     const [request] = broker.exchange({
       version: 1,
       connections: [config.connection],
@@ -120,7 +120,11 @@ function fixture(
           runtimeEpoch: config.runtimeEpoch,
           connectionId: config.connection.id,
           connectionRevision: config.connection.revision,
-          result: { ok: true, apiKey: 'SYNTHETIC_SECRET' },
+          result: {
+            ok: true,
+            apiKey: 'SYNTHETIC_SECRET',
+            ...(oauth ? { oauthConnectionId: config.connection.id } : {}),
+          },
         },
       ],
     });
@@ -139,6 +143,23 @@ function fixture(
 }
 
 describe('owned worker host control', () => {
+  it('replaces a used OAuth worker at the next turn boundary and retains API-key workers', async () => {
+    for (const oauth of [false, true]) {
+      const f = fixture();
+      await f.configured;
+      const result = f.control.prompt({
+        turnId: 'oauth-turn',
+        signal: new AbortController().signal,
+        prompt: async (snapshot) => f.complete(snapshot),
+      });
+      f.grant(oauth);
+      await expect(result).resolves.toMatchObject({ stopReason: 'end_turn' });
+      expect(f.control.needsReplacement(f.config.selection)).toBe(oauth);
+      expect(f.stops).toEqual([]);
+      await f.control.invalidate();
+      f.broker.dispose();
+    }
+  });
   it('allows memory only inside its owning run and rejects cancelled or settled access', async () => {
     const f = fixture(false, [], undefined, true);
     const controller = new AbortController();

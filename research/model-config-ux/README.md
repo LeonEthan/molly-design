@@ -5,6 +5,7 @@
   - [oauth-and-competitors.md](oauth-and-competitors.md) — OpenAI OAuth 机制与 11 家竞品
   - [model-auto-discovery.md](model-auto-discovery.md) — 15 类服务 `/models` 行为与元数据源
   - [repo-touchpoints.md](repo-touchpoints.md) — 本仓库现状链路与最小改动面
+  - [multi-provider-oauth.md](multi-provider-oauth.md) — 期 4 草案：复用 pi-ai 官方 OAuth 扩展到其他订阅 provider
 
 ## 问题与用途
 
@@ -153,6 +154,7 @@ Google 形态保持特例。
 | 1 | 解析器放宽 + usageInStreaming 移除 + 自动发现勾选流程（结果写 customModels） | ✅ 已交付（`113ca444`） |
 | 2 | picker 治理 + 空态/错误/onboarding 收尾 | ✅ 已交付（`3f54a361`） |
 | 3 | OpenAI OAuth（spec 回 draft 评审、ToS 人工精读） | ✅ 已交付（本提交）——ToS 人工精读仍是发布前人工闸门 |
+| 4 | 多 provider OAuth（Anthropic/Kimi/xAI 等复用 pi-ai 官方流程） | 📋 草案，见 [multi-provider-oauth.md](multi-provider-oauth.md)；各 provider 合规闸门独立 |
 
 期 1 独立价值最大（直接解决「手填 9 字段」），期 3 风险最高（政策敞口），隔开交付。
 

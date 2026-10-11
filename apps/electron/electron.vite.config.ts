@@ -100,7 +100,14 @@ export default defineConfig(({ mode }) => {
       define: viteEnvDefine,
       build: {
         externalizeDeps: {
-          exclude: ['@molly/cli-supervisor', '@molly/shared', '@molly/ignore', 'effect']
+          exclude: [
+            '@molly/cli-supervisor',
+            '@molly/shared',
+            '@molly/ignore',
+            'effect',
+            // pi-ai ships ESM only; the CJS main-process entry cannot require it.
+            '@earendil-works/pi-ai'
+          ]
         }
       }
     },

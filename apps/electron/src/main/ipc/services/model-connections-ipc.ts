@@ -22,7 +22,7 @@ import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
-import { OpenAiAuthService } from '../../services/openai-oauth'
+import { OAuthSignInService } from '../../services/oauth-signin'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -40,9 +40,9 @@ async function localWorkspaceId(): Promise<string> {
   return platform.workspace.workspaceId
 }
 
-let openAiAuthService: OpenAiAuthService | undefined
-function getOpenAiAuthService(): OpenAiAuthService {
-  return (openAiAuthService ??= new OpenAiAuthService(getModelConnectionStore(), (url) =>
+let openAiAuthService: OAuthSignInService | undefined
+function getOAuthSignInService(): OAuthSignInService {
+  return (openAiAuthService ??= new OAuthSignInService(getModelConnectionStore(), (url) =>
     shell.openExternal(url)
   ))
 }
@@ -166,12 +166,14 @@ export class ModelConnectionsIpc extends IpcService {
   }
 
   /**
-   * Explicit Settings action: open the OpenAI account sign-in flow. One flow at a time;
-   * beginning cancels any prior pending flow. The renderer only receives the URL to open.
+   * Explicit Settings action: open a subscription sign-in flow for a provider with an
+   * official OAuth path. One flow at a time; beginning cancels any prior pending flow.
+   * The renderer receives either the browser URL to open or the device code to display.
    */
   @IpcMethod()
-  async beginOpenAiAuth() {
-    const result = await getOpenAiAuthService().begin()
+  async beginOpenAiAuth(input?: { provider?: string }) {
+    const provider = input?.provider === 'kimi-coding' ? 'kimi-coding' : 'openai'
+    const result = await getOAuthSignInService().begin(provider)
     return OpenAiAuthSessionSchema.safeParse(result).success
       ? result
       : { ok: false as const, reason: 'unavailable' as const }
@@ -180,12 +182,12 @@ export class ModelConnectionsIpc extends IpcService {
   /** Resolves when the flow completes (browser callback), times out or is cancelled. */
   @IpcMethod()
   async completeOpenAiAuth(input: { sessionId: string }) {
-    return getOpenAiAuthService().complete(input.sessionId)
+    return getOAuthSignInService().complete(input.sessionId)
   }
 
   @IpcMethod()
   async cancelOpenAiAuth(input: { sessionId: string }) {
-    getOpenAiAuthService().cancel(input.sessionId)
+    getOAuthSignInService().cancel(input.sessionId)
   }
 
   /** Sign-out: deletes the local connection and its tokens. */

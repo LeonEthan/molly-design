@@ -834,11 +834,50 @@ describe('connection management', () => {
     );
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === en['settings.models.oauth.signIn'])!
+        .find((button) => button.textContent === en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT'))!
         .click()
     );
     expect(host.textContent).toContain(en['settings.models.oauth.failed.denied']);
     expect(host.querySelector('input[type=password]')).not.toBeNull();
+  });
+
+  it('offers Kimi Code sign-in for kimi-coding and shows the device code', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async (provider) => {
+              expect(provider).toBe('kimi-coding');
+              return {
+                sessionId: '00000000-0000-4000-8000-0000000000bb',
+                deviceCode: {
+                  userCode: 'ABCD-1234',
+                  verificationUri: 'https://auth.kimi.com/device?synthetic',
+                },
+                expiresAt: Date.now() + 60_000,
+              };
+            },
+            complete: async () => new Promise(() => undefined),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find(
+          (button) =>
+            button.textContent ===
+            en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code')
+        )!
+        .click()
+    );
+    expect(host.textContent).toContain('ABCD-1234');
+    expect(host.textContent).toContain(en['settings.models.oauth.deviceCodePrompt']);
   });
 
   it('starts a new connection from a provider shortcut when none exist', async () => {

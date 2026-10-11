@@ -676,6 +676,14 @@ export function getModelConnectionConfigurationIssue(input: {
 }
 
 export const ModelConnectionAuthTypeSchema = z.enum(['api_key', 'openai_oauth']);
+
+/**
+ * Presets with an official subscription sign-in (pi-ai OAuth). The authType value stays
+ * 'openai_oauth' for vault compatibility; this set is the source of truth for which
+ * presets may carry it.
+ */
+export const OAUTH_PROVIDER_PRESETS = ['openai', 'kimi-coding'] as const;
+export type OAuthProviderPresetId = (typeof OAUTH_PROVIDER_PRESETS)[number];
 export type ModelConnectionAuthType = z.infer<typeof ModelConnectionAuthTypeSchema>;
 
 /** Public OAuth account metadata; tokens stay in the main vault. */
@@ -722,8 +730,10 @@ export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
     'OpenAI-compatible connections offer exactly their declared models'
   )
   .refine(
-    (value) => value.authType !== 'openai_oauth' || value.providerPresetId === 'openai',
-    'OAuth sign-in exists only for the OpenAI preset'
+    (value) =>
+      value.authType !== 'openai_oauth' ||
+      (OAUTH_PROVIDER_PRESETS as readonly string[]).includes(value.providerPresetId),
+    'OAuth sign-in exists only for presets with an official subscription flow'
   )
   .refine(
     (value) => value.oauth === undefined || value.authType === 'openai_oauth',
@@ -763,19 +773,29 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   )
   .refine(
     (value) =>
-      value.authType !== 'openai_oauth' || (value.providerPresetId === 'openai' && !value.apiKey),
-    'OAuth sign-in exists only for the OpenAI preset and never carries an API key'
+      value.authType !== 'openai_oauth' ||
+      ((OAUTH_PROVIDER_PRESETS as readonly string[]).includes(value.providerPresetId) &&
+        !value.apiKey),
+    'OAuth sign-in exists only for presets with an official subscription flow and never carries an API key'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
 
 /**
- * The main-side OAuth session handle. `sessionId` is opaque to the renderer; the browser
- * URL is the only thing it may open. Completing the flow saves the connection.
+ * The main-side OAuth session handle. `sessionId` is opaque to the renderer. Browser
+ * flows carry `authorizeUrl` to open; device-code flows carry the code to display.
+ * Completing the flow saves the connection.
  */
 export const OpenAiAuthSessionSchema = z
   .object({
     sessionId: z.string().uuid(),
-    authorizeUrl: z.string().url().max(4096),
+    authorizeUrl: z.string().url().max(4096).optional(),
+    deviceCode: z
+      .object({
+        userCode: z.string().min(1).max(64),
+        verificationUri: z.string().url().max(4096),
+      })
+      .strict()
+      .optional(),
     expiresAt: z.number().int().positive(),
   })
   .strict();
@@ -1019,9 +1039,10 @@ export const HarnessCredentialReportSchema = z
         .object({
           ok: z.literal(true),
           apiKey: z.string().min(1).max(16_384),
-          /** OAuth connections carry the ChatGPT account the codex backend requires. */
+          /** OAuth account identity when the provider exposes one. */
           oauthAccountId: z.string().min(1).max(200).optional(),
-          /** Changes on every rotation; a worker rejects a grant minted before the current one. */
+          /** OAuth grants carry their connection id so a rotation of the same row is accepted. */
+          oauthConnectionId: z.string().min(1).max(200).optional(),
         })
         .strict(),
       z.object({ ok: z.literal(false), error: z.literal('credential_unavailable') }).strict(),

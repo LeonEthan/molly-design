@@ -1,6 +1,18 @@
-import { createModels, type Credential, type CredentialStore } from '@earendil-works/pi-ai'
+import {
+  createModels,
+  type Credential,
+  type CredentialStore,
+  type Provider
+} from '@earendil-works/pi-ai'
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
+import { kimiCodingProvider } from '@earendil-works/pi-ai/providers/kimi-coding'
+import type { OAuthProviderPresetId } from '@molly/shared/embedded-harness'
 import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store.ts'
+
+const OAUTH_PROVIDERS: Record<OAuthProviderPresetId, () => Provider> = {
+  openai: openaiProvider,
+  'kimi-coding': kimiCodingProvider
+}
 
 function toCredential(tokens: OAuthTokenSet): Credential {
   return {
@@ -40,14 +52,17 @@ function toTokenSet(credential: Credential, accountId?: string): OAuthTokenSet |
 export async function usableOAuthAccessToken(
   store: ModelConnectionStore,
   connectionId: string,
+  providerPresetId: OAuthProviderPresetId,
   tokens: OAuthTokenSet
 ): Promise<
   | { ok: true; accessToken: string; accountId?: string }
   | { ok: false; reason: 'denied' | 'unreachable' | 'invalid_response' | 'changed' }
 > {
+  const providerFactory = OAUTH_PROVIDERS[providerPresetId]
+  if (!providerFactory) return { ok: false, reason: 'changed' }
   const credentials: CredentialStore = {
     read: async () => toCredential(tokens),
-    list: async () => [{ providerId: 'openai', type: 'oauth' as const }],
+    list: async () => [{ providerId: providerPresetId, type: 'oauth' as const }],
     modify: async (_id, fn) => {
       const next = await store.mutateOAuth(connectionId, async (current) => {
         // The row may have been reconnected while the exchange was in flight; only
@@ -62,9 +77,9 @@ export async function usableOAuthAccessToken(
     delete: async () => {}
   }
   const models = createModels({ credentials })
-  models.setProvider(openaiProvider())
+  models.setProvider(providerFactory())
   try {
-    const auth = await models.getAuth('openai')
+    const auth = await models.getAuth(providerPresetId)
     const apiKey = typeof auth?.auth.apiKey === 'string' ? auth.auth.apiKey : undefined
     if (!apiKey) return { ok: false, reason: 'unreachable' }
     return {

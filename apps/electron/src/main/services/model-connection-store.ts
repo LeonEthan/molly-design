@@ -563,6 +563,14 @@ export class ModelConnectionStore {
     return this.serial(async () => {
       const store = await this.read()
       if (store.entries.length >= 256) throw new Error('model_connection_limit')
+      // One OAuth row per provider: a second sign-in replaces the previous grant.
+      store.entries = store.entries.filter(
+        (item) =>
+          !(
+            item.connection.authType === 'openai_oauth' &&
+            item.connection.providerPresetId === parsed.data.providerPresetId
+          )
+      )
       const connection = ModelConnectionSchema.parse({
         schemaVersion: 1,
         id: randomUUID(),
@@ -578,7 +586,10 @@ export class ModelConnectionStore {
       })
       store.entries = [
         ...store.entries,
-        { connection, oauth: { ...tokens, ...(account.accountId ? { accountId: account.accountId } : {}) } }
+        {
+          connection,
+          oauth: { ...tokens, ...(account.accountId ? { accountId: account.accountId } : {}) }
+        }
       ]
       await this.write(store)
       return connection

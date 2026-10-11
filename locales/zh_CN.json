@@ -92,7 +92,7 @@
   "settings.models.name": "连接名称",
   "settings.models.nameHint": "显示在会话的模型选择器中。",
   "settings.models.provider": "服务商",
-  "settings.models.oauth.signIn": "使用 ChatGPT 账号登录",
+  "settings.models.oauth.signIn": "使用 {{provider}} 账号登录",
   "settings.models.oauth.waiting": "请在 Molly 刚打开的浏览器窗口中完成登录…",
   "settings.models.oauth.signedIn": "已使用你的 ChatGPT 账号登录。",
   "settings.models.oauth.plan": "已登录 · {{plan}} 套餐",
@@ -3117,5 +3117,8 @@
   "settings.keyboardShortcuts.canvas.zoomIn": "放大画布",
   "settings.keyboardShortcuts.canvas.zoomOut": "缩小画布",
   "settings.keyboardShortcuts.canvas.resetZoom": "重置缩放",
-  "settings.keyboardShortcuts.canvas.pan": "按住并拖动以平移画布"
+  "settings.keyboardShortcuts.canvas.pan": "按住并拖动以平移画布",
+  "settings.models.oauth.deviceCodePrompt": "在登录页面输入此验证码：",
+  "settings.models.oauth.openVerification": "打开登录页面",
+  "settings.models.oauth.hintKimi": "通过 Kimi 官方设备登录使用你的 Kimi Code 订阅；请求发往 api.kimi.com/coding。"
 }

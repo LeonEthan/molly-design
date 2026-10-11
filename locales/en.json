@@ -91,7 +91,7 @@
   "settings.models.name": "Connection name",
   "settings.models.nameHint": "Shown in the conversation's model picker.",
   "settings.models.provider": "Provider",
-  "settings.models.oauth.signIn": "Sign in with ChatGPT",
+  "settings.models.oauth.signIn": "Sign in with {{provider}}",
   "settings.models.oauth.waiting": "Finish signing in in the browser window Molly just opened…",
   "settings.models.oauth.signedIn": "Signed in with your ChatGPT account.",
   "settings.models.oauth.plan": "Signed in · {{plan}} plan",
@@ -3119,5 +3119,8 @@
   "settings.keyboardShortcuts.canvas.zoomIn": "Zoom in",
   "settings.keyboardShortcuts.canvas.zoomOut": "Zoom out",
   "settings.keyboardShortcuts.canvas.resetZoom": "Reset zoom",
-  "settings.keyboardShortcuts.canvas.pan": "Hold and drag to pan"
+  "settings.keyboardShortcuts.canvas.pan": "Hold and drag to pan",
+  "settings.models.oauth.deviceCodePrompt": "Enter this code on the sign-in page:",
+  "settings.models.oauth.openVerification": "Open sign-in page",
+  "settings.models.oauth.hintKimi": "Uses your Kimi Code subscription through Kimi’s official device sign-in; requests go to api.kimi.com/coding."
 }

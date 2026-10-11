@@ -1,49 +1,72 @@
 /**
- * OpenAI "Sign in with ChatGPT" OAuth for model connections, driven by pi-ai's
- * official third-party flow: OpenAI dynamically registers a client per login
- * (agent name hint "Molly") and issues an access token that goes straight to
- * api.openai.com — no borrowed Codex CLI client id.
+ * Subscription OAuth sign-in for model connections, driven by pi-ai's official provider
+ * flows (OpenAI "Sign in with ChatGPT" dynamic client registration; Kimi Code RFC 8628
+ * device authorization; more providers reuse the same shape).
  *
- * pi-ai owns the callback server, code exchange and (under the vault-adapted
- * CredentialStore lock) refresh; this module owns the flow ↔ renderer IPC
- * shape and mapping the credential onto a vault connection row.
+ * pi-ai owns the callback server / device polling, code exchange and (under the
+ * vault-adapted CredentialStore lock in oauth-refresh.ts) refresh; this module owns the
+ * flow ↔ renderer IPC shape and mapping the credential onto a vault connection row.
+ * One flow at a time; beginning cancels any prior pending flow.
  */
 import { randomUUID } from 'node:crypto'
-import { createModels, type AuthInteraction, type Credential } from '@earendil-works/pi-ai'
+import {
+  createModels,
+  type AuthInteraction,
+  type Credential,
+  type Provider
+} from '@earendil-works/pi-ai'
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
+import { kimiCodingProvider } from '@earendil-works/pi-ai/providers/kimi-coding'
 import {
   PROVIDER_PRESET_DEFAULT_BASE_URLS,
-  type ModelConnection
+  type ModelConnection,
+  type OAuthProviderPresetId
 } from '@molly/shared/embedded-harness'
 import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store'
 
-export type OpenAiAuthBeginResult =
-  | { sessionId: string; authorizeUrl: string; expiresAt: number }
+export type OAuthSignInBeginResult =
+  | {
+      sessionId: string
+      /** Browser-callback flows: the URL the renderer opens. */
+      authorizeUrl?: string
+      /** Device-code flows: code the user enters at the verification page. */
+      deviceCode?: { userCode: string; verificationUri: string }
+      expiresAt: number
+    }
   | { ok: false; reason: 'unavailable' }
 
-export type OpenAiAuthCompleteResult =
+export type OAuthSignInCompleteResult =
   | { ok: true; connection: ModelConnection }
   | { ok: false; reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response' }
 
-const FLOW_TIMEOUT_MS = 120_000
+const FLOW_TIMEOUT_MS = 15 * 60_000
+
+const OAUTH_PROVIDERS: Record<
+  OAuthProviderPresetId,
+  { provider: () => Provider; displayName: string }
+> = {
+  openai: { provider: openaiProvider, displayName: 'OpenAI (ChatGPT)' },
+  'kimi-coding': { provider: kimiCodingProvider, displayName: 'Kimi Code' }
+}
 
 interface PendingFlow {
   sessionId: string
+  providerPresetId: OAuthProviderPresetId
   abort: AbortController
   expiryTimer: NodeJS.Timeout
-  result: Promise<OpenAiAuthCompleteResult>
+  result: Promise<OAuthSignInCompleteResult>
 }
 
 /**
  * Login-time store: a scratch pad so `Models.login` can persist the credential it just
  * minted without touching the vault. The service's `finishLogin` writes the connection
- * row; the runtime refresh path uses the vault-backed store in openai-oauth-refresh.ts.
+ * row; the runtime refresh path uses the vault-backed store in oauth-refresh.ts.
  */
-function scratchCredentialStore() {
+function scratchCredentialStore(providerId: string) {
   let held: Credential | undefined
   return {
     read: async () => held,
-    list: async () => (held ? [{ providerId: 'openai', type: 'oauth' as const }] : []),
+    list: async () => (held ? [{ providerId, type: 'oauth' as const }] : []),
     modify: async (
       _providerId: string,
       fn: (current: Credential | undefined) => Promise<Credential | undefined>
@@ -89,7 +112,7 @@ function accountIdFromAccessToken(accessToken: string): string | undefined {
   }
 }
 
-export class OpenAiAuthService {
+export class OAuthSignInService {
   private pending: PendingFlow | undefined
 
   constructor(
@@ -97,25 +120,37 @@ export class OpenAiAuthService {
     private readonly openExternal: (url: string) => void | Promise<void>
   ) {}
 
-  /** One flow at a time; beginning cancels any prior pending flow. */
-  async begin(): Promise<OpenAiAuthBeginResult> {
+  async begin(providerPresetId: OAuthProviderPresetId): Promise<OAuthSignInBeginResult> {
     this.cancelPending()
+    const descriptor = OAUTH_PROVIDERS[providerPresetId]
+    if (!descriptor) return { ok: false, reason: 'unavailable' }
     const sessionId = randomUUID()
     const abort = new AbortController()
     let notifyUrl: ((url: string) => void) | undefined
+    let notifyDeviceCode:
+      | ((code: { userCode: string; verificationUri: string }) => void)
+      | undefined
     const urlReady = new Promise<string>((resolve, reject) => {
       notifyUrl = resolve
       abort.signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
     })
+    const deviceCodeReady = new Promise<{ userCode: string; verificationUri: string }>(
+      (resolve, reject) => {
+        notifyDeviceCode = resolve
+        abort.signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
+      }
+    )
 
     const interaction: AuthInteraction = {
       signal: abort.signal,
       notify: (event) => {
         if (event.type === 'auth_url') notifyUrl?.(event.url)
+        if (event.type === 'device_code')
+          notifyDeviceCode?.({ userCode: event.userCode, verificationUri: event.verificationUri })
       },
-      // The settings form has no paste-a-redirect-URL affordance; pi-ai races this
-      // prompt against the loopback callback, so it must stay pending until the
-      // flow's abort signal settles it — including a cancellation that already landed.
+      // The settings form has no paste-a-code affordance; pi-ai races this prompt against
+      // the callback/device poll, so it must stay pending until the flow's abort signal
+      // settles it — including a cancellation that already landed.
       prompt: (authPrompt) =>
         new Promise<string>((_resolve, reject) => {
           if (authPrompt.signal?.aborted) {
@@ -130,11 +165,11 @@ export class OpenAiAuthService {
         })
     }
 
-    const models = createModels({ credentials: scratchCredentialStore() })
-    models.setProvider(openaiProvider())
+    const models = createModels({ credentials: scratchCredentialStore(providerPresetId) })
+    models.setProvider(descriptor.provider())
 
-    let settle: (result: OpenAiAuthCompleteResult) => void = () => {}
-    const result = new Promise<OpenAiAuthCompleteResult>((resolve) => {
+    let settle: (result: OAuthSignInCompleteResult) => void = () => {}
+    const result = new Promise<OAuthSignInCompleteResult>((resolve) => {
       settle = resolve
     })
     const expiryTimer = setTimeout(() => {
@@ -144,33 +179,38 @@ export class OpenAiAuthService {
       settle({ ok: false, reason: 'timed_out' })
     }, FLOW_TIMEOUT_MS)
     expiryTimer.unref?.()
-    this.pending = { sessionId, abort, expiryTimer, result }
+    this.pending = { sessionId, providerPresetId, abort, expiryTimer, result }
 
     void (async () => {
       try {
-        const credential = await models.login('openai', 'oauth', interaction, {
+        const credential = await models.login(providerPresetId, 'oauth', interaction, {
           getDeviceId: () => this.store.deviceId()
         })
-        settle(await this.finishLogin(sessionId, credential))
+        settle(await this.finishLogin(sessionId, providerPresetId, credential))
       } catch (error) {
         settle({ ok: false, reason: abort.signal.aborted ? 'cancelled' : mapLoginError(error) })
       }
     })()
 
-    const authorizeUrl = await urlReady.catch(() => undefined)
-    if (!authorizeUrl) {
+    // Device-code flows announce the code instead of a URL to open.
+    const first = await Promise.race([
+      urlReady.then((authorizeUrl) => ({ authorizeUrl }) as const),
+      deviceCodeReady.then((deviceCode) => ({ deviceCode }) as const)
+    ]).catch(() => undefined)
+    if (!first) {
       // Clean up only this flow; a replacement may already own the slot.
       if (this.pending?.sessionId === sessionId) this.cancelPending()
       return { ok: false, reason: 'unavailable' }
     }
-    await this.openExternal(authorizeUrl)
-    return { sessionId, authorizeUrl, expiresAt: Date.now() + FLOW_TIMEOUT_MS }
+    if ('authorizeUrl' in first) await this.openExternal(first.authorizeUrl)
+    return { sessionId, ...first, expiresAt: Date.now() + FLOW_TIMEOUT_MS }
   }
 
   private async finishLogin(
     sessionId: string,
+    providerPresetId: OAuthProviderPresetId,
     credential: Credential
-  ): Promise<OpenAiAuthCompleteResult> {
+  ): Promise<OAuthSignInCompleteResult> {
     const tokens = tokenSetFromCredential(credential)
     if (!tokens.accessToken || !tokens.refreshToken)
       return { ok: false, reason: 'invalid_response' }
@@ -180,9 +220,9 @@ export class OpenAiAuthService {
     try {
       const connection = await this.store.saveOAuthConnection(
         {
-          displayName: 'OpenAI (ChatGPT)',
-          providerPresetId: 'openai',
-          baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS.openai,
+          displayName: OAUTH_PROVIDERS[providerPresetId].displayName,
+          providerPresetId,
+          baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS[providerPresetId],
           enabled: true,
           authType: 'openai_oauth'
         },
@@ -202,8 +242,8 @@ export class OpenAiAuthService {
     }
   }
 
-  /** Resolves when the flow completes (browser callback), times out or is cancelled. */
-  complete(sessionId: string): Promise<OpenAiAuthCompleteResult> {
+  /** Resolves when the flow completes, times out or is cancelled. */
+  complete(sessionId: string): Promise<OAuthSignInCompleteResult> {
     if (this.pending?.sessionId !== sessionId)
       return Promise.resolve({ ok: false, reason: 'cancelled' })
     return this.pending.result
@@ -224,10 +264,7 @@ export class OpenAiAuthService {
 
 function mapLoginError(error: unknown): 'denied' | 'unreachable' | 'invalid_response' {
   const message = error instanceof Error ? error.message : ''
-  if (/access_denied|denied/i.test(message)) return 'denied'
+  if (/access_denied|denied|unauthorized|invalid_grant/i.test(message)) return 'denied'
   if (/fetch|network|ECONN|ENOTFOUND|timeout/i.test(message)) return 'unreachable'
   return 'invalid_response'
 }
-
-/** Dynamic-client sign-out has no server-side revoke; the caller deletes the vault row. */
-export async function revokeOAuthTokens(): Promise<void> {}

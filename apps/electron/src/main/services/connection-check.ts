@@ -144,8 +144,8 @@ export async function checkModelConnection(
     const oauth = await store.oauthForCheck(input.stored.id, input.stored.revision)
     if (oauth) {
       if (oauth.connection.baseUrl !== input.baseUrl) return { ok: false, reason: 'needs_key' }
-      // The official flow's access token talks to api.openai.com directly.
-      return checkOpenAiOAuthConnection(oauth.oauth, transport)
+      // OAuth access tokens authenticate against their provider's own endpoint.
+      return checkOAuthConnection(oauth.connection.providerPresetId, oauth.oauth, transport)
     }
     const saved = await store.credentialForCheck(input.stored.id, input.stored.revision)
     if (!saved) return { ok: false, reason: 'changed' }
@@ -164,15 +164,21 @@ export async function checkModelConnection(
   )
 }
 
-const OPENAI_MODELS_URL = 'https://api.openai.com/v1/models'
+const OAUTH_CHECK_URLS: Partial<Record<string, string>> = {
+  openai: 'https://api.openai.com/v1/models',
+  // Kimi's coding endpoint answers a models list for subscription tokens.
+  'kimi-coding': 'https://api.kimi.com/coding/models'
+}
 
-async function checkOpenAiOAuthConnection(
+async function checkOAuthConnection(
+  providerPresetId: string,
   tokens: { accessToken: string; accountId?: string },
   transport: typeof fetch
 ): Promise<ConnectionCheckResult> {
+  const url = OAUTH_CHECK_URLS[providerPresetId] ?? OAUTH_CHECK_URLS.openai!
   let response: Response
   try {
-    response = await transport(OPENAI_MODELS_URL, {
+    response = await transport(url, {
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${tokens.accessToken}`
@@ -196,7 +202,10 @@ async function checkOpenAiOAuthConnection(
     const text = await readBounded(response)
     if (text === null) return { ok: false, reason: 'invalid_response' }
     const data = JSON.parse(text)
-    const entries: unknown[] | null = listEntries('openai', data)
+    const entries: unknown[] | null = listEntries(
+      providerPresetId === 'kimi-coding' ? 'anthropic' : 'openai',
+      data
+    )
     if (!entries) return { ok: true }
     const models = entries
       .map((entry: unknown) => {

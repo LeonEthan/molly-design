@@ -6,7 +6,8 @@ import {
 import type { CliService } from './cli-service'
 import { readLocalPlatformSnapshot } from '../platform'
 import { getModelConnectionStore } from './model-connections'
-import { usableOAuthAccessToken } from './openai-oauth-refresh'
+import { usableOAuthAccessToken } from './oauth-refresh'
+import type { OAuthProviderPresetId } from '@molly/shared/embedded-harness'
 
 /** Reuses the owner-only daemon control socket; no listener or renderer secret-read API. */
 export function startHarnessCredentialHost(cliService: CliService): () => void {
@@ -101,12 +102,14 @@ export function startHarnessCredentialHost(cliService: CliService): () => void {
             const usable = await usableOAuthAccessToken(
               store,
               snapshot.connection.id,
+              snapshot.connection.providerPresetId as OAuthProviderPresetId,
               acquired.oauth
             )
             return usable.ok
               ? {
                   ok: true as const,
                   apiKey: usable.accessToken,
+                  oauthConnectionId: snapshot.connection.id,
                   ...(usable.accountId ? { oauthAccountId: usable.accountId } : {})
                 }
               : { ok: false as const, error: 'credential_unavailable' as const }

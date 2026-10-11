@@ -153,10 +153,15 @@ export type ModelConnectionDiscover = (
   input: DiscoverModelConnection
 ) => Promise<DiscoverModelConnectionResult>;
 
-/** Renderer-side handle for the main-owned sign-in flow. */
+/** Renderer-side handle for the main-owned subscription sign-in flow. */
 export type OpenAiAuthFlow = {
-  begin: () => Promise<
-    | { sessionId: string; authorizeUrl: string; expiresAt: number }
+  begin: (provider?: 'openai' | 'kimi-coding') => Promise<
+    | {
+        sessionId: string;
+        authorizeUrl?: string;
+        deviceCode?: { userCode: string; verificationUri: string };
+        expiresAt: number;
+      }
     | { ok: false; reason: 'unavailable' }
   >;
   complete: (
@@ -261,10 +266,15 @@ export function ModelConnectionForm({
   const [discovery, setDiscovery] = useState<DiscoveryState>({ phase: 'idle' });
   const [authFlow, setAuthFlow] = useState<
     | { phase: 'idle' }
-    | { phase: 'waiting'; sessionId: string }
+    | { phase: 'waiting'; sessionId: string; deviceCode?: { userCode: string; verificationUri: string } }
     | { phase: 'failed'; reason: 'denied' | 'timed_out' | 'unreachable' | 'invalid_response' | 'unavailable' }
   >({ phase: 'idle' });
   const isOAuthConnection = stored?.authType === 'openai_oauth';
+  // Presets with an official subscription sign-in flow.
+  const oauthProvider =
+    provider === 'openai' || provider === 'kimi-coding'
+      ? (provider as 'openai' | 'kimi-coding')
+      : undefined;
 
   const cancelSignIn = useCallback(() => {
     if (authFlow.phase === 'waiting') void onOpenAiAuth?.cancel(authFlow.sessionId);
@@ -292,8 +302,8 @@ export function ModelConnectionForm({
   }, []);
 
   const beginSignIn = useCallback(async () => {
-    if (!onOpenAiAuth) return;
-    const started = await onOpenAiAuth.begin();
+    if (!onOpenAiAuth || !oauthProvider) return;
+    const started = await onOpenAiAuth.begin(oauthProvider);
     if (!('sessionId' in started)) {
       if (mountedRef.current) setAuthFlow({ phase: 'failed', reason: started.reason });
       return;
@@ -304,7 +314,11 @@ export function ModelConnectionForm({
       void onOpenAiAuth.cancel(started.sessionId);
       return;
     }
-    setAuthFlow({ phase: 'waiting', sessionId: started.sessionId });
+    setAuthFlow({
+      phase: 'waiting',
+      sessionId: started.sessionId,
+      ...(started.deviceCode ? { deviceCode: started.deviceCode } : {})
+    });
     const result = await onOpenAiAuth.complete(started.sessionId);
     if (!mountedRef.current) return;
     if (result.ok) {
@@ -317,7 +331,7 @@ export function ModelConnectionForm({
       return;
     }
     setAuthFlow({ phase: 'failed', reason: result.reason });
-  }, [onOpenAiAuth, cancelForm]);
+  }, [onOpenAiAuth, oauthProvider, cancelForm]);
   const configurationIssue = getModelConnectionConfigurationIssue({
     providerPresetId: provider,
     baseUrl: endpoint,
@@ -468,7 +482,7 @@ export function ModelConnectionForm({
       </div>
       {provider !== '' ? (
         <>
-          {provider === 'openai' && onOpenAiAuth ? (
+          {oauthProvider && onOpenAiAuth ? (
             <div className="space-y-2">
               {isOAuthConnection && stored?.oauth ? (
                 <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
@@ -525,9 +539,30 @@ export function ModelConnectionForm({
                 </div>
               ) : authFlow.phase === 'waiting' ? (
                 <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2.5">
-                  <p className="text-xs text-muted-foreground">
-                    {t('settings.models.oauth.waiting')}
-                  </p>
+                  {authFlow.deviceCode ? (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.models.oauth.deviceCodePrompt')}
+                      </p>
+                      <p className="select-all font-mono text-lg tracking-widest">
+                        {authFlow.deviceCode.userCode}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          window.open(authFlow.deviceCode!.verificationUri, '_blank')
+                        }
+                      >
+                        {t('settings.models.oauth.openVerification')}
+                      </Button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {t('settings.models.oauth.waiting')}
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <Button
                       type="button"
@@ -549,7 +584,9 @@ export function ModelConnectionForm({
                     disabled={busy}
                     onClick={() => void beginSignIn()}
                   >
-                    {t('settings.models.oauth.signIn')}
+                    {t('settings.models.oauth.signIn', {
+                      provider: oauthProvider === 'kimi-coding' ? 'Kimi Code' : 'ChatGPT',
+                    })}
                   </Button>
                   {authFlow.phase === 'failed' ? (
                     <p role="alert" className="text-xs text-destructive">
@@ -557,7 +594,9 @@ export function ModelConnectionForm({
                     </p>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
-                    {t('settings.models.oauth.hint')}
+                    {oauthProvider === 'kimi-coding'
+                      ? t('settings.models.oauth.hintKimi')
+                      : t('settings.models.oauth.hint')}
                   </p>
                 </div>
               )}
@@ -566,7 +605,7 @@ export function ModelConnectionForm({
               </p>
             </div>
           ) : null}
-          {!(provider === 'openai' && onOpenAiAuth && isOAuthConnection) ? (
+          {!(oauthProvider && onOpenAiAuth && isOAuthConnection) ? (
           <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
@@ -842,7 +881,7 @@ export function ModelConnectionSetting({
   const onOpenAiAuth = useMemo<OpenAiAuthFlow | undefined>(() => {
     if (!ipc) return undefined;
     return {
-      begin: () => ipc.modelConnections.beginOpenAiAuth(),
+      begin: (provider) => ipc.modelConnections.beginOpenAiAuth({ provider }),
       complete: async (sessionId) => {
         const result = await ipc.modelConnections.completeOpenAiAuth({ sessionId });
         if (result.ok) {

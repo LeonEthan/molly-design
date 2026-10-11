@@ -22,7 +22,7 @@ import { shell } from 'electron'
 import { getModelConnectionStore } from '../../services/model-connections'
 import { checkImageConnection, checkModelConnection } from '../../services/connection-check'
 import { discoverModelConnection } from '../../services/model-discovery'
-import { OAuthSignInService } from '../../services/oauth-signin'
+import { OAuthSignInService, revokeOAuthGrant } from '../../services/oauth-signin'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
@@ -190,13 +190,15 @@ export class ModelConnectionsIpc extends IpcService {
     getOAuthSignInService().cancel(input.sessionId)
   }
 
-  /** Sign-out: deletes the local connection and its tokens. */
+  /** Sign-out: best-effort provider revocation, then delete the local row and tokens. */
   @IpcMethod()
   async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
     const store = getModelConnectionStore()
-    await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
+    const saved = await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
+    if (saved)
+      await revokeOAuthGrant(saved.connection.providerPresetId, saved.oauth).catch(() => undefined)
     return store.delete(parsed.data)
   }
 

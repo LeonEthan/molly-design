@@ -506,10 +506,13 @@ export function ModelConnectionForm({
                         size="sm"
                         disabled={busy}
                         onClick={() => {
+                          // Start a fresh sign-in for this provider; the completed flow
+                          // replaces the denied row (one OAuth row per provider) and the
+                          // new connection keeps the vault's replacement semantics.
                           if (!onOpenAiAuth || !stored) return;
                           void onOpenAiAuth
                             .signOut({ id: stored.id, expectedRevision: stored.revision })
-                            .then(() => onCancel());
+                            .then(() => beginSignIn());
                         }}
                       >
                         {t('settings.models.oauth.signInAgain')}

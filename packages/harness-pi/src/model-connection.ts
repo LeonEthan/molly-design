@@ -53,7 +53,7 @@ export function configureModelConnection(
           supportsReasoningEffort: model.thinking.some((level) => level !== 'off'),
           supportsStore: false,
           supportsDeveloperRole: false,
-          supportsUsageInStreaming: true,
+          supportsUsageInStreaming: model.usageInStreaming ?? true,
           supportsFinishReason: true,
           maxTokensField: model.maxTokensField,
         },

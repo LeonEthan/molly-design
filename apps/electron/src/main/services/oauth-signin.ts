@@ -132,6 +132,12 @@ export class OAuthSignInService {
     let notifyDeviceCode:
       | ((code: { userCode: string; verificationUri: string }) => void)
       | undefined
+    let failReady: ((error: Error) => void) | undefined
+    const readyFailed = new Promise<never>((_resolve, reject) => {
+      failReady = reject
+    })
+    // Suppress the unhandled rejection when the flow announces normally.
+    readyFailed.catch(() => undefined)
     const urlReady = new Promise<string>((resolve, reject) => {
       notifyUrl = resolve
       abort.signal.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
@@ -190,14 +196,20 @@ export class OAuthSignInService {
         })
         settle(await this.finishLogin(sessionId, providerPresetId, credential))
       } catch (error) {
-        settle({ ok: false, reason: abort.signal.aborted ? 'cancelled' : mapLoginError(error) })
+        const reason = abort.signal.aborted ? 'cancelled' : mapLoginError(error)
+        // A failure before any notification must also release begin(): the renderer
+        // awaits it before it can show a cancel control.
+        failReady?.(error instanceof Error ? error : new Error(String(error)))
+        settle({ ok: false, reason })
       }
     })()
 
-    // Device-code flows announce the code instead of a URL to open.
+    // Device-code flows announce the code instead of a URL to open; a login failure
+    // before either notification settles begin() with that failure.
     const first = await Promise.race([
       urlReady.then((authorizeUrl) => ({ authorizeUrl }) as const),
-      deviceCodeReady.then((deviceCode) => ({ deviceCode }) as const)
+      deviceCodeReady.then((deviceCode) => ({ deviceCode }) as const),
+      readyFailed
     ]).catch(() => undefined)
     if (!first) {
       // Clean up only this flow; a replacement may already own the slot.
@@ -276,4 +288,36 @@ function mapLoginError(error: unknown): 'denied' | 'unreachable' | 'invalid_resp
   if (/access_denied|denied|unauthorized|invalid_grant/i.test(message)) return 'denied'
   if (/fetch|network|ECONN|ENOTFOUND|timeout/i.test(message)) return 'unreachable'
   return 'invalid_response'
+}
+
+/** Best-effort RFC 7009 revocation per provider before local deletion; never throws. */
+const OAUTH_REVOKE_URLS: Partial<Record<string, string>> = {
+  openai: 'https://auth.openai.com/api/accounts/oauth/revoke',
+  'kimi-coding': 'https://auth.kimi.com/api/oauth/revoke'
+}
+
+export async function revokeOAuthGrant(
+  providerPresetId: string,
+  tokens: { refreshToken: string; clientId?: string },
+  fetchFn: typeof fetch = fetch
+): Promise<void> {
+  const url = OAUTH_REVOKE_URLS[providerPresetId]
+  if (!url) return
+  try {
+    await fetchFn(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        accept: 'application/json'
+      },
+      body: new URLSearchParams({
+        token: tokens.refreshToken,
+        token_type_hint: 'refresh_token',
+        ...(tokens.clientId ? { client_id: tokens.clientId } : {})
+      }).toString(),
+      signal: AbortSignal.timeout(10_000)
+    })
+  } catch {
+    // Best-effort: local deletion proceeds regardless.
+  }
 }

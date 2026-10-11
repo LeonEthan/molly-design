@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import signEmbeddedHarness, { prepareEmbeddedHarnessSigning } from './sign-embedded-harness.mjs'
+import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 import { verifyEmbeddedHarness } from '../../cli/scripts/verify-embedded-harness.mjs'
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
@@ -79,6 +80,44 @@ function fixture(t, native = false) {
   return { app, binary, directory, manifest }
 }
 
+function browserFixture(app, executable) {
+  const native = new URL('../native/agent-browser/', import.meta.url)
+  const source = JSON.parse(fs.readFileSync(new URL('source.json', native), 'utf8'))
+  const directory = path.join(
+    app,
+    'Contents',
+    'Resources',
+    'app.asar.unpacked',
+    'resources',
+    'agent-browser'
+  )
+  fs.mkdirSync(directory, { recursive: true })
+  fs.copyFileSync(executable, path.join(directory, 'agent-browser'))
+  const licenses = [
+    'LICENSE',
+    'LICENSE-axe-core.txt',
+    'LICENSE-axe-core-THIRD-PARTY.txt',
+    'NOTICE.txt'
+  ]
+  for (const license of licenses) {
+    fs.copyFileSync(new URL(license, native), path.join(directory, license))
+  }
+  const files = ['agent-browser', ...licenses].map((file) => ({
+    path: file,
+    sha256: sha256(fs.readFileSync(path.join(directory, file)))
+  }))
+  const manifest = {
+    ...source,
+    platform: process.platform,
+    arch: process.arch,
+    patchSha256: sha256(fs.readFileSync(new URL('embedded.patch', native))),
+    files,
+    buildId: sha256(JSON.stringify(files))
+  }
+  fs.writeFileSync(path.join(directory, 'manifest.json'), `${JSON.stringify(manifest)}\n`)
+  return { directory, manifest }
+}
+
 void test('requires a valid full baseline seal before signing', (t) => {
   const { directory, manifest } = fixture(t)
   fs.writeFileSync(
@@ -145,6 +184,7 @@ void test(
     const executable = path.join(app, 'Contents', 'MacOS', 'Fixture')
     fs.mkdirSync(path.dirname(executable), { recursive: true })
     command('/usr/bin/clang', ['-x', 'c', '-', '-o', executable], 'int main(void) { return 0; }')
+    const browser = browserFixture(app, executable)
     fs.writeFileSync(
       path.join(app, 'Contents', 'Info.plist'),
       `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.molly-design.seal-test</string><key>CFBundleExecutable</key><string>Fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`
@@ -171,6 +211,11 @@ void test(
     const signedManifest = verifyEmbeddedHarness(directory)
     assert.notEqual(signedManifest.buildId, manifest.buildId)
     assert.equal(signedManifest.buildId, sha256(JSON.stringify(signedManifest.files)))
+    const signedBrowserManifest = verifyAgentBrowser(browser.directory, {
+      platform: 'darwin',
+      arch: process.arch
+    })
+    assert.notEqual(signedBrowserManifest.buildId, browser.manifest.buildId)
     command('/usr/bin/codesign', ['--verify', '--deep', '--strict', app])
     assert.match(
       command('/usr/bin/codesign', ['--display', '--entitlements', '-', app]),

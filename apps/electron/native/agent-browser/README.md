@@ -21,6 +21,13 @@ and build identity. Collection verifies it, and the existing macOS signing hook
 reseals only verified signature changes before the root app's resource seal.
 Changing source, patch, compiler or target invalidates the staged artifact.
 
+Run `node --test apps/electron/scripts/sign-embedded-harness.test.mjs` from the
+repository root to check signing. On macOS, the fixture stages a small compiled
+executable with the browser's source identity, manifest and notices alongside the
+Pi harness, then verifies both refreshed manifests and the app's strict signature.
+This uses synthetic native binaries and requires no Rust build or signing certificate;
+release-artifact signing acceptance remains separate.
+
 Molly starts an owned daemon with `AGENT_BROWSER_EMBEDDED=1`, an isolated explicit
 config, session/socket directory and random `AGENT_BROWSER_EMBEDDED_TOKEN`.
 The CLI authenticates its command envelope to that daemon. The embedded mode:

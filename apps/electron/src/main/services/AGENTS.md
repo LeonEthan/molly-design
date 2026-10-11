@@ -95,8 +95,8 @@ composing or saving; explicit reference actions still flush siblings together. G
 never travels through IPC. Presentation contains only theme, labels and action availability.
 
 Image context actions check image kinds in that saved canonical document, then
-insert only a target mention and editable prompt into the ordinary composer.
-They never mutate the artwork or dispatch a separate image job.
+insert a target mention and editable prompt into the ordinary composer; only Ask
+Molly may send it as an ordinary turn. None mutates artwork or runs image jobs.
 
 Application quit flushes editors before sealing design-worker requests; cancelled
 flush leaves the service usable. Even with no open editor, drain accepted requests,

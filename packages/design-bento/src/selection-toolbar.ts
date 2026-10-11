@@ -1,9 +1,10 @@
-import type {
-  DesignCanvasCommand,
-  DesignSelectedElement,
-  DesignSelectionSummary,
-  DesignToolbarPresentation,
-  DesignToolbarRequest,
+import {
+  DESIGN_ASK_PROMPT_MAX,
+  type DesignCanvasCommand,
+  type DesignSelectedElement,
+  type DesignSelectionSummary,
+  type DesignToolbarPresentation,
+  type DesignToolbarRequest,
 } from '@molly/shared/design-selection-commands';
 import {
   alignCenterIcon,
@@ -114,6 +115,7 @@ export function createSelectionToolbar(options: {
   let popupTrigger: HTMLButtonElement | undefined;
   let signature = '';
   let renderPending = false;
+  let askDraft = { epoch: -1, text: '' };
   const controller = new AbortController();
   const signal = controller.signal;
   const style = document.createElement('style');
@@ -122,7 +124,7 @@ export function createSelectionToolbar(options: {
 [data-molly-toolbar][data-dark=true]{--surface:#262626;--ink:#ededed;--muted:#373737;--line:#ffffff14;color-scheme:dark}
 .molly-selection-toolbar{display:flex;align-items:center;gap:3px;padding:6px;max-width:calc(100vw - 16px);overflow-x:auto;scrollbar-width:thin}
 [data-molly-toolbar][hidden]{display:none!important}
-[data-molly-toolbar] button,[data-molly-toolbar] input{font:inherit;color:inherit;box-sizing:border-box}
+[data-molly-toolbar] button,[data-molly-toolbar] input,[data-molly-toolbar] textarea{font:inherit;color:inherit;box-sizing:border-box}
 [data-molly-toolbar] button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:8px;background:transparent;min-width:32px;height:32px;padding:0 8px;white-space:nowrap;cursor:pointer;flex:none}
 [data-molly-toolbar] button:hover,[data-molly-toolbar] button[aria-pressed=true],[data-molly-toolbar] button[aria-expanded=true]{background:var(--muted)}
 [data-molly-toolbar] button:disabled,[data-molly-toolbar] input:disabled{opacity:.4;cursor:default}
@@ -148,6 +150,12 @@ export function createSelectionToolbar(options: {
 .molly-selection-popup input[type=color]{padding:2px;width:45px;vertical-align:middle}
 .molly-selection-tooltip{z-index:2147483102;border-radius:10px;padding:7px 10px;pointer-events:none;max-width:calc(100vw - 16px)}
 .molly-selection-size{position:fixed;z-index:2147483099;box-sizing:border-box;pointer-events:none;user-select:none;white-space:nowrap;border-radius:5px;padding:2px 6px;background:#566b86;color:#fff;font:500 11px/16px Inter,system-ui,sans-serif;font-variant-numeric:tabular-nums}
+.molly-selection-popup.ask{width:300px}
+.molly-selection-popup textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--muted);color:inherit;font:13px/1.45 Inter,system-ui,sans-serif;padding:8px 10px;outline:none}
+.molly-selection-popup textarea:focus-visible{outline:2px solid #6195ed;outline-offset:-2px}
+.molly-selection-popup .ask-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+.molly-selection-popup .ask-actions .primary{background:var(--ink);color:var(--surface)}
+.molly-selection-popup .ask-actions .primary:hover{background:var(--ink);opacity:.88}
 .molly-selection-error{color:#ef6464;max-width:220px;white-space:normal;padding:4px 8px;flex:none;font-size:11px}
 `;
   document.head.append(style);
@@ -307,7 +315,7 @@ export function createSelectionToolbar(options: {
     schedule();
   };
   const request = async (input: DesignToolbarRequest) => {
-    if (readonly || busy) return;
+    if (readonly || busy) return false;
     const mine = generation;
     busy = true;
     closePopup();
@@ -323,11 +331,12 @@ export function createSelectionToolbar(options: {
     } catch (cause) {
       message = String(cause);
     }
-    if (mine !== generation) return;
+    if (mine !== generation) return false;
     busy = false;
     bar.setAttribute('aria-busy', 'false');
     render(true);
     if (message) error(message);
+    return !message;
   };
   const command = (value: DesignCanvasCommand) =>
     void request({ type: 'command', selectionEpoch: epoch, command: value });
@@ -369,7 +378,7 @@ export function createSelectionToolbar(options: {
     document.body.append(popup);
     shield(popup);
     positionPopup(popup, trigger);
-    popup.querySelector<HTMLElement>('button,input')?.focus();
+    popup.querySelector<HTMLElement>('button,input,textarea')?.focus();
   }
   function number(
     parent: HTMLElement,
@@ -588,9 +597,7 @@ export function createSelectionToolbar(options: {
       node.className = 'sep';
       bar.append(node);
     };
-    action('reference', 'referenceSelection', 'Ask Molly about the selection').append(
-      label('askMolly', 'Ask Molly')
-    );
+    ask();
     separator();
     const kind = summary.kinds.length === 1 ? summary.kinds[0] : undefined;
     const current = summary.elements?.find((element) => element.kind === kind);
@@ -690,6 +697,70 @@ export function createSelectionToolbar(options: {
       }
     }
     schedule();
+  }
+  function ask() {
+    const name = label('referenceSelection', 'Ask Molly about the selection');
+    const trigger = button(bar, icons.reference, name, () =>
+      openPopup(trigger, name, (node) => {
+        node.classList.add('ask');
+        const field = document.createElement('textarea');
+        field.rows = 3;
+        field.maxLength = DESIGN_ASK_PROMPT_MAX;
+        field.placeholder = label('askMollyPlaceholder', 'Describe the change…');
+        field.setAttribute('aria-label', name);
+        if (askDraft.epoch === epoch) field.value = askDraft.text;
+        const row = document.createElement('div');
+        row.className = 'ask-actions';
+        const submit = (send: boolean) => {
+          const prompt = field.value.trim();
+          if (send && !prompt) return;
+          askDraft = { epoch, text: field.value };
+          void request(
+            prompt
+              ? { type: 'ask', selectionEpoch: epoch, prompt, send }
+              : { type: 'action', selectionEpoch: epoch, action: 'reference' }
+          ).then((ok) => {
+            if (ok && askDraft.epoch === epoch) askDraft = { epoch: -1, text: '' };
+          });
+        };
+        const addToChat = button(
+          row,
+          label('askMollyAddToChat', 'Add to chat'),
+          label('askMollyAddToChat', 'Add to chat'),
+          () => submit(false)
+        );
+        addToChat.className = 'secondary';
+        const send = button(
+          row,
+          label('askMollySend', 'Send'),
+          label('askMollySend', 'Send'),
+          () => submit(true)
+        );
+        send.className = 'primary';
+        const validate = () => (send.disabled = busy || !field.value.trim());
+        field.oninput = () => {
+          askDraft = { epoch, text: field.value };
+          validate();
+        };
+        field.onkeydown = (event) => {
+          if (
+            event.key === 'Enter' &&
+            !event.shiftKey &&
+            !event.isComposing &&
+            event.keyCode !== 229
+          ) {
+            event.preventDefault();
+            submit(true);
+          }
+        };
+        validate();
+        node.append(field, row);
+      })
+    );
+    trigger.disabled = busy || !presentation?.actionsEnabled;
+    trigger.setAttribute('aria-haspopup', 'dialog');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.append(label('askMolly', 'Ask Molly'));
   }
   function wording(current: DesignSelectedElement & { textCopy?: string }) {
     const name = label('editWording', 'Edit wording');

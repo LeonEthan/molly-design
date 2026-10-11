@@ -169,6 +169,7 @@ export const DesignCanvasCommandResultSchema = z
   .strict();
 export type DesignCanvasCommandResult = z.infer<typeof DesignCanvasCommandResultSchema>;
 
+export const DESIGN_ASK_PROMPT_MAX = 4000;
 /** Native toolbar requests carry a selection epoch, never an editable target. */
 export const DesignSelectionActionSchema = z.enum([
   'reference',
@@ -197,6 +198,14 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
       // edit-wording carries the user's new wording for the lettering layer;
       // it is prompt text, never a direct document mutation.
       wording: z.string().min(1).max(2000).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('ask'),
+      selectionEpoch: z.number().int().nonnegative(),
+      prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+      send: z.boolean(),
     })
     .strict(),
 ]);

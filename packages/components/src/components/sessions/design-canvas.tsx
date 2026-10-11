@@ -133,6 +133,7 @@ export function DesignCanvas({
   workspaceSlug,
   name,
   onReferenceSelection,
+  onSendSelection,
   onSyncSelection,
   toolbarHost = null,
 }: {
@@ -149,6 +150,7 @@ export function DesignCanvas({
   workspaceSlug: string;
   name: string;
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string) => void;
+  onSendSelection?: (reference: DesignElementReference, prompt: string) => Promise<void>;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
   /** Renders the canvas toolbar into the side panel's top row instead of a row of its own. */
@@ -526,18 +528,33 @@ export function DesignCanvas({
         );
     }
   };
-  const actionCallback = useRef(selectionAction);
-  actionCallback.current = selectionAction;
+  const askSelection = (reference: DesignElementReference, prompt: string, send: boolean) => {
+    if (!send || !onSendSelection) return referenceSelection(prompt, undefined, reference);
+    const generation = attachmentGeneration.current;
+    run(async () => {
+      if (generation !== attachmentGeneration.current)
+        throw Error(
+          t('design.selectionChanged', 'Artwork view changed; select the current elements again')
+        );
+      await onSendSelection(reference, prompt);
+    });
+  };
+  const actionCallback = useRef({ selectionAction, askSelection });
+  actionCallback.current = { selectionAction, askSelection };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
         if (
-          event.hostId === hostId &&
-          event.reference.artworkId === artworkId &&
-          active &&
-          !readonlyView
+          event.hostId !== hostId ||
+          event.reference.artworkId !== artworkId ||
+          !active ||
+          readonlyView
         )
-          actionCallback.current(event.action, event.reference, event.wording);
+          return;
+        if (event.action === 'ask')
+          actionCallback.current.askSelection(event.reference, event.prompt, event.send);
+        else
+          actionCallback.current.selectionAction(event.action, event.reference, event.wording);
       }),
     [hostId, artworkId, active, readonlyView]
   );

@@ -392,6 +392,15 @@ export type SessionChatInputAreaHandle = {
     prompt?: string
   ) => boolean;
   syncDesignSelection: (reference: DesignElementReference | null, label: string) => boolean;
+  /**
+   * Send `prompt` about the selection as its own turn, leaving the draft untouched.
+   * When the turn cannot be sent, the prompt lands in the draft instead.
+   */
+  sendDesignSelection: (
+    reference: DesignElementReference,
+    label: string,
+    prompt: string
+  ) => Promise<boolean>;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -1366,6 +1375,48 @@ export const SessionChatInputArea = memo(
       [isArchived, session.id, setUserInput, t, userInput]
     );
 
+    const designSendInFlightRef = useRef(false);
+    const sendDesignSelection = useCallback(
+      async (reference: DesignElementReference, label: string, prompt: string) => {
+        if (isArchived) return false;
+        const blocked =
+          designSendInFlightRef.current ||
+          sessionConfigReady === false ||
+          isMachineRemoved ||
+          isExternalHistoryRefreshing ||
+          (!!freeTurnLimitNotice && freeTurnLimitNotice.current >= freeTurnLimitNotice.limit);
+        if (blocked) {
+          referenceDesignSelection(reference, label, prompt.trim());
+          return false;
+        }
+        let accepted = false;
+        designSendInFlightRef.current = true;
+        try {
+          const withSelection = appendDesignSelectionMention(prompt.trim(), reference, label);
+          const expanded = expandPromptMentionsRef.current({
+            text: withSelection.text,
+            mentions: [withSelection.mention],
+          });
+          const text = expanded.text.trim();
+          const spans = reanchorMessageTextSpansForTrim(expanded.text, text, expanded.spans);
+          accepted = await onSendMessage([{ type: 'text', text, ...(spans ? { spans } : {}) }]);
+          return accepted;
+        } finally {
+          designSendInFlightRef.current = false;
+          if (!accepted) referenceDesignSelection(reference, label, prompt.trim());
+        }
+      },
+      [
+        freeTurnLimitNotice,
+        isArchived,
+        isExternalHistoryRefreshing,
+        isMachineRemoved,
+        onSendMessage,
+        referenceDesignSelection,
+        sessionConfigReady,
+      ]
+    );
+
     const insertSessionMention = useCallback(
       (sessionId: string) => {
         if (isArchived) {
@@ -1391,6 +1442,7 @@ export const SessionChatInputArea = memo(
         insertSessionMention,
         referenceDesignSelection,
         syncDesignSelection,
+        sendDesignSelection,
       }),
       [
         setInputText,
@@ -1402,6 +1454,7 @@ export const SessionChatInputArea = memo(
         insertSessionMention,
         referenceDesignSelection,
         syncDesignSelection,
+        sendDesignSelection,
       ]
     );
 

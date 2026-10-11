@@ -6,6 +6,8 @@ import {
   DesignCanvasCommandSchema,
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
+  DESIGN_ASK_PROMPT_MAX,
+  DESIGN_SELECTION_BODY_LIMIT,
   DesignToolbarPresentationSchema,
 } from '../src/design-selection-commands';
 
@@ -236,6 +238,32 @@ describe('native toolbar boundary', () => {
       { type: 'action', action: 'edit-wording', selectionEpoch: 3, wording: 'x'.repeat(2001) },
     ])
       expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+  it('carries an inline ask prompt with an explicit send choice', () => {
+    expect(
+      DesignToolbarRequestSchema.parse({
+        type: 'ask',
+        selectionEpoch: 4,
+        prompt: '  把标题改暖一点  ',
+        send: true,
+      })
+    ).toEqual({ type: 'ask', selectionEpoch: 4, prompt: '把标题改暖一点', send: true });
+    for (const input of [
+      { type: 'ask', selectionEpoch: 4, prompt: '   ', send: true },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer', send: 'yes' },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer' },
+      { type: 'ask', selectionEpoch: 4, prompt: 'x'.repeat(DESIGN_ASK_PROMPT_MAX + 1), send: true },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer', send: true, action: 'reference' },
+      { type: 'action', action: 'reference', selectionEpoch: 4, prompt: 'Warmer' },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+    const largest = JSON.stringify({
+      type: 'ask',
+      selectionEpoch: Number.MAX_SAFE_INTEGER,
+      prompt: '暖'.repeat(DESIGN_ASK_PROMPT_MAX),
+      send: false,
+    });
+    expect(largest.length).toBeLessThanOrEqual(DESIGN_SELECTION_BODY_LIMIT);
   });
   it('bounds presentation data and carries no artwork mutation authority', () => {
     expect(

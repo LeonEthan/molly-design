@@ -347,6 +347,32 @@ describe('owned ACP host integration', () => {
     expect(f.observed).toEqual([]);
   });
 
+  it('runs an OpenAI OAuth connection on the public OpenAI preset', async () => {
+    const f = await managed({
+      config: {
+        connection: {
+          schemaVersion: 1,
+          id: 'connection',
+          revision: 1,
+          providerPresetId: 'openai',
+          displayName: 'OpenAI OAuth',
+          baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS.openai,
+          credentialRef: 'protected-reference',
+          enabled: true,
+          authType: 'openai_oauth',
+          oauth: { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' },
+        },
+        selection: { connectionId: 'connection', modelId: 'gpt-5.2', thinking: 'low' },
+      },
+    });
+    const s = await f.open();
+    // The official flow talks to api.openai.com directly on the public preset;
+    // no codex backend provider is registered.
+    expect(f.runtime().getRegisteredProviderConfig('openai-codex')).toBeUndefined();
+    f.grant(s.snapshot, 'SYNTHETIC_OAUTH_TOKEN', 'acct-1');
+    await s.prompt().catch(() => undefined);
+  });
+
   it.each(['model', 'endpoint'] as const)(
     'refuses a native extension changing the selected %s before inference',
     async (kind) => {

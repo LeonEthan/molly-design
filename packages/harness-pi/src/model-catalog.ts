@@ -19,10 +19,8 @@ export async function createBundledModelCatalog() {
     allowModelNetwork: false,
     refreshOnCreate: false,
   });
-  return HarnessModelCatalogSchema.parse({
-    version: 1,
-    engineVersion: PI_ENGINE_VERSION,
-    models: Object.entries(MOLLY_PROVIDER_IDS).flatMap(([providerPresetId, providerId]) =>
+  const catalogModels = Object.entries(MOLLY_PROVIDER_IDS).flatMap(
+    ([providerPresetId, providerId]) =>
       runtime.getModels(providerId).map((model) => ({
         providerPresetId,
         modelId: model.id,
@@ -31,6 +29,10 @@ export async function createBundledModelCatalog() {
         contextWindow: model.contextWindow,
         thinking: getSupportedThinkingLevels(model),
       }))
-    ),
+  );
+  return HarnessModelCatalogSchema.parse({
+    version: 1,
+    engineVersion: PI_ENGINE_VERSION,
+    models: catalogModels,
   });
 }

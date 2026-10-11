@@ -35,6 +35,10 @@ export const WorkerCredentialGrantSchema = z
     runtimeEpoch: z.string().uuid(),
     runId: z.string().min(1).max(200),
     apiKey: z.string().min(1).max(16_384),
+    /** Present when the grant is an OAuth access token with a known account identity. */
+    oauthAccountId: z.string().min(1).max(200).optional(),
+    /** Present on every OAuth grant; lets a rotation of the same row replace the key. */
+    oauthConnectionId: z.string().min(1).max(200).optional(),
   })
   .strict();
 

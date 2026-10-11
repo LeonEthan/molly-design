@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto'
 import { ModelConnectionStore } from './model-connection-store.ts'
+import { saveModelConnection, deleteModelConnection } from './model-connection-settings.ts'
+import { startHarnessCredentialHostCore } from './harness-credential-host-core.ts'
 import {
   checkImageConnection,
   checkModelConnection,
@@ -121,6 +123,285 @@ const legacyImage = {
   updatedAt: 1
 }
 
+void test('oauth connection round-trips its token set without exposing it in the snapshot', async (t) => {
+  const { store } = await fixture(t)
+  const { connection: saved } = await store.saveOAuthConnection(
+    {
+      providerPresetId: 'openai',
+      displayName: 'OpenAI · designer@example.com',
+      baseUrl: 'https://api.openai.com/v1',
+      enabled: true,
+      authType: 'openai_oauth'
+    },
+    {
+      accessToken: 'SYNTHETIC_ACCESS_TOKEN',
+      refreshToken: 'SYNTHETIC_REFRESH_TOKEN',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      accountId: 'acct-1',
+      clientId: 'dynamic-client-1'
+    },
+    { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' }
+  )
+  const snapshot = await store.snapshot()
+  assert.equal(snapshot.connections[0].authType, 'openai_oauth')
+  assert.equal(snapshot.connections[0].oauth?.email, 'designer@example.com')
+  assert.equal(JSON.stringify(snapshot).includes('SYNTHETIC_ACCESS_TOKEN'), false)
+  assert.equal(JSON.stringify(snapshot).includes('SYNTHETIC_REFRESH_TOKEN'), false)
+  const acquired = await store.acquireForRun(saved.id, saved.revision)
+  assert.equal('oauth' in acquired, true)
+  if ('oauth' in acquired) assert.equal(acquired.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
+  // The pi-ai credential store adapter mutates the token set under the vault lock.
+  const next = await store.mutateOAuth(saved.id, async (current) => {
+    assert.equal(current?.accessToken, 'SYNTHETIC_ACCESS_TOKEN')
+    return {
+      accessToken: 'SYNTHETIC_ACCESS_TOKEN_2',
+      refreshToken: 'SYNTHETIC_REFRESH_TOKEN_2',
+      accessTokenExpiresAt: Date.now() + 3_600_000,
+      accountId: 'acct-1',
+      clientId: 'dynamic-client-1'
+    }
+  })
+  assert.equal(next?.accessToken, 'SYNTHETIC_ACCESS_TOKEN_2')
+  const second = await store.acquireForRun(saved.id, saved.revision)
+  if (!('oauth' in second)) throw new Error('expected oauth')
+  assert.equal(second.oauth.accessToken, 'SYNTHETIC_ACCESS_TOKEN_2')
+})
+
+function deferred() {
+  let resolve
+  const promise = new Promise((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+const oauthInput = {
+  providerPresetId: 'openai',
+  displayName: 'Synthetic account',
+  baseUrl: 'https://api.openai.com/v1',
+  enabled: true,
+  authType: 'openai_oauth',
+  models: ['gpt-4.1']
+}
+const oauthTokens = {
+  accessToken: 'SYNTHETIC_ACCESS',
+  refreshToken: 'SYNTHETIC_REFRESH',
+  accessTokenExpiresAt: 2_000_000_000_000,
+  clientId: 'synthetic-client'
+}
+
+void test('OAuth refresh keeps public reads and unrelated saves available, preserving a concurrent name edit', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const started = deferred()
+  const finish = deferred()
+  t.after(() => finish.resolve())
+  const refresh = store.mutateOAuth(
+    connection.id,
+    async (current) => {
+      started.resolve()
+      await finish.promise
+      return {
+        ...current,
+        accessToken: 'SYNTHETIC_ROTATED',
+        refreshToken: 'SYNTHETIC_ROTATED_REFRESH'
+      }
+    },
+    connection.revision
+  )
+  await started.promise
+  assert.equal((await store.snapshot()).connections[0].id, connection.id)
+  const unrelated = await store.save(input)
+  const renamed = await store.save({
+    ...oauthInput,
+    id: connection.id,
+    expectedRevision: connection.revision,
+    displayName: 'Renamed'
+  })
+  finish.resolve()
+  assert.equal((await refresh).accessToken, 'SYNTHETIC_ROTATED')
+  assert.equal(
+    (await store.acquireForRun(connection.id, renamed.revision)).connection.displayName,
+    'Renamed'
+  )
+  assert.equal((await store.acquireForRun(unrelated.id, unrelated.revision)).apiKey, input.apiKey)
+})
+
+void test('reauthentication preserves the selection identity and fences stale refresh and rollback', async (t) => {
+  const { store } = await fixture(t)
+  const first = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const started = deferred()
+  const finish = deferred()
+  t.after(() => finish.resolve())
+  const refresh = store.mutateOAuth(
+    first.connection.id,
+    async (current) => {
+      started.resolve()
+      await finish.promise
+      return { ...current, accessToken: 'STALE_ROTATED' }
+    },
+    first.connection.revision
+  )
+  await started.promise
+  const second = await store.saveOAuthConnection(
+    { ...oauthInput, models: undefined },
+    { ...oauthTokens, refreshToken: 'NEW_LOGIN_REFRESH', clientId: 'new-client' },
+    {}
+  )
+  assert.equal(second.connection.id, first.connection.id)
+  assert.equal(second.connection.credentialRef, first.connection.credentialRef)
+  assert.equal(second.connection.revision, first.connection.revision + 1)
+  assert.deepEqual(second.connection.models, first.connection.models)
+  finish.resolve()
+  assert.equal(await refresh, undefined)
+  await store.rollbackOAuthConnection(first.connection.id, first.connection.revision)
+  assert.equal((await store.oauthFor(first.connection.id)).refreshToken, 'NEW_LOGIN_REFRESH')
+  await store.rollbackOAuthConnection(
+    second.connection.id,
+    second.connection.revision,
+    second.replaced
+  )
+  assert.deepEqual(await store.acquireForRun(first.connection.id, first.connection.revision), {
+    connection: first.connection,
+    oauth: oauthTokens
+  })
+})
+
+void test('provider conversion and deletion revoke OAuth before dropping the saved grant, including offline revocation', async (t) => {
+  const { store } = await fixture(t)
+  const revoked = []
+  const revoke = async (provider, tokens) => {
+    assert.deepEqual(await store.oauthFor(active.id), tokens)
+    revoked.push({ provider, refreshToken: tokens.refreshToken, clientId: tokens.clientId })
+    throw new Error('synthetic offline revocation')
+  }
+  let active = (await store.saveOAuthConnection(oauthInput, oauthTokens, {})).connection
+  const converted = await saveModelConnection(
+    store,
+    {
+      id: active.id,
+      expectedRevision: active.revision,
+      displayName: 'Anthropic',
+      providerPresetId: 'anthropic',
+      baseUrl: 'https://api.anthropic.com',
+      enabled: true,
+      apiKey: 'SYNTHETIC_REPLACEMENT_KEY'
+    },
+    revoke
+  )
+  assert.equal(
+    (await store.acquireForRun(converted.id, converted.revision)).apiKey,
+    'SYNTHETIC_REPLACEMENT_KEY'
+  )
+  assert.equal(await store.oauthFor(converted.id), undefined)
+  active = (await store.saveOAuthConnection(oauthInput, oauthTokens, {})).connection
+  await assert.rejects(
+    deleteModelConnection(store, { id: active.id, expectedRevision: active.revision + 1 }, revoke),
+    /revision_conflict/
+  )
+  await deleteModelConnection(store, { id: active.id, expectedRevision: active.revision }, revoke)
+  assert.deepEqual(revoked, [
+    { provider: 'openai', refreshToken: oauthTokens.refreshToken, clientId: oauthTokens.clientId },
+    { provider: 'openai', refreshToken: oauthTokens.refreshToken, clientId: oauthTokens.clientId }
+  ])
+  assert.equal(
+    (await store.snapshot()).connections.some((row) => row.id === active.id),
+    false
+  )
+})
+
+void test('host heartbeats continue during refresh and retain a report arriving during an unacknowledged exchange', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  const request = {
+    requestId: '00000000-0000-4000-8000-000000000001',
+    snapshot: {
+      schemaVersion: 1,
+      runId: 'synthetic-run',
+      runtimeEpoch: 'synthetic-epoch',
+      sessionId: 'synthetic-session',
+      turnId: 'synthetic-turn',
+      connection,
+      selection: { connectionId: connection.id, modelId: 'gpt-4.1', thinking: 'off' },
+      harness: {
+        id: 'molly',
+        engine: 'pi',
+        engineVersion: '1.0.4',
+        protocolVersion: 1,
+        buildId: 'synthetic-build'
+      },
+      toolsetHash: '0'.repeat(64),
+      pluginSetHash: '1'.repeat(64),
+      permissionProfileId: 'ask'
+    }
+  }
+  const waiting = deferred()
+  const finish = deferred()
+  const exchange = deferred()
+  const exchangeStarted = deferred()
+  let scheduled = deferred()
+  t.mock.method(globalThis, 'setTimeout', (callback) => {
+    scheduled.resolve(callback)
+    return {}
+  })
+  t.mock.method(globalThis, 'clearTimeout', () => {})
+  const received = []
+  let phase = 'request'
+  const stop = startHarnessCredentialHostCore(
+    {
+      getLocalMachineId: async () => 'synthetic-machine',
+      sendLocalMachineRpc: async ({ params }) => {
+        received.push(structuredClone(params))
+        if (phase === 'heartbeat') {
+          exchangeStarted.resolve()
+          return exchange.promise
+        }
+        return {
+          ok: true,
+          result: {
+            type: 'harness/host',
+            version: 1,
+            requests: phase === 'request' ? [request] : []
+          }
+        }
+      }
+    },
+    {
+      readPlatform: async () => ({ workspace: { workspaceId: 'workspace' } }),
+      getStore: () => store,
+      refresh: async () => {
+        waiting.resolve()
+        return finish.promise
+      }
+    }
+  )
+  t.after(stop)
+  await waiting.promise
+  const next = await scheduled.promise
+  phase = 'heartbeat'
+  scheduled = deferred()
+  next()
+  await exchangeStarted.promise
+  finish.resolve({ ok: true, accessToken: 'SYNTHETIC_ROTATED' })
+  exchange.resolve({ ok: false })
+  const afterFailedExchange = await scheduled.promise
+  phase = 'acknowledge'
+  scheduled = deferred()
+  afterFailedExchange()
+  await scheduled.promise
+  assert.equal(received[1].reports.length, 0)
+  assert.deepEqual(received[2].reports, [
+    {
+      requestId: request.requestId,
+      runId: request.snapshot.runId,
+      runtimeEpoch: request.snapshot.runtimeEpoch,
+      connectionId: connection.id,
+      connectionRevision: connection.revision,
+      result: { ok: true, apiKey: 'SYNTHETIC_ROTATED', oauthConnectionId: connection.id }
+    }
+  ])
+})
+
 void test('compatible model metadata persists with revision CAS and no public credential', async (t) => {
   const { directory, store } = await fixture(t)
   const customModels = [
@@ -132,7 +413,6 @@ void test('compatible model metadata persists with revision CAS and no public cr
       maxTokens: 4096,
       thinking: ['off', 'high'],
       toolCalls: true,
-      usageInStreaming: true,
       maxTokensField: 'max_tokens'
     }
   ]
@@ -499,7 +779,6 @@ void test('a chosen model list round-trips with the connection revision', async 
           maxTokens: 1024,
           thinking: ['off'],
           toolCalls: true,
-          usageInStreaming: true,
           maxTokensField: 'max_tokens'
         }
       ],
@@ -514,6 +793,17 @@ async function fixture(t, customCipher = cipher, platform = 'darwin') {
   t.after(() => rm(directory, { recursive: true, force: true }))
   return { directory, store: new ModelConnectionStore(directory, customCipher, platform) }
 }
+
+void test('reuses its encrypted installation identity after reopening and unrelated saves', async (t) => {
+  const { directory, store } = await fixture(t)
+  const id = await store.deviceId()
+  const reopened = new ModelConnectionStore(directory, cipher)
+  assert.equal(await reopened.deviceId(), id)
+  await reopened.save(input)
+  assert.equal(await new ModelConnectionStore(directory, cipher).deviceId(), id)
+  assert.equal(JSON.stringify(await reopened.snapshot()).includes(id), false)
+  assert.equal((await readFile(join(directory, 'model-connections.enc'))).includes(id), false)
+})
 
 void test('persists only ciphertext, returns only public metadata, and reopens across process lifetimes', async (t) => {
   const { directory, store } = await fixture(t)

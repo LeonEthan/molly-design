@@ -33,17 +33,39 @@ export interface CredentialCipher {
   getSelectedStorageBackend(): string
 }
 
+/** OAuth token triple for an OpenAI sign-in; refresh rotates, so the whole set is replaced. */
+const OAuthTokenSetSchema = z
+  .object({
+    accessToken: z.string().min(1).max(16_384),
+    refreshToken: z.string().min(1).max(16_384),
+    /** Epoch milliseconds when the access token expires (JWT exp). */
+    accessTokenExpiresAt: z.number().int().positive(),
+    /** Refresh was rejected; the row stays but runs refuse until the user signs in again. */
+    denied: z.boolean().optional(),
+    accountId: z.string().max(200).optional(),
+    /** Dynamic client id OpenAI issued for this login's refresh grant. */
+    clientId: z.string().max(200).optional()
+  })
+  .strict()
+export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
+
 const StoreSchema = z
   .object({
     schemaVersion: z.literal(1),
+    installationId: z.uuid().optional(),
     entries: z
       .array(
         z
           .object({
             connection: ModelConnectionSchema,
-            apiKey: z.string().min(1).max(16_384)
+            apiKey: z.string().min(1).max(16_384).optional(),
+            oauth: OAuthTokenSetSchema.optional()
           })
           .strict()
+          .refine(
+            (entry) => (entry.apiKey !== undefined) !== (entry.oauth !== undefined),
+            'exactly one credential kind'
+          )
       )
       .max(256),
     image: z
@@ -55,6 +77,7 @@ const StoreSchema = z
   })
   .strict()
 type Store = z.infer<typeof StoreSchema>
+export type StoreEntry = Store['entries'][number]
 
 /** Main-only: never register this class with renderer IPC or include entries in diagnostics. */
 export class ModelConnectionStore {
@@ -62,6 +85,7 @@ export class ModelConnectionStore {
   private readonly cipher: CredentialCipher
   private readonly platform: NodeJS.Platform
   private pending: Promise<unknown> = Promise.resolve()
+  private readonly oauthPending = new Map<string, Promise<unknown>>()
 
   constructor(
     directory: string,
@@ -106,9 +130,30 @@ export class ModelConnectionStore {
     try {
       const stat = await handle.stat()
       if (!stat.isFile() || stat.size > 8 * 1024 * 1024) throw new Error('invalid_vault')
-      const parsed = StoreSchema.parse(
-        JSON.parse(this.cipher.decryptString(await handle.readFile()))
-      )
+      const raw: unknown = JSON.parse(this.cipher.decryptString(await handle.readFile()))
+      // Pre-migration vaults stored a grantSeq counter on OAuth rows; strip it so the
+      // strict schema does not reject the whole vault.
+      if (raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown[] }).entries))
+        for (const entry of (
+          raw as {
+            entries: {
+              connection?: { providerPresetId?: unknown }
+              oauth?: { grantSeq?: unknown; clientId?: unknown; denied?: boolean }
+            }[]
+          }
+        ).entries) {
+          if (!entry?.oauth) continue
+          if (entry.oauth.grantSeq !== undefined) delete entry.oauth.grantSeq
+          // Codex-era OpenAI rows predate dynamic client registration; their refresh
+          // grants cannot be exchanged by the official flow, so they need a fresh
+          // sign-in. Other providers (Kimi) never had a client id and are unaffected.
+          if (
+            entry.connection?.providerPresetId === 'openai' &&
+            typeof entry.oauth.clientId !== 'string'
+          )
+            entry.oauth.denied = true
+        }
+      const parsed = StoreSchema.parse(raw)
       if (
         new Set(parsed.entries.map((entry) => entry.connection.id)).size !== parsed.entries.length
       ) {
@@ -164,9 +209,16 @@ export class ModelConnectionStore {
     }
   }
 
+  /** Public snapshot: renderer sees the denial flag, never the tokens. */
   snapshot(): Promise<{ connections: ModelConnection[] }> {
     return this.serial(async () => ({
-      connections: (await this.read()).entries.map((entry) => entry.connection)
+      connections: (await this.read()).entries.map((entry) => {
+        if (!entry.oauth) return entry.connection
+        return {
+          ...entry.connection,
+          oauth: { ...entry.connection.oauth, ...(entry.oauth.denied ? { denied: true } : {}) }
+        }
+      })
     }))
   }
 
@@ -389,14 +441,25 @@ export class ModelConnectionStore {
       if (!data.id && data.expectedRevision !== undefined)
         throw new Error('model_connection_revision_conflict')
       if (!previous && store.entries.length >= 256) throw new Error('model_connection_limit')
-      const apiKey = data.apiKey ?? previous?.apiKey
-      if (!apiKey) throw new Error('model_connection_credential_required')
+      // Editing an OAuth connection keeps its stored auth type and token set — but only
+      // while the provider stays put. A provider switch means a different credential
+      // shape: OAuth metadata is dropped and the submitted api key rules.
+      const providerChanged =
+        previous !== undefined && previous.connection.providerPresetId !== data.providerPresetId
+      const effectiveAuthType = providerChanged
+        ? data.authType
+        : (data.authType ??
+          (previous?.connection.authType === 'openai_oauth' ? 'openai_oauth' : undefined))
+      if (providerChanged && effectiveAuthType === 'openai_oauth')
+        throw new Error('model_connection_oauth_requires_reauth')
+      const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
+      if (effectiveAuthType !== 'openai_oauth' && !apiKey)
+        throw new Error('model_connection_credential_required')
       // A changed destination must receive explicit renewed credential consent.
       if (
         previous &&
         !data.apiKey &&
-        (previous.connection.baseUrl !== data.baseUrl ||
-          previous.connection.providerPresetId !== data.providerPresetId)
+        (previous.connection.baseUrl !== data.baseUrl || providerChanged)
       ) {
         throw new Error('model_connection_destination_requires_credential')
       }
@@ -409,12 +472,26 @@ export class ModelConnectionStore {
         providerPresetId: data.providerPresetId,
         baseUrl: data.baseUrl,
         enabled: data.enabled,
+        ...(effectiveAuthType ? { authType: effectiveAuthType } : {}),
+        // OAuth account metadata is main-owned and survives only same-provider edits.
+        ...(previous?.connection.oauth && !providerChanged
+          ? { oauth: previous.connection.oauth }
+          : {}),
         ...(data.customModels ? { customModels: data.customModels } : {}),
         ...(data.models ? { models: data.models } : {})
       })
+      const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
+      if (previous && effectiveAuthType === 'openai_oauth' && !oauth)
+        throw new Error('model_connection_oauth_required')
+      // Leaving OAuth for the same provider still requires a fresh sign-in; switching
+      // provider already dropped the grant above, so only the api-key path remains.
+      if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth' && !providerChanged)
+        throw new Error('model_connection_oauth_requires_reauth')
+      const credential =
+        effectiveAuthType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }
       store.entries = previous
-        ? store.entries.map((entry) => (entry === previous ? { connection, apiKey } : entry))
-        : [...store.entries, { connection, apiKey }]
+        ? store.entries.map((entry) => (entry === previous ? credential : entry))
+        : [...store.entries, credential]
       await this.write(store)
       return connection
     })
@@ -441,7 +518,21 @@ export class ModelConnectionStore {
   ): Promise<{ connection: ModelConnection; apiKey: string } | null> {
     return this.serial(async () => {
       const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
-      return entry && entry.connection.revision === revision ? entry : null
+      if (!entry || entry.connection.revision !== revision || entry.apiKey === undefined)
+        return null
+      return { connection: entry.connection, apiKey: entry.apiKey }
+    })
+  }
+
+  /** Main-only: the OAuth token set of this exact revision, on or off. */
+  oauthForCheck(
+    connectionId: string,
+    revision: number
+  ): Promise<{ connection: ModelConnection; oauth: OAuthTokenSet } | null> {
+    return this.serial(async () => {
+      const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
+      if (!entry || entry.connection.revision !== revision || !entry.oauth) return null
+      return { connection: entry.connection, oauth: entry.oauth }
     })
   }
 
@@ -459,13 +550,167 @@ export class ModelConnectionStore {
   acquireForRun(
     connectionId: string,
     revision: number
-  ): Promise<{ connection: ModelConnection; apiKey: string }> {
+  ): Promise<
+    | { connection: ModelConnection; apiKey: string }
+    | { connection: ModelConnection; oauth: OAuthTokenSet }
+  > {
     return this.serial(async () => {
       const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
       if (!entry || !entry.connection.enabled || entry.connection.revision !== revision) {
         throw new Error('model_connection_unavailable')
       }
-      return entry
+      if (entry.oauth) {
+        if (entry.oauth.denied) throw new Error('model_connection_oauth_denied')
+        return { connection: entry.connection, oauth: entry.oauth }
+      }
+      if (entry.apiKey === undefined) throw new Error('model_connection_unavailable')
+      return { connection: entry.connection, apiKey: entry.apiKey }
+    })
+  }
+
+  /**
+   * Completes an OAuth sign-in: creates the connection and its token set atomically.
+   * One OAuth row per provider. The previous row is returned to the caller so a
+   * cancelled flow can restore it — but only when no later sign-in has replaced this
+   * one since (rollbackOAuthConnection refuses to resurrect a superseded row).
+   */
+  saveOAuthConnection(
+    input: SaveModelConnection,
+    tokens: OAuthTokenSet,
+    account: { email?: string; plan?: string; accountId?: string }
+  ): Promise<{ connection: ModelConnection; replaced?: StoreEntry }> {
+    const parsed = SaveModelConnectionSchema.safeParse(input)
+    if (!parsed.success || parsed.data.authType !== 'openai_oauth')
+      return Promise.reject(new Error('invalid_model_connection'))
+    return this.serial(async () => {
+      const store = await this.read()
+      // One OAuth row per provider: a second sign-in replaces the previous grant.
+      const replaced = store.entries.find(
+        (item) =>
+          item.connection.authType === 'openai_oauth' &&
+          item.connection.providerPresetId === parsed.data.providerPresetId
+      )
+      if (!replaced && store.entries.length >= 256) throw new Error('model_connection_limit')
+      store.entries = store.entries.filter((item) => item !== replaced)
+      const connection = ModelConnectionSchema.parse({
+        schemaVersion: 1,
+        id: replaced?.connection.id ?? randomUUID(),
+        revision: (replaced?.connection.revision ?? 0) + 1,
+        credentialRef: replaced?.connection.credentialRef ?? randomUUID(),
+        displayName: replaced?.connection.displayName ?? parsed.data.displayName,
+        providerPresetId: parsed.data.providerPresetId,
+        baseUrl: parsed.data.baseUrl,
+        enabled: parsed.data.enabled,
+        authType: 'openai_oauth',
+        oauth: account,
+        ...((parsed.data.models ?? replaced?.connection.models)
+          ? { models: parsed.data.models ?? replaced?.connection.models }
+          : {})
+      })
+      store.entries = [
+        ...store.entries,
+        {
+          connection,
+          oauth: { ...tokens, ...(account.accountId ? { accountId: account.accountId } : {}) }
+        }
+      ]
+      await this.write(store)
+      return { connection, replaced }
+    })
+  }
+
+  rollbackOAuthConnection(
+    connectionId: string,
+    expectedRevision: number,
+    replaced?: StoreEntry
+  ): Promise<void> {
+    return this.serial(async () => {
+      const store = await this.read()
+      const index = store.entries.findIndex(
+        (item) =>
+          item.connection.id === connectionId && item.connection.revision === expectedRevision
+      )
+      if (index === -1) return
+      const provider = store.entries[index].connection.providerPresetId
+      store.entries.splice(index, 1)
+      // Restore the predecessor only when this rollback removes the provider's last
+      // OAuth row AND the predecessor was never superseded by a row that is itself
+      // gone. A predecessor superseded by a cancelled row stays cancelled with it.
+      if (
+        replaced &&
+        !store.entries.some(
+          (item) =>
+            item.connection.providerPresetId === provider &&
+            item.connection.authType === 'openai_oauth'
+        )
+      )
+        store.entries.push(replaced)
+      await this.write(store)
+    })
+  }
+
+  /** The OAuth token set of one connection (main-process only). */
+  oauthFor(connectionId: string): Promise<OAuthTokenSet | undefined> {
+    return this.serial(async () => {
+      const store = await this.read()
+      return store.entries.find((item) => item.connection.id === connectionId)?.oauth
+    })
+  }
+
+  mutateOAuth(
+    connectionId: string,
+    fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>,
+    expectedRevision?: number
+  ): Promise<OAuthTokenSet | undefined> {
+    const previous = this.oauthPending.get(connectionId) ?? Promise.resolve()
+    const operation = previous.then(async () => {
+      const initial = await this.serial(async () =>
+        (await this.read()).entries.find((item) => item.connection.id === connectionId)
+      )
+      if (
+        !initial?.oauth ||
+        initial.connection.authType !== 'openai_oauth' ||
+        (expectedRevision !== undefined && initial.connection.revision !== expectedRevision)
+      )
+        return undefined
+      const expectedTokens = JSON.stringify(initial.oauth)
+      const next = await fn(initial.oauth)
+      return this.serial(async () => {
+        const store = await this.read()
+        const current = store.entries.find((item) => item.connection.id === connectionId)
+        if (
+          !current?.oauth ||
+          current.connection.authType !== 'openai_oauth' ||
+          current.connection.credentialRef !== initial.connection.credentialRef ||
+          current.connection.providerPresetId !== initial.connection.providerPresetId ||
+          current.connection.baseUrl !== initial.connection.baseUrl ||
+          JSON.stringify(current.oauth) !== expectedTokens
+        )
+          return undefined
+        if (next !== undefined && next !== initial.oauth) {
+          current.oauth = next
+          await this.write(store)
+        }
+        return current.oauth
+      })
+    })
+    const settled = operation.catch(() => undefined)
+    this.oauthPending.set(connectionId, settled)
+    void settled.then(() => {
+      if (this.oauthPending.get(connectionId) === settled) this.oauthPending.delete(connectionId)
+    })
+    return operation
+  }
+
+  /** Stable installation id sent to OpenAI as the agent host id on first login. */
+  deviceId(): Promise<string> {
+    return this.serial(async () => {
+      const store = await this.read()
+      if (!store.installationId) {
+        store.installationId = randomUUID()
+        await this.write(store)
+      }
+      return store.installationId
     })
   }
 }

@@ -156,6 +156,31 @@ export async function buildEmbeddedHarness(outputName = 'dist') {
     path.join(directory, 'model-catalog.json'),
     `${JSON.stringify(await createBundledModelCatalog())}\n`
   );
+  const { createModelMetadataSnapshot } = await import(
+    pathToFileURL(path.join(cliRoot, 'scripts/build-model-metadata-snapshot.mjs')).href
+  );
+  // models.dev enrichment is best-effort: offline builds keep the previously packaged
+  // snapshot, and a first build without network ships an empty one rather than failing.
+  let metadataSnapshot;
+  try {
+    metadataSnapshot = await createModelMetadataSnapshot();
+  } catch (error) {
+    const previous = path.join(directory, 'model-metadata-snapshot.json');
+    if (fs.existsSync(previous)) {
+      metadataSnapshot = JSON.parse(fs.readFileSync(previous, 'utf8'));
+    } else {
+      metadataSnapshot = {
+        version: 1,
+        source: 'models.dev',
+        generatedAt: new Date().toISOString(),
+        providers: {},
+      };
+    }
+  }
+  fs.writeFileSync(
+    path.join(directory, 'model-metadata-snapshot.json'),
+    `${JSON.stringify(metadataSnapshot)}\n`
+  );
   const files = fileDigests(directory);
   const manifest = {
     schemaVersion: 1,

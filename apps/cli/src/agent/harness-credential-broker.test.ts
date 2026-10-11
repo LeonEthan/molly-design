@@ -394,7 +394,7 @@ describe('main to owned-worker credential handoff', () => {
       reports: [f.report],
     });
     expect(result).toEqual([]);
-    expect(await f.lease.credential).toBe('synthetic-canary');
+    expect(await f.lease.credential).toEqual({ apiKey: 'synthetic-canary' });
     expect(JSON.stringify({ result, catalog: f.broker.catalog() })).not.toContain(
       'synthetic-canary'
     );

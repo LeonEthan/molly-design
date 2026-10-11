@@ -20,7 +20,13 @@ import en from '../../../locales/en.json';
 import zh from '../../../locales/zh_CN.json';
 
 const { connectionIpc } = vi.hoisted(() => ({
-  connectionIpc: { getSnapshot: vi.fn(), save: vi.fn(), delete: vi.fn() },
+  connectionIpc: {
+    getSnapshot: vi.fn(),
+    save: vi.fn(),
+    delete: vi.fn(),
+    getModelCatalog: vi.fn().mockRejectedValue(new Error('no catalog')),
+    getModelMetadataSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
+  },
 }));
 vi.mock('../src/lib/electron-ipc-client', () => ({
   getIpcServices: () => ({ modelConnections: connectionIpc }),
@@ -75,6 +81,14 @@ async function change(field: HTMLInputElement, value: string) {
   });
 }
 
+async function pickDiscovered(text: string) {
+  await act(async () =>
+    [...host.querySelectorAll<HTMLButtonElement>('button')]
+      .find((button) => button.textContent?.includes(text))!
+      .click()
+  );
+}
+
 async function openMoreOptions() {
   const trigger = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
     (button) => button.textContent === en['settings.models.moreOptions']
@@ -96,7 +110,6 @@ describe('encrypted model connection form', () => {
         maxTokens: 4096,
         thinking: ['off', 'high'],
         toolCalls: true,
-        usageInStreaming: true,
         maxTokensField: 'max_tokens',
       },
     ];
@@ -166,7 +179,6 @@ describe('encrypted model connection form', () => {
         maxTokens: 4096,
         thinking: ['off'],
         toolCalls: true,
-        usageInStreaming: false,
         maxTokensField: 'max_tokens',
       },
     ]);
@@ -187,7 +199,6 @@ describe('encrypted model connection form', () => {
       maxTokens: 4096,
       thinking: ['off'],
       toolCalls: false,
-      usageInStreaming: false,
       maxTokensField: 'max_tokens',
     };
     await render(async () => undefined, {
@@ -733,6 +744,203 @@ describe('connection management', () => {
     expect(host.textContent).toContain(en['settings.models.empty']);
   });
 
+  it('shows the picker choice outside More options and summarizes the chosen subset', async () => {
+    connectionIpc.getSnapshot.mockResolvedValue({
+      connections: [{ ...stored, models: ['gpt-5', 'gpt-5-mini'] }],
+    });
+    connectionIpc.getModelCatalog.mockResolvedValue({
+      models: ['gpt-5', 'gpt-5-mini', 'gpt-4o'].map((modelId) => ({
+        providerPresetId: 'openai',
+        modelId,
+        name: modelId,
+        input: ['text'],
+        contextWindow: 128000,
+        thinking: ['off'],
+      })),
+    });
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    expect(host.textContent).toContain(
+      en['settings.models.summary.countOf'].replace('{{count}}', '2').replace('{{total}}', '3')
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((node) => node.textContent === en['common.edit'])!
+        .click()
+    );
+    // First-class section: visible without opening More options.
+    expect(host.textContent).toContain(en['settings.models.picker.title']);
+    expect(host.querySelector('[id$="-name"]')).toBeNull();
+    await openMoreOptions();
+    expect(host.querySelector('[id$="-name"]')).not.toBeNull();
+  });
+
+  it('offers ChatGPT sign-in for OpenAI and shows the signed-in account instead of a key field', async () => {
+    const oauthConnection: ModelConnection = {
+      ...stored,
+      providerPresetId: 'openai',
+      authType: 'openai_oauth',
+      oauth: { email: 'designer@example.com', plan: 'plus' },
+    };
+    const signOuts: unknown[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: oauthConnection,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async () => ({ ok: false as const, reason: 'unavailable' as const }),
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async (input: unknown) => {
+              signOuts.push(input);
+            },
+          },
+        })
+      )
+    );
+    expect(host.textContent).toContain('designer@example.com');
+    expect(host.textContent).toContain(
+      en['settings.models.oauth.plan'].replace('{{plan}}', 'plus')
+    );
+    expect(host.querySelector('input[type=password]')).toBeNull();
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.oauth.signOut'])!
+        .click()
+    );
+    expect(signOuts).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
+  });
+
+  it('switches an OAuth account to another provider with its own sign-in and key field', async () => {
+    const providers: string[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored: {
+            ...stored,
+            authType: 'openai_oauth',
+            oauth: { email: 'designer@example.com' },
+          },
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async (provider) => {
+              providers.push(provider);
+              return { ok: false as const, reason: 'unavailable' as const };
+            },
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await pickDiscovered(en['settings.models.changeProvider']);
+    await pickDiscovered(en['settings.models.kimiCode']);
+    expect(host.textContent).not.toContain('designer@example.com');
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+    expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
+    expect(providers).toEqual(['kimi-coding']);
+  });
+
+  it('cancels a late sign-in start after the user selects another provider', async () => {
+    let finishStart!: (value: { sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }) => void;
+    const started = new Promise<{ sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }>((resolve) => { finishStart = resolve; });
+    const cancelled: string[] = [];
+    await act(async () => root.render(createElement(ModelConnectionForm, {
+      initialProvider: 'kimi-coding',
+      onSave: async () => undefined,
+      onCancel: () => undefined,
+      onOpenAiAuth: {
+        begin: async () => started,
+        complete: async () => { throw new Error('stale flow must not be completed'); },
+        cancel: async (id) => { cancelled.push(id); },
+        signOut: async () => undefined,
+      },
+    })));
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
+    await pickDiscovered(en['settings.models.changeProvider']);
+    await pickDiscovered(en['settings.models.providers.anthropic']);
+    await act(async () => finishStart({
+      sessionId: '00000000-0000-4000-8000-0000000000bb',
+      expiresAt: 2_000_000_000_000,
+      deviceCode: { userCode: 'STALE-CODE', verificationUri: 'https://example.invalid' },
+    }));
+    expect(host.textContent).not.toContain('STALE-CODE');
+    expect(cancelled).toEqual(['00000000-0000-4000-8000-0000000000bb']);
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+  });
+
+  it('shows a failure reason and keeps the key path when sign-in fails', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async () => ({
+              sessionId: '00000000-0000-4000-8000-0000000000aa',
+              authorizeUrl: 'https://auth.openai.com/oauth/authorize?synthetic',
+              expiresAt: Date.now() + 60_000,
+            }),
+            complete: async () => ({ ok: false as const, reason: 'denied' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT'))!
+        .click()
+    );
+    expect(host.textContent).toContain(en['settings.models.oauth.failed.denied']);
+    expect(host.querySelector('input[type=password]')).not.toBeNull();
+  });
+
+  it('offers Kimi Code sign-in for kimi-coding and shows the device code', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async (provider) => {
+              expect(provider).toBe('kimi-coding');
+              return {
+                sessionId: '00000000-0000-4000-8000-0000000000bb',
+                deviceCode: {
+                  userCode: 'ABCD-1234',
+                  verificationUri: 'https://auth.kimi.com/device?synthetic',
+                },
+                expiresAt: Date.now() + 60_000,
+              };
+            },
+            complete: async () => new Promise(() => undefined),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find(
+          (button) =>
+            button.textContent ===
+            en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code')
+        )!
+        .click()
+    );
+    expect(host.textContent).toContain('ABCD-1234');
+    expect(host.textContent).toContain(en['settings.models.oauth.deviceCodePrompt']);
+  });
+
   it('starts a new connection from a provider shortcut when none exist', async () => {
     connectionIpc.getSnapshot.mockResolvedValue({ connections: [] });
     await act(async () => root.render(createElement(ModelConnectionSetting)));
@@ -745,5 +953,198 @@ describe('connection management', () => {
       en['settings.models.providers.anthropic']
     );
     expect(host.textContent).toContain('Sends requests to https://api.anthropic.com');
+  });
+
+  it('discovers compatible models from the service and saves the picked declarations', async () => {
+    const writes: SaveModelConnection[] = [];
+    const discovered = [
+      {
+        modelId: 'deepseek-chat',
+        name: 'DeepSeek Chat',
+        contextWindow: 65536,
+        maxTokens: 8192,
+      },
+      { modelId: 'vendor/raw' },
+    ];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async (input) => {
+            writes.push(input);
+          },
+          onCancel: () => undefined,
+          onDiscover: async () => ({ ok: true, models: discovered, filteredNonChat: 2 }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    const discoverButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => button.textContent === en['settings.models.discover.button']
+    )!;
+    await act(async () => discoverButton.click());
+    expect(host.textContent).toContain(
+      en['settings.models.discover.found'].replace('{{count}}', '2')
+    );
+    expect(host.textContent).toContain(
+      en['settings.models.discover.filtered'].replace('{{count}}', '2')
+    );
+    await pickDiscovered('deepseek-chat');
+    expect(host.textContent).toContain('DeepSeek Chat');
+    await pickDiscovered('vendor/raw');
+    expect(host.querySelector('fieldset input[id$="-modelId"]')).not.toBeNull();
+    const submit = host.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    expect(submit.disabled).toBe(true);
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(writes).toEqual([]);
+  });
+
+  it('saves discovered models once the incomplete declaration is completed', async () => {
+    const writes: SaveModelConnection[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async (input) => {
+            writes.push(input);
+          },
+          onCancel: () => undefined,
+          onDiscover: async () => ({
+            ok: true,
+            models: [{ modelId: 'vendor/raw', name: 'Raw Model' }],
+            filteredNonChat: 0,
+          }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    await pickDiscovered('vendor/raw');
+    await change(
+      host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!,
+      '32768'
+    );
+    await change(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!, '4096');
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    );
+    expect(writes[0]?.customModels).toEqual([
+      {
+        modelId: 'vendor/raw',
+        name: 'Raw Model',
+        input: ['text'],
+        contextWindow: 32768,
+        maxTokens: 4096,
+        thinking: ['off'],
+        toolCalls: false,
+        maxTokensField: 'max_tokens',
+      },
+    ]);
+  });
+
+  it('enriches discovery rows from the packaged metadata snapshot without overriding the service', async () => {
+    const snapshot = {
+      version: 1 as const,
+      source: 'models.dev' as const,
+      generatedAt: '2026-10-10T00:00:00Z',
+      providers: {
+        deepseek: {
+          models: {
+            'deepseek-reasoner': {
+              name: 'DeepSeek Reasoner',
+              contextWindow: 131072,
+              maxTokens: 65536,
+              reasoning: true,
+              toolCalls: true,
+            },
+          },
+        },
+      },
+    };
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: snapshot,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onDiscover: async () => ({
+            ok: true,
+            models: [{ modelId: 'deepseek-reasoner' }],
+            filteredNonChat: 0,
+          }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    expect(host.textContent).toContain('DeepSeek Reasoner');
+    expect(host.textContent).toContain(en['settings.models.picker.thinks']);
+    await pickDiscovered('deepseek-reasoner');
+    expect(
+      host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!.value
+    ).toBe('131072');
+    expect(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!.value).toBe(
+      '65536'
+    );
+    expect(host.querySelector<HTMLButtonElement>('fieldset button[id$="-thinking-high"]')!,).not.toBeNull();
+  });
+
+  it('keeps the manual declaration path when discovery fails', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'openai-compatible',
+          metadataSnapshot: null,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onDiscover: async () => ({ ok: false, reason: 'unreachable' as const }),
+        })
+      )
+    );
+    await change(
+      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+      'https://gateway.invalid/v1'
+    );
+    await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'sk-synthetic');
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.discover.button'])!
+        .click()
+    );
+    expect(host.textContent).toContain(en['settings.models.discover.failed']);
+    expect(
+      [...host.querySelectorAll<HTMLButtonElement>('button')].some(
+        (button) => button.textContent === en['settings.models.addCustomModel']
+      )
+    ).toBe(true);
   });
 });

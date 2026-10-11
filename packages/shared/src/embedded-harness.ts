@@ -420,7 +420,7 @@ export const ModelThinkingLevelSchema = z.enum([
   'max',
 ]);
 
-/** User-declared OpenAI Chat Completions metadata, not remote capability verification. */
+/** User-declared OpenAI Chat Completions metadata, enriched by discovery, not remote capability verification. */
 export const CompatibleModelDefinitionSchema = z
   .object({
     modelId: z.string().trim().min(1).max(200),
@@ -438,12 +438,23 @@ export const CompatibleModelDefinitionSchema = z
       .max(7)
       .refine((values) => new Set(values).size === values.length),
     toolCalls: z.boolean(),
-    usageInStreaming: z.boolean(),
     maxTokensField: z.enum(['max_tokens', 'max_completion_tokens']),
+    usageInStreaming: z.boolean().optional(),
   })
   .strict()
   .refine((value) => value.maxTokens <= value.contextWindow);
 export type CompatibleModelDefinition = z.infer<typeof CompatibleModelDefinitionSchema>;
+
+/** A model listed by a connection's own `GET /models`, with what the response itself told us. */
+export const DiscoveredModelSchema = z
+  .object({
+    modelId: z.string().trim().min(1).max(200),
+    name: z.string().trim().min(1).max(300).optional(),
+    contextWindow: z.number().int().positive().max(16_777_216).optional(),
+    maxTokens: z.number().int().positive().max(16_777_216).optional(),
+  })
+  .strict();
+export type DiscoveredModel = z.infer<typeof DiscoveredModelSchema>;
 
 const CompatibleModelsSchema = z
   .array(CompatibleModelDefinitionSchema)
@@ -537,6 +548,59 @@ export type ConnectionCheckResult =
   | { ok: true; models?: string[] }
   | { ok: false; reason: ConnectionCheckFailure; status?: number };
 
+/**
+ * Offline model metadata snapshot (models.dev, MIT), projected at build time into the
+ * harness resources. Keys are models.dev provider ids; enrichment for a compatible
+ * connection matches by modelId. Metadata fills discovery defaults; the user's saved
+ * declaration always wins.
+ */
+export const ModelMetadataSnapshotSchema = z
+  .object({
+    version: z.literal(1),
+    source: z.literal('models.dev'),
+    generatedAt: z.string().min(1).max(40),
+    providers: z.record(
+      z.string().min(1).max(100),
+      z.object({
+        models: z.record(
+          z.string().min(1).max(200),
+          z
+            .object({
+              name: z.string().min(1).max(300).optional(),
+              contextWindow: z.number().int().positive().max(16_777_216).optional(),
+              maxTokens: z.number().int().positive().max(16_777_216).optional(),
+              imageInput: z.boolean().optional(),
+              toolCalls: z.boolean().optional(),
+              reasoning: z.boolean().optional(),
+            })
+            .strict()
+        ),
+      })
+    ),
+  })
+  .strict();
+export type ModelMetadataSnapshot = z.infer<typeof ModelMetadataSnapshotSchema>;
+
+/** Settings discovery: list the models a chat-capable connection serves. Explicit user action. */
+export const DiscoverModelConnectionSchema = z
+  .object({
+    providerPresetId: ProviderPresetIdSchema,
+    baseUrl: ModelEndpointSchema,
+    apiKey: z.string().trim().min(1).max(16_384).optional(),
+    stored: z.object({ id: identifier, revision }).strict().optional(),
+  })
+  .strict();
+// Keyless discovery is intentional: local servers (Ollama, LM Studio) serve /models
+// without an Authorization header.
+export type DiscoverModelConnection = z.infer<typeof DiscoverModelConnectionSchema>;
+export type DiscoverModelConnectionResult =
+  | { ok: true; models: DiscoveredModel[]; filteredNonChat: number }
+  | {
+      ok: false;
+      reason: 'unreachable' | 'invalid_response' | 'needs_key' | 'changed' | 'unsupported' | 'http_error';
+      status?: number;
+    };
+
 /** A typed key goes only to the destination being checked; a saved key only to its own. */
 export const CheckModelConnectionSchema = z
   .object({
@@ -607,6 +671,29 @@ export function getModelConnectionConfigurationIssue(input: {
   return undefined;
 }
 
+export const ModelConnectionAuthTypeSchema = z.enum(['api_key', 'openai_oauth']);
+
+/**
+ * Presets with an official subscription sign-in (pi-ai OAuth). The authType value stays
+ * 'openai_oauth' for vault compatibility; this set is the source of truth for which
+ * presets may carry it.
+ */
+export const OAUTH_PROVIDER_PRESETS = ['openai', 'kimi-coding'] as const;
+export type OAuthProviderPresetId = (typeof OAUTH_PROVIDER_PRESETS)[number];
+export type ModelConnectionAuthType = z.infer<typeof ModelConnectionAuthTypeSchema>;
+
+/** Public OAuth account metadata; tokens stay in the main vault. */
+export const ModelConnectionOAuthSchema = z
+  .object({
+    email: z.string().trim().min(1).max(300).optional(),
+    plan: z.string().trim().min(1).max(60).optional(),
+    accountId: z.string().trim().min(1).max(200).optional(),
+    /** Refresh was rejected; the user must sign in again. */
+    denied: z.boolean().optional(),
+  })
+  .strict();
+export type ModelConnectionOAuth = z.infer<typeof ModelConnectionOAuthSchema>;
+
 const ModelConnectionFieldsSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -617,6 +704,9 @@ const ModelConnectionFieldsSchema = z
     baseUrl: ModelEndpointSchema,
     credentialRef: identifier,
     enabled: z.boolean(),
+    /** Absent means an API key connection. OAuth exists only for the OpenAI preset. */
+    authType: ModelConnectionAuthTypeSchema.optional(),
+    oauth: ModelConnectionOAuthSchema.optional(),
     customModels: CompatibleModelsSchema.optional(),
     /** Native catalog models offered in the conversation picker; absent offers all of them. */
     models: z
@@ -630,18 +720,31 @@ const ModelConnectionFieldsSchema = z
 export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
   (value) => value.customModels === undefined || value.providerPresetId === 'openai-compatible',
   'Custom models require an OpenAI-compatible connection'
-).refine(
-  (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
-  'OpenAI-compatible connections offer exactly their declared models'
-);
+)
+  .refine(
+    (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
+    'OpenAI-compatible connections offer exactly their declared models'
+  )
+  .refine(
+    (value) =>
+      value.authType !== 'openai_oauth' ||
+      (OAUTH_PROVIDER_PRESETS as readonly string[]).includes(value.providerPresetId),
+    'OAuth sign-in exists only for presets with an official subscription flow'
+  )
+  .refine(
+    (value) => value.oauth === undefined || value.authType === 'openai_oauth',
+    'OAuth account metadata requires an OAuth connection'
+  );
 export type ModelConnection = z.infer<typeof ModelConnectionSchema>;
 
-/** The renderer can replace a secret, but cannot select or read a credential reference. */
+/** The renderer can replace a secret, but cannot select or read a credential reference.
+ *  OAuth account metadata is also main-owned: the form never writes it. */
 export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   schemaVersion: true,
   id: true,
   revision: true,
   credentialRef: true,
+  oauth: true,
 })
   .extend({
     id: z.string().uuid().optional(),
@@ -663,8 +766,43 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
   .refine(
     (value) => value.models === undefined || value.providerPresetId !== 'openai-compatible',
     'OpenAI-compatible connections offer exactly their declared models'
+  )
+  .refine(
+    (value) =>
+      value.authType !== 'openai_oauth' ||
+      ((OAUTH_PROVIDER_PRESETS as readonly string[]).includes(value.providerPresetId) &&
+        !value.apiKey),
+    'OAuth sign-in exists only for presets with an official subscription flow and never carries an API key'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
+
+/**
+ * The main-side OAuth session handle. `sessionId` is opaque to the renderer. Browser
+ * flows carry `authorizeUrl` to open; device-code flows carry the code to display.
+ * Completing the flow saves the connection.
+ */
+export const OpenAiAuthSessionSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    authorizeUrl: z.string().url().max(4096).optional(),
+    deviceCode: z
+      .object({
+        userCode: z.string().min(1).max(64),
+        verificationUri: z.string().url().max(4096),
+      })
+      .strict()
+      .optional(),
+    expiresAt: z.number().int().positive(),
+  })
+  .strict();
+export type OpenAiAuthSession = z.infer<typeof OpenAiAuthSessionSchema>;
+
+export type OpenAiAuthCompleteResult =
+  | { ok: true; connection: ModelConnection }
+  | {
+      ok: false;
+      reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response';
+    };
 
 /** Public image metadata only. The credential and legacy backup stay in the main vault. */
 export const ProtectedImageConnectionSchema = z
@@ -893,7 +1031,16 @@ export const HarnessCredentialReportSchema = z
     imageConnectionId: z.string().uuid().optional(),
     imageConnectionRevision: revision.optional(),
     result: z.discriminatedUnion('ok', [
-      z.object({ ok: z.literal(true), apiKey: z.string().min(1).max(16_384) }).strict(),
+      z
+        .object({
+          ok: z.literal(true),
+          apiKey: z.string().min(1).max(16_384),
+          /** OAuth account identity when the provider exposes one. */
+          oauthAccountId: z.string().min(1).max(200).optional(),
+          /** OAuth grants carry their connection id so a rotation of the same row is accepted. */
+          oauthConnectionId: z.string().min(1).max(200).optional(),
+        })
+        .strict(),
       z.object({ ok: z.literal(false), error: z.literal('credential_unavailable') }).strict(),
     ]),
   })

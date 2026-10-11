@@ -59,7 +59,6 @@ it("projects only each compatible connection's declared models without borrowing
         maxTokens: 4096,
         thinking: ['high'],
         toolCalls: true,
-        usageInStreaming: true,
         maxTokensField: 'max_tokens',
       },
     ],

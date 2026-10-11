@@ -83,7 +83,6 @@ export const Compatible: Story = {
           maxTokens: 4096,
           thinking: ['off', 'high'],
           toolCalls: true,
-          usageInStreaming: true,
           maxTokensField: 'max_tokens',
         },
       ],

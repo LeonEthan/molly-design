@@ -1,5 +1,10 @@
-import { expect, it } from 'vitest';
-import { InMemoryCredentialStore, InMemoryModelsStore } from '@earendil-works/pi-ai';
+import { expect, it, vi } from 'vitest';
+import {
+  InMemoryCredentialStore,
+  InMemoryModelsStore,
+  normalizeContext,
+} from '@earendil-works/pi-ai';
+import { streamSimple } from '@earendil-works/pi-ai/api/openai-completions';
 import { ModelRuntime } from '@earendil-works/pi-coding-agent';
 import {
   MOLLY_PROVIDER_IDS,
@@ -136,3 +141,60 @@ it('refuses a model the connection no longer offers in the conversation picker',
     'harness_model_not_in_catalog'
   );
 });
+
+it.each([undefined, false, true])(
+  'requests streaming usage only for an explicit compatible-model capability: %s',
+  async (usageInStreaming) => {
+    let requestBody: unknown;
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(
+        `data: ${JSON.stringify({
+          id: 'synthetic-completion',
+          choices: [{ index: 0, delta: { content: 'synthetic reply' }, finish_reason: 'stop' }],
+        })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } }
+      );
+    });
+    try {
+      const runtime = await offlineRuntime();
+      const configured = configureModelConnection(
+        runtime,
+        {
+          ...connection('openai-compatible', 'https://synthetic.example.invalid/v1'),
+          customModels: [
+            {
+              modelId: 'synthetic-model',
+              name: 'Synthetic',
+              input: ['text'],
+              contextWindow: 4096,
+              maxTokens: 1024,
+              thinking: ['off'],
+              toolCalls: true,
+              maxTokensField: 'max_tokens',
+              ...(usageInStreaming === undefined ? {} : { usageInStreaming }),
+            },
+          ],
+        },
+        selecting('synthetic-model')
+      );
+      const model = runtime.getModel(configured.providerId, 'synthetic-model');
+      if (!model || model.api !== 'openai-completions') throw new Error('missing synthetic model');
+      const response = await streamSimple(
+        { ...model, api: 'openai-completions' },
+        normalizeContext({
+          messages: [{ role: 'user', content: 'synthetic prompt', timestamp: 1 }],
+        }),
+        { apiKey: 'synthetic-key' }
+      ).result();
+      expect(response.stopReason).toBe('stop');
+      expect(requestBody).toEqual(
+        usageInStreaming === true
+          ? expect.objectContaining({ stream_options: { include_usage: true } })
+          : expect.not.objectContaining({ stream_options: expect.anything() })
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  }
+);

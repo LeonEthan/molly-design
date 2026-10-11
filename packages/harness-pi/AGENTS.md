@@ -26,6 +26,8 @@ Read [README](README.md) before changing session construction, packages or the b
   model's. The host checks the selected model's resolved endpoint. A connection's
   `models`, when present, is the only native catalog it offers; refuse any other model.
   `PROVIDER_PRESET_CHECKS` must match each preset's SDK protocol (tested).
+  Compatible endpoints request streaming usage only when explicitly declared; preserve
+  saved `usageInStreaming` values and default unknown support to false.
 - A run is fenced by exclusive creation of its run record before credentials or
   inference. An existing record means already dispatched: report
   `harness_run_already_dispatched` and never replay.

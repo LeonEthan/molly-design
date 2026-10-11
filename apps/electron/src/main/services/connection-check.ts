@@ -61,10 +61,8 @@ async function readBounded(response: Response): Promise<string | null> {
 }
 
 function listedModels(style: CheckStyle, data: unknown): string[] | null {
-  if (!data || typeof data !== 'object') return null
-  const entries =
-    style === 'google' ? (data as { models?: unknown }).models : (data as { data?: unknown }).data
-  if (!Array.isArray(entries)) return null
+  const entries = listEntries(style, data)
+  if (!entries) return null
   const ids = entries
     .map((entry: unknown) => {
       if (!entry || typeof entry !== 'object') return undefined
@@ -74,6 +72,24 @@ function listedModels(style: CheckStyle, data: unknown): string[] | null {
     })
     .filter((id): id is string => id !== undefined && id.length > 0 && id.length <= 200)
   return [...new Set(ids)].slice(0, MAX_LISTED_MODELS)
+}
+
+/**
+ * Locates the model entry array across the response shapes seen in the wild:
+ * `{object:"list", data:[...]}` (OpenAI standard), `{data:[...]}` (OpenRouter, no
+ * `object` marker), bare arrays (Together), and wrappers with extra keys
+ * (new-api mixes in `success:true`). Returns null when no array of objects exists.
+ */
+function listEntries(style: CheckStyle, data: unknown): unknown[] | null {
+  if (style === 'google') {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+    const entries = (data as { models?: unknown }).models
+    return Array.isArray(entries) ? entries : null
+  }
+  if (Array.isArray(data)) return data
+  if (!data || typeof data !== 'object') return null
+  const entries = (data as { data?: unknown }).data
+  return Array.isArray(entries) ? entries : null
 }
 
 /**
@@ -125,6 +141,12 @@ export async function checkModelConnection(
   let apiKey = input.apiKey
   if (!apiKey) {
     if (!input.stored) return { ok: false, reason: 'needs_key' }
+    const oauth = await store.oauthForCheck(input.stored.id, input.stored.revision)
+    if (oauth) {
+      if (oauth.connection.baseUrl !== input.baseUrl) return { ok: false, reason: 'needs_key' }
+      // OAuth access tokens authenticate against their provider's own endpoint.
+      return checkOAuthConnection(oauth.connection.providerPresetId, oauth.oauth, transport)
+    }
     const saved = await store.credentialForCheck(input.stored.id, input.stored.revision)
     if (!saved) return { ok: false, reason: 'changed' }
     if (
@@ -140,6 +162,63 @@ export async function checkModelConnection(
     apiKey,
     transport
   )
+}
+
+const OAUTH_CHECK_URLS: Partial<Record<string, string>> = {
+  openai: 'https://api.openai.com/v1/models',
+  // Kimi's coding endpoint answers a models list for subscription tokens.
+  'kimi-coding': 'https://api.kimi.com/coding/models'
+}
+
+async function checkOAuthConnection(
+  providerPresetId: string,
+  tokens: { accessToken: string; accountId?: string },
+  transport: typeof fetch
+): Promise<ConnectionCheckResult> {
+  const url = OAUTH_CHECK_URLS[providerPresetId] ?? OAUTH_CHECK_URLS.openai!
+  let response: Response
+  try {
+    response = await transport(url, {
+      headers: {
+        accept: 'application/json',
+        authorization: `Bearer ${tokens.accessToken}`
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15_000)
+    })
+  } catch {
+    return { ok: false, reason: 'unreachable' }
+  }
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined)
+    const status = response.status
+    if (status === 401 || status === 403) return { ok: false, reason: 'key_rejected', status }
+    if (status === 404 || status === 405 || status === 501)
+      return { ok: false, reason: 'unsupported', status }
+    if (status === 429) return { ok: false, reason: 'rate_limited', status }
+    return { ok: false, reason: 'http_error', status }
+  }
+  try {
+    const text = await readBounded(response)
+    if (text === null) return { ok: false, reason: 'invalid_response' }
+    const data = JSON.parse(text)
+    const entries: unknown[] | null = listEntries(
+      providerPresetId === 'kimi-coding' ? 'anthropic' : 'openai',
+      data
+    )
+    if (!entries) return { ok: true }
+    const models = entries
+      .map((entry: unknown) => {
+        if (!entry || typeof entry !== 'object') return undefined
+        const record = entry as { id?: unknown; slug?: unknown }
+        const id = typeof record.id === 'string' ? record.id : record.slug
+        return typeof id === 'string' && id.length > 0 && id.length <= 200 ? id : undefined
+      })
+      .filter((id): id is string => id !== undefined)
+    return { ok: true, models: [...new Set(models)].slice(0, MAX_LISTED_MODELS) }
+  } catch {
+    return { ok: false, reason: 'invalid_response' }
+  }
 }
 
 export async function checkImageConnection(

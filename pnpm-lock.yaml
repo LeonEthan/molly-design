@@ -397,6 +397,9 @@ importers:
 
   apps/electron:
     dependencies:
+      '@earendil-works/pi-ai':
+        specifier: catalog:pi
+        version: 1.0.4(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@smithy/signature-v4@5.7.3)(undici@8.10.2)(zod@4.3.6)
       '@electron-toolkit/preload':
         specifier: ^3.0.2
         version: 3.0.2(electron@44.7.0)
@@ -22238,7 +22241,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 26.2.0
+      '@types/node': 24.10.12
       long: 5.3.2
 
   proxy-addr@2.0.7:

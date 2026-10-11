@@ -29,7 +29,9 @@ input. Ordinary upstream ACP failures retain their existing reuse policy; neithe
 classification authorizes replay of a Molly request.
 MCP is configured once at startup through Pi's native MCP extension;
 credentials bind the selected Session/worker epoch and catalog changes retire it.
-Model keys are granted per run and stored in Molly's Pi profile for sub-agents. Image tools save files directly; Session owns no
+Model keys are granted per run into the worker's memory. A used OAuth worker is replaced
+at the existing safe prompt boundary and restores native history before receiving a new
+epoch-bound grant. Image tools save files directly; Session owns no
 private image-byte import callback. Worker startup is a single attempt inside the existing start gate; failed-process
 cleanup and stderr diagnostics remain. The external npx recovery policy and cache
 mutation are retired, independently of native prompt replay prevention.

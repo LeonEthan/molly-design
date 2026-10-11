@@ -76,6 +76,8 @@ export class PiAcpHost {
   private providerFingerprint?: string;
   private nativeProvider?: ReturnType<ModelRuntime['getRegisteredNativeProvider']>;
   private grantedKey?: string;
+  private grantedOAuthConnectionId?: string;
+  private credentialStore?: InstanceType<typeof InMemoryCredentialStore>;
   private sessionStarted = false;
 
   constructor(
@@ -153,8 +155,9 @@ export class PiAcpHost {
     const profile = createWorkerEnvironment({}, this.config).PI_CODING_AGENT_DIR!;
     if ((await realpath(agentDir)) !== (await realpath(profile)))
       throw new Error('pi_acp_host_profile_mismatch');
+    const credentialStore = new InMemoryCredentialStore();
     const runtime = await ModelRuntime.create({
-      credentials: new InMemoryCredentialStore(),
+      credentials: credentialStore,
       modelsStore: new InMemoryModelsStore(),
       modelsPath: null,
       allowModelNetwork: false,
@@ -166,6 +169,7 @@ export class PiAcpHost {
       this.config.selection
     );
     this.runtime = runtime;
+    this.credentialStore = credentialStore;
     this.providerId = providerId;
     this.modelBaseUrl = baseUrl;
     this.providerConfig = runtime.getRegisteredProviderConfig(providerId);
@@ -389,10 +393,28 @@ export class PiAcpHost {
     if (grant.runId !== snapshot.runId || grant.runtimeEpoch !== this.config.runtimeEpoch)
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
-    if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey)
+    if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
+      // Rotation requires a fresh worker: reject any key change before runtime
+      // mutation. The vault refreshes OAuth tokens with a five-minute margin before a
+      // run starts, so an in-place rotation mid-session means the row was reconnected
+      // or the connection swapped under this run.
       throw new Error('pi_acp_host_credential_changed');
-    await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
+    }
+    if (grant.oauthConnectionId !== undefined) {
+      // OAuth grant: install as an oauth credential so the provider's toAuth shapes the
+      // request (Kimi needs Authorization: Bearer, not an api key). The far-future
+      // expiry keeps pi from refreshing in the worker; the vault owns refresh.
+      await this.credentialStore!.modify(this.providerId!, async () => ({
+        type: 'oauth',
+        access: grant.apiKey,
+        refresh: 'worker-managed',
+        expires: Date.now() + 365 * 24 * 3600_000,
+      }));
+    } else {
+      await this.runtime!.setRuntimeApiKey(this.providerId!, grant.apiKey);
+    }
     this.grantedKey = grant.apiKey;
+    this.grantedOAuthConnectionId = grant.oauthConnectionId;
     signal.throwIfAborted();
     let memory: string | undefined;
     let memoryDiagnostic: string | undefined;

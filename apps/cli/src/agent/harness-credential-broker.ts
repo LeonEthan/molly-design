@@ -29,10 +29,10 @@ type Lease = {
   revoke: () => void;
   signal: AbortSignal;
   abort: () => void;
-  resolve: (key: string) => void;
+  resolve: (grant: { apiKey: string; oauthAccountId?: string; oauthConnectionId?: string }) => void;
   reject: (error: Error) => void;
   acquired: boolean;
-  credential?: Promise<string>;
+  credential?: Promise<{ apiKey: string; oauthAccountId?: string; oauthConnectionId?: string }>;
 };
 
 /** No caller-supplied credentialRef API. Only the Session dispatcher creates leases. */
@@ -159,7 +159,10 @@ export class HarnessCredentialBroker {
         lease.request.snapshot.runtimeEpoch === parent.request.snapshot.runtimeEpoch &&
         JSON.stringify(lease.request.imageConnection) === JSON.stringify(connection)
     );
-    if (existing?.credential) return { connection, apiKey: await existing.credential };
+    if (existing?.credential) {
+      const grant = await existing.credential;
+      return { connection, apiKey: grant.apiKey };
+    }
     const lease = this.acquire(
       parent.request.snapshot,
       {
@@ -170,7 +173,7 @@ export class HarnessCredentialBroker {
       connection
     );
     // Retain the lease until its parent ends so a revocation stops the owning worker.
-    return { connection, apiKey: await lease.credential };
+    return { connection, apiKey: (await lease.credential).apiKey };
   }
 
   acquire(
@@ -197,7 +200,11 @@ export class HarnessCredentialBroker {
       snapshot,
       ...(imageConnection ? { imageConnection } : {}),
     };
-    const credential = new Promise<string>((resolve, reject) => {
+    const credential = new Promise<{
+      apiKey: string;
+      oauthAccountId?: string;
+      oauthConnectionId?: string;
+    }>((resolve, reject) => {
       const abort = () => {
         this.leases.delete(request.requestId);
         reject(new Error('harness_run_retired'));
@@ -314,7 +321,13 @@ export class HarnessCredentialBroker {
         lease.abort();
       } else {
         lease.acquired = true;
-        lease.resolve(report.result.apiKey);
+        lease.resolve({
+          apiKey: report.result.apiKey,
+          ...(report.result.oauthAccountId ? { oauthAccountId: report.result.oauthAccountId } : {}),
+          ...(report.result.oauthConnectionId
+            ? { oauthConnectionId: report.result.oauthConnectionId }
+            : {}),
+        });
       }
     }
     const pending = [...this.leases.values()].filter((lease) => !lease.acquired).slice(0, 8);

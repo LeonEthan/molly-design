@@ -135,7 +135,6 @@ export async function runPackagedSmoke({ output, executable }) {
             maxTokens: 4096,
             thinking: ['off'],
             toolCalls: true,
-            usageInStreaming: false,
             maxTokensField: 'max_tokens',
           },
         ],

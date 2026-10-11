@@ -25,20 +25,26 @@ app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → AI models → Models, pick the provider/product tile and paste
-   its API key. Molly suggests the provider's default endpoint and a connection
-   name; change either one, or choose **Use a custom endpoint**. With the default,
-   each model uses its provider's own address (OpenRouter's Claude models
-   included); a custom endpoint receives every model's requests. Once the key
-   settles, Molly checks it for free against the provider's model list (OpenRouter:
-   its key endpoint) and shows the result; it sends no model request, so billing
-   and access to a particular model stay unverified, and some services can't be
-   checked this way. Under **Models in the conversation picker** keep **All** or
-   **Choose** the models you want to pick from; models the provider didn't list
-   for your key are marked. Enter keys only in the local settings field, never in
-   a conversation or artwork file. Saving encrypts the connection and doesn't
-   change an existing session's selection; **Delete** removes a connection after
-   you confirm.
+1. Open Settings → AI models → Models, pick the provider/product tile. For OpenAI you can
+   either **Sign in with ChatGPT** through OpenAI's official dynamic-client flow
+   or paste an API key. Kimi Code also offers account sign-in: open the verification page
+   and enter the displayed device code. Tokens stay in the encrypted local vault.
+   Other providers take a key. Molly suggests the provider's default
+   endpoint and a connection name; change either one, or choose **Use a custom endpoint**.
+   With the default, each model uses its provider's own address (OpenRouter's Claude models
+   included); a custom endpoint receives every model's requests. Once the key settles, Molly
+   checks it for free against the provider's model list (OpenRouter: its key endpoint) and
+   shows the result; it sends no model request, so billing and access to a particular model
+   stay unverified, and some services can't be checked this way. Under **Models in the
+   conversation picker** keep **All** or **Choose** the models you want to pick from; models
+   the provider didn't list for your key are marked and sorted last. Enter keys only in the
+   local settings field, never in a conversation or artwork file. Saving encrypts the
+   connection and doesn't change an existing session's selection; **Delete** removes a
+   connection after you confirm. Sign-out, deletion and conversion to an API key attempt
+   provider revocation before local removal, even when the revocation endpoint is unavailable.
+   **Sign in again** preserves the connection used by existing sessions. ChatGPT sign-in
+   uses OpenAI's direct API token scope through the pinned pi-ai provider; live sign-in
+   and service behavior remain unverified in this build.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid
@@ -68,11 +74,16 @@ live session activation. The question add-on requires the desktop question
 interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
-For **OpenAI-compatible (advanced)**, add explicit model definitions in the connection
-form: IDs, token limits and the capabilities your service actually supports. This
-path uses standard Chat Completions streaming, not Responses or vendor-specific
-thinking formats. Turns containing tools require declared tool-call support. Saving
-does not verify these declarations or select a model; unknown prices remain unknown.
+For **OpenAI-compatible (advanced)**, enter the endpoint and key, then **Discover models
+from this service**: Molly asks the service for its model list, hides non-chat models,
+prefills what the response carries and completes known models from a packaged
+[models.dev](https://models.dev) snapshot. Pick the models to use; anything the service
+and snapshot both miss stays marked **needs details** for you to complete by hand —
+declarations are never probed or verified. Adding a model manually always works, including
+for services without a list endpoint (Azure deployments, z.ai). This path uses standard
+Chat Completions streaming, not Responses or vendor-specific thinking formats. Turns
+containing tools require declared tool-call support. Saving does not verify these
+declarations or select a model; unknown prices remain unknown.
 
 ## Try a design
 

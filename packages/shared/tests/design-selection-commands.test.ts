@@ -10,6 +10,8 @@ import {
   DESIGN_SELECTION_BODY_LIMIT,
   DesignToolbarPresentationSchema,
   DesignHighlightSchema,
+  DesignNotesSchema,
+  DESIGN_NOTES_MAX,
   diffDesignElements,
 } from '../src/design-selection-commands';
 
@@ -321,5 +323,27 @@ describe('element change feedback', () => {
       Array.from({ length: 4 }, () => ({ tone: 'changed', elementIds: [] })),
     ])
       expect(DesignHighlightSchema.safeParse(input).success).toBe(false);
+  });
+  it('carries only the notes epoch in a toolbar request and bounds the read notes', () => {
+    expect(DesignToolbarRequestSchema.parse({ type: 'notes', notesEpoch: 3 })).toEqual({
+      type: 'notes',
+      notesEpoch: 3,
+    });
+    expect(
+      DesignToolbarRequestSchema.safeParse({ type: 'notes', notesEpoch: 3, elementIds: ['a'] })
+        .success
+    ).toBe(false);
+    expect(DesignNotesSchema.parse([{ elementIds: ['a'], prompt: ' Warmer ' }])).toEqual([
+      { elementIds: ['a'], prompt: 'Warmer' },
+    ]);
+    const note = { elementIds: ['a'], prompt: 'Warmer' };
+    for (const input of [
+      [],
+      [{ elementIds: [], prompt: 'Warmer' }],
+      [{ elementIds: ['a'], prompt: '   ' }],
+      [{ ...note, x: 1 }],
+      Array.from({ length: DESIGN_NOTES_MAX + 1 }, () => note),
+    ])
+      expect(DesignNotesSchema.safeParse(input).success).toBe(false);
   });
 });

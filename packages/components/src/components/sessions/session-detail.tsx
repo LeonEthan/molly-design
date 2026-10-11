@@ -3408,6 +3408,30 @@ const SessionDetail = ({
                     );
                   }
             }
+            onSendNotes={
+              activeSession.isArchived
+                ? undefined
+                : async (notes) => {
+                    const chat = chatRefsMap.current.get(activeTabSessionId);
+                    if (
+                      activeTabSessionId !== activeSession.id ||
+                      !chat ||
+                      !('sendDesignNotes' in chat)
+                    )
+                      throw Error(
+                        t(
+                          'design.referenceConversationUnavailable',
+                          'Open this artwork’s conversation before referencing elements'
+                        )
+                      );
+                    return chat.sendDesignNotes(
+                      notes.map((note, index) => ({
+                        ...note,
+                        label: t('design.notePin', 'Note {{count}}', { count: index + 1 }),
+                      }))
+                    );
+                  }
+            }
             onSyncSelection={(reference, label) => {
               const chat = chatRefsMap.current.get(activeTabSessionId);
               if (

@@ -488,3 +488,29 @@ it('keeps an unsent ask for the same selection after a failed request', async ()
   click('Ask Molly about the selection');
   expect(askField().value).toBe('');
 });
+
+it('turns a typed ask into a note without sending a request', () => {
+  toolbar.dispose();
+  const notes: string[] = [];
+  toolbar = createSelectionToolbar({
+    request: async (sent) => {
+      requests.push(sent);
+      return { ok: true };
+    },
+    addNote: (text) => notes.push(text),
+  });
+  toolbar.present({ dark: false, actionsEnabled: true, labels: {} });
+  toolbar.setReadonly(false);
+  select('text');
+  click('Ask Molly about the selection');
+  expect(getByRole(document.body, 'button', { name: 'Add as note' }).hasAttribute('disabled')).toBe(
+    true
+  );
+  typeAsk('  Warmer headline ');
+  click('Add as note');
+  expect(notes).toEqual(['Warmer headline']);
+  expect(requests).toEqual([]);
+  expect(document.querySelector('.molly-selection-popup')).toBeNull();
+  click('Ask Molly about the selection');
+  expect(askField().value).toBe('');
+});

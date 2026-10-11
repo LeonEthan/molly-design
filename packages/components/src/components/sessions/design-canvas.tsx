@@ -140,6 +140,7 @@ export function DesignCanvas({
   name,
   onReferenceSelection,
   onSendSelection,
+  onSendNotes,
   onSyncSelection,
   toolbarHost = null,
 }: {
@@ -157,6 +158,9 @@ export function DesignCanvas({
   name: string;
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string) => void;
   onSendSelection?: (reference: DesignElementReference, prompt: string) => Promise<void>;
+  onSendNotes?: (
+    notes: readonly { reference: DesignElementReference; prompt: string }[]
+  ) => Promise<boolean>;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
   /** Renders the canvas toolbar into the side panel's top row instead of a row of its own. */
@@ -610,18 +614,37 @@ export function DesignCanvas({
       await onSendSelection(reference, prompt);
     });
   };
-  const actionCallback = useRef({ selectionAction, askSelection });
-  actionCallback.current = { selectionAction, askSelection };
+  const sendNotes = (
+    notes: readonly { reference: DesignElementReference; prompt: string }[],
+    notesEpoch: number
+  ) => {
+    const generation = attachmentGeneration.current;
+    run(async () => {
+      const service = getIpcServices()?.design;
+      if (!service || !onSendNotes) throw Error('Local workspace is not ready');
+      if (generation !== attachmentGeneration.current)
+        throw Error(
+          t('design.selectionChanged', 'Artwork view changed; select the current elements again')
+        );
+      if (!(await onSendNotes(notes)))
+        throw Error(
+          t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
+        );
+      await service.clearNotes(artworkId, hostId, notesEpoch);
+    });
+  };
+  const actionCallback = useRef({ selectionAction, askSelection, sendNotes });
+  actionCallback.current = { selectionAction, askSelection, sendNotes };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
-        if (
-          event.hostId !== hostId ||
-          event.reference.artworkId !== artworkId ||
-          !active ||
-          readonlyView
-        )
+        if (event.hostId !== hostId || !active || readonlyView) return;
+        if (event.action === 'notes') {
+          if (event.notes.every((note) => note.reference.artworkId === artworkId))
+            actionCallback.current.sendNotes(event.notes, event.notesEpoch);
           return;
+        }
+        if (event.reference.artworkId !== artworkId) return;
         if (event.action === 'ask')
           actionCallback.current.askSelection(event.reference, event.prompt, event.send);
         else actionCallback.current.selectionAction(event.action, event.reference, event.wording);

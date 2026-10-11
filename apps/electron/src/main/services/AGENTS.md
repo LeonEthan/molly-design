@@ -96,7 +96,7 @@ never travels through IPC. Presentation contains only theme, labels and action a
 
 Image context actions check image kinds in that saved canonical document, then
 insert a target mention and editable prompt into the ordinary composer; only Ask
-Molly may send it as an ordinary turn. None mutates artwork or runs image jobs.
+Molly and numbered notes may send as an ordinary turn. None mutates artwork or runs image jobs.
 
 Application quit flushes editors before sealing design-worker requests; cancelled
 flush leaves the service usable. Even with no open editor, drain accepted requests,

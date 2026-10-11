@@ -100,6 +100,7 @@ const alignmentIcons = {
 
 export function createSelectionToolbar(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
+  addNote?(text: string): void;
 }) {
   let summary: DesignSelectionSummary = { count: 0, kinds: [] };
   let ids: string[] = [];
@@ -723,6 +724,22 @@ export function createSelectionToolbar(options: {
             if (ok && askDraft.epoch === epoch) askDraft = { epoch: -1, text: '' };
           });
         };
+        const addNote = options.addNote;
+        const note = addNote
+          ? button(
+              row,
+              label('askMollyAddNote', 'Add as note'),
+              label('askMollyAddNote', 'Add as note'),
+              () => {
+                const prompt = field.value.trim();
+                if (!prompt || readonly) return;
+                askDraft = { epoch: -1, text: '' };
+                closePopup();
+                addNote(prompt);
+              }
+            )
+          : undefined;
+        if (note) note.className = 'secondary';
         const addToChat = button(
           row,
           label('askMollyAddToChat', 'Add to chat'),
@@ -730,14 +747,14 @@ export function createSelectionToolbar(options: {
           () => submit(false)
         );
         addToChat.className = 'secondary';
-        const send = button(
-          row,
-          label('askMollySend', 'Send'),
-          label('askMollySend', 'Send'),
-          () => submit(true)
+        const send = button(row, label('askMollySend', 'Send'), label('askMollySend', 'Send'), () =>
+          submit(true)
         );
         send.className = 'primary';
-        const validate = () => (send.disabled = busy || !field.value.trim());
+        const validate = () => {
+          send.disabled = busy || !field.value.trim();
+          if (note) note.disabled = busy || !field.value.trim();
+        };
         field.oninput = () => {
           askDraft = { epoch, text: field.value };
           validate();

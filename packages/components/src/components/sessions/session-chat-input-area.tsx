@@ -401,6 +401,13 @@ export type SessionChatInputAreaHandle = {
     label: string,
     prompt: string
   ) => Promise<boolean>;
+  /**
+   * Send numbered canvas notes as one turn, leaving the draft untouched. Returns
+   * false without touching the draft when the turn cannot be sent; the canvas keeps them.
+   */
+  sendDesignNotes: (
+    notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]
+  ) => Promise<boolean>;
   insertSessionMention: (sessionId: string) => boolean;
 };
 
@@ -1376,34 +1383,42 @@ export const SessionChatInputArea = memo(
     );
 
     const designSendInFlightRef = useRef(false);
-    const sendDesignSelection = useCallback(
-      async (reference: DesignElementReference, label: string, prompt: string) => {
-        if (isArchived) return false;
-        const blocked =
+    const sendDesignMentions = useCallback(
+      async (
+        items: readonly { reference: DesignElementReference; label: string; prompt: string }[],
+        numbered: boolean
+      ) => {
+        if (
+          isArchived ||
           designSendInFlightRef.current ||
           sessionConfigReady === false ||
           isMachineRemoved ||
           isExternalHistoryRefreshing ||
-          (!!freeTurnLimitNotice && freeTurnLimitNotice.current >= freeTurnLimitNotice.limit);
-        if (blocked) {
-          referenceDesignSelection(reference, label, prompt.trim());
+          (!!freeTurnLimitNotice && freeTurnLimitNotice.current >= freeTurnLimitNotice.limit)
+        )
           return false;
-        }
-        let accepted = false;
         designSendInFlightRef.current = true;
         try {
-          const withSelection = appendDesignSelectionMention(prompt.trim(), reference, label);
-          const expanded = expandPromptMentionsRef.current({
-            text: withSelection.text,
-            mentions: [withSelection.mention],
+          let text = '';
+          const mentions: MentionRange[] = [];
+          items.forEach((item, index) => {
+            const line = numbered ? `${index + 1}. ${item.prompt.trim()}` : item.prompt.trim();
+            const next = appendDesignSelectionMention(
+              text ? `${text}\n${line}` : line,
+              item.reference,
+              item.label
+            );
+            text = next.text;
+            mentions.push(next.mention);
           });
-          const text = expanded.text.trim();
-          const spans = reanchorMessageTextSpansForTrim(expanded.text, text, expanded.spans);
-          accepted = await onSendMessage([{ type: 'text', text, ...(spans ? { spans } : {}) }]);
-          return accepted;
+          const expanded = expandPromptMentionsRef.current({ text, mentions });
+          const trimmed = expanded.text.trim();
+          const spans = reanchorMessageTextSpansForTrim(expanded.text, trimmed, expanded.spans);
+          return await onSendMessage([
+            { type: 'text', text: trimmed, ...(spans ? { spans } : {}) },
+          ]);
         } finally {
           designSendInFlightRef.current = false;
-          if (!accepted) referenceDesignSelection(reference, label, prompt.trim());
         }
       },
       [
@@ -1412,9 +1427,26 @@ export const SessionChatInputArea = memo(
         isExternalHistoryRefreshing,
         isMachineRemoved,
         onSendMessage,
-        referenceDesignSelection,
         sessionConfigReady,
       ]
+    );
+    const sendDesignSelection = useCallback(
+      async (reference: DesignElementReference, label: string, prompt: string) => {
+        if (isArchived) return false;
+        let accepted = false;
+        try {
+          accepted = await sendDesignMentions([{ reference, label, prompt }], false);
+          return accepted;
+        } finally {
+          if (!accepted) referenceDesignSelection(reference, label, prompt.trim());
+        }
+      },
+      [isArchived, referenceDesignSelection, sendDesignMentions]
+    );
+    const sendDesignNotes = useCallback(
+      (notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]) =>
+        sendDesignMentions(notes, true),
+      [sendDesignMentions]
     );
 
     const insertSessionMention = useCallback(
@@ -1443,6 +1475,7 @@ export const SessionChatInputArea = memo(
         referenceDesignSelection,
         syncDesignSelection,
         sendDesignSelection,
+        sendDesignNotes,
       }),
       [
         setInputText,
@@ -1455,6 +1488,7 @@ export const SessionChatInputArea = memo(
         referenceDesignSelection,
         syncDesignSelection,
         sendDesignSelection,
+        sendDesignNotes,
       ]
     );
 

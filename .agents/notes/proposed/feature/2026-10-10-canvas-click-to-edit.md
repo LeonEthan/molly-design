@@ -14,7 +14,9 @@ Higgsfield and the Codex app all keep the request and its result at the thing
 clicked. This note records that research and a five-phase proposal; the owner
 approved phase A on 2026-10-10 and it is implemented in
 [canvas inline ask](../../implemented/feature/2026-10-10-canvas-inline-ask.md).
-Phases B–E remain proposals, and the research comes from public documentation,
+Phase B is implemented in
+[canvas numbered notes](../../implemented/feature/2026-10-11-canvas-numbered-notes.md);
+phases C and E remain proposals, and the research comes from public documentation,
 not hands-on use.
 
 ## Research (public sources, 2026-10-10)
@@ -44,7 +46,9 @@ payload Codex sends to its agent are not publicly documented.
 ## Phases
 
 - **A. Inline ask** — implemented (see link above).
-- **B. Numbered pins, one batched turn.** Cmd/Ctrl-click drops numbered pins
+- **B. Numbered pins, one batched turn.** Implemented, see
+  [canvas numbered notes](../../implemented/feature/2026-10-11-canvas-numbered-notes.md).
+  Cmd/Ctrl-click drops numbered pins
   with their own instruction; "Send N notes" sends one turn with N references
   and one "Before Molly's edit" restore point. Reuses multi-reference parsing.
   Fits current Spec intent.

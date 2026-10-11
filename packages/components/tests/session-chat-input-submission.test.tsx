@@ -709,6 +709,49 @@ describe('SessionChatInputArea submission feedback', () => {
       });
       expect(textarea.value).toBe('focus regression draft Warmer. ');
     });
+
+    it('sends numbered canvas notes as one turn with one reference per note', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      let sent: SessionInputBlock[] | undefined;
+      const textarea = await renderComposer({
+        composerRef,
+        onSendMessage: async (blocks) => {
+          sent = blocks;
+          return true;
+        },
+      });
+      const second = { ...reference, elementIds: ['photo'] };
+      let accepted: boolean | undefined;
+      await act(async () => {
+        accepted = await composerRef.current?.sendDesignNotes([
+          { reference, label: 'Note 1', prompt: ' Warmer headline. ' },
+          { reference: second, label: 'Note 2', prompt: 'Crop tighter.' },
+        ]);
+      });
+      expect(accepted).toBe(true);
+      const block = sent![0] as { type: string; text: string };
+      const lines = block.text.split('\n');
+      expect(lines).toHaveLength(2);
+      expect(lines[0].startsWith('1. Warmer headline. <molly-elements>')).toBe(true);
+      expect(lines[1].startsWith('2. Crop tighter. <molly-elements>')).toBe(true);
+      expect(readDesignElementReferences(block.text)).toEqual([reference, second]);
+      expect(textarea.value).toBe('focus regression draft');
+      expect(chip()).toBeNull();
+    });
+
+    it('leaves the draft untouched when canvas notes cannot be sent', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ composerRef, onSendMessage: async () => false });
+      let accepted: boolean | undefined;
+      await act(async () => {
+        accepted = await composerRef.current?.sendDesignNotes([
+          { reference, label: 'Note 1', prompt: 'Warmer.' },
+        ]);
+      });
+      expect(accepted).toBe(false);
+      expect(chip()).toBeNull();
+      expect(textarea.value).toBe('focus regression draft');
+    });
   });
 
   it('does not let an old completion enable another session pending submission', async () => {

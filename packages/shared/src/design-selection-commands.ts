@@ -170,6 +170,20 @@ export const DesignCanvasCommandResultSchema = z
 export type DesignCanvasCommandResult = z.infer<typeof DesignCanvasCommandResultSchema>;
 
 export const DESIGN_ASK_PROMPT_MAX = 4000;
+export const DESIGN_NOTES_MAX = 10;
+/** Numbered canvas notes read from the visible canonical canvas, in pin order. */
+export const DesignNotesSchema = z
+  .array(
+    z
+      .object({
+        elementIds: z.array(z.string().min(1).max(200)).min(1).max(1000),
+        prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+      })
+      .strict()
+  )
+  .min(1)
+  .max(DESIGN_NOTES_MAX);
+export type DesignNotes = z.infer<typeof DesignNotesSchema>;
 /** Native toolbar requests carry a selection epoch, never an editable target. */
 export const DesignSelectionActionSchema = z.enum([
   'reference',
@@ -206,6 +220,12 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
       selectionEpoch: z.number().int().nonnegative(),
       prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
       send: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal('notes'),
+      notesEpoch: z.number().int().nonnegative(),
     })
     .strict(),
 ]);

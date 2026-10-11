@@ -9,6 +9,9 @@ Model-account refresh held the credential vault lock while contacting the provid
 
 ## Responsibilities and reuse
 
+The [later replacement correction](2026-10-10-model-oauth-replacement.md) binds edits to
+their exact row, revokes replaced grants and retires the cancellation rollback described here.
+
 [PR 119](https://github.com/LeonEthan/molly-design/pull/119) owns these review corrections.
 The native worker already rejects changed keys, but that guard runs after the journal fence
 and cannot recover an undispatched prompt. The CLI's existing `needsReplacement` branch

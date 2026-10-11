@@ -10,6 +10,8 @@ import {
   SaveMcpCredentialSettingsSchema,
   DeleteMcpCredentialSchema,
   OpenAiAuthSessionSchema,
+  BeginOpenAiAuthSchema,
+  type BeginOpenAiAuth,
   type CheckImageConnection,
   type CheckModelConnection,
   type DiscoverModelConnection,
@@ -175,9 +177,10 @@ export class ModelConnectionsIpc extends IpcService {
    * The renderer receives either the browser URL to open or the device code to display.
    */
   @IpcMethod()
-  async beginOpenAiAuth(input?: { provider?: string }) {
-    const provider = input?.provider === 'kimi-coding' ? 'kimi-coding' : 'openai'
-    const result = await getOAuthSignInService().begin(provider)
+  async beginOpenAiAuth(input: BeginOpenAiAuth = {}) {
+    const parsed = BeginOpenAiAuthSchema.safeParse(input)
+    if (!parsed.success) return { ok: false as const, reason: 'unavailable' as const }
+    const result = await getOAuthSignInService().begin(parsed.data)
     return OpenAiAuthSessionSchema.safeParse(result).success
       ? result
       : { ok: false as const, reason: 'unavailable' as const }

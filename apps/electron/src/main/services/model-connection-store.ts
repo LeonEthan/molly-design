@@ -78,6 +78,7 @@ const StoreSchema = z
   .strict()
 type Store = z.infer<typeof StoreSchema>
 export type StoreEntry = Store['entries'][number]
+export type BeforeConnectionChange = (previous?: StoreEntry) => Promise<boolean>
 
 /** Main-only: never register this class with renderer IPC or include entries in diagnostics. */
 export class ModelConnectionStore {
@@ -111,6 +112,72 @@ export class ModelConnectionStore {
     const next = this.pending.then(operation, operation)
     this.pending = next.catch(() => undefined)
     return next
+  }
+
+  private serialConnection<T>(connectionId: string | undefined, fn: () => Promise<T>): Promise<T> {
+    if (!connectionId) return fn()
+    const previous = this.oauthPending.get(connectionId) ?? Promise.resolve()
+    const operation = previous.then(fn)
+    const settled = operation.catch(() => undefined)
+    this.oauthPending.set(connectionId, settled)
+    void settled.then(() => {
+      if (this.oauthPending.get(connectionId) === settled) this.oauthPending.delete(connectionId)
+    })
+    return operation
+  }
+
+  private changeConnection<T>(
+    queueId: string | undefined,
+    prepare: (store: Store) => { previous?: StoreEntry; next?: StoreEntry; result: T },
+    beforeChange?: BeforeConnectionChange
+  ): Promise<T> {
+    return this.serialConnection(queueId, async () => {
+      const apply = async (store: Store, change: ReturnType<typeof prepare>) => {
+        const index = change.previous ? store.entries.indexOf(change.previous) : -1
+        if (index === -1) {
+          if (change.next) store.entries.push(change.next)
+        } else if (change.next) store.entries[index] = change.next
+        else store.entries.splice(index, 1)
+        await this.write(store)
+        return change.result
+      }
+      if (!beforeChange)
+        return this.serial(async () => {
+          const store = await this.read()
+          return apply(store, prepare(store))
+        })
+      const prepared = await this.serial(async () => prepare(await this.read()))
+      const revocationAttempted = await beforeChange(prepared.previous)
+      try {
+        return await this.serial(async () => {
+          const store = await this.read()
+          const current = prepare(store)
+          if (JSON.stringify(current.previous) !== JSON.stringify(prepared.previous))
+            throw new Error('model_connection_revision_conflict')
+          return apply(store, { ...prepared, previous: current.previous })
+        })
+      } catch (error) {
+        const previous = prepared.previous
+        if (revocationAttempted && previous?.oauth)
+          await this.serial(async () => {
+            const store = await this.read()
+            const current = store.entries.find(
+              (entry) => entry.connection.id === previous.connection.id
+            )
+            if (
+              current?.oauth &&
+              current.connection.credentialRef === previous.connection.credentialRef &&
+              current.connection.providerPresetId === previous.connection.providerPresetId &&
+              current.connection.baseUrl === previous.connection.baseUrl &&
+              JSON.stringify(current.oauth) === JSON.stringify(previous.oauth)
+            ) {
+              current.oauth.denied = true
+              await this.write(store)
+            }
+          }).catch(() => undefined)
+        throw error
+      }
+    })
   }
 
   private async read(): Promise<Store> {
@@ -426,89 +493,96 @@ export class ModelConnectionStore {
     })
   }
 
-  save(input: SaveModelConnection): Promise<ModelConnection> {
+  save(
+    input: SaveModelConnection,
+    beforeChange?: BeforeConnectionChange
+  ): Promise<ModelConnection> {
     const parsed = SaveModelConnectionSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_model_connection'))
-    return this.serial(async () => {
-      const data = parsed.data
-      const store = await this.read()
-      const previous = data.id
-        ? store.entries.find((entry) => entry.connection.id === data.id)
-        : undefined
-      if (data.id && (!previous || previous.connection.revision !== data.expectedRevision)) {
-        throw new Error('model_connection_revision_conflict')
-      }
-      if (!data.id && data.expectedRevision !== undefined)
-        throw new Error('model_connection_revision_conflict')
-      if (!previous && store.entries.length >= 256) throw new Error('model_connection_limit')
-      // Editing an OAuth connection keeps its stored auth type and token set — but only
-      // while the provider stays put. A provider switch means a different credential
-      // shape: OAuth metadata is dropped and the submitted api key rules.
-      const providerChanged =
-        previous !== undefined && previous.connection.providerPresetId !== data.providerPresetId
-      const effectiveAuthType = providerChanged
-        ? data.authType
-        : (data.authType ??
-          (previous?.connection.authType === 'openai_oauth' ? 'openai_oauth' : undefined))
-      if (providerChanged && effectiveAuthType === 'openai_oauth')
-        throw new Error('model_connection_oauth_requires_reauth')
-      const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
-      if (effectiveAuthType !== 'openai_oauth' && !apiKey)
-        throw new Error('model_connection_credential_required')
-      // A changed destination must receive explicit renewed credential consent.
-      if (
-        previous &&
-        !data.apiKey &&
-        (previous.connection.baseUrl !== data.baseUrl || providerChanged)
-      ) {
-        throw new Error('model_connection_destination_requires_credential')
-      }
-      const connection = ModelConnectionSchema.parse({
-        schemaVersion: 1,
-        id: previous?.connection.id ?? randomUUID(),
-        revision: (previous?.connection.revision ?? 0) + 1,
-        credentialRef: previous?.connection.credentialRef ?? randomUUID(),
-        displayName: data.displayName,
-        providerPresetId: data.providerPresetId,
-        baseUrl: data.baseUrl,
-        enabled: data.enabled,
-        ...(effectiveAuthType ? { authType: effectiveAuthType } : {}),
-        // OAuth account metadata is main-owned and survives only same-provider edits.
-        ...(previous?.connection.oauth && !providerChanged
-          ? { oauth: previous.connection.oauth }
-          : {}),
-        ...(data.customModels ? { customModels: data.customModels } : {}),
-        ...(data.models ? { models: data.models } : {})
-      })
-      const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
-      if (previous && effectiveAuthType === 'openai_oauth' && !oauth)
-        throw new Error('model_connection_oauth_required')
-      // Leaving OAuth for the same provider still requires a fresh sign-in; switching
-      // provider already dropped the grant above, so only the api-key path remains.
-      if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth' && !providerChanged)
-        throw new Error('model_connection_oauth_requires_reauth')
-      const credential =
-        effectiveAuthType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }
-      store.entries = previous
-        ? store.entries.map((entry) => (entry === previous ? credential : entry))
-        : [...store.entries, credential]
-      await this.write(store)
-      return connection
-    })
+    const data = parsed.data
+    return this.changeConnection(
+      data.apiKey ? data.id : undefined,
+      (store) => {
+        const previous = data.id
+          ? store.entries.find((entry) => entry.connection.id === data.id)
+          : undefined
+        if (data.id && (!previous || previous.connection.revision !== data.expectedRevision)) {
+          throw new Error('model_connection_revision_conflict')
+        }
+        if (!data.id && data.expectedRevision !== undefined)
+          throw new Error('model_connection_revision_conflict')
+        if (!previous && store.entries.length >= 256) throw new Error('model_connection_limit')
+        // Editing an OAuth connection keeps its stored auth type and token set — but only
+        // while the provider stays put. A provider switch means a different credential
+        // shape: OAuth metadata is dropped and the submitted api key rules.
+        const providerChanged =
+          previous !== undefined && previous.connection.providerPresetId !== data.providerPresetId
+        const effectiveAuthType = providerChanged
+          ? data.authType
+          : (data.authType ??
+            (previous?.connection.authType === 'openai_oauth' ? 'openai_oauth' : undefined))
+        if (providerChanged && effectiveAuthType === 'openai_oauth')
+          throw new Error('model_connection_oauth_requires_reauth')
+        const apiKey = data.apiKey ?? (providerChanged ? undefined : previous?.apiKey)
+        if (effectiveAuthType !== 'openai_oauth' && !apiKey)
+          throw new Error('model_connection_credential_required')
+        // A changed destination must receive explicit renewed credential consent.
+        if (
+          previous &&
+          !data.apiKey &&
+          (previous.connection.baseUrl !== data.baseUrl || providerChanged)
+        ) {
+          throw new Error('model_connection_destination_requires_credential')
+        }
+        const connection = ModelConnectionSchema.parse({
+          schemaVersion: 1,
+          id: previous?.connection.id ?? randomUUID(),
+          revision: (previous?.connection.revision ?? 0) + 1,
+          credentialRef: previous?.connection.credentialRef ?? randomUUID(),
+          displayName: data.displayName,
+          providerPresetId: data.providerPresetId,
+          baseUrl: data.baseUrl,
+          enabled: data.enabled,
+          ...(effectiveAuthType ? { authType: effectiveAuthType } : {}),
+          // OAuth account metadata is main-owned and survives only same-provider edits.
+          ...(previous?.connection.oauth && !providerChanged
+            ? { oauth: previous.connection.oauth }
+            : {}),
+          ...(data.customModels ? { customModels: data.customModels } : {}),
+          ...(data.models ? { models: data.models } : {})
+        })
+        const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
+        if (previous && effectiveAuthType === 'openai_oauth' && !oauth)
+          throw new Error('model_connection_oauth_required')
+        // Leaving OAuth for the same provider still requires a fresh sign-in; switching
+        // provider already dropped the grant above, so only the api-key path remains.
+        if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth' && !providerChanged)
+          throw new Error('model_connection_oauth_requires_reauth')
+        const credential =
+          effectiveAuthType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }
+        return { previous, next: credential, result: connection }
+      },
+      beforeChange
+    )
   }
 
-  delete(input: { id: string; expectedRevision: number }): Promise<void> {
+  delete(
+    input: { id: string; expectedRevision: number },
+    beforeChange?: BeforeConnectionChange
+  ): Promise<void> {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) return Promise.reject(new Error('invalid_model_connection'))
-    return this.serial(async () => {
-      const store = await this.read()
-      const current = store.entries.find((entry) => entry.connection.id === parsed.data.id)
-      if (!current || current.connection.revision !== parsed.data.expectedRevision) {
-        throw new Error('model_connection_revision_conflict')
-      }
-      store.entries = store.entries.filter((entry) => entry !== current)
-      await this.write(store)
-    })
+    return this.changeConnection(
+      parsed.data.id,
+      (store) => {
+        const current = store.entries.find((entry) => entry.connection.id === parsed.data.id)
+        if (!current || current.connection.revision !== parsed.data.expectedRevision) {
+          throw new Error('model_connection_revision_conflict')
+        }
+        return { previous: current, result: undefined }
+      },
+      beforeChange
+    )
   }
 
   /** Main-only explicit settings check: the saved key of this exact revision, on or off. */
@@ -568,85 +642,77 @@ export class ModelConnectionStore {
     })
   }
 
-  /**
-   * Completes an OAuth sign-in: creates the connection and its token set atomically.
-   * One OAuth row per provider. The previous row is returned to the caller so a
-   * cancelled flow can restore it — but only when no later sign-in has replaced this
-   * one since (rollbackOAuthConnection refuses to resurrect a superseded row).
-   */
-  saveOAuthConnection(
+  async saveOAuthConnection(
     input: SaveModelConnection,
     tokens: OAuthTokenSet,
-    account: { email?: string; plan?: string; accountId?: string }
-  ): Promise<{ connection: ModelConnection; replaced?: StoreEntry }> {
+    account: { email?: string; plan?: string; accountId?: string },
+    beforeChange?: BeforeConnectionChange
+  ): Promise<{ connection: ModelConnection }> {
     const parsed = SaveModelConnectionSchema.safeParse(input)
     if (!parsed.success || parsed.data.authType !== 'openai_oauth')
       return Promise.reject(new Error('invalid_model_connection'))
-    return this.serial(async () => {
-      const store = await this.read()
-      // One OAuth row per provider: a second sign-in replaces the previous grant.
-      const replaced = store.entries.find(
-        (item) =>
-          item.connection.authType === 'openai_oauth' &&
-          item.connection.providerPresetId === parsed.data.providerPresetId
+    const data = parsed.data
+    const binding = await this.serial(async () =>
+      (await this.read()).entries.find((item) =>
+        data.id
+          ? item.connection.id === data.id
+          : item.connection.authType === 'openai_oauth' &&
+            item.connection.providerPresetId === data.providerPresetId
       )
-      if (!replaced && store.entries.length >= 256) throw new Error('model_connection_limit')
-      store.entries = store.entries.filter((item) => item !== replaced)
-      const connection = ModelConnectionSchema.parse({
-        schemaVersion: 1,
-        id: replaced?.connection.id ?? randomUUID(),
-        revision: (replaced?.connection.revision ?? 0) + 1,
-        credentialRef: replaced?.connection.credentialRef ?? randomUUID(),
-        displayName: replaced?.connection.displayName ?? parsed.data.displayName,
-        providerPresetId: parsed.data.providerPresetId,
-        baseUrl: parsed.data.baseUrl,
-        enabled: parsed.data.enabled,
-        authType: 'openai_oauth',
-        oauth: account,
-        ...((parsed.data.models ?? replaced?.connection.models)
-          ? { models: parsed.data.models ?? replaced?.connection.models }
-          : {})
-      })
-      store.entries = [
-        ...store.entries,
-        {
-          connection,
-          oauth: { ...tokens, ...(account.accountId ? { accountId: account.accountId } : {}) }
-        }
-      ]
-      await this.write(store)
-      return { connection, replaced }
-    })
-  }
-
-  rollbackOAuthConnection(
-    connectionId: string,
-    expectedRevision: number,
-    replaced?: StoreEntry
-  ): Promise<void> {
-    return this.serial(async () => {
-      const store = await this.read()
-      const index = store.entries.findIndex(
-        (item) =>
-          item.connection.id === connectionId && item.connection.revision === expectedRevision
-      )
-      if (index === -1) return
-      const provider = store.entries[index].connection.providerPresetId
-      store.entries.splice(index, 1)
-      // Restore the predecessor only when this rollback removes the provider's last
-      // OAuth row AND the predecessor was never superseded by a row that is itself
-      // gone. A predecessor superseded by a cancelled row stays cancelled with it.
-      if (
-        replaced &&
-        !store.entries.some(
+    )
+    return this.changeConnection(
+      binding?.connection.id ?? data.id ?? `oauth:${data.providerPresetId}`,
+      (store) => {
+        const providerRow = store.entries.find(
           (item) =>
-            item.connection.providerPresetId === provider &&
-            item.connection.authType === 'openai_oauth'
+            item.connection.authType === 'openai_oauth' &&
+            item.connection.providerPresetId === data.providerPresetId
         )
-      )
-        store.entries.push(replaced)
-      await this.write(store)
-    })
+        const replaced = data.id
+          ? store.entries.find((item) => item.connection.id === data.id)
+          : providerRow
+        if (
+          !data.id &&
+          (replaced?.connection.id !== binding?.connection.id ||
+            replaced?.connection.revision !== binding?.connection.revision)
+        )
+          throw new Error('model_connection_revision_conflict')
+        if (data.id && (!replaced || replaced.connection.revision !== data.expectedRevision))
+          throw new Error('model_connection_revision_conflict')
+        if (!data.id && data.expectedRevision !== undefined)
+          throw new Error('model_connection_revision_conflict')
+        if (data.id && providerRow && providerRow !== replaced)
+          throw new Error('model_connection_oauth_provider_conflict')
+        if (!replaced && store.entries.length >= 256) throw new Error('model_connection_limit')
+        const sameProvider = replaced?.connection.providerPresetId === data.providerPresetId
+        const models = data.models ?? (sameProvider ? replaced?.connection.models : undefined)
+        const connection = ModelConnectionSchema.parse({
+          schemaVersion: 1,
+          id: replaced?.connection.id ?? randomUUID(),
+          revision: (replaced?.connection.revision ?? 0) + 1,
+          credentialRef: replaced?.connection.credentialRef ?? randomUUID(),
+          displayName: replaced?.connection.displayName ?? data.displayName,
+          providerPresetId: data.providerPresetId,
+          baseUrl: data.baseUrl,
+          enabled: replaced?.connection.enabled ?? data.enabled,
+          authType: 'openai_oauth',
+          oauth: account,
+          ...(models ? { models } : {})
+        })
+        return {
+          previous: replaced,
+          next: {
+            connection,
+            oauth: OAuthTokenSetSchema.parse({
+              ...tokens,
+              ...(account.accountId ? { accountId: account.accountId } : {})
+            })
+          },
+          result: { connection }
+        }
+      },
+      beforeChange
+    )
   }
 
   /** The OAuth token set of one connection (main-process only). */
@@ -657,13 +723,24 @@ export class ModelConnectionStore {
     })
   }
 
+  hasOAuthGrant(providerPresetId: string, tokens: OAuthTokenSet): Promise<boolean> {
+    return this.serial(async () =>
+      (await this.read()).entries.some(
+        (entry) =>
+          entry.connection.providerPresetId === providerPresetId &&
+          entry.oauth?.accessToken === tokens.accessToken &&
+          entry.oauth.refreshToken === tokens.refreshToken &&
+          entry.oauth.clientId === tokens.clientId
+      )
+    )
+  }
+
   mutateOAuth(
     connectionId: string,
     fn: (current: OAuthTokenSet | undefined) => Promise<OAuthTokenSet | undefined>,
     expectedRevision?: number
   ): Promise<OAuthTokenSet | undefined> {
-    const previous = this.oauthPending.get(connectionId) ?? Promise.resolve()
-    const operation = previous.then(async () => {
+    return this.serialConnection(connectionId, async () => {
       const initial = await this.serial(async () =>
         (await this.read()).entries.find((item) => item.connection.id === connectionId)
       )
@@ -694,12 +771,6 @@ export class ModelConnectionStore {
         return current.oauth
       })
     })
-    const settled = operation.catch(() => undefined)
-    this.oauthPending.set(connectionId, settled)
-    void settled.then(() => {
-      if (this.oauthPending.get(connectionId) === settled) this.oauthPending.delete(connectionId)
-    })
-    return operation
   }
 
   /** Stable installation id sent to OpenAI as the agent host id on first login. */

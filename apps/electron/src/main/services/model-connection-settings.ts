@@ -14,17 +14,19 @@ export async function saveModelConnection(
   const parsed = SaveModelConnectionSchema.safeParse(input)
   if (!parsed.success) throw new Error('invalid_model_connection')
   const data = parsed.data
-  if (data.id && data.expectedRevision !== undefined) {
-    const saved = await store.oauthForCheck(data.id, data.expectedRevision)
+  if (!data.apiKey || !data.id) return store.save(data)
+  return store.save(data, async (saved) => {
     if (
-      saved &&
+      saved?.oauth &&
       data.apiKey &&
       data.authType !== 'openai_oauth' &&
       saved.connection.providerPresetId !== data.providerPresetId
-    )
+    ) {
       await revoke(saved.connection.providerPresetId, saved.oauth).catch(() => undefined)
-  }
-  return store.save(data)
+      return true
+    }
+    return false
+  })
 }
 
 export async function deleteModelConnection(
@@ -34,7 +36,9 @@ export async function deleteModelConnection(
 ) {
   const parsed = DeleteModelConnectionSchema.safeParse(input)
   if (!parsed.success) throw new Error('invalid_model_connection')
-  const saved = await store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision)
-  if (saved) await revoke(saved.connection.providerPresetId, saved.oauth).catch(() => undefined)
-  return store.delete(parsed.data)
+  return store.delete(parsed.data, async (saved) => {
+    if (!saved?.oauth) return false
+    await revoke(saved.connection.providerPresetId, saved.oauth).catch(() => undefined)
+    return true
+  })
 }

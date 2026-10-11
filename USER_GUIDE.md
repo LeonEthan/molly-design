@@ -40,9 +40,11 @@ app and automation interfaces unresponsive.
    the provider didn't list for your key are marked and sorted last. Enter keys only in the
    local settings field, never in a conversation or artwork file. Saving encrypts the
    connection and doesn't change an existing session's selection; **Delete** removes a
-   connection after you confirm. Sign-out, deletion and conversion to an API key attempt
+   connection after you confirm. Sign-out, deletion, key conversion and account replacement attempt
    provider revocation before local removal, even when the revocation endpoint is unavailable.
-   **Sign in again** preserves the connection used by existing sessions. ChatGPT sign-in
+   Signing in from **Edit** updates that exact connection; a conflicting provider account
+   must be handled separately. **Sign in again** preserves the connection used by existing
+   sessions. Cancel before account replacement begins; revocation and saving finish once started. ChatGPT sign-in
    uses OpenAI's direct API token scope through the pinned pi-ai provider; live sign-in
    and service behavior remain unverified in this build.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
@@ -83,7 +85,8 @@ declarations are never probed or verified. Adding a model manually always works,
 for services without a list endpoint (Azure deployments, z.ai). This path uses standard
 Chat Completions streaming, not Responses or vendor-specific thinking formats. Turns
 containing tools require declared tool-call support. Saving does not verify these
-declarations or select a model; unknown prices remain unknown.
+declarations or select a model; unknown prices remain unknown. Changing the address or
+key clears discovery results and picked discovery drafts; manual declarations stay.
 
 ## Try a design
 

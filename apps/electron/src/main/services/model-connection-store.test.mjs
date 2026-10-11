@@ -227,7 +227,7 @@ void test('OAuth refresh keeps public reads and unrelated saves available, prese
   assert.equal((await store.acquireForRun(unrelated.id, unrelated.revision)).apiKey, input.apiKey)
 })
 
-void test('reauthentication preserves the selection identity and fences stale refresh and rollback', async (t) => {
+void test('reauthentication waits for rotation and preserves the selection identity', async (t) => {
   const { store } = await fixture(t)
   const first = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
   const started = deferred()
@@ -238,34 +238,88 @@ void test('reauthentication preserves the selection identity and fences stale re
     async (current) => {
       started.resolve()
       await finish.promise
-      return { ...current, accessToken: 'STALE_ROTATED' }
+      return { ...current, accessToken: 'ROTATED_ACCESS', refreshToken: 'ROTATED_REFRESH' }
     },
     first.connection.revision
   )
   await started.promise
-  const second = await store.saveOAuthConnection(
+  const replacement = store.saveOAuthConnection(
     { ...oauthInput, models: undefined },
     { ...oauthTokens, refreshToken: 'NEW_LOGIN_REFRESH', clientId: 'new-client' },
-    {}
+    {},
+    async (previous) => {
+      assert.equal(previous.oauth.refreshToken, 'ROTATED_REFRESH')
+      assert.equal((await store.oauthFor(first.connection.id)).refreshToken, 'ROTATED_REFRESH')
+      return true
+    }
   )
+  finish.resolve()
+  assert.equal((await refresh).accessToken, 'ROTATED_ACCESS')
+  const second = await replacement
   assert.equal(second.connection.id, first.connection.id)
   assert.equal(second.connection.credentialRef, first.connection.credentialRef)
   assert.equal(second.connection.revision, first.connection.revision + 1)
   assert.deepEqual(second.connection.models, first.connection.models)
-  finish.resolve()
-  assert.equal(await refresh, undefined)
-  await store.rollbackOAuthConnection(first.connection.id, first.connection.revision)
   assert.equal((await store.oauthFor(first.connection.id)).refreshToken, 'NEW_LOGIN_REFRESH')
-  await store.rollbackOAuthConnection(
-    second.connection.id,
-    second.connection.revision,
-    second.replaced
+  assert.equal(
+    await store.mutateOAuth(
+      first.connection.id,
+      async () => {
+        throw new Error('stale revision must not refresh')
+      },
+      first.connection.revision
+    ),
+    undefined
   )
-  assert.deepEqual(await store.acquireForRun(first.connection.id, first.connection.revision), {
-    connection: first.connection,
-    oauth: oauthTokens
-  })
 })
+
+for (const action of ['delete', 'convert']) {
+  void test(`${action} revokes the rotated grant after an in-flight refresh`, async (t) => {
+    const { store } = await fixture(t)
+    const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+    const started = deferred()
+    const finish = deferred()
+    t.after(() => finish.resolve())
+    const refresh = store.mutateOAuth(
+      connection.id,
+      async (current) => {
+        started.resolve()
+        await finish.promise
+        return { ...current, refreshToken: 'ROTATED_REFRESH' }
+      },
+      connection.revision
+    )
+    await started.promise
+    const revoked = []
+    const revoke = async (provider, tokens) => {
+      revoked.push([provider, tokens.refreshToken])
+      assert.equal((await store.oauthFor(connection.id)).refreshToken, 'ROTATED_REFRESH')
+    }
+    const mutation =
+      action === 'delete'
+        ? deleteModelConnection(
+            store,
+            { id: connection.id, expectedRevision: connection.revision },
+            revoke
+          )
+        : saveModelConnection(
+            store,
+            {
+              ...input,
+              id: connection.id,
+              expectedRevision: connection.revision,
+              providerPresetId: 'anthropic',
+              baseUrl: 'https://api.anthropic.com'
+            },
+            revoke
+          )
+    finish.resolve()
+    await refresh
+    await mutation
+    assert.deepEqual(revoked, [['openai', 'ROTATED_REFRESH']])
+    assert.equal(await store.oauthFor(connection.id), undefined)
+  })
+}
 
 void test('provider conversion and deletion revoke OAuth before dropping the saved grant, including offline revocation', async (t) => {
   const { store } = await fixture(t)

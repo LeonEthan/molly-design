@@ -18,11 +18,14 @@ import {
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
 import { kimiCodingProvider } from '@earendil-works/pi-ai/providers/kimi-coding'
 import {
+  BeginOpenAiAuthSchema,
   PROVIDER_PRESET_DEFAULT_BASE_URLS,
+  type BeginOpenAiAuth,
   type ModelConnection,
   type OAuthProviderPresetId
 } from '@molly/shared/embedded-harness'
-import type { ModelConnectionStore, OAuthTokenSet, StoreEntry } from './model-connection-store'
+import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store'
+import { revokeOAuthGrant } from './oauth-revocation.ts'
 
 export type OAuthSignInBeginResult =
   | {
@@ -62,6 +65,8 @@ interface PendingFlow {
   abort: AbortController
   expiryTimer: NodeJS.Timeout
   result: Promise<OAuthSignInCompleteResult>
+  target: Pick<BeginOpenAiAuth, 'id' | 'expectedRevision'>
+  committing: boolean
 }
 
 /**
@@ -121,23 +126,27 @@ function accountIdFromAccessToken(accessToken: string): string | undefined {
 
 export class OAuthSignInService {
   private pending: PendingFlow | undefined
-  /** Rows whose own flow was cancelled, with the row they replaced (for chain walks). */
-  private readonly cancelledConnections = new Map<string, StoreEntry | undefined>()
   private readonly store: ModelConnectionStore
   private readonly openExternal: (url: string) => void | Promise<void>
   private readonly modelsFactory: typeof createModels
+  private readonly revoke: typeof revokeOAuthGrant
 
   constructor(
     store: ModelConnectionStore,
     openExternal: (url: string) => void | Promise<void>,
-    modelsFactory: typeof createModels = createModels
+    modelsFactory: typeof createModels = createModels,
+    revoke: typeof revokeOAuthGrant = revokeOAuthGrant
   ) {
     this.store = store
     this.openExternal = openExternal
     this.modelsFactory = modelsFactory
+    this.revoke = revoke
   }
 
-  async begin(providerPresetId: OAuthProviderPresetId): Promise<OAuthSignInBeginResult> {
+  async begin(input: BeginOpenAiAuth = {}): Promise<OAuthSignInBeginResult> {
+    const parsed = BeginOpenAiAuthSchema.safeParse(input)
+    if (!parsed.success || this.pending?.committing) return { ok: false, reason: 'unavailable' }
+    const providerPresetId = parsed.data.provider ?? 'openai'
     this.cancelPending()
     const descriptor = OAUTH_PROVIDERS[providerPresetId]
     if (!descriptor) return { ok: false, reason: 'unavailable' }
@@ -202,7 +211,15 @@ export class OAuthSignInService {
       settle({ ok: false, reason: 'timed_out' })
     }, FLOW_TIMEOUT_MS)
     expiryTimer.unref?.()
-    this.pending = { sessionId, providerPresetId, abort, expiryTimer, result }
+    this.pending = {
+      sessionId,
+      providerPresetId,
+      abort,
+      expiryTimer,
+      result,
+      target: { id: parsed.data.id, expectedRevision: parsed.data.expectedRevision },
+      committing: false
+    }
 
     void (async () => {
       try {
@@ -242,14 +259,18 @@ export class OAuthSignInService {
     credential: Credential
   ): Promise<OAuthSignInCompleteResult> {
     const tokens = tokenSetFromCredential(credential)
+    const accountId = accountIdFromAccessToken(tokens.accessToken)
     if (!tokens.accessToken || !tokens.refreshToken)
       return { ok: false, reason: 'invalid_response' }
-    // The flow may have been cancelled while the exchange was in flight; a cancelled
-    // flow must not save an account.
-    if (this.pending?.sessionId !== sessionId) return { ok: false, reason: 'cancelled' }
+    const pending = this.pending
+    if (pending?.sessionId !== sessionId) {
+      await this.discardGrant(providerPresetId, tokens)
+      return { ok: false, reason: 'cancelled' }
+    }
     try {
       const saved = await this.store.saveOAuthConnection(
         {
+          ...pending.target,
           displayName: OAUTH_PROVIDERS[providerPresetId].displayName,
           providerPresetId,
           baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS[providerPresetId],
@@ -257,36 +278,34 @@ export class OAuthSignInService {
           authType: 'openai_oauth'
         },
         tokens,
-        { accountId: accountIdFromAccessToken(tokens.accessToken) }
-      )
-      // The write may have queued behind a cancellation: remove the new row and
-      // restore the oldest live predecessor in its replacement chain, so a cancelled
-      // flow strands no grant and overlapping cancels walk back to the last live row.
-      if (this.pending?.sessionId !== sessionId) {
-        const savedKey = JSON.stringify([saved.connection.id, saved.connection.revision])
-        this.cancelledConnections.set(savedKey, saved.replaced)
-        let predecessor = saved.replaced
-        while (
-          predecessor &&
-          this.cancelledConnections.has(
-            JSON.stringify([predecessor.connection.id, predecessor.connection.revision])
+        accountId ? { accountId } : {},
+        async (previous) => {
+          if (this.pending !== pending || pending.abort.signal.aborted)
+            throw new Error('oauth_cancelled')
+          pending.committing = true
+          clearTimeout(pending.expiryTimer)
+          if (!previous?.oauth) return false
+          await this.revoke(previous.connection.providerPresetId, previous.oauth).catch(
+            () => undefined
           )
-        )
-          predecessor = this.cancelledConnections.get(
-            JSON.stringify([predecessor.connection.id, predecessor.connection.revision])
-          )
-        await this.store
-          .rollbackOAuthConnection(saved.connection.id, saved.connection.revision, predecessor)
-          .catch(() => undefined)
-        return { ok: false, reason: 'cancelled' }
-      }
-      this.cancelledConnections.delete(
-        JSON.stringify([saved.connection.id, saved.connection.revision])
+          return true
+        }
       )
       return { ok: true, connection: saved.connection }
     } catch {
-      return { ok: false, reason: 'unreachable' }
+      await this.discardGrant(providerPresetId, tokens)
+      return { ok: false, reason: pending.abort.signal.aborted ? 'cancelled' : 'unreachable' }
+    } finally {
+      pending.committing = false
+      clearTimeout(pending.expiryTimer)
     }
+  }
+
+  private async discardGrant(providerPresetId: OAuthProviderPresetId, tokens: OAuthTokenSet) {
+    try {
+      if (await this.store.hasOAuthGrant(providerPresetId, tokens)) return
+      await this.revoke(providerPresetId, tokens).catch(() => undefined)
+    } catch {}
   }
 
   /** Resolves when the flow completes, times out or is cancelled. */
@@ -302,7 +321,7 @@ export class OAuthSignInService {
 
   private cancelPending() {
     const pending = this.pending
-    if (!pending) return
+    if (!pending || pending.committing) return
     this.pending = undefined
     clearTimeout(pending.expiryTimer)
     pending.abort.abort()

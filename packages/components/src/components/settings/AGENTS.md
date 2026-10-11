@@ -31,12 +31,12 @@ Preserve historical catalog fields when editing unrelated values.
   supported imports; cookie counts do not attest website sign-in. Import offers every
   installed browser profile from `ACCOUNT_IMPORT_BROWSERS`, names unlistable browsers,
   and keeps the button visible with the reason when a build cannot import.
-- Advanced compatible models use explicit bounded metadata on the connection row.
-  Explain protocol/declared capabilities and missing tool support; saving is not a
-  probe, model selection or price estimate. Native presets retain SDK catalogs.
-  Discovery is an explicit button: one `GET /models` to the typed or stored destination,
-  non-chat models filtered, drafts filled from the response and the packaged models.dev
-  snapshot — the saved declaration wins; a manual row covers unlistable services.
+- Compatible models declare bounded metadata per row. Explain protocol, capabilities
+  and missing tools; saving probes nothing, selects no model and estimates no price.
+  Native presets retain SDK catalogs. Explicit discovery sends one `GET /models` to the
+  typed/stored destination, filters non-chat rows and fills drafts from the response plus
+  packaged models.dev; saved declarations win. Reset discovery and discovered drafts on
+  endpoint/key changes; reject late results. Manual rows cover unlistable services.
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
   runtime launch, installation or capability toggle follows opening settings. It lists
@@ -46,12 +46,11 @@ Preserve historical catalog fields when editing unrelated values.
   background service and bundled capability inventory (System), MCP and Projects as
   sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
   plain sentence; required caveats move behind `InfoTip`, never out of the UI.
-- The connection form picks a provider from brand tiles (or an empty-state shortcut)
-  and prefills `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned SDK in
-  harness-pi) and a provider-named connection, never overwriting a typed endpoint or
-  name; the destination stays visible. Rows show only non-default endpoints; a row's
-  switch saves On/Off at once without the key. Switches save instantly; only key and
-  credential forms keep an explicit Save. Deleting asks first.
+- Connection forms use brand tiles/empty-state shortcuts and prefill
+  `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned harness-pi SDK) and
+  provider names; keep typed names/endpoints and show the destination. Sign-in binds
+  the edited ID/revision. Rows show only custom endpoints. On/Off saves instantly
+  without a key; key/credential forms keep Save. Confirm deletion.
 - A key is checked for free once it settles (`connection-check.tsx`): a typed key only
   against the shown destination, a saved key only against its own provider and endpoint.
   Checks list models or validate the key, never send a model request or DashScope call,

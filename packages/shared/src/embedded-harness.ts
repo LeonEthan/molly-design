@@ -344,7 +344,10 @@ export const ListMcpToolsSchema = z
   .object({
     serverId: identifier,
     destination: McpCredentialDestinationSchema,
-    protectedCredentials: z.object({ credentialRef: z.string().uuid(), revision }).strict().optional(),
+    protectedCredentials: z
+      .object({ credentialRef: z.string().uuid(), revision })
+      .strict()
+      .optional(),
   })
   .strict();
 export type ListMcpTools = z.infer<typeof ListMcpToolsSchema>;
@@ -597,7 +600,13 @@ export type DiscoverModelConnectionResult =
   | { ok: true; models: DiscoveredModel[]; filteredNonChat: number }
   | {
       ok: false;
-      reason: 'unreachable' | 'invalid_response' | 'needs_key' | 'changed' | 'unsupported' | 'http_error';
+      reason:
+        | 'unreachable'
+        | 'invalid_response'
+        | 'needs_key'
+        | 'changed'
+        | 'unsupported'
+        | 'http_error';
       status?: number;
     };
 
@@ -775,6 +784,16 @@ export const SaveModelConnectionSchema = ModelConnectionFieldsSchema.omit({
     'OAuth sign-in exists only for presets with an official subscription flow and never carries an API key'
   );
 export type SaveModelConnection = z.infer<typeof SaveModelConnectionSchema>;
+
+export const BeginOpenAiAuthSchema = z
+  .object({
+    provider: z.enum(OAUTH_PROVIDER_PRESETS).optional(),
+    id: z.uuid().optional(),
+    expectedRevision: revision.optional(),
+  })
+  .strict()
+  .refine((value) => (value.id === undefined) === (value.expectedRevision === undefined));
+export type BeginOpenAiAuth = z.infer<typeof BeginOpenAiAuthSchema>;
 
 /**
  * The main-side OAuth session handle. `sessionId` is opaque to the renderer. Browser

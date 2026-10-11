@@ -9,6 +9,7 @@ import {
   getModelConnectionConfigurationIssue,
   isProviderPresetDefaultEndpoint,
   type CheckModelConnection,
+  type BeginOpenAiAuth,
   type ConnectionCheckResult,
   type DiscoverModelConnection,
   type DiscoverModelConnectionResult,
@@ -155,7 +156,7 @@ export type ModelConnectionDiscover = (
 
 /** Renderer-side handle for the main-owned subscription sign-in flow. */
 export type OpenAiAuthFlow = {
-  begin: (provider?: 'openai' | 'kimi-coding') => Promise<
+  begin: (input: BeginOpenAiAuth) => Promise<
     | {
         sessionId: string;
         authorizeUrl?: string;
@@ -168,7 +169,10 @@ export type OpenAiAuthFlow = {
     sessionId: string
   ) => Promise<
     | { ok: true; connection: ModelConnection }
-    | { ok: false; reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response' }
+    | {
+        ok: false;
+        reason: 'cancelled' | 'timed_out' | 'denied' | 'unreachable' | 'invalid_response';
+      }
   >;
   cancel: (sessionId: string) => Promise<void>;
   signOut: (input: { id: string; expectedRevision: number }) => Promise<void>;
@@ -266,8 +270,15 @@ export function ModelConnectionForm({
   const [discovery, setDiscovery] = useState<DiscoveryState>({ phase: 'idle' });
   const [authFlow, setAuthFlow] = useState<
     | { phase: 'idle' }
-    | { phase: 'waiting'; sessionId: string; deviceCode?: { userCode: string; verificationUri: string } }
-    | { phase: 'failed'; reason: 'denied' | 'timed_out' | 'unreachable' | 'invalid_response' | 'unavailable' }
+    | {
+        phase: 'waiting';
+        sessionId: string;
+        deviceCode?: { userCode: string; verificationUri: string };
+      }
+    | {
+        phase: 'failed';
+        reason: 'denied' | 'timed_out' | 'unreachable' | 'invalid_response' | 'unavailable';
+      }
   >({ phase: 'idle' });
   const authAttemptRef = useRef(0);
   const isOAuthConnection =
@@ -307,7 +318,10 @@ export function ModelConnectionForm({
   const beginSignIn = useCallback(async () => {
     if (!onOpenAiAuth || !oauthProvider) return;
     const attempt = ++authAttemptRef.current;
-    const started = await onOpenAiAuth.begin(oauthProvider);
+    const started = await onOpenAiAuth.begin({
+      provider: oauthProvider,
+      ...(stored ? { id: stored.id, expectedRevision: stored.revision } : {}),
+    });
     if (!('sessionId' in started)) {
       if (mountedRef.current && attempt === authAttemptRef.current)
         setAuthFlow({ phase: 'failed', reason: started.reason });
@@ -322,7 +336,7 @@ export function ModelConnectionForm({
     setAuthFlow({
       phase: 'waiting',
       sessionId: started.sessionId,
-      ...(started.deviceCode ? { deviceCode: started.deviceCode } : {})
+      ...(started.deviceCode ? { deviceCode: started.deviceCode } : {}),
     });
     const result = await onOpenAiAuth.complete(started.sessionId);
     if (!mountedRef.current || attempt !== authAttemptRef.current) return;
@@ -336,7 +350,7 @@ export function ModelConnectionForm({
       return;
     }
     setAuthFlow({ phase: 'failed', reason: result.reason });
-  }, [onOpenAiAuth, oauthProvider, cancelForm]);
+  }, [onOpenAiAuth, oauthProvider, stored, cancelForm]);
   const configurationIssue = getModelConnectionConfigurationIssue({
     providerPresetId: provider,
     baseUrl: endpoint,
@@ -370,28 +384,46 @@ export function ModelConnectionForm({
     provider === 'openai-compatible' &&
     !configurationIssue &&
     ModelEndpointSchema.safeParse(endpoint).success;
+  const discoveryKey = JSON.stringify([provider, endpoint, typedKey, stored?.id, stored?.revision]);
+  const discoveryKeyRef = useRef(discoveryKey);
+  discoveryKeyRef.current = discoveryKey;
+  const discoveryAttemptRef = useRef(0);
+  useEffect(() => {
+    discoveryAttemptRef.current += 1;
+    setDiscovery({ phase: 'idle' });
+    setCustomModels((current) => current.filter((model) => !model.discovered));
+  }, [discoveryKey]);
   const discover = useCallback(() => {
     if (!onDiscover || !discoverable) return;
     const input: DiscoverModelConnection = typedKey
       ? { providerPresetId: 'openai-compatible', baseUrl: endpoint, apiKey: typedKey }
-      : stored
+      : stored && !requiresKey
         ? {
             providerPresetId: 'openai-compatible',
             baseUrl: endpoint,
             stored: { id: stored.id, revision: stored.revision },
           }
         : { providerPresetId: 'openai-compatible', baseUrl: endpoint };
+    const attempt = ++discoveryAttemptRef.current;
+    const current = () =>
+      mountedRef.current &&
+      discoveryKeyRef.current === discoveryKey &&
+      discoveryAttemptRef.current === attempt;
     setDiscovery({ phase: 'loading' });
     void onDiscover(input).then(
-      (result) =>
-        setDiscovery(
-          result.ok
-            ? { phase: 'done', models: result.models, filteredNonChat: result.filteredNonChat }
-            : { phase: 'failed' }
-        ),
-      () => setDiscovery({ phase: 'failed' })
+      (result) => {
+        if (current())
+          setDiscovery(
+            result.ok
+              ? { phase: 'done', models: result.models, filteredNonChat: result.filteredNonChat }
+              : { phase: 'failed' }
+          );
+      },
+      () => {
+        if (current()) setDiscovery({ phase: 'failed' });
+      }
     );
-  }, [discoverable, endpoint, onDiscover, stored, typedKey]);
+  }, [discoverable, discoveryKey, endpoint, onDiscover, requiresKey, stored, typedKey]);
   const listed =
     check.phase === 'done' && check.result.ok && check.result.models
       ? new Set(check.result.models)
@@ -506,9 +538,7 @@ export function ModelConnectionForm({
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() =>
-                          window.open(authFlow.deviceCode!.verificationUri, '_blank')
-                        }
+                        onClick={() => window.open(authFlow.deviceCode!.verificationUri, '_blank')}
                       >
                         {t('settings.models.oauth.openVerification')}
                       </Button>
@@ -534,9 +564,7 @@ export function ModelConnectionForm({
                 <div className="space-y-2 rounded-lg border border-border/60 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm">
-                        {stored.oauth.email ?? stored.displayName}
-                      </p>
+                      <p className="truncate text-sm">{stored.oauth.email ?? stored.displayName}</p>
                       <p className="text-xs text-muted-foreground">
                         {stored.oauth.denied
                           ? t('settings.models.oauth.denied')
@@ -608,35 +636,33 @@ export function ModelConnectionForm({
                   </p>
                 </div>
               )}
-              <p className="text-xs text-muted-foreground">
-                {t('settings.models.oauth.orKey')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('settings.models.oauth.orKey')}</p>
             </div>
           ) : null}
           {!(oauthProvider && onOpenAiAuth && isOAuthConnection) ? (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
-              <InfoTip>{t('settings.models.keyHelp')}</InfoTip>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Label htmlFor={`${id}-key`}>{t('settings.models.apiKey')}</Label>
+                <InfoTip>{t('settings.models.keyHelp')}</InfoTip>
+              </div>
+              <Input
+                id={`${id}-key`}
+                type="password"
+                value={apiKey}
+                disabled={busy}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={requiresKey ? undefined : t('settings.models.keyStoredPlaceholder')}
+                onChange={(event) => setApiKey(event.target.value)}
+                aria-describedby={requiresKey ? `${id}-key-hint` : undefined}
+              />
+              <ConnectionCheckLine state={check} baseUrl={endpoint} onRecheck={recheck} />
+              {requiresKey ? (
+                <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
+                  {t('settings.models.keyRequired')}
+                </p>
+              ) : null}
             </div>
-            <Input
-              id={`${id}-key`}
-              type="password"
-              value={apiKey}
-              disabled={busy}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder={requiresKey ? undefined : t('settings.models.keyStoredPlaceholder')}
-              onChange={(event) => setApiKey(event.target.value)}
-              aria-describedby={requiresKey ? `${id}-key-hint` : undefined}
-            />
-            <ConnectionCheckLine state={check} baseUrl={endpoint} onRecheck={recheck} />
-            {requiresKey ? (
-              <p id={`${id}-key-hint`} className="text-xs text-muted-foreground">
-                {t('settings.models.keyRequired')}
-              </p>
-            ) : null}
-          </div>
           ) : null}
           {showEndpointField ? (
             <div className="space-y-2">
@@ -889,7 +915,7 @@ export function ModelConnectionSetting({
   const onOpenAiAuth = useMemo<OpenAiAuthFlow | undefined>(() => {
     if (!ipc) return undefined;
     return {
-      begin: (provider) => ipc.modelConnections.beginOpenAiAuth({ provider }),
+      begin: (input) => ipc.modelConnections.beginOpenAiAuth(input),
       complete: async (sessionId) => {
         const result = await ipc.modelConnections.completeOpenAiAuth({ sessionId });
         if (result.ok) {

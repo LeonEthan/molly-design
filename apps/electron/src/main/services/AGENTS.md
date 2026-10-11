@@ -4,28 +4,27 @@
 
 ## Model credentials
 
-Capability IPC reads fixed metadata beside the resolved CLI entry, validates package/catalog
-digests and returns public fields. No SDK import or vault access; missing/incompatible
-resources mean unavailable.
+Capability IPC validates fixed metadata beside the resolved CLI: package/catalog digests,
+public fields only. No SDK import/vault access; absent/incompatible resources are unavailable.
 
-`model-connection-store`: main-only IPC save/delete/public metadata, never grants.
-Persist encrypted bytes; unavailable OS storage/Linux plaintext fail closed.
+`model-connection-store`: main-only IPC save/delete/metadata, never grants.
+Encrypt persisted bytes; unavailable OS storage/Linux plaintext fail closed.
 Endpoint/provider edits need new credentials. Broker grants bind active run, worker epoch
-and exact row revision; the vault grants no authority. Model declarations share row/revision,
-without keys, headers, scripts or per-model destinations.
-OAuth refresh queues per connection outside the vault lock; commit only to the same grant.
-Reauth keeps IDs; rollback checks revision. Persist the auth host ID in this vault.
-Attempt revocation before deletion/key conversion.
+and exact row revision; the vault grants no authority. Declarations share row/revision;
+no keys, headers, scripts or per-model destinations.
+OAuth refresh/credential changes queue per row outside the vault lock; CAS the grant.
+Sign-in binds edited ID/revision, preserves IDs and rejects provider collisions.
+Cancel only before revocation/commit; never restore revoked grants. Persist the auth host ID.
+Attempt revocation before deletion, key conversion or replacement.
 Image grants share the vault. Legacy removal needs durable encrypted backup and exact
 current-row match; disclose history/backup residue. Acquisition needs an active run except
 explicit main-only saved-destination settings checks.
-MCP values share this vault, bound to workspace, server, destination and revision;
-a changed URL or stdio command/args needs renewed input. Settings IPC derives
-the local workspace, returning no values. Acquisition needs the selected Session and
-worker epoch, except explicit Settings tool listing of the catalog row's exact binding,
-values going only to the CLI helper's stdin. Saving enables nothing. Header framing
-and isolated-process env fields cannot be credentials. Reject writes past the
-vault read limit.
+MCP values in this vault bind workspace/server/destination/revision. URL or stdio
+command/args changes need renewed input. Settings IPC derives the local workspace;
+no values returned. Acquisition needs selected Session/worker epoch, except explicit
+Settings tool listing of the catalog row's exact binding, values only to CLI helper stdin.
+Saving enables nothing. Header framing/isolated-process env fields cannot be credentials.
+Reject writes past the vault read limit.
 
 ## Design canvas contracts
 

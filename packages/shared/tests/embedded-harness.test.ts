@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ModelConnectionSchema,
   SaveModelConnectionSchema,
+  BeginOpenAiAuthSchema,
   getModelConnectionConfigurationIssue,
   ModelEndpointSchema,
   ModelSelectionSchema,
@@ -14,6 +15,26 @@ import {
 import { buildSessionTurnInputConfig } from '../src/session-input';
 
 describe('embedded harness boundaries', () => {
+  it('OAuth sign-in binds both edited identity fields and rejects credential injection', () => {
+    const target = {
+      provider: 'openai',
+      id: '00000000-0000-4000-8000-000000000001',
+      expectedRevision: 3,
+    };
+    expect(BeginOpenAiAuthSchema.parse(target)).toEqual(target);
+    expect(BeginOpenAiAuthSchema.parse({ provider: 'kimi-coding' })).toEqual({
+      provider: 'kimi-coding',
+    });
+    for (const input of [
+      { id: target.id },
+      { expectedRevision: 3 },
+      { ...target, expectedRevision: 0 },
+      { ...target, provider: 'anthropic' },
+      { ...target, apiKey: 'SYNTHETIC_SECRET' },
+      { ...target, credentialRef: target.id },
+    ])
+      expect(BeginOpenAiAuthSchema.safeParse(input).success).toBe(false);
+  });
   it('still parses a compatible model saved before usageInStreaming was retired', () => {
     const legacy = {
       modelId: 'vendor/model',

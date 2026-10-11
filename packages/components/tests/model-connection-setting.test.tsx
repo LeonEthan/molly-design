@@ -10,6 +10,9 @@ import {
 } from '../src/components/settings/model-connection-setting';
 import type {
   CheckModelConnection,
+  BeginOpenAiAuth,
+  DiscoverModelConnection,
+  DiscoverModelConnectionResult,
   HarnessModelCatalog,
   ModelConnection,
   SaveModelConnection,
@@ -813,7 +816,7 @@ describe('connection management', () => {
   });
 
   it('switches an OAuth account to another provider with its own sign-in and key field', async () => {
-    const providers: string[] = [];
+    const requests: BeginOpenAiAuth[] = [];
     await act(async () =>
       root.render(
         createElement(ModelConnectionForm, {
@@ -825,8 +828,8 @@ describe('connection management', () => {
           onSave: async () => undefined,
           onCancel: () => undefined,
           onOpenAiAuth: {
-            begin: async (provider) => {
-              providers.push(provider);
+            begin: async (input) => {
+              requests.push(input);
               return { ok: false as const, reason: 'unavailable' as const };
             },
             complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
@@ -842,32 +845,80 @@ describe('connection management', () => {
     expect(host.querySelector('input[type=password]')).not.toBeNull();
     expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
     await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
-    expect(providers).toEqual(['kimi-coding']);
+    expect(requests).toEqual([
+      { provider: 'kimi-coding', id: stored.id, expectedRevision: stored.revision },
+    ]);
+  });
+
+  it('binds signing in from an API-key edit to the exact saved row and revision', async () => {
+    const requests: BeginOpenAiAuth[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          stored,
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async (input) => {
+              requests.push(input);
+              return { ok: false as const, reason: 'unavailable' as const };
+            },
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT'));
+    expect(requests).toEqual([
+      { provider: 'openai', id: stored.id, expectedRevision: stored.revision },
+    ]);
   });
 
   it('cancels a late sign-in start after the user selects another provider', async () => {
-    let finishStart!: (value: { sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }) => void;
-    const started = new Promise<{ sessionId: string; expiresAt: number; deviceCode: { userCode: string; verificationUri: string } }>((resolve) => { finishStart = resolve; });
+    let finishStart!: (value: {
+      sessionId: string;
+      expiresAt: number;
+      deviceCode: { userCode: string; verificationUri: string };
+    }) => void;
+    const started = new Promise<{
+      sessionId: string;
+      expiresAt: number;
+      deviceCode: { userCode: string; verificationUri: string };
+    }>((resolve) => {
+      finishStart = resolve;
+    });
     const cancelled: string[] = [];
-    await act(async () => root.render(createElement(ModelConnectionForm, {
-      initialProvider: 'kimi-coding',
-      onSave: async () => undefined,
-      onCancel: () => undefined,
-      onOpenAiAuth: {
-        begin: async () => started,
-        complete: async () => { throw new Error('stale flow must not be completed'); },
-        cancel: async (id) => { cancelled.push(id); },
-        signOut: async () => undefined,
-      },
-    })));
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+          onOpenAiAuth: {
+            begin: async () => started,
+            complete: async () => {
+              throw new Error('stale flow must not be completed');
+            },
+            cancel: async (id) => {
+              cancelled.push(id);
+            },
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
     await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
     await pickDiscovered(en['settings.models.changeProvider']);
     await pickDiscovered(en['settings.models.providers.anthropic']);
-    await act(async () => finishStart({
-      sessionId: '00000000-0000-4000-8000-0000000000bb',
-      expiresAt: 2_000_000_000_000,
-      deviceCode: { userCode: 'STALE-CODE', verificationUri: 'https://example.invalid' },
-    }));
+    await act(async () =>
+      finishStart({
+        sessionId: '00000000-0000-4000-8000-0000000000bb',
+        expiresAt: 2_000_000_000_000,
+        deviceCode: { userCode: 'STALE-CODE', verificationUri: 'https://example.invalid' },
+      })
+    );
     expect(host.textContent).not.toContain('STALE-CODE');
     expect(cancelled).toEqual(['00000000-0000-4000-8000-0000000000bb']);
     expect(host.querySelector('input[type=password]')).not.toBeNull();
@@ -895,7 +946,11 @@ describe('connection management', () => {
     );
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT'))!
+        .find(
+          (button) =>
+            button.textContent ===
+            en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT')
+        )!
         .click()
     );
     expect(host.textContent).toContain(en['settings.models.oauth.failed.denied']);
@@ -910,8 +965,8 @@ describe('connection management', () => {
           onSave: async () => undefined,
           onCancel: () => undefined,
           onOpenAiAuth: {
-            begin: async (provider) => {
-              expect(provider).toBe('kimi-coding');
+            begin: async (input) => {
+              expect(input).toEqual({ provider: 'kimi-coding' });
               return {
                 sessionId: '00000000-0000-4000-8000-0000000000bb',
                 deviceCode: {
@@ -1007,6 +1062,101 @@ describe('connection management', () => {
     );
     expect(writes).toEqual([]);
   });
+
+  it.each(['endpoint', 'apiKey'] as const)(
+    'discards a discovery response after its %s changes, even if the input is restored',
+    async (field) => {
+      const requests: DiscoverModelConnection[] = [];
+      let settle!: (result: DiscoverModelConnectionResult) => void;
+      const pending = new Promise<DiscoverModelConnectionResult>((resolve) => {
+        settle = resolve;
+      });
+      await act(async () =>
+        root.render(
+          createElement(ModelConnectionForm, {
+            initialProvider: 'openai-compatible',
+            onSave: async () => undefined,
+            onCancel: () => undefined,
+            onDiscover: async (input) => {
+              requests.push(input);
+              return pending;
+            },
+          })
+        )
+      );
+      const endpoint = host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!;
+      const apiKey = host.querySelector<HTMLInputElement>('input[type=password]')!;
+      await change(endpoint, 'https://first.invalid/v1');
+      await change(apiKey, 'SYNTHETIC_FIRST_KEY');
+      await pickDiscovered(en['settings.models.discover.button']);
+      expect(requests).toEqual([
+        {
+          providerPresetId: 'openai-compatible',
+          baseUrl: 'https://first.invalid/v1',
+          apiKey: 'SYNTHETIC_FIRST_KEY',
+        },
+      ]);
+      const input = field === 'endpoint' ? endpoint : apiKey;
+      const oldValue = input.value;
+      await change(
+        input,
+        field === 'endpoint' ? 'https://second.invalid/v1' : 'SYNTHETIC_SECOND_KEY'
+      );
+      await change(input, oldValue);
+      await act(async () =>
+        settle({ ok: true, models: [{ modelId: 'stale-model' }], filteredNonChat: 0 })
+      );
+      expect(host.textContent).not.toContain('stale-model');
+      expect(host.textContent).toContain(en['settings.models.discover.button']);
+    }
+  );
+
+  it.each(['endpoint', 'apiKey'] as const)(
+    'clears completed discovery and selected discovery drafts after its %s changes',
+    async (field) => {
+      await act(async () =>
+        root.render(
+          createElement(ModelConnectionForm, {
+            initialProvider: 'openai-compatible',
+            onSave: async () => undefined,
+            onCancel: () => undefined,
+            onDiscover: async () => ({
+              ok: true,
+              models: [{ modelId: 'first-model', contextWindow: 8192, maxTokens: 1024 }],
+              filteredNonChat: 0,
+            }),
+          })
+        )
+      );
+      const endpoint = host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!;
+      const apiKey = host.querySelector<HTMLInputElement>('input[type=password]')!;
+      await change(endpoint, 'https://first.invalid/v1');
+      await change(apiKey, 'SYNTHETIC_FIRST_KEY');
+      await pickDiscovered(en['settings.models.addCustomModel']);
+      await change(
+        host.querySelector<HTMLInputElement>('fieldset input[id$="-modelId"]')!,
+        'manual-model'
+      );
+      await pickDiscovered(en['settings.models.discover.button']);
+      await pickDiscovered('first-model');
+      expect(
+        [...host.querySelectorAll<HTMLInputElement>('fieldset input[id$="-modelId"]')].map(
+          (input) => input.value
+        )
+      ).toEqual(['manual-model', 'first-model']);
+      await change(
+        field === 'endpoint' ? endpoint : apiKey,
+        field === 'endpoint' ? 'https://second.invalid/v1' : 'SYNTHETIC_SECOND_KEY'
+      );
+      expect(host.textContent).not.toContain('first-model');
+      expect(
+        [...host.querySelectorAll<HTMLInputElement>('fieldset input[id$="-modelId"]')].map(
+          (input) => input.value
+        )
+      ).toEqual(['manual-model']);
+      expect(host.textContent).toContain(en['settings.models.discover.button']);
+    }
+  );
 
   it('saves discovered models once the incomplete declaration is completed', async () => {
     const writes: SaveModelConnection[] = [];
@@ -1115,7 +1265,9 @@ describe('connection management', () => {
     expect(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!.value).toBe(
       '65536'
     );
-    expect(host.querySelector<HTMLButtonElement>('fieldset button[id$="-thinking-high"]')!,).not.toBeNull();
+    expect(
+      host.querySelector<HTMLButtonElement>('fieldset button[id$="-thinking-high"]')!
+    ).not.toBeNull();
   });
 
   it('keeps the manual declaration path when discovery fails', async () => {

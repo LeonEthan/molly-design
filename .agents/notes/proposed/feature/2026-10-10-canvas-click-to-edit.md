@@ -54,7 +54,9 @@ payload Codex sends to its agent are not publicly documented.
   editor" by adding only an annotated reference. Automatic object recognition
   (Lovart Cmd-click) is out of scope: it needs a segmentation model. Changes
   Spec intent.
-- **D. Feedback at the target.** A working outline on referenced elements during
+- **D. Feedback at the target.** Implemented except hold-to-compare, see
+  [canvas target feedback](../../implemented/feature/2026-10-10-canvas-target-feedback.md).
+  A working outline on referenced elements during
   a run; afterwards fading "changed" outlines, hold-to-compare against "Before
   Molly's edit", and an advisory element-ID diff that reports changes outside
   the selection without blocking or repairing. Changes Spec intent.

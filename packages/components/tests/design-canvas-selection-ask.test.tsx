@@ -58,6 +58,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       hide: async () => {},
       cover: async () => null,
       presentToolbar: async () => {},
+      highlight: async () => {},
       hidePreview: async () => {},
       closePreview: async () => {},
       selectionSummary: async () => null,

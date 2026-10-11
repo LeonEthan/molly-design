@@ -12,7 +12,10 @@ import {
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
   DesignToolbarPresentationSchema,
+  diffDesignElements,
   type DesignCanvasCommandResult,
+  type DesignElementChanges,
+  type DesignHighlight,
   type DesignSelectionSummary
 } from '@molly/shared/design-selection-commands'
 import type { DesignExportScale } from '@molly/shared/electron-ipc'
@@ -118,7 +121,7 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
-const syncing = new Map<string, Promise<void>>()
+const syncing = new Map<string, Promise<DesignElementChanges | null>>()
 const hosts = new Map<string, string>()
 const designWorker = new DesignWorker(() =>
   spawn(process.execPath, [join(resources(), 'cli/design.js')], {
@@ -714,25 +717,31 @@ export async function readDesignCandidateFile(
  * no draft is discarded to make the saved revision visible. A canvas the user does not have on screen
  * stays closed: destroy is enough, and the next attach reads the store.
  */
-export async function syncDesignCanvasFromStore(id: string): Promise<void> {
-  const previous = syncing.get(id) ?? Promise.resolve()
-  const next = previous.catch(() => {}).then(() => syncDesignCanvasFromStoreOnce(id))
+export async function syncDesignCanvasFromStore(id: string): Promise<DesignElementChanges | null> {
+  const previous = syncing.get(id) ?? Promise.resolve(null)
+  const next = previous.catch(() => null).then(() => syncDesignCanvasFromStoreOnce(id))
   syncing.set(id, next)
   try {
-    await next
+    return await next
   } finally {
     if (syncing.get(id) === next) syncing.delete(id)
   }
 }
 
-async function syncDesignCanvasFromStoreOnce(id: string): Promise<void> {
+/** Element changes compare the superseded canvas with the saved document it is replaced by. */
+async function syncDesignCanvasFromStoreOnce(id: string): Promise<DesignElementChanges | null> {
   const saved = await designRequest({ operation: 'read', sessionId: id })
   if (
-    recordsFor(id).some((record) =>
+    !recordsFor(id).some((record) =>
       openDesignCanvasNeedsReload(record.revisionId, saved.revisionId)
     )
   )
-    await reloadDesignCanvas(id)
+    return null
+  const before = await reloadDesignCanvas(id)
+  const after = saved.doc as { elements?: unknown } | null
+  return before && Array.isArray(after?.elements)
+    ? diffDesignElements(before, after as { elements: { id: string }[] })
+    : null
 }
 
 async function reloadDesignCanvas(id: string) {
@@ -743,12 +752,18 @@ async function reloadDesignCanvas(id: string) {
     if (!state || state.dirty || state.saving || state.composing)
       throw Error('Canvas has unsaved edits; preserve or save them before reloading')
   }
+  const before = entries.length
+    ? await entries[0][1].view.webContents
+        .executeJavaScript('window.molly.snapshot().then((value) => value.doc)')
+        .catch(() => null)
+    : null
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
     destroyDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
+  return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
 }
 
 export async function leaveDesign(id: string, hostId?: string): Promise<boolean> {
@@ -1057,6 +1072,15 @@ async function unfreezeDesigns() {
     [...records.values()].map((record) =>
       record.view.webContents.executeJavaScript('document.body.inert = false').catch(() => {})
     )
+  )
+}
+
+/** Outlines are ephemeral feedback on the retained native view; they never touch the document. */
+export async function highlightDesignElements(id: string, hostId: string, groups: DesignHighlight) {
+  const record = records.get(hostId)
+  if (!record || record.artworkId !== id) return
+  await record.view.webContents.executeJavaScript(
+    `window.molly?.highlight?.(${JSON.stringify(groups)})`
   )
 }
 

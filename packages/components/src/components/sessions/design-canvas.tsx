@@ -2,6 +2,7 @@ import { useConversationIndexRows } from '@/hooks/use-conversation-view';
 import type { DesignElementReference } from '@molly/shared/design-element-reference';
 import type { DesignExportScale } from '@molly/shared/electron-ipc';
 import type {
+  DesignHighlight,
   DesignSelectionAction,
   DesignSelectionSummary,
 } from '@molly/shared/design-selection-commands';
@@ -17,7 +18,12 @@ import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
-import { latestCommittedDesignReceipt, syncOpenDesignCanvas } from '@/lib/design-canvas-sync';
+import {
+  latestCommittedDesignReceipt,
+  latestCommittedDesignTurnId,
+  syncOpenDesignCanvas,
+} from '@/lib/design-canvas-sync';
+import { readDesignTurnElementIds, splitDesignChanges } from '@/lib/design-turn-elements';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { Button } from '@/ui/button';
 import {
@@ -329,6 +335,34 @@ export function DesignCanvas({
     if (preview && active && finalized) void refreshPreview();
   }, [finalized, preview, active, refreshPreview]);
   const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
+  const turnElements = useRef({ view: conversationView, committedTurnId: '' });
+  turnElements.current = {
+    view: conversationView,
+    committedTurnId: latestCommittedDesignTurnId(designHistory, artworkId) ?? '',
+  };
+  const [outsideChanges, setOutsideChanges] = useState<{ ids: string[]; removed: number } | null>(
+    null
+  );
+  const highlight = useCallback(
+    (groups: DesignHighlight) =>
+      void getIpcServices()
+        ?.design.highlight(artworkId, hostId, groups)
+        .catch((cause) => console.error(cause)),
+    [artworkId, hostId]
+  );
+  const runningTurnId = active ? canvasState?.turnId : undefined;
+  useEffect(() => {
+    if (!runningTurnId) return undefined;
+    let cancelled = false;
+    setOutsideChanges(null);
+    void readDesignTurnElementIds(turnElements.current.view, runningTurnId).then((elementIds) => {
+      if (!cancelled && elementIds.length) highlight([{ tone: 'working', elementIds }]);
+    });
+    return () => {
+      cancelled = true;
+      highlight([{ tone: 'working', elementIds: [] }]);
+    };
+  }, [runningTurnId, highlight]);
   useBlocker({
     enableBeforeUnload: false,
     shouldBlockFn: async ({ current, next }) => {
@@ -441,14 +475,29 @@ export function DesignCanvas({
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
     void syncOpenDesignCanvas(artworkId)
-      .then(() => (cancelled ? undefined : refreshVersions()))
+      .then(async (changes) => {
+        if (cancelled) return;
+        await refreshVersions();
+        const { view, committedTurnId } = turnElements.current;
+        if (cancelled || !changes || !committedTurnId) return;
+        const referenced = await readDesignTurnElementIds(view, committedTurnId);
+        if (cancelled) return;
+        const { inside, outside, removedOutside } = splitDesignChanges(changes, referenced);
+        highlight([
+          { tone: 'changed', elementIds: inside },
+          { tone: 'outside', elementIds: outside },
+        ]);
+        setOutsideChanges(
+          outside.length || removedOutside ? { ids: outside, removed: removedOutside } : null
+        );
+      })
       .catch((cause) => {
         if (!cancelled) setError(ipcErrorMessage(cause));
       });
     return () => {
       cancelled = true;
     };
-  }, [artworkId, committedReceipt, synced, refreshVersions]);
+  }, [artworkId, committedReceipt, synced, refreshVersions, highlight]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -883,6 +932,41 @@ export function DesignCanvas({
         >
           {error}
         </p>
+      )}
+      {outsideChanges && (
+        <div
+          role="status"
+          data-design-outside-changes
+          className="mx-3 mt-3 flex items-center gap-3 rounded-xl bg-foreground/[0.03] px-3 py-2 text-sm leading-relaxed"
+        >
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            {t(
+              'design.changedOutsideSelection',
+              'Molly also changed {{count}} elements outside your selection.',
+              { count: outsideChanges.ids.length + outsideChanges.removed }
+            )}
+          </p>
+          {outsideChanges.ids.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 rounded-full"
+              onClick={() => highlight([{ tone: 'outside', elementIds: outsideChanges.ids }])}
+            >
+              {t('design.showChangesOutsideSelection', 'Show')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 rounded-full"
+            onClick={() => setOutsideChanges(null)}
+          >
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
+        </div>
       )}
       {attachmentError && (
         <div

@@ -9,6 +9,8 @@ import {
   DESIGN_ASK_PROMPT_MAX,
   DESIGN_SELECTION_BODY_LIMIT,
   DesignToolbarPresentationSchema,
+  DesignHighlightSchema,
+  diffDesignElements,
 } from '../src/design-selection-commands';
 
 const textElement = {
@@ -280,5 +282,44 @@ describe('native toolbar boundary', () => {
         labels: { bold: 'x'.repeat(501) },
       }).success
     ).toBe(false);
+  });
+});
+
+describe('element change feedback', () => {
+  it('reports added and modified elements, ignoring key and stacking order', () => {
+    const before = {
+      elements: [
+        { id: 'title', kind: 'text', style: { color: '#000', size: 40 } },
+        { id: 'leaf', kind: 'shape', fill: '#d80' },
+        { id: 'logo', kind: 'image' },
+      ],
+    };
+    const after = {
+      elements: [
+        { id: 'leaf', fill: '#d80', kind: 'shape' },
+        { id: 'title', kind: 'text', style: { size: 40, color: '#a84a2a' } },
+        { id: 'badge', kind: 'shape' },
+      ],
+    };
+    expect(diffDesignElements(before, after)).toEqual({
+      changed: ['title', 'badge'],
+      removed: ['logo'],
+    });
+    expect(diffDesignElements(before, before)).toEqual({ changed: [], removed: [] });
+  });
+  it('bounds highlight groups to the known tones', () => {
+    expect(
+      DesignHighlightSchema.parse([
+        { tone: 'changed', elementIds: ['a'] },
+        { tone: 'outside', elementIds: [] },
+      ])
+    ).toHaveLength(2);
+    for (const input of [
+      [{ tone: 'flash', elementIds: ['a'] }],
+      [{ tone: 'changed', elementIds: [''] }],
+      [{ tone: 'changed', elementIds: ['a'], color: 'red' }],
+      Array.from({ length: 4 }, () => ({ tone: 'changed', elementIds: [] })),
+    ])
+      expect(DesignHighlightSchema.safeParse(input).success).toBe(false);
   });
 });

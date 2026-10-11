@@ -120,9 +120,9 @@ describe('latestCommittedDesignRevision', () => {
 describe('syncOpenDesignCanvas', () => {
   it('does nothing when no Electron design service is present', async () => {
     getIpcServicesMock.mockReturnValue(null);
-    await expect(syncOpenDesignCanvas(ARTWORK)).resolves.toBeUndefined();
+    await expect(syncOpenDesignCanvas(ARTWORK)).resolves.toBeNull();
     getIpcServicesMock.mockReturnValue({} as never);
-    await expect(syncOpenDesignCanvas(ARTWORK)).resolves.toBeUndefined();
+    await expect(syncOpenDesignCanvas(ARTWORK)).resolves.toBeNull();
   });
 
   it('asks the design service to reload the open editor from the store', async () => {

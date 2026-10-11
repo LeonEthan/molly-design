@@ -71,6 +71,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         return { src: 'data:image/png;base64,cHJldmlldw==', width: 400, height: 300 };
       },
       presentToolbar: async () => {},
+      highlight: async () => {},
       attach: async () => {
         await state.attach();
         state.visible = true;

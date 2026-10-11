@@ -83,6 +83,10 @@ try {
     join(root, 'src/layers-panel.ts'),
     join(destination, 'editor-bento/src/boot/layers-panel.ts')
   );
+  cpSync(
+    join(root, 'src/element-highlight.ts'),
+    join(destination, 'editor-bento/src/boot/element-highlight.ts')
+  );
   cpSync(join(root, 'src/image.ts'), join(destination, 'editor-bento/src/ui/dom/image.ts'));
   const imageFile = join(destination, 'editor-bento/src/ui/dom/image.ts');
   writeFileSync(

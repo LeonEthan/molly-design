@@ -1,4 +1,5 @@
 import type {
+  DesignHighlight,
   DesignSelectionSummary,
   DesignToolbarPresentation,
 } from '@molly/shared/design-selection-commands';
@@ -19,6 +20,7 @@ import {
   undo2Icon,
   type UiIconNode,
 } from '@molly/shared/ui-icons';
+import { createElementHighlight } from './element-highlight';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
 
@@ -96,7 +98,15 @@ export function createProductSession(options: {
     select: options.select,
     onToggle: (open) => layersButton.classList.toggle('on', open),
   });
-  window.addEventListener('pagehide', () => toolbar.dispose(), { once: true });
+  const highlight = createElementHighlight();
+  window.addEventListener(
+    'pagehide',
+    () => {
+      toolbar.dispose();
+      highlight.dispose();
+    },
+    { once: true }
+  );
   let editSeq = 0;
   let savedSeq = 0;
   let pendingText = false;
@@ -568,6 +578,9 @@ export function createProductSession(options: {
         setStatusMessage(statusSource);
         toolbar.present(value);
         layers.present(value.labels);
+      },
+      highlight(groups: DesignHighlight) {
+        highlight.show(groups);
       },
       selection(expected?: number) {
         assertSelection(expected);

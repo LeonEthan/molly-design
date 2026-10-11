@@ -80,7 +80,14 @@ export async function usableOAuthAccessToken(
   models.setProvider(providerFactory())
   try {
     const auth = await models.getAuth(providerPresetId)
-    const apiKey = typeof auth?.auth.apiKey === 'string' ? auth.auth.apiKey : undefined
+    // Providers hand back either an apiKey (OpenAI) or an Authorization header (Kimi).
+    const headerAuth =
+      auth?.auth.headers?.['Authorization'] ?? auth?.auth.headers?.['authorization']
+    const bearer =
+      typeof headerAuth === 'string' && headerAuth.startsWith('Bearer ')
+        ? headerAuth.slice('Bearer '.length)
+        : undefined
+    const apiKey = typeof auth?.auth.apiKey === 'string' ? auth.auth.apiKey : bearer
     if (!apiKey) return { ok: false, reason: 'unreachable' }
     return {
       ok: true,

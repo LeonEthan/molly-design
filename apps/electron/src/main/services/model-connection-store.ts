@@ -76,6 +76,7 @@ const StoreSchema = z
   })
   .strict()
 type Store = z.infer<typeof StoreSchema>
+export type StoreEntry = Store['entries'][number]
 
 /** Main-only: never register this class with renderer IPC or include entries in diagnostics. */
 export class ModelConnectionStore {
@@ -136,14 +137,22 @@ export class ModelConnectionStore {
       if (raw && typeof raw === 'object' && Array.isArray((raw as { entries?: unknown[] }).entries))
         for (const entry of (
           raw as {
-            entries: { oauth?: { grantSeq?: unknown; clientId?: unknown; denied?: boolean } }[]
+            entries: {
+              connection?: { providerPresetId?: unknown }
+              oauth?: { grantSeq?: unknown; clientId?: unknown; denied?: boolean }
+            }[]
           }
         ).entries) {
           if (!entry?.oauth) continue
           if (entry.oauth.grantSeq !== undefined) delete entry.oauth.grantSeq
-          // Codex-era rows predate dynamic client registration; their refresh grants
-          // cannot be exchanged by the official flow, so they need a fresh sign-in.
-          if (typeof entry.oauth.clientId !== 'string') entry.oauth.denied = true
+          // Codex-era OpenAI rows predate dynamic client registration; their refresh
+          // grants cannot be exchanged by the official flow, so they need a fresh
+          // sign-in. Other providers (Kimi) never had a client id and are unaffected.
+          if (
+            entry.connection?.providerPresetId === 'openai' &&
+            typeof entry.oauth.clientId !== 'string'
+          )
+            entry.oauth.denied = true
         }
       const parsed = StoreSchema.parse(raw)
       if (
@@ -552,11 +561,16 @@ export class ModelConnectionStore {
   }
 
   /** Completes an OAuth sign-in: creates the connection and its token set atomically. */
+  /**
+   * Completes an OAuth sign-in: creates the connection and its token set atomically.
+   * One OAuth row per provider; the replaced row is returned to the caller so a
+   * cancelled flow can restore it (rollbackOAuthConnection).
+   */
   saveOAuthConnection(
     input: SaveModelConnection,
     tokens: OAuthTokenSet,
     account: { email?: string; plan?: string; accountId?: string }
-  ): Promise<ModelConnection> {
+  ): Promise<{ connection: ModelConnection; replaced?: StoreEntry }> {
     const parsed = SaveModelConnectionSchema.safeParse(input)
     if (!parsed.success || parsed.data.authType !== 'openai_oauth')
       return Promise.reject(new Error('invalid_model_connection'))
@@ -564,13 +578,12 @@ export class ModelConnectionStore {
       const store = await this.read()
       if (store.entries.length >= 256) throw new Error('model_connection_limit')
       // One OAuth row per provider: a second sign-in replaces the previous grant.
-      store.entries = store.entries.filter(
+      const replaced = store.entries.find(
         (item) =>
-          !(
-            item.connection.authType === 'openai_oauth' &&
-            item.connection.providerPresetId === parsed.data.providerPresetId
-          )
+          item.connection.authType === 'openai_oauth' &&
+          item.connection.providerPresetId === parsed.data.providerPresetId
       )
+      store.entries = store.entries.filter((item) => item !== replaced)
       const connection = ModelConnectionSchema.parse({
         schemaVersion: 1,
         id: randomUUID(),
@@ -592,7 +605,23 @@ export class ModelConnectionStore {
         }
       ]
       await this.write(store)
-      return connection
+      return { connection, replaced }
+    })
+  }
+
+  /**
+   * Undoes a save whose flow was cancelled underneath it: removes the new row and
+   * restores the one it replaced, so cancellation never strands the previous grant.
+   */
+  rollbackOAuthConnection(connectionId: string, replaced?: StoreEntry): Promise<void> {
+    return this.serial(async () => {
+      const store = await this.read()
+      const index = store.entries.findIndex((item) => item.connection.id === connectionId)
+      if (index === -1) return
+      store.entries.splice(index, 1)
+      if (replaced && !store.entries.some((item) => item.connection.id === replaced.connection.id))
+        store.entries.push(replaced)
+      await this.write(store)
     })
   }
 

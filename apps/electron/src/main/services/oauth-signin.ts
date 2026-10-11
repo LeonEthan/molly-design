@@ -218,7 +218,7 @@ export class OAuthSignInService {
     // flow must not save an account.
     if (this.pending?.sessionId !== sessionId) return { ok: false, reason: 'cancelled' }
     try {
-      const connection = await this.store.saveOAuthConnection(
+      const saved = await this.store.saveOAuthConnection(
         {
           displayName: OAUTH_PROVIDERS[providerPresetId].displayName,
           providerPresetId,
@@ -229,14 +229,15 @@ export class OAuthSignInService {
         tokens,
         { accountId: accountIdFromAccessToken(tokens.accessToken) }
       )
-      // The write may have queued behind a cancellation.
+      // The write may have queued behind a cancellation: remove the new row and
+      // restore the one it replaced, so a cancelled flow strands no grant.
       if (this.pending?.sessionId !== sessionId) {
         await this.store
-          .delete({ id: connection.id, expectedRevision: connection.revision })
+          .rollbackOAuthConnection(saved.connection.id, saved.replaced)
           .catch(() => undefined)
         return { ok: false, reason: 'cancelled' }
       }
-      return { ok: true, connection }
+      return { ok: true, connection: saved.connection }
     } catch {
       return { ok: false, reason: 'unreachable' }
     }

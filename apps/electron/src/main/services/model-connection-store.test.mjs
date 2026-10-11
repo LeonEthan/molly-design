@@ -123,7 +123,7 @@ const legacyImage = {
 
 void test('oauth connection round-trips its token set without exposing it in the snapshot', async (t) => {
   const { store } = await fixture(t)
-  const saved = await store.saveOAuthConnection(
+  const { connection: saved } = await store.saveOAuthConnection(
     {
       providerPresetId: 'openai',
       displayName: 'OpenAI · designer@example.com',

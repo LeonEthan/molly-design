@@ -114,11 +114,17 @@ it('sends by epoch and rejects a read after the notes changed', async () => {
   const { epoch } = pins.read();
   button('Send to Molly').click();
   await vi.waitFor(() => expect(requests).toEqual([{ type: 'notes', notesEpoch: epoch }]));
+  button('Send to Molly').click();
+  pins.add(['photo'], 'Crop tighter');
+  expect(requests).toHaveLength(1);
+  expect(button('Send to Molly').disabled).toBe(true);
+  expect(pins.settle(epoch, false)).toBe(false);
+  expect(button('Send to Molly').disabled).toBe(false);
   pins.add(['photo'], 'Crop tighter');
   expect(() => pins.read(epoch)).toThrow('Notes changed');
-  expect(pins.clear(epoch)).toBe(false);
+  expect(pins.settle(epoch, true)).toBe(false);
   expect(pins.read().notes).toHaveLength(2);
-  expect(pins.clear(pins.read().epoch)).toBe(true);
+  expect(pins.settle(pins.read().epoch, true)).toBe(true);
   expect(pins.read().notes).toEqual([]);
 });
 
@@ -156,7 +162,7 @@ it('merges a note into an existing pin on the same targets and caps the count', 
   pins.add(['title'], 'Bigger');
   expect(pins.read().notes).toEqual([{ elementIds: ['title'], prompt: 'Warmer\nBigger' }]);
   present = Array.from({ length: DESIGN_NOTES_MAX + 1 }, (_, index) => `e${index}`);
-  pins.clear(pins.read().epoch);
+  pins.settle(pins.read().epoch, true);
   for (const id of present) pins.add([id], id);
   expect(pins.read().notes).toHaveLength(DESIGN_NOTES_MAX);
   expect(tray().querySelector('[role=alert]')?.textContent).toContain(String(DESIGN_NOTES_MAX));

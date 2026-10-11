@@ -620,17 +620,21 @@ export function DesignCanvas({
   ) => {
     const generation = attachmentGeneration.current;
     run(async () => {
-      const service = getIpcServices()?.design;
-      if (!service || !onSendNotes) throw Error('Local workspace is not ready');
-      if (generation !== attachmentGeneration.current)
-        throw Error(
-          t('design.selectionChanged', 'Artwork view changed; select the current elements again')
-        );
-      if (!(await onSendNotes(notes)))
-        throw Error(
-          t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
-        );
-      await service.clearNotes(artworkId, hostId, notesEpoch);
+      let sent = false;
+      try {
+        if (!onSendNotes) throw Error('Local workspace is not ready');
+        if (generation !== attachmentGeneration.current)
+          throw Error(
+            t('design.selectionChanged', 'Artwork view changed; select the current elements again')
+          );
+        sent = await onSendNotes(notes);
+        if (!sent)
+          throw Error(
+            t('design.notesNotSent', 'Molly can’t take a new message yet; your notes are kept')
+          );
+      } finally {
+        await getIpcServices()?.design.settleNotes(artworkId, hostId, notesEpoch, sent);
+      }
     });
   };
   const actionCallback = useRef({ selectionAction, askSelection, sendNotes });
@@ -638,12 +642,21 @@ export function DesignCanvas({
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
-        if (event.hostId !== hostId || !active || readonlyView) return;
+        if (event.hostId !== hostId) return;
         if (event.action === 'notes') {
-          if (event.notes.every((note) => note.reference.artworkId === artworkId))
+          if (
+            active &&
+            !readonlyView &&
+            event.notes.every((note) => note.reference.artworkId === artworkId)
+          )
             actionCallback.current.sendNotes(event.notes, event.notesEpoch);
+          else
+            void getIpcServices()
+              ?.design.settleNotes(artworkId, hostId, event.notesEpoch, false)
+              .catch(() => {});
           return;
         }
+        if (!active || readonlyView) return;
         if (event.reference.artworkId !== artworkId) return;
         if (event.action === 'ask')
           actionCallback.current.askSelection(event.reference, event.prompt, event.send);

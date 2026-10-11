@@ -60,7 +60,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
       cover: async () => null,
       presentToolbar: async () => {},
       highlight: async () => {},
-      clearNotes: async (...args: unknown[]) => {
+      settleNotes: async (...args: unknown[]) => {
         ipc.cleared.push(args);
         return true;
       },
@@ -209,13 +209,13 @@ describe('numbered notes from the canvas', () => {
     });
     await emit({ action: 'notes', notes, notesEpoch: 4 });
     expect(sent).toEqual([notes]);
-    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4]]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, true]]);
   });
 
   it('keeps the pins and says so when the turn is not accepted', async () => {
     await mount({ onSendNotes: async () => false, onReferenceSelection: () => {} });
     await emit({ action: 'notes', notes, notesEpoch: 4 });
-    expect(ipc.cleared).toEqual([]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
     expect(container.textContent).toContain('your notes are kept');
   });
 
@@ -234,5 +234,6 @@ describe('numbered notes from the canvas', () => {
       notesEpoch: 4,
     });
     expect(sent).toEqual([]);
+    expect(ipc.cleared).toEqual([[SESSION_ID, SESSION_ID, 4, false]]);
   });
 });

@@ -124,7 +124,9 @@ export function createNotePins(options: {
       marker.setAttribute('aria-expanded', String(editing?.pin === pin));
       marker.hidden = true;
       marker.addEventListener('pointerdown', (event) => event.stopPropagation(), { signal });
-      marker.addEventListener('click', () => !readonly && openEditor(pin), { signal });
+      marker.addEventListener('click', () => !readonly && !busy && openEditor(pin), {
+        signal,
+      });
       layer.append(marker);
     });
     tray.hidden = readonly || !pins.length || !presentation;
@@ -169,12 +171,10 @@ export function createNotePins(options: {
     } catch (cause) {
       failure = String(cause);
     }
+    if (!failure) return;
     busy = false;
+    message = failure;
     render();
-    if (failure) {
-      message = failure;
-      render();
-    }
   }
   function placeEditor() {
     if (!editing) return;
@@ -258,7 +258,7 @@ export function createNotePins(options: {
     field.focus();
   }
   function add(elementIds: readonly string[], text = '') {
-    if (readonly || !elementIds.length) return;
+    if (readonly || busy || !elementIds.length) return;
     const pin = { elementIds: [...new Set(elementIds)], text };
     const existing = pins.find((item) => sameTargets(item, pin));
     if (existing) {
@@ -338,14 +338,19 @@ export function createNotePins(options: {
           .map((pin) => ({ elementIds: pin.elementIds, prompt: pin.text.trim() })),
       };
     },
-    clear(expected: number) {
-      if (expected !== epoch) return false;
+    settle(expected: number, sent: boolean) {
+      busy = false;
+      if (!sent || expected !== epoch) {
+        render();
+        return false;
+      }
       closeEditor(false);
       pins = [];
       changed();
       return true;
     },
     setReadonly(value: boolean) {
+      if (readonly && !value) busy = false;
       readonly = value;
       if (value) closeEditor(false);
       render();

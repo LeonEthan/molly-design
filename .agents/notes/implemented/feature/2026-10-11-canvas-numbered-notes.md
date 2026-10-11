@@ -54,17 +54,20 @@ Lovart's up-to-10 marks per prompt were the reference patterns.
   reference per note at the saved revision, validates them together and
   re-reads the epoch before forwarding `{ action: 'notes', notes, notesEpoch }`.
 - **Send and clear.** `sendDesignNotes` builds `1. prompt @Note 1` lines, one
-  mention per note, and sends one text block without touching the draft. Only
-  after the turn is accepted does the canvas call the new
-  `design.clearNotes(artwork, host, epoch)`; a newer edit to the pins keeps
-  them. A refused send keeps the pins and says so; unlike Ask, notes never fall
-  back into the composer draft, because the draft holds one selection chip.
+  mention per note, and sends one text block without touching the draft. The
+  pins stay locked from the request until the shell answers through the new
+  `design.settleNotes(artwork, host, epoch, sent)`, which the shell calls on
+  every outcome, including an ignored event; this prevents a second click from
+  sending the same notes twice. Only an accepted turn clears them, and a newer
+  edit to the pins keeps them. A refused send keeps the pins and says so;
+  unlike Ask, notes never fall back into the composer draft, because the
+  draft holds one selection chip.
 
 ## Validation
 
 - Unit: schema bounds and the epoch-only request
   (`packages/shared/tests/design-selection-commands.test.ts`); pins gesture,
-  merge, cap, prune, epoch/clear and tray failure
+  merge, cap, prune, lock until settled, epoch/clear and tray failure
   (`packages/components/tests/design-note-pins.test.ts`); "Add as note"
   (`design-selection-toolbar.test.ts`); canvas event routing and clearing
   (`design-canvas-selection-ask.test.tsx`); numbered composer send

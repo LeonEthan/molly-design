@@ -737,13 +737,18 @@ async function captureDesignReferences(
   return references
 }
 
-/** Removes sent notes; a newer edit to the pins keeps them. */
-export async function clearDesignNotes(id: string, hostId: string, notesEpoch: number) {
+/** Releases notes handed to the shell: sent ones are removed unless the pins changed since. */
+export async function settleDesignNotes(
+  id: string,
+  hostId: string,
+  notesEpoch: number,
+  sent: boolean
+) {
   const record = records.get(hostId)
   if (!record || record.artworkId !== id || hosts.get(hostId) !== id) return false
   return (
     (await record.view.webContents.executeJavaScript(
-      `window.molly.clearNotes ? window.molly.clearNotes(${JSON.stringify(notesEpoch)}) : false`
+      `window.molly.settleNotes ? window.molly.settleNotes(${JSON.stringify(notesEpoch)}, ${sent}) : false`
     )) === true
   )
 }

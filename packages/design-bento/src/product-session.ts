@@ -601,8 +601,8 @@ export function createProductSession(options: {
       notes(expected?: number) {
         return pins.read(expected);
       },
-      clearNotes(expected: number) {
-        return pins.clear(expected);
+      settleNotes(expected: number, sent: boolean) {
+        return pins.settle(expected, sent);
       },
       state() {
         return {

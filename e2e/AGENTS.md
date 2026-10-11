@@ -11,15 +11,15 @@ also applies.
   and the synced CLI under `apps/electron/resources/cli`; they never rebuild.
 - Installed acceptance uses the same harness with an explicit executable and
   expected source commit, consuming the package's own entry and resources.
-  Read [installed launch instructions](README.md#installed-molly-design-acceptance)
+  Read [installed launch instructions](README.md#installed-molly-acceptance)
   before selecting that target; preserve the same profile and endpoint isolation.
 - Use a real Electron main process, preload, renderer, IPC graph, and bundled
   CLI. Only an external model/provider wire may be simulated.
-- Every run owns a temporary Electron user-data directory, Lody data directory,
+- Every run owns a temporary Electron user-data directory, Molly data directory,
   workspace, artifact directory, and CLI host endpoint. `MOLLY_E2E=1` and the
   random TCP port on POSIX or unique named pipe on Windows must travel together
   to Electron and all CLI descendants. Never kill or attach to a user's
-  existing Lody process.
+  existing Molly process.
 - On macOS, disable window restoration for the test process with
   `-ApplePersistenceIgnoreState YES`; preserve user saved state and global preferences.
 - Harness restart reuses only its own durable directories after verified process
@@ -48,10 +48,12 @@ also applies.
   promotes the row, proves one assertion ablation fails, restores exact file
   hashes, and runs three fresh focused rounds plus the full suite. Only a passed
   candidate is applied to the maintainer checkout. Neither command publishes it.
+  Candidate validation initializes only ACP core and DSH source submodules;
+  retained vendor runtimes are outside this default path.
 - Every scenario has `@lody`, `@essence`, exactly one of `@P0` or `@P1`,
   exactly one `@runtime-*` owner, and one stable `@LODY-AREA-NNN` id.
 - `@P0` is a short merge-blocking journey. `@P1` is a deeper scheduled or
-  labeled journey. `@runtime-none` means no ACP model runtime is needed; it
+  labeled journey. `@runtime-none` means no model wire is needed; it
   does not mean the bundled CLI may be mocked.
 - Do not commit `@wip` scenarios. Keep Gherkin steps thin and put selectors and
   interaction policy in Page Objects.
@@ -65,11 +67,12 @@ also applies.
 
 ## Evidence and lanes
 
-- Regression E2E is deterministic and blocking. On failure, retain the
-  screenshot, Playwright trace, renderer/main logs, CLI backlog, process and
-  memory snapshot, and machine-readable failure index.
-- Daily regression records each scenario independently, deletes passing videos,
-  and retains one `failure.webm` per failed scenario. It runs one macOS
+- Regression E2E is deterministic and blocking. On failure, retain captured
+  screenshots, Playwright traces, renderer/main logs, CLI backlog, process and
+  memory snapshots, and the machine-readable failure index. Reports describe only
+  collected evidence and count validated recordings; omitted recordings are explicit.
+- Daily regression attempts one `failure.webm` per failed scenario from its trace
+  screenshot frames; passing scenarios produce no videos. It runs one macOS
   and Windows matrix per suite; the failure-issue reconciler treats the macOS
   artifact as canonical evidence until the Windows leg proves stable. The
   read-only runner only
@@ -79,7 +82,7 @@ also applies.
   keep recordings in the bounded artifact without adding a personal token.
   Only a successful full Daily may close that Issue; smoke success never clears
   failure state that can include P1 coverage.
-- Pull-request regression also records scenarios and retains failed videos. Its
+- Pull-request regression also derives failed videos from trace screenshot frames. Its
   read-only runner uploads evidence; a trusted default-branch reconciler may
   validate that artifact and attach it only to the current matching PR head.
 - Acceptance is a separate immutable round. It captures successful user-visible

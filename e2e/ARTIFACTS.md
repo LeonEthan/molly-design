@@ -6,26 +6,30 @@ Runtime output is written below ignored `e2e/artifacts/` directories.
 | -------------------- | --------------------------------------------------------------- |
 | `failure.png`        | Full-window state at the failing step                           |
 | `trace.zip`          | Playwright actions, DOM snapshots, network, and screenshots     |
-| `failure.webm`       | Daily-only recording retained for a failed scenario             |
+| `failure.webm`       | Failed-scenario video derived from available trace screenshots  |
 | `runtime.json`       | Electron, renderer, process, DOM, and memory snapshot           |
 | `console.log`        | Timestamped renderer, Electron main, page, and request failures |
 | `cli-backlog.json`   | Bundled CLI output exposed through the production IPC service   |
 | `failure-index.json` | Stable scenario id to artifact-directory mapping                |
 
-Daily and pull-request regression trace every scenario with screenshots. After
-a journey failure, a separate bounded renderer samples at most 600 ordered
-trace frames and encodes a 640px `failure.webm`. Video generation therefore
+Daily and pull-request regression enable screenshot tracing after Electron
+launch. After a journey failure, a separate bounded renderer samples at most 600
+ordered trace frames and encodes a 640px `failure.webm` when usable frames exist.
+Startup or capture failure can leave the trace, screenshot, or video absent.
+Video generation therefore
 cannot alter Electron startup or journey timing. Successful scenarios do not
-produce videos. The read-only Daily job uploads all evidence as one
+produce videos. The read-only Daily job uploads collected evidence as one
 suite-qualified Actions artifact.
-A separate trusted reconciler validates the failure index and each video, then
-attaches up to one independently retryable comment per failed scenario on the
-durable Daily failure Issue. Only a successful `full` artifact can resolve that
+A separate trusted reconciler validates the failure index and each available
+video, then posts an independently retryable Actions artifact link for each
+validated recording on the durable Daily failure Issue. Only a successful `full` artifact can resolve that
 Issue; a successful `smoke` run does not cover prior P1 failures. Oversized,
 missing, symbolic-link, and unexpected-path files are never attached; the
-workflow run remains linked for complete trace and log retrieval.
-Pull-request failures use the same bounded video contract, but attach to the
-matching open PR only while its head still equals the failed workflow head.
+report identifies omitted recordings and links the workflow run for logs and any
+other uploaded evidence. With no validated video, it emits a summary without a
+recording number. Pull-request failures use the same bounded video contract, but
+attach available validated videos to the matching open PR only while its head
+still equals the failed workflow head.
 
 Acceptance rounds additionally contain `result.json`, `manifest.json`, and a
 successful `checkpoint.png` for every selected scenario. Supplied before/after

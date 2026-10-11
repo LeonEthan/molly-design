@@ -99,3 +99,15 @@ canvas size from the brief, treating an empty canvas as a placeholder. It
 replaces the earlier "draws drafts from rendered native blockouts plus delivery
 assets rather than found references" intent. This approves the stated intent;
 design-quality evaluation runs are recorded separately.
+
+## 2026-10-11 whole-profile browser import
+
+The owner approved the proposed `graphic-design-platform` revision on
+2026-10-11 and amended it in the same reply: import offers a website list with
+every website selected by default, and import replaces in-Molly sign-in as the
+only guided account path. The English and Chinese revisions record that
+decision. Import reads a selected Chromium profile's cookies once instead of one
+supported website, merges them into Molly's website profile, skips partitioned
+and expired cookies, and minimizes macOS prompts, with Keychain access requested
+under Molly's own identity. This approves that revision only; the Spec's other
+draft revisions remain unapproved, so its status stays draft.

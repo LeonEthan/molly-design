@@ -1,6 +1,7 @@
 # Molly 平面设计工作台
 
 Status: draft
+Previous approval: [2026-10-11 whole-profile browser import](../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)
 Previous approval: [2026-10-08 sign-in-first website accounts](../.github/spec-approvals.md#2026-10-08-sign-in-first-website-accounts)
 Previous approval: [2026-09-21 owner approval](../.github/spec-approvals.md#2026-09-21-existing-specs)
 Previous approval: [2026-09-15](../.github/spec-approvals.md#2026-09-15-and-2026-09-16-design-revisions)
@@ -170,9 +171,9 @@ Git 分支操作、PR/CI 等开发功能退出设计主流程，并停止其不�
 
 2026-10-10 后续方向修订：内置浏览能力采用 agent-browser + WebMCP，向通用单页任务发展，继续复用 Electron 可见页面、账号、网络、任务权限和人工接管。目标与实现拆分见[独立 Spec 草案](agent-browser-webmcp.zh.md)。以下首期 Pinterest 范围和已有验收保留其历史阶段含义；驱动与协议已在开发分支替换，本轮未新增运行验证，技术选型不构成全部合同细节或发布批准。
 
-首期交付让设计会话的 Agent 在用户可见的 Molly 内置浏览器中使用 Pinterest 账号搜索素材、浏览详情并保存选定图片；在 Molly 内打开 Pinterest 官方页面登录是主要路径（2026-10-08 owner 决定）：它不读取其他浏览器的数据，因此不会触发钥匙串或“文件与文件夹”授权弹框。设置另提供从 Chromium 内核浏览器（Chrome、Edge、Brave、Arc、Vivaldi、Opera、Chromium；2026-10-03 用户要求）导入 Pinterest 账号，作为次要选项。Amazon 搜索、商品详情与网页问答转为后续范围，不作为首期完成条件。浏览工具只操作当前会话获准的内置页面；来源浏览器仅在用户主动选择时向 Molly 导入指定网站的登录状态，不作为 Agent 的浏览目标。Molly 独立持有网站 profile；导入成功以网站在内置页实际识别账号为准，Cookie 写入或用户在内置页手工登录均不证明浏览器账号已复用。
+首期交付让设计会话的 Agent 在用户可见的 Molly 内置浏览器中使用 Pinterest 账号搜索素材、浏览详情并保存选定图片。从 Chromium 内核浏览器（Chrome、Edge、Brave、Arc、Vivaldi、Opera、Chromium；2026-10-03 用户要求）导入登录状态是 Molly 获得网站账号的唯一引导路径（2026-10-11 owner 决定）：导入不再按支持网站划分，而是读取所选用户配置的网站 Cookie，默认全部导入，用户可在写入前取消个别网站。Molly 不再提供专门的网站登录对话框或登录引导。Amazon 搜索、商品详情与网页问答转为后续范围，不作为首期完成条件。浏览工具只操作当前会话获准的内置页面；来源浏览器仅在用户主动选择时向 Molly 导入登录状态，不作为 Agent 的浏览目标。Molly 独立持有网站 profile，导入的登录状态对所有 Agent 页面可用，因此用户确认的导入范围即 Agent 浏览时可能携带的账号范围。导入成功以网站在内置页实际识别账号为准，Cookie 写入不证明浏览器账号已复用。
 
-首次需要网站账号时，浏览器侧栏优先引导用户登录该网站，并以 Molly 网站账号设置中的导入作为备选；侧栏与 AI 模型设置条中的 Pinterest 项都在对话框中打开同一登录页，对话框打开期间任何 Agent 都不操作页面。无需预先完成必经设置。Molly 内置浏览器无法使用 Google 登录；登录引导会说明替代方式（用网站手机 App 扫描二维码、设置网站密码或导入）。导入区默认折叠，用户展开后 Molly 才列出其他浏览器的用户配置。用户在 Molly 内选择来源浏览器用户配置和支持的网站并发起导入，必要时处理 macOS 的系统授权，不要求进入 Chrome 开发者模式、手工安装扩展或复制配对码。设置中管理导入与清理，导入期间明确提示系统授权与等待；读取超时后由用户处理系统弹框并手动重试，不自动重试，读取失败保留 Molly 原有 Cookie。Cookie 数量只说明本机数据状态，不代表网站已登录。未支持导入的站点仍可由用户在内置页登录；这不扩展 Agent 可操作的浏览器范围。
+首次需要网站账号时，浏览器侧栏与 AI 模型设置条中的 Pinterest 项引导用户从浏览器导入；无需预先完成必经设置。导入对话框可从内置浏览器菜单和网站账号设置打开。打开后 Molly 只按应用安装位置列出已安装的来源浏览器，不读取其数据；用户选定浏览器后才读取其用户配置列表。用户选定用户配置后，Molly 一次读取该配置的 Cookie 并按网站列出，默认全选；用户确认后写入，取消或关闭时丢弃已读取内容。取消勾选不跨导入保存。导入合并到 Molly 现有 Cookie：同一 Cookie 以导入值覆盖，Molly 独有的 Cookie 保留；Molly 无法表示的分区 Cookie 和已过期 Cookie 跳过并报告数量。写入期间暂停所有 Agent 浏览，写入失败时恢复 Molly 原有 Cookie。来源浏览器无需关闭。系统授权应尽量少：首次从某浏览器导入最多需要一次读取其数据的 macOS 授权和一次钥匙串授权；钥匙串授权以 Molly 自身身份请求，使“始终允许”只授予 Molly，之后从同一浏览器导入不再弹出钥匙串授权。Molly 不建议永久授权 `/usr/bin/security` 等通用工具，不要求 Chrome 开发者模式、扩展或配对码。读取超时后由用户处理系统弹框并手动重试，不自动重试。设置可清除 Molly 的全部网站数据。Cookie 数量只说明本机数据状态，不代表网站已登录。部分网站把会话绑定到原设备（例如 Chrome 的设备绑定会话凭据），导入的会话可能很快失效，需要在原浏览器重新登录后再次导入。用户仍可在已接管的页面中自行输入凭据，但这不是引导路径，也不扩展 Agent 可操作的浏览器范围。
 
 浏览器账号导入仅支持 macOS，并要求操作系统安全存储可用。打包版导入及浏览会话持久化要求稳定签名身份；未打包的 macOS 开发版也可导入，但仅写入内存会话，应用退出后登录态消失，设置须明确提示该限制。此开发版例外不开放未签名或 ad-hoc 打包版的导入，也不改变持久会话保护。
 

@@ -218,10 +218,13 @@ reuses the selected row's issued client ID, stable host ID and encrypted ID-toke
 JOSE validates the new token's signature, issuer, audience, expiry, nonce and subject before
 commit; old records without an ID token establish their validated identity on reauthorization.
 Hint-bearing authorization URLs are opened only in main. The vault retains identity/hints
-through the SDK refresh path, and same-registration reauthorization never revokes the
-retained registration. Other grant replacement/deletion keeps queued best-effort revocation.
-Cancellation discards independent new grants, but cannot safely revoke a grant sharing the
-retained OpenAI registration. No live provider acceptance is claimed by synthetic tests.
+through the SDK refresh path. Sign-out revokes the latest saved renewable session and
+clears all tokens, retaining only client/subject mapping in the same disabled connection row.
+The public signed-out flag is derived from that private registration state. Reconnect binds
+its revision; Add cannot silently replace it. Delete explicitly forgets the local mapping.
+Cleanup protects only an exactly retained provider/client/refresh-token grant, including
+uncertain writes; other candidates and replaced sessions are revoked. Sign-out reports
+unconfirmed remote revocation. No live provider acceptance is claimed by synthetic tests.
 See the [review correction](../../.agents/notes/implemented/bug-fix/2026-10-11-model-auth-completion.md).
 
 ## Browser driver build and verification

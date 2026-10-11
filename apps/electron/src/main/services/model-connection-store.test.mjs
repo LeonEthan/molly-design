@@ -5,7 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createCipheriv, createDecipheriv, createHash } from 'node:crypto'
 import { ModelConnectionStore } from './model-connection-store.ts'
-import { saveModelConnection, deleteModelConnection } from './model-connection-settings.ts'
+import {
+  saveModelConnection,
+  deleteModelConnection,
+  signOutModelConnection
+} from './model-connection-settings.ts'
 import { startHarnessCredentialHostCore } from './harness-credential-host-core.ts'
 import {
   checkImageConnection,
@@ -273,7 +277,7 @@ void test('reauthentication waits for rotation and preserves the selection ident
   )
 })
 
-for (const action of ['delete', 'convert']) {
+for (const action of ['delete', 'convert', 'sign out']) {
   void test(`${action} revokes the rotated grant after an in-flight refresh`, async (t) => {
     const { store } = await fixture(t)
     const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
@@ -302,17 +306,23 @@ for (const action of ['delete', 'convert']) {
             { id: connection.id, expectedRevision: connection.revision },
             revoke
           )
-        : saveModelConnection(
-            store,
-            {
-              ...input,
-              id: connection.id,
-              expectedRevision: connection.revision,
-              providerPresetId: 'anthropic',
-              baseUrl: 'https://api.anthropic.com'
-            },
-            revoke
-          )
+        : action === 'sign out'
+          ? signOutModelConnection(
+              store,
+              { id: connection.id, expectedRevision: connection.revision },
+              revoke
+            )
+          : saveModelConnection(
+              store,
+              {
+                ...input,
+                id: connection.id,
+                expectedRevision: connection.revision,
+                providerPresetId: 'anthropic',
+                baseUrl: 'https://api.anthropic.com'
+              },
+              revoke
+            )
     finish.resolve()
     await refresh
     await mutation
@@ -320,6 +330,112 @@ for (const action of ['delete', 'convert']) {
     assert.equal(await store.oauthFor(connection.id), undefined)
   })
 }
+
+void test('sign-out persists only the registration and a disabled reconnectable row across restart', async (t) => {
+  const { store, directory } = await fixture(t)
+  const hostId = await store.deviceId()
+  const tokens = {
+    ...oauthTokens,
+    subject: 'synthetic-subject',
+    idToken: 'SYNTHETIC_ID_TOKEN',
+    scopes: ['chatgpt.tokens.use.direct']
+  }
+  const { connection } = await store.saveOAuthConnection(oauthInput, tokens, {
+    email: 'synthetic@example.invalid'
+  })
+  await assert.rejects(
+    signOutModelConnection(store, { id: connection.id, expectedRevision: connection.revision + 1 }),
+    /revision_conflict/
+  )
+  const result = await signOutModelConnection(
+    store,
+    { id: connection.id, expectedRevision: connection.revision },
+    async (_provider, grant) => {
+      assert.deepEqual(grant, tokens)
+      return true
+    }
+  )
+  assert.deepEqual(result, { revocationConfirmed: true })
+  const reopened = new ModelConnectionStore(directory, cipher, 'darwin')
+  const row = (await reopened.snapshot()).connections[0]
+  assert.deepEqual(row, {
+    ...connection,
+    revision: connection.revision + 1,
+    enabled: false,
+    oauth: { ...connection.oauth, signedOut: true }
+  })
+  assert.equal(await reopened.deviceId(), hostId)
+  assert.deepEqual(await reopened.openAiRegistrationForSignIn(row.id, row.revision), {
+    clientId: tokens.clientId,
+    subject: tokens.subject
+  })
+  const persisted = JSON.parse(
+    cipher.decryptString(await readFile(join(directory, 'model-connections.enc')))
+  )
+  assert.deepEqual(persisted.entries[0].registration, {
+    clientId: tokens.clientId,
+    subject: tokens.subject
+  })
+  for (const value of [tokens.accessToken, tokens.refreshToken, tokens.idToken, ...tokens.scopes])
+    assert.equal(JSON.stringify(persisted).includes(value), false)
+  assert.equal(JSON.stringify(await reopened.snapshot()).includes(tokens.clientId), false)
+  assert.equal(await reopened.oauthFor(row.id), undefined)
+  assert.equal(await reopened.oauthForCheck(row.id, row.revision), null)
+  assert.equal(await reopened.credentialForCheck(row.id, row.revision), null)
+  assert.equal(
+    await reopened.mutateOAuth(row.id, () => assert.fail('signed-out refresh')),
+    undefined
+  )
+  await assert.rejects(reopened.acquireForRun(row.id, row.revision), /unavailable/)
+  assert.deepEqual(
+    await checkModelConnection(
+      reopened,
+      {
+        providerPresetId: 'openai',
+        baseUrl: row.baseUrl,
+        stored: { id: row.id, revision: row.revision }
+      },
+      () => assert.fail('signed-out request')
+    ),
+    { ok: false, reason: 'changed' }
+  )
+  await assert.rejects(
+    reopened.save({ ...oauthInput, id: row.id, expectedRevision: row.revision, enabled: true }),
+    /signed_out/
+  )
+  const renamed = await reopened.save({
+    ...oauthInput,
+    id: row.id,
+    expectedRevision: row.revision,
+    enabled: false,
+    displayName: 'Signed-out account'
+  })
+  assert.equal(renamed.oauth.signedOut, true)
+  await assert.rejects(reopened.saveOAuthConnection(oauthInput, tokens, {}), /provider_conflict/)
+  await deleteModelConnection(reopened, { id: renamed.id, expectedRevision: renamed.revision })
+  assert.deepEqual((await reopened.snapshot()).connections, [])
+  assert.equal(await reopened.deviceId(), hostId)
+})
+
+void test('unconfirmed sign-out clears tokens without inventing a legacy identity', async (t) => {
+  const { store } = await fixture(t)
+  const { connection } = await store.saveOAuthConnection(oauthInput, oauthTokens, {})
+  assert.deepEqual(
+    await signOutModelConnection(
+      store,
+      { id: connection.id, expectedRevision: connection.revision },
+      async () => {
+        throw new Error('synthetic offline')
+      }
+    ),
+    { revocationConfirmed: false }
+  )
+  const row = (await store.snapshot()).connections[0]
+  assert.deepEqual(await store.openAiRegistrationForSignIn(row.id, row.revision), {
+    clientId: oauthTokens.clientId
+  })
+  assert.equal(await store.oauthFor(row.id), undefined)
+})
 
 void test('provider conversion and deletion revoke OAuth before dropping the saved grant, including offline revocation', async (t) => {
   const { store } = await fixture(t)

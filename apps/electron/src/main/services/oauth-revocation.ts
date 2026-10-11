@@ -7,12 +7,13 @@ export async function revokeOAuthGrant(
   providerPresetId: string,
   tokens: { refreshToken: string; clientId?: string },
   fetchFn: typeof fetch = fetch
-): Promise<void> {
+): Promise<boolean> {
   const url = OAUTH_REVOKE_URLS[providerPresetId]
-  if (!url) return
+  if (!url) return false
   try {
-    await fetchFn(url, {
+    const response = await fetchFn(url, {
       method: 'POST',
+      redirect: 'error',
       headers: {
         'content-type': 'application/x-www-form-urlencoded',
         accept: 'application/json'
@@ -24,5 +25,8 @@ export async function revokeOAuthGrant(
       }).toString(),
       signal: AbortSignal.timeout(10_000)
     })
-  } catch {}
+    return response.status === 200
+  } catch {
+    return false
+  }
 }

@@ -27,7 +27,8 @@ import { discoverModelConnection } from '../../services/model-discovery'
 import { OAuthSignInService } from '../../services/oauth-signin'
 import {
   saveModelConnection,
-  deleteModelConnection
+  deleteModelConnection,
+  signOutModelConnection
 } from '../../services/model-connection-settings'
 import { listMcpTools } from '../../services/mcp-tool-discovery'
 import { McpCatalogEntryResultSchema } from '@molly/shared/local-machine-rpc'
@@ -171,11 +172,6 @@ export class ModelConnectionsIpc extends IpcService {
     return discoverModelConnection(getModelConnectionStore(), parsed.data)
   }
 
-  /**
-   * Explicit Settings action: open a subscription sign-in flow for a provider with an
-   * official OAuth path. One flow at a time; beginning cancels any prior pending flow.
-   * The renderer receives either the browser URL to open or the device code to display.
-   */
   @IpcMethod()
   async beginOpenAiAuth(input: BeginOpenAiAuth = {}) {
     const parsed = BeginOpenAiAuthSchema.safeParse(input)
@@ -197,12 +193,11 @@ export class ModelConnectionsIpc extends IpcService {
     getOAuthSignInService().cancel(input.sessionId)
   }
 
-  /** Sign-out: best-effort provider revocation, then delete the local row and tokens. */
   @IpcMethod()
   async signOutOpenAiAuth(input: { id: string; expectedRevision: number }) {
     const parsed = DeleteModelConnectionSchema.safeParse(input)
     if (!parsed.success) throw new Error('invalid_model_connection')
-    return deleteModelConnection(getModelConnectionStore(), parsed.data)
+    return signOutModelConnection(getModelConnectionStore(), parsed.data)
   }
 
   @IpcMethod()

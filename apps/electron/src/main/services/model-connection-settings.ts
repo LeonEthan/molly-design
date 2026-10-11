@@ -42,3 +42,19 @@ export async function deleteModelConnection(
     return true
   })
 }
+
+export async function signOutModelConnection(
+  store: ModelConnectionStore,
+  input: { id: string; expectedRevision: number },
+  revoke = revokeOAuthGrant
+) {
+  let revocationConfirmed = false
+  await store.signOutOAuth(input, async (saved) => {
+    if (!saved?.oauth) return false
+    revocationConfirmed = await revoke(saved.connection.providerPresetId, saved.oauth).catch(
+      () => false
+    )
+    return true
+  })
+  return { revocationConfirmed }
+}

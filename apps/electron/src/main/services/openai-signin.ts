@@ -4,7 +4,7 @@ import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import { z } from 'zod'
 import type { OAuthAuth, OAuthCredential, Provider } from '@earendil-works/pi-ai'
 import { openaiProvider } from '@earendil-works/pi-ai/providers/openai'
-import type { OAuthTokenSet } from './model-connection-store.ts'
+import type { OpenAiSignInRegistration } from './model-connection-store.ts'
 
 const ISSUER = 'https://auth.openai.com'
 const RESOURCE = 'https://api.openai.com/v1'
@@ -106,7 +106,7 @@ interface SignInDependencies {
 }
 
 export function openAiSignInProvider(
-  registration: OAuthTokenSet | undefined,
+  registration: OpenAiSignInRegistration | undefined,
   discard: SignInDependencies['discard'],
   overrides: Partial<Omit<SignInDependencies, 'discard'>> = {}
 ): Provider {

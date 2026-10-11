@@ -220,16 +220,26 @@ export class OAuthSignInService {
     void (async () => {
       try {
         const deviceId = await this.store.deviceId()
+        const snapshot = await this.store.snapshot()
         const edited = parsed.data.id
-          ? (await this.store.snapshot()).connections.find(
-              (connection) => connection.id === parsed.data.id
-            )
+          ? snapshot.connections.find((connection) => connection.id === parsed.data.id)
           : undefined
+        if (
+          !parsed.data.id &&
+          providerPresetId === 'openai' &&
+          snapshot.connections.some(
+            (connection) => connection.providerPresetId === 'openai' && connection.oauth?.signedOut
+          )
+        )
+          throw new Error('model_connection_oauth_provider_conflict')
         if (parsed.data.id && (!edited || edited.revision !== parsed.data.expectedRevision))
           throw new Error('model_connection_revision_conflict')
         const prior =
           providerPresetId === 'openai' && parsed.data.id
-            ? await this.store.oauthForCheck(parsed.data.id, parsed.data.expectedRevision!)
+            ? await this.store.openAiRegistrationForSignIn(
+                parsed.data.id,
+                parsed.data.expectedRevision!
+              )
             : null
         if (
           providerPresetId === 'openai' &&
@@ -242,10 +252,8 @@ export class OAuthSignInService {
         const models = this.modelsFactory({ credentials: scratchCredentialStore(providerPresetId) })
         const provider =
           providerPresetId === 'openai'
-            ? this.openAiProvider(
-                prior?.connection.providerPresetId === 'openai' ? prior.oauth : undefined,
-                async (credential) =>
-                  this.discardGrant('openai', tokenSetFromCredential(credential))
+            ? this.openAiProvider(prior ?? undefined, async (credential) =>
+                this.discardGrant('openai', tokenSetFromCredential(credential))
               )
             : descriptor.provider!()
         models.setProvider(provider)
@@ -329,10 +337,9 @@ export class OAuthSignInService {
           clearTimeout(pending.expiryTimer)
           if (!previous?.oauth) return false
           if (
-            providerPresetId === 'openai' &&
-            previous.connection.providerPresetId === 'openai' &&
-            tokens.clientId &&
-            previous.oauth.clientId === tokens.clientId
+            previous.connection.providerPresetId === providerPresetId &&
+            previous.oauth.clientId === tokens.clientId &&
+            previous.oauth.refreshToken === tokens.refreshToken
           )
             return false
           await this.revoke(previous.connection.providerPresetId, previous.oauth).catch(

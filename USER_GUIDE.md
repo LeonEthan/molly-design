@@ -45,7 +45,11 @@ app and automation interfaces unresponsive.
    Signing in from **Edit** updates that exact connection; a conflicting provider account
    must be handled separately. **Sign in again** preserves the connection used by existing
    sessions and the saved OpenAI client registration. Its verified account identity and encrypted
-   ID-token hint survive token refresh; reauthorization does not revoke that retained registration.
+   ID-token hint survive token refresh. **Sign out** clears all OpenAI tokens, keeps its
+   registration in a disabled row, and reports if remote revocation could not be confirmed.
+   Use **Edit → Sign in again** to reconnect, then enable the connection when ready.
+   **Delete** forgets that local registration; it does not unregister the remote client.
+   Cleanup and replacement target refresh tokens, including new sessions under the same client.
    Cancel before account replacement begins; revocation and saving finish once started. ChatGPT sign-in
    uses OpenAI's direct API token scope, with main-process authorization and pinned pi-ai refresh/inference; live sign-in
    and service behavior remain unverified in this build.

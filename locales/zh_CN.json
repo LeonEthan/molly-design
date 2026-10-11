@@ -97,6 +97,8 @@
   "settings.models.oauth.signedIn": "已使用你的 ChatGPT 账号登录。",
   "settings.models.oauth.plan": "已登录 · {{plan}} 套餐",
   "settings.models.oauth.signOut": "退出登录",
+  "settings.models.oauth.signedOut": "已退出登录",
+  "settings.models.oauth.signOutUnconfirmed": "已在本地退出登录，但无法确认远端授权已撤销。你可以在服务商的账户设置中断开此应用的连接。",
   "settings.models.oauth.signInAgain": "重新登录",
   "settings.models.oauth.denied": "登录已失效",
   "settings.models.oauth.deniedDetail": "OpenAI 拒绝了保存的登录。重新登录以继续使用此账号，或删除连接并改用 API key。",

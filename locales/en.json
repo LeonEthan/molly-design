@@ -96,6 +96,8 @@
   "settings.models.oauth.signedIn": "Signed in with your ChatGPT account.",
   "settings.models.oauth.plan": "Signed in · {{plan}} plan",
   "settings.models.oauth.signOut": "Sign out",
+  "settings.models.oauth.signedOut": "Signed out",
+  "settings.models.oauth.signOutUnconfirmed": "Signed out locally. Remote revocation could not be confirmed; you can disconnect this app in your provider's account settings.",
   "settings.models.oauth.signInAgain": "Sign in again",
   "settings.models.oauth.denied": "Sign-in expired",
   "settings.models.oauth.deniedDetail": "OpenAI rejected the saved sign-in. Sign in again to keep using this account, or delete the connection and use an API key.",

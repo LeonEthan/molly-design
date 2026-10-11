@@ -51,6 +51,8 @@ const OAuthTokenSetSchema = z
   })
   .strict()
 export type OAuthTokenSet = z.infer<typeof OAuthTokenSetSchema>
+export type OpenAiSignInRegistration = Pick<OAuthTokenSet, 'clientId' | 'subject' | 'idToken'>
+const OpenAiRegistrationSchema = OAuthTokenSetSchema.pick({ clientId: true, subject: true })
 
 const StoreSchema = z
   .object({
@@ -62,7 +64,8 @@ const StoreSchema = z
           .object({
             connection: ModelConnectionSchema,
             apiKey: z.string().max(16_384).optional(),
-            oauth: OAuthTokenSetSchema.optional()
+            oauth: OAuthTokenSetSchema.optional(),
+            registration: OpenAiRegistrationSchema.optional()
           })
           .strict()
           .refine(
@@ -70,8 +73,17 @@ const StoreSchema = z
               entry.apiKey !== '' || entry.connection.providerPresetId === 'openai-compatible'
           )
           .refine(
-            (entry) => (entry.apiKey !== undefined) !== (entry.oauth !== undefined),
-            'exactly one credential kind'
+            (entry) =>
+              [entry.apiKey, entry.oauth, entry.registration].filter((value) => value !== undefined)
+                .length === 1,
+            'exactly one credential or registration kind'
+          )
+          .refine(
+            (entry) =>
+              !entry.registration ||
+              (entry.connection.providerPresetId === 'openai' &&
+                entry.connection.authType === 'openai_oauth' &&
+                !entry.connection.enabled)
           )
       )
       .max(256),
@@ -86,6 +98,18 @@ const StoreSchema = z
 type Store = z.infer<typeof StoreSchema>
 export type StoreEntry = Store['entries'][number]
 export type BeforeConnectionChange = (previous?: StoreEntry) => Promise<boolean>
+
+function publicConnection(entry: StoreEntry): ModelConnection {
+  return entry.registration || entry.oauth?.denied
+    ? {
+        ...entry.connection,
+        oauth: {
+          ...entry.connection.oauth,
+          ...(entry.registration ? { signedOut: true } : { denied: true })
+        }
+      }
+    : entry.connection
+}
 
 /** Main-only: never register this class with renderer IPC or include entries in diagnostics. */
 export class ModelConnectionStore {
@@ -286,13 +310,7 @@ export class ModelConnectionStore {
   /** Public snapshot: renderer sees the denial flag, never the tokens. */
   snapshot(): Promise<{ connections: ModelConnection[] }> {
     return this.serial(async () => ({
-      connections: (await this.read()).entries.map((entry) => {
-        if (!entry.oauth) return entry.connection
-        return {
-          ...entry.connection,
-          oauth: { ...entry.connection.oauth, ...(entry.oauth.denied ? { denied: true } : {}) }
-        }
-      })
+      connections: (await this.read()).entries.map(publicConnection)
     }))
   }
 
@@ -559,15 +577,25 @@ export class ModelConnectionStore {
           ...(data.models ? { models: data.models } : {})
         })
         const oauth = effectiveAuthType === 'openai_oauth' ? previous?.oauth : undefined
-        if (previous && effectiveAuthType === 'openai_oauth' && !oauth)
+        const registration =
+          effectiveAuthType === 'openai_oauth' ? previous?.registration : undefined
+        if (registration && data.enabled) throw new Error('model_connection_signed_out')
+        if (previous && effectiveAuthType === 'openai_oauth' && !oauth && !registration)
           throw new Error('model_connection_oauth_required')
         // Leaving OAuth for the same provider still requires a fresh sign-in; switching
         // provider already dropped the grant above, so only the api-key path remains.
-        if (previous && previous.oauth && effectiveAuthType !== 'openai_oauth' && !providerChanged)
+        if (
+          previous &&
+          (previous.oauth || previous.registration) &&
+          effectiveAuthType !== 'openai_oauth' &&
+          !providerChanged
+        )
           throw new Error('model_connection_oauth_requires_reauth')
         const credential =
-          effectiveAuthType === 'openai_oauth' ? { connection, oauth } : { connection, apiKey }
-        return { previous, next: credential, result: connection }
+          effectiveAuthType === 'openai_oauth'
+            ? { connection, ...(oauth ? { oauth } : { registration }) }
+            : { connection, apiKey }
+        return { previous, next: credential, result: publicConnection(credential) }
       },
       beforeChange
     )
@@ -590,6 +618,65 @@ export class ModelConnectionStore {
       },
       beforeChange
     )
+  }
+
+  signOutOAuth(
+    input: { id: string; expectedRevision: number },
+    beforeChange: BeforeConnectionChange
+  ): Promise<void> {
+    const parsed = DeleteModelConnectionSchema.safeParse(input)
+    if (!parsed.success) return Promise.reject(new Error('invalid_model_connection'))
+    return this.changeConnection(
+      parsed.data.id,
+      (store) => {
+        const current = store.entries.find((entry) => entry.connection.id === parsed.data.id)
+        if (!current || current.connection.revision !== parsed.data.expectedRevision)
+          throw new Error('model_connection_revision_conflict')
+        if (current.connection.authType !== 'openai_oauth')
+          throw new Error('model_connection_oauth_required')
+        if (current.connection.providerPresetId !== 'openai')
+          return { previous: current, result: undefined }
+        const identity = current.oauth ?? current.registration
+        if (!identity) throw new Error('model_connection_oauth_required')
+        const next: StoreEntry = {
+          connection: {
+            ...current.connection,
+            revision: current.connection.revision + 1,
+            enabled: false
+          },
+          registration: OpenAiRegistrationSchema.parse({
+            clientId: identity.clientId,
+            subject: identity.subject
+          })
+        }
+        return { previous: current, next, result: undefined }
+      },
+      beforeChange
+    )
+  }
+
+  openAiRegistrationForSignIn(
+    connectionId: string,
+    revision: number
+  ): Promise<OpenAiSignInRegistration | null> {
+    return this.serial(async () => {
+      const entry = (await this.read()).entries.find((item) => item.connection.id === connectionId)
+      if (
+        !entry ||
+        entry.connection.revision !== revision ||
+        entry.connection.providerPresetId !== 'openai' ||
+        entry.connection.authType !== 'openai_oauth'
+      )
+        return null
+      const identity = entry.oauth ?? entry.registration
+      return identity
+        ? {
+            ...(identity.clientId !== undefined ? { clientId: identity.clientId } : {}),
+            ...(identity.subject !== undefined ? { subject: identity.subject } : {}),
+            ...(entry.oauth?.idToken !== undefined ? { idToken: entry.oauth.idToken } : {})
+          }
+        : null
+    })
   }
 
   /** Main-only explicit settings check: the saved key of this exact revision, on or off. */
@@ -678,6 +765,8 @@ export class ModelConnectionStore {
         const replaced = data.id
           ? store.entries.find((item) => item.connection.id === data.id)
           : providerRow
+        if (!data.id && replaced?.registration)
+          throw new Error('model_connection_oauth_provider_conflict')
         if (
           !data.id &&
           (replaced?.connection.id !== binding?.connection.id ||
@@ -736,11 +825,8 @@ export class ModelConnectionStore {
         (entry) =>
           entry.connection.providerPresetId === providerPresetId &&
           entry.oauth !== undefined &&
-          ((providerPresetId === 'openai' &&
-            tokens.clientId !== undefined &&
-            entry.oauth.clientId === tokens.clientId) ||
-            (entry.oauth.refreshToken === tokens.refreshToken &&
-              entry.oauth.clientId === tokens.clientId))
+          entry.oauth.refreshToken === tokens.refreshToken &&
+          entry.oauth.clientId === tokens.clientId
       )
     )
   }

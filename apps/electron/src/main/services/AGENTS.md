@@ -7,25 +7,25 @@
 Capability IPC verifies adjacent CLI package/catalog digests and public fields without
 SDK/vault access; absent/incompatible resources are unavailable.
 
-`model-connection-store`: main-only save/delete/metadata IPC, never grants.
-Encrypt bytes; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
+`model-connection-store`: main-only metadata IPC, never grants.
+Encrypt; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
 require explicit credentials; empty keys are compatible-only, omission preserves.
-Broker grants bind run/epoch/revision; the vault grants no authority. Declarations share
-row/revision; no keys, headers, scripts or model destinations.
-OAuth refresh/credential changes queue per row outside the vault lock; CAS the grant.
-Sign-in binds edited ID/revision, preserves IDs, rejects provider collisions.
-OpenAI: reuse client/host/subject; retain encrypted ID-token hints on refresh. Validate JWT
-signature/issuer/audience/expiry/nonce. Auth URLs stay in main.
-Cancel before revocation/commit; never restore revoked grants. Revoke discarded grants,
-except retained OpenAI registrations during cleanup/reauth.
-Image grants share the vault. Legacy removal needs durable encrypted backup and exact row
-match; disclose history/backup residue. Grants need active runs except main-only
-saved-destination checks.
-MCP binds workspace/server/destination/revision. Renew inputs on URL or stdio command/args
-edits. Settings derives local workspace; returns no values.
+Grants bind run/epoch/revision; vault grants no authority. Declarations share row/revision;
+no keys, headers, scripts or model destinations.
+OAuth refresh/mutations queue per row; I/O outside vault lock, CAS the grant.
+Sign-in binds ID/revision, preserves IDs; provider collisions fail.
+OpenAI: reuse client/host/subject; validate JWT signature/issuer/audience/expiry/nonce.
+Auth URLs stay in main; encrypted hints survive refresh, not sign-out.
+Sign-out keeps disabled, token-free registration; Delete forgets it. Add cannot overwrite it.
+Cancel before revocation/commit; never restore revoked grants. Revoke unretained
+provider/client/refresh-token grants; report unconfirmed sign-out revocation.
+Image grants share the vault. Legacy removal needs durable encrypted backup/exact row;
+disclose history/backup residue. Grants need active runs except main-only saved checks.
+MCP binds workspace/server/destination/revision. URL/stdio command/args edits need new inputs.
+Settings derives local workspace; returns no values.
 Grants require selected Session/epoch, except explicit Settings tool listing of the
 exact catalog binding; values travel only to CLI helper stdin. Saving enables nothing.
-Header framing/isolated-process env fields cannot be credentials. Enforce vault size limits.
+Header framing/isolated env fields cannot be credentials; enforce vault size limits.
 
 ## Design canvas contracts
 

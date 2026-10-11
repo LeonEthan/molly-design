@@ -699,6 +699,7 @@ export const ModelConnectionOAuthSchema = z
     accountId: z.string().trim().min(1).max(200).optional(),
     /** Refresh was rejected; the user must sign in again. */
     denied: z.boolean().optional(),
+    signedOut: z.boolean().optional(),
   })
   .strict();
 export type ModelConnectionOAuth = z.infer<typeof ModelConnectionOAuthSchema>;

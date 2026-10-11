@@ -5,7 +5,7 @@ Translation: pending
 
 ## Abstract
 
-Compatible endpoints could list models without authentication but could not save or run that connection. OpenAI reauthorization also created a new client registration and discarded the account hint. Explicit empty credentials now traverse the existing protected run path, and a main-process OpenAI login adapter retains and validates the registration identity. SDK refresh and inference remain unchanged; synthetic tests establish request and lifecycle behavior, while live provider authorization remains unverified. Reauthorization cleanup cannot safely revoke a grant sharing the retained OpenAI registration.
+Compatible endpoints could list models without authentication but could not save or run that connection. OpenAI reauthorization also created a new client registration and discarded the account hint. Explicit empty credentials now traverse the existing protected run path, and a main-process OpenAI login adapter retains and validates the registration identity. SDK refresh and inference remain unchanged; synthetic tests establish request and lifecycle behavior, while live provider authorization remains unverified. Sign-out retains a token-free registration; cleanup compares the renewable grant, not only the client identity.
 
 ## Reuse and boundaries
 
@@ -51,22 +51,37 @@ failure cancels the attempt, obsolete attempts cannot open a browser, and the ca
 listener closes on completion, startup failure and cancellation. An issued grant arriving
 after cancellation is cleaned up inside the adapter, independently of the SDK's abort race.
 
-Sign-out, deletion, conversion and replacement with another registration retain queued
-best-effort revocation. Reauthorization within the same OpenAI registration does not revoke
-its predecessor: distinct token strings do not establish independent renewable sessions.
-Abandoned-grant cleanup also preserves any retained matching OpenAI client, or matching
-refresh token, rather than invalidating the saved account. This narrows the earlier note's
-unconditional replacement revocation. If the provider rotates or creates a session during
-a subsequently cancelled attempt, the remote effect cannot be rolled back atomically;
-cleanup must prioritize the retained registration. No new local credentials are saved on
-cancellation or identity failure.
+The [account/session contract](https://developers.openai.com/siwc/token-sharing-open-source/profiles-and-sessions)
+separates registration identity from renewable sessions. Sign-out queues behind refresh,
+attempts revocation of the latest refresh token, clears access/refresh/ID tokens and scopes,
+and retains known client/validated-subject fields in the existing encrypted row. The row is
+disabled with its identity, model choices and revision boundary intact. `oauth.signedOut` is
+projected from the strict private registration-only branch, not another persisted lifecycle
+flag. Checks, refresh, runs and enabling refuse it. Reconnect uses the retained mapping with
+no ID-token hint, preserves the disabled preference and lets the user enable it afterward.
+Add cannot silently overwrite a signed-out row. Delete explicitly forgets the local mapping
+without deleting the remote client. Legacy records retain only known facts.
+
+A second store or hidden registration map was rejected because the existing row, queue and
+reconnect form already own this identity. Merely disabling a token-bearing row, or reusing
+`denied`, neither clears secrets nor honestly represents sign-out. The cost is a new private
+registration branch and a main-owned public signed-out flag; token accessors still expose
+only full grants. The UI refreshes authoritative metadata after sign-out and displays failed
+reconnects and unconfirmed remote revocation. No provider retry is introduced.
+
+Discarded-grant ownership compares provider, client and refresh token. A persisted candidate
+survives uncertain writes; a different candidate is revoked even under the same client.
+Successful authorization replacement likewise revokes a different predecessor, while normal
+refresh rotation retains its existing queue/CAS behavior. Revocation targets the renewable
+session, not the registration. Remote token-family isolation remains unverified, so provider
+side effects cannot be described as transactionally reversible.
 
 ## Independent opinion and evidence
 
 A read-only Codex CLI opinion (`gpt-6-astra`, high reasoning) recommended the empty-versus-
 omitted credential distinction and public provider composition. It independently exercised
 the SDK's header handling with a synthetic transport and identified the renderer hint leak,
-late-grant cancellation and shared-registration revocation risks. Its strongest objections
+late-grant cancellation and possible token-family revocation risks. Its strongest objections
 were the less explicit empty-string representation and ownership of security-sensitive
 authorization code. These tradeoffs remain; a future verified upstream login implementation
 would permit removal of the main-process adapter.
@@ -79,7 +94,7 @@ JWTs and exercise registration reuse, missing/mismatched callback client IDs, st
 issuer/audience/expiry/nonce/subject/scope checks, cancellation, refresh retention and
 secret-free renderer snapshots. No live provider requests or user credentials are used.
 
-A final read-only review of tracked and new files reported no P0/P1. Full repository
+The review of `3df957f0` reported no P0/P1, and its GitHub static/tests, three-platform builds and desktop smoke passed. Full repository
 type checks and lint passed, as did CLI 2,948, components 3,038, harness 175 and shared
 1,221 tests. Electron's first stage passed 337/338; its unchanged signing fixture lacks
 `resources/agent-browser/manifest.json`, independently corrected on main in
@@ -88,3 +103,16 @@ passed 19/19 separately. Quick/public-boundary checks, docs validation, formatti
 the OSS Electron Vite production build passed. Live OAuth/inference and native desktop
 packaging were not verified; the earlier full-build browser-driver toolchain limit
 remains recorded in the PR.
+
+Follow-up GitHub review and another read-only Codex CLI opinion identified sign-out losing
+registration identity and the client-wide cleanup exemption retaining unowned refresh tokens.
+The current official session contract supports token-targeted revocation; that evidence
+supersedes the earlier blanket same-client exemption and its documentation. The advisor
+favored the existing-row design, with identity-versus-session separation as the key boundary.
+The same-client cancellation regression failed before correction and passes afterward.
+All 83 credential/OAuth and 42 settings tests pass, including restart/reconnect, signed-out
+availability, refresh/sign-out ordering, exact-grant protection, same-client replacement,
+uncertain writes, confirmation status and visible recovery. The final follow-up review found no introduced P0/P1. Full checks passed types/lint,
+CLI 2,948, components 3,039, harness 175 and shared 1,221 tests. Electron passed 348/349
+in stage one with the same unchanged signer fixture failure, and 19/19 in stage two.
+Quick/public-boundary and docs checks passed; new-head CI is recorded in the PR evidence.

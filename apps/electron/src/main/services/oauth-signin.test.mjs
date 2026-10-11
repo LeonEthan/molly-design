@@ -7,6 +7,8 @@ import { createCipheriv, createDecipheriv } from 'node:crypto'
 import { ModelConnectionStore } from './model-connection-store.ts'
 import { usableOAuthAccessToken } from './oauth-refresh.ts'
 import { OAuthSignInService } from './oauth-signin.ts'
+import { signOutModelConnection } from './model-connection-settings.ts'
+import { revokeOAuthGrant } from './oauth-revocation.ts'
 import { openAiSignInProvider, openOpenAiCallback } from './openai-signin.ts'
 import { generateKeyPair, SignJWT } from 'jose'
 import { EventEmitter } from 'node:events'
@@ -215,6 +217,18 @@ void test('OpenAI reauthorization reuses its client and hint even when the callb
   assert.equal(f.closed(), true)
 })
 
+void test('OpenAI reconnect after sign-out validates the retained subject without an ID-token hint', async (t) => {
+  const f = await openAiLoginFixture(t, {
+    clientId: 'synthetic-issued-client',
+    subject: 'synthetic-user'
+  })
+  assert.equal(f.authorize.searchParams.get('client_id'), 'synthetic-issued-client')
+  assert.equal(f.authorize.searchParams.has('id_token_hint'), false)
+  assert.equal(f.authorize.searchParams.has('agent_name_hint'), false)
+  f.callback()
+  assert.equal((await f.result).subject, 'synthetic-user')
+})
+
 for (const patch of [
   { claims: { nonce: 'wrong' } },
   { issuer: 'https://other.invalid' },
@@ -370,7 +384,7 @@ async function signInFixture(t, revocation) {
   return { store, service, credential, revocations, registrations }
 }
 
-void test('edited OpenAI sign-in reads the saved registration and keeps its renewable session', async (t) => {
+void test('edited OpenAI sign-in reuses registration and revokes only the replaced renewable session', async (t) => {
   const { store, service, credential, revocations, registrations } = await signInFixture(t)
   const tokens = {
     ...oldTokens,
@@ -384,7 +398,9 @@ void test('edited OpenAI sign-in reads the saved registration and keeps its rene
     id: connection.id,
     expectedRevision: connection.revision
   })
-  assert.deepEqual(registrations, [tokens])
+  assert.deepEqual(registrations, [
+    { clientId: tokens.clientId, subject: tokens.subject, idToken: tokens.idToken }
+  ])
   assert.equal('authorizeUrl' in begun, false)
   credential.resolve({
     ...newCredential,
@@ -395,12 +411,94 @@ void test('edited OpenAI sign-in reads the saved registration and keeps its rene
   })
   const completed = await service.complete(begun.sessionId)
   assert.equal(completed.ok, true)
-  assert.deepEqual(revocations, [])
+  assert.deepEqual(revocations, [{ provider: 'openai', refreshToken: tokens.refreshToken }])
   assert.equal((await store.oauthFor(connection.id)).idToken, 'SYNTHETIC_NEW_ID_TOKEN')
   assert.equal(JSON.stringify(await store.snapshot()).includes('SYNTHETIC_NEW_ID_TOKEN'), false)
 })
 
-void test('abandoning OpenAI reauthorization cannot revoke the saved registration', async (t) => {
+void test('sign-out reconnect uses retained identity without tokens and Add cannot overwrite it', async (t) => {
+  const { store, service, credential, registrations } = await signInFixture(t)
+  const { connection } = await store.saveOAuthConnection(
+    oauthInput,
+    { ...oldTokens, subject: 'synthetic-user', idToken: 'SYNTHETIC_ID_TOKEN' },
+    {}
+  )
+  await signOutModelConnection(
+    store,
+    { id: connection.id, expectedRevision: connection.revision },
+    async () => true
+  )
+  const signedOut = (await store.snapshot()).connections[0]
+  assert.deepEqual(await service.begin({ provider: 'openai' }), {
+    ok: false,
+    reason: 'unavailable'
+  })
+  assert.deepEqual(registrations, [])
+  const begun = await service.begin({
+    provider: 'openai',
+    id: signedOut.id,
+    expectedRevision: signedOut.revision
+  })
+  assert.deepEqual(registrations, [{ clientId: oldTokens.clientId, subject: 'synthetic-user' }])
+  credential.resolve({ ...newCredential, clientId: oldTokens.clientId, subject: 'synthetic-user' })
+  const completed = await service.complete(begun.sessionId)
+  assert.equal(completed.ok, true)
+  assert.equal(completed.connection.id, connection.id)
+  assert.equal(completed.connection.credentialRef, connection.credentialRef)
+  assert.deepEqual(completed.connection.models, connection.models)
+  assert.equal(completed.connection.oauth.signedOut, undefined)
+  assert.equal(completed.connection.enabled, false)
+  const enabled = await store.save({
+    ...oauthInput,
+    id: connection.id,
+    expectedRevision: completed.connection.revision,
+    enabled: true
+  })
+  assert.equal(
+    (await store.acquireForRun(enabled.id, enabled.revision)).oauth.refreshToken,
+    newCredential.refresh
+  )
+})
+
+for (const cancel of [false, true])
+  void test(`an exactly retained renewable session is never revoked: cancelled=${cancel}`, async (t) => {
+    const { store, service, credential, revocations } = await signInFixture(t)
+    const { connection } = await store.saveOAuthConnection(oauthInput, oldTokens, {})
+    const begun = await service.begin({
+      provider: 'openai',
+      id: connection.id,
+      expectedRevision: connection.revision
+    })
+    const completed = service.complete(begun.sessionId)
+    if (cancel) service.cancel(begun.sessionId)
+    credential.resolve({
+      ...newCredential,
+      clientId: oldTokens.clientId,
+      refresh: oldTokens.refreshToken
+    })
+    assert.equal((await completed).ok, !cancel)
+    assert.deepEqual(revocations, [])
+    assert.equal((await store.oauthFor(connection.id)).refreshToken, oldTokens.refreshToken)
+  })
+
+for (const status of [200, 400, 500, 'offline'])
+  void test(`revocation confirms only the successful token-targeted response: ${status}`, async () => {
+    const confirmed = await revokeOAuthGrant('openai', oldTokens, async (url, init) => {
+      assert.equal(url, 'https://auth.openai.com/api/accounts/oauth/revoke')
+      assert.equal(init.method, 'POST')
+      assert.equal(init.redirect, 'error')
+      assert.deepEqual(Object.fromEntries(new URLSearchParams(init.body)), {
+        token: oldTokens.refreshToken,
+        token_type_hint: 'refresh_token',
+        client_id: oldTokens.clientId
+      })
+      if (status === 'offline') throw new Error('synthetic offline')
+      return new Response('', { status })
+    })
+    assert.equal(confirmed, status === 200)
+  })
+
+void test('abandoning OpenAI reauthorization revokes its new session while retaining the saved one', async (t) => {
   const { store, service, credential, revocations } = await signInFixture(t)
   const { connection } = await store.saveOAuthConnection(oauthInput, oldTokens, {})
   const begun = await service.begin({
@@ -413,7 +511,7 @@ void test('abandoning OpenAI reauthorization cannot revoke the saved registratio
   credential.resolve({ ...newCredential, clientId: oldTokens.clientId })
   assert.deepEqual(await completed, { ok: false, reason: 'cancelled' })
   assert.deepEqual(await store.oauthFor(connection.id), oldTokens)
-  assert.deepEqual(revocations, [])
+  assert.deepEqual(revocations, [{ provider: 'openai', refreshToken: newCredential.refresh }])
 })
 
 void test('OAuth refresh retains validated identity and hint while replacing token scopes', async (t) => {
@@ -622,7 +720,7 @@ void test('a failed replacement after revocation marks only the surviving old gr
   ])
 })
 
-void test('an uncertain write outcome never revokes the new grant actually persisted', async (t) => {
+void test('an uncertain write outcome never revokes the same-client new grant actually persisted', async (t) => {
   const { store, service, credential, revocations } = await signInFixture(t)
   const { connection: edited } = await store.saveOAuthConnection(oauthInput, oldTokens, {})
   const save = store.saveOAuthConnection.bind(store)
@@ -635,7 +733,7 @@ void test('an uncertain write outcome never revokes the new grant actually persi
     id: edited.id,
     expectedRevision: edited.revision
   })
-  credential.resolve(newCredential)
+  credential.resolve({ ...newCredential, clientId: oldTokens.clientId })
   assert.equal((await service.complete(begun.sessionId)).ok, false)
   assert.equal((await store.oauthFor(edited.id)).refreshToken, newCredential.refresh)
   assert.deepEqual(revocations, [{ provider: 'openai', refreshToken: oldTokens.refreshToken }])

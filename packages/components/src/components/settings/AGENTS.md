@@ -31,13 +31,13 @@ Preserve historical catalog fields when editing unrelated values.
   supported imports; cookie counts do not attest website sign-in. Import offers every
   installed browser profile from `ACCOUNT_IMPORT_BROWSERS`, names unlistable browsers,
   and keeps the button visible with the reason when a build cannot import.
-- Compatible models declare bounded metadata per row. Explain protocol, capabilities
-  and missing tools; saving probes nothing, selects no model and estimates no price.
-  Native presets retain SDK catalogs. Discovery sends one `GET /models` to the
-  typed/stored destination, filters non-chat rows and fills drafts from the response plus
-  packaged models.dev; saved declarations win. Reset discovery and discovered drafts on
-  endpoint/key changes; reject late results. Manual rows cover unlistable services. Compatible-only empty keys mean no auth;
-  omitted keys retain saved values. Destination changes require explicit input.
+- Compatible models declare bounded row metadata; explain protocol, capabilities and missing
+  tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
+  catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat
+  rows, fills drafts from responses/packaged models.dev; saved declarations win. Reset discovery
+  and discovered drafts on endpoint/key changes; reject late results. Manual rows cover unlistable
+  services. Empty compatible keys mean no auth; omission retains keys. Changed destinations
+  require explicit input.
 - Bundled capability inventory describes shipped resources and conditional activation,
   not live-session enablement. Failed reads stay unknown; no default plugin claim,
   runtime launch, installation or capability toggle follows opening settings. It lists
@@ -47,11 +47,11 @@ Preserve historical catalog fields when editing unrelated values.
   background service and bundled capability inventory (System), MCP and Projects as
   sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
   plain sentence; required caveats move behind `InfoTip`, never out of the UI.
-- Forms use brand tiles/empty-state shortcuts and prefill
-  `PROVIDER_PRESET_DEFAULT_BASE_URLS` (checked against the pinned harness-pi SDK) and
-  provider names; preserve typed values and show the destination. Sign-in binds
-  the edited ID/revision. Rows show only custom endpoints. On/Off saves instantly
-  without a key; key/credential forms keep Save. Confirm deletion.
+- Forms use brand tiles/shortcuts and SDK-checked `PROVIDER_PRESET_DEFAULT_BASE_URLS`
+  and names; preserve input, show destinations. Sign-in binds ID/revision. Rows show custom
+  endpoints. On/Off saves immediately; credential forms keep Save. Confirm deletion.
+  OpenAI sign-out retains a disabled reconnectable row; refresh snapshots, block checks/enabling,
+  report unconfirmed revocation. Delete forgets its registration.
 - A key is checked for free once it settles (`connection-check.tsx`): a typed key only
   against the shown destination, a saved key only against its own provider and endpoint.
   Checks list models or validate the key, never send a model request or DashScope call,

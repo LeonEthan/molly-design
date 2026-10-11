@@ -570,25 +570,22 @@ export function ModelConnectionForm({
                     <div className="min-w-0">
                       <p className="truncate text-sm">{stored.oauth.email ?? stored.displayName}</p>
                       <p className="text-xs text-muted-foreground">
-                        {stored.oauth.denied
-                          ? t('settings.models.oauth.denied')
-                          : stored.oauth.plan
-                            ? t('settings.models.oauth.plan', { plan: stored.oauth.plan })
-                            : t('settings.models.oauth.signedIn')}
+                        {stored.oauth.signedOut
+                          ? t('settings.models.oauth.signedOut')
+                          : stored.oauth.denied
+                            ? t('settings.models.oauth.denied')
+                            : stored.oauth.plan
+                              ? t('settings.models.oauth.plan', { plan: stored.oauth.plan })
+                              : t('settings.models.oauth.signedIn')}
                       </p>
                     </div>
-                    {stored.oauth.denied ? (
+                    {stored.oauth.denied || stored.oauth.signedOut ? (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        onClick={() => {
-                          // Keep the denied row alive and start a fresh sign-in; the
-                          // completed flow replaces it (one OAuth row per provider).
-                          // Deleting first would unmount this form and cancel the flow.
-                          void beginSignIn();
-                        }}
+                        onClick={() => void beginSignIn()}
                       >
                         {t('settings.models.oauth.signInAgain')}
                       </Button>
@@ -602,7 +599,8 @@ export function ModelConnectionForm({
                           if (!onOpenAiAuth || !stored) return;
                           void onOpenAiAuth
                             .signOut({ id: stored.id, expectedRevision: stored.revision })
-                            .then(() => onCancel());
+                            .then(() => onCancel())
+                            .catch(() => setAuthFlow({ phase: 'failed', reason: 'unreachable' }));
                         }}
                       >
                         {t('settings.models.oauth.signOut')}
@@ -628,11 +626,6 @@ export function ModelConnectionForm({
                       provider: oauthProvider === 'kimi-coding' ? 'Kimi Code' : 'ChatGPT',
                     })}
                   </Button>
-                  {authFlow.phase === 'failed' ? (
-                    <p role="alert" className="text-xs text-destructive">
-                      {t(`settings.models.oauth.failed.${authFlow.reason}`)}
-                    </p>
-                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     {oauthProvider === 'kimi-coding'
                       ? t('settings.models.oauth.hintKimi')
@@ -640,6 +633,11 @@ export function ModelConnectionForm({
                   </p>
                 </div>
               )}
+              {authFlow.phase === 'failed' ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {t(`settings.models.oauth.failed.${authFlow.reason}`)}
+                </p>
+              ) : null}
               <p className="text-xs text-muted-foreground">{t('settings.models.oauth.orKey')}</p>
             </div>
           ) : null}
@@ -873,6 +871,7 @@ export function ModelConnectionSetting({
   const [editing, setEditing] = useState<Editing>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [signOutUnconfirmed, setSignOutUnconfirmed] = useState(false);
   const [ready, setReady] = useState(false);
   const [catalog, setCatalog] = useState<HarnessModelCatalog['models']>();
   const [metadataSnapshot, setMetadataSnapshot] = useState<ModelMetadataSnapshot | null>(null);
@@ -932,7 +931,10 @@ export function ModelConnectionSetting({
   const onOpenAiAuth = useMemo<OpenAiAuthFlow | undefined>(() => {
     if (!ipc) return undefined;
     return {
-      begin: (input) => ipc.modelConnections.beginOpenAiAuth(input),
+      begin: (input) => {
+        setSignOutUnconfirmed(false);
+        return ipc.modelConnections.beginOpenAiAuth(input);
+      },
       complete: async (sessionId) => {
         const result = await ipc.modelConnections.completeOpenAiAuth({ sessionId });
         if (result.ok) {
@@ -944,8 +946,10 @@ export function ModelConnectionSetting({
       },
       cancel: (sessionId) => ipc.modelConnections.cancelOpenAiAuth({ sessionId }),
       signOut: async (input) => {
-        await ipc.modelConnections.signOutOpenAiAuth(input);
-        setConnections((current) => current.filter((entry) => entry.id !== input.id));
+        const result = await ipc.modelConnections.signOutOpenAiAuth(input);
+        setSignOutUnconfirmed(!result.revocationConfirmed);
+        const snapshot = await ipc.modelConnections.getSnapshot();
+        setConnections(ModelConnectionSchema.array().parse(snapshot.connections));
       },
     };
   }, [ipc]);
@@ -1026,6 +1030,11 @@ export function ModelConnectionSetting({
           {error && (
             <p role="alert" className="p-5 text-xs text-destructive">
               {t('settings.models.error')}
+            </p>
+          )}
+          {signOutUnconfirmed && (
+            <p role="status" className="p-5 text-xs text-muted-foreground">
+              {t('settings.models.oauth.signOutUnconfirmed')}
             </p>
           )}
           {!ready && !error && (
@@ -1188,16 +1197,16 @@ export function ModelConnectionRow({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
           <p className="truncate text-sm">{connection.displayName}</p>
-          <ConnectionCheckBadge state={check} />
+          <ConnectionCheckBadge state={connection.oauth?.signedOut ? undefined : check} />
         </div>
         <p className="truncate text-xs text-muted-foreground">
-          {where} · {summary}
+          {where} · {connection.oauth?.signedOut ? t('settings.models.oauth.signedOut') : summary}
         </p>
       </div>
       <Switch
         aria-label={t('settings.models.useConnection', { name: connection.displayName })}
         checked={connection.enabled}
-        disabled={busy || !toggled.success}
+        disabled={busy || !toggled.success || connection.oauth?.signedOut}
         onCheckedChange={() => {
           if (toggled.success) onToggle(toggled.data);
         }}
@@ -1220,7 +1229,9 @@ export function ModelConnectionRow({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {onCheck ? (
-              <DropdownMenuItem onSelect={onCheck}>{t('settings.check.run')}</DropdownMenuItem>
+              <DropdownMenuItem disabled={connection.oauth?.signedOut} onSelect={onCheck}>
+                {t('settings.check.run')}
+              </DropdownMenuItem>
             ) : null}
             {onCheck && onDelete ? <DropdownMenuSeparator /> : null}
             {onDelete ? (

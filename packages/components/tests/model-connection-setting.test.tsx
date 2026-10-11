@@ -27,6 +27,10 @@ const { connectionIpc } = vi.hoisted(() => ({
     getSnapshot: vi.fn(),
     save: vi.fn(),
     delete: vi.fn(),
+    signOutOpenAiAuth: vi.fn(),
+    beginOpenAiAuth: vi.fn(),
+    completeOpenAiAuth: vi.fn(),
+    cancelOpenAiAuth: vi.fn(),
     getModelCatalog: vi.fn().mockRejectedValue(new Error('no catalog')),
     getModelMetadataSnapshot: vi.fn().mockRejectedValue(new Error('no snapshot')),
   },
@@ -775,6 +779,39 @@ describe('connection management', () => {
     expect(host.querySelector('[id$="-name"]')).toBeNull();
     await openMoreOptions();
     expect(host.querySelector('[id$="-name"]')).not.toBeNull();
+  });
+
+  it('retains the signed-out row, reports uncertain revocation and reconnects the exact revision', async () => {
+    const signedIn: ModelConnection = {
+      ...stored, authType: 'openai_oauth', oauth: { email: 'synthetic@example.invalid' },
+    };
+    const signedOut: ModelConnection = {
+      ...signedIn, revision: stored.revision + 1, enabled: false,
+      oauth: { ...signedIn.oauth, signedOut: true },
+    };
+    const reconnects: BeginOpenAiAuth[] = [];
+    connectionIpc.getSnapshot.mockResolvedValue({ connections: [signedIn] });
+    connectionIpc.signOutOpenAiAuth.mockImplementation(async () => {
+      connectionIpc.getSnapshot.mockResolvedValue({ connections: [signedOut] });
+      return { revocationConfirmed: false };
+    });
+    connectionIpc.beginOpenAiAuth.mockImplementation(async (input: BeginOpenAiAuth) => {
+      reconnects.push(input);
+      return { ok: false, reason: 'unavailable' };
+    });
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    await pickDiscovered(en['common.edit']);
+    await pickDiscovered(en['settings.models.oauth.signOut']);
+    expect(host.textContent).toContain(stored.displayName);
+    expect(host.textContent).toContain(en['settings.models.oauth.signedOut']);
+    expect(host.textContent).toContain(en['settings.models.oauth.signOutUnconfirmed']);
+    expect(host.querySelector<HTMLButtonElement>('[role=switch]')!.disabled).toBe(true);
+    expect(host.querySelector('[role=switch]')!.getAttribute('aria-checked')).toBe('false');
+    await pickDiscovered(en['common.edit']);
+    expect(host.textContent).toContain(en['settings.models.delete']);
+    await pickDiscovered(en['settings.models.oauth.signInAgain']);
+    expect(reconnects).toEqual([{ provider: 'openai', id: signedOut.id, expectedRevision: signedOut.revision }]);
+    expect(host.querySelector('[role=alert]')!.textContent).toContain(en['settings.models.oauth.failed.unavailable']);
   });
 
   it('offers ChatGPT sign-in for OpenAI and shows the signed-in account instead of a key field', async () => {

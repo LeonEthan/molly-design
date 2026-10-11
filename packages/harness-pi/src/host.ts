@@ -394,13 +394,11 @@ export class PiAcpHost {
       throw new Error('pi_acp_host_credential_mismatch');
     signal.throwIfAborted();
     if (this.grantedKey !== undefined && this.grantedKey !== grant.apiKey) {
-      // An OAuth refresh rotates the access token for the same connection between turns;
-      // accept it in place. Any other key change means the row was reconnected or the
-      // connection swapped under this run.
-      const sameOAuthConnection =
-        grant.oauthConnectionId !== undefined &&
-        grant.oauthConnectionId === this.grantedOAuthConnectionId;
-      if (!sameOAuthConnection) throw new Error('pi_acp_host_credential_changed');
+      // Rotation requires a fresh worker: reject any key change before runtime
+      // mutation. The vault refreshes OAuth tokens with a five-minute margin before a
+      // run starts, so an in-place rotation mid-session means the row was reconnected
+      // or the connection swapped under this run.
+      throw new Error('pi_acp_host_credential_changed');
     }
     if (grant.oauthConnectionId !== undefined) {
       // OAuth grant: install as an oauth credential so the provider's toAuth shapes the

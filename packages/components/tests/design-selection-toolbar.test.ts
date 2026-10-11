@@ -413,3 +413,78 @@ it('limits the size readout to one visible editable boxed element and removes it
   toolbar.dispose();
   expect(document.querySelector('.molly-selection-size')).toBeNull();
 });
+
+const askField = () =>
+  document.querySelector<HTMLTextAreaElement>('.molly-selection-popup textarea')!;
+const typeAsk = (value: string) => {
+  const field = askField();
+  field.value = value;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  return field;
+};
+const pressEnter = (field: HTMLElement, init: KeyboardEventInit = {}) => {
+  const event = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  field.dispatchEvent(event);
+  return event;
+};
+
+it('opens an inline ask at the selection and sends it on Enter', () => {
+  select('text');
+  click('Ask Molly about the selection');
+  const field = askField();
+  expect(document.activeElement).toBe(field);
+  expect(getByRole(document.body, 'button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+  typeAsk('Make the headline warmer');
+  expect(getByRole(document.body, 'button', { name: 'Send' }).hasAttribute('disabled')).toBe(
+    false
+  );
+  expect(pressEnter(field, { shiftKey: true }).defaultPrevented).toBe(false);
+  const composing = pressEnter(field, { isComposing: true, keyCode: 229 });
+  expect(composing.defaultPrevented).toBe(false);
+  expect(requests).toEqual([]);
+  expect(pressEnter(field).defaultPrevented).toBe(true);
+  expect(requests).toEqual([
+    { type: 'ask', selectionEpoch: 1, prompt: 'Make the headline warmer', send: true },
+  ]);
+  expect(document.querySelector('.molly-selection-popup')).toBeNull();
+});
+
+it('adds the ask to the chat draft, or only the selection when nothing is typed', async () => {
+  select('image');
+  click('Ask Molly about the selection');
+  click('Add to chat');
+  expect(requests).toEqual([{ type: 'action', action: 'reference', selectionEpoch: 1 }]);
+  await Promise.resolve();
+  await Promise.resolve();
+  click('Ask Molly about the selection');
+  typeAsk('Swap the cup for a teapot');
+  click('Add to chat');
+  expect(requests.at(-1)).toEqual({
+    type: 'ask',
+    selectionEpoch: 1,
+    prompt: 'Swap the cup for a teapot',
+    send: false,
+  });
+});
+
+it('keeps an unsent ask for the same selection after a failed request', async () => {
+  select('shape');
+  finish = () => {};
+  click('Ask Molly about the selection');
+  pressEnter(typeAsk('Rounder corners'));
+  finish({ ok: false, error: 'Current artwork is not visible' });
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(getByRole(document.body, 'alert').textContent).toBe('Current artwork is not visible');
+  finish = undefined;
+  click('Ask Molly about the selection');
+  expect(askField().value).toBe('Rounder corners');
+  select('shape', {}, 2);
+  click('Ask Molly about the selection');
+  expect(askField().value).toBe('');
+});

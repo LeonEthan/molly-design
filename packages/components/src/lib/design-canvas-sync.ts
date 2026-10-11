@@ -49,10 +49,23 @@ export function latestCommittedDesignRevision(
  * no native editor to go stale. A real reload failure rejects so the canvas
  * can show it instead of leaving the editor on the superseded document.
  */
-export async function syncOpenDesignCanvas(artworkId: string): Promise<void> {
+export async function syncOpenDesignCanvas(artworkId: string, hostId?: string) {
   const design = getIpcServices()?.design;
-  if (!design) return;
-  await design.syncFromStore(artworkId);
+  if (!design) return null;
+  return design.syncFromStore(artworkId, hostId);
+}
+
+function latestCommittedDesignOutcome(
+  history: readonly { designOutcome?: unknown }[] | undefined,
+  artworkId: string
+) {
+  let latest: { turnId: string; revisionId: string } | undefined;
+  for (const entry of history ?? []) {
+    const outcome = sanitizeDesignTurnOutcome(entry.designOutcome);
+    if (outcome?.status === 'committed' && outcome.artworkId === artworkId && outcome.revisionId)
+      latest = { turnId: outcome.turnId, revisionId: outcome.revisionId };
+  }
+  return latest;
 }
 
 /** A receipt identity distinguishes a new successful turn even at the same revision. */
@@ -60,12 +73,13 @@ export function latestCommittedDesignReceipt(
   history: readonly { designOutcome?: unknown }[] | undefined,
   artworkId: string
 ): string | undefined {
-  let receipt: string | undefined;
-  for (const entry of history ?? []) {
-    const outcome = sanitizeDesignTurnOutcome(entry.designOutcome);
-    if (outcome?.status === 'committed' && outcome.artworkId === artworkId && outcome.revisionId) {
-      receipt = `${outcome.turnId}:${outcome.revisionId}`;
-    }
-  }
-  return receipt;
+  const latest = latestCommittedDesignOutcome(history, artworkId);
+  return latest && `${latest.turnId}:${latest.revisionId}`;
+}
+
+export function latestCommittedDesignTurnId(
+  history: readonly { designOutcome?: unknown }[] | undefined,
+  artworkId: string
+): string | undefined {
+  return latestCommittedDesignOutcome(history, artworkId)?.turnId;
 }

@@ -19,6 +19,7 @@ import {
 } from './design-service'
 import type { ObservedPreviewResult } from '../../../../cli/src/design/render-preview'
 import { PreviewRequests } from './design-source-preview-core'
+import type { DesignHighlight } from '@molly/shared/design-selection-commands'
 import { translateUi } from '../ui-locale'
 
 type PreviewStatus = {
@@ -123,7 +124,22 @@ export function hideSourcePreview(hostId: string, cancel = true) {
     view.setVisible(false)
   }
 }
+const highlights = new Map<string, DesignHighlight>()
+const applyHighlight = (view: WebContentsView, groups: DesignHighlight) =>
+  view.webContents.executeJavaScript(`window.molly?.highlight?.(${JSON.stringify(groups)})`)
+
+/** Each new preview frame is a fresh page; it inherits the host's current outlines before it is shown. */
+export async function highlightSourcePreview(hostId: string, groups: DesignHighlight) {
+  const working = groups.filter((group) => group.tone === 'working' && group.elementIds.length)
+  if (working.length) highlights.set(hostId, working)
+  else if (!groups.length || groups.some((group) => group.tone === 'working'))
+    highlights.delete(hostId)
+  const view = views.get(hostId)?.view
+  if (view && !view.webContents.isDestroyed()) await applyHighlight(view, groups)
+}
+
 export function closeSourcePreview(hostId: string) {
+  highlights.delete(hostId)
   const previous = views.get(hostId)
   previous?.view.setVisible(false)
   hideSourcePreview(hostId)
@@ -467,6 +483,8 @@ async function renderSourcePreview(
         resource.dispose()
         return { status: 'superseded' as const }
       }
+      const outlined = highlights.get(hostId)
+      if (outlined) await applyHighlight(view, outlined).catch(() => {})
       const previous = views.get(hostId)
       if (
         canPresentDesignHost(owner, hostId) &&

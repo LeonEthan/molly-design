@@ -169,6 +169,7 @@ export const DesignCanvasCommandResultSchema = z
   .strict();
 export type DesignCanvasCommandResult = z.infer<typeof DesignCanvasCommandResultSchema>;
 
+export const DESIGN_ASK_PROMPT_MAX = 4000;
 /** Native toolbar requests carry a selection epoch, never an editable target. */
 export const DesignSelectionActionSchema = z.enum([
   'reference',
@@ -199,6 +200,14 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
       wording: z.string().min(1).max(2000).optional(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal('ask'),
+      selectionEpoch: z.number().int().nonnegative(),
+      prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+      send: z.boolean(),
+    })
+    .strict(),
 ]);
 export type DesignToolbarRequest = z.infer<typeof DesignToolbarRequestSchema>;
 export const DesignToolbarPresentationSchema = z
@@ -211,3 +220,44 @@ export const DesignToolbarPresentationSchema = z
   })
   .strict();
 export type DesignToolbarPresentation = z.infer<typeof DesignToolbarPresentationSchema>;
+
+export const DESIGN_HIGHLIGHT_TONES = ['working', 'changed', 'outside'] as const;
+export const DesignHighlightSchema = z
+  .array(
+    z
+      .object({
+        tone: z.enum(DESIGN_HIGHLIGHT_TONES),
+        elementIds: z.array(z.string().min(1).max(200)).max(1000),
+      })
+      .strict()
+  )
+  .max(DESIGN_HIGHLIGHT_TONES.length);
+export type DesignHighlight = z.infer<typeof DesignHighlightSchema>;
+
+export type DesignElementChanges = { changed: string[]; removed: string[] };
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.keys(value)
+      .sort()
+      .map(
+        (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`
+      )
+      .join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** Added or modified elements are `changed`; stacking order alone is not a change. */
+export function diffDesignElements(
+  before: { elements: readonly { id: string }[] },
+  after: { elements: readonly { id: string }[] }
+): DesignElementChanges {
+  const previous = new Map(before.elements.map((element) => [element.id, canonicalJson(element)]));
+  const changed = after.elements
+    .filter((element) => previous.get(element.id) !== canonicalJson(element))
+    .map((element) => element.id);
+  const kept = new Set(after.elements.map((element) => element.id));
+  const removed = before.elements.map((element) => element.id).filter((id) => !kept.has(id));
+  return { changed, removed };
+}

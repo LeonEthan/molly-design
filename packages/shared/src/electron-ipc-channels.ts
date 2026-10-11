@@ -26,13 +26,21 @@ export type IpcPushMap = {
     error?: string;
     automaticError?: string;
   };
-  'design.selectionAction': {
-    hostId: string;
-    action: DesignSelectionAction;
-    reference: DesignElementReference;
-    /** New wording for the edit-wording action; absent for other actions. */
-    wording?: string;
-  };
+  'design.selectionAction':
+    | {
+        hostId: string;
+        action: DesignSelectionAction;
+        reference: DesignElementReference;
+        /** New wording for the edit-wording action; absent for other actions. */
+        wording?: string;
+      }
+    | {
+        hostId: string;
+        action: 'ask';
+        reference: DesignElementReference;
+        prompt: string;
+        send: boolean;
+      };
   'design.selection': {
     hostId: string;
   } & DesignSelectionSummary;

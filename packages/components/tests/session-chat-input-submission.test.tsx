@@ -649,6 +649,66 @@ describe('SessionChatInputArea submission feedback', () => {
       expect(chip()).not.toBeNull();
       expect(textarea.value).toBe('focus regression draft Make these bolder. ');
     });
+
+    it('sends an inline ask as its own turn and leaves the draft untouched', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      let sent: SessionInputBlock[] | undefined;
+      const textarea = await renderComposer({
+        composerRef,
+        onSendMessage: async (blocks) => {
+          sent = blocks;
+          return true;
+        },
+      });
+      let accepted: boolean | undefined;
+      await act(async () => {
+        accepted = await composerRef.current?.sendDesignSelection(
+          reference,
+          'Selected elements (2)',
+          '  Make the headline warmer.  '
+        );
+      });
+      expect(accepted).toBe(true);
+      expect(sent).toHaveLength(1);
+      const block = sent![0] as { type: string; text: string };
+      expect(block.type).toBe('text');
+      expect(block.text.startsWith('Make the headline warmer. <molly-elements>')).toBe(true);
+      expect(readDesignElementReferences(block.text)).toEqual([reference]);
+      expect(textarea.value).toBe('focus regression draft');
+      expect(chip()).toBeNull();
+    });
+
+    it('moves an inline ask into the draft when the turn is not accepted', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({ composerRef, onSendMessage: async () => false });
+      let accepted: boolean | undefined;
+      await act(async () => {
+        accepted = await composerRef.current?.sendDesignSelection(
+          reference,
+          'Selected elements (2)',
+          'Make the headline warmer.'
+        );
+      });
+      expect(accepted).toBe(false);
+      expect(chip()).not.toBeNull();
+      expect(textarea.value).toBe('focus regression draft Make the headline warmer. ');
+    });
+
+    it('moves an inline ask into the draft when sending throws', async () => {
+      const composerRef = createRef<SessionChatInputAreaHandle>();
+      const textarea = await renderComposer({
+        composerRef,
+        onSendMessage: async () => {
+          throw Error('offline');
+        },
+      });
+      await act(async () => {
+        await expect(
+          composerRef.current!.sendDesignSelection(reference, 'Selected elements (2)', 'Warmer.')
+        ).rejects.toThrow('offline');
+      });
+      expect(textarea.value).toBe('focus regression draft Warmer. ');
+    });
   });
 
   it('does not let an old completion enable another session pending submission', async () => {

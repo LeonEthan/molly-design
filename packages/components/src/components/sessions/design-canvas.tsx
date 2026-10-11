@@ -2,6 +2,7 @@ import { useConversationIndexRows } from '@/hooks/use-conversation-view';
 import type { DesignElementReference } from '@molly/shared/design-element-reference';
 import type { DesignExportScale } from '@molly/shared/electron-ipc';
 import type {
+  DesignHighlight,
   DesignSelectionAction,
   DesignSelectionSummary,
 } from '@molly/shared/design-selection-commands';
@@ -17,7 +18,12 @@ import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
-import { latestCommittedDesignReceipt, syncOpenDesignCanvas } from '@/lib/design-canvas-sync';
+import {
+  latestCommittedDesignReceipt,
+  latestCommittedDesignTurnId,
+  syncOpenDesignCanvas,
+} from '@/lib/design-canvas-sync';
+import { readDesignTurnElementIds, splitDesignChanges } from '@/lib/design-turn-elements';
 import { useSessionDoc } from '@/hooks/use-session-doc';
 import { Button } from '@/ui/button';
 import {
@@ -133,6 +139,7 @@ export function DesignCanvas({
   workspaceSlug,
   name,
   onReferenceSelection,
+  onSendSelection,
   onSyncSelection,
   toolbarHost = null,
 }: {
@@ -149,6 +156,7 @@ export function DesignCanvas({
   workspaceSlug: string;
   name: string;
   onReferenceSelection?: (reference: DesignElementReference, prompt?: string) => void;
+  onSendSelection?: (reference: DesignElementReference, prompt: string) => Promise<void>;
   /** Passive mirror of the live canvas selection into the composer chip. */
   onSyncSelection?: (reference: DesignElementReference | null, label: string) => void;
   /** Renders the canvas toolbar into the side panel's top row instead of a row of its own. */
@@ -327,6 +335,52 @@ export function DesignCanvas({
     if (preview && active && finalized) void refreshPreview();
   }, [finalized, preview, active, refreshPreview]);
   const committedReceipt = latestCommittedDesignReceipt(designHistory, artworkId);
+  const turnElements = useRef({ view: conversationView, committedTurnId: '' });
+  turnElements.current = {
+    view: conversationView,
+    committedTurnId: latestCommittedDesignTurnId(designHistory, artworkId) ?? '',
+  };
+  const [outsideChanges, setOutsideChanges] = useState<{ ids: string[]; removed: number } | null>(
+    null
+  );
+  const highlight = useCallback(
+    (groups: DesignHighlight) =>
+      void getIpcServices()
+        ?.design.highlight(artworkId, hostId, groups)
+        .catch((cause) => console.error(cause)),
+    [artworkId, hostId]
+  );
+  const pendingSettledHighlight = useRef<DesignHighlight | null>(null);
+  const settle = useCallback(
+    async (groups: DesignHighlight) => {
+      pendingSettledHighlight.current = groups;
+      const delivered = await getIpcServices()
+        ?.design.highlight(artworkId, hostId, groups)
+        .catch((cause) => {
+          console.error(cause);
+          return false;
+        });
+      if (delivered && pendingSettledHighlight.current === groups)
+        pendingSettledHighlight.current = null;
+    },
+    [artworkId, hostId]
+  );
+  const runningTurnId = active ? canvasState?.turnId : undefined;
+  const runningTurnIndexed =
+    !!runningTurnId && designHistory.some((entry) => entry.id === runningTurnId);
+  useEffect(() => {
+    if (!runningTurnId) return undefined;
+    let cancelled = false;
+    setOutsideChanges(null);
+    pendingSettledHighlight.current = null;
+    void readDesignTurnElementIds(turnElements.current.view, runningTurnId).then((elementIds) => {
+      if (!cancelled && elementIds.length) highlight([{ tone: 'working', elementIds }]);
+    });
+    return () => {
+      cancelled = true;
+      highlight([{ tone: 'working', elementIds: [] }]);
+    };
+  }, [runningTurnId, runningTurnIndexed, highlight]);
   useBlocker({
     enableBeforeUnload: false,
     shouldBlockFn: async ({ current, next }) => {
@@ -393,6 +447,8 @@ export function DesignCanvas({
                 DESIGN_CANVAS_LABEL_KEYS.map((key) => [key, t(`design.${key}`)])
               ),
             });
+            const settled = pendingSettledHighlight.current;
+            if (settled && current()) await settle(settled);
           }
           if (current()) {
             setAttachmentError('');
@@ -434,19 +490,36 @@ export function DesignCanvas({
     t,
     referenceActionsEnabled,
     attachAttempt,
+    settle,
   ]);
   useEffect(() => {
     if (!synced || !committedReceipt) return undefined;
     let cancelled = false;
-    void syncOpenDesignCanvas(artworkId)
-      .then(() => (cancelled ? undefined : refreshVersions()))
+    void syncOpenDesignCanvas(artworkId, hostId)
+      .then(async (changes) => {
+        if (cancelled) return;
+        await refreshVersions();
+        const { view, committedTurnId } = turnElements.current;
+        if (cancelled || !changes || !committedTurnId) return;
+        const referenced = await readDesignTurnElementIds(view, committedTurnId);
+        if (cancelled) return;
+        const { inside, outside, removedOutside } = splitDesignChanges(changes, referenced);
+        await settle([
+          { tone: 'changed', elementIds: inside },
+          { tone: 'outside', elementIds: outside },
+        ]);
+        if (cancelled) return;
+        setOutsideChanges(
+          outside.length || removedOutside ? { ids: outside, removed: removedOutside } : null
+        );
+      })
       .catch((cause) => {
         if (!cancelled) setError(ipcErrorMessage(cause));
       });
     return () => {
       cancelled = true;
     };
-  }, [artworkId, committedReceipt, synced, refreshVersions]);
+  }, [artworkId, hostId, committedReceipt, synced, refreshVersions, settle]);
   const run = (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -519,25 +592,39 @@ export function DesignCanvas({
             JSON.stringify(wording ?? '') +
             t(
               'design.editWordingPromptTail',
-              '. Keep the lettering style, colors, badge and size as they are; replace only the image asset and update the element\'s textCopy to the new wording. Preserve the rest of the artwork.'
+              ". Keep the lettering style, colors, badge and size as they are; replace only the image asset and update the element's textCopy to the new wording. Preserve the rest of the artwork."
             ),
           'image',
           reference
         );
     }
   };
-  const actionCallback = useRef(selectionAction);
-  actionCallback.current = selectionAction;
+  const askSelection = (reference: DesignElementReference, prompt: string, send: boolean) => {
+    if (!send || !onSendSelection) return referenceSelection(prompt, undefined, reference);
+    const generation = attachmentGeneration.current;
+    run(async () => {
+      if (generation !== attachmentGeneration.current)
+        throw Error(
+          t('design.selectionChanged', 'Artwork view changed; select the current elements again')
+        );
+      await onSendSelection(reference, prompt);
+    });
+  };
+  const actionCallback = useRef({ selectionAction, askSelection });
+  actionCallback.current = { selectionAction, askSelection };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
         if (
-          event.hostId === hostId &&
-          event.reference.artworkId === artworkId &&
-          active &&
-          !readonlyView
+          event.hostId !== hostId ||
+          event.reference.artworkId !== artworkId ||
+          !active ||
+          readonlyView
         )
-          actionCallback.current(event.action, event.reference, event.wording);
+          return;
+        if (event.action === 'ask')
+          actionCallback.current.askSelection(event.reference, event.prompt, event.send);
+        else actionCallback.current.selectionAction(event.action, event.reference, event.wording);
       }),
     [hostId, artworkId, active, readonlyView]
   );
@@ -866,6 +953,41 @@ export function DesignCanvas({
         >
           {error}
         </p>
+      )}
+      {outsideChanges && (
+        <div
+          role="status"
+          data-design-outside-changes
+          className="mx-3 mt-3 flex items-center gap-3 rounded-xl bg-foreground/[0.03] px-3 py-2 text-sm leading-relaxed"
+        >
+          <p className="min-w-0 flex-1 text-muted-foreground">
+            {t(
+              'design.changedOutsideSelection',
+              'Molly also changed {{count}} elements outside your selection.',
+              { count: outsideChanges.ids.length + outsideChanges.removed }
+            )}
+          </p>
+          {outsideChanges.ids.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 shrink-0 rounded-full"
+              onClick={() => highlight([{ tone: 'outside', elementIds: outsideChanges.ids }])}
+            >
+              {t('design.showChangesOutsideSelection', 'Show')}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 shrink-0 rounded-full"
+            onClick={() => setOutsideChanges(null)}
+          >
+            {t('common.dismiss', 'Dismiss')}
+          </Button>
+        </div>
       )}
       {attachmentError && (
         <div

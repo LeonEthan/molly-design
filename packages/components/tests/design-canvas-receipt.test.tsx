@@ -6,7 +6,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
-  history: [] as { designOutcome?: unknown }[],
+  history: [] as { designOutcome?: unknown; items?: unknown }[],
+  highlights: [] as unknown[],
   synced: false,
   previewVisible: false,
   canvasVisible: false,
@@ -15,7 +16,7 @@ const state = vi.hoisted(() => ({
   versions: vi.fn<() => Promise<{ commitId: string; number: number; createdAt: string }[]>>(),
   baseVersionId: undefined as string | undefined,
   changed: true,
-  sync: vi.fn<() => Promise<void>>(),
+  sync: vi.fn<(artworkId: string, hostId?: string) => Promise<unknown>>(),
   attach: vi.fn<() => Promise<void>>(),
   saveVersion: vi.fn<() => Promise<unknown>>(),
   resizeCallbacks: new Set<() => void>(),
@@ -79,7 +80,11 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
         }
       ),
       presentToolbar: async () => {},
-      syncFromStore: () => state.sync(),
+      highlight: async (_artworkId: string, _hostId: string, groups: unknown) => {
+        state.highlights.push(groups);
+        return state.canvasVisible;
+      },
+      syncFromStore: (artworkId: string, hostId?: string) => state.sync(artworkId, hostId),
       cover: async (_artworkId: string, _hostId: string, covered: boolean) => {
         if (!covered) return null;
         state.canvasVisible = false;
@@ -110,6 +115,7 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   }),
 }));
 import { DesignCanvas } from '../src/components/sessions/design-canvas';
+import { formatDesignElementReference } from '@molly/shared/design-element-reference';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -516,4 +522,93 @@ it('clears the temporary frame when the panel becomes inactive', async () => {
   await render({ active: false });
   expect(container.querySelector('img')).toBeNull();
   expect(state.canvasVisible).toBe(false);
+});
+
+const referencing = (elementIds: string[]) => ({
+  items: [
+    {
+      type: 'text',
+      text: `Warmer ${formatDesignElementReference({
+        artworkId: 'artwork',
+        baselineRevisionId: 'b'.repeat(64),
+        elementIds,
+      })}`,
+    },
+  ],
+});
+it('outlines what the turn changed and reports changes outside its selection', async () => {
+  state.synced = true;
+  state.highlights = [];
+  state.sync.mockResolvedValue({ changed: ['title', 'leaf'], removed: ['logo'] });
+  state.history = [{ ...referencing(['title']), ...receipt('turn-0') }];
+  await render();
+  await act(async () => {});
+  expect(state.highlights.at(-1)).toEqual([
+    { tone: 'changed', elementIds: ['title'] },
+    { tone: 'outside', elementIds: ['leaf'] },
+  ]);
+  const notice = container.querySelector('[data-design-outside-changes]')!;
+  expect(notice.textContent).toContain('Molly also changed {{count}} elements outside');
+  const show = [...notice.querySelectorAll('button')].find((b) => b.textContent === 'Show')!;
+  await act(async () => show.click());
+  expect(state.highlights.at(-1)).toEqual([{ tone: 'outside', elementIds: ['leaf'] }]);
+  const dismiss = [...notice.querySelectorAll('button')].find((b) => b.textContent === 'Dismiss')!;
+  await act(async () => dismiss.click());
+  expect(container.querySelector('[data-design-outside-changes]')).toBeNull();
+});
+it('attributes every change to a turn without element references', async () => {
+  state.synced = true;
+  state.highlights = [];
+  state.sync.mockResolvedValue({ changed: ['title', 'leaf'], removed: ['logo'] });
+  state.history = [{ items: [{ type: 'text', text: 'Make it warmer' }], ...receipt('turn-0') }];
+  await render();
+  await act(async () => {});
+  expect(state.highlights.at(-1)).toEqual([
+    { tone: 'changed', elementIds: ['title', 'leaf'] },
+    { tone: 'outside', elementIds: [] },
+  ]);
+  expect(container.querySelector('[data-design-outside-changes]')).toBeNull();
+});
+it('outlines the referenced elements while their turn is running', async () => {
+  state.synced = true;
+  state.processing = true;
+  state.highlights = [];
+  state.history = [{ ...referencing(['title']), id: 'active' } as never];
+  await render();
+  await act(async () => {});
+  expect(state.highlights).toContainEqual([{ tone: 'working', elementIds: ['title'] }]);
+  state.processing = false;
+});
+it('delivers settled outlines once the canonical canvas attaches after the commit', async () => {
+  visibleCanvas();
+  let attached!: () => void;
+  state.attach.mockReturnValue(new Promise<void>((resolve) => (attached = resolve)));
+  state.synced = true;
+  state.highlights = [];
+  state.sync.mockResolvedValue({ changed: ['title'], removed: [] });
+  state.history = [{ ...referencing(['title']), ...receipt('turn-0') }];
+  await render();
+  await act(async () => {});
+  const settled = [
+    { tone: 'changed', elementIds: ['title'] },
+    { tone: 'outside', elementIds: [] },
+  ];
+  expect(state.highlights).toEqual([settled]);
+  expect(state.sync).toHaveBeenCalledWith('artwork', expect.any(String));
+  await act(async () => attached());
+  await act(async () => {});
+  expect(state.highlights).toEqual([settled, settled]);
+});
+it('outlines the running turn once its user turn reaches the conversation index', async () => {
+  state.synced = true;
+  state.processing = true;
+  state.highlights = [];
+  await render();
+  await act(async () => {});
+  expect(state.highlights).not.toContainEqual([{ tone: 'working', elementIds: ['title'] }]);
+  state.history = [{ ...referencing(['title']), id: 'active' } as never];
+  await render();
+  await act(async () => {});
+  expect(state.highlights).toContainEqual([{ tone: 'working', elementIds: ['title'] }]);
+  state.processing = false;
 });

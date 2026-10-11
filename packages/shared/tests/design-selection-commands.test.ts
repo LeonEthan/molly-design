@@ -6,7 +6,11 @@ import {
   DesignCanvasCommandSchema,
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
+  DESIGN_ASK_PROMPT_MAX,
+  DESIGN_SELECTION_BODY_LIMIT,
   DesignToolbarPresentationSchema,
+  DesignHighlightSchema,
+  diffDesignElements,
 } from '../src/design-selection-commands';
 
 const textElement = {
@@ -237,6 +241,32 @@ describe('native toolbar boundary', () => {
     ])
       expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
   });
+  it('carries an inline ask prompt with an explicit send choice', () => {
+    expect(
+      DesignToolbarRequestSchema.parse({
+        type: 'ask',
+        selectionEpoch: 4,
+        prompt: '  把标题改暖一点  ',
+        send: true,
+      })
+    ).toEqual({ type: 'ask', selectionEpoch: 4, prompt: '把标题改暖一点', send: true });
+    for (const input of [
+      { type: 'ask', selectionEpoch: 4, prompt: '   ', send: true },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer', send: 'yes' },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer' },
+      { type: 'ask', selectionEpoch: 4, prompt: 'x'.repeat(DESIGN_ASK_PROMPT_MAX + 1), send: true },
+      { type: 'ask', selectionEpoch: 4, prompt: 'Warmer', send: true, action: 'reference' },
+      { type: 'action', action: 'reference', selectionEpoch: 4, prompt: 'Warmer' },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+    const largest = JSON.stringify({
+      type: 'ask',
+      selectionEpoch: Number.MAX_SAFE_INTEGER,
+      prompt: '暖'.repeat(DESIGN_ASK_PROMPT_MAX),
+      send: false,
+    });
+    expect(largest.length).toBeLessThanOrEqual(DESIGN_SELECTION_BODY_LIMIT);
+  });
   it('bounds presentation data and carries no artwork mutation authority', () => {
     expect(
       DesignToolbarPresentationSchema.safeParse({
@@ -252,5 +282,44 @@ describe('native toolbar boundary', () => {
         labels: { bold: 'x'.repeat(501) },
       }).success
     ).toBe(false);
+  });
+});
+
+describe('element change feedback', () => {
+  it('reports added and modified elements, ignoring key and stacking order', () => {
+    const before = {
+      elements: [
+        { id: 'title', kind: 'text', style: { color: '#000', size: 40 } },
+        { id: 'leaf', kind: 'shape', fill: '#d80' },
+        { id: 'logo', kind: 'image' },
+      ],
+    };
+    const after = {
+      elements: [
+        { id: 'leaf', fill: '#d80', kind: 'shape' },
+        { id: 'title', kind: 'text', style: { size: 40, color: '#a84a2a' } },
+        { id: 'badge', kind: 'shape' },
+      ],
+    };
+    expect(diffDesignElements(before, after)).toEqual({
+      changed: ['title', 'badge'],
+      removed: ['logo'],
+    });
+    expect(diffDesignElements(before, before)).toEqual({ changed: [], removed: [] });
+  });
+  it('bounds highlight groups to the known tones', () => {
+    expect(
+      DesignHighlightSchema.parse([
+        { tone: 'changed', elementIds: ['a'] },
+        { tone: 'outside', elementIds: [] },
+      ])
+    ).toHaveLength(2);
+    for (const input of [
+      [{ tone: 'flash', elementIds: ['a'] }],
+      [{ tone: 'changed', elementIds: [''] }],
+      [{ tone: 'changed', elementIds: ['a'], color: 'red' }],
+      Array.from({ length: 4 }, () => ({ tone: 'changed', elementIds: [] })),
+    ])
+      expect(DesignHighlightSchema.safeParse(input).success).toBe(false);
   });
 });

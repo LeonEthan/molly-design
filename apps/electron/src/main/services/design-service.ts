@@ -12,7 +12,10 @@ import {
   DesignSelectionSummarySchema,
   DesignToolbarRequestSchema,
   DesignToolbarPresentationSchema,
+  diffDesignElements,
   type DesignCanvasCommandResult,
+  type DesignElementChanges,
+  type DesignHighlight,
   type DesignSelectionSummary
 } from '@molly/shared/design-selection-commands'
 import type { DesignExportScale } from '@molly/shared/electron-ipc'
@@ -32,7 +35,11 @@ import { join } from 'node:path'
 import { DesignWorker, quitDesignWorker } from './design-worker'
 import type { DesignPayload, DesignRequest } from '../../../../cli/src/design/store'
 import type { DesignHistoryRequest, DesignVersion } from '../../../../cli/src/design/history'
-import { openDesignCanvasNeedsReload, selectCanvasInstance } from './design-canvas-sync-core'
+import {
+  openDesignCanvasNeedsReload,
+  selectCanvasInstance,
+  selectChangeBaseline
+} from './design-canvas-sync-core'
 import {
   DesignCanvasAccess,
   type CanvasInstance,
@@ -118,7 +125,7 @@ export async function captureDesignFrame(owner: BrowserWindow, artworkId: string
 const lastSelectionSummaries = new Map<string, DesignSelectionSummary>()
 const recordsFor = (id: string) => [...records.values()].filter((record) => record.artworkId === id)
 const loading = new Map<string, Promise<RecordEntry>>()
-const syncing = new Map<string, Promise<void>>()
+const syncing = new Map<string, Promise<DesignElementChanges | null>>()
 const hosts = new Map<string, string>()
 const designWorker = new DesignWorker(() =>
   spawn(process.execPath, [join(resources(), 'cli/design.js')], {
@@ -246,22 +253,26 @@ export async function surface(
           const reference = await getDesignSelection(
             id,
             hostId,
-            input.action === 'edit' ||
-              input.action === 'generate' ||
-              input.action === 'edit-wording'
+            input.type === 'action' &&
+              (input.action === 'edit' ||
+                input.action === 'generate' ||
+                input.action === 'edit-wording')
               ? 'image'
               : undefined,
             { selectionEpoch: input.selectionEpoch, assertCurrent }
           )
           assertCurrent()
-          record!.owner.webContents.send('design.selectionAction', {
-            hostId,
-            action: input.action,
-            reference,
-            ...(input.type === 'action' && input.wording !== undefined
-              ? { wording: input.wording }
-              : {})
-          })
+          record!.owner.webContents.send(
+            'design.selectionAction',
+            input.type === 'ask'
+              ? { hostId, action: 'ask', reference, prompt: input.prompt, send: input.send }
+              : {
+                  hostId,
+                  action: input.action,
+                  reference,
+                  ...(input.wording !== undefined ? { wording: input.wording } : {})
+                }
+          )
           return Response.json({ ok: true }, { headers })
         } catch (error) {
           return Response.json(
@@ -710,28 +721,40 @@ export async function readDesignCandidateFile(
  * no draft is discarded to make the saved revision visible. A canvas the user does not have on screen
  * stays closed: destroy is enough, and the next attach reads the store.
  */
-export async function syncDesignCanvasFromStore(id: string): Promise<void> {
-  const previous = syncing.get(id) ?? Promise.resolve()
-  const next = previous.catch(() => {}).then(() => syncDesignCanvasFromStoreOnce(id))
+export async function syncDesignCanvasFromStore(
+  id: string,
+  hostId?: string
+): Promise<DesignElementChanges | null> {
+  const previous = syncing.get(id) ?? Promise.resolve(null)
+  const next = previous.catch(() => null).then(() => syncDesignCanvasFromStoreOnce(id, hostId))
   syncing.set(id, next)
   try {
-    await next
+    return await next
   } finally {
     if (syncing.get(id) === next) syncing.delete(id)
   }
 }
 
-async function syncDesignCanvasFromStoreOnce(id: string): Promise<void> {
+/** Element changes compare the superseded canvas (see `selectChangeBaseline`) with the saved document. */
+async function syncDesignCanvasFromStoreOnce(
+  id: string,
+  hostId?: string
+): Promise<DesignElementChanges | null> {
   const saved = await designRequest({ operation: 'read', sessionId: id })
   if (
-    recordsFor(id).some((record) =>
+    !recordsFor(id).some((record) =>
       openDesignCanvasNeedsReload(record.revisionId, saved.revisionId)
     )
   )
-    await reloadDesignCanvas(id)
+    return null
+  const before = await reloadDesignCanvas(id, hostId)
+  const after = saved.doc as { elements?: unknown } | null
+  return before && Array.isArray(after?.elements)
+    ? diffDesignElements(before, after as { elements: { id: string }[] })
+    : null
 }
 
-async function reloadDesignCanvas(id: string) {
+async function reloadDesignCanvas(id: string, hostId?: string) {
   const entries = [...records].filter(([, record]) => record.artworkId === id)
   // Check every instance before destroying any: exceptional dirty content is never discarded.
   for (const [, record] of entries) {
@@ -739,12 +762,19 @@ async function reloadDesignCanvas(id: string) {
     if (!state || state.dirty || state.saving || state.composing)
       throw Error('Canvas has unsaved edits; preserve or save them before reloading')
   }
+  const baseline = selectChangeBaseline(entries, hosts, id, hostId)
+  const before = baseline
+    ? await baseline[1].view.webContents
+        .executeJavaScript('window.molly.snapshot().then((value) => value.doc)')
+        .catch(() => null)
+    : null
   for (const [key, record] of entries) {
     const visible = hosts.has(key)
     const bounds = record.view.getBounds()
     destroyDesignInstance(key)
     if (visible) await attachDesign(record.owner, id, bounds, key, false)
   }
+  return Array.isArray(before?.elements) ? (before as { elements: { id: string }[] }) : null
 }
 
 export async function leaveDesign(id: string, hostId?: string): Promise<boolean> {
@@ -1053,6 +1083,24 @@ async function unfreezeDesigns() {
     [...records.values()].map((record) =>
       record.view.webContents.executeJavaScript('document.body.inert = false').catch(() => {})
     )
+  )
+}
+
+/**
+ * Outlines are ephemeral feedback on the retained native view; they never touch the document.
+ * Resolves whether a ready canonical canvas received them.
+ */
+export async function highlightDesignElements(
+  id: string,
+  hostId: string,
+  groups: DesignHighlight
+): Promise<boolean> {
+  const record = records.get(hostId)
+  if (!record || record.artworkId !== id || record.view.webContents.isDestroyed()) return false
+  return (
+    (await record.view.webContents.executeJavaScript(
+      `typeof window.molly?.highlight === 'function' && (window.molly.highlight(${JSON.stringify(groups)}), true)`
+    )) === true
   )
 }
 

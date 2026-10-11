@@ -1,4 +1,5 @@
 import { getIpcContext, IpcMethod, IpcService } from 'electron-ipc-decorator'
+import { DesignHighlightSchema } from '@molly/shared/design-selection-commands'
 import {
   DesignSessionIdSchema as id,
   DesignCandidateIdSchema as candidateId,
@@ -22,11 +23,13 @@ import {
   attachSourcePreview,
   attachDesignFromPreview,
   closeSourcePreview,
-  coverDesignCanvas
+  coverDesignCanvas,
+  highlightSourcePreview
 } from '../../services/design-source-preview'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import {
   getDesignSelection,
+  highlightDesignElements,
   presentDesignToolbar,
   applyDesignCommand,
   createDesignVersion,
@@ -125,6 +128,17 @@ export class DesignIpc extends IpcService {
     owner()
     return presentDesignToolbar(id.parse(sessionId), id.parse(hostId), presentation)
   }
+  @IpcMethod() async highlight(sessionId: string, hostId: string, input: unknown) {
+    owner()
+    const artwork = id.parse(sessionId)
+    const host = id.parse(hostId)
+    const groups = DesignHighlightSchema.parse(input)
+    const [canonical] = await Promise.all([
+      highlightDesignElements(artwork, host, groups),
+      highlightSourcePreview(host, groups)
+    ])
+    return canonical
+  }
   @IpcMethod() async applyCommand(sessionId: string, hostId: string, command: unknown) {
     owner()
     return applyDesignCommand(id.parse(sessionId), id.parse(hostId), command)
@@ -139,9 +153,12 @@ export class DesignIpc extends IpcService {
    * matches the store; the renderer calls this from the committed outcome, not
    * on a timer.
    */
-  @IpcMethod() async syncFromStore(sessionId: string) {
+  @IpcMethod() async syncFromStore(sessionId: string, hostId?: string) {
     owner()
-    await syncDesignCanvasFromStore(id.parse(sessionId))
+    return syncDesignCanvasFromStore(
+      id.parse(sessionId),
+      hostId === undefined ? undefined : id.parse(hostId)
+    )
   }
   /** Existing historical content, addressed by artwork and its recorded digest. */
   @IpcMethod() async candidateFile(sessionId: string, rawCandidateId: string) {

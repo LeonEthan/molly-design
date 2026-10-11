@@ -560,11 +560,11 @@ export class ModelConnectionStore {
     })
   }
 
-  /** Completes an OAuth sign-in: creates the connection and its token set atomically. */
   /**
    * Completes an OAuth sign-in: creates the connection and its token set atomically.
-   * One OAuth row per provider; the replaced row is returned to the caller so a
-   * cancelled flow can restore it (rollbackOAuthConnection).
+   * One OAuth row per provider. The previous row is returned to the caller so a
+   * cancelled flow can restore it — but only when no later sign-in has replaced this
+   * one since (rollbackOAuthConnection refuses to resurrect a superseded row).
    */
   saveOAuthConnection(
     input: SaveModelConnection,
@@ -611,15 +611,28 @@ export class ModelConnectionStore {
 
   /**
    * Undoes a save whose flow was cancelled underneath it: removes the new row and
-   * restores the one it replaced, so cancellation never strands the previous grant.
+   * restores the one it replaced. Refuses to resurrect a row that was itself replaced
+   * by a later sign-in (overlapping flows): in that chain the newest surviving row is
+   * the only one whose rollback may restore its own predecessor.
    */
   rollbackOAuthConnection(connectionId: string, replaced?: StoreEntry): Promise<void> {
     return this.serial(async () => {
       const store = await this.read()
       const index = store.entries.findIndex((item) => item.connection.id === connectionId)
       if (index === -1) return
+      const provider = store.entries[index].connection.providerPresetId
       store.entries.splice(index, 1)
-      if (replaced && !store.entries.some((item) => item.connection.id === replaced.connection.id))
+      // Restore the predecessor only when this rollback removes the provider's last
+      // OAuth row AND the predecessor was never superseded by a row that is itself
+      // gone. A predecessor superseded by a cancelled row stays cancelled with it.
+      if (
+        replaced &&
+        !store.entries.some(
+          (item) =>
+            item.connection.providerPresetId === provider &&
+            item.connection.authType === 'openai_oauth'
+        )
+      )
         store.entries.push(replaced)
       await this.write(store)
     })

@@ -22,7 +22,7 @@ import {
   type ModelConnection,
   type OAuthProviderPresetId
 } from '@molly/shared/embedded-harness'
-import type { ModelConnectionStore, OAuthTokenSet } from './model-connection-store'
+import type { ModelConnectionStore, OAuthTokenSet, StoreEntry } from './model-connection-store'
 
 export type OAuthSignInBeginResult =
   | {
@@ -114,6 +114,8 @@ function accountIdFromAccessToken(accessToken: string): string | undefined {
 
 export class OAuthSignInService {
   private pending: PendingFlow | undefined
+  /** Rows whose own flow was cancelled, with the row they replaced (for chain walks). */
+  private readonly cancelledConnections = new Map<string, StoreEntry | undefined>()
 
   constructor(
     private readonly store: ModelConnectionStore,
@@ -230,13 +232,19 @@ export class OAuthSignInService {
         { accountId: accountIdFromAccessToken(tokens.accessToken) }
       )
       // The write may have queued behind a cancellation: remove the new row and
-      // restore the one it replaced, so a cancelled flow strands no grant.
+      // restore the oldest live predecessor in its replacement chain, so a cancelled
+      // flow strands no grant and overlapping cancels walk back to the last live row.
       if (this.pending?.sessionId !== sessionId) {
+        this.cancelledConnections.set(saved.connection.id, saved.replaced)
+        let predecessor = saved.replaced
+        while (predecessor && this.cancelledConnections.has(predecessor.connection.id))
+          predecessor = this.cancelledConnections.get(predecessor.connection.id)
         await this.store
-          .rollbackOAuthConnection(saved.connection.id, saved.replaced)
+          .rollbackOAuthConnection(saved.connection.id, predecessor)
           .catch(() => undefined)
         return { ok: false, reason: 'cancelled' }
       }
+      this.cancelledConnections.delete(saved.connection.id)
       return { ok: true, connection: saved.connection }
     } catch {
       return { ok: false, reason: 'unreachable' }

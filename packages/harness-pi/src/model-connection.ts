@@ -60,10 +60,10 @@ export function configureModelConnection(
       })),
     });
   else if (connection.authType === 'openai_oauth') {
-    // The official "Sign in with ChatGPT" flow issues an access token that talks directly
-    // to api.openai.com; pi-ai detects the non-`sk-` token on the OpenAI preset and omits
-    // the request fields ChatGPT sign-in rejects.
-    providerId = 'openai';
+    // Official subscription OAuth issues an access token for the provider's own
+    // endpoint; the connection keeps its preset provider and catalog. pi-ai detects
+    // the non-`sk-` token on the OpenAI preset and omits rejected request fields.
+    providerId = MOLLY_PROVIDER_IDS[connection.providerPresetId];
   } else if (!isProviderPresetDefaultEndpoint(connection.providerPresetId, connection.baseUrl))
     runtime.registerProvider(providerId, { baseUrl: connection.baseUrl });
   const model = runtime.getModel(providerId, selection.modelId);

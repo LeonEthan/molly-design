@@ -17,7 +17,8 @@ import type {
   ElectronBrowserProfileChoice,
   ElectronBrowserImportReport
 } from '@molly/shared/electron-ipc'
-import { BrowserAccountError } from './browser-account-error.ts'
+import { BrowserAccountError, browserAccountSourceError } from './browser-account-error.ts'
+import type { BrowserCookieReader } from './browser-cookie-reader.ts'
 
 const browsers: Record<AccountImportBrowserId, { name: string; bundle: string }> = {
   chrome: { name: 'Google Chrome', bundle: 'Google Chrome.app' },
@@ -54,20 +55,24 @@ export async function listImportSources(
 }
 
 export async function listImportProfiles(
-  browserId: AccountImportBrowserId
+  browserId: AccountImportBrowserId,
+  signal: AbortSignal,
+  reader?: Pick<typeof import('rookie-cookies'), 'browserProfiles'>
 ): Promise<ElectronBrowserProfileChoice[]> {
   try {
-    return (
-      await (await import('./browser-cookie-reader.ts'))
-        .browserCookieReader()
-        .browserProfiles(browserId)
-    ).map(({ profile, isDefault }) => ({
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    const nativeReader =
+      reader ?? (await import('./browser-cookie-reader.ts')).browserCookieReader()
+    const profiles = await nativeReader.browserProfiles(browserId, { timeoutMs: 5 * 60_000 })
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    return profiles.map(({ profile, isDefault }) => ({
       id: profile.profileId,
       name: profile.displayName,
       isDefault
     }))
-  } catch {
-    throw new BrowserAccountError('source-unavailable')
+  } catch (error) {
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    throw browserAccountSourceError(error)
   }
 }
 
@@ -88,6 +93,13 @@ const contextSchema = z
 export type BrowserAccountSource = {
   cookies: BrowserImportCookie[]
   report: ElectronBrowserImportReport
+}
+
+function hasCookieControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0)
+    return code < 0x20 || code === 0x7f
+  })
 }
 
 export function selectBrowserCookies(
@@ -159,10 +171,12 @@ export function selectBrowserCookies(
     const converted = value.data
     if (
       !/^\.?[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(converted.domain) ||
+      !/^[!#-'*+\-.0-9A-Z^-z|~]+$/.test(converted.name) ||
+      !/^[\x20-\x3a\x3c-\x7e]*$/.test(converted.value) ||
+      converted.value.startsWith(' ') ||
+      converted.value.endsWith(' ') ||
       !converted.path.startsWith('/') ||
-      ['\r', '\n', '\0'].some((character) =>
-        (converted.name + converted.value + converted.path).includes(character)
-      )
+      hasCookieControlCharacters(converted.path)
     )
       throw new BrowserAccountError('source-invalid')
     const identity = JSON.stringify([converted.domain, converted.path, converted.name])
@@ -180,7 +194,7 @@ export async function readBrowserProfileCookies(
   profileId: string,
   siteIds: readonly BrowserAccountSiteId[],
   signal: AbortSignal,
-  reader?: Pick<typeof import('rookie-cookies'), 'read' | 'CancellationHandle'>,
+  reader?: Pick<BrowserCookieReader, 'read' | 'CancellationHandle'>,
   now: () => number = () => Date.now() / 1000
 ): Promise<BrowserAccountSource> {
   const nativeReader = reader ?? (await import('./browser-cookie-reader.ts')).browserCookieReader()
@@ -197,6 +211,7 @@ export async function readBrowserProfileCookies(
         profile: profileId,
         includeExpired: true,
         includeSession: true,
+        mollyInventory: true,
         timeoutMs: 5 * 60_000,
         appBound: 'disabled'
       },
@@ -212,8 +227,7 @@ export async function readBrowserProfileCookies(
     return selectBrowserCookies(result.detailedCookies, siteIds, now())
   } catch (error) {
     if (signal.aborted) throw new BrowserAccountError('cancelled')
-    if (error instanceof BrowserAccountError) throw error
-    throw new BrowserAccountError('source-unavailable')
+    throw browserAccountSourceError(error)
   } finally {
     signal.removeEventListener('abort', cancel)
   }

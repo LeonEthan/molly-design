@@ -125,7 +125,9 @@ In a design session, the `molly_browser` tools control only the page in Molly's 
 
 Open **Settings → Website accounts → Import from browser…**, the Browser sidebar's
 **⋯ → Import from browser…**, or the Pinterest item in Settings → AI models. Choose
-a browser and profile in the same picker, then **Import**. The website list starts
+a browser, then **Import**. Molly reads its profiles after that click and requests
+system access when needed. One profile continues automatically; if several exist,
+choose the intended profile in the same dialog and **Import**. The website list starts
 collapsed with all 27 design and commerce platforms selected; expand it to deselect
 websites or inspect the included domains. It resets on each opening. Only Cookie
 login data is transferred; there is no password, history or extension import.
@@ -140,12 +142,21 @@ again. Cancel revokes a pending import; it cannot dismiss an OS prompt. Finish o
 dismiss that prompt before retrying. Do not grant a generic `security` helper
 permanent access for this flow.
 
-If profiles cannot be read, use **Open Files and Folders settings**, grant the
-selected browser's data access, and **Reload profiles**. In development macOS can
-attribute this access to the terminal or coding agent that launched Molly. Failed
-listing does not establish that profiles are absent.
+When you approve a system prompt while import is pending, it continues automatically.
+An OS denial or cancellation retains your selections for retry. Closing the dialog
+resets its website choices the next time you open it. If macOS has
+blocked browser-file access, Molly offers **Open Files and Folders settings**.
+Grant access there, return to the dialog and choose **Continue import**; no profile
+refresh is needed. Keychain denial and other read failures show their own reason.
+Molly does not automatically retry a denied request. In development macOS can
+attribute browser-file access to the terminal or coding agent that launched Molly.
+The system may decline to show an approval prompt for that launcher; use the
+settings action offered by the failed import in that case.
+Failed listing does not establish that profiles are absent.
 
-Import pauses Agents and reopens embedded pages. It updates matching cookies and
+Agents remain available while you choose a profile or answer authorization prompts.
+The write phase pauses Agents and reopens embedded pages; Agents do not restart
+automatically. Import updates matching cookies and
 keeps other Molly data. Expired and partitioned source cookies are skipped and
 reported. A failed write restores and verifies the previous cookies; if recovery
 cannot be verified, browsing stays paused until you clear website data. **Clear
@@ -155,11 +166,13 @@ without changing your source browser. It does not guarantee server-side logout.
 Open the website to verify sign-in after import. Device-bound credentials cannot
 be transferred, and a website may request login or MFA. The curated catalog covers
 13 design platforms and 14 commerce platforms including Amazon, Shopify, Etsy,
-TikTok Shop, Shopee and Lazada; it does not certify live login compatibility. This
-revision's synthetic tests cover import isolation, merge, rollback and cancellation.
-Earlier real-account Pinterest acceptance belongs to the previous importer and
-does not verify this revision's Keychain prompts, Developer ID distribution or
-upgrades. Safari, Firefox and import on other operating systems are unsupported.
+TikTok Shop, Shopee and Lazada; it does not certify live login compatibility. The
+synthetic tests cover import isolation, merge, rollback and cancellation.
+The [permission-intent revision](.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
+records successful real Chrome/Pinterest import, website sign-in and denied-file
+settings recovery without a profile refresh. First-prompt grant continuation and
+Developer ID distribution/upgrades remain unverified. Safari, Firefox and import
+on other operating systems are unsupported.
 
 Agent image saving accepts decoded PNG/JPEG/GIF into the current design's `media/`.
 WebP/AVIF remain unsupported by that asset path. Native page downloads remain

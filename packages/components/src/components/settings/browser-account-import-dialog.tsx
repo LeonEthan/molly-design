@@ -52,8 +52,12 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   const [profiles, setProfiles] = useState<
     Partial<Record<AccountImportBrowserId, ElectronBrowserProfileChoice[]>>
   >({});
+  const [browserId, setBrowserId] = useState<AccountImportBrowserId | null>(null);
   const [choice, setChoice] = useState('');
+  const [settingsOpened, setSettingsOpened] = useState(false);
+  const [settingsFailed, setSettingsFailed] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [catalogFailed, setCatalogFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -63,114 +67,125 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   const [error, setError] = useState<BrowserAccountImportErrorCode | null>(null);
   const [report, setReport] = useState<ElectronBrowserImportReport | null>(null);
   const operation = useRef<string | null>(null);
-  const generation = useRef(0);
   const live = useRef(true);
+  const catalogRequest = useRef(0);
+  const privacyRequest = useRef(0);
 
-  const loadProfiles = useCallback(
-    async (browserId: AccountImportBrowserId, known?: ElectronBrowserProfileChoice[]) => {
-      const request = ++generation.current;
-      setLoading(true);
-      setError(null);
-      setChoice(`browser:${browserId}`);
-      try {
-        if (!bridge) throw new Error('unavailable');
-        const next = known ?? (await bridge.getImportProfiles(browserId));
-        if (!live.current || generation.current !== request) return;
-        setProfiles((current) => ({ ...current, [browserId]: next }));
-        const preferred = next.find((profile) => profile.isDefault) ?? next[0];
-        setChoice(preferred ? choiceKey(browserId, preferred.id) : `browser:${browserId}`);
-        if (!preferred) setError('source-unavailable');
-      } catch {
-        if (live.current && generation.current === request) setError('source-unavailable');
-      } finally {
-        if (live.current && generation.current === request) setLoading(false);
+  const loadSources = useCallback(async () => {
+    const request = ++catalogRequest.current;
+    setLoading(true);
+    setError(null);
+    setCatalogFailed(false);
+    try {
+      if (!bridge) throw new Error('unavailable');
+      const nextSummary = await bridge.getAccountSummary();
+      if (!live.current || catalogRequest.current !== request) return;
+      setSummary(nextSummary);
+      if (!nextSummary.importAvailable || nextSummary.recoveryRequired) return;
+      const next = await bridge.getImportSources();
+      if (!live.current || catalogRequest.current !== request) return;
+      setSources(next.sources);
+      const browser =
+        next.sources.find((source) => source.browserId === 'chrome') ?? next.sources[0];
+      if (browser) {
+        setBrowserId(browser.browserId);
+        setChoice(`browser:${browser.browserId}`);
       }
-    },
-    [bridge]
-  );
+    } catch {
+      if (live.current && catalogRequest.current === request) {
+        setCatalogFailed(true);
+        setError('unavailable');
+      }
+    } finally {
+      if (live.current && catalogRequest.current === request) setLoading(false);
+    }
+  }, [bridge]);
+
+  const endSession = useCallback(() => {
+    live.current = false;
+    catalogRequest.current++;
+    privacyRequest.current++;
+    if (operation.current)
+      void bridge?.cancelAccountImport(operation.current).catch(() => undefined);
+  }, [bridge]);
 
   useEffect(() => {
     live.current = true;
-    let current = true;
-    void (async () => {
-      if (!bridge) {
-        setError('unavailable');
-        setLoading(false);
-        return;
-      }
-      try {
-        const nextSummary = await bridge.getAccountSummary();
-        if (!current) return;
-        setSummary(nextSummary);
-        if (!nextSummary.importAvailable || nextSummary.recoveryRequired) {
-          setLoading(false);
-          return;
-        }
-        const next = await bridge.getImportSources();
-        if (!current) return;
-        setSources(next.sources);
-        const browser =
-          next.sources.find((source) => source.browserId === 'chrome') ?? next.sources[0];
-        if (browser) await loadProfiles(browser.browserId);
-        else setLoading(false);
-      } catch {
-        if (current) {
-          setError('source-unavailable');
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      current = false;
-      live.current = false;
-      generation.current = -1;
-      if (operation.current)
-        void bridge?.cancelAccountImport(operation.current).catch(() => undefined);
-    };
-  }, [bridge, loadProfiles]);
+    void loadSources();
+    return endSession;
+  }, [endSession, loadSources]);
 
-  const sourceChoice = sources.flatMap((source) =>
-    (profiles[source.browserId] ?? [])
-      .filter((profile) => choiceKey(source.browserId, profile.id) === choice)
-      .map((profile) => ({ browserId: source.browserId, profileId: profile.id }))
-  )[0];
+  const profile = browserId
+    ? profiles[browserId]?.find((entry) => choiceKey(browserId, entry.id) === choice)
+    : undefined;
+  const needsProfile = Boolean(browserId && profiles[browserId]?.length && !profile);
 
   const close = async () => {
-    if (operation.current && bridge) {
-      const outcome = await bridge.cancelAccountImport(operation.current).catch(() => 'finishing');
+    const operationId = operation.current;
+    if (operationId && bridge) {
+      const outcome = await bridge.cancelAccountImport(operationId).catch(() => 'finishing');
       if (!live.current) return;
-      if (outcome === 'finishing') {
+      if (outcome === 'finishing' && operation.current === operationId) {
         setFinishing(true);
         return;
       }
     }
+    operation.current = null;
+    privacyRequest.current++;
     onOpenChange(false);
   };
 
   const runImport = async () => {
-    if (!bridge || !sourceChoice || selected.size === 0 || operation.current) return;
+    if (catalogFailed) {
+      await loadSources();
+      return;
+    }
+    if (!bridge || !browserId || needsProfile || selected.size === 0 || operation.current) return;
     const operationId = crypto.randomUUID();
     operation.current = operationId;
     setBusy(true);
     setError(null);
     setFinishing(false);
+    privacyRequest.current++;
+    setSettingsOpened(false);
+    setSettingsFailed(false);
     try {
       const result = await bridge.importBrowserAccount({
         operationId,
-        ...sourceChoice,
+        browserId,
+        ...(profile ? { profileId: profile.id } : {}),
         siteIds: [...selected],
       });
-      if (!live.current) return;
-      if (result.ok) setReport(result.report);
-      else setError(result.error);
+      if (!live.current || operation.current !== operationId) return;
+      if (result.ok) {
+        if ('profiles' in result) {
+          setProfiles((current) => ({ ...current, [browserId]: result.profiles }));
+          setChoice('');
+        } else setReport(result.report);
+      } else setError(result.error);
     } catch {
-      if (live.current) setError('unavailable');
+      if (live.current && operation.current === operationId) setError('unavailable');
     } finally {
-      operation.current = null;
-      if (live.current) {
-        setBusy(false);
-        setFinishing(false);
+      if (operation.current === operationId) {
+        operation.current = null;
+        if (live.current) {
+          setBusy(false);
+          setFinishing(false);
+        }
       }
+    }
+  };
+
+  const openPrivacySettings = async () => {
+    const request = ++privacyRequest.current;
+    setSettingsFailed(false);
+    try {
+      const result = await bridge?.openBrowserDataPrivacySettings();
+      if (!live.current || privacyRequest.current !== request) return;
+      setSettingsOpened(Boolean(result?.opened));
+      setSettingsFailed(!result?.opened);
+    } catch {
+      if (live.current && privacyRequest.current === request) setSettingsFailed(true);
     }
   };
 
@@ -207,13 +222,21 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
             value={choice}
             disabled={busy || loading || Boolean(report)}
             onValueChange={(value) => {
-              if (value.startsWith('browser:')) {
-                const source = sources.find((entry) => `browser:${entry.browserId}` === value);
-                if (source) void loadProfiles(source.browserId, profiles[source.browserId]);
-              } else {
-                setChoice(value);
-                setError(null);
-              }
+              const source = sources.find(
+                (entry) =>
+                  `browser:${entry.browserId}` === value ||
+                  profiles[entry.browserId]?.some(
+                    (candidate) => choiceKey(entry.browserId, candidate.id) === value
+                  )
+              );
+              if (!source) return;
+              setBrowserId(source.browserId);
+              setChoice(value);
+              setError(null);
+              setReport(null);
+              privacyRequest.current++;
+              setSettingsOpened(false);
+              setSettingsFailed(false);
             }}
           >
             <SelectTrigger
@@ -222,35 +245,43 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
             >
               <SelectValue
                 placeholder={t(
-                  loading ? 'settings.browserImport.loading' : 'settings.browserImport.noSources'
+                  loading
+                    ? 'settings.browserImport.loading'
+                    : needsProfile
+                      ? 'settings.browserImport.chooseProfile'
+                      : 'settings.browserImport.noSources'
                 )}
               />
             </SelectTrigger>
             <SelectContent>
               {sources.map((source) => (
                 <SelectGroup key={source.browserId}>
+                  <SelectItem value={`browser:${source.browserId}`}>
+                    {source.browserName}
+                  </SelectItem>
                   {profiles[source.browserId]?.length ? (
                     <>
                       <SelectLabel>{source.browserName}</SelectLabel>
-                      {profiles[source.browserId]!.map((profile) => (
+                      {profiles[source.browserId]!.map((candidate) => (
                         <SelectItem
-                          key={profile.id}
-                          value={choiceKey(source.browserId, profile.id)}
+                          key={candidate.id}
+                          value={choiceKey(source.browserId, candidate.id)}
                         >
-                          {source.browserName} · {profile.name}
+                          {source.browserName} · {candidate.name}
                         </SelectItem>
                       ))}
                     </>
-                  ) : (
-                    <SelectItem value={`browser:${source.browserId}`}>
-                      {source.browserName}
-                    </SelectItem>
-                  )}
+                  ) : null}
                 </SelectGroup>
               ))}
             </SelectContent>
           </Select>
         </div>
+        {needsProfile ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t('settings.browserImport.profileRequired')}
+          </p>
+        ) : null}
         <p className="text-xs leading-relaxed text-muted-foreground">
           <WithInfo
             text={t('settings.browserImport.authorization')}
@@ -355,27 +386,27 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
         {error ? (
           <div role="alert" className="space-y-2 text-sm text-destructive">
             <p>{t(`settings.browserImport.errors.${error}`)}</p>
-            {error === 'source-unavailable' || error === 'source-incomplete' ? (
-              <div className="flex gap-2">
+            {error === 'source-access-denied' ? (
+              <>
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={busy || loading}
-                  onClick={() => {
-                    const source = sourceChoice?.browserId ?? sources[0]?.browserId;
-                    if (source) void loadProfiles(source);
-                  }}
-                >
-                  {t('settings.browserImport.retryProfiles')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => void bridge?.openBrowserDataPrivacySettings()}
+                  disabled={busy}
+                  onClick={() => void openPrivacySettings()}
                 >
                   {t('settings.browserAccounts.openFilesAndFolders')}
                 </Button>
-              </div>
+                {settingsOpened ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('settings.browserImport.settingsReturn')}
+                  </p>
+                ) : null}
+                {settingsFailed ? (
+                  <p className="text-xs">
+                    {t('settings.browserAccounts.openFilesAndFoldersFailed')}
+                  </p>
+                ) : null}
+              </>
             ) : null}
           </div>
         ) : null}
@@ -427,10 +458,10 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
               !report &&
               (loading ||
                 busy ||
-                !sourceChoice ||
+                (!browserId && !catalogFailed) ||
+                needsProfile ||
                 selected.size === 0 ||
-                !summary?.importAvailable ||
-                summary.recoveryRequired)
+                Boolean(summary && (!summary.importAvailable || summary.recoveryRequired)))
             }
           >
             {t(
@@ -438,7 +469,11 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
                 ? 'settings.browserImport.done'
                 : busy
                   ? 'settings.browserAccounts.importing'
-                  : 'settings.browserImport.import'
+                  : settingsOpened
+                    ? 'settings.browserImport.continue'
+                    : error
+                      ? 'settings.browserImport.retry'
+                      : 'settings.browserImport.import'
             )}
           </Button>
         </DialogFooter>

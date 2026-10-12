@@ -18,6 +18,11 @@ Keychain access inside Molly. Synthetic tests establish cancellation, isolation 
 verified recovery; real signed authorization and website login compatibility remain
 unverified. Imported counts are explicitly not evidence of sign-in.
 
+The [permission-intent revision](../bug-fix/2026-10-11-browser-import-intent-permissions.md)
+partially supersedes this record's profile-discovery, retry and native inventory
+adaptation, and records later real Chrome/Pinterest acceptance. The
+original native-read, transaction and signing decisions remain historical evidence.
+
 ## Approved scope and reuse
 
 The [approval record](../../../../.github/spec-approvals.md#2026-10-11-whole-profile-browser-import)

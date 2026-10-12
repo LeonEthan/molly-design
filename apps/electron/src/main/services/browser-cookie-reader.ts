@@ -7,6 +7,13 @@ import { z } from 'zod'
 import { BrowserAccountError } from './browser-account-error.ts'
 import source from '../../../native/browser-cookie-reader/source.json'
 
+export type BrowserCookieReader = Omit<typeof import('rookie-cookies'), 'read'> & {
+  read(
+    options: import('rookie-cookies').ReadOptions & { mollyInventory: true },
+    cancellation?: import('rookie-cookies').CancellationHandle
+  ): Promise<import('rookie-cookies').ReadResult>
+}
+
 const manifestSchema = z.object({
   revision: z.literal(source.revision),
   version: z.literal(source.version),
@@ -18,7 +25,7 @@ const manifestSchema = z.object({
   buildId: z.string()
 })
 
-export function browserCookieReader(): typeof import('rookie-cookies') {
+export function browserCookieReader(): BrowserCookieReader {
   try {
     if (process.platform !== 'darwin') throw new Error('unsupported')
     const directory = join(
@@ -41,7 +48,7 @@ export function browserCookieReader(): typeof import('rookie-cookies') {
       if (!lstatSync(location).isFile() || digest(readFileSync(location)) !== file.sha256)
         throw new Error('invalid resource')
     }
-    const reader: typeof import('rookie-cookies') = createRequire(import.meta.url)(
+    const reader: BrowserCookieReader = createRequire(import.meta.url)(
       join(directory, 'rookie-cookies.node')
     )
     if (reader.version() !== source.version) throw new Error('invalid reader')

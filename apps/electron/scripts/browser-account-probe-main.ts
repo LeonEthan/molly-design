@@ -151,13 +151,59 @@ async function rollbackProbe(): Promise<void> {
   checks.push('Exact rollback preserves sibling paths, host-only cookies, CHIPS and metadata')
 }
 
+async function browserCookieValueProbe(): Promise<void> {
+  const browserSession = session.fromPartition('synthetic-browser-cookie-values')
+  const isolation = await isolateBrowserAccounts(browserSession)
+  const variants = [
+    { name: 'quoted', value: '"synthetic-only"' },
+    { name: 'json', value: '{"session":"synthetic-only","route":2}' },
+    { name: 'comma', value: 'synthetic,only' },
+    { name: 'space', value: 'synthetic only' },
+    { name: 'backslash', value: 'synthetic\\only' },
+    { name: 'mixed', value: 'synthetic"quoted,only' },
+    {
+      name: 'printable',
+      value:
+        'synthetic' +
+        Array.from({ length: 95 }, (_, index) => String.fromCharCode(0x20 + index))
+          .filter((character) => character !== ';')
+          .join('') +
+        'only'
+    }
+  ]
+  try {
+    await importBrowserAccountCookies(
+      isolation.store,
+      variants.map((row) => sourceCookie(row))
+    )
+    const rows = await isolation.store.snapshot()
+    assert.deepEqual(
+      rows.map(({ name, value }) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name)),
+      variants.toSorted((a, b) => a.name.localeCompare(b.name))
+    )
+    const before = await isolation.store.snapshot()
+    await assert.rejects(
+      importBrowserAccountCookies(isolation.store, [
+        sourceCookie({ name: 'outer-space', value: ' synthetic only ' })
+      ]),
+      { message: 'write-restored' }
+    )
+    assert.deepEqual(await isolation.store.snapshot(), before)
+    checks.push('Chromium quoted/JSON/comma/space/backslash Cookie values round-trip exactly')
+    checks.push('Values normalized by Chromium fail verification and restore previous Cookies')
+  } finally {
+    await isolation.release()
+  }
+}
+
 void app
   .whenReady()
   .then(async () => {
     await workerProbe(false)
     await workerProbe(true)
-  await workerProbe(false, true)
+    await workerProbe(false, true)
     await rollbackProbe()
+    await browserCookieValueProbe()
     console.log(
       JSON.stringify({
         ok: true,

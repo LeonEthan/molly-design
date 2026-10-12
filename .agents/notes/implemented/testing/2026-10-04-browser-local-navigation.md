@@ -15,7 +15,7 @@ service or an external website; it does not establish real-model browsing qualit
 
 ## Cause and scope
 
-`LODY-BROWSER-002` asserted the retired `Agent browser requires a public website.`
+`MOLLY-BROWSER-002` asserted the retired `Agent browser requires a public website.`
 error and targeted the unowned fixed port 8333. The baseline failed because the
 expected private-host refusal was absent; the unreachable target instead returned
 a browser-operation error. The [native transport decision](../simplification/2026-10-03-native-browser-transport.md)
@@ -54,7 +54,7 @@ the exact original Page Object bytes were restored before the final suite.
 Prettier because that package has no recursive format command.
 
 The full desktop suite passed four of five journeys, including this browser
-journey and all three P0 journeys. `LODY-REVIEW-001` timed out waiting for the
+journey and all three P0 journeys. `MOLLY-REVIEW-001` timed out waiting for the
 All Changes menu item: its fixture creates a design session, whose menu
 intentionally excludes code diffs after preexisting commit `4cecb532`. The
 owning [sessions README](../../../../packages/components/src/components/sessions/README.md)

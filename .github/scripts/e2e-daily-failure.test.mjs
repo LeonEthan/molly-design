@@ -37,7 +37,7 @@ async function writeFailures(workspace, ids) {
 
 void test('builds one inline player per failed scenario', async () => {
   await withWorkspace(async (workspace) => {
-    const ids = ['LODY-SESSION-001', 'LODY-WORK-001'];
+    const ids = ['MOLLY-SESSION-001', 'MOLLY-WORK-001'];
     const evidenceRoot = await writeFailures(workspace, ids);
     const result = await prepareDailyFailureReport({
       ...RUN,
@@ -50,8 +50,8 @@ void test('builds one inline player per failed scenario', async () => {
     assert.deepEqual(
       result.batches.map((batch) => batch.videos),
       [
-        ['daily-evidence/scenarios/lody-session-001/failure.webm'],
-        ['daily-evidence/scenarios/lody-work-001/failure.webm'],
+        ['daily-evidence/scenarios/molly-session-001/failure.webm'],
+        ['daily-evidence/scenarios/molly-work-001/failure.webm'],
       ]
     );
     for (const batch of result.batches) {
@@ -65,7 +65,7 @@ void test('builds one inline player per failed scenario', async () => {
 
 void test('deduplicates repeated failure-index rows from the same scenario', async () => {
   await withWorkspace(async (workspace) => {
-    const id = 'LODY-SESSION-001';
+    const id = 'MOLLY-SESSION-001';
     const evidenceRoot = await writeFailures(workspace, [id]);
     const duplicate = { stableId: id, path: `scenarios/${id.toLowerCase()}` };
     await writeFile(
@@ -87,7 +87,7 @@ void test('gives every recording an independently retryable comment', async () =
   await withWorkspace(async (workspace) => {
     const ids = Array.from(
       { length: 51 },
-      (_, index) => `LODY-BATCH-${String(index + 1).padStart(3, '0')}`
+      (_, index) => `MOLLY-BATCH-${String(index + 1).padStart(3, '0')}`
     );
     const evidenceRoot = await writeFailures(workspace, ids);
     const result = await prepareDailyFailureReport({
@@ -107,12 +107,12 @@ void test('gives every recording an independently retryable comment', async () =
 
 void test('reports missing and oversized videos without attaching them', async () => {
   await withWorkspace(async (workspace) => {
-    const evidenceRoot = await writeFailures(workspace, ['LODY-SESSION-001', 'LODY-WORK-001']);
+    const evidenceRoot = await writeFailures(workspace, ['MOLLY-SESSION-001', 'MOLLY-WORK-001']);
     await writeFile(
-      join(evidenceRoot, 'scenarios/lody-session-001/failure.webm'),
+      join(evidenceRoot, 'scenarios/molly-session-001/failure.webm'),
       'too-large-for-test'
     );
-    await rm(join(evidenceRoot, 'scenarios/lody-work-001/failure.webm'));
+    await rm(join(evidenceRoot, 'scenarios/molly-work-001/failure.webm'));
     const result = await prepareDailyFailureReport({
       ...RUN,
       evidenceRoot,
@@ -123,7 +123,7 @@ void test('reports missing and oversized videos without attaching them', async (
     assert.equal(result.videos.length, 0);
     assert.deepEqual(
       result.omitted.map((entry) => entry.stableId),
-      ['LODY-SESSION-001', 'LODY-WORK-001']
+      ['MOLLY-SESSION-001', 'MOLLY-WORK-001']
     );
     assert.equal(result.batches.length, 1);
     const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
@@ -135,8 +135,8 @@ void test('reports missing and oversized videos without attaching them', async (
 
 void test('rejects a video that resolves outside the evidence root', async () => {
   await withWorkspace(async (workspace) => {
-    const evidenceRoot = await writeFailures(workspace, ['LODY-SESSION-001']);
-    const videoPath = join(evidenceRoot, 'scenarios/lody-session-001/failure.webm');
+    const evidenceRoot = await writeFailures(workspace, ['MOLLY-SESSION-001']);
+    const videoPath = join(evidenceRoot, 'scenarios/molly-session-001/failure.webm');
     await rm(videoPath);
     const outside = join(workspace, 'outside.webm');
     await writeFile(outside, 'video');
@@ -159,10 +159,10 @@ void test('rejects a video reached through a symbolic-link directory', async () 
     await mkdir(join(evidenceRoot, 'scenarios'), { recursive: true });
     await mkdir(outside);
     await writeFile(join(outside, 'failure.webm'), 'video');
-    await symlink(outside, join(evidenceRoot, 'scenarios/lody-session-001'));
+    await symlink(outside, join(evidenceRoot, 'scenarios/molly-session-001'));
     await writeFile(
       join(evidenceRoot, 'failure-index.json'),
-      `${JSON.stringify([{ stableId: 'LODY-SESSION-001', path: 'scenarios/lody-session-001' }])}\n`
+      `${JSON.stringify([{ stableId: 'MOLLY-SESSION-001', path: 'scenarios/molly-session-001' }])}\n`
     );
     const result = await prepareDailyFailureReport({
       ...RUN,
@@ -195,7 +195,7 @@ void test('creates a report for infrastructure failures without a failure index'
 
 void test('reports every recording through artifacts without requiring attachment authentication', async () => {
   await withWorkspace(async (workspace) => {
-    const evidenceRoot = await writeFailures(workspace, ['LODY-WORK-001', 'LODY-BROWSER-002']);
+    const evidenceRoot = await writeFailures(workspace, ['MOLLY-WORK-001', 'MOLLY-BROWSER-002']);
     const result = await prepareDailyFailureReport({
       ...RUN,
       evidenceRoot,
@@ -216,7 +216,7 @@ void test('reports every recording through artifacts without requiring attachmen
   });
 });
 
-void test('builds PR-specific markers and failure copy', async () => {
+void test('reports artifacts from pull requests that predate the MOLLY id rename', async () => {
   await withWorkspace(async (workspace) => {
     const evidenceRoot = await writeFailures(workspace, ['LODY-BROWSER-002']);
     const result = await prepareDailyFailureReport({
@@ -228,7 +228,23 @@ void test('builds PR-specific markers and failure copy', async () => {
       suite: 'full',
     });
     const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
-    assert.match(body, /desktop-e2e-pr-failure-run:123456:video:LODY-BROWSER-002/u);
+    assert.match(body, /video:LODY-BROWSER-002/u);
+  });
+});
+
+void test('builds PR-specific markers and failure copy', async () => {
+  await withWorkspace(async (workspace) => {
+    const evidenceRoot = await writeFailures(workspace, ['MOLLY-BROWSER-002']);
+    const result = await prepareDailyFailureReport({
+      ...RUN,
+      evidenceRoot,
+      outputRoot: join(workspace, 'pr-report'),
+      workingDirectory: workspace,
+      channel: 'pr',
+      suite: 'full',
+    });
+    const body = await readFile(join(workspace, result.batches[0].bodyPath), 'utf8');
+    assert.match(body, /desktop-e2e-pr-failure-run:123456:video:MOLLY-BROWSER-002/u);
     assert.match(body, /Desktop PR full regression failed/u);
     assert.doesNotMatch(body, /Desktop Daily/u);
   });

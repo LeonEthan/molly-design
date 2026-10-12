@@ -16,17 +16,17 @@ import { join, relative, resolve } from 'node:path';
 
 const SCENARIOS = {
   onboarding: {
-    id: 'LODY-ONBOARDING-001',
+    id: 'MOLLY-ONBOARDING-001',
     question:
       'Does a clean real desktop reach an editable local workspace without cloud access or Agent configuration?',
   },
   session: {
-    id: 'LODY-SESSION-001',
+    id: 'MOLLY-SESSION-001',
     question:
       'Does Stop cancel the held model request and permanent Session deletion return to editable local chat?',
   },
   work: {
-    id: 'LODY-SESSION-002',
+    id: 'MOLLY-SESSION-002',
     question:
       'Does permanent Session deletion return to local chat while preserving its project folder?',
   },
@@ -34,19 +34,19 @@ const SCENARIOS = {
 
 const SUBJECTS = {
   'desktop-local-bootstrap': {
-    tags: '@LODY-ONBOARDING-001',
+    tags: '@MOLLY-ONBOARDING-001',
     requirement:
       'A clean OSS desktop starts its bundled CLI, provisions the local workspace, and enters the product without Agent configuration.',
     scenarios: [SCENARIOS.onboarding],
   },
   'desktop-session-lifecycle': {
-    tags: '@LODY-SESSION-001',
+    tags: '@MOLLY-SESSION-001',
     requirement:
       'Stopping a Session cancels its scripted model request; archive and permanent deletion return to editable local chat.',
     scenarios: [SCENARIOS.session],
   },
   'desktop-work-lifecycle': {
-    tags: '@LODY-SESSION-002',
+    tags: '@MOLLY-SESSION-002',
     requirement:
       'A completed Session can be archived and permanently deleted without removing its local project folder.',
     scenarios: [SCENARIOS.work],

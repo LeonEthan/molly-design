@@ -15,7 +15,7 @@ OpenAI-completions loopback server, seeds the connection through the real
 composer. The worktree journey was rescoped to what the design product can
 actually create: fork-to-worktree is unreachable (session creation has no
 worktree selector and the embedded engine advertises no `sessionFork`
-capability, so the fork destination menu never renders), so LODY-WORK-001 now
+capability, so the fork destination menu never renders), so MOLLY-WORK-001 now
 proves permanent delete releases Session terminals while preserving the project
 directory, and the backlog fork row is blocked with that evidence. The full
 suite (4 scenarios) passes locally in ~40 seconds; issue #51 stays open until a
@@ -55,7 +55,7 @@ internal data-plane machinery — a construction no shipping surface can produce
   Terminal and run a marker, archive, permanently delete, then assert the
   Session's terminals are gone and the project directory still exists
   (permanent delete must never delete the user's project). The registry row,
-  checkpoints, coverage, and fingerprints were recomputed; LODY-FORK-001 is
+  checkpoints, coverage, and fingerprints were recomputed; MOLLY-FORK-001 is
   blocked with the unreachability evidence rather than deleted, so the gap
   stays visible if a product worktree path returns.
 - **Fixture hygiene**: the event log lives in the retained artifact directory,

@@ -12,7 +12,7 @@
   },
   "journeys": [
     {
-      "id": "LODY-ONBOARDING-001",
+      "id": "MOLLY-ONBOARDING-001",
       "state": "active",
       "priority": "P0",
       "runtime": "none",
@@ -65,7 +65,7 @@
       "estimatedMinutes": 1
     },
     {
-      "id": "LODY-SESSION-001",
+      "id": "MOLLY-SESSION-001",
       "state": "active",
       "priority": "P0",
       "runtime": "simulator",
@@ -121,7 +121,7 @@
       "estimatedMinutes": 2
     },
     {
-      "id": "LODY-SESSION-002",
+      "id": "MOLLY-SESSION-002",
       "state": "active",
       "priority": "P0",
       "runtime": "simulator",
@@ -172,7 +172,7 @@
       "estimatedMinutes": 3
     },
     {
-      "id": "LODY-BROWSER-002",
+      "id": "MOLLY-BROWSER-002",
       "state": "active",
       "priority": "P1",
       "runtime": "simulator",
@@ -223,7 +223,7 @@
       "estimatedMinutes": 2
     },
     {
-      "id": "LODY-MCP-001",
+      "id": "MOLLY-MCP-001",
       "state": "backlog",
       "priority": "P1",
       "runtime": "simulator",
@@ -285,7 +285,7 @@
       "estimatedMinutes": 6
     },
     {
-      "id": "LODY-FORK-001",
+      "id": "MOLLY-FORK-001",
       "state": "backlog",
       "priority": "P1",
       "runtime": "simulator",

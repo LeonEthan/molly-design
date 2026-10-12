@@ -86,8 +86,8 @@ export function validateRegistry(registry) {
       continue;
     }
     requireString(journey.id, `${path}.id`, failures);
-    if (typeof journey.id === 'string' && !/^LODY-[A-Z0-9-]+-\d{3}$/u.test(journey.id)) {
-      failures.push(`${path}.id must match LODY-AREA-NNN`);
+    if (typeof journey.id === 'string' && !/^MOLLY-[A-Z0-9-]+-\d{3}$/u.test(journey.id)) {
+      failures.push(`${path}.id must match MOLLY-AREA-NNN`);
     }
     if (ids.has(journey.id)) failures.push(`${path}.id duplicates ${ids.get(journey.id)}`);
     else ids.set(journey.id, path);

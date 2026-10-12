@@ -23,7 +23,7 @@ const scoring = {
 
 function journey(overrides = {}) {
   const value = {
-    id: 'LODY-TEST-001',
+    id: 'MOLLY-TEST-001',
     state: 'backlog',
     priority: 'P1',
     runtime: 'none',
@@ -65,9 +65,9 @@ void describe('journey registry', () => {
 
   void it('fingerprints only executable semantics', () => {
     const first = journey();
-    const renamed = journey({ id: 'LODY-OTHER-002', title: 'Renamed proposal' });
+    const renamed = journey({ id: 'MOLLY-OTHER-002', title: 'Renamed proposal' });
     const changed = journey({
-      id: 'LODY-OTHER-003',
+      id: 'MOLLY-OTHER-003',
       actions: [{ id: 'example.open' }, { id: 'example.save' }],
     });
     assert.equal(journeyFingerprint(first), journeyFingerprint(renamed));
@@ -110,50 +110,50 @@ void describe('journey registry', () => {
 
   void it('selects exactly one highest score with an id tie-break', () => {
     const lower = journey({
-      id: 'LODY-TEST-003',
+      id: 'MOLLY-TEST-003',
       signals: { ...journey().signals, criticality: 2 },
     });
     const tiedLast = journey({
-      id: 'LODY-TEST-002',
+      id: 'MOLLY-TEST-002',
       actions: [{ id: 'second.open' }],
     });
     const tiedFirst = journey({
-      id: 'LODY-TEST-001',
+      id: 'MOLLY-TEST-001',
       actions: [{ id: 'first.open' }],
     });
     const result = selectJourneyCandidate(
       { schemaVersion: 1, scoring, journeys: [lower, tiedLast, tiedFirst] },
       []
     );
-    assert.equal(result.selected?.id, 'LODY-TEST-001');
+    assert.equal(result.selected?.id, 'MOLLY-TEST-001');
     assert.equal(result.considered, 3);
   });
 
   void it('deduplicates backlog contracts and contracts already active', () => {
-    const active = journey({ id: 'LODY-ACTIVE-001', state: 'active', feature: 'active.feature' });
-    const covered = journey({ id: 'LODY-COVERED-001' });
-    const unique = journey({ id: 'LODY-UNIQUE-001', actions: [{ id: 'unique.open' }] });
-    const repeated = journey({ id: 'LODY-UNIQUE-002', actions: [{ id: 'unique.open' }] });
+    const active = journey({ id: 'MOLLY-ACTIVE-001', state: 'active', feature: 'active.feature' });
+    const covered = journey({ id: 'MOLLY-COVERED-001' });
+    const unique = journey({ id: 'MOLLY-UNIQUE-001', actions: [{ id: 'unique.open' }] });
+    const repeated = journey({ id: 'MOLLY-UNIQUE-002', actions: [{ id: 'unique.open' }] });
     const result = selectJourneyCandidate(
       { schemaVersion: 1, scoring, journeys: [active, covered, repeated, unique] },
       []
     );
     assert.equal(result.considered, 1);
-    assert.equal(result.selected?.id, 'LODY-UNIQUE-001');
+    assert.equal(result.selected?.id, 'MOLLY-UNIQUE-001');
     assert.deepEqual(
       result.skippedDuplicates.map(({ id }) => id),
-      ['LODY-COVERED-001', 'LODY-UNIQUE-002']
+      ['MOLLY-COVERED-001', 'MOLLY-UNIQUE-002']
     );
   });
 
   void it('skips a blocked leader so it cannot stop the queue', () => {
     const blocked = journey({
-      id: 'LODY-BLOCKED-001',
+      id: 'MOLLY-BLOCKED-001',
       signals: { ...journey().signals, criticality: 5 },
       blockedReason: 'Missing deterministic fixture.',
     });
     const eligible = journey({
-      id: 'LODY-ELIGIBLE-001',
+      id: 'MOLLY-ELIGIBLE-001',
       actions: [{ id: 'eligible.open' }],
       signals: { ...journey().signals, criticality: 2 },
     });
@@ -161,27 +161,27 @@ void describe('journey registry', () => {
       { schemaVersion: 1, scoring, journeys: [blocked, eligible] },
       []
     );
-    assert.equal(result.selected?.id, 'LODY-ELIGIBLE-001');
+    assert.equal(result.selected?.id, 'MOLLY-ELIGIBLE-001');
     assert.deepEqual(result.skippedBlocked, [
-      { id: 'LODY-BLOCKED-001', reason: 'Missing deterministic fixture.' },
+      { id: 'MOLLY-BLOCKED-001', reason: 'Missing deterministic fixture.' },
     ]);
   });
 
   void it('renders active and backlog rows in deterministic id order', () => {
     const active = journey({
-      id: 'LODY-ACTIVE-002',
+      id: 'MOLLY-ACTIVE-002',
       state: 'active',
       priority: 'P0',
       feature: 'active.feature',
     });
-    const backlogB = journey({ id: 'LODY-BACKLOG-002', actions: [{ id: 'b.open' }] });
-    const backlogA = journey({ id: 'LODY-BACKLOG-001', actions: [{ id: 'a.open' }] });
+    const backlogB = journey({ id: 'MOLLY-BACKLOG-002', actions: [{ id: 'b.open' }] });
+    const backlogA = journey({ id: 'MOLLY-BACKLOG-001', actions: [{ id: 'a.open' }] });
     const markdown = renderCoverage({
       schemaVersion: 1,
       scoring,
       journeys: [backlogB, active, backlogA],
     });
-    assert.ok(markdown.indexOf('LODY-BACKLOG-001') < markdown.indexOf('LODY-BACKLOG-002'));
+    assert.ok(markdown.indexOf('MOLLY-BACKLOG-001') < markdown.indexOf('MOLLY-BACKLOG-002'));
     assert.match(markdown, /This file is generated from/u);
   });
 

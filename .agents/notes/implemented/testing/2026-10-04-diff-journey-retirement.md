@@ -5,7 +5,7 @@ Translation: pending
 
 ## Abstract
 
-The user retired diff verification after the desktop `LODY-REVIEW-001` journey
+The user retired diff verification after the desktop `MOLLY-REVIEW-001` journey
 failed against a design Session that intentionally has no All Changes panel.
 Remove that journey and its Scout and acceptance entry points, together with the
 dedicated Review Page Object and synthetic large-diff fixture. The remaining

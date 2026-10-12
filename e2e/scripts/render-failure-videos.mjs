@@ -124,7 +124,7 @@ export async function renderFailureVideos({
       typeof stableId === 'string' ? `scenarios/${stableId.toLowerCase()}` : undefined;
     if (
       typeof stableId !== 'string' ||
-      !/^LODY-[A-Z0-9-]+-\d{3}$/u.test(stableId) ||
+      !/^MOLLY-[A-Z0-9-]+-\d{3}$/u.test(stableId) ||
       failure.path !== expectedPath ||
       seen.has(stableId)
     ) {

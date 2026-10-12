@@ -1,3 +1,4 @@
+import { BrowserAccountError } from '../../services/browser-account-error'
 import { getIpcContext, IpcMethod, IpcService } from 'electron-ipc-decorator'
 import {
   ElectronPublicBrowserBoundsInputSchema,
@@ -6,14 +7,16 @@ import {
   ElectronPublicBrowserNavigateInputSchema,
   ElectronPublicBrowserVisibilityInputSchema,
   ElectronBrowserAccountImportInputSchema,
-  ElectronBrowserAccountSiteInputSchema,
+  ElectronBrowserImportProfilesInputSchema,
+  ElectronBrowserImportOperationInputSchema,
   type ElectronPublicBrowserBoundsInput,
   type ElectronPublicBrowserCreateInput,
   type ElectronPublicBrowserIdInput,
   type ElectronPublicBrowserNavigateInput,
   type ElectronPublicBrowserVisibilityInput,
   type ElectronBrowserAccountImportInput,
-  type ElectronBrowserAccountSiteInput
+  type AccountImportBrowserId,
+  type ElectronBrowserImportResult
 } from '@molly/shared/electron-ipc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import { readLocalPlatformSnapshot } from '../../platform'
@@ -132,17 +135,33 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async importBrowserAccount(raw: ElectronBrowserAccountImportInput) {
+  async importBrowserAccount(
+    raw: ElectronBrowserAccountImportInput
+  ): Promise<ElectronBrowserImportResult> {
     assertTrustedSender()
     const input = ElectronBrowserAccountImportInputSchema.parse(raw)
-    return {
-      imported: await getIpcServiceDeps().publicBrowserService.importBrowserAccount(
-        input.browserId,
-        input.profileId,
-        input.site,
-        input.replaceExisting
-      )
+    try {
+      return {
+        ok: true,
+        report: await getIpcServiceDeps().publicBrowserService.importBrowserAccount(input)
+      }
+    } catch (error) {
+      return { ok: false, error: error instanceof BrowserAccountError ? error.code : 'unavailable' }
     }
+  }
+
+  @IpcMethod()
+  cancelAccountImport(raw: { operationId: string }) {
+    assertTrustedSender()
+    const { operationId } = ElectronBrowserImportOperationInputSchema.parse(raw)
+    return getIpcServiceDeps().publicBrowserService.cancelAccountImport(operationId)
+  }
+
+  @IpcMethod()
+  async getImportProfiles(raw: { browserId: AccountImportBrowserId }) {
+    assertTrustedSender()
+    const { browserId } = ElectronBrowserImportProfilesInputSchema.parse(raw)
+    return await getIpcServiceDeps().publicBrowserService.getImportProfiles(browserId)
   }
 
   @IpcMethod()
@@ -164,25 +183,16 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async clearAccountCookies(raw: ElectronBrowserAccountSiteInput) {
+  async clearAccountData() {
     assertTrustedSender()
-    const { site } = ElectronBrowserAccountSiteInputSchema.parse(raw)
-    return { removed: await getIpcServiceDeps().publicBrowserService.clearAccountCookies(site) }
-  }
-
-  @IpcMethod()
-  async beginAccountSignIn(raw: ElectronPublicBrowserIdInput) {
-    assertTrustedSender()
-    const { browserId } = ElectronPublicBrowserIdInputSchema.parse(raw)
-    await getIpcServiceDeps().publicBrowserService.beginAccountSignIn(browserId)
-    return { ok: true }
+    return { removed: await getIpcServiceDeps().publicBrowserService.clearAccountData() }
   }
 
   @IpcMethod()
   async takeAgentControl(raw: ElectronPublicBrowserIdInput) {
     assertTrustedSender()
     const { browserId } = ElectronPublicBrowserIdInputSchema.parse(raw)
-    const scope = getIpcServiceDeps().publicBrowserService.takeAgentControl(browserId)
+    const scope = await getIpcServiceDeps().publicBrowserService.takeHumanAccountControl(browserId)
     if (!scope) return { ok: false, error: 'No Agent currently controls this page.' }
     await setBrowserTakeover(scope.sessionId, scope.runId, true)
     return { ok: true }

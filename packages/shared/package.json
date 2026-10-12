@@ -151,6 +151,10 @@
     "./personal-memory": {
       "types": "./src/personal-memory.ts",
       "import": "./src/personal-memory.ts"
+    },
+    "./browser-account-sites": {
+      "types": "./src/browser-account-sites.ts",
+      "import": "./src/browser-account-sites.ts"
     }
   },
   "scripts": {

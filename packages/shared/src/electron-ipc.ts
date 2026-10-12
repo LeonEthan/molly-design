@@ -1,3 +1,4 @@
+import { BROWSER_ACCOUNT_SITE_IDS, type BrowserAccountSiteId } from './browser-account-sites';
 import { z } from 'zod';
 import type {
   LocalProjectControlRequest,
@@ -91,13 +92,6 @@ export const ElectronPublicBrowserVisibilityInputSchema = ElectronPublicBrowserI
   { visible: z.boolean() }
 ).strict();
 
-export const ElectronBrowserAccountSiteInputSchema = z
-  .object({
-    site: z.enum(['pinterest.com']),
-  })
-  .strict();
-export type ElectronBrowserAccountSiteInput = z.infer<typeof ElectronBrowserAccountSiteInputSchema>;
-/** Chromium browsers share one site-scoped, partition-checked cookie reader. */
 export const ACCOUNT_IMPORT_BROWSERS = [
   'chrome',
   'edge',
@@ -108,13 +102,22 @@ export const ACCOUNT_IMPORT_BROWSERS = [
   'chromium',
 ] as const;
 export type AccountImportBrowserId = (typeof ACCOUNT_IMPORT_BROWSERS)[number];
-export const ElectronBrowserAccountImportInputSchema = ElectronBrowserAccountSiteInputSchema.extend(
-  {
+export const ElectronBrowserImportProfilesInputSchema = z
+  .object({ browserId: z.enum(ACCOUNT_IMPORT_BROWSERS) })
+  .strict();
+export const ElectronBrowserImportOperationInputSchema = z
+  .object({ operationId: z.string().uuid() })
+  .strict();
+export const ElectronBrowserAccountImportInputSchema =
+  ElectronBrowserImportOperationInputSchema.extend({
     browserId: z.enum(ACCOUNT_IMPORT_BROWSERS),
     profileId: z.string().min(1).max(512),
-    replaceExisting: z.boolean(),
-  }
-).strict();
+    siteIds: z
+      .array(z.enum(BROWSER_ACCOUNT_SITE_IDS))
+      .min(1)
+      .max(BROWSER_ACCOUNT_SITE_IDS.length)
+      .refine((ids) => new Set(ids).size === ids.length),
+  }).strict();
 export type ElectronBrowserAccountImportInput = z.infer<
   typeof ElectronBrowserAccountImportInputSchema
 >;
@@ -122,18 +125,43 @@ export type ElectronBrowserAccountSummary = {
   persistent: boolean;
   importAvailable: boolean;
   importUnavailableReason?: 'macos-required' | 'signing-required' | 'secure-storage-unavailable';
-  sites: Array<{ site: ElectronBrowserAccountSiteInput['site']; cookieCount: number }>;
+  cookieCount: number;
+  sites: Array<{ siteId: BrowserAccountSiteId; cookieCount: number }>;
+  recoveryRequired?: boolean;
 };
 export type ElectronBrowserProfileChoice = { id: string; name: string; isDefault: boolean };
 export type ElectronBrowserImportSources = {
-  sources: Array<{
-    browserId: AccountImportBrowserId;
-    browserName: string;
-    profiles: ElectronBrowserProfileChoice[];
-  }>;
-  /** Installed browsers whose profiles could not be listed. */
-  unreadable: string[];
+  sources: Array<{ browserId: AccountImportBrowserId; browserName: string }>;
 };
+export type ElectronBrowserImportReport = {
+  imported: number;
+  skippedExpired: number;
+  skippedPartitioned: number;
+  sites: Array<{
+    siteId: BrowserAccountSiteId;
+    imported: number;
+    skippedExpired: number;
+    skippedPartitioned: number;
+  }>;
+};
+export type BrowserAccountImportErrorCode =
+  | 'cancelled'
+  | 'busy'
+  | 'source-unavailable'
+  | 'source-incomplete'
+  | 'source-too-large'
+  | 'source-invalid'
+  | 'no-cookies'
+  | 'isolation-failed'
+  | 'cookie-capacity'
+  | 'destination-unsupported'
+  | 'write-restored'
+  | 'restore-incomplete'
+  | 'unavailable';
+export type ElectronBrowserImportResult =
+  | { ok: true; report: ElectronBrowserImportReport }
+  | { ok: false; error: BrowserAccountImportErrorCode };
+export type ElectronBrowserImportCancelResult = 'cancelled' | 'finishing' | 'idle';
 
 export type ElectronPublicBrowserCreateInput = z.infer<
   typeof ElectronPublicBrowserCreateInputSchema
@@ -161,7 +189,6 @@ export type ElectronPublicBrowserState = {
   error?: string;
   blockedUrl?: string;
   agentControl?: 'agent' | 'human' | 'human-takeover';
-  accountImport?: { site: ElectronBrowserAccountSiteInput['site']; imported: number; at: number };
 };
 
 export type ElectronPublicBrowserResult =

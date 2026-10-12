@@ -123,13 +123,47 @@ or millimetre unit.
 
 In a design session, the `molly_browser` tools control only the page in Molly's Browser sidebar through the existing tool permission flow. Browsing has no per-site authorization scope. Navigation and selected-image fetching follow your normal network, including proxies and TUN, without a DNS setup step. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover. If an operation returns an uncertain result, the Agent must observe before deciding what to do next; Molly does not automatically repeat the action or block browsing for the rest of the task.
 
-The simplest way to use your Pinterest account is to sign in inside Molly: **Settings → Website accounts → Sign in to Pinterest**, the Pinterest item in Settings → AI models, or **Sign in** in a session's Browser sidebar. Each opens Pinterest's sign-in page in a dialog, and Agent browsing waits while it is open. Molly keeps that sign-in in its own browser profile and reads no other browser, so macOS shows no Keychain or file-access prompt. Google sign-in does not work in Molly's browser; if you use Google for Pinterest, scan the page's QR code with the Pinterest app, set a Pinterest password with "Forgot your password?", or import from your browser as below.
+Open **Settings → Website accounts → Import from browser…**, the Browser sidebar's
+**⋯ → Import from browser…**, or the Pinterest item in Settings → AI models. Choose
+a browser and profile in the same picker, then **Import**. The website list starts
+collapsed with all 27 design and commerce platforms selected; expand it to deselect
+websites or inspect the included domains. It resets on each opening. Only Cookie
+login data is transferred; there is no password, history or extension import.
 
-To import instead, open **Already signed in to Pinterest in Chrome or another browser? Import it** in Website accounts; Molly lists other browsers' profiles only after you open it. On macOS with secure storage, use the unpackaged development app or a stably signed package. Development imports last only until Molly quits; packaged unsigned/ad-hoc builds still cannot import. Open **Settings → Website accounts**, choose a signed-in browser profile (Chrome, Edge, Brave, Arc, Vivaldi, Opera or Chromium), then select **Import from** that browser for Pinterest. macOS may ask you to allow access to that browser's Safe Storage; enter your Mac login password only in that system dialog and keep Molly open. The initial read allows up to five minutes for authorization. If it times out, finish any pending system prompt and retry manually; existing Molly cookies stay unchanged. Molly reads only the selected site's cookies and reloads that site if it is open. If the selected source or Molly site cookies contain unsupported partitions, Molly stops the whole import before changing its cookies; sign in directly in Molly instead. Verify the account on the website itself; Cookie counts are not proof of sign-in. **Clear Molly cookies** does not clear the source browser, other site storage, or guarantee server-side logout. This flow does not install a browser extension or give the Agent access to your browser's tabs.
+Import supports Chrome, Edge, Brave, Arc, Vivaldi, Opera and Chromium on macOS with
+secure storage. The source browser may stay open. Unpackaged development imports
+last until Molly quits; persistent import requires a stably signed package.
+macOS may ask for browser-data and Keychain access. Enter your Mac password only
+in the system prompt, which is requested by Molly itself. A retained Keychain grant
+can reduce subsequent prompts, but system policy and changed signatures may prompt
+again. Cancel revokes a pending import; it cannot dismiss an OS prompt. Finish or
+dismiss that prompt before retrying. Do not grant a generic `security` helper
+permanent access for this flow.
 
-If profiles cannot be listed, check **System Settings → Privacy & Security → Files & Folders**. macOS may attribute a development app's access to the terminal or coding agent that launched it rather than Electron. If a coding agent such as Claude Code started Molly, check that agent's entry even when its terminal already has browser access. Enable access only for the browser you want under the responsible app, then use **Refresh** in Molly; Full Disk Access is not required by this workflow. Alternatively, fully quit Molly and run `pnpm start:local` directly from a terminal that already has access to the chosen browser. This folder permission is separate from Keychain approval during import. Failed listing is not proof that no browser profiles exist.
+If profiles cannot be read, use **Open Files and Folders settings**, grant the
+selected browser's data access, and **Reload profiles**. In development macOS can
+attribute this access to the terminal or coding agent that launched Molly. Failed
+listing does not establish that profiles are absent.
 
-Pinterest is the first-release scope. A local Apple Development-signed package verified Chrome account import, signed-in search and detail browsing, a JPEG save, sign-in persistence after restarting the same app, and clearing. The current development branch migrates automation to agent-browser + WebMCP; the earlier browser acceptance above does not validate the new driver, which has not undergone runtime acceptance. The Agent can save a selected PNG/JPEG/GIF image into the current design's `media/` and use the returned path in YAML. WebP/AVIF remain unsupported by this design asset path. Native page downloads are available separately and do not automatically become design assets. Amazon account import and shopping Q&A, and import from Safari, Firefox or other operating systems, are deferred; the other Chromium browsers share Chrome's reader but have not been verified with a real profile. Websites can still request sign-in or verification. This local acceptance does not establish Developer ID distribution, notarization or upgrade behavior.
+Import pauses Agents and reopens embedded pages. It updates matching cookies and
+keeps other Molly data. Expired and partitioned source cookies are skipped and
+reported. A failed write restores and verifies the previous cookies; if recovery
+cannot be verified, browsing stays paused until you clear website data. **Clear
+website data** removes cookies, local storage and caches for every website in Molly,
+without changing your source browser. It does not guarantee server-side logout.
+
+Open the website to verify sign-in after import. Device-bound credentials cannot
+be transferred, and a website may request login or MFA. The curated catalog covers
+13 design platforms and 14 commerce platforms including Amazon, Shopify, Etsy,
+TikTok Shop, Shopee and Lazada; it does not certify live login compatibility. This
+revision's synthetic tests cover import isolation, merge, rollback and cancellation.
+Earlier real-account Pinterest acceptance belongs to the previous importer and
+does not verify this revision's Keychain prompts, Developer ID distribution or
+upgrades. Safari, Firefox and import on other operating systems are unsupported.
+
+Agent image saving accepts decoded PNG/JPEG/GIF into the current design's `media/`.
+WebP/AVIF remain unsupported by that asset path. Native page downloads remain
+separate and do not automatically become design assets.
 
 ## Continue, preview and recover
 

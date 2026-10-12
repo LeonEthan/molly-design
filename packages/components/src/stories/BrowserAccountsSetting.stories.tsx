@@ -21,52 +21,51 @@ const meta = {
         switch (channel) {
           case 'publicBrowser.getAccountSummary':
             return {
-              persistent: ![
-                'Development Build',
-                'Unsigned Package',
-                'Unreadable Profiles',
-              ].includes(name),
+              persistent: name !== 'Development Build',
               importAvailable: name !== 'Unsigned Package',
               ...(name === 'Unsigned Package'
                 ? { importUnavailableReason: 'signing-required' }
                 : {}),
-              sites: [{ site: 'pinterest.com', cookieCount: name === 'Cookies Saved' ? 14 : 0 }],
+              cookieCount: 14,
+              sites: [{ siteId: 'pinterest', cookieCount: 14 }],
             };
           case 'publicBrowser.getImportSources':
-            if (name === 'Unreadable Profiles')
-              return { sources: [], unreadable: ['Google Chrome', 'Microsoft Edge', 'Brave'] };
             return {
-              sources: [
-                {
-                  browserId: 'chrome',
-                  browserName: 'Google Chrome',
-                  profiles: [
-                    { id: 'Default', name: 'Designer', isDefault: true },
-                    { id: 'Profile 1', name: 'Studio', isDefault: false },
-                  ],
-                },
-                {
-                  browserId: 'arc',
-                  browserName: 'Arc',
-                  profiles: [{ id: 'Default', name: 'Moodboards', isDefault: true }],
-                },
-              ],
-              unreadable: name === 'Unreadable Browser' ? ['Microsoft Edge'] : [],
+              sources:
+                name === 'No Browsers'
+                  ? []
+                  : [
+                      { browserId: 'chrome', browserName: 'Google Chrome' },
+                      { browserId: 'edge', browserName: 'Microsoft Edge' },
+                    ],
             };
-          case 'publicBrowser.openBrowserDataPrivacySettings':
-            return {
-              opened: true,
-              platform: 'darwin',
-              target:
-                'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders',
-            };
+          case 'publicBrowser.getImportProfiles':
+            if (name === 'Unreadable Profiles') throw new Error('Synthetic denied access');
+            return [
+              { id: 'Default', name: 'Designer', isDefault: true },
+              { id: 'Profile 1', name: 'Studio', isDefault: false },
+            ];
           case 'publicBrowser.importBrowserAccount':
-            if (name === 'Import Failed')
-              throw new Error('Browser authorization or cookie reading timed out.');
-            return new Promise(() => {});
-          case 'publicBrowser.destroy':
-          case 'publicBrowser.beginAccountSignIn':
-            return { ok: true };
+            if (name === 'Import Failed') return { ok: false, error: 'write-restored' };
+            if (name === 'Awaiting Authorization') return new Promise(() => {});
+            return {
+              ok: true,
+              report: {
+                imported: 40,
+                skippedExpired: 2,
+                skippedPartitioned: 1,
+                sites: [
+                  { siteId: 'pinterest', imported: 14, skippedExpired: 2, skippedPartitioned: 1 },
+                  { siteId: 'amazon', imported: 26, skippedExpired: 0, skippedPartitioned: 0 },
+                ],
+              },
+            };
+          case 'publicBrowser.cancelAccountImport':
+            return 'cancelled';
+          case 'publicBrowser.clearAccountData':
+            return { removed: 14 };
+          case 'publicBrowser.openBrowserDataPrivacySettings':
+            return { opened: true, platform: 'darwin' };
           default:
             throw new Error(`Unexpected story IPC: ${channel}`);
         }
@@ -79,45 +78,37 @@ const meta = {
 } satisfies Meta<typeof BrowserAccountsSetting>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
 const openImport = async (canvasElement: HTMLElement) => {
-  const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: /Import it|从浏览器导入/ }));
-  return canvas;
+  await userEvent.click(
+    await within(canvasElement).findByRole('button', { name: /Import from browser|从浏览器导入/ })
+  );
+  return within(await within(document.body).findByRole('dialog'));
 };
-const importOpen: Story = {
-  play: async ({ canvasElement }) => void (await openImport(canvasElement)),
+const opened: Story = {
+  play: async ({ canvasElement }) => {
+    await openImport(canvasElement);
+  },
 };
-
+const importing: Story = {
+  play: async ({ canvasElement }) => {
+    const dialog = await openImport(canvasElement);
+    const button = await dialog.findByRole('button', { name: /^(Import|导入)$/ });
+    await dialog.findByText('Google Chrome · Designer');
+    await userEvent.click(button);
+  },
+};
 export const Ready: Story = {};
-export const SignInDialog: Story = {
+export const ImportDialog: Story = opened;
+export const ExpandedWebsites: Story = {
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: /^(Sign in to Pinterest|登录 Pinterest)$/ })
-    );
+    const dialog = await openImport(canvasElement);
+    await userEvent.click(await dialog.findByRole('button', { name: /Websites|网站清单/ }));
   },
 };
-export const AwaitingAuthorization: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = await openImport(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: /Import from Google Chrome|从 Google Chrome 导入/ })
-    );
-    await canvas.findByRole('status');
-  },
-};
-export const ImportFailed: Story = {
-  play: async ({ canvasElement }) => {
-    const canvas = await openImport(canvasElement);
-    await userEvent.click(
-      await canvas.findByRole('button', { name: /Import from Google Chrome|从 Google Chrome 导入/ })
-    );
-    await canvas.findByRole('alert');
-  },
-};
-export const CookiesSaved: Story = {};
-export const DevelopmentBuild: Story = {};
-export const UnsignedPackage: Story = importOpen;
-export const UnreadableBrowser: Story = importOpen;
-export const UnreadableProfiles: Story = importOpen;
+export const AwaitingAuthorization: Story = importing;
+export const ImportFailed: Story = importing;
+export const Imported: Story = importing;
+export const DevelopmentBuild: Story = opened;
+export const UnsignedPackage: Story = opened;
+export const NoBrowsers: Story = opened;
+export const UnreadableProfiles: Story = opened;

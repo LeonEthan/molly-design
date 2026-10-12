@@ -1,3 +1,4 @@
+import { buildBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -12,6 +13,7 @@ const nodeOptions = /--max[-_]old[-_]space[-_]size(?:=|\s|$)/u.test(inheritedNod
   : `${inheritedNodeOptions} --max-old-space-size=8192`.trim()
 
 await buildAgentBrowser()
+await buildBrowserCookieReader()
 
 const designBuild = spawnSync(
   process.execPath,

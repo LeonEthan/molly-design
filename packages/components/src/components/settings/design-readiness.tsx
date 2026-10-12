@@ -8,7 +8,7 @@ import {
 } from '@molly/shared/embedded-harness';
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { cn } from '@/lib/utils';
-import { WebsiteSignInDialog } from './website-sign-in-dialog';
+import { BrowserAccountImportDialog } from './browser-account-import-dialog';
 
 export type DesignReadinessTarget = 'models' | 'image' | 'pinterest';
 
@@ -141,7 +141,7 @@ function usePinterestCookieCount(readGeneration: number) {
       .getAccountSummary()
       .then((summary) => {
         if (live)
-          setCount(summary.sites.find((entry) => entry.site === 'pinterest.com')?.cookieCount);
+          setCount(summary.sites.find((entry) => entry.siteId === 'pinterest')?.cookieCount);
       })
       .catch(() => undefined);
     return () => {
@@ -159,7 +159,7 @@ export function DesignReadiness({
 }: Pick<DesignReadinessViewProps, 'connections' | 'imageConnection'> & {
   onReveal: (target: Exclude<DesignReadinessTarget, 'pinterest'>) => void;
 }) {
-  const [signInOpen, setSignInOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [readGeneration, setReadGeneration] = useState(0);
   const pinterestCookieCount = usePinterestCookieCount(readGeneration);
   if (!getIpcServices()) return null;
@@ -169,13 +169,12 @@ export function DesignReadiness({
         connections={connections}
         imageConnection={imageConnection}
         pinterestCookieCount={pinterestCookieCount}
-        onShow={(target) => (target === 'pinterest' ? setSignInOpen(true) : onReveal(target))}
+        onShow={(target) => (target === 'pinterest' ? setImportOpen(true) : onReveal(target))}
       />
-      <WebsiteSignInDialog
-        site="pinterest.com"
-        open={signInOpen}
+      <BrowserAccountImportDialog
+        open={importOpen}
         onOpenChange={(open) => {
-          setSignInOpen(open);
+          setImportOpen(open);
           if (!open) setReadGeneration((current) => current + 1);
         }}
       />

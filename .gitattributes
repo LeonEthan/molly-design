@@ -4,3 +4,5 @@ packages/design-bento/** text=auto eol=lf
 packages/harness-pi/** text=auto eol=lf
 apps/electron/native/agent-browser/** text=auto eol=lf
 apps/electron/native/agent-browser/embedded.patch whitespace=-blank-at-eol
+apps/electron/native/browser-cookie-reader/** text=auto eol=lf
+apps/electron/native/browser-cookie-reader/embedded.patch whitespace=-blank-at-eol

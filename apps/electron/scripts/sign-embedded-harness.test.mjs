@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import test from 'node:test'
 import signEmbeddedHarness, { prepareEmbeddedHarnessSigning } from './sign-embedded-harness.mjs'
+import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 import { verifyEmbeddedHarness } from '../../cli/scripts/verify-embedded-harness.mjs'
 
@@ -118,6 +119,36 @@ function browserFixture(app, executable) {
   return { directory, manifest }
 }
 
+function cookieReaderFixture(app, executable) {
+  const native = new URL('../native/browser-cookie-reader/', import.meta.url)
+  const source = JSON.parse(fs.readFileSync(new URL('source.json', native), 'utf8'))
+  const directory = path.join(
+    app,
+    'Contents',
+    'Resources',
+    'app.asar.unpacked',
+    'resources',
+    'browser-cookie-reader'
+  )
+  fs.mkdirSync(directory, { recursive: true })
+  fs.copyFileSync(executable, path.join(directory, 'rookie-cookies.node'))
+  fs.copyFileSync(new URL('LICENSE.md', native), path.join(directory, 'LICENSE.md'))
+  const files = ['rookie-cookies.node', 'LICENSE.md'].map((file) => ({
+    path: file,
+    sha256: sha256(fs.readFileSync(path.join(directory, file)))
+  }))
+  const manifest = {
+    ...source,
+    platform: process.platform,
+    arch: process.arch,
+    patchSha256: sha256(fs.readFileSync(new URL('embedded.patch', native))),
+    files,
+    buildId: sha256(JSON.stringify(files))
+  }
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest))
+  return { directory, manifest }
+}
+
 void test('requires a valid full baseline seal before signing', (t) => {
   const { directory, manifest } = fixture(t)
   fs.writeFileSync(
@@ -185,6 +216,7 @@ void test(
     fs.mkdirSync(path.dirname(executable), { recursive: true })
     command('/usr/bin/clang', ['-x', 'c', '-', '-o', executable], 'int main(void) { return 0; }')
     const browser = browserFixture(app, executable)
+    const reader = cookieReaderFixture(app, executable)
     fs.writeFileSync(
       path.join(app, 'Contents', 'Info.plist'),
       `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>dev.molly-design.seal-test</string><key>CFBundleExecutable</key><string>Fixture</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`
@@ -216,6 +248,11 @@ void test(
       arch: process.arch
     })
     assert.notEqual(signedBrowserManifest.buildId, browser.manifest.buildId)
+    const signedReader = verifyBrowserCookieReader(reader.directory, {
+      platform: 'darwin',
+      arch: process.arch
+    })
+    assert.notEqual(signedReader.buildId, reader.manifest.buildId)
     command('/usr/bin/codesign', ['--verify', '--deep', '--strict', app])
     assert.match(
       command('/usr/bin/codesign', ['--display', '--entitlements', '-', app]),

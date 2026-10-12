@@ -43,10 +43,6 @@ files:
   - 'resources/cli/design-skills/**'
   - 'resources/cli/deepseek-agent-presets/**'
   - '!resources/cli/**/*.map'
-  # The embedded browser-cookie-reader ships its upstream license next to the
-  # binary, and afterPack (`verifyBrowserCookieReader`) requires every file in its
-  # manifest. The blanket markdown exclusion above would otherwise strip it.
-  - 'resources/browser-cookie-reader/LICENSE.md'
   # better-auth client usage in Electron does not require Prisma runtime.
   - '!node_modules/@prisma/**'
   - '!node_modules/prisma/**'

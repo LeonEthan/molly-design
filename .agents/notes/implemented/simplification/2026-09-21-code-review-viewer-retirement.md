@@ -34,7 +34,7 @@ same change:
 - `select-ci-scope.test.mjs` drops the synthetic viewer package and the
   helper→viewer typecheck test, and adds `@molly/code-review-viewer` to the
   real-workspace retired-projects exclusion (the `@molly/site-docs` precedent);
-- `e2e/journeys/registry.json` drops the viewer from LODY-REVIEW-001 owner
+- `e2e/journeys/registry.json` drops the viewer from MOLLY-REVIEW-001 owner
   paths (that journey exercises in-app diff surfaces, never the package);
 - code-review-helper docs (`AGENTS.md`, `standalone-build.md`,
   `file-responsibilities.md`, `embed-standalone.mjs`) now state the standalone

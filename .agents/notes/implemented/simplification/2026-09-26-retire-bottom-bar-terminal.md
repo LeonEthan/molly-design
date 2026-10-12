@@ -64,15 +64,15 @@ remaining references:
    `@xterm/xterm@5.5.0` are deleted (the xterm patch's ScreenDprMonitor
    lifetime fix shipped upstream; the node-pty patch's spawn-helper asar fix
    dies with the only consumer). Attributions regenerated.
-6. **e2e** (found by code review): `LODY-WORK-001` — a P0 journey whose whole
+6. **e2e** (found by code review): `MOLLY-WORK-001` — a P0 journey whose whole
    premise was "delete a Session with Agent and Terminal resources" — is
-   retired and replaced by `LODY-SESSION-002` (same flow minus the terminal:
+   retired and replaced by `MOLLY-SESSION-002` (same flow minus the terminal:
    completed scripted session → archive → permanent delete, asserting the
    project directory survives). The xterm listener probe
    (`terminal-resources-probe.ts` + its `terminal:resources` script), the
    Windows PTY lifecycle probe (`probe-windows-pty.mjs` + its e2e-daily
    workflow step), and all terminal steps/page-object IPC calls are removed.
-   Session Stop coverage stays untouched in `LODY-SESSION-001`.
+   Session Stop coverage stays untouched in `MOLLY-SESSION-001`.
 
 ## Kept (out of scope)
 

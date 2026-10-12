@@ -202,7 +202,7 @@ VS Code 编译时共读取 21 个源码文件，包含 Event/Disposable 等基�
 
 ### 2026-09-23 匿名站点手工验收
 
-用隔离的完整桌面 E2E harness 启动真正的 Electron、daemon、Pi worker 与 `molly_browser` MCP；只有外部 OpenAI-compatible 模型 wire 是临时脚本，按顺序发出导航、快照和选图保存调用。逐站用 `browse-task-v1` 在 UI 中授权，未导入 Chrome Cookie、未使用用户浏览器账号。目标词统一为 `poster design`。本轮验证工具链和网站响应，不证明真实模型能自主判断视觉质量；临时逐次证据位于被 Git 忽略的 `e2e/artifacts/scenarios/lody-browser-999/`。
+用隔离的完整桌面 E2E harness 启动真正的 Electron、daemon、Pi worker 与 `molly_browser` MCP；只有外部 OpenAI-compatible 模型 wire 是临时脚本，按顺序发出导航、快照和选图保存调用。逐站用 `browse-task-v1` 在 UI 中授权，未导入 Chrome Cookie、未使用用户浏览器账号。目标词统一为 `poster design`。本轮验证工具链和网站响应，不证明真实模型能自主判断视觉质量；临时逐次证据位于被 Git 忽略的 `e2e/artifacts/scenarios/molly-browser-999/`。
 
 | 站点              | 匿名搜索与选图结果                                                                               | 观察到的边界                                                                                                 |
 | ----------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |

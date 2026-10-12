@@ -71,7 +71,7 @@ let p1Count = 0;
 for (const pickle of pickles) {
   const tags = pickle.tags.map((tag) => tag.name);
   const location = `${pickle.uri}:${pickle.location?.line ?? '?'}`;
-  if (!tags.includes('@lody')) fail(`${location} ${pickle.name} is missing @lody`);
+  if (!tags.includes('@molly')) fail(`${location} ${pickle.name} is missing @molly`);
   if (!tags.includes('@essence')) fail(`${location} ${pickle.name} is missing @essence`);
   if (tags.includes('@wip')) fail(`${location} ${pickle.name} must not use @wip`);
 
@@ -89,9 +89,9 @@ for (const pickle of pickles) {
     fail(`${location} ${pickle.name} must have exactly one supported @runtime-* owner`);
   }
 
-  const ids = tags.filter((tag) => /^@LODY-[A-Z0-9-]+-\d{3}$/u.test(tag));
+  const ids = tags.filter((tag) => /^@MOLLY-[A-Z0-9-]+-\d{3}$/u.test(tag));
   if (ids.length !== 1) {
-    fail(`${location} ${pickle.name} must have exactly one stable @LODY-AREA-NNN id`);
+    fail(`${location} ${pickle.name} must have exactly one stable @MOLLY-AREA-NNN id`);
     continue;
   }
   const id = ids[0];

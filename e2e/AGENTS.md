@@ -50,8 +50,8 @@ also applies.
   candidate is applied to the maintainer checkout. Neither command publishes it.
   Candidate validation initializes only ACP core and DSH source submodules;
   retained vendor runtimes are outside this default path.
-- Every scenario has `@lody`, `@essence`, exactly one of `@P0` or `@P1`,
-  exactly one `@runtime-*` owner, and one stable `@LODY-AREA-NNN` id.
+- Every scenario has `@molly`, `@essence`, exactly one of `@P0` or `@P1`,
+  exactly one `@runtime-*` owner, and one stable `@MOLLY-AREA-NNN` id.
 - `@P0` is a short merge-blocking journey. `@P1` is a deeper scheduled or
   labeled journey. `@runtime-none` means no model wire is needed; it
   does not mean the bundled CLI may be mocked.

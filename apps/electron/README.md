@@ -182,7 +182,9 @@ Folders settings and an explicit profile reload. See the [user guide](../../USER
 
 `build:cookie-reader` stages a checksum-pinned, patched addon under
 `resources/browser-cookie-reader`; normal build/dev/packaging runs it too. Only
-that resource is loaded. Packaging verifies architecture/hash/version and reseals
+that resource is loaded. Packaging explicitly re-includes its `LICENSE.md` after
+the general Markdown exclusion so the sealed resource stays complete.
+Packaging verifies architecture/hash/version and reseals
 after native signing, alongside the existing encrypted-cookie fuse. See the
 [native reader](native/browser-cookie-reader/README.md) and
 [implementation evidence](../../.agents/notes/implemented/feature/2026-10-11-whole-profile-browser-import.md).

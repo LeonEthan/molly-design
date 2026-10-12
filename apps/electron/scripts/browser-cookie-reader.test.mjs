@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -11,6 +11,17 @@ import {
 } from './browser-cookie-reader-resources.mjs'
 
 const require = createRequire(import.meta.url)
+void test('packaging re-includes the cookie reader license after excluding Markdown', async () => {
+  const yml = await readFile(new URL('../electron-builder.yml', import.meta.url), 'utf8')
+  const markdownExclusion = yml.indexOf("\n  - '!**/*.{md,markdown,mkd}'\n")
+  const licenseInclude = yml.indexOf("\n  - 'resources/browser-cookie-reader/LICENSE.md'\n")
+  assert.notEqual(markdownExclusion, -1)
+  assert.ok(
+    licenseInclude > markdownExclusion,
+    'LICENSE.md must be re-included after the Markdown exclusion so afterPack can verify it'
+  )
+})
+
 void test(
   'sealed native addon reads a synthetic SQLite/WAL snapshot and rejects oversized profiles',
   { skip: process.platform !== 'darwin' },

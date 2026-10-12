@@ -61,7 +61,7 @@ catalogs:
     '@juicesharp/rpiv-i18n': 2.12.0
     '@zigai/pi-mention-skill': 0.10.4
     '@ff-labs/pi-fff': 0.11.0
-    cc-safety-net: 2.6.0
+    cc-safety-net: 2.6.10
 
 ignoredBuiltDependencies:
   # >=13.0.2 has no install script; pnpm still offers to build it because the

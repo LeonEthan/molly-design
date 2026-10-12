@@ -158,10 +158,6 @@ export class PublicBrowserService {
   private recoveryIsolation: Awaited<ReturnType<typeof isolateBrowserAccounts>> | undefined
   private readonly humanAccountPages = new Set<string>()
   private shuttingDown = false
-  private readonly importProfiles = new Map<
-    AccountImportBrowserId,
-    ElectronBrowserProfileChoice[]
-  >()
 
   constructor(
     private readonly getMainWindow: () => BrowserWindow | null,
@@ -570,12 +566,21 @@ export class PublicBrowserService {
   async getImportProfiles(
     browserId: AccountImportBrowserId
   ): Promise<ElectronBrowserProfileChoice[]> {
-    if (this.accountOperation || this.shuttingDown) throw new BrowserAccountError('busy')
+    return this.withAccountOperation(`profiles:${browserId}`, async (operation) => {
+      const profiles = await this.readImportProfiles(browserId, operation)
+      this.assertAccountOwner(operation)
+      return profiles
+    })
+  }
+
+  private async readImportProfiles(
+    browserId: AccountImportBrowserId,
+    operation: NonNullable<PublicBrowserService['accountOperation']>
+  ): Promise<ElectronBrowserProfileChoice[]> {
     if (!(await this.getImportSources()).sources.some((source) => source.browserId === browserId))
       throw new BrowserAccountError('source-unavailable')
-    const profiles = await listImportProfiles(browserId)
-    this.importProfiles.set(browserId, profiles)
-    return profiles
+    this.assertAccountOwner(operation)
+    return listImportProfiles(browserId, operation.controller.signal)
   }
 
   async openBrowserDataPrivacySettings(): Promise<OpenSystemNotificationSettingsResult> {
@@ -702,16 +707,18 @@ export class PublicBrowserService {
 
   async importBrowserAccount(
     input: ElectronBrowserAccountImportInput
-  ): Promise<ElectronBrowserImportReport> {
+  ): Promise<ElectronBrowserImportReport | { profiles: ElectronBrowserProfileChoice[] }> {
     if (accountImportReadinessError()) throw new BrowserAccountError('unavailable')
-    if (
-      !this.importProfiles.get(input.browserId)?.some((profile) => profile.id === input.profileId)
-    )
-      throw new BrowserAccountError('source-unavailable')
     return this.withAccountOperation(input.operationId, async (operation) => {
+      const profiles = await this.readImportProfiles(input.browserId, operation)
+      this.assertAccountOwner(operation)
+      if (profiles.length === 0) throw new BrowserAccountError('source-unavailable')
+      if (!input.profileId && profiles.length > 1) return { profiles }
+      const profileId = input.profileId ?? profiles[0]!.id
+      if (!profiles.some((profile) => profile.id === profileId)) return { profiles }
       const source = await readBrowserProfileCookies(
         input.browserId,
-        input.profileId,
+        profileId,
         input.siteIds,
         operation.controller.signal
       )

@@ -141,10 +141,10 @@ export class PublicBrowserIpc extends IpcService {
     assertTrustedSender()
     const input = ElectronBrowserAccountImportInputSchema.parse(raw)
     try {
-      return {
-        ok: true,
-        report: await getIpcServiceDeps().publicBrowserService.importBrowserAccount(input)
-      }
+      const result = await getIpcServiceDeps().publicBrowserService.importBrowserAccount(input)
+      return 'profiles' in result
+        ? { ok: true, profiles: result.profiles }
+        : { ok: true, report: result }
     } catch (error) {
       return { ok: false, error: error instanceof BrowserAccountError ? error.code : 'unavailable' }
     }

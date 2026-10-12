@@ -108,31 +108,53 @@ this page is the full text of the rules summarised there.
   A packaged Molly with a stable macOS signing identity stores site sessions in a
   separate persistent partition. Development and ad-hoc macOS builds use a
   memory-only partition. With OS secure storage, unpackaged macOS development can
-  import Pinterest into that memory session; packaged ad-hoc/unsigned macOS builds
+  import selected website accounts into that memory session; packaged ad-hoc/unsigned macOS builds
   remain blocked because their Keychain trust does not reliably survive rebuilds.
-  Settings lists supported Chromium browser profiles and imports only Pinterest
-  cookies (the first-release scope) from the selected profile through `rookie-cookies`.
+  The shared account dialog initially discovers installed Chromium browsers without
+  accessing profiles. Import starts a cancellable source operation that lists the
+  selected browser's metadata and allows real native access to request authorization.
+  One profile proceeds automatically; multiple profiles return to the same picker
+  for explicit selection before any Cookie read. Main re-enumerates and validates
+  each selected profile rather than trusting a cached list. It then uses one bounded
+  whole-profile `rookie-cookies` inventory read before header normalization and
+  filters the shared design/commerce catalog IDs, validates selected fields, and
+  retains Cookie values and keys in main. Expired and source CHIPS Cookies
+  are skipped and counted; unknown contexts, conflicting identities and incomplete
+  reads fail before writes. The [whole-profile import](../notes/implemented/feature/2026-10-11-whole-profile-browser-import.md)
+  and [permission-intent revision](../notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
+  replace the older Pinterest-only two-read flow.
   The [development-import decision](../notes/implemented/feature/2026-10-03-development-browser-account-import.md)
-  separates import eligibility from session persistence. The domain-filtered detailed read must match
-  the extraction report; CHIPS, unknown contexts, or conflicting identities reject
-  the import before writes. A temporary blank view checks destination partition
-  metadata via CDP because Electron's flat Cookie API cannot safely back up CHIPS.
-  Existing site CHIPS also blocks replacement. The user may need to approve macOS Keychain
-  access. The initial native report allows five minutes for human authorization;
-  the pinned detailed reader has no timeout parameter. Settings shows a pending
-  hint and manual retry guidance, with no automatic retry. A failed read leaves
-  Molly cookies unchanged. Cookie bytes stay in Electron main and are written to Molly's separate
+  separates import eligibility from session persistence. A temporary blank view
+  snapshots complete destination Cookie metadata via CDP because Electron's flat
+  Cookie API cannot safely preserve CHIPS. Conflicting target partitions block
+  replacement. Native Keychain lookup uses Security.framework inside Molly, with
+  a five-minute cooperative read deadline. Cancellation cannot dismiss a system
+  prompt; the source operation keeps its native lease until settlement and discards
+  late results. Typed browser-file denial, Keychain denial and other unavailable
+  source failures stay distinct. Only file denial offers privacy settings;
+  retained selections continue through an explicit Continue import action without
+  a manual profile refresh. Development file access can belong to the launcher;
+  macOS may reject prompting it, leaving the same file-denial settings fallback.
+  A denied request never retries itself. Authorization
+  and metadata preparation leave Agents and Molly website data available. After
+  the source is ready, the write phase pauses Agents, drains pages, isolates network
+  and Workers, preflights quotas, merges exact identities, and verifies writes and
+  rollback. Unverified recovery holds browsing until explicit clearing. A failed
+  source read leaves Molly cookies unchanged. Cookie bytes are written to Molly's separate
   partition; no extension, daemon import RPC, temporary export file, or second
-  account catalog is involved. The import pauses active Agent page access and
-  reloads an open page for that site. The user verifies the actual website login;
+  account catalog is involved. Saved embedded page URLs reopen after write release;
+  Agents do not resume automatically. The user verifies the actual website login;
   Cookie counts do not prove sign-in. Clearing Molly cookies does not remove Chrome
-  cookies or guarantee server-side logout. The Browser sidebar links to Settings
-  and leaves manual sign-in in the visible page. Image labels and refs follow the
+  data or guarantee server-side logout. Clearing covers all Molly website storage,
+  cache and HTTP authentication. All website-account entry points use the same
+  import dialog; human takeover still permits manual page login/MFA. Image labels and refs follow the
   upstream accessibility snapshot; use screenshots for visual selection.
   Host driver failures use fixed safe messages. MCP text/image blocks carry WebMCP
   updates through the existing Pi adapter, including errors; no Pi fork is introduced.
   Page ownership and cancellation checks remain independent of native loading success.
-  This migration has no new browser runtime, signed-package or real-site acceptance.
+  The permission-intent record establishes real development Chrome/Pinterest
+  import, sign-in and denied-file recovery. First-prompt grant continuation,
+  signed-package behavior and other catalog websites remain unverified.
   The composer info-bar Browser action is an explicit candidate-navigation request, not merely a
   panel-open action. It opens the reported candidate even when another page is already visible.
   That click IS the approval for that exact target: a remote route creates (or replaces) its tunnel

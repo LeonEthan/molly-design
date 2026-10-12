@@ -111,7 +111,7 @@ export const ElectronBrowserImportOperationInputSchema = z
 export const ElectronBrowserAccountImportInputSchema =
   ElectronBrowserImportOperationInputSchema.extend({
     browserId: z.enum(ACCOUNT_IMPORT_BROWSERS),
-    profileId: z.string().min(1).max(512),
+    profileId: z.string().min(1).max(512).optional(),
     siteIds: z
       .array(z.enum(BROWSER_ACCOUNT_SITE_IDS))
       .min(1)
@@ -148,6 +148,8 @@ export type BrowserAccountImportErrorCode =
   | 'cancelled'
   | 'busy'
   | 'source-unavailable'
+  | 'source-access-denied'
+  | 'source-authorization-denied'
   | 'source-incomplete'
   | 'source-too-large'
   | 'source-invalid'
@@ -160,6 +162,7 @@ export type BrowserAccountImportErrorCode =
   | 'unavailable';
 export type ElectronBrowserImportResult =
   | { ok: true; report: ElectronBrowserImportReport }
+  | { ok: true; profiles: ElectronBrowserProfileChoice[] }
   | { ok: false; error: BrowserAccountImportErrorCode };
 export type ElectronBrowserImportCancelResult = 'cancelled' | 'finishing' | 'idle';
 

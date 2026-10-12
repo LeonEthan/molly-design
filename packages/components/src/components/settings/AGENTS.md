@@ -18,17 +18,18 @@ for the saved entry (edited endpoints or credentials, including staged removal, 
 Save), shows server-declared hints as unverified, stores nothing, and never edits rules
 except through the user's "add rule". Failures show their reason, never an empty list.
 Preserve historical catalog fields when editing unrelated values.
+
 ## Layout and components
 
-- Website account entry points reuse `BrowserAccountImportDialog`: one Import action,
-  one browser/profile picker, curated design/commerce websites collapsed and all
-  selected by default on each opening. Listing apps reads no profile; load only the
-  selected browser's profiles. No separate sign-in dialog or preview/confirm step.
-  Use the shared catalog; the renderer sends IDs, never paths/domains/cookie values.
-- Show authorization, explicit retry, unavailable-build reasons, cancelled reads,
-  finishing writes and skipped counts honestly. Passwords belong only in system
-  prompts; stored cookies do not establish sign-in. Clearing explicitly covers all
-  Molly website data. Keep human takeover/MFA controls and native surface coverage.
+- Website accounts reuse `BrowserAccountImportDialog` and the shared catalog, collapsed
+  and fully selected each opening. Opening discovers installed apps only; Import
+  prepares the chosen browser. One profile continues; multiple need explicit selection
+  in the same picker. No sign-in wizard or preview/confirm step. Send IDs only.
+- Preserve choices on OS denial/cancellation and settings visits. Offer settings only
+  for confirmed file-access denial, then explicit Continue import without a reload.
+  Never auto-retry. Show real authorization, unavailable reasons, finishing writes and
+  skip counts; passwords stay in system prompts, counts prove no sign-in. Clear covers
+  all Molly website data. Retain takeover/MFA and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing
   tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
   catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat
@@ -104,7 +105,7 @@ exposes legacy Agent CLI auth.
 
 Worktree setup/cleanup scripts remain editable for existing Session and CLI
 consumers. Repository status is queried only by mounted project settings, never
-  preloaded by the settings root. IDE launcher settings and probes are retired.
+preloaded by the settings root. IDE launcher settings and probes are retired.
 
 Title defaults do not persist an inferred model. Existing title model overrides,
 including values equal to the displayed current model, remain explicit on save.

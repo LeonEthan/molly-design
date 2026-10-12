@@ -153,17 +153,23 @@ single-use permit before invocation. Image refs and element waits reuse upstream
 resolution; checkbox actions never repeat a click to force a state change.
 No second Chromium is installed. Hidden Agent pages stay
 renderable in a hidden host window and reattach when the panel opens. The macOS account flow uses one shared import dialog from Website accounts,
-the Browser menu and the Pinterest setup chip. Its combined browser/profile picker
-loads only the selected browser's profiles. A collapsed, fully selected catalog
+the Browser menu and the Pinterest setup chip. Opening discovers installed browsers
+only. Import begins the selected browser's profile metadata access; native access
+requests system authorization when needed. One profile continues automatically;
+multiple profiles require an explicit selection in the same picker. A collapsed, fully selected catalog
 covers 13 design and 14 commerce platforms; expanding shows exact domain scope.
 The catalog is an import filter, not a matrix of verified website logins.
 
-Main uses one `read()` from the pinned rookie 0.6.0 addon. Its small local patch
+Main uses one inventory-mode `read()` from the pinned rookie 0.6.0 addon. Its small local patch
 calls Security.framework inside Molly and bounds the native profile read before
 materializing cookie rows (50,000 rows / 32 MiB payload). Cookie values and keys
 never enter renderer IPC. Expired/partitioned source cookies are skipped and
 counted. The source browser may remain open: upstream's read transaction or
-verified SQLite/WAL snapshot must succeed. Incomplete reads fail closed.
+verified SQLite/WAL snapshot must succeed. Incomplete reads fail closed. Decoded
+rows retain raw fields and partition context until main selects websites and
+validates import candidates. Portable header normalization of unrelated websites
+cannot discard selected rows or block their import; selected invalid fields and
+genuine row/decryption/host failures still fail before writes.
 
 The write phase pauses Agents, drains native pages, fences new pages and network
 responses, and attaches a private debugger to pause registered Service Workers
@@ -173,12 +179,22 @@ quota preflight prevents incidental eviction, and complete readback checks both
 writes and rollback. Unverified recovery keeps the partition held until explicit
 clearing. Clearing removes all Molly website storage, cache and HTTP auth data.
 
+Source preparation and authorization precede Agent pause and destination isolation.
 Cancellation/owner reload discards pre-write results while the native operation
 retains its slot until settlement. A Keychain prompt cannot be dismissed by the
 cooperative deadline. Accepted writes drain on quit. Stable signatures can retain
 Keychain grants; OS policy or signature changes can prompt again. Development
-folder permission may be attributed to Molly's launcher; failure offers Files &
-Folders settings and an explicit profile reload. See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build).
+folder permission may be attributed to Molly's launcher, and macOS may refuse to
+offer that launcher a prompt. Only confirmed browser-file
+access denial offers Files & Folders settings; Keychain denial and other read failures
+remain distinct. The dialog retains choices and offers Continue import after opening
+settings, without Reload profiles or automatic retry. Granting a native prompt
+continues the same valid request. Cancellation/denial retains selections for explicit
+retry; starting a new dialog resets website selections. No Agent resumes automatically.
+See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
+and [permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md),
+which records final real Chrome/Pinterest import, sign-in and file-denial recovery.
+Fresh approval/grant continuation and signed distribution remain acceptance limits.
 
 `build:cookie-reader` stages a checksum-pinned, patched addon under
 `resources/browser-cookie-reader`; normal build/dev/packaging runs it too. Only

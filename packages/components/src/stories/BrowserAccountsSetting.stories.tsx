@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { userEvent, within } from 'storybook/test';
+import type { ElectronBrowserAccountImportInput } from '@molly/shared/electron-ipc';
 import { BrowserAccountsSetting } from '@/components/settings/browser-accounts-setting';
 
 const meta = {
@@ -17,7 +18,7 @@ const meta = {
     const previous = window.ipc;
     window.ipc = {
       on: () => () => undefined,
-      invoke: async (channel: string) => {
+      invoke: async (channel: string, input?: ElectronBrowserAccountImportInput) => {
         switch (channel) {
           case 'publicBrowser.getAccountSummary':
             return {
@@ -39,15 +40,21 @@ const meta = {
                       { browserId: 'edge', browserName: 'Microsoft Edge' },
                     ],
             };
-          case 'publicBrowser.getImportProfiles':
-            if (name === 'Unreadable Profiles') throw new Error('Synthetic denied access');
-            return [
-              { id: 'Default', name: 'Designer', isDefault: true },
-              { id: 'Profile 1', name: 'Studio', isDefault: false },
-            ];
           case 'publicBrowser.importBrowserAccount':
             if (name === 'Import Failed') return { ok: false, error: 'write-restored' };
-            if (name === 'Awaiting Authorization') return new Promise(() => {});
+            if (name === 'Importing With Authorization') return new Promise(() => {});
+            if (name === 'File Access Denied') return { ok: false, error: 'source-access-denied' };
+            if (name === 'Keychain Access Denied')
+              return { ok: false, error: 'source-authorization-denied' };
+            if (name === 'Unreadable Profiles') return { ok: false, error: 'source-unavailable' };
+            if (name === 'Choose Profile' && !input?.profileId)
+              return {
+                ok: true,
+                profiles: [
+                  { id: 'opaque-default', name: 'Designer', isDefault: true },
+                  { id: 'opaque-studio', name: 'Studio', isDefault: false },
+                ],
+              };
             return {
               ok: true,
               report: {
@@ -93,7 +100,7 @@ const importing: Story = {
   play: async ({ canvasElement }) => {
     const dialog = await openImport(canvasElement);
     const button = await dialog.findByRole('button', { name: /^(Import|导入)$/ });
-    await dialog.findByText('Google Chrome · Designer');
+    await dialog.findByText('Google Chrome');
     await userEvent.click(button);
   },
 };
@@ -105,10 +112,13 @@ export const ExpandedWebsites: Story = {
     await userEvent.click(await dialog.findByRole('button', { name: /Websites|网站清单/ }));
   },
 };
-export const AwaitingAuthorization: Story = importing;
+export const ImportingWithAuthorization: Story = importing;
+export const ChooseProfile: Story = importing;
+export const FileAccessDenied: Story = importing;
+export const KeychainAccessDenied: Story = importing;
 export const ImportFailed: Story = importing;
 export const Imported: Story = importing;
 export const DevelopmentBuild: Story = opened;
 export const UnsignedPackage: Story = opened;
 export const NoBrowsers: Story = opened;
-export const UnreadableProfiles: Story = opened;
+export const UnreadableProfiles: Story = importing;

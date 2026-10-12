@@ -12,7 +12,7 @@ const compiled = await build({
     export { BROWSER_ACCOUNT_SITES, browserAccountSiteForDomain } from '@molly/shared/browser-account-sites';
     export { ElectronBrowserAccountImportInputSchema } from '@molly/shared/electron-ipc';
     export { importBrowserAccountCookies } from './browser-account-import.ts';
-    export { listImportSources, readBrowserProfileCookies, selectBrowserCookies } from './browser-account-source.ts';
+    export { listImportSources, listImportProfiles, readBrowserProfileCookies, selectBrowserCookies } from './browser-account-source.ts';
   `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
     loader: 'ts'
@@ -35,6 +35,7 @@ const {
   ElectronBrowserAccountImportInputSchema,
   importBrowserAccountCookies,
   listImportSources,
+  listImportProfiles,
   readBrowserProfileCookies,
   selectBrowserCookies
 } = module.exports
@@ -143,6 +144,107 @@ void test('discovery checks app bundles without enumerating browser data directo
   )
 })
 
+void test('browser-only Import is a bounded ID request and profile paths remain forbidden', () => {
+  const browserOnly = { ...input }
+  delete browserOnly.profileId
+  assert.deepEqual(ElectronBrowserAccountImportInputSchema.parse(browserOnly), browserOnly)
+  assert.equal(
+    ElectronBrowserAccountImportInputSchema.safeParse({
+      ...browserOnly,
+      profilePath: '/private/path'
+    }).success,
+    false
+  )
+})
+
+void test('profile enumeration returns only choice metadata and discards a cancelled native result', async () => {
+  const pending = Promise.withResolvers(),
+    started = Promise.withResolvers(),
+    controller = new AbortController()
+  const nativeProfiles = [
+    {
+      profile: { profileId: 'opaque-profile', displayName: 'Synthetic', path: '/private/path' },
+      isDefault: true
+    }
+  ]
+  const reader = {
+    browserProfiles: async (browserId, options) => {
+      assert.equal(browserId, 'chrome')
+      assert.deepEqual(options, { timeoutMs: 300000 })
+      started.resolve()
+      return pending.promise
+    }
+  }
+  const listing = listImportProfiles('chrome', controller.signal, reader)
+  await started.promise
+  controller.abort()
+  pending.resolve(nativeProfiles)
+  await assert.rejects(listing, { message: 'cancelled' })
+  assert.deepEqual(
+    await listImportProfiles('chrome', new AbortController().signal, {
+      browserProfiles: async () => nativeProfiles
+    }),
+    [{ id: 'opaque-profile', name: 'Synthetic', isDefault: true }]
+  )
+})
+
+for (const [nativeCode, errorCode] of [
+  ['molly_source_access_denied', 'source-access-denied'],
+  ['molly_source_authorization_denied', 'source-authorization-denied'],
+  ['engine_failure', 'source-unavailable']
+])
+  void test(`native ${nativeCode} reaches only its safe import error code`, async () => {
+    const error = new Error(
+      `__ROOKIE_ERROR_V1__${JSON.stringify({
+        rookieCode: nativeCode,
+        message: '/private/path synthetic-secret'
+      })}`
+    )
+    await assert.rejects(
+      listImportProfiles('chrome', new AbortController().signal, {
+        browserProfiles: async () => {
+          throw error
+        }
+      }),
+      { message: errorCode }
+    )
+    await assert.rejects(
+      readBrowserProfileCookies(
+        'chrome',
+        input.profileId,
+        input.siteIds,
+        new AbortController().signal,
+        {
+          CancellationHandle: class {
+            cancel() {
+              return undefined
+            }
+          },
+          read: async () => {
+            throw error
+          }
+        }
+      ),
+      { message: errorCode }
+    )
+  })
+
+void test('a generic permission-looking diagnostic is not misclassified as a file or Keychain denial', async () => {
+  for (const message of [
+    'Permission denied (os error 1)',
+    'macOS Keychain denied',
+    '__ROOKIE_ERROR_V1__invalid'
+  ])
+    await assert.rejects(
+      listImportProfiles('chrome', new AbortController().signal, {
+        browserProfiles: async () => {
+          throw new Error(message)
+        }
+      }),
+      { message: 'source-unavailable' }
+    )
+})
+
 void test('one complete profile read is filtered in main and reports selected expiration and CHIPS separately', async () => {
   const events = []
   class CancellationHandle {
@@ -183,6 +285,7 @@ void test('one complete profile read is filtered in main and reports selected ex
       profile: input.profileId,
       includeExpired: true,
       includeSession: true,
+      mollyInventory: true,
       timeoutMs: 300000,
       appBound: 'disabled'
     }
@@ -231,6 +334,64 @@ void test('cancellation discards a late native read and never exposes its secret
   await assert.rejects(read, { message: 'cancelled' })
 })
 
+void test('raw inventory validates only selected import candidates and counts raw partition markers', () => {
+  const source = selectBrowserCookies(
+    [
+      details(),
+      details({ domain: '.unselected.test', name: 'invalid name', value: 'invalid\tvalue' }),
+      details({ name: 'opaque-partition', expires: now - 1 }, { topFrameSiteKey: 'opaque' }),
+      details({ domain: '.unselected.test' }, { partitionKey: 'opaque' })
+    ],
+    ['pinterest'],
+    now
+  )
+  assert.deepEqual(
+    source.cookies.map(({ name }) => name),
+    ['synthetic-session']
+  )
+  assert.deepEqual(source.report, {
+    imported: 1,
+    skippedExpired: 0,
+    skippedPartitioned: 1,
+    sites: [{ siteId: 'pinterest', imported: 1, skippedExpired: 0, skippedPartitioned: 1 }]
+  })
+  for (const patch of [
+    { name: 'invalid name' },
+    { name: 'invalid\tname' },
+    { name: 'invalid\n' },
+    { name: 'invalid\r' },
+    { name: 'invalid\u2028' },
+    { name: 'invalid=name' },
+    { value: 'invalid\tvalue' },
+    { value: 'invalid\n' },
+    { value: 'invalid\u2028' },
+    { value: 'invalid\u007fvalue' },
+    { value: 'invalid;value' },
+    { value: 'invalid\u00e9value' },
+    { value: ' leading-space' },
+    { value: 'trailing-space ' },
+    { path: '/invalid\tpath' }
+  ])
+    assert.throws(() => selectBrowserCookies([details(patch)], ['pinterest'], now), {
+      message: 'source-invalid'
+    })
+})
+
+void test('selected Chromium Cookie values retain destination-verified browser syntax exactly', () => {
+  for (const value of [
+    '"synthetic-only"',
+    '{"session":"synthetic-only","route":2}',
+    'synthetic,only',
+    'synthetic only',
+    'synthetic\\only',
+    'synthetic"quoted,only'
+  ]) {
+    const source = selectBrowserCookies([details({ value })], ['pinterest'], now)
+    assert.equal(source.cookies[0].value, value)
+    assert.equal(source.report.imported, 1)
+  }
+})
+
 void test('partial or mismatched native results fail closed with redacted errors', async () => {
   class CancellationHandle {
     cancel() {}
@@ -238,7 +399,10 @@ void test('partial or mismatched native results fail closed with redacted errors
   for (const patch of [
     { profileId: 'another' },
     { browserId: 'edge' },
-    { warnings: [{ code: 'decrypt_failed', count: 1, message: '/private/path synthetic-secret' }] }
+    ...['decrypt_failed', 'row_read_failed', 'malformed_host_identity', 'unknown_warning'].map(
+      (code) => ({ warnings: [{ code, count: 1, message: '/private/path synthetic-secret' }] })
+    ),
+    { warnings: [{ code: 'unknown_warning', count: 0, countersSaturated: true }] }
   ]) {
     await assert.rejects(
       readBrowserProfileCookies(

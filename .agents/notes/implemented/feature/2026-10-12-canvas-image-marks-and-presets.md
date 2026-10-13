@@ -45,11 +45,13 @@ hid edits the Agent already knows how to do: lettering images can gain
   `uploadSessionReferenceImage`, and the existing image edit tool.
 - **Canvas.** `packages/design-bento/src/image-marks.ts` owns mark mode. Marks
   are screen-only state in image-normalized coordinates, so canvas zoom, crop
-  and fit do not move them. The renderer paints an image as an `<img>` at its
-  natural size with a translate/scale transform inside a clipped frame; mark
-  mode finds the image's screen affine by placing three zero-size probes at the
-  image's corners with the same transform, which also follows rotation and
-  zoom. A click without a drag drops a point; Box and Brush pick the drag
+  and fit do not move them. The editor paints an image in one of two ways. A plain
+  image is an `<img>` at its natural size with a translate/scale transform
+  inside a clipped frame; mark mode places three zero-size probes at its
+  corners with the same transform and reads the image's screen affine from
+  them. An image with crop or border goes through the SVG crop pipeline,
+  whose `<image>` x/y/width/height place the whole source; mark mode maps
+  those corners through `getScreenCTM()`. Both follow rotation and zoom. A click without a drag drops a point; Box and Brush pick the drag
   shape; at most 10 marks (`DESIGN_MARKS_MAX`). Mark mode closes on Escape,
   Cancel, a successful request, read-only, a different selection or a lost
   image.
@@ -80,8 +82,8 @@ prompt, send }` and carries no pixels. Main captures the reference (one image
   (`packages/shared/tests/design-selection-commands.test.ts`); chips per kind,
   hidden wording chip, preset send and detail gate, and the Mark button
   (`design-selection-toolbar.test.ts`); box and point marks in image space,
-  refused request, cap and undo, closing, epoch-bound read with downscale, and
-  badge drawing order (`design-image-marks.test.ts`); preset and marks
+  SVG crop-pipeline mapping, refused request, cap and undo, closing,
+  epoch-bound read with downscale, and badge drawing order (`design-image-marks.test.ts`); preset and marks
   forwarding with send and draft fallbacks
   (`design-canvas-selection-ask.test.tsx`).
 - Real Electron app (2026-10-12, dark theme): the Mark button appeared beside
@@ -92,6 +94,11 @@ prompt, send }` and carries no pixels. Main captures the reference (one image
   the panel placed itself above the image, Send stayed disabled until text was
   typed, and Escape closed mark mode. The Ask popup on the same image showed
   the five image quick edits.
+- A local Codex review found that cropped or bordered images use the SVG
+  path; the first push handled only `<img>`, so mark mode closed on them.
+  Fixed and unit-tested; in the app, after cropping the books image (which
+  switched it to the SVG path), a point and a box landed where clicked, and
+  the crop was then reset.
 - Not run: "Add to chat" and the live Send from mark mode (the send is a paid
   model turn), the light theme, and text quick edits in the app. Human visual
   acceptance is pending; the Spec revision stays draft.

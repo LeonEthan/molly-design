@@ -79,6 +79,25 @@ const badges = () =>
     node.getAttribute('y'),
   ]);
 
+it('maps marks through the SVG placement of cropped or bordered images', () => {
+  const node = document.querySelector('[data-el-id]')!;
+  node.innerHTML =
+    '<svg><g><image x="-100" y="0" width="400" height="200" href="data:image/png;base64,AA=="></image></g></svg>';
+  Object.defineProperty(node.querySelector('image')!, 'getScreenCTM', {
+    value: () => ({ a: 1, b: 0, c: 0, d: 1, e: 100, f: 200 }),
+  });
+  marks.open('photo', 1);
+  pointer('down', 200, 300);
+  pointer('up', 200, 300);
+  pointer('down', 50, 210);
+  pointer('up', 50, 210);
+  expect(marks.isOpen()).toBe(true);
+  expect(badges()).toEqual([
+    ['1', '200', '300'],
+    ['2', '50', '210'],
+  ]);
+});
+
 it('drops numbered boxes and points in image space and sends them by epoch', async () => {
   marks.open('photo', 3);
   expect(panel().hidden).toBe(false);

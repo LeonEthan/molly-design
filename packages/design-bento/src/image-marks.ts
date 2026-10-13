@@ -225,13 +225,26 @@ export function createImageMarks(options: {
     const node = document.querySelector<HTMLElement>(
       `.ed-stage-scale [data-el-id="${CSS.escape(target.elementId)}"]`
     );
-    const image = node?.querySelector('img');
-    const corners = image && screenCorners(image);
-    const source = image?.currentSrc || image?.src;
+    const placed = node?.querySelector<SVGImageElement>('svg image');
+    const image = placed ? undefined : node?.querySelector('img');
+    const corners = placed ? placedCorners(placed) : image && screenCorners(image);
+    const source = placed ? placed.getAttribute('href') : image?.currentSrc || image?.src;
     if (!node || !corners || !source) return undefined;
     const [[e, f], [right, top], [left, bottom]] = corners;
     const matrix = { a: right - e, b: top - f, c: left - e, d: bottom - f, e, f };
     return invert(matrix) ? { node, source, matrix } : undefined;
+  }
+  function placedCorners(image: SVGImageElement): NormalizedPoint[] | undefined {
+    const ctm = image.getScreenCTM?.();
+    const attribute = (name: string) => Number.parseFloat(image.getAttribute(name) ?? '');
+    const [x, y, width, height] = ['x', 'y', 'width', 'height'].map(attribute);
+    if (!ctm || ![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0)
+      return undefined;
+    return [
+      [x, y],
+      [x + width, y],
+      [x, y + height],
+    ].map(([px, py]) => apply(ctm, px, py));
   }
   const toScreen = (geo: Geometry, [u, v]: NormalizedPoint) => apply(geo.matrix, u, v);
   function toImage(geo: Geometry, x: number, y: number): NormalizedPoint | undefined {

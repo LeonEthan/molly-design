@@ -40,12 +40,11 @@ vi.mock('../src/lib/electron-ipc-client', () => ({
   getPublicBrowserBridge: () =>
     fakes.ipcAvailable
       ? {
-          beginAccountSignIn: async () => ({ ok: true }),
           destroy: async () => ({ ok: true }),
           getAccountSummary: async () => ({
             persistent: true,
             importAvailable: false,
-            sites: [{ site: 'pinterest.com', cookieCount: fakes.pinterestCookies }],
+            sites: [{ siteId: 'pinterest', cookieCount: fakes.pinterestCookies }],
           }),
         }
       : null,
@@ -214,7 +213,7 @@ describe('AI models page', () => {
     expect(chips()[0]).toBe('unset: Models· Off');
   });
 
-  it('moves to the image section in place and opens the Pinterest sign-in page', async () => {
+  it('moves to the image section in place and opens browser import', async () => {
     HTMLElement.prototype.scrollIntoView = () => undefined;
     await renderPage();
     const chip = (label: string) =>
@@ -226,7 +225,7 @@ describe('AI models page', () => {
     expect(document.activeElement?.textContent).not.toContain('Add model connection');
     await act(async () => chip('Pinterest').click());
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-      'Sign in to Pinterest'
+      'Import from your browser'
     );
     expect(fakes.openedTab).toBeUndefined();
   });

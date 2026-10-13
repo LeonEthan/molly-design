@@ -22,6 +22,15 @@ import { managed } from './fixtures/managed';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 describe('owned ACP host integration', () => {
+  it('accepts an empty grant for its bound compatible connection and completes inference', async () => {
+    const f = await managed();
+    const session = await f.open();
+    f.grant(session.snapshot, '');
+    expect((await session.prompt())._meta?.mollyNativeOutcome).toMatchObject({
+      status: 'completed',
+    });
+    expect((await f.runtime().getAuth(providerId))?.auth.headers?.Authorization).toBeNull();
+  });
   it('reports native model failures without exposing provider payloads or replaying the run', async () => {
     const f = await managed({
       productionProfile: true,
@@ -345,6 +354,32 @@ describe('owned ACP host integration', () => {
       { code: 'ENOENT' }
     );
     expect(f.observed).toEqual([]);
+  });
+
+  it('runs an OpenAI OAuth connection on the public OpenAI preset', async () => {
+    const f = await managed({
+      config: {
+        connection: {
+          schemaVersion: 1,
+          id: 'connection',
+          revision: 1,
+          providerPresetId: 'openai',
+          displayName: 'OpenAI OAuth',
+          baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS.openai,
+          credentialRef: 'protected-reference',
+          enabled: true,
+          authType: 'openai_oauth',
+          oauth: { email: 'designer@example.com', plan: 'plus', accountId: 'acct-1' },
+        },
+        selection: { connectionId: 'connection', modelId: 'gpt-5.2', thinking: 'low' },
+      },
+    });
+    const s = await f.open();
+    // The official flow talks to api.openai.com directly on the public preset;
+    // no codex backend provider is registered.
+    expect(f.runtime().getRegisteredProviderConfig('openai-codex')).toBeUndefined();
+    f.grant(s.snapshot, 'SYNTHETIC_OAUTH_TOKEN', 'acct-1');
+    await s.prompt().catch(() => undefined);
   });
 
   it.each(['model', 'endpoint'] as const)(

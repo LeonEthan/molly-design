@@ -25,20 +25,34 @@ app and automation interfaces unresponsive.
 
 ## Configure connections
 
-1. Open Settings → AI models → Models, pick the provider/product tile and paste
-   its API key. Molly suggests the provider's default endpoint and a connection
-   name; change either one, or choose **Use a custom endpoint**. With the default,
-   each model uses its provider's own address (OpenRouter's Claude models
-   included); a custom endpoint receives every model's requests. Once the key
-   settles, Molly checks it for free against the provider's model list (OpenRouter:
-   its key endpoint) and shows the result; it sends no model request, so billing
-   and access to a particular model stay unverified, and some services can't be
-   checked this way. Under **Models in the conversation picker** keep **All** or
-   **Choose** the models you want to pick from; models the provider didn't list
-   for your key are marked. Enter keys only in the local settings field, never in
-   a conversation or artwork file. Saving encrypts the connection and doesn't
-   change an existing session's selection; **Delete** removes a connection after
-   you confirm.
+1. Open Settings → AI models → Models, pick the provider/product tile. For OpenAI you can
+   either **Sign in with ChatGPT** through OpenAI's official dynamic-client flow
+   or paste an API key. Kimi Code also offers account sign-in: open the verification page
+   and enter the displayed device code. Tokens stay in the encrypted local vault.
+   Other providers take a key. Molly suggests the provider's default
+   endpoint and a connection name; change either one, or choose **Use a custom endpoint**.
+   With the default, each model uses its provider's own address (OpenRouter's Claude models
+   included); a custom endpoint receives every model's requests. Once the key settles, Molly
+   checks it for free against the provider's model list (OpenRouter: its key endpoint) and
+   shows the result; it sends no model request, so billing and access to a particular model
+   stay unverified, and some services can't be checked this way. Under **Models in the
+   conversation picker** keep **All** or **Choose** the models you want to pick from; models
+   the provider didn't list for your key are marked and sorted last. Enter keys only in the
+   local settings field, never in a conversation or artwork file. Saving encrypts the
+   connection and doesn't change an existing session's selection; **Delete** removes a
+   connection after you confirm. Sign-out, deletion, key conversion and account replacement attempt
+   provider revocation before local removal, even when the revocation endpoint is unavailable.
+   Signing in from **Edit** updates that exact connection; a conflicting provider account
+   must be handled separately. **Sign in again** preserves the connection used by existing
+   sessions and the saved OpenAI client registration. Its verified account identity and encrypted
+   ID-token hint survive token refresh. **Sign out** clears all OpenAI tokens, keeps its
+   registration in a disabled row, and reports if remote revocation could not be confirmed.
+   Use **Edit → Sign in again** to reconnect, then enable the connection when ready.
+   **Delete** forgets that local registration; it does not unregister the remote client.
+   Cleanup and replacement target refresh tokens, including new sessions under the same client.
+   Cancel before account replacement begins; revocation and saving finish once started. ChatGPT sign-in
+   uses OpenAI's direct API token scope, with main-process authorization and pinned pi-ai refresh/inference; live sign-in
+   and service behavior remain unverified in this build.
 2. For Kimi membership credentials, select **Kimi Code (membership API key)**,
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid
@@ -68,11 +82,20 @@ live session activation. The question add-on requires the desktop question
 interface; necessary Slash-command mapping remains unfinished.
 There is no user plugin installation required for the bundled engine.
 
-For **OpenAI-compatible (advanced)**, add explicit model definitions in the connection
-form: IDs, token limits and the capabilities your service actually supports. This
-path uses standard Chat Completions streaming, not Responses or vendor-specific
-thinking formats. Turns containing tools require declared tool-call support. Saving
-does not verify these declarations or select a model; unknown prices remain unknown.
+For **OpenAI-compatible (advanced)**, enter the endpoint and an API key if required, then **Discover models
+from this service**: Molly asks the service for its model list, hides non-chat models,
+prefills what the response carries and completes known models from a packaged
+[models.dev](https://models.dev) snapshot. Pick the models to use; anything the service
+and snapshot both miss stays marked **needs details** for you to complete by hand —
+declarations are never probed or verified. Ollama and LM Studio connections that require no
+key can be saved and used with the key field empty. Editing a saved connection keeps its
+key unless you replace it or explicitly choose **Use without an API key**; changing its
+destination requires fresh input or that explicit keyless choice. Adding a model manually always works, including
+for services without a list endpoint (Azure deployments, z.ai). This path uses standard
+Chat Completions streaming, not Responses or vendor-specific thinking formats. Turns
+containing tools require declared tool-call support. Saving does not verify these
+declarations or select a model; unknown prices remain unknown. Changing the address or
+key clears discovery results and picked discovery drafts; manual declarations stay.
 
 ## Try a design
 
@@ -100,13 +123,60 @@ or millimetre unit.
 
 In a design session, the `molly_browser` tools control only the page in Molly's Browser sidebar through the existing tool permission flow. Browsing has no per-site authorization scope. Navigation and selected-image fetching follow your normal network, including proxies and TUN, without a DNS setup step. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover. If an operation returns an uncertain result, the Agent must observe before deciding what to do next; Molly does not automatically repeat the action or block browsing for the rest of the task.
 
-The simplest way to use your Pinterest account is to sign in inside Molly: **Settings → Website accounts → Sign in to Pinterest**, the Pinterest item in Settings → AI models, or **Sign in** in a session's Browser sidebar. Each opens Pinterest's sign-in page in a dialog, and Agent browsing waits while it is open. Molly keeps that sign-in in its own browser profile and reads no other browser, so macOS shows no Keychain or file-access prompt. Google sign-in does not work in Molly's browser; if you use Google for Pinterest, scan the page's QR code with the Pinterest app, set a Pinterest password with "Forgot your password?", or import from your browser as below.
+Open **Settings → Website accounts → Import from browser…**, the Browser sidebar's
+**⋯ → Import from browser…**, or the Pinterest item in Settings → AI models. Choose
+a browser, then **Import**. Molly reads its profiles after that click and requests
+system access when needed. One profile continues automatically; if several exist,
+choose the intended profile in the same dialog and **Import**. The website list starts
+collapsed with all 27 design and commerce platforms selected; expand it to deselect
+websites or inspect the included domains. It resets on each opening. Only Cookie
+login data is transferred; there is no password, history or extension import.
 
-To import instead, open **Already signed in to Pinterest in Chrome or another browser? Import it** in Website accounts; Molly lists other browsers' profiles only after you open it. On macOS with secure storage, use the unpackaged development app or a stably signed package. Development imports last only until Molly quits; packaged unsigned/ad-hoc builds still cannot import. Open **Settings → Website accounts**, choose a signed-in browser profile (Chrome, Edge, Brave, Arc, Vivaldi, Opera or Chromium), then select **Import from** that browser for Pinterest. macOS may ask you to allow access to that browser's Safe Storage; enter your Mac login password only in that system dialog and keep Molly open. The initial read allows up to five minutes for authorization. If it times out, finish any pending system prompt and retry manually; existing Molly cookies stay unchanged. Molly reads only the selected site's cookies and reloads that site if it is open. If the selected source or Molly site cookies contain unsupported partitions, Molly stops the whole import before changing its cookies; sign in directly in Molly instead. Verify the account on the website itself; Cookie counts are not proof of sign-in. **Clear Molly cookies** does not clear the source browser, other site storage, or guarantee server-side logout. This flow does not install a browser extension or give the Agent access to your browser's tabs.
+Import supports Chrome, Edge, Brave, Arc, Vivaldi, Opera and Chromium on macOS with
+secure storage. The source browser may stay open. Unpackaged development imports
+last until Molly quits; persistent import requires a stably signed package.
+macOS may ask for browser-data and Keychain access. Enter your Mac password only
+in the system prompt, which is requested by Molly itself. A retained Keychain grant
+can reduce subsequent prompts, but system policy and changed signatures may prompt
+again. Cancel revokes a pending import; it cannot dismiss an OS prompt. Finish or
+dismiss that prompt before retrying. Do not grant a generic `security` helper
+permanent access for this flow.
 
-If profiles cannot be listed, check **System Settings → Privacy & Security → Files & Folders**. macOS may attribute a development app's access to the terminal or coding agent that launched it rather than Electron. If a coding agent such as Claude Code started Molly, check that agent's entry even when its terminal already has browser access. Enable access only for the browser you want under the responsible app, then use **Refresh** in Molly; Full Disk Access is not required by this workflow. Alternatively, fully quit Molly and run `pnpm start:local` directly from a terminal that already has access to the chosen browser. This folder permission is separate from Keychain approval during import. Failed listing is not proof that no browser profiles exist.
+When you approve a system prompt while import is pending, it continues automatically.
+An OS denial or cancellation retains your selections for retry. Closing the dialog
+resets its website choices the next time you open it. If macOS has
+blocked browser-file access, Molly offers **Open Files and Folders settings**.
+Grant access there, return to the dialog and choose **Continue import**; no profile
+refresh is needed. Keychain denial and other read failures show their own reason.
+Molly does not automatically retry a denied request. In development macOS can
+attribute browser-file access to the terminal or coding agent that launched Molly.
+The system may decline to show an approval prompt for that launcher; use the
+settings action offered by the failed import in that case.
+Failed listing does not establish that profiles are absent.
 
-Pinterest is the first-release scope. A local Apple Development-signed package verified Chrome account import, signed-in search and detail browsing, a JPEG save, sign-in persistence after restarting the same app, and clearing. The current development branch migrates automation to agent-browser + WebMCP; the earlier browser acceptance above does not validate the new driver, which has not undergone runtime acceptance. The Agent can save a selected PNG/JPEG/GIF image into the current design's `media/` and use the returned path in YAML. WebP/AVIF remain unsupported by this design asset path. Native page downloads are available separately and do not automatically become design assets. Amazon account import and shopping Q&A, and import from Safari, Firefox or other operating systems, are deferred; the other Chromium browsers share Chrome's reader but have not been verified with a real profile. Websites can still request sign-in or verification. This local acceptance does not establish Developer ID distribution, notarization or upgrade behavior.
+Agents remain available while you choose a profile or answer authorization prompts.
+The write phase pauses Agents and reopens embedded pages; Agents do not restart
+automatically. Import updates matching cookies and
+keeps other Molly data. Expired and partitioned source cookies are skipped and
+reported. A failed write restores and verifies the previous cookies; if recovery
+cannot be verified, browsing stays paused until you clear website data. **Clear
+website data** removes cookies, local storage and caches for every website in Molly,
+without changing your source browser. It does not guarantee server-side logout.
+
+Open the website to verify sign-in after import. Device-bound credentials cannot
+be transferred, and a website may request login or MFA. The curated catalog covers
+13 design platforms and 14 commerce platforms including Amazon, Shopify, Etsy,
+TikTok Shop, Shopee and Lazada; it does not certify live login compatibility. The
+synthetic tests cover import isolation, merge, rollback and cancellation.
+The [permission-intent revision](.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
+records successful real Chrome/Pinterest import, website sign-in and denied-file
+settings recovery without a profile refresh. First-prompt grant continuation and
+Developer ID distribution/upgrades remain unverified. Safari, Firefox and import
+on other operating systems are unsupported.
+
+Agent image saving accepts decoded PNG/JPEG/GIF into the current design's `media/`.
+WebP/AVIF remain unsupported by that asset path. Native page downloads remain
+separate and do not automatically become design assets.
 
 ## Continue, preview and recover
 

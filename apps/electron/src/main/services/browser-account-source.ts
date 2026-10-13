@@ -1,93 +1,79 @@
-import type {
-  ExtractionReportObject,
-  CookieObject,
-  DetailedCookieObject,
-  SourceExtractionObject
-} from 'rookie-cookies'
+import type { DetailedCookieObject, ReadResult } from 'rookie-cookies'
+import { access } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { z } from 'zod'
-import type { BrowserImportCookie } from '@molly/shared/browser-import-cookie'
+import {
+  BrowserImportCookieSchema,
+  type BrowserImportCookie
+} from '@molly/shared/browser-import-cookie'
+import {
+  browserAccountSiteForDomain,
+  type BrowserAccountSiteId
+} from '@molly/shared/browser-account-sites'
 import type {
   AccountImportBrowserId,
-  ElectronBrowserAccountSiteInput,
   ElectronBrowserImportSources,
-  ElectronBrowserProfileChoice
+  ElectronBrowserProfileChoice,
+  ElectronBrowserImportReport
 } from '@molly/shared/electron-ipc'
-import { BrowserImportCookieSchema } from '@molly/shared/browser-import-cookie'
-import { hostMatchesSite } from './public-browser-agent-policy.ts'
+import { BrowserAccountError, browserAccountSourceError } from './browser-account-error.ts'
+import type { BrowserCookieReader } from './browser-cookie-reader.ts'
 
-type Site = ElectronBrowserAccountSiteInput['site']
-
-const readTimeoutMessage =
-  'Browser authorization or cookie reading timed out. Complete any macOS Keychain prompt, then click Import again. Existing Molly cookies were not changed.'
-
-export type BrowserProfileChoice = ElectronBrowserProfileChoice
-export type BrowserImportSources = ElectronBrowserImportSources
-
-const sameSite = (value: number): BrowserImportCookie['sameSite'] => {
-  switch (value) {
-    case -1:
-      return 'unspecified'
-    case 0:
-      return 'no_restriction'
-    case 1:
-      return 'lax'
-    case 2:
-      return 'strict'
-    default:
-      throw new Error('The browser returned a cookie with an unsupported SameSite value.')
-  }
+const browsers: Record<AccountImportBrowserId, { name: string; bundle: string }> = {
+  chrome: { name: 'Google Chrome', bundle: 'Google Chrome.app' },
+  edge: { name: 'Microsoft Edge', bundle: 'Microsoft Edge.app' },
+  brave: { name: 'Brave', bundle: 'Brave Browser.app' },
+  arc: { name: 'Arc', bundle: 'Arc.app' },
+  vivaldi: { name: 'Vivaldi', bundle: 'Vivaldi.app' },
+  opera: { name: 'Opera', bundle: 'Opera.app' },
+  chromium: { name: 'Chromium', bundle: 'Chromium.app' }
 }
 
-function convertCookie(cookie: CookieObject, site: Site): BrowserImportCookie {
-  const host = cookie.domain.replace(/^\./, '').toLowerCase()
-  if (!hostMatchesSite(host, site))
-    throw new Error('The browser returned a cookie outside the selected website.')
-  const session = cookie.expires === undefined
-  const candidate = {
-    name: cookie.name,
-    value: cookie.value,
-    domain: cookie.domain,
-    path: cookie.path,
-    hostOnly: !cookie.domain.startsWith('.'),
-    secure: cookie.secure,
-    httpOnly: cookie.httpOnly,
-    session,
-    ...(session ? {} : { expirationDate: cookie.expires }),
-    sameSite: sameSite(cookie.sameSite)
-  }
-  const checked = BrowserImportCookieSchema.safeParse(candidate)
-  if (!checked.success) throw new Error('The browser returned an unsupported cookie field.')
-  return checked.data
-}
-
-/** Do not accept a partial profile read as a successful sign-in transfer. */
-function selectedSources(
-  report: ExtractionReportObject,
-  profileId: string
-): SourceExtractionObject[] {
-  if (report.termination === 'timed_out') throw new Error(readTimeoutMessage)
-  if (report.schemaVersion !== 1 || report.termination !== 'completed')
-    throw new Error('The browser profile import did not finish.')
-  const profiles = report.profiles.filter((entry) => entry.profile.profileId === profileId)
-  if (profiles.length !== 1) throw new Error('The selected browser profile is no longer available.')
-  const sources = profiles[0].sources.filter((entry) => entry.selected)
-  if (sources.length === 0 || sources.some((entry) => entry.status !== 'succeeded'))
-    throw new Error('Molly could not read this browser profile’s cookies.')
-  const requestIssues = report.issues.filter(
-    (issue) =>
-      !(
-        issue.code === 'profile_excluded_service_directory' &&
-        issue.stage === 'discovery' &&
-        issue.profileId === null
-      )
-  )
-  if (
-    [...requestIssues, ...profiles[0].issues, ...sources.flatMap((entry) => entry.issues)].some(
-      (issue) => issue.severity === 'error' || issue.code === 'decrypt_failed'
+export async function listImportSources(
+  browserIds: readonly AccountImportBrowserId[],
+  exists: (path: string) => Promise<boolean> = async (path) =>
+    access(path).then(
+      () => true,
+      () => false
     )
+): Promise<ElectronBrowserImportSources> {
+  const installed = await Promise.all(
+    browserIds.map(async (browserId) => {
+      const browser = browsers[browserId]
+      const locations = ['/Applications', join(homedir(), 'Applications')]
+      if (
+        !(await Promise.all(locations.map((base) => exists(join(base, browser.bundle))))).some(
+          Boolean
+        )
+      )
+        return []
+      return [{ browserId, browserName: browser.name }]
+    })
   )
-    throw new Error('This browser profile’s cookies could not be fully decrypted.')
-  return sources
+  return { sources: installed.flat() }
+}
+
+export async function listImportProfiles(
+  browserId: AccountImportBrowserId,
+  signal: AbortSignal,
+  reader?: Pick<typeof import('rookie-cookies'), 'browserProfiles'>
+): Promise<ElectronBrowserProfileChoice[]> {
+  try {
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    const nativeReader =
+      reader ?? (await import('./browser-cookie-reader.ts')).browserCookieReader()
+    const profiles = await nativeReader.browserProfiles(browserId, { timeoutMs: 5 * 60_000 })
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    return profiles.map(({ profile, isDefault }) => ({
+      id: profile.profileId,
+      name: profile.displayName,
+      isDefault
+    }))
+  } catch (error) {
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    throw browserAccountSourceError(error)
+  }
 }
 
 const contextSchema = z
@@ -104,39 +90,47 @@ const contextSchema = z
   })
   .strict()
 
-export function cookiesFromBrowserReport(
-  report: ExtractionReportObject,
-  profileId: string,
-  site: Site,
-  detailedSources: DetailedCookieObject[][]
-): BrowserImportCookie[] {
-  const sources = selectedSources(report, profileId)
-  if (sources.length !== detailedSources.length)
-    throw new Error('Browser cookie details are incomplete. No cookies were imported.')
-  const cookies = detailedSources.flat()
-  if (cookies.length === 0)
-    throw new Error('No cookies for this website were found in that browser profile.')
-  if (cookies.length > 200) throw new Error('This website has more than 200 browser cookies.')
-  // The report preserves extraction diagnostics, but its cookies omit CHIPS.
-  // Compare multisets, not just counts: the two reads must describe the same
-  // cookies, including duplicate entries. Neither values nor paths leave main.
-  for (const [index, source] of sources.entries()) {
-    const reported = source.cookies
-      .map((cookie) => JSON.stringify(convertCookie(cookie, site)))
-      .sort()
-    const detailed = detailedSources[index]
-      .map(({ cookie }) => JSON.stringify(convertCookie(cookie, site)))
-      .sort()
-    if (reported.length !== detailed.length || reported.some((value, i) => value !== detailed[i]))
-      throw new Error('The browser’s cookies changed or could not be fully read. Retry the import.')
+export type BrowserAccountSource = {
+  cookies: BrowserImportCookie[]
+  report: ElectronBrowserImportReport
+}
+
+function hasCookieControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0)
+    return code < 0x20 || code === 0x7f
+  })
+}
+
+export function selectBrowserCookies(
+  entries: DetailedCookieObject[],
+  siteIds: readonly BrowserAccountSiteId[],
+  now: number
+): BrowserAccountSource {
+  if (entries.length > 50_000) throw new BrowserAccountError('source-too-large')
+  const selected = new Set(siteIds)
+  const report: ElectronBrowserImportReport = {
+    imported: 0,
+    skippedExpired: 0,
+    skippedPartitioned: 0,
+    sites: siteIds.map((siteId) => ({
+      siteId,
+      imported: 0,
+      skippedExpired: 0,
+      skippedPartitioned: 0
+    }))
   }
+  const cookies: BrowserImportCookie[] = []
   const identities = new Set<string>()
-  const convertedCookies = cookies.map(({ cookie, context }) => {
+  let bytes = 0
+  for (const { cookie, context } of entries) {
+    bytes += Buffer.byteLength(cookie.name + cookie.value + cookie.domain + cookie.path)
+    if (bytes > 32 * 1024 * 1024) throw new BrowserAccountError('source-too-large')
+    const site = browserAccountSiteForDomain(cookie.domain)
+    if (!site || !selected.has(site.id)) continue
+    const row = report.sites.find((entry) => entry.siteId === site.id)!
     const checked = contextSchema.safeParse(context)
-    if (!checked.success)
-      throw new Error(
-        'The browser returned an unsupported cookie context. No cookies were imported.'
-      )
+    if (!checked.success) throw new BrowserAccountError('source-invalid')
     const details = checked.data
     if (
       details.topFrameSiteKey ||
@@ -144,108 +138,97 @@ export function cookiesFromBrowserReport(
       details.originAttributes ||
       details.userContextId ||
       details.privateBrowsingId
-    )
-      throw new Error(
-        'This website uses partitioned cookies that Molly cannot import yet. No cookies were imported. Sign in inside Molly instead.'
-      )
-    // hasCrossSiteAncestor alone does not imply partitioning: Chromium can set
-    // it on ordinary cookies too. The top-frame site identifies CHIPS.
-    const converted = convertCookie(cookie, site)
-    const identity = JSON.stringify([
-      converted.domain.toLowerCase(),
-      converted.path,
-      converted.name
-    ])
-    if (identities.has(identity))
-      throw new Error(
-        'The browser returned conflicting cookie identities. No cookies were imported.'
-      )
-    identities.add(identity)
-    return converted
-  })
-  if (Buffer.byteLength(JSON.stringify(convertedCookies), 'utf8') > 512 * 1024)
-    throw new Error('This website’s browser cookies exceed the import size limit.')
-  return convertedCookies
-}
-
-/** A rejected listing means an installed browser Molly could not enumerate, not an absent one. */
-export async function listImportSources(
-  browserIds: readonly AccountImportBrowserId[],
-  lister?: Pick<typeof import('rookie-cookies'), 'supportedBrowsers' | 'browserProfiles'>
-): Promise<BrowserImportSources> {
-  const { supportedBrowsers, browserProfiles } = lister ?? (await import('rookie-cookies'))
-  const names = new Map(
-    (await supportedBrowsers()).map((browser) => [browser.id, browser.displayName])
-  )
-  const result: BrowserImportSources = { sources: [], unreadable: [] }
-  for (const browserId of browserIds) {
-    const browserName = names.get(browserId)
-    if (!browserName) continue
-    try {
-      const profiles = await browserProfiles(browserId)
-      if (profiles.length > 0)
-        result.sources.push({
-          browserId,
-          browserName,
-          profiles: profiles.map(({ profile, isDefault }) => ({
-            id: profile.profileId,
-            name: profile.displayName,
-            isDefault
-          }))
-        })
-    } catch {
-      result.unreadable.push(browserName)
+    ) {
+      row.skippedPartitioned++
+      report.skippedPartitioned++
+      continue
     }
+    if (cookie.expires !== undefined && cookie.expires <= now) {
+      row.skippedExpired++
+      report.skippedExpired++
+      continue
+    }
+    const value = BrowserImportCookieSchema.safeParse({
+      name: cookie.name,
+      value: cookie.value,
+      path: cookie.path,
+      secure: cookie.secure,
+      httpOnly: cookie.httpOnly,
+      domain: cookie.domain.toLowerCase(),
+      hostOnly: !cookie.domain.startsWith('.'),
+      session: cookie.expires === undefined,
+      ...(cookie.expires === undefined ? {} : { expirationDate: cookie.expires }),
+      sameSite: (
+        { '-1': 'unspecified', '0': 'no_restriction', '1': 'lax', '2': 'strict' } as Record<
+          string,
+          string
+        >
+      )[cookie.sameSite],
+      sourceScheme: (['Unset', 'NonSecure', 'Secure'] as const)[details.sourceScheme ?? 0],
+      sourcePort: details.sourcePort ?? -1
+    })
+    if (!value.success) throw new BrowserAccountError('source-invalid')
+    const converted = value.data
+    if (
+      !/^\.?[a-z0-9-]+(?:\.[a-z0-9-]+)+$/.test(converted.domain) ||
+      !/^[!#-'*+\-.0-9A-Z^-z|~]+$/.test(converted.name) ||
+      !/^[\x20-\x3a\x3c-\x7e]*$/.test(converted.value) ||
+      converted.value.startsWith(' ') ||
+      converted.value.endsWith(' ') ||
+      !converted.path.startsWith('/') ||
+      hasCookieControlCharacters(converted.path)
+    )
+      throw new BrowserAccountError('source-invalid')
+    const identity = JSON.stringify([converted.domain, converted.path, converted.name])
+    if (identities.has(identity)) throw new BrowserAccountError('source-invalid')
+    identities.add(identity)
+    cookies.push(converted)
+    row.imported++
+    report.imported++
   }
-  return result
+  return { cookies, report }
 }
 
-export async function readBrowserSiteCookies(
+export async function readBrowserProfileCookies(
   browserId: AccountImportBrowserId,
   profileId: string,
-  site: Site,
-  reader?: Pick<typeof import('rookie-cookies'), 'browserReport' | 'chromiumBasedDetailed'>
-): Promise<BrowserImportCookie[]> {
-  const { browserReport, chromiumBasedDetailed } = reader ?? (await import('rookie-cookies'))
-  let report: ExtractionReportObject
+  siteIds: readonly BrowserAccountSiteId[],
+  signal: AbortSignal,
+  reader?: Pick<BrowserCookieReader, 'read' | 'CancellationHandle'>,
+  now: () => number = () => Date.now() / 1000
+): Promise<BrowserAccountSource> {
+  const nativeReader = reader ?? (await import('./browser-cookie-reader.ts')).browserCookieReader()
+  const cancellation = new nativeReader.CancellationHandle()
+  const cancel = (): void => {
+    cancellation.cancel()
+  }
+  signal.addEventListener('abort', cancel, { once: true })
   try {
-    report = await browserReport({
-      browserId,
-      profileId,
-      domains: [site],
-      // This native deadline includes the user's first macOS Keychain approval.
-      // Keep the wait bounded without racing an uncancellable native read.
-      timeoutMs: 5 * 60_000,
-      appBound: 'disabled'
-    })
-  } catch (error) {
-    // Native errors can contain profile paths; only fixed messages leave main.
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    const result: ReadResult = await nativeReader.read(
+      {
+        browser: browserId,
+        profile: profileId,
+        includeExpired: true,
+        includeSession: true,
+        mollyInventory: true,
+        timeoutMs: 5 * 60_000,
+        appBound: 'disabled'
+      },
+      cancellation
+    )
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
     if (
-      typeof error === 'object' &&
-      error !== null &&
-      'stopReason' in error &&
-      error.stopReason === 'timed_out'
+      result.browserId !== browserId ||
+      result.profileId !== profileId ||
+      result.warnings.some((warning) => warning.count > 0 || warning.countersSaturated)
     )
-      // eslint-disable-next-line preserve-caught-error -- Native causes may contain private paths or cookies.
-      throw new Error(readTimeoutMessage)
-    // eslint-disable-next-line preserve-caught-error -- Native causes must not cross renderer IPC.
-    throw new Error(
-      'Molly could not read the selected browser profile. Check macOS access and retry.'
-    )
+      throw new BrowserAccountError('source-incomplete')
+    return selectBrowserCookies(result.detailedCookies, siteIds, now())
+  } catch (error) {
+    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    throw browserAccountSourceError(error)
+  } finally {
+    signal.removeEventListener('abort', cancel)
   }
-  const sources = selectedSources(report, profileId)
-  const detailedSources: DetailedCookieObject[][] = []
-  for (const { source } of sources) {
-    if (source.pathLossy || !source.path)
-      throw new Error('Molly cannot safely read this browser cookie source.')
-    try {
-      // Pinned 0.6.0 compatibility API: unlike read()/fromPath(), this Unix
-      // entry point keeps domain filtering AND partition metadata. The path
-      // comes only from the validated native profile report, never the UI.
-      detailedSources.push(await chromiumBasedDetailed(source.path, [site], browserId))
-    } catch {
-      throw new Error('Molly could not read browser cookie details. No cookies were imported.')
-    }
-  }
-  return cookiesFromBrowserReport(report, profileId, site, detailedSources)
 }

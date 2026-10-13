@@ -1,19 +1,20 @@
 import { useEffect, useRef, type ComponentProps, type FormEvent, type ReactNode } from 'react';
-import {
-  ArrowLeft,
-  ArrowRight,
-  MessageCircle,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, MessageCircle, Ellipsis, RefreshCw, X } from '@/ui/icons';
 import { useTranslation } from 'react-i18next';
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/dropdown-menu';
 import { Button } from '@/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 type SessionBrowserToolbarProps = {
   leadingSlot?: ReactNode;
+  onImportAccounts?: () => void;
   focusAddress?: boolean;
   address: string;
   canGoBack: boolean;
@@ -59,6 +60,7 @@ function ToolbarButton({
 
 export function SessionBrowserToolbar({
   leadingSlot,
+  onImportAccounts,
   focusAddress = false,
   address,
   canGoBack,
@@ -163,6 +165,25 @@ export function SessionBrowserToolbar({
         >
           <MessageCircle className="h-4 w-4" />
         </ToolbarButton>
+        {onImportAccounts ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                aria-label={t('settings.browserImport.browserMenu')}
+              >
+                <Ellipsis className="h-4 w-4" aria-hidden />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={onImportAccounts}>
+                {t('settings.browserAccounts.importFromBrowser')}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
       </div>
     </TooltipProvider>
   );

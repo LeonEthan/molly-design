@@ -57,15 +57,15 @@ narrow panel. Notification status distinguishes system denial, an unrequested
 permission, platform unavailability and Molly's own off switch.
 
 Advanced settings keep plain-language capability descriptions visible and move
-package/version/license/build metadata under Technical details. Website accounts
-lead with `WebsiteSignInDialog` (also opened from the session Browser sidebar), which
-reuses `PublicBrowserSurface` inside a dialog;
-the surface hides only under dialogs opened after its own. Website accounts
-keep import failures beside the source picker and name the failed browser profile;
-unreadable other browsers are expandable when a usable source is selected. When
-no source is usable, the diagnostic remains visible beside the disabled import
-action. These disclosures reuse Radix Collapsible and never alter import or
-execution support. See the [Phase 4 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-settings-explanations.md).
+package/version/license/build metadata under Technical details. Website accounts,
+the Browser menu and the Pinterest setup chip share `BrowserAccountImportDialog`.
+It adapts existing Dialog, Select, Checkbox and Collapsible primitives: browser
+and profile share one picker; the curated design/commerce website list starts
+collapsed and fully selected. One Import action reads and writes without a preview
+step. Source errors, pending authorization, cancellation and retained/skipped
+counts remain in this dialog. `PublicBrowserSurface` hides under covering dialogs.
+Cookie counts describe local data, not verified sign-in. Human takeover and MFA
+remain available on ordinary pages; the dedicated sign-in dialog is retired.
 
 Shortcuts settings starts with a fixed canvas reference backed by Bento's existing
 keyboard handlers, followed by editable application commands and desktop global

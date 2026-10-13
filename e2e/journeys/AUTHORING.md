@@ -13,7 +13,7 @@ cleanup, or a second coverage gap belongs in a later run.
 
 Every candidate starts as `@P1`. Promotion to `@P0` is a human decision because
 P0 changes the merge-blocking contract. The scenario must otherwise satisfy the
-repository contract: `@lody`, `@essence`, one stable `@LODY-AREA-NNN` id, and
+repository contract: `@molly`, `@essence`, one stable `@MOLLY-AREA-NNN` id, and
 one supported `@runtime-*` owner.
 
 The author emits structured output that validates against
@@ -96,7 +96,7 @@ candidate there before it owns these commands:
 ```bash
 pnpm e2e:build
 pnpm e2e:check
-pnpm --filter @molly/e2e exec cucumber-js --config cucumber.mjs --tags '@LODY-AREA-NNN'
+pnpm --filter @molly/e2e exec cucumber-js --config cucumber.mjs --tags '@MOLLY-AREA-NNN'
 pnpm e2e:full
 git diff --check
 git diff --name-only

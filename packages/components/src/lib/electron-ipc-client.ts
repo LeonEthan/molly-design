@@ -1,6 +1,6 @@
 import type {
   AccountImportBrowserId,
-  ElectronBrowserAccountSiteInput,
+  ElectronBrowserAccountImportInput,
   ElectronPublicBrowserBounds,
   ElectronPublicBrowserState,
   IpcPushMap,
@@ -104,16 +104,12 @@ export function getPublicBrowserBridge() {
     destroy: (browserId: string) => pub.destroy({ browserId }),
     getAccountSummary: () => pub.getAccountSummary(),
     getImportSources: () => pub.getImportSources(),
-    importBrowserAccount: (
-      browserId: AccountImportBrowserId,
-      profileId: string,
-      site: ElectronBrowserAccountSiteInput['site'],
-      replaceExisting: boolean
-    ) => pub.importBrowserAccount({ browserId, profileId, site, replaceExisting }),
-    clearAccountCookies: (site: ElectronBrowserAccountSiteInput['site']) =>
-      pub.clearAccountCookies({ site }),
+    getImportProfiles: (browserId: AccountImportBrowserId) => pub.getImportProfiles({ browserId }),
+    importBrowserAccount: (input: ElectronBrowserAccountImportInput) =>
+      pub.importBrowserAccount(input),
+    cancelAccountImport: (operationId: string) => pub.cancelAccountImport({ operationId }),
+    clearAccountData: () => pub.clearAccountData(),
     openBrowserDataPrivacySettings: () => pub.openBrowserDataPrivacySettings(),
-    beginAccountSignIn: (browserId: string) => pub.beginAccountSignIn({ browserId }),
     takeAgentControl: (browserId: string) => pub.takeAgentControl({ browserId }),
     resumeAgentControl: (browserId: string) => pub.resumeAgentControl({ browserId }),
     onState: (handler: (state: ElectronPublicBrowserState) => void) =>

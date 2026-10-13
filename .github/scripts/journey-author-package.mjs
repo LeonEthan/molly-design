@@ -56,7 +56,7 @@ function validateTask(task) {
   delete unsigned.digest;
   if (task.digest !== sha256(JSON.stringify(unsigned))) throw new Error('Task digest mismatch');
   if (task.disposition !== 'claimed') throw new Error('Only claimed tasks can produce candidates');
-  if (!/^LODY-[A-Z0-9-]+-\d{3}$/.test(task.candidate?.id ?? ''))
+  if (!/^MOLLY-[A-Z0-9-]+-\d{3}$/.test(task.candidate?.id ?? ''))
     throw new Error('Invalid candidate id');
   if (!/^[a-f0-9]{40}$/.test(task.baseSha)) throw new Error('Invalid base SHA');
   if (!Array.isArray(task.candidate.ownerPaths))

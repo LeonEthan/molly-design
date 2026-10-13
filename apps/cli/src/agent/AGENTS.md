@@ -45,6 +45,8 @@ context/acp-agent-edit-evidence.md; adapter repos: [apps/cli/AGENTS.md](../../AG
   completed or cancelled receipt only from a live worker with its frozen catalog still
   current; a user abort does not retire it. Pre-dispatch abort and revocation fail closed.
   Keep Stop escalation, dispatch pause and cancelled artifact finalization authoritative.
+- A used OAuth worker is replaced at the next prompt boundary before granting credentials;
+  preserve native history and never replay a dispatched run.
 - Acknowledged steer is inject-or-refuse. `AgentSteerNotDeliveredError` requires local pre-write
   failure or agent JSON-RPC `invalid request`. Await the steer answer before abandoning the
   turn response; never classify uncertain delivery as refusal.

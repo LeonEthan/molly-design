@@ -1,3 +1,4 @@
+import { buildBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -43,6 +44,7 @@ function runScript(script) {
 }
 
 await buildAgentBrowser()
+await buildBrowserCookieReader()
 
 run(process.execPath, [packageManagerEntry, '--dir', '../cli', 'run', 'dev:build'], localEnv)
 runScript('sync:cli:dev')

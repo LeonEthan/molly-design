@@ -6,7 +6,7 @@ import { createJourneyAuthorTask } from './journey-author-task.mjs';
 
 function journey(overrides = {}) {
   const value = {
-    id: 'LODY-SESSION-002',
+    id: 'MOLLY-SESSION-002',
     state: 'backlog',
     priority: 'P1',
     runtime: 'none',
@@ -70,21 +70,21 @@ void test('claims the risk-ranked candidate with a fixed id and bounded lease', 
   const task = create([
     journey(),
     journey({
-      id: 'LODY-MCP-001',
+      id: 'MOLLY-MCP-001',
       title: 'MCP selection',
       signals: { criticality: 5, boundaryRisk: 5, changeFrequency: 4, escapedDefect: false },
     }),
   ]);
-  assert.equal(task.candidate.id, 'LODY-MCP-001');
-  assert.equal(task.claim.leaseId, 'LODY-MCP-001-123');
+  assert.equal(task.candidate.id, 'MOLLY-MCP-001');
+  assert.equal(task.claim.leaseId, 'MOLLY-MCP-001-123');
   assert.equal(task.claim.expiresAt, '2026-09-04T01:00:00.000Z');
 });
 
 void test('excludes an active claim and advances to the next candidate', () => {
-  const task = create([journey(), journey({ id: 'LODY-MCP-001', title: 'MCP selection' })], {
-    excludedCandidateIds: ['LODY-MCP-001'],
+  const task = create([journey(), journey({ id: 'MOLLY-MCP-001', title: 'MCP selection' })], {
+    excludedCandidateIds: ['MOLLY-MCP-001'],
   });
-  assert.equal(task.candidate.id, 'LODY-SESSION-002');
+  assert.equal(task.candidate.id, 'MOLLY-SESSION-002');
 });
 
 void test('returns queue-empty instead of inventing a journey', () => {

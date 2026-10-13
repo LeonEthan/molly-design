@@ -1,20 +1,46 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript test fixtures. */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
-import {
-  assertStoredCookiesUnpartitioned,
-  importBrowserAccountCookies
-} from './browser-account-import.ts'
-import {
-  cookiesFromBrowserReport,
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
+import { compileFunction } from 'node:vm'
+const require = createRequire(import.meta.url)
+const { build } = createRequire(new URL('../../../../cli/package.json', import.meta.url))('esbuild')
+const compiled = await build({
+  stdin: {
+    contents: `
+    export { BROWSER_ACCOUNT_SITES, browserAccountSiteForDomain } from '@molly/shared/browser-account-sites';
+    export { ElectronBrowserAccountImportInputSchema } from '@molly/shared/electron-ipc';
+    export { importBrowserAccountCookies } from './browser-account-import.ts';
+    export { listImportSources, listImportProfiles, readBrowserProfileCookies, selectBrowserCookies } from './browser-account-source.ts';
+  `,
+    resolveDir: fileURLToPath(new URL('.', import.meta.url)),
+    loader: 'ts'
+  },
+  bundle: true,
+  write: false,
+  platform: 'node',
+  format: 'cjs',
+  external: ['electron']
+})
+const module = { exports: {} }
+compileFunction(compiled.outputFiles[0].text, ['module', 'exports', 'require'])(
+  module,
+  module.exports,
+  require
+)
+const {
+  BROWSER_ACCOUNT_SITES,
+  browserAccountSiteForDomain,
+  ElectronBrowserAccountImportInputSchema,
+  importBrowserAccountCookies,
   listImportSources,
-  readBrowserSiteCookies
-} from './browser-account-source.ts'
+  listImportProfiles,
+  readBrowserProfileCookies,
+  selectBrowserCookies
+} = module.exports
 
+const now = 1_800_000_000
 const cookie = {
   domain: '.pinterest.com',
   path: '/',
@@ -36,519 +62,486 @@ const context = {
   partitionKey: null,
   privateBrowsingId: null
 }
-const details = (cookies = [cookie]) =>
-  cookies.map((entry) => ({ cookie: entry, context: { ...context } }))
-const convert = (input = report(), detailed = [details()]) =>
-  cookiesFromBrowserReport(input, 'synthetic-profile', 'pinterest.com', detailed)
-const report = (overrides = {}) => ({
-  schemaVersion: 1,
-  status: 'succeeded',
-  termination: 'completed',
-  summary: {},
-  issues: [],
-  profiles: [
-    {
-      profile: { profileId: 'synthetic-profile' },
-      issues: [],
-      sources: [{ selected: true, status: 'succeeded', cookies: [cookie], issues: [] }]
-    }
-  ],
-  ...overrides
+const details = (patch = {}, contextPatch = {}) => ({
+  cookie: { ...cookie, ...patch },
+  context: { ...context, ...contextPatch }
 })
-
-void test('selected Chrome profile imports only the requested website', () => {
-  const cookies = convert()
-  assert.deepEqual(cookies, [
-    {
-      name: cookie.name,
-      value: cookie.value,
-      domain: cookie.domain,
-      path: '/',
-      hostOnly: false,
-      secure: true,
-      httpOnly: true,
-      session: false,
-      expirationDate: cookie.expires,
-      sameSite: 'lax'
-    }
-  ])
-  assert.throws(
-    () => cookiesFromBrowserReport(report(), 'another-profile', 'pinterest.com', [details()]),
-    /profile is no longer available/
-  )
+const input = {
+  operationId: 'a0100000-0000-4000-8000-000000000001',
+  browserId: 'chrome',
+  profileId: 'synthetic-profile',
+  siteIds: ['pinterest', 'amazon']
+}
+const stored = (patch = {}) => ({
+  name: cookie.name,
+  value: cookie.value,
+  domain: cookie.domain,
+  path: cookie.path,
+  secure: true,
+  httpOnly: true,
+  expires: cookie.expires,
+  session: false,
+  size: 32,
+  sameSite: 'Lax',
+  priority: 'Medium',
+  sourceScheme: 'Secure',
+  sourcePort: 443,
+  ...patch
 })
-
-void test('partial decrypts and off-site cookies never reach Molly', () => {
-  const partial = report()
-  partial.profiles[0].sources[0].issues.push({ code: 'decrypt_failed', severity: 'warning' })
-  assert.throws(() => convert(partial), /could not be fully decrypted/)
-  const offSite = report()
-  offSite.profiles[0].sources[0].cookies = [{ ...cookie, domain: '.pinterest.com.evil.test' }]
-  assert.throws(
-    () => convert(offSite, [details(offSite.profiles[0].sources[0].cookies)]),
-    /outside the selected website/
-  )
-})
-
-void test('an excluded service directory does not block the successfully read selected profile', async () => {
-  const input = report({
-    status: 'partial',
-    issues: [
-      {
-        code: 'profile_excluded_service_directory',
-        stage: 'discovery',
-        severity: 'error',
-        profileId: null
-      }
-    ]
-  })
-  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
-  const store = cookieStore()
-  assert.equal(
-    await importBrowserAccountCookies({
-      store,
-      site: 'pinterest.com',
-      replaceExisting: true,
-      readSource: () =>
-        readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
-          browserReport: async () => input,
-          chromiumBasedDetailed: async () => details()
-        }),
-      beforeWrite: async () => {}
-    }),
-    1
-  )
-  assert.equal(store.state[0].value, cookie.value)
-})
-
-void test('discovery exclusion never hides selected-profile, source, or other request failures', async () => {
-  const excludedDirectory = {
-    code: 'profile_excluded_service_directory',
-    stage: 'discovery',
-    severity: 'error',
-    profileId: null
-  }
-  for (const scenario of ['profile', 'source', 'scoped', 'unknown', 'decrypt', 'missing-scope']) {
-    const input = report()
-    input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
-    const issue = { ...excludedDirectory }
-    if (scenario === 'scoped') issue.profileId = 'synthetic-profile'
-    if (scenario === 'unknown') issue.code = 'unknown-request-failure'
-    if (scenario === 'decrypt') {
-      issue.code = 'decrypt_failed'
-      issue.stage = 'decrypt'
-      issue.severity = 'warning'
-    }
-    if (scenario === 'missing-scope') delete issue.profileId
-    if (scenario === 'profile') input.profiles[0].issues.push(issue)
-    else if (scenario === 'source') input.profiles[0].sources[0].issues.push(issue)
-    else input.issues.push(issue)
-    const store = cookieStore()
-    const before = structuredClone(store.state)
-    await assert.rejects(
-      importBrowserAccountCookies({
-        store,
-        site: 'pinterest.com',
-        replaceExisting: true,
-        readSource: () =>
-          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
-            browserReport: async () => input,
-            chromiumBasedDetailed: async () => details()
-          }),
-        beforeWrite: async () => {}
-      }),
-      /could not be fully decrypted/,
-      scenario
-    )
-    assert.deepEqual(store.state, before)
-  }
-})
-
-void test('single CHIPS cookie and same-name partition collisions reject the whole import', () => {
-  const partitioned = { cookie, context: { ...context, topFrameSiteKey: 'https://example.test' } }
-  assert.throws(() => convert(report(), [[partitioned]]), /partitioned cookies/)
-  const collision = report()
-  collision.profiles[0].sources[0].cookies = [cookie, cookie]
-  assert.throws(() => convert(collision, [[...details(), partitioned]]), /partitioned cookies/)
-})
-
-void test('unknown or missing contexts reject, while ordinary Chrome ancestry remains supported', () => {
-  for (const unsupported of [undefined, {}, { ...context, futurePartition: 'opaque' }]) {
-    assert.throws(
-      () => convert(report(), [[{ cookie, context: unsupported }]]),
-      /unsupported cookie context/
-    )
-  }
-  for (const unsupported of [
-    { partitionKey: 'opaque' },
-    { originAttributes: '^userContextId=1' }
-  ]) {
-    assert.throws(
-      () => convert(report(), [[{ cookie, context: { ...context, ...unsupported } }]]),
-      /partitioned cookies/
-    )
-  }
-  assert.deepEqual(
-    convert(report(), [[{ cookie, context: { ...context, hasCrossSiteAncestor: true } }]]),
-    convert()
-  )
-})
-
-void test('detailed reads must match report values and multiplicity without exposing values', () => {
-  for (const incomplete of [[], [{ ...cookie, value: 'private-value-must-not-appear' }]]) {
-    assert.throws(
-      () => convert(report(), [details(incomplete)]),
-      (error) => {
-        assert.match(error.message, /No cookies|changed or could not be fully read/)
-        assert.doesNotMatch(error.message, /synthetic-only|private-value-must-not-appear/)
-        return true
-      }
-    )
-  }
-  const duplicate = report()
-  duplicate.profiles[0].sources[0].cookies = [cookie, cookie]
-  assert.throws(() => convert(duplicate), /changed or could not be fully read/)
-  assert.throws(
-    () => convert(duplicate, [details([cookie, cookie])]),
-    /conflicting cookie identities/
-  )
-})
-
-void test('ordinary session, host-only, and persistent cookie fields retain their meaning', () => {
-  const sessionCookie = { ...cookie, name: 'session', domain: 'www.pinterest.com', sameSite: -1 }
-  delete sessionCookie.expires
-  const input = report()
-  input.profiles[0].sources[0].cookies = [cookie, sessionCookie]
-  const result = convert(input, [details([sessionCookie, cookie])])
-  assert.deepEqual(result[0], {
-    name: 'session',
-    value: cookie.value,
-    domain: 'www.pinterest.com',
-    path: '/',
-    hostOnly: true,
-    secure: true,
-    httpOnly: true,
-    session: true,
-    sameSite: 'unspecified'
-  })
-  assert.deepEqual(result[1], convert()[0])
-})
-
-void test('cookie count and byte limits still reject the whole import', () => {
-  for (const [count, value, message] of [
-    [201, 'value', /more than 200/],
-    [100, 'x'.repeat(8192), /size limit/]
-  ]) {
-    const cookies = Array.from({ length: count }, (_, i) => ({
-      ...cookie,
-      name: `cookie-${i}`,
-      value
-    }))
-    const input = report()
-    input.profiles[0].sources[0].cookies = cookies
-    assert.throws(() => convert(input, [details(cookies)]), message)
-  }
-})
-
-// A synthetic database exercises the actual pinned native API. Without a
-// browserId this entry point is plaintext-only: no Chrome profile or Keychain.
-void test(
-  'pinned detailed reader filters domains and preserves actual CHIPS metadata',
-  { skip: process.platform === 'win32' },
-  async (t) => {
-    const directory = await mkdtemp(join(tmpdir(), 'molly-cookie-fixture-'))
-    t.after(() => rm(directory, { recursive: true, force: true }))
-    const path = join(directory, 'Cookies')
-    const db = new DatabaseSync(path)
-    try {
-      db.exec(`
-      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
-      INSERT INTO meta VALUES ('version', '23');
-      CREATE TABLE cookies (
-        host_key TEXT, path TEXT, is_secure INTEGER, expires_utc INTEGER,
-        name TEXT, value TEXT, encrypted_value BLOB, is_httponly INTEGER,
-        samesite INTEGER, top_frame_site_key TEXT, has_cross_site_ancestor INTEGER,
-        source_scheme INTEGER, source_port INTEGER, is_persistent INTEGER
-      );
-    `)
-      const insert = db.prepare(
-        'INSERT INTO cookies VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      )
-      for (const [domain, partition] of [
-        ['.pinterest.com', ''],
-        ['.pinterest.com', 'https://example.test'],
-        ['.unselected.test', '']
-      ]) {
-        insert.run(
-          domain,
-          '/',
-          1,
-          13644473600000000n,
-          cookie.name,
-          cookie.value,
-          new Uint8Array(),
-          1,
-          1,
-          partition,
-          0,
-          2,
-          443,
-          1
-        )
-      }
-    } finally {
-      db.close()
-    }
-    const { chromiumBasedDetailed } = await import('rookie-cookies')
-    const actual = await chromiumBasedDetailed(path, ['pinterest.com'])
-    assert.equal(actual.length, 2)
-    assert.ok(actual.every((entry) => entry.cookie.domain === '.pinterest.com'))
-    assert.deepEqual(actual.map((entry) => entry.context.topFrameSiteKey ?? '').sort(), [
-      '',
-      'https://example.test'
-    ])
-    const ordinary = actual.filter((entry) => !entry.context.topFrameSiteKey)
-    const ordinaryReport = report()
-    ordinaryReport.profiles[0].sources[0].cookies = ordinary.map((entry) => entry.cookie)
-    assert.equal(convert(ordinaryReport, [ordinary]).length, 1)
-    const partitionedReport = report()
-    partitionedReport.profiles[0].sources[0].cookies = actual.map((entry) => entry.cookie)
-    assert.throws(() => convert(partitionedReport, [actual]), /partitioned cookies/)
-  }
-)
-
-function cookieStore() {
-  const state = [{ ...convert()[0], value: 'existing-molly-only' }]
-  const key = (entry) => JSON.stringify([entry.domain, entry.path, entry.name])
+const key = (entry) => JSON.stringify([entry.domain, entry.path, entry.name, entry.partitionKey])
+function storeFixture(initial = []) {
+  let rows = structuredClone(initial)
   return {
-    state,
-    async get() {
-      return structuredClone(state)
+    store: {
+      assertIsolated() {},
+      snapshot: async () => structuredClone(rows),
+      set: async (entry) => {
+        rows = [...rows.filter((row) => key(row) !== key(entry)), structuredClone(entry)]
+      },
+      remove: async (entry) => {
+        rows = rows.filter((row) => key(row) !== key(entry))
+      },
+      flush: async () => {}
     },
-    async set(nextCookie) {
-      const index = state.findIndex((entry) => key(entry) === key(nextCookie))
-      if (index >= 0) state.splice(index, 1)
-      const stored = { ...nextCookie }
-      delete stored.url
-      state.push(stored)
-    },
-    async remove(url, name) {
-      const index = state.findIndex(
-        (entry) => entry.name === name && new URL(url).pathname === entry.path
-      )
-      if (index >= 0) state.splice(index, 1)
-    },
-    async flushStore() {
-      // This fixture stores cookies in memory.
-    }
+    rows: () => structuredClone(rows)
   }
 }
 
-void test('first Keychain authorization can take two minutes without losing existing cookies', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] })
-  const store = cookieStore()
-  const before = structuredClone(store.state)
-  const started = Promise.withResolvers()
-  const input = report()
-  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
-  const reader = {
-    browserReport: ({ timeoutMs }) =>
-      new Promise((resolve) => {
-        const timeout = setTimeout(() => resolve(report({ termination: 'timed_out' })), timeoutMs)
-        setTimeout(() => {
-          clearTimeout(timeout)
-          resolve(input)
-        }, 120_000)
-        started.resolve()
-      }),
-    chromiumBasedDetailed: async () => details()
-  }
-  const importing = importBrowserAccountCookies({
-    store,
-    site: 'pinterest.com',
-    replaceExisting: true,
-    readSource: () =>
-      readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', reader),
-    beforeWrite: async () => {}
-  })
-  await started.promise
-  t.mock.timers.tick(90_000)
-  assert.deepEqual(store.state, before)
-  t.mock.timers.tick(30_000)
-  assert.equal(await importing, 1)
-  assert.equal(store.state[0].value, cookie.value)
+void test('catalog has 13 design and 14 commerce platforms with boundary-safe regional matching', () => {
+  assert.equal(BROWSER_ACCOUNT_SITES.filter((site) => site.group === 'design').length, 13)
+  assert.equal(BROWSER_ACCOUNT_SITES.filter((site) => site.group === 'commerce').length, 14)
+  for (const site of BROWSER_ACCOUNT_SITES)
+    for (const domain of site.domains) {
+      assert.equal(browserAccountSiteForDomain(`.seller.${domain}`)?.id, site.id)
+      assert.equal(browserAccountSiteForDomain(`${domain}.attacker.test`), undefined)
+      assert.equal(browserAccountSiteForDomain(`attacker-${domain}`), undefined)
+    }
+  assert.equal(browserAccountSiteForDomain('accounts.google.com'), undefined)
+  assert.equal(browserAccountSiteForDomain('tenant.myshopify.com'), undefined)
+  assert.equal(ElectronBrowserAccountImportInputSchema.safeParse(input).success, true)
+  for (const patch of [
+    { siteIds: [] },
+    { siteIds: ['arbitrary.example'] },
+    { siteIds: ['pinterest', 'pinterest'] },
+    { profilePath: '/private/profile' },
+    { replaceExisting: true }
+  ])
+    assert.equal(
+      ElectronBrowserAccountImportInputSchema.safeParse({ ...input, ...patch }).success,
+      false
+    )
 })
 
-void test('native authorization timeouts give a safe manual retry and preserve the destination', async () => {
-  for (const browserReport of [
-    async () => report({ termination: 'timed_out' }),
-    async () => {
-      throw Object.assign(new Error('/private/profile/secret'), { stopReason: 'timed_out' })
+void test('discovery checks app bundles without enumerating browser data directories', async () => {
+  const observed = []
+  const result = await listImportSources(['chrome', 'edge'], async (path) => {
+    observed.push(path)
+    return path === '/Applications/Google Chrome.app'
+  })
+  assert.deepEqual(result, { sources: [{ browserId: 'chrome', browserName: 'Google Chrome' }] })
+  assert.ok(
+    observed.every((path) => path.endsWith('.app') && !path.includes('Application Support'))
+  )
+})
+
+void test('browser-only Import is a bounded ID request and profile paths remain forbidden', () => {
+  const browserOnly = { ...input }
+  delete browserOnly.profileId
+  assert.deepEqual(ElectronBrowserAccountImportInputSchema.parse(browserOnly), browserOnly)
+  assert.equal(
+    ElectronBrowserAccountImportInputSchema.safeParse({
+      ...browserOnly,
+      profilePath: '/private/path'
+    }).success,
+    false
+  )
+})
+
+void test('profile enumeration returns only choice metadata and discards a cancelled native result', async () => {
+  const pending = Promise.withResolvers(),
+    started = Promise.withResolvers(),
+    controller = new AbortController()
+  const nativeProfiles = [
+    {
+      profile: { profileId: 'opaque-profile', displayName: 'Synthetic', path: '/private/path' },
+      isDefault: true
     }
-  ]) {
-    const store = cookieStore()
-    const before = structuredClone(store.state)
+  ]
+  const reader = {
+    browserProfiles: async (browserId, options) => {
+      assert.equal(browserId, 'chrome')
+      assert.deepEqual(options, { timeoutMs: 300000 })
+      started.resolve()
+      return pending.promise
+    }
+  }
+  const listing = listImportProfiles('chrome', controller.signal, reader)
+  await started.promise
+  controller.abort()
+  pending.resolve(nativeProfiles)
+  await assert.rejects(listing, { message: 'cancelled' })
+  assert.deepEqual(
+    await listImportProfiles('chrome', new AbortController().signal, {
+      browserProfiles: async () => nativeProfiles
+    }),
+    [{ id: 'opaque-profile', name: 'Synthetic', isDefault: true }]
+  )
+})
+
+for (const [nativeCode, errorCode] of [
+  ['molly_source_access_denied', 'source-access-denied'],
+  ['molly_source_authorization_denied', 'source-authorization-denied'],
+  ['engine_failure', 'source-unavailable']
+])
+  void test(`native ${nativeCode} reaches only its safe import error code`, async () => {
+    const error = new Error(
+      `__ROOKIE_ERROR_V1__${JSON.stringify({
+        rookieCode: nativeCode,
+        message: '/private/path synthetic-secret'
+      })}`
+    )
     await assert.rejects(
-      importBrowserAccountCookies({
-        store,
-        site: 'pinterest.com',
-        replaceExisting: true,
-        readSource: () =>
-          readBrowserSiteCookies('chrome', 'synthetic-profile', 'pinterest.com', {
-            browserReport,
-            chromiumBasedDetailed: async () => {
-              throw new Error('A timed out read must stop here.')
-            }
-          }),
-        beforeWrite: async () => {
-          throw new Error('A timed out read must not mutate cookies.')
+      listImportProfiles('chrome', new AbortController().signal, {
+        browserProfiles: async () => {
+          throw error
         }
       }),
-      (error) => {
-        assert.match(error.message, /timed out.*Keychain.*Import again/)
-        assert.doesNotMatch(error.message, /private|secret|synthetic-only/)
-        return true
-      }
+      { message: errorCode }
     )
-    assert.deepEqual(store.state, before)
-  }
-})
-
-void test('rejected source or existing CHIPS leaves destination cookies unchanged', async () => {
-  for (const scenario of [
-    'source-chips',
-    'source-unknown',
-    'destination-chips',
-    'destination-opaque',
-    'destination-unknown'
-  ]) {
-    const store = cookieStore()
-    const before = structuredClone(store.state)
     await assert.rejects(
-      importBrowserAccountCookies({
-        store,
-        site: 'pinterest.com',
-        replaceExisting: true,
-        readSource: async () => {
-          if (scenario === 'source-chips')
-            return convert(report(), [
-              [{ cookie, context: { ...context, topFrameSiteKey: 'https://example.test' } }]
-            ])
-          if (scenario === 'source-unknown') return convert(report(), [[{ cookie, context: {} }]])
-          return convert()
-        },
-        beforeWrite: async () =>
-          assertStoredCookiesUnpartitioned(
-            scenario === 'destination-unknown'
-              ? {}
-              : {
-                  cookies: [
-                    {
-                      domain: '.pinterest.com',
-                      ...(scenario === 'destination-chips'
-                        ? {
-                            partitionKey: {
-                              topLevelSite: 'https://example.test',
-                              hasCrossSiteAncestor: false
-                            }
-                          }
-                        : {}),
-                      ...(scenario === 'destination-opaque' ? { partitionKeyOpaque: true } : {})
-                    }
-                  ]
-                },
-            'pinterest.com'
-          )
-      }),
-      /partitioned|unsupported cookie context|could not verify/
-    )
-    assert.deepEqual(store.state, before)
-  }
-})
-
-void test('ordinary import succeeds and rollback restores prior ordinary cookies', async () => {
-  const store = cookieStore()
-  const input = {
-    store,
-    site: 'pinterest.com',
-    replaceExisting: true,
-    readSource: async () => convert(),
-    beforeWrite: async () =>
-      assertStoredCookiesUnpartitioned(
+      readBrowserProfileCookies(
+        'chrome',
+        input.profileId,
+        input.siteIds,
+        new AbortController().signal,
         {
-          cookies: [
-            { domain: '.pinterest.com' },
-            { domain: '.unselected.test', partitionKey: { topLevelSite: 'https://example.test' } }
-          ]
-        },
-        'pinterest.com'
-      )
-  }
-  assert.equal(await importBrowserAccountCookies(input), 1)
-  assert.equal(store.state[0].value, cookie.value)
-  const before = structuredClone(store.state)
-  const originalSet = store.set.bind(store)
-  store.set = async (incoming) => {
-    if (incoming.value === 'failed-import-value') throw new Error('synthetic-store-error')
-    return originalSet(incoming)
-  }
-  await assert.rejects(
-    importBrowserAccountCookies({
-      ...input,
-      readSource: async () => [{ ...convert()[0], value: 'failed-import-value' }]
-    }),
-    /restored its previous/
-  )
-  assert.deepEqual(store.state, before)
+          CancellationHandle: class {
+            cancel() {
+              return undefined
+            }
+          },
+          read: async () => {
+            throw error
+          }
+        }
+      ),
+      { message: errorCode }
+    )
+  })
+
+void test('a generic permission-looking diagnostic is not misclassified as a file or Keychain denial', async () => {
+  for (const message of [
+    'Permission denied (os error 1)',
+    'macOS Keychain denied',
+    '__ROOKIE_ERROR_V1__invalid'
+  ])
+    await assert.rejects(
+      listImportProfiles('chrome', new AbortController().signal, {
+        browserProfiles: async () => {
+          throw new Error(message)
+        }
+      }),
+      { message: 'source-unavailable' }
+    )
 })
 
-void test('import sources list installed Chromium browsers and name the unreadable ones', async () => {
-  const listed = await listImportSources(['chrome', 'edge', 'arc', 'brave'], {
-    supportedBrowsers: async () => [
-      { id: 'chrome', displayName: 'Google Chrome' },
-      { id: 'edge', displayName: 'Microsoft Edge' },
-      { id: 'brave', displayName: 'Brave' },
-      { id: 'safari', displayName: 'Safari' }
-    ],
-    browserProfiles: async (browserId) => {
-      if (browserId === 'edge') throw new Error('/private/profile/path')
-      if (browserId === 'brave') return []
-      return [
-        { profile: { profileId: 'Default', displayName: 'Personal' }, isDefault: true },
-        { profile: { profileId: 'Profile 1', displayName: 'Work' }, isDefault: false }
-      ]
+void test('one complete profile read is filtered in main and reports selected expiration and CHIPS separately', async () => {
+  const events = []
+  class CancellationHandle {
+    cancel() {
+      events.push('cancelled')
     }
-  })
-  assert.deepEqual(listed, {
-    sources: [
-      {
+  }
+  const reader = {
+    CancellationHandle,
+    read: async (request) => {
+      events.push(request)
+      return {
         browserId: 'chrome',
-        browserName: 'Google Chrome',
-        profiles: [
-          { id: 'Default', name: 'Personal', isDefault: true },
-          { id: 'Profile 1', name: 'Work', isDefault: false }
+        profileId: input.profileId,
+        warnings: [],
+        detailedCookies: [
+          details(),
+          details({ name: 'molly-session', expires: undefined }),
+          details({ name: 'expired', expires: now - 1 }),
+          details({ name: 'partitioned' }, { topFrameSiteKey: 'https://embedded.example' }),
+          details({ domain: '.amazon.co.jp', name: 'commerce' }),
+          details({ domain: '.google.com', name: 'not-selected' })
         ]
       }
-    ],
-    unreadable: ['Microsoft Edge']
+    }
+  }
+  const source = await readBrowserProfileCookies(
+    'chrome',
+    input.profileId,
+    input.siteIds,
+    new AbortController().signal,
+    reader,
+    () => now
+  )
+  assert.deepEqual(events, [
+    {
+      browser: 'chrome',
+      profile: input.profileId,
+      includeExpired: true,
+      includeSession: true,
+      mollyInventory: true,
+      timeoutMs: 300000,
+      appBound: 'disabled'
+    }
+  ])
+  assert.deepEqual(
+    source.cookies.map((entry) => entry.name),
+    ['synthetic-session', 'molly-session', 'commerce']
+  )
+  assert.equal(source.cookies[1].session, true)
+  assert.deepEqual(source.report, {
+    imported: 3,
+    skippedExpired: 1,
+    skippedPartitioned: 1,
+    sites: [
+      { siteId: 'pinterest', imported: 2, skippedExpired: 1, skippedPartitioned: 1 },
+      { siteId: 'amazon', imported: 1, skippedExpired: 0, skippedPartitioned: 0 }
+    ]
   })
-  assert.equal(JSON.stringify(listed).includes('/private'), false)
+  assert.equal(JSON.stringify(source.report).includes('synthetic-only'), false)
 })
 
-void test('the chosen browser reads its own report and cookie database', async () => {
-  const browsers = []
-  const input = report()
-  input.profiles[0].sources[0].source = { path: '/synthetic/Cookies', pathLossy: false }
-  const cookies = await readBrowserSiteCookies('arc', 'synthetic-profile', 'pinterest.com', {
-    browserReport: async ({ browserId }) => {
-      browsers.push(browserId)
-      return input
-    },
-    chromiumBasedDetailed: async (_path, _domains, browserId) => {
-      browsers.push(browserId)
-      return details()
+void test('cancellation discards a late native read and never exposes its secret or diagnostic', async () => {
+  const pending = Promise.withResolvers()
+  const controller = new AbortController()
+  const cancelled = Promise.withResolvers()
+  class CancellationHandle {
+    cancel() {
+      cancelled.resolve()
     }
+  }
+  const read = readBrowserProfileCookies(
+    'chrome',
+    input.profileId,
+    ['pinterest'],
+    controller.signal,
+    { CancellationHandle, read: () => pending.promise }
+  )
+  controller.abort()
+  await cancelled.promise
+  pending.resolve({
+    browserId: 'chrome',
+    profileId: input.profileId,
+    warnings: [],
+    detailedCookies: [details()]
   })
-  assert.equal(cookies.length, 1)
-  assert.deepEqual(browsers, ['arc', 'arc'])
+  await assert.rejects(read, { message: 'cancelled' })
+})
+
+void test('raw inventory validates only selected import candidates and counts raw partition markers', () => {
+  const source = selectBrowserCookies(
+    [
+      details(),
+      details({ domain: '.unselected.test', name: 'invalid name', value: 'invalid\tvalue' }),
+      details({ name: 'opaque-partition', expires: now - 1 }, { topFrameSiteKey: 'opaque' }),
+      details({ domain: '.unselected.test' }, { partitionKey: 'opaque' })
+    ],
+    ['pinterest'],
+    now
+  )
+  assert.deepEqual(
+    source.cookies.map(({ name }) => name),
+    ['synthetic-session']
+  )
+  assert.deepEqual(source.report, {
+    imported: 1,
+    skippedExpired: 0,
+    skippedPartitioned: 1,
+    sites: [{ siteId: 'pinterest', imported: 1, skippedExpired: 0, skippedPartitioned: 1 }]
+  })
+  for (const patch of [
+    { name: 'invalid name' },
+    { name: 'invalid\tname' },
+    { name: 'invalid\n' },
+    { name: 'invalid\r' },
+    { name: 'invalid\u2028' },
+    { name: 'invalid=name' },
+    { value: 'invalid\tvalue' },
+    { value: 'invalid\n' },
+    { value: 'invalid\u2028' },
+    { value: 'invalid\u007fvalue' },
+    { value: 'invalid;value' },
+    { value: 'invalid\u00e9value' },
+    { value: ' leading-space' },
+    { value: 'trailing-space ' },
+    { path: '/invalid\tpath' }
+  ])
+    assert.throws(() => selectBrowserCookies([details(patch)], ['pinterest'], now), {
+      message: 'source-invalid'
+    })
+})
+
+void test('selected Chromium Cookie values retain destination-verified browser syntax exactly', () => {
+  for (const value of [
+    '"synthetic-only"',
+    '{"session":"synthetic-only","route":2}',
+    'synthetic,only',
+    'synthetic only',
+    'synthetic\\only',
+    'synthetic"quoted,only'
+  ]) {
+    const source = selectBrowserCookies([details({ value })], ['pinterest'], now)
+    assert.equal(source.cookies[0].value, value)
+    assert.equal(source.report.imported, 1)
+  }
+})
+
+void test('partial or mismatched native results fail closed with redacted errors', async () => {
+  class CancellationHandle {
+    cancel() {}
+  }
+  for (const patch of [
+    { profileId: 'another' },
+    { browserId: 'edge' },
+    ...['decrypt_failed', 'row_read_failed', 'malformed_host_identity', 'unknown_warning'].map(
+      (code) => ({ warnings: [{ code, count: 1, message: '/private/path synthetic-secret' }] })
+    ),
+    { warnings: [{ code: 'unknown_warning', count: 0, countersSaturated: true }] }
+  ]) {
+    await assert.rejects(
+      readBrowserProfileCookies(
+        'chrome',
+        input.profileId,
+        ['pinterest'],
+        new AbortController().signal,
+        {
+          CancellationHandle,
+          read: async () => ({
+            browserId: 'chrome',
+            profileId: input.profileId,
+            warnings: [],
+            detailedCookies: [details()],
+            ...patch
+          })
+        }
+      ),
+      { message: 'source-incomplete' }
+    )
+  }
+  await assert.rejects(
+    readBrowserProfileCookies(
+      'chrome',
+      input.profileId,
+      ['pinterest'],
+      new AbortController().signal,
+      {
+        CancellationHandle,
+        read: async () => {
+          throw new Error('/private/path synthetic-secret')
+        }
+      }
+    ),
+    { message: 'source-unavailable' }
+  )
+})
+
+void test('unsupported contexts, duplicate identities and bounded profiles reject before writing', () => {
+  for (const entries of [
+    [details({}, { unknownField: true })],
+    [details(), details()],
+    [details({ value: 'a'.repeat(8193) })]
+  ])
+    assert.throws(() => selectBrowserCookies(entries, ['pinterest'], now), {
+      message: 'source-invalid'
+    })
+  assert.throws(() => selectBrowserCookies(Array(50001).fill(details()), ['pinterest'], now), {
+    message: 'source-too-large'
+  })
+  assert.equal(
+    selectBrowserCookies([details({}, { hasCrossSiteAncestor: true })], ['pinterest'], now).cookies
+      .length,
+    1
+  )
+})
+
+void test('merge updates exact identities and keeps Molly-only paths, domains, names and partitions', async () => {
+  const unchanged = [
+    stored({ name: 'other' }),
+    stored({ path: '/account' }),
+    stored({ domain: 'pinterest.com' }),
+    stored({ domain: '.figma.com' }),
+    stored({
+      name: 'partitioned',
+      partitionKey: { topLevelSite: 'https://other.example', hasCrossSiteAncestor: true }
+    })
+  ]
+  const fixture = storeFixture([stored({ value: 'old', priority: 'High' }), ...unchanged])
+  const source = selectBrowserCookies([details()], ['pinterest'], now)
+  const retained = await importBrowserAccountCookies(fixture.store, source.cookies, () => now)
+  assert.equal(retained.has(JSON.stringify([cookie.domain, cookie.path, cookie.name])), true)
+  assert.deepEqual(
+    fixture.rows().filter((entry) => key(entry) !== key(stored())),
+    unchanged
+  )
+  assert.equal(fixture.rows().find((entry) => key(entry) === key(stored())).value, cookie.value)
+})
+
+void test('write failure restores overwritten metadata and removes only inserted exact identities', async () => {
+  const original = [
+    stored({ value: 'original', priority: 'High', sameSite: 'Strict', sourcePort: 8443 }),
+    stored({ path: '/keep', value: 'keep' })
+  ]
+  const fixture = storeFixture(original)
+  const write = fixture.store.set
+  fixture.store.set = async (entry) => {
+    if (entry.name === 'new' && entry.value === 'reject') throw new Error('rejected')
+    await write(entry)
+  }
+  await assert.rejects(
+    importBrowserAccountCookies(
+      fixture.store,
+      selectBrowserCookies(
+        [details(), details({ name: 'new', value: 'reject' })],
+        ['pinterest'],
+        now
+      ).cookies,
+      () => now
+    ),
+    { message: 'write-restored' }
+  )
+  assert.deepEqual(
+    fixture.rows().sort((a, b) => key(a).localeCompare(key(b))),
+    original.sort((a, b) => key(a).localeCompare(key(b)))
+  )
+})
+
+void test('silent write or restore failure is found by readback', async () => {
+  const fixture = storeFixture([stored({ value: 'original' })])
+  fixture.store.set = async () => {}
+  await assert.rejects(
+    importBrowserAccountCookies(
+      fixture.store,
+      selectBrowserCookies([details()], ['pinterest'], now).cookies,
+      () => now
+    ),
+    { message: 'restore-incomplete' }
+  )
+})
+
+void test('conflicting destination CHIPS and capacity pressure leave the destination untouched', async () => {
+  for (const initial of [
+    [
+      stored({
+        partitionKey: { topLevelSite: 'https://other.example', hasCrossSiteAncestor: false }
+      })
+    ],
+    Array.from({ length: 170 }, (_, index) => stored({ name: `existing-${index}` }))
+  ]) {
+    const fixture = storeFixture(initial)
+    await assert.rejects(
+      importBrowserAccountCookies(
+        fixture.store,
+        selectBrowserCookies([details()], ['pinterest'], now).cookies,
+        () => now
+      ),
+      { message: initial.length === 1 ? 'destination-unsupported' : 'cookie-capacity' }
+    )
+    assert.deepEqual(fixture.rows(), initial)
+  }
 })

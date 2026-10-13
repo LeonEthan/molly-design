@@ -1,3 +1,4 @@
+import { buildBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { buildAgentBrowser } from './agent-browser-resources.mjs'
 import { installEmbeddedSqliteBinding, installEmbeddedSharpBinding } from './cli-native-deps.mjs'
 
@@ -23,6 +24,7 @@ export default async function beforePack(context) {
     )
   }
   await buildAgentBrowser({ platform, arch: archName })
+  await buildBrowserCookieReader({ platform, arch: archName })
   installEmbeddedSqliteBinding({ platform, arch: archName })
   installEmbeddedSharpBinding({ platform, arch: archName })
 }

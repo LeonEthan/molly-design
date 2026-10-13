@@ -76,15 +76,14 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   receives finite operations, never arbitrary script/CDP,
   cookies, or a target id. Native page downloads remain available; only
   `save_image` publishes selected, decoded image bytes to design assets.
-- Packaged Molly shares a persistent browser partition across Session pages; macOS
-  persistence requires stable signing. Development and ad-hoc macOS builds use memory.
-  Cookie import is macOS-only, requires secure storage and explicit source Chromium
-  profile/site selection. Unpackaged development may import into memory; packaged
-  imports require stable signing. Main uses the pinned site-only native reader, keeps
-  values in main and pauses all active runs (`browser/pause-all`) before writing.
-  Sign-in blocks Agents until native destruction; owner reload/close
-  closes its sign-in pages and pending opens. No extension or daemon import RPC.
-  Verify `EnableCookieEncryption` before signing. Cookie writes do not prove sign-in.
+- Browser pages share Molly's partition. macOS persistence/packaged import requires
+  stable signing; unpackaged development imports into memory. Import requires
+  secure storage, a selected profile and curated websites. Load only the sealed
+  native reader; request Keychain access inside Molly. Values stay in main.
+  Revoke reads on owner loss, isolate writers, verify merge/recovery. Manual
+  login/MFA holds fresh runs until resume or native destruction. No extension or
+  daemon import RPC. Verify `EnableCookieEncryption` before signing. Cookie writes
+  do not prove sign-in.
 - Image preview export (`services/image-export-service.ts`) keeps the native
   menu, clipboard, and save dialog here because the renderer holds the only copy
   of the image (a `blob:` URL main cannot download). Bytes cross once, after the

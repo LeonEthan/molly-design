@@ -1,0 +1,716 @@
+diff --git a/bindings/node/src/lib.rs b/bindings/node/src/lib.rs
+index 07ac445..eea23a0 100644
+--- a/bindings/node/src/lib.rs
++++ b/bindings/node/src/lib.rs
+@@ -489,7 +489,7 @@ pub struct ExtractionReportObject {
+ 
+ #[napi]
+ pub fn version() -> Result<String> {
+-  Ok(rookie_cookies::version())
++  Ok("0.6.0+molly-native-keychain.3".to_owned())
+ }
+ 
+ fn cookies_to_js(cookies: Vec<Cookie>) -> Result<Vec<CookieObject>> {
+@@ -1557,6 +1557,7 @@ pub fn load_report(options: Option<LoadReportOptions>) -> Result<AsyncTask<LoadR
+ #[napi(object)]
+ pub struct ReadOptions {
+   pub browser: String,
++  pub molly_inventory: Option<bool>,
+   pub profile: Option<String>,
+   pub include_expired: Option<bool>,
+   /// Also includes the browser's declared session store (Gecko only; a
+@@ -1767,6 +1768,9 @@ impl Task for ReadTask {
+       let mut request = ReadRequest::browser(&options.browser)
+         .selection(self.selection.clone())
+         .app_bound(app_bound);
++      if options.molly_inventory == Some(true) {
++        request = request.molly_inventory(true);
++      }
+       if options.include_expired == Some(true) {
+         request = request.include_expired(true);
+       }
+diff --git a/rookie-rs/src/browser/chromium.rs b/rookie-rs/src/browser/chromium.rs
+index 2e94d56..47d514c 100644
+--- a/rookie-rs/src/browser/chromium.rs
++++ b/rookie-rs/src/browser/chromium.rs
+@@ -629,6 +629,15 @@ where
+   // exhausted. A later iteration, identity, or retry error therefore drops
+   // SecretString-backed records instead of abandoning public String values.
+   let mut staged_records = Vec::new();
++  let (molly_count, molly_total_bytes): (i64, i64) = connection.query_row(
++    "SELECT count(*), coalesce(sum(length(host_key) + length(path) + length(name) + length(value) + length(encrypted_value)), 0) FROM cookies",
++    [], |row| Ok((row.get(0)?, row.get(1)?)),
++  )?;
++  if molly_count > 50_000 || molly_total_bytes > 32 * 1024 * 1024 {
++    return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++  }
++  let mut molly_rows = 0usize;
++  let mut molly_bytes = 0usize;
+   let source = ChromiumReadOnlySource {
+     connection,
+     domains,
+@@ -637,6 +646,10 @@ where
+     encrypted_value_policy,
+   };
+   let mut sink = |event| -> Result<()> {
++    molly_rows += 1;
++    if molly_rows > 50_000 {
++      return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++    }
+     let decoded = match event {
+       ChromiumDecodeEvent::RowFailure(failure) => {
+         log::warn!("Failed to decode Chromium cookie row: {}", failure.error);
+@@ -668,6 +681,16 @@ where
+           last_row_error = Some(failure.error);
+           return Ok(());
+         }
++        let value_len = match &record.value {
++          super::cookie_record::CookieValue::Plain(value) => value.len(),
++          _ => 0,
++        };
++        molly_bytes = molly_bytes.saturating_add(
++          record.domain.raw().len() + record.path.len() + record.name.len() + value_len,
++        );
++        if molly_bytes > 32 * 1024 * 1024 {
++          return Err(crate::common::deadline::BoundaryStop::ResourceExhausted.into());
++        }
+         staged_records.push(record);
+       }
+       Err(failure) => {
+diff --git a/rookie-rs/src/browser/chromium_crypto/mod.rs b/rookie-rs/src/browser/chromium_crypto/mod.rs
+index 354523c..e32614b 100644
+--- a/rookie-rs/src/browser/chromium_crypto/mod.rs
++++ b/rookie-rs/src/browser/chromium_crypto/mod.rs
+@@ -154,6 +154,7 @@ impl NonEmptyKeyCandidates {
+ pub(crate) struct ChromiumKeyFailure {
+   message: String,
+   retryability: Retryability,
++  authorization_denied: bool,
+ }
+ 
+ impl ChromiumKeyFailure {
+@@ -164,6 +165,7 @@ impl ChromiumKeyFailure {
+     Self {
+       message: message.into(),
+       retryability: Retryability::Retryable,
++      authorization_denied: false,
+     }
+   }
+ 
+@@ -175,6 +177,7 @@ impl ChromiumKeyFailure {
+     Self {
+       message: message.into(),
+       retryability,
++      authorization_denied: false,
+     }
+   }
+ 
+@@ -198,6 +201,13 @@ pub(crate) enum ChromiumKeyOutcome {
+ }
+ 
+ impl ChromiumKeyOutcome {
++  pub(crate) fn molly_authorization_denied() -> Self {
++    Self::Failure(ChromiumKeyFailure {
++      message: "macOS Keychain authorization denied".to_owned(),
++      retryability: Retryability::NotRetryable,
++      authorization_denied: true,
++    })
++  }
+   /// Constructs a successful outcome only when at least one candidate exists.
+   ///
+   /// Providers must decide explicitly whether an empty retrieval is
+@@ -406,7 +416,16 @@ pub(crate) fn retrieve_key_outcomes<Context: ?Sized, Provider>(
+ where
+   Provider: KeyProvider<Context, Keys = ChromiumKeyOutcomes>,
+ {
+-  crate::common::boundary::keys(provider, context, runtime)
++  let outcomes = crate::common::boundary::keys(provider, context, runtime)?;
++  if [&outcomes.v10, &outcomes.v11, &outcomes.v20].iter().any(|outcome| {
++    matches!(outcome, ChromiumKeyOutcome::Failure(failure) if failure.authorization_denied)
++  }) {
++    return Err(crate::error::EngineFailure::new(
++      crate::error::EngineCause::MollySourceAuthorizationDenied,
++      "macOS Keychain authorization denied",
++    ).into());
++  }
++  Ok(outcomes)
+ }
+ 
+ /// Provider used only to bridge the current untyped platform retrievers.
+@@ -596,6 +615,26 @@ mod tests {
+     assert_eq!(outcomes.v20, ChromiumKeyOutcome::NotApplicable);
+   }
+ 
++  #[test]
++  fn molly_authorization_denied_preserves_its_typed_code_at_the_job_boundary() {
++    let provider = RecordingProvider {
++      calls: Cell::new(0),
++      contexts: RefCell::new(vec![]),
++      outcomes: ChromiumKeyOutcomes {
++        v10: ChromiumKeyOutcome::molly_authorization_denied(),
++        v11: ChromiumKeyOutcome::NotApplicable,
++        v20: ChromiumKeyOutcome::NotApplicable,
++      },
++    };
++    let clock = crate::common::deadline::test_clock::ManualClock::default();
++    let runtime = crate::common::deadline::BoundaryRuntime::new(
++      &clock,
++      crate::common::deadline::Deadline::after(&clock, std::time::Duration::from_secs(1)),
++    );
++    let error = retrieve_key_outcomes(&provider, "synthetic-installation", &runtime).unwrap_err();
++    assert_eq!(crate::error::map_job_error(error).code(), "molly_source_authorization_denied");
++  }
++
+   #[test]
+   fn legacy_provider_keeps_current_shared_candidate_behavior() {
+     let provider = LegacySharedKeyProvider::new(vec![vec![0x2a; 16]]);
+diff --git a/rookie-rs/src/browser/chromium_platform_keys/macos.rs b/rookie-rs/src/browser/chromium_platform_keys/macos.rs
+index 6e9be9d..e0f21c8 100644
+--- a/rookie-rs/src/browser/chromium_platform_keys/macos.rs
++++ b/rookie-rs/src/browser/chromium_platform_keys/macos.rs
+@@ -56,6 +56,13 @@ where
+         )])
+         .expect("a successful macOS Keychain lookup yields one candidate"),
+         Err(error) => {
++          if error.is::<crate::macos::KeychainAuthorizationDenied>() {
++            return ChromiumKeyOutcomes {
++              v10: ChromiumKeyOutcome::molly_authorization_denied(),
++              v11: ChromiumKeyOutcome::NotApplicable,
++              v20: ChromiumKeyOutcome::NotApplicable,
++            };
++          }
+           let diagnostic = format!("macOS Keychain lookup failed: {error:#}");
+           log::warn!("{diagnostic}");
+           ChromiumKeyOutcome::failure(diagnostic)
+@@ -115,7 +122,7 @@ impl KeyProvider<()> for MacosPlatformKeyProvider<'_> {
+   }
+ 
+   fn deadline_enforcement(&self) -> DeadlineEnforcement {
+-    DeadlineEnforcement::Enforceable
++    DeadlineEnforcement::Cooperative
+   }
+ }
+ 
+@@ -126,6 +133,30 @@ mod tests {
+   use crate::browser::chromium_platform_keys::MacosKeychainCredentials;
+   use std::cell::Cell;
+ 
++  #[test]
++  fn molly_keychain_denial_passes_through_the_platform_provider_without_decrypting() {
++    struct DeniedBackend;
++    impl MacosKeychainBackend for DeniedBackend {
++      fn password(&self, _service: &str, _user: &str, _runtime: &BoundaryRuntime<'_>) -> Result<SecretString> {
++        Err(crate::macos::KeychainAuthorizationDenied.into())
++      }
++    }
++    struct DeniedProvider;
++    impl KeyProvider<()> for DeniedProvider {
++      type Keys = ChromiumKeyOutcomes;
++      fn keys(&self, _context: &(), runtime: &BoundaryRuntime<'_>) -> ChromiumKeyOutcomes {
++        retrieve_macos_key_outcomes(request(&macos_credentials()), &DeniedBackend, runtime)
++      }
++      fn deadline_enforcement(&self) -> DeadlineEnforcement {
++        DeadlineEnforcement::Cooperative
++      }
++    }
++    let (clock, deadline) = deadline();
++    let runtime = BoundaryRuntime::new(&clock, deadline);
++    let error = crate::browser::chromium_crypto::retrieve_key_outcomes(&DeniedProvider, &(), &runtime).unwrap_err();
++    assert_eq!(crate::error::map_job_error(error).code(), "molly_source_authorization_denied");
++  }
++
+   fn candidate_bytes(
+     outcomes: &ChromiumKeyOutcomes,
+     cipher: ChromiumCipherVersion,
+diff --git a/rookie-rs/src/browser/legacy.rs b/rookie-rs/src/browser/legacy.rs
+index ef63e4f..1408478 100644
+--- a/rookie-rs/src/browser/legacy.rs
++++ b/rookie-rs/src/browser/legacy.rs
+@@ -680,6 +680,7 @@ mod tests {
+   fn empty_outcome_with_issue(code: &'static str) -> EngineExtract {
+     EngineExtract {
+       discovery_issues: vec![registry::DiscoveryIssue {
++        molly_access_denied: false,
+         code,
+         path: PathBuf::from("/browser/discovery"),
+         message: "injected discovery failure".to_owned(),
+diff --git a/rookie-rs/src/browser/registry.rs b/rookie-rs/src/browser/registry.rs
+index 8fa0abe..10944db 100644
+--- a/rookie-rs/src/browser/registry.rs
++++ b/rookie-rs/src/browser/registry.rs
+@@ -706,6 +706,7 @@ pub(crate) struct DiscoveryIssue {
+   pub(crate) code: &'static str,
+   pub(crate) path: PathBuf,
+   pub(crate) message: String,
++  pub(crate) molly_access_denied: bool,
+   /// How many times this code occurred at or after `path`. Retained samples
+   /// carry 1; a bounded code folds its unsampled remainder into the first
+   /// retained sample, so the per-code total is the sum across entries.
+@@ -729,9 +730,15 @@ impl DiscoveryIssue {
+       code,
+       path,
+       message: message.into(),
++      molly_access_denied: false,
+       occurrences: 1,
+     }
+   }
++
++  fn with_access_denied(mut self, denied: bool) -> Self {
++    self.molly_access_denied = denied;
++    self
++  }
+ }
+ 
+ fn browser_definition<'a>(
+diff --git a/rookie-rs/src/browser/registry/chromium.rs b/rookie-rs/src/browser/registry/chromium.rs
+index f0d22b1..5ad6194 100644
+--- a/rookie-rs/src/browser/registry/chromium.rs
++++ b/rookie-rs/src/browser/registry/chromium.rs
+@@ -228,6 +228,15 @@ pub(super) struct ChromiumDiscovery {
+ }
+ 
+ impl ChromiumDiscovery {
++  fn assert_molly_listing_access(&self) -> Result<()> {
++    if self.profiles().is_empty() && self.issues.iter().any(|issue| issue.molly_access_denied) {
++      bail!(crate::error::EngineFailure::new(
++        crate::error::EngineCause::MollySourceAccessDenied,
++        "browser profile file access denied",
++      ));
++    }
++    Ok(())
++  }
+   pub(super) fn profiles(&self) -> Vec<ChromiumProfile> {
+     self
+       .installations
+@@ -408,7 +417,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
+           "local_state_invalid",
+           installation.local_state_path.clone(),
+           error.to_string(),
+-        ));
++        ).with_access_denied(molly_permission_denied(&error)));
+         LocalStateMetadata::default()
+       }
+     }
+@@ -500,7 +509,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
+           "profile_canonicalize_failed",
+           profile_path,
+           error.to_string(),
+-        ));
++        ).with_access_denied(molly_permission_denied(&error)));
+         continue;
+       }
+     };
+@@ -690,7 +699,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+             "installation_metadata_failed",
+             resolved,
+             error.to_string(),
+-          ));
++          ).with_access_denied(error.raw_os_error() == Some(1)));
+           continue;
+         }
+       }
+@@ -702,7 +711,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+             "installation_canonicalize_failed",
+             resolved,
+             error.to_string(),
+-          ));
++          ).with_access_denied(molly_permission_denied(&error)));
+           continue;
+         }
+       };
+@@ -751,7 +760,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+                 "installation_enumeration_failed",
+                 installation.path.clone(),
+                 error.to_string(),
+-              ));
++              ).with_access_denied(molly_permission_denied(&error)));
+               discovery.installations.push(installation);
+               continue;
+             }
+@@ -919,6 +928,7 @@ where
+ {
+   runtime.check()?;
+   let mut discovery = discover_browser_with_context_and_selection(context, browser_id, selection)?;
++  discovery.assert_molly_listing_access()?;
+   if selection == ProfileSelection::LegacyFirstProfile {
+     // Generic discovery prefers declared profiles over a flat installation
+     // root. The historical Opera selectors on macOS/Windows (and the Linux
+@@ -1345,6 +1355,7 @@ pub(super) fn profiles_for_listing(
+   browser_id: &str,
+   discovery: ChromiumDiscovery,
+ ) -> Result<Vec<ChromiumProfile>> {
++  discovery.assert_molly_listing_access()?;
+   if discovery.all_detected_roots_failed() {
+     bail!("every detected {browser_id} installation failed profile enumeration")
+   }
+@@ -1379,6 +1390,7 @@ pub(crate) fn chromium_listing_with_runtime(
+   runtime.check()?;
+   let discovery = discover_browser_with_context(&context, browser_id)?;
+   runtime.check()?;
++  discovery.assert_molly_listing_access()?;
+   Ok(ChromiumListing {
+     profiles: discovery.profiles(),
+     installations_discovered: discovery.installations.len(),
+@@ -1387,6 +1399,13 @@ pub(crate) fn chromium_listing_with_runtime(
+   })
+ }
+ 
++fn molly_permission_denied(error: &anyhow::Error) -> bool {
++  error.chain().any(|cause| {
++    cause.downcast_ref::<std::io::Error>()
++      .is_some_and(|error| error.raw_os_error() == Some(1))
++  })
++}
++
+ /// Private generic Chromium report seam covering every registered
+ /// Chromium-family browser.
+ fn chromium_registry_report(
+diff --git a/rookie-rs/src/browser/registry/chromium/tests.rs b/rookie-rs/src/browser/registry/chromium/tests.rs
+index c5f0421..28d422f 100644
+--- a/rookie-rs/src/browser/registry/chromium/tests.rs
++++ b/rookie-rs/src/browser/registry/chromium/tests.rs
+@@ -1544,6 +1544,42 @@ fn inaccessible_root_metadata_is_reported_while_not_found_is_silent() {
+   assert!(profiles_for_listing("chrome", discovery).is_err());
+ }
+ 
++#[test]
++fn molly_profile_access_classifies_eperm_and_keeps_eacces_generic() {
++  for errno in [1, 13] {
++    let temp = TempDir::new("molly-profile-access-denial");
++    let real_context = current_context(temp.path().to_path_buf());
++    let root = channel_root(&real_context, "stable");
++    std::fs::create_dir_all(&root).expect("create synthetic root");
++    let canonical_root = root.canonicalize().expect("canonical root");
++    let context = with_test_fs(real_context, TestDiscoveryFs {
++      denied_read_dir_errno: Some((canonical_root, errno)),
++      ..TestDiscoveryFs::default()
++    });
++    let discovery = discover_browser_with_context(&context, "chrome").unwrap();
++    let error = crate::error::map_job_error(profiles_for_listing("chrome", discovery).unwrap_err());
++    assert_eq!(error.code(), if errno == 1 { "molly_source_access_denied" } else { "engine_failure" });
++  }
++}
++
++#[test]
++fn molly_unrelated_profile_access_denial_does_not_block_a_readable_browser_profile() {
++  let temp = TempDir::new("molly-readable-profile");
++  let real_context = current_context(temp.path().to_path_buf());
++  let stable = channel_root(&real_context, "stable");
++  seed_cookie(&stable.join("Default"), true, "synthetic", "fixture-only");
++  let beta = channel_root(&real_context, "beta");
++  std::fs::create_dir_all(&beta).unwrap();
++  let context = with_test_fs(real_context, TestDiscoveryFs {
++    denied_read_dir_errno: Some((beta.canonicalize().unwrap(), 1)),
++    ..TestDiscoveryFs::default()
++  });
++  let discovery = discover_browser_with_context(&context, "chrome").unwrap();
++  let profiles = profiles_for_listing("chrome", discovery).unwrap();
++  assert_eq!(profiles.len(), 1);
++  assert_eq!(profiles[0].path, stable.join("Default").canonicalize().unwrap());
++}
++
+ #[test]
+ fn missing_optional_wildcard_roots_are_silent() {
+   let temp = TempDir::new("missing-wildcard-roots");
+diff --git a/rookie-rs/src/browser/registry/test_seams.rs b/rookie-rs/src/browser/registry/test_seams.rs
+index 81da348..f8b8909 100644
+--- a/rookie-rs/src/browser/registry/test_seams.rs
++++ b/rookie-rs/src/browser/registry/test_seams.rs
+@@ -372,6 +372,7 @@ pub(crate) fn browser_root(
+ 
+ #[derive(Default)]
+ pub(crate) struct TestDiscoveryFs {
++  pub(crate) denied_read_dir_errno: Option<(PathBuf, i32)>,
+   pub(crate) denied_read_dir: Option<PathBuf>,
+   pub(crate) denied_metadata: Option<PathBuf>,
+   pub(crate) denied_canonicalize: Vec<PathBuf>,
+@@ -401,6 +402,11 @@ impl DiscoveryFs for TestDiscoveryFs {
+   }
+ 
+   fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {
++    if let Some((denied, errno)) = &self.denied_read_dir_errno {
++      if denied == path {
++        return Err(std::io::Error::from_raw_os_error(*errno).into());
++      }
++    }
+     if self.denied_read_dir.as_deref() == Some(path) {
+       bail!("injected profile enumeration failure")
+     }
+diff --git a/rookie-rs/src/browser/report_build/tests.rs b/rookie-rs/src/browser/report_build/tests.rs
+index 5c0c0f9..0bfc9c0 100644
+--- a/rookie-rs/src/browser/report_build/tests.rs
++++ b/rookie-rs/src/browser/report_build/tests.rs
+@@ -1238,6 +1238,7 @@ fn a_recovered_discovery_problem_does_not_downgrade_a_complete_report() {
+     browser.issues.push(discovery_issue(
+       &BrowserId::known("firefox"),
+       &registry::DiscoveryIssue {
++        molly_access_denied: false,
+         code,
+         path: PathBuf::from("/profiles/profiles.ini"),
+         message: "unreadable".to_owned(),
+@@ -1255,6 +1256,7 @@ fn bounded_discovery_occurrences_survive_as_a_typed_count_with_sampled_paths() {
+     browser.issues.push(discovery_issue(
+       &BrowserId::known("firefox"),
+       &registry::DiscoveryIssue {
++        molly_access_denied: false,
+         code: "duplicate_profile",
+         path: PathBuf::from(format!("/profiles/{index}")),
+         message: "already owned".to_owned(),
+@@ -1278,6 +1280,7 @@ fn public_discovery_diagnostics_sanitize_paths_embedded_in_messages() {
+   let issue = discovery_issue(
+     &BrowserId::known("firefox"),
+     &registry::DiscoveryIssue {
++      molly_access_denied: false,
+       code: "profile_enumeration_failed",
+       path: PathBuf::from("/profiles/default"),
+       message: message.to_owned(),
+diff --git a/rookie-rs/src/error.rs b/rookie-rs/src/error.rs
+index 97ac4a1..6f8c0af 100644
+--- a/rookie-rs/src/error.rs
++++ b/rookie-rs/src/error.rs
+@@ -170,6 +170,8 @@ impl From<anyhow::Error> for Error {
+ /// by parsing its `Display` is exactly what this crate forbids.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub(crate) enum EngineCause {
++  MollySourceAccessDenied,
++  MollySourceAuthorizationDenied,
+   NoSelectedSource,
+   SourceExtractionFailed,
+   NoDiscoveredSource,
+@@ -180,6 +182,8 @@ pub(crate) enum EngineCause {
+ impl EngineCause {
+   fn code(self) -> &'static str {
+     match self {
++      Self::MollySourceAccessDenied => "molly_source_access_denied",
++      Self::MollySourceAuthorizationDenied => "molly_source_authorization_denied",
+       Self::NoSelectedSource => "no_selected_source",
+       Self::SourceExtractionFailed => "source_extraction_failed",
+       Self::NoDiscoveredSource => "no_discovered_source",
+diff --git a/rookie-rs/src/lib.rs b/rookie-rs/src/lib.rs
+index f95453e..3fa73f3 100644
+--- a/rookie-rs/src/lib.rs
++++ b/rookie-rs/src/lib.rs
+@@ -104,6 +104,7 @@ use std::fmt;
+ #[cfg(unix)]
+ use std::path::PathBuf;
+ #[cfg(target_os = "macos")]
++#[path = "macos/native.rs"]
+ mod macos;
+ #[cfg(target_os = "windows")]
+ mod windows;
+diff --git a/rookie-rs/src/macos/native.rs b/rookie-rs/src/macos/native.rs
+new file mode 100644
+index 0000000..ce16e68
+--- /dev/null
++++ b/rookie-rs/src/macos/native.rs
+@@ -0,0 +1,87 @@
++use anyhow::{bail, Context, Result};
++use crate::common::deadline::BoundaryRuntime;
++use crate::common::secret::{SecretBytes, SecretString};
++use std::{ffi::c_void, ptr};
++use zeroize::Zeroize;
++
++#[derive(Debug)]
++pub(crate) struct KeychainAuthorizationDenied;
++
++impl std::fmt::Display for KeychainAuthorizationDenied {
++  fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++    formatter.write_str("macOS Keychain authorization denied")
++  }
++}
++
++impl std::error::Error for KeychainAuthorizationDenied {}
++
++fn check_keychain_status(status: i32) -> Result<()> {
++  match status {
++    0 => Ok(()),
++    -128 | -25293 => Err(KeychainAuthorizationDenied.into()),
++    _ => bail!("macOS Keychain lookup failed (OSStatus {status})"),
++  }
++}
++
++#[link(name = "Security", kind = "framework")]
++unsafe extern "C" {
++  fn SecKeychainFindGenericPassword(
++    keychain: *const c_void, service_len: u32, service: *const u8,
++    account_len: u32, account: *const u8, password_len: *mut u32,
++    password: *mut *mut c_void, item: *mut *mut c_void,
++  ) -> i32;
++  fn SecKeychainItemFreeContent(attributes: *mut c_void, data: *mut c_void) -> i32;
++}
++
++struct KeychainContent { bytes: *mut c_void, len: u32 }
++
++impl Drop for KeychainContent {
++  fn drop(&mut self) {
++    if !self.bytes.is_null() {
++      // SAFETY: Security.framework owns this allocation until FreeContent; see Apple's SecKeychainFindGenericPassword contract.
++      unsafe {
++        std::slice::from_raw_parts_mut(self.bytes.cast::<u8>(), self.len as usize).zeroize();
++        SecKeychainItemFreeContent(ptr::null_mut(), self.bytes);
++      }
++    }
++  }
++}
++
++pub(crate) fn get_osx_keychain_password_with_runtime(
++  service: &str, account: &str, runtime: &BoundaryRuntime<'_>,
++) -> Result<SecretString> {
++  runtime.check()?;
++  let mut content = KeychainContent { bytes: ptr::null_mut(), len: 0 };
++  // SAFETY: length-delimited UTF-8 inputs and initialized output pointers follow Apple's SecKeychainFindGenericPassword contract.
++  let status = unsafe { SecKeychainFindGenericPassword(
++    ptr::null(), service.len().try_into()?, service.as_ptr(),
++    account.len().try_into()?, account.as_ptr(), &mut content.len,
++    &mut content.bytes, ptr::null_mut(),
++  ) };
++  runtime.check()?;
++  check_keychain_status(status)?;
++  if content.bytes.is_null() || content.len == 0 || content.len > 4096 {
++    bail!("macOS Keychain returned an unsupported credential");
++  }
++  // SAFETY: Security.framework returned a non-null allocation of content.len bytes, owned by the guard above.
++  let secret = SecretBytes::new(unsafe {
++    std::slice::from_raw_parts(content.bytes.cast::<u8>(), content.len as usize).to_vec()
++  });
++  secret.into_secret_string().context("macOS Keychain credential is not UTF-8")
++}
++
++#[cfg(test)]
++mod tests {
++  use super::*;
++
++  #[test]
++  fn molly_keychain_status_classifies_only_explicit_denial_or_user_cancellation() {
++    assert!(check_keychain_status(0).is_ok());
++    for status in [-128, -25293] {
++      assert!(check_keychain_status(status).unwrap_err().is::<KeychainAuthorizationDenied>());
++    }
++    for status in [-25300, -25308, -25291] {
++      assert!(!check_keychain_status(status).unwrap_err().is::<KeychainAuthorizationDenied>());
++    }
++  }
++}
+diff --git a/rookie-rs/src/read.rs b/rookie-rs/src/read.rs
+index 09dd578..38a4079 100644
+--- a/rookie-rs/src/read.rs
++++ b/rookie-rs/src/read.rs
+@@ -88,6 +88,7 @@ impl std::fmt::Display for ReadWarning {
+ pub struct ReadRequest {
+   target: BrowserTarget<ProfileSelection>,
+   include_expired: bool,
++  molly_inventory: bool,
+   control: ExecutionControl,
+ }
+ 
+@@ -100,6 +101,7 @@ impl ReadRequest {
+     Self {
+       target: BrowserTarget::browser(id),
+       include_expired: false,
++      molly_inventory: false,
+       control: ExecutionControl::default(),
+     }
+   }
+@@ -114,6 +116,12 @@ impl ReadRequest {
+     self
+   }
+ 
++  /// Preserves decoded rows for Molly's main-side import validation.
++  pub fn molly_inventory(mut self, enabled: bool) -> Self {
++    self.molly_inventory = enabled;
++    self
++  }
++
+   /// Selects the profile explicitly.
+   ///
+   /// [`ProfileSelection`] has no "every profile" arm, so a snapshot cannot ask
+@@ -601,7 +609,11 @@ fn read_snapshot(
+     return Err(stop.into());
+   }
+   let mut warning_counts = outcome.warnings;
+-  let (cookies, omitted) = filter_snapshot(outcome.cookies, request.include_expired)?;
++  let (cookies, omitted) = if request.molly_inventory {
++    filter_molly_inventory_at(outcome.cookies, request.include_expired, SystemTime::now())?
++  } else {
++    filter_snapshot(outcome.cookies, request.include_expired)?
++  };
+   omitted.record_into(&mut warning_counts);
+   Ok(ReadResult::new(
+     cookies,
+@@ -829,6 +841,31 @@ impl OmittedRows {
+   }
+ }
+ 
++fn filter_molly_inventory_at(
++  cookies: Vec<DetailedCookie>,
++  include_expired: bool,
++  now: SystemTime,
++) -> anyhow::Result<(Vec<DetailedCookie>, OmittedRows)> {
++  let now = unix_seconds(now)?;
++  let mut omitted = OmittedRows::default();
++  let mut kept = Vec::with_capacity(cookies.len());
++  for detailed in cookies {
++    let cookie = &detailed.cookie;
++    if !crate::browser::cookie_record::host_identity_survives(&cookie.domain) {
++      omitted.malformed_host_identity += 1;
++      continue;
++    }
++    if cookie.expires.is_some_and(|expires| expires > (1u64 << 53) - 1) {
++      anyhow::bail!("Molly inventory cannot represent the cookie expiration exactly");
++    }
++    if !include_expired && cookie.expires.is_some_and(|expires| expires <= now) {
++      continue;
++    }
++    kept.push(detailed);
++  }
++  Ok((kept, omitted))
++}
++
+ fn filter_snapshot(
+   cookies: Vec<DetailedCookie>,
+   include_expired: bool,
+diff --git a/rookie-rs/src/read/tests.rs b/rookie-rs/src/read/tests.rs
+index f75b6b9..962942e 100644
+--- a/rookie-rs/src/read/tests.rs
++++ b/rookie-rs/src/read/tests.rs
+@@ -250,3 +250,40 @@ fn from_path_credentials_observes_cancellation() {
+   .expect_err("cancelled from_path");
+   assert_eq!(error.stop_reason(), Some(crate::StopReason::Cancelled));
+ }
++
++
++#[test]
++fn molly_inventory_retains_raw_rows_before_main_selection() {
++  let mut opaque = cookie("partitioned", None);
++  opaque.context.top_frame_site_key = Some("opaque".to_owned());
++  let rows = vec![cookie("valid", None), cookie("invalid name", None), opaque];
++  let (snapshot_rows, snapshot_omissions) = filter_snapshot_at(rows.clone(), true, epoch(1_000)).unwrap();
++  assert_eq!(snapshot_rows.len(), 2);
++  assert_eq!(snapshot_omissions.invalid_octets, 1);
++  assert_eq!(snapshot_omissions.unparsable_partition_key, 1);
++  let (inventory, omissions) = filter_molly_inventory_at(rows.clone(), true, epoch(1_000)).unwrap();
++  assert_eq!(inventory, rows);
++  assert_eq!(omissions, OmittedRows::default());
++  assert!(!ReadRequest::browser("chrome").molly_inventory);
++  assert!(ReadRequest::browser("chrome").molly_inventory(true).molly_inventory);
++}
++
++#[test]
++fn molly_inventory_keeps_host_failures_and_rejects_lossy_expiry() {
++  let mut malformed = cookie("bad-host", None);
++  malformed.cookie.domain = "".to_owned();
++  let (rows, omitted) = filter_molly_inventory_at(vec![cookie("valid", None), malformed], true, epoch(1_000)).unwrap();
++  assert_eq!(rows.len(), 1);
++  assert_eq!(omitted.malformed_host_identity, 1);
++  assert!(filter_molly_inventory_at(vec![cookie("lossy", Some(1u64 << 53))], true, epoch(1_000)).is_err());
++  assert!(filter_molly_inventory_at(vec![cookie("lossy", Some(u64::MAX))], true, epoch(1_000)).is_err());
++}
++
++#[test]
++fn molly_inventory_retains_session_and_expiry_policy_without_normalizing_partitions() {
++  let rows = vec![cookie("expired", Some(999)), cookie("session", None), cookie("future", Some(1_001))];
++  let (all, _) = filter_molly_inventory_at(rows.clone(), true, epoch(1_000)).unwrap();
++  assert_eq!(all, rows);
++  let (current, _) = filter_molly_inventory_at(rows, false, epoch(1_000)).unwrap();
++  assert_eq!(current.iter().map(|row| row.cookie.name.as_str()).collect::<Vec<_>>(), vec!["session", "future"]);
++}

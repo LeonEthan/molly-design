@@ -4,28 +4,28 @@
 
 ## Model credentials
 
-Bundled-capability IPC reads fixed metadata beside the resolved CLI entry, validates
-package and catalog digests, and returns public fields only. It neither imports the SDK
-nor opens the credential store; missing or incompatible resources mean unavailable.
+Capability IPC verifies adjacent CLI package/catalog digests and public fields without
+SDK/vault access; absent/incompatible resources are unavailable.
 
-`model-connection-store` is main-only. Renderer IPC exposes save/delete/public
-metadata, never acquisition. Persist encrypted bytes only; unavailable OS storage
-and Linux plaintext backends fail closed. Endpoint changes require renewed
-credential input. Broker acquisition must bind an active run and worker epoch to
-the exact connection revision; the store itself is not a permission authority.
-Compatible model definitions share that encrypted row and revision; they are public
-capability declarations, never credential/header/script or per-model destination fields.
-Image credentials use the same vault. Acknowledge legacy removal only after encrypted
-backup durability; compare the exact current row before removal. History/backup
-residue remains disclosed, never claimed erased. Acquisition requires an active run, except
-explicit main-only settings checks of the saved destination.
-MCP values share this vault, bound to workspace, server, destination and revision;
-a changed URL or stdio command/args needs renewed input. Settings IPC derives
-the local workspace, returning no values. Acquisition needs the selected Session and
-worker epoch, except explicit Settings tool listing of the catalog row's exact binding,
-values going only to the CLI helper's stdin. Saving enables nothing. Header framing
-and isolated-process env fields cannot be credentials. Reject writes past the
-vault read limit.
+`model-connection-store`: main-only metadata IPC, never grants.
+Encrypt; unavailable OS storage/Linux plaintext fail closed. Endpoint/provider edits
+require explicit credentials; empty keys are compatible-only, omission preserves.
+Grants bind run/epoch/revision; vault grants no authority. Declarations share row/revision;
+no keys, headers, scripts or model destinations.
+OAuth refresh/mutations queue per row; I/O outside vault lock, CAS the grant.
+Sign-in binds ID/revision, preserves IDs; provider collisions fail.
+OpenAI: reuse client/host/subject; validate JWT signature/issuer/audience/expiry/nonce.
+Auth URLs stay in main; encrypted hints survive refresh, not sign-out.
+Sign-out keeps disabled, token-free registration; Delete forgets it. Add cannot overwrite it.
+Cancel before revocation/commit; never restore revoked grants. Revoke unretained
+provider/client/refresh-token grants; report unconfirmed sign-out revocation.
+Image grants share the vault. Legacy removal needs durable encrypted backup/exact row;
+disclose history/backup residue. Grants need active runs except main-only saved checks.
+MCP binds workspace/server/destination/revision. URL/stdio command/args edits need new inputs.
+Settings derives local workspace; returns no values.
+Grants require selected Session/epoch, except explicit Settings tool listing of the
+exact catalog binding; values travel only to CLI helper stdin. Saving enables nothing.
+Header framing/isolated env fields cannot be credentials; enforce vault size limits.
 
 ## Design canvas contracts
 
@@ -45,8 +45,8 @@ while consumers exist; release both with the last consumer. Re-observe new
 dependencies after installing watches. Watch `design.yaml` and needed `media/`; leftover `.pptd` is not a watch or import source. Reject
 old source/turn/view generations; previews never commit or update Agent baselines.
 Valid frozen frames may publish while newer bytes are queued; render serially.
-New canvas instances and container-size changes fit the full artwork to the viewport.
-Unchanged retained instances keep zoom across hide/show.
+New instances/container-size changes fit the full artwork to viewport.
+Unchanged retained instances keep manual zoom across hide/show.
 For visible windows, keep outgoing pixels until the replacement has decoded resources,
 fitted its viewport and completed a compositor capture. Promote before disposal; turn completion does
 not close the visible preview before the canonical editor is ready.
@@ -59,8 +59,8 @@ must recheck the current host's visibility intent.
 
 `design-canvas-access` gates actual human writes and flushes all artwork instances
 before dispatch. Execution state comes from the versioned daemon canvas-host
-snapshot; unknown is readonly. Keep ownership independent of view lifetime, and
-reject reload of dirty/composing/saving instances. Bento stays element-naive:
+snapshot; unknown is readonly. Ownership is view-independent; reject
+dirty/composing/saving reloads. Bento stays element-naive:
 it receives generic readonly/flush plus zod-validated selection property and
 element-creation commands (`window.molly.applyCommands`, one kernel batch per
 command) and reports
@@ -73,15 +73,14 @@ DOM load event alone is not canvas readiness. Before changing these boundaries, 
 The preview host shares the local socket, independent of canvas preparation.
 Keep render policy in Node-testable `design-render-host-core.ts`: no retries, repair or
 per-turn thumbnails; sidebar ones cache the saved revision. Previews use canvas size.
-Historical files resolve by artwork/digest in the worker; local resources serve
-original bytes and embedded assets.
+Worker history resolves files by artwork/digest; local resources serve original
+bytes/embedded assets.
 
-Selecting Git history restores into the editable current draft. Save-version
-and switch flush through the artwork mutation gate; protect unversioned content in
-Git before canonical CAS. Persist selected base and operation identity outside
-BentoDoc, and report successful disk writes separately from failed canvas reloads.
-Execution and artifact processing block both actions. Source display binds to the
-authoritative active turn and excludes unchanged inherited draft bytes.
+Git history restores into the editable current draft. Save-version/switch flush through
+the artwork mutation gate; protect unversioned content in Git before canonical CAS.
+Persist base/operation identity outside BentoDoc; distinguish successful disk writes
+from canvas reload failures. Execution/artifact processing blocks both actions. Source
+display binds to the authoritative active turn, excluding unchanged inherited draft bytes.
 
 Element references originate only from visible canonical selections while idle.
 Capture IDs before flush and pair them with its saved revision; never rebase stored
@@ -92,32 +91,33 @@ recheck that identity after asynchronous queries and check the selection epoch a
 application/capture. Clean selections reuse their saved revision without freezing
 controls. Passive composer mirroring waits for autosave when a sibling is dirty,
 composing or saving; explicit reference actions still flush siblings together. Geometry
-never travels through IPC. Presentation contains only theme, labels and action availability.
+never travels through IPC. Presentation: theme, labels and action availability only.
 
 Image context actions check image kinds in that saved canonical document, then
 insert a target mention and editable prompt into the ordinary composer; only Ask
 Molly, notes and image marks send ordinary turns; marks attach a validated marked copy.
 None mutates artwork or runs image jobs.
 
-Application quit flushes editors before sealing design-worker requests; cancelled
-flush leaves the service usable. Even with no open editor, drain accepted requests,
-end worker input and await child exit before quitting. A closed worker never restarts.
+Quit flushes editors before sealing design-worker requests; cancelled flush leaves
+the service usable. Drain accepted requests even without open editors, end worker
+input and await child exit before quitting. Closed workers never restart.
 
 ## Browser account imports
 
-Reject unsupported source or destination Cookie partitions before import mutations;
-never flatten identities for writes or rollback. Native reads stay site-scoped and
-Cookie values stay in main. Imports cover Pinterest from Chromium browsers. The native
-report deadline includes human Keychain approval; retries require a fresh user
-action, and read failures preserve destination cookies.
+Import reads metadata; one profile continues, multiple need selection. Preserve
+typed file/Keychain failures; settings only for EPERM file denial. Prepare before
+Agent pause/isolation. One raw profile read; main filters IDs, validates fields and keeps
+values/keys. Count CHIPS/expiry skips. Isolate pages/Workers/network; preflight quotas,
+merge exact identities, verify writes/rollback. Failed recovery holds browsing until
+explicit clearing. Revoke late reads; retain native leases until settlement, drain
+writes on quit. Retry is explicit; never auto-resume.
 
 ## Agent browser driver
 
-Keep agent-browser private behind the strict action union. Bind refs to observation,
-lease and document. Invalidate untrusted WebMCP handles on events; check once at dispatch.
-Use the pinned CDP adapter unchanged, with one token-gated loopback connection for
-the granted page and descendants. Revoke detaches synchronously before cleanup.
-Open the human-input gate only during synchronous CDP Input dispatch. Own each native
-daemon and its private config; unknown outcomes never replay. Polling never cancels
-WebMCP work. Retain Chromium network/proxy/TUN behavior and image body/redirect/Cookie
-bounds; native downloads never publish design assets. Result/cancel bypass DOM readiness.
+Keep agent-browser private behind strict actions; bind refs to observation/lease/document.
+Invalidate untrusted WebMCP handles on events; check once at dispatch. Keep the pinned
+CDP adapter unchanged: one token-gated loopback connection to the granted page/descendants.
+Revocation detaches synchronously before cleanup. Human input opens only during synchronous
+CDP Input dispatch. Own each daemon/private config. Unknown outcomes never replay;
+polling never cancels WebMCP work. Retain Chromium network/proxy/TUN and image
+body/redirect/Cookie bounds. Native downloads never publish assets; result/cancel bypass readiness.

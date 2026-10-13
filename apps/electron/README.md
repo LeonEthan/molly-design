@@ -152,40 +152,58 @@ Catalog/lifecycle events invalidate website handles, and the CDP guard checks a
 single-use permit before invocation. Image refs and element waits reuse upstream
 resolution; checkbox actions never repeat a click to force a state change.
 No second Chromium is installed. Hidden Agent pages stay
-renderable in a hidden host window and reattach when the panel opens. The macOS
-Settings > Website accounts leads with signing in on Pinterest's page inside Molly, which reads no
-other browser. Its collapsed import section lists supported local Chromium browser profiles only when opened and uses the pinned
-`rookie-cookies` binding in Electron main to import cookies for a user-selected
-Pinterest account (the first-release import scope). Sign-in blocks Agent browsing until
-its native page is destroyed. Reloading the owning app window closes its sign-in
-pages and cancels pending opens while retaining ordinary Session pages.
-The importer checks detailed Cookie identities against
-the extraction report and rejects unsupported partitions before changing Molly
-cookies, including when the destination already contains site CHIPS cookies.
-The pinned reader reports excluded Chromium service directories as discovery errors;
-that specific unscoped diagnostic does not block a successfully read selected profile.
-Selected-profile/source errors and all other request errors still stop import.
-The user may need to approve macOS Keychain access during import. The site-scoped
-report and detailed reader remain separate native reads; this can repeat Keychain
-authorization, and Molly does not recommend granting `/usr/bin/security` permanent
-access. Browser-data
-permission is separate: macOS can attribute development access to the terminal or
-coding agent that launched Molly. A coding agent can be the responsible app even
-when its terminal already has browser access. Allow the chosen browser under the
-responsible app in Files & Folders, then refresh Molly, or fully quit and launch
-`pnpm start:local` directly from an already authorized terminal. Failed listing
-does not establish absent profiles. The collapsed import section offers **Open Files
-and Folders settings** whenever any browser is unreadable, including alongside
-readable profiles. Clicking it re-lists profiles before opening the macOS privacy
-pane; it does not grant permission or import cookies.
-The initial native report allows five minutes for human
-authorization; Settings shows a pending hint and manual retry guidance. Read
-failures leave existing Molly cookies unchanged. The pinned detailed-reader API
-has no timeout parameter; five minutes is not an overall import deadline.
-No extension or import socket is installed. The after-pack hook enables and
-reads back Electron's encrypted-cookie fuse before signing. See the
-[user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
-for the current setup and support limits.
+renderable in a hidden host window and reattach when the panel opens. The macOS account flow uses one shared import dialog from Website accounts,
+the Browser menu and the Pinterest setup chip. Opening discovers installed browsers
+only. Import begins the selected browser's profile metadata access; native access
+requests system authorization when needed. One profile continues automatically;
+multiple profiles require an explicit selection in the same picker. A collapsed, fully selected catalog
+covers 13 design and 14 commerce platforms; expanding shows exact domain scope.
+The catalog is an import filter, not a matrix of verified website logins.
+
+Main uses one inventory-mode `read()` from the pinned rookie 0.6.0 addon. Its small local patch
+calls Security.framework inside Molly and bounds the native profile read before
+materializing cookie rows (50,000 rows / 32 MiB payload). Cookie values and keys
+never enter renderer IPC. Expired/partitioned source cookies are skipped and
+counted. The source browser may remain open: upstream's read transaction or
+verified SQLite/WAL snapshot must succeed. Incomplete reads fail closed. Decoded
+rows retain raw fields and partition context until main selects websites and
+validates import candidates. Portable header normalization of unrelated websites
+cannot discard selected rows or block their import; selected invalid fields and
+genuine row/decryption/host failures still fail before writes.
+
+The write phase pauses Agents, drains native pages, fences new pages and network
+responses, and attaches a private debugger to pause registered Service Workers
+and remaining Shared Workers. Stopping a Worker alone is insufficient: cookie
+changes can restart it without network. Exact merge preserves Molly-only cookies;
+quota preflight prevents incidental eviction, and complete readback checks both
+writes and rollback. Unverified recovery keeps the partition held until explicit
+clearing. Clearing removes all Molly website storage, cache and HTTP auth data.
+
+Source preparation and authorization precede Agent pause and destination isolation.
+Cancellation/owner reload discards pre-write results while the native operation
+retains its slot until settlement. A Keychain prompt cannot be dismissed by the
+cooperative deadline. Accepted writes drain on quit. Stable signatures can retain
+Keychain grants; OS policy or signature changes can prompt again. Development
+folder permission may be attributed to Molly's launcher, and macOS may refuse to
+offer that launcher a prompt. Only confirmed browser-file
+access denial offers Files & Folders settings; Keychain denial and other read failures
+remain distinct. The dialog retains choices and offers Continue import after opening
+settings, without Reload profiles or automatic retry. Granting a native prompt
+continues the same valid request. Cancellation/denial retains selections for explicit
+retry; starting a new dialog resets website selections. No Agent resumes automatically.
+See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
+and [permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md),
+which records final real Chrome/Pinterest import, sign-in and file-denial recovery.
+Fresh approval/grant continuation and signed distribution remain acceptance limits.
+
+`build:cookie-reader` stages a checksum-pinned, patched addon under
+`resources/browser-cookie-reader`; normal build/dev/packaging runs it too. Only
+that resource is loaded. Packaging explicitly re-includes its `LICENSE.md` after
+the general Markdown exclusion so the sealed resource stays complete.
+Packaging verifies architecture/hash/version and reseals
+after native signing, alongside the existing encrypted-cookie fuse. See the
+[native reader](native/browser-cookie-reader/README.md) and
+[implementation evidence](../../.agents/notes/implemented/feature/2026-10-11-whole-profile-browser-import.md).
 
 Navigation uses Chromium's native URL and network handling. Selected images use
 Electron `net.request` bound to the owning browser session with the existing body, redirect,
@@ -210,6 +228,22 @@ The higher-level `Session.fetch` API was checked first. In the historical Electr
 returning its response. Native request redirect events preserve the existing
 per-hop Cookie policy and five-redirect bound without Node HTTP/DNS or socket
 address verification.
+
+## Model account authorization
+
+OpenAI authorization uses the public Pi provider login seam in main. Returning sign-in
+reuses the selected row's issued client ID, stable host ID and encrypted ID-token hint.
+JOSE validates the new token's signature, issuer, audience, expiry, nonce and subject before
+commit; old records without an ID token establish their validated identity on reauthorization.
+Hint-bearing authorization URLs are opened only in main. The vault retains identity/hints
+through the SDK refresh path. Sign-out revokes the latest saved renewable session and
+clears all tokens, retaining only client/subject mapping in the same disabled connection row.
+The public signed-out flag is derived from that private registration state. Reconnect binds
+its revision; Add cannot silently replace it. Delete explicitly forgets the local mapping.
+Cleanup protects only an exactly retained provider/client/refresh-token grant, including
+uncertain writes; other candidates and replaced sessions are revoked. Sign-out reports
+unconfirmed remote revocation. No live provider acceptance is claimed by synthetic tests.
+See the [review correction](../../.agents/notes/implemented/bug-fix/2026-10-11-model-auth-completion.md).
 
 ## Browser driver build and verification
 

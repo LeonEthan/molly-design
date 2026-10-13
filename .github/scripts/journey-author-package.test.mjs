@@ -21,7 +21,7 @@ function digest(value) {
 
 function fixture() {
   const journey = {
-    id: 'LODY-TEST-001',
+    id: 'MOLLY-TEST-001',
     state: 'backlog',
     priority: 'P1',
     runtime: 'none',
@@ -58,7 +58,7 @@ function fixture() {
   };
   const task = { ...taskCore, digest: digest(taskCore) };
   const featureContent =
-    '# language: zh-CN\n@lody @P1 @essence @runtime-none @LODY-TEST-001\n功能: Test\n\n  场景: Test outcome\n    那么 visible outcome\n';
+    '# language: zh-CN\n@molly @P1 @essence @runtime-none @MOLLY-TEST-001\n功能: Test\n\n  场景: Test outcome\n    那么 visible outcome\n';
   const pageContent = 'export const expected = "visible outcome";\n';
   const files = [
     {
@@ -87,8 +87,8 @@ function fixture() {
     ablation: {
       path: 'e2e/src/support/pages/test-page.ts',
       search: '"visible outcome"',
-      replacement: '"__MOLLY_COUNTERFACTUAL_LODY_TEST_001__"',
-      expectedFailure: '__MOLLY_COUNTERFACTUAL_LODY_TEST_001__',
+      replacement: '"__MOLLY_COUNTERFACTUAL_MOLLY_TEST_001__"',
+      expectedFailure: '__MOLLY_COUNTERFACTUAL_MOLLY_TEST_001__',
     },
     files,
   };
@@ -182,7 +182,7 @@ void test('applies and exactly restores the bounded counterfactual', async () =>
       candidate.files.find((file) => file.path === candidate.ablation.path).content
     );
     await applyAblation({ root, task, candidate });
-    assert.match(await readFile(target, 'utf8'), /__MOLLY_COUNTERFACTUAL_LODY_TEST_001__/u);
+    assert.match(await readFile(target, 'utf8'), /__MOLLY_COUNTERFACTUAL_MOLLY_TEST_001__/u);
     await restoreAblation({ root, task, candidate });
     assert.equal(
       await readFile(target, 'utf8'),

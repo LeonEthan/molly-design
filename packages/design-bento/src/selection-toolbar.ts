@@ -1,5 +1,7 @@
 import {
+  DESIGN_ASK_PRESETS,
   DESIGN_ASK_PROMPT_MAX,
+  type DesignAskPreset,
   type DesignCanvasCommand,
   type DesignSelectedElement,
   type DesignSelectionSummary,
@@ -14,6 +16,7 @@ import {
   boldIcon,
   chevronDownIcon,
   cropIcon,
+  highlighterIcon,
   imagePlusIcon,
   italicIcon,
   paletteIcon,
@@ -88,6 +91,7 @@ const icons = {
   style: paletteIcon,
   regenerate: regenerateIcon,
   wording: typeIcon,
+  mark: highlighterIcon,
   bold: boldIcon,
   italic: italicIcon,
 };
@@ -101,6 +105,7 @@ const alignmentIcons = {
 export function createSelectionToolbar(options: {
   request(input: DesignToolbarRequest): Promise<{ ok: boolean; error?: string }>;
   addNote?(text: string): void;
+  markImage?(elementId: string, selectionEpoch: number): void;
 }) {
   let summary: DesignSelectionSummary = { count: 0, kinds: [] };
   let ids: string[] = [];
@@ -155,6 +160,8 @@ export function createSelectionToolbar(options: {
 .molly-selection-popup textarea{display:block;width:100%;box-sizing:border-box;resize:none;border:0;border-radius:10px;background:var(--muted);color:inherit;font:13px/1.45 Inter,system-ui,sans-serif;padding:8px 10px;outline:none}
 .molly-selection-popup textarea:focus-visible{outline:2px solid #6195ed;outline-offset:-2px}
 .molly-selection-popup .ask-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
+.molly-selection-popup .presets{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.molly-selection-popup .presets button{height:26px;min-width:0;padding:0 9px;border-radius:999px;border:1px solid var(--line);font-size:11.5px}
 .molly-selection-popup .ask-actions .primary{background:var(--ink);color:var(--surface)}
 .molly-selection-popup .ask-actions .primary:hover{background:var(--ink);opacity:.88}
 .molly-selection-error{color:#ef6464;max-width:220px;white-space:normal;padding:4px 8px;flex:none;font-size:11px}
@@ -599,8 +606,15 @@ export function createSelectionToolbar(options: {
       bar.append(node);
     };
     ask();
-    separator();
     const kind = summary.kinds.length === 1 ? summary.kinds[0] : undefined;
+    const markImage = options.markImage;
+    if (kind === 'image' && summary.count === 1 && markImage) {
+      const mark = button(bar, icons.mark, label('markImage', 'Mark areas to edit'), () =>
+        markImage(ids[0], epoch)
+      );
+      mark.disabled = busy || !presentation?.actionsEnabled;
+    }
+    separator();
     const current = summary.elements?.find((element) => element.kind === kind);
     const typed = current && kind !== 'table' && kind !== 'chart' && summary.count <= 8;
     if (!typed || kind === 'image') {
@@ -712,13 +726,31 @@ export function createSelectionToolbar(options: {
         if (askDraft.epoch === epoch) field.value = askDraft.text;
         const row = document.createElement('div');
         row.className = 'ask-actions';
+        let preset: DesignAskPreset | undefined;
+        const presets = askPresets();
+        const chips = document.createElement('div');
+        chips.className = 'presets';
+        chips.setAttribute('role', 'group');
+        chips.setAttribute('aria-label', label('askPresets', 'Quick edits'));
+        const ready = () =>
+          !!field.value.trim() || (!!preset && !DESIGN_ASK_PRESETS[preset].detail);
+        for (const id of presets) {
+          const chip = button(chips, presetLabel(id), presetLabel(id), () => {
+            preset = preset === id ? undefined : id;
+            for (const sibling of chips.children)
+              sibling.setAttribute('aria-pressed', String(sibling === chip && preset === id));
+            validate();
+            field.focus();
+          });
+          chip.setAttribute('aria-pressed', 'false');
+        }
         const submit = (send: boolean) => {
           const prompt = field.value.trim();
-          if (send && !prompt) return;
+          if (send && !ready()) return;
           askDraft = { epoch, text: field.value };
           void request(
-            prompt
-              ? { type: 'ask', selectionEpoch: epoch, prompt, send }
+            prompt || preset
+              ? { type: 'ask', selectionEpoch: epoch, prompt, send, ...(preset ? { preset } : {}) }
               : { type: 'action', selectionEpoch: epoch, action: 'reference' }
           ).then((ok) => {
             if (ok && askDraft.epoch === epoch) askDraft = { epoch: -1, text: '' };
@@ -732,10 +764,12 @@ export function createSelectionToolbar(options: {
               label('askMollyAddNote', 'Add as note'),
               () => {
                 const prompt = field.value.trim();
-                if (!prompt || readonly) return;
+                if (!ready() || readonly) return;
                 askDraft = { epoch: -1, text: '' };
                 closePopup();
-                addNote(prompt);
+                addNote(
+                  preset ? [presetLabel(preset), prompt].filter(Boolean).join(': ') : prompt
+                );
               }
             )
           : undefined;
@@ -752,8 +786,8 @@ export function createSelectionToolbar(options: {
         );
         send.className = 'primary';
         const validate = () => {
-          send.disabled = busy || !field.value.trim();
-          if (note) note.disabled = busy || !field.value.trim();
+          send.disabled = busy || !ready();
+          if (note) note.disabled = busy || !ready();
         };
         field.oninput = () => {
           askDraft = { epoch, text: field.value };
@@ -771,13 +805,34 @@ export function createSelectionToolbar(options: {
           }
         };
         validate();
-        node.append(field, row);
+        node.append(field, ...(presets.length ? [chips] : []), row);
       })
     );
     trigger.disabled = busy || !presentation?.actionsEnabled;
     trigger.setAttribute('aria-haspopup', 'dialog');
     trigger.setAttribute('aria-expanded', 'false');
     trigger.append(label('askMolly', 'Ask Molly'));
+  }
+  function askPresets() {
+    const only = summary.kinds.length === 1 ? summary.kinds[0] : undefined;
+    return (Object.keys(DESIGN_ASK_PRESETS) as DesignAskPreset[]).filter((id) => {
+      const preset = DESIGN_ASK_PRESETS[id];
+      if (preset.kind !== only || (preset.single && summary.count !== 1)) return false;
+      return id !== 'wording-editable' || summary.elements?.[0]?.textCopy === undefined;
+    });
+  }
+  function presetLabel(id: DesignAskPreset) {
+    const key = `preset${id.replace(/(^|-)(\w)/g, (_, _dash, letter: string) => letter.toUpperCase())}`;
+    const fallback = {
+      'remove-background': 'Remove background',
+      'replace-object': 'Replace object',
+      relight: 'Relight',
+      'wording-editable': 'Make wording editable',
+      'split-layers': 'Split into layers',
+      shorten: 'Shorten',
+      rewrite: 'Rewrite',
+    } satisfies Record<DesignAskPreset, string>;
+    return label(key, fallback[id]);
   }
   function wording(current: DesignSelectedElement & { textCopy?: string }) {
     const name = label('editWording', 'Edit wording');

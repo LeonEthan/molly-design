@@ -9,8 +9,8 @@ export type ScenarioArtifacts = {
 };
 
 export function findStableId(tags: readonly string[]): string {
-  const stableId = tags.find((tag) => /^@LODY-[A-Z0-9-]+-\d{3}$/u.test(tag));
-  if (!stableId) throw new Error('Scenario is missing a stable @LODY-AREA-NNN id');
+  const stableId = tags.find((tag) => /^@MOLLY-[A-Z0-9-]+-\d{3}$/u.test(tag));
+  if (!stableId) throw new Error('Scenario is missing a stable @MOLLY-AREA-NNN id');
   return stableId.slice(1);
 }
 

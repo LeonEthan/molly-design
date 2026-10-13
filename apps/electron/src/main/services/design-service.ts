@@ -6,7 +6,10 @@ import {
   validateDesignElementReferences
 } from '@molly/shared/design-element-reference'
 import {
+  DESIGN_ASK_PRESETS,
+  DESIGN_MARKED_IMAGE_MAX_EDGE,
   DESIGN_SELECTION_BODY_LIMIT,
+  decodeDesignMarkedImage,
   DesignCanvasCommandResultSchema,
   DesignCanvasCommandSchema,
   DesignNotesSchema,
@@ -16,6 +19,7 @@ import {
   diffDesignElements,
   type DesignCanvasCommandResult,
   type DesignElementChanges,
+  type DesignElementKind,
   type DesignHighlight,
   type DesignSelectionSummary
 } from '@molly/shared/design-selection-commands'
@@ -262,22 +266,62 @@ export async function surface(
             )
             return Response.json(result, { headers })
           }
+          const preset = input.type === 'ask' && input.preset ? input.preset : undefined
           const reference = await getDesignSelection(
             id,
             hostId,
-            input.type === 'action' &&
-              (input.action === 'edit' ||
-                input.action === 'generate' ||
-                input.action === 'edit-wording')
+            input.type === 'marks' ||
+              (input.type === 'action' &&
+                (input.action === 'edit' ||
+                  input.action === 'generate' ||
+                  input.action === 'edit-wording'))
               ? 'image'
-              : undefined,
+              : preset && DESIGN_ASK_PRESETS[preset].kind,
             { selectionEpoch: input.selectionEpoch, assertCurrent }
           )
+          if (
+            (input.type === 'marks' || (preset && DESIGN_ASK_PRESETS[preset].single)) &&
+            reference.elementIds.length !== 1
+          )
+            throw Error('Select a single element for this action')
+          if (input.type === 'marks') {
+            const image = decodeDesignMarkedImage(
+              await record!.view.webContents.executeJavaScript(
+                `window.molly.marks(${JSON.stringify(input.marksEpoch)})`
+              ),
+              reference.elementIds[0]
+            )
+            const size = nativeImage.createFromBuffer(Buffer.from(image.bytes)).getSize()
+            if (
+              !size.width ||
+              !size.height ||
+              Math.max(size.width, size.height) > DESIGN_MARKED_IMAGE_MAX_EDGE
+            )
+              throw Error('Marked image could not be read')
+            assertCurrent()
+            record!.owner.webContents.send('design.selectionAction', {
+              hostId,
+              action: 'marks',
+              reference,
+              prompt: input.prompt,
+              send: input.send,
+              count: image.count,
+              image: { mimeType: image.mimeType, bytes: image.bytes }
+            })
+            return Response.json({ ok: true }, { headers })
+          }
           assertCurrent()
           record!.owner.webContents.send(
             'design.selectionAction',
             input.type === 'ask'
-              ? { hostId, action: 'ask', reference, prompt: input.prompt, send: input.send }
+              ? {
+                  hostId,
+                  action: 'ask',
+                  reference,
+                  prompt: input.prompt,
+                  send: input.send,
+                  ...(preset ? { preset } : {})
+                }
               : {
                   hostId,
                   action: input.action,
@@ -607,7 +651,7 @@ export async function restoreDesignVersion(
 export async function getDesignSelection(
   id: string,
   hostId: string,
-  kind?: 'image',
+  kind?: DesignElementKind,
   {
     selectionEpoch,
     assertCurrent,
@@ -675,7 +719,7 @@ async function captureDesignReferences(
     kind,
     assertCurrent,
     onlySaved = false
-  }: { kind?: 'image'; assertCurrent?: () => void; onlySaved?: boolean }
+  }: { kind?: DesignElementKind; assertCurrent?: () => void; onlySaved?: boolean }
 ) {
   await queryCanvasState?.()
   if (designCanvasAccess.isReadonly(id))
@@ -713,17 +757,21 @@ async function captureDesignReferences(
   )
   validateDesignElementReferences(references, id, saved)
   if (
-    kind === 'image' &&
+    kind &&
     references.some((reference) =>
       reference.elementIds.some(
         (elementId) =>
           saved.doc.elements.find(
             (element: { id: string; kind: string }) => element.id === elementId
-          )?.kind !== 'image'
+          )?.kind !== kind
       )
     )
   )
-    throw Error('Select only images in the current artwork for this action')
+    throw Error(
+      kind === 'image'
+        ? 'Select only images in the current artwork for this action'
+        : `Select only ${kind} elements in the current artwork for this action`
+    )
   if (
     designCanvasAccess.isReadonly(id) ||
     records.get(hostId) !== record ||

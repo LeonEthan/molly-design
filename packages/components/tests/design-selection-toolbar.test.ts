@@ -514,3 +514,61 @@ it('turns a typed ask into a note without sending a request', () => {
   click('Ask Molly about the selection');
   expect(askField().value).toBe('');
 });
+
+const chipNames = () =>
+  [...document.querySelectorAll('.molly-selection-popup .presets button')].map(
+    (node) => node.textContent
+  );
+const pressed = (name: string) =>
+  getByRole(document.body, 'button', { name }).getAttribute('aria-pressed');
+
+it('offers the image quick edits the tools can do, and hides wording once it is editable', () => {
+  select('image');
+  click('Ask Molly about the selection');
+  expect(chipNames()).toEqual([
+    'Remove background',
+    'Replace object',
+    'Relight',
+    'Make wording editable',
+    'Split into layers',
+  ]);
+  select('image', { textCopy: 'SALE' }, 2);
+  click('Ask Molly about the selection');
+  expect(chipNames()).not.toContain('Make wording editable');
+  select('text', {}, 3);
+  click('Ask Molly about the selection');
+  expect(chipNames()).toEqual(['Shorten', 'Rewrite']);
+});
+
+it('sends a quick edit without text, but asks for detail when the edit needs it', () => {
+  select('image');
+  click('Ask Molly about the selection');
+  const sendButton = () => getByRole(document.body, 'button', { name: 'Send' });
+  click('Replace object');
+  expect(pressed('Replace object')).toBe('true');
+  expect(sendButton().hasAttribute('disabled')).toBe(true);
+  click('Remove background');
+  expect(pressed('Replace object')).toBe('false');
+  expect(pressed('Remove background')).toBe('true');
+  expect(sendButton().hasAttribute('disabled')).toBe(false);
+  click('Send');
+  expect(requests).toEqual([
+    { type: 'ask', selectionEpoch: 1, prompt: '', send: true, preset: 'remove-background' },
+  ]);
+});
+
+it('opens mark mode for exactly one selected image', () => {
+  toolbar.dispose();
+  const marked: [string, number][] = [];
+  toolbar = createSelectionToolbar({
+    request: async () => ({ ok: true }),
+    markImage: (id, epoch) => marked.push([id, epoch]),
+  });
+  toolbar.present({ dark: false, actionsEnabled: true, labels: {} });
+  toolbar.setReadonly(false);
+  select('text');
+  expect(queryByRole(document.body, 'button', { name: 'Mark areas to edit' })).toBeNull();
+  select('image', {}, 4);
+  click('Mark areas to edit');
+  expect(marked).toEqual([['one', 4]]);
+});

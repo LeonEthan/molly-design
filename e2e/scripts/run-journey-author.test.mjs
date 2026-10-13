@@ -82,7 +82,7 @@ void test('requires an explicit human-review acknowledgement for validation', ()
     ]),
     { artifactDir: '/tmp/candidate', approveReviewed: true, budgetMinutes: 60 }
   );
-  assert.throws(() => parseLocalValidationOptions(['--candidate', 'LODY-MCP-001']), /Unknown/u);
+  assert.throws(() => parseLocalValidationOptions(['--candidate', 'MOLLY-MCP-001']), /Unknown/u);
 });
 
 void test('refuses validation before touching a checkout without human acknowledgement', async () => {
@@ -97,7 +97,7 @@ void test('parses bounded local author options', () => {
     parseLocalAuthorOptions([
       '--',
       '--candidate',
-      'LODY-MCP-001',
+      'MOLLY-MCP-001',
       '--budget-minutes',
       '45',
       '--model',
@@ -105,7 +105,7 @@ void test('parses bounded local author options', () => {
       '--prepare-only',
     ]),
     {
-      candidate: 'LODY-MCP-001',
+      candidate: 'MOLLY-MCP-001',
       budgetMinutes: 45,
       model: 'gpt-5.6-sol',
       prepareOnly: true,
@@ -212,7 +212,7 @@ void test('runs the author ephemerally in a writable isolated worktree', () => {
 });
 
 void test('keeps three independent focused rounds between build and full regression', () => {
-  const plan = validationCommandPlan('LODY-MCP-001');
+  const plan = validationCommandPlan('MOLLY-MCP-001');
   assert.deepEqual(
     plan.map((stage) => stage.name),
     [
@@ -232,11 +232,11 @@ void test('keeps three independent focused rounds between build and full regress
     [1, 2, 3]
   );
   assert.ok(plan.slice(1, -1).every((stage) => stage.command === 'pnpm'));
-  assert.equal(plan.find((stage) => stage.name === 'focused-1').args.at(-1), '@LODY-MCP-001');
+  assert.equal(plan.find((stage) => stage.name === 'focused-1').args.at(-1), '@MOLLY-MCP-001');
 });
 
 void test('initializes only current desktop source submodules for candidate validation', () => {
-  const submodules = validationCommandPlan('LODY-MCP-001').find(
+  const submodules = validationCommandPlan('MOLLY-MCP-001').find(
     (stage) => stage.name === 'submodules'
   );
   assert.equal(submodules.command, 'git');

@@ -21,6 +21,7 @@ import {
   type UiIconNode,
 } from '@molly/shared/ui-icons';
 import { createElementHighlight } from './element-highlight';
+import { createImageMarks } from './image-marks';
 import { createNotePins } from './note-pins';
 import { createLayersPanel, type LayerElement } from './layers-panel';
 import { createSelectionToolbar } from './selection-toolbar';
@@ -97,9 +98,13 @@ export function createProductSession(options: {
     selectedIds: () => selectedIds,
     elementIds: () => options.elements().map((element) => element.id),
   });
+  const marks = createImageMarks({ request });
   const toolbar = createSelectionToolbar({
     request,
     addNote: (text) => pins.add(selectedIds, text),
+    markImage: (elementId, expected) => {
+      if (expected === selectionEpoch) marks.open(elementId, expected);
+    },
   });
   const layers = createLayersPanel({
     request,
@@ -113,6 +118,7 @@ export function createProductSession(options: {
     () => {
       toolbar.dispose();
       pins.dispose();
+      marks.dispose();
       highlight.dispose();
     },
     { once: true }
@@ -451,6 +457,7 @@ export function createProductSession(options: {
     readonly = value;
     toolbar.setReadonly(value);
     pins.setReadonly(value);
+    marks.setReadonly(value);
     layers.setReadonly(value);
     try {
       if (value) {
@@ -589,6 +596,7 @@ export function createProductSession(options: {
         setStatusMessage(statusSource);
         toolbar.present(value);
         pins.present(value);
+        marks.present(value);
         layers.present(value.labels);
       },
       highlight(groups: DesignHighlight) {
@@ -603,6 +611,9 @@ export function createProductSession(options: {
       },
       settleNotes(expected: number, sent: boolean) {
         return pins.settle(expected, sent);
+      },
+      marks(expected: number) {
+        return marks.read(expected);
       },
       state() {
         return {
@@ -686,6 +697,7 @@ export function createProductSession(options: {
       selection = elements;
       lastSelectionSummary = summary;
       toolbar.update(summary as DesignSelectionSummary, selectedIds, selectionEpoch);
+      marks.select(selectedIds, selectionEpoch);
       layers.update(selectedIds, selectionEpoch);
       emit('selection', { elements });
       reportSelection(summary);

@@ -130,7 +130,7 @@ export function buildCodexExecArgs({ model, root, schemaPath, outputPath }) {
 }
 
 export function validationCommandPlan(candidateId) {
-  if (!/^LODY-[A-Z0-9-]+-\d{3}$/u.test(candidateId)) throw new Error('Invalid candidate id');
+  if (!/^MOLLY-[A-Z0-9-]+-\d{3}$/u.test(candidateId)) throw new Error('Invalid candidate id');
   const focused = [1, 2, 3].map((round) => ({
     name: `focused-${round}`,
     command: 'pnpm',

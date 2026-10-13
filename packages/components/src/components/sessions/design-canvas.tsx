@@ -2,6 +2,7 @@ import { useConversationIndexRows } from '@/hooks/use-conversation-view';
 import type { DesignElementReference } from '@molly/shared/design-element-reference';
 import type { DesignExportScale } from '@molly/shared/electron-ipc';
 import type {
+  DesignAskPreset,
   DesignHighlight,
   DesignSelectionAction,
   DesignSelectionSummary,
@@ -166,8 +167,16 @@ export function DesignCanvas({
   active: boolean;
   workspaceSlug: string;
   name: string;
-  onReferenceSelection?: (reference: DesignElementReference, prompt?: string) => void;
-  onSendSelection?: (reference: DesignElementReference, prompt: string) => Promise<void>;
+  onReferenceSelection?: (
+    reference: DesignElementReference,
+    prompt?: string,
+    image?: File
+  ) => void;
+  onSendSelection?: (
+    reference: DesignElementReference,
+    prompt: string,
+    image?: File
+  ) => Promise<void>;
   onSendNotes?: (
     notes: readonly { reference: DesignElementReference; prompt: string }[]
   ) => Promise<boolean>;
@@ -541,7 +550,12 @@ export function DesignCanvas({
       .catch((e) => setError(ipcErrorMessage(e)))
       .finally(() => setBusy(false));
   };
-  const referenceSelection = (prompt?: string, kind?: 'image', captured?: DesignElementReference) =>
+  const referenceSelection = (
+    prompt?: string,
+    kind?: 'image',
+    captured?: DesignElementReference,
+    image?: File
+  ) =>
     run(async () => {
       const service = getIpcServices()?.design;
       if (!service) throw Error('Local workspace is not ready');
@@ -551,7 +565,7 @@ export function DesignCanvas({
         throw Error(
           t('design.selectionChanged', 'Artwork view changed; select the current elements again')
         );
-      onReferenceSelection?.(reference, prompt);
+      onReferenceSelection?.(reference, prompt, image);
     });
   const selectionAction = (
     action: DesignSelectionAction,
@@ -613,17 +627,85 @@ export function DesignCanvas({
         );
     }
   };
-  const askSelection = (reference: DesignElementReference, prompt: string, send: boolean) => {
-    if (!send || !onSendSelection) return referenceSelection(prompt, undefined, reference);
+  const presetPrompt = (preset: DesignAskPreset) =>
+    ({
+      'remove-background': t(
+        'design.presetRemoveBackgroundPrompt',
+        "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject, then replace only that image's asset. Preserve the rest of the artwork."
+      ),
+      'replace-object': t(
+        'design.presetReplaceObjectPrompt',
+        "In the selected image, replace the object described below, matching the existing lighting and perspective. Use its current image as the source and replace only that image's asset. Preserve the rest of the artwork. Replace:"
+      ),
+      relight: t(
+        'design.presetRelightPrompt',
+        "Relight the selected image while keeping its content and composition. Use its current image as the source and replace only that image's asset. Preserve the rest of the artwork."
+      ),
+      'wording-editable': t(
+        'design.presetWordingEditablePrompt',
+        "The selected image shows lettering. Read its exact wording and set that element's textCopy to it without changing the picture, so the wording can be edited from the canvas. If it shows no lettering, say so and change nothing."
+      ),
+      'split-layers': t(
+        'design.presetSplitLayersPrompt',
+        'Split the selected flat image into separately editable layers, as in the layered design workflow: extract each subject as its own transparent image, rebuild any wording as text elements, and keep the composition visually identical. Replace the original image with these layers. Preserve the rest of the artwork.'
+      ),
+      shorten: t(
+        'design.presetShortenPrompt',
+        'Make the selected text shorter while keeping its meaning, voice and style.'
+      ),
+      rewrite: t(
+        'design.presetRewritePrompt',
+        'Rewrite the selected text, keeping its style and size. Direction:'
+      ),
+    })[preset];
+  const sendOrReference = (
+    reference: DesignElementReference,
+    prompt: string,
+    send: boolean,
+    image?: File
+  ) => {
+    if (!send || !onSendSelection) return referenceSelection(prompt, undefined, reference, image);
     const generation = attachmentGeneration.current;
     run(async () => {
       if (generation !== attachmentGeneration.current)
         throw Error(
           t('design.selectionChanged', 'Artwork view changed; select the current elements again')
         );
-      await onSendSelection(reference, prompt);
+      await onSendSelection(reference, prompt, image);
     });
   };
+  const askSelection = (
+    reference: DesignElementReference,
+    prompt: string,
+    send: boolean,
+    preset?: DesignAskPreset
+  ) =>
+    sendOrReference(
+      reference,
+      preset ? [presetPrompt(preset), prompt].filter(Boolean).join('\n') : prompt,
+      send
+    );
+  const markSelection = (
+    reference: DesignElementReference,
+    prompt: string,
+    send: boolean,
+    count: number,
+    image: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array }
+  ) =>
+    sendOrReference(
+      reference,
+      t(
+        'design.marksPrompt',
+        "The attached image is a copy of the selected image with {{count}} numbered marks drawn on it. Edit the selected image using its current asset as the source, changing only the marked areas; the marks are guides and must not appear in the result. Replace only that image's asset and preserve the rest of the artwork. Requested change:",
+        { count }
+      ) +
+        '\n' +
+        prompt,
+      send,
+      new File([new Uint8Array(image.bytes)], image.mimeType === 'image/png' ? 'marked.png' : 'marked.jpg', {
+        type: image.mimeType,
+      })
+    );
   const sendNotes = (
     notes: readonly { reference: DesignElementReference; prompt: string }[],
     notesEpoch: number
@@ -647,8 +729,8 @@ export function DesignCanvas({
       }
     });
   };
-  const actionCallback = useRef({ selectionAction, askSelection, sendNotes });
-  actionCallback.current = { selectionAction, askSelection, sendNotes };
+  const actionCallback = useRef({ selectionAction, askSelection, markSelection, sendNotes });
+  actionCallback.current = { selectionAction, askSelection, markSelection, sendNotes };
   useEffect(
     () =>
       onIpcEvent('design.selectionAction', (event) => {
@@ -669,7 +751,20 @@ export function DesignCanvas({
         if (!active || readonlyView) return;
         if (event.reference.artworkId !== artworkId) return;
         if (event.action === 'ask')
-          actionCallback.current.askSelection(event.reference, event.prompt, event.send);
+          actionCallback.current.askSelection(
+            event.reference,
+            event.prompt,
+            event.send,
+            event.preset
+          );
+        else if (event.action === 'marks')
+          actionCallback.current.markSelection(
+            event.reference,
+            event.prompt,
+            event.send,
+            event.count,
+            event.image
+          );
         else actionCallback.current.selectionAction(event.action, event.reference, event.wording);
       }),
     [hostId, artworkId, active, readonlyView]

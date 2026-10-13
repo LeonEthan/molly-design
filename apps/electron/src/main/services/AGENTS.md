@@ -52,7 +52,7 @@ fitted its viewport and completed a compositor capture. Promote before disposal;
 not close the visible preview before the canonical editor is ready.
 Preparation may precede input identity: establish the entry watch and bind that
 identity on observation. Reconcile this startup handoff even without another file
-event; stop the reconciliation when bound or released. Cancellation retires loading native surfaces as well as
+event; stop the reconciliation when bound or released. Cancellation retires loading native surfaces and
 the visible preview; late loads cannot reveal a closed canvas. Canonical editors
 may finish loading while hidden, but initial display and viewport fitting
 must recheck the current host's visibility intent.
@@ -70,7 +70,7 @@ share the pending opening and wait until Bento publishes its generic
 state/snapshot/flush/readonly/commands API and reports the real ready state; a navigation or
 DOM load event alone is not canvas readiness. Before changing these boundaries, read
 [design resources](../../../../../packages/design-bento/README.md).
-The preview host uses the same local socket, independently of canvas preparation.
+The preview host shares the local socket, independent of canvas preparation.
 Keep render policy in Node-testable `design-render-host-core.ts`: no retries, repair or
 per-turn thumbnails; sidebar ones cache the saved revision. Previews use canvas size.
 Worker history resolves files by artwork/digest; local resources serve original
@@ -95,7 +95,8 @@ never travels through IPC. Presentation: theme, labels and action availability o
 
 Image context actions check image kinds in that saved canonical document, then
 insert a target mention and editable prompt into the ordinary composer; only Ask
-Molly and numbered notes may send as an ordinary turn. None mutates artwork or runs image jobs.
+Molly, notes and image marks send ordinary turns; marks attach a validated marked copy.
+None mutates artwork or runs image jobs.
 
 Quit flushes editors before sealing design-worker requests; cancelled flush leaves
 the service usable. Drain accepted requests even without open editors, end worker

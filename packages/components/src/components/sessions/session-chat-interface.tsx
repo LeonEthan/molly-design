@@ -1330,13 +1330,15 @@ export type SessionChatInterfaceHandle = {
   referenceDesignSelection: (
     reference: DesignElementReference,
     label: string,
-    prompt?: string
+    prompt?: string,
+    image?: File
   ) => boolean;
   syncDesignSelection: (reference: DesignElementReference | null, label: string) => boolean;
   sendDesignSelection: (
     reference: DesignElementReference,
     label: string,
-    prompt: string
+    prompt: string,
+    image?: File
   ) => Promise<boolean>;
   sendDesignNotes: (
     notes: readonly { reference: DesignElementReference; label: string; prompt: string }[]
@@ -3399,12 +3401,13 @@ export const SessionChatInterface = memo(
         startShareImageSelection: shareSelection.start,
         openSearch,
         getLastAssistantTurnId: () => lastCompletedAssistantMessageId,
-        referenceDesignSelection: (reference, label, prompt) =>
-          inputAreaRef.current?.referenceDesignSelection(reference, label, prompt) ?? false,
+        referenceDesignSelection: (reference, label, prompt, image) =>
+          inputAreaRef.current?.referenceDesignSelection(reference, label, prompt, image) ?? false,
         syncDesignSelection: (reference, label) =>
           inputAreaRef.current?.syncDesignSelection(reference, label) ?? false,
-        sendDesignSelection: async (reference, label, prompt) =>
-          (await inputAreaRef.current?.sendDesignSelection(reference, label, prompt)) ?? false,
+        sendDesignSelection: async (reference, label, prompt, image) =>
+          (await inputAreaRef.current?.sendDesignSelection(reference, label, prompt, image)) ??
+          false,
         sendDesignNotes: async (notes) =>
           (await inputAreaRef.current?.sendDesignNotes(notes)) ?? false,
         insertSessionMention: (sessionId: string) => {

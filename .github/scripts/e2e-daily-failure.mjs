@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 export const MAX_FAILURE_INDEX_ENTRIES = 500;
 export const MAX_FAILURE_INDEX_BYTES = 1024 * 1024;
 export const MAX_VIDEO_BYTES = 10 * 1024 * 1024;
+const STABLE_ID_PATTERN_ACCEPTING_PRE_RENAME_PR_ARTIFACTS = /^(?:MOLLY|LODY)-[A-Z0-9-]+-\d{3}$/u;
 
 function parseArgs(argv) {
   const values = new Map();
@@ -71,7 +72,7 @@ async function readFailureIndex(evidenceRoot) {
 function validateFailureEntry(entry, seen) {
   if (!entry || typeof entry !== 'object') throw new Error('Invalid failure-index entry');
   const { stableId, path } = entry;
-  if (typeof stableId !== 'string' || !/^LODY-[A-Z0-9-]+-\d{3}$/u.test(stableId)) {
+  if (typeof stableId !== 'string' || !STABLE_ID_PATTERN_ACCEPTING_PRE_RENAME_PR_ARTIFACTS.test(stableId)) {
     throw new Error('Invalid failure-index stableId');
   }
   const expectedPath = `scenarios/${stableId.toLowerCase()}`;

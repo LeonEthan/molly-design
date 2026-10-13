@@ -17,7 +17,7 @@ network request, or longer timeout.
 ## Evidence and ownership
 
 [The failed smoke job](https://github.com/LeonEthan/molly-design/actions/runs/37897784257/job/113713036510)
-timed out in `LODY-SESSION-001` while the model picker remained disabled. Its
+timed out in `MOLLY-SESSION-001` while the model picker remained disabled. Its
 retained screenshot showed “Reconnecting” and a daemon-starting message. The CLI
 reported ready, while the renderer's meta room moved from `connecting` to
 `reconnecting` within one millisecond and never joined before teardown. The next
@@ -55,6 +55,6 @@ timeout would not repair a false renderer status while the relay stays connected
   together: 16 tests across four files.
 - Components typechecking and a fresh `pnpm e2e:build` pass. The full isolated
   desktop suite passes all four scenarios and 23 steps, including every P0 smoke
-  scenario and P1 browser navigation. `LODY-SESSION-001` completes its initial
+  scenario and P1 browser navigation. `MOLLY-SESSION-001` completes its initial
   document sync in 19 milliseconds in that run.
 - The updated GitHub Actions result still needs verification after publication.

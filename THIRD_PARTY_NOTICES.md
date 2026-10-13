@@ -1747,7 +1747,7 @@ This list covers shipped production dependencies plus vendored third-party asset
 - `camelcase @ 5.3.1` — https://github.com/sindresorhus/camelcase#readme
   - Author: Sindre Sorhus
   - Description: Convert a dash/dot/underscore/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`
-- `cc-safety-net @ 2.6.0` — https://ccsafetynet.com
+- `cc-safety-net @ 2.6.10` — https://ccsafetynet.com
   - Author: J Liew
   - Description: A coding agent CLI hook - block destructive commands and secret file access
 - `ccount @ 2.0.1` — https://github.com/wooorm/ccount#readme

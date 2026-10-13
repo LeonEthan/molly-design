@@ -124,6 +124,11 @@ automatically repeats the dispatched request.
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`
 ([mcp.ts](src/mcp.ts)). Protected MCP credentials arrive once per worker on fd 3.
+Catalog labels may contain spaces or non-ASCII characters. The adapter keeps names
+already accepted by Pi unchanged; other labels use a short deterministic native name
+derived from the existing catalog ID, or the original name for standalone ACP servers.
+Their readable label remains in the native description. Catalog IDs, revisions,
+credential bindings and saved names are unchanged; duplicate native names are refused.
 A catalog `description` (and Molly's fixed built-in summary) travels in ACP
 `_meta.mollyMcpDescription` and becomes Pi's native server `description`, the one line
 listed in the `mcp_servers` prompt section. Catalog `exposure` and `toolExposure` use

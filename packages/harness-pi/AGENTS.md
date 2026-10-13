@@ -47,7 +47,10 @@ Read [README](README.md) before changing session construction, packages or the b
 - MCP uses Pi's native MCP, codemode and tool search. Main-session codemode exposes no
   `models` global: images go only through the user's image connection. Protected MCP values stay literal,
   bind the workspace/server/revision and are never written to config files. HTTP header
-  credentials do not require an `Authorization` field.
+  credentials do not require an `Authorization` field. Preserve valid native server names;
+  adapt other display labels through the existing catalog identity, retaining the label
+  in the native description and refusing duplicate native identities. Never rewrite saved
+  names or credential bindings for this adaptation.
 - Disable native agent/provider retries in the managed profile. The host's public
   `session_before_compact` hook cancels recovery with `willRetry`; ordinary compaction remains.
 - Refresh host time, the read-before-edit reminder and personal memory through

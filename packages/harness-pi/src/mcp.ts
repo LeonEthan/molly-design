@@ -10,6 +10,7 @@ import {
   type SettingsManager,
 } from '@earendil-works/pi-coding-agent';
 import { readFile, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import {
   isMcpExposure,
@@ -36,6 +37,20 @@ function literalConfigValue(value: string): string {
   return escaped.startsWith('!') ? `$${escaped}` : escaped;
 }
 
+function nativeMcpServerName(server: McpServer): string {
+  if (/^[A-Za-z0-9_-]+$/.test(server.name)) return server.name;
+  const connection = server._meta?.mollyConnection;
+  const identity =
+    connection &&
+    typeof connection === 'object' &&
+    'id' in connection &&
+    typeof connection.id === 'string' &&
+    connection.id.trim()
+      ? `catalog:${connection.id}`
+      : `acp:${server.name}`;
+  return `molly_${createHash('sha256').update(identity).digest('hex').slice(0, 24)}`;
+}
+
 export function acpMcpConfig(
   servers: readonly McpServer[],
   cwd: string,
@@ -43,10 +58,13 @@ export function acpMcpConfig(
 ): { name: string; config: NativeMcpServerConfig }[] {
   assertLiteralPath(cwd);
   const names = new Set<string>();
+  const nativeNames = new Set<string>();
   const used = new Set<(typeof credentials)[number]>();
   const result = servers.map((server): { name: string; config: NativeMcpServerConfig } => {
     if (!server.name.trim() || names.has(server.name))
       throw new Error('pi_acp_mcp_server_identity');
+    const nativeName = nativeMcpServerName(server);
+    if (nativeNames.has(nativeName)) throw new Error('pi_acp_mcp_server_identity');
     const raw = server._meta?.mollyMcpCredential;
     if (raw !== undefined && !credentials.length)
       throw new Error('pi_acp_protected_mcp_not_integrated');
@@ -71,12 +89,17 @@ export function acpMcpConfig(
       throw new Error('pi_acp_mcp_exposure_invalid');
     if (toolExposure !== undefined && !isMcpToolExposureRules(toolExposure))
       throw new Error('pi_acp_mcp_exposure_invalid');
+    const description = [
+      ...(nativeName !== server.name ? [server.name.trim()] : []),
+      ...(rawDescription?.trim() ? [rawDescription.trim()] : []),
+    ].join(': ');
     const presentation = {
-      ...(rawDescription?.trim() ? { description: rawDescription.trim() } : {}),
+      ...(description ? { description } : {}),
       ...(exposure !== undefined ? { exposure } : {}),
       ...(toolExposure !== undefined ? { toolExposure: toPiToolExposure(toolExposure) } : {}),
     };
     names.add(server.name);
+    nativeNames.add(nativeName);
     if ('command' in server) {
       for (const value of [server.command, ...server.args]) assertLiteralPath(value);
       const env = server.env.filter(
@@ -85,7 +108,7 @@ export function acpMcpConfig(
       if (new Set(env.map(({ name }) => name)).size !== env.length)
         throw new Error('pi_acp_mcp_duplicate_environment');
       return {
-        name: server.name,
+        name: nativeName,
         config: {
           ...presentation,
           command: server.command,
@@ -109,7 +132,7 @@ export function acpMcpConfig(
     if (new Set(headers.map(({ name }) => name.toLowerCase())).size !== headers.length)
       throw new Error('pi_acp_mcp_duplicate_headers');
     return {
-      name: server.name,
+      name: nativeName,
       config: {
         ...presentation,
         type: 'http',

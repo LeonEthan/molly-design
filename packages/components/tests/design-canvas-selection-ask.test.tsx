@@ -155,7 +155,31 @@ describe('inline ask from the canvas selection', () => {
     });
     await emit({ action: 'ask', prompt: 'Warmer headline', send: false });
     expect(sent).toEqual([]);
-    expect(referenced).toEqual([[reference, 'Warmer headline']]);
+    expect(referenced).toEqual([[reference, 'Warmer headline', undefined]]);
+  });
+
+  it('sends a preset as its full instruction followed by the typed detail', async () => {
+    const sent: unknown[] = [];
+    await mount({
+      onSendSelection: async (...args) => {
+        sent.push(args);
+      },
+      onReferenceSelection: () => {},
+    });
+    await emit({ action: 'ask', prompt: '', send: true, preset: 'remove-background' });
+    await emit({ action: 'ask', prompt: 'a red umbrella', send: true, preset: 'replace-object' });
+    expect(sent).toEqual([
+      [
+        reference,
+        "Remove the background of the selected image: edit it into a transparent PNG that keeps only the subject, then replace only that image's asset. Preserve the rest of the artwork.",
+        undefined,
+      ],
+      [
+        reference,
+        "In the selected image, replace the object described below, matching the existing lighting and perspective. Use its current image as the source and replace only that image's asset. Preserve the rest of the artwork. Replace:\na red umbrella",
+        undefined,
+      ],
+    ]);
   });
 
   it('shows a send failure on the canvas', async () => {
@@ -189,6 +213,40 @@ describe('inline ask from the canvas selection', () => {
       });
     });
     expect(sent).toEqual([]);
+  });
+});
+
+describe('marked images from the canvas', () => {
+  const image = { mimeType: 'image/png', bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) };
+
+  it('sends the marked copy as an image attachment with the marks instruction', async () => {
+    const sent: [DesignElementReference, string, File | undefined][] = [];
+    await mount({
+      onSendSelection: async (target, prompt, file) => {
+        sent.push([target, prompt, file]);
+      },
+      onReferenceSelection: () => {},
+    });
+    await emit({ action: 'marks', prompt: 'Make it gold', send: true, count: 2, image });
+    expect(sent).toHaveLength(1);
+    const [target, prompt, file] = sent[0]!;
+    expect(target).toEqual(reference);
+    expect(prompt).toMatch(/^The attached image is a copy of the selected image with .* marks/);
+    expect(prompt.endsWith('Requested change:\nMake it gold')).toBe(true);
+    expect(file?.type).toBe('image/png');
+    expect(file?.size).toBe(4);
+  });
+
+  it('adds the marked copy and instruction to the draft when not sending', async () => {
+    const referenced: [DesignElementReference, string | undefined, File | undefined][] = [];
+    await mount({
+      onSendSelection: async () => {},
+      onReferenceSelection: (target, prompt, file) => referenced.push([target, prompt, file]),
+    });
+    await emit({ action: 'marks', prompt: 'Make it gold', send: false, count: 1, image });
+    expect(referenced).toHaveLength(1);
+    expect(referenced[0]![1]).toContain('Make it gold');
+    expect(referenced[0]![2]?.name).toBe('marked.png');
   });
 });
 

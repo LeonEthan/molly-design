@@ -16,8 +16,10 @@ approved phase A on 2026-10-10 and it is implemented in
 [canvas inline ask](../../implemented/feature/2026-10-10-canvas-inline-ask.md).
 Phase B is implemented in
 [canvas numbered notes](../../implemented/feature/2026-10-11-canvas-numbered-notes.md);
-phases C and E remain proposals, and the research comes from public documentation,
-not hands-on use.
+phases C and E are implemented in
+[canvas image marks and quick edits](../../implemented/feature/2026-10-12-canvas-image-marks-and-presets.md).
+Only phase D's hold-to-compare remains a proposal, and the research comes from
+public documentation, not hands-on use.
 
 ## Research (public sources, 2026-10-10)
 
@@ -52,7 +54,9 @@ payload Codex sends to its agent are not publicly documented.
   with their own instruction; "Send N notes" sends one turn with N references
   and one "Before Molly's edit" restore point. Reuses multi-reference parsing.
   Fits current Spec intent.
-- **C. Marks inside an image.** A point, box or scribble on a selected image is
+- **C. Marks inside an image.** Implemented, see
+  [canvas image marks and quick edits](../../implemented/feature/2026-10-12-canvas-image-marks-and-presets.md).
+  A point, box or scribble on a selected image is
   rendered onto a copy attached as a reference image ("edit only where marked")
   and applied through the existing image edit tool. Avoids the Spec's "no mask
   editor" by adding only an annotated reference. Automatic object recognition
@@ -64,7 +68,10 @@ payload Codex sends to its agent are not publicly documented.
   a run; afterwards fading "changed" outlines, hold-to-compare against "Before
   Molly's edit", and an advisory element-ID diff that reports changes outside
   the selection without blocking or repairing. Changes Spec intent.
-- **E. Kind-aware actions.** Presets per element kind (remove background,
+- **E. Kind-aware actions.** Implemented as quick-edit chips after the
+  inline ask's prompt rather than a Tab shortcut, see
+  [canvas image marks and quick edits](../../implemented/feature/2026-10-12-canvas-image-marks-and-presets.md).
+  Presets per element kind (remove background,
   replace object, relight; "Make wording editable" to add `textCopy`; "Split
   into layers" via the layered workflow), plus Tab presets in the inline ask.
   Offer only what the tools can actually do. Fits current Spec intent.

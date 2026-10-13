@@ -171,6 +171,47 @@ export type DesignCanvasCommandResult = z.infer<typeof DesignCanvasCommandResult
 
 export const DESIGN_ASK_PROMPT_MAX = 4000;
 export const DESIGN_NOTES_MAX = 10;
+export const DESIGN_MARKS_MAX = 10;
+/** Marked copies stay within the composer's inline image budget. */
+export const DESIGN_MARKED_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+export const DESIGN_MARKED_IMAGE_MAX_EDGE = 2048;
+
+/**
+ * Kind-aware Ask presets. Each preset applies only to selections whose elements
+ * all have its kind; `detail` says whether the user must describe the change.
+ * Prompts are composed by the shell from its locale, never by the canvas.
+ */
+export const DESIGN_ASK_PRESETS = {
+  'remove-background': { kind: 'image', detail: false, single: false },
+  'replace-object': { kind: 'image', detail: true, single: true },
+  relight: { kind: 'image', detail: false, single: false },
+  'wording-editable': { kind: 'image', detail: false, single: true },
+  'split-layers': { kind: 'image', detail: false, single: true },
+  shorten: { kind: 'text', detail: false, single: false },
+  rewrite: { kind: 'text', detail: true, single: false },
+} as const satisfies Record<
+  string,
+  { kind: DesignElementKind; detail: boolean; single: boolean }
+>;
+export type DesignAskPreset = keyof typeof DESIGN_ASK_PRESETS;
+export const DesignAskPresetSchema = z.enum(
+  Object.keys(DESIGN_ASK_PRESETS) as [DesignAskPreset, ...DesignAskPreset[]]
+);
+
+/** The canvas's marked copy of one selected image, read by main after the reference capture. */
+export const DesignMarkedImageSchema = z
+  .object({
+    elementId: z.string().min(1).max(200),
+    count: z.number().int().min(1).max(DESIGN_MARKS_MAX),
+    mimeType: z.enum(['image/png', 'image/jpeg']),
+    data: z
+      .string()
+      .min(1)
+      .max(Math.ceil(DESIGN_MARKED_IMAGE_MAX_BYTES / 3) * 4)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/),
+  })
+  .strict();
+export type DesignMarkedImage = z.infer<typeof DesignMarkedImageSchema>;
 /** Numbered canvas notes read from the visible canonical canvas, in pin order. */
 export const DesignNotesSchema = z
   .array(
@@ -218,8 +259,9 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
     .object({
       type: z.literal('ask'),
       selectionEpoch: z.number().int().nonnegative(),
-      prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+      prompt: z.string().trim().max(DESIGN_ASK_PROMPT_MAX),
       send: z.boolean(),
+      preset: DesignAskPresetSchema.optional(),
     })
     .strict(),
   z
@@ -228,7 +270,24 @@ export const DesignToolbarRequestSchema = z.discriminatedUnion('type', [
       notesEpoch: z.number().int().nonnegative(),
     })
     .strict(),
-]);
+  z
+    .object({
+      type: z.literal('marks'),
+      selectionEpoch: z.number().int().nonnegative(),
+      marksEpoch: z.number().int().nonnegative(),
+      prompt: z.string().trim().min(1).max(DESIGN_ASK_PROMPT_MAX),
+      send: z.boolean(),
+    })
+    .strict(),
+]).superRefine((request, ctx) => {
+  if (request.type !== 'ask' || request.prompt) return;
+  if (!request.preset || DESIGN_ASK_PRESETS[request.preset].detail)
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Describe the change',
+      path: ['prompt'],
+    });
+});
 export type DesignToolbarRequest = z.infer<typeof DesignToolbarRequestSchema>;
 export const DesignToolbarPresentationSchema = z
   .object({
@@ -236,7 +295,7 @@ export const DesignToolbarPresentationSchema = z
     actionsEnabled: z.boolean(),
     labels: z
       .record(z.string().max(80), z.string().max(500))
-      .refine((value) => Object.keys(value).length <= 100),
+      .refine((value) => Object.keys(value).length <= 160),
   })
   .strict();
 export type DesignToolbarPresentation = z.infer<typeof DesignToolbarPresentationSchema>;
@@ -253,6 +312,24 @@ export const DesignHighlightSchema = z
   )
   .max(DESIGN_HIGHLIGHT_TONES.length);
 export type DesignHighlight = z.infer<typeof DesignHighlightSchema>;
+
+/** Decodes a marked copy for the referenced image; rejects other targets and non-image bytes. */
+export function decodeDesignMarkedImage(value: unknown, elementId: string) {
+  const image = DesignMarkedImageSchema.parse(value);
+  if (image.elementId !== elementId)
+    throw Error('Marks belong to another element; mark the selected image again');
+  const bytes = Uint8Array.from(atob(image.data), (char) => char.charCodeAt(0));
+  const signature =
+    image.mimeType === 'image/png'
+      ? [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+      : [0xff, 0xd8, 0xff];
+  if (
+    bytes.length > DESIGN_MARKED_IMAGE_MAX_BYTES ||
+    signature.some((byte, index) => bytes[index] !== byte)
+  )
+    throw Error('Marked image is not a valid PNG or JPEG under 5 MB');
+  return { count: image.count, mimeType: image.mimeType, bytes };
+}
 
 export type DesignElementChanges = { changed: string[]; removed: string[] };
 

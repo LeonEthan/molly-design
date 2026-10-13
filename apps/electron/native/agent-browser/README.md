@@ -55,6 +55,12 @@ Electron owns the page and private CDP WebSocket. The daemon receives no user
 profile, plugin, provider, auto-connect, storage export or browser installation
 options. Revocation cuts CDP before waiting for process/file cleanup. WebMCP
 cancellation cannot roll back effects already sent by the website.
+Electron reads the public CLI JSON reply: Rust `Option` fields serialize absent
+`data` and `error` as `null`. The host accepts null or omitted values while retaining
+record/string validation for present values. Invalid replies still revoke the lease
+and report an unknown outcome without replay. The deterministic runtime test uses
+synthetic child-process replies through the actual host parser; it does not replace
+native-page or real-website acceptance.
 The host invalidates tool handles and a single-use invocation permit on catalog,
 document, frame and session changes. Its existing CDP interceptor validates and
 consumes the permit synchronously before sending `WebMCP.invokeTool`. The browser

@@ -20,8 +20,8 @@ const ManifestSchema = z.object({
 })
 const ResponseSchema = z.object({
   success: z.boolean(),
-  data: z.record(z.string(), z.unknown()).optional(),
-  error: z.string().optional()
+  data: z.record(z.string(), z.unknown()).nullish(),
+  error: z.string().nullish()
 })
 export type NativeBrowserResponse = z.infer<typeof ResponseSchema>
 const unavailable = (): Error => new Error('The packaged agent-browser runtime is unavailable.')

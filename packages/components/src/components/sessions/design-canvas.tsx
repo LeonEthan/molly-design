@@ -13,10 +13,11 @@ import { useBlocker, useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getSessionRoomId, type SessionId } from '@molly/shared';
+import { MOLLY_HARNESS_ID } from '@molly/shared/embedded-harness';
 import { activeWorkspaceRuntimeAtom } from '@/atoms/runtime';
 import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
-import { userAtom, currentWorkspaceIdAtom } from '@/atoms';
+import { userAtom, currentWorkspaceIdAtom, getAllAgentConfigAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
 import {
   latestCommittedDesignReceipt,
@@ -81,6 +82,7 @@ export function useDesignCreation(workspaceSlug: string) {
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const user = useAtomValue(userAtom);
   const machine = useAtomValue(localProbeResultAtom);
+  const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   const navigate = useNavigate();
   const pending = useRef<Association | null>(null);
   usePendingDesignRecovery();
@@ -94,6 +96,13 @@ export function useDesignCreation(workspaceSlug: string) {
     const service = getIpcServices()?.design;
     if (!service || !runtime || !user || !machine?.machineId)
       throw Error('Local workspace is not ready');
+    const config = agentConfigs.find(
+      (candidate) =>
+        candidate.machineId === machine.machineId &&
+        candidate.cliType === 'builtin' &&
+        candidate.agentType === MOLLY_HARNESS_ID
+    );
+    if (!config) throw Error('The local Molly catalog is not ready');
     const association = pending.current ?? {
       sessionId: crypto.randomUUID(),
       name,
@@ -113,8 +122,9 @@ export function useDesignCreation(workspaceSlug: string) {
       titleSource: 'user',
       createdAt: association.createdAt,
       isArchived: false,
-      cliType: 'builtin',
-      agentType: '',
+      cliType: config.cliType,
+      agentType: config.agentType,
+      agentConfigId: config.id,
       design: { artworkId: association.sessionId, path: 'design.json' },
     });
     writeStoredLastActiveTabState(association.sessionId as SessionId, {
@@ -1071,6 +1081,7 @@ export function DesignCanvas({
 export function usePendingDesignRecovery() {
   const runtime = useAtomValue(activeWorkspaceRuntimeAtom);
   const user = useAtomValue(userAtom);
+  const agentConfigs = useAtomValue(getAllAgentConfigAtom);
   useEffect(() => {
     const service = getIpcServices()?.design;
     if (!runtime || !user || !service) return;
@@ -1081,16 +1092,26 @@ export function usePendingDesignRecovery() {
           if (association.userId !== user.id) continue;
           const roomId = getSessionRoomId(association.sessionId as SessionId);
           const existing = await runtime.repo.getDocMeta(roomId);
+          const config = !existing?.meta
+            ? agentConfigs.find(
+                (candidate) =>
+                  candidate.machineId === association.machineId &&
+                  candidate.cliType === 'builtin' &&
+                  candidate.agentType === MOLLY_HARNESS_ID
+              )
+            : undefined;
+          if (!existing?.meta && !config) continue;
           await runtime.writer.upsertDocMeta(roomId, {
-            ...(!existing?.meta
+            ...(config
               ? {
                   id: association.sessionId,
                   ...association,
                   title: association.name,
                   titleSource: 'draft',
                   isArchived: false,
-                  cliType: 'builtin',
-                  agentType: '',
+                  cliType: config.cliType,
+                  agentType: config.agentType,
+                  agentConfigId: config.id,
                 }
               : {}),
             design: { artworkId: association.sessionId, path: 'design.json' },
@@ -1099,5 +1120,5 @@ export function usePendingDesignRecovery() {
         }
       })
       .catch((error) => toast.error(String(error)));
-  }, [runtime, user]);
+  }, [runtime, user, agentConfigs]);
 }

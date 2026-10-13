@@ -79,6 +79,25 @@ are retired from Molly. Existing turn diffs read historical snapshots; their sum
 uses the shared conversation derivation without provider scans or retries. Saved Changes
 panels show Files. File previews, editing and send-to-chat references remain.
 
+### Copy a design without starting a turn
+
+Save as new design keeps the native copy and association acknowledgement flow. Before
+copying, the renderer resolves the published builtin Molly configuration on the local
+machine and records that configuration's identity in the new Session. It does not copy
+the source conversation, native Agent session, selected model or reasoning preference.
+The ordinary composer reads model choices from that configuration's existing capability
+catalog; the user selects a model and sends the next message explicitly. A missing
+local Molly configuration reports a preparation failure before creating a copy.
+
+For a persisted but unpublished artwork association, recovery waits for the same-machine
+Molly catalog before creating missing Session metadata. Existing Session bindings remain
+unchanged, including historical copies made with an empty Agent identity. The explicit
+continuation path below also accepts those builtin independent copies only when they
+have no provider configuration or project/parent/repository/branch binding and their
+artwork id equals their Session id. It retains the original empty identity as provenance;
+the user selects a valid same-machine Molly configuration for the new conversation.
+Neither opening an artwork nor repairing its missing association dispatches a turn.
+
 ### Continue an old design with Molly
 
 The owned legacy design's header menu negotiates preparation support on its machine.

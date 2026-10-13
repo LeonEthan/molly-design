@@ -96,7 +96,7 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
     () => (localMachineId === null ? [] : [localMachineId]),
     [localMachineId]
   );
-  useMachineFlockAgentConfigsForMachineIds(machineIds, { syncRemote: false });
+  useMachineFlockAgentConfigsForMachineIds(machineIds);
   const configs = useAtomValue(getAllAgentConfigAtom);
   return (
     <ProvidersScreenView

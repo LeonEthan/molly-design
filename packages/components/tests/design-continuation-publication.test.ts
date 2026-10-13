@@ -43,8 +43,13 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function fixture(withReceipt = true) {
+async function fixture(withReceipt = true, legacyCopy = false) {
   const receipt = record();
+  if (legacyCopy) {
+    receipt.source.agentType = '';
+    receipt.source.design.artworkId = receipt.source.id;
+    receipt.reference.source.artworkId = receipt.source.id;
+  }
   const repo = await LoroRepo.create({});
   cleanups.push(() => repo.destroy());
   const doc = new LoroDoc();
@@ -113,6 +118,21 @@ async function fixture(withReceipt = true) {
 }
 
 describe('design continuation renderer publication', () => {
+  it('publishes an explicitly confirmed legacy copy while keeping its empty source identity', async () => {
+    const f = await fixture(true, true);
+    const before = f.doc.version().toJSON();
+    const meta = await f.writer.publishDesignContinuation(f.receipt, identity);
+    expect(meta).toMatchObject({
+      agentType: 'molly',
+      agentConfigId: 'molly-config',
+      design: f.receipt.source.design,
+    });
+    expect(meta).not.toHaveProperty('modelId');
+    expect(f.doc.version().toJSON()).toEqual(before);
+    expect(await f.repo.getDocMeta(f.sourceRoom)).toEqual(f.sourceBefore);
+    expect(f.receipt.source.agentType).toBe('');
+  });
+
   it.each(['success', 'failure', 'cancel', 'delete'] as const)(
     'waits for local durability without rolling back publication: %s',
     async (outcome) => {

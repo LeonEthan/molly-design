@@ -127,9 +127,10 @@ draft digest for all supported design Agents, independently of hook/image/render
 support; it grants no commit authority. Pi native settlement remains separate.
 Public reminder hooks do not establish read proofs or authorize writes.
 
-Design continuation freezes `ACPSessionConfig.agentConfigId`; normalization and
-dispatch preserve it. `SessionMeta.acpSessionAgentConfigId` identifies the provider
-that owns the persisted ACP ID, independently of the next selected provider.
+Continuation freezes `ACPSessionConfig.agentConfigId` through normalization/dispatch.
+`SessionMeta.acpSessionAgentConfigId` binds the ACP ID to its original provider.
+Empty source identities are builtin independent-copy provenance only; execution
+identities remain nonempty.
 
 ## Isolated title defaults
 

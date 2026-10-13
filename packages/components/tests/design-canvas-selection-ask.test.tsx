@@ -31,6 +31,7 @@ vi.mock('../src/atoms', async () => {
     ...(await import('../src/atoms/layout-state')),
     ...(await import('../src/atoms/sidebar-state')),
     userAtom: atom(null),
+    getAllAgentConfigAtom: atom([]),
     currentWorkspaceIdAtom: atom('workspace'),
     WORKSPACE_FOCUS_SCOPES: { content: 'content' },
   };

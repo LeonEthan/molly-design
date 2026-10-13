@@ -33,7 +33,11 @@ vi.mock('jotai', async (original) => ({
           ? state.canvasState
           : null,
 }));
-vi.mock('../src/atoms', () => ({ userAtom: 'user', currentWorkspaceIdAtom: 'workspace' }));
+vi.mock('../src/atoms', () => ({
+  userAtom: 'user',
+  currentWorkspaceIdAtom: 'workspace',
+  getAllAgentConfigAtom: 'configs',
+}));
 vi.mock('../src/atoms/runtime', () => ({ activeWorkspaceRuntimeAtom: 'runtime' }));
 vi.mock('../src/atoms/local-probe', () => ({ localProbeResultAtom: 'machine' }));
 vi.mock('../src/atoms/presence', () => ({ sessionLiveStatusAtomFamily: () => 'live' }));

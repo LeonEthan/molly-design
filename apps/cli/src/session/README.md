@@ -48,6 +48,11 @@ native transcript. Preparation checks owner, machine, target catalog, source cha
 target tombstones and one-level parent topology; it awaits local persistence but
 publishes no runnable Session metadata. Failed persistence can be explicitly retried;
 corrupt/future receipts are preserved and refused. It does not scan rooms on startup.
+The source-provenance schema also accepts historical builtin copies with an empty Agent
+type only when they own their artwork and have no Agent configuration or inherited
+project, parent, repository or branch. The empty value remains in the receipt; target
+configuration and new-turn identities remain valid Molly bindings. This compatibility
+uses the same explicit preparation and publication, never an automatic metadata rewrite.
 The existing Molly bootstrap can consume a receipt's historical text only when the
 target's workspace, source, artwork, owner, provider and opener bindings agree. It
 labels the reference as data, reuses it on exact native restore, and grants no tool

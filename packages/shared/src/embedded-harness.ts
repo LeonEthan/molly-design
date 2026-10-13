@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpConnectionSpec } from './workspace-mcp';
-import { ImageConnectionProtocolSchema } from '#image-connection';
+import { ImageConnectionEndpointSchema, ImageConnectionProtocolSchema } from '#image-connection';
 // The workspace-relative attachment root is a harness boundary contract too:
 // the daemon materializes resource_link files there and the adapter validates
 // containment against the same value (issue #49: a stale copy broke prompts).
@@ -625,7 +625,7 @@ export type CheckModelConnection = z.infer<typeof CheckModelConnectionSchema>;
 export const CheckImageConnectionSchema = z
   .object({
     protocol: ImageConnectionProtocolSchema.optional(),
-    baseUrl: ModelEndpointSchema,
+    baseUrl: ImageConnectionEndpointSchema,
     apiKey: z.string().trim().min(1).max(16_384).optional(),
     expectedRevision: revision.optional(),
   })
@@ -835,7 +835,7 @@ export const ProtectedImageConnectionSchema = z
     revision,
     enabled: z.boolean(),
     protocol: ImageConnectionProtocolSchema.optional(),
-    baseUrl: ModelEndpointSchema,
+    baseUrl: ImageConnectionEndpointSchema,
     model: z.string().trim().min(1).max(200),
     hasApiKey: z.boolean(),
     legacyHistoryMayContainKey: z.boolean(),

@@ -5,6 +5,7 @@
   "version": "0.0.1",
   "type": "module",
   "imports": {
+    "#browser-url": "./src/browser-url.ts",
     "#image-connection": "./src/image-connection.ts",
     "#session-paths": "./src/session-paths.ts"
   },

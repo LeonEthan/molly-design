@@ -49,6 +49,12 @@ model suggestions never select a model automatically. The setup strip distinguis
 saved configuration from a passed key check and labels image and website setup as
 optional. See the [Phase 3 record](../../../../.agents/notes/implemented/bug-fix/2026-10-05-connection-form-clarity.md).
 
+Image settings reuse the shared image endpoint contract for field validation,
+save, free discovery and protected run metadata. It permits HTTPS, loopback HTTP
+and literal RFC1918 IPv4 HTTP for trusted local image services; the help tip explains
+that HTTP sends keys and images without TLS. Public HTTP and named LAN HTTP fail
+at the address field. Model, OAuth and MCP endpoint restrictions are unchanged.
+
 ## Settings explanations
 
 General settings name concrete actions and keep privacy/data destinations beside

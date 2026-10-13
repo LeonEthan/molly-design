@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from 'react';
 import {
-  ModelEndpointSchema,
   SaveProtectedImageConnectionSchema,
   type CheckImageConnection,
   type ConnectionCheckResult,
@@ -19,8 +18,8 @@ import { useAtom } from 'jotai';
 import {
   IMAGE_CONNECTION_MAX_MODEL_LENGTH,
   IMAGE_CONNECTION_PROTOCOLS,
+  ImageConnectionEndpointSchema,
   imageConnectionProtocol,
-  normalizeImageConnectionBaseUrl,
   type ImageConnectionProtocol,
 } from '@molly/shared';
 import { imageKeyMigrationNoticeDismissedAtom } from '@/atoms';
@@ -131,7 +130,7 @@ export function imageConnectionDraftIssues(draft: ImageConnectionFormDraft): {
   model: boolean;
 } {
   return {
-    baseUrl: normalizeImageConnectionBaseUrl(draft.baseUrl) === undefined,
+    baseUrl: !ImageConnectionEndpointSchema.safeParse(draft.baseUrl.trim()).success,
     model:
       draft.model.trim().length === 0 ||
       draft.model.trim().length > IMAGE_CONNECTION_MAX_MODEL_LENGTH,
@@ -266,7 +265,7 @@ export function ImageConnectionForm({
   );
   const protocolCopy = PROTOCOL_COPY[draft.protocol];
   const checkRequest = useMemo<CheckImageConnection | null>(() => {
-    if (draft.protocol === 'dashscope' || !ModelEndpointSchema.safeParse(baseUrl).success)
+    if (draft.protocol === 'dashscope' || !ImageConnectionEndpointSchema.safeParse(baseUrl).success)
       return null;
     if (typedKey) return { protocol: draft.protocol, baseUrl, apiKey: typedKey };
     if (stored?.revision && hasStoredKey && !draft.clearApiKey && stored.baseUrl === baseUrl)
@@ -312,7 +311,11 @@ export function ImageConnectionForm({
         <Field
           htmlFor={`${fieldId}-base-url`}
           label={t('settings.imageConnection.baseUrl')}
-          icon={<InfoTip>{t(protocolCopy.baseUrlHint)}</InfoTip>}
+          icon={
+            <InfoTip>
+              {t(protocolCopy.baseUrlHint)} {t('settings.imageConnection.endpointTransportHint')}
+            </InfoTip>
+          }
           hint={
             issues.baseUrl && baseUrl.length > 0
               ? t('settings.imageConnection.invalidBaseUrl')
@@ -629,7 +632,16 @@ export function ImageConnectionSetting({
     setSaveError(undefined);
     try {
       const input = buildImageConnectionSave(draft, stored);
-      if (!input) throw new Error('invalid_image_connection');
+      if (!input) {
+        setSaveError(
+          t(
+            imageConnectionDraftIssues(draft).baseUrl
+              ? 'settings.imageConnection.invalidBaseUrl'
+              : 'settings.imageConnection.invalidFields'
+          )
+        );
+        return false;
+      }
       const connection = await ipc.modelConnections.saveImage(input);
       setStored(connection);
       setCheck(

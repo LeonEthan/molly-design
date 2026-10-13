@@ -3,9 +3,9 @@
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 Parent `AGENTS.md` files also apply.
 
-Settings owns model connections and the workspace MCP catalog. The catalog's durability
-rule — a local Flock write is durable, and the upload that follows is not a settings
-concern — is in the root [AGENTS.md](../../../../../AGENTS.md).
+Settings owns model connections and the MCP catalog. Root
+[AGENTS.md](../../../../../AGENTS.md) defines local Flock durability; later upload
+is outside settings.
 
 MCP credential saves encrypt through main before persisting a public reference in the
 catalog. A failed catalog write retains that saved reference for explicit retry; never
@@ -66,6 +66,9 @@ Preserve historical catalog fields when editing unrelated values.
   ticks only saved model/image setups, never Pinterest, and leaves unread items empty. Preserve old config/setup rows without mounting login, installation,
   retry, refresh, editing or automatic migration. Device management retains monitoring
   independently.
+- Image forms validate the shared image endpoint contract before enabling Save/check.
+  Private IP HTTP is image-only; explain unencrypted transport. Invalid endpoints show
+  field errors, not credential-storage failures.
 - A settings row (`compact-layout.tsx`) is one grid: the label column takes the
   remaining space and the control column hugs its content. Never size either column
   from a viewport breakpoint — settings render in a panel far narrower than the window,

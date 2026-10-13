@@ -12,6 +12,9 @@ import {
   DesignHighlightSchema,
   DesignNotesSchema,
   DESIGN_NOTES_MAX,
+  DESIGN_MARKS_MAX,
+  DESIGN_MARKED_IMAGE_MAX_BYTES,
+  decodeDesignMarkedImage,
   diffDesignElements,
 } from '../src/design-selection-commands';
 
@@ -345,5 +348,52 @@ describe('element change feedback', () => {
       Array.from({ length: DESIGN_NOTES_MAX + 1 }, () => note),
     ])
       expect(DesignNotesSchema.safeParse(input).success).toBe(false);
+  });
+  it('lets a preset stand in for the prompt only when it needs no detail', () => {
+    const ask = { type: 'ask', selectionEpoch: 4, send: true };
+    expect(
+      DesignToolbarRequestSchema.parse({ ...ask, prompt: '  ', preset: 'remove-background' })
+    ).toEqual({ ...ask, prompt: '', preset: 'remove-background' });
+    expect(
+      DesignToolbarRequestSchema.parse({ ...ask, prompt: 'a red umbrella', preset: 'replace-object' })
+    ).toEqual({ ...ask, prompt: 'a red umbrella', preset: 'replace-object' });
+    for (const input of [
+      { ...ask, prompt: '', preset: 'replace-object' },
+      { ...ask, prompt: '' },
+      { ...ask, prompt: 'Warmer', preset: 'upscale' },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+  it('carries only the marks epoch and a prompt in a marks request', () => {
+    const marks = { type: 'marks', selectionEpoch: 2, marksEpoch: 5, prompt: 'Gold', send: true };
+    expect(DesignToolbarRequestSchema.parse(marks)).toEqual(marks);
+    for (const input of [
+      { ...marks, prompt: ' ' },
+      { ...marks, marks: [{ kind: 'point', at: [0.5, 0.5] }] },
+      { ...marks, image: 'iVBORw0KGgo=' },
+      { type: 'marks', selectionEpoch: 2, prompt: 'Gold', send: true },
+    ])
+      expect(DesignToolbarRequestSchema.safeParse(input).success).toBe(false);
+  });
+  it('decodes a marked copy only for the referenced image and real image bytes', () => {
+    const png = btoa(String.fromCharCode(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0));
+    const copy = { elementId: 'photo', count: 2, mimeType: 'image/png', data: png };
+    const decoded = decodeDesignMarkedImage(copy, 'photo');
+    expect(decoded.count).toBe(2);
+    expect([...decoded.bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    expect(() => decodeDesignMarkedImage(copy, 'headline')).toThrow('another element');
+    expect(() =>
+      decodeDesignMarkedImage({ ...copy, mimeType: 'image/jpeg' }, 'photo')
+    ).toThrow('valid PNG or JPEG');
+    expect(() => decodeDesignMarkedImage({ ...copy, data: btoa('<svg/>') }, 'photo')).toThrow();
+    for (const input of [
+      { ...copy, count: 0 },
+      { ...copy, count: DESIGN_MARKS_MAX + 1 },
+      { ...copy, mimeType: 'image/svg+xml' },
+      { ...copy, data: 'not base64!' },
+      { ...copy, data: 'A'.repeat(Math.ceil(DESIGN_MARKED_IMAGE_MAX_BYTES / 3) * 4 + 4) },
+      { ...copy, marks: [] },
+    ])
+      expect(() => decodeDesignMarkedImage(input, 'photo')).toThrow();
   });
 });

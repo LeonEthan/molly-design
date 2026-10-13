@@ -389,7 +389,8 @@ export type SessionChatInputAreaHandle = {
   referenceDesignSelection: (
     reference: DesignElementReference,
     label: string,
-    prompt?: string
+    prompt?: string,
+    image?: File
   ) => boolean;
   syncDesignSelection: (reference: DesignElementReference | null, label: string) => boolean;
   /**
@@ -399,7 +400,8 @@ export type SessionChatInputAreaHandle = {
   sendDesignSelection: (
     reference: DesignElementReference,
     label: string,
-    prompt: string
+    prompt: string,
+    image?: File
   ) => Promise<boolean>;
   /**
    * Send numbered canvas notes as one turn, leaving the draft untouched. Returns
@@ -1361,7 +1363,7 @@ export const SessionChatInputArea = memo(
     );
 
     const referenceDesignSelection = useCallback(
-      (reference: DesignElementReference, label: string, prompt?: string) => {
+      (reference: DesignElementReference, label: string, prompt?: string, image?: File) => {
         if (isArchived) return false;
         if (prompt && mentionActionsRef.current?.isComposing())
           throw Error(
@@ -1371,6 +1373,7 @@ export const SessionChatInputArea = memo(
             )
           );
         setDesignSelectionState({ sessionId: session.id, reference, label });
+        if (image) handleAddFiles([image]);
         if (prompt) {
           const current = textareaRef.current?.value ?? userInput;
           const separator = current.length === 0 || /\s$/.test(current) ? '' : ' ';
@@ -1379,14 +1382,15 @@ export const SessionChatInputArea = memo(
         textareaRef.current?.focus();
         return true;
       },
-      [isArchived, session.id, setUserInput, t, userInput]
+      [handleAddFiles, isArchived, session.id, setUserInput, t, userInput]
     );
 
     const designSendInFlightRef = useRef(false);
     const sendDesignMentions = useCallback(
       async (
         items: readonly { reference: DesignElementReference; label: string; prompt: string }[],
-        numbered: boolean
+        numbered: boolean,
+        image?: File
       ) => {
         if (
           isArchived ||
@@ -1414,7 +1418,20 @@ export const SessionChatInputArea = memo(
           const expanded = expandPromptMentionsRef.current({ text, mentions });
           const trimmed = expanded.text.trim();
           const spans = reanchorMessageTextSpansForTrim(expanded.text, trimmed, expanded.spans);
+          let attached: SessionInputBlock[] = [];
+          if (image) {
+            if (!workspaceId) return false;
+            const uploaded = await uploadSessionReferenceImage({
+              workspaceId,
+              sessionId: session.id,
+              localMachineId: canSendFileLocally ? session.machineId : undefined,
+              file: image,
+            }).catch(() => undefined);
+            if (!uploaded) return false;
+            attached = [toImageInputBlock(uploaded)];
+          }
           return await onSendMessage([
+            ...attached,
             { type: 'text', text: trimmed, ...(spans ? { spans } : {}) },
           ]);
         } finally {
@@ -1422,23 +1439,27 @@ export const SessionChatInputArea = memo(
         }
       },
       [
+        canSendFileLocally,
         freeTurnLimitNotice,
         isArchived,
         isExternalHistoryRefreshing,
         isMachineRemoved,
         onSendMessage,
+        session.id,
+        session.machineId,
         sessionConfigReady,
+        workspaceId,
       ]
     );
     const sendDesignSelection = useCallback(
-      async (reference: DesignElementReference, label: string, prompt: string) => {
+      async (reference: DesignElementReference, label: string, prompt: string, image?: File) => {
         if (isArchived) return false;
         let accepted = false;
         try {
-          accepted = await sendDesignMentions([{ reference, label, prompt }], false);
+          accepted = await sendDesignMentions([{ reference, label, prompt }], false, image);
           return accepted;
         } finally {
-          if (!accepted) referenceDesignSelection(reference, label, prompt.trim());
+          if (!accepted) referenceDesignSelection(reference, label, prompt.trim(), image);
         }
       },
       [isArchived, referenceDesignSelection, sendDesignMentions]

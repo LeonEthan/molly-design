@@ -3361,7 +3361,7 @@ const SessionDetail = ({
             onReferenceSelection={
               activeSession.isArchived
                 ? undefined
-                : (reference, prompt) => {
+                : (reference, prompt, image) => {
                     const chat = chatRefsMap.current.get(activeTabSessionId);
                     if (
                       activeTabSessionId !== activeSession.id ||
@@ -3379,14 +3379,15 @@ const SessionDetail = ({
                       t('design.selectedElements', 'Selected elements ({{count}})', {
                         count: reference.elementIds.length,
                       }),
-                      prompt
+                      prompt,
+                      image
                     );
                   }
             }
             onSendSelection={
               activeSession.isArchived
                 ? undefined
-                : async (reference, prompt) => {
+                : async (reference, prompt, image) => {
                     const chat = chatRefsMap.current.get(activeTabSessionId);
                     if (
                       activeTabSessionId !== activeSession.id ||
@@ -3404,7 +3405,8 @@ const SessionDetail = ({
                       t('design.selectedElements', 'Selected elements ({{count}})', {
                         count: reference.elementIds.length,
                       }),
-                      prompt
+                      prompt,
+                      image
                     );
                   }
             }

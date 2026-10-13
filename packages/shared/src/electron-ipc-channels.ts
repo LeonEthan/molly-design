@@ -3,7 +3,11 @@ import type {
   LocalLoroDataPlaneServerMessage,
 } from './local-loro-data-plane';
 import type { DesignElementReference } from './design-element-reference';
-import type { DesignSelectionAction, DesignSelectionSummary } from './design-selection-commands';
+import type {
+  DesignAskPreset,
+  DesignSelectionAction,
+  DesignSelectionSummary,
+} from './design-selection-commands';
 import type {
   CliOutputEvent,
   ElectronCliState,
@@ -40,6 +44,16 @@ export type IpcPushMap = {
         reference: DesignElementReference;
         prompt: string;
         send: boolean;
+        preset?: DesignAskPreset;
+      }
+    | {
+        hostId: string;
+        action: 'marks';
+        reference: DesignElementReference;
+        prompt: string;
+        send: boolean;
+        count: number;
+        image: { mimeType: 'image/png' | 'image/jpeg'; bytes: Uint8Array };
       }
     | {
         hostId: string;

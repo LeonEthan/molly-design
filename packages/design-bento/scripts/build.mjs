@@ -88,6 +88,10 @@ try {
     join(destination, 'editor-bento/src/boot/element-highlight.ts')
   );
   cpSync(join(root, 'src/note-pins.ts'), join(destination, 'editor-bento/src/boot/note-pins.ts'));
+  cpSync(
+    join(root, 'src/image-marks.ts'),
+    join(destination, 'editor-bento/src/boot/image-marks.ts')
+  );
   cpSync(join(root, 'src/image.ts'), join(destination, 'editor-bento/src/ui/dom/image.ts'));
   const imageFile = join(destination, 'editor-bento/src/ui/dom/image.ts');
   writeFileSync(

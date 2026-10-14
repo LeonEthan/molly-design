@@ -69,7 +69,7 @@ graphic-design Skill 的大部分篇幅用于约束表述，并在多个文件�
 
 DMG 测试中，开放式海报需求在未阅读 `references/browser-research.md`、未打开任何图片的情况下就给出了设计方案；第二阶段那条软链接被跳过。第二阶段现在带有**研究门槛**，进入第三阶段前必须全部满足：完整阅读嵌套参考文档；在设计网站上做一次集中的浏览器查看（已登录或已导入时用 Pinterest，否则用其他可访问来源）；逐张打开单个图片（网格与摘要不算）；保存一到三张灵感图；保留三到六个参考并各自说明一项质量。用户禁止联网时，Agent 予以尊重、报告缺口并继续；浏览器或网络不可用时，Agent 报告缺口且不提供方案，仅当用户明确放弃研究才继续。方案报告列出已检查的来源页面 URL 或已保存的灵感图路径，取代“研究来源”。`browser-research.md` 保留技巧并指向门槛，不再重述。至少三个方案的规则不变，Spec 意图（先研究再构图；阻塞不是例外）不变。
 
-回归检查：在开发应用或 DMG 上手动重放，没有自动化轨迹评测。`apps/cli/src/design/skills.test.ts` 固定门槛各项、禁止出方案的阻塞规则和已检查 URL 的报告规则在 `SKILL.md` 中各出现一次，且 `browser-research.md` 不重述数量。重放：用已登录的 Pinterest 配置向 Molly 发送“夺冠海报”需求（中国网球公开赛 WTA1000，1080×1920）。通过：在任何方案之前，转录显示读取了 `browser-research.md`，对单个 pin 或页面调用了 `mcp__molly_browser__navigate` 与 `mcp__molly_browser__screenshot`（或 `snapshot`），至少一次 `mcp__molly_browser__save_image`，且方案回复引用了已检查的页面 URL 或已保存的灵感图路径。失败：没有上述证据就出现方案，或只引用搜索结果 URL。禁用浏览器再重复一次：通过标准是明确说明受阻且不给方案。
+回归检查：在开发应用或 DMG 上手动重放，没有自动化轨迹评测。`apps/cli/src/design/skills.test.ts` 固定门槛各项、禁止出方案的阻塞规则和已检查 URL 的报告规则在 `SKILL.md` 中各出现一次，且 `browser-research.md` 不重述数量。重放：用已登录的 Pinterest 配置向 Molly 发送“夺冠海报”需求（中国网球公开赛 WTA1000，1080×1920）。通过：在任何方案之前，转录显示读取了 `browser-research.md`，对单个 pin 或页面调用了 `mcp__molly_browser__navigate` 与 `mcp__molly_browser__screenshot`，至少一次 `mcp__molly_browser__save_image`，且方案回复引用了已检查的页面 URL 或已保存的灵感图路径。失败：没有上述证据就出现方案，或只引用搜索结果 URL，或转录中只有 `snapshot` 文本、没有单个 pin 或页面的截图。禁用浏览器再重复一次：通过标准是明确说明受阻且不给方案。
 
 ## 备选方案
 

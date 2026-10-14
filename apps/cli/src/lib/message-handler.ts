@@ -5871,7 +5871,11 @@ export class MessageHandler {
       case 'browser/resume': {
         const sessionId = request.ownerSessionId as SessionId;
         const active = this.executionService.getActiveInvocationContext(sessionId)?.sourceTurnId;
-        if (active !== request.params.runId || this.browserTakeovers.get(sessionId) !== active) {
+        const takeover = this.browserTakeovers.get(sessionId);
+        if (
+          takeover !== request.params.runId ||
+          (active !== undefined && active !== request.params.runId)
+        ) {
           return { type: 'browser/control' as const, ok: false };
         }
         this.browserTakeovers.delete(sessionId);

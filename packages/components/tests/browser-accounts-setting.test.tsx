@@ -17,9 +17,10 @@ const bridge = vi.hoisted(() => ({
   importBrowserAccount: vi.fn(),
   cancelAccountImport: vi.fn(),
   clearAccountData: vi.fn(),
-  openBrowserDataPrivacySettings: vi.fn(),
 }));
-vi.mock('../src/lib/electron-ipc-client', () => ({ getPublicBrowserBridge: () => bridge }));
+vi.mock('../src/lib/electron-ipc-client', () => ({
+  getPublicBrowserBridge: () => bridge,
+}));
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 const result: ElectronBrowserImportResult = {
@@ -91,7 +92,6 @@ beforeEach(async () => {
   bridge.importBrowserAccount.mockResolvedValue(result);
   bridge.cancelAccountImport.mockResolvedValue('cancelled');
   bridge.clearAccountData.mockResolvedValue({ removed: 7 });
-  bridge.openBrowserDataPrivacySettings.mockResolvedValue({ opened: true });
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -99,6 +99,7 @@ afterEach(async () => {
   HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   vi.unstubAllGlobals();
   vi.resetAllMocks();
+  localStorage.clear();
 });
 
 it('keeps Import available before reading profiles and preserves the curated website selection', async () => {
@@ -361,57 +362,37 @@ it('requires a new explicit choice when the selected profile is no longer availa
   expect(button(zh['settings.browserImport.done']).disabled).toBe(false);
 });
 
-it('retains choices through denied file access and an explicit continuation after settings', async () => {
-  const events: string[] = [];
+it('stays silent after a file-access denial and keeps selections for an explicit retry', async () => {
   const requests: ElectronBrowserAccountImportInput[] = [];
   bridge.importBrowserAccount.mockImplementation(
     async (input: ElectronBrowserAccountImportInput) => {
-      events.push('import');
       requests.push(input);
-      return { ok: false, error: 'source-access-denied' };
+      return { ok: false as const, error: 'source-access-denied' as const };
     }
   );
-  bridge.openBrowserDataPrivacySettings.mockImplementation(async () => {
-    events.push('settings');
-    return { opened: true };
-  });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
-  await chooseSource('Microsoft Edge');
   await expandSites();
-  const checkboxes = [...document.querySelectorAll<HTMLButtonElement>('[role="checkbox"]')];
+  const checkboxes = [
+    ...document.querySelectorAll<HTMLElement>('[role="dialog"] [role="checkbox"]'),
+  ];
   await act(async () => checkboxes[0].click());
   await act(async () => checkboxes[1].click());
   await act(async () => button(zh['settings.browserImport.import']).click());
-  expect(button(zh['settings.browserImport.retry']).disabled).toBe(false);
-  await act(async () => button(zh['settings.browserAccounts.openFilesAndFolders']).click());
-  await act(async () => window.dispatchEvent(new Event('focus')));
-  expect(events).toEqual(['import', 'settings']);
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Microsoft Edge');
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('1 / 27');
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-    zh['settings.browserImport.errors.source-access-denied']
-  );
-  bridge.importBrowserAccount.mockImplementation(
-    async (input: ElectronBrowserAccountImportInput) => {
-      events.push('continued');
-      requests.push(input);
-      return result;
-    }
-  );
-  await act(async () => button(zh['settings.browserImport.continue']).click());
-  expect(events).toEqual(['import', 'settings', 'continued']);
-  expect(
-    requests.map(({ browserId, profileId, siteIds }) => ({ browserId, profileId, siteIds }))
-  ).toEqual([
-    { browserId: 'edge', profileId: undefined, siteIds: ['pinterest'] },
-    { browserId: 'edge', profileId: undefined, siteIds: ['pinterest'] },
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('[role="alert"]')).toBeNull();
+  expect(dialog.textContent).toContain('1 / 27');
+  expect(button(zh['settings.browserImport.import']).disabled).toBe(false);
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  expect(requests.map(({ browserId, profileId, siteIds }) => ({ browserId, profileId, siteIds }))).toEqual([
+    { browserId: 'chrome', profileId: undefined, siteIds: ['pinterest'] },
+    { browserId: 'chrome', profileId: undefined, siteIds: ['pinterest'] },
   ]);
-  expect(button(zh['settings.browserImport.done']).disabled).toBe(false);
+  expect(document.querySelector('[role="alert"]')).toBeNull();
 });
 
 it.each(['source-unavailable', 'source-incomplete', 'source-authorization-denied'] as const)(
-  'does not send %s to file privacy settings',
+  'shows the localized reason for %s',
   async (error) => {
     bridge.importBrowserAccount.mockResolvedValue({ ok: false, error });
     await act(async () => root.render(<BrowserAccountsSetting />));
@@ -420,32 +401,9 @@ it.each(['source-unavailable', 'source-incomplete', 'source-authorization-denied
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
       zh[`settings.browserImport.errors.${error}`]
     );
-    expect(document.body.textContent).not.toContain(
-      zh['settings.browserAccounts.openFilesAndFolders']
-    );
     expect(button(zh['settings.browserImport.retry']).disabled).toBe(false);
   }
 );
-
-it('shows a failed settings launch without claiming access and ignores stale settings replies', async () => {
-  bridge.importBrowserAccount.mockResolvedValue({ ok: false, error: 'source-access-denied' });
-  bridge.openBrowserDataPrivacySettings.mockResolvedValue({ opened: false });
-  await act(async () => root.render(<BrowserAccountsSetting />));
-  await openImport();
-  await act(async () => button(zh['settings.browserImport.import']).click());
-  await act(async () => button(zh['settings.browserAccounts.openFilesAndFolders']).click());
-  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
-    zh['settings.browserAccounts.openFilesAndFoldersFailed']
-  );
-  expect(button(zh['settings.browserImport.retry']).disabled).toBe(false);
-  const pending = Promise.withResolvers<{ opened: boolean }>();
-  bridge.openBrowserDataPrivacySettings.mockReturnValue(pending.promise);
-  await act(async () => button(zh['settings.browserAccounts.openFilesAndFolders']).click());
-  await chooseSource('Microsoft Edge');
-  await act(async () => pending.resolve({ opened: true }));
-  expect(document.querySelector('[role="alert"]')).toBeNull();
-  expect(button(zh['settings.browserImport.import']).disabled).toBe(false);
-});
 
 it('distinguishes no installed browsers from a failed catalog read and retries only on click', async () => {
   bridge.getImportSources.mockRejectedValue(new Error('Synthetic catalog failure'));

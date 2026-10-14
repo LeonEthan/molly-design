@@ -110,6 +110,7 @@ mac:
   extendInfo:
     NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    NSAppDataUsageDescription: Molly reads the website sign-ins you choose to import from your browser. The data stays on this Mac.
     NSUserNotificationAlertStyle: banner
     SUFeedURL: https://github.com/LeonEthan/molly-design/releases/latest/download/appcast.xml
     SUPublicEDKey: SPARKLE_ED_PUBLIC_KEY_PLACEHOLDER

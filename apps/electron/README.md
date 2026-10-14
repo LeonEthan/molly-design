@@ -185,12 +185,12 @@ retains its slot until settlement. A Keychain prompt cannot be dismissed by the
 cooperative deadline. Accepted writes drain on quit. Stable signatures can retain
 Keychain grants; OS policy or signature changes can prompt again. Development
 folder permission may be attributed to Molly's launcher, and macOS may refuse to
-offer that launcher a prompt. Only confirmed browser-file
-access denial offers Files & Folders settings; Keychain denial and other read failures
-remain distinct. The dialog retains choices and offers Continue import after opening
-settings, without Reload profiles or automatic retry. Granting a native prompt
-continues the same valid request. Cancellation/denial retains selections for explicit
-retry; starting a new dialog resets website selections. No Agent resumes automatically.
+offer that launcher a prompt. A confirmed browser-file access denial is silent:
+the dialog returns to its ready state with selections kept and no settings link;
+Keychain denial and other read failures show their own reason. Granting a native
+prompt continues the same valid request. Cancellation/denial retains selections
+for explicit retry; starting a new dialog resets website selections. No Agent
+resumes automatically.
 See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
 and [permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md),
 which records final real Chrome/Pinterest import, sign-in and file-denial recovery.

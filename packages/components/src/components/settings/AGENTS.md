@@ -26,10 +26,10 @@ Preserve historical catalog fields when editing unrelated values.
   prepares the chosen browser. One profile continues; multiple need explicit selection
   in the same picker. No sign-in wizard or preview/confirm step. Send IDs only.
 - Keep choices through denial and settings visits. Offer App Data settings only for
-  confirmed file-access denial; re-check on focus only after settings were opened;
-  never auto-retry otherwise. Show real authorization, unavailable reasons, finishing writes and
-  skip counts; passwords stay in system prompts, counts prove no sign-in. Clear covers
-  all Molly website data. Retain takeover/MFA and native surface coverage.
+  confirmed file-access denial; re-check on focus only after settings opened; no other
+  auto-retry (lib/AGENTS.md). Show real authorization, unavailable reasons, finishing
+  writes, skip counts; passwords stay in system prompts, counts prove no sign-in. Clear
+  covers all Molly website data. Keep takeover/MFA and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing
   tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
   catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat

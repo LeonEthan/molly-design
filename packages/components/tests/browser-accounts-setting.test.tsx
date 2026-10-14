@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { BROWSER_ACCOUNT_SITE_IDS as BROWSER_SITE_IDS } from '@molly/shared/browser-account-sites';
 import { BrowserAccountsSetting } from '../src/components/settings/browser-accounts-setting';
+import { BrowserImportResume } from '../src/components/settings/browser-import-resume';
+import { BROWSER_IMPORT_RESUME_KEY } from '../src/lib/browser-import-resume';
 import { initI18n } from '../src/i18n';
 import zh from '../../../locales/zh_CN.json';
 import type {
@@ -105,6 +107,7 @@ afterEach(async () => {
   HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
   vi.unstubAllGlobals();
   vi.resetAllMocks();
+  localStorage.clear();
 });
 
 it('keeps Import available before reading profiles and preserves the curated website selection', async () => {
@@ -444,6 +447,31 @@ it('does not re-check on focus before the user has opened System Settings', asyn
   expect(button(zh['settings.browserImport.openSystemSettings']).disabled).toBe(false);
 });
 
+it('advances a still-denied focus re-check to restart instead of waiting on another allow click', async () => {
+  const events: string[] = [];
+  bridge.importBrowserAccount.mockImplementation(async () => {
+    events.push('import');
+    return { ok: false, error: 'source-access-denied' };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  await act(async () => button(zh['settings.browserImport.openSystemSettings']).click());
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(events).toEqual(['import', 'import']);
+  const labels = [...document.querySelectorAll('[role="dialog"] button')].map(
+    (entry) => entry.textContent
+  );
+  expect(labels).toContain(zh['settings.browserImport.restartAndImport']);
+  expect(labels).toContain(zh['settings.browserImport.openSystemSettingsAgain']);
+  expect(labels).not.toContain(zh['settings.browserImport.allowedImportNow']);
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain(
+    zh['settings.browserImport.recovery.stillDenied']
+  );
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(events).toEqual(['import', 'import']);
+});
+
 it('keeps guiding after a retry is still denied and offers restart with no skip exit', async () => {
   const events: string[] = [];
   bridge.importBrowserAccount.mockImplementation(async () => {
@@ -496,6 +524,109 @@ it('shows a restart failure and keeps the restart action available', async () =>
   );
   expect(document.body.textContent).not.toContain('synthetic busy agent');
   expect(button(zh['settings.browserImport.restartAndImport']).disabled).toBe(false);
+  expect(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY)).toBeNull();
+});
+
+it('persists the chosen browser, profile and websites before restarting, and keeps them after an accepted restart', async () => {
+  const persisted: Array<string | null> = [];
+  bridge.importBrowserAccount.mockImplementation(
+    async (input: ElectronBrowserAccountImportInput) => {
+      if (input.profileId === 'opaque-studio') return { ok: false, error: 'source-access-denied' };
+      return {
+        ok: true,
+        profiles: [
+          { id: 'opaque-default', name: 'Designer', isDefault: true },
+          { id: 'opaque-studio', name: 'Studio', isDefault: false },
+        ],
+      };
+    }
+  );
+  app.restartApp.mockImplementation(async () => {
+    persisted.push(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY));
+    return { ok: true };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  await chooseSource('Google Chrome · Studio');
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  await act(async () => button(zh['settings.browserImport.openSystemSettings']).click());
+  await act(async () => button(zh['settings.browserImport.allowedImportNow']).click());
+  await act(async () => button(zh['settings.browserImport.restartAndImport']).click());
+  expect(persisted.map((raw) => JSON.parse(raw ?? 'null'))).toEqual([
+    { v: 1, browserId: 'chrome', profileId: 'opaque-studio', siteIds: [...BROWSER_SITE_IDS] },
+  ]);
+  expect(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY)).not.toBeNull();
+});
+
+it('resumes the saved browser, profile and websites on relaunch and clears the intent before importing', async () => {
+  localStorage.setItem(
+    BROWSER_IMPORT_RESUME_KEY,
+    JSON.stringify({
+      v: 1,
+      browserId: 'chrome',
+      profileId: 'opaque-studio',
+      siteIds: ['pinterest'],
+    })
+  );
+  const requests: ElectronBrowserAccountImportInput[] = [];
+  const storedDuringImport: Array<string | null> = [];
+  bridge.importBrowserAccount.mockImplementation(
+    async (input: ElectronBrowserAccountImportInput) => {
+      requests.push(input);
+      storedDuringImport.push(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY));
+      return result;
+    }
+  );
+  await act(async () => root.render(<BrowserImportResume />));
+  expect(
+    requests.map(({ browserId, profileId, siteIds }) => ({ browserId, profileId, siteIds }))
+  ).toEqual([{ browserId: 'chrome', profileId: 'opaque-studio', siteIds: ['pinterest'] }]);
+  expect(storedDuringImport).toEqual([null]);
+  expect(document.querySelector('[role="status"]')?.textContent).toContain(
+    zh['settings.browserImport.verifyLogin']
+  );
+  expect(button(zh['settings.browserImport.done']).disabled).toBe(false);
+});
+
+it('shows App Data recovery again when a resumed import is still denied, without a skip exit', async () => {
+  localStorage.setItem(
+    BROWSER_IMPORT_RESUME_KEY,
+    JSON.stringify({ v: 1, browserId: 'edge', siteIds: ['pinterest'] })
+  );
+  bridge.importBrowserAccount.mockResolvedValue({ ok: false, error: 'source-access-denied' });
+  await act(async () => root.render(<BrowserImportResume />));
+  const dialog = document.querySelector('[role="dialog"]')!;
+  expect(dialog.querySelector('[role="alert"]')?.textContent).toContain(
+    zh['settings.browserImport.recovery.title']
+  );
+  const labels = [...dialog.querySelectorAll('button')].map((entry) => entry.textContent);
+  expect(labels).toContain(zh['settings.browserImport.openSystemSettings']);
+  expect(labels.some((label) => /skip|跳过/i.test(label ?? ''))).toBe(false);
+  expect(button(zh['settings.browserImport.openSystemSettings']).disabled).toBe(false);
+  expect(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY)).toBeNull();
+});
+
+it.each([
+  ['malformed JSON', 'not json'],
+  ['unknown version', JSON.stringify({ v: 2, browserId: 'chrome', siteIds: ['pinterest'] })],
+  ['empty website list', JSON.stringify({ v: 1, browserId: 'chrome', siteIds: [] })],
+  [
+    'browser no longer installed',
+    JSON.stringify({ v: 1, browserId: 'brave', siteIds: ['pinterest'] }),
+  ],
+])('drops a %s intent without starting an import', async (_label, raw) => {
+  const requests: ElectronBrowserAccountImportInput[] = [];
+  bridge.importBrowserAccount.mockImplementation(
+    async (input: ElectronBrowserAccountImportInput) => {
+      requests.push(input);
+      return result;
+    }
+  );
+  localStorage.setItem(BROWSER_IMPORT_RESUME_KEY, raw);
+  await act(async () => root.render(<BrowserImportResume />));
+  expect(requests).toEqual([]);
+  expect(localStorage.getItem(BROWSER_IMPORT_RESUME_KEY)).toBeNull();
 });
 
 it.each(['source-unavailable', 'source-incomplete', 'source-authorization-denied'] as const)(

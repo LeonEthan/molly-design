@@ -72,6 +72,10 @@ step. Source errors, pending authorization, cancellation and retained/skipped
 counts remain in this dialog. `PublicBrowserSurface` hides under covering dialogs.
 Cookie counts describe local data, not verified sign-in. Human takeover and MFA
 remain available on ordinary pages; the dedicated sign-in dialog is retired.
+"Restart Molly and import" saves that one import (browser, profile, websites) for
+the relaunch. The app-root `BrowserImportResume` reopens the dialog at boot and runs
+it before any click, so the restart works from every caller and whichever route is
+restored. A denial on that run shows App Data recovery again, with no skip exit.
 
 Shortcuts settings starts with a fixed canvas reference backed by Bento's existing
 keyboard handlers, followed by editable application commands and desktop global

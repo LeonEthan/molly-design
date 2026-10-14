@@ -13,6 +13,11 @@ import type {
   ElectronBrowserProfileChoice,
   ElectronBrowserImportReport,
 } from '@molly/shared/electron-ipc';
+import {
+  clearBrowserImportIntent,
+  saveBrowserImportIntent,
+  type BrowserImportIntent,
+} from '@/lib/browser-import-resume';
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
@@ -37,7 +42,11 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { WithInfo } from './info-tip';
 
-type Props = { open: boolean; onOpenChange: (open: boolean) => void };
+type Props = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  resume?: BrowserImportIntent | null;
+};
 const choiceKey = (browserId: string, profileId: string) => JSON.stringify([browserId, profileId]);
 const recoveryLabels = {
   'open-settings': 'settings.browserImport.openSystemSettings',
@@ -45,11 +54,11 @@ const recoveryLabels = {
   restart: 'settings.browserImport.restartAndImport',
 } as const;
 
-export function BrowserAccountImportDialog({ open, onOpenChange }: Props) {
-  return open ? <ImportSession onOpenChange={onOpenChange} /> : null;
+export function BrowserAccountImportDialog({ open, onOpenChange, resume }: Props) {
+  return open ? <ImportSession onOpenChange={onOpenChange} resume={resume ?? null} /> : null;
 }
 
-function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
+function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'resume'>) {
   const { t } = useTranslation();
   const [bridge] = useState(getPublicBrowserBridge);
   const [summary, setSummary] = useState<ElectronBrowserAccountSummary | null>(null);
@@ -78,6 +87,8 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   const live = useRef(true);
   const catalogRequest = useRef(0);
   const privacyRequest = useRef(0);
+  const [resumedProfileId, setResumedProfileId] = useState<string>();
+  const pendingResume = useRef(resume ?? null);
 
   const loadSources = useCallback(async () => {
     const request = ++catalogRequest.current;
@@ -127,6 +138,7 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
     ? profiles[browserId]?.find((entry) => choiceKey(browserId, entry.id) === choice)
     : undefined;
   const needsProfile = Boolean(browserId && profiles[browserId]?.length && !profile);
+  const activeProfileId = profile?.id ?? resumedProfileId;
   const accessDenied = error === 'source-access-denied';
   const importBlocked =
     loading ||
@@ -158,52 +170,82 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
     onOpenChange(false);
   };
 
-  const runImport = useCallback(async ({ automatic = false }: { automatic?: boolean } = {}) => {
-    if (catalogFailed) {
-      await loadSources();
-      return;
-    }
-    if (!bridge || !browserId || needsProfile || selected.size === 0 || operation.current) return;
-    const operationId = crypto.randomUUID();
-    operation.current = operationId;
-    setBusy(true);
-    if (!automatic) setError(null);
-    setFinishing(false);
-    privacyRequest.current++;
-    try {
-      const result = await bridge.importBrowserAccount({
-        operationId,
-        browserId,
-        ...(profile ? { profileId: profile.id } : {}),
-        siteIds: [...selected],
-      });
-      if (!live.current || operation.current !== operationId) return;
-      if (result.ok) {
-        setError(null);
-        if ('profiles' in result) {
-          setProfiles((current) => ({ ...current, [browserId]: result.profiles }));
-          setChoice('');
-        } else setReport(result.report);
-      } else if (result.error === 'source-access-denied') {
-        setError(result.error);
-        if (!automatic && settingsOpened) setStillDenied(true);
-      } else {
-        setError(result.error);
-        setSettingsOpened(false);
-        setStillDenied(false);
-      }
-    } catch {
-      if (live.current && operation.current === operationId) setError('unavailable');
-    } finally {
-      if (operation.current === operationId) {
-        operation.current = null;
-        if (live.current) {
-          setBusy(false);
-          setFinishing(false);
+  const performImport = useCallback(
+    async (request: BrowserImportIntent, { automatic = false }: { automatic?: boolean } = {}) => {
+      if (!bridge || operation.current) return;
+      const operationId = crypto.randomUUID();
+      operation.current = operationId;
+      setBusy(true);
+      if (!automatic) setError(null);
+      setFinishing(false);
+      privacyRequest.current++;
+      try {
+        const result = await bridge.importBrowserAccount({
+          operationId,
+          browserId: request.browserId,
+          ...(request.profileId !== undefined ? { profileId: request.profileId } : {}),
+          siteIds: request.siteIds,
+        });
+        if (!live.current || operation.current !== operationId) return;
+        if (result.ok) {
+          setError(null);
+          if ('profiles' in result) {
+            setProfiles((current) => ({ ...current, [request.browserId]: result.profiles }));
+            setChoice('');
+          } else setReport(result.report);
+        } else if (result.error === 'source-access-denied') {
+          setError(result.error);
+          if (settingsOpened) setStillDenied(true);
+        } else {
+          setError(result.error);
+          setSettingsOpened(false);
+          setStillDenied(false);
+        }
+      } catch {
+        if (live.current && operation.current === operationId) setError('unavailable');
+      } finally {
+        if (operation.current === operationId) {
+          operation.current = null;
+          if (live.current) {
+            setBusy(false);
+            setFinishing(false);
+          }
         }
       }
-    }
-  }, [bridge, browserId, catalogFailed, loadSources, needsProfile, profile, selected, settingsOpened]);
+    },
+    [bridge, settingsOpened]
+  );
+
+  const runImport = useCallback(
+    async ({ automatic = false }: { automatic?: boolean } = {}) => {
+      if (catalogFailed) {
+        await loadSources();
+        return;
+      }
+      if (!browserId || needsProfile || selected.size === 0) return;
+      await performImport(
+        {
+          browserId,
+          ...(activeProfileId !== undefined ? { profileId: activeProfileId } : {}),
+          siteIds: [...selected],
+        },
+        { automatic }
+      );
+    },
+    [activeProfileId, browserId, catalogFailed, loadSources, needsProfile, performImport, selected]
+  );
+
+  useEffect(() => {
+    const intent = pendingResume.current;
+    if (!intent || loading) return;
+    pendingResume.current = null;
+    if (!sources.some((source) => source.browserId === intent.browserId)) return;
+    setBrowserId(intent.browserId);
+    setChoice(`browser:${intent.browserId}`);
+    setResumedProfileId(intent.profileId);
+    setSelected(new Set(intent.siteIds));
+    void performImport(intent);
+  }, [loading, performImport, sources]);
 
   const openPrivacySettings = async () => {
     const request = ++privacyRequest.current;
@@ -219,19 +261,27 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   };
 
   const restartMolly = async () => {
+    if (!browserId) return;
     setRestartFailed(false);
     setRestarting(true);
+    let accepted = false;
     try {
-      const result = await getIpcServices()?.app.restartApp();
-      if (live.current && !result?.ok) setRestartFailed(true);
+      saveBrowserImportIntent({
+        browserId,
+        ...(activeProfileId !== undefined ? { profileId: activeProfileId } : {}),
+        siteIds: [...selected],
+      });
+      accepted = (await getIpcServices()?.app.restartApp())?.ok === true;
+      if (live.current && !accepted) setRestartFailed(true);
     } catch {
       if (live.current) setRestartFailed(true);
     } finally {
+      if (!accepted) clearBrowserImportIntent();
       if (live.current) setRestarting(false);
     }
   };
 
-  const recheckOnReturn = accessDenied && settingsOpened && !busy && !report;
+  const recheckOnReturn = recoveryStage === 'allow-and-import' && !busy && !report;
   useEffect(() => {
     if (!recheckOnReturn) return undefined;
     const recheck = () => void runImport({ automatic: true });
@@ -296,6 +346,7 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
               setSettingsFailed(false);
               setStillDenied(false);
               setRestartFailed(false);
+              setResumedProfileId(undefined);
             }}
           >
             <SelectTrigger
@@ -468,7 +519,9 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
               </p>
             ) : null}
             {restartFailed ? (
-              <p className="text-xs text-destructive">{t('settings.browserImport.restartFailed')}</p>
+              <p className="text-xs text-destructive">
+                {t('settings.browserImport.restartFailed')}
+              </p>
             ) : null}
           </div>
         ) : error ? (
@@ -519,7 +572,11 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
             </Button>
           ) : null}
           {recoveryStage === 'restart' ? (
-            <Button variant="outline" disabled={busy || restarting} onClick={() => void openPrivacySettings()}>
+            <Button
+              variant="outline"
+              disabled={busy || restarting}
+              onClick={() => void openPrivacySettings()}
+            >
               {t('settings.browserImport.openSystemSettingsAgain')}
             </Button>
           ) : null}
@@ -532,9 +589,7 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
             }}
             disabled={
               !report &&
-              (recoveryStage
-                ? busy || restarting || (recoveryStage === 'allow-and-import' && importBlocked)
-                : importBlocked)
+              (busy || restarting || (recoveryStage !== 'open-settings' && importBlocked))
             }
           >
             {t(

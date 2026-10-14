@@ -106,11 +106,11 @@ input and await child exit before quitting. Closed workers never restart.
 
 Import reads metadata; one profile continues, multiple need selection. Preserve
 typed file/Keychain failures; settings only for EPERM file denial. Prepare before
-Agent pause/isolation. One raw profile read; main filters IDs, validates fields and keeps
+Agent pause/isolation. One raw profile read; main filters IDs, validates fields, keeps
 values/keys. Count CHIPS/expiry skips. Isolate pages/Workers/network; preflight quotas,
 merge exact identities, verify writes/rollback. Failed recovery holds browsing until
-explicit clearing. Revoke late reads; retain native leases until settlement, drain
-writes on quit. Retry is explicit; never auto-resume.
+explicit clearing. Revoke late reads; retain native leases until settled, drain
+writes on quit. Retry is explicit; main never auto-resumes.
 
 ## Agent browser driver
 

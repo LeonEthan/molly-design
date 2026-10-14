@@ -23,6 +23,7 @@ import { authTokenAtom, userAtom } from '@/atoms';
 import { ERROR_BOUNDARY_PROBE_EVENT, consumeErrorBoundaryProbe } from '@/lib/error-boundary-probe';
 import { resolveDesktopOpenLocalProjectDeepLinkPath } from '@/lib/desktop-open-local-project-deep-link';
 import { InterfaceFontController } from '@/components/interface-font-controller';
+import { BrowserImportResume } from '@/components/settings/browser-import-resume';
 import { PlatformContext } from '@molly/platform/react';
 import { getLocalPlatformProvider } from '../providers/local-platform-provider';
 import { LocalPlatformAuthProvider } from '../providers/local-platform-auth-provider';
@@ -103,6 +104,7 @@ function RootApp() {
             <LanguageProvider>
               <>
                 <Toaster />
+                {isElectron && <BrowserImportResume />}
                 <RuntimeProvider>
                   {/* Location-driven effects and the Outlet boundary subscribe to
                       router state in these two small components, so a navigation

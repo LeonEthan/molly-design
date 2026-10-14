@@ -54,8 +54,9 @@ Files: [README.md](README.md). Scopes:
 - Static HTML runs `allow-scripts`-only from a policy-owned `srcdoc`; truncated
   documents are never executable and static frames die with their tab.
 - Preview comment writes use `runtime.writer.mutatePreviewVisualComments`, never store `setState`.
-- Reattach hidden Agent pages without navigation; use takeover state. Keep the native
-  surface bridge stable across renders; same-page state must preserve address drafts.
+- Reattach hidden Agent pages without navigation; use takeover state. Agent control
+  reveals Browser once per Turn, never in Zen. Keep the native surface bridge
+  stable across renders; same-page state must preserve address drafts.
   Agent navigation stays native, including loopback, without site/public-IP scopes.
 
 - Keep Stop reachable during permissions/questions. User Stop sends `stop`
@@ -82,11 +83,10 @@ Files: [README.md](README.md). Scopes:
   Model submenu; scopes key on the decoded connection id, never the display
   name), Model (submenu catalog with search), Reasoning (submenu
   option list) — Plan/Fast/interaction/extra selectors no longer render here.
-  Fast is also retired from recents: records neither display nor replay it,
-  and runs differing only in Fast dedupe.
-  Preserve opaque model ids and model-specific reasoning capabilities. Roles
-  are retired: no
-  selection, creation, prompt prefix, draft restoration or recent-Role replay.
+  Fast is retired from recents: never displayed or replayed; Fast-only runs
+  dedupe. Preserve opaque model ids and
+  model-specific reasoning capabilities. Roles are retired: no selection,
+  creation, prompt prefix, draft restoration or recent-Role replay.
 - New composer Turns freeze `agentRoleId: null`; historical Session provenance
   stays untouched. Child drafts inherit explicit run config, not Role identity.
 - Derive selection with `useAcpSessionConfigSelectionState`; never store or
@@ -143,7 +143,7 @@ Files: [README.md](README.md). Scopes:
 
 ## Stories
 
-- Stories mock data and render real components; appearance belongs in production.
+- Stories mock data; appearance belongs in production.
   `SessionConversationPage.stories.tsx` hand-composes leaves and drifts — keep it
   minimal and verify UI changes in the real app.
 

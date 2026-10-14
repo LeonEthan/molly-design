@@ -289,14 +289,9 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
   useEffect(() => {
     if (!recheckOnReturn) return undefined;
     const recheck = () => void runImport({ automatic: true });
-    const recheckWhenVisible = () => {
-      if (document.visibilityState === 'visible') recheck();
-    };
     window.addEventListener('focus', recheck);
-    document.addEventListener('visibilitychange', recheckWhenVisible);
     return () => {
       window.removeEventListener('focus', recheck);
-      document.removeEventListener('visibilitychange', recheckWhenVisible);
     };
   }, [recheckOnReturn, runImport]);
 

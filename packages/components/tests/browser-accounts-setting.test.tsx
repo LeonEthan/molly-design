@@ -436,6 +436,26 @@ it('re-checks the same import when the window regains focus after System Setting
   expect(button(zh['settings.browserImport.done']).disabled).toBe(false);
 });
 
+it('does not re-check when the document becomes visible without a window focus after System Settings', async () => {
+  const events: string[] = [];
+  bridge.importBrowserAccount.mockImplementation(async () => {
+    events.push('import');
+    return { ok: false, error: 'source-access-denied' };
+  });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  await act(async () => button(zh['settings.browserImport.openSystemSettings']).click());
+  const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  try {
+    await act(async () => document.dispatchEvent(new Event('visibilitychange', { bubbles: true })));
+  } finally {
+    visibility.mockRestore();
+  }
+  expect(events).toEqual(['import']);
+  expect(button(zh['settings.browserImport.allowedImportNow']).disabled).toBe(false);
+});
+
 it('does not re-check on focus before the user has opened System Settings', async () => {
   const events: string[] = [];
   bridge.importBrowserAccount.mockImplementation(async () => {

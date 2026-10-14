@@ -13,15 +13,7 @@ import type {
   ElectronBrowserProfileChoice,
   ElectronBrowserImportReport,
 } from '@molly/shared/electron-ipc';
-import appDataDarkScreenshot from '@/assets/browser-import-app-data-dark.png';
-import appDataLightScreenshot from '@/assets/browser-import-app-data-light.png';
-import {
-  clearBrowserImportIntent,
-  saveBrowserImportIntent,
-  type BrowserImportIntent,
-} from '@/lib/browser-import-resume';
-import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
-import { useResolvedTheme } from '@/theme-provider';
+import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
 import { ChevronDown, Loader2, X } from '@/ui/icons';
@@ -45,25 +37,15 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ui/collapsible';
 import { WithInfo } from './info-tip';
 
-type Props = {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  resume?: BrowserImportIntent | null;
-};
+type Props = { open: boolean; onOpenChange: (open: boolean) => void };
 const choiceKey = (browserId: string, profileId: string) => JSON.stringify([browserId, profileId]);
-const recoveryLabels = {
-  'open-settings': 'settings.browserImport.openSystemSettings',
-  'allow-and-import': 'settings.browserImport.allowedImportNow',
-  restart: 'settings.browserImport.restartAndImport',
-} as const;
 
-export function BrowserAccountImportDialog({ open, onOpenChange, resume }: Props) {
-  return open ? <ImportSession onOpenChange={onOpenChange} resume={resume ?? null} /> : null;
+export function BrowserAccountImportDialog({ open, onOpenChange }: Props) {
+  return open ? <ImportSession onOpenChange={onOpenChange} /> : null;
 }
 
-function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'resume'>) {
+function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   const { t } = useTranslation();
-  const resolvedTheme = useResolvedTheme();
   const [bridge] = useState(getPublicBrowserBridge);
   const [summary, setSummary] = useState<ElectronBrowserAccountSummary | null>(null);
   const [sources, setSources] = useState<ElectronBrowserImportSources['sources']>([]);
@@ -72,11 +54,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
   >({});
   const [browserId, setBrowserId] = useState<AccountImportBrowserId | null>(null);
   const [choice, setChoice] = useState('');
-  const [settingsOpened, setSettingsOpened] = useState(false);
-  const [settingsFailed, setSettingsFailed] = useState(false);
-  const [stillDenied, setStillDenied] = useState(false);
-  const [restarting, setRestarting] = useState(false);
-  const [restartFailed, setRestartFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [catalogFailed, setCatalogFailed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,9 +67,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
   const operation = useRef<string | null>(null);
   const live = useRef(true);
   const catalogRequest = useRef(0);
-  const privacyRequest = useRef(0);
-  const [resumedProfileId, setResumedProfileId] = useState<string>();
-  const pendingResume = useRef(resume ?? null);
 
   const loadSources = useCallback(async () => {
     const request = ++catalogRequest.current;
@@ -127,7 +101,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
   const endSession = useCallback(() => {
     live.current = false;
     catalogRequest.current++;
-    privacyRequest.current++;
     if (operation.current)
       void bridge?.cancelAccountImport(operation.current).catch(() => undefined);
   }, [bridge]);
@@ -142,8 +115,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
     ? profiles[browserId]?.find((entry) => choiceKey(browserId, entry.id) === choice)
     : undefined;
   const needsProfile = Boolean(browserId && profiles[browserId]?.length && !profile);
-  const activeProfileId = profile?.id ?? resumedProfileId;
-  const accessDenied = error === 'source-access-denied';
   const importBlocked =
     loading ||
     busy ||
@@ -151,13 +122,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
     needsProfile ||
     selected.size === 0 ||
     Boolean(summary && (!summary.importAvailable || summary.recoveryRequired));
-  const recoveryStage = accessDenied
-    ? settingsOpened
-      ? stillDenied
-        ? 'restart'
-        : 'allow-and-import'
-      : 'open-settings'
-    : null;
 
   const close = async () => {
     const operationId = operation.current;
@@ -170,130 +134,48 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
       }
     }
     operation.current = null;
-    privacyRequest.current++;
     onOpenChange(false);
   };
 
-  const performImport = useCallback(
-    async (request: BrowserImportIntent, { automatic = false }: { automatic?: boolean } = {}) => {
-      if (!bridge || operation.current) return;
-      const operationId = crypto.randomUUID();
-      operation.current = operationId;
-      setBusy(true);
-      if (!automatic) setError(null);
-      setFinishing(false);
-      privacyRequest.current++;
-      try {
-        const result = await bridge.importBrowserAccount({
-          operationId,
-          browserId: request.browserId,
-          ...(request.profileId !== undefined ? { profileId: request.profileId } : {}),
-          siteIds: request.siteIds,
-        });
-        if (!live.current || operation.current !== operationId) return;
-        if (result.ok) {
-          setError(null);
-          if ('profiles' in result) {
-            setProfiles((current) => ({ ...current, [request.browserId]: result.profiles }));
-            setChoice('');
-          } else setReport(result.report);
-        } else if (result.error === 'source-access-denied') {
-          setError(result.error);
-          if (settingsOpened) setStillDenied(true);
-        } else {
-          setError(result.error);
-          setSettingsOpened(false);
-          setStillDenied(false);
-        }
-      } catch {
-        if (live.current && operation.current === operationId) setError('unavailable');
-      } finally {
-        if (operation.current === operationId) {
-          operation.current = null;
-          if (live.current) {
-            setBusy(false);
-            setFinishing(false);
-          }
-        }
-      }
-    },
-    [bridge, settingsOpened]
-  );
-
-  const runImport = useCallback(
-    async ({ automatic = false }: { automatic?: boolean } = {}) => {
-      if (catalogFailed) {
-        await loadSources();
-        return;
-      }
-      if (!browserId || needsProfile || selected.size === 0) return;
-      await performImport(
-        {
-          browserId,
-          ...(activeProfileId !== undefined ? { profileId: activeProfileId } : {}),
-          siteIds: [...selected],
-        },
-        { automatic }
-      );
-    },
-    [activeProfileId, browserId, catalogFailed, loadSources, needsProfile, performImport, selected]
-  );
-
-  useEffect(() => {
-    const intent = pendingResume.current;
-    if (!intent || loading) return;
-    pendingResume.current = null;
-    if (!sources.some((source) => source.browserId === intent.browserId)) return;
-    setBrowserId(intent.browserId);
-    setChoice(`browser:${intent.browserId}`);
-    setResumedProfileId(intent.profileId);
-    setSelected(new Set(intent.siteIds));
-    void performImport(intent);
-  }, [loading, performImport, sources]);
-
-  const openPrivacySettings = async () => {
-    const request = ++privacyRequest.current;
-    setSettingsFailed(false);
-    try {
-      const result = await bridge?.openBrowserDataPrivacySettings();
-      if (!live.current || privacyRequest.current !== request) return;
-      setSettingsOpened(Boolean(result?.opened));
-      setSettingsFailed(!result?.opened);
-    } catch {
-      if (live.current && privacyRequest.current === request) setSettingsFailed(true);
+  const runImport = async () => {
+    if (catalogFailed) {
+      await loadSources();
+      return;
     }
-  };
-
-  const restartMolly = async () => {
-    if (!browserId) return;
-    setRestartFailed(false);
-    setRestarting(true);
-    let accepted = false;
+    if (!bridge || !browserId || needsProfile || selected.size === 0 || operation.current) return;
+    const operationId = crypto.randomUUID();
+    operation.current = operationId;
+    setBusy(true);
+    setError(null);
+    setFinishing(false);
     try {
-      saveBrowserImportIntent({
+      const result = await bridge.importBrowserAccount({
+        operationId,
         browserId,
-        ...(activeProfileId !== undefined ? { profileId: activeProfileId } : {}),
+        ...(profile ? { profileId: profile.id } : {}),
         siteIds: [...selected],
       });
-      accepted = (await getIpcServices()?.app.restartApp())?.ok === true;
-      if (live.current && !accepted) setRestartFailed(true);
+      if (!live.current || operation.current !== operationId) return;
+      if (result.ok) {
+        if ('profiles' in result) {
+          setProfiles((current) => ({ ...current, [browserId]: result.profiles }));
+          setChoice('');
+        } else setReport(result.report);
+      } else if (result.error !== 'source-access-denied') {
+        setError(result.error);
+      }
     } catch {
-      if (live.current) setRestartFailed(true);
+      if (live.current && operation.current === operationId) setError('unavailable');
     } finally {
-      if (!accepted) clearBrowserImportIntent();
-      if (live.current) setRestarting(false);
+      if (operation.current === operationId) {
+        operation.current = null;
+        if (live.current) {
+          setBusy(false);
+          setFinishing(false);
+        }
+      }
     }
   };
-
-  const recheckOnReturn = recoveryStage === 'allow-and-import' && !busy && !report;
-  useEffect(() => {
-    if (!recheckOnReturn) return undefined;
-    const recheck = () => void runImport({ automatic: true });
-    window.addEventListener('focus', recheck);
-    return () => {
-      window.removeEventListener('focus', recheck);
-    };
-  }, [recheckOnReturn, runImport]);
 
   return (
     <Dialog
@@ -340,12 +222,6 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
               setChoice(value);
               setError(null);
               setReport(null);
-              privacyRequest.current++;
-              setSettingsOpened(false);
-              setSettingsFailed(false);
-              setStillDenied(false);
-              setRestartFailed(false);
-              setResumedProfileId(undefined);
             }}
           >
             <SelectTrigger
@@ -492,43 +368,7 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
             {t('settings.browserImport.errors.restore-incomplete')}
           </p>
         ) : null}
-        {error && accessDenied ? (
-          <div role="alert" className="space-y-2 text-sm">
-            {stillDenied ? (
-              <p>{t('settings.browserImport.recovery.stillDenied')}</p>
-            ) : (
-              <>
-                <p className="font-medium">{t('settings.browserImport.recovery.title')}</p>
-                <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">
-                  <li>{t('settings.browserImport.recovery.step1')}</li>
-                  <li>{t('settings.browserImport.recovery.step2')}</li>
-                  <li>{t('settings.browserImport.recovery.step3')}</li>
-                  <li>{t('settings.browserImport.recovery.step4')}</li>
-                </ol>
-                <img
-                  src={resolvedTheme === 'dark' ? appDataDarkScreenshot : appDataLightScreenshot}
-                  alt={t('settings.browserImport.recovery.screenshotAlt')}
-                  className="w-full max-w-md rounded-md border border-border"
-                />
-              </>
-            )}
-            {settingsOpened && !stillDenied ? (
-              <p className="text-xs text-muted-foreground">
-                {t('settings.browserImport.settingsReturn')}
-              </p>
-            ) : null}
-            {settingsFailed ? (
-              <p className="text-xs text-destructive">
-                {t('settings.browserImport.openSystemSettingsFailed')}
-              </p>
-            ) : null}
-            {restartFailed ? (
-              <p className="text-xs text-destructive">
-                {t('settings.browserImport.restartFailed')}
-              </p>
-            ) : null}
-          </div>
-        ) : error ? (
+        {error ? (
           <div role="alert" className="text-sm text-destructive">
             <p>{t(`settings.browserImport.errors.${error}`)}</p>
           </div>
@@ -575,37 +415,18 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
               {t('common.cancel')}
             </Button>
           ) : null}
-          {recoveryStage === 'restart' ? (
-            <Button
-              variant="outline"
-              disabled={busy || restarting}
-              onClick={() => void openPrivacySettings()}
-            >
-              {t('settings.browserImport.openSystemSettingsAgain')}
-            </Button>
-          ) : null}
           <Button
-            onClick={() => {
-              if (report) onOpenChange(false);
-              else if (recoveryStage === 'open-settings') void openPrivacySettings();
-              else if (recoveryStage === 'restart') void restartMolly();
-              else void runImport();
-            }}
-            disabled={
-              !report &&
-              (busy || restarting || (recoveryStage !== 'open-settings' && importBlocked))
-            }
+            onClick={() => (report ? onOpenChange(false) : void runImport())}
+            disabled={!report && importBlocked}
           >
             {t(
               report
                 ? 'settings.browserImport.done'
                 : busy
                   ? 'settings.browserAccounts.importing'
-                  : recoveryStage
-                    ? recoveryLabels[recoveryStage]
-                    : error
-                      ? 'settings.browserImport.retry'
-                      : 'settings.browserImport.import'
+                  : error
+                    ? 'settings.browserImport.retry'
+                    : 'settings.browserImport.import'
             )}
           </Button>
         </DialogFooter>

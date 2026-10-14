@@ -33,7 +33,6 @@ import { CliService } from './services/cli-service'
 import { LoroDataPlaneRelay } from './services/loro-data-plane-relay'
 import { NotificationService } from './services/notification-service'
 import { AppUpdaterService } from './services/app-updater-service'
-import { restartMolly } from './services/app-restart'
 import { shouldConstructUpdaterEnabled } from './services/app-updater-sparkle-policy'
 import { GlobalShortcutsService } from './services/global-shortcuts-service'
 import { WindowsTrayService } from './services/windows-tray-service'
@@ -249,13 +248,7 @@ if (hasSingleInstanceLock) {
       windowBadgeService,
       globalShortcutsService,
       getMainWindow,
-      completeOnboarding,
-      restartApp: () =>
-        restartMolly({
-          prepareRestart: isLocalPlatform() ? prepareDesignUpdate : undefined,
-          relaunch: () => app.relaunch(),
-          quit: () => app.quit()
-        })
+      completeOnboarding
     })
 
     // The design preview render host (P2.4b): the desktop polls its daemon for

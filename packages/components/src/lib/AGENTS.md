@@ -90,12 +90,3 @@ surfaces, or Electron IPC typing. Read the relevant sections before those change
 - Use `product-storage.ts` and `atom-with-product-storage.ts` for renamed settings.
   Read the exact legacy key only when the Molly key is absent; write Molly only.
   Explicit reset removes both keys. Never enumerate or import another app’s storage.
-
-## Browser import restart intent
-
-- `molly:browserImportResume` (`browser-import-resume.ts`) is the only renderer-owned
-  auto-start. Write it only from the Restart click, with browser, optional profile and
-  websites; clear it when Molly refuses the restart. Boot takes and removes it once,
-  before any import starts. Malformed, unknown-version, empty-website and uninstalled
-  browser values are dropped, never retried. The intent holds opaque IDs only, never
-  paths, cookies or import results.

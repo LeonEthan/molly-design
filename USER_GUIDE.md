@@ -150,15 +150,14 @@ permanent access for this flow.
 When you approve a system prompt while import is pending, it continues automatically.
 An OS denial or cancellation retains your selections for retry. Closing the dialog
 resets its website choices the next time you open it. If macOS has blocked
-browser-data access, Molly guides you to **System Settings → Privacy & Security →
-App Data**: turn Molly on there, then return to Molly. After you return, Molly checks
-again and imports without another click. If access is still blocked, choose
-**Restart Molly and import**; Molly restarts once Agent work and design saving finish,
-then resumes the same import automatically. Molly does not otherwise retry a denied request.
-Keychain denial and other read failures show their own reason. In development macOS can
-attribute browser-data access to the terminal or coding agent that launched Molly.
-The system may decline to show an approval prompt for that launcher; use the System
-Settings action offered by the failed import in that case.
+browser-data access, the dialog returns to its ready state without a message and
+keeps your browser, profile and website selections; click **Import** again to retry.
+Molly does not automatically retry a denied request, and macOS may not prompt again
+after a denial — allow Molly under **System Settings → Privacy & Security → App Data**
+yourself first. Keychain denial and other read failures show their own reason.
+In development macOS can attribute browser-data access to the terminal or coding
+agent that launched Molly, and the system may decline to show an approval prompt
+for that launcher.
 Failed listing does not establish that profiles are absent.
 
 Agents remain available while you choose a profile or answer authorization prompts.

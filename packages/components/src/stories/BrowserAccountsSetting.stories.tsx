@@ -71,10 +71,6 @@ const meta = {
             return 'cancelled';
           case 'publicBrowser.clearAccountData':
             return { removed: 14 };
-          case 'publicBrowser.openBrowserDataPrivacySettings':
-            return { opened: true, platform: 'darwin' };
-          case 'app.restartApp':
-            return { ok: true };
           default:
             throw new Error(`Unexpected story IPC: ${channel}`);
         }

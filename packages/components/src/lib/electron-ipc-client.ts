@@ -109,7 +109,6 @@ export function getPublicBrowserBridge() {
       pub.importBrowserAccount(input),
     cancelAccountImport: (operationId: string) => pub.cancelAccountImport({ operationId }),
     clearAccountData: () => pub.clearAccountData(),
-    openBrowserDataPrivacySettings: () => pub.openBrowserDataPrivacySettings(),
     takeAgentControl: (browserId: string) => pub.takeAgentControl({ browserId }),
     resumeAgentControl: (browserId: string) => pub.resumeAgentControl({ browserId }),
     onState: (handler: (state: ElectronPublicBrowserState) => void) =>

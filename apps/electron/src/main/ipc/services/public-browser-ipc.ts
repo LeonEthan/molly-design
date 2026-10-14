@@ -177,12 +177,6 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async openBrowserDataPrivacySettings() {
-    assertTrustedSender()
-    return await getIpcServiceDeps().publicBrowserService.openBrowserDataPrivacySettings()
-  }
-
-  @IpcMethod()
   async clearAccountData() {
     assertTrustedSender()
     return { removed: await getIpcServiceDeps().publicBrowserService.clearAccountData() }

@@ -135,11 +135,10 @@ this page is the full text of the rules summarised there.
   a five-minute cooperative read deadline. Cancellation cannot dismiss a system
   prompt; the source operation keeps its native lease until settlement and discards
   late results. Typed browser-file denial, Keychain denial and other unavailable
-  source failures stay distinct. Only file denial offers privacy settings;
-  retained selections continue through an explicit Continue import action without
-  a manual profile refresh. Development file access can belong to the launcher;
-  macOS may reject prompting it, leaving the same file-denial settings fallback.
-  A denied request never retries itself. Authorization
+  source failures stay distinct. A confirmed file denial is silent: the dialog
+  returns to its ready state with selections kept and no settings fallback.
+  Development file access can belong to the launcher; macOS may reject prompting
+  it. A denied request never retries itself; retry is an explicit click. Authorization
   and metadata preparation leave Agents and Molly website data available. After
   the source is ready, the write phase pauses Agents, drains pages, isolates network
   and Workers, preflights quotas, merges exact identities, and verifies writes and

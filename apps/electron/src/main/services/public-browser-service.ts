@@ -10,8 +10,7 @@ import {
   type ElectronBrowserImportReport,
   type ElectronBrowserImportSources,
   type ElectronBrowserProfileChoice,
-  type ElectronBrowserImportCancelResult,
-  type OpenSystemNotificationSettingsResult
+  type ElectronBrowserImportCancelResult
 } from '@molly/shared/electron-ipc'
 import { parseBrowserAddress } from '@molly/shared/browser-url'
 import { ACCOUNT_IMPORT_BROWSERS } from '@molly/shared/electron-ipc'
@@ -39,7 +38,6 @@ import {
   BROWSER_ACCOUNT_SITES,
   browserAccountSiteForDomain
 } from '@molly/shared/browser-account-sites'
-import { openBrowserDataPrivacySettings as openMacBrowserDataPrivacySettings } from './browser-data-privacy-settings'
 
 type PublicBrowserRecord = {
   browserId: string
@@ -581,10 +579,6 @@ export class PublicBrowserService {
       throw new BrowserAccountError('source-unavailable')
     this.assertAccountOwner(operation)
     return listImportProfiles(browserId, operation.controller.signal)
-  }
-
-  async openBrowserDataPrivacySettings(): Promise<OpenSystemNotificationSettingsResult> {
-    return await openMacBrowserDataPrivacySettings()
   }
 
   async getAccountSummary(): Promise<ElectronBrowserAccountSummary> {

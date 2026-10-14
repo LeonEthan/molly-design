@@ -115,21 +115,24 @@ this page is the full text of the rules summarised there.
   next Turn, Zen spends that Turn's reveal, and browsing ending never returns to
   the canvas.
   A packaged Molly with a stable macOS signing identity stores site sessions in a
-  separate persistent partition. Development and ad-hoc macOS builds use a
-  memory-only partition. With OS secure storage, unpackaged macOS development can
-  import selected website accounts into that memory session; packaged ad-hoc/unsigned macOS builds
-  remain blocked because their Keychain trust does not reliably survive rebuilds.
-  The shared account dialog initially discovers installed Chromium browsers without
-  accessing profiles. Import starts a cancellable source operation that lists the
-  selected browser's metadata and allows real native access to request authorization.
-  One profile proceeds automatically; multiple profiles return to the same picker
-  for explicit selection before any Cookie read. Main re-enumerates and validates
-  each selected profile rather than trusting a cached list. It then uses one bounded
-  whole-profile `rookie-cookies` inventory read before header normalization and
+  separate persistent partition. Unpackaged development uses its own persisted
+  development partition; packaged ad-hoc macOS builds use a memory-only partition.
+  With OS secure storage, unpackaged macOS development can import selected website
+  accounts into the persisted development session; packaged ad-hoc/unsigned macOS
+  builds remain blocked because their Keychain trust does not reliably survive rebuilds.
+  The shared account dialog lists the selected browser's real profiles when it opens
+  (a cancellable operation where native access requests authorization) and shows no
+  recovery UI after a denial. A single profile is displayed and waits for Import;
+  several require an explicit pick before any Cookie read. Main re-lists and compares
+  the chosen profile's path with the listing, copies the Cookies database and sidecars
+  into a private temp directory without following symlinks (native discovery already
+  drops symlinked user-data roots and profile directories; quit awaits and removes the copy), and then uses one bounded
+  whole-profile `rookie-cookies` inventory read of that copy before header normalization and
   filters the shared design/commerce catalog IDs, validates selected fields, and
-  retains Cookie values and keys in main. Expired and source CHIPS Cookies
-  are skipped and counted; unknown contexts, conflicting identities and incomplete
-  reads fail before writes. The [whole-profile import](../notes/implemented/feature/2026-10-11-whole-profile-browser-import.md)
+  retains Cookie values and keys in main. Per selected site it counts discovered,
+  imported, skipped (expired or CHIPS) and failed (invalid, duplicate or oversized)
+  rows; incomplete reads fail before writes. The [profile-first revision](../notes/implemented/bug-fix/2026-10-14-browser-import-profile-first.md),
+  [whole-profile import](../notes/implemented/feature/2026-10-11-whole-profile-browser-import.md)
   and [permission-intent revision](../notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
   replace the older Pinterest-only two-read flow.
   The [development-import decision](../notes/implemented/feature/2026-10-03-development-browser-account-import.md)

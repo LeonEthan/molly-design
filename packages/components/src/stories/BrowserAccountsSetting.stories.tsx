@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react';
 import { userEvent, within } from 'storybook/test';
-import type { ElectronBrowserAccountImportInput } from '@molly/shared/electron-ipc';
 import { BrowserAccountsSetting } from '@/components/settings/browser-accounts-setting';
 
 const meta = {
@@ -18,17 +17,18 @@ const meta = {
     const previous = window.ipc;
     window.ipc = {
       on: () => () => undefined,
-      invoke: async (channel: string, input?: ElectronBrowserAccountImportInput) => {
+      invoke: async (channel: string) => {
         switch (channel) {
           case 'publicBrowser.getAccountSummary':
             return {
-              persistent: name !== 'Development Build',
               importAvailable: name !== 'Unsigned Package',
               ...(name === 'Unsigned Package'
                 ? { importUnavailableReason: 'signing-required' }
                 : {}),
-              cookieCount: 14,
-              sites: [{ siteId: 'pinterest', cookieCount: 14 }],
+              sites: [
+                { siteId: 'pinterest', cookieCount: 14 },
+                { siteId: 'amazon', cookieCount: 26 },
+              ],
             };
           case 'publicBrowser.getImportSources':
             return {
@@ -40,30 +40,33 @@ const meta = {
                       { browserId: 'edge', browserName: 'Microsoft Edge' },
                     ],
             };
+          case 'publicBrowser.getImportProfiles':
+            if (name === 'Profile Access Denied') return { ok: false, error: 'source-access-denied' };
+            if (name === 'Unreadable Profiles') return { ok: false, error: 'source-unavailable' };
+            if (name === 'Listing Profiles') return new Promise(() => {});
+            return {
+              ok: true,
+              profiles:
+                ['Single Profile', 'Importing', 'Keychain Access Denied', 'Import Failed'].includes(name)
+                  ? [{ id: 'opaque-default', name: 'Designer', isDefault: true }]
+                  : [
+                      { id: 'opaque-default', name: 'Designer', isDefault: true },
+                      { id: 'opaque-studio', name: 'Studio', isDefault: false },
+                      { id: 'opaque-work', name: 'Work', isDefault: false },
+                    ],
+            };
           case 'publicBrowser.importBrowserAccount':
             if (name === 'Import Failed') return { ok: false, error: 'write-restored' };
-            if (name === 'Importing With Authorization') return new Promise(() => {});
-            if (name === 'File Access Denied') return { ok: false, error: 'source-access-denied' };
+            if (name === 'Importing') return new Promise(() => {});
             if (name === 'Keychain Access Denied')
               return { ok: false, error: 'source-authorization-denied' };
-            if (name === 'Unreadable Profiles') return { ok: false, error: 'source-unavailable' };
-            if (name === 'Choose Profile' && !input?.profileId)
-              return {
-                ok: true,
-                profiles: [
-                  { id: 'opaque-default', name: 'Designer', isDefault: true },
-                  { id: 'opaque-studio', name: 'Studio', isDefault: false },
-                ],
-              };
             return {
               ok: true,
               report: {
-                imported: 40,
-                skippedExpired: 2,
-                skippedPartitioned: 1,
                 sites: [
-                  { siteId: 'pinterest', imported: 14, skippedExpired: 2, skippedPartitioned: 1 },
-                  { siteId: 'amazon', imported: 26, skippedExpired: 0, skippedPartitioned: 0 },
+                  { siteId: 'pinterest', discovered: 17, imported: 14, skipped: 2, failed: 1 },
+                  { siteId: 'amazon', discovered: 26, imported: 26, skipped: 0, failed: 0 },
+                  { siteId: 'figma', discovered: 0, imported: 0, skipped: 0, failed: 0 },
                 ],
               },
             };
@@ -94,12 +97,19 @@ const opened: Story = {
     await openImport(canvasElement);
   },
 };
-const importing: Story = {
+const imported: Story = {
   play: async ({ canvasElement }) => {
     const dialog = await openImport(canvasElement);
-    const button = await dialog.findByRole('button', { name: /^(Import|导入)$/ });
-    await dialog.findByText('Google Chrome');
-    await userEvent.click(button);
+    await userEvent.click(await dialog.findByRole('combobox', { name: /Profile|用户配置/ }));
+    await userEvent.click(await within(document.body).findByRole('option', { name: 'Studio' }));
+    await userEvent.click(await dialog.findByRole('button', { name: /^(Import|导入)$/ }));
+  },
+};
+const importSingle: Story = {
+  play: async ({ canvasElement }) => {
+    const dialog = await openImport(canvasElement);
+    await dialog.findByText('Designer');
+    await userEvent.click(await dialog.findByRole('button', { name: /^(Import|导入)$/ }));
   },
 };
 export const Ready: Story = {};
@@ -110,13 +120,14 @@ export const ExpandedWebsites: Story = {
     await userEvent.click(await dialog.findByRole('button', { name: /Websites|网站清单/ }));
   },
 };
-export const ImportingWithAuthorization: Story = importing;
-export const ChooseProfile: Story = importing;
-export const FileAccessDenied: Story = importing;
-export const KeychainAccessDenied: Story = importing;
-export const ImportFailed: Story = importing;
-export const Imported: Story = importing;
-export const DevelopmentBuild: Story = opened;
+export const ListingProfiles: Story = opened;
+export const SingleProfile: Story = importSingle;
+export const ChooseProfile: Story = opened;
+export const ProfileAccessDenied: Story = opened;
+export const Importing: Story = importSingle;
+export const KeychainAccessDenied: Story = importSingle;
+export const ImportFailed: Story = importSingle;
+export const Imported: Story = imported;
 export const UnsignedPackage: Story = opened;
 export const NoBrowsers: Story = opened;
-export const UnreadableProfiles: Story = importing;
+export const UnreadableProfiles: Story = opened;

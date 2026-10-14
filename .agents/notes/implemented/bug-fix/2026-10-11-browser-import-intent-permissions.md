@@ -6,6 +6,8 @@ Translation: pending
 
 ## Abstract
 
+> 2026-10-14: profile listing moved back to dialog open, with the OS prompt there, by [profile-first import](2026-10-14-browser-import-profile-first.md); the denial-silence rule stands.
+
 Opening the browser-account dialog read profile metadata before the user requested
 import, and an access failure disabled the action that should initiate authorization.
 The revised flow discovers installed apps first and prepares the selected browser

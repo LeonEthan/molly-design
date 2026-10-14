@@ -6,7 +6,7 @@ identity. The addon is loaded directly from `resources/browser-cookie-reader`;
 the npm package supplies TypeScript declarations only.
 
 The local patch keeps upstream discovery, SQLite snapshotting and Chromium
-unsealing. Resource version `0.6.0+molly-native-keychain.3` preserves native filesystem
+unsealing. Resource version `0.6.0+molly-native-keychain.6` preserves native filesystem
 EPERM for the selected source and explicit Keychain user-cancellation/authentication
 failure. EACCES, generic permission errors and other Keychain failures remain unavailable
 sources rather than offering a privacy-settings recovery they do not establish.
@@ -18,6 +18,12 @@ real native access may trigger system authorization. There is no separate grant 
 non-interactive permission probe or guarantee that denial can prompt again.
 A native SQL preflight and staged-row budget
 reject more than 50,000 rows or 32 MiB of cookie payload before exposing a result.
+Version `.5` also carries the extraction warnings through the explicit-path
+`fromPath` route (a failed or undecryptable row is counted exactly as `read`
+counts it, never dropped) and discovery skips a symbolic-link profile directory
+or user-data root (including a flat layout's root) before canonicalization hides it;
+version `.6` added the root rule. An installation whose only root is a link makes
+profile listing fail rather than list nothing.
 
 Molly opts into the private `mollyInventory` read mode. It preserves decoded rows
 before portable HTTP-header octet filtering and partition normalization so main

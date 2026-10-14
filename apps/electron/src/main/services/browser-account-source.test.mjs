@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript test fixtures. */
 import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -10,9 +15,9 @@ const compiled = await build({
   stdin: {
     contents: `
     export { BROWSER_ACCOUNT_SITES, browserAccountSiteForDomain } from '@molly/shared/browser-account-sites';
-    export { ElectronBrowserAccountImportInputSchema } from '@molly/shared/electron-ipc';
+    export { ElectronBrowserAccountImportInputSchema, ElectronBrowserImportProfilesInputSchema } from '@molly/shared/electron-ipc';
     export { importBrowserAccountCookies } from './browser-account-import.ts';
-    export { listImportSources, listImportProfiles, readBrowserProfileCookies, selectBrowserCookies } from './browser-account-source.ts';
+    export { listImportSources, listImportProfiles, assertRegularProfileFiles, readBrowserProfileCookies, removeImportCopies, sweepStaleImportCopies, selectBrowserCookies } from './browser-account-source.ts';
   `,
     resolveDir: fileURLToPath(new URL('.', import.meta.url)),
     loader: 'ts'
@@ -33,10 +38,14 @@ const {
   BROWSER_ACCOUNT_SITES,
   browserAccountSiteForDomain,
   ElectronBrowserAccountImportInputSchema,
+  ElectronBrowserImportProfilesInputSchema,
   importBrowserAccountCookies,
   listImportSources,
   listImportProfiles,
+  assertRegularProfileFiles,
   readBrowserProfileCookies,
+  removeImportCopies,
+  sweepStaleImportCopies,
   selectBrowserCookies
 } = module.exports
 
@@ -107,6 +116,73 @@ function storeFixture(initial = []) {
   }
 }
 
+const syntheticLocalState = (profiles) => ({
+  profile: {
+    info_cache: Object.fromEntries(profiles.map(([directory, name]) => [directory, { name }]))
+  }
+})
+const profileDescriptors = (root, state) =>
+  Object.entries(state.profile.info_cache).map(([directory, { name }], index) => ({
+    profile: {
+      profileId: directory,
+      displayName: name,
+      path: join(root, directory),
+      pathLossy: false
+    },
+    isDefault: index === 0,
+    sources: [
+      {
+        role: 'cookies',
+        format: 'chromium_sqlite',
+        path: join(root, directory, 'Network', 'Cookies'),
+        pathLossy: false,
+        precedence: 0
+      }
+    ]
+  }))
+async function syntheticChrome(
+  profiles = [
+    ['Default', 'Synthetic personal'],
+    ['Profile 1', 'Synthetic studio'],
+    ['Profile 2', 'Synthetic work']
+  ]
+) {
+  const root = await mkdtemp(join(tmpdir(), 'molly-synthetic-chrome-'))
+  const state = syntheticLocalState(profiles)
+  await writeFile(join(root, 'Local State'), JSON.stringify(state))
+  for (const [directory] of profiles) {
+    await mkdir(join(root, directory, 'Network'), { recursive: true })
+    await writeFile(join(root, directory, 'Network', 'Cookies'), 'synthetic')
+    await writeFile(join(root, directory, 'Network', 'Cookies-wal'), 'synthetic')
+  }
+  return {
+    root,
+    reader: {
+      browserProfiles: async () =>
+        profileDescriptors(
+          root,
+          JSON.parse(await (await import('node:fs/promises')).readFile(join(root, 'Local State')))
+        )
+    },
+    cleanup: () => rm(root, { recursive: true, force: true })
+  }
+}
+const listedProfile = async (chrome, directory = 'Default') =>
+  (await listImportProfiles('chrome', new AbortController().signal, chrome.reader)).find(
+    (entry) => entry.id === directory
+  )
+const readerFor = (result, events = []) => ({
+  CancellationHandle: class {
+    cancel() {
+      events.push('cancelled')
+    }
+  },
+  fromPath: async (request) => {
+    events.push(request)
+    return result
+  }
+})
+
 void test('catalog has 13 design and 14 commerce platforms with boundary-safe regional matching', () => {
   assert.equal(BROWSER_ACCOUNT_SITES.filter((site) => site.group === 'design').length, 13)
   assert.equal(BROWSER_ACCOUNT_SITES.filter((site) => site.group === 'commerce').length, 14)
@@ -144,48 +220,72 @@ void test('discovery checks app bundles without enumerating browser data directo
   )
 })
 
-void test('browser-only Import is a bounded ID request and profile paths remain forbidden', () => {
-  const browserOnly = { ...input }
-  delete browserOnly.profileId
-  assert.deepEqual(ElectronBrowserAccountImportInputSchema.parse(browserOnly), browserOnly)
+void test('Import requires an explicit profile ID and profile paths remain forbidden', () => {
+  assert.deepEqual(ElectronBrowserAccountImportInputSchema.parse(input), input)
+  const withoutProfile = { ...input }
+  delete withoutProfile.profileId
+  for (const forbidden of [
+    withoutProfile,
+    { ...input, profilePath: '/private/path' },
+    { ...input, profileId: '' }
+  ])
+    assert.equal(ElectronBrowserAccountImportInputSchema.safeParse(forbidden).success, false)
+  const listing = { operationId: input.operationId, browserId: 'chrome' }
+  assert.deepEqual(ElectronBrowserImportProfilesInputSchema.parse(listing), listing)
   assert.equal(
-    ElectronBrowserAccountImportInputSchema.safeParse({
-      ...browserOnly,
-      profilePath: '/private/path'
-    }).success,
+    ElectronBrowserImportProfilesInputSchema.safeParse({ browserId: 'chrome' }).success,
     false
   )
 })
 
-void test('profile enumeration returns only choice metadata and discards a cancelled native result', async () => {
-  const pending = Promise.withResolvers(),
-    started = Promise.withResolvers(),
-    controller = new AbortController()
-  const nativeProfiles = [
-    {
-      profile: { profileId: 'opaque-profile', displayName: 'Synthetic', path: '/private/path' },
-      isDefault: true
-    }
-  ]
-  const reader = {
-    browserProfiles: async (browserId, options) => {
-      assert.equal(browserId, 'chrome')
-      assert.deepEqual(options, { timeoutMs: 300000 })
-      started.resolve()
-      return pending.promise
-    }
+void test('profile enumeration lists every Local State profile and discards a cancelled native result', async () => {
+  const chrome = await syntheticChrome()
+  try {
+    const pending = Promise.withResolvers(),
+      started = Promise.withResolvers(),
+      controller = new AbortController()
+    const listing = listImportProfiles('chrome', controller.signal, {
+      browserProfiles: async (browserId, options) => {
+        assert.equal(browserId, 'chrome')
+        assert.deepEqual(options, { timeoutMs: 300000 })
+        started.resolve()
+        return pending.promise
+      }
+    })
+    await started.promise
+    controller.abort()
+    pending.resolve(await chrome.reader.browserProfiles())
+    await assert.rejects(listing, { message: 'cancelled' })
+    const profiles = await listImportProfiles('chrome', new AbortController().signal, chrome.reader)
+    assert.deepEqual(
+      profiles.map(({ id, name, isDefault }) => ({ id, name, isDefault })),
+      [
+        { id: 'Default', name: 'Synthetic personal', isDefault: true },
+        { id: 'Profile 1', name: 'Synthetic studio', isDefault: false },
+        { id: 'Profile 2', name: 'Synthetic work', isDefault: false }
+      ]
+    )
+    assert.deepEqual(profiles[1].path, join(chrome.root, 'Profile 1'))
+    assert.deepEqual(profiles[1].sources, [join(chrome.root, 'Profile 1', 'Network', 'Cookies')])
+  } finally {
+    await chrome.cleanup()
   }
-  const listing = listImportProfiles('chrome', controller.signal, reader)
-  await started.promise
-  controller.abort()
-  pending.resolve(nativeProfiles)
-  await assert.rejects(listing, { message: 'cancelled' })
-  assert.deepEqual(
-    await listImportProfiles('chrome', new AbortController().signal, {
-      browserProfiles: async () => nativeProfiles
-    }),
-    [{ id: 'opaque-profile', name: 'Synthetic', isDefault: true }]
-  )
+})
+
+void test('a profile whose path cannot be represented exactly is not offered', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const [descriptor] = await chrome.reader.browserProfiles()
+    descriptor.profile.pathLossy = true
+    assert.deepEqual(
+      await listImportProfiles('chrome', new AbortController().signal, {
+        browserProfiles: async () => [descriptor]
+      }),
+      []
+    )
+  } finally {
+    await chrome.cleanup()
+  }
 })
 
 for (const [nativeCode, errorCode] of [
@@ -194,39 +294,44 @@ for (const [nativeCode, errorCode] of [
   ['engine_failure', 'source-unavailable']
 ])
   void test(`native ${nativeCode} reaches only its safe import error code`, async () => {
-    const error = new Error(
-      `__ROOKIE_ERROR_V1__${JSON.stringify({
-        rookieCode: nativeCode,
-        message: '/private/path synthetic-secret'
-      })}`
-    )
-    await assert.rejects(
-      listImportProfiles('chrome', new AbortController().signal, {
-        browserProfiles: async () => {
-          throw error
-        }
-      }),
-      { message: errorCode }
-    )
-    await assert.rejects(
-      readBrowserProfileCookies(
-        'chrome',
-        input.profileId,
-        input.siteIds,
-        new AbortController().signal,
-        {
-          CancellationHandle: class {
-            cancel() {
-              return undefined
-            }
-          },
-          read: async () => {
+    const chrome = await syntheticChrome([['Default', 'Synthetic']])
+    try {
+      const error = new Error(
+        `__ROOKIE_ERROR_V1__${JSON.stringify({
+          rookieCode: nativeCode,
+          message: '/private/path synthetic-secret'
+        })}`
+      )
+      await assert.rejects(
+        listImportProfiles('chrome', new AbortController().signal, {
+          browserProfiles: async () => {
             throw error
           }
-        }
-      ),
-      { message: errorCode }
-    )
+        }),
+        { message: errorCode }
+      )
+      await assert.rejects(
+        readBrowserProfileCookies(
+          'chrome',
+          await listedProfile(chrome),
+          input.siteIds,
+          new AbortController().signal,
+          {
+            CancellationHandle: class {
+              cancel() {
+                return undefined
+              }
+            },
+            fromPath: async () => {
+              throw error
+            }
+          }
+        ),
+        { message: errorCode }
+      )
+    } finally {
+      await chrome.cleanup()
+    }
   })
 
 void test('a generic permission-looking diagnostic is not misclassified as a file or Keychain denial', async () => {
@@ -245,93 +350,240 @@ void test('a generic permission-looking diagnostic is not misclassified as a fil
     )
 })
 
-void test('one complete profile read is filtered in main and reports selected expiration and CHIPS separately', async () => {
-  const events = []
-  class CancellationHandle {
-    cancel() {
-      events.push('cancelled')
-    }
-  }
-  const reader = {
-    CancellationHandle,
-    read: async (request) => {
-      events.push(request)
-      return {
-        browserId: 'chrome',
-        profileId: input.profileId,
+void test('one complete profile read is filtered in main and reports per-site discovered, imported, skipped and failed', async () => {
+  const chrome = await syntheticChrome()
+  try {
+    const profile = await listedProfile(chrome, 'Profile 1')
+    const events = []
+    const reader = readerFor(
+      {
+        browserId: null,
+        profileId: null,
         warnings: [],
         detailedCookies: [
           details(),
           details({ name: 'molly-session', expires: undefined }),
           details({ name: 'expired', expires: now - 1 }),
           details({ name: 'partitioned' }, { topFrameSiteKey: 'https://embedded.example' }),
+          details({ name: 'invalid name' }),
           details({ domain: '.amazon.co.jp', name: 'commerce' }),
           details({ domain: '.google.com', name: 'not-selected' })
         ]
-      }
-    }
-  }
-  const source = await readBrowserProfileCookies(
-    'chrome',
-    input.profileId,
-    input.siteIds,
-    new AbortController().signal,
-    reader,
-    () => now
-  )
-  assert.deepEqual(events, [
-    {
-      browser: 'chrome',
-      profile: input.profileId,
+      },
+      events
+    )
+    const source = await readBrowserProfileCookies(
+      'chrome',
+      profile,
+      input.siteIds,
+      new AbortController().signal,
+      reader,
+      () => now
+    )
+    assert.equal(events.length, 1)
+    const { path, ...request } = events[0]
+    assert.deepEqual(request, {
+      browserId: 'chrome',
       includeExpired: true,
-      includeSession: true,
       mollyInventory: true,
       timeoutMs: 300000,
       appBound: 'disabled'
+    })
+    assert.equal(path.endsWith('/Cookies'), true)
+    assert.equal(path.startsWith(profile.path), false)
+    assert.deepEqual(
+      source.cookies.map((entry) => entry.name),
+      ['synthetic-session', 'molly-session', 'commerce']
+    )
+    assert.equal(source.cookies[1].session, true)
+    assert.deepEqual(source.report, {
+      sites: [
+        { siteId: 'pinterest', discovered: 5, imported: 2, skipped: 2, failed: 1 },
+        { siteId: 'amazon', discovered: 1, imported: 1, skipped: 0, failed: 0 }
+      ]
+    })
+    assert.equal(JSON.stringify(source.report).includes('synthetic-only'), false)
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('the native reader opens a private 0700 copy of the database and sidecars that is removed afterwards', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    const [database] = profile.sources
+    await writeFile(database, 'synthetic database bytes')
+    await writeFile(database + '-wal', 'synthetic wal bytes')
+    await writeFile(database + '-shm', 'synthetic shm bytes')
+    const observed = []
+    const reader = {
+      CancellationHandle: class {
+        cancel() {}
+      },
+      fromPath: async ({ path }) => {
+        const directory = join(path, '..')
+        observed.push({
+          path,
+          mode: (await stat(directory)).mode & 0o777,
+          files: (await readdir(directory)).sort(),
+          database: await readFile(path, 'utf8'),
+          wal: await readFile(path + '-wal', 'utf8'),
+          shm: await readFile(path + '-shm', 'utf8')
+        })
+        return { browserId: null, profileId: null, warnings: [], detailedCookies: [] }
+      }
     }
-  ])
-  assert.deepEqual(
-    source.cookies.map((entry) => entry.name),
-    ['synthetic-session', 'molly-session', 'commerce']
-  )
-  assert.equal(source.cookies[1].session, true)
-  assert.deepEqual(source.report, {
-    imported: 3,
-    skippedExpired: 1,
-    skippedPartitioned: 1,
-    sites: [
-      { siteId: 'pinterest', imported: 2, skippedExpired: 1, skippedPartitioned: 1 },
-      { siteId: 'amazon', imported: 1, skippedExpired: 0, skippedPartitioned: 0 }
-    ]
-  })
-  assert.equal(JSON.stringify(source.report).includes('synthetic-only'), false)
+    await readBrowserProfileCookies(
+      'chrome',
+      profile,
+      ['pinterest'],
+      new AbortController().signal,
+      reader,
+      () => now
+    )
+    assert.equal(observed.length, 1)
+    assert.notEqual(observed[0].path, database)
+    assert.equal(observed[0].mode, 0o700)
+    assert.deepEqual(observed[0].files, ['Cookies', 'Cookies-shm', 'Cookies-wal'])
+    assert.deepEqual(
+      [observed[0].database, observed[0].wal, observed[0].shm],
+      ['synthetic database bytes', 'synthetic wal bytes', 'synthetic shm bytes']
+    )
+    await assert.rejects(stat(join(observed[0].path, '..')), { code: 'ENOENT' })
+    assert.equal(await readFile(database, 'utf8'), 'synthetic database bytes')
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('the private copy is removed when the native read fails', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    let directory
+    await assert.rejects(
+      readBrowserProfileCookies(
+        'chrome',
+        await listedProfile(chrome),
+        ['pinterest'],
+        new AbortController().signal,
+        {
+          CancellationHandle: class {
+            cancel() {}
+          },
+          fromPath: async ({ path }) => {
+            directory = join(path, '..')
+            throw new Error('/private/path synthetic-secret')
+          }
+        }
+      ),
+      { message: 'source-unavailable' }
+    )
+    await assert.rejects(stat(directory), { code: 'ENOENT' })
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('a symlinked Cookies database, profile directory or sidecar is refused before any native read', async () => {
+  const chrome = await syntheticChrome()
+  try {
+    const events = []
+    const read = async (profile) =>
+      readBrowserProfileCookies(
+        'chrome',
+        profile,
+        input.siteIds,
+        new AbortController().signal,
+        readerFor(
+          { browserId: 'chrome', profileId: profile.id, warnings: [], detailedCookies: [] },
+          events
+        ),
+        () => now
+      )
+    const [source] = (await listedProfile(chrome, 'Profile 1')).sources
+    await rm(source)
+    await symlink(join(chrome.root, 'Default', 'Network', 'Cookies'), source)
+    await assert.rejects(read(await listedProfile(chrome, 'Profile 1')), {
+      message: 'source-unavailable'
+    })
+
+    const linkedProfile = await listedProfile(chrome, 'Profile 2')
+    await rm(linkedProfile.path, { recursive: true })
+    await symlink(join(chrome.root, 'Default'), linkedProfile.path)
+    await assert.rejects(read(linkedProfile), { message: 'source-unavailable' })
+
+    const [sidecarOwner] = (await listedProfile(chrome, 'Default')).sources
+    await rm(sidecarOwner + '-wal')
+    await symlink(join(chrome.root, 'Local State'), sidecarOwner + '-wal')
+    await assert.rejects(read(await listedProfile(chrome, 'Default')), {
+      message: 'source-unavailable'
+    })
+    assert.deepEqual(events, [])
+    await rm(sidecarOwner + '-wal')
+    await writeFile(sidecarOwner + '-wal', 'synthetic')
+    await read(await listedProfile(chrome, 'Default'))
+    assert.equal(events.length, 1)
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('a profile or Cookies database that disappeared or left its profile directory is refused', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    await assertRegularProfileFiles(profile)
+    await assert.rejects(
+      assertRegularProfileFiles({ ...profile, sources: [join(chrome.root, 'Local State')] }),
+      { message: 'source-unavailable' }
+    )
+    await assert.rejects(
+      assertRegularProfileFiles({ ...profile, sources: [join(profile.path, 'Missing')] }),
+      { message: 'source-unavailable' }
+    )
+    await assert.rejects(
+      assertRegularProfileFiles({ ...profile, path: join(chrome.root, 'Gone') }),
+      { message: 'source-unavailable' }
+    )
+  } finally {
+    await chrome.cleanup()
+  }
 })
 
 void test('cancellation discards a late native read and never exposes its secret or diagnostic', async () => {
-  const pending = Promise.withResolvers()
-  const controller = new AbortController()
-  const cancelled = Promise.withResolvers()
-  class CancellationHandle {
-    cancel() {
-      cancelled.resolve()
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    const pending = Promise.withResolvers()
+    const controller = new AbortController()
+    const started = Promise.withResolvers()
+    const cancelled = Promise.withResolvers()
+    class CancellationHandle {
+      cancel() {
+        cancelled.resolve()
+      }
     }
+    const read = readBrowserProfileCookies('chrome', profile, ['pinterest'], controller.signal, {
+      CancellationHandle,
+      fromPath: () => {
+        started.resolve()
+        return pending.promise
+      }
+    })
+    await started.promise
+    controller.abort()
+    await cancelled.promise
+    pending.resolve({
+      browserId: 'chrome',
+      profileId: profile.id,
+      warnings: [],
+      detailedCookies: [details()]
+    })
+    await assert.rejects(read, { message: 'cancelled' })
+  } finally {
+    await chrome.cleanup()
   }
-  const read = readBrowserProfileCookies(
-    'chrome',
-    input.profileId,
-    ['pinterest'],
-    controller.signal,
-    { CancellationHandle, read: () => pending.promise }
-  )
-  controller.abort()
-  await cancelled.promise
-  pending.resolve({
-    browserId: 'chrome',
-    profileId: input.profileId,
-    warnings: [],
-    detailedCookies: [details()]
-  })
-  await assert.rejects(read, { message: 'cancelled' })
 })
 
 void test('raw inventory validates only selected import candidates and counts raw partition markers', () => {
@@ -350,10 +602,7 @@ void test('raw inventory validates only selected import candidates and counts ra
     ['synthetic-session']
   )
   assert.deepEqual(source.report, {
-    imported: 1,
-    skippedExpired: 0,
-    skippedPartitioned: 1,
-    sites: [{ siteId: 'pinterest', imported: 1, skippedExpired: 0, skippedPartitioned: 1 }]
+    sites: [{ siteId: 'pinterest', discovered: 2, imported: 1, skipped: 1, failed: 0 }]
   })
   for (const patch of [
     { name: 'invalid name' },
@@ -371,10 +620,13 @@ void test('raw inventory validates only selected import candidates and counts ra
     { value: ' leading-space' },
     { value: 'trailing-space ' },
     { path: '/invalid\tpath' }
-  ])
-    assert.throws(() => selectBrowserCookies([details(patch)], ['pinterest'], now), {
-      message: 'source-invalid'
-    })
+  ]) {
+    const rejected = selectBrowserCookies([details(patch)], ['pinterest'], now)
+    assert.deepEqual(rejected.cookies, [])
+    assert.deepEqual(rejected.report.sites, [
+      { siteId: 'pinterest', discovered: 1, imported: 0, skipped: 0, failed: 1 }
+    ])
+  }
 })
 
 void test('selected Chromium Cookie values retain destination-verified browser syntax exactly', () => {
@@ -388,68 +640,64 @@ void test('selected Chromium Cookie values retain destination-verified browser s
   ]) {
     const source = selectBrowserCookies([details({ value })], ['pinterest'], now)
     assert.equal(source.cookies[0].value, value)
-    assert.equal(source.report.imported, 1)
+    assert.equal(source.report.sites[0].imported, 1)
   }
 })
 
 void test('partial or mismatched native results fail closed with redacted errors', async () => {
-  class CancellationHandle {
-    cancel() {}
-  }
-  for (const patch of [
-    { profileId: 'another' },
-    { browserId: 'edge' },
-    ...['decrypt_failed', 'row_read_failed', 'malformed_host_identity', 'unknown_warning'].map(
-      (code) => ({ warnings: [{ code, count: 1, message: '/private/path synthetic-secret' }] })
-    ),
-    { warnings: [{ code: 'unknown_warning', count: 0, countersSaturated: true }] }
-  ]) {
-    await assert.rejects(
-      readBrowserProfileCookies(
-        'chrome',
-        input.profileId,
-        ['pinterest'],
-        new AbortController().signal,
-        {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    class CancellationHandle {
+      cancel() {}
+    }
+    for (const patch of [
+      ...['decrypt_failed', 'row_read_failed', 'malformed_host_identity', 'unknown_warning'].map(
+        (code) => ({ warnings: [{ code, count: 1, message: '/private/path synthetic-secret' }] })
+      ),
+      { warnings: [{ code: 'unknown_warning', count: 0, countersSaturated: true }] }
+    ]) {
+      await assert.rejects(
+        readBrowserProfileCookies('chrome', profile, ['pinterest'], new AbortController().signal, {
           CancellationHandle,
-          read: async () => ({
-            browserId: 'chrome',
-            profileId: input.profileId,
+          fromPath: async () => ({
+            browserId: null,
+            profileId: null,
             warnings: [],
             detailedCookies: [details()],
             ...patch
           })
-        }
-      ),
-      { message: 'source-incomplete' }
-    )
-  }
-  await assert.rejects(
-    readBrowserProfileCookies(
-      'chrome',
-      input.profileId,
-      ['pinterest'],
-      new AbortController().signal,
-      {
+        }),
+        { message: 'source-incomplete' }
+      )
+    }
+    await assert.rejects(
+      readBrowserProfileCookies('chrome', profile, ['pinterest'], new AbortController().signal, {
         CancellationHandle,
-        read: async () => {
+        fromPath: async () => {
           throw new Error('/private/path synthetic-secret')
         }
-      }
-    ),
-    { message: 'source-unavailable' }
-  )
+      }),
+      { message: 'source-unavailable' }
+    )
+  } finally {
+    await chrome.cleanup()
+  }
 })
 
-void test('unsupported contexts, duplicate identities and bounded profiles reject before writing', () => {
+void test('unsupported contexts, duplicate identities and oversized values are counted as failed and never written', () => {
   for (const entries of [
     [details({}, { unknownField: true })],
     [details(), details()],
     [details({ value: 'a'.repeat(8193) })]
-  ])
-    assert.throws(() => selectBrowserCookies(entries, ['pinterest'], now), {
-      message: 'source-invalid'
-    })
+  ]) {
+    const source = selectBrowserCookies(entries, ['pinterest'], now)
+    const row = source.report.sites[0]
+    assert.equal(row.discovered, entries.length)
+    assert.equal(row.imported + row.skipped + row.failed, entries.length)
+    assert.equal(row.imported, source.cookies.length)
+    assert.equal(row.failed > 0, true)
+  }
   assert.throws(() => selectBrowserCookies(Array(50001).fill(details()), ['pinterest'], now), {
     message: 'source-too-large'
   })
@@ -543,5 +791,61 @@ void test('conflicting destination CHIPS and capacity pressure leave the destina
       { message: initial.length === 1 ? 'destination-unsupported' : 'cookie-capacity' }
     )
     assert.deepEqual(fixture.rows(), initial)
+  }
+})
+
+void test('a synchronous quit sweep removes the tracked private copy while a native read is still pending', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const pending = Promise.withResolvers(),
+      started = Promise.withResolvers()
+    let directory
+    const read = readBrowserProfileCookies(
+      'chrome',
+      await listedProfile(chrome),
+      ['pinterest'],
+      new AbortController().signal,
+      {
+        CancellationHandle: class {
+          cancel() {}
+        },
+        fromPath: async ({ path }) => {
+          directory = join(path, '..')
+          started.resolve()
+          return pending.promise
+        }
+      },
+      () => now
+    )
+    await started.promise
+    assert.equal(existsSync(directory), true)
+    assert.match(directory, new RegExp(`molly-cookies-${process.pid}-`))
+    removeImportCopies()
+    assert.equal(existsSync(directory), false)
+    pending.resolve({ browserId: null, profileId: null, warnings: [], detailedCookies: [] })
+    await read
+    assert.equal(existsSync(directory), false)
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('the startup sweep removes only copies left by a process that no longer exists', async () => {
+  const base = await mkdtemp(join(tmpdir(), 'molly-sweep-base-'))
+  try {
+    const finished = spawnSync(process.execPath, ['-e', ''])
+    const stale = join(base, `molly-cookies-${finished.pid}-abc`)
+    const live = join(base, `molly-cookies-${process.pid}-abc`)
+    const unrelated = join(base, 'unrelated-dir')
+    for (const directory of [stale, live, unrelated]) {
+      await mkdir(directory)
+      await writeFile(join(directory, 'Cookies'), 'synthetic')
+    }
+    await sweepStaleImportCopies(base)
+    assert.equal(existsSync(stale), false)
+    assert.equal(existsSync(live), true)
+    assert.equal(existsSync(unrelated), true)
+  } finally {
+    await rm(base, { recursive: true, force: true })
   }
 })

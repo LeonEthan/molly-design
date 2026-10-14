@@ -7,9 +7,13 @@ import { z } from 'zod'
 import { BrowserAccountError } from './browser-account-error.ts'
 import source from '../../../native/browser-cookie-reader/source.json'
 
-export type BrowserCookieReader = Omit<typeof import('rookie-cookies'), 'read'> & {
+export type BrowserCookieReader = Omit<typeof import('rookie-cookies'), 'read' | 'fromPath'> & {
   read(
     options: import('rookie-cookies').ReadOptions & { mollyInventory: true },
+    cancellation?: import('rookie-cookies').CancellationHandle
+  ): Promise<import('rookie-cookies').ReadResult>
+  fromPath(
+    options: import('rookie-cookies').FromPathOptions & { mollyInventory: true },
     cancellation?: import('rookie-cookies').CancellationHandle
   ): Promise<import('rookie-cookies').ReadResult>
 }

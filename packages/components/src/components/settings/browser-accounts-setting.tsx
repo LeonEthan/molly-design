@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BROWSER_ACCOUNT_SITES } from '@molly/shared/browser-account-sites';
 import type { ElectronBrowserAccountSummary } from '@molly/shared/electron-ipc';
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
 import { Button } from '@/ui/button';
@@ -36,12 +37,13 @@ export function BrowserAccountsSetting() {
       setBusy(false);
     }
   };
+  const saved = summary?.sites.filter((site) => site.cookieCount > 0) ?? [];
   return (
     <div className="space-y-5">
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          {t('settings.browserImport.settingsDescription')}
-        </p>
+      <p className="text-sm text-muted-foreground">
+        {t('settings.browserImport.settingsDescription')}
+      </p>
+      <div className="flex items-center gap-2">
         <Button
           onClick={() => {
             setCleared(false);
@@ -51,25 +53,22 @@ export function BrowserAccountsSetting() {
         >
           {t('settings.browserAccounts.importFromBrowser')}
         </Button>
-        {summary ? (
-          <p className="text-xs text-muted-foreground">
-            {t('settings.browserImport.saved', { count: summary.cookieCount })}
-          </p>
-        ) : null}
-      </div>
-      <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {t('settings.browserImport.clearDescription')}
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy || !summary}
-          onClick={() => void clear()}
-        >
+        <Button variant="outline" disabled={busy || !summary} onClick={() => void clear()}>
           {t(busy ? 'settings.browserImport.clearing' : 'settings.browserImport.clear')}
         </Button>
       </div>
+      {saved.length > 0 ? (
+        <ul className="divide-y divide-border rounded-lg border border-border text-sm">
+          {saved.map((site) => (
+            <li key={site.siteId} className="flex items-center justify-between gap-4 px-4 py-2">
+              <span>{BROWSER_ACCOUNT_SITES.find((entry) => entry.id === site.siteId)?.name}</span>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {t('settings.browserImport.siteCookies', { count: site.cookieCount })}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {t('settings.browserImport.clearFailed')}

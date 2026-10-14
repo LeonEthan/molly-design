@@ -33,13 +33,18 @@ type Lease = {
 }
 
 const AGENT_BROWSER_PARTITION = 'persist:molly-public-browser-v1'
-const DEV_BROWSER_PARTITION = 'molly-public-browser-v1'
+const DEV_BROWSER_PARTITION = 'persist:molly-public-browser-dev-v1'
+const UNSIGNED_BROWSER_PARTITION = 'molly-public-browser-v1'
 
 export const canPersistPublicBrowserSession = (): boolean =>
-  app.isPackaged && (process.platform !== 'darwin' || isStableSignedMacApp(app.getPath('exe')))
+  !app.isPackaged || process.platform !== 'darwin' || isStableSignedMacApp(app.getPath('exe'))
 
 export const publicBrowserPartition = (): string =>
-  canPersistPublicBrowserSession() ? AGENT_BROWSER_PARTITION : DEV_BROWSER_PARTITION
+  !canPersistPublicBrowserSession()
+    ? UNSIGNED_BROWSER_PARTITION
+    : app.isPackaged
+      ? AGENT_BROWSER_PARTITION
+      : DEV_BROWSER_PARTITION
 
 export class PublicBrowserAgentController {
   private readonly leases = new Map<number, Lease>()

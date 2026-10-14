@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -96,6 +96,35 @@ void test(
       })
       assert.equal(read.detailedCookies[0].cookie.value, 'fixture-only')
       assert.equal(read.detailedCookies[0].cookie.domain, '.example.test')
+      database.exec(
+        "INSERT INTO cookies VALUES ('.example.test', '/', 1, 0, 'invalid name', 'fixture-only', X'', 1, 1)"
+      )
+      const stock = await reader.fromPath({
+        path,
+        plaintextOnly: true,
+        includeExpired: true,
+        appBound: 'disabled'
+      })
+      assert.equal(stock.detailedCookies.length, 1)
+      assert.equal(
+        stock.warnings.some((warning) => warning.count > 0),
+        true
+      )
+      const inventory = await reader.fromPath({
+        path,
+        plaintextOnly: true,
+        includeExpired: true,
+        mollyInventory: true,
+        appBound: 'disabled'
+      })
+      assert.deepEqual(inventory.detailedCookies.map((entry) => entry.cookie.name).sort(), [
+        'invalid name',
+        'synthetic'
+      ])
+      assert.equal(
+        inventory.warnings.every((warning) => warning.count === 0),
+        true
+      )
       const insert = database.prepare(
         "INSERT INTO cookies VALUES ('.example.test', '/', 1, 0, ?, 'fixture-only', X'', 1, 1)"
       )
@@ -108,6 +137,113 @@ void test(
     } finally {
       database.close()
       await rm(directory, { recursive: true, force: true })
+    }
+  }
+)
+
+void test(
+  'explicit-path reads report rows that failed extraction instead of dropping them',
+  { skip: process.platform !== 'darwin' },
+  async () => {
+    const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
+    const directory = await mkdtemp(join(tmpdir(), 'molly-native-failing-rows-'))
+    const path = join(directory, 'Cookies')
+    const database = new DatabaseSync(path)
+    try {
+      database.exec(`
+      CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+      INSERT INTO meta VALUES ('version', '23');
+      CREATE TABLE cookies (host_key TEXT, path TEXT, is_secure INTEGER, expires_utc INTEGER, name TEXT, value TEXT, encrypted_value BLOB, is_httponly INTEGER, samesite INTEGER);
+      INSERT INTO cookies VALUES ('.example.test', '/', 1, 0, 'plain', 'fixture-only', X'', 1, 1);
+      INSERT INTO cookies VALUES ('.example.test', '/', 1, 0, 'broken-one', '', X'763130626164', 1, 1);
+      INSERT INTO cookies VALUES ('.example.test', '/', 1, 0, 'broken-two', '', X'763130626164', 1, 1);
+    `)
+      database.close()
+      // An absent browser identity carries no Keychain item, so no system prompt is involved.
+      const result = await reader.fromPath({
+        path,
+        browserId: 'chromium',
+        includeExpired: true,
+        mollyInventory: true,
+        appBound: 'disabled'
+      })
+      assert.equal(result.detailedCookies.length, 1)
+      assert.equal(result.detailedCookies[0].cookie.name, 'plain')
+      assert.equal(
+        result.warnings.reduce((total, warning) => total + warning.count, 0) >= 2,
+        true,
+        JSON.stringify(result.warnings)
+      )
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+  }
+)
+
+void test(
+  'native discovery does not offer a symlinked profile directory',
+  { skip: process.platform !== 'darwin' },
+  async () => {
+    const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
+    const home = await mkdtemp(join(tmpdir(), 'molly-native-symlink-home-'))
+    const previous = process.env.HOME
+    try {
+      const root = join(home, 'Library', 'Application Support', 'Google', 'Chrome')
+      await mkdir(join(root, 'Default', 'Network'), { recursive: true })
+      await writeFile(join(root, 'Default', 'Network', 'Cookies'), '')
+      await mkdir(join(home, 'elsewhere', 'Network'), { recursive: true })
+      await writeFile(join(home, 'elsewhere', 'Network', 'Cookies'), '')
+      await symlink(join(home, 'elsewhere'), join(root, 'Profile 1'))
+      await mkdir(join(home, 'Applications', 'Google Chrome.app'), { recursive: true })
+      await writeFile(
+        join(root, 'Local State'),
+        JSON.stringify({
+          profile: {
+            info_cache: { Default: { name: 'Synthetic' }, 'Profile 1': { name: 'Linked' } }
+          }
+        })
+      )
+      process.env.HOME = home
+      const profiles = await reader.browserProfiles('chrome', { timeoutMs: 30000 })
+      assert.deepEqual(
+        profiles.map((entry) => entry.profile.displayName),
+        ['Synthetic']
+      )
+    } finally {
+      if (previous === undefined) delete process.env.HOME
+      else process.env.HOME = previous
+      await rm(home, { recursive: true, force: true })
+    }
+  }
+)
+
+void test(
+  'native discovery does not offer a symlinked flat user-data root',
+  { skip: process.platform !== 'darwin' },
+  async () => {
+    const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
+    const home = await mkdtemp(join(tmpdir(), 'molly-native-flat-root-'))
+    const previous = process.env.HOME
+    try {
+      const support = join(home, 'Library', 'Application Support')
+      const root = join(support, 'com.operasoftware.Opera')
+      const elsewhere = join(home, 'elsewhere')
+      await mkdir(root, { recursive: true })
+      await writeFile(join(root, 'Cookies'), '')
+      await mkdir(elsewhere, { recursive: true })
+      await writeFile(join(elsewhere, 'Cookies'), '')
+      process.env.HOME = home
+      const control = await reader.browserProfiles('opera', { timeoutMs: 30000 })
+      assert.equal(control.length, 1)
+      await rm(root, { recursive: true, force: true })
+      await symlink(elsewhere, root)
+      await assert.rejects(reader.browserProfiles('opera', { timeoutMs: 30000 }), (error) =>
+        error.message.includes('installation root is a symbolic link')
+      )
+    } finally {
+      if (previous === undefined) delete process.env.HOME
+      else process.env.HOME = previous
+      await rm(home, { recursive: true, force: true })
     }
   }
 )

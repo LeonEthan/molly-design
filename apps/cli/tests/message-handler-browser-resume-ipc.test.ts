@@ -252,7 +252,12 @@ function fixture() {
       if (name === '../../platform')
         return { readLocalPlatformSnapshot: async () => ({ workspace: { workspaceId } }) };
       if (name === './browser-account-signing') return { isStableSignedMacApp: () => false };
-      if (name === './browser-account-source' || name === './browser-account-isolation') return {};
+      if (name === './browser-account-source')
+        return {
+          removeImportCopies: () => undefined,
+          sweepStaleImportCopies: async () => undefined,
+        };
+      if (name === './browser-account-isolation') return {};
       return require(name);
     }
   );

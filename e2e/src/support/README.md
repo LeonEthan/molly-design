@@ -11,6 +11,7 @@
 | `pages/onboarding-page.ts`         | First-run user interaction and local bootstrap contract                    |
 | `pages/session-page.ts`            | Bundled Pi conversation and Stop through a scripted model wire             |
 | `pages/browser-navigation-page.ts` | Native local-page URL, title and accessibility snapshot verification       |
+| `pages/browser-import-page.ts`     | Website accounts copy and import-dialog copy assertions                    |
 | `pages/kimi-replication-page.ts`   | Explicit live Kimi golden replication, export and reopen acceptance        |
 | `pages/work-session-page.ts`       | Local project selection, Session deletion, and project-folder preservation |
 | `fixtures/work-session-fixture.ts` | Synthetic Git project and scripted model-server events                     |

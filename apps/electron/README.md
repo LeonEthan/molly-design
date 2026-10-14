@@ -135,8 +135,8 @@ establish the new driver's runtime behavior.
 
 The built-in browser uses a Molly-only Electron partition, persistent in a
 packaged build with a stable macOS signing identity. Unpackaged macOS development
-also supports site-scoped account import when OS secure storage is available, but
-its browser session stays memory-only and loses sign-ins on restart. Packaged
+also supports site-scoped account import when OS secure storage is available, in
+its own persisted development partition, so sign-ins survive restarts. Packaged
 ad-hoc/unsigned macOS builds still disable account import because Keychain trust
 does not reliably survive rebuilds. Agent
 commands travel through the existing owner-only local control socket and act on

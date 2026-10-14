@@ -9,6 +9,8 @@ PR: https://github.com/LeonEthan/molly-design/pull/126
 
 ## Abstract
 
+> 2026-10-14: the profile flow, per-site report, private copy and development partition described here were revised by [profile-first import](../bug-fix/2026-10-14-browser-import-profile-first.md).
+
 The previous Pinterest-only flow listed every browser's profiles, read cookies twice,
 and requested Keychain access through a generic system helper. The owner approved a
 single Import action with browser/profile together and a collapsed, fully selected

@@ -29,7 +29,10 @@ import {
 import {
   listImportSources,
   listImportProfiles,
-  readBrowserProfileCookies
+  readBrowserProfileCookies,
+  removeImportCopies,
+  sweepStaleImportCopies,
+  type ListedImportProfile
 } from './browser-account-source'
 import { importBrowserAccountCookies, importedCookieIdentity } from './browser-account-import'
 import { isolateBrowserAccounts } from './browser-account-isolation'
@@ -52,6 +55,7 @@ type PublicBrowserRecord = {
 }
 
 const MAX_PUBLIC_BROWSER_RECORDS = 8
+const ACCOUNT_QUIT_GRACE_MS = 5000
 
 type AccountImportReadinessError = {
   reason: NonNullable<ElectronBrowserAccountSummary['importUnavailableReason']>
@@ -143,6 +147,7 @@ export class PublicBrowserService {
     owner: BrowserWindow
   } | null = null
   private accountWriting = false
+  private readonly listedProfilePaths = new Map<AccountImportBrowserId, Map<string, string>>()
   private readonly accountPages = new Map<
     string,
     {
@@ -160,7 +165,9 @@ export class PublicBrowserService {
   constructor(
     private readonly getMainWindow: () => BrowserWindow | null,
     private readonly pauseActiveRuns: () => Promise<AgentBrowserScope[]>
-  ) {}
+  ) {
+    void sweepStaleImportCopies().catch(() => undefined)
+  }
 
   create(
     browserId: string,
@@ -562,19 +569,21 @@ export class PublicBrowserService {
   }
 
   async getImportProfiles(
-    browserId: AccountImportBrowserId
+    browserId: AccountImportBrowserId,
+    operationId: string
   ): Promise<ElectronBrowserProfileChoice[]> {
-    return this.withAccountOperation(`profiles:${browserId}`, async (operation) => {
+    return this.withAccountOperation(operationId, async (operation) => {
       const profiles = await this.readImportProfiles(browserId, operation)
       this.assertAccountOwner(operation)
-      return profiles
+      this.listedProfilePaths.set(browserId, new Map(profiles.map(({ id, path }) => [id, path])))
+      return profiles.map(({ id, name, isDefault }) => ({ id, name, isDefault }))
     })
   }
 
   private async readImportProfiles(
     browserId: AccountImportBrowserId,
     operation: NonNullable<PublicBrowserService['accountOperation']>
-  ): Promise<ElectronBrowserProfileChoice[]> {
+  ): Promise<ListedImportProfile[]> {
     if (!(await this.getImportSources()).sources.some((source) => source.browserId === browserId))
       throw new BrowserAccountError('source-unavailable')
     this.assertAccountOwner(operation)
@@ -585,11 +594,9 @@ export class PublicBrowserService {
     const reason = accountImportReadinessError()
     const cookies = await session.fromPartition(publicBrowserPartition()).cookies.get({})
     return {
-      persistent: canPersistPublicBrowserSession(),
       importAvailable: reason === null,
       ...(reason ? { importUnavailableReason: reason.reason } : {}),
       recoveryRequired: Boolean(this.recoveryIsolation),
-      cookieCount: cookies.length,
       sites: BROWSER_ACCOUNT_SITES.map((site) => ({
         siteId: site.id,
         cookieCount: cookies.filter(
@@ -701,18 +708,18 @@ export class PublicBrowserService {
 
   async importBrowserAccount(
     input: ElectronBrowserAccountImportInput
-  ): Promise<ElectronBrowserImportReport | { profiles: ElectronBrowserProfileChoice[] }> {
+  ): Promise<ElectronBrowserImportReport> {
     if (accountImportReadinessError()) throw new BrowserAccountError('unavailable')
     return this.withAccountOperation(input.operationId, async (operation) => {
+      const listedPath = this.listedProfilePaths.get(input.browserId)?.get(input.profileId)
       const profiles = await this.readImportProfiles(input.browserId, operation)
       this.assertAccountOwner(operation)
       if (profiles.length === 0) throw new BrowserAccountError('source-unavailable')
-      if (!input.profileId && profiles.length > 1) return { profiles }
-      const profileId = input.profileId ?? profiles[0]!.id
-      if (!profiles.some((profile) => profile.id === profileId)) return { profiles }
+      const profile = profiles.find((entry) => entry.id === input.profileId)
+      if (!profile || profile.path !== listedPath) throw new BrowserAccountError('profile-changed')
       const source = await readBrowserProfileCookies(
         input.browserId,
-        profileId,
+        profile,
         input.siteIds,
         operation.controller.signal
       )
@@ -725,9 +732,7 @@ export class PublicBrowserService {
           const siteId = browserAccountSiteForDomain(cookie.domain)!.id
           const row = source.report.sites.find((site) => site.siteId === siteId)!
           row.imported--
-          row.skippedExpired++
-          source.report.imported--
-          source.report.skippedExpired++
+          row.skipped++
         }
         return source.report
       })
@@ -752,8 +757,20 @@ export class PublicBrowserService {
 
   async shutdownForQuit(): Promise<void> {
     this.shuttingDown = true
-    if (this.accountOperation?.writing) await this.accountMutation
-    else this.accountOperation?.controller.abort()
+    const operation = this.accountOperation
+    if (operation?.writing) await this.accountMutation
+    else if (operation) {
+      operation.controller.abort()
+      let grace: ReturnType<typeof setTimeout> | undefined
+      await Promise.race([
+        this.accountMutation,
+        new Promise<void>((resolve) => {
+          grace = setTimeout(resolve, ACCOUNT_QUIT_GRACE_MS)
+        })
+      ])
+      clearTimeout(grace)
+    }
+    removeImportCopies()
   }
 
   private configureSession(record: PublicBrowserRecord): void {

@@ -508,7 +508,7 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
                 </ol>
               </>
             )}
-            {settingsOpened ? (
+            {settingsOpened && !stillDenied ? (
               <p className="text-xs text-muted-foreground">
                 {t('settings.browserImport.settingsReturn')}
               </p>

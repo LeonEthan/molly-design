@@ -154,7 +154,7 @@ browser-data access, Molly guides you to **System Settings → Privacy & Securit
 App Data**: turn Molly on there, then return to Molly. After you return, Molly checks
 again and imports without another click. If access is still blocked, choose
 **Restart Molly and import**; Molly restarts once Agent work and design saving finish,
-then choose **Import** again. Molly does not otherwise retry a denied request.
+then resumes the same import automatically. Molly does not otherwise retry a denied request.
 Keychain denial and other read failures show their own reason. In development macOS can
 attribute browser-data access to the terminal or coding agent that launched Molly.
 The system may decline to show an approval prompt for that launcher; use the System

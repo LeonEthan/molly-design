@@ -321,6 +321,7 @@ describe('packaged design materials', () => {
 
     const singleOwner = [
       /\*\*Research rule\.\*\*/g,
+      /\*\*Research gate\.\*\*/g,
       /\*\*Asking\.\*\*/g,
       /^## When the user rejects a direction$/gm,
       /^## Reporting$/gm,
@@ -333,6 +334,28 @@ describe('packaged design materials', () => {
     for (const pattern of singleOwner) {
       expect(oneCopy.match(pattern)?.length ?? 0, String(pattern)).toBe(1);
     }
+
+    const researchGate = entry.match(/\*\*Research gate\.\*\*[\s\S]*?(?=\n### )/)?.[0] ?? '';
+    for (const rule of [
+      /read \[references\/browser-research\.md\]\([^)]*\) in\s+full/,
+      /one focused browser pass on a design site/,
+      /individual images; result grids, search snippets and\s+page titles do not count/,
+      /saved one to three inspiration images/,
+      /kept three to six references, each with one named quality/,
+      /user forbids networking, respect it, report the gap and proceed/,
+      /report the gap and stop:\s+offer no design options and invent no research/,
+    ]) {
+      expect(researchGate, String(rule)).toMatch(rule);
+    }
+    expect(entry).toMatch(
+      /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
+    );
+    const browserResearch = readFileSync(
+      path.join(graphic, 'references/browser-research.md'),
+      'utf8'
+    );
+    expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
+    expect(browserResearch).not.toMatch(/report exactly which visible results/i);
 
     expect(text).toContain('mcp__molly_image__generate');
     expect(text).toContain('Molly has no default model');

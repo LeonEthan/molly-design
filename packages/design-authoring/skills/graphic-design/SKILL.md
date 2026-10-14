@@ -127,25 +127,31 @@ new designs, reconstructions and edits.
 | A topic, style word, logo, product photo or your own idea   | Yes                      |
 | An attachment you have not opened                           | Yes                      |
 
-When research applies, read
-[references/browser-research.md](references/browser-research.md): search from
-the direction words, look at the actual images (search snippets are not visual
-research), include at least one source outside the category and current design
-feeds, and make one focused pass rather than browsing without end. Open the
-individual images you might learn from, not only result grids, and save the few
-you may give the image model in stage 3. The user's own
-direction stays the basis. If the user forbids networking, respect it and report
-the gap; a missing browser or network failure is a blocker, not an exception.
-Fact checks such as event dates are separate from inspiration research.
+**Research gate.** When research applies, stage 3 does not start until all of
+these hold:
+
+- you read [references/browser-research.md](references/browser-research.md) in
+  full;
+- you made one focused browser pass on a design site: Pinterest when it is signed
+  in or imported, otherwise another accessible design source;
+- you opened and inspected individual images; result grids, search snippets and
+  page titles do not count;
+- you saved one to three inspiration images with `save_image` for stage 3;
+- you kept three to six references, each with one named quality (palette, type,
+  crop and light, layout structure) and none taken as literal objects or finished
+  layout.
+
+When the user forbids networking, respect it, report the gap and proceed without
+research. When the browser or network is unavailable, report the gap and stop:
+offer no design options and invent no research from search titles; continue only
+if the user then tells you to proceed without research. Fact checks such as
+event dates are separate from inspiration research. The user's own direction
+stays the basis.
 
 ### 3. Offer designs and let the user choose
 
-Keep three to six references and note the one quality each contributes (the
-palette of one, the type of another, the crop and light of a third). Take
-qualities, never a reference's literal objects or finished layout; check each
-against the direction words.
-
-Then create at least three complete **design options** with the image model,
+Check each kept reference's quality against the direction words, then create at
+least three complete **design options** with the image model,
 each a finished poster at the canvas ratio: composition, imagery, light, the
 headline and key copy drawn in, and the finish you intend. They are the design,
 not sketches, so judge each against the [design defaults](#design-defaults)
@@ -348,8 +354,10 @@ Write in the user's language and size the reply to the request.
   its absolute path, for example `![A](/abs/media/option-a.png)`; never retype
   a hashed file name. Wrap paths containing spaces in angle brackets. Label
   them A, B, C with one line each on the idea, say which you recommend and why in
-  one line, name the research sources briefly, and ask the user to choose. Note
-  copy the image model drew wrong; it will be exact in the editable version.
+  one line, name the inspected source-page URLs, or the saved inspiration image
+  paths when a page has no usable URL (a search-results URL alone does not
+  count), and ask the user to choose. Note copy the image model drew wrong; it
+  will be exact in the editable version.
 - **Editable version of the chosen design:** one or two sentences, plus what
   differs from the chosen design and why, naming each raster layer that visibly
   departs from it.
@@ -364,8 +372,8 @@ could not be done. Mention editability only when asked or when it differs from
 what the user would expect. Offer next tweaks only when asked or when a concrete
 decision remains. Leave out file paths, YAML fields, element IDs, tool and script
 names, commands and diagnostic codes unless the user asks or a limit cannot be
-explained without them; the option image embeds above are the only paths in a
-normal reply.
+explained without them; the option image embeds and inspiration paths above are
+the only paths in a normal reply.
 
 Never claim a check, rendering or save that did not happen. Your image
 inspection is Agent review, not human acceptance; human judgment decides visual

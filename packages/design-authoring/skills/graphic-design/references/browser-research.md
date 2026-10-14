@@ -1,8 +1,9 @@
 # Website research in Molly
 
 [The main Skill](../SKILL.md#2-inspect-references-and-research) owns the research
-requirement and its explicit exception. Use this reference to perform required
-research or inspect a user-specified website.
+requirement, its exception and the gate that must hold before design options.
+Use this reference for the technique of required research or of inspecting a
+user-specified website.
 
 ## Search from the direction
 
@@ -15,27 +16,26 @@ the category and outside current design feeds: historical posters, fine art,
 architecture, packaging from another field. If every result looks alike, the
 search is too narrow; widen it once.
 
-Make one focused pass of a few queries, then move on to choosing. If the
-results stay thin, say so in the report rather than browsing without end.
+Make a few queries, then move on to choosing. If the results stay thin, say so in
+the report rather than browsing without end.
 
 ## Inspect and keep sources
 
-Open relevant results individually and inspect their actual visual content;
-screenshots or image reading are needed to judge appearance. A grid of results
-is a starting point, not research. Search snippets and page text alone do not
-establish visual research.
-Keep the actual inspected reference URLs and briefly connect the observed choices
-to the design. A search-results URL alone does not identify individual references;
-if those pages could not be opened, report exactly which visible results you used.
-Save with `save_image` the few inspiration images you may give the image model
-for the design options (usually one to three), plus any supplied asset or
-prescribed template; observation alone does not require downloading the rest.
+Open relevant results individually and use screenshots or image reading to judge
+their appearance; the gate says what counts as inspection. Keep the actual
+inspected reference URLs and briefly connect the observed choices to the design.
+A search-results URL alone does not identify individual references. If the
+individual pages could not be opened, the gate is not met: report the gap as the
+gate says.
+Save the inspiration images the gate requires with `save_image`, plus any
+supplied asset or prescribed template; observation alone does not require
+downloading the rest.
 
 ## Keep a few references, each with a job
 
-Learn from references; do not copy one. From what you inspected, keep three to
-six that answer the direction words and note what each contributes, one quality
-per reference:
+Learn from references; do not copy one. From what you inspected, keep those that
+answer the direction words, as many as the gate requires, and note what each
+contributes, one quality per reference:
 
 - palette: three to five recurring colors;
 - type direction: serif, grotesque, humanist or display, and why it fits;

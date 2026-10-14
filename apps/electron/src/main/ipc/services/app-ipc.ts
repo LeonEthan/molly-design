@@ -122,6 +122,22 @@ export class AppIpc extends IpcService {
   }
 
   @IpcMethod()
+  async restartApp() {
+    const { event } = getIpcContext()
+    const { getMainWindow, restartApp } = getIpcServiceDeps()
+    const mainWindow = getMainWindow()
+    if (
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      event.sender !== mainWindow.webContents ||
+      event.senderFrame !== event.sender.mainFrame
+    ) {
+      return { ok: false as const, error: 'untrusted_sender' }
+    }
+    return await restartApp()
+  }
+
+  @IpcMethod()
   async getAutoLaunchStatus() {
     return getAutoLaunchStatus()
   }

@@ -48,6 +48,6 @@ records the scope and validation limits.
 
 The [permission-intent revision](../../../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
 records delayed profile discovery and narrow native permission-error propagation.
-Only classified browser-file denial offers Files and Folders settings; a Keychain
+Only classified browser-file denial offers App Data settings; a Keychain
 denial does not. Synthetic reader checks do not establish first/retained grants,
 launcher attribution or denial recovery in a real signed application.

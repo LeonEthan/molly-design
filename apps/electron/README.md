@@ -186,9 +186,10 @@ cooperative deadline. Accepted writes drain on quit. Stable signatures can retai
 Keychain grants; OS policy or signature changes can prompt again. Development
 folder permission may be attributed to Molly's launcher, and macOS may refuse to
 offer that launcher a prompt. Only confirmed browser-file
-access denial offers Files & Folders settings; Keychain denial and other read failures
-remain distinct. The dialog retains choices and offers Continue import after opening
-settings, without Reload profiles or automatic retry. Granting a native prompt
+access denial offers App Data settings (Privacy & Security → App Data); Keychain denial and
+other read failures remain distinct. The dialog retains choices, re-checks the same import
+when its window regains focus after the user opened settings, and offers restart after a
+still-denied retry; it has no skip exit. Granting a native prompt
 continues the same valid request. Cancellation/denial retains selections for explicit
 retry; starting a new dialog resets website selections. No Agent resumes automatically.
 See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)

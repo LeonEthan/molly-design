@@ -25,9 +25,9 @@ Preserve historical catalog fields when editing unrelated values.
   and fully selected each opening. Opening discovers installed apps only; Import
   prepares the chosen browser. One profile continues; multiple need explicit selection
   in the same picker. No sign-in wizard or preview/confirm step. Send IDs only.
-- Preserve choices on OS denial/cancellation and settings visits. Offer settings only
-  for confirmed file-access denial, then explicit Continue import without a reload.
-  Never auto-retry. Show real authorization, unavailable reasons, finishing writes and
+- Keep choices through denial and settings visits. Offer App Data settings only for
+  confirmed file-access denial; re-check on focus only after settings were opened;
+  never auto-retry otherwise. Show real authorization, unavailable reasons, finishing writes and
   skip counts; passwords stay in system prompts, counts prove no sign-in. Clear covers
   all Molly website data. Retain takeover/MFA and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing

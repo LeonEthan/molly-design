@@ -5,6 +5,8 @@ import { formatUnknownError } from '../utils'
 export function browserDataPrivacySettingsUrls(platform: NodeJS.Platform): string[] {
   if (platform !== 'darwin') return []
   return [
+    'x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_AppData',
+    'x-apple.systempreferences:com.apple.preference.security?Privacy_AppData',
     'x-apple.systempreferences:com.apple.Settings.PrivacySecurity.extension?Privacy_FilesAndFolders',
     'x-apple.systempreferences:com.apple.preference.security?Privacy_FilesAndFolders'
   ]
@@ -38,6 +40,6 @@ export async function openBrowserDataPrivacySettings(options?: {
   return {
     opened: false,
     platform,
-    error: lastError ?? 'Failed to open macOS Files and Folders settings'
+    error: lastError ?? 'Failed to open macOS App Data settings'
   }
 }

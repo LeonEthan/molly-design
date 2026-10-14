@@ -108,7 +108,12 @@ this page is the full text of the rules summarised there.
   Cancellation, timeout or disconnect rejects that operation's late result without
   freezing browser access for the rest of the run; the Agent can observe again.
   A hidden Agent page reattaches when the Browser
-  panel opens; opening the panel must not navigate it again.
+  panel opens; opening the panel must not navigate it again. The viewed
+  session's first transition to Agent control in each Turn (keyed on
+  `processingUserMsgId`, falling back to `latestUserMsgId`) opens the right
+  panel's Browser tab without navigation. Closing it keeps it closed until the
+  next Turn, Zen spends that Turn's reveal, and browsing ending never returns to
+  the canvas.
   A packaged Molly with a stable macOS signing identity stores site sessions in a
   separate persistent partition. Development and ad-hoc macOS builds use a
   memory-only partition. With OS secure storage, unpackaged macOS development can

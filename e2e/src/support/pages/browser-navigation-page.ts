@@ -47,4 +47,14 @@ export class BrowserNavigationPage {
     ).toBeVisible({ timeout: 60_000 });
     await expect(this.page.getByRole('button', { name: 'Deny', exact: true })).toHaveCount(0);
   }
+
+  async expectBrowserPanelRevealedWithoutReload(): Promise<void> {
+    await expect(this.page.getByRole('textbox', { name: /^(Address|地址)$/u })).toBeVisible({
+      timeout: 60_000,
+    });
+    const served = this.fixture
+      .readEvents()
+      .filter((event) => event.event === 'browser-page-served');
+    expect(served).toHaveLength(1);
+  }
 }

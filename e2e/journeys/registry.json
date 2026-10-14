@@ -180,7 +180,7 @@
       "owner": "embedded-browser",
       "feature": "src/features/browser-navigation.feature",
       "fixture": "scripted-model-wire",
-      "fingerprint": "bb4169e3b723f5622c49eb0d8a011e6514b53ba4b5de5289d6ec5947868fb5d9",
+      "fingerprint": "c03f1080bb78de33775898fb06ae0a5e5838070197b9b29919263c4cd7c7565f",
       "ownerPaths": [
         "apps/electron/src/main/services/public-browser-service.ts",
         "apps/cli/src/mcp/molly-browser-mcp-server.ts",
@@ -198,14 +198,15 @@
       "checkpoints": [
         "the browser request runs without a permission prompt",
         "the native browser returns the fixture URL and title",
-        "the browser snapshot contains the synthetic heading without truncation"
+        "the browser snapshot contains the synthetic heading without truncation",
+        "the Browser panel opens by itself without a second page load"
       ],
       "cleanup": [
         "isolated desktop process tree exits",
         "isolated workspace and profile are removed"
       ],
       "coverage": {
-        "renderer": "Session completes its browser probe without an approval prompt",
+        "renderer": "Session completes its browser probe without an approval prompt and opens the Browser panel",
         "electronIpc": "Real native browser navigation and accessibility snapshot",
         "bundledCli": "Real Pi codemode to molly_browser navigate and snapshot",
         "durableState": "Isolated Session only",

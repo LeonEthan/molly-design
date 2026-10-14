@@ -183,6 +183,7 @@ import {
 } from '@/lib/session-file-provider-open-result';
 import { canOpenHistoricalSessionDiffs } from '@/lib/session-file-provider';
 import { useSessionDoc, useSessionDocSyncState } from '@/hooks/use-session-doc';
+import { useAgentBrowserAutoReveal } from '@/hooks/use-agent-browser-auto-reveal';
 import { useConversationTail } from '@/hooks/use-conversation-view';
 import { useDelayedFlag } from '@/hooks/use-delayed-flag';
 import { isSyncingRoomSyncState } from '@/lib/room-sync-state';
@@ -2063,6 +2064,19 @@ const SessionDetail = ({
     },
     [activeBrowserSession?.id, activateSidebarTab, navigateToSessionTab, revealRightSidebar]
   );
+
+  const revealAgentBrowser = useCallback(() => {
+    revealRightSidebar();
+    activateSidebarTab('browser');
+  }, [activateSidebarTab, revealRightSidebar]);
+  useAgentBrowserAutoReveal({
+    browserId: activeBrowserSession ? `session-browser-${activeBrowserSession.id}` : null,
+    turnId: activeBrowserSession
+      ? (activeBrowserSession.processingUserMsgId ?? activeBrowserSession.latestUserMsgId ?? null)
+      : null,
+    suppressed: isZenLayoutMode,
+    onReveal: revealAgentBrowser,
+  });
 
   const handleBrowserCandidateNavigationRequestHandled = useCallback((requestId: number) => {
     setBrowserCandidateNavigationRequest((current) => (current?.id === requestId ? null : current));

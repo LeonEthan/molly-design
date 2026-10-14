@@ -396,6 +396,9 @@ it('starts the App Data import on Import and offers System Settings only after t
   expect(alert).toContain(zh['settings.browserImport.recovery.title']);
   for (const step of recoverySteps) expect(alert).toContain(step);
   expect(alert).not.toContain('文件与文件夹');
+  const screenshot = document.querySelector<HTMLImageElement>('[role="alert"] img');
+  expect(screenshot?.getAttribute('alt')).toBe(zh['settings.browserImport.recovery.screenshotAlt']);
+  expect(screenshot?.getAttribute('src')).toContain('browser-import-app-data-light');
   expect(button(zh['settings.browserImport.openSystemSettings']).disabled).toBe(false);
   await act(async () => button(zh['settings.browserImport.openSystemSettings']).click());
   expect(events).toEqual(['import', 'settings']);
@@ -499,6 +502,7 @@ it('keeps guiding after a retry is still denied and offers restart with no skip 
   expect(document.querySelector('[role="alert"]')?.textContent).not.toContain(
     zh['settings.browserImport.recovery.title']
   );
+  expect(document.querySelector('[role="alert"] img')).toBeNull();
   const labels = [...dialog.querySelectorAll('button')].map((entry) => entry.textContent);
   expect(labels).toContain(zh['settings.browserImport.openSystemSettingsAgain']);
   expect(labels).toContain(zh['settings.browserImport.restartAndImport']);

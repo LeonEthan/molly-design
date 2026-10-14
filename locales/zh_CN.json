@@ -3182,6 +3182,7 @@
   "settings.browserImport.recovery.step2": "找到 Molly 并打开开关。如果列表中没有 Molly，点击「+」，从「应用程序」中选择 Molly。",
   "settings.browserImport.recovery.step3": "如果系统要求，输入 Mac 密码，然后回到 Molly。",
   "settings.browserImport.recovery.step4": "点击「我已允许，立即导入」。",
+  "settings.browserImport.recovery.screenshotAlt": "系统设置 → 隐私与安全性 → Files & Folders，已高亮 Molly 的 Google Chrome 开关",
   "settings.browserImport.recovery.stillDenied": "Molly 仍无法读取此浏览器的数据。更改设置后，macOS 有时需要重新启动 Molly。",
   "settings.browserImport.errors.source-authorization-denied": "钥匙串访问被拒绝或取消，未写入数据。请重试，并在 macOS 系统弹框中允许访问。",
   "settings.browserImport.from": "来源",

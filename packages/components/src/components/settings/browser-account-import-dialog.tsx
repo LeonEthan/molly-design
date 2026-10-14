@@ -13,12 +13,15 @@ import type {
   ElectronBrowserProfileChoice,
   ElectronBrowserImportReport,
 } from '@molly/shared/electron-ipc';
+import appDataDarkScreenshot from '@/assets/browser-import-app-data-dark.png';
+import appDataLightScreenshot from '@/assets/browser-import-app-data-light.png';
 import {
   clearBrowserImportIntent,
   saveBrowserImportIntent,
   type BrowserImportIntent,
 } from '@/lib/browser-import-resume';
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
+import { useResolvedTheme } from '@/theme-provider';
 import { Button } from '@/ui/button';
 import { Checkbox } from '@/ui/checkbox';
 import { ChevronDown, Loader2, X } from '@/ui/icons';
@@ -60,6 +63,7 @@ export function BrowserAccountImportDialog({ open, onOpenChange, resume }: Props
 
 function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'resume'>) {
   const { t } = useTranslation();
+  const resolvedTheme = useResolvedTheme();
   const [bridge] = useState(getPublicBrowserBridge);
   const [summary, setSummary] = useState<ElectronBrowserAccountSummary | null>(null);
   const [sources, setSources] = useState<ElectronBrowserImportSources['sources']>([]);
@@ -506,6 +510,11 @@ function ImportSession({ onOpenChange, resume }: Pick<Props, 'onOpenChange' | 'r
                   <li>{t('settings.browserImport.recovery.step3')}</li>
                   <li>{t('settings.browserImport.recovery.step4')}</li>
                 </ol>
+                <img
+                  src={resolvedTheme === 'dark' ? appDataDarkScreenshot : appDataLightScreenshot}
+                  alt={t('settings.browserImport.recovery.screenshotAlt')}
+                  className="w-full max-w-md rounded-md border border-border"
+                />
               </>
             )}
             {settingsOpened && !stillDenied ? (

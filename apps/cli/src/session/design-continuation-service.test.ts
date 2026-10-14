@@ -31,7 +31,7 @@ const history: SessionHistoryInput[] = [
   },
 ];
 
-function fixture(saved = new Map<string, Uint8Array>()) {
+function fixture(saved = new Map<string, Uint8Array>(), sourceHistory = history) {
   const targetId = designContinuationTargetId('workspace-1', sourceId);
   const source = {
     id: sourceId,
@@ -71,7 +71,7 @@ function fixture(saved = new Map<string, Uint8Array>()) {
     if (snapshot) loro.import(snapshot);
     const session = new SessionDocument(repo as never, id, async () => {});
     session.handle = { doc: loro } as never;
-    session.composeSessionData(loro, { history: id === sourceId ? history : [] });
+    session.composeSessionData(loro, { history: id === sourceId ? sourceHistory : [] });
     docs.set(id, { session, loro });
     return session;
   };
@@ -95,6 +95,54 @@ function fixture(saved = new Map<string, Uint8Array>()) {
 }
 
 describe('design continuation preparation', () => {
+  it('explicitly prepares a legacy empty-identity copy without rewriting it or accepting a turn', async () => {
+    const f = fixture(new Map(), []);
+    f.source.agentType = '';
+    Reflect.deleteProperty(f.source, 'agentConfigId');
+    f.source.design.artworkId = sourceId;
+    const before = structuredClone(f.source);
+    const result = await f.service.inspectAttachments(args);
+    expect(result.record.source).toMatchObject({
+      agentType: '',
+      cliType: 'builtin',
+      design: { artworkId: sourceId },
+    });
+    expect(result.record.target.agentConfigId).toBe(configId);
+    expect(result.record.reference.messages).toEqual([]);
+    expect(result.attachments).toEqual([]);
+    expect(f.source).toEqual(before);
+    expect(f.docs.get(f.targetId)?.session.sessionData.history.count()).toBe(0);
+    expect(f.metas.has(getSessionRoomId(f.targetId))).toBe(false);
+    expect(f.saved.has(f.targetId)).toBe(true);
+    expect(buildDesignContinuationMeta(result.record)).toMatchObject({
+      agentType: 'molly',
+      agentConfigId: configId,
+      design: f.source.design,
+    });
+  });
+
+  it.each(['owner', 'machine', 'busy', 'deleted', 'foreign-config', 'legacy-config'] as const)(
+    'keeps the existing access and catalog guards for an empty-identity copy: %s',
+    async (kind) => {
+      const f = fixture(new Map(), []);
+      f.source.agentType = '';
+      Reflect.deleteProperty(f.source, 'agentConfigId');
+      f.source.design.artworkId = sourceId;
+      if (kind === 'owner') f.source.userId = 'other-user';
+      if (kind === 'machine') f.source.machineId = 'other-machine';
+      if (kind === 'busy') f.state.busy = true;
+      if (kind === 'deleted')
+        f.metas.set(getSessionRoomId(sourceId), { meta: f.source, deleted: true });
+      if (kind === 'foreign-config') f.state.config!.machineId = 'other-machine';
+      if (kind === 'legacy-config') f.state.config!.agentType = 'codex';
+      await expect(f.service.inspectAttachments(args)).rejects.toThrow();
+      expect(f.docs.size).toBe(0);
+      expect(f.saved.size).toBe(0);
+      expect(f.metas.has(getSessionRoomId(f.targetId))).toBe(false);
+      expect(f.source.agentType).toBe('');
+    }
+  );
+
   it('inspects prepared attachments without publishing or changing the receipt', async () => {
     const f = fixture();
     const record = await f.service.prepare(args);

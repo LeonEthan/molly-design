@@ -110,7 +110,7 @@ export const DesignContinuationSourceSchema = z
     machineId: identifier,
     userId: identifier,
     cliType: AgentConfigCliTypeSchema,
-    agentType: identifier,
+    agentType: z.union([identifier, z.literal('')]),
     agentConfigId: identifier.optional(),
     title: z.string().max(1024).optional(),
     design: z.object({ artworkId: identifier, path: z.literal('design.json') }).strict(),
@@ -120,7 +120,20 @@ export const DesignContinuationSourceSchema = z
     baseBranch: z.string().max(1024).optional(),
     branchName: z.string().max(1024).optional(),
   })
-  .strip();
+  .strip()
+  .refine(
+    (source) =>
+      source.agentType !== '' ||
+      (source.cliType === 'builtin' &&
+        source.agentConfigId === undefined &&
+        source.design.artworkId === source.id &&
+        source.parentSessionId === undefined &&
+        source.project === undefined &&
+        source.repoFullName === undefined &&
+        source.baseBranch === undefined &&
+        source.branchName === undefined),
+    { path: ['agentType'], message: 'Invalid legacy design copy provenance' }
+  );
 
 /** One immutable migration receipt in the target Session Doc, never a second artwork store. */
 export const DesignContinuationRecordSchema = z

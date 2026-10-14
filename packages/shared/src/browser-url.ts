@@ -13,11 +13,11 @@ export type BrowserAddress = {
 export type BrowserAddressErrorCode = 'empty_address' | 'invalid_address';
 
 export class BrowserAddressError extends Error {
-  constructor(
-    readonly code: BrowserAddressErrorCode,
-    message: string
-  ) {
+  readonly code: BrowserAddressErrorCode;
+
+  constructor(code: BrowserAddressErrorCode, message: string) {
     super(message);
+    this.code = code;
     this.name = 'BrowserAddressError';
   }
 }

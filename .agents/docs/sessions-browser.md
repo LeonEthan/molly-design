@@ -96,7 +96,11 @@ this page is the full text of the rules summarised there.
   the MCP handler revalidates every request against the strict action union before
   dispatch. Browser tools use the
   existing permission flow without per-site scopes; takeover revokes Agent observation and action
-  until the user explicitly resumes. While Agent control is active, Electron blocks
+  until the user explicitly resumes. Resume clears the exact saved takeover even
+  after its turn has ended, releasing Electron's shared-account pause for a later
+  authorized turn. A different active invocation or an unknown takeover identity
+  stays rejected. Handback does not restart a completed turn or replay a browser
+  operation. While Agent control is active, Electron blocks
   human mouse/keyboard events on that page. Only synchronous `Input.*` dispatch
   opens that gate; it is closed again before any asynchronous wait. Toolbar navigation
   takes over first. Detachment revokes pending output and preserves the human page.

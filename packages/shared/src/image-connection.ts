@@ -34,12 +34,21 @@
  */
 
 import { z } from 'zod';
+import { classifyBrowserHostname } from '#browser-url';
 
 export const IMAGE_CONNECTION_VERSION = 1;
 
 export const IMAGE_CONNECTION_MAX_URL_LENGTH = 2048;
 export const IMAGE_CONNECTION_MAX_API_KEY_LENGTH = 8192;
 export const IMAGE_CONNECTION_MAX_MODEL_LENGTH = 200;
+
+export const ImageConnectionEndpointSchema = z
+  .string()
+  .max(IMAGE_CONNECTION_MAX_URL_LENGTH)
+  .refine(
+    isImageConnectionEndpoint,
+    'Use HTTPS, or HTTP with localhost or a literal RFC1918 IPv4 address, without credentials, query or fragment'
+  );
 
 export const IMAGE_CONNECTION_PROTOCOLS = ['openai-images', 'dashscope'] as const;
 export const ImageConnectionProtocolSchema = z.enum(IMAGE_CONNECTION_PROTOCOLS);
@@ -110,6 +119,21 @@ const boundedString = (value: unknown, maxLength: number): string | undefined =>
   if (trimmed.length === 0 || trimmed.length > maxLength) return undefined;
   return trimmed;
 };
+
+const PRIVATE_LAN_HTTP_LITERAL =
+  /^http:\/\/(?:0|[1-9]\d{0,2})(?:\.(?:0|[1-9]\d{0,2})){3}(?::\d+)?(?:\/|$)/i;
+
+function isImageConnectionEndpoint(value: string): boolean {
+  const normalized = normalizeImageConnectionBaseUrl(value);
+  if (normalized === undefined) return false;
+  const url = new URL(normalized);
+  return (
+    url.protocol === 'https:' ||
+    ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+    (PRIVATE_LAN_HTTP_LITERAL.test(value.trim()) &&
+      classifyBrowserHostname(url.hostname) === 'private-lan')
+  );
+}
 
 /**
  * An endpoint URL we are willing to send a credential to.
@@ -187,7 +211,8 @@ export function isImageConnectionReady(
     settings != null &&
     settings.enabled &&
     settings.apiKey.trim().length > 0 &&
-    normalizeImageConnectionSettings(settings) !== undefined
+    normalizeImageConnectionSettings(settings) !== undefined &&
+    ImageConnectionEndpointSchema.safeParse(settings.baseUrl).success
   );
 }
 

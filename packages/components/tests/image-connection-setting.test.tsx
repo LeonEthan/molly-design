@@ -88,8 +88,37 @@ describe('image connection form values', () => {
     'https://images.example/v1?key=secret',
     'https://images.example/v1#fragment',
     'ftp://images.example/v1',
+    'http://images.example.invalid/v1',
+    'http://image-gateway.local/v1',
+    'http://100.64.0.1/v1',
+    'http://169.254.1.1/v1',
+    'http://[fe80::1]/v1',
+    'http://[fd00::1]:8080/v1',
+    'http://10.1/v1',
+    'http://0x0a000001/v1',
   ])('rejects unsafe endpoint %s', (baseUrl) => {
+    expect(imageConnectionDraftIssues(draftOf({ baseUrl })).baseUrl).toBe(true);
     expect(buildImageConnectionSave(draftOf({ baseUrl }))).toBeUndefined();
+  });
+  it.each([
+    'https://images.example.invalid/v1',
+    'http://127.0.0.1:8080/v1',
+    'http://10.0.0.1:8080/v1',
+    'http://172.16.0.1/v1',
+    'http://192.168.0.1/v1',
+    'http://[::1]:8080/v1',
+  ])('uses the same endpoint validation for the draft and save: %s', (baseUrl) => {
+    const draft = draftOf({ baseUrl, apiKey: 'synthetic-renewed-key' });
+    expect(imageConnectionDraftIssues(draft).baseUrl).toBe(false);
+    expect(buildImageConnectionSave(draft, storedConnection())).toEqual({
+      expectedRevision: 3,
+      enabled: true,
+      protocol: 'openai-images',
+      baseUrl,
+      model: 'saved-custom-model',
+      apiKey: 'synthetic-renewed-key',
+      clearApiKey: false,
+    });
   });
   it('sends the CAS revision and leaves retention to the main vault', () => {
     const saved = buildImageConnectionSave(draftOf(), storedConnection());
@@ -321,6 +350,51 @@ describe('ImageConnectionForm', () => {
     });
   });
 
+  it.each([
+    'http://images.example.invalid/v1',
+    'http://image-gateway.local/v1',
+    'http://[fd00::1]:8080/v1',
+  ])('shows the endpoint policy and disables Save for %s', async (baseUrl) => {
+    const saves: ImageConnectionFormDraft[] = [];
+    const view = await renderForm({
+      stored: storedConnection(),
+      onSave: (draft) => void saves.push(draft),
+    });
+    await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+    await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
+    expect(view.textContent).toContain(copy('settings.imageConnection.invalidBaseUrl'));
+    expect(copy('settings.imageConnection.invalidBaseUrl')).toContain('HTTPS');
+    expect(copy('settings.imageConnection.invalidBaseUrl')).toContain('private');
+    expect(button(view, copy('common.save')).disabled).toBe(true);
+    await click(button(view, copy('common.save')));
+    expect(saves).toEqual([]);
+  });
+
+  it.each(['http://192.168.0.1:8080/v1', 'http://172.16.0.1:8080/v1'])(
+    'saves a private HTTP endpoint only after replacing the destination-bound key: %s',
+    async (baseUrl) => {
+      const saves: ImageConnectionFormDraft[] = [];
+      const view = await renderForm({
+        stored: storedConnection(),
+        onSave: (draft) => void saves.push(draft),
+      });
+      await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+      expect(view.textContent).not.toContain(copy('settings.imageConnection.invalidBaseUrl'));
+      expect(button(view, copy('common.save')).disabled).toBe(true);
+      expect(view.textContent).toContain(copy('settings.models.keyRequired'));
+      await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
+      expect(button(view, copy('common.save')).disabled).toBe(false);
+      await click(button(view, copy('common.save')));
+      expect(saves).toEqual([draftOf({ baseUrl, apiKey: 'synthetic-renewed-key' })]);
+      expect(buildImageConnectionSave(saves[0], storedConnection())).toMatchObject({
+        expectedRevision: 3,
+        baseUrl,
+        apiKey: 'synthetic-renewed-key',
+      });
+      expect(apiKeyInput(view).value).toBe('');
+    }
+  );
+
   describe('free check', () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
@@ -385,6 +459,46 @@ describe('ImageConnectionForm', () => {
       await settle();
       expect(requests).toHaveLength(1);
       expect(view.textContent).not.toContain('rejected');
+    });
+
+    it.each(['http://192.168.0.1:8080/v1', 'http://172.16.0.1:8080/v1'])(
+      'checks a private HTTP image endpoint with its newly typed key: %s',
+      async (baseUrl) => {
+        const requests: CheckImageConnection[] = [];
+        const view = await renderForm({
+          stored: storedConnection(),
+          onCheck: async (input) => {
+            requests.push(input);
+            return { ok: true, models: ['synthetic-image-model'] };
+          },
+        });
+        await typeInto(view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!, baseUrl);
+        await settle();
+        expect(requests).toEqual([]);
+        await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
+        await settle();
+        expect(requests).toEqual([
+          { protocol: 'openai-images', baseUrl, apiKey: 'synthetic-renewed-key' },
+        ]);
+        expect(view.textContent).toContain('Key check passed · 1 model listed');
+      }
+    );
+
+    it('never sends a typed key to an invalid public HTTP endpoint', async () => {
+      const requests: CheckImageConnection[] = [];
+      const view = await renderForm({
+        onCheck: async (input) => {
+          requests.push(input);
+          return { ok: true };
+        },
+      });
+      await typeInto(
+        view.querySelector<HTMLInputElement>('input[id$="-base-url"]')!,
+        'http://images.example.invalid/v1'
+      );
+      await typeInto(apiKeyInput(view), 'synthetic-renewed-key');
+      await settle();
+      expect(requests).toEqual([]);
     });
 
     it('never checks DashScope, whose every request is billed', async () => {

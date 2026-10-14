@@ -65,6 +65,11 @@ app and automation interfaces unresponsive.
    generation, editing or masks. DashScope is never checked, because every request
    there is billed. The row's menu removes the connection and its key after a
    confirmation; the section then returns to its set-up state.
+   Image services support HTTPS, or HTTP at localhost and RFC1918 IPv4 literals.
+   HTTP sends the key and image data without TLS encryption;
+   use it only for a trusted local service. Public HTTP and named LAN HTTP are
+   rejected. Changing the address requires re-entering the key. Language-model
+   and MCP connections retain their separate HTTPS/loopback restrictions.
 4. For external tools, configure Settings → Advanced → MCP servers and select
    the servers for the turn. Saving does not test or automatically select them.
    A stdio server runs local code: configure only commands and servers you trust.

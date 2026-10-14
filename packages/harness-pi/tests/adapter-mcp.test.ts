@@ -76,6 +76,68 @@ function fileSignal(directory: string, name: string) {
 }
 
 describe('owned Pi ACP native MCP integration', () => {
+  it.each(['Molly real filesystem read-only', '素材 · 只读文件'])(
+    'starts and calls a selected server with display name %s',
+    async (name) => {
+      const _meta = {
+        mollyConnection: { id: 'synthetic-catalog-entry', revision: 1 },
+        mollyMcpDescription: 'Synthetic read-only materials',
+      };
+      const nativeName = acpMcpConfig([{ ...server('/synthetic'), name, _meta }], '/synthetic')[0]!
+        .name;
+      const f = await fixture({
+        responses: [codemode(`text(await tools.mcp__${nativeName}__image({}));`), done()],
+      });
+      await f.initialize();
+      const session = await f.agent.newSession({
+        cwd: f.cwd,
+        mcpServers: [{ ...server(f.cwd), name, _meta }],
+      });
+      const result = await f.agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'Read the selected synthetic materials' }],
+      });
+      expect(result.stopReason).toBe('end_turn');
+      expect(f.prompts[0]).toContain(`${name}: Synthetic read-only materials`);
+      expect(f.prompts[1]).toContain('SYNTHETIC_IMAGE_RESULT');
+      expect(await protocol(f.cwd)).toContainEqual({
+        method: 'tools/call',
+        params: expect.objectContaining({ name: 'image', arguments: {} }),
+      });
+    }
+  );
+
+  it('keeps readable catalog labels and stable native identity without slug collisions', () => {
+    const selected = {
+      ...server('/synthetic'),
+      name: 'Real files!',
+      _meta: { mollyConnection: { id: 'synthetic-catalog-entry', revision: 1 } },
+    };
+    const [original] = acpMcpConfig([selected], '/synthetic');
+    const [renamed] = acpMcpConfig(
+      [
+        {
+          ...selected,
+          name: '真实文件',
+          _meta: { mollyConnection: { id: 'synthetic-catalog-entry', revision: 2 } },
+        },
+      ],
+      '/synthetic'
+    );
+    expect(original?.name).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(renamed?.name).toBe(original?.name);
+    expect(original?.config.description).toBe('Real files!');
+    expect(renamed?.config.description).toBe('真实文件');
+    const standalone = acpMcpConfig(
+      ['Real files!', 'Real files?', '真实文件'].map((name) => ({ ...server('/synthetic'), name })),
+      '/synthetic'
+    );
+    expect(new Set(standalone.map(({ name }) => name)).size).toBe(3);
+    expect(() =>
+      acpMcpConfig([selected, { ...server('/synthetic'), name: original!.name }], '/synthetic')
+    ).toThrow('pi_acp_mcp_server_identity');
+  });
+
   it('keeps nested MCP outcomes associated with their script and restores summaries without execution', async () => {
     const f = await fixture({
       responses: [

@@ -2,8 +2,8 @@
 
 `CLAUDE.md` is a symlink to this file. Edit `AGENTS.md` only.
 
-Read before changing daemon negotiation, MCP/Role catalogs or UI, per-turn MCP
-selection, or Role dispatch. These contracts bind producers and consumers.
+Read before daemon negotiation, MCP/Role catalog/UI, per-turn MCP selection or Role
+dispatch changes. These contracts bind producers and consumers.
 
 ## Machine protocol negotiation
 
@@ -34,24 +34,26 @@ selection, or Role dispatch. These contracts bind producers and consumers.
 
 ## Embedded harness credentials
 
-`harness/host` v1 and `mcp/catalog-entry` are main-process-only; renderer Machine RPC rejects them.
-Encrypted-store metadata and credential reports use the owner-only socket, never Loro. Only an active dispatcher-owned
-model run/epoch lease or selected MCP session/epoch lease can consume a matching report
-(sole exception: explicit Settings tool listing, `ListMcpToolsSchema`, exact binding). RPC returns work, never secrets. No body/validation-input logs. Empty model grants need compatible bindings; signed-out metadata is main-owned.
-`embedded-harness` schemas separate connection references from model selection;
-no empty-model fallback, snapshot secrets or dispatched-work replay. A native
-connection's optional `models` narrows its picker; it never selects a model. Session
-dispatch owns runtime availability; schema presence does not enable execution.
+`harness/host` v1 and `mcp/catalog-entry` stay main-only; renderer Machine RPC rejects them.
+Vault metadata/reports use the owner-only socket, never Loro. Consumption requires a matching
+dispatcher-owned model run/epoch or selected MCP session/epoch lease; only explicit Settings
+`ListMcpToolsSchema` discovery of the exact binding is exempt. RPC returns work, never secrets;
+no body/validation-input logs. Empty model grants need compatible bindings; signed-out
+metadata is main-owned. References stay separate from selection: no empty-model fallback,
+snapshot secrets or dispatched-work replay. Native `models` only narrows the picker;
+dispatch, not schemas, owns availability.
 
 ## Image connection RPC
 
-- `design/image-connection` carries `ownerSessionId`. Secret-free `available` requires
-  design meta and complete protected metadata. `acquireCredential` additionally requires
-  an active dispatcher-owned run; only then may `ready` carry a credential. Renderer
-  generic RPC rejects this method. Missing/deleted/unreadable meta is unavailable;
-  lookups never create/write Session documents. Settings discovery uses main-only
-  vault IPC; the legacy daemon probe refuses. `artworkWorkdir` and `workspaceRoot`
-  come from the live Session and frozen context, never MCP caller paths.
+- Image settings/protected metadata/checks/grants share HTTPS/loopback HTTP or
+  image-only RFC1918 IPv4 HTTP. Reject other HTTP, userinfo, query and fragment.
+  Legacy public decoding is not authority. Model/OAuth/MCP rules are unchanged.
+- `design/image-connection` binds `ownerSessionId`; secret-free `available` needs design meta
+  and complete protected metadata. `acquireCredential` needs an active dispatcher-owned run
+  before `ready` carries a key. Renderer generic RPC rejects it; Settings uses main-only
+  vault IPC and legacy daemon probes refuse. Missing/deleted/unreadable meta is unavailable;
+  lookups never create/write Sessions. `artworkWorkdir`/`workspaceRoot` come from the live
+  Session and frozen context, never MCP paths.
 - Image models are user-required: preserve explicit stored models, never fill empty ones.
   The wire `protocol` is explicit too; absent means OpenAI Images, never inferred (#33).
   Generate/edit share readiness; image-reading, attachments and rendering remain independent.
@@ -127,9 +129,10 @@ draft digest for all supported design Agents, independently of hook/image/render
 support; it grants no commit authority. Pi native settlement remains separate.
 Public reminder hooks do not establish read proofs or authorize writes.
 
-Design continuation freezes `ACPSessionConfig.agentConfigId`; normalization and
-dispatch preserve it. `SessionMeta.acpSessionAgentConfigId` identifies the provider
-that owns the persisted ACP ID, independently of the next selected provider.
+Continuation freezes `ACPSessionConfig.agentConfigId` through normalization/dispatch.
+`SessionMeta.acpSessionAgentConfigId` binds the ACP ID to its original provider.
+Empty source identities are builtin independent-copy provenance only; execution
+identities remain nonempty.
 
 ## Isolated title defaults
 

@@ -78,7 +78,7 @@ export function OnboardingOverlay({
     () => (localMachineId === null ? [] : [localMachineId]),
     [localMachineId]
   );
-  useMachineFlockAgentConfigsForMachineIds(machineIds, { syncRemote: false });
+  useMachineFlockAgentConfigsForMachineIds(machineIds);
   const summaryAgent = resolveDesktopOnboardingSummaryAgent(
     draft.provider,
     agentConfigs,

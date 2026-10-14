@@ -5,10 +5,12 @@ import {
   DesignContinuationRecordSchema,
   buildDesignContinuationMeta,
   getDesignContinuationSystemContext,
+  DesignContinuationSourceSchema,
 } from '../src/design-continuation';
 import type { SessionHistoryInput } from '../src/schema';
 import type { SessionFilePayload } from '../src/ai';
 import type { SessionId } from '../src/ids';
+import { ACPSessionConfigSchema } from '../src/message-schemas';
 
 const source = {
   sessionId: 'source-session',
@@ -61,6 +63,53 @@ const record = () =>
   });
 
 describe('design continuation model context', () => {
+  it('retains the empty provenance of a legacy copy while publishing a valid Molly target', () => {
+    const receipt = record();
+    receipt.source.agentType = '';
+    receipt.source.design.artworkId = receipt.source.id;
+    receipt.reference.source.artworkId = receipt.source.id;
+    expect(DesignContinuationRecordSchema.safeParse(receipt).success).toBe(true);
+    expect(DesignContinuationSourceSchema.parse(receipt.source).agentType).toBe('');
+    const meta = buildDesignContinuationMeta(receipt);
+    expect(meta.agentType).toBe('molly');
+    expect(meta.agentConfigId).toBe(receipt.target.agentConfigId);
+    expect(getDesignContinuationSystemContext(meta, receipt)).toContain('untrusted historical');
+    expect(receipt.source.agentType).toBe('');
+  });
+
+  it.each([
+    { cliType: 'custom' },
+    { cliType: 'registry' },
+    { agentConfigId: 'existing-config' },
+    { design: { artworkId: 'foreign-artwork', path: 'design.json' } },
+    { parentSessionId: 'parent' },
+    { project: { kind: 'local', localProjectId: 'project-1' } },
+    { repoFullName: 'synthetic/repository' },
+    { baseBranch: 'main' },
+    { branchName: 'old-worktree' },
+    { agentType: ' ' },
+    { agentType: 'invalid/type' },
+  ])('does not widen empty provenance compatibility for %j', (patch) => {
+    const candidate = {
+      ...record().source,
+      agentType: '',
+      design: { artworkId: source.sessionId, path: 'design.json' },
+      ...patch,
+    };
+    expect(DesignContinuationSourceSchema.safeParse(candidate).success).toBe(false);
+    expect(DesignContinuationSourceSchema.strict().safeParse(candidate).success).toBe(false);
+  });
+
+  it('still refuses an empty execution identity in an explicit next turn', () => {
+    expect(
+      ACPSessionConfigSchema.safeParse({
+        prompt: 'Change the title',
+        cliType: 'builtin',
+        agentType: '',
+      }).success
+    ).toBe(false);
+  });
+
   it.each([undefined, 'original-root'])(
     'keeps only artwork and opener provenance from %s',
     (parent) => {

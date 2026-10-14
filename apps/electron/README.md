@@ -214,7 +214,10 @@ by native behavior. Native page downloads remain available and do not publish
 design assets automatically.
 
 Ownership checks, native document readiness, human takeover and finite operation
-timeouts remain. Cancellation or an uncertain outcome rejects only that operation's
+timeouts remain. Explicit Resume Agent releases the recorded human takeover even
+when its original turn has completed, so a later authorized turn can browse without
+restarting Molly. A mismatched active run remains guarded; handback never restarts
+completed turns or replays operations. Cancellation or an uncertain outcome rejects only that operation's
 late result, without freezing browser access for the current run or automatically
 replaying the action. Manual addresses retain loopback Managed Preview routing;
 Agent navigation remains on its native page, including loopback.

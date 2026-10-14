@@ -1,8 +1,18 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
 import { getPublicBrowserBridge } from '@/lib/electron-ipc-client';
+import { LRUCache } from '@/lib/lru-cache';
 
-import { useFireOncePerKey } from './use-fire-once';
+const MAX_REMEMBERED_REVEALS = 100;
+const spentReveals = new LRUCache<string, true>(MAX_REMEMBERED_REVEALS);
+
+export const clearAgentBrowserRevealMemory = (): void => spentReveals.clear();
+
+const spendReveal = (key: string): boolean => {
+  if (spentReveals.has(key)) return false;
+  spentReveals.set(key, true);
+  return true;
+};
 
 type AgentBrowserAutoRevealOptions = {
   browserId: string | null;
@@ -14,8 +24,9 @@ type AgentBrowserAutoRevealOptions = {
 /**
  * Calls `onReveal` the first time the Agent takes control of `browserId` in a
  * Turn. Later control transitions in the same Turn never reveal again, so a
- * user who closes the panel keeps it closed until the next Turn. A reveal
- * opportunity spent while `suppressed` (Zen) is not carried over.
+ * user who closes the panel keeps it closed until the next Turn, even if the
+ * session view remounts. A reveal opportunity spent while `suppressed` (Zen)
+ * is not carried over.
  */
 export function useAgentBrowserAutoReveal({
   browserId,
@@ -23,10 +34,9 @@ export function useAgentBrowserAutoReveal({
   suppressed,
   onReveal,
 }: AgentBrowserAutoRevealOptions): void {
-  const shouldReveal = useFireOncePerKey();
-  const latestRef = useRef({ turnId, suppressed, onReveal, shouldReveal });
+  const latestRef = useRef({ turnId, suppressed, onReveal });
   useLayoutEffect(() => {
-    latestRef.current = { turnId, suppressed, onReveal, shouldReveal };
+    latestRef.current = { turnId, suppressed, onReveal };
   });
 
   useEffect(() => {
@@ -36,7 +46,7 @@ export function useAgentBrowserAutoReveal({
     return bridge.onState((state) => {
       if (state.browserId !== browserId || state.agentControl !== 'agent') return;
       const latest = latestRef.current;
-      if (!latest.shouldReveal(`${browserId}:${latest.turnId ?? ''}`)) return;
+      if (!spendReveal(`${browserId}:${latest.turnId ?? ''}`)) return;
       if (!latest.suppressed) latest.onReveal();
     });
   }, [browserId]);

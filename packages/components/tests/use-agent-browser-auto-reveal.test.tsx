@@ -5,7 +5,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ElectronPublicBrowserState } from '@molly/shared';
 
-import { useAgentBrowserAutoReveal } from '../src/hooks/use-agent-browser-auto-reveal';
+import {
+  clearAgentBrowserRevealMemory,
+  useAgentBrowserAutoReveal,
+} from '../src/hooks/use-agent-browser-auto-reveal';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -67,6 +70,7 @@ describe('useAgentBrowserAutoReveal', () => {
   };
 
   beforeEach(() => {
+    clearAgentBrowserRevealMemory();
     handlers = [];
     window.__MOLLY_ELECTRON__ = true;
     window.ipc = {
@@ -109,6 +113,18 @@ describe('useAgentBrowserAutoReveal', () => {
     emit('session-browser-a', 'human');
     emit('session-browser-a', 'agent');
     emit('session-browser-a', 'human');
+    emit('session-browser-a', 'agent');
+
+    expect(panelOpen()).toBe(false);
+  });
+
+  it('does not reopen after the session view remounts during the same turn', () => {
+    renderHarness({ browserId: 'session-browser-a', turnId: 'turn-1' });
+    emit('session-browser-a', 'agent');
+    act(() => root.unmount());
+    root = createRoot(container);
+
+    renderHarness({ browserId: 'session-browser-a', turnId: 'turn-1' });
     emit('session-browser-a', 'agent');
 
     expect(panelOpen()).toBe(false);

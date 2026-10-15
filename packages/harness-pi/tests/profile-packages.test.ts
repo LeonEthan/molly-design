@@ -39,7 +39,7 @@ describe('application Pi profile packages', () => {
     expect(settings).toMatchObject({
       defaultProjectTrust: 'never',
       enableAnalytics: false,
-      retry: { enabled: false, maxRetries: 0 },
+      retry: { enabled: true, maxRetries: 3, provider: { maxRetries: 0 } },
     });
     expect(settings).not.toHaveProperty('subagents');
     initTheme('dark', false);
@@ -61,25 +61,14 @@ describe('application Pi profile packages', () => {
     expect(commands).toEqual(expect.arrayContaining(['skillful', 'cc-safety-net']));
   });
 
-  it('fails a retryable provider response without another inference under production settings', async () => {
-    const unexpectedRetry = fauxAssistantMessage('A retry must not run.');
-    const f = await fixture({
-      responses: [
-        fauxAssistantMessage('', { stopReason: 'error', errorMessage: '503 Service Unavailable' }),
-        unexpectedRetry,
-      ],
+  it('pins the bounded native retry budget and disables hidden provider retries', () => {
+    expect(createProfileSettings().retry).toEqual({
+      enabled: true,
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxAgentDelayMs: 20000,
+      provider: { maxRetries: 0 },
     });
-    await writeProfileSettings(f.agentDir);
-    expect(SettingsManager.create(f.cwd, f.agentDir).getRetrySettings()).toMatchObject({
-      enabled: false,
-      maxRetries: 0,
-    });
-    await f.initialize();
-    const session = await f.agent.newSession({ cwd: f.cwd, mcpServers: [] });
-    await expect(
-      f.agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Go' }] })
-    ).rejects.toThrow('pi_acp_native_execution_failed');
-    expect(f.responses).toEqual([unexpectedRetry]);
   });
 
   it('blocks a destructive shell command through the safety floor without asking', async () => {

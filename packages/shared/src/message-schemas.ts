@@ -3130,7 +3130,16 @@ export const ChatFailedReasonSchema = z.enum([
   'acp_unknown_error',
 ]);
 
-export const ChatFailedCodeSchema = z.enum(['git_executable_not_found']);
+export const ChatFailedCodeSchema = z.enum([
+  'git_executable_not_found',
+  'model_temporarily_unavailable',
+  'model_auth_rejected',
+  'model_quota_exceeded',
+  'model_context_overflow',
+  'model_content_blocked',
+  'model_request_rejected',
+  'model_request_failed',
+]);
 
 // Metadata for chat_failed system notice
 export const ChatFailedMetaSchema = z.object({

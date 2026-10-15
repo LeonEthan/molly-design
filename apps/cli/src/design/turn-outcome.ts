@@ -527,14 +527,18 @@ export async function collectDesignTurnOutcome(
  * a cancelled turn must not change the canvas behind the user's back.
  */
 export async function recordDesignTurnTerminalOutcome(
-  ctx: DesignTurnOutcomeContext & { status: 'cancelled' | 'failed'; message?: string }
+  ctx: DesignTurnOutcomeContext & {
+    status: 'cancelled' | 'failed';
+    message?: string;
+    omitDiagnostics?: boolean;
+  }
 ): Promise<DesignTurnAttempt> {
   return await recordTurnOutcome(ctx, async ({ artworkId }) => {
     const base = outcomeBase(ctx, artworkId);
     if (ctx.status === 'cancelled') return { outcome: { ...base, status: 'cancelled' } };
-    const entries = diagnostics([
-      { code: 'design_turn_failed', message: ctx.message ?? 'the turn failed' },
-    ]);
+    const entries = ctx.omitDiagnostics
+      ? undefined
+      : diagnostics([{ code: 'design_turn_failed', message: ctx.message ?? 'the turn failed' }]);
     return {
       outcome: {
         ...base,

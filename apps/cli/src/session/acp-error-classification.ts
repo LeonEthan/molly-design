@@ -1,4 +1,4 @@
-import type { ChatFailedReason } from '@molly/shared';
+import type { ChatFailedCode, ChatFailedReason } from '@molly/shared';
 import { formatErrorMessage, formatErrorWithCauses } from '@/utils/format-error';
 
 export const ACP_ERROR_CODES = {
@@ -90,6 +90,26 @@ export const getACPErrorUserMessage = (error: ParsedACPError): string => {
 const isHarnessModelRequestFailedACPError = (error: ParsedACPError): boolean =>
   error.code === ACP_ERROR_CODES.INTERNAL_ERROR &&
   getStringField(error.data, 'code') === 'harness_model_request_failed';
+
+export const mapACPErrorToFailureCode = (error: ParsedACPError): ChatFailedCode | undefined => {
+  if (!isHarnessModelRequestFailedACPError(error)) return undefined;
+  switch (getStringField(error.data, 'category')) {
+    case 'transient':
+      return 'model_temporarily_unavailable';
+    case 'auth':
+      return 'model_auth_rejected';
+    case 'quota':
+      return 'model_quota_exceeded';
+    case 'context_overflow':
+      return 'model_context_overflow';
+    case 'content_policy':
+      return 'model_content_blocked';
+    case 'invalid_request':
+      return 'model_request_rejected';
+    default:
+      return 'model_request_failed';
+  }
+};
 
 export const isUpstreamApiACPError = (error: ParsedACPError): boolean =>
   isHarnessModelRequestFailedACPError(error) ||
@@ -208,6 +228,7 @@ export const isAuthenticationRequiredACPError = (error: unknown): boolean => {
 };
 
 export const mapACPErrorToFailureReason = (error: ParsedACPError): ChatFailedReason => {
+  if (isHarnessModelRequestFailedACPError(error)) return 'acp_upstream_api_error';
   if (isAuthenticationRequiredACPError(error)) {
     return 'acp_auth_required';
   }

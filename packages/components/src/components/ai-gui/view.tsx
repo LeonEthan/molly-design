@@ -211,11 +211,7 @@ import {
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import { getMachineMetaByIdAtomFamily } from '@/atoms/machines';
 import { isHtmlSessionFile } from '@/lib/session-file-presentation';
-import type {
-  MachineId,
-  MessageTextSpan,
-  SessionFilePayload,
-} from '@molly/shared';
+import type { MachineId, MessageTextSpan, SessionFilePayload } from '@molly/shared';
 import { MessageTextWithChips } from '@/components/mentions/message-text-chips';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
@@ -224,10 +220,14 @@ import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { SessionPlanBar } from '@/components/sessions/session-plan-bar';
+import { isModelFailureRetryableCode } from '@/components/sessions/use-model-failure-retry';
 import { ContainerQueryProvider } from './container-query-provider';
 import { usePermissionResponse } from '@/hooks/use-permission-response';
 import { shouldRenderSystemRowItem } from './message-content-guards';
-import { getChatFailedDiagnosticCopy } from './chat-failed-diagnostic-copy';
+import {
+  getChatFailedDiagnosticCopy,
+  isModelRequestFailureCode,
+} from './chat-failed-diagnostic-copy';
 import { extractReadableChatFailedMessage } from './chat-failed-error-report';
 import { ChatFailedDetailDialog } from './chat-failed-detail-dialog';
 import { DEFAULT_CONVERSATION_FONT_SIZE, type ConversationFontSize } from '@/atoms/settings';
@@ -436,6 +436,13 @@ export interface CapacityRetryControl {
   autoRetryExhausted: boolean;
   retry: () => void;
   stopAutoRetry: () => void;
+}
+
+export interface ModelFailureRetryControl {
+  noticeId: string;
+  pending: boolean;
+  canRetry: boolean;
+  retry: () => void;
 }
 
 // Exported for focused message/action binding tests.
@@ -1261,7 +1268,19 @@ export const SessionChatStreamView = forwardRef<
     const { t } = useTranslation();
     const search = useSessionSearch();
     const activeSearchBlockId = search?.activeBlockId ?? null;
-    const shouldShowAgentActivity = Boolean(agentActivityLabel);
+    const latestAssistant = items.findLast(
+      (item) => item.type === 'message' && item.message.role === 'assistant'
+    );
+    const hasActiveRetry =
+      latestAssistant?.type === 'message' &&
+      !latestAssistant.message.finished &&
+      latestAssistant.message.items.some(
+        (item) =>
+          item.type === 'tool_call' &&
+          item.activityKind === 'codex_retry' &&
+          (item.status === 'pending' || item.status === 'in_progress')
+      );
+    const shouldShowAgentActivity = Boolean(agentActivityLabel) && !hasActiveRetry;
     const [assistantExpansionVersion, setAssistantExpansionVersion] = useState(0);
     const [hoveredAssistantMessageId, setHoveredAssistantMessageId] = useState<string | null>(null);
     /**
@@ -1932,6 +1951,7 @@ export const MessageRowView = memo(function MessageRowView({
   onEdit,
   onResendUndelivered,
   capacityRetry,
+  modelFailureRetry,
   conversationFontSize = DEFAULT_CONVERSATION_FONT_SIZE,
 }: {
   message: SessionHistoryParsed;
@@ -1940,6 +1960,7 @@ export const MessageRowView = memo(function MessageRowView({
   onEdit?: (message: SessionHistoryParsed, text: string) => Promise<boolean>;
   onResendUndelivered?: (userTurnId: string, inputBlocks: SessionInputBlock[]) => Promise<boolean>;
   capacityRetry?: CapacityRetryControl;
+  modelFailureRetry?: ModelFailureRetryControl;
   user?: SessionChatUser;
   conversationFontSize?: ConversationFontSize;
 }) {
@@ -1961,6 +1982,7 @@ export const MessageRowView = memo(function MessageRowView({
         sessionId={sessionId}
         onNavigateSession={onNavigateSession}
         capacityRetry={capacityRetry}
+        modelFailureRetry={modelFailureRetry}
       />
     );
   }
@@ -1994,11 +2016,13 @@ const SystemMessageRowView = ({
   sessionId,
   onNavigateSession,
   capacityRetry,
+  modelFailureRetry,
 }: {
   message: SessionHistoryParsed;
   sessionId: SessionId;
   onNavigateSession?: (target: SessionNavigationTarget) => void;
   capacityRetry?: CapacityRetryControl;
+  modelFailureRetry?: ModelFailureRetryControl;
 }) => {
   const systemItems = message.items.flatMap((item, itemIndex) =>
     shouldRenderSystemRowItem(item) ? [{ item, itemIndex }] : []
@@ -2018,6 +2042,7 @@ const SystemMessageRowView = ({
             sessionId={sessionId}
             onNavigateSession={onNavigateSession}
             capacityRetry={capacityRetry}
+            modelFailureRetry={modelFailureRetry}
           />
         ) : item.type === 'worktree_script' ? (
           <WorktreeScriptNoticeView
@@ -2189,18 +2214,25 @@ const SystemNoticeView = ({
   sessionId,
   onNavigateSession,
   capacityRetry,
+  modelFailureRetry,
 }: {
   notice: Extract<MessageContent, { type: 'system_notice' }>;
   sessionId: SessionId;
   onNavigateSession?: (target: SessionNavigationTarget) => void;
   capacityRetry?: CapacityRetryControl;
+  modelFailureRetry?: ModelFailureRetryControl;
 }) => {
   const { t } = useTranslation();
 
   switch (notice.name) {
     case 'chat_failed':
       return (
-        <ChatFailedNoticeView notice={notice} sessionId={sessionId} capacityRetry={capacityRetry} />
+        <ChatFailedNoticeView
+          notice={notice}
+          sessionId={sessionId}
+          capacityRetry={capacityRetry}
+          modelFailureRetry={modelFailureRetry}
+        />
       );
     case 'agent_warning':
       return <AgentWarningNoticeView notice={notice} />;
@@ -2317,10 +2349,12 @@ const ChatFailedNoticeView = ({
   notice,
   sessionId,
   capacityRetry,
+  modelFailureRetry,
 }: {
   notice: Extract<MessageContent, { type: 'system_notice' }>;
   sessionId: SessionId;
   capacityRetry?: CapacityRetryControl;
+  modelFailureRetry?: ModelFailureRetryControl;
 }) => {
   const { t } = useTranslation();
   const sessionMeta = useAtomValue(sessionMetaAtomFamily(getSessionRoomId(sessionId)));
@@ -2457,9 +2491,10 @@ const ChatFailedNoticeView = ({
   };
 
   const reasonMessage = getReasonMessage(meta?.reason);
-  const actionMessage = diagnosticCopy
-    ? t(diagnosticCopy.actionKey, diagnosticCopy.action)
-    : undefined;
+  const actionMessage =
+    diagnosticCopy?.actionKey && diagnosticCopy.action
+      ? t(diagnosticCopy.actionKey, diagnosticCopy.action)
+      : undefined;
   const rawMessage = meta?.message?.trim() ? meta.message : undefined;
   const detailMessage = (() => {
     if (!rawMessage) return undefined;
@@ -2469,7 +2504,11 @@ const ChatFailedNoticeView = ({
   // The raw error only lives behind the modal, so open it whenever there is a
   // raw message at all — even one whose readable extract equals the title, the
   // full payload (stack, upstream JSON) is still worth reading and copying.
-  const hasDetail = Boolean(rawMessage && rawMessage.trim() !== reasonMessage);
+  // Model request failures are the exception: their message is a short static
+  // string, so the notice stays ONE line with no detail modal (#137).
+  const isModelRequestFailure = isModelRequestFailureCode(meta?.code);
+  const hasDetail =
+    !isModelRequestFailure && Boolean(rawMessage && rawMessage.trim() !== reasonMessage);
   const isProviderOverloaded = meta?.reason === 'acp_provider_overloaded';
 
   const noticeBody = (
@@ -2564,6 +2603,25 @@ const ChatFailedNoticeView = ({
       </button>
     ) : null;
 
+  // Transient model request failures get a single small Retry next to the one
+  // line; the harness already spent its automatic retries, so one click resends
+  // the original message and permanent codes get no button (#137).
+  const modelFailureRetryAction =
+    isModelRequestFailure && isModelFailureRetryableCode(meta?.code) && modelFailureRetry ? (
+      <button
+        type="button"
+        className="group relative isolate inline-grid h-7 shrink-0 place-items-center overflow-hidden rounded-full bg-muted-foreground/[0.04] px-2.5 text-xs font-normal tabular-nums text-foreground/80 transition-colors hover:bg-muted-foreground/[0.07] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+        disabled={modelFailureRetry.pending || !modelFailureRetry.canRetry}
+        onClick={modelFailureRetry.retry}
+      >
+        <span className="relative z-10">
+          {modelFailureRetry.pending
+            ? t('sessions.systemNotices.chatFailed.retrying', 'Retrying…')
+            : t('sessions.systemNotices.chatFailed.retry', 'Retry')}
+        </span>
+      </button>
+    ) : null;
+
   return (
     <div className="space-y-2 py-1 @[640px]:pl-3">
       <div role="alert" className="flex w-fit max-w-full flex-wrap items-center gap-2">
@@ -2581,6 +2639,7 @@ const ChatFailedNoticeView = ({
           <div className={rowClassName}>{noticeBody}</div>
         )}
         {retryAction}
+        {modelFailureRetryAction}
       </div>
       {hasDetail ? (
         <ChatFailedDetailDialog

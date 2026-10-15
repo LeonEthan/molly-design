@@ -177,6 +177,7 @@ import {
   CAPACITY_RETRY_CONTINUATION_PROMPT,
   useCapacityAutoRetry,
 } from './use-capacity-auto-retry';
+import { useModelFailureRetry } from './use-model-failure-retry';
 import { PrLinkProvider } from '@/components/ai-gui/pr-link-context';
 import { WorktreeIcon } from '@/components/icons/worktree-icon';
 import {
@@ -190,6 +191,7 @@ import {
   resolveOpenedByNavigationTarget,
   type SessionNavigationTarget,
 } from '@/lib/session-navigation';
+import { buildResendInputBlocks } from '@/lib/undelivered-user-turn';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -3052,6 +3054,26 @@ export const SessionChatInterface = memo(
         ),
     });
 
+    // Manual retry for transient model request failures (#137): the harness
+    // already spent its automatic retries, so one click resends the ORIGINAL
+    // user message of the failed round as a NEW ordinary message — the old
+    // entry and its draft files stay untouched.
+    const modelFailureRetry = useModelFailureRetry({
+      sessionId: session.id,
+      history: sessionHistory,
+      canRetry:
+        sessionDocReady &&
+        !isAgentBusy &&
+        !isMachineRemoved &&
+        !isArchivedSession &&
+        !isExternalHistoryRefreshing,
+      onRetry: async (userEntry) => {
+        const inputBlocks = buildResendInputBlocks(userEntry);
+        if (inputBlocks.length === 0) return false;
+        return await handleSendMessage(inputBlocks);
+      },
+    });
+
     // Resend a user turn the missing-history recovery negatively acknowledged:
     // the row's "Not delivered" label opens a confirmation dialog that calls
     // this with the turn's exact content. It rides the ordinary send path as a
@@ -3936,6 +3958,7 @@ export const SessionChatInterface = memo(
                             }
                             onResendUndelivered={handleResendUndelivered}
                             capacityRetry={capacityRetry ?? undefined}
+                            modelFailureRetry={modelFailureRetry ?? undefined}
                             forkingAssistantMessageId={forkingAssistantMessageId}
                             onNavigateSession={onNavigateSession}
                             onLastCompletedAssistantMessageIdChange={

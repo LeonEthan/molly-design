@@ -1177,7 +1177,20 @@ export type ChatFailedReason =
   | 'acp_parse_error' // -32700: Parse error (invalid JSON)
   | 'acp_unknown_error'; // Other ACP errors not in the predefined list
 
-export type ChatFailedCode = 'git_executable_not_found';
+export type ChatFailedCode = 'git_executable_not_found' | ModelRequestFailureCode;
+
+/**
+ * Embedded-harness model request failures (#137). Transient failures reach the
+ * user only after the harness's bounded automatic retries are exhausted.
+ */
+export type ModelRequestFailureCode =
+  | 'model_temporarily_unavailable'
+  | 'model_auth_rejected'
+  | 'model_quota_exceeded'
+  | 'model_context_overflow'
+  | 'model_content_blocked'
+  | 'model_request_rejected'
+  | 'model_request_failed';
 
 /**
  * Metadata for the chat_failed system notice

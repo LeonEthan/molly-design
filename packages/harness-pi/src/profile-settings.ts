@@ -22,7 +22,13 @@ export function createProfileSettings() {
     defaultProjectTrust: 'never',
     enableAnalytics: false,
     enableInstallTelemetry: false,
-    retry: { enabled: false, maxRetries: 0, provider: { maxRetries: 0 } },
+    retry: {
+      enabled: true,
+      maxRetries: 3,
+      baseDelayMs: 1000,
+      maxAgentDelayMs: 20000,
+      provider: { maxRetries: 0 },
+    },
   };
 }
 

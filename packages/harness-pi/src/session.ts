@@ -18,6 +18,7 @@ import {
 import type { PiAcpHost } from './host';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { PiAcpUsage } from './usage';
+import { modelErrorDiagnostic } from './model-error';
 
 export type AdapterPeer = Pick<acp.AgentSideConnection, 'sessionUpdate'> &
   Partial<Pick<acp.AgentSideConnection, 'request' | 'extMethod' | 'extNotification'>>;
@@ -324,8 +325,7 @@ export class PiAcpSession {
       if (this.host && run.stopReason === 'error')
         throw new RequestError(-32603, 'Model request failed.', {
           code: 'harness_model_request_failed',
-          details:
-            'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+          ...modelErrorDiagnostic(run.finalAssistant, this.piSession.model?.contextWindow),
         });
       if (failed || run.stopReason === 'error') throw new Error('pi_acp_native_execution_failed');
       if (run.started && (!run.settled || run.tools.size))

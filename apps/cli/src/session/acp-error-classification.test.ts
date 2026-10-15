@@ -9,6 +9,7 @@ import {
   isAcpSessionNotFoundError,
   isProviderOverloadedACPError,
   isHarnessRunAlreadyDispatchedError,
+  mapACPErrorToFailureCode,
   mapACPErrorToFailureReason,
   parseACPError,
   shouldRecoverStaleACPConnectionPrompt,
@@ -99,13 +100,15 @@ describe('ACP error classification', () => {
 
   it('reports managed model failures as upstream errors and retires the failed worker', () => {
     const details =
-      'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.';
+      'The model service stayed unavailable after automatic retries. Your conversation and draft files are preserved.';
     const error = new RequestError(ACP_ERROR_CODES.INTERNAL_ERROR, 'Model request failed.', {
       code: 'harness_model_request_failed',
+      category: 'transient',
       details,
     });
 
     expect(mapACPErrorToFailureReason(error)).toBe('acp_upstream_api_error');
+    expect(mapACPErrorToFailureCode(error)).toBe('model_temporarily_unavailable');
     expect(getACPErrorUserMessage(error)).toBe(details);
     expect(shouldTerminateOnACPError(error, 'acp_upstream_api_error')).toBe(true);
     expect(
@@ -121,7 +124,31 @@ describe('ACP error classification', () => {
     const error = new RequestError(ACP_ERROR_CODES.INTERNAL_ERROR, 'harness_model_request_failed');
 
     expect(mapACPErrorToFailureReason(error)).toBe('acp_internal_error');
+    expect(mapACPErrorToFailureCode(error)).toBeUndefined();
     expect(shouldTerminateOnACPError(error, 'acp_upstream_api_error')).toBe(false);
+  });
+
+  it.each([
+    ['transient', 'model_temporarily_unavailable'],
+    ['auth', 'model_auth_rejected'],
+    ['quota', 'model_quota_exceeded'],
+    ['context_overflow', 'model_context_overflow'],
+    ['content_policy', 'model_content_blocked'],
+    ['invalid_request', 'model_request_rejected'],
+    ['unknown', 'model_request_failed'],
+    [undefined, 'model_request_failed'],
+    ['unrecognized', 'model_request_failed'],
+  ])('maps only the static managed category %s to %s', (category, code) => {
+    const error = new RequestError(ACP_ERROR_CODES.INTERNAL_ERROR, 'Model request failed.', {
+      code: 'harness_model_request_failed',
+      category,
+    });
+    expect(mapACPErrorToFailureCode(error)).toBe(code);
+    expect(mapACPErrorToFailureReason(error)).toBe('acp_upstream_api_error');
+    expect(shouldTerminateOnACPError(error, 'acp_upstream_api_error')).toBe(true);
+    expect(
+      mapACPErrorToFailureCode(new RequestError(-32603, 'Internal error', { category }))
+    ).toBeUndefined();
   });
 
   it('maps Codex model capacity to a resumable provider overload', () => {

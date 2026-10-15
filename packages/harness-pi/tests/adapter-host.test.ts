@@ -19,6 +19,7 @@ import { LODY_EXTENSION_METHODS } from 'acp-extension-core';
 import { HARNESS_MEMORY_METHOD } from '@molly/shared/personal-memory';
 
 import { managed } from './fixtures/managed';
+import { retrySignals } from './fixtures/retry';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 describe('owned ACP host integration', () => {
@@ -32,28 +33,42 @@ describe('owned ACP host integration', () => {
     expect((await f.runtime().getAuth(providerId))?.auth.headers?.Authorization).toBeNull();
   });
   it('reports native model failures without exposing provider payloads or replaying the run', async () => {
+    const retry = retrySignals();
     const f = await managed({
       productionProfile: true,
+      peer: retry,
       providerError:
         '500: {"message":"HTTP/2 PROTOCOL_ERROR SYNTHETIC_PROVIDER_SECRET","type":"server_error","code":"internal_server_error"}',
     });
     const session = await f.open();
     f.grant(session.snapshot);
-    const error = await session.prompt().catch((failure: unknown) => failure);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const running = session.prompt().catch((failure: unknown) => failure);
+    let error: unknown;
+    try {
+      for (const [index, signal] of retry.scheduled.entries()) {
+        await signal.promise;
+        await vi.advanceTimersByTimeAsync(1000 * 2 ** index);
+      }
+      error = await running;
+    } finally {
+      vi.useRealTimers();
+    }
     expect(error).toMatchObject({
       code: -32603,
       message: 'Model request failed.',
       data: {
         code: 'harness_model_request_failed',
-        details: expect.stringContaining('not retried automatically'),
+        category: 'transient',
+        details: expect.stringContaining('after automatic retries'),
       },
     });
     expect(JSON.stringify(error)).not.toContain('SYNTHETIC_PROVIDER_SECRET');
     expect(JSON.stringify(f.updates)).not.toContain('SYNTHETIC_PROVIDER_SECRET');
-    expect(f.observed).toHaveLength(1);
+    expect(f.observed).toHaveLength(4);
     expect(f.pipe.destroyed).toBe(true);
     await expect(session.prompt()).rejects.toMatchObject({ code: -32600 });
-    expect(f.observed).toHaveLength(1);
+    expect(f.observed).toHaveLength(4);
   });
 
   it.each(['overflow', 'length'] as const)(

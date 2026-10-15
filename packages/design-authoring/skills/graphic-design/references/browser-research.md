@@ -16,8 +16,8 @@ the category and outside current design feeds: historical posters, fine art,
 architecture, packaging from another field. If every result looks alike, the
 search is too narrow; widen it once.
 
-Make a few queries, then move on to choosing. If the results stay thin, say so in
-the report rather than browsing without end.
+Make a few queries, then move on to choosing. If the results stay thin, take the
+gate's shortfall exit rather than browsing without end.
 
 ## Inspect and keep sources
 

@@ -338,7 +338,8 @@ describe('packaged design materials', () => {
     const researchGate = entry.match(/\*\*Research gate\.\*\*[\s\S]*?(?=\n### )/)?.[0] ?? '';
     for (const rule of [
       /read \[references\/browser-research\.md\]\([^)]*\) in\s+full/,
-      /one focused browser pass on a design site/,
+      /one focused browser pass on a design site: Pinterest when you observe\s+it signed in[\s\S]*imported cookies alone are not access/,
+      /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
       /individual images; result grids, search snippets and\s+page titles do not count/,
       /saved one to three inspiration images/,
       /kept three to six references, each with one named quality/,
@@ -348,12 +349,16 @@ describe('packaged design materials', () => {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
+      /stage 2 ran without\s+research[\s\S]*otherwise `generate` from the prompt alone, and say in the options report that\s+the options were made without research/
+    );
+    expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
     );
     const browserResearch = readFileSync(
       path.join(graphic, 'references/browser-research.md'),
       'utf8'
     );
+    expect(browserResearch).not.toMatch(/signed in or imported/i);
     expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
     expect(browserResearch).not.toMatch(/report exactly which visible results/i);
 

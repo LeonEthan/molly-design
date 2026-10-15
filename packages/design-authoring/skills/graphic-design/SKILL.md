@@ -132,14 +132,18 @@ these hold:
 
 - you read [references/browser-research.md](references/browser-research.md) in
   full;
-- you made one focused browser pass on a design site: Pinterest when it is signed
-  in or imported, otherwise another accessible design source;
+- you made one focused browser pass on a design site: Pinterest when you observe
+  it signed in (references visible without a login overlay), otherwise another
+  accessible design source; imported cookies alone are not access
+  ([Sign-in](references/browser-research.md#sign-in));
 - you opened and inspected individual images; result grids, search snippets and
   page titles do not count;
 - you saved one to three inspiration images with `save_image` for stage 3;
 - you kept three to six references, each with one named quality (palette, type,
   crop and light, layout structure) and none taken as literal objects or finished
-  layout.
+  layout. When one widened pass still yields fewer than three relevant ones, keep
+  the ones you inspected (at least one) and name the shortfall in the options
+  report; never pad with uninspected results.
 
 When the user forbids networking, respect it, report the gap and proceed without
 research. When the browser or network is unavailable, report the gap and stop:
@@ -165,7 +169,11 @@ assets (a product photo, a logo) or the source artwork being redesigned, so the
 options keep them. Add one or two of the inspiration images saved in stage 2,
 chosen by you for that option, and say in the prompt what each contributes
 ("image 2: its light and palette") and that its objects, text and logos are not
-to be copied. Different options may use different inspiration images. Stay
+to be copied. Different options may use different inspiration images. When stage 2 ran without
+research (the user forbade networking or waived research) there are no
+inspiration images: use `edit` with only the source image when there is one,
+otherwise `generate` from the prompt alone, and say in the options report that
+the options were made without research. Stay
 within the connection's input limit in the `imagegen` Skill. An option that is
 recognizably one reference with new copy fails. A rendered blockout can steer an
 option's layout when words are not enough. Techniques are in

@@ -21,6 +21,7 @@ import {
   getMainWindowTitleBarOverlay
 } from './window-theme'
 import { formatUnknownError, normalizeExternalHttpUrl } from './utils'
+import { resolveWindowActivationAction } from './window-activation-policy'
 import { describeDeepLinkForAuthDebug } from './auth-debug'
 import { serializePreferredSystemLanguagesArgument } from '../system-language-argument'
 import {
@@ -452,7 +453,7 @@ type OpenMainWindowOptions = {
   hideWindowOnAutoLaunch?: boolean
 }
 
-export function focusMainWindow(window: BrowserWindow): void {
+export function focusMainWindow(window: BrowserWindow, options: { steal?: boolean } = {}): void {
   if (window.isMinimized()) {
     window.restore()
   }
@@ -462,7 +463,9 @@ export function focusMainWindow(window: BrowserWindow): void {
   if (!window.isVisible()) {
     window.show()
   }
-  app.focus({ steal: true })
+  if (options.steal !== false) {
+    app.focus({ steal: true })
+  }
   window.focus()
 }
 
@@ -546,6 +549,24 @@ export function openMainWindow(options: OpenMainWindowOptions): BrowserWindow {
 
 export function setMainWindowProductReloadTarget(window: BrowserWindow): void {
   setReloadTarget(window, resolveMainRendererTarget('/'))
+}
+
+export function revealMainWindowOnActivate(options: OpenMainWindowOptions): void {
+  const mainWindow = getMainWindow()
+  const action = resolveWindowActivationAction({
+    windowCount: BrowserWindow.getAllWindows().length,
+    mainWindowVisible: !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible(),
+    mainWindowMinimized: !!mainWindow && !mainWindow.isDestroyed() && mainWindow.isMinimized()
+  })
+  if (action === 'open') {
+    openMainWindow(options)
+  } else if (action === 'reveal') {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      focusMainWindow(mainWindow, { steal: false })
+    } else {
+      openMainWindow(options)
+    }
+  }
 }
 
 export function openOrFocusMainWindow(options: OpenMainWindowOptions): BrowserWindow {

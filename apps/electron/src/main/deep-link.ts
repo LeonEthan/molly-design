@@ -123,7 +123,7 @@ export function acquireSingleInstanceLock(): boolean {
     if (!mainWindow || mainWindow.isDestroyed()) {
       return
     }
-    focusMainWindow(mainWindow)
+    focusMainWindow(mainWindow, { steal: urlArg !== null && urlArg !== undefined })
   })
 
   return true

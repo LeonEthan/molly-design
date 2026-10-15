@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../utils/logger';
 import type { ACPSessionId, AcpSessionNotification } from '@molly/shared';
 
 import {
   applyTitleConfigOptions,
   extractTitleChunkFromNotification,
+  generateTitleIsolated,
   sanitizeGeneratedTitle,
 } from './title-generator';
 
@@ -108,5 +110,19 @@ describe('applyTitleConfigOptions', () => {
 
     expect(unstableSetSessionModel).toHaveBeenCalledWith('title-session', 'grok-code-fast-1');
     expect(setSessionConfigOption).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateTitleIsolated for embedded Molly', () => {
+  const logger = { debug: vi.fn() } as unknown as Logger;
+
+  it('titles the session from the first sentence without spawning a worker', async () => {
+    const title = await generateTitleIsolated({
+      cliType: 'builtin',
+      agentType: 'molly',
+      taskPrompt: 'Design a poster for a jazz night. Use warm colours.',
+      logger,
+    });
+    expect(title).toBe('Design a poster for a jazz night');
   });
 });

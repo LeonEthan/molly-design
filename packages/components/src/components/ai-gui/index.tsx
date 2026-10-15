@@ -27,6 +27,7 @@ import {
   type AssistantMessageAction,
   type CapacityRetryControl,
   type MessageFileDiffEntriesByTurn,
+  type ModelFailureRetryControl,
   type SessionChatStreamHandle,
 } from './view';
 import { useStableCallback } from '@/hooks/use-stable-callback';
@@ -43,6 +44,7 @@ export type {
   EmptySessionItem,
   GoalCommand,
   MessageFileDiffEntriesByTurn,
+  ModelFailureRetryControl,
   PlaceholderSessionItem,
   SessionChatStreamHandle,
   SessionChatStreamViewProps,
@@ -84,6 +86,8 @@ export interface SessionChatStreamProps {
   onResendUndelivered?: (userTurnId: string, inputBlocks: SessionInputBlock[]) => Promise<boolean>;
   /** Bounded continuation control for the latest provider-capacity failure. */
   capacityRetry?: CapacityRetryControl;
+  /** One-click resend control for the latest transient model request failure. */
+  modelFailureRetry?: ModelFailureRetryControl;
   forkingAssistantMessageId?: string | null;
   /** Opens another session from an in-conversation link (e.g. a fork's origin). */
   onNavigateSession?: (target: SessionNavigationTarget) => void;
@@ -103,6 +107,7 @@ const MessageRowConnected = memo(function MessageRowConnected({
   onEditLastUser,
   onResendUndelivered,
   capacityRetry,
+  modelFailureRetry,
   conversationFontSize,
 }: {
   message: SessionHistoryParsed;
@@ -114,6 +119,7 @@ const MessageRowConnected = memo(function MessageRowConnected({
    * NEW message; the row's "Not delivered" label opens the confirmation dialog. */
   onResendUndelivered?: (userTurnId: string, inputBlocks: SessionInputBlock[]) => Promise<boolean>;
   capacityRetry?: CapacityRetryControl;
+  modelFailureRetry?: ModelFailureRetryControl;
   conversationFontSize: ConversationFontSize;
 }) {
   const currentUser = useAtomValue(userAtom);
@@ -128,6 +134,7 @@ const MessageRowConnected = memo(function MessageRowConnected({
       onEdit={onEditLastUser}
       onResendUndelivered={onResendUndelivered}
       capacityRetry={capacityRetry}
+      modelFailureRetry={modelFailureRetry}
       conversationFontSize={conversationFontSize}
     />
   );
@@ -162,6 +169,7 @@ const SessionChatStreamImpl = forwardRef<SessionChatStreamHandle, SessionChatStr
       onEditLastUser,
       onResendUndelivered,
       capacityRetry,
+      modelFailureRetry,
       onLastCompletedAssistantMessageIdChange,
       conversationFontSize = DEFAULT_CONVERSATION_FONT_SIZE,
       skipNextViewportResizeAutoScrollRef,
@@ -225,6 +233,9 @@ const SessionChatStreamImpl = forwardRef<SessionChatStreamHandle, SessionChatStr
             onEditLastUser={message.id === lastUserMessageId ? onEditLastUser : undefined}
             onResendUndelivered={onResendUndelivered}
             capacityRetry={message.id === capacityRetry?.noticeId ? capacityRetry : undefined}
+            modelFailureRetry={
+              message.id === modelFailureRetry?.noticeId ? modelFailureRetry : undefined
+            }
             conversationFontSize={conversationFontSize}
           />
         );
@@ -236,6 +247,7 @@ const SessionChatStreamImpl = forwardRef<SessionChatStreamHandle, SessionChatStr
         onEditLastUser,
         onResendUndelivered,
         capacityRetry,
+        modelFailureRetry,
         stableOnNavigateSession,
         workspaceId,
       ]

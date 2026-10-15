@@ -29,6 +29,7 @@ import {
   type ACPSessionId,
   type AgentConfigMeta,
   type AgentConfigId,
+  type ChatFailedCode,
   type ChatFailedReason,
   type LocalProjectId,
   type MachineId,
@@ -2413,6 +2414,161 @@ describe('SessionExecutionService', () => {
     }
   });
 
+  it.each([
+    {
+      name: 'managed model failure',
+      error: new RequestError(-32603, 'Model request failed.', {
+        code: 'harness_model_request_failed',
+        category: 'transient',
+        details:
+          'The model service stayed unavailable after automatic retries. Your conversation and draft files are preserved.',
+      }),
+      reason: 'acp_upstream_api_error',
+      code: 'model_temporarily_unavailable',
+      diagnostics: false,
+    },
+    {
+      name: 'ordinary execution failure',
+      error: new RequestError(-32603, 'Internal error', {
+        details: 'Synthetic execution failure.',
+      }),
+      reason: 'acp_internal_error',
+      code: undefined,
+      diagnostics: true,
+    },
+  ])(
+    'reports a bound first-turn $name as a turn failure with one execution notice',
+    async (testCase) => {
+      const sessionId = randomUUID() as SessionId;
+      const workspace = await setupDesignWorkspace(sessionId);
+      try {
+        const originalMessage = { type: 'text' as const, text: 'make a poster' };
+        let history: SessionHistoryInput[] = [
+          {
+            id: 'turn-user-1',
+            role: 'user',
+            status: 'pending',
+            items: [originalMessage],
+          },
+        ];
+        const sessionDoc = withHistoryPort({
+          roomId: `session-${sessionId}`,
+          getMetaState: async () => ({
+            id: sessionId,
+            isArchived: false,
+            design: { artworkId: sessionId, path: 'design.json' },
+          }),
+          getHistory: () => history,
+          updateHistory: async (
+            update: (current: SessionHistoryInput[]) => SessionHistoryInput[]
+          ) => {
+            history = update(history);
+          },
+          setStatus: async () => {},
+          setProject: async () => {},
+          setBaseBranch: async () => {},
+        });
+        const events: string[] = [];
+        const errors: string[] = [];
+        const failures: Array<{
+          reason: ChatFailedReason;
+          message?: string;
+          code?: ChatFailedCode;
+        }> = [];
+        const prompt = async () => {
+          events.push('prompt');
+          throw testCase.error;
+        };
+        const session = {
+          sessionId,
+          acpSessionId: 'acp-model-failure' as ACPSessionId,
+          agentClient: { isCreated: () => true, prompt, cancel: async () => {} },
+          isEmbeddedHarness: () => true,
+          promptEmbeddedHarness: prompt,
+          terminalManager: {},
+          getWorkdir: () => workspace.workdir,
+          getHostWorkdir: () => workspace.workdir,
+          getParentSessionId: () => undefined,
+          exec: async () => '',
+          terminate: async () => {},
+          updateGitIdentity: () => {},
+          createAgent: async () => 'acp-model-failure',
+          applyExecutionPlaneLimits: async () => {},
+        };
+        const deps = createBaseDeps({
+          logger: {
+            ...createSilentLogger(),
+            error: (message) => {
+              errors.push(message);
+            },
+          },
+          sessionManager: {
+            getSession: () => session,
+            getPendingSession: () => null,
+            createSession: async () => {
+              events.push('create');
+              return session;
+            },
+            terminateSession: async () => {
+              events.push('retire');
+            },
+            setSessionError: async (_id: SessionId, reason: string) => {
+              events.push(reason);
+            },
+            refreshGhTokenForSession: async () => {},
+          } as unknown as SessionManager,
+          workspaceDocument: {
+            repo: { upsertDocMeta: async () => {}, getDocMeta: async () => undefined },
+            getOrCreateSessionDoc: async () => sessionDoc,
+            updateAcpCapabilities: async () => {},
+          } as unknown as LoroDocumentManager,
+          recordChatFailure: async (_doc, reason, message, code) => {
+            failures.push({ reason, message, code });
+          },
+        });
+        await new SessionExecutionService(deps).startSession({
+          type: 'session/create',
+          sessionId,
+          machineId: 'machine-1',
+          workspaceId: 'workspace-1' as WorkspaceId,
+          acpSessionConfig: {
+            prompt: originalMessage.text,
+            cliType: 'builtin',
+            agentType: 'molly',
+          },
+          userTurnId: 'turn-user-1',
+          userId: 'user-1',
+          userName: 'User',
+          userEmail: 'user@example.com',
+        });
+        expect(events).toEqual(['create', 'prompt', 'retire', 'execution_error']);
+        expect(failures).toEqual([
+          { reason: testCase.reason, code: testCase.code, message: testCase.error.data?.details },
+        ]);
+        expect(errors).toEqual([expect.stringContaining(`[${sessionId}] Turn failed:`)]);
+        expect(errors.join('\n')).not.toContain('Failed to create session');
+        expect(history[0]).toMatchObject({ status: 'failed', items: [originalMessage] });
+        const outcome = recordedDesignOutcome(history);
+        expect(outcome?.status).toBe('failed');
+        if (testCase.diagnostics)
+          expect(outcome?.diagnostics?.[0]?.code).toBe('design_turn_failed');
+        else {
+          expect(outcome?.diagnostics).toBeUndefined();
+          expect(outcome?.candidateId).toBeUndefined();
+          expect(outcome?.revisionId).toBeUndefined();
+        }
+        expect(
+          (await designOperation(workspace.root, { operation: 'read', sessionId })).revisionId
+        ).toBe(workspace.created.revisionId);
+        expect(fs.readFileSync(path.join(workspace.workdir, 'design.yaml'), 'utf8')).toContain(
+          'Hello'
+        );
+      } finally {
+        workspace.restore();
+      }
+    }
+  );
+
   it('leaves a non-design session without any design outcome', async () => {
     const { getHistory } = await runSilentPromptTurn({
       sessionId: 'session-no-design',
@@ -3300,7 +3456,8 @@ describe('SessionExecutionService', () => {
     expect(deps.recordChatFailure).toHaveBeenCalledWith(
       sessionDoc,
       'acp_auth_required',
-      'OAuth session expired'
+      'OAuth session expired',
+      undefined
     );
     // Forcing the kill here skips `session/close`, and adapters that flush their
     // transcript on close would lose the artifact `loadSession` needs — so the
@@ -5492,6 +5649,7 @@ describe('SessionExecutionService', () => {
   });
 
   it('releases active presence and marks dispatch failed when start session creation fails', async () => {
+    const errors: string[] = [];
     const upsertDocMeta = vi.fn(async () => {});
     const sessionDoc = withHistoryPort({
       getMetaState: vi.fn(async () => undefined),
@@ -5513,6 +5671,12 @@ describe('SessionExecutionService', () => {
       refreshGhTokenForSession: vi.fn(async () => {}),
     } as unknown as SessionManager;
     const deps = createBaseDeps({
+      logger: {
+        ...createSilentLogger(),
+        error: (message) => {
+          errors.push(message);
+        },
+      },
       sessionManager,
       workspaceDocument: {
         repo: {
@@ -5536,6 +5700,8 @@ describe('SessionExecutionService', () => {
       userName: 'User 2',
       userEmail: 'user2@example.com',
     });
+
+    expect(errors).toEqual(['[session-create-fail] Failed to create session: docker failed']);
 
     expect(deps.startSessionActivePresence).toHaveBeenCalledTimes(1);
     expect(deps.clearSessionActivePresence).toHaveBeenCalledTimes(1);
@@ -5946,6 +6112,7 @@ describe('SessionExecutionService', () => {
       expectedFailure: [
         'acp_invalid_params',
         'No goal is currently set. Use `/goal <objective>` to create one.',
+        undefined,
       ] as const,
     },
     {
@@ -5961,12 +6128,14 @@ describe('SessionExecutionService', () => {
       embedded: true,
       error: new RequestError(-32603, 'Model request failed.', {
         code: 'harness_model_request_failed',
+        category: 'transient',
         details:
-          'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+          'The model service stayed unavailable after automatic retries. Your conversation and draft files are preserved.',
       }),
       expectedFailure: [
         'acp_upstream_api_error',
-        'The model service could not complete the response. Your conversation and draft files are preserved. Send a new message when you are ready to try again; this request was not retried automatically.',
+        'The model service stayed unavailable after automatic retries. Your conversation and draft files are preserved.',
+        'model_temporarily_unavailable',
       ] as const,
     },
   ])('settles context compaction after a provider prompt rejects ($name)', async (testCase) => {

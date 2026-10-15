@@ -106,6 +106,7 @@ import {
   isAgentDisconnectedError,
   isAuthenticationRequiredACPError,
   isHarnessRunAlreadyDispatchedError,
+  mapACPErrorToFailureCode,
   mapACPErrorToFailureReason,
   parseACPError,
   shouldRecoverStaleACPConnectionPrompt,
@@ -2355,15 +2356,17 @@ export class SessionExecutionService {
     await this.handleTurnError(options.sessionId, options.sessionDoc, options.error, {
       providerPromptSettled: options.runtime.promptStarted && !options.runtime.promptInFlight,
     });
-    // P2.3: a design turn that died mid-generation has no artifact to collect
-    // and never reaches `finalizeTurn`, so the result card's 失败 comes from
-    // here. `reportDesignTurnOutcome` is a no-op for non-design sessions.
+    const acpError = parseACPError(options.error);
     await this.reportDesignTurnOutcome({
       sessionId: options.sessionId,
       sessionDoc: options.sessionDoc,
       turnId: options.runtime.turnId,
       userTurnId: options.userTurnId,
-      outcome: { status: 'failed', message: options.describe(options.error) },
+      outcome: {
+        status: 'failed',
+        message: options.describe(options.error),
+        omitDiagnostics: acpError !== null && mapACPErrorToFailureCode(acpError) !== undefined,
+      },
     });
     await options.onUnhandledError?.(options.error);
   }
@@ -2505,7 +2508,12 @@ export class SessionExecutionService {
         this.deps.logger.warn(
           `[${sessionId}] ACP error occurred (code=${acpError.code} reason=${failureReason}): ${userMessage}`
         );
-        await this.deps.recordChatFailure(sessionDoc, failureReason, recordedMessage);
+        await this.deps.recordChatFailure(
+          sessionDoc,
+          failureReason,
+          recordedMessage,
+          mapACPErrorToFailureCode(acpError)
+        );
 
         if (shouldTerminateOnACPError(acpError, failureReason)) {
           // Expired credentials leave a healthy agent process behind, so close
@@ -2658,7 +2666,7 @@ export class SessionExecutionService {
     outcome:
       | { status: 'collect' }
       | { status: 'cancelled' }
-      | { status: 'failed'; message: string };
+      | { status: 'failed'; message: string; omitDiagnostics?: boolean };
   }): Promise<void> {
     const { sessionId, sessionDoc, turnId, userTurnId, outcome } = args;
     // No user turn id: P2.2 froze no turn input, so there is no manifest to
@@ -2692,6 +2700,7 @@ export class SessionExecutionService {
                   ...context,
                   status: 'failed',
                   message: outcome.message,
+                  omitDiagnostics: outcome.omitDiagnostics,
                 });
         if (attempt.status === 'recorded') {
           this.deps.logger.debug(
@@ -5001,6 +5010,11 @@ export class SessionExecutionService {
             { terminateOnCancel: true }
           );
           bindSession(session);
+          setUnhandledErrorContext({
+            code: 'session_turn_failed',
+            describe: (error) => `[${sessionId}] Turn failed: ${formatErrorMessage(error)}`,
+            onUnhandledError: turnErrorContext.onUnhandledError,
+          });
           yield* abortIfCancelled({ terminateSession: true });
           // First-turn attachments are materialized under the session workspace.
           // Start this as soon as createSession has registered the workspace, but

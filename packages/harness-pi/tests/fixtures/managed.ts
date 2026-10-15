@@ -4,7 +4,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { vi } from 'vitest';
 import { ModelRuntime, type InlineExtension } from '@earendil-works/pi-coding-agent';
-import { createAssistantMessageEventStream, fauxAssistantMessage } from '@earendil-works/pi-ai';
+import {
+  createAssistantMessageEventStream,
+  fauxAssistantMessage,
+  type ToolCall,
+} from '@earendil-works/pi-ai';
 import {
   HarnessSessionBindingSchema,
   MOLLY_PROVIDER_IDS,
@@ -26,7 +30,8 @@ export async function managed(
     extensions?: InlineExtension[];
     peer?: Partial<AdapterPeer>;
     length?: boolean;
-    providerError?: string;
+    providerError?: string | ((call: number) => string | undefined);
+    providerToolCall?: (call: number) => ToolCall | undefined;
     productionProfile?: boolean;
     memoryResponse?: string;
     config?: Partial<WorkerConfig>;
@@ -87,10 +92,11 @@ export async function managed(
     );
   vi.stubEnv('PI_CODING_AGENT_DIR', agentDir);
   const peer: AdapterPeer = {
+    ...options.peer,
     sessionUpdate: async (update) => {
       f.updates.push(update);
+      await options.peer?.sessionUpdate?.(update);
     },
-    ...options.peer,
   };
   const host = new PiAcpHost(config, new PrivateControlPipe(pipe), peer);
   const observed: string[] = [];
@@ -108,15 +114,27 @@ export async function managed(
           try {
             await opts?.onPayload?.({ synthetic: true }, model);
             observed.push(JSON.stringify(context));
+            const providerError =
+              typeof options.providerError === 'function'
+                ? options.providerError(observed.length)
+                : options.providerError;
+            const toolCall = options.providerToolCall?.(observed.length);
             const extraction = JSON.stringify(context).includes('Extract only explicitly stated');
             const message = {
               ...fauxAssistantMessage(
-                extraction
-                  ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
-                  : 'Synthetic answer.',
+                toolCall ??
+                  (extraction
+                    ? (options.memoryResponse ?? '{"changes":[{"text":"Prefers serif type"}]}')
+                    : 'Synthetic answer.'),
                 {
-                  stopReason: options.providerError ? 'error' : options.length ? 'length' : 'stop',
-                  ...(options.providerError ? { errorMessage: options.providerError } : {}),
+                  stopReason: providerError
+                    ? 'error'
+                    : toolCall
+                      ? 'toolUse'
+                      : options.length
+                        ? 'length'
+                        : 'stop',
+                  ...(providerError ? { errorMessage: providerError } : {}),
                 }
               ),
               provider: model.provider,
@@ -137,9 +155,13 @@ export async function managed(
                 },
               },
             };
-            if (options.providerError)
-              stream.push({ type: 'error', reason: 'error', error: message });
-            else stream.push({ type: 'done', reason: options.length ? 'length' : 'stop', message });
+            if (providerError) stream.push({ type: 'error', reason: 'error', error: message });
+            else
+              stream.push({
+                type: 'done',
+                reason: toolCall ? 'toolUse' : options.length ? 'length' : 'stop',
+                message,
+              });
             stream.end();
           } catch {
             stream.push({

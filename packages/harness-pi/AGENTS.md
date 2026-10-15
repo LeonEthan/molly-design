@@ -51,8 +51,10 @@ Read [README](README.md) before changing session construction, packages or the b
   adapt other display labels through the existing catalog identity, retaining the label
   in the native description and refusing duplicate native identities. Never rewrite saved
   names or credential bindings for this adaptation.
-- Disable native agent/provider retries in the managed profile. The host's public
-  `session_before_compact` hook cancels recovery with `willRetry`; ordinary compaction remains.
+- The managed profile enables Pi's native agent retry for transient model errors only:
+  three retries, bounded backoff, provider retries off (#137). It repeats only the failed
+  request, never a tool. The host's public `session_before_compact` hook cancels recovery
+  with `willRetry`; ordinary compaction remains. Final model errors carry a static category.
 - Refresh host time, the read-before-edit reminder and personal memory through
   `before_agent_start`. Memory extraction never retries, restarts inference or changes a
   completed outcome; persist native completion before extraction and let the caller

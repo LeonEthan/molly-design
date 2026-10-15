@@ -23,10 +23,15 @@ before releasing ownership. Queued inputs stay intact until explicit Continue; t
 action releases the queue and never retries the old turn. Pending inputs without a
 run fence remain executable. See the [recovery fix](../../../../.agents/notes/implemented/bug-fix/2026-09-28-interrupted-run-recovery.md).
 Native model failures carrying `harness_model_request_failed` use the existing
-upstream-service failure presentation with a static diagnostic. The managed host
+`acp_upstream_api_error` reason with a static category mapped to `ChatFailedCode`.
+The chat notice owns execution status; the failed design outcome remains durable
+without diagnostics, candidate or commit, so its receipt adds no second failure line.
+Other failures retain their design diagnostics. Creation errors use `session_create_failed`
+only until the Session binds; subsequent failures use `session_turn_failed`. The managed host
 has retired its worker, so the session also terminates it before the next explicit
 input. Ordinary upstream ACP failures retain their existing reuse policy; neither
-classification authorizes replay of a Molly request.
+classification authorizes replay of a Molly prompt/turn. Pi natively retries only failed
+transient model requests within its bounded profile budget before reporting this failure.
 MCP is configured once at startup through Pi's native MCP extension;
 credentials bind the selected Session/worker epoch and catalog changes retire it.
 Model keys are granted per run into the worker's memory. A used OAuth worker is replaced

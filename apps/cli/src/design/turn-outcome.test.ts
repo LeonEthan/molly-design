@@ -1176,6 +1176,35 @@ describe('recordDesignTurnTerminalOutcome', () => {
     });
   });
 
+  it('records a model failure without diagnostics when chat owns the execution notice', async () => {
+    const harness = createHarness();
+    const created = await createDesign(harness);
+    await writeArtifact(harness, PAGE);
+    await writeManifest(harness, created.revisionId);
+
+    const attempt = await recordDesignTurnTerminalOutcome({
+      ...contextFor(harness),
+      status: 'failed',
+      message: 'Model request failed.',
+      omitDiagnostics: true,
+    });
+    expect(attempt.status).toBe('recorded');
+    if (attempt.status !== 'recorded') return;
+    expect(attempt.outcome.status).toBe('failed');
+    expect(attempt.outcome.diagnostics).toBeUndefined();
+    expect(attempt.outcome.candidateId).toBeUndefined();
+    expect(attempt.outcome.revisionId).toBeUndefined();
+    expect(
+      (
+        await designOperation(harness.root, {
+          operation: 'read',
+          sessionId: harness.sessionId,
+        })
+      ).revisionId
+    ).toBe(created.revisionId);
+    expect(await listHistoricalCandidateFiles(harness.root, harness.sessionId)).toEqual([]);
+  });
+
   it('keeps the first verdict when a failure follows a collection', async () => {
     const harness = createHarness();
     const created = await createDesign(harness);

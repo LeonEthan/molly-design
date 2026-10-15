@@ -56,9 +56,22 @@ active tools come from the current profile defaults and native MCP activation. A
 tool declaration does not override that factory loadout. Loading history performs no
 inference or tool execution.
 
-The managed settings disable native agent and provider retries. The main host's public
-`session_before_compact` hook also cancels overflow/truncation recovery when Pi would
-retry inference; ordinary compaction remains available.
+The managed settings enable Pi's native agent retry: one initial request plus at most
+three retries, with 1s/2s/4s backoff capped at 20s. Provider/SDK retries stay disabled,
+so retries use the existing ACP `kind: 'retry'` activity. Only the failed model request
+repeats; Molly never replays the dispatched prompt/turn or completed tools, and Pi does
+not execute tool calls from an errored response. The main host's public
+`session_before_compact` hook still cancels overflow/truncation recovery when Pi would
+repeat inference; ordinary compaction remains available.
+
+Known Pi 1.0.4 limits: partial text already streamed before a failure remains visible
+beside the retried answer because ACP has no retraction. A bare `529` or `ECONNRESET`
+without accompanying overload/connection-error text is not matched by Pi's retry
+classifier. Retry-After values are not honored; backoff is fixed. Ordinary compaction
+summarization uses the same retry budget, but its `summarization_retry_*` events are
+not surfaced through ACP. Pi's generic "provider returned error" match may also retry
+a wrapped permanent error; Molly's final diagnostic checks permanent categories first
+but does not change Pi's native retry decision.
 
 In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form dialog
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
@@ -115,11 +128,14 @@ settlement and a final assistant entry; cancellation, truncation and handled com
 reported distinctly. Native usage is projected to Core usage notifications
 ([usage.ts](src/usage.ts)).
 
-Managed native model errors use the static ACP diagnostic `harness_model_request_failed`.
-The CLI presents the existing model-service error and retires the failed worker, preserving
-conversation and draft files for an explicit new message. Provider error bodies never enter
-this diagnostic; unknown host failures retain their generic static code. Neither path
-automatically repeats the dispatched request.
+Final managed model errors use the static ACP diagnostic `harness_model_request_failed`
+with a category: context overflow, authentication, quota, content policy, invalid request,
+transient (retries exhausted), or unknown. Permanent evidence takes precedence over Pi's
+transient classifier. The CLI maps these categories to `ChatFailedCode` in the existing
+upstream-service notice and retires the failed worker, preserving conversation and draft
+files for an explicit new message. Provider text/bodies never enter this diagnostic;
+unknown host failures retain their generic static code. Worker retirement never replays
+the dispatched prompt/turn.
 
 ACP MCP servers, including Molly's design and image servers, are registered through Pi's
 native `createMcpExtension`, `createCodemodeExtension` and `createToolSearchExtension`

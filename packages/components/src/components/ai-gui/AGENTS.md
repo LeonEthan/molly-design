@@ -108,6 +108,9 @@ File-by-file ownership and coverage pointers: [README.md](README.md).
   failed input. A visible countdown keeps consent reversible without a second
   control — reveal stop-auto-retry on hover or keyboard focus, and show it
   directly on touch devices.
+- Model failure notices (`model_*` codes) carry static copy, no detail modal.
+  `model_temporarily_unavailable`/`model_request_failed` show one Retry resending
+  the original message as a NEW turn; the harness owns automatic retries.
 - Terminal persistence and legacy preview bounds live in
   `context/terminal-output-lifecycle.md`. Never send full legacy output through
   ANSI parsing, search, or React rendering.

@@ -44,16 +44,17 @@ tracked `.agents/docs/` directory.
 
 ## Info bar, status, and session actions
 
-| File                                                              | Responsibility                                                   |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `session-info-bar.tsx`, `session-info-chips.tsx`, `info-chip.tsx` | Canonical cluster + fixed stage bar above the composer           |
-| `session-status-strip.tsx`                                        | Priority-ordered connection/machine status (story coverage only) |
-| `session-syncing-indicator.tsx`                                   | Catch-up spinner pinned to the bar's right edge                  |
-| `session-goal-banner.tsx`, `session-goal-control.ts`              | Goal actions reused by the goal chip                             |
-| `session-plan-bar.tsx`, `session-tasklist-mapping.ts`             | Plan/tasklist presentation                                       |
-| `scheduled-tasks-panel.tsx`                                       | Scheduled task list reused by the schedule chip                  |
-| `session-usage-popover.tsx`                                       | Usage/context popover                                            |
-| `use-capacity-auto-retry.ts`                                      | Capacity-error retry behaviour                                   |
+| File                                                              | Responsibility                                                            |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `session-info-bar.tsx`, `session-info-chips.tsx`, `info-chip.tsx` | Canonical cluster + fixed stage bar above the composer                    |
+| `session-status-strip.tsx`                                        | Priority-ordered connection/machine status (story coverage only)          |
+| `session-syncing-indicator.tsx`                                   | Catch-up spinner pinned to the bar's right edge                           |
+| `session-goal-banner.tsx`, `session-goal-control.ts`              | Goal actions reused by the goal chip                                      |
+| `session-plan-bar.tsx`, `session-tasklist-mapping.ts`             | Plan/tasklist presentation                                                |
+| `scheduled-tasks-panel.tsx`                                       | Scheduled task list reused by the schedule chip                           |
+| `session-usage-popover.tsx`                                       | Usage/context popover                                                     |
+| `use-capacity-auto-retry.ts`                                      | Capacity-error retry behaviour                                            |
+| `use-model-failure-retry.ts`                                      | One-click resend of the failed round after exhausted model retries (#137) |
 
 ## File, diff, and browser surfaces
 

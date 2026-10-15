@@ -154,13 +154,18 @@ resolution; checkbox actions never repeat a click to force a state change.
 No second Chromium is installed. Hidden Agent pages stay
 renderable in a hidden host window and reattach when the panel opens. The macOS account flow uses one shared import dialog from Website accounts,
 the Browser menu and the Pinterest setup chip. Opening discovers installed browsers
-only. Import begins the selected browser's profile metadata access; native access
-requests system authorization when needed. One profile continues automatically;
-multiple profiles require an explicit selection in the same picker. A collapsed, fully selected catalog
+and lists the selected browser's real profiles; native metadata access requests
+system authorization when needed. A single profile is shown by name and still waits
+for Import; multiple profiles require an explicit selection in the same picker.
+A collapsed, fully selected catalog
 covers 13 design and 14 commerce platforms; expanding shows exact domain scope.
 The catalog is an import filter, not a matrix of verified website logins.
 
-Main uses one inventory-mode `read()` from the pinned rookie 0.6.0 addon. Its small local patch
+Main re-lists and verifies the selected profile path, copies its Cookies database
+and available WAL/SHM sidecars to a private temporary directory, and passes that
+copy to inventory-mode `fromPath()` in the pinned rookie 0.6.0 addon. Discovery
+refuses symlinks in every lexical path component before canonicalizing, and the
+copy path independently checks directories and files. The local patch
 calls Security.framework inside Molly and bounds the native profile read before
 materializing cookie rows (50,000 rows / 32 MiB payload). Cookie values and keys
 never enter renderer IPC. Expired/partitioned source cookies are skipped and
@@ -168,8 +173,10 @@ counted. The source browser may remain open: upstream's read transaction or
 verified SQLite/WAL snapshot must succeed. Incomplete reads fail closed. Decoded
 rows retain raw fields and partition context until main selects websites and
 validates import candidates. Portable header normalization of unrelated websites
-cannot discard selected rows or block their import; selected invalid fields and
-genuine row/decryption/host failures still fail before writes.
+cannot discard selected rows or block their import. Invalid, duplicate or oversized
+selected rows count as failed for their website; genuine native row/decryption/host
+failures still fail the import before writes. Results expose discovered, imported,
+skipped and failed counts per website.
 
 The write phase pauses Agents, drains native pages, fences new pages and network
 responses, and attaches a private debugger to pause registered Service Workers
@@ -186,15 +193,16 @@ cooperative deadline. Accepted writes drain on quit. Stable signatures can retai
 Keychain grants; OS policy or signature changes can prompt again. Development
 folder permission may be attributed to Molly's launcher, and macOS may refuse to
 offer that launcher a prompt. A confirmed browser-file access denial is silent:
-the dialog returns to its ready state with selections kept and no settings link;
-Keychain denial and other read failures show their own reason. Granting a native
-prompt continues the same valid request. Cancellation/denial retains selections
-for explicit retry; starting a new dialog resets website selections. No Agent
-resumes automatically.
+the dialog clears its profile list and choice, shows no recovery UI, and re-lists
+on window focus or an explicit Import click. Website selections stay intact;
+starting a new dialog resets them. Keychain denial and other read failures show
+their own reason. Granting a native prompt continues the same valid request.
+No Agent resumes automatically.
 See the [user guide](../../USER_GUIDE.md#built-in-browser-research-current-development-build)
-and [permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md),
-which records final real Chrome/Pinterest import, sign-in and file-denial recovery.
-Fresh approval/grant continuation and signed distribution remain acceptance limits.
+and [profile-first import evidence](../../.agents/notes/implemented/bug-fix/2026-10-14-browser-import-profile-first.md)
+for the current acceptance results and limits. The earlier
+[permission-intent revision](../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
+records the previous permission timing.
 
 `build:cookie-reader` stages a checksum-pinned, patched addon under
 `resources/browser-cookie-reader`; normal build/dev/packaging runs it too. Only

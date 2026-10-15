@@ -15,8 +15,9 @@ and verifies the chosen profile's path before reading, reads a private copy of t
 Cookies database, and reports discovered/imported/skipped/failed per website. Development builds keep
 their own persisted partition. The trade-off is that the OS prompt moves from Import
 to dialog open and that the dialog quietly shows no profiles after a denial.
-Synthetic unit, native and UI checks cover the contract; real multi-profile
-Pinterest verification is a separate human/computer-use pass.
+Synthetic unit, native and UI checks cover the contract. A computer-use pass on
+native `.7` also confirms real multi-profile import, Pinterest sign-in and
+development restart persistence; fresh OS authorization remains a separate limit.
 
 ## Decisions (owner, 2026-10-14, issue #138)
 
@@ -89,11 +90,41 @@ Three review findings were fixed before commit.
 
 Synthetic tests: Local State with three profiles, a symlinked database/profile/sidecar,
 a moved or unlisted profile, per-site counts, the multi-profile pick gate and silence
-after denial; the native suite covers `fromPath` inventory. Not established: real
-multi-profile Chrome, a real Keychain approval, an actual macOS App Data prompt/denial,
-or a signed-DMG regression; copying a live database is bounded by the before/after
+after denial; the native suite covers `fromPath` inventory. Fresh Keychain approval
+and an actual macOS App Data prompt/denial remain unverified. The owner waived the
+signed-DMG regression for this task; this is not distribution acceptance.
+Copying a live database is bounded by the before/after
 comparison, and a swap of a parent directory between the `lstat` pass and the open is
 not excluded. The development partition is not covered by the packaged cookie-encryption fuse.
+
+### Native `.7` real-app acceptance (2026-10-15 UTC)
+
+The Mac mini pass used runtime revision `91eb9dfd` from
+[PR #140](https://github.com/LeonEthan/molly-design/pull/140), rebuilt with
+`pnpm start:local`. Separate product and Electron data directories and a free
+local host port isolated it from existing workspaces. The existing E2E scripted
+model server supplied a synthetic completed conversation for the Browser panel;
+no external model or image request was needed. Native manifest/file hashes matched
+the `.7` patch, and the running process mapped that exact reader resource.
+
+| Check | Observed result |
+| --- | --- |
+| Profile picker | Three real profiles; none preselected; Import disabled until an explicit pick |
+| Pinterest, light and dark | 13 discovered / 13 imported / 0 skipped / 0 failed |
+| All selected sites | 27 sites reported; every failed count was 0 |
+| Same-session sign-in | Pinterest opened its authenticated Business Hub |
+| Complete quit and relaunch | A fresh Pinterest navigation remained authenticated without reimport |
+| Temporary copies after quit | Zero `molly-cookies-*` directories in both OS temp locations |
+| Shortened UI | Settings, picker and results verified in light and dark themes |
+
+Screenshots remain outside the repository for private handoff. The full
+`pnpm check` and all seven synthetic native-reader tests passed on this runtime
+revision. A separate signed application with an isolated test identity was prepared
+for OS permission testing; direct CLI launch inherited launcher access, so that
+launch does not establish a fresh grant. LaunchServices launch showed a quiet empty
+picker, but the computer-use tool could not operate the system permission dialog.
+The fresh prompt, user-selected Deny and subsequent grant/recovery sequence remain
+unverified. No shared launcher permission was reset.
 
 ## PR #140 review follow-up
 

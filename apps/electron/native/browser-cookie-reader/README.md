@@ -16,8 +16,9 @@ no recovery UI either.
 It replaces the macOS Keychain helper with Security.framework calls
 inside Molly, frees and zeroizes returned credential bytes, and marks that lookup
 cooperative because an OS authorization dialog cannot be force-cancelled. No
-credential is supplied by JavaScript. Metadata access starts only after Import;
-real native access may trigger system authorization. There is no separate grant API,
+credential is supplied by JavaScript. Profile metadata access starts when the import
+dialog opens; cookie access starts after Import. Real native access may trigger
+system authorization. There is no separate grant API,
 non-interactive permission probe or guarantee that denial can prompt again.
 A native SQL preflight and staged-row budget
 reject more than 50,000 rows or 32 MiB of cookie payload before exposing a result.
@@ -60,8 +61,10 @@ Upstream: [rookie-cookies](https://github.com/teng-lin/rookie-cookies/tree/c9345
 records the scope and validation limits.
 
 The [permission-intent revision](../../../../.agents/notes/implemented/bug-fix/2026-10-11-browser-import-intent-permissions.md)
-records delayed profile discovery and narrow native permission-error propagation.
-A classified browser-file denial stays silent in the dialog (selections kept for
-an explicit retry); a Keychain denial reports its own reason. Synthetic reader
+records the earlier delayed discovery and narrow native permission-error propagation.
+The [profile-first revision](../../../../.agents/notes/implemented/bug-fix/2026-10-14-browser-import-profile-first.md)
+supersedes that discovery timing. A classified browser-file denial stays silent:
+the dialog clears the profile list and choice, then re-lists on focus or Import;
+a Keychain denial reports its own reason. Synthetic reader
 checks do not establish first/retained grants, launcher attribution or denial
 behavior in a real signed application.

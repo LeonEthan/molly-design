@@ -349,11 +349,15 @@ describe('packaged design materials', () => {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
-      /stage 2 ran without\s+research[\s\S]*otherwise `generate` from the prompt alone, and say in the options report that\s+the options were made without research/
+      /stage 2 ran without\s+research[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one, and `generate` from the prompt alone only when\s+there is neither a source image nor a supplied reference[\s\S]*made without web research/
     );
     expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
     );
+    expect(entry).toMatch(
+      /those saved in stage 2 and style references the user supplied and you\s+inspected/
+    );
+    expect(entry).not.toMatch(/there are no\s+inspiration images/);
     const browserResearch = readFileSync(
       path.join(graphic, 'references/browser-research.md'),
       'utf8'

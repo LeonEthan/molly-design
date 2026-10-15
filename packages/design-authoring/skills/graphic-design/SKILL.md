@@ -166,14 +166,16 @@ deliberately unlike the most common look among the references.
 Create the options from images and text, not text alone, with `molly_image`
 `edit`. Pass the source image first when there is one: the supplied delivery
 assets (a product photo, a logo) or the source artwork being redesigned, so the
-options keep them. Add one or two of the inspiration images saved in stage 2,
-chosen by you for that option, and say in the prompt what each contributes
-("image 2: its light and palette") and that its objects, text and logos are not
-to be copied. Different options may use different inspiration images. When stage 2 ran without
-research (the user forbade networking or waived research) there are no
-inspiration images: use `edit` with only the source image when there is one,
-otherwise `generate` from the prompt alone, and say in the options report that
-the options were made without research. Stay
+options keep them. Add one or two inspiration images, chosen by you for that
+option: those saved in stage 2 and style references the user supplied and you
+inspected. Say in the prompt what each contributes ("image 2: its light and
+palette") and that its objects, text and logos are not to be copied. Different
+options may use different inspiration images. When stage 2 ran without research
+(the user forbade networking or waived research) only the web-saved inspiration
+is absent: still use the inspected user-supplied style references, with the
+source image when there is one, and `generate` from the prompt alone only when
+there is neither a source image nor a supplied reference. Say in the options
+report that the options were made without web research. Stay
 within the connection's input limit in the `imagegen` Skill. An option that is
 recognizably one reference with new copy fails. A rendered blockout can steer an
 option's layout when words are not enough. Techniques are in
@@ -363,7 +365,8 @@ Write in the user's language and size the reply to the request.
   a hashed file name. Wrap paths containing spaces in angle brackets. Label
   them A, B, C with one line each on the idea, say which you recommend and why in
   one line, name the inspected source-page URLs, or the saved inspiration image
-  paths when a page has no usable URL (a search-results URL alone does not
+  paths when a page has no usable URL (a user-supplied reference by its
+  attachment) (a search-results URL alone does not
   count), and ask the user to choose. Note copy the image model drew wrong; it
   will be exact in the editable version.
 - **Editable version of the chosen design:** one or two sentences, plus what

@@ -211,11 +211,7 @@ import {
 import { localMachineIdAtom } from '@/atoms/local-probe';
 import { getMachineMetaByIdAtomFamily } from '@/atoms/machines';
 import { isHtmlSessionFile } from '@/lib/session-file-presentation';
-import type {
-  MachineId,
-  MessageTextSpan,
-  SessionFilePayload,
-} from '@molly/shared';
+import type { MachineId, MessageTextSpan, SessionFilePayload } from '@molly/shared';
 import { MessageTextWithChips } from '@/components/mentions/message-text-chips';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ui/tooltip';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
@@ -1272,7 +1268,19 @@ export const SessionChatStreamView = forwardRef<
     const { t } = useTranslation();
     const search = useSessionSearch();
     const activeSearchBlockId = search?.activeBlockId ?? null;
-    const shouldShowAgentActivity = Boolean(agentActivityLabel);
+    const latestAssistant = items.findLast(
+      (item) => item.type === 'message' && item.message.role === 'assistant'
+    );
+    const hasActiveRetry =
+      latestAssistant?.type === 'message' &&
+      !latestAssistant.message.finished &&
+      latestAssistant.message.items.some(
+        (item) =>
+          item.type === 'tool_call' &&
+          item.activityKind === 'codex_retry' &&
+          (item.status === 'pending' || item.status === 'in_progress')
+      );
+    const shouldShowAgentActivity = Boolean(agentActivityLabel) && !hasActiveRetry;
     const [assistantExpansionVersion, setAssistantExpansionVersion] = useState(0);
     const [hoveredAssistantMessageId, setHoveredAssistantMessageId] = useState<string | null>(null);
     /**

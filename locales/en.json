@@ -219,7 +219,7 @@
   "settings.readiness.moreConnections": "{{name}} +{{count}}",
   "settings.readiness.notSignedIn": "Not signed in",
   "settings.readiness.signInNotVerified": "Sign-in not verified",
-  "sessions.activity.retrying": "Retrying...",
+  "sessions.activity.retrying": "Retrying…",
   "sessions.subagentTasks.cancelFailed": "Failed to stop the subtask",
   "sessions.subagentTasks.cancelNamed": "Stop {{name}}",
   "sessions.messageStatus.deliveryUnknown": "Application unknown",

@@ -11,6 +11,8 @@ The managed profile now uses Pi's native three-retry budget and reports a static
 failure category through the existing chat notice. Failed design outcomes remain durable
 without repeating that notice. The adapter preserves native tool and settlement semantics;
 upstream classifier and streaming limits remain explicit.
+Full #137 acceptance remains incomplete: bare transient codes, wrapped permanent
+errors and Retry-After still violate the locked criteria under the unmodified SDK.
 
 ## Decision and reuse
 
@@ -23,8 +25,9 @@ This replaces the retry-disabled policy in the
 its static diagnostic, worker retirement, dispatch fence and draft preservation.
 
 Reuse Pi 1.0.4's unmodified agent retry, existing retry activity projection, `RequestError`,
-`recordChatFailure` and the design outcome store. Adapting these paths supplies the required
-behavior; a separate retry loop, storage layer or tool-replay mechanism is unnecessary.
+`recordChatFailure` and the design outcome store. Adapting these paths supplies bounded
+native retry and final diagnostics; it does not repair upstream retry policy. A separate
+retry loop or tool-replay mechanism is outside the accepted SDK boundary.
 The pure classifier checks context overflow, quota (including HTTP 402 and credits), content
 policy (including guardrail and prompt-injection 403s), then authentication and invalid
 request before Pi's transient match, so a policy 403 is not reported as a rejected key. Only static category/details leave the worker. The CLI keeps
@@ -74,5 +77,65 @@ updated". One Retry click resent the original message as a new message, which su
 after injection stopped. An injected 401 produced one request and the authentication
 line without Retry. Two genuine upstream connection resets during a build turn were also
 retried automatically. Light and dark screenshots of each state were captured, unannotated.
-This is functional evidence, not human visual approval or Spec approval; the
+This earlier run was reported as functional evidence, not human visual approval or Spec approval; the
 429/Retry-After path and the zh_CN copy were not exercised in the desktop run.
+
+## Acceptance correction, 2026-10-14
+
+Revalidation for [PR #142](https://github.com/LeonEthan/molly-design/pull/142) found
+that the earlier claim of a sole retry line was inaccurate: the real Electron
+renderer displayed both "Retrying..." and the generic "Thinking" footer. The
+replacement evidence images also came from constructed UI fixtures, with added
+annotations; they did not establish the required actual-app presentation.
+
+`SessionChatStreamView` now suppresses that footer while the latest unfinished
+assistant message carries an active native retry. This reuses the existing activity
+projection and renderer; a second stored busy state or retry mechanism is unnecessary.
+Completing the retry restores the ordinary activity label. A rendered regression
+first failed with `Retrying...Thinking`, then passed after the fix; the existing
+notice and activity suites also pass. English and Chinese retry copy use the same
+ellipsis as their final-notice controls.
+
+A separate real-SDK probe with synthetic responses and fake timers failed the
+locked acceptance expectations for bare `529`, bare `ECONNRESET`, and wrapped
+`Provider returned error: 401 invalid api key` (four requests instead of one).
+Pi [1.2.0's tagged retry implementation](https://github.com/earendil-works/pi/blob/v1.2.0/packages/ai/src/utils/retry.ts) retains these classification gaps and the
+fixed backoff; upgrading alone does not resolve them. The read-only Codex CLI
+second opinion (`gpt-6-astra`, high) independently found no public retry-policy
+seam satisfying all criteria without a workaround: settings expose no classifier
+or response-delay callback, response hooks cannot choose a delay, message rewriting
+changes persisted history, and continuation/provider wrappers add a separate policy.
+
+These are unresolved acceptance defects, not accepted exceptions. Keep the pinned
+SDK unchanged under `packages/harness-pi/AGENTS.md`; full completion requires an
+upstream fix or explicit human amendment of the boundary or acceptance criteria.
+No Spec approval or merge approval follows from passing tests or this review.
+
+The final desktop run used a fresh isolated profile, the built Electron/CLI/renderer,
+and a loopback OpenAI-compatible wire fixture; all prompts, responses, model labels
+and artwork were synthetic. No product UI was replaced or annotated, and no live
+model or existing user profile was used. The six files in
+[the evidence directory](../../../pr-evidence/137/) now show native window captures
+of retrying, recovered and exhausted states in light and dark. Native capture is
+necessary because renderer-only screenshots omit the separate canvas WebContentsView.
+
+Three injected 503s recovered automatically, with measured gaps about 1s/2s/4s,
+then native read/write calls changed and saved the poster. Persistent 503s made four
+requests, left the artwork intact, and showed one final line plus one Retry button.
+One click added exactly one copy of the original user message as a new turn; after
+three further transient failures that turn recovered and saved. Both themes show
+one retry row without the generic footer. An unwrapped 401 made one request and
+showed the authentication hint without Retry or details. Simplified Chinese showed
+the translated retry, exhausted, Retry-button and authentication states. The final
+failed runs retained the latest saved headline size (70) in both draft and current
+YAML; the current projection uses normalized formatting and adds derived fields.
+
+The real desktop 429 probe returned `Retry-After: 10`, yet the next request arrived
+1007ms later and succeeded. This is an observed failure of the locked criterion,
+not a passing rate-limit test. The native policy remains unmodified.
+
+Final `pnpm check` passed: harness 234, components 3155, CLI 2971 (3 skipped), plus
+the remaining package suites, types, lint, i18n and public/platform boundaries.
+`pnpm format`, `pnpm e2e:build`, and `pnpm run docs check` passed. A separate read-only
+Codex CLI review of the footer fix found no introduced P0/P1; its queue/history and
+virtualization assessment was source-based and it did not rerun Electron.

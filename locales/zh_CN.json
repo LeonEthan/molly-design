@@ -218,7 +218,7 @@
   "settings.readiness.moreConnections": "{{name}} +{{count}}",
   "settings.readiness.notSignedIn": "未登录",
   "settings.readiness.signInNotVerified": "尚未验证登录",
-  "sessions.activity.retrying": "正在重试...",
+  "sessions.activity.retrying": "正在重试…",
   "sessions.subagentTasks.cancelFailed": "无法停止子任务",
   "sessions.subagentTasks.cancelNamed": "停止 {{name}}",
   "sessions.messageStatus.deliveryUnknown": "应用结果未知",

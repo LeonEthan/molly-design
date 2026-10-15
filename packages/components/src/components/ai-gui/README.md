@@ -36,6 +36,12 @@ the header's 16px horizontal inset. The raw-error dialog returns keyboard focus 
 the current notice trigger on close, including after viewport changes replace a
 virtualized row; error extraction and copying retain their existing behavior.
 
+Native model backoff uses the existing retry activity row. While the latest
+unfinished assistant message carries an active retry, `SessionChatStreamView`
+suppresses its generic activity footer so "Retrying…" appears once. Completing
+the retry removes that row and restores the current activity label. Coverage:
+`tests/chat-retry-activity.test.tsx`.
+
 `markdown-renderer.tsx` keeps body line-height at 1.75, with 16px paragraph
 spacing, 6px between list items, and semibold emphasis. Headings retain their
 semantic levels and font-size scaling. Activity prose uses normal weight and

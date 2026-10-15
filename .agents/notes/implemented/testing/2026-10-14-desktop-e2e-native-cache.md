@@ -12,8 +12,9 @@ two staged resource directories from an exact-key Actions cache after a clean
 checkout, then passes them through the existing manifest-verification fast path;
 invalid output is deleted and rebuilt, and only fresh verified builds are saved.
 Actions cache scope is the provenance boundary: pull-request writes stay in their
-PR ref and release never restores. Hosted cold/warm timing at one commit is still
-owed by the PR evidence; this note records the design and local verification only.
+PR ref and release never restores. The durable home for hosted same-SHA cold and
+warm run links and timings is [PR #145](https://github.com/LeonEthan/molly-design/pull/145),
+which closes #144; this note records the design and local verification only.
 
 ## Problem
 
@@ -137,6 +138,7 @@ commit can be timed cold then warm (see the E2E README).
   license were each rejected with their reason, removed and rebuilt; the rebuilt
   agent-browser binary was byte-identical to the cold build.
 - Smoke/full journey selection and gates are unchanged.
-- Not yet established here: hosted same-SHA cold/warm timings, actual hit rate on
-  new PRs (depends on Daily seeding the default branch), and whether the 7–9 minute
-  warm target is reached.
+- The durable home for hosted same-SHA cold/warm run links, timings, and the 7–9
+  minute warm-target result is [PR #145](https://github.com/LeonEthan/molly-design/pull/145).
+  Actual hit rate on new PRs depends on Daily seeding the default branch; this note
+  makes no hit-rate claim.

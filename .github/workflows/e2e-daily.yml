@@ -104,6 +104,10 @@ jobs:
           MOLLY_NATIVE_BUILD_REPORT: ${{ runner.temp }}/molly-native-build-report.jsonl
         run: pnpm --dir apps/electron build
 
+      - name: Test native resource cache contract
+        if: runner.os == 'macOS'
+        run: node --test .github/scripts/desktop-native-cache.test.mjs apps/electron/scripts/native-resource-cache.test.mjs apps/electron/scripts/sign-embedded-harness.test.mjs
+
       - name: Verify native resources before cache save
         id: native-cache-verify
         if: runner.os == 'macOS'

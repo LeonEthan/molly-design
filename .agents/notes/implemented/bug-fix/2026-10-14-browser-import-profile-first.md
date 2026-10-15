@@ -10,14 +10,16 @@ A first import silently read the default Chrome profile because the dialog only
 checked that Chrome existed and the import path took `profiles[0]` when one profile
 was listed before macOS access was granted; the signed-in account lived in another
 profile and Pinterest stayed logged out. The dialog now lists the real profiles when
-it opens (where the OS prompt appears), requires a pick when several exist, re-lists
+it opens (where the OS may prompt), requires a pick when several exist, re-lists
 and verifies the chosen profile's path before reading, reads a private copy of the
 Cookies database, and reports discovered/imported/skipped/failed per website. Development builds keep
-their own persisted partition. The trade-off is that the OS prompt moves from Import
-to dialog open and that the dialog quietly shows no profiles after a denial.
+their own persisted partition. The trade-off is that profile access can prompt at
+dialog open and that the dialog quietly shows no profiles after a denial.
 Synthetic unit, native and UI checks cover the contract. A computer-use pass on
 native `.7` also confirms real multi-profile import, Pinterest sign-in and
-development restart persistence; fresh OS authorization remains a separate limit.
+development restart persistence. A separate signed fixture confirms silent OS denial
+and successful import after a manual Settings grant; a fresh App Data prompt
+remains unverified.
 
 ## Decisions (owner, 2026-10-14, issue #138)
 
@@ -91,7 +93,8 @@ Three review findings were fixed before commit.
 Synthetic tests: Local State with three profiles, a symlinked database/profile/sidecar,
 a moved or unlisted profile, per-site counts, the multi-profile pick gate and silence
 after denial; the native suite covers `fromPath` inventory. Fresh Keychain approval
-and an actual macOS App Data prompt/denial remain unverified. The owner waived the
+and an actual macOS App Data prompt with a user-selected Deny remain unverified.
+Silent OS denial and manual Settings grant recovery are covered below. The owner waived the
 signed-DMG regression for this task; this is not distribution acceptance.
 Copying a live database is bounded by the before/after
 comparison, and a swap of a parent directory between the `lstat` pass and the open is
@@ -119,12 +122,39 @@ the `.7` patch, and the running process mapped that exact reader resource.
 
 Screenshots remain outside the repository for private handoff. The full
 `pnpm check` and all seven synthetic native-reader tests passed on this runtime
-revision. A separate signed application with an isolated test identity was prepared
-for OS permission testing; direct CLI launch inherited launcher access, so that
-launch does not establish a fresh grant. LaunchServices launch showed a quiet empty
-picker, but the computer-use tool could not operate the system permission dialog.
-The fresh prompt, user-selected Deny and subsequent grant/recovery sequence remain
-unverified. No shared launcher permission was reset.
+revision.
+
+### Isolated App Data denial and Settings recovery (2026-10-15 UTC)
+
+**Correction to the initial acceptance report:** the quiet empty picker was not
+evidence of a pending permission dialog. The owner saw no prompt. On macOS 27.0.1,
+bounded TCC diagnostics attributed the App Data request to the separate signed
+fixture and showed that the OS denied it because that binary was ineligible for
+prompting. This remained true after moving the fixture to the user's Applications
+directory, registering it with LaunchServices and resetting only its own
+`SystemPolicyAppDataDetailed` entry. The original Molly and launcher grants were
+unchanged. A direct CLI launch inherited launcher access and is excluded from this
+permission evidence.
+
+The fixture then appeared in Files & Folders with its Google Chrome switch off.
+After the owner enabled that switch, an explicit Import retry in the still-open
+dialog listed all three real profiles. None was selected and Import remained
+disabled until an explicit choice. No app restart or dialog reopen was needed.
+This establishes recovery through the existing retry path; raising the window
+alone did not establish focus-triggered recovery in this pass.
+
+Selecting the same profile and importing then produced Pinterest **13 discovered /
+13 imported / 0 skipped / 0 failed**. All 27 selected sites reported zero failures,
+and Website accounts showed the saved cookies after Done. The import completed
+without another Import click; the fresh Keychain-prompt interaction itself was not
+independently confirmed. The fixture was quit after capturing private evidence.
+
+A read-only Codex second opinion advised checking OS responsibility and denial
+reasons before changing the reader. The observed recovery uses the existing
+profile listing and Import retry; no runtime change, new permission API or
+entitlement change was justified. A fresh App Data prompt, a user clicking Deny
+and same-request continuation after accepting that prompt remain unverified.
+The signed fixture is not the waived DMG/distribution regression.
 
 ## PR #140 review follow-up
 

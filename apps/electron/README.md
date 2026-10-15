@@ -192,7 +192,9 @@ retains its slot until settlement. A Keychain prompt cannot be dismissed by the
 cooperative deadline. Accepted writes drain on quit. Stable signatures can retain
 Keychain grants; OS policy or signature changes can prompt again. Development
 folder permission may be attributed to Molly's launcher, and macOS may refuse to
-offer that launcher a prompt. A confirmed browser-file access denial is silent:
+offer that launcher a prompt. OS policy can also deny an isolated signed app
+without offering a prompt; a separate bundle identity does not guarantee one.
+A confirmed browser-file access denial is silent:
 the dialog clears its profile list and choice, shows no recovery UI, and re-lists
 on window focus or an explicit Import click. Website selections stay intact;
 starting a new dialog resets them. Keychain denial and other read failures show

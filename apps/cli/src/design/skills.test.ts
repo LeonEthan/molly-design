@@ -344,13 +344,16 @@ describe('packaged design materials', () => {
       /persisted\s+one\s+to\s+three\s+inspected\s+inspiration\s+images\s+for\s+stage\s+3:\s+with\s+`save_image`\s+when\s+that\s+tool\s+is\s+available,\s+otherwise\s+with\s+any\s+equivalent\s+visual\s+tool/,
       /kept three to six references, each with one named quality/,
       /user forbids networking, keep prompts and assets local: report the gap\s+and stop before any network call, including `molly_image` generation or editing/,
-      /user forbids only web research and permits remote image processing,\s+report the research gap and proceed without research using the available images/,
+      /When research applies and either the user forbids web research or the browser\s+or network is unavailable, report the gap and stop/,
       /report the gap and stop:\s+offer no design options and invent no research/,
     ]) {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
-      /stage 2 ran without\s+research because only web research was forbidden and remote image processing\s+was permitted,[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one\. When there is neither a source image nor a\s+supplied reference, report the gap and stop[\s\S]*do not\s+`generate` from the prompt alone[\s\S]*image-conditioned[\s\S]*made without web research/
+      /Create the options from images and text, not text alone, with `molly_image`\s+`edit`/
+    );
+    expect(entry).toMatch(
+      /For a template, reconstruction or bounded edit, the prescribed artwork is the\s+chosen design; do not offer options/
     );
     expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
@@ -364,6 +367,9 @@ describe('packaged design materials', () => {
     );
     expect(graphicText).not.toMatch(/waived\s+research/);
     expect(graphicText).not.toMatch(/user forbade networking/);
+    expect(graphicText).not.toMatch(
+      /proceed without\s+research|no-research stage 2|stage 2 ran without\s+research/
+    );
     const browserResearch = readFileSync(
       path.join(graphic, 'references/browser-research.md'),
       'utf8'

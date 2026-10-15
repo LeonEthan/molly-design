@@ -149,9 +149,8 @@ these hold:
 
 When the user forbids networking, keep prompts and assets local: report the gap
 and stop before any network call, including `molly_image` generation or editing.
-If the user forbids only web research and permits remote image processing,
-report the research gap and proceed without research using the available images.
-When the browser or network is unavailable, report the gap and stop:
+When research applies and either the user forbids web research or the browser
+or network is unavailable, report the gap and stop:
 offer no design options and invent no research from search titles. Fact checks
 such as event dates are separate from inspiration research. The user's own
 direction stays the basis.
@@ -174,15 +173,7 @@ options keep them. Add one or two inspiration images, chosen by you for that
 option: those saved in stage 2 and style references the user supplied and you
 inspected. Say in the prompt what each contributes ("image 2: its light and
 palette") and that its objects, text and logos are not to be copied. Different
-options may use different inspiration images. When stage 2 ran without
-research because only web research was forbidden and remote image processing
-was permitted, only the web-saved inspiration is absent:
-still use the inspected user-supplied style references, with the
-source image when there is one. When there is neither a source image nor a
-supplied reference, report the gap and stop: offer no design options and do not
-`generate` from the prompt alone — options must stay image-conditioned. When
-options are shown after a no-research stage 2, say in the options report that
-they were made without web research. Stay within the
+options may use different inspiration images. Stay within the
 connection's input limit in the `imagegen` Skill. An option that is recognizably
 one reference with new copy fails. A rendered blockout can steer an option's
 layout when words are not enough. Techniques are in

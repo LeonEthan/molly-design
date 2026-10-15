@@ -341,7 +341,7 @@ describe('packaged design materials', () => {
       /one focused browser pass on a design site: Pinterest when you observe\s+it signed in[\s\S]*imported cookies alone are not access/,
       /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
       /individual images; result grids, search snippets and\s+page titles do not count/,
-      /saved one to three inspiration images/,
+      /persisted\s+one\s+to\s+three\s+inspected\s+inspiration\s+images\s+for\s+stage\s+3:\s+with\s+`save_image`\s+when\s+the\s+Molly\s+browser\s+tools\s+are\s+available,\s+otherwise\s+with\s+any\s+equivalent\s+visual\s+tool/,
       /kept three to six references, each with one named quality/,
       /user forbids networking, respect it, report the gap and proceed/,
       /report the gap and stop:\s+offer no design options and invent no research/,
@@ -368,6 +368,9 @@ describe('packaged design materials', () => {
     );
     expect(browserResearch).not.toMatch(/signed in or imported/i);
     expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
+    expect(browserResearch).toMatch(
+      /with\s+`save_image`\s+when\s+it\s+is\s+available\s+or\s+an\s+equivalent\s+visual\s+tool\s+otherwise/
+    );
     expect(browserResearch).not.toMatch(/report exactly which visible results/i);
 
     expect(text).toContain('mcp__molly_image__generate');

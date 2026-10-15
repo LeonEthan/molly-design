@@ -138,7 +138,9 @@ these hold:
   ([Sign-in](references/browser-research.md#sign-in));
 - you opened and inspected individual images; result grids, search snippets and
   page titles do not count;
-- you saved one to three inspiration images with `save_image` for stage 3;
+- you persisted one to three inspected inspiration images for stage 3: with
+  `save_image` when the Molly browser tools are available, otherwise with any
+  equivalent visual tool you have that saves the inspected image to a local path;
 - you kept three to six references, each with one named quality (palette, type,
   crop and light, layout structure) and none taken as literal objects or finished
   layout. When one widened pass still yields fewer than three relevant ones, keep

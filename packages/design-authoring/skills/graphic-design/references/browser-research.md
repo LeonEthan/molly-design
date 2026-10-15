@@ -27,9 +27,9 @@ inspected reference URLs and briefly connect the observed choices to the design.
 A search-results URL alone does not identify individual references. If the
 individual pages could not be opened, the gate is not met: report the gap as the
 gate says.
-Save the inspiration images the gate requires with `save_image`, plus any
-supplied asset or prescribed template; observation alone does not require
-downloading the rest.
+Save the inspiration images the gate requires, plus any supplied asset or
+prescribed template, with `save_image` when it is available or an equivalent
+visual tool otherwise; observation alone does not require downloading the rest.
 
 ## Keep a few references, each with a job
 

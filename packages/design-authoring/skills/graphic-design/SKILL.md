@@ -147,10 +147,9 @@ these hold:
 
 When the user forbids networking, respect it, report the gap and proceed without
 research. When the browser or network is unavailable, report the gap and stop:
-offer no design options and invent no research from search titles; continue only
-if the user then tells you to proceed without research. Fact checks such as
-event dates are separate from inspiration research. The user's own direction
-stays the basis.
+offer no design options and invent no research from search titles. Fact checks
+such as event dates are separate from inspiration research. The user's own
+direction stays the basis.
 
 ### 3. Offer designs and let the user choose
 
@@ -171,8 +170,7 @@ option: those saved in stage 2 and style references the user supplied and you
 inspected. Say in the prompt what each contributes ("image 2: its light and
 palette") and that its objects, text and logos are not to be copied. Different
 options may use different inspiration images. When stage 2 ran without research
-(the user forbade networking or waived research) only the web-saved inspiration
-is absent: still use the inspected user-supplied style references, with the
+(the user forbade networking) only the web-saved inspiration is absent: still use the inspected user-supplied style references, with the
 source image when there is one, and `generate` from the prompt alone only when
 there is neither a source image nor a supplied reference. Say in the options
 report that the options were made without web research. Stay

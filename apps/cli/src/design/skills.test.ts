@@ -358,6 +358,10 @@ describe('packaged design materials', () => {
       /those saved in stage 2 and style references the user supplied and you\s+inspected/
     );
     expect(entry).not.toMatch(/there are no\s+inspiration images/);
+    expect(graphicText).not.toMatch(
+      /continue only\s+if the user then tells you to proceed without research/
+    );
+    expect(graphicText).not.toMatch(/waived\s+research/);
     const browserResearch = readFileSync(
       path.join(graphic, 'references/browser-research.md'),
       'utf8'

@@ -19,7 +19,11 @@ Git keeps the tracked native inputs on LF and permits the patch's blank context 
 The manifest records the source archive, patch digest, compiler, target, file hashes
 and build identity. Collection verifies it, and the existing macOS signing hook
 reseals only verified signature changes before the root app's resource seal.
-Changing source, patch, compiler or target invalidates the staged artifact.
+Changing source revision or archive checksum, version, patch, compiler, target
+triple or a license/notice input invalidates the staged artifact. The build logs `[native-resource]` verification, reuse or rebuild
+and duration; an invalid staged directory is removed before rebuilding. Desktop E2E
+restores this directory from an exact-key Actions cache and still applies this
+verification; see [native resource cache](../../../../e2e/README.md#native-resource-cache).
 
 Run `node --test apps/electron/scripts/sign-embedded-harness.test.mjs` from the
 repository root to check signing. On macOS, the fixture stages a small compiled

@@ -321,6 +321,7 @@ describe('packaged design materials', () => {
 
     const singleOwner = [
       /\*\*Research rule\.\*\*/g,
+      /\*\*Research gate\.\*\*/g,
       /\*\*Asking\.\*\*/g,
       /^## When the user rejects a direction$/gm,
       /^## Reporting$/gm,
@@ -333,6 +334,58 @@ describe('packaged design materials', () => {
     for (const pattern of singleOwner) {
       expect(oneCopy.match(pattern)?.length ?? 0, String(pattern)).toBe(1);
     }
+
+    const researchGate = entry.match(/\*\*Research gate\.\*\*[\s\S]*?(?=\n### )/)?.[0] ?? '';
+    for (const rule of [
+      /read \[references\/browser-research\.md\]\([^)]*\) in\s+full/,
+      /one focused browser pass on a design site that meets the user's\s+source constraints\. Use their requested site; otherwise prefer Pinterest\s+when it is allowed and you observe it signed in[\s\S]*Imported\s+cookies alone are not access/,
+      /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
+      /individual images; result grids, search snippets and\s+page titles do not count/,
+      /persisted one to three inspected inspiration images for stage 3/,
+      /Prefer\s+`save_image` when it can save the inspected asset\. If it is absent or cannot\s+save that asset \(including a rejected format\), use an equivalent available\s+visual tool to inspect and persist the same image to a local path stage 3\s+can use/,
+      /kept three to six references, each with one named quality/,
+      /user forbids networking, keep prompts and assets local: report the gap\s+and stop before any network call, including `molly_image` generation or editing/,
+      /When research applies and either the user forbids web research or the browser\s+or network is unavailable, report the gap and stop/,
+      /report the gap and stop:\s+offer no design options and invent no research/,
+    ]) {
+      expect(researchGate, String(rule)).toMatch(rule);
+    }
+    expect(entry).toMatch(
+      /Create the options from images and text, not text alone, with `molly_image`\s+`edit`/
+    );
+    expect(entry).toMatch(
+      /For a template, reconstruction or bounded edit, the prescribed artwork is the\s+chosen design; do not offer options/
+    );
+    expect(entry).toMatch(
+      /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
+    );
+    expect(entry).toMatch(
+      /those saved in stage 2 and style references the user supplied and you\s+inspected/
+    );
+    expect(entry).not.toMatch(/there are no\s+inspiration images/);
+    expect(graphicText).not.toMatch(
+      /continue only\s+if the user then tells you to proceed without research/
+    );
+    expect(graphicText).not.toMatch(/waived\s+research/);
+    expect(graphicText).not.toMatch(/user forbade networking/);
+    expect(graphicText).not.toMatch(
+      /proceed without\s+research|no-research stage 2|stage 2 ran without\s+research/
+    );
+    const browserResearch = readFileSync(
+      path.join(graphic, 'references/browser-research.md'),
+      'utf8'
+    );
+    expect(browserResearch).not.toMatch(/signed in or imported/i);
+    expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
+    expect(browserResearch).toMatch(/using the gate's persistence rule/);
+    expect(browserResearch).toMatch(
+      /A directly opened\s+and inspected image can provide evidence even when its source page is\s+unavailable\. Report that provenance gap/
+    );
+    expect(browserResearch).toContain('[Reporting](../SKILL.md#reporting)');
+    expect(browserResearch).not.toMatch(
+      /individual pages could not be opened, the gate is not met/
+    );
+    expect(browserResearch).not.toMatch(/report exactly which visible results/i);
 
     expect(text).toContain('mcp__molly_image__generate');
     expect(text).toContain('Molly has no default model');

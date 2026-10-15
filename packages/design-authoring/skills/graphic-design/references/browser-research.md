@@ -22,14 +22,14 @@ gate's shortfall exit rather than browsing without end.
 ## Inspect and keep sources
 
 Open relevant results individually and use screenshots or image reading to judge
-their appearance; the gate says what counts as inspection. Keep the actual
-inspected reference URLs and briefly connect the observed choices to the design.
-A search-results URL alone does not identify individual references. If the
-individual pages could not be opened, the gate is not met: report the gap as the
-gate says.
+their appearance; the gate says what counts as inspection. A directly opened
+and inspected image can provide evidence even when its source page is
+unavailable. Report that provenance gap and follow
+[Reporting](../SKILL.md#reporting) for inspected URLs and confirmed saved paths.
+Briefly connect the observed choices to the design.
 Save the inspiration images the gate requires, plus any supplied asset or
-prescribed template, with `save_image` when it is available or an equivalent
-visual tool otherwise; observation alone does not require downloading the rest.
+prescribed template, using the gate's persistence rule; observation alone does
+not require downloading the rest.
 
 ## Keep a few references, each with a job
 

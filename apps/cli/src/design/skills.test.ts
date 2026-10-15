@@ -338,10 +338,11 @@ describe('packaged design materials', () => {
     const researchGate = entry.match(/\*\*Research gate\.\*\*[\s\S]*?(?=\n### )/)?.[0] ?? '';
     for (const rule of [
       /read \[references\/browser-research\.md\]\([^)]*\) in\s+full/,
-      /one focused browser pass on a design site: Pinterest when you observe\s+it signed in[\s\S]*imported cookies alone are not access/,
+      /one focused browser pass on a design site that meets the user's\s+source constraints\. Use their requested site; otherwise prefer Pinterest\s+when it is allowed and you observe it signed in[\s\S]*Imported\s+cookies alone are not access/,
       /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
       /individual images; result grids, search snippets and\s+page titles do not count/,
-      /persisted\s+one\s+to\s+three\s+inspected\s+inspiration\s+images\s+for\s+stage\s+3:\s+with\s+`save_image`\s+when\s+that\s+tool\s+is\s+available,\s+otherwise\s+with\s+any\s+equivalent\s+visual\s+tool/,
+      /persisted one to three inspected inspiration images for stage 3/,
+      /Prefer\s+`save_image` when it can save the inspected asset\. If it is absent or cannot\s+save that asset \(including a rejected format\), use an equivalent available\s+visual tool to inspect and persist the same image to a local path stage 3\s+can use/,
       /kept three to six references, each with one named quality/,
       /user forbids networking, keep prompts and assets local: report the gap\s+and stop before any network call, including `molly_image` generation or editing/,
       /When research applies and either the user forbids web research or the browser\s+or network is unavailable, report the gap and stop/,
@@ -376,8 +377,13 @@ describe('packaged design materials', () => {
     );
     expect(browserResearch).not.toMatch(/signed in or imported/i);
     expect(browserResearch).not.toMatch(/three to six|one to three|usually one/i);
+    expect(browserResearch).toMatch(/using the gate's persistence rule/);
     expect(browserResearch).toMatch(
-      /with\s+`save_image`\s+when\s+it\s+is\s+available\s+or\s+an\s+equivalent\s+visual\s+tool\s+otherwise/
+      /A directly opened\s+and inspected image can provide evidence even when its source page is\s+unavailable\. Report that provenance gap/
+    );
+    expect(browserResearch).toContain('[Reporting](../SKILL.md#reporting)');
+    expect(browserResearch).not.toMatch(
+      /individual pages could not be opened, the gate is not met/
     );
     expect(browserResearch).not.toMatch(/report exactly which visible results/i);
 

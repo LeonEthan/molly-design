@@ -132,15 +132,19 @@ these hold:
 
 - you read [references/browser-research.md](references/browser-research.md) in
   full;
-- you made one focused browser pass on a design site: Pinterest when you observe
-  it signed in (references visible without a login overlay), otherwise another
-  accessible design source; imported cookies alone are not access
+- you made one focused browser pass on a design site that meets the user's
+  source constraints. Use their requested site; otherwise prefer Pinterest
+  when it is allowed and you observe it signed in (references visible without
+  a login overlay), or another accessible allowed design source. Imported
+  cookies alone are not access
   ([Sign-in](references/browser-research.md#sign-in));
 - you opened and inspected individual images; result grids, search snippets and
   page titles do not count;
-- you persisted one to three inspected inspiration images for stage 3: with
-  `save_image` when that tool is available, otherwise with any
-  equivalent visual tool you have that saves the inspected image to a local path;
+- you persisted one to three inspected inspiration images for stage 3. Prefer
+  `save_image` when it can save the inspected asset. If it is absent or cannot
+  save that asset (including a rejected format), use an equivalent available
+  visual tool to inspect and persist the same image to a local path stage 3
+  can use;
 - you kept three to six references, each with one named quality (palette, type,
   crop and light, layout structure) and none taken as literal objects or finished
   layout. When one widened pass still yields fewer than three relevant ones, keep

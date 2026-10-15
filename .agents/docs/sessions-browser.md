@@ -126,7 +126,8 @@ this page is the full text of the rules summarised there.
   several require an explicit pick before any Cookie read. Main re-lists and compares
   the chosen profile's path with the listing, copies the Cookies database and sidecars
   into a private temp directory without following symlinks (native discovery already
-  drops symlinked user-data roots and profile directories; quit awaits and removes the copy), and then uses one bounded
+  refuses a symlink in any component of a user-data root or profile path; cancellation stops
+  the copy; quit awaits and removes the copy), and then uses one bounded
   whole-profile `rookie-cookies` inventory read of that copy before header normalization and
   filters the shared design/commerce catalog IDs, validates selected fields, and
   retains Cookie values and keys in main. Per selected site it counts discovered,

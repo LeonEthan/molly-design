@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
@@ -931,6 +932,59 @@ void test('conflicting destination CHIPS and capacity pressure leave the destina
       { message: initial.length === 1 ? 'destination-unsupported' : 'cookie-capacity' }
     )
     assert.deepEqual(fixture.rows(), initial)
+  }
+})
+
+void test('revoking the operation during the snapshot copy stops the file read, removes the copy and never reaches the native reader', async (t) => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  const copies = async () =>
+    (await readdir(tmpdir())).filter((name) => name.startsWith(`molly-cookies-${process.pid}-`))
+  try {
+    const profile = await listedProfile(chrome)
+    const [source] = profile.sources
+    const fs = require('node:fs/promises')
+    const { open } = fs
+    const stalled = new PassThrough()
+    const copying = Promise.withResolvers()
+    t.mock.method(fs, 'open', async (path, ...rest) => {
+      const handle = await open(path, ...rest)
+      if (path !== source) return handle
+      return {
+        stat: () => handle.stat(),
+        close: () => handle.close(),
+        createReadStream: () => {
+          copying.resolve()
+          stalled.write(Buffer.from('synthetic-partial-page'))
+          return stalled
+        }
+      }
+    })
+    const before = await copies()
+    const controller = new AbortController()
+    const events = []
+    const read = readBrowserProfileCookies(
+      'chrome',
+      profile,
+      input.siteIds,
+      controller.signal,
+      readerFor(
+        { browserId: 'chrome', profileId: profile.id, warnings: [], detailedCookies: [] },
+        events
+      ),
+      () => now
+    )
+    await copying.promise
+    assert.equal((await copies()).length, before.length + 1)
+    controller.abort()
+    await assert.rejects(read, { message: 'cancelled' })
+    assert.equal(stalled.destroyed, true)
+    assert.deepEqual(await copies(), before)
+    assert.equal(
+      events.some((event) => typeof event === 'object'),
+      false
+    )
+  } finally {
+    await chrome.cleanup()
   }
 })
 

@@ -105,7 +105,7 @@ input and await child exit before quitting. Closed workers never restart.
 ## Browser account imports
 
 Opening lists profiles (cancellable); main re-lists, fails `profile-changed` if moved;
-discovery drops symlinked roots/profiles. Keep typed file/Keychain failures; EPERM stays
+discovery drops linked root/profile paths. Keep typed file/Keychain failures; EPERM/EACCES
 silent. Prepare before Agent pause/isolation. Read a private 0700 O_NOFOLLOW copy;
 extraction warnings are `source-incomplete`. Main filters IDs/fields, reports per-site
 counts. Isolate pages/Workers/network; preflight quotas, merge identities, verify

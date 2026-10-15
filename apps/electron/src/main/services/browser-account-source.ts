@@ -167,7 +167,16 @@ async function fingerprint(path: string, optional: boolean): Promise<FileFingerp
   return { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs }
 }
 
-async function copyRegularFile(source: string, destination: string): Promise<void> {
+const throwIfCancelled = (signal: AbortSignal): void => {
+  if (signal.aborted) throw new BrowserAccountError('cancelled')
+}
+
+async function copyRegularFile(
+  source: string,
+  destination: string,
+  signal: AbortSignal
+): Promise<void> {
+  throwIfCancelled(signal)
   let handle
   try {
     handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW)
@@ -183,7 +192,8 @@ async function copyRegularFile(source: string, destination: string): Promise<voi
       throw new BrowserAccountError('source-unavailable')
     await pipeline(
       handle.createReadStream({ autoClose: false, start: 0 }),
-      createWriteStream(destination, { flags: 'wx', mode: 0o600 })
+      createWriteStream(destination, { flags: 'wx', mode: 0o600 }),
+      { signal }
     )
   } finally {
     await handle.close()
@@ -200,7 +210,8 @@ const sameFile = (left: FileFingerprint, right: FileFingerprint): boolean =>
 
 export async function copyProfileCookies(
   profile: ListedImportProfile,
-  directory: string
+  directory: string,
+  signal: AbortSignal
 ): Promise<string> {
   const source = profile.sources[0]
   if (!source) throw new BrowserAccountError('source-unavailable')
@@ -209,12 +220,14 @@ export async function copyProfileCookies(
     ...SIDECAR_SUFFIXES.map((suffix) => [source + suffix, `Cookies${suffix}`, true] as const)
   ] as const
   for (let attempt = 1; attempt <= SNAPSHOT_ATTEMPTS; attempt++) {
+    throwIfCancelled(signal)
     await assertRegularProfileFiles(profile)
     const before = await Promise.all(names.map(([from, , optional]) => fingerprint(from, optional)))
     for (const [index, [from, name]] of names.entries()) {
       await rm(join(directory, name), { force: true })
-      if (before[index]) await copyRegularFile(from, join(directory, name))
+      if (before[index]) await copyRegularFile(from, join(directory, name), signal)
     }
+    throwIfCancelled(signal)
     const after = await Promise.all(names.map(([from, , optional]) => fingerprint(from, optional)))
     if (before.every((entry, index) => sameFile(entry, after[index])))
       return join(directory, 'Cookies')
@@ -352,8 +365,8 @@ export async function readBrowserProfileCookies(
     cancellation = new nativeReader.CancellationHandle()
     directory = await mkdtemp(join(tmpdir(), `${COPY_PREFIX}${process.pid}-`))
     liveCopies.add(directory)
-    const database = await copyProfileCookies(profile, directory)
-    if (signal.aborted) throw new BrowserAccountError('cancelled')
+    const database = await copyProfileCookies(profile, directory, signal)
+    throwIfCancelled(signal)
     const result: ReadResult = await nativeReader.fromPath(
       {
         path: database,

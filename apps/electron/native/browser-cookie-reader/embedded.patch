@@ -1,5 +1,5 @@
 diff --git a/bindings/node/src/lib.rs b/bindings/node/src/lib.rs
-index 07ac445..df589b2 100644
+index 07ac445..7ab2fea 100644
 --- a/bindings/node/src/lib.rs
 +++ b/bindings/node/src/lib.rs
 @@ -489,7 +489,7 @@ pub struct ExtractionReportObject {
@@ -7,7 +7,7 @@ index 07ac445..df589b2 100644
  #[napi]
  pub fn version() -> Result<String> {
 -  Ok(rookie_cookies::version())
-+  Ok("0.6.0+molly-native-keychain.6".to_owned())
++  Ok("0.6.0+molly-native-keychain.7".to_owned())
  }
  
  fn cookies_to_js(cookies: Vec<Cookie>) -> Result<Vec<CookieObject>> {
@@ -361,7 +361,7 @@ index 8fa0abe..10944db 100644
  
  fn browser_definition<'a>(
 diff --git a/rookie-rs/src/browser/registry/chromium.rs b/rookie-rs/src/browser/registry/chromium.rs
-index f0d22b1..ea2b5ba 100644
+index f0d22b1..64c2e79 100644
 --- a/rookie-rs/src/browser/registry/chromium.rs
 +++ b/rookie-rs/src/browser/registry/chromium.rs
 @@ -228,6 +228,15 @@ pub(super) struct ChromiumDiscovery {
@@ -380,7 +380,27 @@ index f0d22b1..ea2b5ba 100644
    pub(super) fn profiles(&self) -> Vec<ChromiumProfile> {
      self
        .installations
-@@ -408,7 +417,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
+@@ -386,6 +395,19 @@ fn has_profile_marker_file<F: DiscoveryFs>(context: &DiscoveryContext<F>, path:
+   })
+ }
+ 
++/// Returns the first lexical component of `path`, from the filesystem root down to
++/// `path` itself, that is a symbolic link.
++fn first_symlink_component(path: &Path) -> Option<PathBuf> {
++  let mut current = PathBuf::new();
++  for component in path.components() {
++    current.push(component);
++    if std::fs::symlink_metadata(&current).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
++      return Some(current);
++    }
++  }
++  None
++}
++
+ fn is_chromium_service_directory(name: &str) -> bool {
+   CHROMIUM_NON_PROFILE_DIRECTORIES.contains(&name)
+ }
+@@ -408,7 +430,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
            "local_state_invalid",
            installation.local_state_path.clone(),
            error.to_string(),
@@ -389,26 +409,24 @@ index f0d22b1..ea2b5ba 100644
          LocalStateMetadata::default()
        }
      }
-@@ -493,6 +502,18 @@ fn discover_installation_profiles<F: DiscoveryFs>(
+@@ -493,6 +515,16 @@ fn discover_installation_profiles<F: DiscoveryFs>(
        ));
        continue;
      }
-+    // Canonicalization below would resolve a symbolic link and hide it from
-+    // every later check, so refuse it here, before the lexical path is lost.
-+    if std::fs::symlink_metadata(&profile_path)
-+      .is_ok_and(|metadata| metadata.file_type().is_symlink())
-+    {
++    // Canonicalization below would resolve a symbolic link in any component and
++    // hide it from every later check, so refuse it before the lexical path is lost.
++    if let Some(link) = first_symlink_component(&profile_path) {
 +      issues.push(DiscoveryIssue::new(
 +        "profile_is_symlink",
-+        profile_path,
-+        "profile directory is a symbolic link".to_owned(),
++        link,
++        "profile path contains a symbolic link".to_owned(),
 +      ));
 +      continue;
 +    }
      let canonical_path = match context.fs.canonicalize(&profile_path) {
        Ok(path) => path,
        Err(error) => {
-@@ -500,7 +521,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
+@@ -500,7 +532,7 @@ fn discover_installation_profiles<F: DiscoveryFs>(
            "profile_canonicalize_failed",
            profile_path,
            error.to_string(),
@@ -417,7 +435,7 @@ index f0d22b1..ea2b5ba 100644
          continue;
        }
      };
-@@ -690,11 +711,24 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+@@ -690,11 +722,22 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
              "installation_metadata_failed",
              resolved,
              error.to_string(),
@@ -427,23 +445,21 @@ index f0d22b1..ea2b5ba 100644
          }
        }
        discovery.detected_roots += 1;
-+      // Canonicalization would resolve a symbolic-link user-data root (the flat
-+      // layout keeps the cookie database directly in it) and hide the link from
-+      // every later check, so refuse it while the lexical path is still known.
-+      if std::fs::symlink_metadata(&resolved)
-+        .is_ok_and(|metadata| metadata.file_type().is_symlink())
-+      {
++      // Canonicalization would resolve a symbolic link anywhere in the user-data
++      // root path (the flat layout keeps the cookie database directly in it) and
++      // hide it from every later check, so refuse it while the lexical path is known.
++      if let Some(link) = first_symlink_component(&resolved) {
 +        discovery.issues.push(DiscoveryIssue::new(
 +          "installation_is_symlink",
-+          resolved,
-+          "installation root is a symbolic link".to_owned(),
++          link,
++          "installation root path contains a symbolic link".to_owned(),
 +        ));
 +        continue;
 +      }
        let canonical_path = match context.fs.canonicalize(&resolved) {
          Ok(path) => path,
          Err(error) => {
-@@ -702,7 +736,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+@@ -702,7 +745,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
              "installation_canonicalize_failed",
              resolved,
              error.to_string(),
@@ -452,7 +468,7 @@ index f0d22b1..ea2b5ba 100644
            continue;
          }
        };
-@@ -751,7 +785,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
+@@ -751,7 +794,7 @@ fn discover_browser_with_context_and_selection<F: DiscoveryFs>(
                  "installation_enumeration_failed",
                  installation.path.clone(),
                  error.to_string(),
@@ -461,7 +477,7 @@ index f0d22b1..ea2b5ba 100644
                discovery.installations.push(installation);
                continue;
              }
-@@ -919,6 +953,7 @@ where
+@@ -919,6 +962,7 @@ where
  {
    runtime.check()?;
    let mut discovery = discover_browser_with_context_and_selection(context, browser_id, selection)?;
@@ -469,7 +485,7 @@ index f0d22b1..ea2b5ba 100644
    if selection == ProfileSelection::LegacyFirstProfile {
      // Generic discovery prefers declared profiles over a flat installation
      // root. The historical Opera selectors on macOS/Windows (and the Linux
-@@ -1345,6 +1380,7 @@ pub(super) fn profiles_for_listing(
+@@ -1345,6 +1389,7 @@ pub(super) fn profiles_for_listing(
    browser_id: &str,
    discovery: ChromiumDiscovery,
  ) -> Result<Vec<ChromiumProfile>> {
@@ -477,7 +493,7 @@ index f0d22b1..ea2b5ba 100644
    if discovery.all_detected_roots_failed() {
      bail!("every detected {browser_id} installation failed profile enumeration")
    }
-@@ -1379,6 +1415,7 @@ pub(crate) fn chromium_listing_with_runtime(
+@@ -1379,6 +1424,7 @@ pub(crate) fn chromium_listing_with_runtime(
    runtime.check()?;
    let discovery = discover_browser_with_context(&context, browser_id)?;
    runtime.check()?;
@@ -485,7 +501,7 @@ index f0d22b1..ea2b5ba 100644
    Ok(ChromiumListing {
      profiles: discovery.profiles(),
      installations_discovered: discovery.installations.len(),
-@@ -1387,6 +1424,13 @@ pub(crate) fn chromium_listing_with_runtime(
+@@ -1387,6 +1433,13 @@ pub(crate) fn chromium_listing_with_runtime(
    })
  }
  
@@ -500,10 +516,10 @@ index f0d22b1..ea2b5ba 100644
  /// Chromium-family browser.
  fn chromium_registry_report(
 diff --git a/rookie-rs/src/browser/registry/chromium/tests.rs b/rookie-rs/src/browser/registry/chromium/tests.rs
-index c5f0421..f9a9a6d 100644
+index c5f0421..22f067e 100644
 --- a/rookie-rs/src/browser/registry/chromium/tests.rs
 +++ b/rookie-rs/src/browser/registry/chromium/tests.rs
-@@ -1016,6 +1016,57 @@ fn generic_chromium_discovery_handles_default_and_flat_existing_browser_layouts(
+@@ -1016,6 +1016,85 @@ fn generic_chromium_discovery_handles_default_and_flat_existing_browser_layouts(
    assert!(opera_profiles[0].is_default);
  }
  
@@ -558,10 +574,38 @@ index c5f0421..f9a9a6d 100644
 +  }
 +}
 +
++#[test]
++fn a_symlinked_ancestor_of_the_installation_root_is_not_offered() {
++  let temp = TempDir::new("symlinked-ancestor");
++  let home = temp.path().join("home");
++  let context = context_for(PlatformId::Linux, home.clone(), []);
++  for (browser, root_id, flat) in [
++    ("opera", "opera-stable-native", true),
++    ("brave", "brave-stable-native", false),
++  ] {
++    let root = browser_root(&context, browser, root_id);
++    let ancestor = root.parent().expect("root parent").to_path_buf();
++    let elsewhere = temp.path().join(format!("elsewhere-ancestor-{browser}"));
++    let relocated_root = elsewhere.join(root.file_name().expect("root name"));
++    if flat {
++      seed_cookie(&relocated_root, false, browser, "value");
++    } else {
++      seed_cookie(&relocated_root.join("Default"), true, browser, "value");
++    }
++    std::fs::create_dir_all(ancestor.parent().expect("ancestor parent")).expect("create parent");
++    std::os::unix::fs::symlink(&elsewhere, &ancestor).expect("link ancestor");
++    let profiles = discover_browser_with_context(&context, browser)
++      .map(|discovery| discovery.profiles().len())
++      .unwrap_or(0);
++    assert_eq!(profiles, 0, "{browser} must not offer a root behind a symlinked ancestor");
++    std::fs::remove_file(&ancestor).expect("unlink ancestor");
++  }
++}
++
  #[test]
  fn wildcard_roots_are_sorted_before_generic_discovery() {
    let temp = TempDir::new("wildcard-roots");
-@@ -1544,6 +1595,42 @@ fn inaccessible_root_metadata_is_reported_while_not_found_is_silent() {
+@@ -1544,6 +1623,42 @@ fn inaccessible_root_metadata_is_reported_while_not_found_is_silent() {
    assert!(profiles_for_listing("chrome", discovery).is_err());
  }
  
@@ -605,10 +649,21 @@ index c5f0421..f9a9a6d 100644
  fn missing_optional_wildcard_roots_are_silent() {
    let temp = TempDir::new("missing-wildcard-roots");
 diff --git a/rookie-rs/src/browser/registry/test_seams.rs b/rookie-rs/src/browser/registry/test_seams.rs
-index 81da348..f8b8909 100644
+index 81da348..6406d76 100644
 --- a/rookie-rs/src/browser/registry/test_seams.rs
 +++ b/rookie-rs/src/browser/registry/test_seams.rs
-@@ -372,6 +372,7 @@ pub(crate) fn browser_root(
+@@ -327,7 +327,9 @@ impl TempDir {
+       std::process::id()
+     ));
+     std::fs::create_dir_all(&path).expect("create temporary directory");
+-    Self(path)
++    // Discovery refuses any symbolic-link path component, and the platform temporary
++    // directory may sit behind one (macOS `/var` -> `/private/var`).
++    Self(std::fs::canonicalize(&path).expect("canonicalize temporary directory"))
+   }
+ 
+   pub(crate) fn path(&self) -> &Path {
+@@ -372,6 +374,7 @@ pub(crate) fn browser_root(
  
  #[derive(Default)]
  pub(crate) struct TestDiscoveryFs {
@@ -616,7 +671,7 @@ index 81da348..f8b8909 100644
    pub(crate) denied_read_dir: Option<PathBuf>,
    pub(crate) denied_metadata: Option<PathBuf>,
    pub(crate) denied_canonicalize: Vec<PathBuf>,
-@@ -401,6 +402,11 @@ impl DiscoveryFs for TestDiscoveryFs {
+@@ -401,6 +404,11 @@ impl DiscoveryFs for TestDiscoveryFs {
    }
  
    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {

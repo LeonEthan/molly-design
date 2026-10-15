@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createRequire } from 'node:module'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -185,7 +185,7 @@ void test(
   { skip: process.platform !== 'darwin' },
   async () => {
     const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
-    const home = await mkdtemp(join(tmpdir(), 'molly-native-symlink-home-'))
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'molly-native-symlink-home-')))
     const previous = process.env.HOME
     try {
       const root = join(home, 'Library', 'Application Support', 'Google', 'Chrome')
@@ -222,7 +222,7 @@ void test(
   { skip: process.platform !== 'darwin' },
   async () => {
     const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
-    const home = await mkdtemp(join(tmpdir(), 'molly-native-flat-root-'))
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'molly-native-flat-root-')))
     const previous = process.env.HOME
     try {
       const support = join(home, 'Library', 'Application Support')
@@ -238,8 +238,48 @@ void test(
       await rm(root, { recursive: true, force: true })
       await symlink(elsewhere, root)
       await assert.rejects(reader.browserProfiles('opera', { timeoutMs: 30000 }), (error) =>
-        error.message.includes('installation root is a symbolic link')
+        error.message.includes('installation root path contains a symbolic link')
       )
+    } finally {
+      if (previous === undefined) delete process.env.HOME
+      else process.env.HOME = previous
+      await rm(home, { recursive: true, force: true })
+    }
+  }
+)
+
+void test(
+  'native discovery does not offer a user-data root behind a symlinked ancestor',
+  { skip: process.platform !== 'darwin' },
+  async () => {
+    const reader = require(join(browserCookieReaderResources, 'rookie-cookies.node'))
+    const home = await realpath(await mkdtemp(join(tmpdir(), 'molly-native-ancestor-')))
+    const previous = process.env.HOME
+    try {
+      const vendor = join(home, 'Library', 'Application Support', 'Google')
+      const relocated = join(home, 'elsewhere', 'Google')
+      for (const base of [vendor, relocated]) {
+        await mkdir(join(base, 'Chrome', 'Default', 'Network'), { recursive: true })
+        await writeFile(join(base, 'Chrome', 'Default', 'Network', 'Cookies'), '')
+        await writeFile(
+          join(base, 'Chrome', 'Local State'),
+          JSON.stringify({ profile: { info_cache: { Default: { name: 'Synthetic' } } } })
+        )
+      }
+      await mkdir(join(home, 'Applications', 'Google Chrome.app'), { recursive: true })
+      process.env.HOME = home
+      const control = await reader.browserProfiles('chrome', { timeoutMs: 30000 })
+      assert.equal(control.length, 1)
+      await rm(vendor, { recursive: true, force: true })
+      await symlink(relocated, vendor)
+      const offered = await reader
+        .browserProfiles('chrome', { timeoutMs: 30000 })
+        .then((profiles) => profiles.length)
+        .catch((error) => {
+          assert.match(error.message, /installation root path contains a symbolic link/u)
+          return 0
+        })
+      assert.equal(offered, 0)
     } finally {
       if (previous === undefined) delete process.env.HOME
       else process.env.HOME = previous

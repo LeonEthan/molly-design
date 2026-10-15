@@ -61,6 +61,12 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
   const browserRef = useRef<AccountImportBrowserId | null>(null);
   browserRef.current = browserId;
 
+  const denyAccess = useCallback(() => {
+    setProfiles([]);
+    setProfileId('');
+    setAccessDenied(true);
+  }, []);
+
   const listProfiles = useCallback(
     async (target: AccountImportBrowserId, request: number) => {
       if (!bridge) throw new Error('unavailable');
@@ -76,7 +82,7 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
           setProfiles(result.profiles);
           if (result.profiles.length === 1) setProfileId(result.profiles[0]!.id);
         } else if (result.error === 'source-access-denied') {
-          setAccessDenied(true);
+          denyAccess();
         } else if (result.error !== 'cancelled') {
           setCatalogFailed(true);
           setError(result.error);
@@ -85,7 +91,7 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
         if (listing.current === operationId) listing.current = null;
       }
     },
-    [bridge]
+    [bridge, denyAccess]
   );
 
   const loadSources = useCallback(async () => {
@@ -210,7 +216,8 @@ function ImportSession({ onOpenChange }: Pick<Props, 'onOpenChange'>) {
       else if (result.error === 'profile-changed') {
         setError(result.error);
         await listProfiles(browserId, catalogRequest.current);
-      } else if (result.error !== 'source-access-denied') setError(result.error);
+      } else if (result.error === 'source-access-denied') denyAccess();
+      else setError(result.error);
     } catch {
       if (live.current && operation.current === operationId) setError('unavailable');
     } finally {

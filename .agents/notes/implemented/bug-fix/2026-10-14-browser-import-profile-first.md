@@ -51,7 +51,7 @@ The addon's `read` discovers a profile itself and already snapshots DB+WAL priva
 but it follows symlinks and cannot be pointed at a path, so a TypeScript copy could
 not be read through it. The smallest change that makes the TypeScript copy the thing
 the addon reads was a 10-line patch adding `mollyInventory` to `fromPath` (resource
-version `0.6.0+molly-native-keychain.6` after the follow-up); the Keychain/decryption path is unchanged
+version `0.6.0+molly-native-keychain.7` after the follow-ups); the Keychain/decryption path is unchanged
 (`fromPath` with `browserId` uses the same registry key provider). Refusing symlinks
 inside Rust instead would have kept `read` but left no way to prove which file bytes
 were read. `-shm` is copied when present although SQLite rebuilds it from the WAL.
@@ -94,3 +94,19 @@ multi-profile Chrome, a real Keychain approval, an actual macOS App Data prompt/
 or a signed-DMG regression; copying a live database is bounded by the before/after
 comparison, and a swap of a parent directory between the `lstat` pass and the open is
 not excluded. The development partition is not covered by the packaged cookie-encryption fuse.
+
+## PR #140 review follow-up
+
+- A copy-path `source-access-denied` (EPERM or EACCES from main's own file operations)
+  now enters the same silent state as a denied listing: the profile choice and list are
+  cleared and focus or Import re-lists. The native reader's EACCES classification is
+  unchanged.
+- The account operation's signal reaches the snapshot copy loop and each file pipeline,
+  so cancellation, closing or navigation stops the filesystem read and frees the lease.
+- Discovery now refuses a symlink in any lexical component of the user-data root or
+  profile path, not only the final directory, before canonicalizing (resource version
+  `.7`). This replaces the earlier allowance for a linked parent such as
+  `Application Support`; a home or Application Support folder reached through a link
+  now lists no profiles.
+- The P1 journey's no-explanatory-copy check ignores paragraphs inside a `role="alert"`,
+  so the Windows `macos-required` notice does not fail it.

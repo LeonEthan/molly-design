@@ -169,7 +169,9 @@ it('lists the profiles of another browser only after it is chosen', async () => 
   const listings: string[] = [];
   bridge.getImportProfiles.mockImplementation(async (browserId: string) => {
     listings.push(browserId);
-    return listed(browserId === 'edge' ? [{ id: 'edge-one', name: 'Edge person', isDefault: true }] : several);
+    return listed(
+      browserId === 'edge' ? [{ id: 'edge-one', name: 'Edge person', isDefault: true }] : several
+    );
   });
   await act(async () => root.render(<BrowserAccountsSetting />));
   await openImport();
@@ -206,9 +208,7 @@ it('reports discovered, imported, skipped and failed for every selected site and
   await openImport();
   await act(async () => button(zh['settings.browserImport.import']).click());
   const rows = [...dialog().querySelectorAll<HTMLElement>('tbody tr')];
-  expect(
-    [...dialog().querySelectorAll('thead th')].map((entry) => entry.textContent)
-  ).toEqual([
+  expect([...dialog().querySelectorAll('thead th')].map((entry) => entry.textContent)).toEqual([
     zh['settings.browserImport.websites'],
     zh['settings.browserImport.columns.discovered'],
     zh['settings.browserImport.columns.imported'],
@@ -389,6 +389,46 @@ it('re-enumerates after the user allows access, on focus or an explicit Import c
   bridge.getImportProfiles.mockResolvedValue(listed(one));
   await act(async () => button(zh['settings.browserImport.import']).click());
   expect(bridge.importBrowserAccount).not.toHaveBeenCalled();
+  expect(picker('browser-import-profile-label').textContent).toBe('Designer');
+});
+
+it('treats a denied copy at Import like a denied listing: silent, picker cleared, re-listed on focus', async () => {
+  bridge.getImportProfiles.mockResolvedValue(listed(several));
+  bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await choose('browser-import-profile-label', 'Studio');
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  expect(dialog().querySelector('[role="alert"]')).toBeNull();
+  expect(dialog().querySelector('a, img, video')).toBeNull();
+  expect(picker('browser-import-profile-label').textContent).toBe(
+    zh['settings.browserImport.noProfiles']
+  );
+  expect(picker('browser-import-profile-label').disabled).toBe(true);
+  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    window.dispatchEvent(new Event('focus'));
+  });
+  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
+  expect(picker('browser-import-profile-label').textContent).toBe(
+    zh['settings.browserImport.chooseProfile']
+  );
+  expect(bridge.importBrowserAccount).toHaveBeenCalledTimes(1);
+  expect(dialog().querySelector('[role="alert"]')).toBeNull();
+});
+
+it('re-lists on an explicit Import click after a denied copy and never re-reads on its own', async () => {
+  bridge.getImportProfiles.mockResolvedValue(listed(one));
+  bridge.importBrowserAccount.mockResolvedValueOnce({ ok: false, error: 'source-access-denied' });
+  await act(async () => root.render(<BrowserAccountsSetting />));
+  await openImport();
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  expect(picker('browser-import-profile-label').textContent).toBe(
+    zh['settings.browserImport.noProfiles']
+  );
+  await act(async () => button(zh['settings.browserImport.import']).click());
+  expect(bridge.getImportProfiles).toHaveBeenCalledTimes(2);
+  expect(bridge.importBrowserAccount).toHaveBeenCalledTimes(1);
   expect(picker('browser-import-profile-label').textContent).toBe('Designer');
 });
 

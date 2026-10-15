@@ -35,7 +35,11 @@ export class BrowserImportPage {
     await expect(dialog.getByRole('combobox', { name: 'Profile' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Websites' })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Import', exact: true })).toBeVisible();
-    await expect(dialog.getByRole('paragraph').filter({ hasNotText: /^$/u })).toHaveCount(0);
+    const explanatoryCopy = dialog
+      .getByRole('paragraph')
+      .filter({ hasNotText: /^$/u })
+      .and(dialog.locator('xpath=.//p[not(ancestor-or-self::*[@role="alert"])]'));
+    await expect(explanatoryCopy).toHaveCount(0);
   }
 
   async closeWithoutImporting(): Promise<void> {

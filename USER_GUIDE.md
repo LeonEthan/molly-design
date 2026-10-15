@@ -4,24 +4,28 @@
 
 ## Install the macOS package
 
-The local build produces `MollyDesign-<version>-arm64.dmg` (macOS, Apple Silicon).
-Open the DMG and copy **Molly.app** to a folder you own; it does not replace or
-modify other applications. The package is ad-hoc signed and not notarized: on first
-launch, right-click the app and choose **Open**, then confirm. Do not disable
-Gatekeeper or remove quarantine attributes to run it.
+The current public package is **v0.1.0** for macOS Apple Silicon:
+[`MollyDesign-0.1.0-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.0/MollyDesign-0.1.0-arm64.dmg)
+from the [v0.1.0 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0).
+It is Developer ID signed and notarized. Open the DMG and copy **Molly.app** to a
+folder you own (for example Applications); it does not replace or modify other
+applications. Because the DMG is notarized, you can open Molly normally through
+Gatekeeper—double-click or right-click → **Open** if macOS still shows a first-run
+confirmation. Do not disable Gatekeeper or remove quarantine attributes to run it.
 
 On first launch macOS asks whether Molly may use its "Molly Safe Storage" keychain
-entry, which protects saved connection credentials. In a consistently signed build,
-**Always Allow** keeps saved connections readable across restarts; **Allow** grants
-once, and **Deny** leaves the
-app usable but unable to read saved connections while access is denied; the store is
-preserved and macOS asks again on the next launch.
-Ad-hoc local builds do not share a stable signing identity. macOS can ask again
-after a rebuild and even repeatedly for subsequent accesses if **Allow** grants
-only one access. Repeated prompts are not the intended account-import experience.
-Ad-hoc builds keep browser sessions in memory and disable browser account import;
-use a consistently signed build for that test. A pending prompt can leave the
+entry, which protects saved connection credentials. Choose **Always Allow** to keep
+saved connections readable across restarts; **Allow** grants once, and **Deny** leaves
+the app usable but unable to read saved connections while access is denied; the store
+is preserved and macOS asks again on the next launch. A pending prompt can leave the
 app and automation interfaces unresponsive.
+
+Local engineering builds may still produce an ad-hoc signed, non-notarized DMG. Those
+builds are not the public download path: on first launch, right-click the app and choose
+**Open**, then confirm. Ad-hoc builds do not share a stable signing identity, so macOS
+can ask again after a rebuild; they keep browser sessions in memory and disable browser
+account import—use the notarized Release (or another consistently signed build) for
+that journey.
 
 ## Configure connections
 
@@ -124,7 +128,7 @@ spacing. Before each Molly turn that starts from existing artwork, History keeps
 sheets (A4, A5, A3, US Letter and business card) as pixel sizes; there is no bleed
 or millimetre unit.
 
-## Built-in browser research (current development build)
+## Built-in browser research
 
 In a design session, the `molly_browser` tools control only the page in Molly's Browser sidebar through the existing tool permission flow. Browsing has no per-site authorization scope. Navigation and selected-image fetching follow your normal network, including proxies and TUN, without a DNS setup step. Opening the Browser sidebar shows the same page. **Take control** pauses Agent reading and actions while you sign in or complete MFA; **Resume Agent** lets it observe again. A dispatched click cannot be undone by takeover. If an operation returns an uncertain result, the Agent must observe before deciding what to do next; Molly does not automatically repeat the action or block browsing for the rest of the task.
 
@@ -270,8 +274,10 @@ the pre-migration runtime. They do not validate the
 current embedded engine. See the [review procedure](e2e/DESIGN-ACCEPTANCE.md) for
 design review context, not a claim that the migration has passed.
 
-No public release, Developer ID signing, notarization or automatic update channel
-is established by the local ad-hoc package checks.
+**v0.1.0** ships a public Developer ID signed and notarized macOS Apple Silicon DMG
+via the [GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0).
+Two-version automatic upgrade acceptance and macOS Intel / Windows product support
+remain open. Local ad-hoc package checks remain engineering evidence only.
 
 ## Back up, uninstall and recover data
 

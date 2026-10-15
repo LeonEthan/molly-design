@@ -349,7 +349,7 @@ describe('packaged design materials', () => {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
-      /stage\s+2\s+ran\s+without\s+research[\s\S]*still\s+use\s+the\s+inspected\s+user-supplied\s+style\s+references,\s+with\s+the\s+source\s+image\s+when\s+there\s+is\s+one,\s+and\s+`generate`\s+from\s+the\s+prompt\s+alone\s+only\s+when\s+there\s+is\s+neither\s+a\s+source\s+image\s+nor\s+a\s+supplied\s+reference[\s\S]*made\s+without\s+web\s+research/
+      /stage 2 ran without\s+research[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one, and `generate` from the prompt alone only when\s+there is neither a source image nor a supplied reference[\s\S]*made without web research/
     );
     expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/

@@ -169,15 +169,15 @@ options keep them. Add one or two inspiration images, chosen by you for that
 option: those saved in stage 2 and style references the user supplied and you
 inspected. Say in the prompt what each contributes ("image 2: its light and
 palette") and that its objects, text and logos are not to be copied. Different
-options may use different inspiration images. When stage 2 ran without research
-(the user forbade networking) only the web-saved inspiration is absent: still
-use the inspected user-supplied style references, with the source image when
-there is one, and `generate` from the prompt alone only when there is neither a
-source image nor a supplied reference. Say in the options report that the
-options were made without web research. Stay within the connection's input limit
-in the `imagegen` Skill. An option that is recognizably one reference with new
-copy fails. A rendered blockout can steer an option's layout when words are not
-enough. Techniques are in
+options may use different inspiration images. When stage 2 ran without
+research (the user forbade networking) only the web-saved inspiration is absent:
+still use the inspected user-supplied style references, with the
+source image when there is one, and `generate` from the prompt alone only when
+there is neither a source image nor a supplied reference. Say in the options
+report that the options were made without web research. Stay within the
+connection's input limit in the `imagegen` Skill. An option that is recognizably
+one reference with new copy fails. A rendered blockout can steer an option's
+layout when words are not enough. Techniques are in
 [references/layered-workflow.md](references/layered-workflow.md#design-options).
 
 Show the options and **end the turn** so the user can choose, as

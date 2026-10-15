@@ -25,8 +25,9 @@ its static diagnostic, worker retirement, dispatch fence and draft preservation.
 Reuse Pi 1.0.4's unmodified agent retry, existing retry activity projection, `RequestError`,
 `recordChatFailure` and the design outcome store. Adapting these paths supplies the required
 behavior; a separate retry loop, storage layer or tool-replay mechanism is unnecessary.
-The pure classifier checks context overflow, auth, quota, content policy and invalid request
-before Pi's transient match. Only static category/details leave the worker. The CLI keeps
+The pure classifier checks context overflow, quota (including HTTP 402 and credits), content
+policy (including guardrail and prompt-injection 403s), then authentication and invalid
+request before Pi's transient match, so a policy 403 is not reported as a rejected key. Only static category/details leave the worker. The CLI keeps
 the upstream reason and retirement policy, adding the category-specific failure code.
 After session binding, the create path uses the ordinary turn error context.
 

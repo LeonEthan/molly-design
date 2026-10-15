@@ -37,17 +37,21 @@ export function classifyModelError(
   if (isContextOverflow(message, contextWindow)) return 'context_overflow';
   const text = message.errorMessage ?? '';
   if (
-    /\b(?:401|403|unauthori[sz]ed|authentication(?:_error)?)\b|invalid[ _-]api[ _-]key/i.test(text)
-  )
-    return 'auth';
-  if (
-    /\bquota(?:_exceeded)?\b|insufficient[ _-]quota|billing|usage[ _-]?limit|out of budget|available balance/i.test(
+    /\b(?:402|quota(?:_exceeded)?|credits?)\b|payment[ _-]required|insufficient[ _-]quota|billing|usage[ _-]?limit|out of budget|available balance/i.test(
       text
     )
   )
     return 'quota';
-  if (/content[ _-]?(?:policy|filter)|\b(?:safety|moderation|flagged)\b/i.test(text))
+  if (
+    /content[ _-]?(?:policy|filter)|\b(?:safety|moderation|flagged|guardrails?|polic(?:y|ies)|blocked by)\b|prompt[ _-]injection|\b(?:request|prompt|content|input|output|response) (?:was |has been )?blocked\b/i.test(
+      text
+    )
+  )
     return 'content_policy';
+  if (
+    /\b(?:401|403|unauthori[sz]ed|authentication(?:_error)?)\b|invalid[ _-]api[ _-]key/i.test(text)
+  )
+    return 'auth';
   if (/\b(?:400|404|405|410|413|415|422)\b|invalid[ _-]request|\bbad request\b/i.test(text))
     return 'invalid_request';
   if (isRetryableAssistantError(message)) return 'transient';

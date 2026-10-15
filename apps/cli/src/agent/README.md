@@ -25,9 +25,10 @@ ACP capability cache. Connection-qualified model IDs prevent same-model cross-ac
 ambiguity; the initial placeholder is not a default model. Public catalog publication
 never reads credentials, tests inference or changes the user's existing Agent selection.
 
-Embedded Molly title generation uses the first local user sentence without spawning
-a title worker or requesting model inference. A committed artwork title later
-replaces it (see [design collection](../design/README.md)).
+Embedded Molly sessions are not titled at dispatch: a new design keeps its "Untitled design"
+draft title until a committed artwork title or a user rename replaces it (see
+[design collection](../design/README.md) and the Spec). No title worker or model
+inference runs for them.
 
 Embedded prompt cancellation sends ACP cancel while retaining the native response.
 `embedded-harness-control.ts` accepts a completed or cancelled receipt only when its

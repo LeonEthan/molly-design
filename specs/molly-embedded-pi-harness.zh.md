@@ -101,6 +101,8 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 主会话的模型请求、个人记忆提取和压缩通过原生使用量记录归属其明确连接。提取在取消或响应校验前追加实测的 provider/model 使用量，文本保持临时状态；capture 失败保留已完成的主响应回执和计量。原生完成在提取前持久化。调用方取消保留有效的已完成响应，而用户明确 Stop 仍暂停派发并取消产物收尾；回执不将已停止的设计任务变为成功。发布失败保留待发状态，以后发送累计快照，不重复推理或增量；首版标题由用户首句本地生成。瞬时模型请求失败（服务端错误、过载、限流或连接中断）由 Pi 原生 Agent 重试自动处理：最多重试三次并有上限退避，界面只显示一行内联的重试状态。只重复失败的那次模型请求；已完成的工具调用和失败响应中的工具调用都不会再次执行。provider 层重试保持禁用；鉴权、额度、无效请求、内容策略和上下文溢出失败立即结束并给出对应类别。重试耗尽后用户只看到一行提示和一个明确的“重试”，它把原消息作为新消息重新发送（[#137](https://github.com/LeonEthan/molly-design/issues/137)）。主会话的上下文溢出或截断恢复不得重复推理。Molly 不因传输失败自动重启整个用户任务；MCP 内部连接恢复遵循下文原版组件的语义。费用无可靠依据时显示未知或估算。
 
+[#137 的范围调整](https://github.com/LeonEthan/molly-design/issues/137#issuecomment-6183452896)将三项上游重试缺口延期至 [#143](https://github.com/LeonEthan/molly-design/issues/143)：裸 `529` / `ECONNRESET` 的识别、包装后的永久错误立即停止，以及遵守 Retry-After。上述保证仍是目标；这三项尚未实现，不再计入 #137 / #142 本次合并的验收条件。等待上游发布修复，不修改 Pi，也不在 Molly 中增加补救逻辑。其余重试要求继续有效；此次范围调整不代表整份 Spec 获得批准。
+
 ### MCP 与付费图片
 
 2026-09-28 方向修订，2026-10-01 因 Pi 内置 MCP 更新：采用普通 coding agent 的标准链路：`Pi Agent → Pi 原生 MCP → Molly 图片 MCP server → 图片服务`。该链路已基于 Pi 原生 MCP 实施（[PR #55](https://github.com/LeonEthan/molly-design/pull/55)）；决策及历史证据见[迁移记录](../.agents/notes/proposed/architecture/2026-09-28-pi-mcp-adapter-triage.md)。

@@ -11,8 +11,9 @@ The managed profile now uses Pi's native three-retry budget and reports a static
 failure category through the existing chat notice. Failed design outcomes remain durable
 without repeating that notice. The adapter preserves native tool and settlement semantics;
 upstream classifier and streaming limits remain explicit.
-Full #137 acceptance remains incomplete: bare transient codes, wrapped permanent
-errors and Retry-After still violate the locked criteria under the unmodified SDK.
+The maintainer deferred bare transient codes, wrapped permanent errors and Retry-After
+to [#143](https://github.com/LeonEthan/molly-design/issues/143), allowing the completed
+#137 scope to merge while these upstream defects remain unresolved.
 
 ## Decision and reuse
 
@@ -106,7 +107,7 @@ seam satisfying all criteria without a workaround: settings expose no classifier
 or response-delay callback, response hooks cannot choose a delay, message rewriting
 changes persisted history, and continuation/provider wrappers add a separate policy.
 
-These are unresolved acceptance defects, not accepted exceptions. Keep the pinned
+At this review stage these were unresolved acceptance defects, not accepted exceptions. Keep the pinned
 SDK unchanged under `packages/harness-pi/AGENTS.md`; full completion requires an
 upstream fix or explicit human amendment of the boundary or acceptance criteria.
 No Spec approval or merge approval follows from passing tests or this review.
@@ -139,3 +140,29 @@ the remaining package suites, types, lint, i18n and public/platform boundaries.
 `pnpm format`, `pnpm e2e:build`, and `pnpm run docs check` passed. A separate read-only
 Codex CLI review of the footer fix found no introduced P0/P1; its queue/history and
 virtualization assessment was source-based and it did not rerun Electron.
+
+## Maintainer scope amendment, 2026-10-14 PT
+
+The [acceptance amendment](https://github.com/LeonEthan/molly-design/issues/137#issuecomment-6183452896)
+and [PR decision](https://github.com/LeonEthan/molly-design/pull/142#issuecomment-6183453552)
+move exactly the three reproduced upstream gaps into [#143](https://github.com/LeonEthan/molly-design/issues/143).
+They no longer block #137 / #142; deferral does not mean the original behavior is
+implemented. Other acceptance requirements and the original long-term target remain.
+The maintainer authorized merging the completed scope after its remaining checks pass.
+
+Wait for released upstream fixes, then adopt and verify them; do not patch Pi or add a
+Molly workaround. This preserves the existing SDK boundary and avoids maintaining a
+second retry policy. The trade-off is that affected errors can still fail without a
+retry, retry unnecessarily, or exhaust their budget before the server permits recovery.
+The two latest review threads were resolved as explicitly accepted deferrals, not fixes.
+
+Upstream [#10601](https://github.com/earendil-works/pi/issues/10601) and its unmerged
+[PR #10600](https://github.com/earendil-works/pi/pull/10600) track Retry-After;
+[#10941](https://github.com/earendil-works/pi/issues/10941) reports the network errno gap.
+The focused [contribution proposal #10975](https://github.com/earendil-works/pi/issues/10975)
+requests permission to fix wrapped authentication classification. Its extension-free
+classifier reproduction confirms direct 401 is not retryable but wrapped 401 is, on
+the installed Pi 1.0.4 and unchanged v1.2.0 classifier. Pi requires maintainer `lgtm`
+approval before an upstream PR; `lgtmi` only permits subsequent issues. The proposal
+was auto-closed by the new-contributor gate and awaits maintainer review; it does not
+represent approval or an implemented fix. The harness Spec remains draft.

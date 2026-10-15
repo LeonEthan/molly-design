@@ -73,6 +73,11 @@ not surfaced through ACP. Pi's generic "provider returned error" match may also 
 a wrapped permanent error; Molly's final diagnostic checks permanent categories first
 but does not change Pi's native retry decision.
 
+The maintainer deferred the bare-code/network matching, wrapped permanent-error and
+Retry-After defects to [#143](https://github.com/LeonEthan/molly-design/issues/143),
+outside #137's merge acceptance. They remain unresolved pending released upstream
+fixes; Molly keeps the SDK unmodified and adds no retry-policy workaround.
+
 In RPC mode Pi binds select/confirm/input/editor/notify to the existing ACP form dialog
 ([session.ts](src/session.ts), [extension-ui.ts](src/extension-ui.ts)). Terminal components,
 widgets, footers and autocomplete are unavailable.

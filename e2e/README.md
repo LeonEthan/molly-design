@@ -183,6 +183,55 @@ The current active coverage is tracked in [the coverage matrix](./COVERAGE.md).
 The suite checker parses Gherkin and enforces IDs, priorities, runtime ownership,
 documentation indexes, and P0 matrix entries before any application build.
 
+## Native resource cache
+
+GitHub-hosted macOS regression restores the staged `agent-browser` and
+`browser-cookie-reader` resources from the Actions cache after a clean checkout.
+Each exact key covers runner OS, `ImageOS` and `ImageVersion`, architecture and target, `rustc -vV`,
+`cargo -V`, `clang --version`, macOS SDK, Rust/C build environment variables, `source.json`
+(revision, archive checksum, compiler), the embedded patch, license/notice files
+and both build scripts; there are no fallback keys. Because Actions can
+prefix-match even a primary key, a restore is accepted only when
+`cache-matched-key` equals the requested key; anything else is deleted before the
+build. An accepted hit is still only a candidate: the existing build fast path
+verifies the source revision, archive checksum, version, patch, compiler,
+platform/architecture and target triple, file inventory, hashes, build identity
+and license bytes. Any failure removes the
+restored directory and rebuilds from source before the app build continues. The
+build records each component it compiled and verified in this run (with its
+`buildId`) to `MOLLY_NATIVE_BUILD_REPORT`; only those components, re-verified
+after the build with the same `buildId`, are saved. Reused output is never
+saved. `pull_request` runs, forks included, can save into their PR merge-ref
+scope. Save steps are non-fatal so cache-service unavailability, quota or a
+refused write only leaves later runs cold.
+The smoke workflow also runs the deterministic cache tests on every hosted run.
+An exact entry is immutable: a corrupt one keeps being rejected and rebuilt until
+it is evicted or the key schema changes.
+
+PR runs read their own PR cache and default-branch caches; any writes stay in
+the PR merge ref. The scheduled Daily macOS leg seeds default-branch entries; a
+dispatch on another branch writes only that branch's scope and is not trusted. Release
+packaging never restores these caches. See
+[workflow security](../.github/workflow-security.md) and the
+[decision note](../.agents/notes/implemented/testing/2026-10-14-desktop-e2e-native-cache.md).
+
+Logs tagged `[native-cache]` report pnpm-cache and per-resource restore state
+(`hit`, `miss`, `rejected-key`, `skipped-cold`) and restore duration; `[native-resource]` lines report verification outcome,
+reuse or rebuild, and each native build duration.
+
+To benchmark one commit, dispatch the PR workflow twice on the same branch
+without pushing between runs; its concurrency group cancels overlapping runs:
+
+```sh
+gh workflow run e2e-smoke.yml --ref <branch> -f suite=smoke -f native_cache=cold
+# after it finishes:
+gh workflow run e2e-smoke.yml --ref <branch> -f suite=smoke -f native_cache=reuse
+gh run list --workflow e2e-smoke.yml --branch <branch> --json databaseId,headSha,status
+```
+
+`cold` skips restore only; it still rebuilds, verifies and saves on that branch
+when no entry with the key exists there. The `reuse` run then reports a hit.
+
 ## Installed Molly acceptance
 
 Set `MOLLY_E2E_INSTALLED_EXECUTABLE` to the executable in a private installed

@@ -47,7 +47,11 @@ an older addon from silently ignoring this mode; npm declarations remain unchang
 dev and packaging run the same step. macOS arm64/x64 requires Rust 1.99.0 and the
 corresponding target. Windows has no reader resource and cannot import accounts.
 Packaging verifies the staged seal for every target, probes loading on the host
-architecture, and uses the existing native signing reseal mechanism. Runtime checks
+architecture, and uses the existing native signing reseal mechanism. Staged reuse also
+checks the archive checksum and target triple and binds `LICENSE.md` to this
+directory's bytes; any verification failure removes the
+staged directory and rebuilds. Desktop E2E restores it from an exact-key Actions
+cache and re-verifies it; see [native resource cache](../../../../e2e/README.md#native-resource-cache). Runtime checks
 the resource seal and patched version; it never loads the upstream helper package.
 
 Run `pnpm --filter @molly/electron test:cookie-reader` for synthetic native checks:

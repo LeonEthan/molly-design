@@ -81,6 +81,8 @@ function fixture(t, native = false) {
   return { app, binary, directory, manifest }
 }
 
+const darwinTarget = process.arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin'
+
 function browserFixture(app, executable) {
   const native = new URL('../native/agent-browser/', import.meta.url)
   const source = JSON.parse(fs.readFileSync(new URL('source.json', native), 'utf8'))
@@ -111,6 +113,7 @@ function browserFixture(app, executable) {
     ...source,
     platform: process.platform,
     arch: process.arch,
+    target: darwinTarget,
     patchSha256: sha256(fs.readFileSync(new URL('embedded.patch', native))),
     files,
     buildId: sha256(JSON.stringify(files))
@@ -141,6 +144,7 @@ function cookieReaderFixture(app, executable) {
     ...source,
     platform: process.platform,
     arch: process.arch,
+    target: darwinTarget,
     patchSha256: sha256(fs.readFileSync(new URL('embedded.patch', native))),
     files,
     buildId: sha256(JSON.stringify(files))

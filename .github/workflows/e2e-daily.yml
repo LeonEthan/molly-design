@@ -45,6 +45,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Setup Node
+        id: setup-node
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -56,6 +57,40 @@ jobs:
           rustup toolchain install 1.99.0 --profile minimal --no-self-update
           rustup default 1.99.0
 
+      - name: Compute native resource cache keys
+        id: native-cache-key
+        if: runner.os == 'macOS'
+        run: node .github/scripts/desktop-native-cache.mjs key
+
+      - name: Restore agent-browser native resource
+        id: agent-browser-cache
+        if: runner.os == 'macOS'
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/electron/resources/agent-browser
+          key: ${{ steps.native-cache-key.outputs.agent-browser }}
+
+      - name: Restore browser-cookie-reader native resource
+        id: browser-cookie-reader-cache
+        if: runner.os == 'macOS'
+        uses: actions/cache/restore@v4
+        with:
+          path: apps/electron/resources/browser-cookie-reader
+          key: ${{ steps.native-cache-key.outputs.browser-cookie-reader }}
+
+      - name: Accept exact native resource cache restores
+        if: runner.os == 'macOS'
+        env:
+          NATIVE_CACHE_RESTORE_STARTED_AT: ${{ steps.native-cache-key.outputs.started-at }}
+          AGENT_BROWSER_CACHE_KEY: ${{ steps.native-cache-key.outputs.agent-browser }}
+          AGENT_BROWSER_CACHE_HIT: ${{ steps.agent-browser-cache.outputs.cache-hit }}
+          AGENT_BROWSER_MATCHED_KEY: ${{ steps.agent-browser-cache.outputs.cache-matched-key }}
+          BROWSER_COOKIE_READER_CACHE_KEY: ${{ steps.native-cache-key.outputs.browser-cookie-reader }}
+          BROWSER_COOKIE_READER_CACHE_HIT: ${{ steps.browser-cookie-reader-cache.outputs.cache-hit }}
+          BROWSER_COOKIE_READER_MATCHED_KEY: ${{ steps.browser-cookie-reader-cache.outputs.cache-matched-key }}
+          PNPM_CACHE_HIT: ${{ steps.setup-node.outputs.cache-hit }}
+        run: node .github/scripts/desktop-native-cache.mjs accept-restore
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -66,7 +101,31 @@ jobs:
         env:
           # CLI Vite SSR chunk rendering exceeds Node's default heap on macOS.
           NODE_OPTIONS: --max-old-space-size=8192
+          MOLLY_NATIVE_BUILD_REPORT: ${{ runner.temp }}/molly-native-build-report.jsonl
         run: pnpm --dir apps/electron build
+
+      - name: Verify native resources before cache save
+        id: native-cache-verify
+        if: runner.os == 'macOS'
+        env:
+          MOLLY_NATIVE_BUILD_REPORT: ${{ runner.temp }}/molly-native-build-report.jsonl
+        run: node .github/scripts/desktop-native-cache.mjs verify
+
+      - name: Save agent-browser native resource
+        if: runner.os == 'macOS' && steps.native-cache-verify.outputs.agent-browser-fresh == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: apps/electron/resources/agent-browser
+          key: ${{ steps.native-cache-key.outputs.agent-browser }}
+
+      - name: Save browser-cookie-reader native resource
+        if: runner.os == 'macOS' && steps.native-cache-verify.outputs.browser-cookie-reader-fresh == 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: apps/electron/resources/browser-cookie-reader
+          key: ${{ steps.native-cache-key.outputs.browser-cookie-reader }}
 
       - name: Run desktop journeys
         shell: bash

@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { performance } from 'node:perf_hooks'
+import { recordNativeBuild, reuseVerifiedResource } from './native-resource-cache.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const native = path.join(root, 'native', 'agent-browser')
@@ -15,12 +17,32 @@ const LICENSES = [
   'NOTICE.txt'
 ]
 const patchSha256 = () => sha256(fs.readFileSync(path.join(native, 'embedded.patch')))
+const TARGETS = {
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'darwin-x64': 'x86_64-apple-darwin',
+  'win32-x64': 'x86_64-pc-windows-msvc',
+  'win32-arm64': 'aarch64-pc-windows-msvc'
+}
 export const agentBrowserResources = path.join(root, 'resources', 'agent-browser')
+export const agentBrowserCacheInputs = {
+  name: 'agent-browser',
+  root,
+  targets: TARGETS,
+  inputs: [
+    path.join(native, 'source.json'),
+    path.join(native, 'embedded.patch'),
+    ...LICENSES.map((name) => path.join(native, name)),
+    fileURLToPath(import.meta.url),
+    fileURLToPath(new URL('./native-resource-cache.mjs', import.meta.url))
+  ]
+}
 
 export function verifyAgentBrowser(directory, target = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'))
   if (
+    manifest.version !== source.version ||
     manifest.revision !== source.revision ||
+    manifest.archiveSha256 !== source.archiveSha256 ||
     manifest.protocol !== source.protocol ||
     manifest.patchSha256 !== patchSha256() ||
     manifest.rust !== source.rust
@@ -28,7 +50,8 @@ export function verifyAgentBrowser(directory, target = {}) {
     throw new Error('agent-browser source identity mismatch')
   if (
     (target.platform && target.platform !== manifest.platform) ||
-    (target.arch && target.arch !== manifest.arch)
+    (target.arch && target.arch !== manifest.arch) ||
+    manifest.target !== TARGETS[`${manifest.platform}-${manifest.arch}`]
   )
     throw new Error('agent-browser target mismatch')
   const binary = manifest.platform === 'win32' ? 'agent-browser.exe' : 'agent-browser'
@@ -45,6 +68,12 @@ export function verifyAgentBrowser(directory, target = {}) {
     if (!fs.lstatSync(location).isFile() || sha256(fs.readFileSync(location)) !== file.sha256)
       throw new Error(`Invalid agent-browser resource: ${file.path}`)
   }
+  for (const name of LICENSES)
+    if (
+      manifest.files.find((file) => file.path === name).sha256 !==
+      sha256(fs.readFileSync(path.join(native, name)))
+    )
+      throw new Error(`agent-browser license input mismatch: ${name}`)
   if (manifest.buildId !== sha256(JSON.stringify(manifest.files)))
     throw new Error('agent-browser build identity mismatch')
   if (
@@ -65,16 +94,17 @@ function run(command, args, cwd) {
 }
 
 export async function buildAgentBrowser({ platform = process.platform, arch = process.arch } = {}) {
-  try {
-    verifyAgentBrowser(agentBrowserResources, { platform, arch })
+  if (
+    reuseVerifiedResource({
+      name: 'agent-browser',
+      directory: agentBrowserResources,
+      verify: verifyAgentBrowser,
+      target: { platform, arch }
+    })
+  )
     return
-  } catch {}
-  const target = {
-    'darwin-arm64': 'aarch64-apple-darwin',
-    'darwin-x64': 'x86_64-apple-darwin',
-    'win32-x64': 'x86_64-pc-windows-msvc',
-    'win32-arm64': 'aarch64-pc-windows-msvc'
-  }[`${platform}-${arch}`]
+  const started = performance.now()
+  const target = TARGETS[`${platform}-${arch}`]
   if (!target) throw new Error(`Unsupported agent-browser target: ${platform}-${arch}`)
   const compiler = spawnSync('rustc', ['--version'], { encoding: 'utf8' })
   if (compiler.status !== 0 || !compiler.stdout.startsWith(`rustc ${source.rust} `))
@@ -141,7 +171,8 @@ export async function buildAgentBrowser({ platform = process.platform, arch = pr
     path.join(agentBrowserResources, 'manifest.json'),
     `${JSON.stringify({ ...source, platform, arch, target, patchSha256: digest, files, buildId: sha256(JSON.stringify(files)) }, null, 2)}\n`
   )
-  verifyAgentBrowser(agentBrowserResources, { platform, arch })
+  const manifest = verifyAgentBrowser(agentBrowserResources, { platform, arch })
+  recordNativeBuild('agent-browser', manifest, Math.round(performance.now() - started))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))

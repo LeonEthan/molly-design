@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
+import { performance } from 'node:perf_hooks'
+import { recordNativeBuild, reuseVerifiedResource } from './native-resource-cache.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 const native = path.join(root, 'native', 'browser-cookie-reader')
@@ -10,12 +12,29 @@ const source = JSON.parse(fs.readFileSync(path.join(native, 'source.json'), 'utf
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const LICENSES = ['LICENSE.md']
 const patchSha256 = () => sha256(fs.readFileSync(path.join(native, 'embedded.patch')))
+const TARGETS = {
+  'darwin-arm64': 'aarch64-apple-darwin',
+  'darwin-x64': 'x86_64-apple-darwin'
+}
 export const browserCookieReaderResources = path.join(root, 'resources', 'browser-cookie-reader')
+export const browserCookieReaderCacheInputs = {
+  name: 'browser-cookie-reader',
+  root,
+  targets: TARGETS,
+  inputs: [
+    path.join(native, 'source.json'),
+    path.join(native, 'embedded.patch'),
+    ...LICENSES.map((name) => path.join(native, name)),
+    fileURLToPath(import.meta.url),
+    fileURLToPath(new URL('./native-resource-cache.mjs', import.meta.url))
+  ]
+}
 
 export function verifyBrowserCookieReader(directory, target = {}) {
   const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'))
   if (
     manifest.revision !== source.revision ||
+    manifest.archiveSha256 !== source.archiveSha256 ||
     manifest.version !== source.version ||
     manifest.patchSha256 !== patchSha256() ||
     manifest.rust !== source.rust
@@ -23,7 +42,8 @@ export function verifyBrowserCookieReader(directory, target = {}) {
     throw new Error('browser-cookie-reader source identity mismatch')
   if (
     (target.platform && target.platform !== manifest.platform) ||
-    (target.arch && target.arch !== manifest.arch)
+    (target.arch && target.arch !== manifest.arch) ||
+    manifest.target !== TARGETS[`${manifest.platform}-${manifest.arch}`]
   )
     throw new Error('browser-cookie-reader target mismatch')
   const binary = 'rookie-cookies.node'
@@ -40,6 +60,12 @@ export function verifyBrowserCookieReader(directory, target = {}) {
     if (!fs.lstatSync(location).isFile() || sha256(fs.readFileSync(location)) !== file.sha256)
       throw new Error(`Invalid browser-cookie-reader resource: ${file.path}`)
   }
+  for (const name of LICENSES)
+    if (
+      manifest.files.find((file) => file.path === name).sha256 !==
+      sha256(fs.readFileSync(path.join(native, name)))
+    )
+      throw new Error(`browser-cookie-reader license input mismatch: ${name}`)
   if (manifest.buildId !== sha256(JSON.stringify(manifest.files)))
     throw new Error('browser-cookie-reader build identity mismatch')
   if (
@@ -68,14 +94,17 @@ export async function buildBrowserCookieReader({
     fs.rmSync(browserCookieReaderResources, { recursive: true, force: true })
     return
   }
-  try {
-    verifyBrowserCookieReader(browserCookieReaderResources, { platform, arch })
+  if (
+    reuseVerifiedResource({
+      name: 'browser-cookie-reader',
+      directory: browserCookieReaderResources,
+      verify: verifyBrowserCookieReader,
+      target: { platform, arch }
+    })
+  )
     return
-  } catch {}
-  const target = {
-    'darwin-arm64': 'aarch64-apple-darwin',
-    'darwin-x64': 'x86_64-apple-darwin'
-  }[`${platform}-${arch}`]
+  const started = performance.now()
+  const target = TARGETS[`${platform}-${arch}`]
   if (!target) throw new Error(`Unsupported browser-cookie-reader target: ${platform}-${arch}`)
   const compiler = spawnSync('rustc', ['--version'], { encoding: 'utf8' })
   if (compiler.status !== 0 || !compiler.stdout.startsWith(`rustc ${source.rust} `))
@@ -144,7 +173,8 @@ export async function buildBrowserCookieReader({
     path.join(browserCookieReaderResources, 'manifest.json'),
     `${JSON.stringify({ ...source, platform, arch, target, patchSha256: digest, files, buildId: sha256(JSON.stringify(files)) }, null, 2)}\n`
   )
-  verifyBrowserCookieReader(browserCookieReaderResources, { platform, arch })
+  const manifest = verifyBrowserCookieReader(browserCookieReaderResources, { platform, arch })
+  recordNativeBuild('browser-cookie-reader', manifest, Math.round(performance.now() - started))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))

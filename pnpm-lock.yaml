@@ -128,8 +128,8 @@ catalogs:
       specifier: 0.10.4
       version: 0.10.4
     cc-safety-net:
-      specifier: 2.6.10
-      version: 2.6.10
+      specifier: 2.6.12
+      version: 2.6.12
     pi-skillful:
       specifier: 0.4.0
       version: 0.4.0
@@ -1140,7 +1140,7 @@ importers:
         version: link:../acp-extension-core
       cc-safety-net:
         specifier: catalog:pi
-        version: 2.6.10
+        version: 2.6.12
       pi-skillful:
         specifier: catalog:pi
         version: 0.4.0(@earendil-works/pi-coding-agent@1.0.4(@aws-sdk/credential-provider-node@3.972.83)(@modelcontextprotocol/sdk@1.29.0(zod@4.3.6))(@smithy/signature-v4@5.7.3)(zod@4.3.6))(@earendil-works/pi-tui@1.0.4)
@@ -6668,8 +6668,8 @@ packages:
   caniuse-lite@1.0.30001769:
     resolution: {integrity: sha512-BCfFL1sHijQlBGWBMuJyhZUhzo7wer5sVj9hqekB/7xn0Ypy+pER/edCYQm4exbXj4WiySGp40P8UuTh6w1srg==}
 
-  cc-safety-net@2.6.10:
-    resolution: {integrity: sha512-pG208ywF+9IEoJoZKeMNm51x9Eu7FXusJGucNBOm1PwCyOk3JDHvdD7JSlsmsFIsHC9ewgbpMwIn9sSJGmiA9w==}
+  cc-safety-net@2.6.12:
+    resolution: {integrity: sha512-+mdu6m/EDx671B2Hh4y4j3t0UQXz7ElQuQjCdLLkCJJfcvU95Hi+5pyniSLHWtIOT7vfqtH74fx2Y9NtIovt5g==}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -18168,7 +18168,7 @@ snapshots:
 
   caniuse-lite@1.0.30001769: {}
 
-  cc-safety-net@2.6.10: {}
+  cc-safety-net@2.6.12: {}
 
   ccount@2.0.1: {}
 

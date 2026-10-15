@@ -4861,15 +4861,16 @@ export class SessionExecutionService {
       dispatchStartPatch.fromFeedbackPostId = fromFeedbackPostId;
     }
 
-    void this.deps.maybeGenerateAndStoreSessionTitle(
-      sessionId,
-      sessionConfig.agentCliType,
-      sessionConfig.agentType,
-      agentConfig.prompt,
-      env,
-      acpSessionConfig.customAcp,
-      acpSessionConfig.runtimeOverrides
-    );
+    if (sessionConfig.agentType !== 'molly')
+      void this.deps.maybeGenerateAndStoreSessionTitle(
+        sessionId,
+        sessionConfig.agentCliType,
+        sessionConfig.agentType,
+        agentConfig.prompt,
+        env,
+        acpSessionConfig.customAcp,
+        acpSessionConfig.runtimeOverrides
+      );
 
     const self = this;
     const turnErrorContext: VisibleSessionTurnUnhandledErrorContext = {

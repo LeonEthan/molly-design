@@ -460,12 +460,16 @@ export function focusMainWindow(window: BrowserWindow, options: { steal?: boolea
   if (pendingInitialMaximize.delete(window)) {
     window.maximize()
   }
+  if (options.steal === false) {
+    if (!window.isVisible()) {
+      window.showInactive()
+    }
+    return
+  }
   if (!window.isVisible()) {
     window.show()
   }
-  if (options.steal !== false) {
-    app.focus({ steal: true })
-  }
+  app.focus({ steal: true })
   window.focus()
 }
 

@@ -45,7 +45,10 @@
         "workspace initialization completes",
         "session composer is editable"
       ],
-      "cleanup": ["desktop process tree exits", "isolated endpoint can be rebound"],
+      "cleanup": [
+        "desktop process tree exits",
+        "isolated endpoint can be rebound"
+      ],
       "coverage": {
         "renderer": "Intro and local entry",
         "electronIpc": "Real window and invoke bridge",
@@ -101,7 +104,10 @@
         "the held model request is cancelled after Stop",
         "Session disappears after permanent deletion"
       ],
-      "cleanup": ["model request is cancelled", "Session durable state is deleted"],
+      "cleanup": [
+        "model request is cancelled",
+        "Session durable state is deleted"
+      ],
       "coverage": {
         "renderer": "Session lifecycle",
         "electronIpc": "Real window and invoke bridge",
@@ -116,7 +122,9 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": ["session"],
+      "scoutJourneys": [
+        "session"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 2
     },
@@ -130,7 +138,10 @@
       "feature": "src/features/lifecycle.feature",
       "fixture": "synthetic-git-and-scripted-model",
       "fingerprint": "c52ffe7a131dace94ba899f939a931363256f1e5ba9ece30d6c7590a61912393",
-      "ownerPaths": ["apps/cli/src/session/", "packages/components/src/components/sessions/"],
+      "ownerPaths": [
+        "apps/cli/src/session/",
+        "packages/components/src/components/sessions/"
+      ],
       "actions": [
         {
           "id": "model.seedScriptedConnection"
@@ -152,7 +163,10 @@
         "Session completes its scripted model turn",
         "permanent delete releases Session resources and preserves the project directory"
       ],
-      "cleanup": ["model turn completes", "project directory remains intact"],
+      "cleanup": [
+        "model turn completes",
+        "project directory remains intact"
+      ],
       "coverage": {
         "renderer": "Work lifecycle",
         "electronIpc": "Real window and IPC",
@@ -167,7 +181,9 @@
         "escapedDefect": false
       },
       "freshness": 5,
-      "scoutJourneys": ["work"],
+      "scoutJourneys": [
+        "work"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 3
     },
@@ -224,6 +240,62 @@
       "estimatedMinutes": 2
     },
     {
+      "id": "MOLLY-BROWSER-003",
+      "state": "active",
+      "priority": "P1",
+      "runtime": "none",
+      "title": "Website accounts and the browser import dialog keep only essential copy",
+      "owner": "embedded-browser",
+      "feature": "src/features/browser-import.feature",
+      "fixture": "fresh-local-workspace",
+      "fingerprint": "db87cd4adc5c9eac7c28dca6e3b6aaeff5b8f9378fad309089bbc90c1a437a25",
+      "ownerPaths": [
+        "packages/components/src/components/settings/browser-account-import-dialog.tsx",
+        "packages/components/src/components/settings/browser-accounts-setting.tsx",
+        "apps/electron/src/main/services/public-browser-service.ts"
+      ],
+      "actions": [
+        {
+          "id": "desktop.launchFresh"
+        },
+        {
+          "id": "onboarding.skipAgentConfiguration"
+        },
+        {
+          "id": "settings.openWebsiteAccounts"
+        },
+        {
+          "id": "browserImport.openAndCancelDialog"
+        }
+      ],
+      "checkpoints": [
+        "Website accounts shows one line, Import and Clear",
+        "the import dialog shows only its title, profile picker, website list and Import",
+        "cancelling closes the dialog without reading a browser"
+      ],
+      "cleanup": [
+        "desktop process tree exits",
+        "isolated workspace and profile are removed"
+      ],
+      "coverage": {
+        "renderer": "Website accounts settings and the import dialog copy",
+        "electronIpc": "Real publicBrowser account summary and import source listing",
+        "bundledCli": "Real owned runtime (not exercised by the import)",
+        "durableState": "Isolated profile only; no cookie row is read or written",
+        "externalWire": "None"
+      },
+      "signals": {
+        "criticality": 4,
+        "boundaryRisk": 4,
+        "changeFrequency": 4,
+        "escapedDefect": true
+      },
+      "freshness": 5,
+      "scoutJourneys": [],
+      "blockedReason": null,
+      "estimatedMinutes": 2
+    },
+    {
       "id": "MOLLY-MCP-001",
       "state": "backlog",
       "priority": "P1",
@@ -261,7 +333,10 @@
         "driving turn carries the explicit MCP selection into ACP startup",
         "catalog entry is removed without changing prior turn input"
       ],
-      "cleanup": ["synthetic MCP process exits", "workspace MCP catalog entry is deleted"],
+      "cleanup": [
+        "synthetic MCP process exits",
+        "workspace MCP catalog entry is deleted"
+      ],
       "coverage": {
         "renderer": "MCP settings and composer selection",
         "electronIpc": "Real window and workspace RPC",
@@ -281,7 +356,9 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": ["session"],
+      "scoutJourneys": [
+        "session"
+      ],
       "blockedReason": null,
       "estimatedMinutes": 6
     },
@@ -321,7 +398,10 @@
         "fork records its origin and owns an independent worktree",
         "source Session remains unchanged when the fork is deleted"
       ],
-      "cleanup": ["fork ACP process exits", "fork worktree and Session are deleted"],
+      "cleanup": [
+        "fork ACP process exits",
+        "fork worktree and Session are deleted"
+      ],
       "coverage": {
         "renderer": "Session fork destination and origin",
         "electronIpc": "Real window and Session RPC",
@@ -341,7 +421,10 @@
         "escapedDefect": false
       },
       "freshness": 4,
-      "scoutJourneys": ["session", "work"],
+      "scoutJourneys": [
+        "session",
+        "work"
+      ],
       "blockedReason": "Design Sessions expose no worktree creation path: creation has no worktree selector and the embedded engine advertises no sessionFork capability, so the fork destination menu never renders. The scripted-ACP fixture premise retired with the legacy harness; re-author against the scripted model wire if a product worktree path returns.",
       "estimatedMinutes": 8
     }

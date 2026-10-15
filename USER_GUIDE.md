@@ -130,16 +130,19 @@ In a design session, the `molly_browser` tools control only the page in Molly's 
 
 Open **Settings → Website accounts → Import from browser…**, the Browser sidebar's
 **⋯ → Import from browser…**, or the Pinterest item in Settings → AI models. Choose
-a browser, then **Import**. Molly reads its profiles after that click and requests
-system access when needed. One profile continues automatically; if several exist,
-choose the intended profile in the same dialog and **Import**. The website list starts
+a browser; Molly lists its profiles as soon as the dialog opens and macOS may ask
+for browser-data access then. Pick the profile you are signed in with (a single
+profile is shown by name), then **Import**; nothing is read before you click it. The
+result lists, per website, how many cookies were discovered, imported, skipped and
+failed. The website list starts
 collapsed with all 27 design and commerce platforms selected; expand it to deselect
 websites or inspect the included domains. It resets on each opening. Only Cookie
 login data is transferred; there is no password, history or extension import.
 
 Import supports Chrome, Edge, Brave, Arc, Vivaldi, Opera and Chromium on macOS with
-secure storage. The source browser may stay open. Unpackaged development imports
-last until Molly quits; persistent import requires a stably signed package.
+secure storage. The source browser may stay open. Unpackaged development builds
+keep imports in their own persisted session; packaged import requires a stably
+signed package.
 macOS may ask for browser-data and Keychain access. Enter your Mac password only
 in the system prompt, which is requested by Molly itself. A retained Keychain grant
 can reduce subsequent prompts, but system policy and changed signatures may prompt
@@ -150,8 +153,8 @@ permanent access for this flow.
 When you approve a system prompt while import is pending, it continues automatically.
 An OS denial or cancellation retains your selections for retry. Closing the dialog
 resets its website choices the next time you open it. If macOS has blocked
-browser-data access, the dialog returns to its ready state without a message and
-keeps your browser, profile and website selections; click **Import** again to retry.
+browser-data access, the dialog shows no profiles and no message; allow access
+yourself, then return to the window or click **Import** to list profiles again.
 Molly does not automatically retry a denied request, and macOS may not prompt again
 after a denial — allow Molly under **System Settings → Privacy & Security → App Data**
 yourself first. Keychain denial and other read failures show their own reason.

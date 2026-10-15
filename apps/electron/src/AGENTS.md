@@ -77,7 +77,7 @@ native-dependency, and OSS-composition rules stay in `apps/electron/AGENTS.md`.
   cookies, or a target id. Native page downloads remain available; only
   `save_image` publishes selected, decoded image bytes to design assets.
 - Browser pages share Molly's partition. macOS persistence/packaged import requires
-  stable signing; unpackaged development imports into memory. Import requires
+  stable signing; unpackaged development has its own persisted partition. Import requires
   secure storage, a selected profile and curated websites. Load only the sealed
   native reader; request Keychain access inside Molly. Values stay in main.
   Revoke reads on owner loss, isolate writers, verify merge/recovery. Manual

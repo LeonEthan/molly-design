@@ -102,16 +102,17 @@ export const ACCOUNT_IMPORT_BROWSERS = [
   'chromium',
 ] as const;
 export type AccountImportBrowserId = (typeof ACCOUNT_IMPORT_BROWSERS)[number];
-export const ElectronBrowserImportProfilesInputSchema = z
-  .object({ browserId: z.enum(ACCOUNT_IMPORT_BROWSERS) })
-  .strict();
 export const ElectronBrowserImportOperationInputSchema = z
   .object({ operationId: z.string().uuid() })
   .strict();
+export const ElectronBrowserImportProfilesInputSchema =
+  ElectronBrowserImportOperationInputSchema.extend({
+    browserId: z.enum(ACCOUNT_IMPORT_BROWSERS),
+  }).strict();
 export const ElectronBrowserAccountImportInputSchema =
   ElectronBrowserImportOperationInputSchema.extend({
     browserId: z.enum(ACCOUNT_IMPORT_BROWSERS),
-    profileId: z.string().min(1).max(512).optional(),
+    profileId: z.string().min(1).max(512),
     siteIds: z
       .array(z.enum(BROWSER_ACCOUNT_SITE_IDS))
       .min(1)
@@ -122,10 +123,8 @@ export type ElectronBrowserAccountImportInput = z.infer<
   typeof ElectronBrowserAccountImportInputSchema
 >;
 export type ElectronBrowserAccountSummary = {
-  persistent: boolean;
   importAvailable: boolean;
   importUnavailableReason?: 'macos-required' | 'signing-required' | 'secure-storage-unavailable';
-  cookieCount: number;
   sites: Array<{ siteId: BrowserAccountSiteId; cookieCount: number }>;
   recoveryRequired?: boolean;
 };
@@ -133,17 +132,14 @@ export type ElectronBrowserProfileChoice = { id: string; name: string; isDefault
 export type ElectronBrowserImportSources = {
   sources: Array<{ browserId: AccountImportBrowserId; browserName: string }>;
 };
-export type ElectronBrowserImportReport = {
+export type ElectronBrowserImportSiteReport = {
+  siteId: BrowserAccountSiteId;
+  discovered: number;
   imported: number;
-  skippedExpired: number;
-  skippedPartitioned: number;
-  sites: Array<{
-    siteId: BrowserAccountSiteId;
-    imported: number;
-    skippedExpired: number;
-    skippedPartitioned: number;
-  }>;
+  skipped: number;
+  failed: number;
 };
+export type ElectronBrowserImportReport = { sites: ElectronBrowserImportSiteReport[] };
 export type BrowserAccountImportErrorCode =
   | 'cancelled'
   | 'busy'
@@ -153,6 +149,7 @@ export type BrowserAccountImportErrorCode =
   | 'source-incomplete'
   | 'source-too-large'
   | 'source-invalid'
+  | 'profile-changed'
   | 'no-cookies'
   | 'isolation-failed'
   | 'cookie-capacity'
@@ -162,6 +159,8 @@ export type BrowserAccountImportErrorCode =
   | 'unavailable';
 export type ElectronBrowserImportResult =
   | { ok: true; report: ElectronBrowserImportReport }
+  | { ok: false; error: BrowserAccountImportErrorCode };
+export type ElectronBrowserProfilesResult =
   | { ok: true; profiles: ElectronBrowserProfileChoice[] }
   | { ok: false; error: BrowserAccountImportErrorCode };
 export type ElectronBrowserImportCancelResult = 'cancelled' | 'finishing' | 'idle';

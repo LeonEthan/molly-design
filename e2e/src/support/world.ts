@@ -4,6 +4,7 @@ import { OnboardingPage } from './pages/onboarding-page.js';
 import { SessionPage } from './pages/session-page.js';
 import { WorkSessionPage, type WorkSessionResources } from './pages/work-session-page.js';
 import { BrowserNavigationPage } from './pages/browser-navigation-page.js';
+import { BrowserImportPage } from './pages/browser-import-page.js';
 import { WorkSessionFixture, type ScriptedRuntimeEvent } from './fixtures/work-session-fixture.js';
 import { createScenarioArtifacts, type ScenarioArtifacts } from './world-utils.js';
 
@@ -14,6 +15,7 @@ export class MollyWorld extends World {
   sessionPage: SessionPage | null = null;
   workPage: WorkSessionPage | null = null;
   browserNavigationPage: BrowserNavigationPage | null = null;
+  browserImportPage: BrowserImportPage | null = null;
   workFixture: WorkSessionFixture | null = null;
   activeRuntimeEvent: ScriptedRuntimeEvent | null = null;
   workResources: WorkSessionResources | null = null;
@@ -29,6 +31,7 @@ export class MollyWorld extends World {
     if (!this.harness.page) throw new Error('Electron did not open a main window');
     this.onboarding = new OnboardingPage(this.harness.page);
     this.workPage = new WorkSessionPage(this.harness.page);
+    this.browserImportPage = new BrowserImportPage(this.harness.page);
   }
 
   async configureScriptedAgent(): Promise<void> {

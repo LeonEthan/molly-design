@@ -2,7 +2,11 @@ import assert from 'node:assert/strict'
 import { EventEmitter } from 'node:events'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
+import { existsSync } from 'node:fs'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { compileFunction } from 'node:vm'
 
 const require = createRequire(import.meta.url)
@@ -41,11 +45,15 @@ const sourceCookie = {
 const source = () => ({
   cookies: [sourceCookie],
   report: {
-    imported: 1,
-    skippedExpired: 0,
-    skippedPartitioned: 0,
-    sites: [{ siteId: 'pinterest', imported: 1, skippedExpired: 0, skippedPartitioned: 0 }]
+    sites: [{ siteId: 'pinterest', discovered: 1, imported: 1, skipped: 0, failed: 0 }]
   }
+})
+const listed = (id, name, path = `/synthetic/chrome/${id}`) => ({
+  id,
+  name,
+  isDefault: id === 'Default',
+  path,
+  sources: [`${path}/Network/Cookies`]
 })
 const input = {
   operationId: 'a0100000-0000-4000-8000-000000000001',
@@ -75,11 +83,13 @@ function fixture({
   secure = true,
   owner = browserWindow(),
   pauseActiveRuns = async () => [],
-  listProfiles = async () => [{ id: 'Default', name: 'Synthetic profile', isDefault: true }],
+  listFirst = true,
+  listProfiles = async () => [listed('Default', 'Synthetic profile')],
   readSource = async () => source(),
   write = async () => {}
 } = {}) {
   const events = []
+  const copyEvents = []
   let rows = []
   const requests = {}
   const browserSession = {
@@ -151,7 +161,11 @@ function fixture({
             sources: [{ browserId: 'chrome', browserName: 'Google Chrome' }]
           }),
           listImportProfiles: listProfiles,
-          readBrowserProfileCookies: readSource
+          readBrowserProfileCookies: readSource,
+          removeImportCopies: () => copyEvents.push('removed'),
+          sweepStaleImportCopies: async () => {
+            copyEvents.push('swept')
+          }
         }
       if (name === './browser-account-isolation')
         return {
@@ -182,10 +196,18 @@ function fixture({
     { ...process, platform }
   )
   const service = new module.exports.PublicBrowserService(() => owner, pauseActiveRuns)
+  if (listFirst) {
+    const importBrowserAccount = service.importBrowserAccount.bind(service)
+    service.importBrowserAccount = async (request) => {
+      await service.getImportProfiles(request.browserId, `listing-${request.operationId}`)
+      return importBrowserAccount(request)
+    }
+  }
   return {
     service,
     owner,
     events,
+    copyEvents,
     requests,
     rows: () => structuredClone(rows),
     partition: module.exports.publicBrowserPartition
@@ -193,17 +215,18 @@ function fixture({
 }
 
 for (const options of [{}, { packaged: true, signed: true }])
-  void test('imports locally with the existing signed or development partition policy', async () => {
+  void test('imports into a persisted partition in development and in a signed package', async () => {
     const context = fixture(options)
     const summary = await context.service.getAccountSummary()
     assert.equal(summary.importAvailable, true)
-    assert.equal(summary.persistent, Boolean(options.packaged))
     assert.equal(
       context.partition(),
-      options.packaged ? 'persist:molly-public-browser-v1' : 'molly-public-browser-v1'
+      options.packaged ? 'persist:molly-public-browser-v1' : 'persist:molly-public-browser-dev-v1'
     )
     const report = await context.service.importBrowserAccount(input)
-    assert.equal(report.imported, 1)
+    assert.deepEqual(report.sites, [
+      { siteId: 'pinterest', discovered: 1, imported: 1, skipped: 0, failed: 0 }
+    ])
     assert.equal(context.rows()[0].value, sourceCookie.value)
     assert.equal(
       (await context.service.getAccountSummary()).sites.find((site) => site.siteId === 'pinterest')
@@ -212,6 +235,11 @@ for (const options of [{}, { packaged: true, signed: true }])
     )
     assert.equal(JSON.stringify(report).includes(sourceCookie.value), false)
   })
+
+void test('a packaged ad-hoc macOS build keeps the in-memory partition', () => {
+  const context = fixture({ packaged: true, signed: false })
+  assert.equal(context.partition(), 'molly-public-browser-v1')
+})
 
 for (const [options, reason] of [
   [{ secure: false }, 'secure-storage-unavailable'],
@@ -226,72 +254,100 @@ for (const [options, reason] of [
     assert.deepEqual(rows(), [])
   })
 
-void test('renderer supplied profiles must exist in a fresh main-process listing', async () => {
-  const context = fixture()
-  assert.deepEqual(
-    await context.service.importBrowserAccount({ ...input, profileId: '/foreign/path' }),
-    { profiles: [{ id: 'Default', name: 'Synthetic profile', isDefault: true }] }
+void test('a renderer supplied profile must come from this process listing and match a fresh one', async () => {
+  const context = fixture({ listFirst: false })
+  await assert.rejects(context.service.importBrowserAccount(input), {
+    message: 'profile-changed'
+  })
+  await context.service.getImportProfiles('chrome', 'a0100000-0000-4000-8000-000000000009')
+  await assert.rejects(
+    context.service.importBrowserAccount({ ...input, profileId: '/foreign/path' }),
+    { message: 'profile-changed' }
   )
-  assert.deepEqual(context.events, [])
-})
-
-void test('a browser-only Import lists its one profile and continues the same request into cookie import', async () => {
-  const observed = []
-  const context = fixture({
-    listProfiles: async (browserId) => {
-      observed.push({ stage: 'profiles', browserId })
-      return [{ id: 'opaque-only-profile', name: 'Synthetic', isDefault: false }]
-    },
-    readSource: async (browserId, profileId, siteIds) => {
-      observed.push({ stage: 'cookies', browserId, profileId, siteIds })
-      return source()
-    }
-  })
-  const browserOnly = { ...input }
-  delete browserOnly.profileId
-  const report = await context.service.importBrowserAccount(browserOnly)
-  assert.equal(report.imported, 1)
-  assert.deepEqual(observed, [
-    { stage: 'profiles', browserId: 'chrome' },
-    {
-      stage: 'cookies',
-      browserId: 'chrome',
-      profileId: 'opaque-only-profile',
-      siteIds: ['pinterest']
-    }
-  ])
-  assert.equal(context.rows()[0].value, sourceCookie.value)
-})
-
-void test('multiple profiles return a choice without reading cookies and the chosen profile is revalidated', async () => {
-  const profiles = [
-    { id: 'Default', name: 'Synthetic personal', isDefault: true },
-    { id: 'work', name: 'Synthetic work', isDefault: false }
-  ]
-  let available = profiles
-  const context = fixture({
-    listProfiles: async () => available,
-    readSource: async (_browserId, profileId) => {
-      assert.equal(profileId, 'work')
-      return source()
-    }
-  })
-  const browserOnly = { ...input }
-  delete browserOnly.profileId
-  assert.deepEqual(await context.service.importBrowserAccount(browserOnly), { profiles })
   assert.deepEqual(context.events, [])
   assert.deepEqual(context.rows(), [])
-  available = [profiles[0]]
-  assert.deepEqual(await context.service.importBrowserAccount({ ...input, profileId: 'work' }), {
-    profiles: available
+})
+
+void test('listing returns every profile as choice metadata only and requests no cookies', async () => {
+  const observed = []
+  const context = fixture({
+    listFirst: false,
+    listProfiles: async (browserId) => {
+      observed.push({ stage: 'profiles', browserId })
+      return [
+        listed('Default', 'Synthetic personal'),
+        listed('Profile 1', 'Synthetic studio'),
+        listed('Profile 2', 'Synthetic work')
+      ]
+    },
+    readSource: async () => assert.fail('listing must not read cookies')
   })
-  assert.deepEqual(context.events, [])
-  available = [profiles[1]]
-  assert.equal(
-    (await context.service.importBrowserAccount({ ...input, profileId: 'work' })).imported,
-    1
+  const profiles = await context.service.getImportProfiles(
+    'chrome',
+    'a0100000-0000-4000-8000-000000000009'
   )
+  assert.deepEqual(profiles, [
+    { id: 'Default', name: 'Synthetic personal', isDefault: true },
+    { id: 'Profile 1', name: 'Synthetic studio', isDefault: false },
+    { id: 'Profile 2', name: 'Synthetic work', isDefault: false }
+  ])
+  assert.deepEqual(observed, [{ stage: 'profiles', browserId: 'chrome' }])
+  assert.deepEqual(context.events, [])
+  assert.deepEqual(context.rows(), [])
+})
+
+void test('only the chosen listed profile is read and a changed path is refused before any read', async () => {
+  const read = []
+  let current = [listed('Default', 'Synthetic personal'), listed('work', 'Synthetic work')]
+  const context = fixture({
+    listFirst: false,
+    listProfiles: async () => current,
+    readSource: async (_browserId, profile) => {
+      read.push(profile.id)
+      return source()
+    }
+  })
+  const operation = 'a0100000-0000-4000-8000-000000000009'
+  await context.service.getImportProfiles('chrome', operation)
+  current = [listed('Default', 'Synthetic personal'), listed('work', 'Synthetic work', '/moved')]
+  await assert.rejects(context.service.importBrowserAccount({ ...input, profileId: 'work' }), {
+    message: 'profile-changed'
+  })
+  current = [listed('Default', 'Synthetic personal')]
+  await assert.rejects(context.service.importBrowserAccount({ ...input, profileId: 'work' }), {
+    message: 'profile-changed'
+  })
+  assert.deepEqual(read, [])
+  assert.deepEqual(context.events, [])
+  assert.deepEqual(context.rows(), [])
+  current = [listed('Default', 'Synthetic personal'), listed('work', 'Synthetic work')]
+  await context.service.getImportProfiles('chrome', operation)
+  const report = await context.service.importBrowserAccount({ ...input, profileId: 'work' })
+  assert.equal(report.sites[0].imported, 1)
+  assert.deepEqual(read, ['work'])
   assert.equal(context.rows()[0].value, sourceCookie.value)
+})
+
+void test('a denied listing stays a typed silent error and re-enumerates after access is allowed', async () => {
+  let denied = true
+  const context = fixture({
+    listFirst: false,
+    listProfiles: async () => {
+      if (denied)
+        throw Object.assign(new Error('source-access-denied'), { code: 'source-access-denied' })
+      return [listed('Default', 'Synthetic')]
+    }
+  })
+  await assert.rejects(
+    context.service.getImportProfiles('chrome', 'a0100000-0000-4000-8000-000000000009'),
+    { message: 'source-access-denied' }
+  )
+  assert.deepEqual(context.events, [])
+  denied = false
+  assert.deepEqual(
+    await context.service.getImportProfiles('chrome', 'a0100000-0000-4000-8000-000000000010'),
+    [{ id: 'Default', name: 'Synthetic', isDefault: true }]
+  )
 })
 
 for (const ending of ['cancel', 'navigation', 'close', 'quit'])
@@ -299,6 +355,7 @@ for (const ending of ['cancel', 'navigation', 'close', 'quit'])
     const profiles = Promise.withResolvers(),
       started = Promise.withResolvers()
     const context = fixture({
+      listFirst: false,
       listProfiles: async () => {
         started.resolve()
         return profiles.promise
@@ -307,12 +364,11 @@ for (const ending of ['cancel', 'navigation', 'close', 'quit'])
         assert.fail('a revoked profile listing must not read cookies')
       }
     })
-    const browserOnly = { ...input }
-    delete browserOnly.profileId
-    const pending = context.service.importBrowserAccount(browserOnly)
+    const listingId = 'a0100000-0000-4000-8000-000000000009'
+    const pending = context.service.getImportProfiles('chrome', listingId)
     await started.promise
     if (ending === 'cancel')
-      assert.equal(context.service.cancelAccountImport(input.operationId), 'cancelled')
+      assert.equal(context.service.cancelAccountImport(listingId), 'cancelled')
     if (ending === 'navigation')
       context.owner.webContents.emit('did-start-navigation', {
         isMainFrame: true,
@@ -321,12 +377,27 @@ for (const ending of ['cancel', 'navigation', 'close', 'quit'])
     if (ending === 'close') context.owner.emit('closed')
     if (ending === 'quit') await context.service.shutdownForQuit()
     await assert.rejects(context.service.importBrowserAccount(input), { message: 'busy' })
-    await assert.rejects(context.service.getImportProfiles('chrome'), { message: 'busy' })
-    profiles.resolve([{ id: 'Default', name: 'Synthetic', isDefault: true }])
+    await assert.rejects(context.service.getImportProfiles('chrome', 'listing-two'), {
+      message: 'busy'
+    })
+    profiles.resolve([listed('Default', 'Synthetic')])
     await assert.rejects(pending, { message: 'cancelled' })
     assert.deepEqual(context.events, [])
     assert.deepEqual(context.rows(), [])
   })
+
+void test('a denied import read stays a typed silent error and leaves website data unchanged', async () => {
+  const context = fixture({
+    readSource: async () => {
+      throw Object.assign(new Error('source-access-denied'), { code: 'source-access-denied' })
+    }
+  })
+  await assert.rejects(context.service.importBrowserAccount(input), {
+    message: 'source-access-denied'
+  })
+  assert.deepEqual(context.events, [])
+  assert.deepEqual(context.rows(), [])
+})
 
 void test('an empty successful profile listing leaves website data unchanged and can be explicitly retried', async () => {
   let profiles = []
@@ -335,8 +406,8 @@ void test('an empty successful profile listing leaves website data unchanged and
     message: 'source-unavailable'
   })
   assert.deepEqual(context.events, [])
-  profiles = [{ id: 'Default', name: 'Synthetic', isDefault: true }]
-  assert.equal((await context.service.importBrowserAccount(input)).imported, 1)
+  profiles = [listed('Default', 'Synthetic')]
+  assert.equal((await context.service.importBrowserAccount(input)).sites[0].imported, 1)
 })
 
 for (const ending of ['cancel', 'navigation', 'close', 'quit'])
@@ -411,6 +482,58 @@ void test('native page destruction completes before isolation or any destination
   close()
   await importing
   assert.equal(context.rows().length, 1)
+})
+
+void test('quit waits for a revoked read to finish removing its private copy before exiting', async () => {
+  const read = Promise.withResolvers(),
+    started = Promise.withResolvers()
+  const directory = await mkdtemp(join(tmpdir(), 'molly-quit-copy-'))
+  await writeFile(join(directory, 'Cookies'), 'synthetic')
+  const context = fixture({
+    readSource: async () => {
+      try {
+        started.resolve()
+        return await read.promise
+      } finally {
+        await rm(directory, { recursive: true, force: true })
+      }
+    }
+  })
+  const pending = context.service.importBrowserAccount(input)
+  await started.promise
+  let finished = false
+  const quitting = context.service.shutdownForQuit().then(() => {
+    finished = true
+  })
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(finished, false)
+  assert.equal(existsSync(directory), true)
+  read.resolve(source())
+  await assert.rejects(pending, { message: 'cancelled' })
+  await quitting
+  assert.equal(existsSync(directory), false)
+  assert.deepEqual(context.copyEvents, ['swept', 'removed'])
+})
+
+void test('quit stops waiting for a native read that cannot settle and still removes tracked copies', async () => {
+  const started = Promise.withResolvers()
+  const context = fixture({
+    readSource: async () => {
+      started.resolve()
+      return new Promise(() => {})
+    }
+  })
+  void context.service.importBrowserAccount(input).catch(() => undefined)
+  await started.promise
+  mock.timers.enable({ apis: ['setTimeout'] })
+  try {
+    const quitting = context.service.shutdownForQuit()
+    mock.timers.tick(5000)
+    await quitting
+  } finally {
+    mock.timers.reset()
+  }
+  assert.deepEqual(context.copyEvents, ['swept', 'removed'])
 })
 
 void test('quit waits for an accepted write and clear removes all destination storage', async () => {

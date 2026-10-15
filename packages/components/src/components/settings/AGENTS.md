@@ -22,14 +22,13 @@ Preserve historical catalog fields when editing unrelated values.
 ## Layout and components
 
 - Website accounts reuse `BrowserAccountImportDialog` and the shared catalog, collapsed
-  and fully selected each opening. Opening discovers installed apps only; Import
-  prepares the chosen browser. One profile continues; multiple need explicit selection
-  in the same picker. No sign-in wizard or preview/confirm step. Send IDs only.
-- Denial keeps choices: a confirmed file-access denial returns to ready silently —
-  no error, settings link or auto-retry; other failures show their reason. Show real
-  authorization, unavailable reasons, finishing writes, skip counts; passwords stay in
-  system prompts, counts prove no sign-in. Clear covers all Molly website data. Keep
-  takeover/MFA and native surface coverage.
+  and fully selected each opening. Opening lists the browser's profiles (the OS
+  prompt); one is shown by name, several must be picked before Import. Results are
+  per-site found/imported/skipped/failed only. No sign-in wizard or preview. IDs only.
+- A confirmed OS denial leaves no profiles silently — no error, tutorial or link;
+  focus or Import re-lists. Other failures show their reason. Website accounts keep
+  one line, Import, Clear and per-site counts without a total; no tips or essays.
+  Clear covers all Molly website data. Keep takeover/MFA and native surface coverage.
 - Compatible models declare bounded row metadata; explain protocol, capabilities and missing
   tools. Saving probes nothing, selects no model, estimates no price. Native presets use SDK
   catalogs. Discovery sends one `GET /models` to the typed/stored destination; filters non-chat

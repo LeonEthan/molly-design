@@ -104,7 +104,8 @@ export function getPublicBrowserBridge() {
     destroy: (browserId: string) => pub.destroy({ browserId }),
     getAccountSummary: () => pub.getAccountSummary(),
     getImportSources: () => pub.getImportSources(),
-    getImportProfiles: (browserId: AccountImportBrowserId) => pub.getImportProfiles({ browserId }),
+    getImportProfiles: (browserId: AccountImportBrowserId, operationId: string) =>
+      pub.getImportProfiles({ browserId, operationId }),
     importBrowserAccount: (input: ElectronBrowserAccountImportInput) =>
       pub.importBrowserAccount(input),
     cancelAccountImport: (operationId: string) => pub.cancelAccountImport({ operationId }),

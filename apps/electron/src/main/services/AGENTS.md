@@ -104,13 +104,13 @@ input and await child exit before quitting. Closed workers never restart.
 
 ## Browser account imports
 
-Import reads metadata; one profile continues, multiple need selection. Preserve
-typed file/Keychain failures; EPERM denial stays silent in the dialog. Prepare
-before Agent pause/isolation. One raw profile read; main filters IDs, validates fields, keeps
-values/keys. Count CHIPS/expiry skips. Isolate pages/Workers/network; preflight quotas,
-merge exact identities, verify writes/rollback. Failed recovery holds browsing until
-explicit clearing. Revoke late reads; retain native leases until settled, drain
-writes on quit. Retry is explicit; never auto-resume.
+Opening lists profiles (cancellable); main re-lists, fails `profile-changed` if moved;
+discovery drops linked root/profile paths. Keep typed file/Keychain failures; EPERM/EACCES
+silent. Prepare before Agent pause/isolation. Read a private 0700 O_NOFOLLOW copy;
+extraction warnings are `source-incomplete`. Main filters IDs/fields, reports per-site
+counts. Isolate pages/Workers/network; preflight quotas, merge identities, verify
+writes/rollback. Failed recovery holds browsing until cleared. Quit awaits revoked
+reads (bounded), removes copies, drains writes.
 
 ## Agent browser driver
 

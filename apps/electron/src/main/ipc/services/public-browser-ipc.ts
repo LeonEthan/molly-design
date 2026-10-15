@@ -16,7 +16,8 @@ import {
   type ElectronPublicBrowserVisibilityInput,
   type ElectronBrowserAccountImportInput,
   type AccountImportBrowserId,
-  type ElectronBrowserImportResult
+  type ElectronBrowserImportResult,
+  type ElectronBrowserProfilesResult
 } from '@molly/shared/electron-ipc'
 import { getIpcServiceDeps } from '../ipc-service-deps'
 import { readLocalPlatformSnapshot } from '../../platform'
@@ -141,10 +142,8 @@ export class PublicBrowserIpc extends IpcService {
     assertTrustedSender()
     const input = ElectronBrowserAccountImportInputSchema.parse(raw)
     try {
-      const result = await getIpcServiceDeps().publicBrowserService.importBrowserAccount(input)
-      return 'profiles' in result
-        ? { ok: true, profiles: result.profiles }
-        : { ok: true, report: result }
+      const report = await getIpcServiceDeps().publicBrowserService.importBrowserAccount(input)
+      return { ok: true, report }
     } catch (error) {
       return { ok: false, error: error instanceof BrowserAccountError ? error.code : 'unavailable' }
     }
@@ -158,10 +157,21 @@ export class PublicBrowserIpc extends IpcService {
   }
 
   @IpcMethod()
-  async getImportProfiles(raw: { browserId: AccountImportBrowserId }) {
+  async getImportProfiles(raw: {
+    browserId: AccountImportBrowserId
+    operationId: string
+  }): Promise<ElectronBrowserProfilesResult> {
     assertTrustedSender()
-    const { browserId } = ElectronBrowserImportProfilesInputSchema.parse(raw)
-    return await getIpcServiceDeps().publicBrowserService.getImportProfiles(browserId)
+    const { browserId, operationId } = ElectronBrowserImportProfilesInputSchema.parse(raw)
+    try {
+      const profiles = await getIpcServiceDeps().publicBrowserService.getImportProfiles(
+        browserId,
+        operationId
+      )
+      return { ok: true, profiles }
+    } catch (error) {
+      return { ok: false, error: error instanceof BrowserAccountError ? error.code : 'unavailable' }
+    }
   }
 
   @IpcMethod()

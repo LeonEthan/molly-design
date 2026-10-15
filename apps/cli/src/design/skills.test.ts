@@ -349,7 +349,7 @@ describe('packaged design materials', () => {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
-      /stage 2 ran without\s+research[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one, and `generate` from the prompt alone only when\s+there is neither a source image nor a supplied reference[\s\S]*made without web research/
+      /stage 2 ran without\s+research[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one\. When there is neither a source image nor a\s+supplied reference, report the gap and stop[\s\S]*do not\s+`generate` from the prompt alone[\s\S]*image-conditioned[\s\S]*made without web research/
     );
     expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/

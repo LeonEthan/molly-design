@@ -174,9 +174,11 @@ palette") and that its objects, text and logos are not to be copied. Different
 options may use different inspiration images. When stage 2 ran without
 research (the user forbade networking) only the web-saved inspiration is absent:
 still use the inspected user-supplied style references, with the
-source image when there is one, and `generate` from the prompt alone only when
-there is neither a source image nor a supplied reference. Say in the options
-report that the options were made without web research. Stay within the
+source image when there is one. When there is neither a source image nor a
+supplied reference, report the gap and stop: offer no design options and do not
+`generate` from the prompt alone — options must stay image-conditioned. When
+options are shown after a no-research stage 2, say in the options report that
+they were made without web research. Stay within the
 connection's input limit in the `imagegen` Skill. An option that is recognizably
 one reference with new copy fails. A rendered blockout can steer an option's
 layout when words are not enough. Techniques are in

@@ -92,12 +92,19 @@ export async function listImportProfiles(
 
 const SIDECAR_SUFFIXES = ['-wal', '-shm'] as const
 
+function sourceFileError(error: unknown): BrowserAccountError {
+  const code = (error as NodeJS.ErrnoException).code
+  return new BrowserAccountError(
+    code === 'EPERM' || code === 'EACCES' ? 'source-access-denied' : 'source-unavailable'
+  )
+}
+
 async function inspectEntry(path: string, optional: boolean) {
   try {
     return await lstat(path)
   } catch (error) {
     if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') return null
-    throw new BrowserAccountError('source-unavailable')
+    throw sourceFileError(error)
   }
 }
 
@@ -164,12 +171,14 @@ async function copyRegularFile(source: string, destination: string): Promise<voi
   let handle
   try {
     handle = await open(source, constants.O_RDONLY | constants.O_NOFOLLOW)
-  } catch {
-    throw new BrowserAccountError('source-unavailable')
+  } catch (error) {
+    throw sourceFileError(error)
   }
   try {
     const opened = await handle.stat()
-    const named = await lstat(source)
+    const named = await lstat(source).catch((error: unknown) => {
+      throw sourceFileError(error)
+    })
     if (!opened.isFile() || opened.dev !== named.dev || opened.ino !== named.ino)
       throw new BrowserAccountError('source-unavailable')
     await pipeline(

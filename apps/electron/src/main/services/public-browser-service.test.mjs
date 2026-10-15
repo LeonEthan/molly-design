@@ -386,6 +386,19 @@ for (const ending of ['cancel', 'navigation', 'close', 'quit'])
     assert.deepEqual(context.rows(), [])
   })
 
+void test('a denied import read stays a typed silent error and leaves website data unchanged', async () => {
+  const context = fixture({
+    readSource: async () => {
+      throw Object.assign(new Error('source-access-denied'), { code: 'source-access-denied' })
+    }
+  })
+  await assert.rejects(context.service.importBrowserAccount(input), {
+    message: 'source-access-denied'
+  })
+  assert.deepEqual(context.events, [])
+  assert.deepEqual(context.rows(), [])
+})
+
 void test('an empty successful profile listing leaves website data unchanged and can be explicitly retried', async () => {
   let profiles = []
   const context = fixture({ listProfiles: async () => profiles })

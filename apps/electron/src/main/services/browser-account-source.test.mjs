@@ -1,6 +1,16 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript test fixtures. */
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -546,6 +556,136 @@ void test('a profile or Cookies database that disappeared or left its profile di
       assertRegularProfileFiles({ ...profile, path: join(chrome.root, 'Gone') }),
       { message: 'source-unavailable' }
     )
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+const denied = (code) => Object.assign(new Error(`synthetic ${code}`), { code })
+const modeBitsEnforced = process.platform !== 'win32' && process.getuid?.() !== 0
+const readWithEvents = (profile, events) =>
+  readBrowserProfileCookies(
+    'chrome',
+    profile,
+    input.siteIds,
+    new AbortController().signal,
+    readerFor(
+      { browserId: 'chrome', profileId: profile.id, warnings: [], detailedCookies: [] },
+      events
+    ),
+    () => now
+  )
+
+void test('EPERM while inspecting a Cookies database is a silent access denial, not an unavailable source', async (t) => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    const [source] = profile.sources
+    const fs = require('node:fs/promises')
+    const { lstat } = fs
+    t.mock.method(fs, 'lstat', async (path, ...rest) => {
+      if (path === source) throw denied('EPERM')
+      return lstat(path, ...rest)
+    })
+    const events = []
+    await assert.rejects(assertRegularProfileFiles(profile), { message: 'source-access-denied' })
+    await assert.rejects(readWithEvents(profile, events), { message: 'source-access-denied' })
+    assert.deepEqual(events, [])
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('EPERM while opening a Cookies database for copy is a silent access denial', async (t) => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    const [source] = profile.sources
+    const fs = require('node:fs/promises')
+    const { open } = fs
+    t.mock.method(fs, 'open', async (path, ...rest) => {
+      if (path === source) throw denied('EPERM')
+      return open(path, ...rest)
+    })
+    const events = []
+    await assert.rejects(readWithEvents(profile, events), { message: 'source-access-denied' })
+    assert.deepEqual(events, [])
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test('EPERM while re-checking an opened Cookies database is a silent access denial', async (t) => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    const [source] = profile.sources
+    const fs = require('node:fs/promises')
+    const { lstat, open } = fs
+    let opened = false
+    t.mock.method(fs, 'open', async (path, ...rest) => {
+      const handle = await open(path, ...rest)
+      if (path === source) opened = true
+      return handle
+    })
+    t.mock.method(fs, 'lstat', async (path, ...rest) => {
+      if (opened && path === source) throw denied('EPERM')
+      return lstat(path, ...rest)
+    })
+    const events = []
+    await assert.rejects(readWithEvents(profile, events), { message: 'source-access-denied' })
+    assert.deepEqual(events, [])
+  } finally {
+    await chrome.cleanup()
+  }
+})
+
+void test(
+  'EACCES while inspecting a Cookies database is a silent access denial',
+  { skip: !modeBitsEnforced && 'file modes are not enforced for root or on Windows' },
+  async () => {
+    const chrome = await syntheticChrome([['Default', 'Synthetic']])
+    const network = join(chrome.root, 'Default', 'Network')
+    try {
+      const profile = await listedProfile(chrome)
+      await chmod(network, 0)
+      await assert.rejects(assertRegularProfileFiles(profile), {
+        message: 'source-access-denied'
+      })
+    } finally {
+      await chmod(network, 0o700)
+      await chrome.cleanup()
+    }
+  }
+)
+
+void test(
+  'EACCES while opening a Cookies database for copy is a silent access denial',
+  { skip: !modeBitsEnforced && 'file modes are not enforced for root or on Windows' },
+  async () => {
+    const chrome = await syntheticChrome([['Default', 'Synthetic']])
+    const source = join(chrome.root, 'Default', 'Network', 'Cookies')
+    try {
+      const profile = await listedProfile(chrome)
+      await chmod(source, 0)
+      const events = []
+      await assert.rejects(readWithEvents(profile, events), { message: 'source-access-denied' })
+      assert.deepEqual(events, [])
+    } finally {
+      await chmod(source, 0o600)
+      await chrome.cleanup()
+    }
+  }
+)
+
+void test('a missing Cookies database stays source-unavailable on the copy path', async () => {
+  const chrome = await syntheticChrome([['Default', 'Synthetic']])
+  try {
+    const profile = await listedProfile(chrome)
+    await rm(profile.sources[0])
+    const events = []
+    await assert.rejects(readWithEvents(profile, events), { message: 'source-unavailable' })
+    assert.deepEqual(events, [])
   } finally {
     await chrome.cleanup()
   }

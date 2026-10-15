@@ -25,7 +25,7 @@ const shippedPackages = [
   ['@juicesharp/rpiv-ask-user-question', '2.12.0'],
   ['@zigai/pi-mention-skill', '0.10.4'],
   ['@ff-labs/pi-fff', '0.11.0'],
-  ['cc-safety-net', '2.6.10']
+  ['cc-safety-net', '2.6.12']
 ]
 
 for (const mode of [

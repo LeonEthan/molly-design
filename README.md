@@ -16,7 +16,7 @@ execution architecture with the Bento editor and one bundled Pi engine. Artwork,
 versions and conversations stay in local product storage. Model and image requests
 use the providers you explicitly configure; no Molly cloud account is required.
 
-## Current development build
+## Current release (v0.1.0)
 
 - Create and revise a single-canvas design through conversation or direct editing.
 - Automatically save manual edits, retain versions, reopen and export artwork.
@@ -24,16 +24,17 @@ use the providers you explicitly configure; no Molly cloud account is required.
   a separately configured connection and explicit model.
 - Keep editable BentoDoc artwork with a YAML projection for Agent authoring.
 
-**Release status:** development build; first-release target is **macOS Apple Silicon**.
-There is scoped installed-package evidence, but the complete migrated workflow,
-public signed/notarized distribution and two-version automatic upgrade acceptance
-are not complete. macOS Intel and Windows builds remain experimental. Linux desktop support is retired.
+**Release status:** **v0.1.0** is the current public release for **macOS Apple Silicon**.
+Download the Developer ID signed and notarized DMG from the
+[v0.1.0 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0).
+macOS Intel and Windows builds remain experimental. Linux desktop support is retired.
 See [tested journeys and limits](USER_GUIDE.md#release-status-and-support-limits).
 
 ## Get started
 
-For an available local DMG, follow the [installation guide](USER_GUIDE.md#install-the-macos-package).
-This repository does not yet claim an established public download channel.
+Download [`MollyDesign-0.1.0-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.0/MollyDesign-0.1.0-arm64.dmg)
+from the [v0.1.0 Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0), then follow the
+[installation guide](USER_GUIDE.md#install-the-macos-package).
 
 1. Open Settings → AI models → Models and add your provider connection.
 2. Create a canvas and explicitly select the connection, model and thinking level.

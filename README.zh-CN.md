@@ -14,22 +14,24 @@ Molly 基于 [Lody](https://github.com/LodyAI/Lody) 的桌面与执行架构，�
 编辑器和内置 Pi 引擎。作品、版本与会话使用本地产品存储；模型和图片请求发送到
 你明确配置的服务商，无需 Molly 云账户。
 
-## 当前开发版本
+## 当前发布版本（v0.1.0）
 
 - 通过对话或直接编辑创建、修改单画布设计。
 - 自动保存手工编辑，保存作品版本、重新打开并导出。
 - 使用自己的模型连接；图片生成与编辑可选，需单独配置连接和明确模型。
 - BentoDoc 是可编辑作品，YAML 是面向 Agent 的画稿投影。
 
-**发布状态：开发版本，首发目标为 macOS Apple Silicon。** 已有局部安装包验收证据，
-完整迁移旅程、公开签名/公证分发及两个真实版本间的自动升级验收仍未完成。
-macOS Intel、Windows 和 Linux 构建为实验性支持。
+**发布状态：v0.1.0 是面向 macOS Apple Silicon 的当前公开发布。**
+请从 [v0.1.0 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0)
+下载 Developer ID 签名并已公证的 DMG。
+macOS Intel、Windows 构建仍为实验性支持；Linux 桌面支持已退役。
 详见[已验证旅程与限制](USER_GUIDE.zh-CN.md#发布状态与支持限制)。
 
 ## 开始使用
 
-已有本地 DMG 时，按[安装指南](USER_GUIDE.zh-CN.md#安装-macos-安装包)操作。
-本仓库尚不宣称已建立公开下载通道。
+从 [v0.1.0 Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0) 下载
+[`MollyDesign-0.1.0-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.0/MollyDesign-0.1.0-arm64.dmg)，
+再按[安装指南](USER_GUIDE.zh-CN.md#安装-macos-安装包)操作。
 
 1. 在设置 → AI 模型 → 模型中添加服务商连接。
 2. 创建画布，明确选择连接、模型和思考级别。

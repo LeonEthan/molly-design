@@ -341,15 +341,16 @@ describe('packaged design materials', () => {
       /one focused browser pass on a design site: Pinterest when you observe\s+it signed in[\s\S]*imported cookies alone are not access/,
       /fewer than three relevant ones, keep\s+the ones you inspected \(at least one\) and name the shortfall in the options\s+report; never pad with uninspected results/,
       /individual images; result grids, search snippets and\s+page titles do not count/,
-      /persisted\s+one\s+to\s+three\s+inspected\s+inspiration\s+images\s+for\s+stage\s+3:\s+with\s+`save_image`\s+when\s+the\s+Molly\s+browser\s+tools\s+are\s+available,\s+otherwise\s+with\s+any\s+equivalent\s+visual\s+tool/,
+      /persisted\s+one\s+to\s+three\s+inspected\s+inspiration\s+images\s+for\s+stage\s+3:\s+with\s+`save_image`\s+when\s+that\s+tool\s+is\s+available,\s+otherwise\s+with\s+any\s+equivalent\s+visual\s+tool/,
       /kept three to six references, each with one named quality/,
-      /user forbids networking, respect it, report the gap and proceed/,
+      /user forbids networking, keep prompts and assets local: report the gap\s+and stop before any network call, including `molly_image` generation or editing/,
+      /user forbids only web research and permits remote image processing,\s+report the research gap and proceed without research using the available images/,
       /report the gap and stop:\s+offer no design options and invent no research/,
     ]) {
       expect(researchGate, String(rule)).toMatch(rule);
     }
     expect(entry).toMatch(
-      /stage 2 ran without\s+research[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one\. When there is neither a source image nor a\s+supplied reference, report the gap and stop[\s\S]*do not\s+`generate` from the prompt alone[\s\S]*image-conditioned[\s\S]*made without web research/
+      /stage 2 ran without\s+research because only web research was forbidden and remote image processing\s+was permitted,[\s\S]*still use the inspected user-supplied style references, with the\s+source image when there is one\. When there is neither a source image nor a\s+supplied reference, report the gap and stop[\s\S]*do not\s+`generate` from the prompt alone[\s\S]*image-conditioned[\s\S]*made without web research/
     );
     expect(entry).toMatch(
       /inspected source-page URLs[\s\S]*a search-results URL alone does not\s+count/
@@ -362,6 +363,7 @@ describe('packaged design materials', () => {
       /continue only\s+if the user then tells you to proceed without research/
     );
     expect(graphicText).not.toMatch(/waived\s+research/);
+    expect(graphicText).not.toMatch(/user forbade networking/);
     const browserResearch = readFileSync(
       path.join(graphic, 'references/browser-research.md'),
       'utf8'

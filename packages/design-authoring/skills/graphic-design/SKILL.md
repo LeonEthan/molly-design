@@ -139,7 +139,7 @@ these hold:
 - you opened and inspected individual images; result grids, search snippets and
   page titles do not count;
 - you persisted one to three inspected inspiration images for stage 3: with
-  `save_image` when the Molly browser tools are available, otherwise with any
+  `save_image` when that tool is available, otherwise with any
   equivalent visual tool you have that saves the inspected image to a local path;
 - you kept three to six references, each with one named quality (palette, type,
   crop and light, layout structure) and none taken as literal objects or finished
@@ -147,8 +147,11 @@ these hold:
   the ones you inspected (at least one) and name the shortfall in the options
   report; never pad with uninspected results.
 
-When the user forbids networking, respect it, report the gap and proceed without
-research. When the browser or network is unavailable, report the gap and stop:
+When the user forbids networking, keep prompts and assets local: report the gap
+and stop before any network call, including `molly_image` generation or editing.
+If the user forbids only web research and permits remote image processing,
+report the research gap and proceed without research using the available images.
+When the browser or network is unavailable, report the gap and stop:
 offer no design options and invent no research from search titles. Fact checks
 such as event dates are separate from inspiration research. The user's own
 direction stays the basis.
@@ -172,7 +175,8 @@ option: those saved in stage 2 and style references the user supplied and you
 inspected. Say in the prompt what each contributes ("image 2: its light and
 palette") and that its objects, text and logos are not to be copied. Different
 options may use different inspiration images. When stage 2 ran without
-research (the user forbade networking) only the web-saved inspiration is absent:
+research because only web research was forbidden and remote image processing
+was permitted, only the web-saved inspiration is absent:
 still use the inspected user-supplied style references, with the
 source image when there is one. When there is neither a source image nor a
 supplied reference, report the gap and stop: offer no design options and do not

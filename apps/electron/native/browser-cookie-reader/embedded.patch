@@ -1,5 +1,5 @@
 diff --git a/bindings/node/src/lib.rs b/bindings/node/src/lib.rs
-index 07ac445..7ab2fea 100644
+index 07ac445..f8f0967 100644
 --- a/bindings/node/src/lib.rs
 +++ b/bindings/node/src/lib.rs
 @@ -489,7 +489,7 @@ pub struct ExtractionReportObject {
@@ -7,7 +7,7 @@ index 07ac445..7ab2fea 100644
  #[napi]
  pub fn version() -> Result<String> {
 -  Ok(rookie_cookies::version())
-+  Ok("0.6.0+molly-native-keychain.7".to_owned())
++  Ok("0.6.0+molly-native-keychain.8".to_owned())
  }
  
  fn cookies_to_js(cookies: Vec<Cookie>) -> Result<Vec<CookieObject>> {
@@ -361,7 +361,7 @@ index 8fa0abe..10944db 100644
  
  fn browser_definition<'a>(
 diff --git a/rookie-rs/src/browser/registry/chromium.rs b/rookie-rs/src/browser/registry/chromium.rs
-index f0d22b1..64c2e79 100644
+index f0d22b1..deaefd8 100644
 --- a/rookie-rs/src/browser/registry/chromium.rs
 +++ b/rookie-rs/src/browser/registry/chromium.rs
 @@ -228,6 +228,15 @@ pub(super) struct ChromiumDiscovery {
@@ -440,7 +440,7 @@ index f0d22b1..64c2e79 100644
              resolved,
              error.to_string(),
 -          ));
-+          ).with_access_denied(error.raw_os_error() == Some(1)));
++          ).with_access_denied(matches!(error.raw_os_error(), Some(1 | 13))));
            continue;
          }
        }
@@ -508,7 +508,7 @@ index f0d22b1..64c2e79 100644
 +fn molly_permission_denied(error: &anyhow::Error) -> bool {
 +  error.chain().any(|cause| {
 +    cause.downcast_ref::<std::io::Error>()
-+      .is_some_and(|error| error.raw_os_error() == Some(1))
++      .is_some_and(|error| matches!(error.raw_os_error(), Some(1 | 13)))
 +  })
 +}
 +
@@ -516,7 +516,7 @@ index f0d22b1..64c2e79 100644
  /// Chromium-family browser.
  fn chromium_registry_report(
 diff --git a/rookie-rs/src/browser/registry/chromium/tests.rs b/rookie-rs/src/browser/registry/chromium/tests.rs
-index c5f0421..22f067e 100644
+index c5f0421..f88b47f 100644
 --- a/rookie-rs/src/browser/registry/chromium/tests.rs
 +++ b/rookie-rs/src/browser/registry/chromium/tests.rs
 @@ -1016,6 +1016,85 @@ fn generic_chromium_discovery_handles_default_and_flat_existing_browser_layouts(
@@ -605,25 +605,31 @@ index c5f0421..22f067e 100644
  #[test]
  fn wildcard_roots_are_sorted_before_generic_discovery() {
    let temp = TempDir::new("wildcard-roots");
-@@ -1544,6 +1623,42 @@ fn inaccessible_root_metadata_is_reported_while_not_found_is_silent() {
+@@ -1544,6 +1623,50 @@ fn inaccessible_root_metadata_is_reported_while_not_found_is_silent() {
    assert!(profiles_for_listing("chrome", discovery).is_err());
  }
  
 +#[test]
-+fn molly_profile_access_classifies_eperm_and_keeps_eacces_generic() {
-+  for errno in [1, 13] {
-+    let temp = TempDir::new("molly-profile-access-denial");
-+    let real_context = current_context(temp.path().to_path_buf());
-+    let root = channel_root(&real_context, "stable");
-+    std::fs::create_dir_all(&root).expect("create synthetic root");
-+    let canonical_root = root.canonicalize().expect("canonical root");
-+    let context = with_test_fs(real_context, TestDiscoveryFs {
-+      denied_read_dir_errno: Some((canonical_root, errno)),
-+      ..TestDiscoveryFs::default()
-+    });
-+    let discovery = discover_browser_with_context(&context, "chrome").unwrap();
-+    let error = crate::error::map_job_error(profiles_for_listing("chrome", discovery).unwrap_err());
-+    assert_eq!(error.code(), if errno == 1 { "molly_source_access_denied" } else { "engine_failure" });
++fn molly_profile_access_classifies_eperm_and_eacces() {
++  for errno in [1, 13, 5] {
++    for metadata in [false, true] {
++      let temp = TempDir::new("molly-profile-access-denial");
++      let real_context = current_context(temp.path().to_path_buf());
++      let root = channel_root(&real_context, "stable");
++      std::fs::create_dir_all(&root).expect("create synthetic root");
++      let canonical_root = root.canonicalize().expect("canonical root");
++      let mut fs = TestDiscoveryFs::default();
++      if metadata {
++        fs.denied_metadata_errno = Some((root, errno));
++      } else {
++        fs.denied_read_dir_errno = Some((canonical_root, errno));
++      }
++      let context = with_test_fs(real_context, fs);
++      let discovery = discover_browser_with_context(&context, "chrome").unwrap();
++      let error = crate::error::map_job_error(profiles_for_listing("chrome", discovery).unwrap_err());
++      let expected = if matches!(errno, 1 | 13) { "molly_source_access_denied" } else { "engine_failure" };
++      assert_eq!(error.code(), expected, "errno={errno}, metadata={metadata}");
++    }
 +  }
 +}
 +
@@ -635,21 +641,23 @@ index c5f0421..22f067e 100644
 +  seed_cookie(&stable.join("Default"), true, "synthetic", "fixture-only");
 +  let beta = channel_root(&real_context, "beta");
 +  std::fs::create_dir_all(&beta).unwrap();
-+  let context = with_test_fs(real_context, TestDiscoveryFs {
-+    denied_read_dir_errno: Some((beta.canonicalize().unwrap(), 1)),
-+    ..TestDiscoveryFs::default()
-+  });
-+  let discovery = discover_browser_with_context(&context, "chrome").unwrap();
-+  let profiles = profiles_for_listing("chrome", discovery).unwrap();
-+  assert_eq!(profiles.len(), 1);
-+  assert_eq!(profiles[0].path, stable.join("Default").canonicalize().unwrap());
++  for errno in [1, 13] {
++    let context = with_test_fs(current_context(temp.path().to_path_buf()), TestDiscoveryFs {
++      denied_read_dir_errno: Some((beta.canonicalize().unwrap(), errno)),
++      ..TestDiscoveryFs::default()
++    });
++    let discovery = discover_browser_with_context(&context, "chrome").unwrap();
++    let profiles = profiles_for_listing("chrome", discovery).unwrap();
++    assert_eq!(profiles.len(), 1);
++    assert_eq!(profiles[0].path, stable.join("Default").canonicalize().unwrap());
++  }
 +}
 +
  #[test]
  fn missing_optional_wildcard_roots_are_silent() {
    let temp = TempDir::new("missing-wildcard-roots");
 diff --git a/rookie-rs/src/browser/registry/test_seams.rs b/rookie-rs/src/browser/registry/test_seams.rs
-index 81da348..6406d76 100644
+index 81da348..f32dd01 100644
 --- a/rookie-rs/src/browser/registry/test_seams.rs
 +++ b/rookie-rs/src/browser/registry/test_seams.rs
 @@ -327,7 +327,9 @@ impl TempDir {
@@ -663,15 +671,28 @@ index 81da348..6406d76 100644
    }
  
    pub(crate) fn path(&self) -> &Path {
-@@ -372,6 +374,7 @@ pub(crate) fn browser_root(
+@@ -372,6 +374,8 @@ pub(crate) fn browser_root(
  
  #[derive(Default)]
  pub(crate) struct TestDiscoveryFs {
 +  pub(crate) denied_read_dir_errno: Option<(PathBuf, i32)>,
++  pub(crate) denied_metadata_errno: Option<(PathBuf, i32)>,
    pub(crate) denied_read_dir: Option<PathBuf>,
    pub(crate) denied_metadata: Option<PathBuf>,
    pub(crate) denied_canonicalize: Vec<PathBuf>,
-@@ -401,6 +404,11 @@ impl DiscoveryFs for TestDiscoveryFs {
+@@ -391,6 +395,11 @@ impl DiscoveryFs for TestDiscoveryFs {
+   }
+ 
+   fn metadata(&self, path: &Path) -> std::io::Result<std::fs::Metadata> {
++    if let Some((denied, errno)) = &self.denied_metadata_errno {
++      if denied == path {
++        return Err(std::io::Error::from_raw_os_error(*errno));
++      }
++    }
+     if self.denied_metadata.as_deref() == Some(path) {
+       return Err(std::io::Error::new(
+         std::io::ErrorKind::PermissionDenied,
+@@ -401,6 +410,11 @@ impl DiscoveryFs for TestDiscoveryFs {
    }
  
    fn read_dir(&self, path: &Path) -> Result<Vec<PathBuf>> {

@@ -41,10 +41,7 @@ void test(
       { encoding: 'utf8' }
     )
     assert.equal(result.status, 0, result.stdout + result.stderr)
-    assert.match(
-      result.stdout,
-      /molly_profile_access_classifies_eperm_and_keeps_eacces_generic \.\.\. ok/
-    )
+    assert.match(result.stdout, /molly_profile_access_classifies_eperm_and_eacces \.\.\. ok/)
     assert.match(
       result.stdout,
       /molly_keychain_denial_passes_through_the_platform_provider_without_decrypting \.\.\. ok/

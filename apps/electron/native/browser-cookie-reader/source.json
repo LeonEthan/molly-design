@@ -2,5 +2,5 @@
   "revision": "c934548faa1bab23984a9d82e4d62bd67230a1f9",
   "archiveSha256": "1d42163980cea3562ce821d93781839b6bf950959677d6374137f9436085de9f",
   "rust": "1.99.0",
-  "version": "0.6.0+molly-native-keychain.7"
+  "version": "0.6.0+molly-native-keychain.8"
 }

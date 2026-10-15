@@ -43,7 +43,7 @@ export function classifyModelError(
   )
     return 'quota';
   if (
-    /content[ _-]?(?:policy|filter)|\b(?:safety|moderation|flagged|guardrails?|polic(?:y|ies)|blocked by)\b|prompt[ _-]injection|\b(?:request|prompt|content|input|output|response) (?:was |has been )?blocked\b/i.test(
+    /content[ _-]?(?:policy|filter)|\b(?:safety|moderation|flagged|guardrails?|polic(?:y|ies)|blocked)\b|prompt[ _-]injection/i.test(
       text
     )
   )

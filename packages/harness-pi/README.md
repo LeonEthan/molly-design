@@ -130,8 +130,10 @@ reported distinctly. Native usage is projected to Core usage notifications
 
 Final managed model errors use the static ACP diagnostic `harness_model_request_failed`
 with a category: context overflow, authentication, quota, content policy, invalid request,
-transient (retries exhausted), or unknown. Permanent evidence takes precedence over Pi's
-transient classifier. The CLI maps these categories to `ChatFailedCode` in the existing
+transient (retries exhausted), or unknown. HTTP 402, payment-required and exhausted-credit
+errors map to quota. Explicit blocked-request, policy, prompt-injection, moderation,
+safety or guardrail evidence takes precedence over HTTP 403's authentication fallback.
+Permanent evidence takes precedence over Pi's transient classifier. The CLI maps these categories to `ChatFailedCode` in the existing
 upstream-service notice and retires the failed worker, preserving conversation and draft
 files for an explicit new message. Provider text/bodies never enter this diagnostic;
 unknown host failures retain their generic static code. Worker retirement never replays

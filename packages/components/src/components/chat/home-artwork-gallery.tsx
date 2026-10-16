@@ -41,7 +41,10 @@ function HomeArtworkCard({
         className={cn(
           'relative block overflow-hidden rounded-[6px] bg-foreground/[0.04]',
           'outline outline-1 -outline-offset-1 outline-[var(--hairline)]',
-          'group-focus-visible:outline-2 group-focus-visible:outline-ring'
+          'group-focus-visible:outline-2 group-focus-visible:outline-ring',
+          // CDS card Y-lift: gentle rise + shadow deepening on hover
+          'transition-[transform,box-shadow] duration-200 ease-[var(--ease-gallery)]',
+          'group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-md)]'
         )}
       >
         {src ? (

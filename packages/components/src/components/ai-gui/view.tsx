@@ -1642,6 +1642,10 @@ export const SessionChatStreamView = forwardRef<
       [handleScroll, reportVisibleTurnRange, syncActiveOutlineIndex]
     );
 
+    // isSticky mirrors "at bottom"; used for the scroll-to-latest button and
+    // the bottom fade overlay. isScrolledFromTop drives the top fade.
+    const isFadeBottomActive = !isSticky;
+
     const handleOutlinePreview = useCallback(
       (outlineIndex: number) => {
         const entry = outlineEntries[outlineIndex];
@@ -1894,6 +1898,14 @@ export const SessionChatStreamView = forwardRef<
                 hinting that the conversation continues past the top edge. */}
             {isScrolledFromTop ? (
               <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-background to-transparent" />
+            ) : null}
+
+            {/* Bottom fade: softens the hard clip at the conversation's lower
+                edge when more content exists below. Sibling overlay (not
+                mask-image) so interactive rows are never clipped. Short and
+                fast-decaying so it never washes out code-block action rows. */}
+            {isFadeBottomActive ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background via-background/60 to-transparent" />
             ) : null}
 
             {
@@ -5299,7 +5311,7 @@ const UserPlainTextBlock = ({
     <div className="flex max-w-full justify-end sm:pl-2">
       <div
         data-molly-user-bubble=""
-        className="min-w-0 max-w-full rounded-[18px] bg-foreground/[0.06] px-4 py-3"
+        className="animate-user-bubble-enter min-w-0 max-w-full rounded-[18px] bg-foreground/[0.06] px-4 py-3"
       >
         <div
           className={cn(

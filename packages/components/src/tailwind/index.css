@@ -134,6 +134,15 @@ svg.lucide:not([data-molly-brand]) {
     --streamdown-caret: '' !important;
   }
 
+  /* Typographic runt control: avoid a lone word on the last line of paragraphs
+     and balance multi-line headings. Zero-cost in Chromium/WebKit. */
+  .markdown-renderer :is(p, li, dd, blockquote) {
+    text-wrap: pretty;
+  }
+  .markdown-renderer :is(h1, h2, h3, h4) {
+    text-wrap: balance;
+  }
+
   .markdown-renderer [data-streamdown='code-block'] {
     --markdown-code-block-bg: hsl(var(--code-background));
     --markdown-code-block-border: hsl(var(--code-border));
@@ -722,12 +731,15 @@ svg.lucide:not([data-molly-brand]) {
     /* macOS-like shadows (airy, not heavy) */
     --shadow-2xs: 0px 2px 4px 0px hsl(0 0% 0% / 0.05);
     --shadow-xs: 0px 2px 4px 0px hsl(0 0% 0% / 0.05);
-    --shadow-sm: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 1px 2px -1px hsl(0 0% 0% / 0.1);
-    --shadow: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 1px 2px -1px hsl(0 0% 0% / 0.1);
-    --shadow-md: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 2px 4px -1px hsl(0 0% 0% / 0.1);
-    --shadow-lg: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 4px 6px -1px hsl(0 0% 0% / 0.1);
+    /* CDS-style two-layer compound shadows: near-field occlusion + far-field diffusion */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
+    --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
+    --shadow-md: 0 2px 4px 0 hsl(0 0% 0% / 0.05), 0 6px 16px 0 hsl(0 0% 0% / 0.08);
+    --shadow-lg: 0 4px 8px 0 hsl(0 0% 0% / 0.06), 0 12px 28px -2px hsl(0 0% 0% / 0.08);
     --shadow-xl: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 8px 10px -1px hsl(0 0% 0% / 0.1);
     --shadow-2xl: 0px 2px 4px 0px hsl(0 0% 0% / 0.25);
+    /* Card resting elevation: subtle near-field only, prevents flat harshness */
+    --shadow-card: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
     /* Pro floating panel shadows (macOS "air" feel) */
     --shadow-panel: 0 1px 2px hsl(0 0% 0% / 0.08), 0 10px 30px hsl(0 0% 0% / 0.1);
     --shadow-popover: 0 2px 6px hsl(0 0% 0% / 0.1), 0 18px 50px hsl(0 0% 0% / 0.14);
@@ -868,9 +880,14 @@ svg.lucide:not([data-molly-brand]) {
     --terminal-ansi-bright-cyan: var(--vscode-terminal-ansiBrightCyan, #67e8f9);
     --terminal-ansi-bright-white: var(--vscode-terminal-ansiBrightWhite, #f4f6fb);
     /* Dark mode shadows — neutral and grounded like the light set (the
-       monochrome chrome keeps shadows subtle; no dramatic "pro" elevation). */
+       monochrome chrome keeps shadows subtle; no dramatic "pro" elevation).
+       Popover gets an inset top-light chamfer instead of a white outer ring:
+       reads as physical edge bevel catching light, no fluorescent outline. */
+    --shadow-card: 0 1px 2px 0 hsl(0 0% 0% / 0.4), 0 2px 8px 0 hsl(0 0% 0% / 0.4);
     --shadow-panel: 0 1px 2px hsl(0 0% 0% / 0.2), 0 6px 20px hsl(0 0% 0% / 0.24);
-    --shadow-popover: 0 2px 6px hsl(0 0% 0% / 0.24), 0 12px 32px hsl(0 0% 0% / 0.28);
+    --shadow-popover:
+      inset 0 0 0 1px hsl(var(--foreground) / 0.08), 0 2px 6px hsl(0 0% 0% / 0.24),
+      0 12px 32px hsl(0 0% 0% / 0.28);
   }
 }
 

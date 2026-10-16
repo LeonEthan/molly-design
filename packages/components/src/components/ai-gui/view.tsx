@@ -1642,6 +1642,10 @@ export const SessionChatStreamView = forwardRef<
       [handleScroll, reportVisibleTurnRange, syncActiveOutlineIndex]
     );
 
+    // isSticky mirrors "at bottom"; used for the scroll-to-latest button and
+    // the bottom fade overlay. isScrolledFromTop drives the top fade.
+    const isFadeBottomActive = !isSticky;
+
     const handleOutlinePreview = useCallback(
       (outlineIndex: number) => {
         const entry = outlineEntries[outlineIndex];
@@ -1894,6 +1898,13 @@ export const SessionChatStreamView = forwardRef<
                 hinting that the conversation continues past the top edge. */}
             {isScrolledFromTop ? (
               <div className="pointer-events-none absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-background to-transparent" />
+            ) : null}
+
+            {/* Bottom fade: softens the hard clip at the conversation's lower
+                edge when more content exists below. Sibling overlay (not
+                mask-image) so interactive rows are never clipped. */}
+            {isFadeBottomActive ? (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent" />
             ) : null}
 
             {

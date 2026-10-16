@@ -5310,7 +5310,7 @@ const UserPlainTextBlock = ({
     <div className="flex max-w-full justify-end sm:pl-2">
       <div
         data-molly-user-bubble=""
-        className="min-w-0 max-w-full rounded-[18px] bg-foreground/[0.06] px-4 py-3"
+        className="animate-user-bubble-enter min-w-0 max-w-full rounded-[18px] bg-foreground/[0.06] px-4 py-3"
       >
         <div
           className={cn(

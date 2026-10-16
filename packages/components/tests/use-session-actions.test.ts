@@ -36,6 +36,7 @@ import {
 } from '../src/hooks/use-session-actions';
 import { buildResendInputBlocks } from '../src/lib/undelivered-user-turn';
 import * as electronIpc from '../src/lib/electron-ipc-client';
+import { isDesignCanvasRetired, registerDesignCanvas } from '../src/lib/design-canvas-close';
 
 (
   globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -229,6 +230,80 @@ describe('useSessionActions', () => {
     }
     return actions;
   };
+
+  describe('canvas retirement during permanent deletion', () => {
+    const closingService = {
+      design: { leave: async () => true, close: async () => true },
+    } as unknown as electronIpc.IpcServices;
+
+    function mountedCanvas(sessionId: SessionId) {
+      const canvas = { reopened: false, unregister: () => {} };
+      canvas.unregister = registerDesignCanvas(sessionId, () => {
+        canvas.reopened = true;
+      });
+      return canvas;
+    }
+
+    it('reopens a surviving session when direct deletion fails', async () => {
+      const id = 'retire-direct' as SessionId;
+      vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue(closingService);
+      const canvas = mountedCanvas(id);
+      const runtime = createRuntime({
+        repo: {
+          getDocMeta: async () => ({ meta: { id } }),
+          deleteDoc: async () => {
+            throw Error('delete failed');
+          },
+        } as unknown as WorkspaceRuntime['repo'],
+      });
+      const actions = await renderActions(runtime);
+
+      await expect(actions.deleteSessions([id])).rejects.toThrow('delete failed');
+
+      expect(isDesignCanvasRetired(id)).toBe(false);
+      expect(canvas.reopened).toBe(true);
+      canvas.unregister();
+    });
+
+    it('keeps an already deleted child retired when its parent deletion fails', async () => {
+      const parent = { id: 'retire-parent' as SessionId, isArchived: true } as SessionMeta;
+      const child = {
+        id: 'retire-child' as SessionId,
+        parentSessionId: parent.id,
+        isArchived: true,
+      } as SessionMeta;
+      const meta = Object.fromEntries([parent, child].map((s) => [getSessionRoomId(s.id), s]));
+      const deleted = new Set<string>();
+      vi.spyOn(electronIpc, 'getIpcServices').mockReturnValue(closingService);
+      const childCanvas = mountedCanvas(child.id);
+      const parentCanvas = mountedCanvas(parent.id);
+      const runtime = createRuntime({
+        repo: {
+          getDocMeta: async (room: string) => ({
+            meta: meta[room],
+            deleted: deleted.has(room),
+          }),
+          deleteDoc: async (room: string) => {
+            if (room === getSessionRoomId(parent.id)) throw Error('parent delete failed');
+            deleted.add(room);
+          },
+        } as unknown as WorkspaceRuntime['repo'],
+      });
+      const actions = await renderActions(runtime, { sessionMetaCache: meta });
+
+      await expect(actions.deleteArchivedSession(parent.id)).rejects.toThrow(
+        'parent delete failed'
+      );
+
+      expect(deleted.has(getSessionRoomId(child.id))).toBe(true);
+      expect(isDesignCanvasRetired(child.id)).toBe(true);
+      expect(childCanvas.reopened).toBe(false);
+      expect(isDesignCanvasRetired(parent.id)).toBe(false);
+      expect(parentCanvas.reopened).toBe(true);
+      childCanvas.unregister();
+      parentCanvas.unregister();
+    });
+  });
 
   it('does not block local session creation on document stream pre-creation', async () => {
     const sessionId = 'session-create-stream-pending' as SessionId;

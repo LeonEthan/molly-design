@@ -20,6 +20,7 @@ import { designCanvasFocusAtom } from '@/atoms/layout-state';
 import { localProbeResultAtom } from '@/atoms/local-probe';
 import { userAtom, currentWorkspaceIdAtom, getAllAgentConfigAtom } from '@/atoms';
 import { getIpcServices, onIpcEvent, type IpcServices } from '@/lib/electron-ipc-client';
+import { isDesignCanvasRetired, registerDesignCanvas } from '@/lib/design-canvas-close';
 import {
   latestCommittedDesignReceipt,
   latestCommittedDesignTurnId,
@@ -416,6 +417,10 @@ export function DesignCanvas({
       }
     },
   });
+  useEffect(
+    () => registerDesignCanvas(sessionId, () => setAttachAttempt((attempt) => attempt + 1)),
+    [sessionId]
+  );
   useEffect(() => {
     let disposed = false;
     const generation = ++attachmentGeneration.current;
@@ -456,6 +461,7 @@ export function DesignCanvas({
             if (current()) setOverlayFrame(null);
             return;
           }
+          if (isDesignCanvasRetired(sessionId)) return;
           const { x, y, width, height } = host.current.getBoundingClientRect();
           if (width <= 0 || height <= 0) return;
           if (visiblePreview) {

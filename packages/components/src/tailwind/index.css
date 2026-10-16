@@ -936,7 +936,21 @@ svg.lucide:not([data-molly-brand]) {
 
   :where(a, button, input, textarea, select, [tabindex]):focus-visible {
     outline: none;
-    box-shadow: inset 0 0 0 2px hsl(var(--ring));
+    /* CDS triple-layer focus ring, conservative baseline: fixed ring token so
+       theme swaps can't explode into a neon --signal accent inside portals.
+       The glow layer is added only where color-mix is supported. */
+    box-shadow:
+      inset 0 0 0 1px hsl(var(--background)),
+      0 0 0 1.5px hsl(var(--ring));
+  }
+
+  @supports (background: color-mix(in srgb, red 25%, transparent)) {
+    :where(a, button, input, textarea, select, [tabindex]):focus-visible {
+      box-shadow:
+        inset 0 0 0 1px hsl(var(--background)),
+        0 0 0 1.5px hsl(var(--ring)),
+        0 0 6px 1px color-mix(in srgb, var(--signal) 25%, transparent);
+    }
   }
 
   /* Radix menu items already paint their own focus highlight (focus:bg-hover /
@@ -1686,5 +1700,38 @@ svg.lucide:not([data-molly-brand]) {
 @keyframes molly-fade {
   from {
     opacity: 0;
+  }
+}
+
+/* User message bubble entrance: a quick overshoot micro-settle, so a freshly
+   sent message "lands" instead of popping. Transform+opacity only; React idle. */
+@keyframes user-bubble-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-user-bubble-enter {
+  animation: user-bubble-enter 0.45s cubic-bezier(0.34, 1.3, 0.64, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-user-bubble-enter {
+    animation: molly-fade 200ms linear both;
+  }
+}
+
+/* Skeleton sweep: highlight band crossing the resting slab, CDS skeleton spec. */
+@keyframes skeleton-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
   }
 }

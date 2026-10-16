@@ -33,7 +33,11 @@ Parent rules apply. `CLAUDE.md` links here; edit `AGENTS.md`. [Ownership](README
 
 - Permanent session deletion checks retained canvases across the selected lifecycle
   before disposing views or queueing machine cleanup. Reuse native save/close guards;
-  cancellation or failure preserves session documents. Navigation/archival alone
+  cancellation or failure preserves session documents. Once the close is accepted, a
+  mounted `DesignCanvas` must not attach that session again (the confirm dialog closing
+  re-runs its attach effect). `lib/design-canvas-close.ts` holds the ids only while a canvas is
+  mounted or a deletion runs, and reopens only sessions that survive a failed deletion (#151).
+  Navigation/archival alone
   must not dispose retained editors, and closing views never deletes artwork files.
 - `useStableSession` reads the local platform's static authentication context.
   The CLI-owned installation snapshot supplies user identity; no renderer auth

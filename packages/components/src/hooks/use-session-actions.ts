@@ -46,25 +46,9 @@ import {
 } from '@/atoms/session-dispatch-delivery';
 import { resolveSessionCreateRepoFullName } from '@/lib/session-repo';
 import { collectSessionLifecycleIds } from '@/lib/session-lifecycle';
-import { getIpcServices } from '@/lib/electron-ipc-client';
+import { closeSessionCanvases, type DesignCanvasLifecycle } from '@/lib/design-canvas-close';
 
 const log = debug('lody:session-actions');
-
-async function closeSessionCanvases(sessionIds: Iterable<SessionId>): Promise<void> {
-  const design = getIpcServices()?.design;
-  if (!design) return;
-  const ids = [...sessionIds];
-  // Check the whole lifecycle first: a child with unsaved edits must be able
-  // to cancel without disposing its parent's still-open editor.
-  for (const sessionId of ids) {
-    if (!(await design.leave(sessionId))) throw new Error('Canvas close cancelled');
-  }
-  for (const sessionId of ids) {
-    // Hidden editors survive navigation. Permanent deletion is an explicit close,
-    // including its save/discard guard, not merely another renderer unmount.
-    if (!(await design.close(sessionId))) throw new Error('Canvas close cancelled');
-  }
-}
 
 type RepoDocMetaPatch = Parameters<WorkspaceRuntime['repo']['upsertDocMeta']>[1];
 type CreateSessionResult = {
@@ -1092,6 +1076,14 @@ export function useSessionActions(): SessionActions {
     [invalidateExternalHistoryCatalog, runtime]
   );
 
+  const confirmSessionDeleted = useCallback(
+    async (sessionId: SessionId, lifecycle: DesignCanvasLifecycle) => {
+      const meta = await runtime?.repo.getDocMeta(getSessionRoomId(sessionId)).catch(() => null);
+      if (meta && isLoroRepoDocDeleted(meta)) lifecycle.deleted(sessionId);
+    },
+    [runtime]
+  );
+
   const deleteSessions = useCallback(
     async (sessionIds: SessionId[]) => {
       if (!runtime) {
@@ -1105,14 +1097,26 @@ export function useSessionActions(): SessionActions {
         }
       }
       const uniqueIds = Array.from(allIds);
-      await closeSessionCanvases(uniqueIds);
-      await Promise.all(
-        uniqueIds.map(async (id) => {
-          await deleteSessionDocuments(id);
-        })
-      );
+      const lifecycle = await closeSessionCanvases(uniqueIds);
+      try {
+        const outcomes = await Promise.allSettled(
+          uniqueIds.map(async (id) => {
+            try {
+              await deleteSessionDocuments(id);
+            } catch (error) {
+              await confirmSessionDeleted(id, lifecycle);
+              throw error;
+            }
+            lifecycle.deleted(id);
+          })
+        );
+        const failure = outcomes.find((outcome) => outcome.status === 'rejected');
+        if (failure) throw failure.reason;
+      } finally {
+        lifecycle.release();
+      }
     },
-    [runtime, store, deleteSessionDocuments]
+    [runtime, store, deleteSessionDocuments, confirmSessionDeleted]
   );
 
   const archiveSession = useCallback(
@@ -1314,13 +1318,23 @@ export function useSessionActions(): SessionActions {
 
       // Do not queue filesystem cleanup or delete any session document if a
       // retained canvas refuses to close.
-      await closeSessionCanvases(lifecycleSessions.map((session) => session.id));
-      for (const session of lifecycleSessions.reverse()) {
-        await deleteArchivedSessionMeta(session);
+      const lifecycle = await closeSessionCanvases(lifecycleSessions.map((session) => session.id));
+      try {
+        for (const session of lifecycleSessions.reverse()) {
+          try {
+            await deleteArchivedSessionMeta(session);
+          } catch (error) {
+            await confirmSessionDeleted(session.id, lifecycle);
+            throw error;
+          }
+          lifecycle.deleted(session.id);
+        }
+      } finally {
+        lifecycle.release();
       }
       log('[session-delete] lifecycle deleted', { sessionId });
     },
-    [runtime, getSessionLifecycleMetas, deleteArchivedSessionMeta]
+    [runtime, getSessionLifecycleMetas, deleteArchivedSessionMeta, confirmSessionDeleted]
   );
 
   const setSessionPinned = useCallback(

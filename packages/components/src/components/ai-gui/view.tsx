@@ -1902,9 +1902,10 @@ export const SessionChatStreamView = forwardRef<
 
             {/* Bottom fade: softens the hard clip at the conversation's lower
                 edge when more content exists below. Sibling overlay (not
-                mask-image) so interactive rows are never clipped. */}
+                mask-image) so interactive rows are never clipped. Short and
+                fast-decaying so it never washes out code-block action rows. */}
             {isFadeBottomActive ? (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-background to-transparent" />
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-background via-background/60 to-transparent" />
             ) : null}
 
             {

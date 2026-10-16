@@ -707,9 +707,7 @@ export function ChatComposer({
                       }
                       className={cn(
                         'relative shrink-0 overflow-hidden rounded-xl',
-                        'h-20 w-20',
-                        image.status === 'failed' &&
-                          'shadow-[inset_0_0_0_1px_hsl(var(--destructive)/0.5)]'
+                        'h-20 w-20'
                       )}
                     >
                       <button
@@ -735,7 +733,10 @@ export function ChatComposer({
                           />
                         ) : null}
                         {image.status === 'failed' ? (
-                          <div className="absolute inset-0 bg-black/45" />
+                          // The ring lives on the overlay above the img: an
+                          // inset shadow on the card itself would be painted
+                          // under the opaque image and never read.
+                          <div className="absolute inset-0 bg-black/45 shadow-[inset_0_0_0_1.5px_hsl(var(--destructive)/0.8)]" />
                         ) : null}
                       </button>
                       <div className="absolute right-1 top-1">

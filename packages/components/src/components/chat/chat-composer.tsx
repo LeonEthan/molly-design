@@ -569,7 +569,9 @@ export function ChatComposer({
   const composerSurfaceClassName = cn(
     'rounded-2xl border border-input-border/70 bg-input-field transition-[border-color,box-shadow] duration-150',
     'shadow-[0_1px_2px_hsl(0_0%_0%/0.03),0_18px_40px_-28px_hsl(0_0%_0%/0.22)]',
-    'focus-within:border-foreground/30',
+    // Inset focus ring: border stays put so the box never shifts by 1px when
+    // focus lands; the inset ring reads as the border "darkening".
+    'focus-within:shadow-[0_1px_2px_hsl(0_0%_0%/0.03),0_18px_40px_-28px_hsl(0_0%_0%/0.22),inset_0_0_0_1px_hsl(var(--foreground)/0.30)]',
     mentionSurfaceClassName
   );
 
@@ -704,9 +706,10 @@ export function ChatComposer({
                         image.status === 'failed' ? image.error || uploadFailedLabel : undefined
                       }
                       className={cn(
-                        'relative shrink-0 overflow-hidden rounded-xl border',
+                        'relative shrink-0 overflow-hidden rounded-xl',
                         'h-20 w-20',
-                        image.status === 'failed' && 'border-destructive/50'
+                        image.status === 'failed' &&
+                          'shadow-[inset_0_0_0_1px_hsl(var(--destructive)/0.5)]'
                       )}
                     >
                       <button
@@ -770,11 +773,11 @@ export function ChatComposer({
                       key={file.id}
                       title={file.status === 'failed' ? file.error || uploadFailedLabel : undefined}
                       className={cn(
-                        'relative flex shrink-0 flex-col overflow-hidden rounded-xl border p-2',
+                        'relative flex shrink-0 flex-col overflow-hidden rounded-xl p-2',
                         'h-20 w-20',
                         file.status === 'failed'
-                          ? 'border-destructive/45 bg-muted/60'
-                          : 'border-border/60 bg-muted/60'
+                          ? 'bg-muted/60 shadow-[inset_0_0_0_1px_hsl(var(--destructive)/0.45)]'
+                          : 'bg-muted/60'
                       )}
                     >
                       <span

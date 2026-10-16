@@ -4,9 +4,9 @@
 
 ## 安装 macOS 安装包
 
-当前公开发布包为面向 macOS Apple Silicon 的 **v0.1.0**：
-从 [v0.1.0 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0)
-下载 [`MollyDesign-0.1.0-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.0/MollyDesign-0.1.0-arm64.dmg)。
+当前公开发布包为面向 macOS Apple Silicon 的 **v0.1.1**：
+从 [v0.1.1 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.1)
+下载 [`MollyDesign-0.1.1-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg)。
 该 DMG 经 Developer ID 签名并已公证。打开 DMG 后把 **Molly.app** 复制到你有权限的
 任意文件夹（例如“应用程序”）；它不会替换或修改其他应用。因已公证，可通过 Gatekeeper
 正常打开——双击即可；若首次仍出现确认提示，右键选择**打开**并确认。不要为运行它
@@ -153,7 +153,7 @@ Windows/Linux 资源构建不是原生执行证据。
 此前的设计验收与五 Agent 矩阵是迁移前运行时的历史证据，不能验证当前内置引擎。
 [验收说明](e2e/DESIGN-ACCEPTANCE.md)提供设计评审背景，不代表迁移已通过。
 
-**v0.1.0** 已通过 [GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0)
+**v0.1.1** 已通过 [GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.1)
 提供面向 macOS Apple Silicon 的公开 Developer ID 签名并已公证的 DMG。
 两个真实版本间的自动升级验收，以及 macOS Intel / Windows 产品支持仍开放。
 本地临时签名包验证仅作工程证据。

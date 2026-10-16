@@ -4,9 +4,9 @@
 
 ## Install the macOS package
 
-The current public package is **v0.1.0** for macOS Apple Silicon:
-[`MollyDesign-0.1.0-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.0/MollyDesign-0.1.0-arm64.dmg)
-from the [v0.1.0 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0).
+The current public package is **v0.1.1** for macOS Apple Silicon:
+[`MollyDesign-0.1.1-arm64.dmg`](https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg)
+from the [v0.1.1 GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.1).
 It is Developer ID signed and notarized. Open the DMG and copy **Molly.app** to a
 folder you own (for example Applications); it does not replace or modify other
 applications. Because the DMG is notarized, you can open Molly normally through
@@ -274,8 +274,8 @@ the pre-migration runtime. They do not validate the
 current embedded engine. See the [review procedure](e2e/DESIGN-ACCEPTANCE.md) for
 design review context, not a claim that the migration has passed.
 
-**v0.1.0** ships a public Developer ID signed and notarized macOS Apple Silicon DMG
-via the [GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.0).
+**v0.1.1** ships a public Developer ID signed and notarized macOS Apple Silicon DMG
+via the [GitHub Release](https://github.com/LeonEthan/molly-design/releases/tag/v0.1.1).
 Two-version automatic upgrade acceptance and macOS Intel / Windows product support
 remain open. Local ad-hoc package checks remain engineering evidence only.
 

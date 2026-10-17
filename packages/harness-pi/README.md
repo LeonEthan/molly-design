@@ -186,9 +186,16 @@ does not run scripts, repeat paid calls or commit artwork.
 The managed host ([host.ts](src/host.ts)) validates each run snapshot against the worker,
 fences the run with an exclusive record in `<private>/runs` before reading credentials
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
-read-before-edit reminder and recalled personal preferences through `before_agent_start`,
-and extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
-The native completion receipt is durably settled before extraction starts. Caller
+read-before-edit reminder and recalled personal preferences through `before_agent_start`
+once per session. The complete built string is stored as a versioned
+`molly_host_system_prompt` custom native entry, then reused byte-for-byte on later turns
+and fresh worker reloads, including when host configuration changes. Earlier histories
+without that entry capture it on their first subsequent inference. New sessions sample
+current time and memory; changes within a conversation apply to its next session.
+The host extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
+The native completion receipt is durably settled before extraction starts. Later
+turns retain their pre-inference memory read for extraction revision fences; those
+records never replace the frozen preference context. Caller
 cancellation sends ACP cancel and retains the pending response until native settlement;
 the CLI validates the run, epoch and current catalog before accepting it. Revoked workers
 and invalid receipts still fail. Explicit Stop keeps dispatch paused and cancels artifact

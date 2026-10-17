@@ -882,6 +882,90 @@ describe('owned ACP host integration', () => {
     expect(second.observed).toEqual([]);
   });
 
+  it('keeps provider system bytes stable across turns and fresh host reload, then refreshes a new session', async () => {
+    let instant = new Date('2026-10-17T12:00:00.123Z');
+    let preference = 'Likes muted color';
+    const options = {
+      time: { now: () => instant, resolveTimeZone: () => 'America/Los_Angeles' },
+      memoryResponse: '{"changes":[]}',
+      peer: {
+        extMethod: async () => ({
+          revision: preference,
+          enabled: true,
+          entries: [{ id: 'p1', text: preference }],
+        }),
+      },
+    };
+    const f = await managed({
+      ...options,
+      config: {
+        personalMemory: true,
+        readBeforeEditReminder: 'Read before editing synthetic files.',
+      },
+    });
+    const first = await f.open();
+    const systemBytes = (observed: string): string =>
+      JSON.stringify(
+        JSON.parse(observed)
+          .messages.filter((message: { role: string }) => message.role === 'system')
+          .map((message: { content: unknown; sections?: unknown }) => ({
+            content: message.content,
+            sections: message.sections,
+          }))
+      );
+    const systems: string[] = [];
+    for (let turn = 1; turn <= 3; turn++) {
+      const snapshot = { ...first.snapshot, runId: `stable-${turn}`, turnId: `turn-${turn}` };
+      f.grant(snapshot);
+      expect((await first.prompt(`Synthetic turn ${turn}`, snapshot)).stopReason).toBe('end_turn');
+      const main = JSON.parse(f.observed.at(-2)!);
+      systems.push(systemBytes(f.observed.at(-2)!));
+      expect(
+        main.messages.filter((message: { role: string }) => message.role === 'user')
+      ).toHaveLength(turn);
+      instant = new Date(instant.getTime() + 60_000);
+      preference = `Current preference after turn ${turn}`;
+    }
+    expect(systems[0]).toContain('2026-10-17T12:00:00.123Z');
+    expect(systems[0]).toContain('Likes muted color');
+    expect(systems[0]).toContain(f.config.readBeforeEditReminder);
+    expect(systems).toEqual([systems[0], systems[0], systems[0]]);
+    await f.agent.dispose();
+    vi.restoreAllMocks();
+    const restored = await managed({
+      ...options,
+      config: {
+        ...f.config,
+        runtimeEpoch: randomUUID(),
+        nativeSessionId: first.response.sessionId,
+        systemPrompt: 'Changed worker host context.',
+        readBeforeEditReminder: 'Changed worker reminder.',
+      },
+    });
+    const resumed = await restored.open();
+    const resumeSnapshot = { ...resumed.snapshot, runId: 'resumed-run' };
+    restored.grant(resumeSnapshot);
+    expect((await resumed.prompt('Synthetic resumed turn', resumeSnapshot)).stopReason).toBe(
+      'end_turn'
+    );
+    expect(systemBytes(restored.observed[0]!)).toBe(systems[0]);
+    await restored.agent.dispose();
+    vi.restoreAllMocks();
+    const next = await managed({
+      ...options,
+      config: { ...f.config, runtimeEpoch: randomUUID(), productSessionId: 'next-product-session' },
+    });
+    const fresh = await next.open();
+    const freshSnapshot = { ...fresh.snapshot, runId: 'fresh-run' };
+    next.grant(freshSnapshot);
+    expect((await fresh.prompt('Synthetic fresh turn', freshSnapshot)).stopReason).toBe('end_turn');
+    const freshSystem = systemBytes(next.observed[0]!);
+    expect(freshSystem).not.toBe(systems[0]);
+    expect(freshSystem).toContain(instant.toISOString());
+    expect(freshSystem).toContain(preference);
+    expect(freshSystem).not.toContain('Likes muted color');
+  });
+
   it('recalls personal preferences into context and captures new ones after completion', async () => {
     const operations: unknown[] = [];
     const usage: Record<string, unknown>[] = [];

@@ -23,11 +23,13 @@ import type { WorkerConfig } from '../../src/worker-config';
 import { createWorkerEnvironment } from '../../src/environment';
 import { fixture } from './adapter';
 import { writeProfileSettings } from '../../src/profile-settings';
+import type { HostTimeSource } from '../../src/host-time';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 export async function managed(
   options: {
     extensions?: InlineExtension[];
+    time?: HostTimeSource;
     peer?: Partial<AdapterPeer>;
     length?: boolean;
     providerError?: string | ((call: number) => string | undefined);
@@ -98,7 +100,7 @@ export async function managed(
       await options.peer?.sessionUpdate?.(update);
     },
   };
-  const host = new PiAcpHost(config, new PrivateControlPipe(pipe), peer);
+  const host = new PiAcpHost(config, new PrivateControlPipe(pipe), peer, options.time);
   const observed: string[] = [];
   let selectedRuntime!: ModelRuntime;
   const create = ModelRuntime.create.bind(ModelRuntime);
@@ -194,7 +196,16 @@ export async function managed(
     );
   }
   async function open() {
-    const response = await agent.newSession({ cwd: f.cwd, mcpServers: [] });
+    const response = config.nativeSessionId
+      ? {
+          ...(await agent.loadSession({
+            sessionId: config.nativeSessionId,
+            cwd: config.cwd,
+            mcpServers: [],
+          })),
+          sessionId: config.nativeSessionId,
+        }
+      : await agent.newSession({ cwd: config.cwd, mcpServers: [] });
     const binding = HarnessSessionBindingSchema.parse(response._meta?.mollyRuntime);
     const snapshot: HarnessRunSnapshot = {
       schemaVersion: 1,

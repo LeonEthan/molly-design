@@ -3,7 +3,7 @@ export type HostTimeSource = {
   resolveTimeZone: () => string;
 };
 
-/** Sampled for every prompt; the SDK restarts the hook chain from its base system prompt. */
+/** Sample once when building the host system prompt; persist and reuse it for the session. */
 export function hostTimeContext(source?: HostTimeSource): string {
   const instant = source?.now() ?? new Date();
   const timeZone = source?.resolveTimeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone;

@@ -11,7 +11,7 @@ One daemon owns the local mem0 store. Settings > General exposes automatic memor
 
 V1 retains at most 32 preferences, each at most 300 characters, and recalls that bounded set through mem0's list API. It does not perform semantic vector search or download an embedding model. Full capacity rejects new additions without silently evicting an existing entry. Extracted changes are a bounded atomic batch; stale changes are rejected without retry. A later explicit statement can create a new memory after a deletion.
 
-Recall enters transient system context as untrusted information, subordinate to current user instructions, and grants no tool authority. Deleted information is omitted from future memory recall. It can remain in existing conversations and prior model requests; deletion is not a forensic erasure claim. Changes made during a model request cannot retract context already sent to that model.
+Recall enters the session system context once, as untrusted information subordinate to current user instructions, and grants no tool authority. The complete built host prompt, including those preferences and its sampled host time, is retained in native session history and reused unchanged across turns and worker reloads. Memory edits, deletion, disabling and newly learned preferences affect the system context of new sessions; they do not rewrite an existing conversation. Current records are still read for extraction and its save fences. Deleted information is omitted from future session recall. It can remain in existing conversations and prior model requests; deletion is not a forensic erasure claim. Changes made during a model request cannot retract context already sent to that model.
 
 ## Evidence and limits
 

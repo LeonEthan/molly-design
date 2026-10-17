@@ -57,8 +57,11 @@ Read [README](README.md) before changing session construction, packages or the b
   with `willRetry`; ordinary compaction remains. Final model errors carry a static category.
   Three upstream classification/delay defects are deferred in [#143](https://github.com/LeonEthan/molly-design/issues/143)
   pending released upstream fixes; keep the no-workaround boundary above.
-- Refresh host time, the read-before-edit reminder and personal memory through
-  `before_agent_start`. Memory extraction never retries, restarts inference or changes a
+- Build the full host system prompt once per session through `before_agent_start`,
+  sampling host time and personal memory once. Persist its exact bytes in native session
+  metadata and reuse them across turns and worker reloads; reminder and host-section
+  changes apply to new sessions. Keep per-run memory reads for extraction revision
+  fences without rewriting the session prompt. Memory extraction never retries, restarts inference or changes a
   completed outcome; persist native completion before extraction and let the caller
   retain its validated receipt after cancellation. Cancellation fences saves. Append measured extraction usage to
   native history before abort/response validation; retain failed publication for the

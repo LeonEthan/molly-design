@@ -76,6 +76,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for prerequisites, checks and dependency 
 | `packages/acp-extension-core`, `packages/acp-extension-dsh` | Required upstream protocol/capability contracts                |
 | `.agents`                                                  | Shared maintenance workflows, explanations and decision records |
 | `e2e`                                                       | Desktop acceptance tooling                                     |
+| `website`                                                   | Official website source, local QA and manual deploy notes      |
 
 Other ACP submodules under `vendor/` retain upstream/historical material outside
 the default workspace. See the

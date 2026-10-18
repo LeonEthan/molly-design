@@ -1,0 +1,18 @@
+{
+  "name": "molly-design-website",
+  "private": true,
+  "description": "QA tooling for the Molly Design website. Not a member of the root pnpm workspace.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "python3 build.py",
+    "qa": "bash scripts/qa/run-all.sh"
+  },
+  "devDependencies": {
+    "lighthouse": "12.8.2",
+    "playwright-core": "1.58.2"
+  },
+  "engines": {
+    "node": ">=22.19.0 <23 || >=23.6.0"
+  },
+  "packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd"
+}

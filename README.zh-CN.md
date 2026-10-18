@@ -72,6 +72,7 @@ corepack pnpm start:local
 | `packages/acp-extension-core`、`packages/acp-extension-dsh` | 必需的上游协议与能力合同             |
 | `.agents`                                                  | 随 Git 共享的维护工作流、说明与决策记录 |
 | `e2e`                                                       | 桌面验收工具                         |
+| `website`                                                   | 官网源码、本地 QA 与手动部署说明     |
 
 `vendor/` 下的其他 ACP 子模块保留上游或历史材料，不参与默认工作区。
 修改这些项目之前请阅读[依赖维护说明](CONTRIBUTING.md#source-dependencies)。

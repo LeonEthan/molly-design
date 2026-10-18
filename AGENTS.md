@@ -83,7 +83,7 @@ repositories. No parallel snapshot store; retain current saves, CAS and drafts.
 ## Repository boundary
 
 - Public source is `apps/{cli,electron}` and their packages. Exclude hosted backends,
-  operator/billing config, secrets/private records and Web/mobile sources.
+  operator/billing config, secrets/private records and Web/mobile app sources.
   Never commit captured user/agent transcripts; use synthetic fixtures.
 - No `@lody/convex`, private workspace packages or generated backend APIs.
   Optional-cloud names/DTOs belong in `packages/cloud-api`; shared product code

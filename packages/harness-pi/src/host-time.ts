@@ -3,7 +3,7 @@ export type HostTimeSource = {
   resolveTimeZone: () => string;
 };
 
-/** Sample once when building the host system prompt; persist and reuse it for the session. */
+/** Sampled only when the host system prompt is built: once per session and toolset (#157). */
 export function hostTimeContext(source?: HostTimeSource): string {
   const instant = source?.now() ?? new Date();
   const timeZone = source?.resolveTimeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone;

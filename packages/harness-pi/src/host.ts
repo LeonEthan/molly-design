@@ -37,10 +37,12 @@ import { extractPersonalPreferences } from './personal-memory';
 import { hostTimeContext, type HostTimeSource } from './host-time';
 import { RunJournal, isAlreadyDispatched } from './run-journal';
 import { createWorkerEnvironment } from './environment';
+import {
+  HOST_SYSTEM_PROMPT_ENTRY,
+  hostSystemPromptEntry,
+  savedHostSystemPrompt,
+} from './host-system-prompt';
 import { z } from 'zod';
-
-const HOST_SYSTEM_PROMPT_ENTRY = 'molly_host_system_prompt';
-const HostSystemPromptSchema = z.object({ version: z.literal(1), systemPrompt: z.string() });
 
 const NativeCompletionSchema = z.object({
   execution: z.literal('inference'),
@@ -208,7 +210,7 @@ export class PiAcpHost {
       pi.on('session_before_compact', (event) => (event.willRetry ? { cancel: true } : undefined));
       pi.on('before_agent_start', (event, ctx) => {
         validate(event, ctx);
-        if (!this.run) throw new Error('pi_acp_host_dispatch_missing');
+        if (!this.run || !this.binding) throw new Error('pi_acp_host_dispatch_missing');
         if (this.systemPrompt === undefined) {
           const systemPrompt = [
             event.systemPrompt,
@@ -219,7 +221,10 @@ export class PiAcpHost {
           ]
             .filter(Boolean)
             .join('\n\n');
-          pi.appendEntry(HOST_SYSTEM_PROMPT_ENTRY, { version: 1, systemPrompt });
+          pi.appendEntry(
+            HOST_SYSTEM_PROMPT_ENTRY,
+            hostSystemPromptEntry(systemPrompt, this.binding)
+          );
           this.systemPrompt = systemPrompt;
         }
         return { systemPrompt: this.systemPrompt };
@@ -255,15 +260,7 @@ export class PiAcpHost {
       wrapper.piSession.getAllTools().length
     )
       throw new Error('pi_acp_host_model_tools_unsupported');
-    const savedPrompt = wrapper.piSession.sessionManager
-      .getEntries()
-      .find((entry) => entry.type === 'custom' && entry.customType === HOST_SYSTEM_PROMPT_ENTRY);
-    if (savedPrompt?.type === 'custom')
-      this.systemPrompt = HostSystemPromptSchema.parse(savedPrompt.data).systemPrompt;
-    this.binding = HarnessSessionBindingSchema.parse({
-      version: 1,
-      runtimeEpoch: this.config.runtimeEpoch,
-      harness: this.config.harness,
+    const fingerprint = {
       toolsetHash: hash(
         wrapper.piSession
           .getAllTools()
@@ -271,6 +268,16 @@ export class PiAcpHost {
           .sort((a, b) => a.name.localeCompare(b.name))
       ),
       pluginSetHash: hash([...plugins].sort()),
+    };
+    this.systemPrompt = savedHostSystemPrompt(
+      wrapper.piSession.sessionManager.getEntries(),
+      fingerprint
+    );
+    this.binding = HarnessSessionBindingSchema.parse({
+      version: 1,
+      runtimeEpoch: this.config.runtimeEpoch,
+      harness: this.config.harness,
+      ...fingerprint,
       nativeSessionFile: await realpath(wrapper.piSession.sessionManager.getSessionFile()!),
     });
     return this.binding;

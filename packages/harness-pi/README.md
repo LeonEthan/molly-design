@@ -188,9 +188,16 @@ fences the run with an exclusive record in `<private>/runs` before reading crede
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
 read-before-edit reminder and recalled personal preferences through `before_agent_start`
 once per session. The complete built string is stored as a versioned
-`molly_host_system_prompt` custom native entry, then reused byte-for-byte on later turns
-and fresh worker reloads, including when host configuration changes. Earlier histories
-without that entry capture it on their first subsequent inference. New sessions sample
+`molly_host_system_prompt` custom native entry together with the worker's `toolsetHash`
+and `pluginSetHash`, then reused byte-for-byte on later turns and fresh worker reloads,
+including when host configuration changes. A reload whose tool or plugin set differs
+rebuilds the prompt once, with current time and memory through the same hook, and
+appends a new entry; this costs one provider cache miss but keeps the SDK tool list
+honest ([#157](https://github.com/LeonEthan/molly-design/issues/157)). Version 1 entries
+have no fingerprint and rebuild once the same way. When several entries exist, the latest
+decides; any malformed entry refuses the session with
+`pi_acp_host_invalid_system_prompt_snapshot` rather than being skipped. Earlier histories
+without an entry capture it on their first subsequent inference. New sessions sample
 current time and memory; changes within a conversation apply to its next session.
 The host extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
 The native completion receipt is durably settled before extraction starts. Later

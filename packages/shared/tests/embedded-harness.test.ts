@@ -4,6 +4,7 @@ import {
   SaveModelConnectionSchema,
   BeginOpenAiAuthSchema,
   getModelConnectionConfigurationIssue,
+  isProviderPresetDefaultEndpoint,
   ModelEndpointSchema,
   ModelSelectionSchema,
   ManagedMcpConnectionSchema,
@@ -200,18 +201,36 @@ describe('embedded harness boundaries', () => {
         .success
     ).toBe(true);
     expect(getModelConnectionConfigurationIssue(fields)).toBe('kimi_code_requires_own_provider');
-    const corrected = { ...fields, providerPresetId: 'kimi-coding', apiKey: 'synthetic' };
+    const corrected = { ...fields, providerPresetId: 'kimi-coding', baseUrl: 'https://api.kimi.com/coding/v1', apiKey: 'synthetic' };
     expect(SaveModelConnectionSchema.safeParse(corrected).success).toBe(true);
     expect(
       SaveModelConnectionSchema.safeParse({
         ...corrected,
-        baseUrl: 'https://api.kimi.com/coding/v1',
+        baseUrl: 'https://api.kimi.com/coding/',
       }).success
     ).toBe(false);
     expect(
       getModelConnectionConfigurationIssue({ ...fields, baseUrl: 'https://api.moonshot.ai/v1' })
     ).toBeUndefined();
   });
+  it.each(['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'])('migrates saved Kimi Code endpoint %s while refusing it in a typed form', (baseUrl) => {
+    const saved = {schemaVersion:1, id:'legacy-kimi', revision:7, providerPresetId:'kimi-coding', displayName:'Legacy Kimi', baseUrl, enabled:true, credentialRef:'legacy-ref', authType:'openai_oauth', oauth:{accountId:'synthetic-account'}};
+    const migrated = ModelConnectionSchema.parse(saved);
+    expect(migrated).toEqual({...saved, baseUrl: 'https://api.kimi.com/coding/v1'});
+    expect(isProviderPresetDefaultEndpoint(migrated.providerPresetId, migrated.baseUrl)).toBe(true);
+    expect(getModelConnectionConfigurationIssue(migrated)).toBeUndefined();
+    expect(getModelConnectionConfigurationIssue(saved)).toBe('kimi_code_requires_coding_v1_base');
+    expect(SaveModelConnectionSchema.safeParse({providerPresetId:'kimi-coding',displayName:'Typed',baseUrl,enabled:true,apiKey:'synthetic'}).success).toBe(false);
+    expect(ModelConnectionSchema.parse({...saved,providerPresetId:'moonshot',authType:'api_key',oauth:undefined}).baseUrl).toBe(baseUrl);
+    expect(ModelConnectionSchema.parse({...saved,baseUrl:'https://custom.invalid/coding'}).baseUrl).toBe('https://custom.invalid/coding');
+  });
+
+  it.each(['https://api.kimi.com/coding/v1', 'https://api.kimi.com/coding/v1/'])('accepts the current Kimi Code endpoint %s as default', (baseUrl) => {
+    expect(SaveModelConnectionSchema.safeParse({providerPresetId:'kimi-coding',displayName:'Kimi',baseUrl,enabled:true,apiKey:'synthetic'}).success).toBe(true);
+    expect(getModelConnectionConfigurationIssue({providerPresetId:'kimi-coding',baseUrl})).toBeUndefined();
+    expect(isProviderPresetDefaultEndpoint('kimi-coding',baseUrl)).toBe(true);
+  });
+
   it('rejects secret-bearing or ambiguous endpoints and permits explicit local test servers', () => {
     for (const value of [
       '',

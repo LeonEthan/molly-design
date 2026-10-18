@@ -1,7 +1,7 @@
 # Molly embedded Pi
 
 This package is Molly's Agent engine: the public Pi SDK (`@earendil-works/pi-coding-agent`
-1.0.4) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
+1.3.0) plus unmodified published Pi packages, behind an ACP adapter. The CLI host owns
 dispatch, credentials, design transactions and session history policy; Pi owns the model
 loop, tools, resource discovery and native conversation history.
 Intent: [embedded harness Spec](../../specs/molly-embedded-pi-harness.md).
@@ -64,7 +64,7 @@ not execute tool calls from an errored response. The main host's public
 `session_before_compact` hook still cancels overflow/truncation recovery when Pi would
 repeat inference; ordinary compaction remains available.
 
-Known Pi 1.0.4 limits: partial text already streamed before a failure remains visible
+Known Pi limits, observed on 1.0.4 and not listed as fixed in the 1.3.0 changelog: partial text already streamed before a failure remains visible
 beside the retried answer because ACP has no retraction. A bare `529` or `ECONNRESET`
 without accompanying overload/connection-error text is not matched by Pi's retry
 classifier. Retry-After values are not honored; backoff is fixed. Ordinary compaction
@@ -116,7 +116,15 @@ does not presume endpoint support. Pi applies a provider endpoint override to ev
 model of that provider, so a connection on its preset's default endpoint
 (`PROVIDER_PRESET_DEFAULT_BASE_URLS`) registers no override and each model keeps its own SDK
 endpoint: OpenRouter serves Anthropic-protocol models at `/api` and the rest at `/api/v1`.
-A custom endpoint still replaces every model's. When a connection lists `models`, the
+A custom endpoint still replaces every model's. Since Pi 1.3.0
+([#10720](https://github.com/earendil-works/pi/issues/10720)) Kimi Code uses OpenAI Chat
+Completions at `https://api.kimi.com/coding/v1`; a connection saved with the earlier default
+`https://api.kimi.com/coding` (with or without a trailing slash) is migrated to the new default
+on load by the shared saved-connection schema, preserving identity, revision and credentials.
+Vault, IPC and runtime reads share that normalization. Typed addresses on `api.kimi.com` must use
+`/coding/v1`, with or without a trailing slash. API-key and OAuth checks both list
+`https://api.kimi.com/coding/v1/models` with Bearer authentication; saving neither verifies
+account access nor chooses a model. When a connection lists `models`, the
 conversation picker offers only those catalog models and the worker refuses any other with
 `harness_model_not_in_catalog`; without the list it offers the whole preset catalog. Settings'
 free key check follows `PROVIDER_PRESET_CHECKS`, which a test keeps in step with each preset's
@@ -187,7 +195,10 @@ The managed host ([host.ts](src/host.ts)) validates each run snapshot against th
 fences the run with an exclusive record in `<private>/runs` before reading credentials
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
 read-before-edit reminder and recalled personal preferences through `before_agent_start`
-once per session. The complete built string is stored as a versioned
+once per session. Since Pi 1.2.0 that hook also fires for idle extension
+`sendMessage(..., { triggerTurn: true })` runs (`messageType: 'custom'`); Molly dispatches
+only user prompts, so any other or undispatched run retires the worker with
+`pi_acp_host_dispatch_missing`. The complete built string is stored as a versioned
 `molly_host_system_prompt` custom native entry together with the worker's `toolsetHash`
 and `pluginSetHash`, then reused byte-for-byte on later turns and fresh worker reloads,
 including when host configuration changes. A reload whose tool or plugin set differs
@@ -195,8 +206,12 @@ rebuilds the prompt once, with current time and memory through the same hook, an
 appends a new entry; this costs one provider cache miss but keeps the SDK tool list
 honest ([#157](https://github.com/LeonEthan/molly-design/issues/157)). Version 1 entries
 have no fingerprint and rebuild once the same way. When several entries exist, the latest
-decides; any malformed entry refuses the session with
-`pi_acp_host_invalid_system_prompt_snapshot` rather than being skipped. Earlier histories
+decides. A well-formed entry with a later integer version (above 2) and a string prompt also
+rebuilds once, so a future format followed by a downgrade cannot brick a session; any
+malformed entry refuses the session with `pi_acp_host_invalid_system_prompt_snapshot` rather
+than being skipped. Both hashes sort by plain code-unit order, never the host locale. A Pi
+upgrade that only rewords the base prompt without changing any tool keeps the saved prompt:
+existing sessions are not refreshed. Earlier histories
 without an entry capture it on their first subsequent inference. New sessions sample
 current time and memory; changes within a conversation apply to its next session.
 The host extracts new preferences after completion ([personal memory](../../specs/personal-memory.md)).
@@ -238,7 +253,7 @@ the repaired protocol. History files and their partition layout are unchanged.
 Pi and every package dependency into the sealed `harness/` closure with a checksummed
 manifest. `molly-pi-agent.js --probe` reports the engine and package count without a key.
 The workspace, CLI install/startup checks and bundle require Node `>=22.19.0 <23 || >=23.6.0`
-with Node-API 10, matching Pi 1.0.4 and the SQLite binding.
+with Node-API 10, matching Pi 1.3.0 and the SQLite binding.
 The Settings capability reader verifies the staged question package's `package.json`
 and `LICENSE` against that manifest and exposes only public package metadata.
 `apps/cli/scripts/smoke-embedded-harness.mjs <cli-output> [node]` starts the bundled worker

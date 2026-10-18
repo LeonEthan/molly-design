@@ -8,7 +8,7 @@ export { SESSION_ATTACHMENTS_DIR_RELATIVE } from '#session-paths';
 
 export const MOLLY_HARNESS_ID = 'molly' as const;
 export const MOLLY_HARNESS_PROTOCOL_VERSION = 1 as const;
-export const PI_ENGINE_VERSION = '1.0.4' as const;
+export const PI_ENGINE_VERSION = '1.3.0' as const;
 /** Unmodified published Pi packages every worker profile lists; settings reports the same set. */
 export const MOLLY_PI_PACKAGES = [
   'pi-skillful',
@@ -495,7 +495,7 @@ export const PROVIDER_PRESET_DEFAULT_BASE_URLS: Record<
   xai: 'https://api.x.ai/v1',
   deepseek: 'https://api.deepseek.com',
   moonshot: 'https://api.moonshot.ai/v1',
-  'kimi-coding': 'https://api.kimi.com/coding',
+  'kimi-coding': 'https://api.kimi.com/coding/v1',
   zai: 'https://api.z.ai/api/coding/paas/v4',
   minimax: 'https://api.minimax.io/anthropic',
   openrouter: 'https://openrouter.ai/api/v1',
@@ -528,7 +528,7 @@ export const PROVIDER_PRESET_CHECKS: Record<
   xai: 'openai',
   deepseek: 'openai',
   moonshot: 'openai',
-  'kimi-coding': 'anthropic',
+  'kimi-coding': 'openai',
   zai: 'openai',
   minimax: 'anthropic',
   openrouter: 'openrouter',
@@ -659,7 +659,7 @@ export type HarnessModelCatalog = z.infer<typeof HarnessModelCatalogSchema>;
 export function getModelConnectionConfigurationIssue(input: {
   providerPresetId: string;
   baseUrl: string;
-}): 'kimi_code_requires_own_provider' | 'kimi_code_requires_anthropic_base' | undefined {
+}): 'kimi_code_requires_own_provider' | 'kimi_code_requires_coding_v1_base' | undefined {
   let url: URL;
   try {
     url = new URL(input.baseUrl);
@@ -674,8 +674,8 @@ export function getModelConnectionConfigurationIssue(input: {
   ) {
     return 'kimi_code_requires_own_provider';
   }
-  if (input.providerPresetId === 'kimi-coding' && path !== '/coding') {
-    return 'kimi_code_requires_anthropic_base';
+  if (input.providerPresetId === 'kimi-coding' && path !== '/coding/v1') {
+    return 'kimi_code_requires_coding_v1_base';
   }
   return undefined;
 }
@@ -714,7 +714,7 @@ const ModelConnectionFieldsSchema = z
     baseUrl: ModelEndpointSchema,
     credentialRef: identifier,
     enabled: z.boolean(),
-    /** Absent means an API key connection. OAuth exists only for the OpenAI preset. */
+    /** Absent means an API key connection. OAuth exists only for presets with an official subscription flow. */
     authType: ModelConnectionAuthTypeSchema.optional(),
     oauth: ModelConnectionOAuthSchema.optional(),
     customModels: CompatibleModelsSchema.optional(),
@@ -744,6 +744,12 @@ export const ModelConnectionSchema = ModelConnectionFieldsSchema.refine(
   .refine(
     (value) => value.oauth === undefined || value.authType === 'openai_oauth',
     'OAuth account metadata requires an OAuth connection'
+  )
+  .transform((connection) =>
+    connection.providerPresetId === 'kimi-coding' &&
+    ['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'].includes(connection.baseUrl)
+      ? { ...connection, baseUrl: PROVIDER_PRESET_DEFAULT_BASE_URLS['kimi-coding'] }
+      : connection
   );
 export type ModelConnection = z.infer<typeof ModelConnectionSchema>;
 

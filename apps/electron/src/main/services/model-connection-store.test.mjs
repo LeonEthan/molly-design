@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -20,7 +21,7 @@ import { readBundledCapabilities } from './bundled-capabilities.ts'
 import { listMcpTools } from './mcp-tool-discovery.ts'
 
 const shippedPackages = [
-  ['@earendil-works/pi-coding-agent', '1.0.4'],
+  ['@earendil-works/pi-coding-agent', PI_ENGINE_VERSION],
   ['pi-skillful', '0.4.0'],
   ['@juicesharp/rpiv-ask-user-question', '2.12.0'],
   ['@zigai/pi-mention-skill', '0.10.4'],
@@ -64,7 +65,7 @@ for (const mode of [
     if (mode === 'duplicate') files.push(files[1])
     const runtime = {
       engine: 'pi',
-      engineVersion: '1.0.4',
+      engineVersion: PI_ENGINE_VERSION,
       protocolVersion: 1,
       buildId: 'b'.repeat(64),
       buildPlatform: mode === 'platform' ? 'other' : process.platform,
@@ -81,7 +82,7 @@ for (const mode of [
     assert.equal(snapshot.harness.buildId, runtime.buildId)
     assert.deepEqual(snapshot.engine, {
       name: '@earendil-works/pi-coding-agent',
-      version: '1.0.4',
+      version: PI_ENGINE_VERSION,
       license: 'MIT'
     })
     assert.deepEqual(
@@ -125,6 +126,78 @@ const legacyImage = {
   model: 'synthetic-image',
   apiKey: 'synthetic-image-secret',
   updatedAt: 1
+}
+
+for (const baseUrl of ['https://api.kimi.com/coding', 'https://api.kimi.com/coding/']) {
+  for (const authType of ['api_key', 'openai_oauth']) {
+    void test(`saved Kimi ${authType} ${baseUrl} migrates through snapshot, checks and run grants`, async (t) => {
+      const { store, directory } = await fixture(t)
+      const fields = {
+        displayName: 'Synthetic Kimi',
+        providerPresetId: 'kimi-coding',
+        baseUrl: 'https://api.kimi.com/coding/v1',
+        enabled: true
+      }
+      const saved =
+        authType === 'api_key'
+          ? await store.save({ ...fields, apiKey: 'SYNTHETIC_KIMI_KEY' })
+          : (
+              await store.saveOAuthConnection(
+                { ...fields, authType },
+                {
+                  accessToken: 'SYNTHETIC_KIMI_ACCESS',
+                  refreshToken: 'SYNTHETIC_KIMI_REFRESH',
+                  accessTokenExpiresAt: 4_000_000_000_000
+                },
+                { accountId: 'synthetic-kimi' }
+              )
+            ).connection
+      const file = join(directory, 'model-connections.enc')
+      const raw = JSON.parse(cipher.decryptString(await readFile(file)))
+      raw.entries[0].connection.baseUrl = baseUrl
+      await writeFile(file, cipher.encryptString(JSON.stringify(raw)))
+      const reopened = new ModelConnectionStore(directory, cipher)
+      const migrated = (await reopened.snapshot()).connections[0]
+      assert.deepEqual(migrated, saved)
+      const forCheck =
+        authType === 'api_key'
+          ? await reopened.credentialForCheck(saved.id, saved.revision)
+          : await reopened.oauthForCheck(saved.id, saved.revision)
+      assert.equal(forCheck.connection.baseUrl, fields.baseUrl)
+      assert.equal(
+        (await reopened.acquireForRun(saved.id, saved.revision)).connection.baseUrl,
+        fields.baseUrl
+      )
+      const requests = []
+      const result = await checkModelConnection(
+        reopened,
+        {
+          providerPresetId: 'kimi-coding',
+          baseUrl: fields.baseUrl,
+          stored: { id: saved.id, revision: saved.revision }
+        },
+        async (url, options) => {
+          requests.push({ url, headers: options.headers, redirect: options.redirect })
+          return new Response(JSON.stringify({ object: 'list', data: [{ id: 'kimi-for-coding' }] }))
+        }
+      )
+      assert.deepEqual(result, { ok: true, models: ['kimi-for-coding'] })
+      assert.deepEqual(requests, [
+        {
+          url: 'https://api.kimi.com/coding/v1/models',
+          headers:
+            authType === 'api_key'
+              ? { accept: 'application/json', authorization: 'Bearer SYNTHETIC_KIMI_KEY' }
+              : { accept: 'application/json', authorization: 'Bearer SYNTHETIC_KIMI_ACCESS' },
+          redirect: 'error'
+        }
+      ])
+      await assert.rejects(
+        store.save({ ...fields, baseUrl, apiKey: 'SYNTHETIC_TYPED' }),
+        /invalid_model_connection/
+      )
+    })
+  }
 }
 
 void test('oauth connection round-trips its token set without exposing it in the snapshot', async (t) => {
@@ -496,7 +569,7 @@ void test('host heartbeats continue during refresh and retain a report arriving 
       harness: {
         id: 'molly',
         engine: 'pi',
-        engineVersion: '1.0.4',
+        engineVersion: PI_ENGINE_VERSION,
         protocolVersion: 1,
         buildId: 'synthetic-build'
       },

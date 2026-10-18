@@ -46,6 +46,14 @@ describe('saved host system prompt selection', () => {
     ).toBe('Rebuilt');
   });
 
+  it.each([3, 42])('rebuilds a well-formed future version %s once', (version) => {
+    const future = custom({ version, systemPrompt: 'Future', futureField: true });
+    expect(savedHostSystemPrompt([future], current)).toBeUndefined();
+    expect(
+      savedHostSystemPrompt([future, custom(hostSystemPromptEntry('Rebuilt', current))], current)
+    ).toBe('Rebuilt');
+  });
+
   it('lets the latest entry win over earlier duplicates in either direction', () => {
     expect(
       savedHostSystemPrompt(
@@ -69,7 +77,9 @@ describe('saved host system prompt selection', () => {
 
   it.each([
     ['missing data', undefined],
-    ['unknown version', { version: 3, systemPrompt: 'Future' }],
+    ['future without prompt', { version: 3 }],
+    ['fractional version', { version: 3.5, systemPrompt: 'Future' }],
+    ['non-numeric version', { version: '3', systemPrompt: 'Future' }],
     ['v2 without fingerprint', { version: 2, systemPrompt: 'Saved' }],
     ['non-hex fingerprint', { ...hostSystemPromptEntry('Saved', current), toolsetHash: 'x' }],
     ['non-string prompt', { version: 1, systemPrompt: 42 }],

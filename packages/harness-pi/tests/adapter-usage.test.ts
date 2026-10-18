@@ -288,7 +288,7 @@ describe('native ACP usage projection', () => {
     if (start?.sessionUpdate !== 'tool_call' || end?.sessionUpdate !== 'tool_call_update')
       throw new Error('Expected activity tool updates');
     expect(end.toolCallId).toBe(start.toolCallId);
-    expect(f.projection.activity({ type: 'agent_settled' })).toBeUndefined();
+    expect(f.projection.activity({ type: 'agent_settled', aborted: false })).toBeUndefined();
   });
 
   it('keeps retry attempts in one activity and emits bounded failure metadata', () => {

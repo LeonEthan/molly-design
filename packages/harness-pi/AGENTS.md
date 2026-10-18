@@ -57,13 +57,16 @@ Read [README](README.md) before changing session construction, packages or the b
   with `willRetry`; ordinary compaction remains. Final model errors carry a static category.
   Three upstream classification/delay defects are deferred in [#143](https://github.com/LeonEthan/molly-design/issues/143)
   pending released upstream fixes; keep the no-workaround boundary above.
+- `before_agent_start` serves only Molly-dispatched user prompts; any other `messageType`
+  or undispatched run retires the worker.
 - Build the full host system prompt once per session through `before_agent_start`,
   sampling host time and personal memory once per toolset. Persist its exact bytes in
   native session metadata with the toolset/plugin-set hashes and reuse them across turns
   and worker reloads; reminder and host-section changes apply to new sessions. A reload
-  whose hashes differ, or a legacy v1 entry, rebuilds once and appends a new entry. The
-  latest entry wins; any malformed entry fails with
-  `pi_acp_host_invalid_system_prompt_snapshot`. Keep per-run memory reads for extraction
+  whose hashes differ, a legacy v1 entry or a well-formed later integer version rebuilds once
+  and appends a new entry. The latest entry wins; any malformed entry fails with
+  `pi_acp_host_invalid_system_prompt_snapshot`. Hashes sort by code unit, never locale.
+  A revert of #159 must keep the v2 reader, or sessions holding v2 entries fail setup. Keep per-run memory reads for extraction
   revision fences without rewriting the session prompt. Memory extraction never retries, restarts inference or changes a
   completed outcome; persist native completion before extraction and let the caller
   retain its validated receipt after cancellation. Cancellation fences saves. Append measured extraction usage to

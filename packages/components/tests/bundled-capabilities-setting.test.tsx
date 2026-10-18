@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -15,11 +16,11 @@ const snapshot = {
   harness: {
     id: 'molly',
     engine: 'pi',
-    engineVersion: '1.0.4',
+    engineVersion: PI_ENGINE_VERSION,
     protocolVersion: 1,
     buildId: 'a'.repeat(64),
   },
-  engine: { name: '@earendil-works/pi-coding-agent', version: '1.0.4', license: 'MIT' },
+  engine: { name: '@earendil-works/pi-coding-agent', version: PI_ENGINE_VERSION, license: 'MIT' },
   addons: MOLLY_PI_PACKAGES.map((name) => ({ name, version: '1.2.3', license: 'MIT' })),
 };
 let host: HTMLDivElement;
@@ -51,7 +52,7 @@ it.each(['en', 'zh_CN'] as const)(
     expect(details.getAttribute('aria-expanded')).toBe('false');
     await act(async () => details.click());
     expect(details.getAttribute('aria-expanded')).toBe('true');
-    expect(host.textContent).toContain('@earendil-works/pi-coding-agent · 1.0.4 · MIT');
+    expect(host.textContent).toContain(`@earendil-works/pi-coding-agent · ${PI_ENGINE_VERSION} · MIT`);
     expect(host.textContent).toContain(snapshot.harness.buildId);
     for (const name of MOLLY_PI_PACKAGES)
       expect(host.textContent).toContain(`${name} · 1.2.3 · MIT`);

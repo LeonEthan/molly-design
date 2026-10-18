@@ -146,7 +146,7 @@ export function applyProviderChoice(
 const endpointLabel = (url: string) => withoutTrailingSlash(url).replace(/^https?:\/\//, '');
 const issueKeys = {
   kimi_code_requires_own_provider: 'settings.models.kimiCodeProviderRequired',
-  kimi_code_requires_anthropic_base: 'settings.models.kimiCodeEndpointRequired',
+  kimi_code_requires_coding_v1_base: 'settings.models.kimiCodeEndpointRequired',
 } as const;
 
 export type ModelConnectionCheck = (input: CheckModelConnection) => Promise<ConnectionCheckResult>;

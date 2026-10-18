@@ -210,7 +210,10 @@ export class PiAcpHost {
       pi.on('session_before_compact', (event) => (event.willRetry ? { cancel: true } : undefined));
       pi.on('before_agent_start', (event, ctx) => {
         validate(event, ctx);
-        if (!this.run || !this.binding) throw new Error('pi_acp_host_dispatch_missing');
+        if (event.messageType !== 'user' || !this.run || !this.binding) {
+          this.retire();
+          throw new Error('pi_acp_host_dispatch_missing');
+        }
         if (this.systemPrompt === undefined) {
           const systemPrompt = [
             event.systemPrompt,
@@ -265,7 +268,7 @@ export class PiAcpHost {
         wrapper.piSession
           .getAllTools()
           .map(({ name, description, parameters }) => ({ name, description, parameters }))
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
       ),
       pluginSetHash: hash([...plugins].sort()),
     };

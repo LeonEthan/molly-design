@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '../../../packages/shared/src/embedded-harness.ts'
 import { verifyBrowserCookieReader } from './browser-cookie-reader-resources.mjs'
 import { verifyAgentBrowser } from './agent-browser-resources.mjs'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging hook. */
@@ -256,7 +257,7 @@ export default async function afterPack(context) {
     throw new Error('[embedded-pi] packaged runtime probe failed')
   const harnessRuntime = JSON.parse(harnessProbe.stdout.trim())
   if (
-    harnessRuntime.engineVersion !== '1.0.4' ||
+    harnessRuntime.engineVersion !== PI_ENGINE_VERSION ||
     harnessRuntime.protocolVersion !== 1 ||
     harnessRuntime.modelCount < 1
   ) {

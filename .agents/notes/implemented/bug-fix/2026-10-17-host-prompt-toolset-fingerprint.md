@@ -21,6 +21,8 @@ Policy:
 - Every entry of this type must validate, including superseded ones and unknown future versions. One malformed entry raises `pi_acp_host_invalid_system_prompt_snapshot` from `bind()`; session setup then fails without inference or history rewrite, as with other restored-history corruption. Skipping it would silently swallow corruption; the owner asked for a named failure. The trade-off is that an older corrupt entry blocks reuse even after a later valid one. Molly writes these entries only through Pi's `appendEntry`, so this is not expected outside manual edits or disk corruption.
 - Reverting to an earlier toolset after a rebuild rebuilds again, because only the latest entry is compared.
 
+Follow-up: the [Pi 1.3.0 upgrade](../architecture/2026-10-17-pi-1-3-0-upgrade.md) ([#158](https://github.com/LeonEthan/molly-design/issues/158)) later treats a well-formed entry with a later integer version as an unknown fingerprint that rebuilds once, keeping the named error for malformed entries, and sorts the hash inputs by code unit instead of `localeCompare`.
+
 `pluginSetHash` hashes extension paths. Pi packages resolve from the app's `node_modules`, not the per-epoch `PI_CODING_AGENT_DIR`, so unchanged installs keep the same hash across workers; a production-profile test pins this.
 
 ## Evidence

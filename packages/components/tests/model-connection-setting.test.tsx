@@ -227,7 +227,7 @@ describe('encrypted model connection form', () => {
       async (input) => {
         writes.push(input);
       },
-      { ...stored, providerPresetId: 'kimi-coding', baseUrl: 'https://api.kimi.com/coding/' }
+      { ...stored, providerPresetId: 'kimi-coding', baseUrl: 'https://api.kimi.com/coding/v1' }
     );
     expect(host.textContent).toContain(en['settings.models.kimiCode']);
     expect(host.textContent).toContain(en['settings.models.kimiCodeHint']);
@@ -239,6 +239,57 @@ describe('encrypted model connection form', () => {
     });
     expect(writes[0]).toMatchObject({ providerPresetId: 'kimi-coding' });
     expect(writes[0].apiKey).toBeUndefined();
+  });
+
+  it('treats a saved Kimi Code /coding/v1 address as the default endpoint', async () => {
+    await render(async () => undefined, {
+      ...stored,
+      providerPresetId: 'kimi-coding',
+      baseUrl: 'https://api.kimi.com/coding/v1',
+    });
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
+    expect(host.textContent).toContain(
+      en['settings.models.endpointDefault'].replace('{{url}}', 'https://api.kimi.com/coding/v1')
+    );
+  });
+
+  it.each(['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'])('renders a migrated saved %s connection as default without an endpoint error', async (baseUrl) => {
+    connectionIpc.getSnapshot.mockResolvedValue({connections:[{...stored,providerPresetId:'kimi-coding',baseUrl}]});
+    await act(async () => root.render(createElement(ModelConnectionSetting)));
+    await pickDiscovered(en['common.edit']);
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
+    expect(host.textContent).toContain(en['settings.models.endpointDefault'].replace('{{url}}','https://api.kimi.com/coding/v1'));
+  });
+
+  it('flags a typed Kimi Code address without /v1 and accepts /coding/v1 with or without a slash', async () => {
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          initialProvider: 'kimi-coding',
+          onSave: async () => undefined,
+          onCancel: () => undefined,
+        })
+      )
+    );
+    expect(host.textContent).toContain(
+      en['settings.models.endpointDefault'].replace('{{url}}', 'https://api.kimi.com/coding/v1')
+    );
+    await act(async () =>
+      [...host.querySelectorAll<HTMLButtonElement>('button')]
+        .find((button) => button.textContent === en['settings.models.useCustomEndpoint'])!
+        .click()
+    );
+    const endpoint = () => host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!;
+    await change(endpoint(), 'https://api.kimi.com/coding');
+    expect(host.querySelector('[role=alert]')?.textContent).toBe(
+      en['settings.models.kimiCodeEndpointRequired']
+    );
+    await change(endpoint(), 'https://api.kimi.com/coding/v1');
+    expect(host.querySelector('[role=alert]')).toBeNull();
+    await change(endpoint(), 'https://api.kimi.com/coding/v1/');
+    expect(host.querySelector('[role=alert]')).toBeNull();
   });
 
   it('explains a historical Moonshot/Kimi Code mismatch without rewriting or submitting it', async () => {
@@ -416,7 +467,7 @@ describe('provider choice', () => {
         {
           provider: 'kimi-coding',
           name: 'Label:kimi-coding',
-          endpoint: 'https://api.kimi.com/coding/',
+          endpoint: 'https://api.kimi.com/coding/v1/',
         },
         'openai',
         labelOf
@@ -459,6 +510,17 @@ describe('connection row', () => {
     expect(host.textContent).not.toContain(stored.credentialRef);
     expect(rowSwitch().getAttribute('aria-label')).toBe('Use Synthetic');
     expect(rowSwitch().getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('lists a Kimi Code connection on /coding/v1 as the default endpoint', async () => {
+    await renderRow({
+      ...stored,
+      providerPresetId: 'kimi-coding',
+      baseUrl: 'https://api.kimi.com/coding/v1/',
+    });
+    expect(host.textContent).toContain(en['settings.models.kimiCode']);
+    expect(host.textContent).not.toContain('api.kimi.com');
+    expect(rowSwitch().disabled).toBe(false);
   });
 
   it('shows a custom endpoint and a switched-off connection', async () => {
@@ -1020,6 +1082,7 @@ describe('connection management', () => {
         })
       )
     );
+    expect(host.textContent).toContain(en['settings.models.oauth.hintKimi']);
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
         .find(

@@ -58,10 +58,13 @@ Read [README](README.md) before changing session construction, packages or the b
   Three upstream classification/delay defects are deferred in [#143](https://github.com/LeonEthan/molly-design/issues/143)
   pending released upstream fixes; keep the no-workaround boundary above.
 - Build the full host system prompt once per session through `before_agent_start`,
-  sampling host time and personal memory once. Persist its exact bytes in native session
-  metadata and reuse them across turns and worker reloads; reminder and host-section
-  changes apply to new sessions. Keep per-run memory reads for extraction revision
-  fences without rewriting the session prompt. Memory extraction never retries, restarts inference or changes a
+  sampling host time and personal memory once per toolset. Persist its exact bytes in
+  native session metadata with the toolset/plugin-set hashes and reuse them across turns
+  and worker reloads; reminder and host-section changes apply to new sessions. A reload
+  whose hashes differ, or a legacy v1 entry, rebuilds once and appends a new entry. The
+  latest entry wins; any malformed entry fails with
+  `pi_acp_host_invalid_system_prompt_snapshot`. Keep per-run memory reads for extraction
+  revision fences without rewriting the session prompt. Memory extraction never retries, restarts inference or changes a
   completed outcome; persist native completion before extraction and let the caller
   retain its validated receipt after cancellation. Cancellation fences saves. Append measured extraction usage to
   native history before abort/response validation; retain failed publication for the

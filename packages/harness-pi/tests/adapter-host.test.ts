@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { ModelRuntime } from '@earendil-works/pi-coding-agent';
+import { ModelRuntime, type InlineExtension } from '@earendil-works/pi-coding-agent';
+import { PiAcpHost } from '../src/host';
 import type { CreateElicitationRequest, CreateElicitationResponse } from '@agentclientprotocol/sdk';
 import { parseAskUserQuestionElicitationRequest } from '@molly/shared';
 import {
@@ -1161,5 +1162,225 @@ describe('owned ACP host integration', () => {
     expect(entries).toContainEqual(
       expect.objectContaining({ type: 'usage', kind: 'personal_memory_extraction' })
     );
+  });
+});
+
+describe('session system prompt toolset fingerprint', () => {
+  const reloadOptions = () => {
+    const state = {
+      instant: new Date('2026-10-17T12:00:00.000Z'),
+      preference: 'Likes muted color',
+    };
+    return {
+      state,
+      options: {
+        time: { now: () => state.instant, resolveTimeZone: () => 'America/Los_Angeles' },
+        memoryResponse: '{"changes":[]}',
+        peer: {
+          extMethod: async () => ({
+            revision: state.preference,
+            enabled: true,
+            entries: [{ id: 'p1', text: state.preference }],
+          }),
+        },
+      },
+    };
+  };
+  const toolExtension =
+    (register: boolean): InlineExtension =>
+    (pi) => {
+      if (register)
+        pi.registerTool({
+          name: 'synthetic_added_tool',
+          label: 'Synthetic added tool',
+          description: 'Synthetic tool present only in some workers',
+          parameters: { type: 'object', properties: {} },
+          execute: async () => ({ content: [{ type: 'text', text: 'unused' }], details: {} }),
+        });
+    };
+  const systemText = (observed: string): string =>
+    JSON.stringify(
+      JSON.parse(observed).messages.filter((message: { role: string }) => message.role === 'system')
+    );
+  const savedEntries = async (file: string) =>
+    (await readFile(file, 'utf8'))
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .filter(
+        (entry) => entry.type === 'custom' && entry.customType === 'molly_host_system_prompt'
+      );
+  type Fixture = Awaited<ReturnType<typeof managed>>;
+  const worker = async (
+    options: ReturnType<typeof reloadOptions>['options'],
+    register: boolean,
+    base?: Fixture['config'],
+    nativeSessionId?: string,
+    productionProfile = false
+  ) => {
+    const f = await managed({
+      ...options,
+      productionProfile,
+      extensions: [toolExtension(register)],
+      config: {
+        personalMemory: true,
+        ...base,
+        ...(base ? { runtimeEpoch: randomUUID(), nativeSessionId } : {}),
+      },
+    });
+    const session = await f.open();
+    const turn = async (runId: string) => {
+      const snapshot = { ...session.snapshot, runId, turnId: runId };
+      f.grant(snapshot);
+      expect((await session.prompt(`Synthetic ${runId}`, snapshot)).stopReason).toBe('end_turn');
+      return systemText(f.observed.filter((body) => !body.includes('Extract only')).at(-1)!);
+    };
+    const close = async () => {
+      await f.agent.dispose();
+      vi.restoreAllMocks();
+    };
+    return { f, session, turn, close };
+  };
+
+  it.each([
+    ['adds', false, true],
+    ['removes', true, false],
+  ])(
+    'rebuilds once with fresh time and memory when the next worker %s a tool',
+    async (_, before, after) => {
+      const { state, options } = reloadOptions();
+      const first = await worker(options, before);
+      const original = await first.turn('first');
+      expect(original).toContain('2026-10-17T12:00:00.000Z');
+      expect(original).toContain('Likes muted color');
+      await first.close();
+      state.instant = new Date('2026-10-18T09:30:00.000Z');
+      state.preference = 'Prefers bold contrast';
+      const second = await worker(options, after, first.f.config, first.session.response.sessionId);
+      expect(second.session.binding.pluginSetHash).toBe(first.session.binding.pluginSetHash);
+      expect(second.session.binding.toolsetHash).not.toBe(first.session.binding.toolsetHash);
+      const rebuilt = await second.turn('second');
+      expect(rebuilt).not.toBe(original);
+      expect(rebuilt).toContain('2026-10-18T09:30:00.000Z');
+      expect(rebuilt).toContain('Prefers bold contrast');
+      expect(rebuilt).not.toContain('Likes muted color');
+      expect(rebuilt.includes('synthetic_added_tool')).toBe(after);
+      state.instant = new Date('2026-10-19T00:00:00.000Z');
+      expect(await second.turn('third')).toBe(rebuilt);
+      const entries = await savedEntries(second.session.binding.nativeSessionFile);
+      expect(entries.map((entry) => entry.data.toolsetHash)).toEqual([
+        first.session.binding.toolsetHash,
+        second.session.binding.toolsetHash,
+      ]);
+      expect(entries.map((entry) => entry.data.version)).toEqual([2, 2]);
+      await second.close();
+    }
+  );
+
+  it('keeps byte-identical prompts across production-profile workers with an unchanged toolset', async () => {
+    const { state, options } = reloadOptions();
+    const first = await worker(options, true, undefined, undefined, true);
+    const original = await first.turn('first');
+    await first.close();
+    state.instant = new Date('2026-10-18T09:30:00.000Z');
+    state.preference = 'Prefers bold contrast';
+    const second = await worker(
+      options,
+      true,
+      first.f.config,
+      first.session.response.sessionId,
+      true
+    );
+    expect(second.session.binding.toolsetHash).toBe(first.session.binding.toolsetHash);
+    expect(second.session.binding.pluginSetHash).toBe(first.session.binding.pluginSetHash);
+    expect(await second.turn('second')).toBe(original);
+    expect(await savedEntries(second.session.binding.nativeSessionFile)).toHaveLength(1);
+    await second.close();
+  });
+
+  it('lets the latest of duplicate entries win across workers', async () => {
+    const { state, options } = reloadOptions();
+    const first = await worker(options, false);
+    await first.turn('first');
+    await first.close();
+    state.instant = new Date('2026-10-18T09:30:00.000Z');
+    const second = await worker(options, true, first.f.config, first.session.response.sessionId);
+    const rebuilt = await second.turn('second');
+    await second.close();
+    state.instant = new Date('2026-10-19T00:00:00.000Z');
+    const third = await worker(options, true, first.f.config, first.session.response.sessionId);
+    expect(await third.turn('third')).toBe(rebuilt);
+    expect(await savedEntries(third.session.binding.nativeSessionFile)).toHaveLength(2);
+    await third.close();
+  });
+
+  it('rebuilds a legacy v1 entry exactly once, then reuses the rebuilt bytes', async () => {
+    const { state, options } = reloadOptions();
+    const first = await worker(options, false);
+    const original = await first.turn('first');
+    await first.close();
+    const file = first.session.binding.nativeSessionFile;
+    const lines = (await readFile(file, 'utf8')).split('\n');
+    await writeFile(
+      file,
+      lines
+        .map((line) => {
+          if (!line) return line;
+          const entry = JSON.parse(line);
+          if (entry.customType !== 'molly_host_system_prompt') return line;
+          return JSON.stringify({
+            ...entry,
+            data: { version: 1, systemPrompt: entry.data.systemPrompt },
+          });
+        })
+        .join('\n')
+    );
+    state.instant = new Date('2026-10-18T09:30:00.000Z');
+    const second = await worker(options, false, first.f.config, first.session.response.sessionId);
+    const rebuilt = await second.turn('second');
+    expect(rebuilt).not.toBe(original);
+    expect(rebuilt).toContain('2026-10-18T09:30:00.000Z');
+    await second.close();
+    state.instant = new Date('2026-10-19T00:00:00.000Z');
+    const third = await worker(options, false, first.f.config, first.session.response.sessionId);
+    expect(await third.turn('third')).toBe(rebuilt);
+    expect((await savedEntries(file)).map((entry) => entry.data.version)).toEqual([1, 2]);
+    await third.close();
+  });
+
+  it('refuses a malformed saved entry without rewriting history or inferring', async () => {
+    const { options } = reloadOptions();
+    const first = await worker(options, false);
+    await first.turn('first');
+    await first.close();
+    const file = first.session.binding.nativeSessionFile;
+    const corrupted = (await readFile(file, 'utf8'))
+      .split('\n')
+      .map((line) => {
+        if (!line) return line;
+        const entry = JSON.parse(line);
+        if (entry.customType !== 'molly_host_system_prompt') return line;
+        return JSON.stringify({ ...entry, data: { version: 2, systemPrompt: 'Missing hashes' } });
+      })
+      .join('\n');
+    await writeFile(file, corrupted);
+    const bind = vi.spyOn(PiAcpHost.prototype, 'bind');
+    const f = await managed({
+      ...options,
+      extensions: [toolExtension(false)],
+      config: {
+        ...first.f.config,
+        runtimeEpoch: randomUUID(),
+        nativeSessionId: first.session.response.sessionId,
+      },
+    });
+    await expect(f.open()).rejects.toThrow('pi_acp_session_setup_failed');
+    await expect(bind.mock.results[0]!.value).rejects.toThrow(
+      'pi_acp_host_invalid_system_prompt_snapshot'
+    );
+    expect(await readFile(file, 'utf8')).toBe(corrupted);
+    expect(f.observed).toEqual([]);
+    await f.agent.dispose();
+    vi.restoreAllMocks();
   });
 });

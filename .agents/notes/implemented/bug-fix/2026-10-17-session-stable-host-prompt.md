@@ -17,6 +17,8 @@ Reuse ladder: the existing host hook alone could not survive a new worker. The n
 
 The snapshot begins at the first actual inference hook. Histories from older builds without the custom entry acquire one on their next inference; their prior prompt bytes cannot be recovered retrospectively. Later host/reminder changes apply to new sessions. This deliberately postpones such updates for already active sessions. Mid-conversation system updates, transport changes and Search/Fetch remain outside this change.
 
+Follow-up: [toolset fingerprint](2026-10-17-host-prompt-toolset-fingerprint.md) ([#157](https://github.com/LeonEthan/molly-design/issues/157)) later rebuilds the saved prompt once when a reload's tool or plugin set differs, and replaces first-entry selection with latest-entry selection.
+
 The preference context is captured once. Extraction still needs current memory records and revision fences, so every run retains its existing pre-inference read solely for extraction once the prompt has been built. The first run also uses that snapshot for prompt context. Keeping this read timing preserves deletion/disable changes during inference as stale-revision fences for the eventual capture; moving the read after inference would weaken that behavior. This preserves current disable/delete/write-conflict checks without rewriting the system prompt. The [memory Spec](../../../../specs/personal-memory.md) now describes the retained prompt and deletion boundary; it remains draft. This supersedes only the per-turn context timing in the [memory integration note](../../proposed/architecture/2026-09-28-memory-component-selection.md), preserving its component/extraction decisions.
 
 ## Deterministic evidence

@@ -56,7 +56,7 @@ export const KimiCode: Story = {
     stored: {
       ...StoredSecret.args!.stored!,
       providerPresetId: 'kimi-coding',
-      baseUrl: 'https://api.kimi.com/coding/',
+      baseUrl: 'https://api.kimi.com/coding/v1',
     },
   },
 };

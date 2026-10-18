@@ -5,7 +5,7 @@ export const HOST_SYSTEM_PROMPT_ENTRY = 'molly_host_system_prompt';
 
 export type ToolsetFingerprint = { toolsetHash: string; pluginSetHash: string };
 
-const HostSystemPromptSchema = z.discriminatedUnion('version', [
+const HostSystemPromptSchema = z.union([
   z.object({ version: z.literal(1), systemPrompt: z.string() }),
   z.object({
     version: z.literal(2),
@@ -13,6 +13,7 @@ const HostSystemPromptSchema = z.discriminatedUnion('version', [
     toolsetHash: z.string().regex(/^[a-f0-9]{64}$/),
     pluginSetHash: z.string().regex(/^[a-f0-9]{64}$/),
   }),
+  z.object({ version: z.number().int().gt(2), systemPrompt: z.string() }),
 ]);
 
 export function hostSystemPromptEntry(
@@ -39,6 +40,8 @@ export function savedHostSystemPrompt(
   }
   if (
     latest?.version === 2 &&
+    'toolsetHash' in latest &&
+    'pluginSetHash' in latest &&
     latest.toolsetHash === current.toolsetHash &&
     latest.pluginSetHash === current.pluginSetHash
   )

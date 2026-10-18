@@ -1,0 +1,91 @@
+{
+  "writtenBy": {
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "1.0.4"
+  },
+  "header": {
+    "type": "session",
+    "version": 3,
+    "id": "01a14d09-e635-77e6-93fc-cefa1a953a59",
+    "timestamp": "2026-10-18T03:24:16.822Z",
+    "cwd": "/synthetic/workspace"
+  },
+  "entries": [
+    {
+      "type": "model_change",
+      "id": "92983b29",
+      "parentId": null,
+      "timestamp": "2026-10-18T03:24:16.823Z",
+      "provider": "openai",
+      "modelId": "synthetic-legacy-model"
+    },
+    {
+      "type": "thinking_level_change",
+      "id": "9df6ec7a",
+      "parentId": "92983b29",
+      "timestamp": "2026-10-18T03:24:16.823Z",
+      "thinkingLevel": "off"
+    },
+    {
+      "type": "custom",
+      "customType": "molly_host_system_prompt",
+      "data": {
+        "version": 1,
+        "systemPrompt": "Synthetic Pi 1.0.4 frozen host prompt."
+      },
+      "id": "23d64bdf",
+      "parentId": "9df6ec7a",
+      "timestamp": "2026-10-18T03:24:16.823Z"
+    },
+    {
+      "type": "message",
+      "id": "ec51a887",
+      "parentId": "23d64bdf",
+      "timestamp": "2026-10-18T03:24:16.823Z",
+      "message": {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Synthetic legacy greeting."
+          }
+        ],
+        "timestamp": 0
+      }
+    },
+    {
+      "type": "message",
+      "id": "448c5b60",
+      "parentId": "ec51a887",
+      "timestamp": "2026-10-18T03:24:16.823Z",
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "Synthetic legacy answer."
+          }
+        ],
+        "api": "faux",
+        "provider": "faux",
+        "model": "faux-1",
+        "usage": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "totalTokens": 0,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "stopReason": "stop",
+        "timestamp": 1792293856823
+      }
+    }
+  ]
+}

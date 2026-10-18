@@ -64,6 +64,23 @@ it('suggests the endpoint most pinned SDK models of each native preset use', asy
   }
 });
 
+it.each(['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'])(
+  'loads a legacy saved Kimi %s as the SDK default OpenAI endpoint',
+  async (baseUrl) => {
+    const runtime = await offlineRuntime();
+    const model = runtime.getModel('kimi-coding', 'kimi-for-coding');
+    expect(model?.api).toBe('openai-completions');
+    expect(
+      configureModelConnection(
+        runtime,
+        connection('kimi-coding', baseUrl),
+        selecting('kimi-for-coding')
+      )
+    ).toEqual({ providerId: 'kimi-coding', baseUrl: 'https://api.kimi.com/coding/v1' });
+    expect(runtime.getRegisteredProviderConfig('kimi-coding')).toBeUndefined();
+  }
+);
+
 it('keeps every SDK model on its own endpoint while a connection uses the default', async () => {
   for (const preset of nativePresets) {
     const runtime = await offlineRuntime();

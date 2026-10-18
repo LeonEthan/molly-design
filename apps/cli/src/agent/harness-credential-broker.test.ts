@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   HarnessRunSnapshot,
@@ -30,7 +31,7 @@ const snapshot: HarnessRunSnapshot = {
   harness: {
     id: 'molly',
     engine: 'pi',
-    engineVersion: '1.0.4',
+    engineVersion: PI_ENGINE_VERSION,
     buildId: 'test',
     protocolVersion: 1,
   },

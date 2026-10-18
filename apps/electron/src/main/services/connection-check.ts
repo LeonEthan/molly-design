@@ -167,7 +167,7 @@ export async function checkModelConnection(
 const OAUTH_CHECK_URLS: Partial<Record<string, string>> = {
   openai: 'https://api.openai.com/v1/models',
   // Kimi's coding endpoint answers a models list for subscription tokens.
-  'kimi-coding': 'https://api.kimi.com/coding/models'
+  'kimi-coding': 'https://api.kimi.com/coding/v1/models'
 }
 
 async function checkOAuthConnection(
@@ -202,10 +202,7 @@ async function checkOAuthConnection(
     const text = await readBounded(response)
     if (text === null) return { ok: false, reason: 'invalid_response' }
     const data = JSON.parse(text)
-    const entries: unknown[] | null = listEntries(
-      providerPresetId === 'kimi-coding' ? 'anthropic' : 'openai',
-      data
-    )
+    const entries: unknown[] | null = listEntries('openai', data)
     if (!entries) return { ok: true }
     const models = entries
       .map((entry: unknown) => {

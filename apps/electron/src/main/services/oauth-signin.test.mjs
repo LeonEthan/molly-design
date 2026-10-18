@@ -607,6 +607,7 @@ void test('cross-provider sign-in revokes the edited grant before replacing it; 
   assert.equal(result.connection.credentialRef, edited.credentialRef)
   assert.equal(result.connection.revision, edited.revision + 1)
   assert.equal(result.connection.providerPresetId, 'kimi-coding')
+  assert.equal(result.connection.baseUrl, 'https://api.kimi.com/coding/v1')
   assert.equal(result.connection.models, undefined)
   assert.deepEqual(revocations, [{ provider: 'openai', refreshToken: oldTokens.refreshToken }])
   assert.equal((await store.oauthFor(edited.id)).refreshToken, newCredential.refresh)
@@ -657,7 +658,7 @@ void test('an edit cannot overwrite an unrelated destination-provider OAuth conn
     {
       ...oauthInput,
       providerPresetId: 'kimi-coding',
-      baseUrl: 'https://api.kimi.com/coding',
+      baseUrl: 'https://api.kimi.com/coding/v1',
       models: undefined
     },
     oldTokens,

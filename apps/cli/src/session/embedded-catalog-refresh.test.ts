@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { describe, expect, it } from 'vitest';
 import {
   ACP_CAPABILITY_CACHE_VERSION,
@@ -28,7 +29,7 @@ const catalog: AcpCapabilityCacheEntry = {
   cliType: 'builtin',
   agentType: 'molly',
   cacheVersion: ACP_CAPABILITY_CACHE_VERSION,
-  sourceVersion: 'molly-pi:1.0.4:synthetic',
+  sourceVersion: `molly-pi:${PI_ENGINE_VERSION}:synthetic`,
   provenance: 'runtime',
   fetchedAt: 1,
   modes: [],

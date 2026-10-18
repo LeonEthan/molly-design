@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { ModelRuntime, type InlineExtension } from '@earendil-works/pi-coding-agent';
+import { getCurrentTools } from '@earendil-works/pi-ai';
 import { PiAcpHost } from '../src/host';
 import type { CreateElicitationRequest, CreateElicitationResponse } from '@agentclientprotocol/sdk';
 import { parseAskUserQuestionElicitationRequest } from '@molly/shared';
@@ -24,6 +25,122 @@ import { retrySignals } from './fixtures/retry';
 
 const providerId = MOLLY_PROVIDER_IDS['openai-compatible'];
 describe('owned ACP host integration', () => {
+  it('fingerprints tool names and plugin paths in locale-independent code-unit order', async () => {
+    const f = await managed({
+      extensions: [
+        (pi) => {
+          for (const name of ['synthetic_a', 'synthetic_Z', 'synthetic_z'])
+            pi.registerTool({
+              name,
+              label: name,
+              description: name,
+              parameters: { type: 'object', properties: {} },
+              execute: async () => ({ content: [{ type: 'text', text: 'unused' }], details: {} }),
+            });
+        },
+      ],
+    });
+    const bind = vi.spyOn(f.host, 'bind');
+    const session = await f.open();
+    const wrapper = bind.mock.calls[0]![0];
+    const tools = wrapper.piSession
+      .getAllTools()
+      .map(({ name, description, parameters }) => ({ name, description, parameters }));
+    const names = tools.map((tool) => tool.name).sort();
+    expect(names.filter((name) => name.startsWith('synthetic_'))).toEqual([
+      'synthetic_Z',
+      'synthetic_a',
+      'synthetic_z',
+    ]);
+    const hash = (value: unknown) =>
+      createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    expect(session.binding.toolsetHash).toBe(
+      hash(names.map((name) => tools.find((tool) => tool.name === name)))
+    );
+    vi.spyOn(String.prototype, 'localeCompare').mockImplementation(() => {
+      throw new Error('locale_sort_forbidden');
+    });
+    const first = await f.host.bind(wrapper, ['/plugins/z', '/plugins/ä', '/plugins/Z']);
+    const second = await f.host.bind(wrapper, ['/plugins/ä', '/plugins/Z', '/plugins/z']);
+    expect(first.toolsetHash).toBe(session.binding.toolsetHash);
+    expect(first.pluginSetHash).toBe(hash(['/plugins/Z', '/plugins/z', '/plugins/ä']));
+    expect(second.pluginSetHash).toBe(first.pluginSetHash);
+  });
+
+  it.each(['custom', 'user'] as const)(
+    'refuses an idle native %s turn after Molly dispatch ends',
+    async (messageType) => {
+      const events: string[] = [];
+      const f = await managed({
+        extensions: [
+          (pi) => {
+            pi.on('before_agent_start', (event) => {
+              events.push(event.messageType);
+            });
+          },
+        ],
+      });
+      const bind = vi.spyOn(f.host, 'bind');
+      const session = await f.open();
+      const native = bind.mock.calls[0]![0].piSession;
+      f.grant(session.snapshot);
+      await session.prompt();
+      const original = (await readFile(session.binding.nativeSessionFile, 'utf8'))
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line))
+        .filter((entry) => entry.customType === 'molly_host_system_prompt');
+      const unsolicited =
+        messageType === 'custom'
+          ? native.sendCustomMessage(
+              { customType: 'synthetic-trigger', content: 'Synthetic idle turn', display: false },
+              { triggerTurn: true }
+            )
+          : native.sendUserMessage('Synthetic idle user turn');
+      await expect(unsolicited).rejects.toThrow('pi_acp_extension_failed');
+      expect(events).toEqual(['user', messageType]);
+      expect(f.observed).toHaveLength(1);
+      expect(f.pipe.destroyed).toBe(true);
+      expect(
+        (await readFile(session.binding.nativeSessionFile, 'utf8'))
+          .split('\n')
+          .filter(Boolean)
+          .map((line) => JSON.parse(line))
+          .filter((entry) => entry.customType === 'molly_host_system_prompt')
+      ).toEqual(original);
+    }
+  );
+
+  it('restores the active native tool loadout on resume without executing tools', async () => {
+    const f = await managed();
+    const bind = vi.spyOn(f.host, 'bind');
+    const first = await f.open();
+    const native = bind.mock.calls[0]![0].piSession;
+    native.setActiveToolsByName(['read']);
+    f.grant(first.snapshot);
+    await first.prompt();
+    expect(native.getActiveToolNames()).toEqual(['read']);
+    await f.agent.dispose();
+    vi.restoreAllMocks();
+    const next = await managed({
+      config: {
+        ...f.config,
+        runtimeEpoch: randomUUID(),
+        nativeSessionId: first.response.sessionId,
+      },
+    });
+    const nextBind = vi.spyOn(next.host, 'bind');
+    const resumed = await next.open();
+    expect(nextBind.mock.calls[0]![0].piSession.getActiveToolNames()).toEqual(['read']);
+    expect(next.observed).toEqual([]);
+    next.grant({ ...resumed.snapshot, runId: 'resumed' });
+    await resumed.prompt('Synthetic resume', { ...resumed.snapshot, runId: 'resumed' });
+    expect(nextBind.mock.calls[0]![0].piSession.getActiveToolNames()).toEqual(['read']);
+    expect(getCurrentTools(JSON.parse(next.observed[0]!).messages).map(({ name }) => name)).toEqual(
+      ['read']
+    );
+  });
+
   it('accepts an empty grant for its bound compatible connection and completes inference', async () => {
     const f = await managed();
     const session = await f.open();
@@ -1189,7 +1306,10 @@ describe('session system prompt toolset fingerprint', () => {
   const toolExtension =
     (register: boolean): InlineExtension =>
     (pi) => {
-      if (register)
+      if (register) {
+        pi.on('session_start', () =>
+          pi.setActiveTools([...pi.getActiveTools(), 'synthetic_added_tool'])
+        );
         pi.registerTool({
           name: 'synthetic_added_tool',
           label: 'Synthetic added tool',
@@ -1197,6 +1317,7 @@ describe('session system prompt toolset fingerprint', () => {
           parameters: { type: 'object', properties: {} },
           execute: async () => ({ content: [{ type: 'text', text: 'unused' }], details: {} }),
         });
+      }
     };
   const systemText = (observed: string): string =>
     JSON.stringify(
@@ -1314,38 +1435,92 @@ describe('session system prompt toolset fingerprint', () => {
     await third.close();
   });
 
-  it('rebuilds a legacy v1 entry exactly once, then reuses the rebuilt bytes', async () => {
+  it.each([1, 3])(
+    'rebuilds a version %s entry exactly once, then reuses the rebuilt bytes',
+    async (version) => {
+      const { state, options } = reloadOptions();
+      const first = await worker(options, false);
+      const original = await first.turn('first');
+      await first.close();
+      const file = first.session.binding.nativeSessionFile;
+      const lines = (await readFile(file, 'utf8')).split('\n');
+      await writeFile(
+        file,
+        lines
+          .map((line) => {
+            if (!line) return line;
+            const entry = JSON.parse(line);
+            if (entry.customType !== 'molly_host_system_prompt') return line;
+            return JSON.stringify({
+              ...entry,
+              data: { version, systemPrompt: entry.data.systemPrompt },
+            });
+          })
+          .join('\n')
+      );
+      state.instant = new Date('2026-10-18T09:30:00.000Z');
+      const second = await worker(options, false, first.f.config, first.session.response.sessionId);
+      const rebuilt = await second.turn('second');
+      expect(rebuilt).not.toBe(original);
+      expect(rebuilt).toContain('2026-10-18T09:30:00.000Z');
+      await second.close();
+      state.instant = new Date('2026-10-19T00:00:00.000Z');
+      const third = await worker(options, false, first.f.config, first.session.response.sessionId);
+      expect(await third.turn('third')).toBe(rebuilt);
+      expect((await savedEntries(file)).map((entry) => entry.data.version)).toEqual([version, 2]);
+      await third.close();
+    }
+  );
+
+  it('opens a genuine Pi 1.0.4-written v1 session and rebuilds once on 1.3.0', async () => {
     const { state, options } = reloadOptions();
-    const first = await worker(options, false);
-    const original = await first.turn('first');
-    await first.close();
-    const file = first.session.binding.nativeSessionFile;
-    const lines = (await readFile(file, 'utf8')).split('\n');
-    await writeFile(
-      file,
-      lines
-        .map((line) => {
-          if (!line) return line;
-          const entry = JSON.parse(line);
-          if (entry.customType !== 'molly_host_system_prompt') return line;
-          return JSON.stringify({
-            ...entry,
-            data: { version: 1, systemPrompt: entry.data.systemPrompt },
-          });
-        })
-        .join('\n')
+    const id = randomUUID();
+    const f = await managed({
+      ...options,
+      extensions: [toolExtension(false)],
+      config: { nativeSessionId: id, personalMemory: true },
+    });
+    const baseline = JSON.parse(
+      await readFile(new URL('./fixtures/pi-1.0.4-session.json', import.meta.url), 'utf8')
     );
-    state.instant = new Date('2026-10-18T09:30:00.000Z');
-    const second = await worker(options, false, first.f.config, first.session.response.sessionId);
-    const rebuilt = await second.turn('second');
-    expect(rebuilt).not.toBe(original);
-    expect(rebuilt).toContain('2026-10-18T09:30:00.000Z');
-    await second.close();
+    expect(baseline.writtenBy.version).toBe('1.0.4');
+    const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+    const directory = join(
+      f.root,
+      'sessions',
+      digest(f.config.connection.id),
+      digest(f.config.productSessionId)
+    );
+    await mkdir(directory, { recursive: true });
+    const file = join(directory, `2026-10-17T12-00-00-000Z_${id}.jsonl`);
+    const original =
+      [
+        JSON.stringify({ ...baseline.header, id, cwd: f.cwd }),
+        ...baseline.entries.map((entry: unknown) => JSON.stringify(entry)),
+      ].join('\n') + '\n';
+    await writeFile(file, original);
+    const session = await f.open();
+    expect(await readFile(file, 'utf8')).toBe(original);
+    f.grant(session.snapshot);
+    await session.prompt();
+    const rebuilt = systemText(f.observed[0]!);
+    expect(rebuilt).not.toContain('Synthetic Pi 1.0.4 frozen host prompt.');
+    expect(rebuilt).toContain('Likes muted color');
+    expect(f.updates).toContainEqual(
+      expect.objectContaining({
+        update: {
+          sessionUpdate: 'user_message_chunk',
+          content: { type: 'text', text: 'Synthetic legacy greeting.' },
+        },
+      })
+    );
+    await f.agent.dispose();
+    vi.restoreAllMocks();
     state.instant = new Date('2026-10-19T00:00:00.000Z');
-    const third = await worker(options, false, first.f.config, first.session.response.sessionId);
-    expect(await third.turn('third')).toBe(rebuilt);
+    const next = await worker(options, false, f.config, id);
+    expect(await next.turn('reopened')).toBe(rebuilt);
     expect((await savedEntries(file)).map((entry) => entry.data.version)).toEqual([1, 2]);
-    await third.close();
+    await next.close();
   });
 
   it('refuses a malformed saved entry without rewriting history or inferring', async () => {

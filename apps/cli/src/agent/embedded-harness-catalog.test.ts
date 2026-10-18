@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -19,7 +20,7 @@ import type { LoroDocumentManager } from '../lib/loro/doc';
 
 const catalog: HarnessModelCatalog = {
   version: 1,
-  engineVersion: '1.0.4',
+  engineVersion: PI_ENGINE_VERSION,
   models: [
     {
       providerPresetId: 'kimi-coding',
@@ -118,7 +119,7 @@ it('keeps duplicate model IDs separated by connection and leaves first use unsel
 it('clean-install Kimi All offers every catalog model with its thinking ladder', () => {
   const kimiCatalog: HarnessModelCatalog = {
     version: 1,
-    engineVersion: '1.0.4',
+    engineVersion: PI_ENGINE_VERSION,
     models: [
       {
         providerPresetId: 'kimi-coding',
@@ -197,7 +198,7 @@ it('reads only a platform-matched, hash-verified catalog from the packaged direc
   await mkdir(join(root, 'harness'));
   const bytes = JSON.stringify(catalog);
   const manifest = {
-    engineVersion: '1.0.4',
+    engineVersion: PI_ENGINE_VERSION,
     protocolVersion: 1,
     buildId: 'synthetic-build',
     buildPlatform: process.platform,
@@ -259,7 +260,7 @@ it('publishes from the local machine authority without cloud confirmation and re
     documents,
     machineId,
     workspaceId,
-    async () => ({ catalog, sourceVersion: 'molly-pi:1.0.4:synthetic' })
+    async () => ({ catalog, sourceVersion: `molly-pi:${PI_ENGINE_VERSION}:synthetic` })
   );
   await expect(publisher.publish([connection])).rejects.toThrow('synthetic_flush_failure');
   expect(configs.map((config) => config.id)).toEqual([id]);
@@ -280,7 +281,7 @@ it('publishes from the local machine authority without cloud confirmation and re
       projectEmbeddedHarnessCatalog(catalog, [connection]).configOptions,
       [],
       false,
-      'molly-pi:1.0.4:synthetic',
+      `molly-pi:${PI_ENGINE_VERSION}:synthetic`,
       projectEmbeddedHarnessCatalog(catalog, [connection]).modelReasoningEfforts,
     ],
   ]);

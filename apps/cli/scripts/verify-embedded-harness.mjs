@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '../../../packages/shared/src/embedded-harness.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -32,7 +33,7 @@ export function verifyEmbeddedHarness(directory) {
   if (
     manifest.schemaVersion !== 1 ||
     manifest.protocolVersion !== 1 ||
-    manifest.engineVersion !== '1.0.4' ||
+    manifest.engineVersion !== PI_ENGINE_VERSION ||
     !Array.isArray(manifest.files) ||
     !Array.isArray(manifest.packages)
   )

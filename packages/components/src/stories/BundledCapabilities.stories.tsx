@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '@molly/shared/embedded-harness';
 import type { Meta, StoryObj } from '@storybook/react';
 import { BundledCapabilitiesView } from '@/components/settings/bundled-capabilities-setting';
 
@@ -24,11 +25,11 @@ export const Included: Story = {
       harness: {
         id: 'molly',
         engine: 'pi',
-        engineVersion: '1.0.4',
+        engineVersion: PI_ENGINE_VERSION,
         protocolVersion: 1,
         buildId: 'a'.repeat(64),
       },
-      engine: { name: '@earendil-works/pi-coding-agent', version: '1.0.4', license: 'MIT' },
+      engine: { name: '@earendil-works/pi-coding-agent', version: PI_ENGINE_VERSION, license: 'MIT' },
       addons: [
         { name: 'pi-skillful', version: '0.4.0', license: 'MIT' },
         { name: '@juicesharp/rpiv-ask-user-question', version: '2.12.0', license: 'MIT' },

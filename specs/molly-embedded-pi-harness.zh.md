@@ -79,7 +79,7 @@ R1 → R2 是关键路径；R3 嵌入 R2，随后完成 R4 和 R5。新增真实
 
 ### 内置交付与隔离
 
-引擎基线为 Pi v1.0.4，使用公开 coding-agent SDK、固定绝对路径和独立进程。引擎、下列 Pi 包及实际需要的资源在构建时锁定并随包交付；发布产物带版本、依赖/资源摘要、协议版本和平台清单。开发与安装包均需验证实际 Node 版本满足引擎要求，不以宿主开发 Node 代替包内探针。
+引擎基线为 Pi v1.3.0，使用公开 coding-agent SDK、固定绝对路径和独立进程。引擎、下列 Pi 包及实际需要的资源在构建时锁定并随包交付；发布产物带版本、依赖/资源摘要、协议版本和平台清单。开发与安装包均需验证实际 Node 版本满足引擎要求，不以宿主开发 Node 代替包内探针。
 
 Molly 不定位、启动或修改本地 Pi，从不读写用户自己的 Pi 配置（`~/.pi/agent`），也不继承其认证。每个 worker epoch 在 Molly 私有数据下拥有独立的原生 Pi 配置（agent 目录），在导入 SDK 前由 epoch 派生；settings 和包状态位于该配置；受管模型运行时的凭据、模型目录及连接配置保留在内存。产品历史和临时文件保留在现有私有根目录下。在该配置内保留 Pi 的通用 Agent 能力：原生资源发现、skills、提示模板、上下文文件和扩展钩子。打开会话目录不会自动信任其中的项目代码：默认不加载项目 `.pi` 配置、包和 JavaScript 扩展；Pi 保存的显式信任决定在所属配置内有效；新 worker 不继承另一 worker 的信任授予或包状态。Molly 在工作目录 `.agents/skills` 中生成的文本 skills 通过 SDK 的显式 skill 路径加载，不授予可执行项目资源信任；用户 `~/.agents/skills` 中的共享 skills 也会被原生发现。worker 环境采用白名单，保留包内 Node 启动所需变量，移除外部认证和代码注入变量。退出只清理自己拥有的进程。
 
@@ -93,7 +93,7 @@ Provider preset、用户连接和模型选择分别建模。同厂商多个连�
 
 兼容服务可明确配置为空密钥，从发现、保存到运行都支持免密；省略凭据字段仅保留同一目标的旧值。更换目标需要重新输入密钥或明确选择免密。只有绑定兼容连接的 run 可接受空凭据；请求不带授权头，也不使用环境中的密钥。
 
-保留已有原生 presets、高级 OpenAI-compatible 和多连接架构；本次真实服务交付以已配置的 Kimi k3-256k/high 为准，不再扩展逐厂商、地域和模型验收。SDK 升级到锁定的 v1.0.4 基线，以使用其原生 MCP 和包。Molly 不再包装 provider 传输，因此先前 Google 拒绝自定义 fetch 的问题不再适用；Google 仍未验证。支持矩阵区分真实验证、模拟验证、阻塞和未执行；只有真实通过的范围可称为正式支持。目录存在不代表服务可用，无视觉能力的模型不得显示为完成了原生看图评审。
+保留已有原生 presets、高级 OpenAI-compatible 和多连接架构；本次真实服务交付以已配置的 Kimi k3-256k/high 为准，不再扩展逐厂商、地域和模型验收。SDK 保持锁定基线（为使用原生 MCP 和包而采用 v1.0.4，现为 v1.3.0）。Molly 不再包装 provider 传输，因此先前 Google 拒绝自定义 fetch 的问题不再适用；Google 仍未验证。支持矩阵区分真实验证、模拟验证、阻塞和未执行；只有真实通过的范围可称为正式支持。目录存在不代表服务可用，无视觉能力的模型不得显示为完成了原生看图评审。
 
 凭据由 SecretStore 保护，普通配置仅保存引用；保存后无通用明文读取 API。每轮运行通过 fd 3 向 worker 的 Pi 内存凭据存储授予所选连接的模型 Key。模型目录、自定义端点和已声明模型保留在该运行时内存；使用预设默认端点的连接让每个模型沿用其自身的 SDK 端点。受管运行时不读取旧 profile 认证/模型文件，也不再为子会话发布新副本。独立 worker 运行时保留原生 provider ID，同时隔离连接。从编辑表单发起的 OAuth 登录绑定该连接 ID 和预期版本，在凭据/服务商转换后保留身份，不覆盖另一个服务商账号。新增连接会替换该服务商已有的 OAuth 账号。退出登录、转换 API key 或替换账号时，在本地移除前尝试撤销服务商授权，并与刷新串行执行。OpenAI 重新登录复用该注册的 client ID、主机 ID 和保留的 ID-token hint；校验新 ID token 的签名、issuer、audience、有效期、nonce 和已保存的 subject 后才更新凭据。身份与 hint 在加密 vault 中保留，刷新不丢失，授权 URL 仅在主进程使用。OpenAI 退出登录清除 access、refresh 和 ID token，但在原有禁用连接行中保留 client 与已验证 subject 的映射。主进程拥有的退出状态允许重新登录或显式删除，不允许检查、执行、刷新或启用。重新登录复用该注册，Add 不得覆盖它；删除只忘记本地映射，不注销远端 client。清理仅保护已保存的 provider/client/refresh-token 授权，其余候选和被替换会话均尝试撤销，包括同一 client 的授权。退出时若无法确认远端撤销，应明确提示。取消仅在撤销/提交开始前生效；这一不可逆阶段完成后不会恢复已撤销的旧授权。若提交失败且存储仍可用，将匹配的旧授权保留为拒绝状态。OAuth 刷新不阻塞主机心跳。已使用的 OAuth worker 在下一次 prompt 前替换，保留原生历史并为新 epoch 获取授权。该 epoch 第一次成功授予的 Key 固定不变；后续不同 Key 的授予在修改运行时前使 worker 退役，必须使用新 worker，且不会自动重放已加 fence 的 run。旧配置既不导入也不删除；原生产品历史独立恢复。旧明文 profile 副本和旧 detached 进程持有的 Key 仍是升级边界；升级前旧扩展任务必须已经退出，卸包不会停止它们或撤销 Key。秘密不进入工作区/Loro 配置、Role、原生会话、模型上下文、工具参数、命令行、诊断或 Git；模型 Key 不通过环境变量传给 shell，不同 MCP 不共享秘密。旧图片 Key 的迁移必须考虑 CRDT 历史和备份，不能将删除当前字段宣称为彻底清除历史明文。SecretStore 无法可靠持久化时明确失败。
 
@@ -173,6 +173,6 @@ Role 选择、创建、管理、迁移、`@` 引用展开和新程序化创建�
 仓库核查基线为 `7c85b3b06cc227a4e9e0c0e61d769352754aaa00`。实现证据、合成测试、资源探针及部分 Kimi/图片真实调用见实施计划的进度记录。此前图片解码探针的路径别名误报已修复并回归通过。#57 升级现已通过 macOS arm64 签名包完整性校验，以及使用合成推理的真实 Helper Codemode 执行；该证据不涵盖 notarization、真实服务或人工视觉验收。R1 尚未完成。部分服务通过不等于所有服务、安装包、社区 GUI 或人工视觉均已验收；剩余工作以本修订 R1–R5 为准，历史矩阵不再额外扩大本次门槛。
 
 - [现有 Agent 责任](../apps/cli/src/agent/README.md)、[设计链路](../apps/cli/src/design/README.md)、[共享合同](../packages/shared/AGENTS.md)。
-- [Pi v1.0.4 包清单](https://github.com/earendil-works/pi/blob/v1.0.4/packages/coding-agent/package.json)：公开包和 Node `>=22.19.0` 要求。
-- [Pi v1.0.4 SDK 文档](https://github.com/earendil-works/pi/blob/v1.0.4/packages/coding-agent/docs/sdk.md)：原生会话、ModelRuntime、资源发现、包及默认认证/模型选择行为。
+- [Pi v1.3.0 包清单](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/package.json)：公开包和 Node `>=22.19.0` 要求。
+- [Pi v1.3.0 SDK 文档](https://github.com/earendil-works/pi/blob/v1.3.0/packages/coding-agent/docs/sdk.md)：原生会话、ModelRuntime、资源发现、包及默认认证/模型选择行为。
 - [Pi 附加包决策记录](../.agents/notes/proposed/architecture/2026-10-01-pi-native-addons.md)：包选择、不做权限检查的决定和配置凭据存储。

@@ -1,3 +1,4 @@
+import { PI_ENGINE_VERSION } from '../../../packages/shared/src/embedded-harness.ts'
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- JavaScript packaging fixtures. */
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -43,7 +44,7 @@ function fixture(t, native = false) {
     fs.mkdirSync(path.dirname(location), { recursive: true })
     fs.writeFileSync(
       location,
-      JSON.stringify({ name: `@earendil-works/${name}`, version: '1.0.4' })
+      JSON.stringify({ name: `@earendil-works/${name}`, version: PI_ENGINE_VERSION })
     )
     paths.push(relative)
   }
@@ -71,7 +72,7 @@ function fixture(t, native = false) {
   }))
   const manifest = {
     schemaVersion: 1,
-    engineVersion: '1.0.4',
+    engineVersion: PI_ENGINE_VERSION,
     protocolVersion: 1,
     packages: [],
     files,

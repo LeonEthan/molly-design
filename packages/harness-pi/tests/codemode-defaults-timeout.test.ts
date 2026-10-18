@@ -121,7 +121,7 @@ describe('managed Codemode defaults and MCP request budget', () => {
     expect(tools.some((name) => name.startsWith('subagent'))).toBe(false);
   });
 
-  it('restores native history without replay and uses the SDK factory default tool selection', async () => {
+  it('restores native history and its active tools without replay or resetting the selection to defaults', async () => {
     let restoring = false;
     const f = await fixture({
       extensions: [
@@ -184,16 +184,16 @@ describe('managed Codemode defaults and MCP request budget', () => {
     f.responses.push(fauxAssistantMessage('SYNTHETIC_RESTORED'));
     await resumed.prompt({
       sessionId: session.sessionId,
-      prompt: [{ type: 'text', text: 'Use the native factory selection after restore' }],
+      prompt: [{ type: 'text', text: 'Use the restored native tool selection' }],
     });
     expect(
       getCurrentTools(JSON.parse(f.prompts[1]!).messages)
         .map(({ name }) => name)
         .sort()
-    ).toEqual(expect.arrayContaining(['codemode', 'read', 'bash', 'edit', 'write']));
+    ).toEqual(expect.arrayContaining(['read', 'write']));
     expect(
-      getCurrentTools(JSON.parse(f.prompts[1]!).messages).some(({ name }) =>
-        name.startsWith('subagent')
+      getCurrentTools(JSON.parse(f.prompts[1]!).messages).some(
+        ({ name }) => ['bash', 'edit', 'codemode'].includes(name) || name.startsWith('subagent')
       )
     ).toBe(false);
   });

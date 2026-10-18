@@ -214,6 +214,27 @@ const VENDORED_ATTRIBUTIONS = [
   },
 ];
 
+const WEBSITE_ATTRIBUTIONS = [
+  {
+    name: 'Geist',
+    license: 'OFL-1.1',
+    homepage: 'https://github.com/vercel/geist-font',
+    author: 'The Geist Project Authors',
+    description: 'Subset web font served by the website; not bundled in the app.',
+    assets: ['website/assets/fonts/geist.woff2'],
+    noticePath: 'website/assets/fonts/OFL-Geist.txt',
+  },
+  {
+    name: 'JetBrains Mono',
+    license: 'OFL-1.1',
+    homepage: 'https://github.com/JetBrains/JetBrainsMono',
+    author: 'The JetBrains Mono Project Authors',
+    description: 'Subset web font served by the website; not bundled in the app.',
+    assets: ['website/assets/fonts/jbm.woff2'],
+    noticePath: 'website/assets/fonts/OFL-JetBrainsMono.txt',
+  },
+];
+
 function main() {
   const dependencyEntries = resolvePackageAttributions();
   const vendoredEntries = VENDORED_ATTRIBUTIONS.toSorted((a, b) => a.name.localeCompare(b.name));
@@ -357,6 +378,11 @@ function writeGeneratedMarkdown(bundle) {
     ...Object.entries(dependenciesByLicense)
       .sort(([left], [right]) => left.localeCompare(right))
       .flatMap(([license, entries]) => renderDependencyLicenseGroupMarkdown(license, entries)),
+    '## Website Assets',
+    '',
+    'Third-party assets served only by the website in `website/`; the website source and its own assets are Apache-2.0.',
+    '',
+    ...WEBSITE_ATTRIBUTIONS.flatMap((entry) => renderVendoredMarkdown(entry)),
   ].join('\n');
 
   writeFileSync(OUTPUT_MD, markdown);

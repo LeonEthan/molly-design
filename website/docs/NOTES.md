@@ -1,0 +1,93 @@
+# NOTES — Molly Design website decisions
+
+Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file keeps the decisions and constraints future edits must respect. Per-round chatter, session logs and local paths are not kept.
+
+## Status
+
+- Live at `https://molly-design.pages.dev` (Cloudflare Pages project `molly-design`), deployed manually.
+- The source in this folder rebuilds the deployed site byte for byte. `dist/index.html` sha256 is `375b6db08a08f9a5ece4be0cca4d0cf4384f65e7e6ad36aaeb97404c2fb05b38` (release v0.1.1 DMG).
+- Bringing the source into the repository was a migration only: no design, copy or animation change.
+
+## Build pipeline
+
+- `build.py` (Python 3 standard library) reads `src/slots.json` (bilingual copy as `[[zh||en]]` pairs), `src/style.css` and `src/site.js`, inlines CSS and JS, and writes `dist/index.html`.
+- `@@A:key@@` placeholders resolve to content-hashed files copied into `dist/assets/`; only assets the page uses are copied. Root files (`og.png`, icons, `_headers`, `404.html`, `robots.txt`, `sitemap.xml`) keep fixed names.
+- WebP derivatives carry `srcset`/`sizes` and explicit width/height. AVIF was not added: every browser that can run the macOS download (Safari 14+) supports WebP, and Lighthouse reports no image-format opportunity.
+- Video: H.264 MP4, faststart, no audio, poster frame, `preload="none"`.
+- Fonts are Geist and JetBrains Mono, subset with `fontTools.subset` to the Latin characters the page uses (`kern,liga,calt,ss01,tnum` for Geist, `kern` for JetBrains Mono). Chinese text uses system fonts.
+- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a release-page URL (`releases/latest`, `/releases/tag/`, a bare `/releases`) in any page including 404, a missing asset, or 404 referencing an unshipped asset.
+
+## Claims and honesty rules
+
+- Facts: Apple Silicon (arm64) only, macOS 13 Ventura or later. The app is Developer ID signed and notarized; the DMG itself is never called signed.
+- No version numbers in visible text, and no plugins, roadmap, stats, testimonials or customer logos.
+- "Real capture" wording is scoped to sections that show real app captures (the recorded edit, the export menu, workflow and explores screenshots, the sample wall of real exports).
+- The hero is a crafted animation and always shows the visible `[ Illustration ]` / `[ 示意动画 ]` label. Its bilingual aria-label says the cutouts and repaired background are crafted and that the sage-green mug is generated.
+- Sample-wall brands are made up and the captions say so: Stillwater Clay, Ember Current, Tideform, Juniper Wharf, Moss & Ember.
+- The research capture shows a 1936 WPA public-domain poster as a reference inside the built-in browser, not as Molly output. It is the only third-party artwork.
+- "Connect a model" was removed from the demo: the only Settings capture shows provider and model names. "Your key stays on this computer" remains in the hero bullets and FAQ.
+
+## Direct DMG download
+
+- Every download CTA (nav, hero, final CTA, footer, 404), the install and update FAQ answers, and JSON-LD `downloadUrl` use one constant, `DMG` in `build.py` (`@@DMG@@` in `slots.json` and `404.html`). Labels never show the version.
+- GitHub serves the asset with `Content-Disposition: attachment`, so the cross-origin link downloads directly even though browsers ignore `download` there.
+- Every release must update `DMG`; see README, "Release: bump the DMG URL". A later alternative is a `_redirects` rule `/download <dmg-url> 302` with `DMG` pointing at `/download`.
+
+## Asset provenance
+
+Every shipped image and video was checked by eye. Raw masters (app captures and crafting sources, about 127 MB) stay outside git; `assets/manifest.json` records each derivative's source name and crop for reference. Regenerating derivatives from raw masters is out of scope here.
+
+| Slot | Asset key(s) | Source |
+|---|---|---|
+| Pillar 1 (layers) | `p1-v7b` | Layers-panel capture |
+| Workflow 01 brief, 06 export | — | Text and illustration only |
+| Workflow 02 research | `wf-research-v7c` | Research capture (Wikimedia Commons references) |
+| Workflow 03 options | `wf-options-v7c` | Directions board A/B/C capture |
+| Workflow 04 layers | `wf-kv` | Tideform KV sample in the app window |
+| Workflow 05 edit | `wf-edit-v7c` | "honey oat" still after a client revision |
+| Demo A "Change a word" | video `edit-v7c`, poster `edit-v7c-poster` | Real screen recording, 9 s, muted |
+| Demo B "Export" | `export-v7c` | Export menu over the Stillwater Clay page |
+| Explores trio | `p-research-v7c`, `p-options-v7c`, `p-decide-v7c` | Crops of the research and options captures; "You decide" shows the agent waiting for the pick |
+| Sample wall | `s-detail`, `s-longform`, `s-kv`, `s-social`, `s-packaging` | Real Molly exports (made-up brands) |
+| Hero tiles | `hx-kettle`, `hx-latte`, `hx-forest`, `hx-ribbon` | Crops of the sample exports |
+| Hero scene | `scene-plate`, `scene-kettle`, `scene-kettle-shadow`, `scene-mug`, `scene-mug-shadow` | Crafted from the Stillwater Clay photo; repaired plate; mug image-generated; synthesized shadows |
+| `og.png` | — | Real wordmark plus the Tideform KV export, 1200×630 |
+| Wordmark, icons | `brand/`, `icons/` | Real Molly wordmark and icon |
+
+## Hero animation
+
+- One Stillwater Clay photographic scene with a fixed editorial headline, spec table and caption, drawn by a fixed-size canvas compositor. The editorial text and UI stay HTML.
+- One 10 s loop: cursor click-to-select → move → scale → light sweep → subject swap (kettle ↔ sage-green mug) → gentle reset. Adjacent loops alternate subjects. The headline and text never change.
+- Desktop pointer parallax only. No decorative arcs, rings, stickers or blinking particles. No animation library or runtime dependency.
+- Reduced motion draws one still with the selected kettle, handles and the Regenerate pill. Off-screen and hidden-tab states cancel the frame callback.
+- The canvas is decorative inside a labelled image role, so the page's `h1` stays the LCP element.
+- Mobile (≤640 px) uses tighter headline and spec offsets so selection handles never touch the text.
+
+## Videos
+
+- Videos autoplay muted only while in view, play once, then show native controls for replay; they do not autoplay again after finishing.
+- With `prefers-reduced-motion`, nothing autoplays and controls show from the start.
+
+## Secret safety
+
+- Shipped images, video frames and `og.png` were checked by eye for keys, tokens, emails, account names, owner project names, logged-in third-party accounts, model or provider names, and the macOS recording indicator.
+- `scripts/qa/scan.cjs` checks the committed folder for absolute local paths, token patterns, email-like strings and file sizes.
+
+## QA baseline
+
+`scripts/qa/run-all.sh` covers: layout in EN/ZH × 360/390/640/768/1024/1440 with and without reduced motion (24 cases in total), navigation and GitHub link checks at 1440/768/390/360, accessibility, production CSP and video pause/resume at EN/ZH × 1440/768/390, COPY drift, the repository scan and Lighthouse. Baseline at migration:
+
+| Run | Perf | A11y | BP | SEO | LCP | TBT | CLS | LCP element |
+|---|---:|---:|---:|---:|---|---|---|---|
+| Mobile | 99 | 100 | 100 | 100 | 1.9 s | 0 ms | 0 | `div.hero > div.wrap > div.hero-copy > h1` |
+| Desktop | 100 | 100 | 100 | 100 | 0.4 s | 0 ms | 0 | `div.hero > div.wrap > div.hero-copy > h1` |
+
+Mobile performance has varied from 95 to 99 between runs; the gate is ≥95.
+
+## Known limits
+
+- The hero mug is an illustration composite: its shadow is synthesized and its satin texture is smoother than the kettle.
+- The cursor press is subtle and best judged in motion.
+- Native video-control focus is drawn inside the browser's shadow DOM, so the a11y checker logs those stops without a CSS ring.
+- Three existing GitHub Issues links remain in the page alongside the repository and DMG links.
+- No finished "You decide" poster or "Connect a model" capture exists; a future capture round could add them.

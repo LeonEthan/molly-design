@@ -1,0 +1,7 @@
+# Standalone workspace root: keeps website/ out of the repository workspace and lockfile.
+packages: []
+
+# Quarantine new dependency releases for seven days, as the repository workspace does.
+minimumReleaseAge: 10080
+
+onlyBuiltDependencies: []

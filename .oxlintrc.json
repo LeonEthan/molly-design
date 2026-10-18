@@ -15,7 +15,7 @@
     "vendor/acp-extension-grok/**/*",
     "vendor/acp-extension-kimi/**/*",
     "site/**/*",
-    "website/src/**/*",
+    "website/**/*",
     "functions/**/*",
     ".codex/**/*",
     ".claude/**/*",

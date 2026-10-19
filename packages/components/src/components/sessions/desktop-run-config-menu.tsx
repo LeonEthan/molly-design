@@ -370,6 +370,7 @@ export function DesktopRunConfigMenu({
   const modelSearchPlaceholder = t('chat.runConfig.modelSearchPlaceholder', 'Search models');
   const modelSearchEmptyLabel = t('chat.runConfig.modelSearchEmpty', 'No models match');
   const reasoningLabel = t('chat.runConfig.reasoningLabel', 'Reasoning');
+  const reasoningUnavailableLabel = t('chat.runConfig.reasoningUnavailable', 'Not available');
 
   const selectedModelOption = modelValue
     ? modelPickerOptions.find((opt) => opt.value === modelValue)
@@ -544,20 +545,29 @@ export function DesktopRunConfigMenu({
         <DropdownMenuSub>
           <ValueSubTrigger label={reasoningLabel} value={thinkingLabel} />
           <DropdownMenuSubContent className="w-56">
-            {reasoningSelector?.options.map((opt) => (
+            {reasoningSelector ? (
+              reasoningSelector.options.map((opt) => (
+                <OptionItem
+                  key={opt.value}
+                  label={opt.label}
+                  description={opt.description}
+                  selected={opt.value === thinkingValue}
+                  disabled={opt.disabled}
+                  closeOnSelect
+                  onSelect={() => {
+                    if (!reasoningConfigId) return;
+                    onConfigOptionChange?.(reasoningConfigId, opt.value as AcpConfigOptionValue);
+                  }}
+                />
+              ))
+            ) : (
               <OptionItem
-                key={opt.value}
-                label={opt.label}
-                description={opt.description}
-                selected={opt.value === thinkingValue}
-                disabled={opt.disabled}
-                closeOnSelect
-                onSelect={() => {
-                  if (!reasoningConfigId) return;
-                  onConfigOptionChange?.(reasoningConfigId, opt.value as AcpConfigOptionValue);
-                }}
+                label={reasoningUnavailableLabel}
+                selected={false}
+                disabled
+                onSelect={() => undefined}
               />
-            ))}
+            )}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         {showProviderRow ? (

@@ -17,7 +17,8 @@ this page is the full text of the rules summarised there.
   levels, even when a level has only one option: Agent (the selected runtime,
   for example Molly; the home composer can change it, an in-canvas composer
   keeps the session's agent), Reasoning (every effort that selected model
-  supports, including a single effort), and Model (plain model names).
+  supports, including a single effort, or one disabled "Not available" row
+  when the model publishes none), and Model (plain model names).
   Recently-used whole configurations sit above those rows when the caller has
   any. Provider remains a Model scope and appears only when more than one
   connection is configured — picking one filters the Model submenu, and "All

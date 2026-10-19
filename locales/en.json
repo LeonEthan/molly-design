@@ -541,6 +541,7 @@
   "chat.runConfig.modelSearchPlaceholder": "Search models",
   "chat.runConfig.permissionLabel": "Permission",
   "chat.runConfig.reasoningLabel": "Reasoning",
+  "chat.runConfig.reasoningUnavailable": "Not available",
   "chat.runConfig.recentLabel": "Recently used",
   "chat.promptPlaceholder": "",
   "chat.projectPicker.clear": "No project",

@@ -381,6 +381,61 @@ describe('composer model picker search', () => {
     expect(onAgentChange).toHaveBeenCalledWith({ agentId: other.id, machineId });
   });
 
+  it('shows a disabled Reasoning placeholder when the model has no thought level', async () => {
+    const onConfigOptionChange = vi.fn();
+    await openRunConfigMenu({
+      ...mollyProps,
+      modelOptions: fewModels,
+      selectedModelId: fewModels[0]?.value ?? null,
+      configOptionSelectors: [],
+      onConfigOptionChange,
+    });
+    expect(rootRowText().some((text) => text.startsWith('Reasoning'))).toBe(true);
+    const rows = radioRows(await openSubmenu('Reasoning'));
+    expect(rows.map((row) => row.textContent)).toEqual(['Not available']);
+    expect(rows[0]?.getAttribute('aria-disabled')).toBe('true');
+    await clickRow(rows[0]);
+    expect(onConfigOptionChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps Agent, Reasoning, and Model on the in-canvas path and lists only the session agent', async () => {
+    const other: AgentConfigMeta = {
+      ...mollyConfig,
+      id: 'config-other' as AgentConfigId,
+      name: 'Other',
+    };
+    await openRunConfigMenu({
+      agentSelection: { agentId: mollyConfig.id, machineId },
+      availableAgentConfigs: [mollyConfig, other],
+      modelOptions: [{ value: 'gpt-5.5', label: 'GPT-5.5' }],
+      selectedModelId: 'gpt-5.5',
+      configOptionSelectors: [
+        {
+          type: 'select' as const,
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Thinking',
+          currentValue: 'off',
+          options: [{ value: 'off', label: 'Off' }],
+        },
+      ],
+      configOptionValues: { reasoning_effort: 'off' },
+    });
+    const labels = rootRowText();
+    const indexOf = (prefix: string) => labels.findIndex((text) => text.startsWith(prefix));
+    expect(indexOf('Agent')).toBeGreaterThanOrEqual(0);
+    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Agent'));
+    expect(indexOf('Model')).toBeGreaterThan(indexOf('Reasoning'));
+    expect(
+      radioRows(await openSubmenu('Agent')).map(
+        (row) => row.querySelector('.truncate')?.textContent
+      )
+    ).toEqual(['Molly']);
+    expect(radioRows(await openSubmenu('Reasoning')).map((row) => row.textContent)).toEqual([
+      'Off',
+    ]);
+  });
+
   it('keeps a canvas Agent row on the session agent when that config is unresolved', async () => {
     const other: AgentConfigMeta = {
       ...agentConfig,

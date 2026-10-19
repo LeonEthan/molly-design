@@ -22,13 +22,16 @@ a single connection was configured. The unselected Molly catalog publishes
 
 Showing the row is separate from inventing efforts. Reasoning options stay
 limited to the selected model's supported levels. A level with one option
-still has a row and a submenu. The home composer can change Agent; a canvas
-session keeps its current agent visible and does not offer a switch.
+still has a row and a submenu. When the model publishes no effort, that
+submenu is one disabled "Not available" row. The home composer can change
+Agent; a canvas session lists only its current agent and does not switch it.
 
 ## Verification
 
 A component test opens the menu with one agent, one reasoning effort, and one
 model, and again with the unselected sentinel plus two models from one
 connection. Both must show Agent, Reasoning, and Model, and neither shows
-Provider. Manual checks on the Mac home and canvas composers were not run
-here.
+Provider. The in-canvas path (no agent-change callback) lists only the
+session agent. An empty thought-level selector shows the disabled
+"Not available" row. Manual checks on the Mac home and canvas composers
+were not run here.

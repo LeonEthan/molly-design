@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+import type { ChatFailedCodeSchema } from './message-schemas';
 import {
   AvailableCommand,
   PermissionOption,
@@ -1183,14 +1185,10 @@ export type ChatFailedCode = 'git_executable_not_found' | ModelRequestFailureCod
  * Embedded-harness model request failures (#137). Transient failures reach the
  * user only after the harness's bounded automatic retries are exhausted.
  */
-export type ModelRequestFailureCode =
-  | 'model_temporarily_unavailable'
-  | 'model_auth_rejected'
-  | 'model_quota_exceeded'
-  | 'model_context_overflow'
-  | 'model_content_blocked'
-  | 'model_request_rejected'
-  | 'model_request_failed';
+export type ModelRequestFailureCode = Exclude<
+  z.infer<typeof ChatFailedCodeSchema>,
+  'git_executable_not_found'
+>;
 
 /**
  * Metadata for the chat_failed system notice

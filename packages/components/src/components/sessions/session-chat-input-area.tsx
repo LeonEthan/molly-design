@@ -1954,7 +1954,7 @@ export const SessionChatInputArea = memo(
 
     const primaryActionSizeClassName = 'h-9 w-9';
     const primaryActionSurfaceClassName =
-      'rounded-full transition-colors bg-foreground text-background hover:bg-foreground/90 hover:text-background';
+      'rounded-full transition-colors bg-primary text-primary-foreground hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground';
     const primaryActionNode = showStopButton ? (
       <Button
         onClick={() => {

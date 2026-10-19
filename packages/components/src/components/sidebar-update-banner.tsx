@@ -59,7 +59,7 @@ export function SidebarUpdateBanner({
       <button
         type="button"
         onClick={onViewChangelog}
-        className="mt-1 inline-flex text-xs font-medium text-primary underline-offset-2 hover:underline"
+        className="mt-1 inline-flex text-xs font-medium text-ring underline-offset-2 hover:underline"
       >
         {t('sidebar.updateReady.changelog', 'View changelog')}
       </button>

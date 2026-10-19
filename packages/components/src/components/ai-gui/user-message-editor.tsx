@@ -116,7 +116,7 @@ export function UserMessageEditor({
           onClick={onSave}
           className={cn(
             'h-7 rounded-full px-3.5 text-xs font-medium shadow-xs transition-all',
-            'bg-foreground text-background hover:bg-foreground/90 hover:text-background',
+            'bg-primary text-primary-foreground hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground',
             'active:translate-y-[1px]'
           )}
         >

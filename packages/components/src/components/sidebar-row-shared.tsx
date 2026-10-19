@@ -55,7 +55,7 @@ function SessionRowStatusIndicator({
     icon = (
       <Loader2
         data-session-working-spinner=""
-        className="h-3 w-3 shrink-0 animate-spin text-primary will-change-transform"
+        className="h-3 w-3 shrink-0 animate-spin text-ring will-change-transform"
       />
     );
   } else if (hasUnreadMessages) {
@@ -601,6 +601,10 @@ export function GitHubOwnerIcon({
     />
   );
 }
+
+/** The selected Session row: the accent tint with a faint inset accent ring, in every list. */
+export const SIDEBAR_SESSION_ROW_SELECTED_CLASS =
+  'bg-sidebar-selection text-sidebar-selection-foreground ring-1 ring-inset ring-sidebar-primary/35 hover:bg-sidebar-selection';
 
 // Shared section-header metrics. Every sidebar organize mode (Workspace local
 // project / GitHub Worktrees sections and the flat Updated list) uses these so

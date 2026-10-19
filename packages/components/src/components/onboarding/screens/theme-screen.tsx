@@ -80,7 +80,7 @@ export function ThemeScreenView({ mode, onModeChange, onBack, onNext }: ThemeScr
                 <option.Icon
                   className={cn(
                     'h-4 w-4 transition-colors',
-                    selected ? 'text-primary' : 'text-muted-foreground'
+                    selected ? 'text-ring' : 'text-muted-foreground'
                   )}
                 />
                 <span>{t(option.labelKey, option.labelDefault)}</span>

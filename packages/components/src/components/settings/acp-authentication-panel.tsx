@@ -602,7 +602,7 @@ export function AcpAuthenticationPanel({
           </Button>
         )}
         {phase === 'authenticated' ? (
-          <span className="text-xs text-primary">
+          <span className="text-xs text-ring">
             {t('agents.authentication.succeeded', '{{provider}} sign-in completed', {
               provider,
             })}

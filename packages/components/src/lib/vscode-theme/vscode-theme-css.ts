@@ -2,6 +2,7 @@ import type { MollyResolvedVSCodeTheme } from './vscode-theme-schemas';
 import {
   asVSCodeCssVariableName,
   compositeHexColors,
+  hexColorContrastRatio,
   hexColorToHslChannel,
   hexColorToRgb,
   hexColorToRgba,
@@ -19,7 +20,28 @@ type MollyAliasRule = {
     minimumRgbDistance?: number;
     fallbackBlendRatio?: number;
   };
+  ensureReadableOn?: {
+    colorIds: readonly string[];
+    minimumContrastRatio: number;
+  };
 };
+
+const WCAG_AA_TEXT_CONTRAST_RATIO = 4.5;
+const DESTRUCTIVE_COLOR_IDS = [
+  'editorError.foreground',
+  'errorForeground',
+  'inputValidation.errorBorder',
+  'terminal.ansiRed',
+  'terminal.ansiBrightRed',
+];
+const HIGHLIGHT_COLOR_IDS = [
+  'focusBorder',
+  'textLink.foreground',
+  'progressBar.background',
+  'activityBarBadge.background',
+  'button.background',
+  'terminal.ansiBlue',
+];
 
 const DEFAULT_ALIAS_BASE_COLOR_IDS = [
   'editor.background',
@@ -137,17 +159,15 @@ const MOLLY_ALIAS_RULES: MollyAliasRule[] = [
   },
   {
     cssVariable: '--destructive',
-    colorIds: [
-      'editorError.foreground',
-      'errorForeground',
-      'inputValidation.errorBorder',
-      'terminal.ansiRed',
-      'terminal.ansiBrightRed',
-    ],
+    colorIds: DESTRUCTIVE_COLOR_IDS,
   },
   {
     cssVariable: '--destructive-foreground',
     colorIds: ['button.foreground', 'editor.background'],
+    ensureReadableOn: {
+      colorIds: DESTRUCTIVE_COLOR_IDS,
+      minimumContrastRatio: WCAG_AA_TEXT_CONTRAST_RATIO,
+    },
   },
   {
     cssVariable: '--button-secondary',
@@ -213,18 +233,15 @@ const MOLLY_ALIAS_RULES: MollyAliasRule[] = [
   },
   {
     cssVariable: '--highlight',
-    colorIds: [
-      'focusBorder',
-      'textLink.foreground',
-      'progressBar.background',
-      'activityBarBadge.background',
-      'button.background',
-      'terminal.ansiBlue',
-    ],
+    colorIds: HIGHLIGHT_COLOR_IDS,
   },
   {
     cssVariable: '--highlight-foreground',
     colorIds: ['button.foreground', 'editor.background', 'foreground', 'editor.foreground'],
+    ensureReadableOn: {
+      colorIds: HIGHLIGHT_COLOR_IDS,
+      minimumContrastRatio: WCAG_AA_TEXT_CONTRAST_RATIO,
+    },
   },
   {
     cssVariable: '--selection',
@@ -762,6 +779,10 @@ const resolveWorkbenchAliasColor = (
     : undefined;
   const minimumRgbDistance =
     rule.ensureVisibleAgainst?.minimumRgbDistance ?? DEFAULT_MINIMUM_VISIBLE_RGB_DISTANCE;
+  const readableOnColor = rule.ensureReadableOn
+    ? resolveFirstWorkbenchAliasColor(theme, rule.ensureReadableOn.colorIds, baseColor)
+    : undefined;
+  let firstUnreadableColor: string | undefined;
 
   for (const colorId of rule.colorIds) {
     const color = resolveWorkbenchAliasCandidateColor(theme, colorId, baseColor);
@@ -769,8 +790,20 @@ const resolveWorkbenchAliasColor = (
       if (visibleBaseColor && rgbDistance(color, visibleBaseColor) < minimumRgbDistance) {
         continue;
       }
+      if (
+        readableOnColor &&
+        rule.ensureReadableOn &&
+        hexColorContrastRatio(color, readableOnColor) < rule.ensureReadableOn.minimumContrastRatio
+      ) {
+        firstUnreadableColor ??= color;
+        continue;
+      }
       return color;
     }
+  }
+
+  if (firstUnreadableColor) {
+    return firstUnreadableColor;
   }
 
   if (visibleBaseColor && rule.ensureVisibleAgainst?.fallbackBlendRatio) {

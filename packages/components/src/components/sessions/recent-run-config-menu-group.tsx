@@ -110,7 +110,7 @@ export function RecentRunConfigMenuGroup({
           <span className="ml-auto flex shrink-0 items-center gap-1 pl-2">
             {item.planOn ? (
               <ListChecks
-                className="h-3.5 w-3.5 text-primary"
+                className="h-3.5 w-3.5 text-ring"
                 strokeWidth={1.8}
                 aria-hidden="true"
               />

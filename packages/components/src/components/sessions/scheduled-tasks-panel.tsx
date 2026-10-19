@@ -168,7 +168,7 @@ export function ScheduledTasksPanel({ tasks, className }: ScheduledTasksPanelPro
         aria-label={t('sessions.scheduledTasks.toggle')}
         className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-muted-foreground transition-colors hover:text-foreground"
       >
-        <AlarmClock className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+        <AlarmClock className="h-3.5 w-3.5 shrink-0 text-ring" aria-hidden="true" />
         <span className="font-medium text-foreground">{t('sessions.scheduledTasks.heading')}</span>
         <span className="truncate">
           · {t('sessions.scheduledTasks.summary', { count: rows.length })}

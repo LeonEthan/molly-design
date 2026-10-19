@@ -53,7 +53,7 @@ function ConversationDropOverlayPaint({ kind }: { kind: ConversationDropKind }) 
           'text-sm font-medium text-foreground shadow-sm'
         )}
       >
-        <Icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+        <Icon className="h-4 w-4 shrink-0 text-ring" aria-hidden />
         <span className="truncate">{label}</span>
       </div>
     </div>

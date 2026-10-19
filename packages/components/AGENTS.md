@@ -52,12 +52,15 @@ This package contains the local desktop React UI, including narrow Electron wind
   The handwritten signature is a brand moment only: sidebar header, onboarding ceremony,
   share cards, and the About tab. It never shares a lockup or heading line with the
   `font-editorial` serif display type — on any surface, pick one voice.
-- Designer surfaces follow the Atelier system (2026-10-04): regular-weight editorial
-  serif display (`font-editorial`) for the home heading and section titles only; 14px
-  reading, 13px chrome rows, 12px muted metadata; mono uppercase `eyebrow` labels and
-  mono dimensions. Chrome stays near-monochrome: primary is the ink inversion, and the
-  vermilion `--signal` marks only focus and live or changed state. No gradients, glows
-  or decorative hue. Rationale:
+- Designer surfaces follow the Atelier system (2026-10-04, soft-lime revision
+  2026-10-18): regular-weight editorial serif display (`font-editorial`) for the home
+  heading, section titles, the lone-tab session title (19px), artwork captions (17px)
+  and the Settings heading (30px); 14px reading, 13px chrome rows, 12px muted metadata;
+  tracked sans-caps `eyebrow` labels; mono only for dimensions. Chrome stays tonal
+  paper/ink. The soft-lime accent means only "selected / act here": `primary` fills
+  carry dark ink text with no edge, `ring` is the legible accent for small text and
+  borders, `selection` is the selected tint. `--signal` marks only focus and live or
+  changed state. No gradients, glows or decorative hue. Rationale:
   [Atelier note](../../.agents/notes/proposed/feature/2026-10-04-atelier-redesign.md).
 
 ## Rules shared by callers

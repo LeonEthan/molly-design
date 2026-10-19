@@ -469,6 +469,7 @@ function NavButton({
   onClick,
   badge,
   action,
+  cta = false,
 }: {
   active: boolean;
   label: string;
@@ -482,6 +483,8 @@ function NavButton({
    * would route the click to the row underneath it.
    */
   action?: ReactNode;
+  /** The primary call to action: always the accent fill, whether or not it is the active view. */
+  cta?: boolean;
 }) {
   return (
     <div className="relative flex w-full items-center">
@@ -491,9 +494,11 @@ function NavButton({
         className={cn(
           'group flex min-h-9 w-full select-none items-center gap-2 rounded-lg px-2 py-2 text-left text-sm outline-hidden transition',
           'focus-visible:ring-1 focus-visible:ring-sidebar-ring/30',
-          active
-            ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
-            : 'text-sidebar-foreground dark:text-sidebar-foreground/75 hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
+          cta
+            ? 'bg-sidebar-primary font-medium text-sidebar-primary-foreground hover:bg-button-hover'
+            : active
+              ? 'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]'
+              : 'text-sidebar-foreground dark:text-sidebar-foreground/75 hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
           // Keep the label clear of the trailing control instead of letting it
           // truncate under it.
           action && 'pr-8'
@@ -896,6 +901,7 @@ export const LoroSidebar = memo(function LoroSidebar({
             label={mergedLabels.home}
             icon={<SquarePen className="h-4 w-4" />}
             onClick={onHomeClicked}
+            cta
           />
         </div>
 

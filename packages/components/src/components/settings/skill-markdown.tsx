@@ -23,7 +23,7 @@ function safeHref(rawUrl: string): string | undefined {
 
 const INLINE_CODE_CLASS =
   'rounded-sm bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground';
-const LINK_CLASS = 'text-primary underline underline-offset-2 hover:opacity-80';
+const LINK_CLASS = 'text-ring underline underline-offset-2 hover:opacity-80';
 
 /** Parse a single line of inline Markdown into React nodes. */
 export function renderInlineMarkdown(text: string, keyPrefix: string): React.ReactNode[] {

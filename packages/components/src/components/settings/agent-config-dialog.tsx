@@ -2624,7 +2624,7 @@ function RailItem({
       </span>
       <span className="min-w-0 flex-1 truncate leading-tight">{getOptionLabel(t, option)}</span>
       {selected && !chevron && (
-        <Check className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
+        <Check className="h-3 w-3 shrink-0 text-ring" aria-hidden="true" />
       )}
       {chevron && (
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/70" aria-hidden="true" />
@@ -2694,7 +2694,7 @@ function ProbeStatus({
   const { t } = useTranslation();
   if (isPreset) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+      <span className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-ring">
         <Sparkles className="h-3 w-3" aria-hidden="true" />
         {t('settings.agent.dialog.presetBadge', 'Preset')}
       </span>
@@ -2978,7 +2978,7 @@ function PresetPanel({
                   href={preset.helpUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="font-medium text-primary underline-offset-2 hover:underline"
+                  className="font-medium text-ring underline-offset-2 hover:underline"
                 >
                   {t(
                     preset.helpLinkLabelKey ?? 'settings.agent.dialog.preset.helpLink',
@@ -3077,7 +3077,7 @@ function PresetPanel({
                 <dt className="min-w-0 flex-1 truncate font-mono text-muted-foreground">
                   {tokenEnvKey}
                 </dt>
-                <dd className="min-w-0 flex-1 truncate text-right font-mono text-primary/90">
+                <dd className="min-w-0 flex-1 truncate text-right font-mono text-ring/90">
                   {token.trim() ? '••••••••' : t('settings.agent.dialog.required', '(required)')}
                 </dd>
               </div>

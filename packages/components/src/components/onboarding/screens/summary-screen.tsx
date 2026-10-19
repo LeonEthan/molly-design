@@ -201,9 +201,9 @@ function SummaryRow({
       <TableCell className="py-4 text-right">
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           {status === 'ready' ? (
-            <Check className="size-3.5 text-primary" />
+            <Check className="size-3.5 text-ring" />
           ) : status === 'preparing' ? (
-            <Clock3 className="size-3.5 text-primary" />
+            <Clock3 className="size-3.5 text-ring" />
           ) : status === 'failed' ? (
             <XCircle className="size-3.5 text-destructive" />
           ) : (

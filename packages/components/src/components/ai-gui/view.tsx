@@ -3013,7 +3013,7 @@ const UserMessageRowView = ({
           ) : (
             <span title={isDelivered ? 'Delivered' : 'Sending'}>
               {isDelivered ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-primary" strokeWidth={2} />
+                <CheckCircle2 className="h-3.5 w-3.5 text-ring" strokeWidth={2} />
               ) : (
                 <Circle className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2} />
               )}
@@ -3902,7 +3902,7 @@ const AssistantTurnFooter = ({
                 className={cn(
                   'h-8 gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
                   isAccent
-                    ? 'border border-primary/40 bg-primary/[0.12] text-primary shadow-xs hover:bg-primary/[0.18] hover:text-primary disabled:opacity-60'
+                    ? 'border border-primary/40 bg-primary/[0.12] text-ring shadow-xs hover:bg-primary/[0.18] hover:text-ring disabled:opacity-60'
                     : 'border-border/60 bg-background/60 text-foreground/85 shadow-none hover:bg-muted/55 hover:text-foreground'
                 )}
                 onClick={action.onClick}
@@ -6404,7 +6404,7 @@ const StandardToolContentBlock = ({
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 p-3 text-primary"
+          className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 p-3 text-ring"
           style={conversationTextFontSizeStyle(fontSize)}
         >
           <FileText className="h-4 w-4" />
@@ -6431,7 +6431,7 @@ const StandardToolContentBlock = ({
             href={href}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary"
+            className="text-ring"
             style={conversationTextFontSizeStyle(fontSize)}
           >
             Download blob

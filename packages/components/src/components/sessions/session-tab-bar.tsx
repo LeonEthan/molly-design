@@ -106,6 +106,8 @@ interface SessionTabBarProps {
    with adjacent panels. A lone tab still drops its fill. */
 const TAB_ITEM_CLASS =
   'group relative flex h-8 w-full min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-transparent px-3 text-[13px] transition-colors cursor-pointer';
+/** A lone tab reads as the page title, so it takes the editorial serif. */
+const SOLO_TAB_TITLE_CLASS = 'font-editorial text-[19px] leading-none';
 const TAB_ITEM_ACTIVE_CLASS = TAB_PILL_ACTIVE_CLASS;
 const TAB_ITEM_INACTIVE_CLASS = TAB_PILL_INACTIVE_CLASS;
 const TAB_INLINE_ACTION_CLASS =
@@ -293,10 +295,13 @@ function TabContent({
             if (e.key === 'Enter') commitRename();
             if (e.key === 'Escape') cancelRename();
           }}
-          className="w-full min-w-0 bg-transparent outline-hidden text-[13px]"
+          className={cn(
+            'w-full min-w-0 bg-transparent outline-hidden',
+            solo ? SOLO_TAB_TITLE_CLASS : 'text-[13px]'
+          )}
         />
       ) : (
-        <span className="truncate">{label}</span>
+        <span className={cn('truncate', solo && SOLO_TAB_TITLE_CLASS)}>{label}</span>
       )}
       {isParent && !isEditing && !solo && (
         <Tooltip>
@@ -401,7 +406,7 @@ function DraftTabContent({
           className="h-3.5 w-3.5 opacity-70"
         />
       </span>
-      <span className="truncate">{label}</span>
+      <span className={cn('truncate', solo && SOLO_TAB_TITLE_CLASS)}>{label}</span>
       {showClose && (
         <button
           type="button"

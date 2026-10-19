@@ -156,6 +156,10 @@
     "./browser-account-sites": {
       "types": "./src/browser-account-sites.ts",
       "import": "./src/browser-account-sites.ts"
+    },
+    "./embedded-run-contract": {
+      "types": "./src/embedded-run-contract.ts",
+      "import": "./src/embedded-run-contract.ts"
     }
   },
   "scripts": {

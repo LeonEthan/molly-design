@@ -1,14 +1,16 @@
+import {
+  acceptRunSnapshot,
+  readMcpBindings,
+  runResponseMeta,
+} from '@molly/shared/embedded-run-contract';
 import type * as acp from '@agentclientprotocol/sdk';
 import { RequestError } from '@agentclientprotocol/sdk';
 import { ModelRuntime, VERSION, type InlineExtension } from '@earendil-works/pi-coding-agent';
 import { InMemoryCredentialStore, InMemoryModelsStore } from '@earendil-works/pi-ai';
 import {
-  HarnessRunSnapshotSchema,
   HarnessSessionBindingSchema,
-  McpCredentialBindingSchema,
   MOLLY_BUILTIN_MCP_CONNECTION,
   encodeMollyModelOption,
-  mcpCredentialMatchesServer,
   type HarnessRunOutcome,
   type HarnessRunSnapshot,
   type HarnessSessionBinding,
@@ -116,23 +118,9 @@ export class PiAcpHost {
     try {
       if ((await realpath(cwd)) !== (await realpath(this.config.cwd)))
         throw new Error('pi_acp_host_cwd_mismatch');
-      const connections: McpCredentialBinding[] = [];
-      for (const server of servers) {
-        if (server._meta?.mollyMcpCredential === undefined) continue;
-        const binding = McpCredentialBindingSchema.parse(server._meta.mollyMcpCredential);
-        const catalog = server._meta.mollyConnection;
-        if (
-          binding.workspaceId !== this.config.workspaceId ||
-          !catalog ||
-          typeof catalog !== 'object' ||
-          !('id' in catalog) ||
-          catalog.id !== binding.serverId ||
-          !mcpCredentialMatchesServer(binding, server) ||
-          connections.some((entry) => entry.serverId === binding.serverId)
-        )
-          throw new Error('pi_acp_mcp_binding_mismatch');
-        connections.push(binding);
-      }
+      const bindings = readMcpBindings(servers, this.config.workspaceId);
+      if (!bindings.ok) throw new Error('pi_acp_mcp_binding_mismatch');
+      const connections = bindings.value;
       const credentials = connections.length
         ? WorkerMcpCredentialGrantSchema.parse(await this.control.read(this.lifetime.signal))
         : undefined;
@@ -336,23 +324,16 @@ export class PiAcpHost {
   async prompt(wrapper: PiAcpSession, params: acp.PromptRequest): Promise<acp.PromptResponse> {
     if (this.busy || !this.binding || this.lifetime.signal.aborted)
       throw RequestError.invalidRequest('Managed worker is unavailable.');
-    const snapshot = HarnessRunSnapshotSchema.parse(params._meta?.mollyRunSnapshot);
-    const config = this.config;
-    if (
-      snapshot.runtimeEpoch !== config.runtimeEpoch ||
-      snapshot.sessionId !== config.productSessionId ||
-      JSON.stringify(snapshot.harness) !== JSON.stringify(config.harness) ||
-      JSON.stringify(snapshot.connection) !== JSON.stringify(config.connection) ||
-      JSON.stringify(snapshot.selection) !== JSON.stringify(config.selection) ||
-      snapshot.permissionProfileId !== config.permissionProfileId ||
-      snapshot.permissionMode !== undefined ||
-      snapshot.toolsetHash !== this.binding.toolsetHash ||
-      snapshot.pluginSetHash !== this.binding.pluginSetHash ||
-      JSON.stringify(snapshot.mcpConnections ?? []) !== JSON.stringify(this.mcpConnections)
-    ) {
+    const accepted = acceptRunSnapshot(params._meta?.mollyRunSnapshot, {
+      config: this.config,
+      binding: this.binding,
+      mcpConnections: this.mcpConnections,
+    });
+    if (!accepted.ok) {
       this.retire();
       throw new Error('pi_acp_host_snapshot_mismatch');
     }
+    const snapshot = accepted.value;
     const controller = new AbortController();
     let finish = () => {};
     const finished = new Promise<void>((resolve) => {
@@ -378,13 +359,12 @@ export class PiAcpHost {
         ...outcome.response,
         _meta: {
           ...outcome.response._meta,
-          ...(outcome.memory ? { mollyPersonalMemory: outcome.memory } : {}),
-          ...(outcome.memoryDiagnostic
-            ? { mollyPersonalMemoryDiagnostic: outcome.memoryDiagnostic }
-            : {}),
-          mollyRunId: snapshot.runId,
-          mollyRuntimeEpoch: snapshot.runtimeEpoch,
-          mollyNativeOutcome: outcome.native,
+          ...runResponseMeta({
+            snapshot,
+            outcome: outcome.native,
+            memory: outcome.memory,
+            memoryDiagnostic: outcome.memoryDiagnostic,
+          }),
         },
       };
     } catch (error) {

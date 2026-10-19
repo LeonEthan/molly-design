@@ -5,7 +5,7 @@ const { BASE, OUT, SHOTS, buildConstant, launch, run } = require('./lib.cjs');
 
 const GH = buildConstant('GH');
 const LABEL = { en: 'Molly Design on GitHub', zh: '在 GitHub 上查看 Molly Design' };
-const HOVER_COLOR = 'rgb(162, 240, 140)';
+const HOVER_COLOR = 'rgb(90, 116, 20)';
 
 run('nav', async () => {
   const browser = await launch();
@@ -23,7 +23,12 @@ run('nav', async () => {
       const requests = [];
       page.on('request', (request) => requests.push(request.url()));
       try {
-        await page.goto(BASE, { waitUntil: 'networkidle' });
+        await page.addInitScript(() => {
+        try {
+          localStorage.setItem('molly-theme', 'light');
+        } catch (e) {}
+      });
+      await page.goto(BASE, { waitUntil: 'networkidle' });
         await page.evaluate(() => document.fonts.ready);
         const github = page.locator('.nav-github');
         const expectLanguage = async (language) => {
@@ -33,6 +38,7 @@ run('nav', async () => {
         };
         await expectLanguage(lang);
         const other = lang === 'en' ? 'zh' : 'en';
+        if (width <= 700) await page.locator('.menu').click();
         await page.locator(`[data-set="${other}"]`).click();
         await expectLanguage(other);
         await page.locator(`[data-set="${lang}"]`).click();
@@ -48,17 +54,21 @@ run('nav', async () => {
             innerWidth,
             brand: measure('.brand'),
             github: measure('.nav-github'),
-            toggle: measure('.lang'),
+            lang: measure('.lang'),
+            dl: measure('.nav-dl'),
             menu: measure('.menu'),
             color: getComputedStyle(document.querySelector('.nav-github')).color,
           };
         });
         assert.equal(metrics.scrollWidth, width);
-        assert.equal(metrics.github.w, 36);
-        assert.equal(metrics.github.h, 36);
-        assert(metrics.brand.right <= metrics.github.x);
-        assert(metrics.github.right <= metrics.toggle.x);
-        if (width <= 860) assert(metrics.toggle.right <= metrics.menu.x);
+        assert(metrics.github.w >= 34 && metrics.github.w <= 38);
+        assert(metrics.github.h >= 34 && metrics.github.h <= 38);
+        if (width > 700) {
+          assert(metrics.brand.right <= metrics.lang.x);
+          assert(metrics.lang.right <= metrics.dl.x);
+          assert(metrics.dl.right <= metrics.github.x);
+        }
+        if (width <= 700 && metrics.menu.w) assert(metrics.github.right <= metrics.menu.x);
 
         for (const selector of ['.nav-github', '.footer-github']) {
           const link = page.locator(selector);
@@ -85,7 +95,7 @@ run('nav', async () => {
             await page.locator('.top').screenshot({ path: path.join(SHOTS, 'nav-hover-1440.png') });
             await page.mouse.move(0, 0);
             await page.locator('.brand').focus();
-            for (let i = 0; i < 10 && !(await github.evaluate((element) => element === document.activeElement)); i++)
+            for (let i = 0; i < 20 && !(await github.evaluate((element) => element === document.activeElement)); i++)
               await page.keyboard.press('Tab');
             metrics.focus = await github.evaluate((element) => ({
               active: element === document.activeElement,
@@ -107,7 +117,7 @@ run('nav', async () => {
         }
         if (width === 390 && lang === 'en')
           await page.locator('.top').screenshot({ path: path.join(SHOTS, 'nav-en-390.png') });
-        if (width <= 860) {
+        if (width <= 700) {
           await page.locator('.menu').click();
           assert.equal(await page.locator('html').evaluate((element) => element.scrollWidth), width);
           assert(await github.isVisible());

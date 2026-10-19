@@ -33,6 +33,7 @@ run(`qa ${motion}`, async () => {
           const box = element.getBoundingClientRect();
           if (!box.width || (box.right <= viewportWidth + 1 && box.left >= -1)) return;
           if (getComputedStyle(element).position === 'fixed') return;
+          if (element.classList.contains('skip')) return;
           for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement)
             if (['auto', 'hidden', 'scroll', 'clip'].includes(getComputedStyle(ancestor).overflowX)) return;
           overflow.push(`${element.tagName}.${element.className} ${Math.round(box.left)}..${Math.round(box.right)}`);

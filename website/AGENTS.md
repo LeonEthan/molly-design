@@ -15,10 +15,10 @@
   printed by `build.py`. Design, copy or animation changes need owner approval
   and a regenerated `docs/COPY.md`.
 - Follow the claims rules in NOTES: no version numbers in visible text; never
-  call the DMG signed; keep the hero `Illustration` label; scope "real capture"
-  wording to real captures.
-- Downloads use the `DMG` constant only; never link `releases/latest` or the
-  release page.
+  call the DMG signed; no visible frame captions or hero eyebrow labels (#175).
+- Nav and closing primary download buttons link to `DOWNLOAD` (`…/releases/latest`)
+  in `build.py`. FAQ install/update answers and `404.html` still use the `DMG`
+  constant (`@@DMG@@` in `slots.json`).
 - Commit web-ready derivatives only: WebP images (PNG only for `og.png` and
   icons), no raw captures or masters, each file under 1 MB. Record provenance in
   `assets/manifest.json`.

@@ -511,6 +511,7 @@
   "chat.mobileHome.emptyLocalProjects": "No local projects from this machine have been added to the workspace",
   "chat.mobileHome.emptyLocalProjectsAllMachines": "No local projects in this workspace yet",
   "chat.mobileNewChat.planModeLabel": "Plan",
+  "chat.runConfig.agentLabel": "Agent",
   "chat.runConfig.providerLabel": "Provider",
   "chat.runConfig.allProviders": "All providers",
   "chat.runConfig.deepseek.delegationDiscussion": "Upstream discussion",

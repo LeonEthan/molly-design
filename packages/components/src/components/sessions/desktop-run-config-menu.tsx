@@ -55,15 +55,15 @@ import {
  *   [ agent icon + model · reasoning ⌄ ]  [ permission icon + name ⌄ ]
  *
  * `DesktopRunConfigMenu` is one flat menu of value rows, each opening a
- * submenu: Provider (the user-configured model connections, only when more
- * than one exists; picking one scopes the Model row to it), Model (the
- * catalog with search, just model names), and Reasoning (an option list,
- * only when the model offers more than one level). Recently-used whole
- * configurations sit on top when the caller has them. The builtin agent
- * brings no models of its own — every model belongs to a user connection.
- * `DesktopPermissionModeButton` stays a separate button because permission
- * is the knob users flip most — its face shows the full permission name and
- * opens a flat permission list.
+ * submenu. Clicking it always presents three levels, even when a level has
+ * only one option: Agent, Reasoning (limited to the selected model's
+ * efforts), and Model (the catalog with search, just model names). Provider
+ * scopes the Model row and appears only when more than one connection
+ * exists. Recently-used whole configurations sit on top when the caller has
+ * them. The builtin agent brings no models of its own — every model belongs
+ * to a user connection. `DesktopPermissionModeButton` stays a separate
+ * button because permission is the knob users flip most — its face shows the
+ * full permission name and opens a flat permission list.
  *
  * Both menus use the app-wide DropdownMenu surface.
  */
@@ -249,6 +249,8 @@ export type DesktopRunConfigMenuProps = {
   agentSelection: AgentSelection | null;
   /** Explicit configuration metadata for the selected runtime, never a harness picker. */
   availableAgentConfigs?: ReadonlyArray<AgentConfigMeta>;
+  /** Home composer can change the runtime. Absent keeps the current Agent visible and fixed. */
+  onAgentChange?: (selection: AgentSelection) => void;
   /** Keep the whole run-config menu inert and explain why on hover/focus. */
   disabledReason?: string;
   fallbackAgent?: {
@@ -273,6 +275,7 @@ export type DesktopRunConfigMenuProps = {
 export function DesktopRunConfigMenu({
   agentSelection,
   availableAgentConfigs,
+  onAgentChange,
   disabledReason,
   fallbackAgent,
   modelOptions,
@@ -359,6 +362,8 @@ export function DesktopRunConfigMenu({
     thinkingSelector?.options.find((opt) => opt.value === thinkingValue)?.label ?? thinkingValue;
 
   const modelPickerLabel = t('chat.runConfig.modelPickerLabel', 'Provider and model');
+  const agentRowLabel = t('chat.runConfig.agentLabel', 'Agent');
+  const selectAgentLabel = t('sessions.filter.selectAgent', 'Select Agent');
   const providerRowLabel = t('chat.runConfig.providerLabel', 'Provider');
   const allProvidersLabel = t('chat.runConfig.allProviders', 'All providers');
   const modelRowLabel = t('chat.runConfig.modelLabel', 'Model');
@@ -421,7 +426,29 @@ export function DesktopRunConfigMenu({
   );
 
   const reasoningSelector =
-    thinkingSelector && thinkingSelector.options.length > 1 ? thinkingSelector : null;
+    thinkingSelector && thinkingSelector.options.length > 0 ? thinkingSelector : null;
+
+  const agentMenuConfigs = useMemo(() => {
+    const onMachine = agentSelection
+      ? selectableAgentConfigs.filter((config) => config.machineId === agentSelection.machineId)
+      : selectableAgentConfigs;
+    const known =
+      onMachine.length > 0 ? [...onMachine] : selectedAgentConfig ? [selectedAgentConfig] : [];
+    if (onAgentChange || !selectedAgentConfig) return known;
+    const current = known.find(
+      (config) =>
+        config.id === selectedAgentConfig.id && config.machineId === selectedAgentConfig.machineId
+    );
+    return [current ?? selectedAgentConfig];
+  }, [agentSelection, onAgentChange, selectableAgentConfigs, selectedAgentConfig]);
+  const duplicateAgentNames = new Set(
+    agentMenuConfigs
+      .map((config) => config.name)
+      .filter((name, index, names) => names.indexOf(name) !== index)
+  );
+  const agentValue =
+    selectedAgentConfig?.name ?? (agentMenuConfigs.length > 0 ? selectAgentLabel : null);
+  const reasoningConfigId = reasoningSelector?.configId;
 
   /* A resolved runtime alone suffices: the Model row is then the empty-catalog
      hint that sends the user to Settings. */
@@ -489,6 +516,58 @@ export function DesktopRunConfigMenu({
             onSelect={onRecentRunConfigSelect}
           />
         ) : null}
+        <DropdownMenuSub>
+          <ValueSubTrigger label={agentRowLabel} value={agentValue} />
+          <DropdownMenuSubContent className="w-64">
+            {agentMenuConfigs.map((config) => {
+              const selected =
+                agentSelection?.agentId === config.id &&
+                agentSelection.machineId === config.machineId;
+              return (
+                <OptionItem
+                  key={`${config.machineId}:${config.id}`}
+                  icon={
+                    <AgentIcon
+                      cliType={config.cliType}
+                      agentType={config.agentType}
+                      brandId={config.brandId}
+                      env={config.env}
+                      className="size-3.5"
+                    />
+                  }
+                  label={config.name}
+                  description={duplicateAgentNames.has(config.name) ? config.id : undefined}
+                  selected={selected}
+                  disabled={onAgentChange == null && !selected}
+                  onSelect={() => {
+                    if (!onAgentChange) return;
+                    setProviderChoice(undefined);
+                    onAgentChange({ agentId: config.id, machineId: config.machineId });
+                  }}
+                />
+              );
+            })}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSub>
+          <ValueSubTrigger label={reasoningLabel} value={thinkingLabel} />
+          <DropdownMenuSubContent className="w-56">
+            {reasoningSelector?.options.map((opt) => (
+              <OptionItem
+                key={opt.value}
+                label={opt.label}
+                description={opt.description}
+                selected={opt.value === thinkingValue}
+                disabled={opt.disabled}
+                closeOnSelect
+                onSelect={() => {
+                  if (!reasoningConfigId) return;
+                  onConfigOptionChange?.(reasoningConfigId, opt.value as AcpConfigOptionValue);
+                }}
+              />
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
         {showProviderRow ? (
           <DropdownMenuSub>
             <ValueSubTrigger
@@ -541,29 +620,6 @@ export function DesktopRunConfigMenu({
             />
           </DropdownMenuSubContent>
         </DropdownMenuSub>
-        {reasoningSelector ? (
-          <DropdownMenuSub>
-            <ValueSubTrigger label={reasoningLabel} value={thinkingLabel} />
-            <DropdownMenuSubContent className="w-56">
-              {reasoningSelector.options.map((opt) => (
-                <OptionItem
-                  key={opt.value}
-                  label={opt.label}
-                  description={opt.description}
-                  selected={opt.value === thinkingValue}
-                  disabled={opt.disabled}
-                  closeOnSelect
-                  onSelect={() =>
-                    onConfigOptionChange?.(
-                      reasoningSelector.configId,
-                      opt.value as AcpConfigOptionValue
-                    )
-                  }
-                />
-              ))}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        ) : null}
 
         {showDeepSeekDelegationWarning ? (
           <DropdownMenuItem

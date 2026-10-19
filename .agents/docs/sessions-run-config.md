@@ -13,13 +13,17 @@ this page is the full text of the rules summarised there.
   `DesktopRunConfigMenu` (pill face `agent icon · model · reasoning ⌄`,
   reasoning muted) and `DesktopPermissionModeButton` (permission icon + full
   name; flat permission list). The run-config menu itself is one flat list of
-  value rows, each opening a submenu: Recently-used whole configurations on top
-  when the caller has them, then Provider (only when the user has configured
-  more than one model connection — picking one scopes the Model submenu to it,
-  and "All providers" restores the full grouped catalog; the builtin agent
-  ships no models of its own, so providers are exactly the user's connections),
-  Model (plain model names), and Reasoning (an option list, only when the model
-  offers more than one level). Plan, Fast, provider interaction modes and extra
+  value rows, each opening a submenu. Clicking the control always shows three
+  levels, even when a level has only one option: Agent (the selected runtime,
+  for example Molly; the home composer can change it, an in-canvas composer
+  keeps the session's agent), Reasoning (every effort that selected model
+  supports, including a single effort), and Model (plain model names).
+  Recently-used whole configurations sit above those rows when the caller has
+  any. Provider remains a Model scope and appears only when more than one
+  connection is configured — picking one filters the Model submenu, and "All
+  providers" restores the grouped catalog. The builtin agent ships no models
+  of its own, so providers are exactly the user's connections. Plan, Fast,
+  provider interaction modes and extra
   selects no longer render in this menu, and Fast is retired from recents too:
   a recently-used record neither displays nor replays a Fast value, and runs
   differing only in Fast dedupe to one entry. Explicit `_permission` config options

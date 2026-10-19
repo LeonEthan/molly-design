@@ -298,6 +298,91 @@ describe('composer model picker search', () => {
     ]);
   });
 
+  const rootRowText = () =>
+    [...(menuContents()[0]?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+      (el) => el.textContent ?? ''
+    );
+
+  it('keeps Agent, Reasoning, and Model when each level has one option', async () => {
+    const onAgentChange = vi.fn();
+    const singleModel = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    const freshConnect = {
+      ...mollyProps,
+      onAgentChange,
+      modelOptions: [
+        {
+          value: singleModel,
+          label: 'DeepSeek V4 Pro',
+          description: 'deepseek-v4-pro',
+          group: 'DeepSeek',
+        },
+      ],
+      selectedModelId: null,
+      configOptionSelectors: [
+        {
+          type: 'select' as const,
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Thinking',
+          currentValue: 'off',
+          options: [{ value: 'off', label: 'Off' }],
+        },
+      ],
+      configOptionValues: { reasoning_effort: 'off' },
+    };
+    await openRunConfigMenu(freshConnect);
+    const labels = rootRowText();
+    const indexOf = (prefix: string) => labels.findIndex((text) => text.startsWith(prefix));
+    expect(indexOf('Agent')).toBeGreaterThanOrEqual(0);
+    expect(indexOf('Reasoning')).toBeGreaterThan(indexOf('Agent'));
+    expect(indexOf('Model')).toBeGreaterThan(indexOf('Reasoning'));
+    expect(indexOf('Provider')).toBe(-1);
+    expect(radioRows(await openSubmenu('Reasoning')).map((row) => row.textContent)).toEqual([
+      'Off',
+    ]);
+    expect(radioRows(await openSubmenu('Model')).map((row) => row.textContent)).toEqual([
+      'DeepSeek V4 Pro',
+    ]);
+    await clickRow(radioRows(await openSubmenu('Agent'))[0]);
+    expect(onAgentChange).toHaveBeenCalledWith({ agentId: mollyConfig.id, machineId });
+  });
+
+  it('still shows Agent and Reasoning beside a freshly connected model list', async () => {
+    const flash = encodeMollyModelOption('deepseek', 'deepseek-v4-flash');
+    const pro = encodeMollyModelOption('deepseek', 'deepseek-v4-pro');
+    await openRunConfigMenu({
+      ...mollyProps,
+      onAgentChange: () => undefined,
+      modelOptions: [
+        { value: MOLLY_UNSELECTED_MODEL, label: 'Select a connection and model' },
+        { value: flash, label: 'DeepSeek V4.1 Flash', group: 'DeepSeek' },
+        { value: pro, label: 'DeepSeek V4 Pro', group: 'DeepSeek' },
+      ],
+      selectedModelId: MOLLY_UNSELECTED_MODEL,
+      configOptionSelectors: [
+        {
+          type: 'select' as const,
+          configId: 'reasoning_effort',
+          category: 'thought_level',
+          label: 'Thinking',
+          currentValue: 'off',
+          options: [{ value: 'off', label: 'Off' }],
+        },
+      ],
+      configOptionValues: { reasoning_effort: 'off' },
+    });
+    const labels = rootRowText();
+    expect(labels.some((text) => text.startsWith('Agent'))).toBe(true);
+    expect(labels.some((text) => text.startsWith('Reasoning'))).toBe(true);
+    expect(labels.some((text) => text.startsWith('Model'))).toBe(true);
+    expect(labels.some((text) => text.startsWith('Provider'))).toBe(false);
+    const modelRows = radioRows(await openSubmenu('Model'));
+    expect(modelRows.map((row) => row.textContent)).toEqual([
+      'DeepSeek V4.1 Flash',
+      'DeepSeek V4 Pro',
+    ]);
+  });
+
   it('hides the Provider row when every model comes from one provider', async () => {
     const studioNimbus = encodeMollyModelOption('studio', 'nimbus/2');
     await openRunConfigMenu({

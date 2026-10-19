@@ -510,6 +510,7 @@
   "chat.mobileHome.emptyLocalProjects": "当前机器没有已加入工作空间的本地项目",
   "chat.mobileHome.emptyLocalProjectsAllMachines": "当前工作空间还没有任何本地项目",
   "chat.mobileNewChat.planModeLabel": "计划",
+  "chat.runConfig.agentLabel": "代理",
   "chat.runConfig.providerLabel": "服务商",
   "chat.runConfig.allProviders": "全部服务商",
   "chat.runConfig.deepseek.delegationDiscussion": "上游讨论",

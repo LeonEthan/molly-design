@@ -44,7 +44,7 @@ MAC APP
 
 AI design for graphic designers. Every layer stays editable.
 
-Describe a poster, a social post or a key visual, and get it back in layers. Change the type, move things and swap images on the same file, without starting over.
+Put in a brief for a poster, a social post or a key visual and get a layered file back. Retype copy, adjust shapes and swap images in the same file instead of starting over.
 
 Download for macOS
 Watch the demo
@@ -80,7 +80,7 @@ MAC 桌面应用
 给平面设计师的 AI 设计工具。
 每一层都能接着改。
 
-说清楚要做的海报、社媒图或主视觉，拿回来的是分好层的稿子。改字、挪位置、换图都在原稿上做，不用从头生成。
+把海报、社媒图或主视觉的需求丢进去，拿回一份分层稿。改字、调形状、换图都在同一份稿上，不用重新生成。
 
 下载 macOS 版
 看演示
@@ -116,7 +116,7 @@ Stillwater Clay
 NATIVE
 Built for Apple Silicon · App notarized by Apple
 LOCAL
-Artwork, versions and chats stay on your Mac
+Design files, versions and chats stay on your Mac
 YOUR KEYS
 Your own models and keys. No Molly account
 UPDATES
@@ -129,7 +129,7 @@ Check for updates in the app, or download any time
 原生
 Apple Silicon 原生 · 应用已通过 Apple 公证
 本地
-作品、版本和对话都留在你的 Mac 上
+设计稿、版本和对话都留在你的 Mac 上
 自带密钥
 用你自己的模型和密钥，不需要 Molly 账户
 更新
@@ -145,7 +145,7 @@ PRODUCT DEMO
 
 Captured in the app
 
-A real screen recording and a real screenshot, not mockups: changing one word, and the Export menu.
+Not mockups. One screen recording of changing a word and one screenshot of the Export menu.
 
 AChange a word
 BExport
@@ -167,9 +167,9 @@ Export PNG or JPEG at 1×, 2× or 3×.
 ```text
 产品演示
 
-在 Molly 里实际截下来的
+在 Molly 里直接录屏、截图
 
-真实录屏和截图，不是效果图：一段改字的短录屏，以及展开的导出菜单。
+不是效果图。一段是改一个词的录屏，一张是展开的导出菜单。
 
 A改一个词
 B导出
@@ -195,7 +195,7 @@ WORKFLOW
 
 From brief to delivery
 
-One job in the order real work goes: brief, references, direction, layers, revisions, export.
+One job in the order you’d actually work it: brief, design inspiration, direction, layers, revisions, export.
 
 1
 Brief
@@ -214,7 +214,7 @@ Write the brief
 
 THE WAY YOU’D BRIEF A COLLEAGUE
 
-Pick a size and say in a sentence or two what it is, who it’s for and how it should feel. Square, portrait, story, landscape and long-image presets are built in, or let the agent decide.
+Pick a size and say in a sentence or two what it is, who it’s for and how it should feel. Square, portrait, story, landscape and long-image presets are built in, or let Molly decide.
 
 New design
 ILLUSTRATION
@@ -236,11 +236,11 @@ Landscape
 Long image
 1080×2400
 02
-Find references
+Find design inspiration
 
-THE AGENT LOOKS FOR YOU
+MOLLY LOOKS FOR YOU
 
-When the job calls for it, the agent opens the built-in browser to find references, such as public-domain photos and posters on Wikimedia Commons, and notes what it took from each one.
+When the job calls for it, Molly opens the built-in browser to look for design inspiration, such as public-domain photos and posters on Wikimedia Commons, and notes what it took from each one.
 
 Built-in browser
 REAL CAPTURE
@@ -249,7 +249,7 @@ Pick a direction
 
 A FEW DIRECTIONS, YOU CHOOSE
 
-The agent lays a few directions side by side on the canvas, with a note on each. You pick one and it builds from there.
+Molly lays a few directions side by side on the canvas, with a note on each. Pick one and it builds that one.
 
 Directions
 REAL CAPTURE
@@ -258,16 +258,16 @@ Build the layers
 
 TYPE, SHAPES AND IMAGES EACH GET A LAYER
 
-The chosen direction is built as layers: real text, vector shapes and an image background. Each one sits in the Layers panel, where you can select it, align it and type exact values.
+The chosen direction is built as a layered file: real text, vector shapes and one image layer for the background. Every layer sits in the Layers panel, where you can select it, align it and type exact values.
 
 Layers
 REAL CAPTURE
 05
 Client revisions
 
-EVERY ROUND, THE SAME FILE
+EVERY ROUND, THE SAME WORKING FILE
 
-If the client wants a different word, select the text and change it. For bigger changes, ask the agent in chat, and go back to an earlier saved version if you don’t like the result.
+If the client wants a different word, select the text and retype it. For bigger changes, ask Molly in chat, and go back to an earlier saved version if the result isn’t right.
 
 Editing the headline
 REAL CAPTURE
@@ -276,7 +276,7 @@ Export
 
 PNG OR JPEG AT THREE SCALES
 
-Save, then export. Your client gets the image. The editable file and its saved versions stay on your Mac for the next round.
+Save, then export. Your client gets the exported image. The working file and its saved versions stay on your Mac for the next round.
 
 Export
 ILLUSTRATION
@@ -306,7 +306,7 @@ poster@3x.png
 3240 × 4050
 3×
 
-When the next round of changes comes in, you open the same file.
+When the next round of changes comes in, you open the same working file.
 ```
 
 ### 中文
@@ -314,9 +314,9 @@ When the next round of changes comes in, you open the same file.
 ```text
 工作流程
 
-从简报到交稿
+从需求到交稿
 
-按真实接单的顺序走一遍：写简报、找参考、挑方向、落图层、回修、导出。
+按平时接活的顺序走一遍：写需求、找设计灵感、挑方向、落图层、客户回修、导出。
 
 1
 写简报
@@ -331,11 +331,11 @@ When the next round of changes comes in, you open the same file.
 6
 导出交付
 01
-写简报
+写需求
 
-像给同事交代活儿一样
+像给同事交代需求一样
 
-选好尺寸，用一两句话说清楚要做什么、给谁看、想要什么感觉。内置尺寸有方图、竖版、竖屏、横版和长图，也可以交给 Agent 自己判断。
+选好尺寸，用一两句话说清楚做什么、给谁看、要什么感觉。内置方图、竖版、竖屏、横版和长图几种尺寸，也可以交给 Molly 判断。
 
 新建设计
 示意
@@ -357,11 +357,11 @@ When the next round of changes comes in, you open the same file.
 长图
 1080×2400
 02
-找参考
+找设计灵感
 
-AGENT 自己上网看
+MOLLY 自己上网找
 
-需要的时候，Agent 会打开内置浏览器去找参考，比如维基共享资源里的公版老照片和海报，再一条条告诉你它从中借鉴了什么。
+需要的时候，Molly 会打开内置浏览器找设计灵感，比如维基共享资源里的公版老照片和海报，再逐条说明从每一张里借鉴了什么。
 
 内置浏览器
 真实截图
@@ -370,7 +370,7 @@ AGENT 自己上网看
 
 几套方向，你来选
 
-Agent 把几套方向并排放到画布上，附上每套的思路。你挑中一套，它就照这个往下做。
+Molly 把几套方向并排放在画布上，每套附一段思路。你选一套，它就按那套出稿。
 
 方向
 真实截图
@@ -379,16 +379,16 @@ Agent 把几套方向并排放到画布上，附上每套的思路。你挑中�
 
 文字、形状、图片各占一层
 
-选定的方向会做成图层：文字是真文字，圆和线是形状，背景是图片。每一层都在图层面板里，可以选中、对齐，也可以填精确的数值。
+选定的方向会做成分层稿：文字是真文字，圆和线是矢量形状，背景是一层图片。每一层都在图层面板里，可以选中、对齐，也可以输入精确数值。
 
 图层
 真实截图
 05
 客户回修
 
-每一轮改的都是同一份文件
+每一轮改的都是同一份源文件
 
-客户想换个词，你选中文字直接改。要改得多一点，就在对话里交给 Agent，不满意还能回到之前保存的版本。
+客户要换个词，选中文字直接改。改动大一点就在对话里交给 Molly，不满意还能回到之前保存的版本。
 
 改标题
 真实截图
@@ -397,7 +397,7 @@ Agent 把几套方向并排放到画布上，附上每套的思路。你挑中�
 
 PNG 或 JPEG，三档倍率
 
-保存后导出。交给客户的是导出的图，可编辑的工程和历史版本留在你的 Mac 上，下一轮接着改。
+保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的 Mac 上，下一轮接着改。
 
 导出
 示意
@@ -427,7 +427,7 @@ poster@3x.png
 3240 × 4050
 3×
 
-下一轮改稿来了，你打开的还是同一份文件。
+客户下一轮改稿来了，你打开的还是同一份源文件。
 ```
 
 ## why
@@ -437,9 +437,9 @@ poster@3x.png
 ```text
 WHY MOLLY · LAYERS
 
-Not a flat picture. A file you can keep working on
+Not a flat image. A real working file
 
-One-shot tools give you a flat picture, and changing one word means starting over. Molly gives you a file that is already in layers.
+Most image tools hand back a flat picture, so changing one line of copy means starting over. Molly gives you real text, vector shapes and one image layer in the same file.
 
 Molly Design · Layers
 REAL CAPTURE
@@ -469,9 +469,9 @@ The image model only makes the picture layer. Headlines and small print are neve
 ```text
 为什么是 MOLLY · 分层
 
-不是一张图，是一份能改的稿
+不是压平的单张图，是能接着做的源文件
 
-一键出图给你的是一张扁平图片，改一个字就得重来。Molly 交给你的稿子已经分好层。
+多数生图工具只给一张压平的图，改一行字就得重来。Molly 给你的是真文字、矢量形状和一层图片，都在同一份稿里。
 
 Molly Design · 图层
 真实截图
@@ -493,7 +493,7 @@ Aa
 
 图片只占一层
 
-图像模型只负责画面那一层，标题和小字不会被画进图里。
+图片模型只出画面那一层，标题和小字不会被画进图里。
 ```
 
 ## section
@@ -503,30 +503,30 @@ Aa
 ```text
 WHY MOLLY · EXPLORES FIRST
 
-It looks around first, then offers directions
+Design inspiration first, then directions
 
-Before it builds anything, the agent goes looking for references on its own and comes back with a few directions. You choose one, and it carries on from there.
+Before laying anything out, Molly searches for design inspiration in its built-in browser and puts a few directions side by side. Pick one and it builds that one.
 
 01
 
-Research
+Inspiration
 REAL CAPTURE
-Research
-It opens the built-in browser, finds references and says what it took from each.
+Design inspiration
+It opens the built-in browser, looks for design inspiration and says what it took from each piece.
 
 02
 
 Directions
 REAL CAPTURE
 Directions
-A few complete directions side by side, not one image and a roll of the dice.
+A few complete directions side by side, so you compare before you commit.
 
 03
 
 Your call
 REAL CAPTURE
 You decide
-It explains each direction, then waits. Pick one and it rebuilds that one as editable artwork.
+It explains each direction, then waits. Pick one and it rebuilds that one as an editable layered file.
 ```
 
 ### 中文
@@ -534,30 +534,30 @@ It explains each direction, then waits. Pick one and it rebuilds that one as edi
 ```text
 为什么是 MOLLY · 自主探索
 
-先看参考，再给方向
+先找设计灵感，再出方向
 
-动手之前，Agent 会先自己去找参考，再拿出几套方向。选哪一套由你决定，它再接着往下做。
+排版之前，Molly 先用内置浏览器找设计灵感，再把几套方向并排摆出来。你选一套，它就按那套出稿。
 
 01
 
-查参考
+找灵感
 真实截图
-先查参考
-自己打开内置浏览器找参考，再说清楚借鉴了什么。
+先找设计灵感
+自己打开内置浏览器找设计灵感，再说明从每一张里借鉴了什么。
 
 02
 
 方向
 真实截图
 给出几套方向
-几套完整的方向摆在一起，而不是一张图碰运气。
+几套完整方向并排看，先对比再定稿。
 
 03
 
 轮到你
 真实截图
 你来定
-它说明每套的特点，然后停下来等你。选好一套，它再做成可编辑的稿子。
+它说明每套的特点，然后停下来等你。选好一套，它再做成可编辑的设计稿。
 ```
 
 ## section
@@ -567,9 +567,9 @@ It explains each direction, then waits. Pick one and it rebuilds that one as edi
 ```text
 WHY MOLLY · ON YOUR MAC
 
-Your files and keys stay on your Mac
+Your design files and keys stay on your Mac
 
-Artwork, versions and chats are stored locally. Model requests go straight to the providers you set up.
+Design files, versions and chats are stored locally. Model requests go straight to the providers you set up.
 
 Where things go
 DIAGRAM
@@ -591,10 +591,10 @@ Image models
 Molly cloud account
 NOT NEEDED
 
-Artwork, versions and chats are stored locally. No Molly cloud account.
+Design files, versions and chats are stored locally. No Molly cloud account.
 Keys are kept in the system’s encrypted storage. On first launch macOS may ask to let Molly use the Keychain. Choose Always Allow.
-The providers you configure bill you directly for model and image use. Molly doesn’t collect or resell it.
-When you back up or move to a new Mac, your work copies over like any files. Encrypted keys may need to be entered again on the new machine.
+The providers you configure bill you directly for chat and image model use. Molly doesn’t collect or resell it.
+When you back up or move to a new Mac, your design files copy over like any other files. Encrypted keys may need to be entered again on the new machine.
 ```
 
 ### 中文
@@ -602,9 +602,9 @@ When you back up or move to a new Mac, your work copies over like any files. Enc
 ```text
 为什么是 MOLLY · 留在本机
 
-稿子和密钥都在你的 Mac 上
+设计稿和密钥都在你的 Mac 上
 
-作品、版本和对话存在本地。模型请求直接发给你自己配置的服务商。
+设计稿、版本和对话都存在本地。模型请求直接发给你自己配置的服务商。
 
 数据怎么走
 示意图
@@ -626,10 +626,10 @@ When you back up or move to a new Mac, your work copies over like any files. Enc
 Molly 云账户
 不需要
 
-作品、版本和对话都存在本地，不需要 Molly 云账户。
+设计稿、版本和对话都存在本地，不需要 Molly 云账户。
 密钥存在系统加密存储里。第一次启动时，macOS 可能会请求允许 Molly 使用钥匙串，选「始终允许」即可。
-模型和图片的费用由你配置的服务商直接收取，Molly 不代收，也不转售。
-换电脑或备份时，作品和数据可以直接拷走；加密保存的密钥可能需要在新机器上重新填一次。
+对话模型和图片模型的费用由你配置的服务商直接收取，Molly 不代收，也不转售。
+换电脑或备份时，设计稿和数据可以直接拷走；加密保存的密钥可能要在新机器上重新填一次。
 ```
 
 ## cases
@@ -641,15 +641,15 @@ WORK
 
 All made in Molly
 
-Every piece below was made in Molly and exported as is. The brands and events are made up.
+Every piece below was built and exported in Molly. Brands and campaigns are fictional.
 EXPORTED FROM MOLLY
 
 Product detail page
-A pour-over kettle for a made-up pottery brand, 1080 × 2400. Headline, details and spec table are all text layers.
+A pour-over kettle for a fictional pottery brand, 1080 × 2400. Headline, details and spec table are all text layers.
 Long-form graphic
-A brew guide for a made-up coffee roaster, 1080 × 2400, in five modules you can edit one at a time.
+A brew guide for a fictional coffee roaster, 1080 × 2400, in five modules you can edit one at a time.
 Key visual
-A landscape key visual for a made-up design week, 1920 × 1080.
+A landscape key visual for a fictional design week, 1920 × 1080.
 Social post
 An autumn special for a neighbourhood café, 1080 × 1080.
 Packaging label
@@ -661,9 +661,9 @@ A small-batch tea label, 1080 × 1080. Even the net weight is editable text.
 ```text
 作品
 
-都是 Molly 做出来的
+都是在 Molly 里做的
 
-下面每一张都是在 Molly 里跑出来、直接导出的稿子。品牌和活动都是虚构的。
+下面每一张都是在 Molly 里做完、直接导出的。品牌和活动都是虚构的。
 MOLLY 导出原图
 
 商品详情页
@@ -687,12 +687,12 @@ COMPARE
 
 Compared with one-shot image tools
 ASPECT	ONE-SHOT IMAGE TOOLS	MOLLY DESIGN
-What you get	Usually one flat image	An editable, layered file
+What you get	Usually one flat image	A layered file you can edit
 Changing copy	Often means regenerating	Edit the text layer, or ask in chat
-Alignment and fine-tuning	Limited, or you reroll	Select layers, align, type exact values
-Design direction	One roll of the dice	References first, a few directions, then layers
-Models	Usually tied to one platform	Set up locally, with your own connections and keys
-Where data lives	Often in the vendor’s cloud	Artwork and chats on your Mac
+Alignment and fine-tuning	Limited, or you regenerate	Select layers, align, type exact values
+Design direction	Single flat picture	Design inspiration first, a few directions, then layers
+Models	Usually tied to one platform	Your own connections and keys for the chat and image models
+Where data lives	Often in the vendor’s cloud	Design files and chats on your Mac
 Export	An image in a chat thread	PNG / JPEG · 1× / 2× / 3×
 
 This sketches common product types, not any one vendor's full feature set.
@@ -705,12 +705,12 @@ This sketches common product types, not any one vendor's full feature set.
 
 和一键出图的工具比
 维度	一键出图工具（泛指）	MOLLY DESIGN
-交付物	多为一张扁平图片	可编辑的分层稿
+交付物	多为一张压平的图	可编辑的分层稿
 改文案	往往要重新生成	直接改文字层，或在对话里改
-对齐和微调	较弱，或靠重新抽	选中图层、对齐、填数值
-设计方向	一次生成，看运气	先找参考，给几套方向，再落图层
-模型	通常绑定某个平台	本地配置，用你自己的连接和密钥
-数据在哪	常在服务商的云端	作品和对话在你的 Mac 上
+对齐和微调	有限，或者只能重新生成	选中图层、对齐、填数值
+设计方向	压平的单张图	先找设计灵感，并排出几套方向，再落图层
+模型	通常绑定某个平台	对话模型和图片模型都用你自己的连接和密钥
+数据在哪	常在服务商的云端	设计稿和对话在你的 Mac 上
 导出	对话里的一张图	PNG / JPEG · 1× / 2× / 3×
 
 表格概括的是常见产品形态，不对应任何一家的完整功能。
@@ -725,7 +725,7 @@ MODELS & KEYS
 
 Bring your own models
 
-Add connections under Settings → AI models. For each session you choose the connection, the model and how hard it thinks.
+Add connections under Settings → AI models. For each session you pick the connection, the model and how hard it thinks.
 
 01
 
@@ -749,7 +749,7 @@ Image generation
 
 Image models are set up separately
 
-Under Image generation, enter a compatible API address, a key and the model. It is separate from the chat model and you can switch it off. Without it, Molly still lays out type and shapes.
+Under Image generation, add a compatible endpoint, key and model name. It’s set up separately from the chat model, and you need both before you can send a brief.
 
 Which models you can use depends on the provider and your key.
 ```
@@ -761,7 +761,7 @@ Which models you can use depends on the provider and your key.
 
 用你自己的模型
 
-在设置 → AI 模型里添加连接。每个会话可以选用哪个连接、哪个模型和思考强度。
+在设置 → AI 模型里添加连接。每个会话可以单独选连接、模型和思考强度。
 
 01
 
@@ -785,7 +785,7 @@ OpenAI 兼容接口
 
 图片模型单独设置
 
-在图片生成里填兼容的接口地址、密钥和模型，和对话模型分开设置，可以随时开关。不用图片模型，也能只用文字和形状排版。
+在图片生成里填兼容的接口地址、密钥和模型名称。它和对话模型分开设置，两个都填好才能发送需求。
 
 能用哪些模型，取决于服务商和你的密钥。
 ```
@@ -814,27 +814,27 @@ Download the DMG, open it and drag Molly.app into Applications. The app is signe
 03
 Does it cost anything? Who pays for the models?
 
-Molly is free to download. The providers you configure bill you directly for model and image use. Molly doesn’t collect or resell it.
+Molly is free to download. The providers you configure bill you directly for chat and image model use. Molly doesn’t collect or resell it.
 
 04
-Do my designs and chats get uploaded to Molly?
+Do my design files and chats get uploaded to Molly?
 
-No. Artwork, versions and chats are stored locally, and Molly has no cloud account. Model requests go straight to the providers you configure.
+No. Design files, versions and chats are stored locally, and Molly has no cloud account. Model requests go straight to the providers you configure.
 
 05
 Which models can I use?
 
-That depends on what you connect: OpenAI, Kimi Code and any OpenAI-compatible endpoint, including local Ollama and LM Studio. Image models are set up separately. The exact list depends on the provider and your key.
+That depends on what you connect: OpenAI, Kimi Code and any OpenAI-compatible endpoint, including local Ollama and LM Studio. The image model is set up separately, and you connect it alongside the chat model on first launch. The exact list depends on the provider and your key.
 
 06
-Can I use it without an image model?
+Do I need an image model?
 
-Yes. Layouts with type and shapes don’t need an image service. Image generation is optional.
+Yes. On first launch you connect a chat model and an image model. Molly needs both before it can start a design.
 
 07
 How is this different from asking a chat AI for a poster?
 
-A chat tool usually hands you one flat image. Molly looks for references, offers a few directions, and builds the one you pick as editable layers. You can align, reword and roll back, then export PNG or JPEG on your Mac.
+A chat tool usually hands you one flat image. Molly looks for design inspiration, puts a few directions side by side and builds the one you pick as editable layers. You can align, retype and roll back, then export PNG or JPEG on your Mac.
 
 08
 Can I make print files?
@@ -869,27 +869,27 @@ Check for updates in the app, or download the DMG again from this page at any ti
 03
 要付费吗？模型费用谁出？
 
-Molly 可以免费下载。模型和图片调用的费用，由你配置的服务商直接向你收取，Molly 不代收也不转售。
+Molly 可以免费下载。对话模型和图片模型的调用费用，由你配置的服务商直接向你收取，Molly 不代收也不转售。
 
 04
-我的稿子和对话会上传到 Molly 吗？
+我的设计稿和对话会上传到 Molly 吗？
 
-不会。作品、版本和对话都存在本地，Molly 没有云账户。模型请求直接发给你配置的服务商。
+不会。设计稿、版本和对话都存在本地，Molly 没有云账户。模型请求直接发给你配置的服务商。
 
 05
 支持哪些模型？
 
-取决于你添加的连接：OpenAI、Kimi Code，以及任何 OpenAI 兼容接口（包括本地的 Ollama、LM Studio）。图片模型另外设置。具体能用哪些，看服务商和你的密钥。
+取决于你添加的连接：OpenAI、Kimi Code，以及任何 OpenAI 兼容接口（包括本地的 Ollama、LM Studio）。图片模型单独设置，首次启动时和对话模型一起接上。具体能用哪些，看服务商和你的密钥。
 
 06
-没有图片模型能用吗？
+需要图片模型吗？
 
-可以。只用文字和形状排版不需要图片服务，图片生成是可选的。
+需要。首次启动时接上对话模型和图片模型，两个都配好才能开始做稿。
 
 07
 和直接让聊天 AI「做张海报」有什么不同？
 
-聊天里出图，通常给你一张扁平的结果。Molly 会先找参考、给几套方向，再把选中的方向做成可编辑的图层：可以对齐、改字、回到旧版本，最后在本机导出 PNG 或 JPEG。
+在聊天工具里出图，通常拿到的是一张压平的图。Molly 先找设计灵感、并排给几套方向，再把选中的方向做成可编辑的图层：可以对齐、改字、回到旧版本，最后在本机导出 PNG 或 JPEG。
 
 08
 能做印刷稿吗？
@@ -967,15 +967,15 @@ Issues
 | A screen recording: on the Molly canvas, the headline of a café poster is selected and changed from “maple oat” to “honey oat” | 一段屏幕录制：在 Molly 画布上选中咖啡海报的标题，把 maple oat 改成 honey oat |
 | A ceramic kettle product page on the Molly canvas with the Export menu open, listing PNG and JPEG at 1×, 2× and 3× | Molly 画布上一张陶瓷手冲壶商品详情长图，右上角的导出菜单已展开，列出 PNG 和 JPEG 的 1×、2×、3× |
 | Illustration: the new-design box with a one-line brief, above the size presets: auto by brief, square, portrait, story, landscape and long image. | 示意：新建设计的输入框里写着一句简报，下面是尺寸预设：按简报自动、方图、竖版、竖屏、横版和长图。 |
-| The agent lists public-domain references for a darkroom open-house poster, with a Wikimedia Commons file page open in the built-in browser | Agent 在对话里列出暗房开放日海报的公版参考，右边内置浏览器打开着维基共享资源的图片页 |
-| Three directions for a community darkroom open-house poster side by side on the canvas, with the agent’s note on each in the chat | 画布上并排的三套社区暗房开放日海报方向，左边是 Agent 对每套的说明 |
+| Molly lists the public-domain reference images it found for a darkroom open-house poster, with a Wikimedia Commons file page open in the built-in browser | Molly 在对话里列出为暗房开放日海报找到的公版参考图，右侧内置浏览器开着维基共享资源的图片页 |
+| Three directions for a community darkroom open-house poster side by side on the canvas, with Molly’s note on each in the chat | 画布上并排的三套社区暗房开放日海报方向，左侧对话里是 Molly 对每套的说明 |
 | A design-week key visual on the Molly canvas, with the layer, text and shape tools below | Molly 画布上一张设计周横版主视觉，下方是图层、文字和形状工具 |
 | A café poster with its headline changed to “honey oat”, the text box still selected and the matching layer highlighted in the Layers panel | 咖啡海报的标题已改成 honey oat，文字框仍选中，右边图层面板显示同名图层 |
 | Illustration: the editable file and its saved versions stay on your Mac; the export goes out as PNG or JPEG at 1×, 2× or 3× for the client. | 示意：可编辑的稿子和保存的版本留在 Mac 上；导出 PNG 或 JPEG，1×、2×、3× 三档，交给客户。 |
-| The Pour-over headline text layer selected on a coffee guide: selection handles on the canvas, a floating toolbar with font and size, and the Layers panel highlighting the row with its position and size | 在手冲咖啡长图上选中 Pour-over 标题文字图层：画布上有选框，浮动工具栏显示字体和字号，右侧图层面板高亮这一层并显示位置和尺寸 |
-| The agent’s list of public-domain references it checked on Wikimedia Commons, and what it took from each | Agent 列出它在维基共享资源上查过的公版参考，以及每一张借鉴了什么 |
+| The Pour-over headline text layer selected on a coffee guide. The canvas shows selection handles and a floating toolbar with font and size, while the Layers panel highlights the row with its position and size | 在手冲咖啡长图上选中 Pour-over 标题文字图层：画布上有选框，浮动工具栏显示字体和字号，右侧图层面板高亮这一层并显示位置和尺寸 |
+| Molly’s list of public-domain reference images it checked on Wikimedia Commons, and what it took from each | Molly 列出它在维基共享资源上查过的公版参考图，以及每一张借鉴了什么 |
 | Three directions for a community darkroom open-house poster side by side on the canvas: The Negative, The Proof Sheet and The Print | 三套社区暗房开放日海报方向并排摆在画布上：底片、样张、相纸 |
-| The agent’s reply: this is the comparison canvas, not the finished poster; pick A, B or C and it will rebuild that direction as the editable 1080 × 1350 artwork | Agent 的回复：这是比较用的画布，不是成稿；选 A、B 或 C，它就把那套重做成可编辑的 1080 × 1350 稿子 |
+| Molly’s reply: this is the comparison canvas, not the final design; pick A, B or C and it will rebuild that direction as the editable 1080 × 1350 file | Molly 的回复：这是用来对比的画布，不是定稿；选 A、B 或 C，它就把那套重做成可编辑的 1080 × 1350 设计稿 |
 | Diagram: artwork, versions, chats and encrypted keys stay on your Mac; model and image requests go straight to the providers you configure; no Molly cloud account. | 示意图：作品、版本、对话和加密的密钥都在你的 Mac 上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。 |
 | A long product page for a ceramic pour-over kettle: hero photo, headline, three details and a spec table | 陶瓷手冲壶的商品详情长图：大图、标题、三个细节和规格表 |
 | A long how-to graphic for pour-over coffee: five steps, each with an illustration and a short explanation | 手冲咖啡五步图解长图：每一步一张插图和说明 |

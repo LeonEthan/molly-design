@@ -1,21 +1,22 @@
 import {
+  acceptRunResponse,
+  acceptSessionBinding,
+  buildRunSnapshot,
+  readMcpBindings,
+} from '@molly/shared/embedded-run-contract';
+import {
   HarnessMemoryRequestSchema,
   type HarnessMemoryRequest,
   type PersonalMemorySnapshot,
 } from '@molly/shared/personal-memory';
 import { getPersonalMemory } from './personal-memory';
-import { createHash } from 'node:crypto';
 import type { Writable } from 'node:stream';
 import type { McpServer, PromptResponse } from '@agentclientprotocol/sdk';
 import {
-  HarnessRunOutcomeSchema,
-  HarnessRunSnapshotSchema,
-  HarnessSessionBindingSchema,
+  type HarnessRunSnapshot,
   ModelSelectionSchema,
   type HarnessSessionBinding,
-  McpCredentialBindingSchema,
   HarnessMcpSessionSchema,
-  mcpCredentialMatchesServer,
   type McpCredentialBinding,
 } from '@molly/shared/embedded-harness';
 import {
@@ -87,22 +88,9 @@ export class EmbeddedHarnessControl {
 
   async configureMcp(servers: readonly McpServer[]): Promise<void> {
     if (this.busy || this.binding) throw new Error('harness_mcp_already_bound');
-    this.mcpConnections = servers.flatMap((server) => {
-      const metadata = server._meta?.mollyMcpCredential;
-      if (metadata === undefined) return [];
-      const binding = McpCredentialBindingSchema.parse(metadata);
-      const catalog = server._meta?.mollyConnection;
-      if (
-        binding.workspaceId !== this.config.workspaceId ||
-        !mcpCredentialMatchesServer(binding, server) ||
-        !catalog ||
-        typeof catalog !== 'object' ||
-        !('id' in catalog) ||
-        catalog.id !== binding.serverId
-      )
-        throw new Error('harness_mcp_binding_mismatch');
-      return [binding];
-    });
+    const bindings = readMcpBindings(servers, this.config.workspaceId);
+    if (!bindings.ok) throw new Error('harness_mcp_binding_mismatch');
+    this.mcpConnections = bindings.value;
     if (!this.mcpConnections.length) return;
     const session = HarnessMcpSessionSchema.parse({
       version: 1,
@@ -205,43 +193,25 @@ export class EmbeddedHarnessControl {
   }
 
   bind(binding: HarnessSessionBinding): void {
-    binding = HarnessSessionBindingSchema.parse(binding);
-    if (
-      this.binding ||
-      binding.runtimeEpoch !== this.config.runtimeEpoch ||
-      JSON.stringify(binding.harness) !== JSON.stringify(this.config.harness)
-    )
-      throw new Error('harness_worker_identity_mismatch');
-    this.binding = binding;
+    const accepted = acceptSessionBinding(binding, this.config);
+    if (this.binding || !accepted.ok) throw new Error('harness_worker_identity_mismatch');
+    this.binding = accepted.value;
   }
 
   async prompt(input: {
     turnId: string;
     signal: AbortSignal;
-    prompt: (
-      snapshot: ReturnType<typeof HarnessRunSnapshotSchema.parse>
-    ) => Promise<PromptResponse>;
+    prompt: (snapshot: HarnessRunSnapshot) => Promise<PromptResponse>;
   }): Promise<PromptResponse> {
     if (this.retired || this.busy || !this.binding) throw new Error('harness_worker_unavailable');
     input.signal.throwIfAborted();
     this.busy = true;
-    const snapshot = HarnessRunSnapshotSchema.parse({
-      schemaVersion: 1,
-      // Turn identity, not process identity: a restart may not replay a dispatched user task.
-      runId: createHash('sha256')
-        .update(JSON.stringify([this.config.productSessionId, input.turnId]))
-        .digest('hex'),
-      runtimeEpoch: this.config.runtimeEpoch,
-      sessionId: this.config.productSessionId,
+    const snapshot = buildRunSnapshot({
+      config: this.config,
       turnId: input.turnId,
-      connection: this.config.connection,
-      imageConnection: this.imageConnection ?? undefined,
-      ...(this.mcpConnections.length ? { mcpConnections: this.mcpConnections } : {}),
-      selection: this.config.selection,
-      harness: this.config.harness,
-      toolsetHash: this.binding.toolsetHash,
-      pluginSetHash: this.binding.pluginSetHash,
-      permissionProfileId: this.config.permissionProfileId,
+      binding: this.binding,
+      mcpConnections: this.mcpConnections,
+      imageConnection: this.imageConnection,
     });
     const controller = new AbortController();
     this.activeController = controller;
@@ -283,17 +253,8 @@ export class EmbeddedHarnessControl {
       const response = await input.prompt(snapshot);
       if (this.retired || this.catalogRequiresReplacement())
         throw new Error('harness_worker_retired');
-      const outcome = HarnessRunOutcomeSchema.safeParse(response._meta?.mollyNativeOutcome);
-      if (
-        !outcome.success ||
-        response._meta?.mollyRunId !== snapshot.runId ||
-        response._meta?.mollyRuntimeEpoch !== snapshot.runtimeEpoch ||
-        (response.stopReason === 'end_turn'
-          ? outcome.data.status !== 'completed'
-          : response.stopReason !== 'cancelled' || outcome.data.status !== 'cancelled')
-      ) {
+      if (!acceptRunResponse(response, snapshot).ok)
         throw new Error('harness_native_outcome_invalid');
-      }
       return response;
     } catch (error) {
       // A channel containing an unread grant cannot safely serve another run.

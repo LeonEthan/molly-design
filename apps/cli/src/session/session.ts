@@ -1,3 +1,4 @@
+import { runRequestMeta } from '@molly/shared/embedded-run-contract';
 import { randomUUID } from 'node:crypto';
 import { Writable } from 'node:stream';
 import { createWorkerEnvironment } from '@molly/harness-pi/environment';
@@ -152,7 +153,7 @@ export class Session extends EventEmitter<SessionEvents> implements ISession {
       prompt: async (snapshot) => {
         const response = await client.prompt(sessionId, prompt, {
           signal,
-          _meta: { mollyRunSnapshot: snapshot },
+          _meta: runRequestMeta(snapshot),
         });
         if (!response) throw new Error('harness_native_outcome_missing');
         return response;

@@ -1,0 +1,14 @@
+# Shared source contracts
+
+`CLAUDE.md` symlinks here; edit `AGENTS.md` only.
+
+## Embedded harness credentials
+
+`harness/host` v1 and `mcp/catalog-entry` stay main-only; renderer Machine RPC rejects them.
+Vault metadata/reports use the owner-only socket, never Loro. Consumption requires a matching
+dispatcher-owned model run/epoch or selected MCP session/epoch lease; only explicit Settings
+`ListMcpToolsSchema` discovery of the exact binding is exempt. RPC returns work, never secrets;
+no body/validation-input logs. Empty model grants need compatible bindings; signed-out
+metadata is main-owned. References stay separate from selection: no empty-model fallback,
+snapshot secrets or dispatched-work replay. Native `models` only narrows the picker;
+dispatch, not schemas, owns availability.

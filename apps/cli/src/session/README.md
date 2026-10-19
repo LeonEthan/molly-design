@@ -23,7 +23,10 @@ before releasing ownership. Queued inputs stay intact until explicit Continue; t
 action releases the queue and never retries the old turn. Pending inputs without a
 run fence remain executable. See the [recovery fix](../../../../.agents/notes/implemented/bug-fix/2026-09-28-interrupted-run-recovery.md).
 Native model failures carrying `harness_model_request_failed` use the existing
-`acp_upstream_api_error` reason with a static category mapped to `ChatFailedCode`.
+`acp_upstream_api_error` reason. The shared `embedded-run-contract` maps the static category
+to `ModelRequestFailureCode`, derived from `ChatFailedCodeSchema`; missing or unknown categories
+map to `model_request_failed`. The same contract builds run snapshots, validates session
+bindings and native responses, and owns the request/response `_meta` envelope.
 The chat notice owns execution status; the failed design outcome remains durable
 without diagnostics, candidate or commit, so its receipt adds no second failure line.
 Other failures retain their design diagnostics. Creation errors use `session_create_failed`

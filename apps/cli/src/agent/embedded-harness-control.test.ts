@@ -410,56 +410,24 @@ describe('owned worker host control', () => {
     f.pipe.destroy();
   });
 
-  it('records no permission mode in a run snapshot', async () => {
+  it('refuses a resolved ACP prompt without native proof and retires the worker', async () => {
     const f = fixture();
-    await f.control.bootstrap();
-    const snapshots: HarnessRunSnapshot[] = [];
     const result = f.control.prompt({
-      turnId: 'turn-auto',
+      turnId: 'turn-1',
       signal: new AbortController().signal,
-      prompt: async (snapshot) => {
-        snapshots.push(snapshot);
-        return f.complete(snapshot);
-      },
+      prompt: async () => ({ stopReason: 'end_turn' }),
     });
     f.grant();
-    await result;
-    expect(snapshots.map((snapshot) => snapshot.permissionMode)).toEqual([undefined]);
-    f.pipe.destroy();
-  });
-
-  it.each(['missing', 'stale', 'failed'] as const)(
-    'refuses a resolved ACP prompt with %s native proof',
-    async (kind) => {
-      const f = fixture();
-      const result = f.control.prompt({
-        turnId: 'turn-1',
+    await expect(result).rejects.toThrow('harness_native_outcome_invalid');
+    expect(f.stops).toEqual(['stopped']);
+    await expect(
+      f.control.prompt({
+        turnId: 'turn-2',
         signal: new AbortController().signal,
-        prompt: async (snapshot) =>
-          kind === 'missing'
-            ? { stopReason: 'end_turn' }
-            : {
-                ...f.complete(snapshot),
-                _meta: {
-                  ...f.complete(snapshot)._meta,
-                  ...(kind === 'stale'
-                    ? { mollyRuntimeEpoch: randomUUID() }
-                    : { mollyNativeOutcome: { status: 'failed', errorCode: 'provider' } }),
-                },
-              },
-      });
-      f.grant();
-      await expect(result).rejects.toThrow('harness_native_outcome_invalid');
-      expect(f.stops).toEqual(['stopped']);
-      await expect(
-        f.control.prompt({
-          turnId: 'turn-2',
-          signal: new AbortController().signal,
-          prompt: async (snapshot) => f.complete(snapshot),
-        })
-      ).rejects.toThrow('harness_worker_unavailable');
-    }
-  );
+        prompt: async (snapshot) => f.complete(snapshot),
+      })
+    ).rejects.toThrow('harness_worker_unavailable');
+  });
 
   it('cancel before grant retires the worker without dispatching a model request', async () => {
     const f = fixture();

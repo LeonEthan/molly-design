@@ -181,20 +181,19 @@ describe('getOnboardingDefaultModelId', () => {
     { value: encodeMollyModelOption('conn-b', 'beta/1'), label: 'beta' },
   ];
 
-  it('prefers the ready connection’s first offered model', () => {
-    expect(getOnboardingDefaultModelId(options, 'conn-b')).toBe(
+  it('picks the first offered model of a ready connection', () => {
+    expect(getOnboardingDefaultModelId(options, new Set(['conn-b']))).toBe(
       encodeMollyModelOption('conn-b', 'beta/1')
+    );
+    expect(getOnboardingDefaultModelId(options, new Set(['conn-b', 'conn-a']))).toBe(
+      encodeMollyModelOption('conn-a', 'alpha/1')
     );
   });
 
-  it('falls back to the first offered model and never the unselected sentinel', () => {
-    expect(getOnboardingDefaultModelId(options, 'conn-missing')).toBe(
-      encodeMollyModelOption('conn-a', 'alpha/1')
-    );
-    expect(getOnboardingDefaultModelId(options, undefined)).toBe(
-      encodeMollyModelOption('conn-a', 'alpha/1')
-    );
-    expect(getOnboardingDefaultModelId([options[0]!], 'conn-a')).toBeNull();
+  it('returns null until a ready connection has a projected model', () => {
+    expect(getOnboardingDefaultModelId(options, new Set(['conn-missing']))).toBeNull();
+    expect(getOnboardingDefaultModelId(options, new Set())).toBeNull();
+    expect(getOnboardingDefaultModelId([options[0]!], new Set(['conn-a']))).toBeNull();
   });
 });
 

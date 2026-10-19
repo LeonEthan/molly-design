@@ -1337,7 +1337,7 @@ function WorkspaceChatLanding({
       // model classes it can only fail later, so block here and name what's missing.
       if (isElectron && getIpcServices()?.design) {
         const missingModels = await readMissingDesignModelClasses();
-        if (missingModels.length > 0) {
+        if (missingModels === null || missingModels.length > 0) {
           setComposerStatus({
             tone: 'error',
             message: (

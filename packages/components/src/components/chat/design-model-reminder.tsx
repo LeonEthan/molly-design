@@ -4,26 +4,33 @@ import type { DesignModelClass } from '@/lib/design-model-readiness';
 /**
  * Blocks a design-session start when a required model class is not connected,
  * naming what is missing and offering the Settings section that fixes it.
+ * `missing: null` means readiness could not be read; sending again retries.
  */
 export function DesignModelReadinessReminder({
   missing,
   onOpenSettings,
 }: {
-  missing: readonly DesignModelClass[];
+  missing: readonly DesignModelClass[] | null;
   onOpenSettings: () => void;
 }) {
   const { t } = useTranslation();
-  const both = missing.includes('language') && missing.includes('image');
-  const key = both
-    ? 'chat.validation.missingModelsBoth'
-    : missing.includes('language')
-      ? 'chat.validation.missingModelLanguage'
-      : 'chat.validation.missingModelImage';
-  const fallback = both
-    ? 'Connect a language model and an image model to start designing.'
-    : missing.includes('language')
-      ? 'Connect a language model to start designing.'
-      : 'Connect an image model to start designing.';
+  const both = missing !== null && missing.includes('language') && missing.includes('image');
+  const key =
+    missing === null
+      ? 'chat.validation.modelReadinessUnreadable'
+      : both
+        ? 'chat.validation.missingModelsBoth'
+        : missing.includes('language')
+          ? 'chat.validation.missingModelLanguage'
+          : 'chat.validation.missingModelImage';
+  const fallback =
+    missing === null
+      ? 'Couldn’t check your model connections. Check them in Settings, then send again.'
+      : both
+        ? 'Connect a language model and an image model to start designing.'
+        : missing.includes('language')
+          ? 'Connect a language model to start designing.'
+          : 'Connect an image model to start designing.';
   return (
     <span>
       {t(key, fallback)}{' '}

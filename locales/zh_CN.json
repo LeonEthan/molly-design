@@ -553,6 +553,7 @@
   "chat.validation.missingMachine": "所选 Agent 缺少可用机器。",
   "chat.validation.missingModelImage": "连接图像模型后即可开始设计。",
   "chat.validation.missingModelLanguage": "连接语言模型后即可开始设计。",
+  "chat.validation.modelReadinessUnreadable": "无法读取模型连接状态。请在设置中检查后再发送。",
   "chat.validation.missingModelsBoth": "连接语言模型和图像模型后即可开始设计。",
   "chat.validation.missingProject": "请选择一个项目。",
   "chat.validation.missingPrompt": "请输入想要讨论的内容。",

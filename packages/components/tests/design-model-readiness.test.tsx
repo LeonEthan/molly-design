@@ -114,10 +114,10 @@ describe('readMissingDesignModelClasses', () => {
     await expect(readMissingDesignModelClasses()).resolves.toEqual(['language', 'image']);
   });
 
-  it('fails open with console detail when the snapshots cannot be read', async () => {
+  it('reports unreadable readiness instead of ready when the snapshots cannot be read', async () => {
     fakes.failRead = true;
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await expect(readMissingDesignModelClasses()).resolves.toEqual([]);
+    await expect(readMissingDesignModelClasses()).resolves.toBeNull();
     expect(consoleError).toHaveBeenCalledWith(
       'Failed to read design model readiness',
       expect.any(Error)
@@ -146,6 +146,7 @@ describe('DesignModelReadinessReminder', () => {
     [['language'], 'Connect a language model to start designing.'],
     [['image'], 'Connect an image model to start designing.'],
     [['language', 'image'], 'Connect a language model and an image model to start designing.'],
+    [null, 'Couldn’t check your model connections. Check them in Settings, then send again.'],
   ] as const)('names the missing class(es): %s', async (missing, message) => {
     let opened = 0;
     await act(async () =>

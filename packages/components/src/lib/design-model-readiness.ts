@@ -49,11 +49,11 @@ export function getMissingDesignModelClasses(input: {
 }
 
 /**
- * Live snapshot read for the landing send gate. A read failure is not evidence
- * of missing models, so it reports ready and lets the session's own error
- * paths handle a genuinely unusable setup.
+ * Live snapshot read for the landing send gate. `null` means the saved state
+ * could not be read (for example Keychain access was denied); callers block
+ * the send rather than treat an unread snapshot as ready.
  */
-export async function readMissingDesignModelClasses(): Promise<DesignModelClass[]> {
+export async function readMissingDesignModelClasses(): Promise<DesignModelClass[] | null> {
   const ipc = getIpcServices();
   if (!ipc) return [];
   try {
@@ -67,6 +67,6 @@ export async function readMissingDesignModelClasses(): Promise<DesignModelClass[
     });
   } catch (error) {
     console.error('Failed to read design model readiness', error);
-    return [];
+    return null;
   }
 }

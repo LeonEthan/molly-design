@@ -554,6 +554,7 @@
   "chat.validation.missingMachine": "Selected agent is missing a machine.",
   "chat.validation.missingModelImage": "Connect an image model to start designing.",
   "chat.validation.missingModelLanguage": "Connect a language model to start designing.",
+  "chat.validation.modelReadinessUnreadable": "Couldn’t check your model connections. Check them in Settings, then send again.",
   "chat.validation.missingModelsBoth": "Connect a language model and an image model to start designing.",
   "chat.validation.missingProject": "Please select a project.",
   "chat.validation.missingPrompt": "Please enter something to discuss.",

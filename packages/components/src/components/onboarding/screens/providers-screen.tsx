@@ -27,18 +27,18 @@ export function getOnboardingDefaultThinking(efforts: readonly string[] | undefi
   return !efforts || efforts.includes('medium') ? 'medium' : (efforts[0] ?? 'medium');
 }
 
-/** The connected LLM's first offered model, else the first offered model at all. */
+/** The first offered model of a ready connection; `null` until one is projected. */
 export function getOnboardingDefaultModelId(
   modelOptions: readonly AcpSessionSelectOption[],
-  readyConnectionId: string | undefined
+  readyConnectionIds: ReadonlySet<string>
 ): string | null {
-  const offered = modelOptions.filter((option) => decodeMollyModelOption(option.value));
-  const forConnection = readyConnectionId
-    ? offered.find(
-        (option) => decodeMollyModelOption(option.value)?.connectionId === readyConnectionId
-      )
-    : undefined;
-  return (forConnection ?? offered[0])?.value ?? null;
+  const option = modelOptions.find((candidate) => {
+    const decoded = decodeMollyModelOption(candidate.value);
+    return (
+      decoded !== null && decoded !== undefined && readyConnectionIds.has(decoded.connectionId)
+    );
+  });
+  return option?.value ?? null;
 }
 
 type ProvidersScreenProps = {
@@ -132,7 +132,7 @@ export function ProvidersScreen(props: ProvidersScreenProps) {
   // its models; completing earlier would persist an empty model default.
   const defaultModelId = getOnboardingDefaultModelId(
     selectorOptions.modelOptions,
-    readyConnections[0]?.id
+    new Set(readyConnections.map((connection) => connection.id))
   );
 
   const handleNext = () => {

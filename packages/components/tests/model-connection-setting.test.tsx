@@ -230,7 +230,6 @@ describe('encrypted model connection form', () => {
       { ...stored, providerPresetId: 'kimi-coding', baseUrl: 'https://api.kimi.com/coding/v1' }
     );
     expect(host.textContent).toContain(en['settings.models.kimiCode']);
-    expect(host.textContent).toContain(en['settings.models.kimiCodeHint']);
     expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
     await act(async () => {
       host
@@ -249,19 +248,28 @@ describe('encrypted model connection form', () => {
     });
     expect(host.querySelector('[role=alert]')).toBeNull();
     expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
+    await openMoreOptions();
     expect(host.textContent).toContain(
       en['settings.models.endpointDefault'].replace('{{url}}', 'https://api.kimi.com/coding/v1')
     );
   });
 
-  it.each(['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'])('renders a migrated saved %s connection as default without an endpoint error', async (baseUrl) => {
-    connectionIpc.getSnapshot.mockResolvedValue({connections:[{...stored,providerPresetId:'kimi-coding',baseUrl}]});
-    await act(async () => root.render(createElement(ModelConnectionSetting)));
-    await pickDiscovered(en['common.edit']);
-    expect(host.querySelector('[role=alert]')).toBeNull();
-    expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
-    expect(host.textContent).toContain(en['settings.models.endpointDefault'].replace('{{url}}','https://api.kimi.com/coding/v1'));
-  });
+  it.each(['https://api.kimi.com/coding', 'https://api.kimi.com/coding/'])(
+    'renders a migrated saved %s connection as default without an endpoint error',
+    async (baseUrl) => {
+      connectionIpc.getSnapshot.mockResolvedValue({
+        connections: [{ ...stored, providerPresetId: 'kimi-coding', baseUrl }],
+      });
+      await act(async () => root.render(createElement(ModelConnectionSetting)));
+      await pickDiscovered(en['common.edit']);
+      expect(host.querySelector('[role=alert]')).toBeNull();
+      expect(host.querySelector('input[id$="-endpoint"]')).toBeNull();
+      await openMoreOptions();
+      expect(host.textContent).toContain(
+        en['settings.models.endpointDefault'].replace('{{url}}', 'https://api.kimi.com/coding/v1')
+      );
+    }
+  );
 
   it('flags a typed Kimi Code address without /v1 and accepts /coding/v1 with or without a slash', async () => {
     await act(async () =>
@@ -273,6 +281,7 @@ describe('encrypted model connection form', () => {
         })
       )
     );
+    await openMoreOptions();
     expect(host.textContent).toContain(
       en['settings.models.endpointDefault'].replace('{{url}}', 'https://api.kimi.com/coding/v1')
     );
@@ -320,6 +329,47 @@ describe('encrypted model connection form', () => {
     expect(host.textContent).not.toContain('PRIVATE_REFERENCE_NOT_A_SECRET');
   });
 
+  it('groups plan sign-ins, API keys and Custom in the shared provider picker', async () => {
+    const signIns: BeginOpenAiAuth[] = [];
+    await act(async () =>
+      root.render(
+        createElement(ModelConnectionForm, {
+          onSave: async () => undefined,
+          onOpenAiAuth: {
+            begin: async (input) => {
+              signIns.push(input);
+              return { ok: false as const, reason: 'unavailable' as const };
+            },
+            complete: async () => ({ ok: false as const, reason: 'cancelled' as const }),
+            cancel: async () => undefined,
+            signOut: async () => undefined,
+          },
+        })
+      )
+    );
+    const groups = host.querySelector('[role="radiogroup"]')!.textContent!;
+    expect(groups.indexOf(en['settings.models.groups.signIn'])).toBeLessThan(
+      groups.indexOf(en['settings.models.groups.apiKey'])
+    );
+    expect(groups).toContain(en['settings.models.groups.other']);
+    expect(groups).not.toContain(en['settings.models.kimiCode']);
+    expect(en['settings.models.compatible']).toBe('Custom');
+    const tile = (label: string) =>
+      [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
+        node.textContent?.endsWith(label)
+      );
+    expect(tile('Custom')).toBeDefined();
+    expect(tile(en['settings.models.chatgpt'])).toBeDefined();
+    await act(async () => tile(en['settings.models.chatgpt'])!.click());
+    expect(host.querySelector('input[type=password]')).toBeNull();
+    await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'ChatGPT'));
+    expect(signIns).toEqual([{ provider: 'openai' }]);
+    await pickDiscovered(en['settings.models.allProviders']);
+    await act(async () => tile('Custom')!.click());
+    expect(host.querySelector('input[id$="-endpoint"]')).not.toBeNull();
+    expect(host.textContent).toContain(en['settings.models.optional']);
+  });
+
   it('asks for the key once a provider tile is picked and suggests its address', async () => {
     await render(async () => undefined);
     const tile = [...host.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((node) =>
@@ -327,8 +377,8 @@ describe('encrypted model connection form', () => {
     )!;
     await act(async () => tile.click());
     expect(host.querySelector<HTMLInputElement>('input[type=password]')!.value).toBe('');
-    expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
     await openMoreOptions();
+    expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
     expect(host.querySelector<HTMLInputElement>('input[id$="-name"]')!.value).toBe(
       en['settings.models.providers.deepseek']
     );
@@ -428,6 +478,7 @@ describe('encrypted model connection form', () => {
     const button = (label: string) =>
       [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
     expect(endpointField()).toBeNull();
+    await openMoreOptions();
     expect(host.textContent).toContain('Sends requests to https://api.deepseek.com');
     await act(async () => button(en['settings.models.useCustomEndpoint']).click());
     expect(endpointField()!.value).toBe('https://api.deepseek.com/');
@@ -651,7 +702,7 @@ describe('free key check and model choice', () => {
     expect(requests).toEqual([
       { providerPresetId: 'openai', baseUrl: 'https://api.openai.com/v1', apiKey: 'SYNTHETIC_KEY' },
     ]);
-    expect(host.textContent).toContain('Key check passed · 1 model listed');
+    expect(host.querySelector('[role=alert]')).toBeNull();
     await openMoreOptions();
     expect(radio('All 2').getAttribute('aria-checked')).toBe('true');
     await act(async () => radio(en['settings.models.picker.choose']).click());
@@ -716,7 +767,7 @@ describe('free key check and model choice', () => {
     );
     await change(host.querySelector<HTMLInputElement>('input[type=password]')!, 'SYNTHETIC_KEY');
     await settle();
-    expect(host.textContent).toContain('Key check passed · 1 model listed');
+    expect(host.querySelector('[role=alert]')).toBeNull();
     await openMoreOptions();
     expect(radio('All 4').getAttribute('aria-checked')).toBe('true');
     await act(async () => radio(en['settings.models.picker.choose']).click());
@@ -810,10 +861,10 @@ describe('connection management', () => {
     await act(async () => button(en['settings.models.delete']).click());
     expect(deleted).toEqual([{ id: stored.id, expectedRevision: stored.revision }]);
     expect(host.textContent).not.toContain('Synthetic');
-    expect(host.textContent).toContain(en['settings.models.empty']);
+    expect(host.textContent).toContain(en['settings.models.chooseProvider']);
   });
 
-  it('shows the picker choice outside More options and summarizes the chosen subset', async () => {
+  it('keeps the model choice under Advanced and summarizes the chosen subset', async () => {
     connectionIpc.getSnapshot.mockResolvedValue({
       connections: [{ ...stored, models: ['gpt-5', 'gpt-5-mini'] }],
     });
@@ -836,19 +887,23 @@ describe('connection management', () => {
         .find((node) => node.textContent === en['common.edit'])!
         .click()
     );
-    // First-class section: visible without opening More options.
-    expect(host.textContent).toContain(en['settings.models.picker.title']);
+    expect(host.textContent).not.toContain(en['settings.models.picker.title']);
     expect(host.querySelector('[id$="-name"]')).toBeNull();
     await openMoreOptions();
+    expect(host.textContent).toContain(en['settings.models.picker.title']);
     expect(host.querySelector('[id$="-name"]')).not.toBeNull();
   });
 
   it('retains the signed-out row, reports uncertain revocation and reconnects the exact revision', async () => {
     const signedIn: ModelConnection = {
-      ...stored, authType: 'openai_oauth', oauth: { email: 'synthetic@example.invalid' },
+      ...stored,
+      authType: 'openai_oauth',
+      oauth: { email: 'synthetic@example.invalid' },
     };
     const signedOut: ModelConnection = {
-      ...signedIn, revision: stored.revision + 1, enabled: false,
+      ...signedIn,
+      revision: stored.revision + 1,
+      enabled: false,
       oauth: { ...signedIn.oauth, signedOut: true },
     };
     const reconnects: BeginOpenAiAuth[] = [];
@@ -872,8 +927,12 @@ describe('connection management', () => {
     await pickDiscovered(en['common.edit']);
     expect(host.textContent).toContain(en['settings.models.delete']);
     await pickDiscovered(en['settings.models.oauth.signInAgain']);
-    expect(reconnects).toEqual([{ provider: 'openai', id: signedOut.id, expectedRevision: signedOut.revision }]);
-    expect(host.querySelector('[role=alert]')!.textContent).toContain(en['settings.models.oauth.failed.unavailable']);
+    expect(reconnects).toEqual([
+      { provider: 'openai', id: signedOut.id, expectedRevision: signedOut.revision },
+    ]);
+    expect(host.querySelector('[role=alert]')!.textContent).toContain(
+      en['settings.models.oauth.failed.unavailable']
+    );
   });
 
   it('offers ChatGPT sign-in for OpenAI and shows the signed-in account instead of a key field', async () => {
@@ -938,8 +997,8 @@ describe('connection management', () => {
         })
       )
     );
-    await pickDiscovered(en['settings.models.changeProvider']);
-    await pickDiscovered(en['settings.models.kimiCode']);
+    await pickDiscovered(en['settings.models.allProviders']);
+    await pickDiscovered(en['settings.models.kimiCodePlan']);
     expect(host.textContent).not.toContain('designer@example.com');
     expect(host.querySelector('input[type=password]')).not.toBeNull();
     expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(true);
@@ -993,6 +1052,7 @@ describe('connection management', () => {
       root.render(
         createElement(ModelConnectionForm, {
           initialProvider: 'kimi-coding',
+          initialSignIn: true,
           onSave: async () => undefined,
           onCancel: () => undefined,
           onOpenAiAuth: {
@@ -1009,7 +1069,7 @@ describe('connection management', () => {
       )
     );
     await pickDiscovered(en['settings.models.oauth.signIn'].replace('{{provider}}', 'Kimi Code'));
-    await pickDiscovered(en['settings.models.changeProvider']);
+    await pickDiscovered(en['settings.models.allProviders']);
     await pickDiscovered(en['settings.models.providers.anthropic']);
     await act(async () =>
       finishStart({
@@ -1028,6 +1088,7 @@ describe('connection management', () => {
       root.render(
         createElement(ModelConnectionForm, {
           initialProvider: 'openai',
+          initialSignIn: true,
           onSave: async () => undefined,
           onCancel: () => undefined,
           onOpenAiAuth: {
@@ -1053,6 +1114,7 @@ describe('connection management', () => {
         .click()
     );
     expect(host.textContent).toContain(en['settings.models.oauth.failed.denied']);
+    await pickDiscovered(en['settings.models.useKeyInstead']);
     expect(host.querySelector('input[type=password]')).not.toBeNull();
   });
 
@@ -1061,6 +1123,7 @@ describe('connection management', () => {
       root.render(
         createElement(ModelConnectionForm, {
           initialProvider: 'kimi-coding',
+          initialSignIn: true,
           onSave: async () => undefined,
           onCancel: () => undefined,
           onOpenAiAuth: {
@@ -1082,7 +1145,6 @@ describe('connection management', () => {
         })
       )
     );
-    expect(host.textContent).toContain(en['settings.models.oauth.hintKimi']);
     await act(async () =>
       [...host.querySelectorAll<HTMLButtonElement>('button')]
         .find(
@@ -1258,61 +1320,68 @@ describe('connection management', () => {
     }
   );
 
-  it.each(['sk-synthetic', ''])('saves discovered models with an optional key: %s', async (apiKey) => {
-    const writes: SaveModelConnection[] = [];
-    await act(async () =>
-      root.render(
-        createElement(ModelConnectionForm, {
-          initialProvider: 'openai-compatible',
-          metadataSnapshot: null,
-          onSave: async (input) => {
-            writes.push(input);
-          },
-          onCancel: () => undefined,
-          onDiscover: async () => ({
-            ok: true,
-            models: [{ modelId: 'vendor/raw', name: 'Raw Model' }],
-            filteredNonChat: 0,
-          }),
-        })
-      )
-    );
-    await change(
-      host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
-      'https://gateway.invalid/v1'
-    );
-    if (apiKey) await change(host.querySelector<HTMLInputElement>('input[type=password]')!, apiKey);
-    await act(async () =>
-      [...host.querySelectorAll<HTMLButtonElement>('button')]
-        .find((button) => button.textContent === en['settings.models.discover.button'])!
-        .click()
-    );
-    await pickDiscovered('vendor/raw');
-    await change(
-      host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!,
-      '32768'
-    );
-    await change(host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!, '4096');
-    expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
-    await act(async () =>
-      host
-        .querySelector('form')!
-        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
-    );
-    expect(writes[0]?.customModels).toEqual([
-      {
-        modelId: 'vendor/raw',
-        name: 'Raw Model',
-        input: ['text'],
-        contextWindow: 32768,
-        maxTokens: 4096,
-        thinking: ['off'],
-        toolCalls: false,
-        maxTokensField: 'max_tokens',
-      },
-    ]);
-    expect(writes[0]?.apiKey).toBe(apiKey);
-  });
+  it.each(['sk-synthetic', ''])(
+    'saves discovered models with an optional key: %s',
+    async (apiKey) => {
+      const writes: SaveModelConnection[] = [];
+      await act(async () =>
+        root.render(
+          createElement(ModelConnectionForm, {
+            initialProvider: 'openai-compatible',
+            metadataSnapshot: null,
+            onSave: async (input) => {
+              writes.push(input);
+            },
+            onCancel: () => undefined,
+            onDiscover: async () => ({
+              ok: true,
+              models: [{ modelId: 'vendor/raw', name: 'Raw Model' }],
+              filteredNonChat: 0,
+            }),
+          })
+        )
+      );
+      await change(
+        host.querySelector<HTMLInputElement>('input[id$="-endpoint"]')!,
+        'https://gateway.invalid/v1'
+      );
+      if (apiKey)
+        await change(host.querySelector<HTMLInputElement>('input[type=password]')!, apiKey);
+      await act(async () =>
+        [...host.querySelectorAll<HTMLButtonElement>('button')]
+          .find((button) => button.textContent === en['settings.models.discover.button'])!
+          .click()
+      );
+      await pickDiscovered('vendor/raw');
+      await change(
+        host.querySelector<HTMLInputElement>('fieldset input[id$="-contextWindow"]')!,
+        '32768'
+      );
+      await change(
+        host.querySelector<HTMLInputElement>('fieldset input[id$="-maxTokens"]')!,
+        '4096'
+      );
+      expect(host.querySelector<HTMLButtonElement>('button[type=submit]')!.disabled).toBe(false);
+      await act(async () =>
+        host
+          .querySelector('form')!
+          .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      );
+      expect(writes[0]?.customModels).toEqual([
+        {
+          modelId: 'vendor/raw',
+          name: 'Raw Model',
+          input: ['text'],
+          contextWindow: 32768,
+          maxTokens: 4096,
+          thinking: ['off'],
+          toolCalls: false,
+          maxTokensField: 'max_tokens',
+        },
+      ]);
+      expect(writes[0]?.apiKey).toBe(apiKey);
+    }
+  );
 
   it('enriches discovery rows from the packaged metadata snapshot without overriding the service', async () => {
     const snapshot = {

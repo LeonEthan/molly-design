@@ -26,6 +26,15 @@ test('next completes onboarding once both models are ready', async ({ page }) =>
   await expect(page.getByRole('heading', { name: 'Connect your models' })).toBeVisible({
     timeout: 30_000,
   });
+  await expect(page.getByRole('button', { name: /Language model/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Image model/ })).toBeVisible();
+  const browserRow = page.getByRole('button', { name: /Browser sign-ins/ });
+  await expect(browserRow).toContainText('Optional');
+  await browserRow.click();
+  await expect(page.getByRole('region', { name: 'Browser sign-ins' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Finish' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Browser import' }).click();
+  await expect(page.getByRole('region', { name: 'Browser sign-ins' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Finish' })).toBeEnabled();
   await page.getByRole('button', { name: 'Finish' }).click();
 

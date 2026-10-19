@@ -45,7 +45,7 @@ Preserve historical catalog fields when editing unrelated values.
   background service and bundled capability inventory (System), MCP and Projects as
   sub-tabs; their tab ids and legacy paths still resolve. Each card leads with one
   plain sentence; required caveats move behind `InfoTip`, never out of the UI.
-- Forms use brand tiles/shortcuts and SDK-checked `PROVIDER_PRESET_DEFAULT_BASE_URLS`
+- Forms share one grouped picker (plan sign-ins, API keys, Custom) and SDK-checked `PROVIDER_PRESET_DEFAULT_BASE_URLS`
   and names; preserve input, show destinations. Sign-in binds ID/revision. Rows show custom
   endpoints. On/Off saves immediately; credential forms keep Save. Confirm deletion.
   OpenAI sign-out retains a disabled reconnectable row; refresh snapshots, block checks/enabling,
@@ -53,8 +53,8 @@ Preserve historical catalog fields when editing unrelated values.
 - A key is checked for free once it settles (`connection-check.tsx`): a typed key only
   against the shown destination, a saved key only against its own provider and endpoint.
   Checks list models or validate the key, never send a model request or DashScope call,
-  and report unsupported services as uncheckable. Native connections offer All or a chosen
-  `models` list as a form section (More options keeps only the name); listed
+  and show only real failures. Native connections offer
+  All or a chosen `models` list under Advanced with the endpoint and name; listed
   IDs sort first and keep the not-listed tag, never select. Choose pre-checks the full
   packaged catalog, not the key-check listing, so a one-model key cannot shrink the
   picker. Rows summarize a subset as "N of M".
@@ -73,7 +73,8 @@ Preserve historical catalog fields when editing unrelated values.
   from a viewport breakpoint — settings render in a panel far narrower than the window,
   and the panel clips its overflow, so a `md:`-width label column silently hides the
   control.
-- Onboarding reuses `ModelConnectionSetting`; neither onboarding nor settings mounts
+- Onboarding reuses the model, image and browser-import forms as `panel` variants;
+  neither onboarding nor settings mounts
   `AgentConfigDialog`. Remaining legacy stories are not runtime support.
 - Keep optional three.js/R3F usage behind the lazy usage-calendar module so lightweight
   and SSR consumers do not evaluate its renderer graph.

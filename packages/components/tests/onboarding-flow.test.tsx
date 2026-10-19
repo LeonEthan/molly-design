@@ -73,6 +73,7 @@ vi.mock('../src/components/settings/model-connection-setting', () => ({
   },
 }));
 vi.mock('../src/components/settings/image-connection-setting', () => ({
+  imageProtocolLabelKey: () => 'settings.imageConnection.protocols.openaiImages',
   ImageConnectionSetting: ({
     onConnectionChange,
   }: {
@@ -134,6 +135,7 @@ function installElectronWindowIpc() {
       invoke: async (channel: string) => {
         if (channel === 'cli.getState') return mocks.getCliState();
         if (channel === 'modelConnections.getModelCatalog') return SYNTHETIC_MODEL_CATALOG;
+        if (channel === 'publicBrowser.getAccountSummary') return { sites: [] };
         throw new Error(`unexpected invoke ${channel}`);
       },
       on: (channel: string, listener: (payload: unknown) => void) => {
@@ -151,8 +153,8 @@ function uninstallElectronWindowIpc() {
 }
 
 function findButton(container: HTMLElement, label: string): HTMLButtonElement {
-  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
-    item.textContent?.includes(label)
+  const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
+    (item) => item.textContent?.includes(label) && !item.closest('[hidden]')
   );
   if (!button) throw new Error(`Expected button containing "${label}"`);
   return button;

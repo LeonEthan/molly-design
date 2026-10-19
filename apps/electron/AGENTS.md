@@ -32,6 +32,13 @@ contracts, and window/renderer integration rules live in
 - Use `pnpm --dir apps/electron preview:local` only when a smoke/E2E harness has
   already prepared and validated the OSS build artifacts. That low-level command must
   remain `--skipBuild --mode oss`.
+- Linux has no agent-browser or browser-cookie-reader target, so `pnpm start:local`
+  stops while preparing those resources. A Linux preview still builds the CLI, Bento
+  resources, and `electron-vite build --mode oss`, then runs `preview:local` with
+  `MOLLY_ELECTRON_USE_BUNDLED_CLI=1` and `MOLLY_DATA_DIR`. Launch that preview with
+  `setsid` (no controlling terminal). The runtime probes an interactive login shell,
+  and a foreground terminal job control stop freezes Electron with it. The embedded
+  browser driver and cookie import stay unavailable.
 
 ## Build toolchain
 

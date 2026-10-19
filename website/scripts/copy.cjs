@@ -42,7 +42,7 @@ async function main() {
 
   let md =
     '# COPY — final EN + CN copy\n\nGenerated from the built `dist/index.html` (rendered in each language) by `scripts/copy.cjs`, so it matches what ships. Source of truth: `src/slots.json` + `build.py`.\n\n';
-  md += `## Meta\n\n- EN title: ${out.en.title}\n- Description (bilingual): ${out.en.desc}\n\n`;
+  md += `## Meta\n\n- EN title: ${out.en.title}\n- ZH title: ${out.zh.title}\n- EN description: ${out.en.desc}\n- ZH description: ${out.zh.desc}\n\n`;
   out.en.blocks.forEach((block, i) => {
     const zh = out.zh.blocks[i];
     md += `## ${block.id}\n\n### EN\n\n\`\`\`text\n${block.text}\n\`\`\`\n\n### 中文\n\n\`\`\`text\n${zh ? zh.text : ''}\n\`\`\`\n\n`;

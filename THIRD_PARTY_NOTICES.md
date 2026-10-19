@@ -3377,6 +3377,20 @@ Third-party assets served only by the website in `website/`; the website source 
 - Assets: website/assets/fonts/geist.woff2
 - Notice file: `website/assets/fonts/OFL-Geist.txt`
 - Notes: Subset web font served by the website; not bundled in the app.
+### Inter
+- License: OFL-1.1
+- Author: The Inter Project Authors
+- Source: https://github.com/rsms/inter
+- Assets: website/assets/fonts/inter.woff2
+- Notice file: `website/assets/fonts/OFL-Inter.txt`
+- Notes: Latin variable subset served by the website (#175).
+### Instrument Serif
+- License: OFL-1.1
+- Author: The Instrument Serif Project Authors
+- Source: https://github.com/googlefonts/instrument-serif
+- Assets: website/assets/fonts/instrument-serif.woff2, website/assets/fonts/instrument-serif-italic.woff2
+- Notice file: `website/assets/fonts/OFL-InstrumentSerif.txt`
+- Notes: Latin subset served by the website (#175).
 ### JetBrains Mono
 - License: OFL-1.1
 - Author: The JetBrains Mono Project Authors

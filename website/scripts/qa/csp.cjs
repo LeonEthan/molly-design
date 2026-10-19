@@ -29,7 +29,8 @@ run(`csp ${lang || 'auto'} ${width}`, async () => {
     await sleep(page, 120);
   }
   await page.locator('#demo').scrollIntoViewIfNeeded();
-  await sleep(page, 1500);
+  await page.locator('.watch-edit').click();
+  await sleep(page, 2000);
   const video = await page.evaluate(() => {
     const element = document.querySelector('video');
     return { time: element.currentTime, readyState: element.readyState };

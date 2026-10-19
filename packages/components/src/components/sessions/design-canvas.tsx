@@ -983,7 +983,7 @@ export function DesignCanvas({
                   <Button
                     variant="secondary"
                     size="sm"
-                    className="ml-1 h-8 rounded-full bg-foreground px-3.5 text-[13px] font-medium text-background hover:bg-foreground/85 hover:text-background"
+                    className="ml-1 h-8 rounded-full bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground"
                     disabled={busy || readonlyView}
                     aria-label={t('design.export', 'Export')}
                   >

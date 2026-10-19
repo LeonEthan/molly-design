@@ -16,7 +16,7 @@ const buttonVariants = cva(
         secondary:
           'bg-[hsl(var(--button-secondary))] text-[hsl(var(--button-secondary-foreground))] hover:bg-[hsl(var(--button-secondary-hover))]',
         ghost: 'hover:bg-hover hover:text-hover-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
+        link: 'text-ring underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-8 px-3',

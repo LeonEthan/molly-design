@@ -280,7 +280,7 @@ function DiscoveryPanel({
                   className={cn(
                     'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
                     picked
-                      ? 'border-foreground bg-foreground text-background'
+                      ? 'border-primary bg-primary text-primary-foreground'
                       : 'border-border/80'
                   )}
                 >

@@ -302,7 +302,7 @@ export function ScheduleChip({
         content: (
           <div className="flex flex-col gap-1.5 p-3">
             <div className="flex items-center gap-1.5 text-xs">
-              <AlarmClock className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+              <AlarmClock className="h-3.5 w-3.5 shrink-0 text-ring" aria-hidden="true" />
               <span className="font-medium text-foreground">{heading}</span>
               <span className="text-muted-foreground">· {summary}</span>
             </div>

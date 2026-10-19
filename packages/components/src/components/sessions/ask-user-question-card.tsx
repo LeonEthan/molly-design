@@ -466,7 +466,7 @@ export function AskUserQuestionCard({ meta, mode, className }: AskUserQuestionCa
         <div className="flex min-w-0 flex-1 items-start gap-2 whitespace-pre-wrap break-words text-sm font-medium leading-snug text-foreground">
           <span className="min-w-0 flex-1">{question.question}</span>
           {total > 1 ? (
-            <span className="mt-0.5 shrink-0 tabular-nums text-[11px] font-medium text-primary/70">
+            <span className="mt-0.5 shrink-0 tabular-nums text-[11px] font-medium text-ring/70">
               {currentIndex + 1}/{total}
             </span>
           ) : null}

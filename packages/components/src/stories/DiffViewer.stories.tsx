@@ -63,7 +63,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
                 {STATUS_LABELS[project.status] ?? 'Unknown'}
               </div>
             </div>
-            <button className="text-xs text-primary hover:underline">Open</button>
+            <button className="text-xs text-ring hover:underline">Open</button>
           </li>
         ))}
       </ul>
@@ -129,7 +129,7 @@ export function ProjectList({
                 {getStatusLabel(project.state)}
               </div>
             </div>
-            <button className="text-xs text-primary hover:underline">View</button>
+            <button className="text-xs text-ring hover:underline">View</button>
           </li>
         ))}
       </ul>

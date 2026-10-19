@@ -133,7 +133,7 @@ function SettingsCategoryRow({
            so the settings rows feel like the same family as the home
            Chat / Projects rows. */}
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-          <Icon className="h-[1.05rem] w-[1.05rem] text-primary" aria-hidden="true" />
+          <Icon className="h-[1.05rem] w-[1.05rem] text-ring" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[0.95rem] font-medium text-foreground">{label}</h3>
@@ -182,7 +182,7 @@ export function SettingsCategoryGrid() {
                 <CardContent className="p-6">
                   <div className="flex flex-col gap-3">
                     <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <category.icon className="h-6 w-6 text-primary" />
+                      <category.icon className="h-6 w-6 text-ring" />
                     </div>
 
                     <div>

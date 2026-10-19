@@ -267,7 +267,7 @@ function DemoComposer({
         size="icon"
         variant="ghost"
         aria-label="Send"
-        className="h-9 w-9 rounded-full bg-foreground text-background transition-colors hover:bg-foreground/90 hover:text-background"
+        className="h-9 w-9 rounded-full bg-primary text-primary-foreground transition-colors hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground"
       >
         <ArrowUp className="h-5 w-5" />
       </Button>

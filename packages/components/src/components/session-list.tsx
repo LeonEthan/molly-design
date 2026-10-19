@@ -83,6 +83,7 @@ import {
   SessionOpenedByTreeRow,
   SessionRowOpenedByMenuItems,
   SidebarListSkeleton,
+  SIDEBAR_SESSION_ROW_SELECTED_CLASS,
   buildSessionRowOpenedByTreeSlot,
 } from '@/components/sidebar-row-shared';
 import { SessionInfoHoverCard } from '@/components/session-info-hover-card';
@@ -827,7 +828,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
                     isSelectable &&
                     'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground',
                   showSelectedState &&
-                    'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
+                    SIDEBAR_SESSION_ROW_SELECTED_CLASS,
                   // Keyboard-only focus ring. Plain :focus-within also matches
                   // after a mouse click (the overlay <a> keeps focus), which
                   // left a permanent inset ring on the selected row that read
@@ -877,8 +878,7 @@ const SessionGroupSection = memo(function SessionGroupSection({
                   <div
                     className={cn(
                       'min-w-0 flex-1 flex items-center gap-1 truncate text-[13px]',
-                      // See SidebarUpdatedSessionList: the selected row is a 6%
-                      // tint, too light for the inverted selection foreground.
+                      // Selected titles keep full strength; resting titles dim in dark mode.
                       showSelectedState
                         ? 'text-sidebar-foreground'
                         : 'text-sidebar-foreground dark:text-sidebar-foreground/75'

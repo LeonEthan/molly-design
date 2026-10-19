@@ -31,6 +31,7 @@ import {
   SidebarListSkeleton,
   SidebarSectionHeader,
   SessionRowOpenedByMenuItems,
+  SIDEBAR_SESSION_ROW_SELECTED_CLASS,
   buildSessionRowOpenedByTreeSlot,
   type SidebarRowKind,
   type SessionRowOpenedByTreeSlot,
@@ -713,7 +714,7 @@ const UpdatedItemRow = memo(function UpdatedItemRow({
           onSelect &&
           'hover:bg-sidebar-foreground/[0.04] hover:text-sidebar-hover-foreground data-[menu-open]:bg-sidebar-foreground/[0.04] data-[menu-open]:text-sidebar-hover-foreground',
         showSelectedState &&
-          'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
+          SIDEBAR_SESSION_ROW_SELECTED_CLASS,
         // Keyboard-only focus ring — see SessionList: plain :focus-within also
         // matches after mouse clicks via the overlay <a> and left a permanent
         // inset ring on the selected row.

@@ -123,7 +123,7 @@ export function CanvasFormatTiles({
                   'relative border transition-[border-color,background-color] duration-200',
                   auto ? 'border-dashed' : 'border-solid',
                   selected
-                    ? 'border-foreground bg-foreground/[0.07]'
+                    ? 'border-ring bg-selection'
                     : 'border-foreground/45 group-hover:border-foreground/75'
                 )}
                 style={
@@ -136,15 +136,15 @@ export function CanvasFormatTiles({
                 }
               >
                 {selected ? (
-                  <span className="absolute -right-[3px] -top-[3px] size-[5px] rounded-full bg-foreground" />
+                  <span className="absolute -right-[3px] -top-[3px] size-[5px] rounded-full bg-primary" />
                 ) : null}
               </span>
             </span>
             <span className="flex flex-col items-center gap-0.5">
               <span
                 className={cn(
-                  'max-w-full truncate text-[13px] text-foreground',
-                  selected && 'font-medium'
+                  'max-w-full truncate text-[13px]',
+                  selected ? 'font-medium text-ring' : 'text-foreground'
                 )}
               >
                 {label}

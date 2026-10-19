@@ -39,7 +39,7 @@ function MockProvidersForm() {
             <span className="text-sm font-medium">{row.name}</span>
             <span className="text-xs text-muted-foreground">{row.subtitle}</span>
           </div>
-          <span className="inline-flex items-center gap-1 rounded-full border border-primary/35 bg-primary/8 px-2 py-0.5 text-[10px] text-primary">
+          <span className="inline-flex items-center gap-1 rounded-full border border-primary/35 bg-primary/8 px-2 py-0.5 text-[10px] text-ring">
             {row.badge}
           </span>
           <span className="text-sm text-muted-foreground">Edit</span>

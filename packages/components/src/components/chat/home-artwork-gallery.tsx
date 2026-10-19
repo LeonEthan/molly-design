@@ -59,7 +59,7 @@ function HomeArtworkCard({
         )}
       </span>
       <span className="mt-3 flex items-baseline gap-3 px-0.5">
-        <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground transition-colors duration-200 group-hover:text-foreground">
+        <span className="min-w-0 flex-1 truncate font-editorial text-[17px] text-muted-foreground transition-colors duration-200 group-hover:text-foreground">
           {item.title}
         </span>
         <span className="eyebrow shrink-0 text-[10px] tabular-nums text-muted-foreground/60">

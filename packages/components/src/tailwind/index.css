@@ -560,46 +560,47 @@ svg.lucide:not([data-molly-brand]) {
 }
 
 @layer base {
-  /* Molly monochrome fallbacks (overridden at runtime by the Molly Light VS
-     Code theme — see vscode-theme-css.ts). Canvas ground #f5f5f5 sits lighter
-     than the white panels; selection is the solid black inversion. Values
-     mirror the resolved molly-light channels. */
+  /* Molly soft-lime Paper fallbacks (overridden at runtime by the Molly Light VS
+     Code theme — see vscode-theme-css.ts). Cream panels lift above the warm paper
+     ground; the lime fill marks only act-here controls, the olive ring carries
+     focus and accent text, and selection is a pale lime tint. Values mirror the
+     resolved molly-light channels. */
   :root {
-    --background: 42 27.8% 92.9%;
-    --foreground: 60 2.6% 7.6%;
-    --card: 45 40% 98%;
-    --card-foreground: 60 2.6% 7.6%;
-    --popover: 45 40% 98%;
+    --background: 41.2 47.1% 93.3%;
+    --foreground: 66 12.8% 15.3%;
+    --card: 43.6 57.9% 96.3%;
+    --card-foreground: 66 12.8% 15.3%;
+    --popover: 42.9 100% 98.6%;
     --popover-foreground: 0 0% 11.8%;
-    --primary: 60 2.6% 7.6%;
-    --primary-foreground: 45 40% 98%;
-    --secondary: 42 27.8% 92.9%;
-    --secondary-foreground: 60 2.6% 7.6%;
-    --muted: 42 27.8% 92.9%;
-    --muted-foreground: 45 3.9% 40.4%;
-    --highlight: var(--primary);
-    --highlight-foreground: var(--primary-foreground);
-    --hover: 40 22.2% 89.4%;
+    --primary: 74.7 60.2% 65.5%;
+    --primary-foreground: 80 54.5% 8.6%;
+    --secondary: 42 37% 89.4%;
+    --secondary-foreground: 66 12.8% 15.3%;
+    --muted: 42 37% 89.4%;
+    --muted-foreground: 48 9.9% 39.6%;
+    --highlight: var(--ring);
+    --highlight-foreground: var(--background);
+    --hover: 42 37% 89.4%;
     --hover-foreground: var(--foreground);
-    --selection: 41.5 21.3% 88%;
-    --selection-foreground: 60 2.6% 7.6%;
-    --selection-inactive: 42 27.8% 92.9%;
+    --selection: 71.1 52.9% 90%;
+    --selection-foreground: 66 12.8% 15.3%;
+    --selection-inactive: 42 37% 89.4%;
     --selection-inactive-foreground: var(--foreground);
-    --destructive: 11 88.9% 54.1%;
-    --destructive-foreground: 45 40% 98%;
-    --border: 40 18.2% 87.1%;
-    --input: 45 40% 98%;
+    --destructive: 12.4 50.4% 45.1%;
+    --destructive-foreground: 41.2 47.1% 93.3%;
+    --border: 40.9 30.6% 85.9%;
+    --input: 43.6 57.9% 96.3%;
     --input-foreground: var(--foreground);
-    --input-placeholder: 43.6 5.6% 61.8%;
-    --input-border: 41.5 14.3% 82.2%;
+    --input-placeholder: 45.7 9.6% 57.1%;
+    --input-border: 41.5 25.5% 80%;
     /* Fill of an editable control. `--input` stays the recessed slab used by
        the composer and by muted chips; a form field on a light canvas must not
        be darker than the page or it reads as disabled, so it sits on white and
        is delimited by `--input-border`. Themed builds compute the same rule in
        `vscode-theme-css.ts`. */
-    --input-field: 45 40% 98%;
-    --switch-track: 41.5 14.3% 82.2%;
-    --ring: 11.9 81.5% 51.4%;
+    --input-field: 43.6 57.9% 96.3%;
+    --switch-track: 41.5 25.5% 80%;
+    --ring: 76.3 70.6% 26.7%;
     /* Tooltip surface: frozen monochrome dark bubble (spec §5), independent of
        the active editor theme; tips always read as dark ink with white text. */
     --tip-bg: 0 0% 17.3%;
@@ -609,37 +610,37 @@ svg.lucide:not([data-molly-brand]) {
     --chart-3: 262 60% 55%;
     --chart-4: 24 90% 50%;
     --chart-5: 151 55% 40%;
-    --sidebar-background: 45 40% 98%;
-    --sidebar-foreground: 60 2.6% 7.6%;
-    --sidebar-foreground-muted: 43.6 5.6% 61.8%;
-    --sidebar-primary: 60 2.6% 7.6%;
-    --sidebar-primary-foreground: 45 40% 98%;
+    --sidebar-background: 43.6 57.9% 96.3%;
+    --sidebar-foreground: 66 12.8% 15.3%;
+    --sidebar-foreground-muted: 45.7 9.6% 57.1%;
+    --sidebar-primary: 74.7 60.2% 65.5%;
+    --sidebar-primary-foreground: 80 54.5% 8.6%;
     --sidebar-highlight: var(--sidebar-primary);
     --sidebar-highlight-foreground: var(--sidebar-primary-foreground);
-    --sidebar-hover: 40 22.2% 89.4%;
+    --sidebar-hover: 42 37% 89.4%;
     --sidebar-hover-foreground: var(--sidebar-foreground);
-    --sidebar-selection: 41.5 21.3% 88%;
-    --sidebar-selection-foreground: 60 2.6% 7.6%;
-    --sidebar-border: 40 18.2% 87.1%;
-    --sidebar-ring: 11.9 81.5% 51.4%;
-    --button-hover: 60 2.4% 16.5%;
+    --sidebar-selection: 71.1 52.9% 90%;
+    --sidebar-selection-foreground: 66 12.8% 15.3%;
+    --sidebar-border: 40.9 30.6% 85.9%;
+    --sidebar-ring: 76.3 70.6% 26.7%;
+    --button-hover: 75.1 53.6% 59.4%;
     --button-secondary: var(--secondary);
     --button-secondary-foreground: var(--secondary-foreground);
     --button-secondary-hover: var(--hover);
-    --bottom-bar: 45 40% 98%;
-    --bottom-bar-foreground: 45 3.9% 40.4%;
-    --tab-bar: 45 40% 98%;
-    --tab-active: 45 40% 98%;
-    --tab-active-foreground: 60 2.6% 7.6%;
-    --tab-inactive: 42 27.8% 92.9%;
-    --tab-inactive-foreground: 45 3.9% 40.4%;
-    --tab-hover: 40 22.2% 89.4%;
-    --tab-hover-foreground: 60 2.6% 7.6%;
-    --tab-border: 40 18.2% 87.1%;
-    --tab-active-accent: var(--primary);
-    --status-info: 60 2.6% 7.6%;
-    --status-success: 148.1 79.4% 38%;
-    --status-warning: 40.1 100% 30.2%;
+    --bottom-bar: 43.6 57.9% 96.3%;
+    --bottom-bar-foreground: 48 9.9% 39.6%;
+    --tab-bar: 43.6 57.9% 96.3%;
+    --tab-active: 43.6 57.9% 96.3%;
+    --tab-active-foreground: 66 12.8% 15.3%;
+    --tab-inactive: 41.2 47.1% 93.3%;
+    --tab-inactive-foreground: 48 9.9% 39.6%;
+    --tab-hover: 42 37% 89.4%;
+    --tab-hover-foreground: 66 12.8% 15.3%;
+    --tab-border: 40.9 30.6% 85.9%;
+    --tab-active-accent: var(--ring);
+    --status-info: 66 12.8% 15.3%;
+    --status-success: 76.3 70.6% 26.7%;
+    --status-warning: 36.6 66.5% 36.3%;
     --status-danger: var(--destructive);
     /* Retained theme magenta — git/syntax territory, not chrome (exception). */
     --status-merged: 334.3 48.4% 42.5%;
@@ -651,12 +652,12 @@ svg.lucide:not([data-molly-brand]) {
     --github-addition: var(--github-open);
     --github-deletion: var(--github-closed);
     --primary-content: 0 0% 11.8%;
-    --scrollbar-thumb: 45 8.7% 91%;
-    --scrollbar-thumb-hover: 45 4.9% 83.9%;
-    --scrollbar-thumb-active: 40 2.4% 75.5%;
-    --code-background: 42 27.8% 92.9%;
-    --code-foreground: 60 2.6% 7.6%;
-    --code-border: 41.5 14.3% 82.2%;
+    --scrollbar-thumb: 43.6 21.6% 90%;
+    --scrollbar-thumb-hover: 48 11.9% 83.5%;
+    --scrollbar-thumb-active: 49.1 8.9% 75.9%;
+    --code-background: 42 37% 89.4%;
+    --code-foreground: 66 12.8% 15.3%;
+    --code-border: 41.5 25.5% 80%;
     --code-added: var(--status-success);
     --code-removed: var(--destructive);
     --modified-file: var(--status-warning);
@@ -728,21 +729,19 @@ svg.lucide:not([data-molly-brand]) {
     --dur-2: 180ms;
     --ease: cubic-bezier(0.2, 0, 0, 1);
 
-    /* macOS-like shadows (airy, not heavy) */
-    --shadow-2xs: 0px 2px 4px 0px hsl(0 0% 0% / 0.05);
-    --shadow-xs: 0px 2px 4px 0px hsl(0 0% 0% / 0.05);
-    /* CDS-style two-layer compound shadows: near-field occlusion + far-field diffusion */
-    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
-    --shadow: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
-    --shadow-md: 0 2px 4px 0 hsl(0 0% 0% / 0.05), 0 6px 16px 0 hsl(0 0% 0% / 0.08);
-    --shadow-lg: 0 4px 8px 0 hsl(0 0% 0% / 0.06), 0 12px 28px -2px hsl(0 0% 0% / 0.08);
-    --shadow-xl: 0px 2px 4px 0px hsl(0 0% 0% / 0.1), 0px 8px 10px -1px hsl(0 0% 0% / 0.1);
-    --shadow-2xl: 0px 2px 4px 0px hsl(0 0% 0% / 0.25);
-    /* Card resting elevation: subtle near-field only, prevents flat harshness */
-    --shadow-card: 0 1px 2px 0 hsl(0 0% 0% / 0.05), 0 2px 8px 0 hsl(0 0% 0% / 0.08);
-    /* Pro floating panel shadows (macOS "air" feel) */
-    --shadow-panel: 0 1px 2px hsl(0 0% 0% / 0.08), 0 10px 30px hsl(0 0% 0% / 0.1);
-    --shadow-popover: 0 2px 6px hsl(0 0% 0% / 0.1), 0 18px 50px hsl(0 0% 0% / 0.14);
+    /* Warm paper shadows: a brown-tinted near-field occlusion plus a soft,
+       inset-spread far field, so elevation reads as paper on paper. */
+    --shadow-2xs: 0px 2px 4px 0px hsl(40 35% 25% / 0.05);
+    --shadow-xs: 0px 2px 4px 0px hsl(40 35% 25% / 0.05);
+    --shadow-sm: 0 1px 2px hsl(40 35% 25% / 0.05), 0 2px 8px hsl(40 35% 25% / 0.06);
+    --shadow: 0 1px 2px hsl(40 35% 25% / 0.05), 0 2px 8px hsl(40 35% 25% / 0.06);
+    --shadow-md: 0 2px 4px hsl(40 35% 25% / 0.05), 0 8px 22px -6px hsl(40 35% 25% / 0.12);
+    --shadow-lg: 0 4px 8px hsl(40 35% 25% / 0.05), 0 16px 36px -8px hsl(40 35% 25% / 0.14);
+    --shadow-xl: 0px 2px 4px 0px hsl(40 35% 25% / 0.1), 0px 8px 10px -1px hsl(40 35% 25% / 0.1);
+    --shadow-2xl: 0px 2px 4px 0px hsl(40 35% 25% / 0.25);
+    --shadow-card: 0 1px 2px hsl(40 35% 25% / 0.05), 0 6px 18px -6px hsl(40 35% 25% / 0.12);
+    --shadow-panel: 0 1px 2px hsl(40 35% 25% / 0.06), 0 12px 32px -8px hsl(40 35% 25% / 0.12);
+    --shadow-popover: 0 2px 6px hsl(40 35% 25% / 0.08), 0 18px 48px -10px hsl(40 35% 25% / 0.18);
     --tracking-normal: 0rem;
     /*
      * Tailwind v4 spacing utilities resolve through this variable. Keep the
@@ -757,41 +756,42 @@ svg.lucide:not([data-molly-brand]) {
     --native-keyboard-height: 0px;
   }
   .dark {
-    /* Molly Dark monochrome fallbacks — canvas ground #1e1e1e sits darker than
-       the #2c2c2c panels; selection is the solid white inversion. Values mirror
-       the resolved molly-dark channels. */
-    --background: 240 4.3% 4.5%;
-    --foreground: 42.9 20% 93.1%;
-    --card: 240 2.4% 8%;
-    --card-foreground: 42.9 20% 93.1%;
-    --popover: 240 2.4% 8%;
+    /* Molly soft-lime Ink fallbacks — the warm ink ground sinks below its
+       panels; the lime fill doubles as focus ring and accent text, and
+       selection is a deep moss tint. Values mirror the resolved molly-dark
+       channels. */
+    --background: 72 10.6% 9.2%;
+    --foreground: 43.3 32.1% 89%;
+    --card: 70 9.4% 12.5%;
+    --card-foreground: 43.3 32.1% 89%;
+    --popover: 68.6 8.9% 15.5%;
     --popover-foreground: 0 0% 100%;
-    --primary: 42.9 20% 93.1%;
-    --primary-foreground: 240 4.3% 4.5%;
-    --secondary: 240 3.9% 15.1%;
-    --secondary-foreground: 42.9 20% 93.1%;
-    --muted: 240 3.9% 15.1%;
-    --muted-foreground: 260 2% 70%;
-    --highlight: var(--primary);
+    --primary: 78.5 54.5% 67.3%;
+    --primary-foreground: 80 54.5% 8.6%;
+    --secondary: 68.6 8.4% 16.3%;
+    --secondary-foreground: 43.3 32.1% 89%;
+    --muted: 68.6 8.4% 16.3%;
+    --muted-foreground: 46.4 10.6% 59.2%;
+    --highlight: var(--ring);
     --highlight-foreground: var(--primary-foreground);
-    --hover: 240 3.9% 15.1%;
+    --hover: 68.6 8.4% 16.3%;
     --hover-foreground: var(--foreground);
-    --selection: 240 3.9% 15.1%;
-    --selection-foreground: 42.9 20% 93.1%;
-    --selection-inactive: 240 3.9% 15.1%;
+    --selection: 77.1 35% 15.7%;
+    --selection-foreground: 43.3 32.1% 89%;
+    --selection-inactive: 68.6 8.4% 16.3%;
     --selection-inactive-foreground: var(--foreground);
-    --destructive: 11 88.9% 54.1%;
-    --destructive-foreground: 240 4.3% 4.5%;
-    --border: 240 3.9% 15.1%;
-    --input: 240 2.4% 8%;
+    --destructive: 12.6 67.5% 62.5%;
+    --destructive-foreground: 80 54.5% 8.6%;
+    --border: 67.5 8.2% 19.2%;
+    --input: 70 9.4% 12.5%;
     --input-foreground: var(--foreground);
-    --input-placeholder: 252 2% 49.2%;
-    --input-border: 240 3.6% 22%;
+    --input-placeholder: 46.7 8% 44.3%;
+    --input-border: 66.7 7.6% 23.3%;
     /* Dark canvases already raise the field above the page, so it keeps the
        theme fill. */
     --input-field: var(--input);
-    --switch-track: 240 3.6% 22%;
-    --ring: 12.6 100% 59%;
+    --switch-track: 66.7 7.6% 23.3%;
+    --ring: 78.5 54.5% 67.3%;
     /* Tooltip surface: frozen monochrome dark bubble (spec §5), independent of
        the active editor theme; tips always read as dark ink with white text. */
     --tip-bg: 0 0% 11.8%;
@@ -801,40 +801,40 @@ svg.lucide:not([data-molly-brand]) {
     --chart-3: 261 84% 70%;
     --chart-4: 28 88% 62%;
     --chart-5: 154 68% 52%;
-    --sidebar-background: 240 2.4% 8%;
-    --sidebar-foreground: 42.9 20% 93.1%;
-    --sidebar-foreground-muted: 252 2% 49.2%;
-    --sidebar-primary: 42.9 20% 93.1%;
-    --sidebar-primary-foreground: 240 4.3% 4.5%;
+    --sidebar-background: 70 9.4% 12.5%;
+    --sidebar-foreground: 43.3 32.1% 89%;
+    --sidebar-foreground-muted: 46.7 8% 44.3%;
+    --sidebar-primary: 78.5 54.5% 67.3%;
+    --sidebar-primary-foreground: 80 54.5% 8.6%;
     --sidebar-highlight: var(--sidebar-primary);
     --sidebar-highlight-foreground: var(--sidebar-primary-foreground);
-    --sidebar-hover: 240 3.9% 15.1%;
+    --sidebar-hover: 68.6 8.4% 16.3%;
     --sidebar-hover-foreground: var(--sidebar-foreground);
-    --sidebar-selection: 240 3.9% 15.1%;
-    --sidebar-selection-foreground: 42.9 20% 93.1%;
-    --sidebar-border: 240 3.9% 15.1%;
-    --sidebar-ring: 12.6 100% 59%;
-    --button-hover: 42.9 12.3% 88.8%;
+    --sidebar-selection: 77.1 35% 15.7%;
+    --sidebar-selection-foreground: 43.3 32.1% 89%;
+    --sidebar-border: 67.5 8.2% 19.2%;
+    --sidebar-ring: 78.5 54.5% 67.3%;
+    --button-hover: 77.5 58.5% 73.5%;
     --button-secondary: var(--secondary);
     --button-secondary-foreground: var(--secondary-foreground);
-    --button-secondary-hover: 240 3.4% 17.5%;
-    --bottom-bar: 240 4.3% 4.5%;
-    --bottom-bar-foreground: 260 2% 70%;
-    --tab-bar: 240 4.3% 4.5%;
-    --tab-active: 240 2.4% 8%;
-    --tab-active-foreground: 42.9 20% 93.1%;
-    --tab-inactive: 240 4.3% 4.5%;
-    --tab-inactive-foreground: 260 2% 70%;
-    --tab-hover: 240 3.9% 15.1%;
-    --tab-hover-foreground: 42.9 20% 93.1%;
-    --tab-border: 240 3.9% 15.1%;
-    --tab-active-accent: var(--primary);
-    --status-info: 42.9 20% 93.1%;
-    --status-success: 148.1 79.4% 38%;
-    --status-warning: 48.8 54.9% 47.8%;
+    --button-secondary-hover: 67.5 8.2% 19.2%;
+    --bottom-bar: 72 10.6% 9.2%;
+    --bottom-bar-foreground: 46.4 10.6% 59.2%;
+    --tab-bar: 72 10.6% 9.2%;
+    --tab-active: 70 9.4% 12.5%;
+    --tab-active-foreground: 43.3 32.1% 89%;
+    --tab-inactive: 72 10.6% 9.2%;
+    --tab-inactive-foreground: 46.4 10.6% 59.2%;
+    --tab-hover: 68.6 8.4% 16.3%;
+    --tab-hover-foreground: 43.3 32.1% 89%;
+    --tab-border: 67.5 8.2% 19.2%;
+    --tab-active-accent: var(--ring);
+    --status-info: 43.3 32.1% 89%;
+    --status-success: 78.5 54.5% 67.3%;
+    --status-warning: 35.4 62.6% 60.2%;
     --status-danger: var(--destructive);
     /* Forked Vesper merge yellow — git/syntax territory, not chrome (exception). */
-    --status-merged: 48.8 54.9% 47.8%;
+    --status-merged: 35.4 62.6% 60.2%;
     --github-open: 128 49% 49%;
     --github-merged: 262 89% 71%;
     --github-closed: 3 93% 63%;
@@ -842,12 +842,12 @@ svg.lucide:not([data-molly-brand]) {
     --github-addition: var(--github-open);
     --github-deletion: var(--github-closed);
     --primary-content: 0 0% 100%;
-    --scrollbar-thumb: 240 3.9% 15.1%;
-    --scrollbar-thumb-hover: 240 3.6% 22%;
-    --scrollbar-thumb-active: 240 2.2% 36.1%;
-    --code-background: 240 2.4% 8%;
-    --code-foreground: 42.9 20% 93.1%;
-    --code-border: 240 3.6% 22%;
+    --scrollbar-thumb: 67.5 8.7% 18%;
+    --scrollbar-thumb-hover: 66.7 7.6% 23.3%;
+    --scrollbar-thumb-active: 50.8 7.6% 33.5%;
+    --code-background: 68.6 8.4% 16.3%;
+    --code-foreground: 43.3 32.1% 89%;
+    --code-border: 66.7 7.6% 23.3%;
     --code-added: var(--status-success);
     --code-removed: var(--destructive);
     --modified-file: var(--status-warning);
@@ -879,15 +879,14 @@ svg.lucide:not([data-molly-brand]) {
     --terminal-ansi-bright-magenta: var(--vscode-terminal-ansiBrightMagenta, #d8b4fe);
     --terminal-ansi-bright-cyan: var(--vscode-terminal-ansiBrightCyan, #67e8f9);
     --terminal-ansi-bright-white: var(--vscode-terminal-ansiBrightWhite, #f4f6fb);
-    /* Dark mode shadows — neutral and grounded like the light set (the
-       monochrome chrome keeps shadows subtle; no dramatic "pro" elevation).
-       Popover gets an inset top-light chamfer instead of a white outer ring:
-       reads as physical edge bevel catching light, no fluorescent outline. */
-    --shadow-card: 0 1px 2px 0 hsl(0 0% 0% / 0.4), 0 2px 8px 0 hsl(0 0% 0% / 0.4);
-    --shadow-panel: 0 1px 2px hsl(0 0% 0% / 0.2), 0 6px 20px hsl(0 0% 0% / 0.24);
+    /* Dark mode shadows — warm ink, grounded like the light set. Popover keeps
+       an inset top-light chamfer instead of a white outer ring: reads as a
+       physical edge bevel catching light, no fluorescent outline. */
+    --shadow-card: 0 1px 2px hsl(70 30% 3% / 0.4), 0 8px 24px -8px hsl(70 30% 3% / 0.5);
+    --shadow-panel: 0 1px 2px hsl(70 30% 3% / 0.3), 0 12px 32px -8px hsl(70 30% 3% / 0.45);
     --shadow-popover:
-      inset 0 0 0 1px hsl(var(--foreground) / 0.08), 0 2px 6px hsl(0 0% 0% / 0.24),
-      0 12px 32px hsl(0 0% 0% / 0.28);
+      inset 0 0 0 1px hsl(var(--foreground) / 0.08), 0 2px 6px hsl(70 30% 3% / 0.35),
+      0 18px 48px -10px hsl(70 30% 3% / 0.55);
   }
 }
 
@@ -1613,12 +1612,12 @@ svg.lucide:not([data-molly-brand]) {
   --radius-2xl: 1.5rem;
 }
 
-/* Atelier layer (2026-10-04 redesign). Chrome stays near-monochrome so the
-   artwork supplies colour: one vermilion signal for focus and live moments,
-   hairline rules instead of shadows, an editorial serif for display type and
-   mono for dimensions. */
+/* Atelier layer (2026-10-04 redesign, soft-lime revision 2026-10-18). Chrome
+   stays tonal so the artwork supplies colour: the lime signal marks focus glow
+   and live moments, hairline rules replace shadows, an editorial serif sets
+   display type, tracked sans caps set eyebrows and mono sets dimensions. */
 :root {
-  --signal: #e8461e;
+  --signal: #b3cf60;
   --hairline: hsl(var(--foreground) / 0.09);
   --hairline-strong: hsl(var(--foreground) / 0.16);
   --stage-dot: hsl(var(--foreground) / 0.1);
@@ -1626,7 +1625,7 @@ svg.lucide:not([data-molly-brand]) {
   --ease-gallery: cubic-bezier(0.32, 0.72, 0, 1);
 }
 .dark {
-  --signal: #ff5a2e;
+  --signal: #bdd97e;
   --hairline: hsl(var(--foreground) / 0.08);
   --hairline-strong: hsl(var(--foreground) / 0.15);
   --stage-dot: hsl(var(--foreground) / 0.09);
@@ -1640,10 +1639,10 @@ svg.lucide:not([data-molly-brand]) {
 }
 
 @utility eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
+  font-family: var(--font-sans);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
 }
 

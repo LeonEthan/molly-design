@@ -74,6 +74,23 @@ export const compositeHexColors = (foreground: string, background: string): stri
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 };
 
+const relativeLuminance = (color: string): number => {
+  const { r, g, b } = hexColorToRgb(color);
+  const linear = (channel: number) => {
+    const value = channel / 255;
+    return value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
+};
+
+/** WCAG 2 contrast ratio between two opaque colors. */
+export const hexColorContrastRatio = (first: string, second: string): number => {
+  const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort(
+    (a, b) => b - a
+  );
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
 export const hexColorToHslChannel = (color: string): string => {
   const { r, g, b } = hexColorToRgb(color);
   const red = r / 255;

@@ -35,7 +35,7 @@ export function createNotePins(options: {
 .molly-note-pin{position:fixed;z-index:2147483099;display:flex;align-items:center;justify-content:center;width:22px;height:22px;min-width:0!important;padding:0!important;border-radius:11px 11px 11px 3px!important;background:#d9512c!important;color:#fff!important;font:600 11px/1 Inter,system-ui,sans-serif!important;box-shadow:0 2px 8px rgb(0 0 0 / .25);cursor:pointer}
 .molly-note-pin[aria-expanded=true]{outline:2px solid #fff;outline-offset:1px}
 .molly-note-tray{--surface:#fff;--ink:#242424;--muted:#f2f2f2;--line:#00000010;position:fixed;left:50%;bottom:calc(var(--molly-dock-bottom,18px) + var(--molly-dock-height,52px) + 12px);transform:translateX(-50%);z-index:2147483099;display:flex;align-items:center;gap:6px;padding:6px 6px 6px 12px;max-width:calc(100vw - 16px);border-radius:999px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 6px 20px rgb(0 0 0 / .12);font:12px Inter,system-ui,sans-serif;box-sizing:border-box}
-.molly-note-tray .primary,.molly-note-editor .primary{background:var(--ink)!important;color:var(--surface)}
+.molly-note-tray .primary,.molly-note-editor .primary{background:var(--accent)!important;color:var(--on-accent)}
 .molly-note-tray .molly-selection-error{max-width:260px}
 .molly-note-editor{width:280px}
 `;

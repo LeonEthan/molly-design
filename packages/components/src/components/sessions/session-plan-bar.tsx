@@ -27,7 +27,7 @@ const PlanStatusIcon = ({ status, className }: { status: PlanStatus; className?:
     case 'completed':
       return <CheckCircle2 className={cn('h-4 w-4 text-status-success', className)} />;
     case 'in_progress':
-      return <CarbonInProgress className={cn('h-4 w-4 text-primary', className)} />;
+      return <CarbonInProgress className={cn('h-4 w-4 text-ring', className)} />;
     case 'pending':
     default:
       return <Circle className={cn('h-4 w-4 text-muted-foreground', className)} />;

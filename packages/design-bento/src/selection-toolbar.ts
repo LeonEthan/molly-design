@@ -162,8 +162,8 @@ export function createSelectionToolbar(options: {
 .molly-selection-popup .ask-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}
 .molly-selection-popup .presets{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
 .molly-selection-popup .presets button{height:26px;min-width:0;padding:0 9px;border-radius:999px;border:1px solid var(--line);font-size:11.5px}
-.molly-selection-popup .ask-actions .primary{background:var(--ink);color:var(--surface)}
-.molly-selection-popup .ask-actions .primary:hover{background:var(--ink);opacity:.88}
+.molly-selection-popup .ask-actions .primary{background:var(--accent);color:var(--on-accent)}
+.molly-selection-popup .ask-actions .primary:hover{background:var(--accent);opacity:.88}
 .molly-selection-error{color:#ef6464;max-width:220px;white-space:normal;padding:4px 8px;flex:none;font-size:11px}
 `;
   document.head.append(style);

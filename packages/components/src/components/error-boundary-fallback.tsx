@@ -218,7 +218,7 @@ export function ErrorBoundaryFallback({
               )}{' '}
               <button
                 type="button"
-                className="font-medium text-primary underline-offset-4 hover:underline"
+                className="font-medium text-ring underline-offset-4 hover:underline"
                 onClick={() => {
                   void openExternalUrl(MOLLY_ISSUES_URL);
                 }}

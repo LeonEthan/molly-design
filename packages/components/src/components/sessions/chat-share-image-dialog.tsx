@@ -270,7 +270,7 @@ export function ChatShareImageDialog({
                   className={cn(
                     'col-span-full flex h-9 items-center justify-center rounded-md border text-sm font-medium transition-colors',
                     backdrop === 'none'
-                      ? 'border-primary bg-primary/10 text-primary ring-2 ring-primary/25'
+                      ? 'border-primary bg-primary/10 text-ring ring-2 ring-primary/25'
                       : 'border-border bg-muted/30 hover:bg-muted/60'
                   )}
                   onClick={() => setBackdrop('none')}

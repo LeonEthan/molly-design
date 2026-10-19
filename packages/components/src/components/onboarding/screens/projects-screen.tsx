@@ -441,7 +441,7 @@ function ExistingProjectList({
                   <div className="truncate text-xs text-muted-foreground">{item.detail}</div>
                 </div>
                 {selectedProjectKey === `${item.kind}:${item.key}` ? (
-                  <Check className="size-4 shrink-0 text-primary" />
+                  <Check className="size-4 shrink-0 text-ring" />
                 ) : null}
               </button>
             </motion.li>
@@ -486,7 +486,7 @@ function ActionCard({
       )}
     >
       {trailing ? <span className="absolute right-3 top-3">{trailing}</span> : null}
-      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-primary">
+      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted/60 text-foreground transition-colors group-hover:bg-primary/15 group-hover:text-ring">
         {icon}
       </div>
       <div className="space-y-0.5">

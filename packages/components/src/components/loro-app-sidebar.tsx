@@ -162,6 +162,7 @@ import {
   SidebarRowEndSlot,
   SidebarSectionHeader,
   SessionRowOpenedByMenuItems,
+  SIDEBAR_SESSION_ROW_SELECTED_CLASS,
   buildSessionRowOpenedByTreeSlot,
   type SessionRowOpenedByTreeSlot,
 } from '@/components/sidebar-row-shared';
@@ -597,11 +598,7 @@ const LocalProjectSessionItem = memo(function LocalProjectSessionItem({
         'border border-transparent bg-transparent',
         !showSelectedState &&
           'hover:bg-sidebar-foreground/[0.04] data-[menu-open]:bg-sidebar-foreground/[0.04]',
-        showSelectedState &&
-          'bg-sidebar-foreground/[0.06] text-sidebar-foreground hover:bg-sidebar-foreground/[0.06]',
-        // The selected tint is too light for the inverted selection
-        // foreground (see SidebarUpdatedSessionList) — keep the plain sidebar
-        // foreground on selected rows.
+        showSelectedState && SIDEBAR_SESSION_ROW_SELECTED_CLASS,
         !showSelectedState && 'text-sidebar-foreground dark:text-sidebar-foreground/75'
       )}
       onClick={() => {

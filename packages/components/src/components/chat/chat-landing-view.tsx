@@ -259,7 +259,7 @@ export function ChatLandingView({
 
   const primaryActionButtonClassName = cn(
     'h-9 w-9 rounded-full transition-colors',
-    'bg-foreground text-background hover:bg-foreground/90 hover:text-background focus-visible:ring-ring focus-visible:ring-offset-background'
+    'bg-primary text-primary-foreground hover:bg-[hsl(var(--button-hover))] hover:text-primary-foreground focus-visible:ring-ring focus-visible:ring-offset-background'
   );
 
   // No-agent-config hint shown in scrollable area (not as overlay)

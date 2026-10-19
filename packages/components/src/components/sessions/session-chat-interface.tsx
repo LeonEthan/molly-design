@@ -361,7 +361,7 @@ const parseTimestamp = (value?: number | string | null): number | null => {
 
 const STATUS_TONE_STYLES = {
   info: {
-    text: 'text-primary',
+    text: 'text-ring',
     dot: 'bg-primary',
   },
   warn: {

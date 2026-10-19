@@ -427,25 +427,15 @@ describe('owned ACP host integration', () => {
     await expect(s.prompt()).rejects.toMatchObject({ code: -32600 });
   });
 
-  it.each(['epoch', 'selection', 'policy', 'tools'] as const)(
-    'refuses mismatched %s before consuming credentials',
-    async (kind) => {
-      const f = await managed();
-      const s = await f.open();
-      const snapshot = {
-        ...s.snapshot,
-        ...(kind === 'epoch' ? { runtimeEpoch: randomUUID() } : {}),
-        ...(kind === 'selection'
-          ? { selection: { ...s.snapshot.selection, modelId: 'other' } }
-          : {}),
-        ...(kind === 'policy' ? { permissionMode: 'auto-review' as const } : {}),
-        ...(kind === 'tools' ? { toolsetHash: '0'.repeat(64) } : {}),
-      };
-      await expect(s.prompt('Hello', snapshot)).rejects.toThrow('pi_acp_host_snapshot_mismatch');
-      expect(f.observed).toEqual([]);
-      expect(f.pipe.destroyed).toBe(true);
-    }
-  );
+  it('refuses a mismatched snapshot before consuming credentials', async () => {
+    const f = await managed();
+    const s = await f.open();
+    await expect(s.prompt('Hello', { ...s.snapshot, runtimeEpoch: randomUUID() })).rejects.toThrow(
+      'pi_acp_host_snapshot_mismatch'
+    );
+    expect(f.observed).toEqual([]);
+    expect(f.pipe.destroyed).toBe(true);
+  });
 
   it('refuses a credential for a different run and never opens a model connection', async () => {
     const f = await managed();

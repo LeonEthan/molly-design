@@ -1,3 +1,4 @@
+import { readRunIdentity, readRunResponseMeta } from '@molly/shared/embedded-run-contract';
 import {
   HARNESS_MEMORY_METHOD,
   HarnessMemoryRequestSchema,
@@ -2653,16 +2654,8 @@ export class AgentClient implements acp.Client {
         this.options.agentConfig?.cliType === 'builtin' &&
         this.options.agentConfig.agentType === 'molly';
       if (isEmbeddedHarness) {
-        const run = z
-          .object({ runId: z.string(), runtimeEpoch: z.string().uuid() })
-          .passthrough()
-          .safeParse(options?._meta?.mollyRunSnapshot);
-        if (run.success)
-          this.questionRun = {
-            runId: run.data.runId,
-            runtimeEpoch: run.data.runtimeEpoch,
-            owner: promptPromise,
-          };
+        const run = readRunIdentity(options?._meta);
+        if (run.ok) this.questionRun = { ...run.value, owner: promptPromise };
         const retire = () => {
           this.abortQuestions(promptPromise);
           if (this.questionRun?.owner === promptPromise) this.questionRun = undefined;
@@ -2696,21 +2689,18 @@ export class AgentClient implements acp.Client {
         trackedPromptCompletion = { sessionId, promise: completion };
         this.activePromptCompletion = trackedPromptCompletion;
         const result = await completion;
-        const memoryDiagnostic = result._meta?.mollyPersonalMemoryDiagnostic;
-        if (typeof memoryDiagnostic === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(memoryDiagnostic))
+        const metadata = readRunResponseMeta(result._meta);
+        const memory = metadata.ok ? metadata.value.memory : undefined;
+        const memoryDiagnostic = metadata.ok ? metadata.value.memoryDiagnostic : undefined;
+        if (memoryDiagnostic)
           this.logger.warn(
-            `[${this.options.sessionId}] personal memory ${String(
-              result._meta?.mollyPersonalMemory ?? 'unknown'
-            )}: ${memoryDiagnostic}`
+            `[${this.options.sessionId}] personal memory ${memory ?? 'unknown'}: ${memoryDiagnostic}`
           );
-        if (
-          result._meta?.mollyPersonalMemory === 'capture_failed' ||
-          result._meta?.mollyPersonalMemory === 'recall_failed'
-        ) {
+        if (memory === 'capture_failed' || memory === 'recall_failed') {
           this.options.onAgentWarning?.({
             source: 'personalMemory',
             message:
-              result._meta.mollyPersonalMemory === 'capture_failed'
+              memory === 'capture_failed'
                 ? 'The response completed, but personal preferences could not be saved.'
                 : 'Personal preferences could not be recalled for this response.',
           });

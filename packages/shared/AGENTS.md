@@ -34,14 +34,9 @@ dispatch changes. These contracts bind producers and consumers.
 
 ## Embedded harness credentials
 
-`harness/host` v1 and `mcp/catalog-entry` stay main-only; renderer Machine RPC rejects them.
-Vault metadata/reports use the owner-only socket, never Loro. Consumption requires a matching
-dispatcher-owned model run/epoch or selected MCP session/epoch lease; only explicit Settings
-`ListMcpToolsSchema` discovery of the exact binding is exempt. RPC returns work, never secrets;
-no body/validation-input logs. Empty model grants need compatible bindings; signed-out
-metadata is main-owned. References stay separate from selection: no empty-model fallback,
-snapshot secrets or dispatched-work replay. Native `models` only narrows the picker;
-dispatch, not schemas, owns availability.
+Run snapshots, MCP bindings, session bindings, `_meta` envelopes and failure categories are built and checked only through `embedded-run-contract`; neither side re-implements them.
+
+Before embedded harness credential changes, read [credential rules](src/AGENTS.md).
 
 ## Image connection RPC
 

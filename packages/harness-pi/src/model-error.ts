@@ -1,17 +1,9 @@
+import type { ModelErrorCategory } from '@molly/shared/embedded-run-contract';
 import {
   isContextOverflow,
   isRetryableAssistantError,
   type AssistantMessage,
 } from '@earendil-works/pi-ai';
-
-export type ModelErrorCategory =
-  | 'context_overflow'
-  | 'auth'
-  | 'quota'
-  | 'content_policy'
-  | 'invalid_request'
-  | 'transient'
-  | 'unknown';
 
 const MODEL_ERROR_DETAILS: Record<ModelErrorCategory, string> = {
   context_overflow:

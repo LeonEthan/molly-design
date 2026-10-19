@@ -1,3 +1,4 @@
+import { failureCodeForCategory } from '@molly/shared/embedded-run-contract';
 import type { ChatFailedCode, ChatFailedReason } from '@molly/shared';
 import { formatErrorMessage, formatErrorWithCauses } from '@/utils/format-error';
 
@@ -93,22 +94,7 @@ const isHarnessModelRequestFailedACPError = (error: ParsedACPError): boolean =>
 
 export const mapACPErrorToFailureCode = (error: ParsedACPError): ChatFailedCode | undefined => {
   if (!isHarnessModelRequestFailedACPError(error)) return undefined;
-  switch (getStringField(error.data, 'category')) {
-    case 'transient':
-      return 'model_temporarily_unavailable';
-    case 'auth':
-      return 'model_auth_rejected';
-    case 'quota':
-      return 'model_quota_exceeded';
-    case 'context_overflow':
-      return 'model_context_overflow';
-    case 'content_policy':
-      return 'model_content_blocked';
-    case 'invalid_request':
-      return 'model_request_rejected';
-    default:
-      return 'model_request_failed';
-  }
+  return failureCodeForCategory(getStringField(error.data, 'category'));
 };
 
 export const isUpstreamApiACPError = (error: ParsedACPError): boolean =>

@@ -146,7 +146,9 @@ with a category: context overflow, authentication, quota, content policy, invali
 transient (retries exhausted), or unknown. HTTP 402, payment-required and exhausted-credit
 errors map to quota. Explicit blocked-request, policy, prompt-injection, moderation,
 safety or guardrail evidence takes precedence over HTTP 403's authentication fallback.
-Permanent evidence takes precedence over Pi's transient classifier. The CLI maps these categories to `ChatFailedCode` in the existing
+Permanent evidence takes precedence over Pi's transient classifier. The shared `embedded-run-contract` owns the category vocabulary and exhaustive mapping to
+`ModelRequestFailureCode`, derived from `ChatFailedCodeSchema`; missing or unknown categories
+map to `model_request_failed`. The CLI uses this mapping in the existing
 upstream-service notice and retires the failed worker, preserving conversation and draft
 files for an explicit new message. Provider text/bodies never enter this diagnostic;
 unknown host failures retain their generic static code. Worker retirement never replays
@@ -191,7 +193,10 @@ original child results. Recovered rows say that results are unavailable; incompl
 records remain unknown. Existing product results survive reopen, and history restore
 does not run scripts, repeat paid calls or commit artwork.
 
-The managed host ([host.ts](src/host.ts)) validates each run snapshot against the worker,
+The shared [`embedded-run-contract`](../shared/src/embedded-run-contract.ts) builds and checks
+run snapshots, MCP and session bindings, and request/response `_meta` envelopes. The CLI
+builds snapshots; only the managed host ([host.ts](src/host.ts)) accepts them against the worker.
+The host
 fences the run with an exclusive record in `<private>/runs` before reading credentials
 ([run-journal.ts](src/run-journal.ts)), adds Molly's system prompt, host time, the
 read-before-edit reminder and recalled personal preferences through `before_agent_start`

@@ -37,6 +37,8 @@ import { Button } from '@/ui/button';
 import { type AgentSelection } from '@/components/shared';
 import { cn } from '@/lib/utils';
 import { getIpcServices } from '@/lib/electron-ipc-client';
+import { readMissingDesignModelClasses } from '@/lib/design-model-readiness';
+import { DesignModelReadinessReminder } from '@/components/chat/design-model-reminder';
 import { flushDesignCanvasBeforeSend } from '@/lib/design-canvas-save-gate';
 import {
   chatLandingSessionStateAtomFamily,
@@ -1331,6 +1333,23 @@ function WorkspaceChatLanding({
     try {
       setSubmitting(true);
       setComposerStatus(null);
+      // A landing send starts a real design session on this Mac; without both
+      // model classes it can only fail later, so block here and name what's missing.
+      if (isElectron && getIpcServices()?.design) {
+        const missingModels = await readMissingDesignModelClasses();
+        if (missingModels.length > 0) {
+          setComposerStatus({
+            tone: 'error',
+            message: (
+              <DesignModelReadinessReminder
+                missing={missingModels}
+                onOpenSettings={() => openSettings('agents')}
+              />
+            ),
+          });
+          return;
+        }
+      }
       // Preserve React draft state until startSession is accepted, but clear the
       // controlled element immediately so click/Enter feedback cannot wait for
       // the first local writer await.
@@ -1808,7 +1827,10 @@ function WorkspaceChatLanding({
     skillAgent,
     promptValue: prompt,
   });
-  const promptPlaceholder = t('composer.promptPlaceholder.base', 'Describe a design or a change…');
+  const promptPlaceholder = t(
+    'composer.promptPlaceholder.landing',
+    'Describe what you want to design…'
+  );
 
   const hasSendableContent = prompt.trim().length > 0 || hasUploadedImages || hasUploadedFiles;
   const submitDisabled = getChatLandingSubmitDisabled({

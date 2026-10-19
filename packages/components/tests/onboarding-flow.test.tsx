@@ -4,13 +4,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Provider, createStore, type Store } from 'jotai';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type {
-  AgentConfigId,
-  AgentConfigMeta,
-  LocalProjectId,
-  MachineId,
-  WorkspaceId,
-} from '@molly/shared';
+import type { AgentConfigId, AgentConfigMeta, MachineId, WorkspaceId } from '@molly/shared';
 import { getAgentConfigRoomId } from '@molly/shared';
 import { createLocalPlatformProvider, createStaticStore } from '@molly/platform';
 import { PlatformContext } from '@molly/platform/react';
@@ -18,8 +12,6 @@ import { PlatformContext } from '@molly/platform/react';
 const mocks = vi.hoisted(() => ({
   getCliState: vi.fn(),
   onCliState: vi.fn(),
-  selectLocalProjectDirectory: vi.fn(),
-  useVisibleLocalProjects: vi.fn(),
 }));
 
 vi.mock('../src/hooks/use-recoverable-convex-query', () => ({
@@ -35,18 +27,74 @@ vi.mock('../src/hooks/use-authenticated-convex', async (importOriginal) => {
   };
 });
 
-vi.mock('../src/hooks/use-visible-local-projects', () => ({
-  useVisibleLocalProjects: mocks.useVisibleLocalProjects,
-}));
 vi.mock('../src/hooks/use-machine-flock-agent-configs', () => ({
   useMachineFlockAgentConfigsForMachineIds: () => undefined,
 }));
+vi.mock('../src/hooks/use-acp-selector-options', () => ({
+  useAcpSelectorOptions: () => ({
+    capabilityAuthority: 'authoritative',
+    modeOptions: [],
+    modelOptions: [
+      { value: 'molly-model:unselected', label: 'Select a connection and model' },
+      {
+        value: 'molly-model:00000000-0000-4000-8000-000000000001/deepseek-chat',
+        label: 'deepseek-chat',
+      },
+    ],
+    defaultModeId: null,
+    defaultModelId: 'molly-model:unselected',
+    configOptionSelectors: [],
+    modelReasoningEfforts: {
+      'molly-model:00000000-0000-4000-8000-000000000001/deepseek-chat': ['off', 'medium', 'high'],
+    },
+  }),
+}));
 vi.mock('../src/components/settings/model-connection-setting', () => ({
-  ModelConnectionSetting: () => <div data-testid="model-connections" />,
+  ModelConnectionSetting: ({
+    onConnectionsChange,
+  }: {
+    onConnectionsChange?: (connections: unknown[]) => void;
+  }) => {
+    React.useEffect(() => {
+      onConnectionsChange?.([
+        {
+          schemaVersion: 1,
+          id: '00000000-0000-4000-8000-000000000001',
+          revision: 1,
+          providerPresetId: 'deepseek',
+          displayName: 'DeepSeek',
+          baseUrl: 'https://api.deepseek.com',
+          enabled: true,
+          credentialRef: 'synthetic-reference',
+        },
+      ]);
+    }, [onConnectionsChange]);
+    return <div data-testid="model-connections" />;
+  },
+}));
+vi.mock('../src/components/settings/image-connection-setting', () => ({
+  ImageConnectionSetting: ({
+    onConnectionChange,
+  }: {
+    onConnectionChange?: (connection: unknown) => void;
+  }) => {
+    React.useEffect(() => {
+      onConnectionChange?.({
+        id: '00000000-0000-4000-8000-000000000009',
+        revision: 1,
+        enabled: true,
+        baseUrl: 'https://images.example.com/v1',
+        model: 'synthetic-image-model',
+        hasApiKey: true,
+        legacyHistoryMayContainKey: false,
+      });
+    }, [onConnectionChange]);
+    return <div data-testid="image-connection" />;
+  },
 }));
 
 import { runtimeAtom } from '../src/atoms/runtime';
-import { desktopOnboardingDraftAtom, desktopOnboardingPhaseAtom } from '../src/atoms/onboarding';
+import { desktopOnboardingPhaseAtom } from '../src/atoms/onboarding';
 import { localCliStartingAtom, localProbeResultAtom } from '../src/atoms/local-probe';
 import { agentConfigMetaCacheAtom } from '../src/atoms/doc-meta';
 import { currentWorkspaceIdAtom, currentWorkspaceSlugAtom } from '../src/atoms/workspace-context';
@@ -55,9 +103,8 @@ import {
   resolveDesktopOnboardingPhase,
 } from '../src/components/onboarding/onboarding-overlay';
 import { getDesktopOnboardingSteps } from '../src/components/onboarding/onboarding-steps';
-import { ProjectsScreenView } from '../src/components/onboarding/screens/projects-screen';
-import { ProvidersScreenView } from '../src/components/onboarding/screens/providers-screen';
-import { SummaryScreen } from '../src/components/onboarding/screens/summary-screen';
+import { agentDefaultsCache } from '../src/lib/local-storage-cache';
+import { readChatLandingDefaults } from '../src/lib/chat-landing-defaults';
 import { initI18n } from '../src/i18n';
 import { TestCloudPlatformProvider } from './test-platform';
 
@@ -72,11 +119,8 @@ function installElectronWindowIpc() {
   Object.defineProperty(window, 'ipc', {
     configurable: true,
     value: {
-      invoke: async (channel: string, ...args: unknown[]) => {
+      invoke: async (channel: string) => {
         if (channel === 'cli.getState') return mocks.getCliState();
-        if (channel === 'localProjects.selectDirectory') {
-          return mocks.selectLocalProjectDirectory(...args);
-        }
         throw new Error(`unexpected invoke ${channel}`);
       },
       on: (channel: string, listener: (payload: unknown) => void) => {
@@ -111,7 +155,6 @@ describe('desktop onboarding flow', () => {
     vi.spyOn(document, 'hasFocus').mockReturnValue(true);
     await initI18n('en');
     localStorage.clear();
-    mocks.useVisibleLocalProjects.mockReturnValue({ projects: new Map() });
     installElectronWindowIpc();
 
     store = createStore();
@@ -189,8 +232,9 @@ describe('desktop onboarding flow', () => {
       }
       await act(async () => findButton(container, action).click());
       expect(store.get(desktopOnboardingPhaseAtom)).toBe('providers');
-      expect(container.textContent).toContain('Connect a model');
+      expect(container.textContent).toContain('Connect your models');
       expect(container.querySelector('[data-testid=model-connections]')).not.toBeNull();
+      expect(container.querySelector('[data-testid=image-connection]')).not.toBeNull();
       expect(container.querySelector('img')?.getAttribute('src')).toContain(
         'molly-editorial-v3.png'
       );
@@ -205,40 +249,32 @@ describe('desktop onboarding flow', () => {
     }
   );
 
-  it('derives steps and repairs stale phases from platform capabilities', () => {
+  it('derives steps and normalizes legacy phases from platform capabilities', () => {
     expect(getDesktopOnboardingSteps({ cloudAccount: false, multiWorkspace: false })).toEqual([
       'ceremony',
       'providers',
-      'projects',
-      'firstTask',
     ]);
     expect(getDesktopOnboardingSteps({ cloudAccount: true, multiWorkspace: true })).toEqual([
       'ceremony',
       'login',
       'workspace',
       'providers',
-      'projects',
-      'firstTask',
     ]);
+    const local = { cloudAccount: false, multiWorkspace: false };
+    expect(resolveDesktopOnboardingPhase(null, local)).toBe('ceremony');
+    expect(resolveDesktopOnboardingPhase('login', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('workspace', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('projects', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('firstTask', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('summary', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('providers', local)).toBe('providers');
+    expect(resolveDesktopOnboardingPhase('ceremony', local)).toBe('ceremony');
     expect(
-      resolveDesktopOnboardingPhase('login', {
-        cloudAccount: false,
-        multiWorkspace: false,
-        hasAgent: false,
-        hasProject: false,
-      })
-    ).toBe('providers');
-    expect(
-      resolveDesktopOnboardingPhase('firstTask', {
-        cloudAccount: false,
-        multiWorkspace: false,
-        hasAgent: true,
-        hasProject: false,
-      })
-    ).toBe('projects');
+      resolveDesktopOnboardingPhase('workspace', { cloudAccount: true, multiWorkspace: true })
+    ).toBe('workspace');
   });
 
-  it('mounts the real connection step without probing, installing or reviving old setup', async () => {
+  it('resumes a legacy persisted phase at Connect your models without probing old setup', async () => {
     const legacyRequests: string[] = [];
     const legacy: AgentConfigMeta = {
       id: 'retired' as AgentConfigId,
@@ -252,10 +288,6 @@ describe('desktop onboarding flow', () => {
     store.set(localProbeResultAtom, { ok: true, machineId });
     store.set(localCliStartingAtom, false);
     store.set(agentConfigMetaCacheAtom, { [getAgentConfigRoomId(legacy.id)]: legacy });
-    store.set(desktopOnboardingDraftAtom, {
-      provider: { kind: 'agentConfig', agentConfigId: legacy.id, agentName: legacy.name },
-      project: null,
-    });
     store.set(desktopOnboardingPhaseAtom, 'firstTask');
     store.set(runtimeAtom, {
       workspaceId,
@@ -284,69 +316,14 @@ describe('desktop onboarding flow', () => {
       )
     );
     expect(container.querySelector('[data-testid=model-connections]')).not.toBeNull();
-    expect(container.textContent).toContain('Connect a model');
-    expect(findButton(container, 'Next').disabled).toBe(true);
+    expect(container.textContent).toContain('Connect your models');
+    expect(findButton(container, 'Finish').disabled).toBe(true);
     expect(container.textContent).not.toContain('Previous Claude');
     expect(legacyRequests).toEqual([]);
-    expect(store.get(desktopOnboardingDraftAtom).provider).toEqual({
-      kind: 'agentConfig',
-      agentConfigId: legacy.id,
-      agentName: legacy.name,
-    });
   });
 
-  it('returns the exact selected local project', async () => {
-    const onComplete = vi.fn();
-    const selectedMachine = 'machine-2' as MachineId;
-    const selectedProject = 'project-2' as LocalProjectId;
-    await act(async () => {
-      root?.render(
-        <ProjectsScreenView
-          local={[
-            {
-              key: `${machineId}:project-1`,
-              machineId,
-              localProjectId: 'project-1' as LocalProjectId,
-              name: 'first',
-              detail: '/first',
-            },
-            {
-              key: `${selectedMachine}:${selectedProject}`,
-              machineId: selectedMachine,
-              localProjectId: selectedProject,
-              name: 'selected',
-              detail: '/selected',
-            },
-          ]}
-          github={[]}
-          importing={false}
-          connectingGitHub={false}
-          canImportLocal
-          canConnectGitHub={false}
-          loadingRepos={false}
-          selectedProjectKey={`local:${selectedMachine}:${selectedProject}`}
-          onAddLocal={vi.fn()}
-          onConnectGitHub={vi.fn()}
-          onBack={vi.fn()}
-          onSkip={vi.fn()}
-          onComplete={onComplete}
-        />
-      );
-    });
-
-    await act(async () => {
-      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onComplete).toHaveBeenCalledWith({
-      kind: 'local',
-      machineId: selectedMachine,
-      localProjectId: selectedProject,
-      name: 'selected',
-    });
-  });
-
-  it('requires explicit selection of a published local Molly', async () => {
-    const selected: AgentConfigMeta = {
+  it('auto-selects the built-in Molly and binds first-session defaults on Finish', async () => {
+    const molly: AgentConfigMeta = {
       id: 'synthetic-molly' as AgentConfigId,
       machineId,
       name: 'Molly',
@@ -355,123 +332,69 @@ describe('desktop onboarding flow', () => {
       agentType: 'molly',
       env: {},
     };
-    const selections: unknown[] = [];
+    store.set(localProbeResultAtom, { ok: true, machineId });
+    store.set(agentConfigMetaCacheAtom, { [getAgentConfigRoomId(molly.id)]: molly });
+    store.set(desktopOnboardingPhaseAtom, 'providers');
+    const completed: unknown[] = [];
+    const platform = createLocalPlatformProvider({
+      session: createStaticStore({ status: 'unauthenticated' }),
+      workspaces: createStaticStore({ status: 'ready', workspaces: [], activeWorkspaceId: null }),
+    });
     await act(async () =>
       root?.render(
-        <ProvidersScreenView
-          configs={[
-            selected,
-            {
-              ...selected,
-              id: 'legacy' as AgentConfigId,
-              name: 'Retired Claude',
-              agentType: 'claude',
-            },
-            {
-              ...selected,
-              id: 'remote' as AgentConfigId,
-              name: 'Remote Molly',
-              machineId: 'remote' as MachineId,
-            },
-          ]}
-          localMachineId={machineId}
-          onBack={() => undefined}
-          onSkip={() => undefined}
-          onNext={(selection) => selections.push(selection)}
-        />
+        <Provider store={store}>
+          <PlatformContext.Provider value={platform}>
+            <OnboardingOverlay
+              onCompleted={async (completion) => {
+                completed.push(completion);
+                return true;
+              }}
+            />
+          </PlatformContext.Provider>
+        </Provider>
       )
     );
-    expect(findButton(container, 'Next').disabled).toBe(true);
-    expect(container.textContent).not.toContain('Retired Claude');
-    expect(container.textContent).not.toContain('Remote Molly');
-    await act(async () =>
-      findButton(container, 'Molly').dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    );
-    await act(async () =>
-      findButton(container, 'Next').dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    );
-    expect(selections).toEqual([
-      { kind: 'agentConfig', agentConfigId: selected.id, agentName: selected.name },
-    ]);
-  });
-
-  it('does not replace a removed selection with another Molly or offer legacy installers', async () => {
-    const config: AgentConfigMeta = {
-      id: 'one' as AgentConfigId,
+    expect(findButton(container, 'Finish').disabled).toBe(false);
+    await act(async () => findButton(container, 'Finish').click());
+    expect(completed).toEqual([{}]);
+    expect(readChatLandingDefaults(workspaceId)).toMatchObject({
+      agentId: molly.id,
       machineId,
-      name: 'Molly One',
-      description: undefined,
-      cliType: 'builtin',
-      agentType: 'molly',
-      env: {},
-    };
-    const selections: unknown[] = [];
-    const render = (configs: AgentConfigMeta[], currentMachineId = machineId) =>
-      root?.render(
-        <ProvidersScreenView
-          configs={configs}
-          localMachineId={currentMachineId}
-          onBack={() => undefined}
-          onSkip={() => undefined}
-          onNext={(selection) => selections.push(selection)}
-        />
-      );
-    await act(async () => render([config]));
-    await act(async () =>
-      findButton(container, 'Molly One').dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    );
-    await act(async () => render([{ ...config, id: 'two' as AgentConfigId, name: 'Molly Two' }]));
-    expect(findButton(container, 'Next').disabled).toBe(true);
-    expect(selections).toEqual([]);
-    const otherMachine = 'other-machine' as MachineId;
-    await act(async () => render([{ ...config, machineId: otherMachine }], otherMachine));
-    expect(findButton(container, 'Next').disabled).toBe(true);
-    expect(findButton(container, 'Molly One').getAttribute('aria-pressed')).toBe('false');
-    expect(container.textContent).not.toContain('Download');
-    expect(container.textContent).not.toContain('Sign in');
-    expect(container.textContent).not.toContain('Add provider');
+      contextType: 'chat',
+    });
+    expect(agentDefaultsCache.get(molly.id)).toMatchObject({
+      modeId: null,
+      modelId: 'molly-model:00000000-0000-4000-8000-000000000001/deepseek-chat',
+      configOptionValues: { reasoning_effort: 'medium' },
+    });
   });
 
-  it('keeps failed Agent setup retryable from Summary with investigation detail', async () => {
-    const retry = vi
-      .fn<() => Promise<void>>()
-      .mockRejectedValueOnce(new Error('machine is offline'))
-      .mockResolvedValueOnce(undefined);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    await act(async () => {
+  it('completes onboarding from Connect your models via Skip for now', async () => {
+    const completed: unknown[] = [];
+    const platform = createLocalPlatformProvider({
+      session: createStaticStore({ status: 'unauthenticated' }),
+      workspaces: createStaticStore({ status: 'ready', workspaces: [], activeWorkspaceId: null }),
+    });
+    store.set(desktopOnboardingPhaseAtom, 'providers');
+    store.set(localProbeResultAtom, { ok: true, machineId });
+    await act(async () =>
       root?.render(
-        <SummaryScreen
-          agentState="failed"
-          agentName="Codex"
-          agentFailureCode="runtime-install-failed"
-          onBack={vi.fn()}
-          onComplete={vi.fn()}
-          onRetryAgent={retry}
-        />
-      );
-    });
-
-    expect(container.textContent).toContain(
-      'Molly could not download the Agent runtime. Check your connection and try again.'
+        <Provider store={store}>
+          <PlatformContext.Provider value={platform}>
+            <OnboardingOverlay
+              onCompleted={async (completion) => {
+                completed.push(completion);
+                return true;
+              }}
+            />
+          </PlatformContext.Provider>
+        </Provider>
+      )
     );
-    expect(container.textContent).not.toContain('runtime-install-failed');
-    await act(async () => {
-      findButton(container, 'Retry').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-    expect(container.textContent).toContain('machine is offline');
-    expect(consoleError).toHaveBeenCalledWith(
-      '[onboarding] Failed to retry Agent setup from Summary:',
-      expect.any(Error)
-    );
-    expect(findButton(container, 'Retry').disabled).toBe(false);
-
-    await act(async () => {
-      findButton(container, 'Retry').dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-    expect(retry).toHaveBeenCalledTimes(2);
+    // Finish stays disabled until both model cards report readiness; the
+    // mocked cards never report, so only Skip can complete here.
+    expect(findButton(container, 'Finish').disabled).toBe(true);
+    await act(async () => findButton(container, 'Skip for now').click());
+    expect(completed).toEqual([{}]);
   });
 });

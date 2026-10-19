@@ -1,29 +1,40 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import { fn } from 'storybook/test';
-import { ProvidersScreenView, SummaryScreen } from '@/components/onboarding';
+import { ProvidersScreenView } from '@/components/onboarding';
 
 function ProviderSkipJourney() {
-  const [step, setStep] = useState<'providers' | 'summary' | 'complete'>('providers');
-  if (step === 'complete') return <div data-testid="onboarding-complete">Onboarding complete</div>;
-  if (step === 'summary')
-    return (
-      <SummaryScreen
-        agentState="missing"
-        onBack={() => setStep('providers')}
-        onComplete={() => setStep('complete')}
-      />
-    );
+  const [complete, setComplete] = useState(false);
+  if (complete) return <div data-testid="onboarding-complete">Onboarding complete</div>;
   return (
     <ProvidersScreenView
-      configs={[]}
-      localMachineId={null}
+      languageReady={false}
+      imageReady={false}
+      modelReady={false}
+      mollyAvailable={false}
       onBack={fn()}
-      onSkip={() => setStep('summary')}
+      onSkip={() => setComplete(true)}
       onNext={fn()}
     />
   );
 }
+
+function ProviderNextJourney() {
+  const [complete, setComplete] = useState(false);
+  if (complete) return <div data-testid="onboarding-complete">Onboarding complete</div>;
+  return (
+    <ProvidersScreenView
+      languageReady
+      imageReady
+      modelReady
+      mollyAvailable
+      onBack={fn()}
+      onSkip={fn()}
+      onNext={() => setComplete(true)}
+    />
+  );
+}
+
 const meta = {
   title: 'Onboarding/CompletionJourney',
   component: ProviderSkipJourney,
@@ -32,13 +43,4 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 export const ProviderSkip: Story = {};
-export const RetiredSetup: Story = {
-  render: () => (
-    <SummaryScreen
-      agentState="retired"
-      agentName="Previous Codex setup"
-      onBack={fn()}
-      onComplete={fn()}
-    />
-  ),
-};
+export const ProviderNext: Story = { render: () => <ProviderNextJourney /> };

@@ -1,12 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronRight, Circle, CircleCheck, CircleDashed } from '@/ui/icons';
-import {
-  getModelConnectionConfigurationIssue,
-  type ModelConnection,
-  type ProtectedImageConnection,
-} from '@molly/shared/embedded-harness';
+import type { ModelConnection, ProtectedImageConnection } from '@molly/shared/embedded-harness';
 import { getIpcServices, getPublicBrowserBridge } from '@/lib/electron-ipc-client';
+import { getReadyModelConnections, isImageConnectionReady } from '@/lib/design-model-readiness';
 import { cn } from '@/lib/utils';
 import { BrowserAccountImportDialog } from './browser-account-import-dialog';
 
@@ -39,9 +36,7 @@ export function DesignReadinessView({
   onShow,
 }: DesignReadinessViewProps) {
   const { t } = useTranslation();
-  const usable = connections?.filter(
-    (connection) => connection.enabled && !getModelConnectionConfigurationIssue(connection)
-  );
+  const usable = connections ? getReadyModelConnections(connections) : undefined;
   const models: Item = { target: 'models', label: t('settings.models.title'), state: 'unknown' };
   if (connections && usable) {
     const [first, ...rest] = usable;
@@ -78,7 +73,7 @@ export function DesignReadinessView({
       image,
       !imageConnection?.enabled
         ? { state: 'unset', value: t('settings.readiness.off') }
-        : !imageConnection.hasApiKey
+        : !isImageConnectionReady(imageConnection)
           ? { state: 'unset', value: t('settings.readiness.keyMissing') }
           : { state: 'set', value: imageConnection.model }
     );

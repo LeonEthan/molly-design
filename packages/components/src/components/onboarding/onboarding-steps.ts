@@ -25,8 +25,6 @@ export function getDesktopOnboardingSteps(input: {
     ...(input.cloudAccount ? (['login'] as const) : []),
     ...(input.multiWorkspace ? (['workspace'] as const) : []),
     'providers',
-    'projects',
-    'firstTask',
   ];
 }
 

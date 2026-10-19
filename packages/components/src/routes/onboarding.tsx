@@ -3,7 +3,7 @@ import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { desktopOnboardingDraftAtom, desktopOnboardingPhaseAtom } from '@/atoms/onboarding';
+import { desktopOnboardingPhaseAtom } from '@/atoms/onboarding';
 import { currentWorkspaceSlugAtom } from '@/atoms/workspace-context';
 import { OnboardingOverlay, type DesktopOnboardingCompletion } from '@/components/onboarding';
 import { enterDesktopProduct } from '@/components/onboarding/desktop-onboarding-completion';
@@ -41,7 +41,6 @@ function DesktopOnboardingExperience() {
   );
   const workspaceSlug = useAtomValue(currentWorkspaceSlugAtom);
   const setPhase = useSetAtom(desktopOnboardingPhaseAtom);
-  const setDraft = useSetAtom(desktopOnboardingDraftAtom);
   const inFlightCompletion = useRef<Promise<boolean> | null>(null);
   const completeThemeLifecycle = useOnboardingThemeLifecycle();
 
@@ -77,7 +76,6 @@ function DesktopOnboardingExperience() {
         },
         onDurableCompletion: () => {
           setPhase(null);
-          setDraft({ provider: null, project: null });
         },
         onPersistenceFailure: (error) => {
           console.error('Failed to persist desktop onboarding completion', error);
@@ -98,7 +96,7 @@ function DesktopOnboardingExperience() {
       inFlightCompletion.current = attempt;
       return attempt;
     },
-    [completeThemeLifecycle, navigate, setDraft, setPhase, t, workspaceSlug]
+    [completeThemeLifecycle, navigate, setPhase, t, workspaceSlug]
   );
 
   return <OnboardingOverlay onCompleted={complete} />;

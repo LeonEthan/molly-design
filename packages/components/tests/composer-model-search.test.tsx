@@ -343,8 +343,58 @@ describe('composer model picker search', () => {
     expect(radioRows(await openSubmenu('Model')).map((row) => row.textContent)).toEqual([
       'DeepSeek V4 Pro',
     ]);
-    await clickRow(radioRows(await openSubmenu('Agent'))[0]);
-    expect(onAgentChange).toHaveBeenCalledWith({ agentId: mollyConfig.id, machineId });
+    const agentRows = radioRows(await openSubmenu('Agent'));
+    expect(agentRows.map((row) => row.textContent)).toEqual(['Molly']);
+    await clickRow(agentRows[0]);
+    expect(onAgentChange).not.toHaveBeenCalled();
+  });
+
+  it('changes Agent only from a different row and keeps a repeated pick from clearing Provider', async () => {
+    const onAgentChange = vi.fn();
+    const other: AgentConfigMeta = {
+      ...mollyConfig,
+      id: 'config-other' as AgentConfigId,
+      name: 'Other',
+    };
+    await openRunConfigMenu({
+      ...mollyProps,
+      availableAgentConfigs: [mollyConfig, other],
+      onAgentChange,
+      modelOptions: twoProviderModels,
+      selectedModelId: studio,
+    });
+    await clickRow(radioRows(await openSubmenu('Provider'))[2]);
+    const agentRows = radioRows(await openSubmenu('Agent'));
+    expect(agentRows.map((row) => row.querySelector('.truncate')?.textContent)).toEqual([
+      'Molly',
+      'Other',
+    ]);
+    await clickRow(agentRows[0]);
+    expect(onAgentChange).not.toHaveBeenCalled();
+    expect(
+      radioRows(await openSubmenu('Model')).map(
+        (row) => row.querySelector('.truncate')?.textContent
+      )
+    ).toEqual(['Aurora 1', 'Nimbus 2']);
+    await clickRow(radioRows(await openSubmenu('Agent'))[1]);
+    expect(onAgentChange).toHaveBeenCalledTimes(1);
+    expect(onAgentChange).toHaveBeenCalledWith({ agentId: other.id, machineId });
+  });
+
+  it('keeps a canvas Agent row on the session agent when that config is unresolved', async () => {
+    const other: AgentConfigMeta = {
+      ...agentConfig,
+      id: 'config-other' as AgentConfigId,
+      name: 'Other',
+    };
+    await openRunConfigMenu({
+      agentSelection: { agentId: 'missing-agent' as AgentConfigId, machineId },
+      availableAgentConfigs: [agentConfig, other],
+      modelOptions: fewModels,
+      selectedModelId: fewModels[0]?.value ?? null,
+    });
+    expect(rootRowText().some((text) => text.startsWith('Agent'))).toBe(true);
+    expect(radioRows(await openSubmenu('Agent'))).toEqual([]);
   });
 
   it('still shows Agent and Reasoning beside a freshly connected model list', async () => {

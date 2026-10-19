@@ -429,17 +429,10 @@ export function DesktopRunConfigMenu({
     thinkingSelector && thinkingSelector.options.length > 0 ? thinkingSelector : null;
 
   const agentMenuConfigs = useMemo(() => {
-    const onMachine = agentSelection
+    if (!onAgentChange) return selectedAgentConfig ? [selectedAgentConfig] : [];
+    return agentSelection
       ? selectableAgentConfigs.filter((config) => config.machineId === agentSelection.machineId)
       : selectableAgentConfigs;
-    const known =
-      onMachine.length > 0 ? [...onMachine] : selectedAgentConfig ? [selectedAgentConfig] : [];
-    if (onAgentChange || !selectedAgentConfig) return known;
-    const current = known.find(
-      (config) =>
-        config.id === selectedAgentConfig.id && config.machineId === selectedAgentConfig.machineId
-    );
-    return [current ?? selectedAgentConfig];
   }, [agentSelection, onAgentChange, selectableAgentConfigs, selectedAgentConfig]);
   const duplicateAgentNames = new Set(
     agentMenuConfigs
@@ -538,9 +531,8 @@ export function DesktopRunConfigMenu({
                   label={config.name}
                   description={duplicateAgentNames.has(config.name) ? config.id : undefined}
                   selected={selected}
-                  disabled={onAgentChange == null && !selected}
                   onSelect={() => {
-                    if (!onAgentChange) return;
+                    if (!onAgentChange || selected) return;
                     setProviderChoice(undefined);
                     onAgentChange({ agentId: config.id, machineId: config.machineId });
                   }}

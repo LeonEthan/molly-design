@@ -20,8 +20,8 @@ use the providers you explicitly configure; no Molly cloud account is required.
 
 - Create and revise a single-canvas design through conversation or direct editing.
 - Automatically save manual edits, retain versions, reopen and export artwork.
-- Supply your own model connection. Image generation/editing is optional and uses
-  a separately configured connection and explicit model.
+- Supply your own model connection. Image generation/editing uses a separately
+  configured connection and explicit model; starting a design session requires both.
 - Keep editable BentoDoc artwork with a YAML projection for Agent authoring.
 
 **Release status:** **v0.1.1** is the current public release for **macOS Apple Silicon**.

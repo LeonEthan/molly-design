@@ -109,7 +109,7 @@ export function DesignReadinessView({
               />
               <span className="shrink-0 text-foreground">
                 {item.label}
-                {item.target !== 'models' ? ` (${t('settings.readiness.optional')})` : ''}
+                {item.target === 'pinterest' ? ` (${t('settings.readiness.optional')})` : ''}
               </span>
               {item.value ? (
                 <span className="min-w-0 truncate text-muted-foreground">

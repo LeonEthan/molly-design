@@ -131,7 +131,7 @@ describe('design setup strip', () => {
     });
     expect(chips()).toEqual([
       'set: Models· Configured: DeepSeek +1',
-      'set: Image generation (optional)· Configured: synthetic-image-model',
+      'set: Image generation· Configured: synthetic-image-model',
       'unverified: Pinterest (optional)· Sign-in not verified',
     ]);
   });
@@ -161,7 +161,7 @@ describe('design setup strip', () => {
   ] as const)('explains why image generation is not set up', async (image, reason) => {
     await renderView({ imageConnection: image, pinterestCookieCount: 0 });
     expect(chips().slice(1)).toEqual([
-      `unset: Image generation (optional)· ${reason}`,
+      `unset: Image generation· ${reason}`,
       'unset: Pinterest (optional)· Not signed in',
     ]);
   });
@@ -170,7 +170,7 @@ describe('design setup strip', () => {
     await renderView({});
     expect(chips()).toEqual([
       'unknown: Models',
-      'unknown: Image generation (optional)',
+      'unknown: Image generation',
       'unknown: Pinterest (optional)',
     ]);
   });
@@ -204,7 +204,7 @@ describe('AI models page', () => {
     await renderPage();
     expect(chips()).toEqual([
       'set: Models· Configured: DeepSeek',
-      'unset: Image generation (optional)· Off',
+      'unset: Image generation· Off',
       'unset: Pinterest (optional)· Not signed in',
     ]);
     await act(async () =>

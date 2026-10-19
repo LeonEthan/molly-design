@@ -61,7 +61,8 @@ that journey.
    not Moonshot Open Platform. In the conversation composer choose Molly and an
    explicit connection, model and supported thinking level. Missing or invalid
    selections fail rather than silently switching providers or models.
-3. Optionally set up Settings → AI models → Image generation separately. Supply
+3. Set up Settings → AI models → Image generation as well; it is required to
+   start a design session. Supply
    an OpenAI Images-compatible API root (without `/images/generations` or
    `/images/edits`), key and exact model, and save; the row's switch turns it on
    or off. Molly checks the key against the service's free `/models` list and

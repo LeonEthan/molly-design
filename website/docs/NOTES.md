@@ -5,8 +5,8 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 ## Status
 
 - Live at `https://molly-design.pages.dev` (Cloudflare Pages project `molly-design`), deployed manually.
-- The source in this folder rebuilds the deployed site byte for byte. `dist/index.html` sha256 is `375b6db08a08f9a5ece4be0cca4d0cf4384f65e7e6ad36aaeb97404c2fb05b38` (release v0.1.1 DMG).
-- Bringing the source into the repository was a migration only: no design, copy or animation change.
+- #175 changed the page, and `build.py` reads GitHub Releases while it builds. `dist/index.html` therefore depends on network access, and its sha256 can differ between builds. Offline, the build uses `DMG_FALLBACK` and `FALLBACK_RELEASES`.
+- Bringing the source into the repository was a migration only: no design, copy or animation change. The redesign after that migration is #175.
 
 ## Build pipeline
 
@@ -14,24 +14,25 @@ Trimmed from the v7 working notes (rounds v7 → v7i, 2026-10-17). This file kee
 - `@@A:key@@` placeholders resolve to content-hashed files copied into `dist/assets/`; only assets the page uses are copied. Root files (`og.png`, icons, `_headers`, `404.html`, `robots.txt`, `sitemap.xml`) keep fixed names.
 - WebP derivatives carry `srcset`/`sizes` and explicit width/height. AVIF was not added: every browser that can run the macOS download (Safari 14+) supports WebP, and Lighthouse reports no image-format opportunity.
 - Video: H.264 MP4, faststart, no audio, poster frame, `preload="none"`.
-- Fonts are Geist and JetBrains Mono, subset with `fontTools.subset` to the Latin characters the page uses (`kern,liga,calt,ss01,tnum` for Geist, `kern` for JetBrains Mono). Chinese text uses system fonts.
-- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a release-page URL (`releases/latest`, `/releases/tag/`, a bare `/releases`) in any page including 404, a missing asset, or 404 referencing an unshipped asset.
+- Fonts on the page are self-hosted Inter (variable, latin), Instrument Serif (regular and italic, latin), and JetBrains Mono. Chinese text uses system fonts. Geist remains in `assets/fonts/` but the page does not request it.
+- Build guards (`sys.exit`): placeholder markup (`ph-tag`, `ph-block`, `placeholder`, `占位`), a missing asset, or 404 referencing an unshipped asset. `releases/latest` is a real nav, closing, and 404 link. Release tag links are real Recent updates rows.
 
 ## Claims and honesty rules
 
 - Facts: Apple Silicon (arm64) only, macOS 13 Ventura or later. The app is Developer ID signed and notarized; the DMG itself is never called signed.
-- No version numbers in visible text, and no plugins, roadmap, stats, testimonials or customer logos.
+- No version numbers in visible text except the Recent updates block (#175), which shows GitHub release tags and dates. That exception is only that block. No plugins, roadmap, stats, testimonials or customer logos.
 - "Real capture" wording is scoped to sections that show real app captures (the recorded edit, the export menu, workflow and explores screenshots, the sample wall of real exports).
 - The hero is a crafted animation and always shows the visible `[ Illustration ]` / `[ 示意动画 ]` label. Its bilingual aria-label says the cutouts and repaired background are crafted and that the sage-green mug is generated.
 - Sample-wall brands are made up and the captions say so: Stillwater Clay, Ember Current, Tideform, Juniper Wharf, Moss & Ember.
 - The research capture shows a 1936 WPA public-domain poster as a reference inside the built-in browser, not as Molly output. It is the only third-party artwork.
 - "Connect a model" was removed from the demo: the only Settings capture shows provider and model names. "Your key stays on this computer" remains in the hero bullets and FAQ.
 
-## Direct DMG download
+## Downloads
 
-- Every download CTA (nav, hero, final CTA, footer, 404), the install and update FAQ answers, and JSON-LD `downloadUrl` use one constant, `DMG` in `build.py` (`@@DMG@@` in `slots.json` and `404.html`). Labels never show the version.
-- GitHub serves the asset with `Content-Disposition: attachment`, so the cross-origin link downloads directly even though browsers ignore `download` there.
-- Every release must update `DMG`; see README, "Release: bump the DMG URL". A later alternative is a `_redirects` rule `/download <dmg-url> 302` with `DMG` pointing at `/download`.
+- Nav, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). JSON-LD `downloadUrl` uses the same URL. The hero has no download button.
+- FAQ install and update answers (`@@DMG@@` in `slots.json`) use the `.dmg` `fetch_github()` selects: the newest stable release that actually has one. Drafts and prereleases are skipped, and a newer release without a DMG does not stop the scan. `DMG_FALLBACK` (the v0.1.1 asset) is used only when the API is unavailable.
+- GitHub serves a release asset with `Content-Disposition: attachment`. `releases/latest` is an HTML page, so those buttons are not direct file downloads.
+- A normal app release needs no edit to `build.py`. See README, "Release".
 
 ## Asset provenance
 

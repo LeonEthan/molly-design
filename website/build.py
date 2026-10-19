@@ -1,30 +1,49 @@
 #!/usr/bin/env python3
-"""Builds the Molly Design website into dist/ (the Cloudflare Pages deploy folder).
-Python 3 standard library only; every path is relative to this file."""
-import hashlib, json, pathlib, re, shutil, sys
+"""Builds the Molly Design website into dist/ (Cloudflare Pages deploy folder)."""
+import hashlib, json, pathlib, re, shutil, sys, urllib.request
+from datetime import datetime
 
 ROOT = pathlib.Path(__file__).resolve().parent
-SRC = ROOT / 'assets'                 # processed, web-ready assets (images, video, fonts, icons)
+SRC = ROOT / 'assets'
 SITE_DIR = ROOT / 'dist'
 HERE = ROOT / 'src'
 SITE = 'https://molly-design.pages.dev'
-# Update on every release (see README.md, "Release: bump the DMG URL").
-DMG = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
-RELEASE_PAGE = re.compile(r'releases/latest|/releases(?:["\'?#<\s]|/tag/|/?$)', re.M)
+DMG_FALLBACK = 'https://github.com/LeonEthan/molly-design/releases/download/v0.1.1/MollyDesign-0.1.1-arm64.dmg'
+DMG = DMG_FALLBACK
 GH = 'https://github.com/LeonEthan/molly-design'
+DOWNLOAD = GH + '/releases/latest'
+RELEASES = GH + '/releases'
 MAN = json.loads((SRC / 'manifest.json').read_text())
-CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
+CFG = {}
 DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0l-4-4m4 4l4-4M5 20h14"/></svg>'
 GITHUB_MARK = '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true" focusable="false"><path d="M6.766 11.328c-2.063-.25-3.516-1.734-3.516-3.656 0-.781.281-1.625.75-2.188-.203-.515-.172-1.609.063-2.062.625-.078 1.468.25 1.968.703.594-.187 1.219-.281 1.985-.281.765 0 1.39.094 1.953.265.484-.437 1.344-.765 1.969-.687.218.422.25 1.515.046 2.047.5.593.766 1.39.766 2.203 0 1.922-1.453 3.375-3.547 3.64.531.344.89 1.094.89 1.954v1.625c0 .468.391.734.86.547C13.781 14.359 16 11.53 16 8.03 16 3.61 12.406 0 7.984 0 3.563 0 0 3.61 0 8.031a7.88 7.88 0 0 0 5.172 7.422c.422.156.828-.125.828-.547v-1.25c-.219.094-.5.156-.75.156-1.031 0-1.64-.562-2.078-1.609-.172-.422-.36-.672-.719-.719-.187-.015-.25-.093-.25-.187 0-.188.313-.328.625-.328.453 0 .844.281 1.25.86.313.452.64.655 1.031.655s.641-.14 1-.5c.266-.265.47-.5.657-.656"/></svg>'
 GITHUB_LABEL = '[[在 GitHub 上查看 Molly Design||Molly Design on GitHub]]'
 CTA = '[[下载 macOS 版||Download for macOS]]'
+CTA_GH = '[[在 GitHub 看源码||View source on GitHub]]'
+WF_KEYS = ('brief', 'research', 'options', 'layers', 'edit', 'export')
+FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-15')]
+TITLE_EN = 'Molly Design · AI design for graphic designers, in layers you can edit'
+TITLE_ZH = 'Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改'
+DESC_EN = (
+    'An AI design app for graphic designers on your computer. Describe the job and get back a layered file: '
+    'real text, shapes and images you can keep editing.'
+)
+DESC_ZH = '给平面设计师的 AI 设计工具，在你的电脑上。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。'
 
 
 def pairs(s):
-    s = re.sub(r'([a-z][\w-]*)="\[\[(.*?)\|\|(.*?)\]\]"',
-               lambda m: '%s="%s" data-%s-zh="%s" data-%s-en="%s"' % (m.group(1), m.group(3), m.group(1), m.group(2), m.group(1), m.group(3)), s)
-    return re.sub(r'\[\[(.*?)\|\|(.*?)\]\]',
-                  lambda m: '<span data-l="zh">%s</span><span data-l="en">%s</span>' % (m.group(1), m.group(2)), s, flags=re.S)
+    s = re.sub(
+        r'([a-z][\w-]*)="\[\[(.*?)\|\|(.*?)\]\]"',
+        lambda m: '%s="%s" data-%s-zh="%s" data-%s-en="%s"'
+        % (m.group(1), m.group(3), m.group(1), m.group(2), m.group(1), m.group(3)),
+        s,
+    )
+    return re.sub(
+        r'\[\[(.*?)\|\|(.*?)\]\]',
+        lambda m: '<span data-l="zh">%s</span><span data-l="en">%s</span>' % (m.group(1), m.group(2)),
+        s,
+        flags=re.S,
+    )
 
 
 def esc(s):
@@ -42,45 +61,123 @@ def pic(key, zh, en, sizes='(max-width:1040px) 100vw, 1100px', eager=False, cls=
     big = m['files'][str(ws[-1])]
     load = 'fetchpriority="high"' if eager else 'loading="lazy"'
     c = ' class="%s"' % cls if cls else ''
-    return ('<img%s src="@@A:%s@@" srcset="%s" sizes="%s" width="%d" height="%d" %s %s decoding="async">'
-            % (c, big, srcset, sizes, m['w'], m['h'], alt(zh, en), load))
+    return (
+        '<img%s src="@@A:%s@@" srcset="%s" sizes="%s" width="%d" height="%d" %s %s decoding="async">'
+        % (c, big, srcset, sizes, m['w'], m['h'], alt(zh, en), load)
+    )
 
 
-def vid(key, zh, en):
+def vid(key, zh, en, cls=''):
     m = MAN['video'][key]
     p = MAN['img'][m['poster']]
     pw = sorted(int(w) for w in p['files'])[-1]
-    return ('<video muted%s playsinline preload="none" width="%d" height="%d" style="--ar:%d/%d" poster="@@A:%s@@" aria-label="%s" data-alt-zh="%s" data-alt-en="%s"><source src="@@A:%s@@" type="video/mp4"></video>'
-            % ('', m['w'], m['h'], m['w'], m['h'], p['files'][str(pw)], esc(en), esc(zh), esc(en), m['file']))
+    c = ' class="%s"' % cls if cls else ''
+    return (
+        '<video muted playsinline preload="none" width="%d" height="%d" style="--ar:%d/%d" poster="@@A:%s@@" aria-label="%s" data-alt-zh="%s" data-alt-en="%s"%s><source src="@@A:%s@@" type="video/mp4"></video>'
+        % (m['w'], m['h'], m['w'], m['h'], p['files'][str(pw)], esc(en), esc(zh), esc(en), c, m['file'])
+    )
 
 
-REAL = '[[真实截图||Real capture]]'
-REALV = '[[真实录屏||Real recording]]'
-ILL = '[[示意||Illustration]]'
+def S(name):
+    v = CFG['text'][name]
+    return '[[%s||%s]]' % (v[0], v[1])
 
 
-def media(label, inner, chip=REAL, narrow=False, ill=False):
-    """Frame for a capture or an illustration: a caption row above, never fake window chrome."""
-    return ('<div class="media%s%s"><div class="mhead"><span class="ml">%s</span><span class="chip %s">%s</span></div><div class="mbody">%s</div></div>'
-            % (' narrow' if narrow else '', ' ill' if ill else '', label, 'ill' if ill else 'real', ILL if ill else chip, inner))
+def release_label(tag):
+    tag = str(tag)
+    if re.fullmatch(r'v?\d+(?:\.\d+)*', tag):
+        return tag if tag.startswith('v') else 'v' + tag
+    return tag
 
 
-HERO_TILES = ['hx-kettle', 'hx-latte', 'hx-forest', 'hx-ribbon']
+def stable_releases(rows):
+    """Published releases only. Drafts and prereleases are not site content."""
+    stable = []
+    for row in rows:
+        if row.get('draft') or row.get('prerelease'):
+            continue
+        if not row.get('tag_name') or not row.get('published_at'):
+            continue
+        stable.append(row)
+    return stable
+
+
+def dmg_asset(row):
+    for asset in row.get('assets') or []:
+        url = asset.get('browser_download_url') or ''
+        name = asset.get('name') or ''
+        if name.endswith('.dmg') and url:
+            return url
+    return ''
+
+
+def fetch_github():
+    """Stable release rows plus the newest app DMG. Falls back offline.
+
+    Scans the recent release list, not only the newest entry, so a draft,
+    prerelease, or non-app release does not hide the current installer.
+    """
+    global DMG, CFG
+    releases = list(FALLBACK_RELEASES)
+    dmg = DMG_FALLBACK
+    try:
+        req = urllib.request.Request(
+            'https://api.github.com/repos/LeonEthan/molly-design/releases?per_page=100',
+            headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'molly-design-website-build'},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read())
+        stable = stable_releases(data)
+        rows = []
+        for row in stable:
+            rows.append((release_label(row['tag_name']), row['published_at'][:10]))
+            if len(rows) == 3:
+                break
+        if rows:
+            releases = rows
+        for row in stable:
+            found = dmg_asset(row)
+            if found:
+                dmg = found
+                break
+    except Exception:
+        pass
+    DMG = dmg
+    CFG = json.loads((HERE / 'slots.json').read_text().replace('@@DMG@@', DMG))
+    return releases
+
+
+def hero_h1():
+    zh, en = CFG['text']['h1']
+    zh = zh.replace('接着改。', '<span class="nobr">接着改。</span>')
+    return '[[%s||%s]]' % (zh, en)
+
+
+def trust_line():
+    a, b = CFG['text']['trust2'], CFG['text']['trust3']
+    zh = a[0].rstrip('。') + '。' + b[0].rstrip('。') + '。'
+    en = a[1].rstrip('.') + '. ' + b[1].rstrip('.') + '.'
+    return '[[%s||%s]]' % (zh, en)
+
 
 def scene_asset(key):
     m = MAN['img'][key]
     ws = sorted(int(w) for w in m['files'])
     srcset = ', '.join('@@A:%s@@ %dw' % (m['files'][str(w)], w) for w in ws)
-    return '<img data-scene="%s" src="@@A:%s@@" srcset="%s" sizes="(max-width:640px) 500px, 800px" width="%d" height="%d" alt="" aria-hidden="true" fetchpriority="low" decoding="async">' % (key, m['files'][str(ws[0])], srcset, m['w'], m['h'])
+    return (
+        '<img data-scene="%s" src="@@A:%s@@" srcset="%s" sizes="(max-width:640px) 500px, 800px" width="%d" height="%d" alt="" aria-hidden="true" fetchpriority="low" decoding="async">'
+        % (key, m['files'][str(ws[0])], srcset, m['w'], m['h'])
+    )
 
 
 def hero_stage():
-    assets = ''.join(scene_asset(k) for k in ['scene-plate', 'scene-kettle', 'scene-kettle-shadow', 'scene-mug', 'scene-mug-shadow'])
-    return f'''<div class="hs-wrap">
-    <div class="hs-amb" aria-hidden="true"><i class="a1"></i><i class="a2"></i><i class="a3"></i></div>
+    assets = ''.join(
+        scene_asset(k)
+        for k in ('scene-plate', 'scene-kettle', 'scene-kettle-shadow', 'scene-mug', 'scene-mug-shadow')
+    )
+    return f'''<div class="stage">
     <div class="hs" role="img" aria-label="[[示意动画：产品照片中的茶壶被单击选中、移动和缩放，再重新生成一个鼠尾草绿马克杯。背景和文字保持原位。马克杯由图像生成，抠图与背景修补为示意制作。||Illustration: the kettle in a product photo is clicked to select, moved and resized, then regenerated into a sage-green mug. Background and text stay in place. The mug is image-generated; cutouts and the repaired background are crafted for this illustration.]]">
       <div class="hs-fit"><div class="hs-scene">
-        <div class="hs-glow"></div>
         <div class="hs-board">
           <canvas class="hs-photo" width="1000" height="1080" aria-hidden="true"></canvas>
           <div class="hs-assets" hidden>{assets}</div>
@@ -98,108 +195,7 @@ def hero_stage():
         </div>
       </div></div>
     </div>
-    <p class="hs-note">[[示意动画||Illustration]]</p>
   </div>'''
-
-
-def sh(kicker, h2, lead=None):
-    s = '<div class="sh"><p class="kicker">%s</p><h2>%s</h2>' % (kicker, h2)
-    return s + ('<p class="lead">%s</p>' % lead if lead else '') + '</div>'
-
-
-def S(name):
-    """bilingual text from slots.json"""
-    v = CFG['text'][name]
-    return '[[%s||%s]]' % (v[0], v[1])
-
-
-def head():
-    desc_en = 'An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: real text, shapes and images you can keep editing.'
-    desc_zh = '给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的稿子，文字、形状、图片都能接着改。'
-    title = 'Molly Design · AI design for graphic designers, in layers you can edit'
-    jsonld = json.dumps({"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "Molly Design",
-                         "applicationCategory": "DesignApplication", "operatingSystem": "macOS",
-                         "url": SITE + '/', "downloadUrl": DMG, "image": SITE + '/og.png', "description": desc_en,
-                         "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}, ensure_ascii=False)
-    return f'''<!doctype html>
-<html lang="zh-CN" data-lang="zh">
-<head>
-<meta charset="utf-8">
-<!-- SITE_URL={SITE} -->
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title}</title>
-<meta name="description" content="{desc_en} {desc_zh}">
-<meta name="theme-color" content="#0e1711">
-<meta name="color-scheme" content="dark light">
-<link rel="canonical" href="{SITE}/">
-<link rel="icon" href="@@R:favicon.ico@@" sizes="32x32">
-<link rel="icon" href="@@R:favicon.svg@@" type="image/svg+xml">
-<link rel="apple-touch-icon" href="@@R:apple-touch-icon.png@@">
-<link rel="manifest" href="@@R:site.webmanifest@@">
-<link rel="preload" href="@@A:fonts/geist.woff2@@" as="font" type="font/woff2" crossorigin>
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="Molly Design">
-<meta property="og:title" content="{title}">
-<meta property="og:description" content="{desc_en}">
-<meta property="og:url" content="{SITE}/">
-<meta property="og:image" content="{SITE}/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Molly Design: AI design for graphic designers">
-<meta property="og:locale" content="zh_CN">
-<meta property="og:locale:alternate" content="en_US">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="{title}">
-<meta name="twitter:description" content="{desc_en}">
-<meta name="twitter:image" content="{SITE}/og.png">
-<script type="application/ld+json">{jsonld}</script>
-<script>(function(){{var l=null;try{{l=localStorage.getItem('molly-lang')}}catch(e){{}}if(l!=='zh'&&l!=='en')l=/^zh/i.test(navigator.language||'')?'zh':'en';var r=document.documentElement;r.setAttribute('data-lang',l);r.lang=l==='zh'?'zh-CN':'en'}})();</script>
-<style>
-{(HERE / 'style.css').read_text()}
-</style>
-</head>
-'''
-
-
-def words(zh, en):
-    """Brief text split into spans so the illustration can 'type' it in on reveal."""
-    def wrap(parts, sep):
-        return sep.join('<span style="--i:%d">%s</span>' % (i, w) for i, w in enumerate(parts))
-    zh_parts = re.findall(r'[^，。？]+[，。？]?', zh)
-    return '<span data-l="zh">%s</span><span data-l="en">%s</span>' % (wrap(zh_parts, ''), wrap(en.split(' '), ' '))
-
-
-SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0l-6 6m6-6l6 6"/></svg>'
-
-
-def ill_brief():
-    sizes = [('auto', '自动', 'Auto size', '按简报', 'by brief'), ('sq', '方图', 'Square', '1080×1080', '1080×1080'),
-             ('po', '竖版', 'Portrait', '1080×1350', '1080×1350'), ('st', '竖屏', 'Story', '1080×1920', '1080×1920'),
-             ('la', '横版', 'Landscape', '1920×1080', '1920×1080'), ('lo', '长图', 'Long image', '1080×2400', '1080×2400')]
-    cells = ''.join('<span class="%s"><i class="r-%s"></i><b>[[%s||%s]]</b><em>[[%s||%s]]</em></span>'
-                    % ('on' if k == 'po' else '', k, zh, en, mz, me) for k, zh, en, mz, me in sizes)
-    text = words('给海边的周末陶器市集做一张海报，温暖、安静、有手作感。先找几张参考，给我看两三个方向？',
-                 'A poster for a weekend ceramics market by the harbour. Warm, calm and handmade. Find a few references and show me a couple of directions first?')
-    return f'''<div class="ill-c ib" role="img" aria-label="[[示意：新建设计的输入框里写着一句简报，下面是尺寸预设：按简报自动、方图、竖版、竖屏、横版和长图。||Illustration: the new-design box with a one-line brief, above the size presets: auto by brief, square, portrait, story, landscape and long image.]]">
-        <div class="ib-box"><p class="ib-text">{text}<i class="ib-caret"></i></p>
-          <div class="ib-row"><span class="ib-plus">+</span><span class="ib-chip"><i></i>1080 × 1350</span><span class="ib-send">{SEND}</span></div></div>
-        <div class="ib-sizes">{cells}</div>
-      </div>'''
-
-
-def ill_export():
-    files = ''.join('<li style="--i:%d"><i class="fi"></i><span>poster@%dx.png</span><em>%d × %d</em><b>%d×</b></li>' % (i, k, 1080 * k, 1350 * k, k)
-                    for i, k in enumerate([1, 2, 3]))
-    vers = ''.join('<span class="v k%d"><i></i><b>v%d</b></span>' % (i, i) for i in (1, 2, 3))
-    return f'''<div class="ill-c ix" role="img" aria-label="[[示意：可编辑的稿子和保存的版本留在 Mac 上；导出 PNG 或 JPEG，1×、2×、3× 三档，交给客户。||Illustration: the editable file and its saved versions stay on your Mac; the export goes out as PNG or JPEG at 1×, 2× or 3× for the client.]]">
-        <div class="ix-mac"><p class="ix-h">[[留在你的 Mac 上||Stays on your Mac]]</p>
-          <div class="ix-stack">{vers}</div>
-          <p class="ix-s">[[可编辑的稿子 · 已保存的版本||Editable file · saved versions]]</p></div>
-        <div class="ix-go" aria-hidden="true"><span></span><em>[[导出||Export]]</em></div>
-        <div class="ix-out"><p class="ix-h">[[交给客户||For the client]]</p>
-          <p class="ix-fmt"><b>PNG</b><span>JPEG</span></p>
-          <ul>{files}</ul></div>
-      </div>'''
 
 
 ICON = {
@@ -216,12 +212,19 @@ def ic(k):
 
 
 def diagram():
-    rows = ''.join('<li>%s[[%s||%s]]%s</li>' % (ic(k), zh, en, '<em>[[加密||encrypted]]</em>' if k == 'key' else '')
-                   for k, zh, en in [('art', '作品', 'Artwork'), ('ver', '版本', 'Versions'), ('chat', '对话', 'Chats'), ('key', '密钥', 'Keys')])
-    return f'''<div class="dia" role="img" aria-label="[[示意图：作品、版本、对话和加密的密钥都在你的 Mac 上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。||Diagram: artwork, versions, chats and encrypted keys stay on your Mac; model and image requests go straight to the providers you configure; no Molly cloud account.]]">
-        <div class="mhead"><span class="ml">[[数据怎么走||Where things go]]</span><span class="chip ill">[[示意图||Diagram]]</span></div>
-        <div class="dg zz" data-anim>
-          <div class="dg-mac"><p class="dg-h">{ic('mac')}[[你的 Mac||Your Mac]]</p><ul>{rows}</ul></div>
+    rows = ''.join(
+        '<li>%s[[%s||%s]]%s</li>'
+        % (ic(k), zh, en, '<em>[[加密||encrypted]]</em>' if k == 'key' else '')
+        for k, zh, en in [
+            ('art', '作品', 'Artwork'),
+            ('ver', '版本', 'Versions'),
+            ('chat', '对话', 'Chats'),
+            ('key', '密钥', 'Keys'),
+        ]
+    )
+    return f'''<div class="dia" role="img" aria-label="[[示意图：作品、版本、对话和加密的密钥都在你的电脑上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。||Diagram: artwork, versions, chats and encrypted keys stay on your computer; model and image requests go straight to the providers you configure; no Molly cloud account.]]">
+        <div class="dg">
+          <div class="dg-mac"><p class="dg-h">{ic('mac')}[[你的电脑||Your computer]]</p><ul>{rows}</ul></div>
           <div class="dg-link"><span class="ln"><i></i><i></i></span><span class="ln"><i></i><i></i></span><em>[[直接请求||direct]]</em></div>
           <div class="dg-prov"><p class="dg-h">[[你配置的服务商||Providers you configure]]</p><span class="nd"><i></i>[[对话模型||Chat models]]</span><span class="nd"><i></i>[[图片模型||Image models]]</span></div>
         </div>
@@ -229,176 +232,293 @@ def diagram():
       </div>'''
 
 
-GLYPH = [
-    '<svg viewBox="0 0 120 72" aria-hidden="true"><text x="6" y="54" class="g-t">Aa</text><path class="g-c" d="M79 16v44"/><rect class="g-s" x="2" y="10" width="88" height="56" rx="3"/><rect class="g-h" x="-1" y="7" width="6" height="6"/><rect class="g-h" x="87" y="63" width="6" height="6"/></svg>',
-    '<svg viewBox="0 0 120 72" aria-hidden="true"><circle class="g-f" cx="34" cy="38" r="22"/><path class="g-l" d="M58 60L112 14"/><rect class="g-h" x="55" y="57" width="6" height="6"/><rect class="g-h" x="109" y="11" width="6" height="6"/><circle class="g-o" cx="34" cy="38" r="22"/></svg>',
-    '<svg viewBox="0 0 120 72" aria-hidden="true"><rect class="g-b" x="30" y="4" width="70" height="44" rx="5"/><rect class="g-b" x="20" y="14" width="70" height="44" rx="5"/><rect class="g-i" x="10" y="24" width="70" height="44" rx="5"/><path class="g-m" d="M10 58l20-16 14 11 10-8 26 21"/></svg>',
-]
+SEND = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5m0 0l-6 6m6-6l6 6"/></svg>'
 
 
-def body():
-    t = CFG['text']
-    def tile(w):
-        return ('<figure class="wt"><div class="art">%s</div><figcaption><b>[[%s||%s]]</b>[[%s||%s]]</figcaption></figure>'
-                % (pic(w['img'], w['alt'][0], w['alt'][1], sizes='(max-width:640px) 90vw, (max-width:1040px) 45vw, 360px'),
-                   w['title'][0], w['title'][1], w['cap'][0], w['cap'][1]))
-    wall = ''.join('<div class="wcol">%s</div>' % ''.join(tile(w) for w in col) for col in CFG['wall'])
-    trio = ''.join(
-        '<figure><p class="tn" aria-hidden="true">0%d</p>%s<figcaption><b>[[%s||%s]]</b>[[%s||%s]]</figcaption></figure>'
-        % (i + 1, media('[[%s||%s]]' % tuple(f['bar']), pic(f['img'], f['alt'][0], f['alt'][1], sizes='(max-width:860px) 100vw, 380px')),
-           f['title'][0], f['title'][1], f['cap'][0], f['cap'][1]) for i, f in enumerate(CFG['trio']))
+def words(zh, en):
+    def wrap(parts, sep):
+        return sep.join('<span style="--i:%d">%s</span>' % (i, w) for i, w in enumerate(parts))
 
-    ills = {'brief': ('[[新建设计||New design]]', ill_brief()), 'export': ('[[导出||Export]]', ill_export())}
+    zh_parts = re.findall(r'[^，。？]+[，。？]?', zh)
+    return '<span data-l="zh">%s</span><span data-l="en">%s</span>' % (wrap(zh_parts, ''), wrap(en.split(' '), ' '))
 
-    def wf(n, key):
-        w = CFG['wf'][key]
-        if key in ills:
-            shot = media(ills[key][0], ills[key][1], ill=True)
-        else:
-            vis = vid(w['video'], *w['alt']) if w.get('video') else pic(w['img'], *w['alt'], sizes='(max-width:1040px) 100vw, 680px')
-            shot = media('[[%s||%s]]' % tuple(w['bar']), vis)
-        return f'''
-    <div class="wf" id="w{n}">
-      <div class="wf-t"><div class="n" aria-hidden="true"><span>0{n}</span><i></i></div><h3>[[{w['h'][0]}||{w['h'][1]}]]</h3><p class="why">[[{w['why'][0]}||{w['why'][1]}]]</p>
-        <p>[[{w['p'][0]}||{w['p'][1]}]]</p></div>
-      {shot}
-    </div>'''
 
-    demo = CFG['demo']
-    tabs = ''.join('<button type="button" role="tab" id="t-%s" aria-controls="%s" aria-selected="%s" tabindex="%s"><b>%s</b>[[%s||%s]]</button>'
-                   % (d['id'], d['id'], 'true' if i == 0 else 'false', '0' if i == 0 else '-1', 'AB'[i], d['tab'][0], d['tab'][1])
-                   for i, d in enumerate(demo))
-    panels = ''
-    for i, d in enumerate(demo):
-        vis = vid(d['video'], *d['alt']) if d.get('video') else pic(d['img'], *d['alt'], sizes='(max-width:860px) 100vw, 1100px')
-        label = 'Molly Design · [[%s||%s]]' % tuple(d['tab'])
-        panels += ('<div class="dpanel" role="tabpanel" id="%s" aria-labelledby="t-%s"%s>%s<p class="cap"><b aria-hidden="true">%s</b>[[%s||%s]]</p></div>'
-                   % (d['id'], d['id'], '' if i == 0 else ' hidden', media(label, vis, REALV if d.get('video') else REAL), 'AB'[i], d['cap'][0], d['cap'][1]))
+def ill_brief():
+    sizes = [
+        ('auto', '自动', 'Auto size', '按简报', 'by brief'),
+        ('sq', '方图', 'Square', '1080×1080', '1080×1080'),
+        ('po', '竖版', 'Portrait', '1080×1350', '1080×1350'),
+        ('st', '竖屏', 'Story', '1080×1920', '1080×1920'),
+        ('la', '横版', 'Landscape', '1920×1080', '1920×1080'),
+        ('lo', '长图', 'Long image', '1080×2400', '1080×2400'),
+    ]
+    cells = ''.join(
+        '<span class="%s"><i class="r-%s"></i><b>[[%s||%s]]</b><em>[[%s||%s]]</em></span>'
+        % ('on' if k == 'po' else '', k, zh, en, mz, me)
+        for k, zh, en, mz, me in sizes
+    )
+    text = words(
+        '给海边的周末陶器市集做一张海报，温暖、安静、有手作感。先找几张参考，给我看两三个方向？',
+        'A poster for a weekend ceramics market by the harbour. Warm, calm and handmade. Find a few references and show me a couple of directions first?',
+    )
+    return f'''<div class="ill-c ib" role="img" aria-label="[[示意：新建设计的输入框里写着一句简报，下面是尺寸预设：按简报自动、方图、竖版、竖屏、横版和长图。||Illustration: the new-design box with a one-line brief, above the size presets: auto by brief, square, portrait, story, landscape and long image.]]">
+        <div class="ib-box"><p class="ib-text">{text}<i class="ib-caret"></i></p>
+          <div class="ib-row"><span class="ib-plus">+</span><span class="ib-chip"><i></i>1080 × 1350</span><span class="ib-send">{SEND}</span></div></div>
+        <div class="ib-sizes">{cells}</div>
+      </div>'''
 
-    trust = [('原生', 'Native', S('trust1'), '<circle cx="12" cy="9" r="5"/><path d="M8.5 13.5L7 21l5-3 5 3-1.5-7.5"/>'),
-             ('本地', 'Local', S('trust2'), '<rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M5 14l2-8h10l2 8M17 17h.01"/>'),
-             ('自带密钥', 'Your keys', S('trust3'), '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/>'),
-             ('更新', 'Updates', S('trust4'), '<path d="M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 3v4h-4M6 21v-4h4"/>')]
-    trust_li = ''.join('<li><span class="ti"><svg viewBox="0 0 24 24" aria-hidden="true">%s</svg></span><div><em>[[%s||%s]]</em><span>%s</span></div></li>'
-                       % (svg, zh, en, txt) for zh, en, txt, svg in trust)
 
-    cards1 = [('文字是真文字', 'Real text', 'p1_b1'), ('形状是矢量', 'Real shapes', 'p1_b2'), ('图片只占一层', 'The image is one layer', 'p1_b3')]
-    grid1 = ''.join('<div class="card gc"><div class="gl">%s</div><p class="num">0%d</p><h3 class="h4">[[%s||%s]]</h3><p>%s</p></div>'
-                    % (GLYPH[i], i + 1, zh, en, S(k)) for i, (zh, en, k) in enumerate(cards1))
+def wf_shot(key):
+    w = CFG['wf'][key]
+    if key == 'brief':
+        return ill_brief()
+    if key == 'export':
+        d = CFG['demo'][1]
+        return pic(d['img'], d['alt'][0], d['alt'][1], sizes='(max-width:1040px) 100vw, 900px')
+    return pic(w['img'], w['alt'][0], w['alt'][1], sizes='(max-width:1040px) 100vw, 900px')
 
-    faq = ''.join('<details><summary><i>%02d</i><span>[[%s||%s]]</span><b class="pm" aria-hidden="true"></b></summary><div class="fa"><p>[[%s||%s]]</p></div></details>'
-                  % ((n + 1,) + tuple(q)) for n, q in enumerate(CFG['faq']))
-    fc = ''.join('<img class="fc-i c%d" src="@@A:%s@@" width="280" height="280" alt="" aria-hidden="true" loading="lazy" fetchpriority="low" decoding="async">'
-                 % (i, MAN['img'][k]['files']['280']) for i, k in enumerate(HERO_TILES))
+
+def head():
+    desc_en = DESC_EN
+    desc_zh = DESC_ZH
+    title = TITLE_EN
+    jsonld = json.dumps(
+        {
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            'name': 'Molly Design',
+            'applicationCategory': 'DesignApplication',
+            'operatingSystem': 'macOS',
+            'url': SITE + '/',
+            'downloadUrl': DOWNLOAD,
+            'image': SITE + '/og.png',
+            'description': desc_en,
+            'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'USD'},
+        },
+        ensure_ascii=False,
+    )
+    theme_boot = (
+        "(function(){var t=null;try{t=localStorage.getItem('molly-theme')}catch(e){}"
+        "if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';"
+        "document.documentElement.setAttribute('data-theme',t);})();"
+    )
+    lang_boot = (
+        "(function(){var l=null;try{l=localStorage.getItem('molly-lang')}catch(e){}"
+        "if(l!=='zh'&&l!=='en')l=/^zh/i.test(navigator.language||'')?'zh':'en';"
+        "var r=document.documentElement;r.setAttribute('data-lang',l);r.lang=l==='zh'?'zh-CN':'en';"
+        "var t=r.getAttribute('data-title-'+l);if(t)document.title=t;"
+        "var md=document.querySelector('meta[name=description]');var d=r.getAttribute('data-desc-'+l);if(md&&d)md.setAttribute('content',d);})();"
+    )
+    return f'''<!doctype html>
+<html lang="zh-CN" data-lang="zh" data-title-zh="{esc(TITLE_ZH)}" data-title-en="{esc(TITLE_EN)}" data-desc-zh="{esc(DESC_ZH)}" data-desc-en="{esc(DESC_EN)}">
+<head>
+<meta charset="utf-8">
+<!-- SITE_URL={SITE} -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<meta name="description" content="{desc_en} {desc_zh}">
+<meta name="theme-color" content="#f6f1e6">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="{SITE}/">
+<link rel="icon" href="@@R:favicon.ico@@" sizes="32x32">
+<link rel="icon" href="@@R:favicon.svg@@" type="image/svg+xml">
+<link rel="apple-touch-icon" href="@@R:apple-touch-icon.png@@">
+<link rel="manifest" href="@@R:site.webmanifest@@">
+<link rel="preload" href="@@A:fonts/inter.woff2@@" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="@@A:fonts/instrument-serif.woff2@@" as="font" type="font/woff2" crossorigin>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Molly Design">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{desc_en}">
+<meta property="og:url" content="{SITE}/">
+<meta property="og:image" content="{SITE}/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Molly Design: AI design for graphic designers">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:description" content="{desc_en}">
+<meta name="twitter:image" content="{SITE}/og.png">
+<script type="application/ld+json">{jsonld}</script>
+<script>{theme_boot}</script>
+<script>{lang_boot}</script>
+<style>
+{(HERE / 'style.css').read_text()}
+</style>
+</head>
+'''
+
+
+def body(releases):
+    demo = CFG['demo'][0]
+    bullets = ''.join('<li>%s</li>' % S('p1_b%d' % i) for i in (1, 2, 3))
+    rel_rows = ''.join(
+        '<a class="rel-row" href="%s/tag/%s"><b><s></s>%s</b><span class="mono">%s</span></a>'
+        % (RELEASES, tag, tag, date)
+        for tag, date in releases
+    )
+
+    def wall_tile(w, cls=''):
+        return (
+            '<figure class="wt%s"><div class="shot">%s</div><figcaption><b>[[%s||%s]]</b>[[%s||%s]]</figcaption></figure>'
+            % (
+                (' ' + cls) if cls else '',
+                pic(w['img'], w['alt'][0], w['alt'][1], sizes='(max-width:700px) 100vw, 520px'),
+                w['title'][0],
+                w['title'][1],
+                w['cap'][0],
+                w['cap'][1],
+            )
+        )
+
+    by_img = {w['img']: w for col in CFG['wall'] for w in col}
+    wall_html = (
+        '<div class="wall-side">%s<div class="wall-sq">%s%s</div></div>%s%s'
+        % (
+            wall_tile(by_img['s-kv'], 'w-wide'),
+            wall_tile(by_img['s-social']),
+            wall_tile(by_img['s-packaging']),
+            wall_tile(by_img['s-detail'], 'w-tall'),
+            wall_tile(by_img['s-longform'], 'w-tall'),
+        )
+    )
+
+    steps = ''.join(
+        '<button type="button" class="wf-step%s" data-wf="%s" role="tab" aria-selected="%s" tabindex="%s"><i>%02d</i><span>[[%s||%s]]</span></button>'
+        % (' on' if i == 0 else '', k, 'true' if i == 0 else 'false', '0' if i == 0 else '-1', i + 1, CFG['wf'][k]['h'][0], CFG['wf'][k]['h'][1])
+        for i, k in enumerate(WF_KEYS)
+    )
+
+    wf_panels = ''.join(
+        '<div class="wf-panel%s" data-wf="%s" role="tabpanel"%s><h3>[[%s||%s]]</h3><p>[[%s||%s]]</p><div class="shot wf-shot">%s</div></div>'
+        % (
+            ' on' if i == 0 else '',
+            k,
+            '' if i == 0 else ' hidden',
+            CFG['wf'][k]['why'][0],
+            CFG['wf'][k]['why'][1],
+            CFG['wf'][k]['p'][0],
+            CFG['wf'][k]['p'][1],
+            wf_shot(k),
+        )
+        for i, k in enumerate(WF_KEYS)
+    )
+
+    faq = ''.join(
+        '<details><summary><span>[[%s||%s]]</span><b class="pm" aria-hidden="true"></b></summary><div class="fa"><p>[[%s||%s]]</p></div></details>'
+        % (q[0], q[1], q[2], q[3])
+        for q in CFG['faq']
+    )
 
     return f'''<body>
 <a class="skip" href="#main">[[跳到正文||Skip to content]]</a>
 <header class="top" id="top">
-  <div class="wrap">
+  <div class="wrap top-in">
     <a class="brand" href="#main" aria-label="Molly Design"><img src="@@A:brand/molly-wordmark.svg@@" width="91" height="30" alt="Molly Design"></a>
+    <div class="nav-cluster">
     <nav class="links" id="nav" aria-label="[[主导航||Main]]">
       <a href="#demo">[[演示||Demo]]</a>
-      <a href="#story">[[工作流程||Workflow]]</a>
-      <a href="#why">[[为什么是 Molly||Why Molly]]</a>
-      <a href="#cases">[[作品||Work]]</a>
+      <a href="#workflow">[[工作流程||Workflow]]</a>
+      <a href="#work">[[作品||Work]]</a>
+      <a href="#releases">[[更新||Releases]]</a>
       <a href="#faq">[[常见问题||FAQ]]</a>
     </nav>
-    <a class="nav-github" href="{GH}" target="_blank" rel="noopener noreferrer" aria-label="{GITHUB_LABEL}" title="{GITHUB_LABEL}">{GITHUB_MARK}</a>
+    <span class="sp"></span>
+    <div class="nav-tools">
     <div class="lang" role="group" aria-label="Language / 语言">
       <button type="button" data-set="zh" lang="zh-CN">中</button>
       <button type="button" data-set="en" lang="en">EN</button>
     </div>
+    <div class="theme" role="group" aria-label="[[主题||Theme]]">
+      <button type="button" data-theme-set="light" aria-label="[[浅色||Light]]">☀</button>
+      <button type="button" data-theme-set="dark" aria-label="[[深色||Dark]]">☾</button>
+    </div>
+    </div>
+    </div>
+    <a class="btn accent nav-dl" href="{DOWNLOAD}">{CTA}</a>
+    <a class="btn ic nav-github" href="{GH}" target="_blank" rel="noopener noreferrer" aria-label="{GITHUB_LABEL}" title="{GITHUB_LABEL}">{GITHUB_MARK}</a>
     <button type="button" class="menu" aria-controls="nav" aria-expanded="false" aria-label="菜单 / Menu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-    <a class="btn" href="{DMG}" download>{DL}{CTA}</a>
   </div>
-  <span class="prog" aria-hidden="true"></span>
 </header>
 
 <main id="main">
-<div class="hero"><div class="hero-amb zz" data-anim aria-hidden="true"><i class="g1"></i><i class="g2"></i></div><div class="wrap hero-in">
-  <div class="hero-copy">
-    <p class="eyebrow">[[Mac 桌面应用||Mac app]]</p>
-    <h1>{S('h1')}</h1>
-    <div class="hero-side">
-      <p class="sub">{S('sub')}</p>
-      <div class="cta-row"><a class="btn lg" href="{DMG}" download>{DL}{CTA}</a><a class="ghost" href="#demo">[[看演示||Watch the demo]]</a></div>
-      <p class="cta-note">{S('note')}</p>
+<header class="hero">
+  <div class="wrap hero-in">
+    <h1 class="serif">{hero_h1()}</h1>
+    <p class="hero-sub">[[拿回一份分层设计稿，改字换图都在同一份里。||Get a layered file back. Retype and swap images in the same file.]]</p>
+    {hero_stage()}
+  </div>
+</header>
+
+<div class="band lime">
+  <div class="wrap strip">
+    <div><h2 class="h3">[[能接着做的源文件||A real working file]]</h2><p>[[真文字、矢量形状和一层图片，都在同一份设计稿里。||Real text, vector shapes and one image layer in the same file.]]</p></div>
+    <div><h2 class="h3">{S('p2_h')}</h2><p>[[几套方向并排摆出来，你选一套，它就按那套出稿。||Pick one of a few directions, and Molly builds that one.]]</p></div>
+    <div><h2 class="h3">[[留在你的电脑上||Stays on your computer]]</h2><p>{trust_line()}</p></div>
+  </div>
+</div>
+
+<section class="feat" id="demo" aria-labelledby="p1-h">
+  <div class="wrap">
+    <div class="fh"><div><h2 class="serif" id="p1-h">{S('p1_h')}</h2></div><p>{S('p1_lead')}</p></div>
+    <ul class="ticks layers-ticks">{bullets}</ul>
+    <div class="shot">{pic(CFG['p1_img'], CFG['p1_alt'][0], CFG['p1_alt'][1], sizes='(max-width:1040px) 100vw, 1100px')}</div>
+    <div class="edit-block" hidden>
+      <p class="cap">[[{demo['cap'][0]}||{demo['cap'][1]}]]</p>
+      {vid(demo['video'], demo['alt'][0], demo['alt'][1], cls='edit-vid')}
     </div>
+    <button type="button" class="more watch-edit">[[看改字录屏 →||Watch the edit →]]</button>
   </div>
-  {hero_stage()}
-</div></div>
+</section>
 
-<div class="trust"><div class="wrap"><ul>{trust_li}</ul></div></div>
-
-<section class="s-dark" id="demo" aria-labelledby="demo-h">
+<section class="feat" id="directions" aria-labelledby="p2-h">
   <div class="wrap">
-    <div class="sh"><p class="kicker">[[产品演示||Product demo]]</p><h2 id="demo-h">{S('demo_h')}</h2><p class="lead">{S('demo_lead')}</p></div>
-    <div class="stage-d">
-      <div class="tabs" role="tablist" aria-label="[[演示片段||Demo clips]]">{tabs}</div>
-      {panels}
+    <div class="fh"><div><h2 class="serif" id="p2-h">{S('p2_h')}</h2></div><p>{S('p2_lead')}</p></div>
+    <div class="shot">{pic('p-research-v7c', CFG['trio'][0]['alt'][0], CFG['trio'][0]['alt'][1], sizes='(max-width:1040px) 100vw, 920px')}</div>
+  </div>
+</section>
+
+<div class="band olive" id="workflow">
+  <section class="feat" aria-labelledby="wf-h">
+    <div class="wrap">
+      <div class="fh"><div><h2 class="serif" id="wf-h">{S('wf_h')}</h2></div><p>{S('wf_lead')}</p></div>
+      <div class="steps" role="tablist" aria-label="[[流程步骤||Workflow steps]]">{steps}</div>
+      <div class="wfbody">{wf_panels}</div>
+      <p class="wf-end">{S('wf_end')}</p>
     </div>
-  </div>
-</section>
+  </section>
+</div>
 
-<section class="s-cream sheet" id="story" aria-labelledby="story-h">
-  <div class="wrap"><div class="sh"><p class="kicker">[[工作流程||Workflow]]</p><h2 id="story-h">{S('wf_h')}</h2><p class="lead">{S('wf_lead')}</p></div></div>
-  <nav class="steps" aria-label="[[流程步骤||Workflow steps]]"><div class="wrap">
-    <a href="#w1"><b>1</b>[[写简报||Brief]]</a><a href="#w2"><b>2</b>[[找参考||References]]</a><a href="#w3"><b>3</b>[[挑方向||Direction]]</a><a href="#w4"><b>4</b>[[落成图层||Layers]]</a><a href="#w5"><b>5</b>[[客户回修||Revisions]]</a><a href="#w6"><b>6</b>[[导出交付||Export]]</a>
-  </div><span class="fill" aria-hidden="true"></span></nav>
-  <div class="wrap wfs">
-    {wf(1, 'brief')}{wf(2, 'research')}{wf(3, 'options')}{wf(4, 'layers')}{wf(5, 'edit')}{wf(6, 'export')}
-    <p class="wf-end"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 0114-5.3M20 12a8 8 0 01-14 5.3M18 3v4h-4M6 21v-4h4"/></svg><span>{S('wf_end')}</span></p>
-  </div>
-</section>
-
-<section class="s-dark sheet" id="why" aria-labelledby="p1-h">
+<section class="feat" id="export" aria-labelledby="export-h">
   <div class="wrap">
-    <div class="sh"><p class="kicker">[[为什么是 Molly · 分层||Why Molly · Layers]]</p><h2 id="p1-h">{S('p1_h')}</h2><p class="lead">{S('p1_lead')}</p></div>
-    <div class="pillar-shot">{media('Molly Design · [[图层||Layers]]', pic(CFG['p1_img'], *CFG['p1_alt']))}</div>
-    <div class="grid3">{grid1}</div>
-  </div>
-</section>
-
-<section class="s-cream sheet" aria-labelledby="p2-h">
-  <div class="wrap">
-    <div class="sh"><p class="kicker">[[为什么是 Molly · 自主探索||Why Molly · Explores first]]</p><h2 id="p2-h">{S('p2_h')}</h2><p class="lead">{S('p2_lead')}</p></div>
-    <div class="trio">{trio}</div>
-  </div>
-</section>
-
-<section class="s-dark sheet" aria-labelledby="p3-h">
-  <div class="wrap">
-    <div class="sh"><p class="kicker">[[为什么是 Molly · 留在本机||Why Molly · On your Mac]]</p><h2 id="p3-h">{S('p3_h')}</h2><p class="lead">{S('p3_lead')}</p></div>
+    <div class="fh"><div><h2 class="serif" id="export-h">[[{CFG['wf']['export']['why'][0]}||{CFG['wf']['export']['why'][1]}]]</h2></div><p>[[{CFG['wf']['export']['p'][0]}||{CFG['wf']['export']['p'][1]}]]</p></div>
+    <div class="shot">{pic(CFG['demo'][1]['img'], CFG['demo'][1]['alt'][0], CFG['demo'][1]['alt'][1], sizes='(max-width:1040px) 100vw, 1100px')}</div>
     <div class="local">
+      <div><h3 class="h4">{S('p3_h')}</h3><p class="lead-sm">{S('p3_lead')}</p><ul class="ticks">{''.join('<li>%s</li>' % S('p3_l%d' % i) for i in range(1, 5))}</ul></div>
       {diagram()}
-      <ul class="ticks">
-        <li>{S('p3_l1')}</li><li>{S('p3_l2')}</li><li>{S('p3_l3')}</li><li>{S('p3_l4')}</li>
-      </ul>
     </div>
   </div>
 </section>
 
-<section class="s-cream sheet" id="cases" aria-labelledby="cases-h">
+<section class="feat" id="work" aria-labelledby="cases-h">
   <div class="wrap">
-    <div class="sh sh-row"><div><p class="kicker">[[作品||Work]]</p><h2 id="cases-h">{S('cases_h')}</h2></div><p class="lead">{S('cases_lead')}<span class="chip real">[[Molly 导出原图||Exported from Molly]]</span></p></div>
-    <div class="wall">{wall}</div>
+    <div class="fh"><div><h2 class="serif" id="cases-h">{S('cases_h')}</h2></div><p>{S('cases_lead')}</p></div>
+    <div class="wall">{wall_html}</div>
   </div>
 </section>
 
-<section class="s-dark sheet" aria-labelledby="cmp-h">
+<section class="feat" id="releases" aria-labelledby="rel-h">
   <div class="wrap">
-    <div class="sh"><p class="kicker">[[对比||Compare]]</p><h2 id="cmp-h">[[和一键出图的工具比||Compared with one-shot image tools]]</h2></div>
-    <table class="cmp">
-      <thead><tr><th scope="col">[[维度||Aspect]]</th><th scope="col">[[一键出图工具（泛指）||One-shot image tools]]</th><th scope="col"><span>Molly Design</span></th></tr></thead>
-      <tbody>{''.join('<tr><td>[[%s||%s]]</td><td><span class="mh" aria-hidden="true">[[一键出图工具||One-shot tools]]</span>[[%s||%s]]</td><td><span class="mh" aria-hidden="true">Molly Design</span>[[%s||%s]]</td></tr>' % tuple(r) for r in CFG['cmp'])}</tbody>
-    </table>
-    <p class="fine">[[表格概括的是常见产品形态，不对应任何一家的完整功能。||This sketches common product types, not any one vendor's full feature set.]]</p>
+    <div class="fh fh-rel"><div><h2 class="serif" id="rel-h">[[最近更新||Recent updates]]</h2></div><a class="more" href="{RELEASES}">[[全部版本 →||All releases →]]</a></div>
+    <div class="rel">{rel_rows}</div>
   </div>
 </section>
 
-<section class="s-forest sheet" aria-labelledby="m-h">
+<section class="feat" id="models" aria-labelledby="m-h">
   <div class="wrap">
-    <div class="sh"><p class="kicker">[[模型与密钥||Models &amp; keys]]</p><h2 id="m-h">[[用你自己的模型||Bring your own models]]</h2><p class="lead">{S('m_lead')}</p></div>
+    <div class="fh"><div><h2 class="serif" id="m-h">[[用你自己的模型||Bring your own models]]</h2></div><p>{S('m_lead')}</p></div>
     <div class="grid3 mods">
       <div class="card"><p class="num">01</p><h3 class="h4">OpenAI</h3><p>[[用 ChatGPT 登录，或者粘贴 API key。||Sign in with ChatGPT or paste an API key.]]</p></div>
       <div class="card"><p class="num">02</p><h3 class="h4">Kimi Code</h3><p>[[会员 API key，或设备码登录。||Membership API key or device-code sign-in.]]</p></div>
@@ -409,36 +529,34 @@ def body():
   </div>
 </section>
 
-<section class="s-cream sheet" id="faq" aria-labelledby="faq-h">
-  <div class="wrap faq-grid">
-    <div class="faq-side"><div class="sh"><p class="kicker">[[常见问题||FAQ]]</p><h2 id="faq-h">[[常见问题||Common questions]]</h2></div>
-      <p class="faq-more">[[没找到答案？||Didn’t find your answer?]] <a href="{GH}/issues">[[在 GitHub 上提问||Ask on GitHub]] ↗</a></p></div>
+<section class="feat" id="faq" aria-labelledby="faq-h">
+  <div class="wrap faq-wrap">
+    <h2 class="serif" id="faq-h">[[常见问题||FAQ]]</h2>
     <div class="faq">{faq}</div>
   </div>
 </section>
 
-<section class="final sheet" aria-labelledby="final-h">
-  <div class="fc zz" data-anim aria-hidden="true">{fc}</div>
-  <div class="wrap">
-    <p class="kicker">Molly Design</p>
-    <h2 id="final-h">[[在你的 Mac 上试试||Try it on your Mac]]</h2>
-    <p>{S('final_p')}</p>
-    <div class="cta-row"><a class="btn lg" href="{DMG}" download>{DL}{CTA}</a></div>
-    <p class="links2"><a href="{GH}">[[GitHub 源码||Source on GitHub]]</a><a href="{GH}/issues">[[反馈问题||Report an issue]]</a></p>
-  </div>
-</section>
-</main>
-
-<footer>
-  <div class="wrap">
-    <div class="ft-top">
-      <div class="ft-b"><img src="@@A:brand/molly-wordmark.svg@@" width="79" height="26" alt="Molly Design" loading="lazy"><p>[[给平面设计师的 Mac AI 设计工具。||AI design for graphic designers, on the Mac.]]</p></div>
-      <nav aria-label="[[页脚||Footer]]"><a href="{DMG}" download>[[下载 macOS 版||Download for macOS]]</a><a class="footer-github" href="{GH}" target="_blank" rel="noopener noreferrer">{GITHUB_MARK}<span>[[GitHub||GitHub]]</span></a><a href="{GH}/issues">Issues</a></nav>
+<div class="band olive end">
+  <section class="close" aria-labelledby="final-h">
+    <div class="wrap">
+      <h2 class="serif" id="final-h">[[从<em>下一份需求</em>开始。||Start with your <em>next brief.</em>]]</h2>
+      <p>{S('final_p')}</p>
+      <div class="cta-row">
+        <a class="btn accent" href="{DOWNLOAD}">{DL}{CTA}</a>
+        <a class="btn ghost" href="{GH}" target="_blank" rel="noopener noreferrer">{CTA_GH}</a>
+      </div>
     </div>
-    <small>[[基于 Lody 构建；Bento 等组件保留各自的许可。||Built on Lody. Bento and other components keep their own licenses.]]</small>
-    <img class="ft-mark" src="@@A:brand/molly-wordmark.svg@@" width="1747" height="576" alt="" aria-hidden="true" loading="lazy">
-  </div>
-</footer>
+  </section>
+  <footer>
+    <div class="wrap ft">
+      <div><img src="@@A:brand/molly-wordmark.svg@@" width="79" height="26" alt="Molly Design" loading="lazy"><p class="ft-copy">© 2026 Molly Design</p></div>
+      <div><p class="ft-h">[[产品||Product]]</p><a href="#demo">[[图层||Layers]]</a><a href="#directions">[[方向||Directions]]</a><a href="#export">[[导出||Export]]</a></div>
+      <div><p class="ft-h">[[资源||Resources]]</p><a href="#releases">[[更新||Releases]]</a><a href="#faq">[[常见问题||FAQ]]</a></div>
+      <div><p class="ft-h">[[社区||Community]]</p><a class="footer-github" href="{GH}" target="_blank" rel="noopener noreferrer">{GITHUB_MARK}<span>GitHub</span></a></div>
+    </div>
+  </footer>
+</div>
+</main>
 <script>
 {(HERE / 'site.js').read_text()}
 </script>
@@ -448,18 +566,16 @@ def body():
 
 
 def build():
-    html = pairs(head() + body())
+    releases = fetch_github()
+    html = pairs(head() + body(releases))
     if re.search(r'ph-tag|ph-block|placeholder|占位', html, re.I):
         sys.exit('placeholder markup left in page')
-    if RELEASE_PAGE.search(html):
-        sys.exit('release-page URL left in page; downloads must use DMG')
     used = sorted(set(re.findall(r'@@A:([^@]+)@@', html)))
     roots = sorted(set(re.findall(r'@@R:([^@]+)@@', html)))
     for u in used:
         if not (SRC / u).exists():
             sys.exit('missing asset ' + u)
 
-    # dist/: only used assets, content-hashed under /assets/, root files unhashed
     SITE_DIR.mkdir(exist_ok=True)
     for c in SITE_DIR.iterdir():
         shutil.rmtree(c) if c.is_dir() else c.unlink()
@@ -480,12 +596,12 @@ def build():
 
     nf = (HERE / '404.html').read_text()
     nf = re.sub(r'@@A:([^@]+)@@', lambda m: amap.get(m.group(1)) or sys.exit('404 uses unshipped ' + m.group(1)), nf)
-    nf = nf.replace('@@DMG@@', DMG)
-    if RELEASE_PAGE.search(nf):
-        sys.exit('release-page URL left in 404')
+    nf = nf.replace('@@LATEST@@', DOWNLOAD)
     (SITE_DIR / '404.html').write_text(nf, encoding='utf-8')
     (SITE_DIR / 'robots.txt').write_text('User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n' % SITE)
-    (SITE_DIR / 'sitemap.xml').write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>%s/</loc></url>\n</urlset>\n' % SITE)
+    (SITE_DIR / 'sitemap.xml').write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>%s/</loc></url>\n</urlset>\n' % SITE
+    )
     shutil.copyfile(HERE / '_headers', SITE_DIR / '_headers')
     print('dist/index.html', len(s.encode()), 'sha256', hashlib.sha256(s.encode()).hexdigest(), 'assets', len(used))
 

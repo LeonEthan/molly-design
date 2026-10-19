@@ -5,22 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Page not found · Molly Design</title>
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#0e1711">
+<meta name="theme-color" content="#f6f1e6">
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<script>(function(){var t=null;try{t=localStorage.getItem('molly-theme')}catch(e){}if(t!=='light'&&t!=='dark')t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',t);})();</script>
 <style>
-@font-face{font-family:"Geist";src:url(@@A:fonts/geist.woff2@@) format("woff2");font-weight:300 700;font-display:swap}
+@font-face{font-family:"Inter";src:url(@@A:fonts/inter.woff2@@) format("woff2");font-weight:100 900;font-display:swap}
+:root{--paper:#f6f1e6;--ink:#2b2c22;--muted:#6f6b5b;--accent:#c2dc72;--on-accent:#1a220a}
+[data-theme=dark]{--paper:#191a15;--ink:#ece7da;--muted:#a29d8c;--accent:#bdd97e}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;background:radial-gradient(760px 380px at 50% 120%,rgba(162,240,140,.3),transparent 70%),#0e1711;color:#fcfaee;font:16px/1.65 "Geist",-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif;text-align:center;padding:24px}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--paper);color:var(--ink);font:16px/1.65 Inter,-apple-system,"PingFang SC",sans-serif;text-align:center;padding:24px}
 img{height:32px;width:auto;margin:0 auto 40px;display:block}
-h1{font-weight:420;font-size:clamp(2rem,5vw,3.2rem);letter-spacing:-.03em;line-height:1.1;margin:0}
-p{color:rgba(252,250,238,.76);margin:16px 0 0}
+[data-theme=light] img{filter:invert(1)}
+h1{font-weight:500;font-size:clamp(2rem,5vw,3.2rem);letter-spacing:-.03em;line-height:1.1;margin:0}
+p{color:var(--muted);margin:16px 0 0}
 .row{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:32px}
-a.btn{display:inline-flex;align-items:center;background:#a2f08c;color:#0e1711;text-decoration:none;font-weight:500;padding:13px 24px;border-radius:999px}
-a.btn:hover{background:#b9f6a6}
-a.ghost{display:inline-flex;align-items:center;background:rgba(252,250,238,.1);color:#fcfaee;text-decoration:none;font-weight:500;padding:13px 24px;border-radius:999px}
-a:focus-visible{outline:2px solid #a2f08c;outline-offset:3px}
+a.btn{display:inline-flex;align-items:center;background:var(--accent);color:var(--on-accent);text-decoration:none;font-weight:500;padding:13px 24px;border-radius:999px}
+a.btn:hover{filter:brightness(.96)}
+a.ghost{display:inline-flex;align-items:center;border:1px solid color-mix(in srgb,var(--ink) 25%,transparent);color:var(--ink);text-decoration:none;font-weight:500;padding:13px 24px;border-radius:999px}
+a:focus-visible{outline:2px solid #5a7414;outline-offset:3px}
 </style>
 </head>
 <body>
@@ -30,7 +34,7 @@ a:focus-visible{outline:2px solid #a2f08c;outline-offset:3px}
   <p lang="zh-CN">这个页面不存在，可能链接有误或已移走。</p>
   <div class="row">
     <a class="ghost" href="/">Back to home · 返回首页</a>
-    <a class="btn" href="@@DMG@@" download>Download for macOS · 下载 macOS 版</a>
+    <a class="btn" href="@@LATEST@@">Download for macOS · 下载 macOS 版</a>
   </div>
 </main>
 </body>

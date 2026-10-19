@@ -2,7 +2,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright-core');
 
-const OUT = process.env.ARTIFACT_DIR || '/opt/cursor/artifacts';
+const WEBSITE = path.resolve(__dirname, '..', '..');
+const OUT = process.env.ARTIFACT_DIR || path.join(WEBSITE, 'qa-output', 'captures');
 const BASE = process.env.QA_BASE || 'http://127.0.0.1:8790/';
 
 async function main() {
@@ -67,6 +68,7 @@ async function main() {
     viewport: { width: 1440, height: 900 },
     recordVideo: { dir: OUT, size: { width: 1440, height: 900 } },
   });
+  const recording = recordPage.video();
   await recordPage.addInitScript(() => {
     localStorage.setItem('molly-lang', 'en');
     localStorage.setItem('molly-theme', 'light');
@@ -75,9 +77,7 @@ async function main() {
   await recordPage.locator('.stage').scrollIntoViewIfNeeded();
   await recordPage.waitForTimeout(10000);
   await recordPage.close();
-  const webms = fs.readdirSync(OUT).filter((f) => f.endsWith('.webm'));
-  const latest = webms.sort().pop();
-  if (latest) fs.renameSync(path.join(OUT, latest), videoPath);
+  if (recording) await recording.saveAs(videoPath);
 
   await browser.close();
   console.log('artifacts written to', OUT);

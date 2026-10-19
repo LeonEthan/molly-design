@@ -83,32 +83,62 @@ def S(name):
     return '[[%s||%s]]' % (v[0], v[1])
 
 
+def release_label(tag):
+    tag = str(tag)
+    if re.fullmatch(r'v?\d+(?:\.\d+)*', tag):
+        return tag if tag.startswith('v') else 'v' + tag
+    return tag
+
+
+def stable_releases(rows):
+    """Published releases only. Drafts and prereleases are not site content."""
+    stable = []
+    for row in rows:
+        if row.get('draft') or row.get('prerelease'):
+            continue
+        if not row.get('tag_name') or not row.get('published_at'):
+            continue
+        stable.append(row)
+    return stable
+
+
+def dmg_asset(row):
+    for asset in row.get('assets') or []:
+        url = asset.get('browser_download_url') or ''
+        name = asset.get('name') or ''
+        if name.endswith('.dmg') and url:
+            return url
+    return ''
+
+
 def fetch_github():
-    """Latest release rows plus the current DMG asset URL. Falls back offline."""
+    """Stable release rows plus the newest app DMG. Falls back offline.
+
+    Scans the recent release list, not only the newest entry, so a draft,
+    prerelease, or non-app release does not hide the current installer.
+    """
     global DMG, CFG
     releases = list(FALLBACK_RELEASES)
     dmg = DMG_FALLBACK
     try:
         req = urllib.request.Request(
-            'https://api.github.com/repos/LeonEthan/molly-design/releases?per_page=3',
+            'https://api.github.com/repos/LeonEthan/molly-design/releases?per_page=100',
             headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'molly-design-website-build'},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read())
+        stable = stable_releases(data)
         rows = []
-        for row in data[:3]:
-            tag = row.get('tag_name') or ''
-            published = row.get('published_at') or ''
-            if not tag or not published:
-                continue
-            rows.append((tag if tag.startswith('v') else 'v' + tag, published[:10]))
+        for row in stable:
+            rows.append((release_label(row['tag_name']), row['published_at'][:10]))
+            if len(rows) == 3:
+                break
         if rows:
             releases = rows
-        for asset in (data[0].get('assets') or []) if data else []:
-            url = asset.get('browser_download_url') or ''
-            name = asset.get('name') or ''
-            if name.endswith('.dmg') and url:
-                dmg = url
+        for row in stable:
+            found = dmg_asset(row)
+            if found:
+                dmg = found
                 break
     except Exception:
         pass

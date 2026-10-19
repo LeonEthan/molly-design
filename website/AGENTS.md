@@ -14,11 +14,15 @@
 - Pure migrations and refactors keep `dist/` byte-identical; compare the sha
   printed by `build.py`. Design, copy or animation changes need owner approval
   and a regenerated `docs/COPY.md`.
-- Follow the claims rules in NOTES: no version numbers in visible text; never
-  call the DMG signed; no visible frame captions or hero eyebrow labels (#175).
+- Follow the claims rules in NOTES: never call the DMG signed; no visible
+  frame captions or hero eyebrow labels (#175). Version numbers stay out of
+  visible text except the Recent updates block, which lists GitHub release
+  tags and dates. That exception does not apply to any other section.
 - Nav, closing, and `404.html` link to `DOWNLOAD` (`…/releases/latest`). FAQ
-  `@@DMG@@` links use the latest GitHub release `.dmg` asset, resolved at build
-  time, falling back to the pinned v0.1.1 URL when the API is unavailable.
+  `@@DMG@@` links use the newest stable GitHub release that has a `.dmg`
+  (drafts and prereleases skipped; later releases are scanned), falling back
+  to the pinned v0.1.1 URL when the API is unavailable. The HTML sha depends
+  on that network response and can differ between builds.
 - Commit web-ready derivatives only: WebP images (PNG only for `og.png` and
   icons), no raw captures or masters, each file under 1 MB. Record provenance in
   `assets/manifest.json`.

@@ -22,8 +22,8 @@
    "Built for Apple Silicon · App notarized by Apple"
   ],
   "trust2": [
-   "设计稿、版本和对话都留在你的 Mac 上",
-   "Design files, versions and chats stay on your Mac"
+   "设计稿、版本和对话都留在你的电脑上",
+   "Design files, versions and chats stay on your computer"
   ],
   "trust3": [
    "用你自己的模型和密钥，不需要 Molly 账户",
@@ -82,8 +82,8 @@
    "Before laying anything out, Molly searches for design inspiration in its built-in browser and puts a few directions side by side. Pick one and it builds that one."
   ],
   "p3_h": [
-   "设计稿和密钥都在你的 Mac 上",
-   "Your design files and keys stay on your Mac"
+   "设计稿和密钥都在你的电脑上",
+   "Your design files and keys stay on your computer"
   ],
   "p3_lead": [
    "设计稿、版本和对话都存在本地。模型请求直接发给你自己配置的服务商。",
@@ -103,7 +103,7 @@
   ],
   "p3_l4": [
    "换电脑或备份时，设计稿和数据可以直接拷走；加密保存的密钥可能要在新机器上重新填一次。",
-   "When you back up or move to a new Mac, your design files copy over like any other files. Encrypted keys may need to be entered again on the new machine."
+   "When you back up or move to a new computer, your design files copy over like any other files. Encrypted keys may need to be entered again on the new machine."
   ],
   "cases_h": [
    "都是在 Molly 里做的",
@@ -281,8 +281,8 @@
     "PNG or JPEG at three scales"
    ],
    "p": [
-    "保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的 Mac 上，下一轮接着改。",
-    "Save, then export. Your client gets the exported image. The working file and its saved versions stay on your Mac for the next round."
+    "保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的电脑上，下一轮接着改。",
+    "Save, then export. Your client gets the exported image. The working file and its saved versions stay on your computer for the next round."
    ],
    "bar": [
     "导出",
@@ -478,8 +478,8 @@
    "Where data lives",
    "常在服务商的云端",
    "Often in the vendor’s cloud",
-   "设计稿和对话在你的 Mac 上",
-   "Design files and chats on your Mac"
+   "设计稿和对话在你的电脑上",
+   "Design files and chats on your computer"
   ],
   [
    "导出",
@@ -531,7 +531,7 @@
    "和直接让聊天 AI「做张海报」有什么不同？",
    "How is this different from asking a chat AI for a poster?",
    "在聊天工具里出图，通常拿到的是一张压平的图。Molly 先找设计灵感、并排给几套方向，再把选中的方向做成可编辑的图层：可以对齐、改字、回到旧版本，最后在本机导出 PNG 或 JPEG。",
-   "A chat tool usually hands you one flat image. Molly looks for design inspiration, puts a few directions side by side and builds the one you pick as editable layers. You can align, retype and roll back, then export PNG or JPEG on your Mac."
+   "A chat tool usually hands you one flat image. Molly looks for design inspiration, puts a few directions side by side and builds the one you pick as editable layers. You can align, retype and roll back, then export PNG or JPEG on your computer."
   ],
   [
    "能做印刷稿吗？",

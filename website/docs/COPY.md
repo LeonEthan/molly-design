@@ -6,8 +6,8 @@ Generated from the built `dist/index.html` (rendered in each language) by `scrip
 
 - EN title: Molly Design · AI design for graphic designers, in layers you can edit
 - ZH title: Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改
-- EN description: An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: real text, shapes and images you can keep editing.
-- ZH description: 给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。
+- EN description: An AI design app for graphic designers on your computer. Describe the job and get back a layered file: real text, shapes and images you can keep editing.
+- ZH description: 给平面设计师的 AI 设计工具，在你的电脑上。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。
 
 ## top
 
@@ -109,9 +109,9 @@ Design inspiration first, then directions
 
 Pick one of a few directions, and Molly builds that one.
 
-Stays on your Mac
+Stays on your computer
 
-Design files, versions and chats stay on your Mac. Your own models and keys. No Molly account.
+Design files, versions and chats stay on your computer. Your own models and keys. No Molly account.
 ```
 
 ### 中文
@@ -125,9 +125,9 @@ Design files, versions and chats stay on your Mac. Your own models and keys. No 
 
 几套方向并排摆出来，你选一套，它就按那套出稿。
 
-留在你的 Mac 上
+留在你的电脑上
 
-设计稿、版本和对话都留在你的 Mac 上。用你自己的模型和密钥，不需要 Molly 账户。
+设计稿、版本和对话都留在你的电脑上。用你自己的模型和密钥，不需要 Molly 账户。
 ```
 
 ## demo
@@ -235,7 +235,7 @@ If the client wants a different word, select the text and retype it. For bigger 
 
 PNG or JPEG at three scales
 
-Save, then export. Your client gets the exported image. The working file and its saved versions stay on your Mac for the next round.
+Save, then export. Your client gets the exported image. The working file and its saved versions stay on your computer for the next round.
 
 When the next round of changes comes in, you open the same working file.
 ```
@@ -291,7 +291,7 @@ Molly 把几套方向并排放在画布上，每套附一段思路。你选一�
 
 PNG 或 JPEG，三档倍率
 
-保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的 Mac 上，下一轮接着改。
+保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的电脑上，下一轮接着改。
 
 客户下一轮改稿来了，你打开的还是同一份源文件。
 ```
@@ -303,18 +303,18 @@ PNG 或 JPEG，三档倍率
 ```text
 PNG or JPEG at three scales
 
-Save, then export. Your client gets the exported image. The working file and its saved versions stay on your Mac for the next round.
+Save, then export. Your client gets the exported image. The working file and its saved versions stay on your computer for the next round.
 
-Your design files and keys stay on your Mac
+Your design files and keys stay on your computer
 
 Design files, versions and chats are stored locally. Model requests go straight to the providers you set up.
 
 Design files, versions and chats are stored locally. No Molly cloud account.
 Keys are kept in the system’s encrypted storage. On first launch macOS may ask to let Molly use the Keychain. Choose Always Allow.
 The providers you configure bill you directly for chat and image model use. Molly doesn’t collect or resell it.
-When you back up or move to a new Mac, your design files copy over like any other files. Encrypted keys may need to be entered again on the new machine.
+When you back up or move to a new computer, your design files copy over like any other files. Encrypted keys may need to be entered again on the new machine.
 
-YOUR MAC
+YOUR COMPUTER
 
 Artwork
 Versions
@@ -337,9 +337,9 @@ NOT NEEDED
 ```text
 PNG 或 JPEG，三档倍率
 
-保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的 Mac 上，下一轮接着改。
+保存后导出。交给客户的是导出的图，可编辑的源文件和历史版本留在你的电脑上，下一轮接着改。
 
-设计稿和密钥都在你的 Mac 上
+设计稿和密钥都在你的电脑上
 
 设计稿、版本和对话都存在本地。模型请求直接发给你自己配置的服务商。
 
@@ -348,7 +348,7 @@ PNG 或 JPEG，三档倍率
 对话模型和图片模型的费用由你配置的服务商直接收取，Molly 不代收，也不转售。
 换电脑或备份时，设计稿和数据可以直接拷走；加密保存的密钥可能要在新机器上重新填一次。
 
-你的 MAC
+你的电脑
 
 作品
 版本
@@ -462,7 +462,7 @@ Yes. On first launch you connect a chat model and an image model. Molly needs bo
 
 How is this different from asking a chat AI for a poster?
 
-A chat tool usually hands you one flat image. Molly looks for design inspiration, puts a few directions side by side and builds the one you pick as editable layers. You can align, retype and roll back, then export PNG or JPEG on your Mac.
+A chat tool usually hands you one flat image. Molly looks for design inspiration, puts a few directions side by side and builds the one you pick as editable layers. You can align, retype and roll back, then export PNG or JPEG on your computer.
 
 Can I make print files?
 
@@ -588,7 +588,7 @@ GitHub
 | A café poster with its headline changed to “honey oat”, the text box still selected and the matching layer highlighted in the Layers panel | 咖啡海报的标题已改成 honey oat，文字框仍选中，右边图层面板显示同名图层 |
 | A ceramic kettle product page on the Molly canvas with the Export menu open, listing PNG and JPEG at 1×, 2× and 3× | Molly 画布上一张陶瓷手冲壶商品详情长图，右上角的导出菜单已展开，列出 PNG 和 JPEG 的 1×、2×、3× |
 | A ceramic kettle product page on the Molly canvas with the Export menu open, listing PNG and JPEG at 1×, 2× and 3× | Molly 画布上一张陶瓷手冲壶商品详情长图，右上角的导出菜单已展开，列出 PNG 和 JPEG 的 1×、2×、3× |
-| Diagram: artwork, versions, chats and encrypted keys stay on your Mac; model and image requests go straight to the providers you configure; no Molly cloud account. | 示意图：作品、版本、对话和加密的密钥都在你的 Mac 上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。 |
+| Diagram: artwork, versions, chats and encrypted keys stay on your computer; model and image requests go straight to the providers you configure; no Molly cloud account. | 示意图：作品、版本、对话和加密的密钥都在你的电脑上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。 |
 | A design-week key visual: the headline IDEAS IN MOTION beside a red ribbon wrapped around a glass sphere | 设计周主视觉：IDEAS IN MOTION 大标题，右侧是红色丝带缠绕的玻璃球 |
 | A café social post: the words maple oat latte above a latte with leaf art | 咖啡馆社媒方图：maple oat latte 标题和一杯拉花拿铁 |
 | A tea label: a botanical engraving in a round window on deep green, with the name FOREST DAWN | 茶叶包装标签：深绿底上的植物版画圆窗和 FOREST DAWN 字样 |

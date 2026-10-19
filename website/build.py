@@ -25,10 +25,10 @@ FALLBACK_RELEASES = [('v0.1.1', '2026-10-17'), ('v0.1.0', '2026-10-15')]
 TITLE_EN = 'Molly Design · AI design for graphic designers, in layers you can edit'
 TITLE_ZH = 'Molly Design · 给平面设计师的 AI 设计工具，分层设计稿可以接着改'
 DESC_EN = (
-    'An AI design app for graphic designers on the Mac. Describe the job and get back a layered file: '
+    'An AI design app for graphic designers on your computer. Describe the job and get back a layered file: '
     'real text, shapes and images you can keep editing.'
 )
-DESC_ZH = '给平面设计师的 Mac AI 设计工具。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。'
+DESC_ZH = '给平面设计师的 AI 设计工具，在你的电脑上。说清要做什么，拿回分好层的设计稿，文字、形状、图片都能接着改。'
 
 
 def pairs(s):
@@ -222,9 +222,9 @@ def diagram():
             ('key', '密钥', 'Keys'),
         ]
     )
-    return f'''<div class="dia" role="img" aria-label="[[示意图：作品、版本、对话和加密的密钥都在你的 Mac 上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。||Diagram: artwork, versions, chats and encrypted keys stay on your Mac; model and image requests go straight to the providers you configure; no Molly cloud account.]]">
+    return f'''<div class="dia" role="img" aria-label="[[示意图：作品、版本、对话和加密的密钥都在你的电脑上；模型和图片请求直接发给你配置的服务商；不需要 Molly 云账户。||Diagram: artwork, versions, chats and encrypted keys stay on your computer; model and image requests go straight to the providers you configure; no Molly cloud account.]]">
         <div class="dg">
-          <div class="dg-mac"><p class="dg-h">{ic('mac')}[[你的 Mac||Your Mac]]</p><ul>{rows}</ul></div>
+          <div class="dg-mac"><p class="dg-h">{ic('mac')}[[你的电脑||Your computer]]</p><ul>{rows}</ul></div>
           <div class="dg-link"><span class="ln"><i></i><i></i></span><span class="ln"><i></i><i></i></span><em>[[直接请求||direct]]</em></div>
           <div class="dg-prov"><p class="dg-h">[[你配置的服务商||Providers you configure]]</p><span class="nd"><i></i>[[对话模型||Chat models]]</span><span class="nd"><i></i>[[图片模型||Image models]]</span></div>
         </div>
@@ -456,7 +456,7 @@ def body(releases):
   <div class="wrap strip">
     <div><h2 class="h3">[[能接着做的源文件||A real working file]]</h2><p>[[真文字、矢量形状和一层图片，都在同一份设计稿里。||Real text, vector shapes and one image layer in the same file.]]</p></div>
     <div><h2 class="h3">{S('p2_h')}</h2><p>[[几套方向并排摆出来，你选一套，它就按那套出稿。||Pick one of a few directions, and Molly builds that one.]]</p></div>
-    <div><h2 class="h3">[[留在你的 Mac 上||Stays on your Mac]]</h2><p>{trust_line()}</p></div>
+    <div><h2 class="h3">[[留在你的电脑上||Stays on your computer]]</h2><p>{trust_line()}</p></div>
   </div>
 </div>
 

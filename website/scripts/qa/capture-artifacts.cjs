@@ -30,28 +30,49 @@ async function main() {
     );
     await page.goto(BASE, { waitUntil: 'networkidle' });
     await page.evaluate(() => document.fonts.ready);
-    await page.evaluate(async () => {
-      const step = Math.max(window.innerHeight * 0.8, 400);
-      const height = document.documentElement.scrollHeight;
-      for (let y = 0; y < height; y += step) {
+    const missing = await page.evaluate(async () => {
+      document.querySelectorAll('img[loading="lazy"]').forEach((image) => {
+        image.loading = 'eager';
+      });
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+      const step = 400;
+      let y = 0;
+      while (y < document.documentElement.scrollHeight) {
         window.scrollTo(0, y);
-        await new Promise((resolve) => setTimeout(resolve, 80));
+        await sleep(150);
+        y += step;
       }
+      window.scrollTo(0, document.documentElement.scrollHeight);
+      await sleep(200);
       window.scrollTo(0, 0);
-      await Promise.race([
-        Promise.all(
-          [...document.images].map((image) =>
-            image.complete
-              ? Promise.resolve()
-              : new Promise((resolve) => {
-                  image.addEventListener('load', resolve, { once: true });
-                  image.addEventListener('error', resolve, { once: true });
-                })
-          )
-        ),
-        new Promise((resolve) => setTimeout(resolve, 8000)),
-      ]);
+      const visible = [...document.images].filter((image) => {
+        if (image.closest('[hidden]')) return false;
+        for (let node = image; node && node !== document.body; node = node.parentElement) {
+          const style = getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') return false;
+        }
+        return true;
+      });
+      await Promise.all(
+        visible.map(
+          (image) =>
+            new Promise((resolve) => {
+              if (image.complete && image.naturalWidth > 0) {
+                resolve();
+                return;
+              }
+              const done = () => resolve();
+              image.addEventListener('load', done, { once: true });
+              image.addEventListener('error', done, { once: true });
+              setTimeout(done, 10000);
+            })
+        )
+      );
+      return visible
+        .filter((image) => !(image.complete && image.naturalWidth > 0))
+        .map((image) => image.currentSrc || image.src);
     });
+    if (missing.length) throw new Error(`visible images failed to load: ${missing.join(', ')}`);
     const shot = path.join(OUT, `site175-${lang}-${theme}-${width}.png`);
     await page.screenshot({ path: shot, fullPage: true });
     console.log('wrote', shot);
